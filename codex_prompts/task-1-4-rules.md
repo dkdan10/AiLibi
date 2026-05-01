@@ -41,4 +41,4 @@ Open a PR from branch `phase-1-rules` with a title like `task 1.4: rules`.
 The PR description must reference DESIGN.md §3.4, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.
 
 Task
-engine/rules.py for kill, vent, report, sabotage, win conditions per §3.4 + §3.5.
+Depends on task 1.3.5 being merged first. engine/rules.py for kill, vent, report, sabotage, win conditions per §3.4 + §3.5.
