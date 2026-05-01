@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 
 from dataclasses import dataclass
-from typing import Any, Literal, TypeAlias, cast
+from typing import Any, Literal, TypeAlias, TypeVar, cast
 
 from engine.entities import (
     BodyId,
@@ -30,6 +32,8 @@ VisibilityMode: TypeAlias = Literal["same_room_and_adjacent", "same_room_only"]
 _ROOM_OR_VENT_ID_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _TASK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 _CANONICAL_MAP_PATH = Path(__file__).resolve().parent / "maps" / "canonical_1.yaml"
+_MappingKey = TypeVar("_MappingKey")
+_MappingValue = TypeVar("_MappingValue")
 
 
 class MapValidationError(ValueError):
@@ -47,13 +51,25 @@ class WorldState:
     tick: int
     phase: Literal["PLAY", "MEETING", "GAME_OVER"]
     map: MapId
-    players: dict[PlayerId, PlayerState]
-    bodies: dict[BodyId, BodyState]
-    tasks: dict[TaskId, TaskState]
+    players: Mapping[PlayerId, PlayerState]
+    bodies: Mapping[BodyId, BodyState]
+    tasks: Mapping[TaskId, TaskState]
     sabotage: SabotageState | None
-    cooldowns: dict[PlayerId, int]
+    cooldowns: Mapping[PlayerId, int]
     rng_state: bytes
     seed: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "players", _readonly_mapping(self.players))
+        object.__setattr__(self, "bodies", _readonly_mapping(self.bodies))
+        object.__setattr__(self, "tasks", _readonly_mapping(self.tasks))
+        object.__setattr__(self, "cooldowns", _readonly_mapping(self.cooldowns))
+
+
+def _readonly_mapping(
+    source: Mapping[_MappingKey, _MappingValue],
+) -> Mapping[_MappingKey, _MappingValue]:
+    return MappingProxyType(dict(source))
 
 
 class _FrozenModel(BaseModel):
