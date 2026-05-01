@@ -1,0 +1,15 @@
+{
+  "name": "basic_tasks_and_movement",
+  "seed": 11,
+  "actions": [
+    {"tick": 0, "type": "move", "actor": "player-1", "payload": {"to_room": "ADMIN"}},
+    {"tick": 0, "type": "move", "actor": "player-2", "payload": {"to_room": "CAFETERIA"}},
+    {"tick": 0, "type": "wait", "actor": "impostor-1", "payload": {}},
+    {"tick": 1, "type": "do_task", "actor": "player-1", "payload": {"task_id": "swipe_card"}},
+    {"tick": 1, "type": "move", "actor": "player-2", "payload": {"to_room": "MEDBAY"}},
+    {"tick": 1, "type": "sabotage", "actor": "impostor-1", "payload": {"kind": "lights"}},
+    {"tick": 2, "type": "wait", "actor": "player-1", "payload": {}},
+    {"tick": 2, "type": "do_task", "actor": "player-2", "payload": {"task_id": "submit_scan"}},
+    {"tick": 2, "type": "wait", "actor": "impostor-1", "payload": {}}
+  ]
+}
