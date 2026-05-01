@@ -26,6 +26,9 @@ jobs:
       - name: Run ruff
         run: uv run ruff check .
 
+      - name: Run import linter
+        run: uv run lint-imports
+
       - name: Run mypy
         run: uv run mypy --strict engine observation agents
 
