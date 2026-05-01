@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
+from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias, cast
+
+from engine.entities import (
+    BodyId,
+    BodyState,
+    PlayerId,
+    PlayerState,
+    SabotageState,
+    TaskState,
+)
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -23,6 +34,26 @@ _CANONICAL_MAP_PATH = Path(__file__).resolve().parent / "maps" / "canonical_1.ya
 
 class MapValidationError(ValueError):
     """Raised when map data violates the static engine map contract."""
+
+
+class Phase(str):
+    PLAY = "PLAY"
+    MEETING = "MEETING"
+    GAME_OVER = "GAME_OVER"
+
+
+@dataclass(frozen=True)
+class WorldState:
+    tick: int
+    phase: Literal["PLAY", "MEETING", "GAME_OVER"]
+    map: MapId
+    players: dict[PlayerId, PlayerState]
+    bodies: dict[BodyId, BodyState]
+    tasks: dict[TaskId, TaskState]
+    sabotage: SabotageState | None
+    cooldowns: dict[PlayerId, int]
+    rng_state: bytes
+    seed: int
 
 
 class _FrozenModel(BaseModel):
@@ -84,7 +115,9 @@ class Edge(_FrozenModel):
         if self.traversal_ticks < 1:
             raise MapValidationError("edge traversal_ticks must be at least 1")
         if self.from_room == self.to_room:
-            raise MapValidationError(f"edge cannot connect a room to itself: {self.from_room}")
+            raise MapValidationError(
+                f"edge cannot connect a room to itself: {self.from_room}"
+            )
         return self
 
 
@@ -250,7 +283,9 @@ class Map(_FrozenModel):
         room_ids = set(self.rooms)
         vent_ids = set(self.vents)
         task_ids = set(self.tasks)
-        reused_ids = (room_ids & vent_ids) | (room_ids & task_ids) | (vent_ids & task_ids)
+        reused_ids = (
+            (room_ids & vent_ids) | (room_ids & task_ids) | (vent_ids & task_ids)
+        )
         if reused_ids:
             joined = ", ".join(sorted(reused_ids))
             raise MapValidationError(f"map ids must be namespace-disjoint: {joined}")
@@ -358,11 +393,15 @@ class _YamlSubsetParser:
             if self._index >= len(self._lines) or self._current_indent() < indent:
                 break
             if self._current_indent() > indent:
-                raise MapValidationError(f"unexpected indentation at line {self._index + 1}")
+                raise MapValidationError(
+                    f"unexpected indentation at line {self._index + 1}"
+                )
 
             content = self._current_content()
             if content.startswith("- "):
-                raise MapValidationError(f"unexpected list item at line {self._index + 1}")
+                raise MapValidationError(
+                    f"unexpected list item at line {self._index + 1}"
+                )
 
             key, raw_value = self._split_key_value(content)
             self._index += 1
@@ -381,7 +420,9 @@ class _YamlSubsetParser:
             if self._index >= len(self._lines) or self._current_indent() < indent:
                 break
             if self._current_indent() > indent:
-                raise MapValidationError(f"unexpected indentation at line {self._index + 1}")
+                raise MapValidationError(
+                    f"unexpected indentation at line {self._index + 1}"
+                )
 
             content = self._current_content()
             if not content.startswith("- "):
@@ -397,7 +438,9 @@ class _YamlSubsetParser:
     def _parse_nested_value(self, parent_indent: int) -> object:
         self._skip_ignored()
         if self._index >= len(self._lines) or self._current_indent() <= parent_indent:
-            raise MapValidationError(f"missing nested value near line {self._index + 1}")
+            raise MapValidationError(
+                f"missing nested value near line {self._index + 1}"
+            )
         nested_indent = self._current_indent()
         if self._current_content().startswith("- "):
             return self._parse_sequence(nested_indent)
@@ -420,7 +463,9 @@ class _YamlSubsetParser:
 
     def _split_key_value(self, content: str) -> tuple[str, str]:
         if ":" not in content:
-            raise MapValidationError(f"expected key/value pair at line {self._index + 1}")
+            raise MapValidationError(
+                f"expected key/value pair at line {self._index + 1}"
+            )
         key, raw_value = content.split(":", 1)
         key = key.strip()
         if not key:
