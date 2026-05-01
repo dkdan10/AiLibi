@@ -29,7 +29,7 @@ Files explicitly NOT in scope:
 - agents/
 - llm/
 - api/
-- frontend/src/store/ unless TODO_REVIEW from 4.3 requires a compatible adapter
+- frontend/src/store/
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 

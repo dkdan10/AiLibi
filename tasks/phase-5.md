@@ -15,7 +15,7 @@ Mostly parallel. 5.1 through 5.4 are independent files in eval/ and can fan out.
 Vote-correctness metric.
 
 **Files in scope:**
-- eval/TODO_REVIEW vote-correctness metric file
+- eval/vote_correctness.py
 
 **Files NOT in scope:**
 - engine/
@@ -42,7 +42,7 @@ Vote-correctness metric.
 Accusation-calibration metric.
 
 **Files in scope:**
-- eval/TODO_REVIEW accusation-calibration metric file
+- eval/accusation_calibration.py
 
 **Files NOT in scope:**
 - engine/
@@ -69,7 +69,7 @@ Accusation-calibration metric.
 Alibi-fabrication-rate metric.
 
 **Files in scope:**
-- eval/TODO_REVIEW alibi-fabrication-rate metric file
+- eval/alibi_fabrication.py
 
 **Files NOT in scope:**
 - engine/
@@ -96,7 +96,7 @@ Alibi-fabrication-rate metric.
 Cost dashboard per prompt-version cost.
 
 **Files in scope:**
-- eval/TODO_REVIEW cost dashboard metric file
+- eval/cost_dashboard.py
 
 **Files NOT in scope:**
 - engine/
@@ -123,7 +123,7 @@ Cost dashboard per prompt-version cost.
 Tournament dashboard frontend page.
 
 **Files in scope:**
-- frontend/src/TODO_REVIEW tournament dashboard page path
+- frontend/src/components/TournamentDashboard.tsx
 
 **Files NOT in scope:**
 - engine/
@@ -148,8 +148,8 @@ Tournament dashboard frontend page.
 Prompt regression test suite.
 
 **Files in scope:**
-- eval/TODO_REVIEW prompt regression test file
-- tests/TODO_REVIEW prompt regression fixtures path
+- eval/prompt_regression.py
+- tests/fixtures/prompt_regression/
 
 **Files NOT in scope:**
 - engine/

@@ -10,7 +10,7 @@ Implement the existing MVP-plan task anchored to DESIGN.md §11.3, DESIGN.md §7
 
 3. Files in scope
 You may edit only:
-- frontend/src/TODO_REVIEW tournament dashboard page path
+- frontend/src/components/TournamentDashboard.tsx
 
 4. Acceptance criteria
 The task is done only when all of these are true:

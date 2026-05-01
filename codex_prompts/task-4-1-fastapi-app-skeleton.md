@@ -11,7 +11,10 @@ Implement the existing MVP-plan task anchored to DESIGN.md §7. Do not implement
 3. Files in scope
 You may edit only:
 - api/main.py
-- api/routes/TODO_REVIEW
+- api/routes/games.py
+- api/routes/replays.py
+- api/routes/eval.py
+- api/routes/__init__.py
 - api/ws.py
 
 4. Acceptance criteria

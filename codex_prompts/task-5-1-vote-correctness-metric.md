@@ -10,7 +10,7 @@ Implement the existing MVP-plan task anchored to DESIGN.md §11.3. Do not implem
 
 3. Files in scope
 You may edit only:
-- eval/TODO_REVIEW vote-correctness metric file
+- eval/vote_correctness.py
 
 4. Acceptance criteria
 The task is done only when all of these are true:

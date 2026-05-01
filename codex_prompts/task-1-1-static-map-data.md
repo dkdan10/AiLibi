@@ -11,12 +11,14 @@ Implement the existing MVP-plan task anchored to DESIGN.md §3, DESIGN.md §8.1.
 3. Files in scope
 You may edit only:
 - engine/world.py
-- TODO_REVIEW canonical map YAML path
+
+Read-only input:
+- engine/maps/canonical_1.yaml
 
 4. Acceptance criteria
 The task is done only when all of these are true:
-- [ ] Static map data exists as specified by the Phase 1 plan.
-- [ ] Room graph and vent network are represented for one canonical MVP map.
+- [ ] engine/world.py loads and validates the existing human-provided engine/maps/canonical_1.yaml.
+- [ ] Room graph and vent network from engine/maps/canonical_1.yaml are represented for one canonical MVP map.
 - [ ] Relevant engine tests pass.
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
@@ -27,7 +29,10 @@ Do not modify CODEX_IMPLEMENTATION.md.
 Do not implement work outside this task.
 Do not add LLM calls inside agents/tactical/.
 Do not import engine/ from agents/.
+Read engine/maps/canonical_1.yaml as a supplied artifact only. Do not create, regenerate, reformat, or rewrite it.
+If engine/maps/canonical_1.yaml is missing or structurally incompatible with DESIGN.md, stop and add a Questions section in the PR rather than guessing.
 Files explicitly NOT in scope:
+- engine/maps/canonical_1.yaml; do not modify, read and validate only
 - agents/
 - observation/
 - api/
@@ -41,4 +46,4 @@ Open a PR from branch `phase-1-static-map-data` with a title like `task 1.1: sta
 The PR description must reference DESIGN.md §3, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.
 
 Task
-engine/world.py::Map, room graph, vent network. One canonical map as YAML.
+engine/world.py::Map, room graph, vent network. Use the human-provided engine/maps/canonical_1.yaml.

@@ -14,6 +14,8 @@ None. Single sequential agent (CLI preferred so you can watch).
 
 Create pyproject.toml, engine/, agents/, observation/, meetings/, orchestrator/, llm/, api/, eval/, tests/. Empty __init__.py files. Smoke test passes.
 
+Preservation note: if engine/maps/canonical_1.yaml already exists, do not modify, replace, or delete it. Phase 0 may create missing package directories and __init__.py files, but must leave the map YAML untouched.
+
 **Files in scope:**
 - pyproject.toml
 - .gitignore
@@ -35,6 +37,7 @@ Create pyproject.toml, engine/, agents/, observation/, meetings/, orchestrator/,
 
 **Files NOT in scope:**
 - any logic in any package
+- engine/maps/canonical_1.yaml if it already exists; preserve it unchanged
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 

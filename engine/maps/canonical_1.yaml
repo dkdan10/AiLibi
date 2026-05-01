@@ -1,0 +1,437 @@
+# AiLibi — Canonical MVP Map (DESIGN.md §8.1)
+#
+# ID conventions (enforced by the loader; see VALIDATION EXPECTATIONS at end):
+#   - Room IDs:  UPPERCASE_SNAKE  (e.g. CAFETERIA, EAST_HALL)
+#   - Vent IDs:  UPPERCASE_SNAKE, suffixed _VENT  (e.g. STORAGE_VENT)
+#   - Task IDs:  lowercase_snake  (e.g. align_engine_output)
+#
+# Topology rationale:
+#   - Cafeteria is the hub: meeting room, emergency button, spawn. High traffic
+#     by design — most safe paths route through it, so witnesses are common.
+#   - Two wings branch east (Engineering / Reactor / Storage) and west
+#     (MedBay / Labs). Each wing terminates in an isolated dead-end room
+#     (Reactor, Labs) where kills are plausible.
+#   - Admin sits opposite the Cafeteria and bridges the two wings via the
+#     Upper, East, and West hallways. This produces multiple paths between
+#     every major area, so alibis are imperfect: an agent claiming to walk
+#     Cafe -> MedBay could have gone via West Hall directly OR via Admin,
+#     and witnesses on one route do not rule out the other.
+#   - Storage is doubly isolated: only one doorway (from Engineering) plus
+#     a vent. It is the canonical "kill happened here, who was nearby?" room.
+#   - Vent network is a 6-node perimeter chain with one cross-link so
+#     impostors have non-trivial routing options without trivializing the map.
+#   - Tasks cluster in the wings (4 in Engineering area, 4 in MedBay/Labs)
+#     plus 2 admin tasks and 2 common tasks in Cafeteria, for 12 total.
+#     Hallways have no tasks — they are pure transit.
+#
+# Balanced for 5–7 agents, 1 impostor.
+
+map_id: canonical_1
+name: Canonical MVP Map
+version: 0.2
+
+tick_rate_hz: 2
+
+# ---------------------------------------------------------------------------
+# VISIBILITY DEFAULTS
+# ---------------------------------------------------------------------------
+# Applied to every room unless that room declares its own `visibility:` block.
+# For the MVP map, no room overrides these — visibility is uniform across the
+# map and gates only on the lights sabotage. Per-room overrides are reserved
+# for later maps that introduce e.g. soundproof rooms or dim corridors.
+
+visibility_defaults:
+  base: same_room_and_adjacent
+  lights_sabotage: same_room_only
+
+
+# ---------------------------------------------------------------------------
+# ROOMS
+# ---------------------------------------------------------------------------
+# Coordinate system: top-left origin, +x right, +y down. All values are
+# non-negative. Units are abstract grid cells (used by the spectator UI for
+# layout; engine movement is graph-based and ignores coordinates).
+#
+# All rooms inherit `visibility_defaults` above. None override.
+
+rooms:
+
+  CAFETERIA:
+    name: Cafeteria
+    kind: meeting_room
+    position: { x: 36, y: 4 }
+    size: { width: 16, height: 10 }
+    notes: >
+      Central hub, meeting room, emergency button, agent spawn. Designed as a
+      high-traffic room — most cross-map paths route through here, so kills
+      adjacent to Cafeteria are easily witnessed.
+
+  UPPER_HALL:
+    name: Upper Hall
+    kind: hallway
+    position: { x: 38, y: 16 }
+    size: { width: 12, height: 4 }
+    notes: >
+      Vertical corridor connecting Cafeteria to Admin. Pure transit; no tasks.
+
+  ADMIN:
+    name: Admin
+    kind: task_room
+    position: { x: 36, y: 22 }
+    size: { width: 16, height: 8 }
+    notes: >
+      Mid-traffic room opposite Cafeteria. Bridges east and west hallways,
+      so it appears in many alibi claims. Holds the lights-sabotage repair
+      panel and two short tasks.
+
+  EAST_HALL:
+    name: East Hallway
+    kind: hallway
+    position: { x: 56, y: 12 }
+    size: { width: 4, height: 14 }
+    notes: >
+      East transit corridor between Cafeteria, Admin, and Engineering. Pure
+      transit; provides an alternate route to Engineering that bypasses
+      Cafeteria (supports alibi ambiguity).
+
+  ENGINEERING:
+    name: Engineering
+    kind: task_room
+    position: { x: 64, y: 14 }
+    size: { width: 14, height: 10 }
+    notes: >
+      Mid-traffic task room. Gateway to Reactor and Storage. Both impostors
+      and crew have legitimate reasons to be here, which makes Engineering
+      itself a poor accusation (high prior) but a great alibi anchor.
+
+  REACTOR:
+    name: Reactor
+    kind: task_room
+    position: { x: 82, y: 16 }
+    size: { width: 10, height: 8 }
+    notes: >
+      Isolated dead-end on the east wing. Single doorway (from Engineering)
+      plus a vent. Long task here invites kills — the victim is committed
+      for several ticks with one escape route.
+
+  STORAGE:
+    name: Storage
+    kind: utility
+    position: { x: 64, y: 26 }
+    size: { width: 14, height: 6 }
+    notes: >
+      Doubly-isolated: only one doorway (Engineering) plus a vent. The
+      canonical "body found here, who was last seen near Engineering?"
+      crime scene. One short task to give crew a reason to enter.
+
+  WEST_HALL:
+    name: West Hallway
+    kind: hallway
+    position: { x: 30, y: 12 }
+    size: { width: 4, height: 14 }
+    notes: >
+      West transit corridor between Cafeteria, Admin, and MedBay. Pure
+      transit; mirrors East Hall to keep the topology symmetric for
+      analysis.
+
+  MEDBAY:
+    name: MedBay
+    kind: task_room
+    position: { x: 14, y: 14 }
+    size: { width: 14, height: 10 }
+    notes: >
+      Mid-traffic task room on the west wing. Gateway to Labs. Holds the
+      "scan" long task — a self-verifying task that produces a public
+      alibi for the duration the agent stood in MedBay.
+
+  LABS:
+    name: Labs
+    kind: task_room
+    position: { x: 0, y: 16 }
+    size: { width: 10, height: 8 }
+    notes: >
+      Isolated dead-end on the west wing. Single doorway (from MedBay)
+      plus a vent. Mirror of Reactor — the second canonical kill room.
+
+
+# ---------------------------------------------------------------------------
+# EDGES
+# ---------------------------------------------------------------------------
+# Doorways (kind=doorway) are direct room-to-room transitions, 1 tick.
+# Hallways (kind=hallway) connect a room to a hallway room, 1 tick each side.
+# Edges are undirected; the engine treats from/to symmetrically.
+
+edges:
+
+  # Cafeteria <-> Upper Hall <-> Admin (north-south spine)
+  - { from: CAFETERIA,  to: UPPER_HALL, kind: doorway,  traversal_ticks: 1, door_id: null }
+  - { from: UPPER_HALL, to: ADMIN,      kind: doorway,  traversal_ticks: 1, door_id: null }
+
+  # Cafeteria <-> East Hall <-> Engineering (east branch)
+  - { from: CAFETERIA, to: EAST_HALL,   kind: hallway,  traversal_ticks: 1, door_id: null }
+  - { from: EAST_HALL, to: ENGINEERING, kind: doorway,  traversal_ticks: 1, door_id: null }
+
+  # Admin <-> East Hall (loop closer; alternate route to Engineering)
+  - { from: ADMIN, to: EAST_HALL, kind: hallway, traversal_ticks: 1, door_id: null }
+
+  # Engineering <-> Reactor (dead-end branch)
+  - { from: ENGINEERING, to: REACTOR, kind: doorway, traversal_ticks: 1, door_id: null }
+
+  # Engineering <-> Storage (only doorway into Storage)
+  - { from: ENGINEERING, to: STORAGE, kind: doorway, traversal_ticks: 1, door_id: null }
+
+  # Cafeteria <-> West Hall <-> MedBay (west branch)
+  - { from: CAFETERIA, to: WEST_HALL, kind: hallway, traversal_ticks: 1, door_id: null }
+  - { from: WEST_HALL, to: MEDBAY,    kind: doorway, traversal_ticks: 1, door_id: null }
+
+  # Admin <-> West Hall (loop closer; alternate route to MedBay)
+  - { from: ADMIN, to: WEST_HALL, kind: hallway, traversal_ticks: 1, door_id: null }
+
+  # MedBay <-> Labs (dead-end branch)
+  - { from: MEDBAY, to: LABS, kind: doorway, traversal_ticks: 1, door_id: null }
+
+
+# ---------------------------------------------------------------------------
+# VENTS
+# ---------------------------------------------------------------------------
+# 6 vent nodes. Topology: a perimeter chain plus ONE cross-link
+# (REACTOR_VENT <-> ADMIN_VENT) that lets an impostor cut from the east
+# dead-end back to the central spine without re-entering Engineering.
+#
+#         REACTOR_VENT --- STORAGE_VENT --- ENGINEERING_VENT
+#               \                                  |
+#                \                                 |
+#               (cross)                       LABS_VENT
+#                  \                               |
+#                ADMIN_VENT --- MEDBAY_VENT -------+
+#
+# Storage vent intentionally has only TWO connections (Reactor, Engineering).
+# Storage is already a high-isolation crime scene with one doorway; pairing
+# that with a 3-way vent gave impostors too much "kill + teleport across the
+# map" power. Two connections preserve the "drop a body in Storage and slip
+# back to Engineering" play without enabling instant west-wing escape.
+#
+# Vent links are declared symmetrically below; the loader must verify
+# symmetry (or normalize it) — see VALIDATION EXPECTATIONS.
+
+vents:
+
+  REACTOR_VENT:
+    room: REACTOR
+    connects_to:
+      - STORAGE_VENT
+      - ADMIN_VENT
+    traversal_ticks: 1
+
+  STORAGE_VENT:
+    room: STORAGE
+    connects_to:
+      - REACTOR_VENT
+      - ENGINEERING_VENT
+    traversal_ticks: 1
+
+  ENGINEERING_VENT:
+    room: ENGINEERING
+    connects_to:
+      - STORAGE_VENT
+      - LABS_VENT
+    traversal_ticks: 1
+
+  ADMIN_VENT:
+    room: ADMIN
+    connects_to:
+      - REACTOR_VENT
+      - MEDBAY_VENT
+    traversal_ticks: 1
+
+  MEDBAY_VENT:
+    room: MEDBAY
+    connects_to:
+      - ADMIN_VENT
+      - LABS_VENT
+    traversal_ticks: 1
+
+  LABS_VENT:
+    room: LABS
+    connects_to:
+      - ENGINEERING_VENT
+      - MEDBAY_VENT
+    traversal_ticks: 1
+
+
+# ---------------------------------------------------------------------------
+# TASKS
+# ---------------------------------------------------------------------------
+# 12 tasks total. Distribution:
+#   - Engineering wing (4): Engineering x2, Reactor x1, Storage x1
+#   - Lab wing (4):         MedBay x2, Labs x2
+#   - Admin (2):            short admin tasks
+#   - Common (2):           Cafeteria — both crew complete the same task
+# Hallways have no tasks. Long tasks are weighted higher because they pin an
+# agent in a room for several ticks, producing both alibi value and kill risk.
+
+tasks:
+
+  # --- Engineering wing ---
+  align_engine_output:
+    name: Align Engine Output
+    room: ENGINEERING
+    duration_ticks: 8
+    task_type: long
+    weight: 2
+
+  calibrate_distributor:
+    name: Calibrate Distributor
+    room: ENGINEERING
+    duration_ticks: 4
+    task_type: short
+    weight: 1
+
+  start_reactor:
+    name: Start Reactor
+    room: REACTOR
+    duration_ticks: 10
+    task_type: long
+    weight: 2
+
+  fuel_reserves:
+    name: Restock Fuel Reserves
+    room: STORAGE
+    duration_ticks: 6
+    task_type: short
+    weight: 1
+
+  # --- Lab wing ---
+  submit_scan:
+    name: Submit Medical Scan
+    room: MEDBAY
+    duration_ticks: 10
+    task_type: long
+    weight: 2
+
+  inspect_samples:
+    name: Inspect Samples
+    room: MEDBAY
+    duration_ticks: 4
+    task_type: short
+    weight: 1
+
+  analyze_specimen:
+    name: Analyze Specimen
+    room: LABS
+    duration_ticks: 8
+    task_type: long
+    weight: 2
+
+  log_findings:
+    name: Log Lab Findings
+    room: LABS
+    duration_ticks: 4
+    task_type: short
+    weight: 1
+
+  # --- Admin ---
+  swipe_card:
+    name: Swipe Card
+    room: ADMIN
+    duration_ticks: 3
+    task_type: short
+    weight: 1
+
+  upload_logs:
+    name: Upload Logs
+    room: ADMIN
+    duration_ticks: 6
+    task_type: short
+    weight: 1
+
+  # --- Common ---
+  empty_trash:
+    name: Empty Trash
+    room: CAFETERIA
+    duration_ticks: 4
+    task_type: common
+    weight: 1
+
+  fix_wiring_cafeteria:
+    name: Fix Wiring (Cafeteria)
+    room: CAFETERIA
+    duration_ticks: 5
+    task_type: common
+    weight: 1
+
+
+# ---------------------------------------------------------------------------
+# SABOTAGES
+# ---------------------------------------------------------------------------
+# MVP scope (DESIGN.md §8.3): lights only.
+
+sabotages:
+  lights:
+    affected_visibility: same_room_only
+    repair_rooms:
+      - ADMIN
+    duration_ticks: 90
+
+
+# ---------------------------------------------------------------------------
+# EMERGENCY / SPAWN / MEETING
+# ---------------------------------------------------------------------------
+
+emergency:
+  button_room: CAFETERIA
+  uses_per_player: 1
+
+spawn:
+  room: CAFETERIA
+
+meeting:
+  room: CAFETERIA
+
+
+# ===========================================================================
+# VALIDATION EXPECTATIONS
+# ===========================================================================
+# This block is intentionally a YAML comment so it is NOT parsed as engine
+# data. It documents what the map loader / `tests/engine/test_map_loader.py`
+# must assert when ingesting this file. Every item below should correspond to
+# a single test or assertion.
+#
+# Structural integrity
+#   - All `edges[*].from` and `edges[*].to` reference a defined room ID.
+#   - The undirected room graph (via `edges`) is fully connected; every room
+#     is reachable from CAFETERIA in finite steps.
+#   - All `vents[*].room` reference a defined room ID.
+#   - Every ID listed in `vents[*].connects_to` references a defined vent ID
+#     (not a room ID, not a typo).
+#   - Vent links are symmetric: if A.connects_to contains B, then
+#     B.connects_to contains A. The loader MUST either verify this strictly
+#     or normalize the graph by adding the missing reverse edge — pick one
+#     behavior and document it.
+#   - All `tasks[*].room` reference a defined room ID.
+#   - No task is assigned to a room whose `kind == hallway`. Hallways are
+#     transit-only by design.
+#   - `sabotages.lights.repair_rooms` entries are all defined room IDs.
+#   - `spawn.room`, `meeting.room`, and `emergency.button_room` are all
+#     defined room IDs.
+#
+# Coordinate hygiene
+#   - For every room: `position.x >= 0` and `position.y >= 0`.
+#   - For every room: `size.width > 0` and `size.height > 0`.
+#
+# Identifier hygiene
+#   - All room IDs are unique within `rooms`.
+#   - All vent IDs are unique within `vents`.
+#   - All task IDs are unique within `tasks`.
+#   - Room IDs and vent IDs match `^[A-Z][A-Z0-9_]*$` (UPPERCASE_SNAKE).
+#   - Task IDs match `^[a-z][a-z0-9_]*$` (lowercase_snake).
+#   - The three ID namespaces are disjoint — no string is reused across
+#     rooms, vents, and tasks.
+#
+# Schema sanity
+#   - Every `room.kind` is one of:
+#       hallway | room | task_room | meeting_room | utility.
+#   - Every `edge.kind` is one of: doorway | hallway.
+#   - Every `task.task_type` is one of: short | long | common.
+#   - `tick_rate_hz > 0`; all `traversal_ticks >= 1`; all `duration_ticks >= 1`.
+# ===========================================================================

@@ -16,7 +16,10 @@ api/main.py, basic routes, WebSocket endpoint per §7.
 
 **Files in scope:**
 - api/main.py
-- api/routes/TODO_REVIEW
+- api/routes/games.py
+- api/routes/replays.py
+- api/routes/eval.py
+- api/routes/__init__.py
 - api/ws.py
 
 **Files NOT in scope:**
@@ -73,8 +76,8 @@ frontend/ skeleton, type-safe API client.
 - frontend/package.json
 - frontend/vite.config.ts
 - frontend/src/App.tsx
-- frontend/src/TODO_REVIEW type-safe API client path
-- frontend/src/store/TODO_REVIEW shared store interface path
+- frontend/src/api/client.ts
+- frontend/src/store/index.ts
 
 **Files NOT in scope:**
 - engine/
@@ -107,7 +110,7 @@ PixiJS canvas rendering rooms + players.
 - agents/
 - llm/
 - api/
-- frontend/src/store/ unless TODO_REVIEW from 4.3 requires a compatible adapter
+- frontend/src/store/
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 
@@ -133,7 +136,7 @@ Transcript renderer.
 - agents/
 - llm/
 - api/
-- frontend/src/store/ unless TODO_REVIEW from 4.3 requires a compatible adapter
+- frontend/src/store/
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 
@@ -159,7 +162,7 @@ Per-agent memory + LLM call viewer.
 - agents/
 - llm/
 - api/
-- frontend/src/store/ unless TODO_REVIEW from 4.3 requires a compatible adapter
+- frontend/src/store/
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 
@@ -185,7 +188,7 @@ Heatmap of who suspects whom.
 - agents/
 - llm/
 - api/
-- frontend/src/store/ unless TODO_REVIEW from 4.3 requires a compatible adapter
+- frontend/src/store/
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 
@@ -211,7 +214,7 @@ Scrubber, speed control.
 - agents/
 - llm/
 - api/
-- frontend/src/store/ unless TODO_REVIEW from 4.3 requires a compatible adapter
+- frontend/src/store/
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 

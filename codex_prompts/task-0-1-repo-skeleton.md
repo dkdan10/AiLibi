@@ -42,8 +42,10 @@ Do not modify CODEX_IMPLEMENTATION.md.
 Do not implement work outside this task.
 Do not add LLM calls inside agents/tactical/.
 Do not import engine/ from agents/.
+If engine/maps/canonical_1.yaml already exists, do not modify, replace, or delete it. Phase 0 may create missing package directories and __init__.py files, but must leave the map YAML untouched.
 Files explicitly NOT in scope:
 - any logic in any package
+- engine/maps/canonical_1.yaml if it already exists; preserve it unchanged
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 
@@ -53,3 +55,4 @@ The PR description must reference DESIGN.md §2, list the definition-of-done che
 
 Task
 Create pyproject.toml, engine/, agents/, observation/, meetings/, orchestrator/, llm/, api/, eval/, tests/. Empty __init__.py files. Smoke test passes.
+Preserve any existing engine/maps/canonical_1.yaml without changes.

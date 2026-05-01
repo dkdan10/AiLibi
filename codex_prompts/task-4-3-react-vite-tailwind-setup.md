@@ -13,8 +13,8 @@ You may edit only:
 - frontend/package.json
 - frontend/vite.config.ts
 - frontend/src/App.tsx
-- frontend/src/TODO_REVIEW type-safe API client path
-- frontend/src/store/TODO_REVIEW shared store interface path
+- frontend/src/api/client.ts
+- frontend/src/store/index.ts
 
 4. Acceptance criteria
 The task is done only when all of these are true:

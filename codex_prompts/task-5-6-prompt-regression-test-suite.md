@@ -10,8 +10,8 @@ Implement the existing MVP-plan task anchored to DESIGN.md §11.3. Do not implem
 
 3. Files in scope
 You may edit only:
-- eval/TODO_REVIEW prompt regression test file
-- tests/TODO_REVIEW prompt regression fixtures path
+- eval/prompt_regression.py
+- tests/fixtures/prompt_regression/
 
 4. Acceptance criteria
 The task is done only when all of these are true:

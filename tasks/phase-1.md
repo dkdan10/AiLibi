@@ -12,13 +12,16 @@ One foreground CLI agent on the engine. In parallel, a second agent can build de
 **Depends on:** Phase 0 merged
 **Section refs:** DESIGN.md §3, DESIGN.md §8.1
 
-engine/world.py::Map, room graph, vent network. One canonical map as YAML.
+engine/world.py::Map, room graph, vent network. Use the human-provided engine/maps/canonical_1.yaml.
 
-**Files in scope:**
+**Files in scope (editable):**
 - engine/world.py
-- TODO_REVIEW canonical map YAML path
+
+**Read-only input:**
+- engine/maps/canonical_1.yaml
 
 **Files NOT in scope:**
+- engine/maps/canonical_1.yaml; do not modify, read and validate only
 - agents/
 - observation/
 - api/
@@ -28,8 +31,8 @@ engine/world.py::Map, room graph, vent network. One canonical map as YAML.
 - CODEX_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Static map data exists as specified by the Phase 1 plan.
-- [ ] Room graph and vent network are represented for one canonical MVP map.
+- [ ] engine/world.py loads and validates the existing human-provided engine/maps/canonical_1.yaml.
+- [ ] Room graph and vent network from engine/maps/canonical_1.yaml are represented for one canonical MVP map.
 - [ ] Relevant engine tests pass.
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
