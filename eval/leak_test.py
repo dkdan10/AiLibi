@@ -96,6 +96,7 @@ def _initial_world_state(*, seed: int) -> WorldState:
         },
         sabotage=None,
         cooldowns={"impostor-1": 0},
+        emergency_uses={},
         rng_state=rng_state,
         seed=seed,
     )

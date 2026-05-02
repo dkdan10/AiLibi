@@ -31,10 +31,18 @@ from engine.world import Map, WorldState, load_canonical_map
 
 
 EngineEvent = dict[str, Any]
+_KILL_COOLDOWN_TICKS = 10
 
 
-def _decrement_cooldowns(state: WorldState) -> dict[PlayerId, int]:
-    return {player_id: max(0, ticks - 1) for player_id, ticks in state.cooldowns.items()}
+def _decrement_cooldowns(
+    state: WorldState,
+    *,
+    skip_players: set[PlayerId],
+) -> dict[PlayerId, int]:
+    return {
+        player_id: ticks if player_id in skip_players else max(0, ticks - 1)
+        for player_id, ticks in state.cooldowns.items()
+    }
 
 
 def _advance_sabotage(sabotage: SabotageState | None) -> SabotageState | None:
@@ -166,7 +174,9 @@ def _apply_kill(state: WorldState, action: KillAction) -> tuple[WorldState, Rule
     players[action.payload.target] = replace(target, alive=False)
     bodies = dict(state.bodies)
     bodies[body.id] = body
-    return replace(state, players=players, bodies=bodies), event
+    cooldowns = dict(state.cooldowns)
+    cooldowns[action.actor] = _KILL_COOLDOWN_TICKS
+    return replace(state, players=players, bodies=bodies, cooldowns=cooldowns), event
 
 
 def _apply_vent(state: WorldState, game_map: Map, action: VentAction) -> tuple[WorldState, RuleEvent]:
@@ -196,10 +206,17 @@ def _apply_emergency(
         state,
         action,
         emergency_uses_per_player=game_map.emergency.uses_per_player,
-        emergency_uses_by_player={},
+        emergency_uses_by_player=state.emergency_uses,
     )
     players = _with_actor_last_action(state, action)
-    return replace(state, phase="MEETING", players=players), event
+    emergency_uses = dict(state.emergency_uses)
+    emergency_uses[action.actor] = emergency_uses.get(action.actor, 0) + 1
+    return replace(
+        state,
+        phase="MEETING",
+        players=players,
+        emergency_uses=emergency_uses,
+    ), event
 
 
 def _apply_sabotage(
@@ -251,22 +268,31 @@ def _apply_action(state: WorldState, game_map: Map, action: Action) -> tuple[Wor
 def advance_tick(state: WorldState, actions: Sequence[Action]) -> tuple[WorldState, list[EngineEvent]]:
     """Advance one engine tick using the DESIGN.md §3.1 seven-step loop."""
 
+    if state.phase != "PLAY":
+        raise ValueError(f"cannot advance tick during {state.phase}")
+
     game_map = _load_state_map(state)
     events: list[EngineEvent] = []
     working_state = state
+    cooldown_skip_players: set[PlayerId] = set()
 
     # 1) Apply queued actions from previous tick.
     for action in actions:
         try:
             working_state, rule_event = _apply_action(working_state, game_map, action)
             events.append(_event_from_rule(rule_event, tick=state.tick))
+            if rule_event.type == "Killed":
+                cooldown_skip_players.add(action.actor)
             if working_state.phase == "MEETING":
-                break
+                return working_state, events
         except ActionRejectedError as exc:
             events.append(_rejection_event(tick=state.tick, action=action, reason=str(exc)))
 
     # 2) Resolve passive effects.
-    cooldowns = _decrement_cooldowns(working_state)
+    cooldowns = _decrement_cooldowns(
+        working_state,
+        skip_players=cooldown_skip_players,
+    )
     sabotage = _advance_sabotage(working_state.sabotage)
     tasks = _advance_tasks(dict(working_state.tasks))
 

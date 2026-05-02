@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from math import dist
 
@@ -72,23 +73,41 @@ def resolve_vent(state: WorldState, game_map: Map, action: VentAction) -> RuleEv
     if actor.role != "IMPOSTOR":
         raise ActionRejectedError("only impostors can vent")
 
-    vent = game_map.vents.get(action.payload.vent_id)
-    if vent is None:
+    destination_vent = game_map.vents.get(action.payload.vent_id)
+    if destination_vent is None:
         raise ActionRejectedError(f"unknown vent id: {action.payload.vent_id}")
 
     if actor.in_vent:
-        if vent.room != actor.room:
-            raise ActionRejectedError("cannot exit to vent in different room")
+        current_vent = game_map.vent_for_room(actor.room)
+        if current_vent is None:
+            raise ValueError(f"actor is in a ventless room while in vent: {actor.room}")
+        if (
+            destination_vent.id != current_vent.id
+            and destination_vent.id not in current_vent.connects_to
+        ):
+            raise ActionRejectedError("destination vent must be current or connected vent")
         event_type = "VentExited"
+        source_vent_id = current_vent.id
+        source_room = current_vent.room
     else:
-        if vent.room != actor.room:
+        if destination_vent.room != actor.room:
             raise ActionRejectedError("cannot enter vent from another room")
         event_type = "VentEntered"
+        source_vent_id = destination_vent.id
+        source_room = actor.room
 
     return RuleEvent(
         type=event_type,
         actor=action.actor,
-        details={"vent_id": vent.id, "room": vent.room, "traversal_ticks": vent.traversal_ticks},
+        details={
+            "vent_id": destination_vent.id,
+            "room": destination_vent.room,
+            "source_vent_id": source_vent_id,
+            "destination_vent_id": destination_vent.id,
+            "source_room": source_room,
+            "destination_room": destination_vent.room,
+            "traversal_ticks": destination_vent.traversal_ticks,
+        },
     )
 
 
@@ -107,7 +126,7 @@ def resolve_emergency_meeting(
     action: EmergencyMeetingAction,
     *,
     emergency_uses_per_player: int,
-    emergency_uses_by_player: dict[PlayerId, int],
+    emergency_uses_by_player: Mapping[PlayerId, int],
 ) -> RuleEvent:
     _ = _get_live_player(state, action.actor)
     used = emergency_uses_by_player.get(action.actor, 0)

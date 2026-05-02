@@ -56,6 +56,7 @@ class WorldState:
     tasks: Mapping[TaskId, TaskState]
     sabotage: SabotageState | None
     cooldowns: Mapping[PlayerId, int]
+    emergency_uses: Mapping[PlayerId, int]
     rng_state: bytes
     seed: int
 
@@ -64,6 +65,7 @@ class WorldState:
         object.__setattr__(self, "bodies", _readonly_mapping(self.bodies))
         object.__setattr__(self, "tasks", _readonly_mapping(self.tasks))
         object.__setattr__(self, "cooldowns", _readonly_mapping(self.cooldowns))
+        object.__setattr__(self, "emergency_uses", _readonly_mapping(self.emergency_uses))
 
 
 def _readonly_mapping(

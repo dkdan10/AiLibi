@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from engine.actions import (
     DoTaskAction,
     EmergencyMeetingAction,
@@ -11,7 +13,7 @@ from engine.actions import (
     SabotageAction,
     VentAction,
 )
-from engine.entities import BodyState, PlayerState, TaskState
+from engine.entities import BodyState, PlayerState, SabotageState, TaskState
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState
@@ -60,6 +62,7 @@ def _state() -> WorldState:
         tasks={"swipe_card": _task("swipe_card", "player-2", "ADMIN")},
         sabotage=None,
         cooldowns={"impostor-1": 0},
+        emergency_uses={},
         rng_state=EngineRng.from_seed(42).snapshot(),
         seed=42,
     )
@@ -75,8 +78,13 @@ def test_valid_kill_mutates_state_and_emits_event() -> None:
 
     assert not next_state.players["player-1"].alive
     assert "body-player-1-0" in next_state.bodies
+    assert next_state.cooldowns["impostor-1"] == 10
     assert any(event["type"] == "Killed" for event in events)
     assert next_state.phase == "PLAY"
+
+    later_state, _ = advance_tick(next_state, [])
+
+    assert later_state.cooldowns["impostor-1"] == 9
 
 
 def test_invalid_kill_emits_rejection_and_leaves_state_unchanged() -> None:
@@ -145,6 +153,57 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
     assert [event["type"] for event in events[:2]] == ["VentEntered", "SabotageStarted"]
 
 
+def test_vent_can_exit_through_connected_destination_vent() -> None:
+    state = replace(
+        _state(),
+        players={
+            **dict(_state().players),
+            "impostor-1": replace(_state().players["impostor-1"], room="ADMIN"),
+        },
+    )
+
+    in_vent_state, enter_events = advance_tick(
+        state,
+        [VentAction(type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"})],
+    )
+    exited_state, exit_events = advance_tick(
+        in_vent_state,
+        [VentAction(type="vent", actor="impostor-1", payload={"vent_id": "REACTOR_VENT"})],
+    )
+
+    assert in_vent_state.players["impostor-1"].room == "ADMIN"
+    assert in_vent_state.players["impostor-1"].in_vent
+    assert enter_events[0]["type"] == "VentEntered"
+    assert exited_state.players["impostor-1"].room == "REACTOR"
+    assert not exited_state.players["impostor-1"].in_vent
+    assert exit_events[0]["type"] == "VentExited"
+    assert exit_events[0]["details"]["source_vent_id"] == "ADMIN_VENT"
+    assert exit_events[0]["details"]["destination_vent_id"] == "REACTOR_VENT"
+
+
+def test_vent_rejects_unconnected_destination_vent() -> None:
+    state = replace(
+        _state(),
+        players={
+            **dict(_state().players),
+            "impostor-1": replace(_state().players["impostor-1"], room="ADMIN"),
+        },
+    )
+    in_vent_state, _ = advance_tick(
+        state,
+        [VentAction(type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"})],
+    )
+
+    next_state, events = advance_tick(
+        in_vent_state,
+        [VentAction(type="vent", actor="impostor-1", payload={"vent_id": "STORAGE_VENT"})],
+    )
+
+    assert next_state.players["impostor-1"].room == "ADMIN"
+    assert next_state.players["impostor-1"].in_vent
+    assert events[0]["type"] == "ActionRejected"
+
+
 def test_report_and_emergency_transition_to_meeting() -> None:
     body = BodyState(
         id="body-player-2-0",
@@ -177,4 +236,92 @@ def test_report_and_emergency_transition_to_meeting() -> None:
     )
 
     assert emergency_state.phase == "MEETING"
+    assert emergency_state.emergency_uses["player-1"] == 1
     assert any(event["type"] == "MeetingTriggered" for event in emergency_events)
+
+
+def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> None:
+    body = BodyState(
+        id="body-player-2-0",
+        player_id="player-2",
+        room="CAFETERIA",
+        position=(0.0, 0.0),
+        killed_by="impostor-1",
+        discovered_by=None,
+    )
+    state = replace(
+        _state(),
+        bodies={body.id: body},
+        sabotage=SabotageState(
+            kind="lights",
+            remaining_ticks=1,
+            affected_rooms=("ADMIN",),
+            active=True,
+        ),
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [
+            ReportBodyAction(
+                type="report",
+                actor="player-1",
+                payload={"body_id": "body-player-2-0"},
+            )
+        ],
+    )
+
+    assert next_state.phase == "MEETING"
+    assert next_state.tick == state.tick
+    assert next_state.rng_state == state.rng_state
+    assert next_state.sabotage is not None
+    assert next_state.sabotage.remaining_ticks == 1
+    assert [event["type"] for event in events] == ["MeetingTriggered"]
+
+
+def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> None:
+    state = replace(
+        _state(),
+        sabotage=SabotageState(
+            kind="lights",
+            remaining_ticks=1,
+            affected_rooms=("ADMIN",),
+            active=True,
+        ),
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+    )
+
+    assert next_state.phase == "MEETING"
+    assert next_state.tick == state.tick
+    assert next_state.rng_state == state.rng_state
+    assert next_state.sabotage is not None
+    assert next_state.sabotage.remaining_ticks == 1
+    assert [event["type"] for event in events] == ["MeetingTriggered"]
+
+
+def test_advance_tick_rejects_non_play_phases() -> None:
+    with pytest.raises(ValueError, match="MEETING"):
+        advance_tick(replace(_state(), phase="MEETING"), [])
+    with pytest.raises(ValueError, match="GAME_OVER"):
+        advance_tick(replace(_state(), phase="GAME_OVER"), [])
+
+
+def test_repeated_emergency_use_is_rejected() -> None:
+    meeting_state, _ = advance_tick(
+        _state(),
+        [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+    )
+    resumed_state = replace(meeting_state, phase="PLAY")
+
+    next_state, events = advance_tick(
+        resumed_state,
+        [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+    )
+
+    assert next_state.phase == "PLAY"
+    assert next_state.emergency_uses["player-1"] == 1
+    assert events[0]["type"] == "ActionRejected"
