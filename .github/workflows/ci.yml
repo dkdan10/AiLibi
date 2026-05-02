@@ -2,10 +2,13 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
 
 jobs:
-  checks:
-    name: Ruff, mypy, pytest
+  project-checks:
+    name: Project checks
     runs-on: ubuntu-latest
 
     steps:
@@ -20,17 +23,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install dependencies
-        run: uv sync
+      - name: Set up project environment
+        run: bash scripts/setup_env.sh
 
-      - name: Run ruff
-        run: uv run ruff check .
-
-      - name: Run import linter
-        run: uv run lint-imports
-
-      - name: Run mypy
-        run: uv run mypy --strict engine observation agents
-
-      - name: Run pytest
-        run: uv run pytest
+      - name: Run checks
+        run: bash scripts/check.sh

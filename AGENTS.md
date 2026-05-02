@@ -40,13 +40,22 @@ every task, then read DESIGN.md and CODEX_IMPLEMENTATION.md as referenced.
 - `ruff` and `ruff format` must pass.
 - Tests are `pytest`. Property tests use `hypothesis`.
 
+## Environment setup
+
+- In a fresh local, container, or Codex Web environment, run
+  `bash scripts/setup_env.sh` before testing or implementation work.
+- For final verification, run `bash scripts/check.sh`. Targeted `uv run ...`
+  commands are fine while developing, but the shared check script is the
+  required full-project gate.
+- New Python dependencies must be added intentionally with `uv add ...` or
+  `uv lock`. Commit both `pyproject.toml` and `uv.lock` when dependencies
+  change.
+
 ## Definition of done (always)
 
 A task is not done until:
 - All checkboxes in the task's "Definition of done" are checked.
-- `pytest` passes locally.
-- `ruff check .` passes.
-- `mypy --strict` passes on the touched packages.
+- `bash scripts/check.sh` passes locally.
 - The diff touches only the files listed as in scope.
 - The PR description references the DESIGN.md section(s) implemented.
 
