@@ -73,6 +73,7 @@ def _visible_player_ids(
             player_id
             for player_id, player in players.items()
             if player_id != observer_id and player.alive and player.room in visible_room_set
+            and not player.in_vent
         )
     )
 

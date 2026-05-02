@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
+import sys
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from engine.actions import (
     DoTaskAction,
@@ -12,11 +16,11 @@ from engine.actions import (
     ReportBodyAction,
     SabotageAction,
     VentAction,
-)
-from engine.entities import BodyState, PlayerState, SabotageState, TaskState
-from engine.rng import EngineRng
-from engine.tick import advance_tick
-from engine.world import WorldState
+)  # noqa: E402
+from engine.entities import BodyState, PlayerState, SabotageState, TaskState  # noqa: E402
+from engine.rng import EngineRng  # noqa: E402
+from engine.tick import advance_tick  # noqa: E402
+from engine.world import WorldState  # noqa: E402
 
 
 def _player(
@@ -70,6 +74,18 @@ def _state() -> WorldState:
 
 def test_valid_kill_mutates_state_and_emits_event() -> None:
     state = _state()
+    players = dict(state.players)
+    players["crew-b"] = _player("crew-b", "CREWMATE", "CAFETERIA", (2.0, 0.0))
+    players["crew-a"] = _player("crew-a", "CREWMATE", "CAFETERIA", (3.0, 0.0))
+    players["dead-crew"] = replace(
+        _player("dead-crew", "CREWMATE", "CAFETERIA", (4.0, 0.0)),
+        alive=False,
+    )
+    players["vented-crew"] = replace(
+        _player("vented-crew", "CREWMATE", "CAFETERIA", (5.0, 0.0)),
+        in_vent=True,
+    )
+    state = replace(state, players=players)
 
     next_state, events = advance_tick(
         state,
@@ -79,7 +95,8 @@ def test_valid_kill_mutates_state_and_emits_event() -> None:
     assert not next_state.players["player-1"].alive
     assert "body-player-1-0" in next_state.bodies
     assert next_state.cooldowns["impostor-1"] == 10
-    assert any(event["type"] == "Killed" for event in events)
+    killed_event = next(event for event in events if event["type"] == "Killed")
+    assert killed_event["details"]["witnesses"] == ("crew-a", "crew-b")
     assert next_state.phase == "PLAY"
 
     later_state, _ = advance_tick(next_state, [])
@@ -128,11 +145,17 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
 
 
 def test_vent_sabotage_and_passive_effects_apply() -> None:
+    base_state = _state()
     state = replace(
-        _state(),
+        base_state,
         players={
-            **dict(_state().players),
-            "impostor-1": replace(_state().players["impostor-1"], room="ADMIN"),
+            **dict(base_state.players),
+            "impostor-1": replace(base_state.players["impostor-1"], room="ADMIN"),
+            "player-3": replace(base_state.players["player-3"], room="ADMIN", in_vent=True),
+            "dead-admin": replace(
+                _player("dead-admin", "CREWMATE", "ADMIN", (2.0, 0.0)),
+                alive=False,
+            ),
         },
         cooldowns={"impostor-1": 2},
     )
@@ -151,14 +174,19 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
     assert next_state.sabotage.remaining_ticks == 89
     assert next_state.cooldowns["impostor-1"] == 1
     assert [event["type"] for event in events[:2]] == ["VentEntered", "SabotageStarted"]
+    assert events[0]["details"]["witnesses"] == ("player-2",)
+    assert events[0]["details"]["source_witnesses"] == ("player-2",)
+    assert events[0]["details"]["destination_witnesses"] == ("player-2",)
 
 
 def test_vent_can_exit_through_connected_destination_vent() -> None:
+    base_state = _state()
     state = replace(
-        _state(),
+        base_state,
         players={
-            **dict(_state().players),
-            "impostor-1": replace(_state().players["impostor-1"], room="ADMIN"),
+            **dict(base_state.players),
+            "impostor-1": replace(base_state.players["impostor-1"], room="ADMIN"),
+            "player-3": replace(base_state.players["player-3"], room="REACTOR"),
         },
     )
 
@@ -179,6 +207,9 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
     assert exit_events[0]["type"] == "VentExited"
     assert exit_events[0]["details"]["source_vent_id"] == "ADMIN_VENT"
     assert exit_events[0]["details"]["destination_vent_id"] == "REACTOR_VENT"
+    assert exit_events[0]["details"]["witnesses"] == ("player-2", "player-3")
+    assert exit_events[0]["details"]["source_witnesses"] == ("player-2",)
+    assert exit_events[0]["details"]["destination_witnesses"] == ("player-3",)
 
 
 def test_vent_rejects_unconnected_destination_vent() -> None:

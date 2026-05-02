@@ -19,7 +19,7 @@ _SCRIPTED_GAMES = (
 )
 _FORBIDDEN_VISIBLE_PLAYER_FIELDS = frozenset({"role", "kill_attribution", "killed_by"})
 _FORBIDDEN_BODY_FIELDS = frozenset({"killed_by", "kill_attribution", "player_id"})
-_FORBIDDEN_VISIBLE_PLAYER_ACTIONS = frozenset({"kill", "sabotage", "vent"})
+_FORBIDDEN_VISIBLE_PLAYER_ACTIONS = frozenset({"sabotage"})
 _ACTION_ADAPTER = TypeAdapter(Action)
 
 
@@ -114,7 +114,10 @@ def _fixture_actions(script: dict[str, object]) -> dict[int, list[Action]]:
     return actions_by_tick
 
 
-def _run_scripted_game(fixture_name: str, tmp_path: Path) -> list[dict[str, object]]:
+def _run_scripted_game(
+    fixture_name: str,
+    tmp_path: Path,
+) -> list[tuple[dict[str, object], list[dict[str, object]]]]:
     fixture_path = Path("tests/fixtures") / fixture_name
     script = json.loads(fixture_path.read_text(encoding="utf-8"))
 
@@ -124,29 +127,76 @@ def _run_scripted_game(fixture_name: str, tmp_path: Path) -> list[dict[str, obje
     observation_service = ObservationService(game_map=game_map, audit_log_path=audit_path)
     actions_by_tick = _fixture_actions(script)
 
+    packet_records: list[tuple[dict[str, object], list[dict[str, object]]]] = []
     for tick in range(max(actions_by_tick, default=-1) + 1):
         assert state.tick == tick
-        state, _ = advance_tick(state, actions_by_tick.get(tick, []))
+        state, events = advance_tick(state, actions_by_tick.get(tick, []))
         for player_id, player in state.players.items():
             if player.alive:
-                observation_service.build_packet(world_state=state, agent_id=player_id)
+                packet = observation_service.build_packet(
+                    world_state=state,
+                    agent_id=player_id,
+                    engine_events=events,
+                )
+                packet_records.append((packet.model_dump(mode="json"), events))
         if state.phase == "GAME_OVER":
             break
 
-    return [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+    audit_packets = [
+        json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert audit_packets == [packet for packet, _ in packet_records]
+    return packet_records
+
+
+def _event_witnesses(event: dict[str, object], key: str) -> tuple[str, ...]:
+    details = event.get("details")
+    if not isinstance(details, dict):
+        return ()
+    raw_witnesses = details.get(key)
+    if not isinstance(raw_witnesses, (list, tuple)):
+        return ()
+    return tuple(witness for witness in raw_witnesses if isinstance(witness, str))
+
+
+def _action_is_permitted_by_witness_event(
+    *,
+    action: object,
+    actor_id: object,
+    agent_id: object,
+    engine_events: list[dict[str, object]],
+) -> bool:
+    if not isinstance(action, str) or not isinstance(actor_id, str) or not isinstance(agent_id, str):
+        return False
+    for event in engine_events:
+        if event.get("actor") != actor_id:
+            continue
+        event_type = event.get("type")
+        if action == "kill" and event_type == "Killed":
+            return agent_id in _event_witnesses(event, "witnesses")
+        if action == "vent" and event_type in {"VentEntered", "VentExited"}:
+            return agent_id in _event_witnesses(event, "witnesses")
+    return False
 
 
 def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
     for fixture_name in _SCRIPTED_GAMES:
-        packets = _run_scripted_game(fixture_name, tmp_path)
-        assert packets, f"no packets captured for {fixture_name}"
+        packet_records = _run_scripted_game(fixture_name, tmp_path)
+        assert packet_records, f"no packets captured for {fixture_name}"
 
-        for packet in packets:
+        for packet, engine_events in packet_records:
             assert "self_state" in packet
             for visible_player in packet["visible_players"]:
                 assert set(visible_player.keys()) == {"id", "room", "action"}
                 assert _FORBIDDEN_VISIBLE_PLAYER_FIELDS.isdisjoint(visible_player.keys())
                 assert visible_player["action"] not in _FORBIDDEN_VISIBLE_PLAYER_ACTIONS
+                if visible_player["action"] in {"kill", "vent"}:
+                    assert _action_is_permitted_by_witness_event(
+                        action=visible_player["action"],
+                        actor_id=visible_player["id"],
+                        agent_id=packet["agent_id"],
+                        engine_events=engine_events,
+                    )
             for visible_body in packet["visible_bodies"]:
                 assert set(visible_body.keys()) == {"id", "room"}
                 assert _FORBIDDEN_BODY_FIELDS.isdisjoint(visible_body.keys())

@@ -30,6 +30,24 @@ class RuleEvent:
 _KILL_RADIUS = 2.0
 
 
+def _witnesses_in_room(
+    state: WorldState,
+    *,
+    room: str,
+    exclude: set[PlayerId],
+) -> tuple[PlayerId, ...]:
+    return tuple(
+        sorted(
+            player_id
+            for player_id, player in state.players.items()
+            if player_id not in exclude
+            and player.alive
+            and not player.in_vent
+            and player.room == room
+        )
+    )
+
+
 def _get_live_player(state: WorldState, player_id: PlayerId) -> PlayerState:
     player = state.players.get(player_id)
     if player is None:
@@ -64,7 +82,15 @@ def resolve_kill(state: WorldState, action: KillAction) -> tuple[BodyState, Rule
     return body, RuleEvent(
         type="Killed",
         actor=action.actor,
-        details={"target": target.id, "room": target.room},
+        details={
+            "target": target.id,
+            "room": target.room,
+            "witnesses": _witnesses_in_room(
+                state,
+                room=target.room,
+                exclude={actor.id, target.id},
+            ),
+        },
     )
 
 
@@ -96,6 +122,18 @@ def resolve_vent(state: WorldState, game_map: Map, action: VentAction) -> RuleEv
         source_vent_id = destination_vent.id
         source_room = actor.room
 
+    source_witnesses = _witnesses_in_room(
+        state,
+        room=source_room,
+        exclude={actor.id},
+    )
+    destination_witnesses = _witnesses_in_room(
+        state,
+        room=destination_vent.room,
+        exclude={actor.id},
+    )
+    witnesses = tuple(sorted(set(source_witnesses) | set(destination_witnesses)))
+
     return RuleEvent(
         type=event_type,
         actor=action.actor,
@@ -107,6 +145,9 @@ def resolve_vent(state: WorldState, game_map: Map, action: VentAction) -> RuleEv
             "source_room": source_room,
             "destination_room": destination_vent.room,
             "traversal_ticks": destination_vent.traversal_ticks,
+            "witnesses": witnesses,
+            "source_witnesses": source_witnesses,
+            "destination_witnesses": destination_witnesses,
         },
     )
 
