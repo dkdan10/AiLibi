@@ -27,7 +27,7 @@ from engine.rules import (
     resolve_vent,
     resolve_win_conditions,
 )
-from engine.world import Map, WorldState, load_canonical_map
+from engine.world import Map, WorldState
 
 
 EngineEvent = dict[str, Any]
@@ -55,11 +55,9 @@ def _advance_tasks(tasks: dict[str, TaskState]) -> dict[str, TaskState]:
     return tasks
 
 
-def _load_state_map(state: WorldState) -> Map:
-    game_map = load_canonical_map()
+def _validate_state_map(state: WorldState, game_map: Map) -> None:
     if state.map != game_map.id:
         raise ValueError(f"unsupported map id for Phase 1 engine: {state.map}")
-    return game_map
 
 
 def _get_live_player(state: WorldState, player_id: PlayerId) -> PlayerState:
@@ -278,14 +276,14 @@ def _apply_action(
 
 
 def advance_tick(
-    state: WorldState, actions: Sequence[Action]
+    state: WorldState, actions: Sequence[Action], *, game_map: Map
 ) -> tuple[WorldState, list[EngineEvent]]:
     """Advance one engine tick using the DESIGN.md §3.1 seven-step loop."""
 
     if state.phase != "PLAY":
         raise ValueError(f"cannot advance tick during {state.phase}")
 
-    game_map = _load_state_map(state)
+    _validate_state_map(state, game_map)
     events: list[EngineEvent] = []
     working_state = state
     cooldown_skip_players: set[PlayerId] = set()

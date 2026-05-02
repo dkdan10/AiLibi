@@ -77,7 +77,7 @@ def _readonly_mapping(
 
 
 class _FrozenModel(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
 
 class Position(_FrozenModel):
@@ -241,27 +241,12 @@ class Map(_FrozenModel):
         if not isinstance(data, dict):
             return data
         prepared = dict(data)
-        raw_rooms = prepared.get("rooms")
-        if isinstance(raw_rooms, dict):
-            prepared["rooms"] = {
-                room_id: {**room_data, "id": room_id}
-                for room_id, room_data in raw_rooms.items()
-                if isinstance(room_data, dict)
-            }
-        raw_vents = prepared.get("vents")
-        if isinstance(raw_vents, dict):
-            prepared["vents"] = {
-                vent_id: {**vent_data, "id": vent_id}
-                for vent_id, vent_data in raw_vents.items()
-                if isinstance(vent_data, dict)
-            }
-        raw_tasks = prepared.get("tasks")
-        if isinstance(raw_tasks, dict):
-            prepared["tasks"] = {
-                task_id: {**task_data, "id": task_id}
-                for task_id, task_data in raw_tasks.items()
-                if isinstance(task_data, dict)
-            }
+        for field_name in ("rooms", "vents", "tasks"):
+            if field_name in prepared:
+                prepared[field_name] = _attach_mapping_ids(
+                    field_name=field_name,
+                    raw_items=prepared[field_name],
+                )
         return prepared
 
     @model_validator(mode="after")
@@ -378,6 +363,30 @@ class Map(_FrozenModel):
         for label, room_id in special_rooms.items():
             if room_id not in self.rooms:
                 raise MapValidationError(f"{label} references unknown room: {room_id}")
+
+
+def _attach_mapping_ids(
+    *, field_name: str, raw_items: object
+) -> dict[str, dict[str, object]]:
+    if not isinstance(raw_items, Mapping):
+        raise MapValidationError(f"{field_name} must be a mapping")
+
+    prepared_items: dict[str, dict[str, object]] = {}
+    for item_id, raw_item in raw_items.items():
+        if not isinstance(item_id, str):
+            raise MapValidationError(f"{field_name} ids must be strings")
+        if not isinstance(raw_item, Mapping):
+            raise MapValidationError(f"{field_name}.{item_id} must be a mapping")
+
+        item_data = dict(raw_item)
+        embedded_id = item_data.get("id")
+        if embedded_id is not None and embedded_id != item_id:
+            raise MapValidationError(
+                f"{field_name}.{item_id} embedded id must match mapping key"
+            )
+        item_data["id"] = item_id
+        prepared_items[item_id] = item_data
+    return prepared_items
 
 
 def load_canonical_map() -> Map:

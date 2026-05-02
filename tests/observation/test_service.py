@@ -66,6 +66,7 @@ def _visible_player(packet_id: str, packet_players: list[PlayerView]) -> PlayerV
 
 
 def test_kill_witness_sees_killer_action(tmp_path: Path) -> None:
+    game_map = load_canonical_map()
     state = _base_world_state()
     players = dict(state.players)
     players["observer"] = _player("observer", "CREWMATE", "STORAGE", (2.0, 0.0))
@@ -86,6 +87,7 @@ def test_kill_witness_sees_killer_action(tmp_path: Path) -> None:
     state, events = advance_tick(
         state,
         [KillAction(type="kill", actor="impostor", payload={"target": "victim"})],
+        game_map=game_map,
     )
 
     packet = _observation_service(tmp_path).build_packet(
@@ -99,9 +101,11 @@ def test_kill_witness_sees_killer_action(tmp_path: Path) -> None:
 
 
 def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> None:
+    game_map = load_canonical_map()
     state, _ = advance_tick(
         _base_world_state(),
         [KillAction(type="kill", actor="impostor", payload={"target": "victim"})],
+        game_map=game_map,
     )
     state, events = advance_tick(
         state,
@@ -112,6 +116,7 @@ def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> No
                 payload={"to_room": "ENGINEERING"},
             )
         ],
+        game_map=game_map,
     )
 
     packet = _observation_service(tmp_path).build_packet(
@@ -125,6 +130,7 @@ def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> No
 
 
 def test_vent_witness_sees_vent_action_and_audible_event(tmp_path: Path) -> None:
+    game_map = load_canonical_map()
     state = _base_world_state()
     players = dict(state.players)
     players["impostor"] = _player("impostor", "IMPOSTOR", "ADMIN", (1.0, 0.0))
@@ -146,6 +152,7 @@ def test_vent_witness_sees_vent_action_and_audible_event(tmp_path: Path) -> None
     state, events = advance_tick(
         state,
         [VentAction(type="vent", actor="impostor", payload={"vent_id": "ADMIN_VENT"})],
+        game_map=game_map,
     )
 
     packet = _observation_service(tmp_path).build_packet(
@@ -162,6 +169,7 @@ def test_vent_witness_sees_vent_action_and_audible_event(tmp_path: Path) -> None
 
 
 def test_vented_player_is_hidden_without_same_tick_event(tmp_path: Path) -> None:
+    game_map = load_canonical_map()
     state = _base_world_state()
     players = dict(state.players)
     players["impostor"] = _player("impostor", "IMPOSTOR", "ADMIN", (1.0, 0.0))
@@ -182,6 +190,7 @@ def test_vented_player_is_hidden_without_same_tick_event(tmp_path: Path) -> None
     state, _ = advance_tick(
         state,
         [VentAction(type="vent", actor="impostor", payload={"vent_id": "ADMIN_VENT"})],
+        game_map=game_map,
     )
 
     packet = _observation_service(tmp_path).build_packet(
@@ -244,9 +253,11 @@ def test_impostor_receives_own_cooldown(tmp_path: Path) -> None:
 
 
 def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
+    game_map = load_canonical_map()
     state, _ = advance_tick(
         _base_world_state(),
         [KillAction(type="kill", actor="impostor", payload={"target": "victim"})],
+        game_map=game_map,
     )
     state, events = advance_tick(
         state,
@@ -257,6 +268,7 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
                 payload={"to_room": "ENGINEERING"},
             )
         ],
+        game_map=game_map,
     )
     state_with_bad_cooldown = WorldState(
         tick=state.tick,

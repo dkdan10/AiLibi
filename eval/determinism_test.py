@@ -112,13 +112,14 @@ def _fixture_actions(fixture_name: str) -> tuple[int, dict[int, list[Action]]]:
 
 def _write_fixture_replay(fixture_name: str, path: Path) -> bytes:
     seed, actions_by_tick = _fixture_actions(fixture_name)
+    game_map = load_canonical_map()
     state = _initial_world_state(seed=seed)
     replay = ReplayLog(path, game_id=fixture_name)
 
     for tick in range(max(actions_by_tick, default=-1) + 1):
         assert state.tick == tick
         actions = actions_by_tick.get(tick, [])
-        state, _ = advance_tick(state, actions)
+        state, _ = advance_tick(state, actions, game_map=game_map)
         replay.record_tick(tick, actions, state)
         if state.phase == "GAME_OVER":
             break

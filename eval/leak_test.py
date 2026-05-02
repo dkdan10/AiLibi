@@ -134,7 +134,11 @@ def _run_scripted_game(
     packet_records: list[tuple[dict[str, object], list[dict[str, object]]]] = []
     for tick in range(max(actions_by_tick, default=-1) + 1):
         assert state.tick == tick
-        state, events = advance_tick(state, actions_by_tick.get(tick, []))
+        state, events = advance_tick(
+            state,
+            actions_by_tick.get(tick, []),
+            game_map=game_map,
+        )
         for player_id, player in state.players.items():
             if player.alive:
                 packet = observation_service.build_packet(

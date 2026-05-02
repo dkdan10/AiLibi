@@ -20,7 +20,7 @@ from engine.actions import (
 from engine.entities import BodyState, PlayerState, SabotageState, TaskState  # noqa: E402
 from engine.rng import EngineRng  # noqa: E402
 from engine.tick import advance_tick  # noqa: E402
-from engine.world import WorldState  # noqa: E402
+from engine.world import WorldState, load_canonical_map  # noqa: E402
 
 
 def _player(
@@ -73,6 +73,7 @@ def _state() -> WorldState:
 
 
 def test_valid_kill_mutates_state_and_emits_event() -> None:
+    game_map = load_canonical_map()
     state = _state()
     players = dict(state.players)
     players["crew-b"] = _player("crew-b", "CREWMATE", "CAFETERIA", (2.0, 0.0))
@@ -90,6 +91,7 @@ def test_valid_kill_mutates_state_and_emits_event() -> None:
     next_state, events = advance_tick(
         state,
         [KillAction(type="kill", actor="impostor-1", payload={"target": "player-1"})],
+        game_map=game_map,
     )
 
     assert not next_state.players["player-1"].alive
@@ -99,17 +101,19 @@ def test_valid_kill_mutates_state_and_emits_event() -> None:
     assert killed_event["details"]["witnesses"] == ("crew-a", "crew-b")
     assert next_state.phase == "PLAY"
 
-    later_state, _ = advance_tick(next_state, [])
+    later_state, _ = advance_tick(next_state, [], game_map=game_map)
 
     assert later_state.cooldowns["impostor-1"] == 9
 
 
 def test_invalid_kill_emits_rejection_and_leaves_state_unchanged() -> None:
+    game_map = load_canonical_map()
     state = replace(_state(), cooldowns={"impostor-1": 1})
 
     next_state, events = advance_tick(
         state,
         [KillAction(type="kill", actor="impostor-1", payload={"target": "player-1"})],
+        game_map=game_map,
     )
 
     assert next_state.players["player-1"].alive
@@ -119,9 +123,11 @@ def test_invalid_kill_emits_rejection_and_leaves_state_unchanged() -> None:
 
 
 def test_move_and_task_actions_apply_expected_mutations() -> None:
+    game_map = load_canonical_map()
     moved_state, move_events = advance_tick(
         _state(),
         [MoveAction(type="move", actor="player-1", payload={"to_room": "UPPER_HALL"})],
+        game_map=game_map,
     )
     task_state = replace(
         moved_state,
@@ -139,6 +145,7 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
                 type="do_task", actor="player-2", payload={"task_id": "swipe_card"}
             )
         ],
+        game_map=game_map,
     )
 
     assert moved_state.players["player-1"].room == "UPPER_HALL"
@@ -149,6 +156,7 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
 
 
 def test_vent_sabotage_and_passive_effects_apply() -> None:
+    game_map = load_canonical_map()
     base_state = _state()
     state = replace(
         base_state,
@@ -176,6 +184,7 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
                 type="sabotage", actor="impostor-1", payload={"kind": "lights"}
             ),
         ],
+        game_map=game_map,
     )
 
     assert next_state.players["impostor-1"].in_vent
@@ -190,6 +199,7 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
 
 
 def test_vent_can_exit_through_connected_destination_vent() -> None:
+    game_map = load_canonical_map()
     base_state = _state()
     state = replace(
         base_state,
@@ -207,6 +217,7 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
                 type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"}
             )
         ],
+        game_map=game_map,
     )
     exited_state, exit_events = advance_tick(
         in_vent_state,
@@ -215,6 +226,7 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
                 type="vent", actor="impostor-1", payload={"vent_id": "REACTOR_VENT"}
             )
         ],
+        game_map=game_map,
     )
 
     assert in_vent_state.players["impostor-1"].room == "ADMIN"
@@ -231,6 +243,7 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
 
 
 def test_vent_rejects_unconnected_destination_vent() -> None:
+    game_map = load_canonical_map()
     state = replace(
         _state(),
         players={
@@ -245,6 +258,7 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
                 type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"}
             )
         ],
+        game_map=game_map,
     )
 
     next_state, events = advance_tick(
@@ -254,6 +268,7 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
                 type="vent", actor="impostor-1", payload={"vent_id": "STORAGE_VENT"}
             )
         ],
+        game_map=game_map,
     )
 
     assert next_state.players["impostor-1"].room == "ADMIN"
@@ -262,6 +277,7 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
 
 
 def test_report_and_emergency_transition_to_meeting() -> None:
+    game_map = load_canonical_map()
     body = BodyState(
         id="body-player-2-0",
         player_id="player-2",
@@ -281,6 +297,7 @@ def test_report_and_emergency_transition_to_meeting() -> None:
                 payload={"body_id": "body-player-2-0"},
             )
         ],
+        game_map=game_map,
     )
 
     assert next_state.phase == "MEETING"
@@ -290,6 +307,7 @@ def test_report_and_emergency_transition_to_meeting() -> None:
     emergency_state, emergency_events = advance_tick(
         _state(),
         [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+        game_map=game_map,
     )
 
     assert emergency_state.phase == "MEETING"
@@ -300,6 +318,7 @@ def test_report_and_emergency_transition_to_meeting() -> None:
 def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> (
     None
 ):
+    game_map = load_canonical_map()
     body = BodyState(
         id="body-player-2-0",
         player_id="player-2",
@@ -328,6 +347,7 @@ def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks()
                 payload={"body_id": "body-player-2-0"},
             )
         ],
+        game_map=game_map,
     )
 
     assert next_state.phase == "MEETING"
@@ -341,6 +361,7 @@ def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks()
 def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> (
     None
 ):
+    game_map = load_canonical_map()
     state = replace(
         _state(),
         sabotage=SabotageState(
@@ -354,6 +375,7 @@ def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks
     next_state, events = advance_tick(
         state,
         [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+        game_map=game_map,
     )
 
     assert next_state.phase == "MEETING"
@@ -365,22 +387,53 @@ def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks
 
 
 def test_advance_tick_rejects_non_play_phases() -> None:
+    game_map = load_canonical_map()
     with pytest.raises(ValueError, match="MEETING"):
-        advance_tick(replace(_state(), phase="MEETING"), [])
+        advance_tick(replace(_state(), phase="MEETING"), [], game_map=game_map)
     with pytest.raises(ValueError, match="GAME_OVER"):
-        advance_tick(replace(_state(), phase="GAME_OVER"), [])
+        advance_tick(replace(_state(), phase="GAME_OVER"), [], game_map=game_map)
+
+
+def test_advance_tick_rejects_mismatched_state_map() -> None:
+    game_map = load_canonical_map()
+
+    with pytest.raises(ValueError, match="unsupported map id"):
+        advance_tick(replace(_state(), map="other_map"), [], game_map=game_map)
+
+
+def test_advance_tick_uses_supplied_map_without_loading_canonical_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    game_map = load_canonical_map()
+
+    def fail_if_loaded() -> None:
+        pytest.fail("advance_tick must not load the canonical map")
+
+    monkeypatch.setattr("engine.world.load_canonical_map", fail_if_loaded)
+
+    next_state, events = advance_tick(
+        _state(),
+        [MoveAction(type="move", actor="player-1", payload={"to_room": "UPPER_HALL"})],
+        game_map=game_map,
+    )
+
+    assert next_state.players["player-1"].room == "UPPER_HALL"
+    assert any(event["type"] == "Moved" for event in events)
 
 
 def test_repeated_emergency_use_is_rejected() -> None:
+    game_map = load_canonical_map()
     meeting_state, _ = advance_tick(
         _state(),
         [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+        game_map=game_map,
     )
     resumed_state = replace(meeting_state, phase="PLAY")
 
     next_state, events = advance_tick(
         resumed_state,
         [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+        game_map=game_map,
     )
 
     assert next_state.phase == "PLAY"
