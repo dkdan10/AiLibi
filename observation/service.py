@@ -53,10 +53,15 @@ class ObservationService:
             PlayerView(
                 id=player_id,
                 room=world_state.players[player_id].room,
-                action=self._action_name(world_state.players[player_id].last_action),
+                # Other-player actions require event-aware visibility. Reading
+                # engine last_action here can leak unseen kills, vents, or sabotage.
+                action=None,
             )
             for player_id in visibility.visible_player_ids
         ]
+        cooldown = (
+            world_state.cooldowns.get(agent_id) if player.role == "IMPOSTOR" else None
+        )
         visible_bodies = [
             BodyView(id=body_id, room=world_state.bodies[body_id].room)
             for body_id in visibility.visible_body_ids
@@ -73,7 +78,7 @@ class ObservationService:
             visible_bodies=visible_bodies,
             audible_events=self._audible_events(world_state=world_state, visibility=visibility),
             global_state=self._global_view(world_state=world_state),
-            cooldown=world_state.cooldowns.get(agent_id),
+            cooldown=cooldown,
         )
         return packet
 
@@ -111,13 +116,3 @@ class ObservationService:
         if not owned_unfinished_tasks:
             return None
         return sorted(owned_unfinished_tasks)[0]
-
-    def _action_name(self, action: object | None) -> str | None:
-        if action is None:
-            return None
-        action_type = getattr(action, "type", None)
-        if action_type is None:
-            return type(action).__name__
-        if not isinstance(action_type, str):
-            raise ValueError("action.type must be a string when present")
-        return action_type

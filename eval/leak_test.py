@@ -19,6 +19,7 @@ _SCRIPTED_GAMES = (
 )
 _FORBIDDEN_VISIBLE_PLAYER_FIELDS = frozenset({"role", "kill_attribution", "killed_by"})
 _FORBIDDEN_BODY_FIELDS = frozenset({"killed_by", "kill_attribution", "player_id"})
+_FORBIDDEN_VISIBLE_PLAYER_ACTIONS = frozenset({"kill", "sabotage", "vent"})
 _ACTION_ADAPTER = TypeAdapter(Action)
 
 
@@ -145,6 +146,7 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
             for visible_player in packet["visible_players"]:
                 assert set(visible_player.keys()) == {"id", "room", "action"}
                 assert _FORBIDDEN_VISIBLE_PLAYER_FIELDS.isdisjoint(visible_player.keys())
+                assert visible_player["action"] not in _FORBIDDEN_VISIBLE_PLAYER_ACTIONS
             for visible_body in packet["visible_bodies"]:
                 assert set(visible_body.keys()) == {"id", "room"}
                 assert _FORBIDDEN_BODY_FIELDS.isdisjoint(visible_body.keys())
