@@ -46,7 +46,9 @@ def _serialize_actions(actions: list[Action]) -> list[dict[str, Any]]:
     for action in actions:
         serialized = _to_jsonable(action)
         if not isinstance(serialized, dict):
-            raise TypeError(f"action did not serialize to object: {type(action).__name__}")
+            raise TypeError(
+                f"action did not serialize to object: {type(action).__name__}"
+            )
         serialized_actions.append(serialized)
     return serialized_actions
 

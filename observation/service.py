@@ -68,7 +68,9 @@ class ObservationService:
         if player is None:
             raise ValueError(f"unknown agent id: {agent_id}")
 
-        pending_task_id = self._pending_task_id_for_agent(world_state=world_state, agent_id=agent_id)
+        pending_task_id = self._pending_task_id_for_agent(
+            world_state=world_state, agent_id=agent_id
+        )
         observed_actions = self._observed_actions_for_agent(
             agent_id=agent_id,
             engine_events=engine_events,
@@ -155,8 +157,7 @@ class ObservationService:
             )
         )
         events.extend(
-            AudibleEvent(kind="vent_use_heard", room=room)
-            for room in vent_rooms
+            AudibleEvent(kind="vent_use_heard", room=room) for room in vent_rooms
         )
         if world_state.sabotage is not None and world_state.sabotage.active:
             events.append(AudibleEvent(kind="sabotage_alarm", room=None))
@@ -204,8 +205,12 @@ class ObservationService:
     ) -> _ObservedAction | None:
         witnessed_rooms: list[str] = []
         if agent_id in self._event_witnesses(details, "source_witnesses", event_type):
-            witnessed_rooms.append(self._event_string(details, "source_room", event_type))
-        if agent_id in self._event_witnesses(details, "destination_witnesses", event_type):
+            witnessed_rooms.append(
+                self._event_string(details, "source_room", event_type)
+            )
+        if agent_id in self._event_witnesses(
+            details, "destination_witnesses", event_type
+        ):
             witnessed_rooms.append(
                 self._event_string(details, "destination_room", event_type)
             )
@@ -246,18 +251,28 @@ class ObservationService:
 
     def _global_view(self, *, world_state: WorldState) -> GlobalView:
         tasks_total = len(world_state.tasks)
-        tasks_completed = sum(1 for task in world_state.tasks.values() if task.completed)
-        task_completion_percent = (tasks_completed / tasks_total) if tasks_total > 0 else 0.0
+        tasks_completed = sum(
+            1 for task in world_state.tasks.values() if task.completed
+        )
+        task_completion_percent = (
+            (tasks_completed / tasks_total) if tasks_total > 0 else 0.0
+        )
 
         return GlobalView(
             tasks_completed=tasks_completed,
             tasks_total=tasks_total,
             task_completion_percent=task_completion_percent,
-            sabotage_active=(world_state.sabotage is not None and world_state.sabotage.active),
-            sabotage_kind=world_state.sabotage.kind if world_state.sabotage is not None else None,
+            sabotage_active=(
+                world_state.sabotage is not None and world_state.sabotage.active
+            ),
+            sabotage_kind=world_state.sabotage.kind
+            if world_state.sabotage is not None
+            else None,
         )
 
-    def _pending_task_id_for_agent(self, *, world_state: WorldState, agent_id: PlayerId) -> TaskId | None:
+    def _pending_task_id_for_agent(
+        self, *, world_state: WorldState, agent_id: PlayerId
+    ) -> TaskId | None:
         owned_unfinished_tasks = [
             task.id
             for task in world_state.tasks.values()

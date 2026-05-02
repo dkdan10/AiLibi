@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from engine.world import MapValidationError, load_canonical_map  # noqa: E402
+from engine.world import Map, MapValidationError, load_canonical_map  # noqa: E402
 
 
 def test_load_canonical_map_counts() -> None:
@@ -52,3 +52,89 @@ def test_map_graph_helpers_reject_unknown_ids() -> None:
         game_map.vent_neighbors("UNKNOWN_VENT")
     with pytest.raises(MapValidationError):
         game_map.vent_for_room("UNKNOWN_ROOM")
+
+
+def test_loaded_map_collections_reject_in_place_mutation() -> None:
+    game_map = load_canonical_map()
+    room = game_map.rooms["CAFETERIA"]
+    vent = game_map.vents["ADMIN_VENT"]
+    task = game_map.tasks["swipe_card"]
+    sabotage = game_map.sabotages["lights"]
+
+    with pytest.raises(TypeError):
+        game_map.rooms["ZZ_TEST"] = room  # type: ignore[index]
+    with pytest.raises(TypeError):
+        game_map.vents["ZZ_TEST_VENT"] = vent  # type: ignore[index]
+    with pytest.raises(TypeError):
+        game_map.tasks["zz_test_task"] = task  # type: ignore[index]
+    with pytest.raises(TypeError):
+        game_map.sabotages["zz_test"] = sabotage  # type: ignore[index]
+
+
+def test_map_model_defensively_copies_collection_inputs() -> None:
+    rooms = {
+        "CAFETERIA": {
+            "name": "Cafeteria",
+            "kind": "meeting_room",
+            "position": {"x": 0, "y": 0},
+            "size": {"width": 1, "height": 1},
+        }
+    }
+    vents: dict[str, object] = {}
+    tasks: dict[str, object] = {}
+    sabotages = {
+        "lights": {
+            "affected_visibility": "same_room_only",
+            "repair_rooms": ["CAFETERIA"],
+            "duration_ticks": 1,
+        }
+    }
+    game_map = Map.model_validate(
+        {
+            "map_id": "test_map",
+            "name": "Test Map",
+            "version": "0.1",
+            "tick_rate_hz": 2,
+            "visibility_defaults": {
+                "base": "same_room_and_adjacent",
+                "lights_sabotage": "same_room_only",
+            },
+            "rooms": rooms,
+            "edges": [],
+            "vents": vents,
+            "tasks": tasks,
+            "sabotages": sabotages,
+            "emergency": {"button_room": "CAFETERIA", "uses_per_player": 1},
+            "spawn": {"room": "CAFETERIA"},
+            "meeting": {"room": "CAFETERIA"},
+        }
+    )
+
+    rooms["ZZ_TEST"] = {
+        "name": "Test",
+        "kind": "room",
+        "position": {"x": 1, "y": 1},
+        "size": {"width": 1, "height": 1},
+    }
+    vents["ZZ_TEST_VENT"] = {
+        "room": "CAFETERIA",
+        "connects_to": [],
+        "traversal_ticks": 1,
+    }
+    tasks["zz_test_task"] = {
+        "name": "Test",
+        "room": "CAFETERIA",
+        "duration_ticks": 1,
+        "task_type": "short",
+        "weight": 1,
+    }
+    sabotages["zz_test"] = {
+        "affected_visibility": "same_room_only",
+        "repair_rooms": ["CAFETERIA"],
+        "duration_ticks": 1,
+    }
+
+    assert tuple(game_map.rooms) == ("CAFETERIA",)
+    assert tuple(game_map.vents) == ()
+    assert tuple(game_map.tasks) == ()
+    assert tuple(game_map.sabotages) == ("lights",)

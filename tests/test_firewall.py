@@ -29,7 +29,9 @@ def test_agents_cannot_reach_engine_through_observation() -> None:
     bridge = repo_root / "observation" / "_firewall_engine_bridge.py"
     bad_import = repo_root / "agents" / "_firewall_bad_transitive_import.py"
     bridge.write_text("import engine\n", encoding="utf-8")
-    bad_import.write_text("import observation._firewall_engine_bridge\n", encoding="utf-8")
+    bad_import.write_text(
+        "import observation._firewall_engine_bridge\n", encoding="utf-8"
+    )
 
     try:
         result = subprocess.run(
@@ -49,7 +51,9 @@ def test_agents_cannot_reach_engine_through_observation() -> None:
 
 def test_observation_packet_has_no_engine_imports() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    packet_source = (repo_root / "observation" / "packet.py").read_text(encoding="utf-8")
+    packet_source = (repo_root / "observation" / "packet.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "from engine" not in packet_source
     assert "import engine" not in packet_source

@@ -65,7 +65,9 @@ class WorldState:
         object.__setattr__(self, "bodies", _readonly_mapping(self.bodies))
         object.__setattr__(self, "tasks", _readonly_mapping(self.tasks))
         object.__setattr__(self, "cooldowns", _readonly_mapping(self.cooldowns))
-        object.__setattr__(self, "emergency_uses", _readonly_mapping(self.emergency_uses))
+        object.__setattr__(
+            self, "emergency_uses", _readonly_mapping(self.emergency_uses)
+        )
 
 
 def _readonly_mapping(
@@ -224,11 +226,11 @@ class Map(_FrozenModel):
     version: str
     tick_rate_hz: int
     visibility_defaults: VisibilityDefaults
-    rooms: dict[RoomId, Room]
+    rooms: Mapping[RoomId, Room]
     edges: tuple[Edge, ...]
-    vents: dict[VentId, Vent]
-    tasks: dict[TaskId, TaskDefinition]
-    sabotages: dict[str, SabotageDefinition]
+    vents: Mapping[VentId, Vent]
+    tasks: Mapping[TaskId, TaskDefinition]
+    sabotages: Mapping[str, SabotageDefinition]
     emergency: EmergencyConfig
     spawn: SpawnConfig
     meeting: MeetingConfig
@@ -238,28 +240,29 @@ class Map(_FrozenModel):
     def attach_ids(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
-        raw_rooms = data.get("rooms")
+        prepared = dict(data)
+        raw_rooms = prepared.get("rooms")
         if isinstance(raw_rooms, dict):
-            data["rooms"] = {
+            prepared["rooms"] = {
                 room_id: {**room_data, "id": room_id}
                 for room_id, room_data in raw_rooms.items()
                 if isinstance(room_data, dict)
             }
-        raw_vents = data.get("vents")
+        raw_vents = prepared.get("vents")
         if isinstance(raw_vents, dict):
-            data["vents"] = {
+            prepared["vents"] = {
                 vent_id: {**vent_data, "id": vent_id}
                 for vent_id, vent_data in raw_vents.items()
                 if isinstance(vent_data, dict)
             }
-        raw_tasks = data.get("tasks")
+        raw_tasks = prepared.get("tasks")
         if isinstance(raw_tasks, dict):
-            data["tasks"] = {
+            prepared["tasks"] = {
                 task_id: {**task_data, "id": task_id}
                 for task_id, task_data in raw_tasks.items()
                 if isinstance(task_data, dict)
             }
-        return data
+        return prepared
 
     @model_validator(mode="after")
     def validate_map(self) -> Map:
@@ -271,6 +274,10 @@ class Map(_FrozenModel):
         self._validate_tasks()
         self._validate_sabotages()
         self._validate_special_rooms()
+        object.__setattr__(self, "rooms", _readonly_mapping(self.rooms))
+        object.__setattr__(self, "vents", _readonly_mapping(self.vents))
+        object.__setattr__(self, "tasks", _readonly_mapping(self.tasks))
+        object.__setattr__(self, "sabotages", _readonly_mapping(self.sabotages))
         return self
 
     def room_neighbors(self, room_id: RoomId) -> tuple[RoomId, ...]:

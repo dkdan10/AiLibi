@@ -134,7 +134,11 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
 
     next_state, task_events = advance_tick(
         task_state,
-        [DoTaskAction(type="do_task", actor="player-2", payload={"task_id": "swipe_card"})],
+        [
+            DoTaskAction(
+                type="do_task", actor="player-2", payload={"task_id": "swipe_card"}
+            )
+        ],
     )
 
     assert moved_state.players["player-1"].room == "UPPER_HALL"
@@ -151,7 +155,9 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
         players={
             **dict(base_state.players),
             "impostor-1": replace(base_state.players["impostor-1"], room="ADMIN"),
-            "player-3": replace(base_state.players["player-3"], room="ADMIN", in_vent=True),
+            "player-3": replace(
+                base_state.players["player-3"], room="ADMIN", in_vent=True
+            ),
             "dead-admin": replace(
                 _player("dead-admin", "CREWMATE", "ADMIN", (2.0, 0.0)),
                 alive=False,
@@ -163,8 +169,12 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
     next_state, events = advance_tick(
         state,
         [
-            VentAction(type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"}),
-            SabotageAction(type="sabotage", actor="impostor-1", payload={"kind": "lights"}),
+            VentAction(
+                type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"}
+            ),
+            SabotageAction(
+                type="sabotage", actor="impostor-1", payload={"kind": "lights"}
+            ),
         ],
     )
 
@@ -192,11 +202,19 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
 
     in_vent_state, enter_events = advance_tick(
         state,
-        [VentAction(type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"})],
+        [
+            VentAction(
+                type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"}
+            )
+        ],
     )
     exited_state, exit_events = advance_tick(
         in_vent_state,
-        [VentAction(type="vent", actor="impostor-1", payload={"vent_id": "REACTOR_VENT"})],
+        [
+            VentAction(
+                type="vent", actor="impostor-1", payload={"vent_id": "REACTOR_VENT"}
+            )
+        ],
     )
 
     assert in_vent_state.players["impostor-1"].room == "ADMIN"
@@ -222,12 +240,20 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
     )
     in_vent_state, _ = advance_tick(
         state,
-        [VentAction(type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"})],
+        [
+            VentAction(
+                type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"}
+            )
+        ],
     )
 
     next_state, events = advance_tick(
         in_vent_state,
-        [VentAction(type="vent", actor="impostor-1", payload={"vent_id": "STORAGE_VENT"})],
+        [
+            VentAction(
+                type="vent", actor="impostor-1", payload={"vent_id": "STORAGE_VENT"}
+            )
+        ],
     )
 
     assert next_state.players["impostor-1"].room == "ADMIN"
@@ -271,7 +297,9 @@ def test_report_and_emergency_transition_to_meeting() -> None:
     assert any(event["type"] == "MeetingTriggered" for event in emergency_events)
 
 
-def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> None:
+def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> (
+    None
+):
     body = BodyState(
         id="body-player-2-0",
         player_id="player-2",
@@ -310,7 +338,9 @@ def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks()
     assert [event["type"] for event in events] == ["MeetingTriggered"]
 
 
-def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> None:
+def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> (
+    None
+):
     state = replace(
         _state(),
         sabotage=SabotageState(

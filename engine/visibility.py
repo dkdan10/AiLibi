@@ -72,7 +72,9 @@ def _visible_player_ids(
         sorted(
             player_id
             for player_id, player in players.items()
-            if player_id != observer_id and player.alive and player.room in visible_room_set
+            if player_id != observer_id
+            and player.alive
+            and player.room in visible_room_set
             and not player.in_vent
         )
     )
@@ -113,7 +115,9 @@ def compute_visibility_for_player(
         )
 
     mode = resolve_visibility_mode(world_state, game_map)
-    visible_rooms = visible_rooms_for_player(observer=observer, game_map=game_map, mode=mode)
+    visible_rooms = visible_rooms_for_player(
+        observer=observer, game_map=game_map, mode=mode
+    )
 
     return VisibilityResult(
         observer_id=observer_id,

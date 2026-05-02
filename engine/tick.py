@@ -71,7 +71,9 @@ def _get_live_player(state: WorldState, player_id: PlayerId) -> PlayerState:
     return player
 
 
-def _with_actor_last_action(state: WorldState, action: Action) -> dict[PlayerId, PlayerState]:
+def _with_actor_last_action(
+    state: WorldState, action: Action
+) -> dict[PlayerId, PlayerState]:
     players = dict(state.players)
     actor = _get_live_player(state, action.actor)
     players[action.actor] = replace(actor, last_action=action)
@@ -102,7 +104,9 @@ def _rejection_event(
     }
 
 
-def _apply_move(state: WorldState, game_map: Map, action: MoveAction) -> tuple[WorldState, RuleEvent]:
+def _apply_move(
+    state: WorldState, game_map: Map, action: MoveAction
+) -> tuple[WorldState, RuleEvent]:
     actor = _get_live_player(state, action.actor)
     if actor.in_vent:
         raise ActionRejectedError("cannot move while in vent")
@@ -130,7 +134,9 @@ def _apply_move(state: WorldState, game_map: Map, action: MoveAction) -> tuple[W
     return replace(state, players=players), event
 
 
-def _apply_do_task(state: WorldState, action: DoTaskAction) -> tuple[WorldState, RuleEvent]:
+def _apply_do_task(
+    state: WorldState, action: DoTaskAction
+) -> tuple[WorldState, RuleEvent]:
     actor = _get_live_player(state, action.actor)
     if actor.in_vent:
         raise ActionRejectedError("cannot do task while in vent")
@@ -179,7 +185,9 @@ def _apply_kill(state: WorldState, action: KillAction) -> tuple[WorldState, Rule
     return replace(state, players=players, bodies=bodies, cooldowns=cooldowns), event
 
 
-def _apply_vent(state: WorldState, game_map: Map, action: VentAction) -> tuple[WorldState, RuleEvent]:
+def _apply_vent(
+    state: WorldState, game_map: Map, action: VentAction
+) -> tuple[WorldState, RuleEvent]:
     event = resolve_vent(state, game_map, action)
     vent = game_map.vents[action.payload.vent_id]
     players = _with_actor_last_action(state, action)
@@ -188,7 +196,9 @@ def _apply_vent(state: WorldState, game_map: Map, action: VentAction) -> tuple[W
     return replace(state, players=players), event
 
 
-def _apply_report(state: WorldState, action: ReportBodyAction) -> tuple[WorldState, RuleEvent]:
+def _apply_report(
+    state: WorldState, action: ReportBodyAction
+) -> tuple[WorldState, RuleEvent]:
     event = resolve_report(state, action)
     players = _with_actor_last_action(state, action)
     bodies = dict(state.bodies)
@@ -243,7 +253,9 @@ def _apply_wait(state: WorldState, action: WaitAction) -> tuple[WorldState, Rule
     return replace(state, players=players), event
 
 
-def _apply_action(state: WorldState, game_map: Map, action: Action) -> tuple[WorldState, RuleEvent]:
+def _apply_action(
+    state: WorldState, game_map: Map, action: Action
+) -> tuple[WorldState, RuleEvent]:
     if state.phase != "PLAY":
         raise ActionRejectedError(f"cannot apply gameplay action during {state.phase}")
     if isinstance(action, MoveAction):
@@ -265,7 +277,9 @@ def _apply_action(state: WorldState, game_map: Map, action: Action) -> tuple[Wor
     raise TypeError(f"unsupported action type: {type(action).__name__}")
 
 
-def advance_tick(state: WorldState, actions: Sequence[Action]) -> tuple[WorldState, list[EngineEvent]]:
+def advance_tick(
+    state: WorldState, actions: Sequence[Action]
+) -> tuple[WorldState, list[EngineEvent]]:
     """Advance one engine tick using the DESIGN.md §3.1 seven-step loop."""
 
     if state.phase != "PLAY":
@@ -286,7 +300,9 @@ def advance_tick(state: WorldState, actions: Sequence[Action]) -> tuple[WorldSta
             if working_state.phase == "MEETING":
                 return working_state, events
         except ActionRejectedError as exc:
-            events.append(_rejection_event(tick=state.tick, action=action, reason=str(exc)))
+            events.append(
+                _rejection_event(tick=state.tick, action=action, reason=str(exc))
+            )
 
     # 2) Resolve passive effects.
     cooldowns = _decrement_cooldowns(
@@ -296,7 +312,9 @@ def advance_tick(state: WorldState, actions: Sequence[Action]) -> tuple[WorldSta
     sabotage = _advance_sabotage(working_state.sabotage)
     tasks = _advance_tasks(dict(working_state.tasks))
 
-    working_state = replace(working_state, cooldowns=cooldowns, sabotage=sabotage, tasks=tasks)
+    working_state = replace(
+        working_state, cooldowns=cooldowns, sabotage=sabotage, tasks=tasks
+    )
 
     # 3) Check victory.
     win_result = resolve_win_conditions(working_state)

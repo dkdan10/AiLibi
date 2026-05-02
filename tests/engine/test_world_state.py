@@ -7,6 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from engine.actions import MoveAction  # noqa: E402
 from engine.entities import BodyState, PlayerState, TaskState  # noqa: E402
 from engine.world import WorldState  # noqa: E402
 
@@ -126,3 +127,41 @@ def test_world_state_keeps_public_mapping_field_names() -> None:
     assert state.tasks == {}
     assert state.cooldowns == {}
     assert state.emergency_uses == {}
+
+
+def test_player_state_accepts_none_last_action() -> None:
+    player = _player("player-1")
+
+    assert player.last_action is None
+
+
+def test_player_state_accepts_engine_action_last_action() -> None:
+    action = MoveAction(
+        type="move",
+        actor="player-1",
+        payload={"to_room": "ADMIN"},
+    )
+    player = PlayerState(
+        id="player-1",
+        role="CREWMATE",
+        alive=True,
+        room="CAFETERIA",
+        position=(0.0, 0.0),
+        last_action=action,
+        in_vent=False,
+    )
+
+    assert player.last_action == action
+
+
+def test_player_state_rejects_non_action_last_action() -> None:
+    with pytest.raises(TypeError, match="last_action"):
+        PlayerState(
+            id="player-1",
+            role="CREWMATE",
+            alive=True,
+            room="CAFETERIA",
+            position=(0.0, 0.0),
+            last_action=[],  # type: ignore[arg-type]
+            in_vent=False,
+        )

@@ -27,7 +27,11 @@ def evaluate_win_conditions(state: WorldState) -> WinResult | None:
     if alive_impostors >= alive_crewmates:
         return WinResult(winner="IMPOSTORS", reason="IMPOSTOR_PARITY")
 
-    if state.sabotage is not None and state.sabotage.active and state.sabotage.remaining_ticks == 0:
+    if (
+        state.sabotage is not None
+        and state.sabotage.active
+        and state.sabotage.remaining_ticks == 0
+    ):
         return WinResult(winner="IMPOSTORS", reason="IMPOSTOR_SABOTAGE")
 
     return None

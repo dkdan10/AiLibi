@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
+
+if TYPE_CHECKING:
+    from engine.actions import Action
 
 PlayerId: TypeAlias = str
 BodyId: TypeAlias = str
@@ -17,8 +20,17 @@ class PlayerState:
     alive: bool
     room: RoomId
     position: tuple[float, float]
-    last_action: object | None
+    last_action: Action | None
     in_vent: bool
+
+    def __post_init__(self) -> None:
+        if self.last_action is None:
+            return
+
+        from engine.actions import is_action_instance
+
+        if not is_action_instance(self.last_action):
+            raise TypeError("last_action must be an engine Action or None")
 
 
 @dataclass(frozen=True)

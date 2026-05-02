@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias
+from typing import Annotated, Literal, TypeAlias, TypeGuard
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -119,3 +119,19 @@ Action: TypeAlias = Annotated[
     | WaitAction,
     Field(discriminator="type"),
 ]
+
+
+def is_action_instance(value: object) -> TypeGuard[Action]:
+    return isinstance(
+        value,
+        (
+            MoveAction,
+            DoTaskAction,
+            KillAction,
+            VentAction,
+            ReportBodyAction,
+            EmergencyMeetingAction,
+            SabotageAction,
+            WaitAction,
+        ),
+    )

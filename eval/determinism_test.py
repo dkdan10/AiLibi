@@ -98,7 +98,9 @@ def _initial_world_state(*, seed: int) -> WorldState:
 def _fixture_actions(fixture_name: str) -> tuple[int, dict[int, list[Action]]]:
     fixture_path = Path("tests/fixtures") / fixture_name
     script = json.loads(fixture_path.read_text(encoding="utf-8"))
-    raw_actions = TypeAdapter(list[dict[str, object]]).validate_python(script["actions"])
+    raw_actions = TypeAdapter(list[dict[str, object]]).validate_python(
+        script["actions"]
+    )
     actions_by_tick: dict[int, list[Action]] = {}
     for raw_action in raw_actions:
         action_data = dict(raw_action)
@@ -138,7 +140,9 @@ def test_replay_log_writes_jsonl_for_dataclass_world_state(tmp_path: Path) -> No
     assert len(entry["state_hash"]) == 64
 
 
-def test_identical_seed_and_actions_produce_byte_identical_replay(tmp_path: Path) -> None:
+def test_identical_seed_and_actions_produce_byte_identical_replay(
+    tmp_path: Path,
+) -> None:
     first = _write_fixture_replay(
         "scripted_game_kill_report_meeting.json",
         tmp_path / "first.jsonl",

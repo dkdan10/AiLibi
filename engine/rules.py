@@ -111,7 +111,9 @@ def resolve_vent(state: WorldState, game_map: Map, action: VentAction) -> RuleEv
             destination_vent.id != current_vent.id
             and destination_vent.id not in current_vent.connects_to
         ):
-            raise ActionRejectedError("destination vent must be current or connected vent")
+            raise ActionRejectedError(
+                "destination vent must be current or connected vent"
+            )
         event_type = "VentExited"
         source_vent_id = current_vent.id
         source_room = current_vent.room
@@ -159,7 +161,11 @@ def resolve_report(state: WorldState, action: ReportBodyAction) -> RuleEvent:
         raise ActionRejectedError(f"unknown body id: {action.payload.body_id}")
     if body.room != actor.room:
         raise ActionRejectedError("report requires actor and body in same room")
-    return RuleEvent(type="MeetingTriggered", actor=action.actor, details={"trigger": "report", "body_id": body.id})
+    return RuleEvent(
+        type="MeetingTriggered",
+        actor=action.actor,
+        details={"trigger": "report", "body_id": body.id},
+    )
 
 
 def resolve_emergency_meeting(
@@ -173,10 +179,14 @@ def resolve_emergency_meeting(
     used = emergency_uses_by_player.get(action.actor, 0)
     if used >= emergency_uses_per_player:
         raise ActionRejectedError("emergency meeting use limit exceeded")
-    return RuleEvent(type="MeetingTriggered", actor=action.actor, details={"trigger": "emergency"})
+    return RuleEvent(
+        type="MeetingTriggered", actor=action.actor, details={"trigger": "emergency"}
+    )
 
 
-def resolve_sabotage(state: WorldState, game_map: Map, action: SabotageAction) -> RuleEvent:
+def resolve_sabotage(
+    state: WorldState, game_map: Map, action: SabotageAction
+) -> RuleEvent:
     actor = _get_live_player(state, action.actor)
     if actor.role != "IMPOSTOR":
         raise ActionRejectedError("only impostors can sabotage")

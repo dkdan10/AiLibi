@@ -104,7 +104,9 @@ def _initial_world_state(*, seed: int) -> WorldState:
 
 
 def _fixture_actions(script: dict[str, object]) -> dict[int, list[Action]]:
-    raw_actions = TypeAdapter(list[dict[str, object]]).validate_python(script["actions"])
+    raw_actions = TypeAdapter(list[dict[str, object]]).validate_python(
+        script["actions"]
+    )
     actions_by_tick: dict[int, list[Action]] = {}
     for raw_action in raw_actions:
         action_data = dict(raw_action)
@@ -124,7 +126,9 @@ def _run_scripted_game(
     game_map = load_canonical_map()
     state = _initial_world_state(seed=int(script["seed"]))
     audit_path = tmp_path / f"audit_{fixture_name}.jsonl"
-    observation_service = ObservationService(game_map=game_map, audit_log_path=audit_path)
+    observation_service = ObservationService(
+        game_map=game_map, audit_log_path=audit_path
+    )
     actions_by_tick = _fixture_actions(script)
 
     packet_records: list[tuple[dict[str, object], list[dict[str, object]]]] = []
@@ -166,7 +170,11 @@ def _action_is_permitted_by_witness_event(
     agent_id: object,
     engine_events: list[dict[str, object]],
 ) -> bool:
-    if not isinstance(action, str) or not isinstance(actor_id, str) or not isinstance(agent_id, str):
+    if (
+        not isinstance(action, str)
+        or not isinstance(actor_id, str)
+        or not isinstance(agent_id, str)
+    ):
         return False
     for event in engine_events:
         if event.get("actor") != actor_id:
@@ -188,7 +196,9 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
             assert "self_state" in packet
             for visible_player in packet["visible_players"]:
                 assert set(visible_player.keys()) == {"id", "room", "action"}
-                assert _FORBIDDEN_VISIBLE_PLAYER_FIELDS.isdisjoint(visible_player.keys())
+                assert _FORBIDDEN_VISIBLE_PLAYER_FIELDS.isdisjoint(
+                    visible_player.keys()
+                )
                 assert visible_player["action"] not in _FORBIDDEN_VISIBLE_PLAYER_ACTIONS
                 if visible_player["action"] in {"kill", "vent"}:
                     assert _action_is_permitted_by_witness_event(

@@ -287,7 +287,9 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
         json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()
     ]
     visible_impostor = next(
-        player for player in audit_entry["visible_players"] if player["id"] == "impostor"
+        player
+        for player in audit_entry["visible_players"]
+        if player["id"] == "impostor"
     )
     assert audit_entry == packet.model_dump(mode="json")
     assert visible_impostor["action"] is None
