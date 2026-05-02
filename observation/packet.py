@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict
 
-from engine.entities import BodyId, PlayerId, Role
-from engine.world import RoomId, TaskId
+BodyId: TypeAlias = str
+PlayerId: TypeAlias = str
+Role: TypeAlias = Literal["CREWMATE", "IMPOSTOR"]
+RoomId: TypeAlias = str
+TaskId: TypeAlias = str
 
 
 class _FrozenModel(BaseModel):

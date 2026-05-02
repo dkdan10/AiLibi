@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from dataclasses import fields, is_dataclass
 import hashlib
 import json
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel
 
 from engine.actions import Action
 from engine.world import WorldState
@@ -38,7 +42,13 @@ class ReplayLog:
 
 
 def _serialize_actions(actions: list[Action]) -> list[dict[str, Any]]:
-    return [action.model_dump(mode="json") for action in actions]
+    serialized_actions: list[dict[str, Any]] = []
+    for action in actions:
+        serialized = _to_jsonable(action)
+        if not isinstance(serialized, dict):
+            raise TypeError(f"action did not serialize to object: {type(action).__name__}")
+        serialized_actions.append(serialized)
+    return serialized_actions
 
 
 def _state_hash(state: WorldState) -> str:
@@ -47,24 +57,36 @@ def _state_hash(state: WorldState) -> str:
 
 
 def _serialize_world_state(state: WorldState) -> dict[str, Any]:
-    return {
-        "tick": state.tick,
-        "phase": state.phase,
-        "map": state.map,
-        "players": {player_id: _serialize_model(player) for player_id, player in state.players.items()},
-        "bodies": {body_id: _serialize_model(body) for body_id, body in state.bodies.items()},
-        "tasks": {task_id: _serialize_model(task) for task_id, task in state.tasks.items()},
-        "sabotage": _serialize_model(state.sabotage),
-        "cooldowns": dict(state.cooldowns),
-        "rng_state": state.rng_state.hex(),
-        "seed": state.seed,
-    }
+    serialized = _to_jsonable(state)
+    if not isinstance(serialized, dict):
+        raise TypeError("world state did not serialize to object")
+    return serialized
 
 
-def _serialize_model(model: Any) -> Any:
-    if model is None:
-        return None
-    return model.model_dump(mode="json")
+def _to_jsonable(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, bytes):
+        return value.hex()
+    if isinstance(value, BaseModel):
+        return _to_jsonable(value.model_dump(mode="json"))
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: _to_jsonable(getattr(value, field.name))
+            for field in fields(value)
+        }
+    if isinstance(value, Mapping):
+        serialized_mapping: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError(f"unsupported mapping key type: {type(key).__name__}")
+            serialized_mapping[key] = _to_jsonable(item)
+        return serialized_mapping
+    if isinstance(value, tuple):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_to_jsonable(item) for item in value]
+    raise TypeError(f"unsupported replay serialization type: {type(value).__name__}")
 
 
 def _stable_json(data: Any) -> str:

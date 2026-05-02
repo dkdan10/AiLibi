@@ -2,6 +2,7 @@
 root_packages =
     agents
     engine
+    observation
 
 [importlinter:agents_must_not_import_engine]
 name = Agents must not import engine
