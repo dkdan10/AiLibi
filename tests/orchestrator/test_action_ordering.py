@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from pydantic import TypeAdapter
+import pytest
 
 from engine.actions import Action
-from orchestrator.action_ordering import order_actions_for_tick
+from orchestrator.action_ordering import (
+    ActionBatchValidationError,
+    order_actions_for_tick,
+)
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -39,18 +43,17 @@ def test_order_actions_for_tick_sorts_by_actor_without_mutating_input() -> None:
     ]
 
 
-def test_order_actions_for_tick_tie_breaks_duplicate_actor_actions() -> None:
-    ordered = order_actions_for_tick(
-        [
-            _action({"type": "wait", "actor": "player-1", "payload": {}}),
-            _action(
-                {
-                    "type": "move",
-                    "actor": "player-1",
-                    "payload": {"to_room": "ADMIN"},
-                }
-            ),
-        ]
-    )
+def test_order_actions_for_tick_rejects_duplicate_actor_actions() -> None:
+    actions = [
+        _action({"type": "wait", "actor": "player-1", "payload": {}}),
+        _action(
+            {
+                "type": "move",
+                "actor": "player-1",
+                "payload": {"to_room": "ADMIN"},
+            }
+        ),
+    ]
 
-    assert [action.type for action in ordered] == ["move", "wait"]
+    with pytest.raises(ActionBatchValidationError, match="player-1"):
+        order_actions_for_tick(actions)

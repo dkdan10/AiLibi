@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import pytest
 from pydantic import TypeAdapter
 
 from observation.action_intent import ActionIntent
+from orchestrator.action_ordering import ActionBatchValidationError
 from orchestrator.boundary import (
     public_map_from_engine_map,
     translate_action_intent,
@@ -65,6 +67,22 @@ def test_translate_action_intent_returns_matching_engine_action() -> None:
     assert action.payload.to_room == "ADMIN"
 
 
+def test_translate_repair_sabotage_intent_returns_matching_engine_action() -> None:
+    action = translate_action_intent(
+        _intent(
+            {
+                "type": "repair_sabotage",
+                "actor": "player-1",
+                "payload": {"kind": "lights"},
+            }
+        )
+    )
+
+    assert action.type == "repair_sabotage"
+    assert action.actor == "player-1"
+    assert action.payload.kind == "lights"
+
+
 def test_translate_action_intents_for_tick_returns_deterministic_order() -> None:
     intents = [
         _intent({"type": "wait", "actor": "player-2", "payload": {}}),
@@ -90,3 +108,19 @@ def test_translate_action_intents_for_tick_returns_deterministic_order() -> None
         "player-1",
         "impostor-1",
     ]
+
+
+def test_translate_action_intents_for_tick_rejects_duplicate_actors() -> None:
+    intents = [
+        _intent({"type": "wait", "actor": "player-1", "payload": {}}),
+        _intent(
+            {
+                "type": "move",
+                "actor": "player-1",
+                "payload": {"to_room": "ADMIN"},
+            }
+        ),
+    ]
+
+    with pytest.raises(ActionBatchValidationError, match="player-1"):
+        translate_action_intents_for_tick(intents)

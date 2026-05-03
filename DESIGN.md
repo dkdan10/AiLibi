@@ -217,11 +217,11 @@ Module responsibilities are intentionally narrow. `engine/` is a pure function o
 
 Single tick (`engine/tick.py::advance_tick`):
 
-1. **Apply queued actions** from the previous tick. Each action is re-validated against current state (positions could have changed by sabotage). Invalid actions become no-ops; an `ActionRejected` event is emitted.
+1. **Apply queued actions** from the previous tick. Each action is re-validated against current state. Invalid actions become no-ops; an `ActionRejected` event is emitted. The orchestrator enforces exactly one submitted action per actor per tick before actions enter the engine.
 2. **Resolve passive effects:** kill cooldown decrement, sabotage timer countdown, task progress on continuing tasks.
 3. **Check victory:** crewmates win on all-tasks-done; impostors win on parity (impostors ≥ remaining crew) or sabotage-timeout. If a side has won, emit `GameOver` and return.
 4. **Compute observations:** for each living agent, ObservationService renders an `ObservationPacket` for tick `t`.
-5. **Solicit actions:** agents return engine-free `ActionIntent`s. The orchestrator validates and translates them into engine `Action`s before they enter the next tick's action queue. In live mode this is awaited with a per-agent deadline; in headless mode it is synchronous.
+5. **Solicit actions:** agents return engine-free `ActionIntent`s. The orchestrator validates one intent per actor, translates them into engine `Action`s, and rejects duplicate actor submissions before they enter the next tick's action queue. In live mode this is awaited with a per-agent deadline; in headless mode it is synchronous.
 6. **Emit tick event** to event bus (full state, used by spectator API and replay log).
 7. Increment tick counter; repeat.
 
@@ -240,6 +240,7 @@ class WorldState:
     tasks: dict[TaskId, TaskState]    # location, owner, progress, completed
     sabotage: SabotageState | None
     cooldowns: dict[PlayerId, int]    # ticks remaining, impostor only
+    emergency_uses: dict[PlayerId, int] # emergency calls used by player
     rng_state: bytes                  # serialized RNG cursor
     seed: int
 
@@ -249,27 +250,30 @@ class PlayerState:
     role: Role                        # CREWMATE | IMPOSTOR
     alive: bool
     room: RoomId
-    position: tuple[float, float]     # within-room coords
+    position: tuple[float, float]     # layout metadata; not rule-authoritative in MVP
     last_action: Action | None
     in_vent: bool
 ```
 
 Frozen dataclasses keep `advance_tick` a pure function: `(state, actions) -> (state', events)`. Replay is just `reduce(advance_tick, actions_log, initial_state)`.
+For MVP, gameplay rules operate at room-graph granularity. `position` remains
+available for rendering and future pixel-level work, but movement, visibility,
+kill eligibility, and vent witnessing use `room`, not within-room coordinates.
 
 ### 3.3 Entities
 
-- **Player**: position, role, alive flag. Role is hidden from observation.
+- **Player**: room, render/layout position, role, alive flag. Role is hidden from observation.
 - **Body**: where someone died, who killed (hidden until game-over), and who discovered it.
 - **Task**: anchored to a room; "long" tasks take N ticks of standing in place. Tasks contribute to a global completion counter visible to all crewmates.
 - **Sabotage**: a global timer that crewmates must resolve within N ticks or impostors win. Disables certain rooms (e.g., lights → reduces crew visibility radius).
 
 ### 3.4 Rules
 
-- **Kill:** impostor and crewmate must be in the same room and within kill radius; cooldown must be 0. Kill spawns a `Body` and emits `Killed` event. Witnesses (other players in same room with line-of-sight) are recorded — used by ObservationService.
+- **Kill:** impostor and crewmate must be in the same room; cooldown must be 0. Kill spawns a `Body` and emits `Killed` event. Witnesses are living non-vented players in the same room — used by ObservationService.
 - **Report:** any living player in a room containing a body can `ReportBody`. Triggers meeting.
-- **Vent:** impostor-only; vent network is per-map; entering and exiting are separate actions with a one-tick traversal. Vent use is observable to anyone in the source/destination room.
+- **Vent:** impostor-only; vent network is per-map; entering and exiting are explicit actions. Vent use is observable to living non-vented players in the source/destination room.
 - **Emergency Meeting:** any player can call once per game (configurable). Triggers meeting.
-- **Sabotage:** impostor-only; certain sabotages have global UI effects but the global task counter still progresses.
+- **Sabotage:** impostor-only; certain sabotages have global UI effects but the global task counter still progresses. Crewmates resolve active sabotages with `RepairSabotageAction`, which accumulates repair progress against the sabotage's configured repair threshold.
 
 ### 3.5 Win conditions
 
@@ -338,7 +342,10 @@ Perception code converts this into `EpisodicEvent`s tagged with provenance. Cruc
 Agents also receive a `PublicMapView` containing only public topology needed for
 pathing and tactical choice. Tactical policies return `ActionIntent`s, not
 engine `Action`s. This keeps both directions of the agent boundary free of
-engine imports while still allowing deterministic gameplay.
+engine imports while still allowing deterministic gameplay. The agent-visible
+intent vocabulary includes `repair_sabotage`; the orchestrator maps that intent
+to the engine-owned repair action and rejects duplicate actor submissions before
+action ordering.
 
 ### 4.3 Memory
 
@@ -638,6 +645,8 @@ Two stack questions deserve explicit calls:
 
 ### 8.3 Simplifications
 
+- Gameplay rules are room-graph based for MVP. `position` fields are retained
+  for layout/rendering and future pixel-level rules.
 - Visibility = "same room or adjacent room with open door." No occlusion within a room.
 - Sabotage limited to "lights" (reduces visibility to same-room only). No reactor / O2.
 - Meeting deadlines off in headless mode; on with generous defaults in live mode.
@@ -821,7 +830,17 @@ A more general version walks the schema and asserts no field whose value should 
 ```python
 class Action(BaseModel):
     actor: PlayerId
-    type: Literal["move","do_task","kill","vent","report","emergency","sabotage","wait"]
+    type: Literal[
+        "move",
+        "do_task",
+        "kill",
+        "vent",
+        "report",
+        "emergency",
+        "sabotage",
+        "repair_sabotage",
+        "wait",
+    ]
     payload: dict   # validated per type
 
 class ObservationPacket(BaseModel):

@@ -88,6 +88,15 @@ class SabotageIntent(_BaseIntent):
     payload: _SabotagePayload
 
 
+class _RepairSabotagePayload(_FrozenModel):
+    kind: str
+
+
+class RepairSabotageIntent(_BaseIntent):
+    type: Literal["repair_sabotage"]
+    payload: _RepairSabotagePayload
+
+
 class _WaitPayload(_FrozenModel):
     pass
 
@@ -105,6 +114,7 @@ ActionIntent: TypeAlias = Annotated[
     | ReportBodyIntent
     | EmergencyMeetingIntent
     | SabotageIntent
+    | RepairSabotageIntent
     | WaitIntent,
     Field(discriminator="type"),
 ]

@@ -18,6 +18,7 @@ def test_action_intent_union_accepts_supported_intent_types() -> None:
         {"type": "report", "actor": "player-1", "payload": {"body_id": "body-1"}},
         {"type": "emergency", "actor": "player-1", "payload": {"reason": "test"}},
         {"type": "sabotage", "actor": "impostor", "payload": {"kind": "lights"}},
+        {"type": "repair_sabotage", "actor": "player-1", "payload": {"kind": "lights"}},
         {"type": "wait", "actor": "player-1", "payload": {}},
     ]
 
@@ -31,13 +32,14 @@ def test_action_intent_union_accepts_supported_intent_types() -> None:
         "report",
         "emergency",
         "sabotage",
+        "repair_sabotage",
         "wait",
     ]
 
 
 def test_action_intent_union_rejects_unknown_or_malformed_intents() -> None:
     invalid_payloads = [
-        {"type": "repair_sabotage", "actor": "player-1", "payload": {"kind": "lights"}},
+        {"type": "repair_sabotage", "actor": "player-1", "payload": {}},
         {"type": "move", "actor": "player-1", "payload": {"room": "ADMIN"}},
         {
             "type": "do_task",

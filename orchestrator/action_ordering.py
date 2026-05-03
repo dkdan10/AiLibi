@@ -6,10 +6,29 @@ import json
 from engine.actions import Action
 
 
+class ActionBatchValidationError(ValueError):
+    """Raised when a tick action batch violates orchestrator boundary rules."""
+
+
 def order_actions_for_tick(actions: Sequence[Action]) -> tuple[Action, ...]:
     """Return the deterministic action order future async dispatch must use."""
 
+    _validate_unique_actors(actions)
     return tuple(sorted(actions, key=_action_order_key))
+
+
+def _validate_unique_actors(actions: Sequence[Action]) -> None:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for action in actions:
+        if action.actor in seen:
+            duplicates.add(action.actor)
+        seen.add(action.actor)
+    if duplicates:
+        joined = ", ".join(sorted(duplicates))
+        raise ActionBatchValidationError(
+            f"one action per actor per tick is required; duplicates: {joined}"
+        )
 
 
 def _action_order_key(action: Action) -> tuple[str, str, str]:

@@ -22,8 +22,10 @@ importing engine types.
 - observation/action_intent.py
 - observation/public_map.py
 - orchestrator/boundary.py
+- orchestrator/action_ordering.py
 - tests/observation/test_boundary_contracts.py
 - tests/orchestrator/test_boundary.py
+- tests/orchestrator/test_action_ordering.py
 - tests/test_firewall.py
 
 **Files NOT in scope:**
@@ -36,9 +38,10 @@ importing engine types.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] `ActionIntent` is a Pydantic discriminated union for move, do_task, kill, vent, report, emergency, sabotage, and wait.
+- [ ] `ActionIntent` is a Pydantic discriminated union for move, do_task, kill, vent, report, emergency, sabotage, repair_sabotage, and wait.
 - [ ] `PublicMapView` exposes only public map topology needed by agents: map id, room ids, room neighbors, vent graph, task locations, spawn room, meeting room, and emergency button room.
 - [ ] Orchestrator boundary helpers translate `PublicMapView` from an engine map and translate valid `ActionIntent` values into engine `Action` values.
+- [ ] Orchestrator boundary helpers reject duplicate actor submissions before actions enter `advance_tick`.
 - [ ] Invalid intents raise during translation; there are no silent fallbacks.
 - [ ] `agents/` has no imports from `engine/`, directly or transitively.
 - [ ] Relevant boundary and firewall tests pass.
