@@ -11,6 +11,7 @@ One foreground CLI agent on the engine. In parallel, a second agent can build de
 **Branch:** `phase-1-static-map-data`
 **Depends on:** Phase 0 merged
 **Section refs:** DESIGN.md §3, DESIGN.md §8.1
+**Complexity:** Medium
 
 engine/world.py::Map, room graph, vent network. Use the human-provided engine/maps/canonical_1.yaml.
 
@@ -37,12 +38,18 @@ engine/world.py::Map, room graph, vent network. Use the human-provided engine/ma
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §3 + §8.1. The canonical map ships at `engine/maps/canonical_1.yaml`; the loader lives in `engine/world.py::load_canonical_map`. Use PyYAML's `safe_load` — do not write a custom YAML parser. Validation happens via Pydantic model validators on `Map`.
+
 **Ready-to-paste prompt:** `agent_prompts/task-1-1-static-map-data.md`
 
 ### Task 1.2 — State model
 **Branch:** `phase-1-state-model`
 **Depends on:** 1.1 merged
 **Section refs:** DESIGN.md §3.2
+**Complexity:** Small
 
 WorldState, PlayerState, BodyState, TaskState, SabotageState per §3.2.
 
@@ -72,6 +79,7 @@ WorldState, PlayerState, BodyState, TaskState, SabotageState per §3.2.
 **Branch:** `phase-1-action-types`
 **Depends on:** 1.2 merged
 **Section refs:** DESIGN.md Appendix A
+**Complexity:** Small
 
 engine/actions.py Pydantic union per §A. Validators.
 
@@ -100,6 +108,7 @@ engine/actions.py Pydantic union per §A. Validators.
 **Branch:** `phase-1-engine-contract-hardening`
 **Depends on:** 1.3 merged
 **Section refs:** DESIGN.md §3.1, DESIGN.md §3.2, DESIGN.md §11.1
+**Complexity:** Small
 
 Harden the already-merged engine state/action contracts before rules depend on them. Make WorldState defensively immutable and add baseline tests for map loading, action validation, and WorldState immutability.
 
@@ -139,6 +148,7 @@ Harden the already-merged engine state/action contracts before rules depend on t
 **Branch:** `phase-1-rules`
 **Depends on:** 1.3.5 merged
 **Section refs:** DESIGN.md §3.4, DESIGN.md §3.5
+**Complexity:** Medium
 
 engine/rules.py for kill, vent, report, sabotage, win conditions per §3.4 + §3.5.
 
@@ -162,12 +172,18 @@ engine/rules.py for kill, vent, report, sabotage, win conditions per §3.4 + §3
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §3.4 + §3.5. Rule resolvers in `engine/rules.py` return typed `EngineEvent` subclasses directly (kill → KilledEvent, vent → VentEnteredEvent | VentExitedEvent, etc.). Win conditions in `engine/win_conditions.py` evaluate in the §3.5 order. Reject with `ActionRejectedError` for invalid actions; raise `ValueError` for invariant violations.
+
 **Ready-to-paste prompt:** `agent_prompts/task-1-4-rules.md`
 
 ### Task 1.5 — advance_tick
 **Branch:** `phase-1-advance-tick`
 **Depends on:** 1.4 merged
 **Section refs:** DESIGN.md §3.1
+**Complexity:** Integration
 
 Pure function (state, actions) -> (state', events) per §3.1. RNG threaded through engine/rng.py.
 
@@ -191,12 +207,26 @@ Pure function (state, actions) -> (state', events) per §3.1. RNG threaded throu
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §3.1. `advance_tick(state, actions, *, game_map) -> (state', events)` is a pure function implementing the 7-step loop. Steps 4–5 (observation packets, action solicitation) are explicitly the orchestrator's job; the engine just leaves placeholders. RNG state is threaded through `engine/rng.py::EngineRng`.
+
+**Integration risk:**
+
+advance_tick is the heartbeat of the entire simulation; every downstream Phase depends on it being a pure function with no hidden state. Risks:
+
+- Determinism: any randomness must come from `state.rng_state`.   No `time.time()`, no `random.random()` without seed.
+- MEETING phase: when an action triggers MEETING, return early;   do not run passive effects or win checks within that tick.
+- Cooldown skip: the impostor that just killed must not have its   cooldown decremented in the same tick that set it.
+
 **Ready-to-paste prompt:** `agent_prompts/task-1-5-advance-tick.md`
 
 ### Task 1.6 — Visibility
 **Branch:** `phase-1-visibility`
 **Depends on:** 1.5 merged
 **Section refs:** DESIGN.md §3.6, DESIGN.md §1.3
+**Complexity:** Small
 
 engine/visibility.py per §3.6 + §1.3 simplifications (room + adjacent room).
 
@@ -225,6 +255,7 @@ engine/visibility.py per §3.6 + §1.3 simplifications (room + adjacent room).
 **Branch:** `phase-1-observation-service`
 **Depends on:** 1.6 merged
 **Section refs:** DESIGN.md §1.3, DESIGN.md §4.2
+**Complexity:** Medium
 
 observation/service.py and ObservationPacket schema per §1.3 + §4.2. Audit log to disk.
 
@@ -249,12 +280,18 @@ observation/service.py and ObservationPacket schema per §1.3 + §4.2. Audit log
 - [ ] mypy --strict passes on observation/.
 - [ ] ruff check . passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §1.3 + §4.2. `ObservationService` is the only boundary-crossing object. Input: `(WorldState, agent_id, engine_events)`. Output: `ObservationPacket`. Strip every hidden field; the leak test (`eval/leak_test.py`) is the contract. Audit every packet to disk via `ObservationAuditLog`.
+
 **Ready-to-paste prompt:** `agent_prompts/task-1-7-observationservice.md`
 
 ### Task 1.8 — Replay log
 **Branch:** `phase-1-replay-log`
 **Depends on:** 1.7 merged
 **Section refs:** DESIGN.md §3.1, DESIGN.md §11.1, DESIGN.md §11.4
+**Complexity:** Small
 
 orchestrator/replay.py writes JSONL of (tick, actions, state-hash) per game.
 
@@ -282,6 +319,7 @@ orchestrator/replay.py writes JSONL of (tick, actions, state-hash) per game.
 **Branch:** `phase-1-test-fixtures`
 **Depends on:** 1.3 merged
 **Section refs:** DESIGN.md §11.1
+**Complexity:** Trivial
 
 Hand-author tests/fixtures/scripted_game_*.json short canned games used by the determinism test. Does not touch engine code.
 
@@ -311,6 +349,7 @@ Hand-author tests/fixtures/scripted_game_*.json short canned games used by the d
 **Branch:** `phase-1-leak-test-implementation`
 **Depends on:** 1.7 merged
 **Section refs:** DESIGN.md §11.2, DESIGN.md §1.3
+**Complexity:** Small
 
 Once ObservationPacket exists, implement the actual leak-test assertions. Can be done in parallel with task 1.8.
 

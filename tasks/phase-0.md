@@ -11,6 +11,7 @@ None. Single sequential agent (CLI preferred so you can watch).
 **Branch:** `phase-0-skeleton`
 **Depends on:** none
 **Section refs:** DESIGN.md §2
+**Complexity:** Small
 
 Create pyproject.toml, engine/, agents/, observation/, meetings/, orchestrator/, llm/, api/, eval/, tests/. Empty __init__.py files. Smoke test passes.
 
@@ -54,6 +55,7 @@ Preservation note: if engine/maps/canonical_1.yaml already exists, do not modify
 **Branch:** `phase-0-ci`
 **Depends on:** 0.1 merged
 **Section refs:** DESIGN.md §11
+**Complexity:** Small
 
 .github/workflows/ci.yml running ruff, mypy, pytest. Triggers on PR.
 
@@ -75,6 +77,7 @@ Preservation note: if engine/maps/canonical_1.yaml already exists, do not modify
 **Branch:** `phase-0-firewall`
 **Depends on:** 0.2 merged
 **Section refs:** DESIGN.md §1.3
+**Complexity:** Small
 
 Add import-linter config that fails if agents/ imports from engine/. Verify by adding an intentional bad import in a test, watching CI fail, then removing it.
 
@@ -101,6 +104,7 @@ Add import-linter config that fails if agents/ imports from engine/. Verify by a
 **Branch:** `phase-0-leaktest`
 **Depends on:** 0.1 merged
 **Section refs:** DESIGN.md §11.2
+**Complexity:** Trivial
 
 eval/leak_test.py imports nothing from engine/ directly but defines the test that will be implemented in Phase 1. Marked @pytest.mark.skip for now with a TODO.
 
@@ -123,6 +127,7 @@ eval/leak_test.py imports nothing from engine/ directly but defines the test tha
 **Branch:** `phase-0-adr`
 **Depends on:** 0.1 merged
 **Section refs:** DESIGN.md §0
+**Complexity:** Trivial
 
 docs/adr/0001-three-load-bearing-decisions.md capturing DESIGN.md §0 verbatim.
 

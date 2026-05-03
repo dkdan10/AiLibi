@@ -1,7 +1,15 @@
 # AGENTS.md
 
 You are an AI coding agent working on AiLibi. Read this file before every
-task, then read DESIGN.md and AGENT_IMPLEMENTATION.md as referenced.
+task, then read DESIGN.md and the task contract in tasks/phase-N.md.
+
+## One-time onboarding
+
+Read once, before your first task: `AGENT_IMPLEMENTATION.md`. It is the
+provider-neutral build plan and orients you on the overall multi-phase shape.
+You do not need to re-read it per task — the task contract in
+tasks/phase-N.md plus the prompt in agent_prompts/ is the implementation
+contract for each PR.
 
 ## Source of truth
 
@@ -9,8 +17,11 @@ task, then read DESIGN.md and AGENT_IMPLEMENTATION.md as referenced.
   a specific section. If the section says X, you do X — even if you think Y
   is better. If you genuinely think the design is wrong, leave a comment in
   the PR description and stop. Do not change the design unilaterally.
-- `AGENT_IMPLEMENTATION.md` is the provider-neutral build plan. The current
-  task description in the prompt overrides it where they conflict.
+- `tasks/phase-N.md` is the task contract — branch, dependencies, files in/out
+  of scope, definition of done, implementation hint, public types introduced.
+  The matching `agent_prompts/task-*.md` is generated from this contract by
+  `scripts/generate_prompts.py`. Do not hand-edit prompts; edit
+  `tasks/phase-N.md` and regenerate.
 
 ## Three load-bearing rules (DESIGN.md §0)
 

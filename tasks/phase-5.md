@@ -16,6 +16,7 @@ touch independent metric modules. Task 5.6 integrates them after 5.2 through
 **Branch:** `phase-5-eval-report-schema`
 **Depends on:** Phase 4 merged
 **Section refs:** DESIGN.md §11.3, DESIGN.md §11.4
+**Complexity:** Small
 
 Define the typed tournament/eval JSON report schema consumed by all Phase 5
 metrics and the dashboard.
@@ -47,6 +48,7 @@ metrics and the dashboard.
 **Branch:** `phase-5-vote-correctness-metric`
 **Depends on:** 5.1 merged
 **Section refs:** DESIGN.md §11.3
+**Complexity:** Medium
 
 Vote-correctness metric.
 
@@ -74,12 +76,18 @@ Vote-correctness metric.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §11.3. Vote correctness = ejected_player.role == "IMPOSTOR" AND ejection rationale cites a real contradiction or kill witness. Pure analyzer over eval/report_schema records — no engine or LLM dependencies.
+
 **Ready-to-paste prompt:** `agent_prompts/task-5-2-vote-correctness-metric.md`
 
 ### Task 5.3 — Accusation-calibration metric
 **Branch:** `phase-5-accusation-calibration-metric`
 **Depends on:** 5.1 merged
 **Section refs:** DESIGN.md §11.3
+**Complexity:** Medium
 
 Accusation-calibration metric.
 
@@ -107,12 +115,18 @@ Accusation-calibration metric.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §11.3. Bin accusations by confidence and compute actual-impostor-rate per bin. Calibrated when high-confidence accusations are correct more often than low-confidence ones.
+
 **Ready-to-paste prompt:** `agent_prompts/task-5-3-accusation-calibration-metric.md`
 
 ### Task 5.4 — Alibi-fabrication-rate metric
 **Branch:** `phase-5-alibi-fabrication-rate-metric`
 **Depends on:** 5.1 merged
 **Section refs:** DESIGN.md §11.3
+**Complexity:** Medium
 
 Alibi-fabrication-rate metric.
 
@@ -140,12 +154,18 @@ Alibi-fabrication-rate metric.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §11.3. Count impostor alibis that survive the contradiction detector. Pure analyzer over meeting transcripts.
+
 **Ready-to-paste prompt:** `agent_prompts/task-5-4-alibi-fabrication-rate-metric.md`
 
 ### Task 5.5 — Cost dashboard metric
 **Branch:** `phase-5-cost-dashboard`
 **Depends on:** 5.1 merged
 **Section refs:** DESIGN.md §11.3
+**Complexity:** Medium
 
 Cost metric data by prompt version.
 
@@ -173,12 +193,18 @@ Cost metric data by prompt version.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §10.4. Aggregate `llm.budget` records by prompt version × game; emit cost-per-game and cost-per-prompt-version.
+
 **Ready-to-paste prompt:** `agent_prompts/task-5-5-cost-dashboard-per-prompt-version-cost.md`
 
 ### Task 5.6 — Tournament metric integration
 **Branch:** `phase-5-tournament-metric-integration`
 **Depends on:** 5.2 merged, 5.3 merged, 5.4 merged, 5.5 merged
 **Section refs:** DESIGN.md §11.3
+**Complexity:** Integration
 
 Wire Phase 5 metric modules into the tournament JSON report after the parallel
 metric tasks have merged.
@@ -210,12 +236,22 @@ metric tasks have merged.
 - [ ] `uv run mypy --strict eval scripts` passes if scripts are included by mypy config; otherwise `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §11.3. Read all metric outputs from 5.2–5.5 and fold them into the unified `eval.report_schema` artifact emitted by `scripts/run_tournament.py`.
+
+**Integration risk:**
+
+Convergence point for Phase 5 metrics. Each metric module ships independently; this task wires them. Risk: breaking the report_schema breaks every downstream consumer (dashboard, regression tests). Add the schema-version field early.
+
 **Ready-to-paste prompt:** `agent_prompts/task-5-6-tournament-metric-integration.md`
 
 ### Task 5.7 — Tournament dashboard frontend page
 **Branch:** `phase-5-tournament-dashboard-frontend-page`
 **Depends on:** 5.6 merged
 **Section refs:** DESIGN.md §11.3, DESIGN.md §7
+**Complexity:** Medium
 
 Tournament dashboard frontend page.
 
@@ -236,12 +272,18 @@ Tournament dashboard frontend page.
 - [ ] Dashboard includes metrics from 5.2 through 5.5.
 - [ ] Frontend build/check command passes if configured.
 
+
+**Implementation hint:**
+
+See DESIGN.md §7. React + PixiJS dashboard reading the eval report.
+
 **Ready-to-paste prompt:** `agent_prompts/task-5-7-tournament-dashboard-frontend-page.md`
 
 ### Task 5.8 — Prompt regression test suite
 **Branch:** `phase-5-prompt-regression-test-suite`
 **Depends on:** 5.6 merged
 **Section refs:** DESIGN.md §11.3
+**Complexity:** Integration
 
 Prompt regression test suite.
 
@@ -266,6 +308,15 @@ Prompt regression test suite.
 - [ ] Relevant eval tests pass.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
+
+
+**Implementation hint:**
+
+See DESIGN.md §11.3. For each prompt version × fixed seed set, compare metric deltas against a baseline. Block merge on regression > X%.
+
+**Integration risk:**
+
+Determinism is essential — flaky tests destroy the regression signal. Use the fake LLM provider with recorded outputs; never call a real model in CI.
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-8-prompt-regression-test-suite.md`
 

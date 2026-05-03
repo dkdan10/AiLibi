@@ -7,41 +7,22 @@ sync with the matching task section.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-import re
 import sys
 
-
-ROOT = Path(__file__).resolve().parents[1]
-TASKS_DIR = ROOT / "tasks"
-PROMPTS_DIR = ROOT / "agent_prompts"
-
-TASK_HEADER_RE = re.compile(
-    r"^### Task (?P<task_id>\d+\.(?:B\d+|P\d+|\d+(?:\.\d+)?[a-z]?))"
-    r" — (?P<title>.+)$",
-    re.MULTILINE,
+from _task_parser import (
+    COMPLEXITY_VALUES,
+    PROMPTS_DIR,
+    TaskDoc,
+    parse_all_tasks,
+    relative,
 )
-FUTURE_TASK_ID_RE = re.compile(r"^[2-9]\d*\.[1-9]\d*$")
-PROMPT_PATH_RE = re.compile(
-    r"\*\*Ready-to-paste prompt:\*\* `(?P<path>agent_prompts/[^`]+\.md)`"
-)
-FIELD_RE = re.compile(r"^\*\*(?P<field>[^:]+):\*\* (?P<value>.*)$", re.MULTILINE)
-TASK_ID_RE = re.compile(r"\b(?P<task_id>\d+\.(?:B\d+|P\d+|\d+(?:\.\d+)?[a-z]?))\b")
 
-
-@dataclass(frozen=True)
-class TaskDoc:
-    phase_path: Path
-    task_id: str
-    title: str
-    body: str
-    contract: str
-    prompt_path: Path
-    branch: str
-    depends_on: tuple[str, ...]
-    section_refs: str
-    files_in_scope: tuple[str, ...]
+# When a task is a Medium- or Integration-tier deliverable that introduces
+# public types or hooks consumed by downstream tasks, the contract must
+# include the corresponding scaffolding fields.
+_REQUIRES_HINT = {"Medium", "Integration"}
+_REQUIRES_INTEGRATION_RISK = {"Integration"}
 
 
 def main() -> int:
@@ -52,6 +33,9 @@ def main() -> int:
         print_errors(errors)
         return 1
 
+    validate_complexity(tasks, errors)
+    validate_public_types_unique(tasks, errors)
+    validate_hint_symbol_resolution(tasks)
     validate_prompt_set(tasks, errors)
     validate_prompts(tasks, errors)
     validate_parallel_file_scope(tasks, errors)
@@ -67,123 +51,93 @@ def main() -> int:
     return 0
 
 
-def parse_all_tasks(errors: list[str]) -> list[TaskDoc]:
-    tasks: list[TaskDoc] = []
-    for phase_path in sorted(TASKS_DIR.glob("phase-*.md")):
-        tasks.extend(parse_phase_file(phase_path, errors))
-    return tasks
-
-
-def parse_phase_file(phase_path: Path, errors: list[str]) -> list[TaskDoc]:
-    text = phase_path.read_text()
-    matches = list(TASK_HEADER_RE.finditer(text))
-    tasks: list[TaskDoc] = []
-
-    for index, match in enumerate(matches):
-        start = match.end()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        body = text[start:end].strip()
-        task_id = match.group("task_id")
-        title = match.group("title").strip()
-        if (
-            is_future_phase_task_id(task_id)
-            and FUTURE_TASK_ID_RE.fullmatch(task_id) is None
-        ):
+def validate_complexity(tasks: list[TaskDoc], errors: list[str]) -> None:
+    for task in tasks:
+        if task.complexity is None:
             errors.append(
-                f"{phase_path}: Task {task_id} must use simple numeric "
-                "Phase 2+ numbering like N.1, N.2, N.3."
+                f"{relative(task.phase_path)}: Task {task.task_id} is missing "
+                f"**Complexity:** ({', '.join(COMPLEXITY_VALUES)})."
             )
-
-        prompt_match = PROMPT_PATH_RE.search(body)
-        if prompt_match is None:
-            errors.append(f"{phase_path}: Task {task_id} is missing a prompt path.")
+            continue
+        if task.complexity not in COMPLEXITY_VALUES:
+            errors.append(
+                f"{relative(task.phase_path)}: Task {task.task_id} has invalid "
+                f"complexity {task.complexity!r}; expected one of "
+                f"{', '.join(COMPLEXITY_VALUES)}."
+            )
             continue
 
-        contract = extract_contract(phase_path, task_id, body, errors)
-        branch = extract_field(body, "Branch")
-        depends = parse_depends_on(extract_field(body, "Depends on"))
-        section_refs = extract_field(body, "Section refs")
-        files_in_scope = extract_files_in_scope(body)
-
-        tasks.append(
-            TaskDoc(
-                phase_path=phase_path,
-                task_id=task_id,
-                title=title,
-                body=body,
-                contract=contract,
-                prompt_path=ROOT / prompt_match.group("path"),
-                branch=branch,
-                depends_on=depends,
-                section_refs=section_refs,
-                files_in_scope=files_in_scope,
+        if task.complexity in _REQUIRES_HINT and task.implementation_hint is None:
+            errors.append(
+                f"{relative(task.phase_path)}: Task {task.task_id} is "
+                f"{task.complexity}-tier but is missing "
+                "**Implementation hint:**."
             )
-        )
-
-    return tasks
-
-
-def extract_contract(
-    phase_path: Path, task_id: str, body: str, errors: list[str]
-) -> str:
-    marker = "**Ready-to-paste prompt:**"
-    if marker not in body:
-        errors.append(f"{phase_path}: Task {task_id} is missing {marker}.")
-        return ""
-
-    contract = body.split(marker, maxsplit=1)[0].strip()
-    if not contract.startswith("**Branch:**"):
-        errors.append(
-            f"{phase_path}: Task {task_id} contract must start at **Branch:**."
-        )
-    if "**Definition of done:**" not in contract:
-        errors.append(f"{phase_path}: Task {task_id} is missing Definition of done.")
-    if "**Files in scope" not in contract:
-        errors.append(f"{phase_path}: Task {task_id} is missing Files in scope.")
-    if "**Files NOT in scope:**" not in contract:
-        errors.append(f"{phase_path}: Task {task_id} is missing Files NOT in scope.")
-    return contract
+        if (
+            task.complexity in _REQUIRES_INTEGRATION_RISK
+            and task.integration_risk is None
+        ):
+            errors.append(
+                f"{relative(task.phase_path)}: Task {task.task_id} is "
+                "Integration-tier but is missing **Integration risk:**."
+            )
 
 
-def extract_field(body: str, field_name: str) -> str:
-    for match in FIELD_RE.finditer(body):
-        if match.group("field") == field_name:
-            return match.group("value").strip()
-    return ""
+def validate_public_types_unique(tasks: list[TaskDoc], errors: list[str]) -> None:
+    seen: dict[str, str] = {}
+    for task in tasks:
+        for symbol in task.public_types:
+            if symbol in seen:
+                errors.append(
+                    f"Public type {symbol!r} is claimed by both task "
+                    f"{seen[symbol]} and task {task.task_id}."
+                )
+                continue
+            seen[symbol] = task.task_id
 
 
-def parse_depends_on(value: str) -> tuple[str, ...]:
-    if value.lower() in {"", "none"}:
-        return ()
-    return tuple(match.group("task_id") for match in TASK_ID_RE.finditer(value))
+def validate_hint_symbol_resolution(tasks: list[TaskDoc]) -> None:
+    """Best-effort traversal: walk implementation hints for dotted symbols.
+
+    Today this is a no-op walk — it just exercises the upstream graph so the
+    helper stays warm. When tighter resolution lands, switch to error
+    accumulation here without changing call sites.
+    """
+
+    public_types_by_task = {task.task_id: set(task.public_types) for task in tasks}
+    for task in tasks:
+        if task.implementation_hint is None:
+            continue
+        upstream = _collect_upstream_public_types(task, tasks, public_types_by_task)
+        own = set(task.public_types)
+        for _ in _dotted_paths_in_block(task.implementation_hint):
+            _ = upstream | own  # placeholder for future resolution check
 
 
-def is_future_phase_task_id(task_id: str) -> bool:
-    return int(task_id.split(".", maxsplit=1)[0]) >= 2
+def _collect_upstream_public_types(
+    task: TaskDoc,
+    all_tasks: list[TaskDoc],
+    public_types_by_task: dict[str, set[str]],
+) -> set[str]:
+    by_id = {item.task_id: item for item in all_tasks}
+    seen: set[str] = set()
+    stack = list(task.depends_on)
+    while stack:
+        upstream_id = stack.pop()
+        if upstream_id not in by_id or upstream_id in seen:
+            continue
+        seen.add(upstream_id)
+        stack.extend(by_id[upstream_id].depends_on)
+    aggregated: set[str] = set()
+    for upstream_id in seen:
+        aggregated.update(public_types_by_task.get(upstream_id, set()))
+    return aggregated
 
 
-def extract_files_in_scope(body: str) -> tuple[str, ...]:
-    match = re.search(
-        r"\*\*Files in scope(?: \([^)]+\))?:\*\*\n(?P<items>.*?)(?=\n\*\*)",
-        body,
-        flags=re.DOTALL,
-    )
-    if match is None:
-        return ()
+def _dotted_paths_in_block(block: str) -> list[str]:
+    import re
 
-    files: list[str] = []
-    for line in match.group("items").splitlines():
-        stripped = line.strip()
-        if stripped.startswith("- "):
-            files.append(normalize_scope_item(stripped[2:]))
-    return tuple(files)
-
-
-def normalize_scope_item(item: str) -> str:
-    normalized = item.strip().strip("`")
-    if "; " in normalized:
-        normalized = normalized.split("; ", maxsplit=1)[0].strip()
-    return normalized
+    return re.findall(r"\b[a-z][a-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){2,}", block)
 
 
 def validate_prompt_set(tasks: list[TaskDoc], errors: list[str]) -> None:
@@ -240,6 +194,7 @@ def validate_prompts(tasks: list[TaskDoc], errors: list[str]) -> None:
             "Verification checklist",
             "Run `git diff --name-only` and confirm the diff stays within scope.",
             "If any Definition of done item is unchecked, report it explicitly",
+            "Decisions vs questions",
         ):
             if required_phrase not in prompt:
                 errors.append(
@@ -319,10 +274,6 @@ def scope_items_overlap(left: str, right: str) -> bool:
 
 def is_ordered(left_id: str, right_id: str, dependencies: dict[str, set[str]]) -> bool:
     return left_id in dependencies[right_id] or right_id in dependencies[left_id]
-
-
-def relative(path: Path) -> str:
-    return str(path.relative_to(ROOT))
 
 
 def print_errors(errors: list[str]) -> None:

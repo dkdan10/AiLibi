@@ -14,6 +14,7 @@ shared store/API interface exists.
 **Branch:** `phase-4-fastapi-app-skeleton`
 **Depends on:** Phase 3 merged
 **Section refs:** DESIGN.md §7
+**Complexity:** Medium
 
 api/main.py, basic routes, WebSocket endpoint registration, and sanitized API
 DTO schemas per §7.
@@ -46,12 +47,18 @@ DTO schemas per §7.
 - [ ] Relevant API tests pass.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §7. FastAPI app gains `/games`, `/replays`, `/eval` routes plus a WebSocket endpoint at `/ws/games/{id}`. DTOs in `api/schemas.py` are sanitized — never embed raw `WorldState`.
+
 **Ready-to-paste prompt:** `agent_prompts/task-4-1-fastapi-app-skeleton.md`
 
 ### Task 4.2 — Game broadcast
 **Branch:** `phase-4-game-broadcast`
 **Depends on:** 4.1 merged
 **Section refs:** DESIGN.md §7
+**Complexity:** Medium
 
 api/ws.py - broadcast sanitized tick and meeting events from a running game.
 
@@ -74,12 +81,18 @@ api/ws.py - broadcast sanitized tick and meeting events from a running game.
 - [ ] Relevant API/WebSocket tests pass.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §7. WebSocket broadcaster fans out per-tick payloads to subscribers. Per-spectator view is privileged but sanitized via api/schemas.py DTOs.
+
 **Ready-to-paste prompt:** `agent_prompts/task-4-2-game-broadcast.md`
 
 ### Task 4.3 — React + Vite + Tailwind setup
 **Branch:** `phase-4-react-vite-tailwind-setup`
 **Depends on:** 4.2 merged
 **Section refs:** DESIGN.md §7
+**Complexity:** Small
 
 frontend/ skeleton, type-safe API client, and shared store interface. Use npm
 with package-lock.json unless a frontend package manager has already been
@@ -121,6 +134,7 @@ chosen in the repo before this task starts.
 **Branch:** `phase-4-mapview`
 **Depends on:** 4.3 merged
 **Section refs:** DESIGN.md §7
+**Complexity:** Medium
 
 PixiJS canvas rendering rooms + players.
 
@@ -142,12 +156,18 @@ PixiJS canvas rendering rooms + players.
 - [ ] Component does not depend on raw engine state.
 - [ ] Frontend build/check command passes if configured.
 
+
+**Implementation hint:**
+
+See DESIGN.md §7 (frontend). PixiJS canvas renders rooms by `position` + `size` from PublicMapView; player tokens move on tick.
+
 **Ready-to-paste prompt:** `agent_prompts/task-4-4-mapview.md`
 
 ### Task 4.5 — MeetingView
 **Branch:** `phase-4-meetingview`
 **Depends on:** 4.3 merged
 **Section refs:** DESIGN.md §5, DESIGN.md §7
+**Complexity:** Medium
 
 Transcript renderer.
 
@@ -168,12 +188,18 @@ Transcript renderer.
 - [ ] Component consumes the shared store/API shape from 4.3.
 - [ ] Frontend build/check command passes if configured.
 
+
+**Implementation hint:**
+
+See DESIGN.md §5. React component for meeting transcript + ballots.
+
 **Ready-to-paste prompt:** `agent_prompts/task-4-5-meetingview.md`
 
 ### Task 4.6 — ThoughtStream
 **Branch:** `phase-4-thoughtstream`
 **Depends on:** 4.3 merged
 **Section refs:** DESIGN.md §6, DESIGN.md §7
+**Complexity:** Medium
 
 Per-agent memory + LLM call viewer.
 
@@ -195,12 +221,18 @@ Per-agent memory + LLM call viewer.
 - [ ] Component renders prompt versions and cost metadata when present.
 - [ ] Frontend build/check command passes if configured.
 
+
+**Implementation hint:**
+
+See DESIGN.md §6.6. Per-agent memory + belief view.
+
 **Ready-to-paste prompt:** `agent_prompts/task-4-6-thoughtstream.md`
 
 ### Task 4.7 — BeliefMatrix
 **Branch:** `phase-4-beliefmatrix`
 **Depends on:** 4.3 merged
 **Section refs:** DESIGN.md §6, DESIGN.md §7
+**Complexity:** Medium
 
 Heatmap of who suspects whom.
 
@@ -221,12 +253,18 @@ Heatmap of who suspects whom.
 - [ ] Component consumes the shared store/API shape from 4.3.
 - [ ] Frontend build/check command passes if configured.
 
+
+**Implementation hint:**
+
+See DESIGN.md §6.3. Suspicion graph as a matrix view.
+
 **Ready-to-paste prompt:** `agent_prompts/task-4-7-beliefmatrix.md`
 
 ### Task 4.8 — ReplayControls
 **Branch:** `phase-4-replaycontrols`
 **Depends on:** 4.3 merged
 **Section refs:** DESIGN.md §7, DESIGN.md §11.4
+**Complexity:** Medium
 
 Scrubber, speed control.
 
@@ -246,6 +284,11 @@ Scrubber, speed control.
 - [ ] ReplayControls provides scrubber and speed controls for sanitized replay DTOs.
 - [ ] Component consumes the shared store/API shape from 4.3.
 - [ ] Frontend build/check command passes if configured.
+
+
+**Implementation hint:**
+
+See DESIGN.md §11.4. Replay scrubber with seek-to-tick.
 
 **Ready-to-paste prompt:** `agent_prompts/task-4-8-replaycontrols.md`
 

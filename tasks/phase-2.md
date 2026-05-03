@@ -26,6 +26,7 @@ the corresponding tests pass. Subsequent Phase 2 tasks build on them.
 **Branch:** `phase-2-boundary-contracts`
 **Depends on:** Phase 1 merged
 **Section refs:** DESIGN.md §1.3, DESIGN.md §3.1, DESIGN.md §4.1
+**Complexity:** Medium
 
 Define the engine-free schemas and adapters that let agents act without
 importing engine types.
@@ -60,12 +61,40 @@ importing engine types.
 - [ ] `uv run mypy --strict engine observation agents orchestrator` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+```python
+# observation/action_intent.py
+class ActionIntent(BaseModel):
+    """Discriminated union over move | do_task | kill | vent |
+    report | emergency | sabotage | repair_sabotage | wait."""
+
+# orchestrator/boundary.py
+def public_map_from_engine_map(game_map: Map) -> PublicMapView: ...
+def translate_action_intent(intent: ActionIntent) -> Action: ...
+def translate_action_intents_for_tick(
+    intents: Sequence[ActionIntent],
+) -> tuple[Action, ...]: ...
+```
+
+Reject duplicate-actor batches in the orchestrator boundary, not in
+the engine. The engine assumes one action per actor per tick already.
+
+**Public types introduced:**
+- `observation.action_intent.ActionIntent`
+- `observation.public_map.PublicMapView`
+- `orchestrator.boundary.public_map_from_engine_map`
+- `orchestrator.boundary.translate_action_intent`
+- `orchestrator.boundary.translate_action_intents_for_tick`
+
 **Ready-to-paste prompt:** `agent_prompts/task-2-1-boundary-contracts.md`
 
 ### Task 2.2 — Agent base + runtime
 **Branch:** `phase-2-agent-base-runtime`
 **Depends on:** 2.1 merged
 **Section refs:** DESIGN.md §4.1
+**Complexity:** Medium
 
 agents/base.py and agents/runtime.py per §4.1. Runtime consumes
 `ObservationPacket` and `PublicMapView`, updates memory, and returns
@@ -96,12 +125,37 @@ agents/base.py and agents/runtime.py per §4.1. Runtime consumes
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+```python
+# agents/base.py
+class AgentInterface(Protocol):
+    def decide(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+    ) -> ActionIntent: ...
+
+# agents/runtime.py
+class AgentRuntime:
+    """Glue: perception (2.4) -> memory (2.3) -> tactical (2.6/2.7).
+    For 2.2 the memory/perception/tactical methods are stubs that the
+    later tasks fill in. Do not import engine."""
+    def decide(self, packet, public_map) -> ActionIntent: ...
+```
+
+**Public types introduced:**
+- `agents.base.AgentInterface`
+- `agents.runtime.AgentRuntime`
+
 **Ready-to-paste prompt:** `agent_prompts/task-2-2-agent-base-runtime.md`
 
 ### Task 2.3 — Memory scaffolding (no LLM)
 **Branch:** `phase-2-memory-scaffolding`
 **Depends on:** 2.2 merged
 **Section refs:** DESIGN.md §6.1
+**Complexity:** Medium
 
 agents/memory/episodic.py, working.py, beliefs.py per §6.1. Write paths only;
 no prompt rendering yet.
@@ -131,12 +185,39 @@ no prompt rendering yet.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+```python
+# agents/memory/episodic.py
+@dataclass(frozen=True)
+class EpisodicEvent:
+    tick: int
+    type: str
+    payload: Mapping[str, Any]
+    provenance: str  # e.g. 'observed', 'reported'
+
+class MemoryStore:
+    def append(self, event: EpisodicEvent) -> None: ...
+    def recent(self, *, since_tick: int) -> tuple[EpisodicEvent, ...]: ...
+```
+
+Read paths and prompt rendering are out of scope here — they ship
+in 3.3.
+
+**Public types introduced:**
+- `agents.memory.episodic.EpisodicEvent`
+- `agents.memory.episodic.MemoryStore`
+- `agents.memory.working.WorkingMemory`
+- `agents.memory.beliefs.BeliefState`
+
 **Ready-to-paste prompt:** `agent_prompts/task-2-3-memory-scaffolding-no-llm.md`
 
 ### Task 2.4 — Perception ingestion
 **Branch:** `phase-2-perception-ingestion`
 **Depends on:** 2.3 merged
 **Section refs:** DESIGN.md §4.2, DESIGN.md §6.2
+**Complexity:** Medium
 
 Convert `ObservationPacket` into typed episodic events before tactical policies
 read memory.
@@ -164,12 +245,35 @@ read memory.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+```python
+# agents/perception.py
+def ingest_packet(
+    *,
+    packet: ObservationPacket,
+    memory: MemoryStore,
+) -> None:
+    """Convert visible_players, visible_bodies, audible_events,
+    self_state, global_state, and cooldown into typed EpisodicEvents
+    appended to memory. Provenance must distinguish observed vs.
+    inferred."""
+```
+
+Tactical policies must consume memory only — never raw
+ObservationPacket. Keep parsing here.
+
+**Public types introduced:**
+- `agents.perception.ingest_packet`
+
 **Ready-to-paste prompt:** `agent_prompts/task-2-4-perception-ingestion.md`
 
 ### Task 2.5 — Pathing
 **Branch:** `phase-2-pathing`
 **Depends on:** 2.4 merged
 **Section refs:** DESIGN.md §4.4
+**Complexity:** Medium
 
 agents/tactical/pathing.py - deterministic A* over `PublicMapView`.
 
@@ -194,12 +298,32 @@ agents/tactical/pathing.py - deterministic A* over `PublicMapView`.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+```python
+# agents/tactical/pathing.py
+def find_path(
+    *,
+    public_map: PublicMapView,
+    start: RoomId,
+    goal: RoomId,
+) -> tuple[RoomId, ...]:
+    """Deterministic A* over public_map.room_neighbors. Tie-break
+    on sorted room id. Raise on unknown or disconnected rooms.
+    Return the inclusive path from start to goal."""
+```
+
+**Public types introduced:**
+- `agents.tactical.pathing.find_path`
+
 **Ready-to-paste prompt:** `agent_prompts/task-2-5-pathing.md`
 
 ### Task 2.6 — Crewmate FSM
 **Branch:** `phase-2-crewmate-fsm`
 **Depends on:** 2.5 merged
 **Section refs:** DESIGN.md §4.4
+**Complexity:** Medium
 
 agents/tactical/crewmate_policy.py per §4.4.
 
@@ -227,12 +351,32 @@ agents/tactical/crewmate_policy.py per §4.4.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+```python
+# agents/tactical/crewmate_policy.py
+class CrewmatePolicy:
+    """FSM: IDLE -> MOVE_TO_TASK -> DO_TASK -> IDLE.
+    Interrupts: BODY_VISIBLE -> REPORT, KILL_WITNESSED -> FLEE_AND_REPORT.
+    Must be deterministic given memory state."""
+    def decide(
+        self,
+        memory: MemoryStore,
+        public_map: PublicMapView,
+    ) -> ActionIntent: ...
+```
+
+**Public types introduced:**
+- `agents.tactical.crewmate_policy.CrewmatePolicy`
+
 **Ready-to-paste prompt:** `agent_prompts/task-2-6-crewmate-fsm.md`
 
 ### Task 2.7 — Impostor FSM
 **Branch:** `phase-2-impostor-fsm`
 **Depends on:** 2.5 merged
 **Section refs:** DESIGN.md §4.4
+**Complexity:** Medium
 
 agents/tactical/impostor_policy.py per §4.4.
 
@@ -261,12 +405,31 @@ agents/tactical/impostor_policy.py per §4.4.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+```python
+# agents/tactical/impostor_policy.py
+class ImpostorPolicy:
+    """FSM: IDLE -> STALK -> KILL_OPPORTUNITY -> KILL -> COVER.
+    Target score: isolation * (1 - witness_risk) * (cooldown == 0)."""
+    def decide(
+        self,
+        memory: MemoryStore,
+        public_map: PublicMapView,
+    ) -> ActionIntent: ...
+```
+
+**Public types introduced:**
+- `agents.tactical.impostor_policy.ImpostorPolicy`
+
 **Ready-to-paste prompt:** `agent_prompts/task-2-7-impostor-fsm.md`
 
 ### Task 2.8 — Headless game orchestrator
 **Branch:** `phase-2-headless-game-orchestrator`
 **Depends on:** 2.6 merged, 2.7 merged
 **Section refs:** DESIGN.md §1.4, DESIGN.md §3.1, DESIGN.md §11.4
+**Complexity:** Integration
 
 Build the deterministic single-game loop spine. This task wires existing engine,
 observation, agents, action-intent translation, and replay together, but does
@@ -298,12 +461,76 @@ not implement tournament aggregation.
 - [ ] `uv run mypy --strict engine observation agents orchestrator` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+```python
+# orchestrator/seeder.py
+def seed_initial_state(
+    *, seed: int, game_map: Map, num_players: int, num_impostors: int = 1,
+) -> WorldState: ...
+
+# orchestrator/game.py
+@dataclass(frozen=True)
+class HeadlessGameResult:
+    final_state: WorldState
+    outcome: Literal["CREWMATES", "IMPOSTORS", "MEETING_PHASE_REACHED"]
+    replay_path: Path
+
+class HeadlessGame:
+    def __init__(
+        self,
+        *,
+        seed: int,
+        game_map: Map,
+        agent_factory: AgentFactory,
+        replay_path: Path,
+    ) -> None: ...
+
+    def run(self) -> HeadlessGameResult:
+        state = seed_initial_state(seed=self._seed, game_map=self._game_map, num_players=...)
+        while state.phase == "PLAY":
+            packets = {pid: self._observation_service.build_packet(...) for pid in alive(state)}
+            intents = [self._agents[pid].decide(packets[pid], self._public_map) for pid in ...]
+            actions = translate_action_intents_for_tick(intents)
+            state, events = advance_tick(state, actions, game_map=self._game_map)
+            self._replay.record_tick(state.tick, list(actions), state)
+        return HeadlessGameResult(...)
+```
+
+Use `tests/_helpers/world_state.scripted_initial_world_state` as the
+shape reference for `seed_initial_state`; the eval scripts will
+switch to your seeder once it lands.
+
+**Public types introduced:**
+- `orchestrator.game.HeadlessGame`
+- `orchestrator.game.HeadlessGameResult`
+- `orchestrator.seeder.seed_initial_state`
+- `orchestrator.scheduler.TickScheduler`
+
+**Integration risk:**
+
+This task is the convergence point of Phase 2. It depends on tasks
+2.1–2.7. Failure here invalidates Phase 2 merge criteria.
+
+- Memory write paths from 2.3 must accept the typed events from 2.4.
+  If they diverge, perception → memory wiring silently drops events.
+  Verify with: `uv run pytest tests/agents/test_runtime.py`.
+- The MEETING phase has no manager (Phase 3.8 owns it). When the
+  engine returns `phase == "MEETING"`, the loop pauses and emits
+  `MEETING_PHASE_REACHED` on the result. Do NOT mutate engine state
+  to resume.
+- The leak test (`eval/leak_test.py`) must continue to pass when
+  driven by your orchestrator. Run it explicitly before declaring
+  done.
+
 **Ready-to-paste prompt:** `agent_prompts/task-2-8-headless-game-orchestrator.md`
 
 ### Task 2.9 — Headless tournament harness
 **Branch:** `phase-2-headless-tournament-harness`
 **Depends on:** 2.8 merged
 **Section refs:** DESIGN.md §11.3
+**Complexity:** Medium
 
 scripts/run_tournament.py and eval/balance_eval.py per §11.3. This task
 aggregates many headless games; it must not invent the single-game
@@ -332,6 +559,27 @@ orchestrator.
 - [ ] Leak test still passes across all tournament games.
 - [ ] `uv run pytest tests/eval/test_balance_eval.py` passes.
 - [ ] `uv run ruff check .` passes.
+
+
+**Implementation hint:**
+
+```python
+# eval/balance_eval.py
+@dataclass(frozen=True)
+class BalanceReport:
+    games: int
+    crew_wins: int
+    impostor_wins: int
+    seeds_used: tuple[int, ...]
+
+def run_balance_eval(*, seeds: Sequence[int]) -> BalanceReport: ...
+```
+
+Reuse `HeadlessGame` from 2.8 — do NOT reinvent the single-game loop.
+
+**Public types introduced:**
+- `eval.balance_eval.BalanceReport`
+- `eval.balance_eval.run_balance_eval`
 
 **Ready-to-paste prompt:** `agent_prompts/task-2-9-headless-tournament-harness.md`
 

@@ -16,6 +16,7 @@ rendered-memory inputs.
 **Branch:** `phase-3-llm-client`
 **Depends on:** Phase 2 merged
 **Section refs:** DESIGN.md §4.4, DESIGN.md §7, DESIGN.md §10.4
+**Complexity:** Medium
 
 llm/client.py, provider adapter, fake provider, cache, and budget.
 
@@ -46,12 +47,18 @@ llm/client.py, provider adapter, fake provider, cache, and budget.
 - [ ] `uv run mypy --strict llm agents` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §7 + §10.4 for the LLM-client surface. The fake deterministic provider is the most important piece — it is what every test in CI calls. `LLMClient` is a Protocol; the real and fake providers both implement it. Cache and budget are layered on.
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-1-llm-client.md`
 
 ### Task 3.2 — Shared meeting/output schemas
 **Branch:** `phase-3-output-schemas`
 **Depends on:** 3.1 merged
 **Section refs:** DESIGN.md §5.3, DESIGN.md §5.5, DESIGN.md Appendix A
+**Complexity:** Small
 
 Centralize meeting artifacts in meetings/schemas.py. Agent strategic schemas may
 re-export or wrap the shared schemas, but must not duplicate independent schema
@@ -79,12 +86,18 @@ definitions.
 - [ ] `uv run mypy --strict agents meetings` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §5.3 + §5.5. `meetings/schemas.py` owns the canonical Pydantic shapes for `ReportDocument`, `Statement`, `VoteBallot`, and `MeetingResult`. `agents/strategic/output_schemas.py` re-exports or wraps these — never duplicate.
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-2-output-schemas.md`
 
 ### Task 3.3 — Memory rendering
 **Branch:** `phase-3-memory-rendering`
 **Depends on:** 3.2 merged
 **Section refs:** DESIGN.md §6.6
+**Complexity:** Medium
 
 agents/memory/store.py::render_for_prompt per §6.6.
 
@@ -110,12 +123,18 @@ agents/memory/store.py::render_for_prompt per §6.6.
 - [ ] `uv run mypy --strict agents meetings` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §6.6 for the canonical rendered-prompt example. The render function takes a `MemoryStore` and a token budget, then returns a single Markdown string with sections: role, tasks completed, recent observations (salience-sorted), beliefs, and open contradictions. Drop events past the token budget by lowest salience first.
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-3-memory-rendering.md`
 
 ### Task 3.4 — Crewmate report prompt
 **Branch:** `phase-3-crewmate-report-prompt`
 **Depends on:** 3.3 merged
 **Section refs:** DESIGN.md §5.3, DESIGN.md §6.6
+**Complexity:** Medium
 
 agents/strategic/prompts/crewmate_report.j2.
 
@@ -137,12 +156,18 @@ agents/strategic/prompts/crewmate_report.j2.
 - [ ] Prompt includes a version marker.
 - [ ] No code outside the prompt file is modified.
 
+
+**Implementation hint:**
+
+Jinja2 template only; pair with §5.3 ReportDocument schema.
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-4-crewmate-report-prompt.md`
 
 ### Task 3.5 — Impostor report prompt
 **Branch:** `phase-3-impostor-report-prompt`
 **Depends on:** 3.3 merged
 **Section refs:** DESIGN.md §4.5, DESIGN.md §5.3, DESIGN.md §6.6
+**Complexity:** Medium
 
 agents/strategic/prompts/impostor_report.j2.
 
@@ -165,12 +190,18 @@ agents/strategic/prompts/impostor_report.j2.
 - [ ] Prompt includes a version marker.
 - [ ] No code outside the prompt file is modified.
 
+
+**Implementation hint:**
+
+Jinja2 template only; pair with §5.3 + §4.5 (deception framing).
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-5-impostor-report-prompt.md`
 
 ### Task 3.6 — Accusation round prompt
 **Branch:** `phase-3-accusation-round-prompt`
 **Depends on:** 3.3 merged
 **Section refs:** DESIGN.md §5.2, DESIGN.md §5.3
+**Complexity:** Medium
 
 agents/strategic/prompts/accusation_round.j2.
 
@@ -192,12 +223,18 @@ agents/strategic/prompts/accusation_round.j2.
 - [ ] Prompt includes a version marker.
 - [ ] No code outside the prompt file is modified.
 
+
+**Implementation hint:**
+
+Jinja2 template only; pair with §5.2 + §5.3 Statement schema.
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-6-accusation-round-prompt.md`
 
 ### Task 3.7 — Vote ballot prompt
 **Branch:** `phase-3-vote-ballot-prompt`
 **Depends on:** 3.3 merged
 **Section refs:** DESIGN.md §5.5
+**Complexity:** Small
 
 agents/strategic/prompts/vote_ballot.j2.
 
@@ -220,12 +257,18 @@ agents/strategic/prompts/vote_ballot.j2.
 - [ ] Prompt includes a version marker.
 - [ ] No code outside the prompt file is modified.
 
+
+**Implementation hint:**
+
+Jinja2 template only; pair with §5.5 VoteBallot schema.
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-7-vote-ballot-prompt.md`
 
 ### Task 3.8 — Meeting state machine
 **Branch:** `phase-3-meeting-state-machine`
 **Depends on:** 3.3 merged
 **Section refs:** DESIGN.md §5.1, DESIGN.md §5.2
+**Complexity:** Medium
 
 meetings/manager.py and meetings/transcript.py per §5.1 + §5.2.
 
@@ -253,12 +296,18 @@ meetings/manager.py and meetings/transcript.py per §5.1 + §5.2.
 - [ ] `uv run mypy --strict meetings agents llm` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §5.1 + §5.2. `MeetingManager` is a state machine that moves through report intake → accusation rounds → voting → resolution. It must NOT mutate engine state; it returns a `MeetingResult` that the orchestrator (3.12) applies.
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-8-meeting-state-machine.md`
 
 ### Task 3.9 — Strategic reasoner
 **Branch:** `phase-3-strategic-reasoner`
 **Depends on:** 3.8 merged
 **Section refs:** DESIGN.md §4.4, DESIGN.md §6.6
+**Complexity:** Medium
 
 agents/strategic/reasoner.py - wires render_for_prompt -> LLM -> parsed
 structured outputs.
@@ -284,12 +333,18 @@ structured outputs.
 - [ ] `uv run mypy --strict agents llm meetings` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §4.4 + §6.6. Strategic reasoner pattern: render_for_prompt(memory) → llm_client.complete(prompt) → parse_structured_output(...) → return ReportDocument | Statement | VoteBallot. Tests use the fake provider; no network.
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-9-strategic-reasoner.md`
 
 ### Task 3.10 — Voting
 **Branch:** `phase-3-voting`
 **Depends on:** 3.9 merged
 **Section refs:** DESIGN.md §5.5
+**Complexity:** Small
 
 meetings/voting.py per §5.5.
 
@@ -313,12 +368,18 @@ meetings/voting.py per §5.5.
 - [ ] `uv run mypy --strict meetings agents` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §5.5. Tally votes (target | SKIP); apply confidence threshold from §4.6; return ejection or skip. No LLM here — voting logic is mechanical; the *ballot* is LLM-produced (3.7).
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-10-voting.md`
 
 ### Task 3.11 — Contradiction detection
 **Branch:** `phase-3-contradiction-detection`
 **Depends on:** 3.10 merged
 **Section refs:** DESIGN.md §5.4, DESIGN.md §6.4
+**Complexity:** Medium
 
 meetings/transcript.py::detect_contradictions per §5.4 + §6.4.
 
@@ -342,12 +403,18 @@ meetings/transcript.py::detect_contradictions per §5.4 + §6.4.
 - [ ] `uv run mypy --strict meetings agents` passes.
 - [ ] `uv run ruff check .` passes.
 
+
+**Implementation hint:**
+
+See DESIGN.md §5.4 + §6.4. Index alibi claims by (agent, tick_range, location); cross-reference with `saw_player` observations; emit `ContradictionRef` objects. Detector is data, not verdict — flags feed back into the rendered memory view (3.3).
+
 **Ready-to-paste prompt:** `agent_prompts/task-3-11-contradiction-detection.md`
 
 ### Task 3.12 — Meeting/orchestrator integration
 **Branch:** `phase-3-meeting-orchestrator-integration`
 **Depends on:** 3.11 merged
 **Section refs:** DESIGN.md §3.1, DESIGN.md §5.1, DESIGN.md §11.4
+**Complexity:** Integration
 
 Apply `MeetingResult` through the orchestrator, resume gameplay, and record
 meeting artifacts in replay/eval records.
@@ -374,6 +441,19 @@ meeting artifacts in replay/eval records.
 - [ ] Relevant integration tests pass with fake LLM outputs.
 - [ ] `uv run mypy --strict engine observation agents meetings orchestrator llm` passes.
 - [ ] `uv run ruff check .` passes.
+
+
+**Implementation hint:**
+
+See DESIGN.md §3.1 + §11.4. The orchestrator owns the engine ↔ MeetingManager handoff: when the engine returns `phase == "MEETING"`, dispatch to MeetingManager, receive a `MeetingResult`, apply it to engine-owned state via a new engine function `apply_meeting_result(state, result)`, and resume. Replay log gains LLM-output records for replay determinism.
+
+**Integration risk:**
+
+This is the Phase 3 convergence point. It depends on tasks 3.1–3.11 plus 2.8.
+
+- Determinism: replay must record LLM outputs alongside actions   and replay must re-use them, not re-call the model. Verify   with a determinism test that runs the same seed twice and   asserts byte-identical replay logs.
+- Memory consistency: meeting outcomes must update each agent's   belief state. Without this, post-meeting reasoning is stale.
+- Phase boundary: do not let MeetingManager touch engine state   directly — every state change goes through the orchestrator.
 
 **Ready-to-paste prompt:** `agent_prompts/task-3-12-meeting-orchestrator-integration.md`
 

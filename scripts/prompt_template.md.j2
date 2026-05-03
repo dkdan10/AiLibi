@@ -1,0 +1,67 @@
+{# AiLibi task prompt template.
+
+   Source of truth for every file under agent_prompts/. Edit this template
+   plus the task contracts under tasks/phase-*.md, then run
+   `uv run python scripts/generate_prompts.py` to regenerate the prompts.
+
+   Variables (passed in by scripts/generate_prompts.py):
+     task                  — TaskDoc for the current task
+     phase_basename        — e.g. "phase-2.md"
+     title_lowercased      — task title, lowered, for the PR title
+     applicable_constraints — list[str] of constraint sentences to include
+                              in the constraints section, filtered by file scope
+     dependency_check      — list[str] of pre-flight verification commands
+#}# Agent Prompt — {{ task.task_id }} {{ task.title }}
+
+You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/{{ phase_basename }}.
+
+## Role and context
+You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
+
+## Exact section reference
+Implement Task {{ task.task_id }} — {{ task.title }}, anchored to {{ task.section_refs }}. Do not implement work outside these references.
+
+## Task contract
+The authoritative task contract is copied below from tasks/{{ phase_basename }}. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
+
+{{ task.contract }}
+{% if task.complexity in ("Medium", "Integration") and task.implementation_hint %}
+## Implementation hint
+{{ task.implementation_hint }}
+{% endif %}{% if task.public_types %}
+## Public types this task introduces
+{% for symbol in task.public_types -%}
+- `{{ symbol }}`
+{% endfor %}
+These are the symbols downstream tasks will import. Keep their signatures stable.
+{% endif %}{% if task.complexity == "Integration" and task.integration_risk %}
+## Integration risk
+{{ task.integration_risk }}
+{% endif %}{% if dependency_check %}
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+{% for command in dependency_check -%}
+- `{{ command }}`
+{% endfor %}{% endif %}
+## Pre-flight checklist
+- Read AGENTS.md, DESIGN.md, and the task section before editing.
+- Inspect the current implementation before editing.
+- Identify the existing local patterns for the files in scope and follow them.
+
+## Constraints and non-goals
+{% for constraint in applicable_constraints -%}
+{{ constraint }}
+{% endfor %}
+## Verification checklist
+- Run every command listed in the Definition of done.
+- Run `git diff --name-only` and confirm the diff stays within scope.
+- If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
+
+## Decisions vs questions
+- If something is **ambiguous and blocking** (you cannot make a reasonable choice without further information): stop, open a draft PR, add a `## Questions` section, request review.
+- If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
+
+## Output expectation
+Open a PR from branch `{{ task.branch }}` with a title like `task {{ task.task_id }}: {{ title_lowercased }}`.
+The PR description must reference {{ task.section_refs }}, list the definition-of-done checklist, and include `Decisions` and (if blocking) `Questions` sections.
