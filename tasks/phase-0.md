@@ -39,7 +39,7 @@ Preservation note: if engine/maps/canonical_1.yaml already exists, do not modify
 - any logic in any package
 - engine/maps/canonical_1.yaml if it already exists; preserve it unchanged
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] pyproject.toml declares Python 3.11 and lists pydantic v2, fastapi, pytest, mypy, ruff, import-linter, hypothesis as dependencies.
@@ -48,7 +48,7 @@ Preservation note: if engine/maps/canonical_1.yaml already exists, do not modify
 - [ ] pytest exits 0.
 - [ ] ruff check . exits 0.
 
-**Ready-to-paste prompt:** `codex_prompts/task-0-1-repo-skeleton.md`
+**Ready-to-paste prompt:** `agent_prompts/task-0-1-repo-skeleton.md`
 
 ### Task 0.2 — CI workflow
 **Branch:** `phase-0-ci`
@@ -63,13 +63,13 @@ Preservation note: if engine/maps/canonical_1.yaml already exists, do not modify
 **Files NOT in scope:**
 - AiLibi application logic
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] CI runs ruff, mypy, pytest on every PR.
 - [ ] CI passes on this PR.
 
-**Ready-to-paste prompt:** `codex_prompts/task-0-2-ci-workflow.md`
+**Ready-to-paste prompt:** `agent_prompts/task-0-2-ci-workflow.md`
 
 ### Task 0.3 — Import boundary lint rule
 **Branch:** `phase-0-firewall`
@@ -88,14 +88,14 @@ Add import-linter config that fails if agents/ imports from engine/. Verify by a
 - agents/ application logic
 - observation/ application logic
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] import-linter config bans agents.* from importing engine.*.
 - [ ] CI runs lint-imports.
 - [ ] tests/test_firewall.py adds an intentional bad import in a temp file, runs lint-imports, asserts failure, removes the file.
 
-**Ready-to-paste prompt:** `codex_prompts/task-0-3-import-boundary-lint-rule.md`
+**Ready-to-paste prompt:** `agent_prompts/task-0-3-import-boundary-lint-rule.md`
 
 ### Task 0.4 — Skeleton leak test
 **Branch:** `phase-0-leaktest`
@@ -112,12 +112,12 @@ eval/leak_test.py imports nothing from engine/ directly but defines the test tha
 - agents/
 - observation/ application logic
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] File exists with a single @pytest.mark.skip(reason="implemented in phase 1") test that documents the assertion contract.
 
-**Ready-to-paste prompt:** `codex_prompts/task-0-4-skeleton-leak-test.md`
+**Ready-to-paste prompt:** `agent_prompts/task-0-4-skeleton-leak-test.md`
 
 ### Task 0.5 — ADR file
 **Branch:** `phase-0-adr`
@@ -132,12 +132,12 @@ docs/adr/0001-three-load-bearing-decisions.md capturing DESIGN.md §0 verbatim.
 **Files NOT in scope:**
 - AiLibi application logic
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] ADR captures the three load-bearing decisions verbatim with date and author.
 
-**Ready-to-paste prompt:** `codex_prompts/task-0-5-adr-file.md`
+**Ready-to-paste prompt:** `agent_prompts/task-0-5-adr-file.md`
 
 ## Merge Criteria
 - All five tasks merged.

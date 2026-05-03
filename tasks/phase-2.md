@@ -35,7 +35,7 @@ importing engine types.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] `ActionIntent` is a Pydantic discriminated union for move, do_task, kill, vent, report, emergency, sabotage, and wait.
@@ -47,7 +47,7 @@ importing engine types.
 - [ ] `uv run mypy --strict engine observation agents orchestrator` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-2-1-boundary-contracts.md`
+**Ready-to-paste prompt:** `agent_prompts/task-2-1-boundary-contracts.md`
 
 ### Task 2.2 — Agent base + runtime
 **Branch:** `phase-2-agent-base-runtime`
@@ -71,7 +71,7 @@ agents/base.py and agents/runtime.py per §4.1. Runtime consumes
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] `AgentInterface` protocol and `AgentRuntime` wiring match DESIGN.md §4.1.
@@ -83,7 +83,7 @@ agents/base.py and agents/runtime.py per §4.1. Runtime consumes
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-2-2-agent-base-runtime.md`
+**Ready-to-paste prompt:** `agent_prompts/task-2-2-agent-base-runtime.md`
 
 ### Task 2.3 — Memory scaffolding (no LLM)
 **Branch:** `phase-2-memory-scaffolding`
@@ -107,7 +107,7 @@ no prompt rendering yet.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Episodic, working, and belief memory scaffolds exist per DESIGN.md §6.1.
@@ -118,7 +118,7 @@ no prompt rendering yet.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-2-3-memory-scaffolding-no-llm.md`
+**Ready-to-paste prompt:** `agent_prompts/task-2-3-memory-scaffolding-no-llm.md`
 
 ### Task 2.4 — Perception ingestion
 **Branch:** `phase-2-perception-ingestion`
@@ -140,7 +140,7 @@ read memory.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Perception converts visible players, visible bodies, audible events, self state, global state, and cooldown into typed episodic events with provenance.
@@ -151,7 +151,7 @@ read memory.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-2-4-perception-ingestion.md`
+**Ready-to-paste prompt:** `agent_prompts/task-2-4-perception-ingestion.md`
 
 ### Task 2.5 — Pathing
 **Branch:** `phase-2-pathing`
@@ -170,7 +170,7 @@ agents/tactical/pathing.py - deterministic A* over `PublicMapView`.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] A* pathing over `PublicMapView` exists per DESIGN.md §4.4.
@@ -181,7 +181,7 @@ agents/tactical/pathing.py - deterministic A* over `PublicMapView`.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-2-5-pathing.md`
+**Ready-to-paste prompt:** `agent_prompts/task-2-5-pathing.md`
 
 ### Task 2.6 — Crewmate FSM
 **Branch:** `phase-2-crewmate-fsm`
@@ -201,7 +201,7 @@ agents/tactical/crewmate_policy.py per §4.4.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Crewmate FSM implements IDLE -> MOVE_TO_TASK -> DO_TASK -> IDLE and listed interrupts.
@@ -214,7 +214,7 @@ agents/tactical/crewmate_policy.py per §4.4.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-2-6-crewmate-fsm.md`
+**Ready-to-paste prompt:** `agent_prompts/task-2-6-crewmate-fsm.md`
 
 ### Task 2.7 — Impostor FSM
 **Branch:** `phase-2-impostor-fsm`
@@ -234,7 +234,7 @@ agents/tactical/impostor_policy.py per §4.4.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Impostor FSM implements IDLE -> STALK -> KILL_OPPORTUNITY -> KILL -> COVER.
@@ -248,7 +248,7 @@ agents/tactical/impostor_policy.py per §4.4.
 - [ ] `uv run mypy --strict agents observation` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-2-7-impostor-fsm.md`
+**Ready-to-paste prompt:** `agent_prompts/task-2-7-impostor-fsm.md`
 
 ### Task 2.8 — Headless game orchestrator
 **Branch:** `phase-2-headless-game-orchestrator`
@@ -274,7 +274,7 @@ not implement tournament aggregation.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] A single headless game can run from a seed using deterministic role/spawn/task assignment.
@@ -285,7 +285,7 @@ not implement tournament aggregation.
 - [ ] `uv run mypy --strict engine observation agents orchestrator` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-2-8-headless-game-orchestrator.md`
+**Ready-to-paste prompt:** `agent_prompts/task-2-8-headless-game-orchestrator.md`
 
 ### Task 2.9 — Headless tournament harness
 **Branch:** `phase-2-headless-tournament-harness`
@@ -309,7 +309,7 @@ orchestrator.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Headless tournament harness runs multiple orchestrated games.
@@ -320,7 +320,7 @@ orchestrator.
 - [ ] `uv run pytest tests/eval/test_balance_eval.py` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-2-9-headless-tournament-harness.md`
+**Ready-to-paste prompt:** `agent_prompts/task-2-9-headless-tournament-harness.md`
 
 ## Merge Criteria
 - 100-game headless tournament completes without crashes.

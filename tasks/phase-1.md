@@ -28,7 +28,7 @@ engine/world.py::Map, room graph, vent network. Use the human-provided engine/ma
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] engine/world.py loads and validates the existing human-provided engine/maps/canonical_1.yaml.
@@ -37,7 +37,7 @@ engine/world.py::Map, room graph, vent network. Use the human-provided engine/ma
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-1-static-map-data.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-1-static-map-data.md`
 
 ### Task 1.2 — State model
 **Branch:** `phase-1-state-model`
@@ -57,7 +57,7 @@ WorldState, PlayerState, BodyState, TaskState, SabotageState per §3.2.
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] WorldState, PlayerState, BodyState, TaskState, and SabotageState exist per DESIGN.md §3.2.
@@ -66,7 +66,7 @@ WorldState, PlayerState, BodyState, TaskState, SabotageState per §3.2.
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-2-state-model.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-2-state-model.md`
 
 ### Task 1.3 — Action types
 **Branch:** `phase-1-action-types`
@@ -85,7 +85,7 @@ engine/actions.py Pydantic union per §A. Validators.
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Action types are represented as a Pydantic union per DESIGN.md Appendix A.
@@ -94,7 +94,7 @@ engine/actions.py Pydantic union per §A. Validators.
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-3-action-types.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-3-action-types.md`
 
 ### Task 1.3.5 — Engine contract hardening
 **Branch:** `phase-1-engine-contract-hardening`
@@ -118,7 +118,7 @@ Harden the already-merged engine state/action contracts before rules depend on t
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] WorldState keeps the public field names players, bodies, tasks, and cooldowns but converts mutable mapping inputs into read-only mappings during construction.
@@ -133,7 +133,7 @@ Harden the already-merged engine state/action contracts before rules depend on t
 - [ ] uv run pytest passes.
 - [ ] uv run lint-imports passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-3-5-engine-contract-hardening.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-3-5-engine-contract-hardening.md`
 
 ### Task 1.4 — Rules
 **Branch:** `phase-1-rules`
@@ -153,7 +153,7 @@ engine/rules.py for kill, vent, report, sabotage, win conditions per §3.4 + §3
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Kill, vent, report, emergency meeting, sabotage, and win-condition rules match DESIGN.md §3.4 and §3.5.
@@ -162,7 +162,7 @@ engine/rules.py for kill, vent, report, sabotage, win conditions per §3.4 + §3
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-4-rules.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-4-rules.md`
 
 ### Task 1.5 — advance_tick
 **Branch:** `phase-1-advance-tick`
@@ -182,7 +182,7 @@ Pure function (state, actions) -> (state', events) per §3.1. RNG threaded throu
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] advance_tick follows the seven-step loop in DESIGN.md §3.1.
@@ -191,7 +191,7 @@ Pure function (state, actions) -> (state', events) per §3.1. RNG threaded throu
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-5-advance-tick.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-5-advance-tick.md`
 
 ### Task 1.6 — Visibility
 **Branch:** `phase-1-visibility`
@@ -210,7 +210,7 @@ engine/visibility.py per §3.6 + §1.3 simplifications (room + adjacent room).
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Visibility logic preserves hidden information per DESIGN.md §3.6.
@@ -219,7 +219,7 @@ engine/visibility.py per §3.6 + §1.3 simplifications (room + adjacent room).
 - [ ] mypy --strict passes on touched engine files.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-6-visibility.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-6-visibility.md`
 
 ### Task 1.7 — ObservationService
 **Branch:** `phase-1-observation-service`
@@ -239,7 +239,7 @@ observation/service.py and ObservationPacket schema per §1.3 + §4.2. Audit log
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] ObservationPacket schema matches DESIGN.md §4.2.
@@ -249,7 +249,7 @@ observation/service.py and ObservationPacket schema per §1.3 + §4.2. Audit log
 - [ ] mypy --strict passes on observation/.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-7-observationservice.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-7-observationservice.md`
 
 ### Task 1.8 — Replay log
 **Branch:** `phase-1-replay-log`
@@ -267,7 +267,7 @@ orchestrator/replay.py writes JSONL of (tick, actions, state-hash) per game.
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Replay log writes JSONL entries containing tick, actions, and state hash per game.
@@ -276,7 +276,7 @@ orchestrator/replay.py writes JSONL of (tick, actions, state-hash) per game.
 - [ ] mypy --strict passes on touched files.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-8-replay-log.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-8-replay-log.md`
 
 ### Task 1.B1 — Test fixtures
 **Branch:** `phase-1-test-fixtures`
@@ -296,7 +296,7 @@ Hand-author tests/fixtures/scripted_game_*.json short canned games used by the d
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Short canned scripted game fixtures exist for determinism testing.
@@ -305,7 +305,7 @@ Hand-author tests/fixtures/scripted_game_*.json short canned games used by the d
 - [ ] pytest fixture-loading tests pass if present.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-b1-test-fixtures.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-b1-test-fixtures.md`
 
 ### Task 1.B2 — Leak test implementation
 **Branch:** `phase-1-leak-test-implementation`
@@ -324,7 +324,7 @@ Once ObservationPacket exists, implement the actual leak-test assertions. Can be
 - frontend/
 - llm/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] eval/leak_test.py asserts observation purity for hidden fields.
@@ -333,7 +333,7 @@ Once ObservationPacket exists, implement the actual leak-test assertions. Can be
 - [ ] No engine code is modified.
 - [ ] ruff check . passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-1-b2-leak-test-implementation.md`
+**Ready-to-paste prompt:** `agent_prompts/task-1-b2-leak-test-implementation.md`
 
 ## Merge Criteria
 - pytest tests/engine/ green.

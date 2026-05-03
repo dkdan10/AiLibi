@@ -32,7 +32,7 @@ metrics and the dashboard.
 - frontend/
 - scripts/run_tournament.py
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Eval report schema represents game outcomes, replay references, meeting artifacts, prompt versions, LLM cost metadata, and metric inputs.
@@ -41,7 +41,7 @@ metrics and the dashboard.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-5-1-eval-report-schema.md`
+**Ready-to-paste prompt:** `agent_prompts/task-5-1-eval-report-schema.md`
 
 ### Task 5.2 — Vote-correctness metric
 **Branch:** `phase-5-vote-correctness-metric`
@@ -65,7 +65,7 @@ Vote-correctness metric.
 - eval/alibi_fabrication.py
 - eval/cost_dashboard.py
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Vote-correctness metric is implemented against eval report data.
@@ -74,7 +74,7 @@ Vote-correctness metric.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-5-2-vote-correctness-metric.md`
+**Ready-to-paste prompt:** `agent_prompts/task-5-2-vote-correctness-metric.md`
 
 ### Task 5.3 — Accusation-calibration metric
 **Branch:** `phase-5-accusation-calibration-metric`
@@ -98,7 +98,7 @@ Accusation-calibration metric.
 - eval/alibi_fabrication.py
 - eval/cost_dashboard.py
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Accusation-calibration metric is implemented against eval report data.
@@ -107,7 +107,7 @@ Accusation-calibration metric.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-5-3-accusation-calibration-metric.md`
+**Ready-to-paste prompt:** `agent_prompts/task-5-3-accusation-calibration-metric.md`
 
 ### Task 5.4 — Alibi-fabrication-rate metric
 **Branch:** `phase-5-alibi-fabrication-rate-metric`
@@ -131,7 +131,7 @@ Alibi-fabrication-rate metric.
 - eval/accusation_calibration.py
 - eval/cost_dashboard.py
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Alibi-fabrication-rate metric is implemented against eval report data.
@@ -140,7 +140,7 @@ Alibi-fabrication-rate metric.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-5-4-alibi-fabrication-rate-metric.md`
+**Ready-to-paste prompt:** `agent_prompts/task-5-4-alibi-fabrication-rate-metric.md`
 
 ### Task 5.5 — Cost dashboard metric
 **Branch:** `phase-5-cost-dashboard`
@@ -164,7 +164,7 @@ Cost metric data by prompt version.
 - eval/accusation_calibration.py
 - eval/alibi_fabrication.py
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Per-prompt-version cost metric/dashboard data is implemented against eval report data.
@@ -173,7 +173,7 @@ Cost metric data by prompt version.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-5-5-cost-dashboard-per-prompt-version-cost.md`
+**Ready-to-paste prompt:** `agent_prompts/task-5-5-cost-dashboard-per-prompt-version-cost.md`
 
 ### Task 5.6 — Tournament metric integration
 **Branch:** `phase-5-tournament-metric-integration`
@@ -200,7 +200,7 @@ metric tasks have merged.
 - eval/alibi_fabrication.py
 - eval/cost_dashboard.py
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Tournament JSON report includes outputs from vote correctness, accusation calibration, alibi fabrication, and cost metrics.
@@ -210,7 +210,7 @@ metric tasks have merged.
 - [ ] `uv run mypy --strict eval scripts` passes if scripts are included by mypy config; otherwise `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-5-6-tournament-metric-integration.md`
+**Ready-to-paste prompt:** `agent_prompts/task-5-6-tournament-metric-integration.md`
 
 ### Task 5.7 — Tournament dashboard frontend page
 **Branch:** `phase-5-tournament-dashboard-frontend-page`
@@ -229,14 +229,14 @@ Tournament dashboard frontend page.
 - api/ unless a read endpoint already exists and needs wiring
 - eval/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Frontend dashboard renders the typed tournament JSON report.
 - [ ] Dashboard includes metrics from 5.2 through 5.5.
 - [ ] Frontend build/check command passes if configured.
 
-**Ready-to-paste prompt:** `codex_prompts/task-5-7-tournament-dashboard-frontend-page.md`
+**Ready-to-paste prompt:** `agent_prompts/task-5-7-tournament-dashboard-frontend-page.md`
 
 ### Task 5.8 — Prompt regression test suite
 **Branch:** `phase-5-prompt-regression-test-suite`
@@ -257,7 +257,7 @@ Prompt regression test suite.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Prompt regression tests exercise prompt versions against stable fixtures.
@@ -267,7 +267,7 @@ Prompt regression test suite.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-5-8-prompt-regression-test-suite.md`
+**Ready-to-paste prompt:** `agent_prompts/task-5-8-prompt-regression-test-suite.md`
 
 ## Merge Criteria
 - running `python scripts/run_tournament.py --N=200` produces a JSON report with all metrics.

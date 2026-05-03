@@ -21,7 +21,7 @@ llm/client.py, provider adapter, fake provider, cache, and budget.
 
 **Files in scope:**
 - llm/client.py
-- llm/claude_provider.py
+- llm/provider.py
 - llm/fake_provider.py
 - llm/cache.py
 - llm/budget.py
@@ -34,7 +34,7 @@ llm/client.py, provider adapter, fake provider, cache, and budget.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] `LLMClient` protocol exists.
@@ -46,7 +46,7 @@ llm/client.py, provider adapter, fake provider, cache, and budget.
 - [ ] `uv run mypy --strict llm agents` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-1-llm-client.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-1-llm-client.md`
 
 ### Task 3.2 — Shared meeting/output schemas
 **Branch:** `phase-3-output-schemas`
@@ -68,7 +68,7 @@ definitions.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] `ReportDocument`, `Statement`, `VoteBallot`, `MeetingResult`, and contradiction/result DTOs match DESIGN.md §5.3 and §5.5.
@@ -79,7 +79,7 @@ definitions.
 - [ ] `uv run mypy --strict agents meetings` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-2-output-schemas.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-2-output-schemas.md`
 
 ### Task 3.3 — Memory rendering
 **Branch:** `phase-3-memory-rendering`
@@ -99,7 +99,7 @@ agents/memory/store.py::render_for_prompt per §6.6.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] `render_for_prompt` produces a token-budgeted structured view per DESIGN.md §6.6.
@@ -110,7 +110,7 @@ agents/memory/store.py::render_for_prompt per §6.6.
 - [ ] `uv run mypy --strict agents meetings` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-3-memory-rendering.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-3-memory-rendering.md`
 
 ### Task 3.4 — Crewmate report prompt
 **Branch:** `phase-3-crewmate-report-prompt`
@@ -129,7 +129,7 @@ agents/strategic/prompts/crewmate_report.j2.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Crewmate report prompt exists and targets the shared `ReportDocument` schema.
@@ -137,7 +137,7 @@ agents/strategic/prompts/crewmate_report.j2.
 - [ ] Prompt includes a version marker.
 - [ ] No code outside the prompt file is modified.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-4-crewmate-report-prompt.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-4-crewmate-report-prompt.md`
 
 ### Task 3.5 — Impostor report prompt
 **Branch:** `phase-3-impostor-report-prompt`
@@ -156,7 +156,7 @@ agents/strategic/prompts/impostor_report.j2.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Impostor report prompt exists and targets the shared `ReportDocument` schema.
@@ -165,7 +165,7 @@ agents/strategic/prompts/impostor_report.j2.
 - [ ] Prompt includes a version marker.
 - [ ] No code outside the prompt file is modified.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-5-impostor-report-prompt.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-5-impostor-report-prompt.md`
 
 ### Task 3.6 — Accusation round prompt
 **Branch:** `phase-3-accusation-round-prompt`
@@ -184,7 +184,7 @@ agents/strategic/prompts/accusation_round.j2.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Accusation round prompt exists and targets the shared `Statement` schema.
@@ -192,7 +192,7 @@ agents/strategic/prompts/accusation_round.j2.
 - [ ] Prompt includes a version marker.
 - [ ] No code outside the prompt file is modified.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-6-accusation-round-prompt.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-6-accusation-round-prompt.md`
 
 ### Task 3.7 — Vote ballot prompt
 **Branch:** `phase-3-vote-ballot-prompt`
@@ -211,7 +211,7 @@ agents/strategic/prompts/vote_ballot.j2.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Vote ballot prompt exists and targets the shared `VoteBallot` schema.
@@ -220,7 +220,7 @@ agents/strategic/prompts/vote_ballot.j2.
 - [ ] Prompt includes a version marker.
 - [ ] No code outside the prompt file is modified.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-7-vote-ballot-prompt.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-7-vote-ballot-prompt.md`
 
 ### Task 3.8 — Meeting state machine
 **Branch:** `phase-3-meeting-state-machine`
@@ -242,7 +242,7 @@ meetings/manager.py and meetings/transcript.py per §5.1 + §5.2.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] `MeetingManager` follows trigger lifecycle in DESIGN.md §5.1.
@@ -253,7 +253,7 @@ meetings/manager.py and meetings/transcript.py per §5.1 + §5.2.
 - [ ] `uv run mypy --strict meetings agents llm` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-8-meeting-state-machine.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-8-meeting-state-machine.md`
 
 ### Task 3.9 — Strategic reasoner
 **Branch:** `phase-3-strategic-reasoner`
@@ -273,7 +273,7 @@ structured outputs.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Strategic reasoner calls `render_for_prompt`, invokes `LLMClient`, and parses structured outputs.
@@ -284,7 +284,7 @@ structured outputs.
 - [ ] `uv run mypy --strict agents llm meetings` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-9-strategic-reasoner.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-9-strategic-reasoner.md`
 
 ### Task 3.10 — Voting
 **Branch:** `phase-3-voting`
@@ -303,7 +303,7 @@ meetings/voting.py per §5.5.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Voting tally and uncertainty-aware skip behavior match DESIGN.md §5.5.
@@ -313,7 +313,7 @@ meetings/voting.py per §5.5.
 - [ ] `uv run mypy --strict meetings agents` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-10-voting.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-10-voting.md`
 
 ### Task 3.11 — Contradiction detection
 **Branch:** `phase-3-contradiction-detection`
@@ -332,7 +332,7 @@ meetings/transcript.py::detect_contradictions per §5.4 + §6.4.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] `detect_contradictions` flags incompatible alibi and saw-player claims.
@@ -342,7 +342,7 @@ meetings/transcript.py::detect_contradictions per §5.4 + §6.4.
 - [ ] `uv run mypy --strict meetings agents` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-11-contradiction-detection.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-11-contradiction-detection.md`
 
 ### Task 3.12 — Meeting/orchestrator integration
 **Branch:** `phase-3-meeting-orchestrator-integration`
@@ -364,7 +364,7 @@ meeting artifacts in replay/eval records.
 - api/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] Orchestrator applies `MeetingResult` ejection/skip outcomes to engine-owned world state.
@@ -375,7 +375,7 @@ meeting artifacts in replay/eval records.
 - [ ] `uv run mypy --strict engine observation agents meetings orchestrator llm` passes.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-3-12-meeting-orchestrator-integration.md`
+**Ready-to-paste prompt:** `agent_prompts/task-3-12-meeting-orchestrator-integration.md`
 
 ## Merge Criteria
 - 50-game eval: full-LLM games complete end-to-end using fake-provider tests in CI and real provider only in explicit local/eval runs.

@@ -1,7 +1,7 @@
 # AGENTS.md
 
-You are an AI coding agent (Codex) working on AiLibi. Read this file before
-every task, then read DESIGN.md and CODEX_IMPLEMENTATION.md as referenced.
+You are an AI coding agent working on AiLibi. Read this file before every
+task, then read DESIGN.md and AGENT_IMPLEMENTATION.md as referenced.
 
 ## Source of truth
 
@@ -9,8 +9,8 @@ every task, then read DESIGN.md and CODEX_IMPLEMENTATION.md as referenced.
   a specific section. If the section says X, you do X — even if you think Y
   is better. If you genuinely think the design is wrong, leave a comment in
   the PR description and stop. Do not change the design unilaterally.
-- `CODEX_IMPLEMENTATION.md` is the build plan. The current task description
-  in the prompt overrides it where they conflict.
+- `AGENT_IMPLEMENTATION.md` is the provider-neutral build plan. The current
+  task description in the prompt overrides it where they conflict.
 
 ## Three load-bearing rules (DESIGN.md §0)
 
@@ -42,7 +42,7 @@ every task, then read DESIGN.md and CODEX_IMPLEMENTATION.md as referenced.
 
 ## Environment setup
 
-- In a fresh local, container, or Codex Web environment, run
+- In a fresh local, container, or agent runner environment, run
   `bash scripts/setup_env.sh` before testing or implementation work.
 - For final verification, run `bash scripts/check.sh`. Targeted `uv run ...`
   commands are fine while developing, but the shared check script is the

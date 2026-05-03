@@ -35,7 +35,7 @@ DTO schemas per §7.
 - llm/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] FastAPI app skeleton exists.
@@ -46,7 +46,7 @@ DTO schemas per §7.
 - [ ] Relevant API tests pass.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-4-1-fastapi-app-skeleton.md`
+**Ready-to-paste prompt:** `agent_prompts/task-4-1-fastapi-app-skeleton.md`
 
 ### Task 4.2 — Game broadcast
 **Branch:** `phase-4-game-broadcast`
@@ -65,7 +65,7 @@ api/ws.py - broadcast sanitized tick and meeting events from a running game.
 - llm/
 - frontend/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] WebSocket broadcaster streams tick and meeting events from a running game.
@@ -74,7 +74,7 @@ api/ws.py - broadcast sanitized tick and meeting events from a running game.
 - [ ] Relevant API/WebSocket tests pass.
 - [ ] `uv run ruff check .` passes.
 
-**Ready-to-paste prompt:** `codex_prompts/task-4-2-game-broadcast.md`
+**Ready-to-paste prompt:** `agent_prompts/task-4-2-game-broadcast.md`
 
 ### Task 4.3 — React + Vite + Tailwind setup
 **Branch:** `phase-4-react-vite-tailwind-setup`
@@ -104,7 +104,7 @@ chosen in the repo before this task starts.
 - api/ beyond API client contract needs
 - .github/workflows/ci.yml
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] React, Vite, and Tailwind frontend skeleton exists.
@@ -115,7 +115,7 @@ chosen in the repo before this task starts.
 - [ ] scripts/check.sh runs the configured frontend build/check command, without changing Python check behavior.
 - [ ] Frontend build/check command passes if configured.
 
-**Ready-to-paste prompt:** `codex_prompts/task-4-3-react-vite-tailwind-setup.md`
+**Ready-to-paste prompt:** `agent_prompts/task-4-3-react-vite-tailwind-setup.md`
 
 ### Task 4.4 — MapView
 **Branch:** `phase-4-mapview`
@@ -134,7 +134,7 @@ PixiJS canvas rendering rooms + players.
 - api/
 - frontend/src/store/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] MapView renders rooms and players with PixiJS.
@@ -142,7 +142,7 @@ PixiJS canvas rendering rooms + players.
 - [ ] Component does not depend on raw engine state.
 - [ ] Frontend build/check command passes if configured.
 
-**Ready-to-paste prompt:** `codex_prompts/task-4-4-mapview.md`
+**Ready-to-paste prompt:** `agent_prompts/task-4-4-mapview.md`
 
 ### Task 4.5 — MeetingView
 **Branch:** `phase-4-meetingview`
@@ -161,14 +161,14 @@ Transcript renderer.
 - api/
 - frontend/src/store/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] MeetingView renders meeting transcripts, ballots, and contradiction flags exposed by the API DTOs.
 - [ ] Component consumes the shared store/API shape from 4.3.
 - [ ] Frontend build/check command passes if configured.
 
-**Ready-to-paste prompt:** `codex_prompts/task-4-5-meetingview.md`
+**Ready-to-paste prompt:** `agent_prompts/task-4-5-meetingview.md`
 
 ### Task 4.6 — ThoughtStream
 **Branch:** `phase-4-thoughtstream`
@@ -187,7 +187,7 @@ Per-agent memory + LLM call viewer.
 - api/
 - frontend/src/store/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] ThoughtStream displays per-agent memory and LLM reasoning/call information exposed by the spectator API.
@@ -195,7 +195,7 @@ Per-agent memory + LLM call viewer.
 - [ ] Component renders prompt versions and cost metadata when present.
 - [ ] Frontend build/check command passes if configured.
 
-**Ready-to-paste prompt:** `codex_prompts/task-4-6-thoughtstream.md`
+**Ready-to-paste prompt:** `agent_prompts/task-4-6-thoughtstream.md`
 
 ### Task 4.7 — BeliefMatrix
 **Branch:** `phase-4-beliefmatrix`
@@ -214,14 +214,14 @@ Heatmap of who suspects whom.
 - api/
 - frontend/src/store/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] BeliefMatrix renders a heatmap of suspicion/trust relationships from sanitized spectator DTOs.
 - [ ] Component consumes the shared store/API shape from 4.3.
 - [ ] Frontend build/check command passes if configured.
 
-**Ready-to-paste prompt:** `codex_prompts/task-4-7-beliefmatrix.md`
+**Ready-to-paste prompt:** `agent_prompts/task-4-7-beliefmatrix.md`
 
 ### Task 4.8 — ReplayControls
 **Branch:** `phase-4-replaycontrols`
@@ -240,14 +240,14 @@ Scrubber, speed control.
 - api/
 - frontend/src/store/
 - DESIGN.md
-- CODEX_IMPLEMENTATION.md
+- AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
 - [ ] ReplayControls provides scrubber and speed controls for sanitized replay DTOs.
 - [ ] Component consumes the shared store/API shape from 4.3.
 - [ ] Frontend build/check command passes if configured.
 
-**Ready-to-paste prompt:** `codex_prompts/task-4-8-replaycontrols.md`
+**Ready-to-paste prompt:** `agent_prompts/task-4-8-replaycontrols.md`
 
 ## Merge Criteria
 - Non-technical viewer can watch a live game and replay any saved one.

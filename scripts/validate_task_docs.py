@@ -1,4 +1,4 @@
-"""Validate AiLibi task files and paste-ready Codex prompts.
+"""Validate AiLibi task files and paste-ready task prompts.
 
 The phase task files are the source of truth. Prompt files are allowed to add
 execution guidance, but the copied task contract must stay byte-for-byte in
@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS_DIR = ROOT / "tasks"
-PROMPTS_DIR = ROOT / "codex_prompts"
+PROMPTS_DIR = ROOT / "agent_prompts"
 
 TASK_HEADER_RE = re.compile(
     r"^### Task (?P<task_id>\d+\.(?:B\d+|P\d+|\d+(?:\.\d+)?[a-z]?))"
@@ -24,7 +24,7 @@ TASK_HEADER_RE = re.compile(
 )
 FUTURE_TASK_ID_RE = re.compile(r"^[2-9]\d*\.[1-9]\d*$")
 PROMPT_PATH_RE = re.compile(
-    r"\*\*Ready-to-paste prompt:\*\* `(?P<path>codex_prompts/[^`]+\.md)`"
+    r"\*\*Ready-to-paste prompt:\*\* `(?P<path>agent_prompts/[^`]+\.md)`"
 )
 FIELD_RE = re.compile(r"^\*\*(?P<field>[^:]+):\*\* (?P<value>.*)$", re.MULTILINE)
 TASK_ID_RE = re.compile(r"\b(?P<task_id>\d+\.(?:B\d+|P\d+|\d+(?:\.\d+)?[a-z]?))\b")
@@ -215,7 +215,7 @@ def validate_prompts(tasks: list[TaskDoc], errors: list[str]) -> None:
             continue
 
         prompt = task.prompt_path.read_text()
-        expected_title = f"# Codex Prompt — {task.task_id} {task.title}"
+        expected_title = f"# Agent Prompt — {task.task_id} {task.title}"
         if expected_title not in prompt.splitlines()[:1]:
             errors.append(
                 f"{relative(task.prompt_path)}: expected title {expected_title!r}."
