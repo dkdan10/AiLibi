@@ -1,39 +1,47 @@
-# Codex Prompt — 4.6 ThoughtStream
+# Codex Prompt — 2.3 Memory scaffolding (no LLM)
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section in tasks/phase-4.md.
+You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section in tasks/phase-2.md.
 
 1. Role and context
 You are a Codex implementation agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth, CODEX_IMPLEMENTATION.md is the build plan, and the task contract below is the implementation contract for this PR.
 
 2. Exact section reference
-Implement Task 4.6 — ThoughtStream, anchored to DESIGN.md §6, DESIGN.md §7. Do not implement work outside these references.
+Implement Task 2.3 — Memory scaffolding (no LLM), anchored to DESIGN.md §6.1. Do not implement work outside these references.
 
 3. Task contract
-The authoritative task contract is copied below from tasks/phase-4.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
+The authoritative task contract is copied below from tasks/phase-2.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
-**Branch:** `phase-4-thoughtstream`
-**Depends on:** 4.3 merged
-**Section refs:** DESIGN.md §6, DESIGN.md §7
+**Branch:** `phase-2-memory-scaffolding`
+**Depends on:** 2.2 merged
+**Section refs:** DESIGN.md §6.1
 
-Per-agent memory + LLM call viewer.
+agents/memory/episodic.py, working.py, beliefs.py per §6.1. Write paths only;
+no prompt rendering yet.
 
 **Files in scope:**
-- frontend/src/components/ThoughtStream.tsx
+- agents/memory/episodic.py
+- agents/memory/working.py
+- agents/memory/beliefs.py
+- tests/agents/test_memory.py
 
 **Files NOT in scope:**
 - engine/
-- agents/
 - llm/
+- agents/memory/store.py
+- agents/tactical/
 - api/
-- frontend/src/store/
+- frontend/
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] ThoughtStream displays per-agent memory and LLM reasoning/call information exposed by the spectator API.
-- [ ] Component consumes the shared store/API shape from 4.3.
-- [ ] Component renders prompt versions and cost metadata when present.
-- [ ] Frontend build/check command passes if configured.
+- [ ] Episodic, working, and belief memory scaffolds exist per DESIGN.md §6.1.
+- [ ] Write paths are implemented for typed agent-visible events.
+- [ ] Prompt rendering is not implemented in this task.
+- [ ] No raw `ObservationPacket` parsing is added to tactical policy files.
+- [ ] No imports from engine/ under agents/.
+- [ ] `uv run mypy --strict agents observation` passes.
+- [ ] `uv run ruff check .` passes.
 
 4. Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section before editing.
@@ -57,5 +65,5 @@ If something is ambiguous, stop and add a Questions section in the PR descriptio
 - If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
 
 7. Output expectation
-Open a PR from branch `phase-4-thoughtstream` with a title like `task 4.6: thoughtstream`.
-The PR description must reference DESIGN.md §6, DESIGN.md §7, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.
+Open a PR from branch `phase-2-memory-scaffolding` with a title like `task 2.3: memory scaffolding (no llm)`.
+The PR description must reference DESIGN.md §6.1, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.

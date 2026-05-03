@@ -87,7 +87,7 @@ Tasks under the same phase that share no files in scope can run **in parallel**.
 
 There are three viable mechanisms, and you'll likely use a mix. Each is explained below.
 
-### 2.1 Mechanism A — Codex Cloud (recommended for parallel work)
+### 2.2 Mechanism A — Codex Cloud (recommended for parallel work)
 
 Codex Cloud (the version accessible via your ChatGPT account) lets you dispatch multiple tasks at once, each running in its own ephemeral container. Each task opens a pull request when it finishes. This is the easiest way to run agents in parallel because the isolation is automatic — every task gets a fresh checkout of your repo.
 
@@ -108,7 +108,7 @@ Codex Cloud (the version accessible via your ChatGPT account) lets you dispatch 
 
 **Important:** Codex Cloud charges per task and per token. See Part 7 for ballparks.
 
-### 2.2 Mechanism B — Codex CLI in multiple terminals + git worktrees
+### 2.3 Mechanism B — Codex CLI in multiple terminals + git worktrees
 
 When you want hands-on iteration with an agent (e.g., debugging an engine rule), use the Codex CLI locally. To run two CLI agents at once, you use **git worktrees** — a git feature that creates multiple working directories backed by the same repo. This way two agents can edit two different branches at the same time without confusing each other.
 
@@ -145,7 +145,7 @@ git worktree remove ../ailibi-frontend
 
 **When to use it:** when you want to watch an agent work and intervene mid-task. CLI gives you a tighter feedback loop than Cloud, at the cost of holding your machine.
 
-### 2.3 Mechanism C — Hybrid
+### 2.5 Mechanism C — Hybrid
 
 The pattern I recommend for AiLibi:
 
@@ -154,7 +154,7 @@ The pattern I recommend for AiLibi:
 
 Concretely: while you're driving Codex CLI through Phase 1's engine work, you might have Codex Cloud working on the empty React/Pixi scaffolding for Phase 4 in the background. They never touch the same files.
 
-### 2.4 Picking the mechanism per task
+### 2.6 Picking the mechanism per task
 
 | Task type                                              | Mechanism      | Why                                          |
 | ------------------------------------------------------ | -------------- | -------------------------------------------- |
@@ -172,14 +172,21 @@ Concretely: while you're driving Codex CLI through Phase 1's engine work, you mi
 
 ### 3.1 Anatomy of a good prompt
 
-A good Codex prompt has six parts, in this order:
+A good Codex prompt has seven parts, in this order:
 
-1. **The role and context.** "You are working on the AiLibi project. Read AGENTS.md and DESIGN.md before starting."
-2. **The exact section reference.** "Implement DESIGN.md §3.2 (State model) and §3.6 (Hidden information)."
-3. **Files in scope.** "Edit only `engine/world.py` and `engine/entities.py`. Do not touch any file in `agents/` or `observation/`."
-4. **The acceptance criteria.** "When done, `pytest tests/engine/test_world_state.py` passes, `mypy engine/world.py` passes."
-5. **Constraints / non-goals.** "Do not implement visibility — that's a separate task. Do not import from `agents/`."
-6. **Output expectation.** "Open a PR titled `phase-1: world state and entities` against `phase-1-engine`."
+1. **The role and context.** "You are working on the AiLibi project. Read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section before starting."
+2. **The exact task and section reference.** "Implement Task 1.2 — State model, anchored to DESIGN.md §3.2."
+3. **The copied task contract.** Paste the exact task body from `tasks/phase-N.md`, starting at `**Branch:**` and ending at the Definition of done checklist. This is what keeps prompts synchronized with the human task plan.
+4. **Pre-flight checklist.** Require the agent to read the governing docs, inspect the current implementation before editing, confirm dependencies, and follow existing local patterns.
+5. **Constraints / non-goals.** Protect source-of-truth docs, unrelated packages, the observation firewall, and phase boundaries.
+6. **Verification checklist.** Require every DoD command, `git diff --name-only` scope review, and explicit reporting of unchecked DoD items.
+7. **Output expectation.** "Open a PR titled `task 1.2: state model` from branch `phase-1-state-model`."
+
+The prompt files in `codex_prompts/` are paste-ready wrappers around the task
+contracts in `tasks/phase-*.md`. The task files remain the source of truth.
+`scripts/validate_task_docs.py` enforces that every task has exactly one prompt,
+that each prompt copies the task contract exactly, and that same-phase parallel
+tasks do not edit the same files unless dependencies make them sequential.
 
 ### 3.2 Anatomy of a bad prompt (anti-patterns)
 
@@ -195,7 +202,7 @@ Things that look reasonable but produce drift:
 
 The biggest win from `DESIGN.md` is that you can write prompts like "Implement §6.3 belief tracking with the exact suspicion update weights specified" and Codex will produce code that matches the design rather than inventing its own scheme. This is what keeps the architecture coherent across many independent tasks.
 
-### 3.4 Definition of done
+### 3.8 Definition of done
 
 Every task has a checklist. The checklist is part of the prompt and ends up in the PR description. Example:
 
@@ -209,6 +216,16 @@ Definition of done:
 ```
 
 If Codex says "done" and one box is unchecked, the PR is rejected. This is the one rule you must enforce — agents will absolutely declare victory prematurely otherwise.
+
+### 3.9 Prompt/task validation
+
+Run `uv run python scripts/validate_task_docs.py` whenever you add, rename, or
+edit a task or prompt. The full `bash scripts/check.sh` gate runs it
+automatically. A validator failure means the workflow docs are out of sync; fix
+the task/prompt mismatch before dispatching more agents. Phase 0 and Phase 1
+retain their historical IDs, but Phase 2 and later must use simple numeric task
+IDs like `2.1`, `2.2`, and `3.10`; do not add half-step, lettered, or prompt
+group IDs.
 
 ---
 
@@ -267,9 +284,9 @@ Open a PR titled "phase-0: project skeleton" against main.
 - **1.1 Static map data.** `engine/world.py::Map`, room graph, vent network. One canonical map as YAML.
 - **1.2 State model.** `WorldState`, `PlayerState`, `BodyState`, `TaskState`, `SabotageState` per §3.2.
 - **1.3 Action types.** `engine/actions.py` Pydantic union per §A. Validators.
-- **1.4 Rules.** `engine/rules.py` for kill, vent, report, sabotage, win conditions per §3.4 + §3.5.
+- **1.4 Rules.** `engine/rules.py` for kill, vent, report, sabotage, win conditions per §3.8 + §3.5.
 - **1.5 advance_tick.** Pure function `(state, actions) -> (state', events)` per §3.1. RNG threaded through `engine/rng.py`.
-- **1.6 Visibility.** `engine/visibility.py` per §3.6 + §1.3 simplifications (room + adjacent room).
+- **1.6 Visibility.** `engine/visibility.py` per §3.10 + §1.3 simplifications (room + adjacent room).
 - **1.7 ObservationService.** `observation/service.py` and `ObservationPacket` schema per §1.3 + §4.2. Audit log to disk.
 - **1.8 Replay log.** `orchestrator/replay.py` writes JSONL of (tick, actions, state-hash) per game.
 
@@ -290,48 +307,53 @@ Open a PR titled "phase-0: project skeleton" against main.
 
 **Goal:** rule-based crewmate and impostor agents complete games headlessly without crashing. Win rates land in a believable band even without LLMs.
 
-**Parallelism:** crewmate and impostor policies can be developed in parallel because they live in separate files, *but* both depend on `agents/runtime.py` and the memory scaffolding. So serial up through 2.3, then parallel.
+**Parallelism:** serial through the firewall-safe boundary contracts, runtime, memory, perception, and pathing. Crewmate and impostor policies can then run in parallel because they live in separate files and both return `ActionIntent`. The single-game orchestrator and tournament harness run after both policies merge.
 
 **Tasks:**
 
-- **2.1 Agent base + runtime.** `agents/base.py` and `agents/runtime.py` per §4.1. Memory wiring stub.
-- **2.2 Memory scaffolding (no LLM).** `agents/memory/episodic.py`, `working.py`, `beliefs.py` per §6.1. Write paths only — no rendering yet (that comes in Phase 3).
-- **2.3 Pathing.** `agents/tactical/pathing.py` — A* over room graph.
-- **2.4 Crewmate FSM.** `agents/tactical/crewmate_policy.py` per §4.4. **(parallel branch)**
-- **2.5 Impostor FSM.** `agents/tactical/impostor_policy.py` per §4.4. **(parallel branch)**
-- **2.6 Headless tournament harness.** `scripts/run_tournament.py`, `eval/balance_eval.py` per §11.3.
+- **2.1 Boundary contracts.** Engine-free `ActionIntent` and `PublicMapView` plus orchestrator adapters that translate to engine-owned types.
+- **2.2 Agent base + runtime.** `agents/base.py` and `agents/runtime.py` per §4.1. Runtime consumes `ObservationPacket` + `PublicMapView` and returns `ActionIntent`.
+- **2.3 Memory scaffolding (no LLM).** `agents/memory/episodic.py`, `working.py`, `beliefs.py` per §6.1. Write paths only — no rendering yet.
+- **2.4 Perception ingestion.** `agents/perception.py` converts `ObservationPacket` into typed episodic events.
+- **2.5 Pathing.** `agents/tactical/pathing.py` — deterministic A* over `PublicMapView`.
+- **2.6 Crewmate FSM.** `agents/tactical/crewmate_policy.py` per §4.4. Consumes memory/public map; returns `ActionIntent`. **(parallel branch)**
+- **2.7 Impostor FSM.** `agents/tactical/impostor_policy.py` per §4.4. Consumes memory/public map; returns `ActionIntent`. **(parallel branch)**
+- **2.8 Headless game orchestrator.** `orchestrator/game.py`, `seeder.py`, `scheduler.py`, and `scripts/run_game.py` wire seed setup, observations, agents, action-intent translation, replay, and game-over handling.
+- **2.9 Headless tournament harness.** `scripts/run_tournament.py`, `eval/balance_eval.py` per §11.3. Aggregates many games; does not invent the single-game orchestrator.
 
 **Parallelism plan:**
-- Sequential: 2.1 → 2.2 → 2.3 (these all touch foundational types).
-- After 2.3 merges, fan out 2.4 and 2.5 to two Cloud agents in parallel. They edit different files; they should not conflict.
-- 2.6 runs after 2.4 and 2.5 are merged.
+- Sequential: 2.1 → 2.2 → 2.3 → 2.4 → 2.5.
+- After 2.5 merges, fan out 2.6 and 2.7 to two Cloud agents in parallel. They edit different files; they should not conflict.
+- 2.8 runs after 2.6 and 2.7 are merged. 2.9 runs after 2.8.
 
 **Merge criteria:**
 - 100-game headless tournament completes without crashes.
 - Both sides win > 20% of games (sanity check).
 - Leak test still passes across all 100 games.
+- `agents/` still has no direct or transitive imports from `engine/`.
 
 ### Phase 3 — Strategic agents and meetings (1 foreground agent, prompt work in parallel)
 
 **Goal:** LLM-driven meetings work end-to-end. Reports, accusations, votes. Cost stays under budget.
 
-**Parallelism:** the meeting state machine, the LLM client, and the memory rendering are tightly coupled and should go through one CLI agent in series. Prompt templates and output schemas can be parallel branches once the schemas are stable.
+**Parallelism:** LLM client, shared schemas, memory rendering, meeting state, reasoner, voting, contradiction detection, and meeting/orchestrator integration are serial. Prompt templates can run in parallel after memory rendering lands, because they depend on both schemas and rendered-memory inputs.
 
 **Tasks (sequential foreground, on `phase-3-meetings`):**
 
-- **3.1 LLM client.** `llm/client.py`, `llm/claude_provider.py` (or whichever provider — but the `LLMClient` protocol is what matters), cache, budget.
-- **3.2 Output schemas.** `agents/strategic/output_schemas.py` — `ReportDocument`, `Statement`, `VoteBallot` per §5.3 + §A.
+- **3.1 LLM client.** `llm/client.py`, `llm/claude_provider.py`, `llm/fake_provider.py`, cache, and budget. CI uses the fake provider only.
+- **3.2 Shared meeting/output schemas.** `meetings/schemas.py` owns `ReportDocument`, `Statement`, `VoteBallot`, `MeetingResult`, and contradiction DTOs. `agents/strategic/output_schemas.py` may re-export/wrap them but must not duplicate definitions.
 - **3.3 Memory rendering.** `agents/memory/store.py::render_for_prompt` per §6.6. This is the hard, important one.
-- **3.4 Meeting state machine.** `meetings/manager.py` and `meetings/transcript.py` per §5.1 + §5.2.
-- **3.5 Strategic reasoner.** `agents/strategic/reasoner.py` — wires render_for_prompt → LLM → parsed output.
-- **3.6 Voting.** `meetings/voting.py` per §5.5.
-- **3.7 Contradiction detection.** `meetings/transcript.py::detect_contradictions` per §5.4 + §6.4.
+- **3.8 Meeting state machine.** `meetings/manager.py` and `meetings/transcript.py` per §5.1 + §5.2. Returns `MeetingResult`; does not mutate engine state.
+- **3.9 Strategic reasoner.** `agents/strategic/reasoner.py` — wires render_for_prompt → LLM → parsed output.
+- **3.10 Voting.** `meetings/voting.py` per §5.5.
+- **3.11 Contradiction detection.** `meetings/transcript.py::detect_contradictions` per §5.4 + §6.4.
+- **3.12 Meeting/orchestrator integration.** Orchestrator applies `MeetingResult`, resumes gameplay, and records meeting artifacts, prompt versions, and LLM cost metadata in replay/eval records.
 
-**Parallel tasks (Cloud, after 3.2 merges):**
-- **3.P1 Crewmate report prompt.** `agents/strategic/prompts/crewmate_report.j2`.
-- **3.P2 Impostor report prompt.** `agents/strategic/prompts/impostor_report.j2`.
-- **3.P3 Accusation round prompt.** `agents/strategic/prompts/accusation_round.j2`.
-- **3.P4 Vote ballot prompt.** `agents/strategic/prompts/vote_ballot.j2`.
+**Parallel tasks (Cloud, after 3.3 merges):**
+- **3.4 Crewmate report prompt.** `agents/strategic/prompts/crewmate_report.j2`.
+- **3.5 Impostor report prompt.** `agents/strategic/prompts/impostor_report.j2`.
+- **3.6 Accusation round prompt.** `agents/strategic/prompts/accusation_round.j2`.
+- **3.7 Vote ballot prompt.** `agents/strategic/prompts/vote_ballot.j2`.
 
 These are four files, four agents, fully parallel.
 
@@ -340,6 +362,7 @@ These are four files, four agents, fully parallel.
 - Impostor win rate in [25%, 65%] band.
 - Cost per game ≤ $0.30 (or whichever provider's equivalent).
 - Meeting transcripts are human-readable.
+- Replay/eval records include meeting artifacts, prompt versions, and LLM cost metadata.
 
 **Tip:** wire up budget caps in `llm/budget.py` early. Codex tasks will sometimes loop on retries when prompts fail validation; you do not want that to drain your account.
 
@@ -351,33 +374,35 @@ These are four files, four agents, fully parallel.
 
 **Tasks:**
 
-- **4.1 FastAPI app skeleton.** `api/main.py`, basic routes, WebSocket endpoint per §7. **(serial)**
-- **4.2 Game broadcast.** `api/ws.py` — broadcast tick events from a running game. **(serial)**
-- **4.3 React + Vite + Tailwind setup.** `frontend/` skeleton, type-safe API client. **(serial)**
+- **4.1 FastAPI app skeleton and spectator DTOs.** `api/main.py`, `api/schemas.py`, basic routes, WebSocket endpoint per §7. **(serial)**
+- **4.2 Game broadcast.** `api/ws.py` — broadcast sanitized tick and meeting events from a running game. **(serial)**
+- **4.3 React + Vite + Tailwind setup.** `frontend/` skeleton, type-safe API client, npm with `package-lock.json` unless an existing repo choice says otherwise. **(serial)**
 - **4.4 MapView.** PixiJS canvas rendering rooms + players. **(parallel)**
 - **4.5 MeetingView.** Transcript renderer. **(parallel)**
 - **4.6 ThoughtStream.** Per-agent memory + LLM call viewer. **(parallel)**
 - **4.7 BeliefMatrix.** Heatmap of who suspects whom. **(parallel)**
 - **4.8 ReplayControls.** Scrubber, speed control. **(parallel)**
 
-**Parallelism plan:** 4.1 → 4.2 → 4.3 in series (Cloud, but one at a time). Then fan out 4.4–4.8 to five Cloud agents at once. Each touches its own file in `frontend/src/components/`. They share `frontend/src/store/` — handle that with a single small stub task (4.3.5, defining the store interface) before fanning out.
+**Parallelism plan:** 4.1 → 4.2 → 4.3 in series (Cloud, but one at a time). Task 4.3 owns the shared store/API interface. Then fan out 4.4–4.8 to five Cloud agents at once. Each touches its own file in `frontend/src/components/` and consumes the store shape from 4.3.
 
-**Merge criteria:** non-technical viewer can watch a live game and replay any saved one.
+**Merge criteria:** non-technical viewer can watch a live game and replay any saved one; spectator API and WebSocket payloads expose sanitized DTOs only.
 
 ### Phase 5 — Eval and polish (highly parallel)
 
 **Goal:** every prompt or rule change produces a measurable signal in the eval dashboard.
 
-**Tasks (mostly parallel):**
+**Tasks (mostly parallel after 5.1):**
 
-- **5.1 Vote-correctness metric.**
-- **5.2 Accusation-calibration metric.**
-- **5.3 Alibi-fabrication-rate metric.**
-- **5.4 Cost dashboard (per-prompt-version cost).**
-- **5.5 Tournament dashboard frontend page.**
-- **5.6 Prompt regression test suite.**
+- **5.1 Eval report schema.** `eval/report_schema.py` defines the typed tournament/eval JSON report.
+- **5.2 Vote-correctness metric.**
+- **5.3 Accusation-calibration metric.**
+- **5.4 Alibi-fabrication-rate metric.**
+- **5.5 Cost dashboard (per-prompt-version cost).**
+- **5.6 Tournament metric integration.** Wire 5.2–5.5 into tournament JSON output after parallel metric branches merge.
+- **5.7 Tournament dashboard frontend page.**
+- **5.8 Prompt regression test suite.**
 
-5.1–5.4 are all independent files in `eval/` — perfect Cloud fan-out (4 parallel tasks).
+5.2–5.5 are all independent files in `eval/` — perfect Cloud fan-out (4 parallel tasks). They do not edit `scripts/run_tournament.py`; 5.6 owns that integration to avoid conflicts.
 
 **Merge criteria:** running `python scripts/run_tournament.py --N=200` produces a JSON report with all metrics; the frontend dashboard renders it.
 
@@ -391,7 +416,7 @@ Held until MVP demonstrably works. Sequential CLI work; UI changes plus a human 
 
 This is where you stay sane while running 3+ agents in parallel.
 
-### 5.1 Your PR review checklist
+### 5.2 Your PR review checklist
 
 For every PR an agent opens, before merging:
 
@@ -404,11 +429,11 @@ For every PR an agent opens, before merging:
 
 This takes 5–15 minutes per PR. Budget for it. If you have 4 PRs queued up and zero review time, you have too many agents running.
 
-### 5.2 Merge order
+### 5.3 Merge order
 
 When two parallel PRs both touch the same file (it happens despite scope), merge the smaller one first, then ask the second agent to rebase. Don't try to manually resolve the conflict yourself — give the rebase task back to Codex with clear instructions.
 
-### 5.3 The "I'll just fix this myself" trap
+### 5.4 The "I'll just fix this myself" trap
 
 You'll be tempted to fix small things in agent diffs by hand. Resist most of the time, because:
 - Hand fixes don't improve the next agent's behavior.
@@ -417,7 +442,7 @@ You'll be tempted to fix small things in agent diffs by hand. Resist most of the
 
 The exception: typos in non-code files (READMEs, ADRs). Fix those by hand; not worth a Codex round-trip.
 
-### 5.4 Detecting design drift
+### 5.5 Detecting design drift
 
 Every 2–3 merged PRs, do a 5-minute "drift check":
 - Re-read DESIGN.md §0 (the three load-bearing decisions).
@@ -560,7 +585,7 @@ Codex CLI, single agent, sequential.
 ### Task 0.3 — Import boundary lint
 **Owner:** Codex CLI
 **Branch:** phase-0-firewall
-**Depends on:** 0.1 merged
+**Depends on:** 0.2 merged
 **Section refs:** DESIGN.md §1.3
 **Files in scope:** .importlinter, .github/workflows/ci.yml (extend), tests/test_firewall.py
 **Definition of done:**
@@ -591,104 +616,66 @@ Codex CLI, single agent, sequential.
 
 ## Appendix C — Codex prompt templates
 
-Copy these into your task description in Codex Cloud or paste them as the first message in Codex CLI. Replace the `{{...}}` placeholders.
+Copy this shape into `codex_prompts/task-*.md`. The phase task file remains
+the source of truth; the prompt is a paste-ready wrapper around the copied task
+contract. Replace the `{{...}}` placeholders.
 
-### C.1 General implementation task
-
-```
-You are working on AiLibi. Before starting, read AGENTS.md, then read
-DESIGN.md sections {{SECTIONS}}.
-
-Task: {{TASK TITLE}}
-
-Implement exactly what DESIGN.md §{{PRIMARY SECTION}} specifies for {{COMPONENT}}.
-
-Files in scope (you may edit these):
-- {{FILE 1}}
-- {{FILE 2}}
-
-Files explicitly NOT in scope (do not touch):
-- anything in {{OTHER PACKAGE}}/
-- {{ANY OTHER FILE TO PROTECT}}
-
-Definition of done:
-- [ ] {{TEST NAME}} passes.
-- [ ] {{OTHER VERIFICATION COMMAND}} passes.
-- [ ] mypy --strict passes on touched files.
-- [ ] ruff check passes.
-- [ ] Diff stays within files-in-scope.
-
-Constraints:
-- Do not invent a different approach than DESIGN.md specifies. If you think
-  the design is wrong, write your concern in the PR description and stop.
-- Do not import from packages not listed as in scope.
-- Do not refactor unrelated code.
-
-When done, open a PR titled "{{PR TITLE}}" against branch {{BASE BRANCH}}.
-The PR description must include a "Definition of done" checklist with all
-items checked.
-```
-
-### C.2 Test-only task
+### C.1 Canonical task prompt
 
 ```
-You are working on AiLibi. Read AGENTS.md, then DESIGN.md §{{SECTION}}.
+# Codex Prompt — {{TASK ID}} {{TASK TITLE}}
 
-Task: write tests for {{COMPONENT}} based on DESIGN.md, NOT based on the
-existing implementation. The goal is to verify the implementation matches
-the design, not the other way around.
+You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md,
+CODEX_IMPLEMENTATION.md, and the task section in tasks/phase-{{N}}.md.
 
-Files in scope:
-- tests/{{TEST FILE}}
+1. Role and context
+You are a Codex implementation agent working on the AiLibi project. Follow
+AGENTS.md exactly. DESIGN.md is the source of truth, CODEX_IMPLEMENTATION.md is
+the build plan, and the task contract below is the implementation contract for
+this PR.
 
-Tests to write (each must be a separate pytest function):
-1. {{TEST 1 DESCRIPTION}}
-2. {{TEST 2 DESCRIPTION}}
-3. {{TEST 3 DESCRIPTION}}
+2. Exact section reference
+Implement Task {{TASK ID}} — {{TASK TITLE}}, anchored to {{DESIGN SECTION REFS}}.
+Do not implement work outside these references.
 
-Definition of done:
-- [ ] All listed tests exist and pass.
-- [ ] Tests reference the spec, not implementation details (e.g., test outputs,
-      not internal helper functions).
-- [ ] mypy and ruff pass on the test file.
+3. Task contract
+The authoritative task contract is copied below from tasks/phase-{{N}}.md.
+Follow it exactly, including branch, dependencies, section refs, files in scope,
+files not in scope, and definition of done.
 
-Open a PR titled "{{PR TITLE}}" against {{BASE BRANCH}}.
-```
+{{COPY THE TASK BODY FROM **Branch:** THROUGH THE DEFINITION OF DONE CHECKLIST}}
 
-### C.3 Prompt-template task (Phase 3)
+4. Pre-flight checklist
+- Read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section
+  before editing.
+- Inspect the current implementation before editing.
+- Confirm the dependency listed in the task contract is present in the current
+  branch.
+- Identify the existing local patterns for the files in scope and follow them.
 
-```
-You are working on AiLibi. Read AGENTS.md and DESIGN.md §5 and §6 before starting.
+5. Constraints and non-goals
+Do not modify DESIGN.md.
+Do not modify CODEX_IMPLEMENTATION.md.
+Do not modify tasks/phase-*.md unless this task explicitly lists those files in
+scope.
+Do not implement work outside this task.
+Do not add LLM calls inside agents/tactical/.
+Do not import engine/ from agents/.
+If something is ambiguous, stop and add a Questions section in the PR
+description rather than guessing.
 
-Task: write the Jinja2 prompt template at agents/strategic/prompts/{{TEMPLATE}}.j2.
+6. Verification checklist
+- Run every command listed in the Definition of done.
+- Run `git diff --name-only` and confirm the diff stays within scope.
+- If any Definition of done item is unchecked, report it explicitly in the PR
+  description instead of declaring the task complete.
 
-Inputs available to the template (see agents/strategic/reasoner.py):
-- self_view: SelfView (role, current room, current task)
-- rendered_memory: str (output of memory.store.render_for_prompt)
-- transcript: list[Statement] (may be empty for the first phase)
-- meeting_phase: "report" | "accusation" | "vote"
-
-The template must produce a prompt that, when sent to the LLM, yields a
-JSON object matching the {{SCHEMA NAME}} schema in
-agents/strategic/output_schemas.py.
-
-Files in scope:
-- agents/strategic/prompts/{{TEMPLATE}}.j2
-- tests/agents/test_prompts.py (extend, do not rewrite)
-
-Definition of done:
-- [ ] Template renders without errors against fixtures in
-      tests/fixtures/render_inputs/.
-- [ ] Test test_{{TEMPLATE}}_renders passes.
-- [ ] Test test_{{TEMPLATE}}_output_validates passes (mock LLM returns a
-      valid {{SCHEMA NAME}}).
-- [ ] No code changes outside the prompt file and the test file.
-
-Constraints:
-- Use the exact role-framing language from DESIGN.md §4.5 for the impostor case.
-- Do not modify the output schema or the reasoner.
-
-Open a PR titled "phase-3: {{TEMPLATE}} prompt template" against phase-3-meetings.
+7. Output expectation
+Open a PR from branch `{{BRANCH}}` with a title like `task {{TASK ID}}:
+{{TASK TITLE}}`.
+The PR description must reference {{DESIGN SECTION REFS}}, list the
+definition-of-done checklist, and include a Questions section if anything is
+ambiguous.
 ```
 
 ---
@@ -702,6 +689,7 @@ Before you dispatch the first Codex task, make sure all of these are true:
 - [ ] `AGENTS.md` from Appendix A is committed to `main`.
 - [ ] `tasks/phase-0.md` from Appendix B is committed to `main`.
 - [ ] CI is set up and runs ruff + pytest on PRs.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
 - [ ] You have Codex Cloud connected to the repo (or Codex CLI installed locally).
 - [ ] You've set a budget cap on your Codex account.
 - [ ] You can answer "what does DESIGN.md §0 say" without looking it up.

@@ -81,7 +81,10 @@ This is the single most important architectural property. Enforced as follows:
 
 - `engine/` and `agents/` are separate Python packages.
 - `agents/` has no import path to `engine/`. A pre-commit hook + import-linter rule fails CI if `agents/` imports from `engine/`.
-- The only data structure that crosses the boundary is `ObservationPacket` (Pydantic model in `observation/packet.py`).
+- Agent-visible boundary schemas are engine-free Pydantic models defined outside
+  `engine/`: `ObservationPacket`, `PublicMapView`, and `ActionIntent`.
+  Engine `Action` objects remain internal to `engine/`; the orchestrator
+  translates validated `ActionIntent`s into engine actions.
 - ObservationService logs every packet to an audit trail. The leak test (Section 11) replays games and asserts no field in any packet contains information the agent should not have.
 
 ### 1.4 Real-time vs turn-based
@@ -116,10 +119,13 @@ ailibi/
 ├── observation/                     # information firewall
 │   ├── service.py                   # ObservationService
 │   ├── packet.py                    # ObservationPacket schema (Pydantic)
+│   ├── public_map.py                # PublicMapView schema for agent pathing
+│   ├── action_intent.py             # engine-free agent action intent schema
 │   └── audit.py                     # records every packet for leak tests
 │
 ├── agents/                          # agent runtimes (no engine imports!)
 │   ├── base.py                      # AgentInterface protocol
+│   ├── perception.py                # ObservationPacket -> episodic events
 │   ├── tactical/
 │   │   ├── crewmate_policy.py       # task selection, pathing, panic
 │   │   ├── impostor_policy.py       # target selection, vent use, alibi
@@ -150,6 +156,7 @@ ailibi/
 │   ├── game.py                      # Game class: one full match
 │   ├── scheduler.py                 # tick clock, agent deadlines
 │   ├── seeder.py                    # role/spawn assignment
+│   ├── boundary.py                  # PublicMapView/ActionIntent adapters
 │   └── replay.py                    # ReplayLog write/read
 │
 ├── llm/
@@ -185,6 +192,7 @@ ailibi/
 │   ├── determinism_test.py          # same seed -> same game
 │   ├── balance_eval.py              # win rates across N seeds
 │   ├── meeting_quality.py           # vote-correctness, accusation accuracy
+│   ├── report_schema.py             # tournament/eval JSON report DTOs
 │   └── fixtures/                    # canonical replays
 │
 ├── scripts/
@@ -213,11 +221,11 @@ Single tick (`engine/tick.py::advance_tick`):
 2. **Resolve passive effects:** kill cooldown decrement, sabotage timer countdown, task progress on continuing tasks.
 3. **Check victory:** crewmates win on all-tasks-done; impostors win on parity (impostors ≥ remaining crew) or sabotage-timeout. If a side has won, emit `GameOver` and return.
 4. **Compute observations:** for each living agent, ObservationService renders an `ObservationPacket` for tick `t`.
-5. **Solicit actions:** agents return `Action`s. In live mode this is awaited with a per-agent deadline; in headless mode it is synchronous.
+5. **Solicit actions:** agents return engine-free `ActionIntent`s. The orchestrator validates and translates them into engine `Action`s before they enter the next tick's action queue. In live mode this is awaited with a per-agent deadline; in headless mode it is synchronous.
 6. **Emit tick event** to event bus (full state, used by spectator API and replay log).
 7. Increment tick counter; repeat.
 
-A meeting interrupts the tick loop: when an agent submits a `ReportBody` or `EmergencyButton` action that validates, the engine transitions to `MEETING` phase. The MeetingManager owns the loop until a vote resolves; then control returns to tick `t+1`.
+A meeting interrupts the tick loop: when an agent submits a `ReportBody` or `EmergencyButton` intent that validates into an engine action, the engine transitions to `MEETING` phase. The MeetingManager owns the loop until a vote resolves and returns an engine-free `MeetingResult`; the orchestrator applies that result to engine-owned state and returns control to tick `t+1`.
 
 ### 3.2 State model
 
@@ -305,7 +313,7 @@ The engine is the single source of truth and *contains* hidden info (roles, kill
   └──────┬───────┘      │ - voting       │
          │              │ - triggers     │
          ▼              └────────┬───────┘
-       Action                    │
+       ActionIntent              │
                               Statement / Ballot
 ```
 
@@ -326,6 +334,11 @@ class ObservationPacket(BaseModel):
 ```
 
 Perception code converts this into `EpisodicEvent`s tagged with provenance. Crucially: **role is in `self_state`, never in `visible_players` for others.**
+
+Agents also receive a `PublicMapView` containing only public topology needed for
+pathing and tactical choice. Tactical policies return `ActionIntent`s, not
+engine `Action`s. This keeps both directions of the agent boundary free of
+engine imports while still allowing deterministic gameplay.
 
 ### 4.3 Memory
 
@@ -381,7 +394,11 @@ A meeting starts when a `ReportBody` or `EmergencyMeeting` action validates. The
 1. Freezes engine state (no movement, no kills, cooldowns paused).
 2. Broadcasts `MeetingOpened` with the trigger info to all living agents.
 3. Runs the protocol below.
-4. Resolves voting; if someone is ejected, applies it; emits `MeetingClosed`; engine resumes.
+4. Resolves voting and returns a `MeetingResult` containing the ejection/skip
+   outcome, ballots, contradiction flags, and final transcript. The
+   orchestrator applies the result to engine-owned state, emits
+   `MeetingClosed`, records the meeting artifacts in replay, and resumes the
+   engine.
 
 ### 5.2 Protocol
 
@@ -762,6 +779,10 @@ A more general version walks the schema and asserts no field whose value should 
 ### 11.3 Agent behavior evaluation
 
 - **Balance eval (`eval/balance_eval.py`):** N=200 games, report impostor / crew win rates, distribution of game length, distribution of correct ejections vs wrong ejections.
+- **Eval report schema (`eval/report_schema.py`):** every tournament report is
+  a typed JSON object containing game outcomes, replay references, meeting
+  artifacts, prompt versions, LLM cost metadata, and metric inputs. Individual
+  metric modules consume this schema rather than scraping raw logs ad hoc.
 - **Meeting quality (`eval/meeting_quality.py`):**
   - *Vote correctness*: when an impostor is ejected, was the eject decision driven by correct evidence (did the rationale cite a real contradiction or kill witness)?
   - *Accusation calibration*: are high-confidence accusations more often correct than low-confidence ones?
@@ -772,6 +793,11 @@ A more general version walks the schema and asserts no field whose value should 
 
 - `scripts/render_replay.py` produces a static HTML file with: per-tick map state, every observation packet (privileged), every LLM call with prompt and response, every belief-state mutation. Indispensable for debugging "why did the agent do that?"
 - The spectator UI's "thought stream" panel surfaces the same data for live games.
+- Replay/eval records must include meeting transcripts, ballots,
+  `MeetingResult`s, prompt template versions, LLM usage/cost metadata, and the
+  structured inputs needed by Phase 5 metrics. Engine determinism remains based
+  on state hashes and recorded actions; LLM-layer determinism is achieved by
+  replaying recorded LLM outputs.
 
 ---
 

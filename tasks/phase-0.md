@@ -73,7 +73,7 @@ Preservation note: if engine/maps/canonical_1.yaml already exists, do not modify
 
 ### Task 0.3 — Import boundary lint rule
 **Branch:** `phase-0-firewall`
-**Depends on:** 0.1 merged
+**Depends on:** 0.2 merged
 **Section refs:** DESIGN.md §1.3
 
 Add import-linter config that fails if agents/ imports from engine/. Verify by adding an intentional bad import in a test, watching CI fail, then removing it.

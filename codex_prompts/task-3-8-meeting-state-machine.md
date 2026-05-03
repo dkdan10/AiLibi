@@ -1,4 +1,4 @@
-# Codex Prompt — 3.2 Shared meeting/output schemas
+# Codex Prompt — 3.8 Meeting state machine
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section in tasks/phase-3.md.
 
@@ -6,26 +6,26 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, CODEX_IMP
 You are a Codex implementation agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth, CODEX_IMPLEMENTATION.md is the build plan, and the task contract below is the implementation contract for this PR.
 
 2. Exact section reference
-Implement Task 3.2 — Shared meeting/output schemas, anchored to DESIGN.md §5.3, DESIGN.md §5.5, DESIGN.md Appendix A. Do not implement work outside these references.
+Implement Task 3.8 — Meeting state machine, anchored to DESIGN.md §5.1, DESIGN.md §5.2. Do not implement work outside these references.
 
 3. Task contract
 The authoritative task contract is copied below from tasks/phase-3.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
-**Branch:** `phase-3-output-schemas`
-**Depends on:** 3.1 merged
-**Section refs:** DESIGN.md §5.3, DESIGN.md §5.5, DESIGN.md Appendix A
+**Branch:** `phase-3-meeting-state-machine`
+**Depends on:** 3.3 merged
+**Section refs:** DESIGN.md §5.1, DESIGN.md §5.2
 
-Centralize meeting artifacts in meetings/schemas.py. Agent strategic schemas may
-re-export or wrap the shared schemas, but must not duplicate independent schema
-definitions.
+meetings/manager.py and meetings/transcript.py per §5.1 + §5.2.
 
 **Files in scope:**
-- meetings/schemas.py
-- agents/strategic/output_schemas.py
-- tests/meetings/test_schemas.py
+- meetings/manager.py
+- meetings/transcript.py
+- tests/meetings/test_manager.py
+- tests/meetings/test_transcript.py
 
 **Files NOT in scope:**
-- engine/
+- engine/ core rule changes
+- orchestrator/
 - agents/tactical/
 - api/
 - frontend/
@@ -33,12 +33,12 @@ definitions.
 - CODEX_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] `ReportDocument`, `Statement`, `VoteBallot`, `MeetingResult`, and contradiction/result DTOs match DESIGN.md §5.3 and §5.5.
-- [ ] `agents/strategic/output_schemas.py` re-exports or wraps shared meeting schemas without duplicating them.
-- [ ] Schemas are suitable for structured LLM output.
-- [ ] No imports from engine/ under agents/.
-- [ ] Relevant schema tests pass.
-- [ ] `uv run mypy --strict agents meetings` passes.
+- [ ] `MeetingManager` follows trigger lifecycle in DESIGN.md §5.1.
+- [ ] Protocol implements report intake, accusation rounds, voting, and resolution per DESIGN.md §5.2.
+- [ ] Missed deadlines yield default no-statement/no-vote behavior as specified.
+- [ ] Manager returns `MeetingResult`; it does not mutate engine state.
+- [ ] Relevant meeting tests pass using fake strategic participants.
+- [ ] `uv run mypy --strict meetings agents llm` passes.
 - [ ] `uv run ruff check .` passes.
 
 4. Pre-flight checklist
@@ -63,5 +63,5 @@ If something is ambiguous, stop and add a Questions section in the PR descriptio
 - If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
 
 7. Output expectation
-Open a PR from branch `phase-3-output-schemas` with a title like `task 3.2: shared meeting/output schemas`.
-The PR description must reference DESIGN.md §5.3, DESIGN.md §5.5, DESIGN.md Appendix A, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.
+Open a PR from branch `phase-3-meeting-state-machine` with a title like `task 3.8: meeting state machine`.
+The PR description must reference DESIGN.md §5.1, DESIGN.md §5.2, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.

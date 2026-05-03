@@ -1,39 +1,43 @@
-# Codex Prompt — 4.6 ThoughtStream
+# Codex Prompt — 5.8 Prompt regression test suite
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section in tasks/phase-4.md.
+You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section in tasks/phase-5.md.
 
 1. Role and context
 You are a Codex implementation agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth, CODEX_IMPLEMENTATION.md is the build plan, and the task contract below is the implementation contract for this PR.
 
 2. Exact section reference
-Implement Task 4.6 — ThoughtStream, anchored to DESIGN.md §6, DESIGN.md §7. Do not implement work outside these references.
+Implement Task 5.8 — Prompt regression test suite, anchored to DESIGN.md §11.3. Do not implement work outside these references.
 
 3. Task contract
-The authoritative task contract is copied below from tasks/phase-4.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
+The authoritative task contract is copied below from tasks/phase-5.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
-**Branch:** `phase-4-thoughtstream`
-**Depends on:** 4.3 merged
-**Section refs:** DESIGN.md §6, DESIGN.md §7
+**Branch:** `phase-5-prompt-regression-test-suite`
+**Depends on:** 5.6 merged
+**Section refs:** DESIGN.md §11.3
 
-Per-agent memory + LLM call viewer.
+Prompt regression test suite.
 
 **Files in scope:**
-- frontend/src/components/ThoughtStream.tsx
+- eval/prompt_regression.py
+- tests/fixtures/prompt_regression/
+- tests/eval/test_prompt_regression.py
 
 **Files NOT in scope:**
 - engine/
-- agents/
-- llm/
+- agents/tactical/
+- llm/ provider behavior
 - api/
-- frontend/src/store/
+- frontend/
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] ThoughtStream displays per-agent memory and LLM reasoning/call information exposed by the spectator API.
-- [ ] Component consumes the shared store/API shape from 4.3.
-- [ ] Component renders prompt versions and cost metadata when present.
-- [ ] Frontend build/check command passes if configured.
+- [ ] Prompt regression tests exercise prompt versions against stable fixtures.
+- [ ] Regression results are tagged by prompt version.
+- [ ] Tests use recorded/fake LLM outputs and make no network calls.
+- [ ] Relevant eval tests pass.
+- [ ] `uv run mypy --strict eval` passes.
+- [ ] `uv run ruff check .` passes.
 
 4. Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section before editing.
@@ -57,5 +61,5 @@ If something is ambiguous, stop and add a Questions section in the PR descriptio
 - If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
 
 7. Output expectation
-Open a PR from branch `phase-4-thoughtstream` with a title like `task 4.6: thoughtstream`.
-The PR description must reference DESIGN.md §6, DESIGN.md §7, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.
+Open a PR from branch `phase-5-prompt-regression-test-suite` with a title like `task 5.8: prompt regression test suite`.
+The PR description must reference DESIGN.md §11.3, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.

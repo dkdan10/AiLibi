@@ -1,39 +1,41 @@
-# Codex Prompt — 4.6 ThoughtStream
+# Codex Prompt — 3.11 Contradiction detection
 
-You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section in tasks/phase-4.md.
+You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section in tasks/phase-3.md.
 
 1. Role and context
 You are a Codex implementation agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth, CODEX_IMPLEMENTATION.md is the build plan, and the task contract below is the implementation contract for this PR.
 
 2. Exact section reference
-Implement Task 4.6 — ThoughtStream, anchored to DESIGN.md §6, DESIGN.md §7. Do not implement work outside these references.
+Implement Task 3.11 — Contradiction detection, anchored to DESIGN.md §5.4, DESIGN.md §6.4. Do not implement work outside these references.
 
 3. Task contract
-The authoritative task contract is copied below from tasks/phase-4.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
+The authoritative task contract is copied below from tasks/phase-3.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
-**Branch:** `phase-4-thoughtstream`
-**Depends on:** 4.3 merged
-**Section refs:** DESIGN.md §6, DESIGN.md §7
+**Branch:** `phase-3-contradiction-detection`
+**Depends on:** 3.10 merged
+**Section refs:** DESIGN.md §5.4, DESIGN.md §6.4
 
-Per-agent memory + LLM call viewer.
+meetings/transcript.py::detect_contradictions per §5.4 + §6.4.
 
 **Files in scope:**
-- frontend/src/components/ThoughtStream.tsx
+- meetings/transcript.py
+- tests/meetings/test_contradictions.py
 
 **Files NOT in scope:**
 - engine/
-- agents/
-- llm/
+- agents/tactical/
 - api/
-- frontend/src/store/
+- frontend/
 - DESIGN.md
 - CODEX_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] ThoughtStream displays per-agent memory and LLM reasoning/call information exposed by the spectator API.
-- [ ] Component consumes the shared store/API shape from 4.3.
-- [ ] Component renders prompt versions and cost metadata when present.
-- [ ] Frontend build/check command passes if configured.
+- [ ] `detect_contradictions` flags incompatible alibi and saw-player claims.
+- [ ] Contradiction flags are information, not verdicts.
+- [ ] Detected contradictions are represented in shared schemas and can be surfaced to rendered memory.
+- [ ] Relevant transcript tests pass.
+- [ ] `uv run mypy --strict meetings agents` passes.
+- [ ] `uv run ruff check .` passes.
 
 4. Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, CODEX_IMPLEMENTATION.md, and the task section before editing.
@@ -57,5 +59,5 @@ If something is ambiguous, stop and add a Questions section in the PR descriptio
 - If any Definition of done item is unchecked, report it explicitly in the PR description instead of declaring the task complete.
 
 7. Output expectation
-Open a PR from branch `phase-4-thoughtstream` with a title like `task 4.6: thoughtstream`.
-The PR description must reference DESIGN.md §6, DESIGN.md §7, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.
+Open a PR from branch `phase-3-contradiction-detection` with a title like `task 3.11: contradiction detection`.
+The PR description must reference DESIGN.md §5.4, DESIGN.md §6.4, list the definition-of-done checklist, and include a Questions section if anything is ambiguous.
