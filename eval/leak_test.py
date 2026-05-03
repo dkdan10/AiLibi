@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
+from typing import TypeAlias, cast
 
+import pytest
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from engine.actions import Action
@@ -21,7 +24,16 @@ _SCRIPTED_GAMES = (
 _FORBIDDEN_VISIBLE_PLAYER_FIELDS = frozenset({"role", "kill_attribution", "killed_by"})
 _FORBIDDEN_BODY_FIELDS = frozenset({"killed_by", "kill_attribution", "player_id"})
 _FORBIDDEN_VISIBLE_PLAYER_ACTIONS = frozenset({"sabotage"})
+_FORBIDDEN_RECURSIVE_FIELD_NAMES = frozenset(
+    {"killed_by", "kill_attribution", "player_id"}
+)
+_ALLOWED_RECURSIVE_FIELD_PATHS = frozenset({("self_state", "role")})
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+
+JsonScalar: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
+JsonPathPart: TypeAlias = str | int
+JsonPath: TypeAlias = tuple[JsonPathPart, ...]
 
 
 class _ScriptedAction(BaseModel):
@@ -203,12 +215,72 @@ def _action_is_permitted_by_witness_event(
     return False
 
 
+def _walk_json(
+    value: JsonValue, path: JsonPath = ()
+) -> Iterator[tuple[JsonPath, JsonValue]]:
+    yield path, value
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield from _walk_json(child, (*path, key))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _walk_json(child, (*path, index))
+
+
+def _format_json_path(path: JsonPath) -> str:
+    formatted_path = "$"
+    for part in path:
+        if isinstance(part, int):
+            formatted_path = f"{formatted_path}[{part}]"
+        else:
+            formatted_path = f"{formatted_path}.{part}"
+    return formatted_path
+
+
+def _assert_no_recursive_hidden_fields(packet_dump: JsonValue) -> None:
+    for path, _ in _walk_json(packet_dump):
+        if not path:
+            continue
+        field_name = path[-1]
+        if not isinstance(field_name, str):
+            continue
+        if field_name == "role" and path not in _ALLOWED_RECURSIVE_FIELD_PATHS:
+            raise AssertionError(
+                f"hidden field {field_name!r} leaked at {_format_json_path(path)}"
+            )
+        if field_name in _FORBIDDEN_RECURSIVE_FIELD_NAMES:
+            raise AssertionError(
+                f"hidden field {field_name!r} leaked at {_format_json_path(path)}"
+            )
+
+
+def test_recursive_hidden_field_scanner_reports_nested_path() -> None:
+    packet_dump: JsonValue = {
+        "self_state": {"role": "CREWMATE"},
+        "visible_bodies": [
+            {
+                "id": "body-player-1-3",
+                "room": "STORAGE",
+                "details": {"killed_by": "impostor-1"},
+            }
+        ],
+    }
+
+    with pytest.raises(
+        AssertionError,
+        match=r"\$\.visible_bodies\[0\]\.details\.killed_by",
+    ):
+        _assert_no_recursive_hidden_fields(packet_dump)
+
+
 def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
     for fixture_name in _SCRIPTED_GAMES:
         packet_records = _run_scripted_game(fixture_name, tmp_path)
         assert packet_records, f"no packets captured for {fixture_name}"
 
         for packet, engine_events in packet_records:
+            packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
+            _assert_no_recursive_hidden_fields(packet_dump)
             for visible_player in packet.visible_players:
                 visible_player_dump = visible_player.model_dump(mode="json")
                 assert set(visible_player_dump.keys()) == {"id", "room", "action"}
