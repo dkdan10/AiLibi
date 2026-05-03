@@ -4,15 +4,23 @@ import json
 from pathlib import Path
 import sys
 
+from pydantic import TypeAdapter
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from engine.actions import KillAction, MoveAction, VentAction  # noqa: E402
+from engine.actions import Action  # noqa: E402
 from engine.entities import PlayerState  # noqa: E402
 from engine.rng import EngineRng  # noqa: E402
 from engine.tick import advance_tick  # noqa: E402
 from engine.world import WorldState, load_canonical_map  # noqa: E402
 from observation.packet import PlayerView  # noqa: E402
 from observation.service import ObservationService  # noqa: E402
+
+_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+
+
+def _action(data: object) -> Action:
+    return _ACTION_ADAPTER.validate_python(data)
 
 
 def _player(
@@ -86,7 +94,11 @@ def test_kill_witness_sees_killer_action(tmp_path: Path) -> None:
 
     state, events = advance_tick(
         state,
-        [KillAction(type="kill", actor="impostor", payload={"target": "victim"})],
+        [
+            _action(
+                {"type": "kill", "actor": "impostor", "payload": {"target": "victim"}}
+            )
+        ],
         game_map=game_map,
     )
 
@@ -104,16 +116,22 @@ def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> No
     game_map = load_canonical_map()
     state, _ = advance_tick(
         _base_world_state(),
-        [KillAction(type="kill", actor="impostor", payload={"target": "victim"})],
+        [
+            _action(
+                {"type": "kill", "actor": "impostor", "payload": {"target": "victim"}}
+            )
+        ],
         game_map=game_map,
     )
     state, events = advance_tick(
         state,
         [
-            MoveAction(
-                type="move",
-                actor="observer",
-                payload={"to_room": "ENGINEERING"},
+            _action(
+                {
+                    "type": "move",
+                    "actor": "observer",
+                    "payload": {"to_room": "ENGINEERING"},
+                }
             )
         ],
         game_map=game_map,
@@ -151,7 +169,15 @@ def test_vent_witness_sees_vent_action_and_audible_event(tmp_path: Path) -> None
 
     state, events = advance_tick(
         state,
-        [VentAction(type="vent", actor="impostor", payload={"vent_id": "ADMIN_VENT"})],
+        [
+            _action(
+                {
+                    "type": "vent",
+                    "actor": "impostor",
+                    "payload": {"vent_id": "ADMIN_VENT"},
+                }
+            )
+        ],
         game_map=game_map,
     )
 
@@ -189,7 +215,15 @@ def test_vented_player_is_hidden_without_same_tick_event(tmp_path: Path) -> None
     )
     state, _ = advance_tick(
         state,
-        [VentAction(type="vent", actor="impostor", payload={"vent_id": "ADMIN_VENT"})],
+        [
+            _action(
+                {
+                    "type": "vent",
+                    "actor": "impostor",
+                    "payload": {"vent_id": "ADMIN_VENT"},
+                }
+            )
+        ],
         game_map=game_map,
     )
 
@@ -256,16 +290,22 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
     game_map = load_canonical_map()
     state, _ = advance_tick(
         _base_world_state(),
-        [KillAction(type="kill", actor="impostor", payload={"target": "victim"})],
+        [
+            _action(
+                {"type": "kill", "actor": "impostor", "payload": {"target": "victim"}}
+            )
+        ],
         game_map=game_map,
     )
     state, events = advance_tick(
         state,
         [
-            MoveAction(
-                type="move",
-                actor="observer",
-                payload={"to_room": "ENGINEERING"},
+            _action(
+                {
+                    "type": "move",
+                    "actor": "observer",
+                    "payload": {"to_room": "ENGINEERING"},
+                }
             )
         ],
         game_map=game_map,

@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from engine.actions import Action  # noqa: E402
 
-_ACTION_ADAPTER = TypeAdapter(Action)
+_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
 
 def test_action_union_accepts_known_action_types() -> None:

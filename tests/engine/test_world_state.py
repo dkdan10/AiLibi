@@ -4,12 +4,19 @@ import sys
 from pathlib import Path
 
 import pytest
+from pydantic import TypeAdapter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from engine.actions import MoveAction  # noqa: E402
+from engine.actions import Action  # noqa: E402
 from engine.entities import BodyState, PlayerState, TaskState  # noqa: E402
 from engine.world import WorldState  # noqa: E402
+
+_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+
+
+def _action(data: object) -> Action:
+    return _ACTION_ADAPTER.validate_python(data)
 
 
 def _player(player_id: str) -> PlayerState:
@@ -136,10 +143,8 @@ def test_player_state_accepts_none_last_action() -> None:
 
 
 def test_player_state_accepts_engine_action_last_action() -> None:
-    action = MoveAction(
-        type="move",
-        actor="player-1",
-        payload={"to_room": "ADMIN"},
+    action = _action(
+        {"type": "move", "actor": "player-1", "payload": {"to_room": "ADMIN"}}
     )
     player = PlayerState(
         id="player-1",

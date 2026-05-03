@@ -5,22 +5,21 @@ from pathlib import Path
 import sys
 
 import pytest
+from pydantic import TypeAdapter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from engine.actions import (
-    DoTaskAction,
-    EmergencyMeetingAction,
-    KillAction,
-    MoveAction,
-    ReportBodyAction,
-    SabotageAction,
-    VentAction,
-)  # noqa: E402
+from engine.actions import Action  # noqa: E402
 from engine.entities import BodyState, PlayerState, SabotageState, TaskState  # noqa: E402
 from engine.rng import EngineRng  # noqa: E402
 from engine.tick import advance_tick  # noqa: E402
 from engine.world import WorldState, load_canonical_map  # noqa: E402
+
+_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+
+
+def _action(data: object) -> Action:
+    return _ACTION_ADAPTER.validate_python(data)
 
 
 def _player(
@@ -90,7 +89,15 @@ def test_valid_kill_mutates_state_and_emits_event() -> None:
 
     next_state, events = advance_tick(
         state,
-        [KillAction(type="kill", actor="impostor-1", payload={"target": "player-1"})],
+        [
+            _action(
+                {
+                    "type": "kill",
+                    "actor": "impostor-1",
+                    "payload": {"target": "player-1"},
+                }
+            )
+        ],
         game_map=game_map,
     )
 
@@ -112,7 +119,15 @@ def test_invalid_kill_emits_rejection_and_leaves_state_unchanged() -> None:
 
     next_state, events = advance_tick(
         state,
-        [KillAction(type="kill", actor="impostor-1", payload={"target": "player-1"})],
+        [
+            _action(
+                {
+                    "type": "kill",
+                    "actor": "impostor-1",
+                    "payload": {"target": "player-1"},
+                }
+            )
+        ],
         game_map=game_map,
     )
 
@@ -126,7 +141,15 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
     game_map = load_canonical_map()
     moved_state, move_events = advance_tick(
         _state(),
-        [MoveAction(type="move", actor="player-1", payload={"to_room": "UPPER_HALL"})],
+        [
+            _action(
+                {
+                    "type": "move",
+                    "actor": "player-1",
+                    "payload": {"to_room": "UPPER_HALL"},
+                }
+            )
+        ],
         game_map=game_map,
     )
     task_state = replace(
@@ -141,8 +164,12 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
     next_state, task_events = advance_tick(
         task_state,
         [
-            DoTaskAction(
-                type="do_task", actor="player-2", payload={"task_id": "swipe_card"}
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "player-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
             )
         ],
         game_map=game_map,
@@ -177,11 +204,19 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
     next_state, events = advance_tick(
         state,
         [
-            VentAction(
-                type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"}
+            _action(
+                {
+                    "type": "vent",
+                    "actor": "impostor-1",
+                    "payload": {"vent_id": "ADMIN_VENT"},
+                }
             ),
-            SabotageAction(
-                type="sabotage", actor="impostor-1", payload={"kind": "lights"}
+            _action(
+                {
+                    "type": "sabotage",
+                    "actor": "impostor-1",
+                    "payload": {"kind": "lights"},
+                }
             ),
         ],
         game_map=game_map,
@@ -213,8 +248,12 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
     in_vent_state, enter_events = advance_tick(
         state,
         [
-            VentAction(
-                type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"}
+            _action(
+                {
+                    "type": "vent",
+                    "actor": "impostor-1",
+                    "payload": {"vent_id": "ADMIN_VENT"},
+                }
             )
         ],
         game_map=game_map,
@@ -222,8 +261,12 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
     exited_state, exit_events = advance_tick(
         in_vent_state,
         [
-            VentAction(
-                type="vent", actor="impostor-1", payload={"vent_id": "REACTOR_VENT"}
+            _action(
+                {
+                    "type": "vent",
+                    "actor": "impostor-1",
+                    "payload": {"vent_id": "REACTOR_VENT"},
+                }
             )
         ],
         game_map=game_map,
@@ -254,8 +297,12 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
     in_vent_state, _ = advance_tick(
         state,
         [
-            VentAction(
-                type="vent", actor="impostor-1", payload={"vent_id": "ADMIN_VENT"}
+            _action(
+                {
+                    "type": "vent",
+                    "actor": "impostor-1",
+                    "payload": {"vent_id": "ADMIN_VENT"},
+                }
             )
         ],
         game_map=game_map,
@@ -264,8 +311,12 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
     next_state, events = advance_tick(
         in_vent_state,
         [
-            VentAction(
-                type="vent", actor="impostor-1", payload={"vent_id": "STORAGE_VENT"}
+            _action(
+                {
+                    "type": "vent",
+                    "actor": "impostor-1",
+                    "payload": {"vent_id": "STORAGE_VENT"},
+                }
             )
         ],
         game_map=game_map,
@@ -291,10 +342,12 @@ def test_report_and_emergency_transition_to_meeting() -> None:
     next_state, report_events = advance_tick(
         report_state,
         [
-            ReportBodyAction(
-                type="report",
-                actor="player-1",
-                payload={"body_id": "body-player-2-0"},
+            _action(
+                {
+                    "type": "report",
+                    "actor": "player-1",
+                    "payload": {"body_id": "body-player-2-0"},
+                }
             )
         ],
         game_map=game_map,
@@ -306,7 +359,7 @@ def test_report_and_emergency_transition_to_meeting() -> None:
 
     emergency_state, emergency_events = advance_tick(
         _state(),
-        [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
         game_map=game_map,
     )
 
@@ -341,10 +394,12 @@ def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks()
     next_state, events = advance_tick(
         state,
         [
-            ReportBodyAction(
-                type="report",
-                actor="player-1",
-                payload={"body_id": "body-player-2-0"},
+            _action(
+                {
+                    "type": "report",
+                    "actor": "player-1",
+                    "payload": {"body_id": "body-player-2-0"},
+                }
             )
         ],
         game_map=game_map,
@@ -374,7 +429,7 @@ def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks
 
     next_state, events = advance_tick(
         state,
-        [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
         game_map=game_map,
     )
 
@@ -413,7 +468,15 @@ def test_advance_tick_uses_supplied_map_without_loading_canonical_map(
 
     next_state, events = advance_tick(
         _state(),
-        [MoveAction(type="move", actor="player-1", payload={"to_room": "UPPER_HALL"})],
+        [
+            _action(
+                {
+                    "type": "move",
+                    "actor": "player-1",
+                    "payload": {"to_room": "UPPER_HALL"},
+                }
+            )
+        ],
         game_map=game_map,
     )
 
@@ -425,14 +488,14 @@ def test_repeated_emergency_use_is_rejected() -> None:
     game_map = load_canonical_map()
     meeting_state, _ = advance_tick(
         _state(),
-        [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
         game_map=game_map,
     )
     resumed_state = replace(meeting_state, phase="PLAY")
 
     next_state, events = advance_tick(
         resumed_state,
-        [EmergencyMeetingAction(type="emergency", actor="player-1", payload={})],
+        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
         game_map=game_map,
     )
 

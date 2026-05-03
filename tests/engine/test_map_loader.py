@@ -88,7 +88,9 @@ def test_map_graph_helpers_return_sorted_neighbors() -> None:
         "ADMIN_VENT",
         "STORAGE_VENT",
     )
-    assert game_map.vent_for_room("REACTOR").id == "REACTOR_VENT"
+    reactor_vent = game_map.vent_for_room("REACTOR")
+    assert reactor_vent is not None
+    assert reactor_vent.id == "REACTOR_VENT"
     assert game_map.vent_for_room("CAFETERIA") is None
 
 

@@ -4,7 +4,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from engine.actions import Action
 from engine.entities import PlayerState, TaskState
@@ -13,7 +13,24 @@ from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
 from orchestrator.replay import ReplayLog
 
-_ACTION_ADAPTER = TypeAdapter(Action)
+_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+
+
+class _ScriptedAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tick: int
+    type: str
+    actor: str
+    payload: dict[str, object]
+
+
+class _ScriptedGame(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    seed: int
+    actions: list[_ScriptedAction]
 
 
 def _initial_world_state(*, seed: int) -> WorldState:
@@ -97,17 +114,13 @@ def _initial_world_state(*, seed: int) -> WorldState:
 
 def _fixture_actions(fixture_name: str) -> tuple[int, dict[int, list[Action]]]:
     fixture_path = Path("tests/fixtures") / fixture_name
-    script = json.loads(fixture_path.read_text(encoding="utf-8"))
-    raw_actions = TypeAdapter(list[dict[str, object]]).validate_python(
-        script["actions"]
-    )
+    script = _ScriptedGame.model_validate_json(fixture_path.read_text(encoding="utf-8"))
     actions_by_tick: dict[int, list[Action]] = {}
-    for raw_action in raw_actions:
-        action_data = dict(raw_action)
-        tick = int(action_data.pop("tick"))
+    for raw_action in script.actions:
+        action_data = raw_action.model_dump(exclude={"tick"})
         action = _ACTION_ADAPTER.validate_python(action_data)
-        actions_by_tick.setdefault(tick, []).append(action)
-    return int(script["seed"]), actions_by_tick
+        actions_by_tick.setdefault(raw_action.tick, []).append(action)
+    return script.seed, actions_by_tick
 
 
 def _write_fixture_replay(fixture_name: str, path: Path) -> bytes:
