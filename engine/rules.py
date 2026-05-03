@@ -12,7 +12,7 @@ from engine.actions import (
     SabotageAction,
     VentAction,
 )
-from engine.entities import BodyState, PlayerId, PlayerState
+from engine.entities import BodyState, PlayerId, PlayerState, RoomId
 from engine.win_conditions import WinResult, evaluate_win_conditions
 from engine.world import Map, WorldState
 
@@ -173,13 +173,18 @@ def resolve_emergency_meeting(
     state: WorldState,
     action: EmergencyMeetingAction,
     *,
+    emergency_button_room: RoomId,
     emergency_uses_per_player: int,
     emergency_uses_by_player: Mapping[PlayerId, int],
 ) -> RuleEvent:
-    _ = _get_live_player(state, action.actor)
+    actor = _get_live_player(state, action.actor)
+    if actor.in_vent:
+        raise ActionRejectedError("cannot call emergency meeting while in vent")
     used = emergency_uses_by_player.get(action.actor, 0)
     if used >= emergency_uses_per_player:
         raise ActionRejectedError("emergency meeting use limit exceeded")
+    if actor.room != emergency_button_room:
+        raise ActionRejectedError("emergency meeting requires emergency button room")
     return RuleEvent(
         type="MeetingTriggered", actor=action.actor, details={"trigger": "emergency"}
     )

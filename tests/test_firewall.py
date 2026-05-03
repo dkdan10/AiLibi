@@ -49,11 +49,15 @@ def test_agents_cannot_reach_engine_through_observation() -> None:
         bridge.unlink(missing_ok=True)
 
 
-def test_observation_packet_has_no_engine_imports() -> None:
+def test_agent_visible_observation_schemas_have_no_engine_imports() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    packet_source = (repo_root / "observation" / "packet.py").read_text(
-        encoding="utf-8"
+    schema_paths = (
+        repo_root / "observation" / "action_intent.py",
+        repo_root / "observation" / "packet.py",
+        repo_root / "observation" / "public_map.py",
     )
 
-    assert "from engine" not in packet_source
-    assert "import engine" not in packet_source
+    for schema_path in schema_paths:
+        source = schema_path.read_text(encoding="utf-8")
+        assert "from engine" not in source
+        assert "import engine" not in source

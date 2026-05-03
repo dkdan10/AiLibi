@@ -808,6 +808,40 @@ def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks
     assert [event["type"] for event in events] == ["MeetingTriggered"]
 
 
+def test_emergency_requires_actor_in_button_room() -> None:
+    game_map = load_canonical_map()
+
+    next_state, events = advance_tick(
+        _state(),
+        [_action({"type": "emergency", "actor": "player-2", "payload": {}})],
+        game_map=game_map,
+    )
+
+    assert next_state.phase == "PLAY"
+    assert "player-2" not in next_state.emergency_uses
+    assert events[0]["type"] == "ActionRejected"
+    assert "emergency button room" in events[0]["reason"]
+
+
+def test_emergency_rejects_actor_in_vent() -> None:
+    game_map = load_canonical_map()
+    state = _state()
+    players = dict(state.players)
+    players["player-1"] = replace(players["player-1"], in_vent=True)
+
+    next_state, events = advance_tick(
+        replace(state, players=players),
+        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
+        game_map=game_map,
+    )
+
+    assert next_state.phase == "PLAY"
+    assert "player-1" not in next_state.emergency_uses
+    assert next_state.players["player-1"].in_vent
+    assert events[0]["type"] == "ActionRejected"
+    assert "while in vent" in events[0]["reason"]
+
+
 def test_advance_tick_rejects_non_play_phases() -> None:
     game_map = load_canonical_map()
     with pytest.raises(ValueError, match="MEETING"):

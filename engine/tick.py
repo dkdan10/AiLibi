@@ -408,6 +408,7 @@ def _apply_emergency(
     event = resolve_emergency_meeting(
         state,
         action,
+        emergency_button_room=game_map.emergency.button_room,
         emergency_uses_per_player=game_map.emergency.uses_per_player,
         emergency_uses_by_player=state.emergency_uses,
     )
