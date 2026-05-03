@@ -1,20 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 import json
 from pathlib import Path
-import sys
 
+import pytest
 from pydantic import TypeAdapter
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from engine.actions import Action  # noqa: E402
-from engine.entities import PlayerState  # noqa: E402
-from engine.rng import EngineRng  # noqa: E402
-from engine.tick import advance_tick  # noqa: E402
-from engine.world import WorldState, load_canonical_map  # noqa: E402
-from observation.packet import PlayerView  # noqa: E402
-from observation.service import ObservationService  # noqa: E402
+from engine.actions import Action
+from engine.entities import PlayerState
+from engine.rng import EngineRng
+from engine.tick import advance_tick
+from engine.world import WorldState, load_canonical_map
+from observation.packet import PlayerView
+from observation.service import ObservationService
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -69,7 +68,7 @@ def _observation_service(tmp_path: Path) -> ObservationService:
     )
 
 
-def _visible_player(packet_id: str, packet_players: list[PlayerView]) -> PlayerView:
+def _visible_player(packet_id: str, packet_players: Sequence[PlayerView]) -> PlayerView:
     return next(player for player in packet_players if player.id == packet_id)
 
 
@@ -346,3 +345,17 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
     assert audit_entry == packet.model_dump(mode="json")
     assert visible_impostor["action"] is None
     assert audit_entry["cooldown"] is None
+
+
+def test_observation_packet_collections_are_immutable(tmp_path: Path) -> None:
+    packet = _observation_service(tmp_path).build_packet(
+        world_state=_base_world_state(),
+        agent_id="observer",
+        engine_events=[],
+    )
+
+    assert isinstance(packet.visible_players, tuple)
+    assert isinstance(packet.visible_bodies, tuple)
+    assert isinstance(packet.audible_events, tuple)
+    with pytest.raises(AttributeError):
+        packet.visible_players.append(PlayerView(id="x", room="ADMIN", action=None))  # type: ignore[attr-defined]

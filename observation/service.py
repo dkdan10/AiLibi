@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from engine.entities import PlayerId
+from engine.events import EngineEvent, KilledEvent, VentEnteredEvent, VentExitedEvent
 from engine.visibility import VisibilityResult, compute_visibility_for_player
 from engine.world import Map, TaskId, WorldState
 from observation.audit import ObservationAuditLog
@@ -17,8 +17,6 @@ from observation.packet import (
     PlayerView,
     SelfView,
 )
-
-EngineEvent = Mapping[str, Any]
 
 
 @dataclass(frozen=True)
@@ -83,10 +81,10 @@ class ObservationService:
         cooldown = (
             world_state.cooldowns.get(agent_id) if player.role == "IMPOSTOR" else None
         )
-        visible_bodies = [
+        visible_bodies = tuple(
             BodyView(id=body_id, room=world_state.bodies[body_id].room)
             for body_id in visibility.visible_body_ids
-        ]
+        )
         packet = ObservationPacket(
             tick=world_state.tick,
             agent_id=agent_id,
@@ -112,7 +110,7 @@ class ObservationService:
         world_state: WorldState,
         visibility: VisibilityResult,
         observed_actions: Mapping[PlayerId, _ObservedAction],
-    ) -> list[PlayerView]:
+    ) -> tuple[PlayerView, ...]:
         visible_players_by_id: dict[PlayerId, PlayerView] = {}
         for player_id in visibility.visible_player_ids:
             observed_action = observed_actions.get(player_id)
@@ -134,17 +132,17 @@ class ObservationService:
                     action=observed_action.action,
                 )
 
-        return [
+        return tuple(
             visible_players_by_id[player_id]
             for player_id in sorted(visible_players_by_id)
-        ]
+        )
 
     def _audible_events(
         self,
         *,
         world_state: WorldState,
         observed_actions: Mapping[PlayerId, _ObservedAction],
-    ) -> list[AudibleEvent]:
+    ) -> tuple[AudibleEvent, ...]:
         events: list[AudibleEvent] = []
         vent_rooms = tuple(
             sorted(
@@ -161,7 +159,7 @@ class ObservationService:
         )
         if world_state.sabotage is not None and world_state.sabotage.active:
             events.append(AudibleEvent(kind="sabotage_alarm", room=None))
-        return events
+        return tuple(events)
 
     def _observed_actions_for_agent(
         self,
@@ -171,49 +169,32 @@ class ObservationService:
     ) -> dict[PlayerId, _ObservedAction]:
         observed_actions: dict[PlayerId, _ObservedAction] = {}
         for event in engine_events:
-            event_type = event.get("type")
-            actor = event.get("actor")
-            details = event.get("details")
-            if not isinstance(actor, str):
-                continue
-            if event_type == "Killed":
-                if not isinstance(details, Mapping):
-                    raise ValueError("Killed event details must be a mapping")
-                if agent_id in self._event_witnesses(details, "witnesses", "Killed"):
-                    observed_actions[actor] = _ObservedAction(
+            if isinstance(event, KilledEvent):
+                if agent_id in event.witnesses:
+                    observed_actions[event.actor] = _ObservedAction(
                         action="kill",
-                        room=self._event_string(details, "room", "Killed"),
+                        room=event.room,
                     )
-            elif event_type in {"VentEntered", "VentExited"}:
-                if not isinstance(details, Mapping):
-                    raise ValueError(f"{event_type} event details must be a mapping")
+            elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):
                 vent_observation = self._vent_observation_for_agent(
-                    event_type=event_type,
-                    details=details,
+                    event=event,
                     agent_id=agent_id,
                 )
                 if vent_observation is not None:
-                    observed_actions[actor] = vent_observation
+                    observed_actions[event.actor] = vent_observation
         return observed_actions
 
     def _vent_observation_for_agent(
         self,
         *,
-        event_type: object,
-        details: Mapping[str, object],
+        event: VentEnteredEvent | VentExitedEvent,
         agent_id: PlayerId,
     ) -> _ObservedAction | None:
         witnessed_rooms: list[str] = []
-        if agent_id in self._event_witnesses(details, "source_witnesses", event_type):
-            witnessed_rooms.append(
-                self._event_string(details, "source_room", event_type)
-            )
-        if agent_id in self._event_witnesses(
-            details, "destination_witnesses", event_type
-        ):
-            witnessed_rooms.append(
-                self._event_string(details, "destination_room", event_type)
-            )
+        if agent_id in event.source_witnesses:
+            witnessed_rooms.append(event.source_room)
+        if agent_id in event.destination_witnesses:
+            witnessed_rooms.append(event.destination_room)
         if not witnessed_rooms:
             return None
         return _ObservedAction(
@@ -221,33 +202,6 @@ class ObservationService:
             room=witnessed_rooms[0],
             audible_room=witnessed_rooms[0],
         )
-
-    def _event_witnesses(
-        self,
-        details: Mapping[str, object],
-        key: str,
-        event_type: object,
-    ) -> tuple[PlayerId, ...]:
-        raw_witnesses = details.get(key)
-        if not isinstance(raw_witnesses, (list, tuple)):
-            raise ValueError(f"{event_type} event {key} must be a sequence")
-        witnesses: list[PlayerId] = []
-        for witness in raw_witnesses:
-            if not isinstance(witness, str):
-                raise ValueError(f"{event_type} event {key} must contain player ids")
-            witnesses.append(witness)
-        return tuple(witnesses)
-
-    def _event_string(
-        self,
-        details: Mapping[str, object],
-        key: str,
-        event_type: object,
-    ) -> str:
-        value = details.get(key)
-        if not isinstance(value, str):
-            raise ValueError(f"{event_type} event {key} must be a string")
-        return value
 
     def _global_view(self, *, world_state: WorldState) -> GlobalView:
         tasks_total = len(world_state.tasks)

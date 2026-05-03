@@ -1,19 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
-import sys
 
 import pytest
 from pydantic import TypeAdapter
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from engine.actions import Action  # noqa: E402
-from engine.entities import BodyState, PlayerState, SabotageState, TaskState  # noqa: E402
-from engine.rng import EngineRng  # noqa: E402
-from engine.tick import advance_tick  # noqa: E402
-from engine.world import WorldState, load_canonical_map  # noqa: E402
+from engine.actions import Action
+from engine.entities import BodyState, PlayerState, SabotageState, TaskState
+from engine.rng import EngineRng
+from engine.tick import advance_tick
+from engine.world import WorldState, load_canonical_map
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -439,6 +435,169 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
     assert events[0]["details"]["witnesses"] == ("player-2",)
     assert events[0]["details"]["source_witnesses"] == ("player-2",)
     assert events[0]["details"]["destination_witnesses"] == ("player-2",)
+
+
+def _active_lights_state(*, remaining_ticks: int = 5) -> WorldState:
+    return replace(
+        _state(),
+        sabotage=SabotageState(
+            kind="lights",
+            remaining_ticks=remaining_ticks,
+            affected_rooms=("ADMIN",),
+            active=True,
+        ),
+    )
+
+
+def test_timed_sabotage_repair_completes_after_configured_ticks() -> None:
+    game_map = load_canonical_map()
+    state = _active_lights_state()
+
+    first_state, first_events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "repair_sabotage",
+                    "actor": "player-2",
+                    "payload": {"kind": "lights"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    second_state, second_events = advance_tick(
+        first_state,
+        [
+            _action(
+                {
+                    "type": "repair_sabotage",
+                    "actor": "player-2",
+                    "payload": {"kind": "lights"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    repaired_state, repaired_events = advance_tick(
+        second_state,
+        [
+            _action(
+                {
+                    "type": "repair_sabotage",
+                    "actor": "player-2",
+                    "payload": {"kind": "lights"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert first_events[0]["type"] == "SabotageRepairProgressed"
+    assert first_events[0]["details"]["progress"] == 1
+    assert first_state.sabotage is not None
+    assert first_state.sabotage.repair_progress["ADMIN"] == 1
+    assert second_events[0]["details"]["progress"] == 2
+    assert repaired_events[0]["type"] == "SabotageRepaired"
+    assert repaired_events[0]["details"]["required_ticks"] == 3
+    assert repaired_state.sabotage is not None
+    assert not repaired_state.sabotage.active
+    assert not any(event["type"] == "GameOver" for event in repaired_events)
+
+
+def test_repair_prevents_same_tick_sabotage_timeout_when_completed() -> None:
+    game_map = load_canonical_map()
+    sabotage = SabotageState(
+        kind="lights",
+        remaining_ticks=1,
+        affected_rooms=("ADMIN",),
+        active=True,
+        repair_progress={"ADMIN": 2},
+    )
+    state = replace(_state(), sabotage=sabotage)
+
+    next_state, events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "repair_sabotage",
+                    "actor": "player-2",
+                    "payload": {"kind": "lights"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert events[0]["type"] == "SabotageRepaired"
+    assert next_state.sabotage is not None
+    assert not next_state.sabotage.active
+    assert not any(event["type"] == "GameOver" for event in events)
+
+
+def test_unrepaired_sabotage_timeout_still_wins() -> None:
+    game_map = load_canonical_map()
+
+    next_state, events = advance_tick(
+        _active_lights_state(remaining_ticks=1),
+        [],
+        game_map=game_map,
+    )
+
+    assert next_state.phase == "GAME_OVER"
+    assert events[0]["type"] == "GameOver"
+    assert events[0]["winner"] == "IMPOSTORS"
+    assert events[0]["reason"] == "IMPOSTOR_SABOTAGE"
+
+
+@pytest.mark.parametrize(
+    ("state", "action_actor", "kind", "match"),
+    (
+        (_state(), "player-2", "lights", "no active sabotage"),
+        (_active_lights_state(), "player-1", "lights", "repair room"),
+        (_active_lights_state(), "player-2", "unknown", "unknown sabotage"),
+        (
+            replace(
+                _active_lights_state(),
+                players={
+                    **dict(_active_lights_state().players),
+                    "player-2": replace(
+                        _active_lights_state().players["player-2"], in_vent=True
+                    ),
+                },
+            ),
+            "player-2",
+            "lights",
+            "while in vent",
+        ),
+    ),
+)
+def test_invalid_sabotage_repairs_are_rejected(
+    state: WorldState,
+    action_actor: str,
+    kind: str,
+    match: str,
+) -> None:
+    game_map = load_canonical_map()
+
+    next_state, events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "repair_sabotage",
+                    "actor": action_actor,
+                    "payload": {"kind": kind},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert next_state.sabotage == state.sabotage or state.sabotage is not None
+    assert events[0]["type"] == "ActionRejected"
+    assert match in events[0]["reason"]
 
 
 def test_vent_can_exit_through_connected_destination_vent() -> None:

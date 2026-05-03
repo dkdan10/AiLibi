@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-import sys
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from engine.world import Map, MapValidationError, load_canonical_map  # noqa: E402
+from engine.world import Map, MapValidationError, load_canonical_map
 
 MapData = dict[str, object]
 MapMutator = Callable[[MapData], None]
@@ -191,6 +187,10 @@ def _non_positive_task_duration(data: MapData) -> None:
     _entry(data, "tasks", "empty_trash")["duration_ticks"] = 0
 
 
+def _non_positive_sabotage_repair_ticks(data: MapData) -> None:
+    _entry(data, "sabotages", "lights")["repair_ticks"] = 0
+
+
 def test_load_canonical_map_counts() -> None:
     game_map = load_canonical_map()
 
@@ -201,6 +201,7 @@ def test_load_canonical_map_counts() -> None:
     assert len(game_map.vents) == 6
     assert len(game_map.tasks) == 12
     assert len(game_map.sabotages) == 1
+    assert game_map.sabotages["lights"].repair_ticks == 3
 
 
 def test_map_graph_helpers_return_sorted_neighbors() -> None:
@@ -415,6 +416,10 @@ def test_map_model_rejects_mismatched_embedded_ids(
         (_non_positive_edge_traversal, "edge traversal_ticks must be at least 1"),
         (_non_positive_vent_traversal, "vent traversal_ticks must be at least 1"),
         (_non_positive_task_duration, "task duration_ticks must be at least 1"),
+        (
+            _non_positive_sabotage_repair_ticks,
+            "sabotage repair_ticks must be at least 1",
+        ),
     ),
 )
 def test_map_model_rejects_documented_validation_errors(

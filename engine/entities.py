@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, TypeAlias
 
 if TYPE_CHECKING:
@@ -59,3 +61,9 @@ class SabotageState:
     remaining_ticks: int
     affected_rooms: tuple[RoomId, ...]
     active: bool
+    repair_progress: Mapping[RoomId, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "repair_progress", MappingProxyType(dict(self.repair_progress))
+        )

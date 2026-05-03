@@ -49,8 +49,8 @@ class ObservationPacket(_FrozenModel):
     tick: int
     agent_id: PlayerId
     self_state: SelfView
-    visible_players: list[PlayerView]
-    visible_bodies: list[BodyView]
-    audible_events: list[AudibleEvent]
+    visible_players: tuple[PlayerView, ...]
+    visible_bodies: tuple[BodyView, ...]
+    audible_events: tuple[AudibleEvent, ...]
     global_state: GlobalView
     cooldown: int | None

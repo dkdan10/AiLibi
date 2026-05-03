@@ -10,8 +10,9 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from engine.actions import Action
 from engine.entities import PlayerState, TaskState
+from engine.events import EngineEvent
 from engine.rng import EngineRng
-from engine.tick import EngineEvent, advance_tick
+from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
 from observation.packet import ObservationPacket
 from observation.service import ObservationService

@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from engine.actions import Action  # noqa: E402
+from engine.actions import Action
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -22,6 +17,11 @@ def test_action_union_accepts_known_action_types() -> None:
         {"type": "report", "actor": "player-1", "payload": {"body_id": "body-1"}},
         {"type": "emergency", "actor": "player-1", "payload": {"reason": "test"}},
         {"type": "sabotage", "actor": "impostor", "payload": {"kind": "lights"}},
+        {
+            "type": "repair_sabotage",
+            "actor": "player-1",
+            "payload": {"kind": "lights"},
+        },
         {"type": "wait", "actor": "player-1", "payload": {}},
     ]
 
@@ -35,6 +35,7 @@ def test_action_union_accepts_known_action_types() -> None:
         "report",
         "emergency",
         "sabotage",
+        "repair_sabotage",
         "wait",
     ]
 

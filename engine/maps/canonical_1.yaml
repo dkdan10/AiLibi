@@ -372,6 +372,7 @@ sabotages:
     repair_rooms:
       - ADMIN
     duration_ticks: 90
+    repair_ticks: 3
 
 
 # ---------------------------------------------------------------------------

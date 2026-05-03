@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 from pydantic import TypeAdapter
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from engine.actions import Action  # noqa: E402
-from engine.entities import BodyState, PlayerState, TaskState  # noqa: E402
-from engine.world import WorldState  # noqa: E402
+from engine.actions import Action
+from engine.entities import BodyState, PlayerState, TaskState
+from engine.world import WorldState
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 

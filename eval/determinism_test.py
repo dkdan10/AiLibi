@@ -12,7 +12,7 @@ from engine.entities import PlayerState, TaskState
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
-from orchestrator.replay import ReplayLog
+from orchestrator.replay import ReplayLog, read_replay_entries
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 _SCRIPTED_GAMES = (
@@ -158,6 +158,30 @@ def test_replay_log_writes_jsonl_for_dataclass_world_state(tmp_path: Path) -> No
     assert entry["actions"] == []
     assert isinstance(entry["state_hash"], str)
     assert len(entry["state_hash"]) == 64
+
+
+def test_replay_log_reads_written_entries(tmp_path: Path) -> None:
+    state = _initial_world_state(seed=303)
+    action = _ACTION_ADAPTER.validate_python(
+        {"type": "move", "actor": "player-1", "payload": {"to_room": "UPPER_HALL"}}
+    )
+    replay_path = tmp_path / "roundtrip.jsonl"
+    replay = ReplayLog(replay_path, game_id="roundtrip")
+
+    replay.record_tick(0, [], state)
+    moved_state, _ = advance_tick(state, [action], game_map=load_canonical_map())
+    replay.record_tick(1, [action], moved_state)
+
+    entries = replay.read_entries()
+
+    assert entries == read_replay_entries(replay_path)
+    assert [entry.tick for entry in entries] == [0, 1]
+    assert entries[0].game_id == "roundtrip"
+    assert entries[0].actions == ()
+    assert entries[1].actions == (
+        {"actor": "player-1", "payload": {"to_room": "UPPER_HALL"}, "type": "move"},
+    )
+    assert all(len(entry.state_hash) == 64 for entry in entries)
 
 
 @pytest.mark.parametrize("fixture_name", _SCRIPTED_GAMES)

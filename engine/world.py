@@ -193,11 +193,14 @@ class SabotageDefinition(_FrozenModel):
     affected_visibility: VisibilityMode
     repair_rooms: tuple[RoomId, ...]
     duration_ticks: int
+    repair_ticks: int = 3
 
     @model_validator(mode="after")
     def validate_sabotage(self) -> SabotageDefinition:
         if self.duration_ticks < 1:
             raise MapValidationError("sabotage duration_ticks must be at least 1")
+        if self.repair_ticks < 1:
+            raise MapValidationError("sabotage repair_ticks must be at least 1")
         return self
 
 

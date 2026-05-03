@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
-import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from engine.entities import PlayerState  # noqa: E402
-from engine.rng import EngineRng  # noqa: E402
-from engine.visibility import compute_visibility_for_player  # noqa: E402
-from engine.world import WorldState, load_canonical_map  # noqa: E402
+from engine.entities import PlayerState
+from engine.rng import EngineRng
+from engine.visibility import compute_visibility_for_player
+from engine.world import WorldState, load_canonical_map
 
 
 def _player(

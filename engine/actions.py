@@ -99,6 +99,17 @@ class SabotageAction(_BaseAction):
     payload: _SabotagePayload
 
 
+class _RepairSabotagePayload(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: str
+
+
+class RepairSabotageAction(_BaseAction):
+    type: Literal["repair_sabotage"]
+    payload: _RepairSabotagePayload
+
+
 class _WaitPayload(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -116,6 +127,7 @@ Action: TypeAlias = Annotated[
     | ReportBodyAction
     | EmergencyMeetingAction
     | SabotageAction
+    | RepairSabotageAction
     | WaitAction,
     Field(discriminator="type"),
 ]
@@ -132,6 +144,7 @@ def is_action_instance(value: object) -> TypeGuard[Action]:
             ReportBodyAction,
             EmergencyMeetingAction,
             SabotageAction,
+            RepairSabotageAction,
             WaitAction,
         ),
     )

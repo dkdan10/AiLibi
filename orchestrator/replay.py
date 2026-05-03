@@ -7,10 +7,21 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from engine.actions import Action
 from engine.world import WorldState
+
+
+class ReplayEntry(BaseModel):
+    """One replay JSONL record written by ReplayLog."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    game_id: str
+    tick: int
+    actions: tuple[dict[str, Any], ...]
+    state_hash: str
 
 
 class ReplayLog:
@@ -39,6 +50,27 @@ class ReplayLog:
         with self._path.open("a", encoding="utf-8") as handle:
             handle.write(_stable_json(entry))
             handle.write("\n")
+
+    def read_entries(self) -> tuple[ReplayEntry, ...]:
+        return read_replay_entries(self._path)
+
+
+def read_replay_entries(path: Path) -> tuple[ReplayEntry, ...]:
+    if not path.exists():
+        raise FileNotFoundError(path)
+
+    entries: list[ReplayEntry] = []
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not raw_line:
+            continue
+        try:
+            raw_entry = json.loads(raw_line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid replay JSON at line {line_number}") from exc
+        entries.append(ReplayEntry.model_validate(raw_entry))
+    return tuple(entries)
 
 
 def _serialize_actions(actions: list[Action]) -> list[dict[str, Any]]:

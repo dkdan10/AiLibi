@@ -7,6 +7,7 @@ from math import dist
 from engine.actions import (
     EmergencyMeetingAction,
     KillAction,
+    RepairSabotageAction,
     ReportBodyAction,
     SabotageAction,
     VentAction,
@@ -205,6 +206,30 @@ def resolve_sabotage(
             "duration_ticks": sabotage_def.duration_ticks,
             "affected_rooms": sabotage_def.repair_rooms,
         },
+    )
+
+
+def resolve_repair_sabotage(
+    state: WorldState, game_map: Map, action: RepairSabotageAction
+) -> RuleEvent:
+    actor = _get_live_player(state, action.actor)
+    if actor.in_vent:
+        raise ActionRejectedError("cannot repair sabotage while in vent")
+
+    sabotage_def = game_map.sabotages.get(action.payload.kind)
+    if sabotage_def is None:
+        raise ActionRejectedError(f"unknown sabotage kind: {action.payload.kind}")
+    if state.sabotage is None or not state.sabotage.active:
+        raise ActionRejectedError("no active sabotage to repair")
+    if state.sabotage.kind != action.payload.kind:
+        raise ActionRejectedError("active sabotage kind does not match repair action")
+    if actor.room not in sabotage_def.repair_rooms:
+        raise ActionRejectedError("repair requires actor in a sabotage repair room")
+
+    return RuleEvent(
+        type="SabotageRepairValidated",
+        actor=action.actor,
+        details={"kind": action.payload.kind, "room": actor.room},
     )
 
 
