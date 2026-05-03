@@ -9,13 +9,17 @@ import pytest
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from engine.actions import Action
-from engine.entities import PlayerState, TaskState
-from engine.events import EngineEvent
-from engine.rng import EngineRng
+from engine.events import (
+    EngineEvent,
+    KilledEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
+)
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
 from observation.packet import ObservationPacket
 from observation.service import ObservationService
+from tests._helpers.world_state import scripted_initial_world_state
 
 _SCRIPTED_GAMES = (
     "scripted_game_basic_tasks.json",
@@ -54,86 +58,6 @@ class _ScriptedGame(BaseModel):
     actions: list[_ScriptedAction]
 
 
-def _initial_world_state(*, seed: int) -> WorldState:
-    game_map = load_canonical_map()
-    rng_state = EngineRng.from_seed(seed).snapshot()
-    return WorldState(
-        tick=0,
-        phase="PLAY",
-        map=game_map.id,
-        players={
-            "player-1": PlayerState(
-                id="player-1",
-                role="CREWMATE",
-                alive=True,
-                room=game_map.spawn.room,
-                position=(0.0, 0.0),
-                last_action=None,
-                in_vent=False,
-            ),
-            "player-2": PlayerState(
-                id="player-2",
-                role="CREWMATE",
-                alive=True,
-                room=game_map.spawn.room,
-                position=(1.0, 0.0),
-                last_action=None,
-                in_vent=False,
-            ),
-            "impostor-1": PlayerState(
-                id="impostor-1",
-                role="IMPOSTOR",
-                alive=True,
-                room=game_map.spawn.room,
-                position=(2.0, 0.0),
-                last_action=None,
-                in_vent=False,
-            ),
-            "player-3": PlayerState(
-                id="player-3",
-                role="CREWMATE",
-                alive=True,
-                room=game_map.spawn.room,
-                position=(3.0, 0.0),
-                last_action=None,
-                in_vent=False,
-            ),
-        },
-        bodies={},
-        tasks={
-            "swipe_card": TaskState(
-                id="swipe_card",
-                owner="player-1",
-                room="ADMIN",
-                progress=0,
-                required_ticks=1,
-                completed=False,
-            ),
-            "submit_scan": TaskState(
-                id="submit_scan",
-                owner="player-2",
-                room="MEDBAY",
-                progress=0,
-                required_ticks=1,
-                completed=False,
-            ),
-            "empty_trash": TaskState(
-                id="empty_trash",
-                owner="player-3",
-                room="CAFETERIA",
-                progress=0,
-                required_ticks=1,
-                completed=False,
-            ),
-        },
-        sabotage=None,
-        cooldowns={"impostor-1": 0},
-        emergency_uses={},
-        rng_state=rng_state,
-        seed=seed,
-    )
-
-
 def _fixture_actions(script: _ScriptedGame) -> dict[int, list[Action]]:
     actions_by_tick: dict[int, list[Action]] = {}
     for raw_action in script.actions:
@@ -151,7 +75,7 @@ def _run_scripted_game(
     script = _ScriptedGame.model_validate_json(fixture_path.read_text(encoding="utf-8"))
 
     game_map = load_canonical_map()
-    state = _initial_world_state(seed=script.seed)
+    state: WorldState = scripted_initial_world_state(seed=script.seed)
     audit_path = tmp_path / f"audit_{fixture_name}.jsonl"
     observation_service = ObservationService(
         game_map=game_map, audit_log_path=audit_path
@@ -186,16 +110,6 @@ def _run_scripted_game(
     return packet_records
 
 
-def _event_witnesses(event: EngineEvent, key: str) -> tuple[str, ...]:
-    details = event.get("details")
-    if not isinstance(details, dict):
-        return ()
-    raw_witnesses = details.get(key)
-    if not isinstance(raw_witnesses, (list, tuple)):
-        return ()
-    return tuple(witness for witness in raw_witnesses if isinstance(witness, str))
-
-
 def _action_is_permitted_by_witness_event(
     *,
     action: str | None,
@@ -206,13 +120,14 @@ def _action_is_permitted_by_witness_event(
     if action is None:
         return False
     for event in engine_events:
-        if event.get("actor") != actor_id:
-            continue
-        event_type = event.get("type")
-        if action == "kill" and event_type == "Killed":
-            return agent_id in _event_witnesses(event, "witnesses")
-        if action == "vent" and event_type in {"VentEntered", "VentExited"}:
-            return agent_id in _event_witnesses(event, "witnesses")
+        if action == "kill" and isinstance(event, KilledEvent):
+            if event.actor == actor_id:
+                return agent_id in event.witnesses
+        elif action == "vent" and isinstance(
+            event, (VentEnteredEvent, VentExitedEvent)
+        ):
+            if event.actor == actor_id:
+                return agent_id in event.witnesses
     return False
 
 

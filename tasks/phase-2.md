@@ -10,6 +10,14 @@ state or engine `Action`.
 Sequential through 2.5. Tasks 2.6 and 2.7 can run in parallel after 2.5. Task
 2.8 runs after both policies merge. Task 2.9 runs after 2.8.
 
+## Status
+
+Task 2.1 (Boundary contracts) is already merged on `main`. The
+in-scope files (`observation/action_intent.py`, `observation/public_map.py`,
+`orchestrator/boundary.py`, `tests/observation/test_boundary_contracts.py`,
+`tests/orchestrator/test_boundary.py`, `tests/test_firewall.py`) exist and
+the corresponding tests pass. Subsequent Phase 2 tasks build on them.
+
 ## Tasks
 
 ### Task 2.1 — Boundary contracts

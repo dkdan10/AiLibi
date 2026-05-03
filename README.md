@@ -46,6 +46,8 @@ Then visit `http://localhost:8000/health`.
 
 ## Current Limitations
 
-Agents, tactical policies, meetings, LLM integration, the spectator frontend,
-and tournament dashboards are future phases. The current API is intentionally
-minimal and exists to satisfy the Phase 0 boot path.
+Phase 2 boundary contracts (`ActionIntent`, `PublicMapView`, and the
+`orchestrator/boundary.py` translation layer) are already in place. Tactical
+agents, FSMs, the headless game orchestrator, meetings, LLM integration, the
+spectator frontend, and tournament dashboards are future phases. The current
+API is intentionally minimal and exists to satisfy the Phase 0 boot path.

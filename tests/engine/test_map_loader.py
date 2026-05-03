@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from engine.world import Map, MapValidationError, load_canonical_map
+from engine.world import Map, MapValidationError, load_canonical_map, load_map
 
 MapData = dict[str, object]
 MapMutator = Callable[[MapData], None]
@@ -17,6 +18,7 @@ def _minimal_map_data() -> MapData:
         "name": "Test Map",
         "version": "0.1",
         "tick_rate_hz": 2,
+        "kill_cooldown_ticks": 10,
         "visibility_defaults": {
             "base": "same_room_and_adjacent",
             "lights_sabotage": "same_room_only",
@@ -166,6 +168,10 @@ def _non_positive_tick_rate(data: MapData) -> None:
     data["tick_rate_hz"] = 0
 
 
+def _non_positive_kill_cooldown(data: MapData) -> None:
+    data["kill_cooldown_ticks"] = 0
+
+
 def _non_positive_edge_traversal(data: MapData) -> None:
     _add_admin_room(data)
     _sequence(data, "edges").append(
@@ -196,6 +202,7 @@ def test_load_canonical_map_counts() -> None:
 
     assert game_map.id == "canonical_1"
     assert game_map.tick_rate_hz == 2
+    assert game_map.kill_cooldown_ticks == 10
     assert len(game_map.rooms) == 10
     assert len(game_map.edges) == 11
     assert len(game_map.vents) == 6
@@ -279,6 +286,7 @@ def test_map_model_defensively_copies_collection_inputs() -> None:
             "name": "Test Map",
             "version": "0.1",
             "tick_rate_hz": 2,
+            "kill_cooldown_ticks": 10,
             "visibility_defaults": {
                 "base": "same_room_and_adjacent",
                 "lights_sabotage": "same_room_only",
@@ -413,6 +421,7 @@ def test_map_model_rejects_mismatched_embedded_ids(
         (_negative_room_position, "room positions must be non-negative"),
         (_non_positive_room_size, "room sizes must be positive"),
         (_non_positive_tick_rate, "tick_rate_hz must be positive"),
+        (_non_positive_kill_cooldown, "kill_cooldown_ticks must be at least 1"),
         (_non_positive_edge_traversal, "edge traversal_ticks must be at least 1"),
         (_non_positive_vent_traversal, "vent traversal_ticks must be at least 1"),
         (_non_positive_task_duration, "task duration_ticks must be at least 1"),
@@ -431,3 +440,120 @@ def test_map_model_rejects_documented_validation_errors(
 
     with pytest.raises(ValidationError, match=match):
         Map.model_validate(data)
+
+
+_MINIMAL_YAML_BODY = """\
+map_id: yaml_features
+name: YAML Features
+version: "0.1"
+tick_rate_hz: 2
+kill_cooldown_ticks: 10
+visibility_defaults:
+  base: same_room_and_adjacent
+  lights_sabotage: same_room_only
+edges: []
+vents:
+  CAFETERIA_VENT:
+    room: CAFETERIA
+    connects_to: []
+    traversal_ticks: 1
+tasks:
+  empty_trash:
+    name: Empty Trash
+    room: CAFETERIA
+    duration_ticks: 1
+    task_type: common
+    weight: 1
+sabotages:
+  lights:
+    affected_visibility: same_room_only
+    repair_rooms:
+      - CAFETERIA
+    duration_ticks: 1
+emergency: { button_room: CAFETERIA, uses_per_player: 1 }
+spawn: { room: CAFETERIA }
+meeting: { room: CAFETERIA }
+"""
+
+
+def _write_minimal_yaml(tmp_path: Path, rooms_block: str) -> Path:
+    map_path = tmp_path / "map.yaml"
+    map_path.write_text(rooms_block + _MINIMAL_YAML_BODY, encoding="utf-8")
+    return map_path
+
+
+def test_load_map_accepts_colon_in_room_notes(tmp_path: Path) -> None:
+    """PyYAML must round-trip a notes string that contains a colon."""
+
+    rooms_block = (
+        "rooms:\n"
+        "  CAFETERIA:\n"
+        "    name: Cafeteria\n"
+        "    kind: meeting_room\n"
+        "    position: { x: 0, y: 0 }\n"
+        "    size: { width: 1, height: 1 }\n"
+        '    notes: "Hub: central room with multiple exits"\n'
+    )
+
+    game_map = load_map(_write_minimal_yaml(tmp_path, rooms_block))
+
+    assert game_map.rooms["CAFETERIA"].notes == (
+        "Hub: central room with multiple exits"
+    )
+
+
+def test_load_map_accepts_folded_block_scalar_notes(tmp_path: Path) -> None:
+    """PyYAML must accept a folded `>` block-scalar note."""
+
+    rooms_block = (
+        "rooms:\n"
+        "  CAFETERIA:\n"
+        "    name: Cafeteria\n"
+        "    kind: meeting_room\n"
+        "    position: { x: 0, y: 0 }\n"
+        "    size: { width: 1, height: 1 }\n"
+        "    notes: >\n"
+        "      First line of folded notes\n"
+        "      that wraps onto a second line.\n"
+    )
+
+    game_map = load_map(_write_minimal_yaml(tmp_path, rooms_block))
+
+    notes = game_map.rooms["CAFETERIA"].notes
+    assert "First line of folded notes" in notes
+    assert "second line" in notes
+
+
+def test_load_map_rejects_non_integer_tick_rate(tmp_path: Path) -> None:
+    """A YAML float for tick_rate_hz must raise; the schema requires int."""
+
+    map_path = tmp_path / "map.yaml"
+    map_path.write_text(
+        _MINIMAL_YAML_BODY.replace(
+            "tick_rate_hz: 2",
+            "tick_rate_hz: 2.5",
+        ).replace(
+            "edges:",
+            "rooms:\n"
+            "  CAFETERIA:\n"
+            "    name: Cafeteria\n"
+            "    kind: meeting_room\n"
+            "    position: { x: 0, y: 0 }\n"
+            "    size: { width: 1, height: 1 }\n"
+            "edges:",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_map(map_path)
+
+
+def test_load_map_rejects_non_mapping_top_level(tmp_path: Path) -> None:
+    """A YAML document whose root is not a mapping must fail with a clear error."""
+
+    map_path = tmp_path / "list.yaml"
+    map_path.write_text("- one\n- two\n", encoding="utf-8")
+
+    with pytest.raises(MapValidationError, match="top-level mapping"):
+        load_map(map_path)

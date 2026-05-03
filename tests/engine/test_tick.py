@@ -7,6 +7,7 @@ from pydantic import TypeAdapter
 
 from engine.actions import Action
 from engine.entities import BodyState, PlayerState, SabotageState, TaskState
+from engine.events import event_to_dict
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
@@ -107,8 +108,8 @@ def test_valid_kill_mutates_state_and_emits_event() -> None:
     assert not next_state.players["player-1"].alive
     assert "body-player-1-0" in next_state.bodies
     assert next_state.cooldowns["impostor-1"] == 10
-    killed_event = next(event for event in events if event["type"] == "Killed")
-    assert killed_event["details"]["witnesses"] == ("crew-a", "crew-b")
+    killed_event = next(event for event in events if event.type == "Killed")
+    assert event_to_dict(killed_event)["details"]["witnesses"] == ("crew-a", "crew-b")
     assert next_state.phase == "PLAY"
 
     later_state, _ = advance_tick(next_state, [], game_map=game_map)
@@ -137,7 +138,7 @@ def test_invalid_kill_emits_rejection_and_leaves_state_unchanged() -> None:
     assert next_state.players["player-1"].alive
     assert next_state.bodies == {}
     assert next_state.cooldowns["impostor-1"] == 0
-    assert any(event["type"] == "ActionRejected" for event in events)
+    assert any(event.type == "ActionRejected" for event in events)
 
 
 def test_continuing_task_progresses_without_repeated_action() -> None:
@@ -164,11 +165,11 @@ def test_continuing_task_progresses_without_repeated_action() -> None:
 
     assert started_state.tasks["swipe_card"].progress == 1
     assert not started_state.tasks["swipe_card"].completed
-    assert [event["type"] for event in start_events].count("TaskProgressed") == 1
+    assert [event.type for event in start_events].count("TaskProgressed") == 1
     assert continued_state.tasks["swipe_card"].progress == 2
     assert not continued_state.tasks["swipe_card"].completed
-    assert continue_events[0]["type"] == "TaskProgressed"
-    assert continue_events[0]["details"] == {
+    assert continue_events[0].type == "TaskProgressed"
+    assert event_to_dict(continue_events[0])["details"] == {
         "task_id": "swipe_card",
         "progress": 2,
         "required_ticks": 3,
@@ -197,9 +198,9 @@ def test_continuing_task_completes_and_can_trigger_crew_win() -> None:
     assert completed_state.tasks["swipe_card"].progress == 3
     assert completed_state.tasks["swipe_card"].completed
     assert completed_state.phase == "GAME_OVER"
-    assert [event["type"] for event in events] == ["TaskCompleted", "GameOver"]
-    assert events[1]["winner"] == "CREWMATES"
-    assert events[1]["reason"] == "CREWMATE_TASKS"
+    assert [event.type for event in events] == ["TaskCompleted", "GameOver"]
+    assert event_to_dict(events[1])["winner"] == "CREWMATES"
+    assert event_to_dict(events[1])["reason"] == "CREWMATE_TASKS"
 
 
 def test_submitted_wait_suppresses_continuing_task_progress() -> None:
@@ -225,8 +226,8 @@ def test_submitted_wait_suppresses_continuing_task_progress() -> None:
     )
 
     assert waited_state.tasks["swipe_card"].progress == 1
-    assert [event["type"] for event in events].count("TaskProgressed") == 0
-    assert events[0]["type"] == "Waited"
+    assert [event.type for event in events].count("TaskProgressed") == 0
+    assert events[0].type == "Waited"
 
 
 def test_submitted_move_suppresses_continuing_task_progress() -> None:
@@ -261,8 +262,8 @@ def test_submitted_move_suppresses_continuing_task_progress() -> None:
 
     assert moved_state.tasks["swipe_card"].progress == 1
     assert moved_state.players["player-2"].room == "UPPER_HALL"
-    assert [event["type"] for event in events].count("TaskProgressed") == 0
-    assert events[0]["type"] == "Moved"
+    assert [event.type for event in events].count("TaskProgressed") == 0
+    assert events[0].type == "Moved"
 
 
 def test_rejected_action_suppresses_continuing_task_progress_for_that_tick() -> None:
@@ -301,10 +302,10 @@ def test_rejected_action_suppresses_continuing_task_progress_for_that_tick() -> 
     )
 
     assert rejected_state.tasks["swipe_card"].progress == 1
-    assert rejected_events[0]["type"] == "ActionRejected"
-    assert [event["type"] for event in rejected_events].count("TaskProgressed") == 0
+    assert rejected_events[0].type == "ActionRejected"
+    assert [event.type for event in rejected_events].count("TaskProgressed") == 0
     assert continued_state.tasks["swipe_card"].progress == 2
-    assert continued_events[0]["type"] == "TaskProgressed"
+    assert continued_events[0].type == "TaskProgressed"
 
 
 def test_repeated_do_task_action_increments_once_per_tick() -> None:
@@ -338,7 +339,7 @@ def test_repeated_do_task_action_increments_once_per_tick() -> None:
     )
 
     assert next_state.tasks["swipe_card"].progress == 2
-    assert [event["type"] for event in events].count("TaskProgressed") == 1
+    assert [event.type for event in events].count("TaskProgressed") == 1
 
 
 def test_move_and_task_actions_apply_expected_mutations() -> None:
@@ -380,10 +381,10 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
     )
 
     assert moved_state.players["player-1"].room == "UPPER_HALL"
-    assert any(event["type"] == "Moved" for event in move_events)
+    assert any(event.type == "Moved" for event in move_events)
     assert next_state.tasks["swipe_card"].completed
     assert next_state.tasks["swipe_card"].progress == 1
-    assert any(event["type"] == "TaskCompleted" for event in task_events)
+    assert any(event.type == "TaskCompleted" for event in task_events)
 
 
 def test_vent_sabotage_and_passive_effects_apply() -> None:
@@ -431,10 +432,10 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
     assert next_state.sabotage.kind == "lights"
     assert next_state.sabotage.remaining_ticks == 89
     assert next_state.cooldowns["impostor-1"] == 1
-    assert [event["type"] for event in events[:2]] == ["VentEntered", "SabotageStarted"]
-    assert events[0]["details"]["witnesses"] == ("player-2",)
-    assert events[0]["details"]["source_witnesses"] == ("player-2",)
-    assert events[0]["details"]["destination_witnesses"] == ("player-2",)
+    assert [event.type for event in events[:2]] == ["VentEntered", "SabotageStarted"]
+    assert event_to_dict(events[0])["details"]["witnesses"] == ("player-2",)
+    assert event_to_dict(events[0])["details"]["source_witnesses"] == ("player-2",)
+    assert event_to_dict(events[0])["details"]["destination_witnesses"] == ("player-2",)
 
 
 def _active_lights_state(*, remaining_ticks: int = 5) -> WorldState:
@@ -493,16 +494,16 @@ def test_timed_sabotage_repair_completes_after_configured_ticks() -> None:
         game_map=game_map,
     )
 
-    assert first_events[0]["type"] == "SabotageRepairProgressed"
-    assert first_events[0]["details"]["progress"] == 1
+    assert first_events[0].type == "SabotageRepairProgressed"
+    assert event_to_dict(first_events[0])["details"]["progress"] == 1
     assert first_state.sabotage is not None
     assert first_state.sabotage.repair_progress["ADMIN"] == 1
-    assert second_events[0]["details"]["progress"] == 2
-    assert repaired_events[0]["type"] == "SabotageRepaired"
-    assert repaired_events[0]["details"]["required_ticks"] == 3
+    assert event_to_dict(second_events[0])["details"]["progress"] == 2
+    assert repaired_events[0].type == "SabotageRepaired"
+    assert event_to_dict(repaired_events[0])["details"]["required_ticks"] == 3
     assert repaired_state.sabotage is not None
     assert not repaired_state.sabotage.active
-    assert not any(event["type"] == "GameOver" for event in repaired_events)
+    assert not any(event.type == "GameOver" for event in repaired_events)
 
 
 def test_repair_prevents_same_tick_sabotage_timeout_when_completed() -> None:
@@ -530,10 +531,10 @@ def test_repair_prevents_same_tick_sabotage_timeout_when_completed() -> None:
         game_map=game_map,
     )
 
-    assert events[0]["type"] == "SabotageRepaired"
+    assert events[0].type == "SabotageRepaired"
     assert next_state.sabotage is not None
     assert not next_state.sabotage.active
-    assert not any(event["type"] == "GameOver" for event in events)
+    assert not any(event.type == "GameOver" for event in events)
 
 
 def test_unrepaired_sabotage_timeout_still_wins() -> None:
@@ -546,9 +547,9 @@ def test_unrepaired_sabotage_timeout_still_wins() -> None:
     )
 
     assert next_state.phase == "GAME_OVER"
-    assert events[0]["type"] == "GameOver"
-    assert events[0]["winner"] == "IMPOSTORS"
-    assert events[0]["reason"] == "IMPOSTOR_SABOTAGE"
+    assert events[0].type == "GameOver"
+    assert event_to_dict(events[0])["winner"] == "IMPOSTORS"
+    assert event_to_dict(events[0])["reason"] == "IMPOSTOR_SABOTAGE"
 
 
 @pytest.mark.parametrize(
@@ -596,8 +597,8 @@ def test_invalid_sabotage_repairs_are_rejected(
     )
 
     assert next_state.sabotage == state.sabotage or state.sabotage is not None
-    assert events[0]["type"] == "ActionRejected"
-    assert match in events[0]["reason"]
+    assert events[0].type == "ActionRejected"
+    assert match in event_to_dict(events[0])["reason"]
 
 
 def test_vent_can_exit_through_connected_destination_vent() -> None:
@@ -641,15 +642,23 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
 
     assert in_vent_state.players["impostor-1"].room == "ADMIN"
     assert in_vent_state.players["impostor-1"].in_vent
-    assert enter_events[0]["type"] == "VentEntered"
+    assert enter_events[0].type == "VentEntered"
     assert exited_state.players["impostor-1"].room == "REACTOR"
     assert not exited_state.players["impostor-1"].in_vent
-    assert exit_events[0]["type"] == "VentExited"
-    assert exit_events[0]["details"]["source_vent_id"] == "ADMIN_VENT"
-    assert exit_events[0]["details"]["destination_vent_id"] == "REACTOR_VENT"
-    assert exit_events[0]["details"]["witnesses"] == ("player-2", "player-3")
-    assert exit_events[0]["details"]["source_witnesses"] == ("player-2",)
-    assert exit_events[0]["details"]["destination_witnesses"] == ("player-3",)
+    assert exit_events[0].type == "VentExited"
+    assert event_to_dict(exit_events[0])["details"]["source_vent_id"] == "ADMIN_VENT"
+    assert (
+        event_to_dict(exit_events[0])["details"]["destination_vent_id"]
+        == "REACTOR_VENT"
+    )
+    assert event_to_dict(exit_events[0])["details"]["witnesses"] == (
+        "player-2",
+        "player-3",
+    )
+    assert event_to_dict(exit_events[0])["details"]["source_witnesses"] == ("player-2",)
+    assert event_to_dict(exit_events[0])["details"]["destination_witnesses"] == (
+        "player-3",
+    )
 
 
 def test_vent_rejects_unconnected_destination_vent() -> None:
@@ -691,7 +700,7 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
 
     assert next_state.players["impostor-1"].room == "ADMIN"
     assert next_state.players["impostor-1"].in_vent
-    assert events[0]["type"] == "ActionRejected"
+    assert events[0].type == "ActionRejected"
 
 
 def test_report_and_emergency_transition_to_meeting() -> None:
@@ -722,7 +731,7 @@ def test_report_and_emergency_transition_to_meeting() -> None:
 
     assert next_state.phase == "MEETING"
     assert next_state.bodies["body-player-2-0"].discovered_by == "player-1"
-    assert any(event["type"] == "MeetingTriggered" for event in report_events)
+    assert any(event.type == "MeetingTriggered" for event in report_events)
 
     emergency_state, emergency_events = advance_tick(
         _state(),
@@ -732,7 +741,7 @@ def test_report_and_emergency_transition_to_meeting() -> None:
 
     assert emergency_state.phase == "MEETING"
     assert emergency_state.emergency_uses["player-1"] == 1
-    assert any(event["type"] == "MeetingTriggered" for event in emergency_events)
+    assert any(event.type == "MeetingTriggered" for event in emergency_events)
 
 
 def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> (
@@ -777,7 +786,7 @@ def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks()
     assert next_state.rng_state == state.rng_state
     assert next_state.sabotage is not None
     assert next_state.sabotage.remaining_ticks == 1
-    assert [event["type"] for event in events] == ["MeetingTriggered"]
+    assert [event.type for event in events] == ["MeetingTriggered"]
 
 
 def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks() -> (
@@ -805,7 +814,7 @@ def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks
     assert next_state.rng_state == state.rng_state
     assert next_state.sabotage is not None
     assert next_state.sabotage.remaining_ticks == 1
-    assert [event["type"] for event in events] == ["MeetingTriggered"]
+    assert [event.type for event in events] == ["MeetingTriggered"]
 
 
 def test_emergency_requires_actor_in_button_room() -> None:
@@ -819,8 +828,8 @@ def test_emergency_requires_actor_in_button_room() -> None:
 
     assert next_state.phase == "PLAY"
     assert "player-2" not in next_state.emergency_uses
-    assert events[0]["type"] == "ActionRejected"
-    assert "emergency button room" in events[0]["reason"]
+    assert events[0].type == "ActionRejected"
+    assert "emergency button room" in event_to_dict(events[0])["reason"]
 
 
 def test_emergency_rejects_actor_in_vent() -> None:
@@ -838,8 +847,8 @@ def test_emergency_rejects_actor_in_vent() -> None:
     assert next_state.phase == "PLAY"
     assert "player-1" not in next_state.emergency_uses
     assert next_state.players["player-1"].in_vent
-    assert events[0]["type"] == "ActionRejected"
-    assert "while in vent" in events[0]["reason"]
+    assert events[0].type == "ActionRejected"
+    assert "while in vent" in event_to_dict(events[0])["reason"]
 
 
 def test_advance_tick_rejects_non_play_phases() -> None:
@@ -882,7 +891,7 @@ def test_advance_tick_uses_supplied_map_without_loading_canonical_map(
     )
 
     assert next_state.players["player-1"].room == "UPPER_HALL"
-    assert any(event["type"] == "Moved" for event in events)
+    assert any(event.type == "Moved" for event in events)
 
 
 def test_repeated_emergency_use_is_rejected() -> None:
@@ -902,4 +911,4 @@ def test_repeated_emergency_use_is_rejected() -> None:
 
     assert next_state.phase == "PLAY"
     assert next_state.emergency_uses["player-1"] == 1
-    assert events[0]["type"] == "ActionRejected"
+    assert events[0].type == "ActionRejected"

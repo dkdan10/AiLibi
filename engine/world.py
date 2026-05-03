@@ -8,6 +8,8 @@ from types import MappingProxyType
 from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias, TypeVar, cast
 
+import yaml
+
 from engine.entities import (
     BodyId,
     BodyState,
@@ -38,12 +40,6 @@ _MappingValue = TypeVar("_MappingValue")
 
 class MapValidationError(ValueError):
     """Raised when map data violates the static engine map contract."""
-
-
-class Phase(str):
-    PLAY = "PLAY"
-    MEETING = "MEETING"
-    GAME_OVER = "GAME_OVER"
 
 
 @dataclass(frozen=True)
@@ -228,6 +224,7 @@ class Map(_FrozenModel):
     name: str
     version: str
     tick_rate_hz: int
+    kill_cooldown_ticks: int
     visibility_defaults: VisibilityDefaults
     rooms: Mapping[RoomId, Room]
     edges: tuple[Edge, ...]
@@ -256,6 +253,8 @@ class Map(_FrozenModel):
     def validate_map(self) -> Map:
         if self.tick_rate_hz <= 0:
             raise MapValidationError("tick_rate_hz must be positive")
+        if self.kill_cooldown_ticks < 1:
+            raise MapValidationError("kill_cooldown_ticks must be at least 1")
         self._validate_disjoint_namespaces()
         self._validate_room_graph()
         self._validate_vent_network()
@@ -397,161 +396,14 @@ def load_canonical_map() -> Map:
 
 
 def load_map(path: Path) -> Map:
-    data = _load_yaml_subset(path)
+    data = _load_map_yaml(path)
     return Map.model_validate(data)
 
 
-def _load_yaml_subset(path: Path) -> dict[str, object]:
+def _load_map_yaml(path: Path) -> dict[str, object]:
     if not path.exists():
         raise FileNotFoundError(path)
-    lines = path.read_text(encoding="utf-8").splitlines()
-    parser = _YamlSubsetParser(lines)
-    parsed = parser.parse()
+    parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(parsed, dict):
         raise MapValidationError("map file must contain a top-level mapping")
     return cast(dict[str, object], parsed)
-
-
-class _YamlSubsetParser:
-    def __init__(self, lines: list[str]) -> None:
-        self._lines = lines
-        self._index = 0
-
-    def parse(self) -> object:
-        self._skip_ignored()
-        if self._index >= len(self._lines):
-            raise MapValidationError("map file is empty")
-        return self._parse_mapping(self._current_indent())
-
-    def _parse_mapping(self, indent: int) -> dict[str, object]:
-        result: dict[str, object] = {}
-        while self._index < len(self._lines):
-            self._skip_ignored()
-            if self._index >= len(self._lines) or self._current_indent() < indent:
-                break
-            if self._current_indent() > indent:
-                raise MapValidationError(
-                    f"unexpected indentation at line {self._index + 1}"
-                )
-
-            content = self._current_content()
-            if content.startswith("- "):
-                raise MapValidationError(
-                    f"unexpected list item at line {self._index + 1}"
-                )
-
-            key, raw_value = self._split_key_value(content)
-            self._index += 1
-            if raw_value == "":
-                result[key] = self._parse_nested_value(indent)
-            elif raw_value in {">", "|"}:
-                result[key] = self._parse_block_scalar(indent)
-            else:
-                result[key] = self._parse_scalar(raw_value)
-        return result
-
-    def _parse_sequence(self, indent: int) -> list[object]:
-        result: list[object] = []
-        while self._index < len(self._lines):
-            self._skip_ignored()
-            if self._index >= len(self._lines) or self._current_indent() < indent:
-                break
-            if self._current_indent() > indent:
-                raise MapValidationError(
-                    f"unexpected indentation at line {self._index + 1}"
-                )
-
-            content = self._current_content()
-            if not content.startswith("- "):
-                break
-            raw_value = content[2:].strip()
-            self._index += 1
-            if raw_value == "":
-                result.append(self._parse_nested_value(indent))
-            else:
-                result.append(self._parse_scalar(raw_value))
-        return result
-
-    def _parse_nested_value(self, parent_indent: int) -> object:
-        self._skip_ignored()
-        if self._index >= len(self._lines) or self._current_indent() <= parent_indent:
-            raise MapValidationError(
-                f"missing nested value near line {self._index + 1}"
-            )
-        nested_indent = self._current_indent()
-        if self._current_content().startswith("- "):
-            return self._parse_sequence(nested_indent)
-        return self._parse_mapping(nested_indent)
-
-    def _parse_block_scalar(self, parent_indent: int) -> str:
-        block_lines: list[str] = []
-        while self._index < len(self._lines):
-            raw_line = self._lines[self._index]
-            if not raw_line.strip():
-                block_lines.append("")
-                self._index += 1
-                continue
-            current_indent = len(raw_line) - len(raw_line.lstrip(" "))
-            if current_indent <= parent_indent:
-                break
-            block_lines.append(raw_line.strip())
-            self._index += 1
-        return " ".join(line for line in block_lines if line).strip()
-
-    def _split_key_value(self, content: str) -> tuple[str, str]:
-        if ":" not in content:
-            raise MapValidationError(
-                f"expected key/value pair at line {self._index + 1}"
-            )
-        key, raw_value = content.split(":", 1)
-        key = key.strip()
-        if not key:
-            raise MapValidationError(f"empty key at line {self._index + 1}")
-        return key, raw_value.strip()
-
-    def _parse_scalar(self, raw_value: str) -> object:
-        if raw_value == "null":
-            return None
-        if raw_value.startswith("{") and raw_value.endswith("}"):
-            return self._parse_inline_mapping(raw_value)
-        if raw_value.startswith("[") and raw_value.endswith("]"):
-            return self._parse_inline_sequence(raw_value)
-        if raw_value.isdecimal():
-            return int(raw_value)
-        return raw_value.strip("\"'")
-
-    def _parse_inline_mapping(self, raw_value: str) -> dict[str, object]:
-        inner = raw_value[1:-1].strip()
-        if not inner:
-            return {}
-        result: dict[str, object] = {}
-        for item in inner.split(","):
-            key, value = self._split_inline_key_value(item.strip())
-            result[key] = self._parse_scalar(value)
-        return result
-
-    def _parse_inline_sequence(self, raw_value: str) -> list[object]:
-        inner = raw_value[1:-1].strip()
-        if not inner:
-            return []
-        return [self._parse_scalar(item.strip()) for item in inner.split(",")]
-
-    def _split_inline_key_value(self, item: str) -> tuple[str, str]:
-        if ":" not in item:
-            raise MapValidationError(f"invalid inline mapping item: {item}")
-        key, value = item.split(":", 1)
-        return key.strip(), value.strip()
-
-    def _skip_ignored(self) -> None:
-        while self._index < len(self._lines):
-            stripped = self._lines[self._index].strip()
-            if stripped and not stripped.startswith("#"):
-                return
-            self._index += 1
-
-    def _current_indent(self) -> int:
-        line = self._lines[self._index]
-        return len(line) - len(line.lstrip(" "))
-
-    def _current_content(self) -> str:
-        return self._lines[self._index].strip()

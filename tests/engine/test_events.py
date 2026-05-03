@@ -12,10 +12,11 @@ def test_typed_engine_event_serializes_to_legacy_shape() -> None:
         to_room="ADMIN",
     )
 
-    assert event_to_dict(event) == {
+    serialized = event_to_dict(event)
+    assert serialized == {
         "type": "Moved",
         "tick": 3,
         "actor": "player-1",
         "details": {"from_room": "CAFETERIA", "to_room": "ADMIN"},
     }
-    assert event["details"] == {"from_room": "CAFETERIA", "to_room": "ADMIN"}
+    assert serialized["details"] == {"from_room": "CAFETERIA", "to_room": "ADMIN"}

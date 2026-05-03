@@ -24,21 +24,8 @@ EventType: TypeAlias = Literal[
 ]
 
 
-class _EventCompatMixin:
-    """Temporary mapping-style access while callers migrate to typed events."""
-
-    def as_dict(self) -> dict[str, Any]:
-        return event_to_dict(self)
-
-    def __getitem__(self, key: str) -> Any:
-        return self.as_dict()[key]
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self.as_dict().get(key, default)
-
-
 @dataclass(frozen=True)
-class ActionRejectedEvent(_EventCompatMixin):
+class ActionRejectedEvent:
     type: Literal["ActionRejected"]
     tick: int
     actor: PlayerId
@@ -47,7 +34,7 @@ class ActionRejectedEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class MovedEvent(_EventCompatMixin):
+class MovedEvent:
     type: Literal["Moved"]
     tick: int
     actor: PlayerId
@@ -56,7 +43,7 @@ class MovedEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class TaskProgressedEvent(_EventCompatMixin):
+class TaskProgressedEvent:
     type: Literal["TaskProgressed"]
     tick: int
     actor: PlayerId
@@ -66,7 +53,7 @@ class TaskProgressedEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class TaskCompletedEvent(_EventCompatMixin):
+class TaskCompletedEvent:
     type: Literal["TaskCompleted"]
     tick: int
     actor: PlayerId
@@ -76,7 +63,7 @@ class TaskCompletedEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class KilledEvent(_EventCompatMixin):
+class KilledEvent:
     type: Literal["Killed"]
     tick: int
     actor: PlayerId
@@ -86,7 +73,7 @@ class KilledEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class VentEnteredEvent(_EventCompatMixin):
+class VentEnteredEvent:
     type: Literal["VentEntered"]
     tick: int
     actor: PlayerId
@@ -103,7 +90,7 @@ class VentEnteredEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class VentExitedEvent(_EventCompatMixin):
+class VentExitedEvent:
     type: Literal["VentExited"]
     tick: int
     actor: PlayerId
@@ -120,7 +107,7 @@ class VentExitedEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class SabotageStartedEvent(_EventCompatMixin):
+class SabotageStartedEvent:
     type: Literal["SabotageStarted"]
     tick: int
     actor: PlayerId
@@ -130,7 +117,7 @@ class SabotageStartedEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class SabotageRepairProgressedEvent(_EventCompatMixin):
+class SabotageRepairProgressedEvent:
     type: Literal["SabotageRepairProgressed"]
     tick: int
     actor: PlayerId
@@ -141,7 +128,7 @@ class SabotageRepairProgressedEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class SabotageRepairedEvent(_EventCompatMixin):
+class SabotageRepairedEvent:
     type: Literal["SabotageRepaired"]
     tick: int
     actor: PlayerId
@@ -152,7 +139,7 @@ class SabotageRepairedEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class MeetingTriggeredEvent(_EventCompatMixin):
+class MeetingTriggeredEvent:
     type: Literal["MeetingTriggered"]
     tick: int
     actor: PlayerId
@@ -161,14 +148,14 @@ class MeetingTriggeredEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class WaitedEvent(_EventCompatMixin):
+class WaitedEvent:
     type: Literal["Waited"]
     tick: int
     actor: PlayerId
 
 
 @dataclass(frozen=True)
-class GameOverEvent(_EventCompatMixin):
+class GameOverEvent:
     type: Literal["GameOver"]
     tick: int
     winner: Literal["CREWMATES", "IMPOSTORS"]
@@ -176,7 +163,7 @@ class GameOverEvent(_EventCompatMixin):
 
 
 @dataclass(frozen=True)
-class TickAdvancedEvent(_EventCompatMixin):
+class TickAdvancedEvent:
     type: Literal["TickAdvanced"]
     tick: int
 

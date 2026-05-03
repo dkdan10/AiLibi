@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from math import dist
 
 from engine.actions import (
     EmergencyMeetingAction,
@@ -13,22 +11,19 @@ from engine.actions import (
     VentAction,
 )
 from engine.entities import BodyState, PlayerId, PlayerState, RoomId
+from engine.events import (
+    KilledEvent,
+    MeetingTriggeredEvent,
+    SabotageStartedEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
+)
 from engine.win_conditions import WinResult, evaluate_win_conditions
 from engine.world import Map, WorldState
 
 
 class ActionRejectedError(ValueError):
     """Raised when an action violates engine rules."""
-
-
-@dataclass(frozen=True)
-class RuleEvent:
-    type: str
-    actor: PlayerId
-    details: dict[str, str | int | float | tuple[str, ...]]
-
-
-_KILL_RADIUS = 2.0
 
 
 def _witnesses_in_room(
@@ -58,7 +53,9 @@ def _get_live_player(state: WorldState, player_id: PlayerId) -> PlayerState:
     return player
 
 
-def resolve_kill(state: WorldState, action: KillAction) -> tuple[BodyState, RuleEvent]:
+def resolve_kill(
+    state: WorldState, action: KillAction
+) -> tuple[BodyState, KilledEvent]:
     actor = _get_live_player(state, action.actor)
     target = _get_live_player(state, action.payload.target)
 
@@ -68,8 +65,6 @@ def resolve_kill(state: WorldState, action: KillAction) -> tuple[BodyState, Rule
         raise ActionRejectedError("kill is on cooldown")
     if actor.room != target.room:
         raise ActionRejectedError("kill requires same room")
-    if dist(actor.position, target.position) > _KILL_RADIUS:
-        raise ActionRejectedError("target outside kill radius")
 
     body_id = f"body-{target.id}-{state.tick}"
     body = BodyState(
@@ -80,22 +75,24 @@ def resolve_kill(state: WorldState, action: KillAction) -> tuple[BodyState, Rule
         killed_by=actor.id,
         discovered_by=None,
     )
-    return body, RuleEvent(
+    event = KilledEvent(
         type="Killed",
+        tick=state.tick,
         actor=action.actor,
-        details={
-            "target": target.id,
-            "room": target.room,
-            "witnesses": _witnesses_in_room(
-                state,
-                room=target.room,
-                exclude={actor.id, target.id},
-            ),
-        },
+        target=target.id,
+        room=target.room,
+        witnesses=_witnesses_in_room(
+            state,
+            room=target.room,
+            exclude={actor.id, target.id},
+        ),
     )
+    return body, event
 
 
-def resolve_vent(state: WorldState, game_map: Map, action: VentAction) -> RuleEvent:
+def resolve_vent(
+    state: WorldState, game_map: Map, action: VentAction
+) -> VentEnteredEvent | VentExitedEvent:
     actor = _get_live_player(state, action.actor)
     if actor.role != "IMPOSTOR":
         raise ActionRejectedError("only impostors can vent")
@@ -104,6 +101,9 @@ def resolve_vent(state: WorldState, game_map: Map, action: VentAction) -> RuleEv
     if destination_vent is None:
         raise ActionRejectedError(f"unknown vent id: {action.payload.vent_id}")
 
+    is_exit: bool
+    source_vent_id: str
+    source_room: RoomId
     if actor.in_vent:
         current_vent = game_map.vent_for_room(actor.room)
         if current_vent is None:
@@ -115,13 +115,13 @@ def resolve_vent(state: WorldState, game_map: Map, action: VentAction) -> RuleEv
             raise ActionRejectedError(
                 "destination vent must be current or connected vent"
             )
-        event_type = "VentExited"
+        is_exit = True
         source_vent_id = current_vent.id
         source_room = current_vent.room
     else:
         if destination_vent.room != actor.room:
             raise ActionRejectedError("cannot enter vent from another room")
-        event_type = "VentEntered"
+        is_exit = False
         source_vent_id = destination_vent.id
         source_room = actor.room
 
@@ -137,35 +137,54 @@ def resolve_vent(state: WorldState, game_map: Map, action: VentAction) -> RuleEv
     )
     witnesses = tuple(sorted(set(source_witnesses) | set(destination_witnesses)))
 
-    return RuleEvent(
-        type=event_type,
+    if is_exit:
+        return VentExitedEvent(
+            type="VentExited",
+            tick=state.tick,
+            actor=action.actor,
+            vent_id=destination_vent.id,
+            room=destination_vent.room,
+            source_vent_id=source_vent_id,
+            destination_vent_id=destination_vent.id,
+            source_room=source_room,
+            destination_room=destination_vent.room,
+            traversal_ticks=destination_vent.traversal_ticks,
+            witnesses=witnesses,
+            source_witnesses=source_witnesses,
+            destination_witnesses=destination_witnesses,
+        )
+    return VentEnteredEvent(
+        type="VentEntered",
+        tick=state.tick,
         actor=action.actor,
-        details={
-            "vent_id": destination_vent.id,
-            "room": destination_vent.room,
-            "source_vent_id": source_vent_id,
-            "destination_vent_id": destination_vent.id,
-            "source_room": source_room,
-            "destination_room": destination_vent.room,
-            "traversal_ticks": destination_vent.traversal_ticks,
-            "witnesses": witnesses,
-            "source_witnesses": source_witnesses,
-            "destination_witnesses": destination_witnesses,
-        },
+        vent_id=destination_vent.id,
+        room=destination_vent.room,
+        source_vent_id=source_vent_id,
+        destination_vent_id=destination_vent.id,
+        source_room=source_room,
+        destination_room=destination_vent.room,
+        traversal_ticks=destination_vent.traversal_ticks,
+        witnesses=witnesses,
+        source_witnesses=source_witnesses,
+        destination_witnesses=destination_witnesses,
     )
 
 
-def resolve_report(state: WorldState, action: ReportBodyAction) -> RuleEvent:
+def resolve_report(
+    state: WorldState, action: ReportBodyAction
+) -> MeetingTriggeredEvent:
     actor = _get_live_player(state, action.actor)
     body = state.bodies.get(action.payload.body_id)
     if body is None:
         raise ActionRejectedError(f"unknown body id: {action.payload.body_id}")
     if body.room != actor.room:
         raise ActionRejectedError("report requires actor and body in same room")
-    return RuleEvent(
+    return MeetingTriggeredEvent(
         type="MeetingTriggered",
+        tick=state.tick,
         actor=action.actor,
-        details={"trigger": "report", "body_id": body.id},
+        trigger="report",
+        body_id=body.id,
     )
 
 
@@ -176,7 +195,7 @@ def resolve_emergency_meeting(
     emergency_button_room: RoomId,
     emergency_uses_per_player: int,
     emergency_uses_by_player: Mapping[PlayerId, int],
-) -> RuleEvent:
+) -> MeetingTriggeredEvent:
     actor = _get_live_player(state, action.actor)
     if actor.in_vent:
         raise ActionRejectedError("cannot call emergency meeting while in vent")
@@ -185,14 +204,18 @@ def resolve_emergency_meeting(
         raise ActionRejectedError("emergency meeting use limit exceeded")
     if actor.room != emergency_button_room:
         raise ActionRejectedError("emergency meeting requires emergency button room")
-    return RuleEvent(
-        type="MeetingTriggered", actor=action.actor, details={"trigger": "emergency"}
+    return MeetingTriggeredEvent(
+        type="MeetingTriggered",
+        tick=state.tick,
+        actor=action.actor,
+        trigger="emergency",
+        body_id=None,
     )
 
 
 def resolve_sabotage(
     state: WorldState, game_map: Map, action: SabotageAction
-) -> RuleEvent:
+) -> SabotageStartedEvent:
     actor = _get_live_player(state, action.actor)
     if actor.role != "IMPOSTOR":
         raise ActionRejectedError("only impostors can sabotage")
@@ -203,20 +226,21 @@ def resolve_sabotage(
     if sabotage_def is None:
         raise ActionRejectedError(f"unknown sabotage kind: {action.payload.kind}")
 
-    return RuleEvent(
+    return SabotageStartedEvent(
         type="SabotageStarted",
+        tick=state.tick,
         actor=action.actor,
-        details={
-            "kind": action.payload.kind,
-            "duration_ticks": sabotage_def.duration_ticks,
-            "affected_rooms": sabotage_def.repair_rooms,
-        },
+        kind=action.payload.kind,
+        duration_ticks=sabotage_def.duration_ticks,
+        affected_rooms=sabotage_def.repair_rooms,
     )
 
 
 def resolve_repair_sabotage(
     state: WorldState, game_map: Map, action: RepairSabotageAction
-) -> RuleEvent:
+) -> None:
+    """Validate a repair-sabotage action; raise if invalid."""
+
     actor = _get_live_player(state, action.actor)
     if actor.in_vent:
         raise ActionRejectedError("cannot repair sabotage while in vent")
@@ -230,12 +254,6 @@ def resolve_repair_sabotage(
         raise ActionRejectedError("active sabotage kind does not match repair action")
     if actor.room not in sabotage_def.repair_rooms:
         raise ActionRejectedError("repair requires actor in a sabotage repair room")
-
-    return RuleEvent(
-        type="SabotageRepairValidated",
-        actor=action.actor,
-        details={"kind": action.payload.kind, "room": actor.room},
-    )
 
 
 def resolve_win_conditions(state: WorldState) -> WinResult | None:
