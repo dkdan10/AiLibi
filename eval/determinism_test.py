@@ -4,6 +4,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from engine.actions import Action
@@ -14,6 +15,11 @@ from engine.world import WorldState, load_canonical_map
 from orchestrator.replay import ReplayLog
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+_SCRIPTED_GAMES = (
+    "scripted_game_basic_tasks.json",
+    "scripted_game_kill_report_meeting.json",
+    "scripted_game_vent_and_emergency.json",
+)
 
 
 class _ScriptedAction(BaseModel):
@@ -154,15 +160,17 @@ def test_replay_log_writes_jsonl_for_dataclass_world_state(tmp_path: Path) -> No
     assert len(entry["state_hash"]) == 64
 
 
+@pytest.mark.parametrize("fixture_name", _SCRIPTED_GAMES)
 def test_identical_seed_and_actions_produce_byte_identical_replay(
     tmp_path: Path,
+    fixture_name: str,
 ) -> None:
     first = _write_fixture_replay(
-        "scripted_game_kill_report_meeting.json",
+        fixture_name,
         tmp_path / "first.jsonl",
     )
     second = _write_fixture_replay(
-        "scripted_game_kill_report_meeting.json",
+        fixture_name,
         tmp_path / "second.jsonl",
     )
 

@@ -51,8 +51,64 @@ def _advance_sabotage(sabotage: SabotageState | None) -> SabotageState | None:
     return replace(sabotage, remaining_ticks=max(0, sabotage.remaining_ticks - 1))
 
 
-def _advance_tasks(tasks: dict[str, TaskState]) -> dict[str, TaskState]:
-    return tasks
+def _task_progress_event(*, actor: PlayerId, task: TaskState) -> RuleEvent:
+    return RuleEvent(
+        type="TaskCompleted" if task.completed else "TaskProgressed",
+        actor=actor,
+        details={
+            "task_id": task.id,
+            "progress": task.progress,
+            "required_ticks": task.required_ticks,
+        },
+    )
+
+
+def _advance_tasks(
+    state: WorldState,
+    *,
+    submitted_actors: set[PlayerId],
+) -> tuple[dict[str, TaskState], list[RuleEvent]]:
+    tasks = dict(state.tasks)
+    events: list[RuleEvent] = []
+
+    for player_id in sorted(state.players):
+        if player_id in submitted_actors:
+            continue
+
+        player = state.players[player_id]
+        last_action = player.last_action
+        if not isinstance(last_action, DoTaskAction):
+            continue
+
+        task_id = last_action.payload.task_id
+        task = tasks.get(task_id)
+        if task is None:
+            raise ValueError(f"continuing task references unknown task id: {task_id}")
+        if task.id != task_id:
+            raise ValueError(f"task id mismatch for task mapping key: {task_id}")
+        if task.owner != player_id:
+            raise ValueError(f"continuing task is not owned by actor: {task_id}")
+        if task.required_ticks < 1:
+            raise ValueError(f"task has invalid required_ticks: {task.id}")
+
+        if (
+            task.completed
+            or not player.alive
+            or player.in_vent
+            or player.room != task.room
+        ):
+            continue
+
+        next_progress = min(task.required_ticks, task.progress + 1)
+        next_task = replace(
+            task,
+            progress=next_progress,
+            completed=next_progress >= task.required_ticks,
+        )
+        tasks[task.id] = next_task
+        events.append(_task_progress_event(actor=player_id, task=next_task))
+
+    return tasks, events
 
 
 def _validate_state_map(state: WorldState, game_map: Map) -> None:
@@ -156,14 +212,9 @@ def _apply_do_task(
     tasks = dict(state.tasks)
     tasks[task.id] = replace(task, progress=next_progress, completed=completed)
     players = _with_actor_last_action(state, action)
-    event = RuleEvent(
-        type="TaskCompleted" if completed else "TaskProgressed",
+    event = _task_progress_event(
         actor=action.actor,
-        details={
-            "task_id": task.id,
-            "progress": next_progress,
-            "required_ticks": task.required_ticks,
-        },
+        task=tasks[task.id],
     )
     return replace(state, players=players, tasks=tasks), event
 
@@ -287,6 +338,7 @@ def advance_tick(
     events: list[EngineEvent] = []
     working_state = state
     cooldown_skip_players: set[PlayerId] = set()
+    submitted_actors = {action.actor for action in actions}
 
     # 1) Apply queued actions from previous tick.
     for action in actions:
@@ -308,11 +360,15 @@ def advance_tick(
         skip_players=cooldown_skip_players,
     )
     sabotage = _advance_sabotage(working_state.sabotage)
-    tasks = _advance_tasks(dict(working_state.tasks))
+    tasks, task_events = _advance_tasks(
+        working_state,
+        submitted_actors=submitted_actors,
+    )
 
     working_state = replace(
         working_state, cooldowns=cooldowns, sabotage=sabotage, tasks=tasks
     )
+    events.extend(_event_from_rule(event, tick=state.tick) for event in task_events)
 
     # 3) Check victory.
     win_result = resolve_win_conditions(working_state)

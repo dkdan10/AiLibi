@@ -71,6 +71,13 @@ def _state() -> WorldState:
     )
 
 
+def _long_task_state() -> WorldState:
+    return replace(
+        _state(),
+        tasks={"swipe_card": _task("swipe_card", "player-2", "ADMIN", 3)},
+    )
+
+
 def test_valid_kill_mutates_state_and_emits_event() -> None:
     game_map = load_canonical_map()
     state = _state()
@@ -135,6 +142,207 @@ def test_invalid_kill_emits_rejection_and_leaves_state_unchanged() -> None:
     assert next_state.bodies == {}
     assert next_state.cooldowns["impostor-1"] == 0
     assert any(event["type"] == "ActionRejected" for event in events)
+
+
+def test_continuing_task_progresses_without_repeated_action() -> None:
+    game_map = load_canonical_map()
+    started_state, start_events = advance_tick(
+        _long_task_state(),
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "player-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    continued_state, continue_events = advance_tick(
+        started_state,
+        [],
+        game_map=game_map,
+    )
+
+    assert started_state.tasks["swipe_card"].progress == 1
+    assert not started_state.tasks["swipe_card"].completed
+    assert [event["type"] for event in start_events].count("TaskProgressed") == 1
+    assert continued_state.tasks["swipe_card"].progress == 2
+    assert not continued_state.tasks["swipe_card"].completed
+    assert continue_events[0]["type"] == "TaskProgressed"
+    assert continue_events[0]["details"] == {
+        "task_id": "swipe_card",
+        "progress": 2,
+        "required_ticks": 3,
+    }
+
+
+def test_continuing_task_completes_and_can_trigger_crew_win() -> None:
+    game_map = load_canonical_map()
+    state, _ = advance_tick(
+        _long_task_state(),
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "player-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    state, _ = advance_tick(state, [], game_map=game_map)
+
+    completed_state, events = advance_tick(state, [], game_map=game_map)
+
+    assert completed_state.tasks["swipe_card"].progress == 3
+    assert completed_state.tasks["swipe_card"].completed
+    assert completed_state.phase == "GAME_OVER"
+    assert [event["type"] for event in events] == ["TaskCompleted", "GameOver"]
+    assert events[1]["winner"] == "CREWMATES"
+    assert events[1]["reason"] == "CREWMATE_TASKS"
+
+
+def test_submitted_wait_suppresses_continuing_task_progress() -> None:
+    game_map = load_canonical_map()
+    started_state, _ = advance_tick(
+        _long_task_state(),
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "player-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    waited_state, events = advance_tick(
+        started_state,
+        [_action({"type": "wait", "actor": "player-2", "payload": {}})],
+        game_map=game_map,
+    )
+
+    assert waited_state.tasks["swipe_card"].progress == 1
+    assert [event["type"] for event in events].count("TaskProgressed") == 0
+    assert events[0]["type"] == "Waited"
+
+
+def test_submitted_move_suppresses_continuing_task_progress() -> None:
+    game_map = load_canonical_map()
+    started_state, _ = advance_tick(
+        _long_task_state(),
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "player-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    moved_state, events = advance_tick(
+        started_state,
+        [
+            _action(
+                {
+                    "type": "move",
+                    "actor": "player-2",
+                    "payload": {"to_room": "UPPER_HALL"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert moved_state.tasks["swipe_card"].progress == 1
+    assert moved_state.players["player-2"].room == "UPPER_HALL"
+    assert [event["type"] for event in events].count("TaskProgressed") == 0
+    assert events[0]["type"] == "Moved"
+
+
+def test_rejected_action_suppresses_continuing_task_progress_for_that_tick() -> None:
+    game_map = load_canonical_map()
+    started_state, _ = advance_tick(
+        _long_task_state(),
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "player-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    rejected_state, rejected_events = advance_tick(
+        started_state,
+        [
+            _action(
+                {
+                    "type": "move",
+                    "actor": "player-2",
+                    "payload": {"to_room": "REACTOR"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    continued_state, continued_events = advance_tick(
+        rejected_state,
+        [],
+        game_map=game_map,
+    )
+
+    assert rejected_state.tasks["swipe_card"].progress == 1
+    assert rejected_events[0]["type"] == "ActionRejected"
+    assert [event["type"] for event in rejected_events].count("TaskProgressed") == 0
+    assert continued_state.tasks["swipe_card"].progress == 2
+    assert continued_events[0]["type"] == "TaskProgressed"
+
+
+def test_repeated_do_task_action_increments_once_per_tick() -> None:
+    game_map = load_canonical_map()
+    started_state, _ = advance_tick(
+        _long_task_state(),
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "player-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    next_state, events = advance_tick(
+        started_state,
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "player-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert next_state.tasks["swipe_card"].progress == 2
+    assert [event["type"] for event in events].count("TaskProgressed") == 1
 
 
 def test_move_and_task_actions_apply_expected_mutations() -> None:

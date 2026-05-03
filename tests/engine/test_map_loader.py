@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import sys
 from pathlib import Path
 
@@ -10,8 +11,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from engine.world import Map, MapValidationError, load_canonical_map  # noqa: E402
 
+MapData = dict[str, object]
+MapMutator = Callable[[MapData], None]
 
-def _minimal_map_data() -> dict[str, object]:
+
+def _minimal_map_data() -> MapData:
     return {
         "map_id": "test_map",
         "name": "Test Map",
@@ -57,6 +61,134 @@ def _minimal_map_data() -> dict[str, object]:
         "spawn": {"room": "CAFETERIA"},
         "meeting": {"room": "CAFETERIA"},
     }
+
+
+def _mapping(data: MapData, key: str) -> dict[str, object]:
+    value = data[key]
+    assert isinstance(value, dict)
+    return value
+
+
+def _sequence(data: MapData, key: str) -> list[object]:
+    value = data[key]
+    assert isinstance(value, list)
+    return value
+
+
+def _entry(data: MapData, collection_key: str, item_key: str) -> dict[str, object]:
+    value = _mapping(data, collection_key)[item_key]
+    assert isinstance(value, dict)
+    return value
+
+
+def _admin_room() -> dict[str, object]:
+    return {
+        "name": "Admin",
+        "kind": "task_room",
+        "position": {"x": 2, "y": 0},
+        "size": {"width": 1, "height": 1},
+    }
+
+
+def _add_admin_room(data: MapData) -> None:
+    _mapping(data, "rooms")["ADMIN"] = _admin_room()
+
+
+def _connect_cafeteria_to_admin(data: MapData) -> None:
+    _sequence(data, "edges").append(
+        {
+            "from": "CAFETERIA",
+            "to": "ADMIN",
+            "kind": "doorway",
+            "traversal_ticks": 1,
+            "door_id": None,
+        }
+    )
+
+
+def _unknown_edge_room(data: MapData) -> None:
+    _sequence(data, "edges").append(
+        {
+            "from": "CAFETERIA",
+            "to": "UNKNOWN_ROOM",
+            "kind": "doorway",
+            "traversal_ticks": 1,
+            "door_id": None,
+        }
+    )
+
+
+def _disconnected_room(data: MapData) -> None:
+    _add_admin_room(data)
+
+
+def _unknown_vent_reference(data: MapData) -> None:
+    _entry(data, "vents", "CAFETERIA_VENT")["connects_to"] = ["UNKNOWN_VENT"]
+
+
+def _asymmetric_vent_reference(data: MapData) -> None:
+    _add_admin_room(data)
+    _connect_cafeteria_to_admin(data)
+    _mapping(data, "vents")["ADMIN_VENT"] = {
+        "room": "ADMIN",
+        "connects_to": [],
+        "traversal_ticks": 1,
+    }
+    _entry(data, "vents", "CAFETERIA_VENT")["connects_to"] = ["ADMIN_VENT"]
+
+
+def _task_in_hallway(data: MapData) -> None:
+    _entry(data, "rooms", "CAFETERIA")["kind"] = "hallway"
+
+
+def _task_unknown_room(data: MapData) -> None:
+    _entry(data, "tasks", "empty_trash")["room"] = "UNKNOWN_ROOM"
+
+
+def _unknown_sabotage_repair_room(data: MapData) -> None:
+    _entry(data, "sabotages", "lights")["repair_rooms"] = ["UNKNOWN_ROOM"]
+
+
+def _unknown_special_room(data: MapData) -> None:
+    _mapping(data, "spawn")["room"] = "UNKNOWN_ROOM"
+
+
+def _invalid_room_id(data: MapData) -> None:
+    rooms = _mapping(data, "rooms")
+    rooms["bad_room"] = rooms.pop("CAFETERIA")
+
+
+def _negative_room_position(data: MapData) -> None:
+    _entry(data, "rooms", "CAFETERIA")["position"] = {"x": -1, "y": 0}
+
+
+def _non_positive_room_size(data: MapData) -> None:
+    _entry(data, "rooms", "CAFETERIA")["size"] = {"width": 0, "height": 1}
+
+
+def _non_positive_tick_rate(data: MapData) -> None:
+    data["tick_rate_hz"] = 0
+
+
+def _non_positive_edge_traversal(data: MapData) -> None:
+    _add_admin_room(data)
+    _sequence(data, "edges").append(
+        {
+            "from": "CAFETERIA",
+            "to": "ADMIN",
+            "kind": "doorway",
+            "traversal_ticks": 0,
+            "door_id": None,
+        }
+    )
+
+
+def _non_positive_vent_traversal(data: MapData) -> None:
+    _entry(data, "vents", "CAFETERIA_VENT")["traversal_ticks"] = 0
+
+
+def _non_positive_task_duration(data: MapData) -> None:
+    _entry(data, "tasks", "empty_trash")["duration_ticks"] = 0
 
 
 def test_load_canonical_map_counts() -> None:
@@ -262,4 +394,35 @@ def test_map_model_rejects_mismatched_embedded_ids(
     item["id"] = wrong_id
 
     with pytest.raises(ValidationError, match="embedded id must match mapping key"):
+        Map.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    (
+        (_unknown_edge_room, "edge references unknown room"),
+        (_disconnected_room, "room graph is not fully connected"),
+        (_unknown_vent_reference, "references unknown vent"),
+        (_asymmetric_vent_reference, "vent link must be symmetric"),
+        (_task_in_hallway, "task assigned to hallway"),
+        (_task_unknown_room, "task references unknown room"),
+        (_unknown_sabotage_repair_room, "references unknown room"),
+        (_unknown_special_room, "spawn.room references unknown room"),
+        (_invalid_room_id, "invalid room id"),
+        (_negative_room_position, "room positions must be non-negative"),
+        (_non_positive_room_size, "room sizes must be positive"),
+        (_non_positive_tick_rate, "tick_rate_hz must be positive"),
+        (_non_positive_edge_traversal, "edge traversal_ticks must be at least 1"),
+        (_non_positive_vent_traversal, "vent traversal_ticks must be at least 1"),
+        (_non_positive_task_duration, "task duration_ticks must be at least 1"),
+    ),
+)
+def test_map_model_rejects_documented_validation_errors(
+    mutate: MapMutator,
+    match: str,
+) -> None:
+    data = _minimal_map_data()
+    mutate(data)
+
+    with pytest.raises(ValidationError, match=match):
         Map.model_validate(data)
