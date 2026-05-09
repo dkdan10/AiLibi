@@ -52,7 +52,7 @@ importing engine types.
 
 **Definition of done:**
 - [ ] `ActionIntent` is a Pydantic discriminated union for move, do_task, kill, vent, report, emergency, sabotage, repair_sabotage, and wait.
-- [ ] `PublicMapView` exposes only public map topology needed by agents: map id, room ids, room neighbors, vent graph, task locations, spawn room, meeting room, and emergency button room.
+- [ ] `PublicMapView` exposes only public map topology needed by agents: map id, room ids, room neighbors, vent graph, vent rooms, task locations, spawn room, meeting room, and emergency button room.
 - [ ] Orchestrator boundary helpers translate `PublicMapView` from an engine map and translate valid `ActionIntent` values into engine `Action` values.
 - [ ] Orchestrator boundary helpers reject duplicate actor submissions before actions enter `advance_tick`.
 - [ ] Invalid intents raise during translation; there are no silent fallbacks.
@@ -523,6 +523,10 @@ This task is the convergence point of Phase 2. It depends on tasks
 - The leak test (`eval/leak_test.py`) must continue to pass when
   driven by your orchestrator. Run it explicitly before declaring
   done.
+- Add a regression test that pins today's body-visibility-after-discovery
+  behaviour from `engine/visibility.py`: bodies whose `discovered_by` is
+  set are filtered out of every observer's `visible_bodies`, including the
+  reporter's own packet on the discovery tick.
 
 **Ready-to-paste prompt:** `agent_prompts/task-2-8-headless-game-orchestrator.md`
 

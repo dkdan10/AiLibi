@@ -40,7 +40,7 @@ importing engine types.
 
 **Definition of done:**
 - [ ] `ActionIntent` is a Pydantic discriminated union for move, do_task, kill, vent, report, emergency, sabotage, repair_sabotage, and wait.
-- [ ] `PublicMapView` exposes only public map topology needed by agents: map id, room ids, room neighbors, vent graph, task locations, spawn room, meeting room, and emergency button room.
+- [ ] `PublicMapView` exposes only public map topology needed by agents: map id, room ids, room neighbors, vent graph, vent rooms, task locations, spawn room, meeting room, and emergency button room.
 - [ ] Orchestrator boundary helpers translate `PublicMapView` from an engine map and translate valid `ActionIntent` values into engine `Action` values.
 - [ ] Orchestrator boundary helpers reject duplicate actor submissions before actions enter `advance_tick`.
 - [ ] Invalid intents raise during translation; there are no silent fallbacks.

@@ -2,11 +2,16 @@
 
 Replay determinism depends on ``snapshot()`` + ``from_state()`` round-tripping
 exactly. These tests lock today's behavior so any future change to the RNG
-encoding (e.g., switching off ``repr`` + ``ast.literal_eval``) gets a hard
-signal if anything diverges.
+encoding gets a hard signal if anything diverges.
+
+Snapshot bytes are UTF-8 JSON of ``random.Random.getstate()`` shaped as
+``{"v": version, "s": [...internal...], "g": gauss_next}``. ``from_state``
+re-tuples the inner state list before ``setstate``.
 """
 
 from __future__ import annotations
+
+import json
 
 from engine.rng import EngineRng
 
@@ -61,8 +66,15 @@ def test_independent_seeds_diverge() -> None:
     assert a != b
 
 
-def test_snapshot_returns_bytes() -> None:
+def test_snapshot_returns_utf8_json_bytes() -> None:
     snapshot = EngineRng.from_seed(0).snapshot()
 
     assert isinstance(snapshot, bytes)
     assert snapshot  # non-empty
+
+    payload = json.loads(snapshot.decode("utf-8"))
+    assert set(payload.keys()) == {"v", "s", "g"}
+    assert isinstance(payload["v"], int)
+    assert isinstance(payload["s"], list)
+    assert all(isinstance(value, int) for value in payload["s"])
+    assert payload["g"] is None or isinstance(payload["g"], float)

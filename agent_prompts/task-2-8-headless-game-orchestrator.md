@@ -109,6 +109,10 @@ This task is the convergence point of Phase 2. It depends on tasks
 - The leak test (`eval/leak_test.py`) must continue to pass when
   driven by your orchestrator. Run it explicitly before declaring
   done.
+- Add a regression test that pins today's body-visibility-after-discovery
+  behaviour from `engine/visibility.py`: bodies whose `discovered_by` is
+  set are filtered out of every observer's `visible_bodies`, including the
+  reporter's own packet on the discovery tick.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.

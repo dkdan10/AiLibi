@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pickle
+import json
 import random
 from dataclasses import dataclass
 
@@ -9,11 +9,10 @@ from dataclasses import dataclass
 class EngineRng:
     """Deterministic RNG wrapper with explicit serialized state threading.
 
-    State is serialized via :mod:`pickle` rather than ``repr`` of the internal
-    Mersenne Twister tuple. ``pickle`` is the standard library tool designed
-    for round-tripping arbitrary tuple/int structures and avoids the implicit
-    coupling to CPython's ``repr`` format. Replays are local-only artifacts;
-    the standard ``pickle`` trust caveat does not apply here.
+    State is serialized as UTF-8 JSON of ``random.Random.getstate()``: a
+    ``{"v": version, "s": [...internal...], "g": gauss_next}`` payload. The
+    inner state list is re-tupled before ``setstate`` so the encoding is
+    Python-version-portable rather than coupled to a pickle protocol.
     """
 
     _random: random.Random
@@ -24,12 +23,15 @@ class EngineRng:
 
     @classmethod
     def from_state(cls, state: bytes) -> EngineRng:
-        value = random.Random()
-        value.setstate(pickle.loads(state))
-        return cls(_random=value)
+        payload = json.loads(state.decode("utf-8"))
+        inner = random.Random()
+        inner.setstate((payload["v"], tuple(payload["s"]), payload["g"]))
+        return cls(_random=inner)
 
     def snapshot(self) -> bytes:
-        return pickle.dumps(self._random.getstate(), protocol=pickle.DEFAULT_PROTOCOL)
+        version, internal, gauss = self._random.getstate()
+        payload = {"v": version, "s": list(internal), "g": gauss}
+        return json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
     def randint(self, a: int, b: int) -> tuple[int, bytes]:
         value = self._random.randint(a, b)
