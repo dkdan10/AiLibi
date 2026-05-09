@@ -144,6 +144,49 @@ docs/adr/0001-three-load-bearing-decisions.md capturing DESIGN.md §0 verbatim.
 
 **Ready-to-paste prompt:** `agent_prompts/task-0-5-adr-file.md`
 
+### Task 0.6 — Empty FastAPI scaffolding
+**Branch:** `phase-0-fastapi-skeleton`
+**Depends on:** 0.1 merged
+**Section refs:** DESIGN.md §9
+**Complexity:** Small
+
+Document the empty FastAPI scaffolding that satisfies the Phase 0 success
+criterion "`docker-compose up` boots an empty FastAPI" (DESIGN.md §9). This
+scope was delivered alongside Phase 0 by hand and is recorded retroactively
+so future audits and provenance checks see a matching contract.
+
+## Status
+
+This task is already merged on `main`. The in-scope files (`api/main.py`,
+`tests/api/test_main.py`, `docker-compose.yml`) exist and the corresponding
+test passes. No further implementation work is required.
+
+**Files in scope:**
+- api/main.py
+- tests/api/test_main.py
+- docker-compose.yml
+
+**Files NOT in scope:**
+- engine/
+- agents/
+- observation/
+- orchestrator/
+- llm/
+- DESIGN.md
+- AGENT_IMPLEMENTATION.md
+
+**Definition of done:**
+- [x] api/main.py exposes a `create_app()` function that returns a FastAPI app with at least a `/health` route.
+- [x] tests/api/test_main.py confirms the app imports, registers `/health`, and that docker-compose.yml declares the api service with uvicorn.
+- [x] docker-compose.yml declares an `api` service that runs `uv run uvicorn api.main:app` and exposes the configured port.
+- [x] uv run pytest tests/api/test_main.py passes.
+
+**Implementation hint:**
+
+This task is retroactive. The implementation already exists. A future agent reading this contract should run `uv run pytest tests/api/test_main.py` and confirm the file shape matches the DoD checkboxes; no production behaviour change is expected.
+
+**Ready-to-paste prompt:** `agent_prompts/task-0-6-empty-fastapi-scaffolding.md`
+
 ## Merge Criteria
 - All five tasks merged.
 - CI green on main.
