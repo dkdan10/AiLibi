@@ -851,6 +851,7 @@ class ObservationPacket(BaseModel):
     visible_bodies: list[BodyView]
     audible_events: list[AudibleEvent]
     global_state: GlobalView
+    cooldown: int | None  # impostor only
 
 class ReportDocument(BaseModel):
     agent_id: PlayerId

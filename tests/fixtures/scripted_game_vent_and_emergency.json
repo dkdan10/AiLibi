@@ -7,7 +7,6 @@
     {"tick": 1, "type": "move", "actor": "impostor-1", "payload": {"to_room": "ADMIN"}},
     {"tick": 1, "type": "wait", "actor": "player-1", "payload": {}},
     {"tick": 2, "type": "vent", "actor": "impostor-1", "payload": {"vent_id": "ADMIN_VENT"}},
-    {"tick": 2, "type": "emergency", "actor": "player-2", "payload": {"reason": "saw suspicious vent route"}},
-    {"tick": 2, "type": "wait", "actor": "impostor-1", "payload": {}}
+    {"tick": 2, "type": "emergency", "actor": "player-2", "payload": {"reason": "saw suspicious vent route"}}
   ]
 }
