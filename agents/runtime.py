@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agents.memory.episodic import MemoryStore
+from agents.perception import ingest_packet
 from observation.action_intent import ActionIntent, WaitIntent
 from observation.packet import ObservationPacket, PlayerId
 from observation.public_map import PublicMapView
@@ -19,12 +21,22 @@ class AgentRuntime:
     observation schemas and emits ``ActionIntent``.
     """
 
-    def __init__(self, *, agent_id: PlayerId) -> None:
+    def __init__(
+        self,
+        *,
+        agent_id: PlayerId,
+        memory: MemoryStore | None = None,
+    ) -> None:
         self._agent_id = agent_id
+        self._memory = memory
 
     @property
     def agent_id(self) -> PlayerId:
         return self._agent_id
+
+    @property
+    def memory(self) -> MemoryStore | None:
+        return self._memory
 
     def decide(
         self,
@@ -46,8 +58,18 @@ class AgentRuntime:
         packet: ObservationPacket,
         public_map: PublicMapView,
     ) -> tuple[object, ...]:
-        """Perception stub. Task 2.4 returns typed `EpisodicEvent`s here."""
+        """Convert the packet into typed episodic events.
 
+        When the runtime owns a :class:`MemoryStore`, perception writes
+        directly into it via :func:`agents.perception.ingest_packet` and
+        returns ``()`` (no events for ``_update_memory`` to re-process).
+        Without a store, this remains a pure stub so callers that have not
+        yet wired memory keep working.
+        """
+
+        if self._memory is None:
+            return ()
+        ingest_packet(packet=packet, memory=self._memory)
         return ()
 
     def _update_memory(self, events: tuple[object, ...]) -> None:

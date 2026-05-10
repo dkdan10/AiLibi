@@ -1,0 +1,186 @@
+"""Perception ingestion (DESIGN.md §4.2, §6.2).
+
+Convert an :class:`ObservationPacket` into typed :class:`EpisodicEvent` rows
+and append them to the agent's :class:`MemoryStore`. Tactical policies read
+from memory only and never parse raw packets — keeping all raw-packet
+parsing in this module is what makes that possible.
+
+Provenance values:
+
+* ``"observed"`` — first-hand sensory data: own room/role/task, sightings of
+  other players, body discoveries, audible cues, and the impostor kill
+  cooldown reading.
+* ``"inferred"`` — the global aggregate the agent receives but does not
+  directly perceive (system-wide task progress, sabotage status). The
+  number is derived from world state the agent could not see itself.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any, Final
+
+from agents.memory.episodic import EpisodicEvent, MemoryStore
+from observation.packet import (
+    AudibleEvent,
+    BodyView,
+    GlobalView,
+    ObservationPacket,
+    PlayerView,
+    SelfView,
+)
+
+PROVENANCE_OBSERVED: Final[str] = "observed"
+PROVENANCE_INFERRED: Final[str] = "inferred"
+
+EVENT_SELF_STATE: Final[str] = "self_state"
+EVENT_COOLDOWN_STATUS: Final[str] = "cooldown_status"
+EVENT_SAW_PLAYER: Final[str] = "saw_player"
+EVENT_SAW_BODY: Final[str] = "saw_body"
+EVENT_HEARD_VENT_USE: Final[str] = "heard_vent_use"
+EVENT_HEARD_SABOTAGE_ALARM: Final[str] = "heard_sabotage_alarm"
+EVENT_GLOBAL_STATUS: Final[str] = "global_status"
+
+_AUDIBLE_EVENT_TYPES: Final[Mapping[str, str]] = {
+    "vent_use_heard": EVENT_HEARD_VENT_USE,
+    "sabotage_alarm": EVENT_HEARD_SABOTAGE_ALARM,
+}
+
+
+def ingest_packet(
+    *,
+    packet: ObservationPacket,
+    memory: MemoryStore,
+) -> None:
+    """Append typed :class:`EpisodicEvent` rows for one observation tick.
+
+    Order of appended events at ``packet.tick``:
+
+    1. ``self_state`` (own room, role, pending task)
+    2. ``cooldown_status`` (impostor only — skipped when ``cooldown`` is None)
+    3. ``saw_player`` for each entry in ``visible_players`` (packet order)
+    4. ``saw_body`` for each entry in ``visible_bodies`` (packet order)
+    5. one ``heard_*`` per ``audible_events`` entry (packet order)
+    6. ``global_status`` (inferred system-wide aggregate)
+    """
+
+    tick = packet.tick
+
+    memory.append(
+        EpisodicEvent(
+            tick=tick,
+            type=EVENT_SELF_STATE,
+            payload=_self_state_payload(packet.self_state),
+            provenance=PROVENANCE_OBSERVED,
+        )
+    )
+
+    if packet.cooldown is not None:
+        memory.append(
+            EpisodicEvent(
+                tick=tick,
+                type=EVENT_COOLDOWN_STATUS,
+                payload={"cooldown": packet.cooldown},
+                provenance=PROVENANCE_OBSERVED,
+            )
+        )
+
+    for player in packet.visible_players:
+        memory.append(
+            EpisodicEvent(
+                tick=tick,
+                type=EVENT_SAW_PLAYER,
+                payload=_visible_player_payload(player),
+                provenance=PROVENANCE_OBSERVED,
+            )
+        )
+
+    for body in packet.visible_bodies:
+        memory.append(
+            EpisodicEvent(
+                tick=tick,
+                type=EVENT_SAW_BODY,
+                payload=_visible_body_payload(body),
+                provenance=PROVENANCE_OBSERVED,
+            )
+        )
+
+    for audible in packet.audible_events:
+        memory.append(
+            EpisodicEvent(
+                tick=tick,
+                type=_audible_event_type(audible),
+                payload=_audible_event_payload(audible),
+                provenance=PROVENANCE_OBSERVED,
+            )
+        )
+
+    memory.append(
+        EpisodicEvent(
+            tick=tick,
+            type=EVENT_GLOBAL_STATUS,
+            payload=_global_state_payload(packet.global_state),
+            provenance=PROVENANCE_INFERRED,
+        )
+    )
+
+
+def _self_state_payload(self_state: SelfView) -> Mapping[str, Any]:
+    return {
+        "room": self_state.room,
+        "role": self_state.role,
+        "pending_task_id": self_state.pending_task_id,
+    }
+
+
+def _visible_player_payload(player: PlayerView) -> Mapping[str, Any]:
+    return {
+        "player_id": player.id,
+        "room": player.room,
+        "action": player.action,
+    }
+
+
+def _visible_body_payload(body: BodyView) -> Mapping[str, Any]:
+    return {
+        "body_id": body.id,
+        "room": body.room,
+    }
+
+
+def _audible_event_type(event: AudibleEvent) -> str:
+    event_type = _AUDIBLE_EVENT_TYPES.get(event.kind)
+    if event_type is None:
+        raise ValueError(f"unknown audible event kind: {event.kind!r}")
+    return event_type
+
+
+def _audible_event_payload(event: AudibleEvent) -> Mapping[str, Any]:
+    return {
+        "kind": event.kind,
+        "room": event.room,
+    }
+
+
+def _global_state_payload(global_state: GlobalView) -> Mapping[str, Any]:
+    return {
+        "tasks_completed": global_state.tasks_completed,
+        "tasks_total": global_state.tasks_total,
+        "task_completion_percent": global_state.task_completion_percent,
+        "sabotage_active": global_state.sabotage_active,
+        "sabotage_kind": global_state.sabotage_kind,
+    }
+
+
+__all__ = [
+    "EVENT_COOLDOWN_STATUS",
+    "EVENT_GLOBAL_STATUS",
+    "EVENT_HEARD_SABOTAGE_ALARM",
+    "EVENT_HEARD_VENT_USE",
+    "EVENT_SAW_BODY",
+    "EVENT_SAW_PLAYER",
+    "EVENT_SELF_STATE",
+    "PROVENANCE_INFERRED",
+    "PROVENANCE_OBSERVED",
+    "ingest_packet",
+]
