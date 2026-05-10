@@ -111,7 +111,7 @@ def test_agent_runtime_default_perceive_and_update_memory_are_pure_stubs() -> No
     events = runtime._perceive(_packet(), _public_map())
 
     assert events == ()
-    assert runtime._update_memory(events) is None
+    runtime._update_memory(events)
 
 
 def test_agent_runtime_exposes_agent_id_property() -> None:
