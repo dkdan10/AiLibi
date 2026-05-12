@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import get_args
+
 import pytest
 
+import agents.perception
 from agents.memory.episodic import MemoryStore
 from agents.perception import (
     EVENT_COOLDOWN_STATUS,
@@ -381,3 +384,14 @@ class TestRuntimeIntegration:
         runtime = AgentRuntime(agent_id="p1", memory=store)
 
         assert runtime.memory is store
+
+
+class TestAudibleEventEnumCoupling:
+    def test_audible_event_types_cover_every_audible_event_kind(self) -> None:
+        # AudibleEvent.model_fields["kind"].annotation is the Literal alias.
+        # If a new kind is added to AudibleEvent without an accompanying entry
+        # in _AUDIBLE_EVENT_TYPES, perception would raise at runtime; this
+        # test fails earlier (at import + assertion time) instead.
+        expected_kinds = set(get_args(AudibleEvent.model_fields["kind"].annotation))
+
+        assert set(agents.perception._AUDIBLE_EVENT_TYPES) == expected_kinds

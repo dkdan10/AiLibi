@@ -397,3 +397,69 @@ class TestCrewmateAgentIdProperty:
         policy = CrewmatePolicy(agent_id="p7")
 
         assert policy.agent_id == "p7"
+
+
+class TestCrewmateDisconnectedGoal:
+    def test_disconnected_task_room_falls_back_to_wait(self) -> None:
+        # ADMIN sits in its own component; ELECTRICAL is unreachable from there.
+        rooms = ("ADMIN", "CAFETERIA", "ELECTRICAL")
+        neighbors: Mapping[RoomId, tuple[RoomId, ...]] = {
+            "ADMIN": (),
+            "CAFETERIA": ("ELECTRICAL",),
+            "ELECTRICAL": ("CAFETERIA",),
+        }
+        store = _store_with(
+            _self_state_event(
+                tick=10, room="ADMIN", pending_task_id="wires_electrical"
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(
+            store,
+            _public_map(
+                rooms=rooms,
+                neighbors=neighbors,
+                task_locations={"wires_electrical": "ELECTRICAL"},
+                emergency_button_room="ADMIN",
+                meeting_room="ADMIN",
+                spawn_room="ADMIN",
+            ),
+        )
+
+        assert isinstance(intent, WaitIntent)
+        assert intent.actor == "p1"
+
+    def test_disconnected_emergency_room_under_kill_witness_falls_back_to_wait(
+        self,
+    ) -> None:
+        # Agent witnesses a kill in their own room, but the emergency button
+        # room is unreachable: crewmate must emit WaitIntent instead of raising.
+        rooms = ("ADMIN", "CAFETERIA", "ELECTRICAL")
+        neighbors: Mapping[RoomId, tuple[RoomId, ...]] = {
+            "ADMIN": (),
+            "CAFETERIA": ("ELECTRICAL",),
+            "ELECTRICAL": ("CAFETERIA",),
+        }
+        store = _store_with(
+            _self_state_event(tick=10, room="ELECTRICAL", pending_task_id=None),
+            _saw_player_event(
+                tick=10, player_id="p2", room="ELECTRICAL", action=KILL_ACTION
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(
+            store,
+            _public_map(
+                rooms=rooms,
+                neighbors=neighbors,
+                task_locations={},
+                emergency_button_room="ADMIN",
+                meeting_room="ADMIN",
+                spawn_room="ADMIN",
+            ),
+        )
+
+        assert isinstance(intent, WaitIntent)
+        assert intent.actor == "p1"

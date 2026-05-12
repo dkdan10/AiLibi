@@ -69,4 +69,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-0-fastapi-skeleton` with a title like `task 0.6: empty fastapi scaffolding`.
-The PR description must reference DESIGN.md §9, list the definition-of-done checklist, and include `Decisions` and (if blocking) `Questions` sections.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §9), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

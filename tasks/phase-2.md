@@ -224,6 +224,7 @@ read memory.
 
 **Files in scope:**
 - agents/perception.py
+- agents/runtime.py
 - tests/agents/test_perception.py
 
 **Files NOT in scope:**
@@ -366,6 +367,13 @@ class CrewmatePolicy:
         public_map: PublicMapView,
     ) -> ActionIntent: ...
 ```
+
+The `KILL_WITNESSED` interrupt deliberately fires only when the kill action
+is reported in the agent's own room. This is narrower than the engine's
+`same_room_and_adjacent` visibility window, which can surface a kill action
+in an adjacent room. Restricting the interrupt to the agent's own room is an
+intentional tactical choice — an adjacent kill is not a confirmed witness
+event and would over-trigger emergency meetings — not a bug.
 
 **Public types introduced:**
 - `agents.tactical.crewmate_policy.CrewmatePolicy`

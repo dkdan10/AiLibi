@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Sequence
 import json
 from pathlib import Path
@@ -8,7 +9,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from engine.actions import Action
-from engine.entities import PlayerState
+from engine.entities import BodyState, PlayerState
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
@@ -345,6 +346,43 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
     assert audit_entry == packet.model_dump(mode="json")
     assert visible_impostor["action"] is None
     assert audit_entry["cooldown"] is None
+
+
+def test_discovered_body_is_hidden_from_subsequent_packets(tmp_path: Path) -> None:
+    # Pins today's engine/visibility.py rule (DESIGN.md §3.6 / §4.2): once a
+    # body has discovered_by set, it is filtered out of every observer's
+    # visible_bodies — including the discoverer's own packet on the same tick.
+    state = _base_world_state()
+    body = BodyState(
+        id="victim-body",
+        player_id="victim",
+        room="REACTOR",
+        position=(0.0, 0.0),
+        killed_by="impostor",
+        discovered_by=None,
+    )
+    state_with_body = dataclasses.replace(state, bodies={body.id: body})
+    service = _observation_service(tmp_path)
+
+    packet_before = service.build_packet(
+        world_state=state_with_body,
+        agent_id="observer",
+        engine_events=[],
+    )
+    assert "victim-body" in {b.id for b in packet_before.visible_bodies}
+
+    discovered_body = dataclasses.replace(body, discovered_by="observer")
+    state_after_discovery = dataclasses.replace(
+        state_with_body, bodies={discovered_body.id: discovered_body}
+    )
+
+    packet_after = service.build_packet(
+        world_state=state_after_discovery,
+        agent_id="observer",
+        engine_events=[],
+    )
+
+    assert packet_after.visible_bodies == ()
 
 
 def test_observation_packet_collections_are_immutable(tmp_path: Path) -> None:

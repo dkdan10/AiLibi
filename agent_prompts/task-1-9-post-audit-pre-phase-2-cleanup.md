@@ -117,4 +117,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-1-post-audit-cleanup` with a title like `task 1.9: post-audit pre-phase-2 cleanup`.
-The PR description must reference DESIGN.md §1.3, DESIGN.md §3.1, DESIGN.md §A, list the definition-of-done checklist, and include `Decisions` and (if blocking) `Questions` sections.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §1.3, DESIGN.md §3.1, DESIGN.md §A), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

@@ -70,6 +70,24 @@ A task is not done until:
 - The diff touches only the files listed as in scope.
 - The PR description references the DESIGN.md section(s) implemented.
 
+## PR description (always)
+
+Every PR — task-driven or ad-hoc (audits, hygiene, hotfixes) — must
+populate the sections in `.github/pull_request_template.md`:
+
+- `## Summary` — 1–3 bullets stating what changed and why.
+- `## Definition of done` — copy the task's checklist and tick each item;
+  for ad-hoc PRs, list the scope you actually executed.
+- `## Decisions` — every judgment call resolved without human input.
+  Write "None." if there were none.
+- `## Questions` — blocking questions only; omit the section if none.
+
+When creating the PR with `gh pr create`, pass `--body` with a here-doc
+containing the populated template. Passing `--body` overrides the
+template, so the here-doc itself must include every required section.
+`gh pr create --fill` and `gh pr create --body ""` both ship empty bodies
+and are not permitted.
+
 ## When you're stuck
 
 Don't guess. In the PR description, write a "Questions" section listing what
