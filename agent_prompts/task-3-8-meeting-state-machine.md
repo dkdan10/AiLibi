@@ -68,4 +68,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-3-meeting-state-machine` with a title like `task 3.8: meeting state machine`.
-The PR description must reference DESIGN.md §5.1, DESIGN.md §5.2, list the definition-of-done checklist, and include `Decisions` and (if blocking) `Questions` sections.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §5.1, DESIGN.md §5.2), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

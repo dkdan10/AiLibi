@@ -57,6 +57,13 @@ class CrewmatePolicy:
     ) -> ActionIntent: ...
 ```
 
+The `KILL_WITNESSED` interrupt deliberately fires only when the kill action
+is reported in the agent's own room. This is narrower than the engine's
+`same_room_and_adjacent` visibility window, which can surface a kill action
+in an adjacent room. Restricting the interrupt to the agent's own room is an
+intentional tactical choice — an adjacent kill is not a confirmed witness
+event and would over-trigger emergency meetings — not a bug.
+
 ## Public types this task introduces
 - `agents.tactical.crewmate_policy.CrewmatePolicy`
 
@@ -101,4 +108,4 @@ If the task mentions engine-free boundary schemas, keep agents/ free of engine i
 
 ## Output expectation
 Open a PR from branch `phase-2-crewmate-fsm` with a title like `task 2.6: crewmate fsm`.
-The PR description must reference DESIGN.md §4.4, list the definition-of-done checklist, and include `Decisions` and (if blocking) `Questions` sections.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §4.4), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

@@ -67,4 +67,4 @@ If the task mentions engine-free boundary schemas, keep agents/ free of engine i
 
 ## Output expectation
 Open a PR from branch `phase-3-output-schemas` with a title like `task 3.2: shared meeting/output schemas`.
-The PR description must reference DESIGN.md §5.3, DESIGN.md §5.5, DESIGN.md Appendix A, list the definition-of-done checklist, and include `Decisions` and (if blocking) `Questions` sections.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §5.3, DESIGN.md §5.5, DESIGN.md Appendix A), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

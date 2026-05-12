@@ -195,7 +195,10 @@ class CrewmatePolicy:
         own_room: RoomId,
         goal: RoomId,
     ) -> ActionIntent:
-        path = find_path(public_map=public_map, start=own_room, goal=goal)
+        try:
+            path = find_path(public_map=public_map, start=own_room, goal=goal)
+        except ValueError:
+            return self._wait()
         next_room = path[1]
         return MoveIntent.model_validate(
             {

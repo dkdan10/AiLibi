@@ -65,4 +65,4 @@ If the task mentions engine-free boundary schemas, keep agents/ free of engine i
 
 ## Output expectation
 Open a PR from branch `phase-3-accusation-round-prompt` with a title like `task 3.6: accusation round prompt`.
-The PR description must reference DESIGN.md §5.2, DESIGN.md §5.3, list the definition-of-done checklist, and include `Decisions` and (if blocking) `Questions` sections.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §5.2, DESIGN.md §5.3), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
