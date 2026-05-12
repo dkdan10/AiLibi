@@ -249,8 +249,10 @@ edit a task or prompt. The full `bash scripts/check.sh` gate runs it
 automatically. A validator failure means the workflow docs are out of sync; fix
 the task/prompt mismatch before dispatching more agents. Phase 0 and Phase 1
 retain their historical IDs, but Phase 2 and later must use simple numeric task
-IDs like `2.1`, `2.2`, and `3.10`; do not add half-step, lettered, or prompt
-group IDs.
+IDs like `2.1`, `2.2`, and `3.10`; do not add lettered or prompt group IDs.
+A single half-step suffix (e.g., `2.7.5`) is permitted only for an audit-repair
+or hygiene task slotted between two sequential tasks, mirroring the `1.3.5`
+precedent; do not nest deeper than one half-step.
 
 ---
 
