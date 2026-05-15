@@ -37,6 +37,7 @@ structured outputs.
 - [ ] Tests use `llm.fake_provider` and make no network calls.
 - [ ] No imports from engine/ under agents/.
 - [ ] No LLM calls in agents/tactical/.
+- [ ] **R-10 acceptance gate for strategic prompt inputs (per `audits/audit-2026-05-15-0225-reconciled.md` §R-10):** The packet field/value leak scanners from `eval/leak_test.py` (`_assert_no_recursive_hidden_fields` and `_assert_no_role_bearing_values`, or their canonical Phase 3 successors) are reused against the strategic prompt inputs the reasoner assembles before they reach `LLMClient`. `tests/agents/test_strategic_reasoner.py` includes at least one planted negative test pinning that the scanner trips on a forbidden role-bearing string injected into a prompt input.
 - [ ] `uv run mypy --strict agents llm meetings` passes.
 - [ ] `uv run ruff check .` passes.
 

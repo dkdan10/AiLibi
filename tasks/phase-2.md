@@ -954,6 +954,437 @@ Reuse `HeadlessGame` from 2.8 — do NOT reinvent the single-game loop.
 
 **Ready-to-paste prompt:** `agent_prompts/task-2-9-headless-tournament-harness.md`
 
+### Task 2.10 — Pre-Phase-3 tactical repair
+**Branch:** `phase-2-pre-phase-3-tactical-repair`
+**Depends on:** 2.8.5 merged, 2.9 merged
+**Section refs:** DESIGN.md §1.3, DESIGN.md §3.5, DESIGN.md §4.4
+**Complexity:** Integration
+
+Close the four critical/high findings in
+`audits/audit-2026-05-15-0225-reconciled.md` that block Phase 3: R-5 (dead-
+crewmate task rule decision), R-3 (impostor stale-target chase loop), R-2
+(six-seed sweep yields zero decisive outcomes), and R-1 (100-game
+tournament fails the merge criterion). These four form a causal chain:
+R-5 is the prerequisite rule decision that makes crew victory reachable
+after an early kill; R-3 is the tactical fix that stops the impostor from
+oscillating between two rooms forever; once both are in, R-2 and R-1
+become re-runnable acceptance gates. This is a single bundled PR because
+splitting it leaves the seed sweep and tournament gates encoded against
+unfixed code.
+
+The R-5 decision is the first deliverable. The audit grades R-5 as
+Concern but documents it as the structural reason crew can never win
+after an early kill (`audits/audit-2026-05-15-0225-reconciled.md:218-223`).
+Pick one of `dropped` / `reassigned` / `ghost-completable` /
+`still-required`, document the choice and its rationale in DESIGN.md, and
+reference the design anchor from `engine/win_conditions.py`. Implement
+the chosen rule before fixing the impostor stale-target loop in R-3, then
+re-run the seed sweep (R-2) and the 100-game tournament (R-1).
+
+**Files in scope:**
+- DESIGN.md
+- engine/win_conditions.py
+- engine/tick.py
+- agents/tactical/impostor_policy.py
+- tests/agents/test_impostor_policy.py
+- tests/engine/test_tick.py
+- tests/orchestrator/test_game.py
+
+**Files NOT in scope:**
+- engine/world.py
+- engine/actions.py
+- engine/events.py
+- engine/visibility.py
+- engine/rng.py
+- engine/entities.py
+- engine/maps/
+- observation/
+- orchestrator/game.py
+- orchestrator/seeder.py
+- orchestrator/replay.py
+- orchestrator/scheduler.py
+- orchestrator/boundary.py
+- orchestrator/action_ordering.py
+- agents/base.py
+- agents/runtime.py
+- agents/perception.py
+- agents/memory/
+- agents/tactical/crewmate_policy.py
+- agents/tactical/pathing.py
+- eval/
+- scripts/
+- llm/
+- api/
+- frontend/
+- AGENTS.md
+- AGENT_IMPLEMENTATION.md
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- tests/agents/test_crewmate_policy.py
+- tests/agents/test_memory.py
+- tests/agents/test_pathing.py
+- tests/agents/test_perception.py
+- tests/agents/test_runtime.py
+- tests/engine/test_actions.py
+- tests/engine/test_events.py
+- tests/engine/test_map_loader.py
+- tests/engine/test_rng.py
+- tests/engine/test_tick_properties.py
+- tests/engine/test_visibility.py
+- tests/engine/test_world_state.py
+- tests/eval/
+- tests/observation/
+- tests/orchestrator/test_action_ordering.py
+- tests/orchestrator/test_boundary.py
+- tests/orchestrator/test_seeder.py
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **R-5 — rule decision documented:** A short subsection added to DESIGN.md (anchored under §1.3 or §4) names the chosen rule for dead-crewmate-owned tasks. The choice must be one of: `dropped` (task removed from `state.tasks` on owner death), `reassigned` (ownership transferred to an alive crewmate on owner death), `ghost-completable` (task counted complete on owner death), or `still-required` (crew victory genuinely demands all original task slots, with the merge criterion updated accordingly). The subsection states the rationale in two to four sentences. `engine/win_conditions.py` gains a one-line comment naming the DESIGN.md anchor.
+- [ ] **R-5 — rule implemented and pinned:** If the chosen rule changes engine behavior, the implementation lives in `engine/win_conditions.py` (count adjustment for `ghost-completable`) or `engine/tick.py` (death handler for `dropped` / `reassigned`). A regression test in `tests/engine/test_tick.py` or `tests/orchestrator/test_game.py` constructs a state where a crewmate dies with an incomplete task and asserts crew can still reach `CREWMATE_TASKS` (for `dropped` / `reassigned` / `ghost-completable`) or that crew victory is unreachable until all crewmates complete their original tasks (for `still-required`). The test name encodes the chosen rule so future readers can map the rule to its pin.
+- [ ] **R-3 — staleness/dead-target pruning unit test:** `tests/agents/test_impostor_policy.py` adds a regression that drives `ImpostorPolicy.decide` with `EVENT_SAW_PLAYER` events whose target was last seen ≥ 30 ticks ago, plus an `EVENT_SAW_BODY` event naming the same target. The test asserts the policy does not produce a `MoveIntent` toward the stale-sighting room and does not select the dead/stale player as the scored target. The test must fail against the pre-fix `_scored_targets` and pass after the fix.
+- [ ] **R-3 — staleness/dead-target pruning implementation:** `agents/tactical/impostor_policy.py::_scored_targets` filters out (a) players the impostor has observed as dead (via `EVENT_SAW_BODY`-derived inference or an equivalent belief signal — see Implementation hint) and (b) sightings older than a documented staleness threshold (tick-based; default ~30 ticks, tuned against seed 0). The threshold is a module-level constant with a one-line comment. Existing scored-target ordering (`(-score, player_id)`) is preserved when at least one valid target remains.
+- [ ] **R-3 — default-agent integration regression:** `tests/orchestrator/test_game.py` adds a regression that runs `HeadlessGame` with seed 0 at default agents for ≥ 200 ticks and asserts the impostor's replayed actions do not contain the pre-fix `ENGINEERING → REACTOR → ENGINEERING → REACTOR` alternation pattern over any window of ≥ 30 consecutive ticks after a confirmed kill. The assertion may be expressed as: across any 30-tick window starting after the first `KilledEvent`, the impostor's distinct `MoveIntent.to_room` targets exceed 1.
+- [ ] **R-2 — six-seed decisive sweep re-runs green:** After landing R-3 and R-5, run `for seed in 0 1 2 7 42 100; do uv run python scripts/run_game.py --seed $seed --replay-path /tmp/r-$seed.jsonl --max-ticks 1000; done`. At least one of the six seeds must end at `CREWMATES` or `IMPOSTORS`. Record each seed's outcome in the PR description's `## Decisions` block (six lines).
+- [ ] **R-1 — 100-game tournament re-runs green:** Run `uv run python scripts/run_tournament.py --num-games 100 --start-seed 0 --output-dir /tmp/tournament-post-2.10 --max-ticks 1000`. Both decisive outcomes (`CREWMATES` and `IMPOSTORS`) must each be > 20% of decisive games per the Phase 2 merge criterion at `tasks/phase-2.md:959`. Record the four-bucket counts (`crew_wins`, `impostor_wins`, `tick_budget_reached`, `meeting_phase_reached`) and the decisive split in the PR description.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+The R-5 rule choice is yours and is the **first** thing to ship — document it in DESIGN.md before touching `_scored_targets` or any engine code, because the rule decision can change how `engine/tick.py` handles `KilledEvent` for crewmates. Do not pre-empt the decision with code.
+
+For R-3, the staleness filter integrates into the existing `_scored_targets` loop. The current loop at `agents/tactical/impostor_policy.py:219-265` keeps every seen player in `latest_sighting`; the fix is to drop the stale and dead entries before they enter the bucket and score:
+
+```python
+# agents/tactical/impostor_policy.py — sketch only; pick the threshold
+# against a regression seed and document it.
+_STALENESS_THRESHOLD: Final[int] = 30  # ticks
+
+@staticmethod
+def _scored_targets(
+    events: tuple[EpisodicEvent, ...],
+    *,
+    cooldown: int,
+    current_tick: int,
+    confirmed_dead: frozenset[PlayerId],
+) -> tuple[_ScoredTarget, ...]:
+    latest_sighting: dict[PlayerId, EpisodicEvent] = {}
+    bucket: dict[tuple[int, RoomId], int] = {}
+    for event in events:
+        if event.type != EVENT_SAW_PLAYER:
+            continue
+        player_id = event.payload["player_id"]
+        if not isinstance(player_id, str):
+            raise ValueError(...)
+        if player_id in confirmed_dead:
+            continue
+        if current_tick - event.tick > _STALENESS_THRESHOLD:
+            continue
+        # ... existing bucket / latest_sighting bookkeeping
+```
+
+`confirmed_dead` should be sourced from the agent's own memory — not from engine state. Two options for the implementing agent (pick one and pin with a comment):
+
+1. **Episodic inference**: walk `EVENT_SAW_BODY` events; the perception event payload at `agents/perception.py:138-146` already carries `body_id`. If the body→victim mapping is not directly recoverable from the event payload today, prefer option 2.
+2. **Belief signal**: extend `agents/memory/beliefs.py::PlayerBelief` with a boolean (e.g. `is_confirmed_dead`) that perception sets when it ingests a `KilledEvent`-derived audible/visible event. This is the cleaner long-term fix but requires touching `agents/memory/beliefs.py` (currently out of scope) — if you choose this path, expand `Files in scope` to add `agents/memory/beliefs.py` and `tests/agents/test_memory.py`, justify the expansion in `## Decisions`, and confirm import-linter still passes.
+
+For both R-2 and R-1, the commands are mechanical:
+
+```bash
+# R-2 — six-seed sweep
+for seed in 0 1 2 7 42 100; do
+  uv run python scripts/run_game.py \
+    --seed "$seed" \
+    --replay-path "/tmp/r-$seed.jsonl" \
+    --max-ticks 1000
+done
+
+# R-1 — 100-game tournament
+uv run python scripts/run_tournament.py \
+  --num-games 100 \
+  --start-seed 0 \
+  --output-dir /tmp/tournament-post-2.10 \
+  --max-ticks 1000
+```
+
+Both runs go in the PR description verbatim (the exact stdout summary for the tournament, the six outcome literals for the sweep). Do not summarize — paste the raw counts.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+This task is the convergence point for the Phase 2 acceptance gates. It changes engine win-condition behavior (R-5) and impostor tactical scoring (R-3), and re-runs the headless gates that the audit reproduces.
+
+- **Determinism:** `tests/orchestrator/test_game.py:139-155` pins default-agent byte-identical replay over 20 ticks. R-5 and R-3 will change the byte content of those replays; re-record the baseline within this PR if the existing assertion compares against a frozen reference. If the test compares two live runs of the same fixture against each other, byte identity must still hold post-fix — verify explicitly with `uv run pytest tests/orchestrator/test_game.py -v`.
+- **Engine purity:** `engine/win_conditions.py` and `engine/tick.py` remain pure functions of state and actions. Do not add agent imports, randomness, or hidden state. The R-5 rule must be expressible as a state-only function.
+- **Observation firewall:** R-3's `confirmed_dead` set must be derived from agent-owned memory, not from engine state. If you choose Implementation-hint option 2, add `agents/memory/beliefs.py` to scope explicitly. Either way, run `uv run lint-imports` to confirm the firewall holds.
+- **Leak scan:** R-3 may add new fields or values to belief state; if so, re-run `uv run pytest eval/leak_test.py` and confirm the value-scanner still passes against all three scripted fixtures and the 100-game tournament audit logs.
+- **Merge-criterion text:** if the R-5 rule choice is `still-required`, update `tasks/phase-2.md:959` and the Phase 2 Merge Criteria block to make clear the criterion is reachable. That edit is OUT of scope for this task — it belongs to Task 2.11's R-8 cleanup. If you choose `still-required`, leave a `## Decisions` note flagging that 2.11 will need to amend the criterion.
+- **Tournament re-run cost:** `scripts/run_tournament.py` against 100 games at max-ticks 1000 takes ~minutes on a default workstation. Budget for it; do not gate the merge on faster runs.
+- **`audits/*` are read-only artifacts.** Do not edit the reconciled audit; this task addresses its findings, it does not amend the record.
+
+**Ready-to-paste prompt:** `agent_prompts/task-2-10-pre-phase-3-tactical-repair.md`
+
+### Task 2.11 — Contract hygiene and test-guard cleanup
+**Branch:** `phase-2-contract-hygiene-cleanup`
+**Depends on:** 2.10 merged, 2.8.5 merged, 2.9 merged
+**Section refs:** DESIGN.md §1.3, DESIGN.md §11.2, DESIGN.md §11.3
+**Complexity:** Medium
+
+Close the four documentation, test-fixture, and task-contract findings in
+`audits/audit-2026-05-15-0225-reconciled.md` that are pure hygiene: R-4
+(the Task 2.8.5 old-id grep guard cannot be used as written because the
+literal hits are planted scanner self-tests), R-7 (Task 2.8.5's
+`Files in scope` list omits files the implementing PR touched), R-8 (Task
+2.9 DoD wording at `tasks/phase-2.md:927` disagrees with the Phase 2
+Merge Criterion at `:959`), and R-14 (`tests/observation/test_service.py`
+helper ids still use role-bearing strings outside the value-scanner
+harness). None of these touches runtime code. The four diffs do not
+overlap.
+
+**Files in scope:**
+- eval/leak_test.py
+- tests/eval/test_balance_eval.py
+- tests/observation/test_service.py
+- tasks/phase-2.md
+
+**Files NOT in scope:**
+- engine/
+- observation/
+- orchestrator/
+- agents/
+- llm/
+- api/
+- frontend/
+- scripts/
+- eval/balance_eval.py
+- eval/determinism_test.py
+- DESIGN.md
+- AGENTS.md
+- AGENT_IMPLEMENTATION.md
+- audits/
+- README.md
+- open_issues.md
+- tests/agents/
+- tests/engine/
+- tests/meetings/
+- tests/orchestrator/
+- tests/observation/test_boundary_contracts.py
+- tests/_helpers/
+- tests/fixtures/
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **R-4 — old-id grep guard cleared:** Replace the planted role-bearing-id strings in `eval/leak_test.py:181`, `eval/leak_test.py:228`, and `tests/eval/test_balance_eval.py:258` with sentinels that still trip the value-scanner (i.e. contain one of `impostor` / `crewmate` / `crew`) but do not match the legacy regex `["'](player|impostor)-[0-9]+["']`. After the edit, `git grep -nE "['\"](player|impostor)-[0-9]+['\"]" eval/ tests/` must return empty. The negative-test semantics (scanner trips, allow-list permits `self_state.role`, nested-path message format) must remain unchanged — verify with `uv run pytest eval/leak_test.py tests/eval/test_balance_eval.py -v`. The Task 2.8.5 DoD bullet `Use \`git grep ... tests/\` ... the post-fix grep must be empty` is then satisfiable as written.
+- [ ] **R-7 — Task 2.8.5 file-scope drift recorded retroactively:** Append a short prose note after the Task 2.8.5 Implementation hint and before the Integration risk block, stating that the merged PR (commit `e3b2a60`) also touched `eval/determinism_test.py`, `tests/engine/test_actions.py`, `tests/engine/test_events.py`, `tests/engine/test_world_state.py`, `tests/orchestrator/test_seeder.py`, and `agent_prompts/task-2-9-headless-tournament-harness.md` as mechanical fallout of the `p-N` id rename. The note must state that these files are retroactively considered in scope for that historical PR and that the rename did not change behavior. Do not edit the Task 2.8.5 `Files in scope` list — the historical contract stays as merged; the note documents the actual diff.
+- [ ] **R-8 — Task 2.9 DoD wording aligned with merge criterion:** Replace the line at `tasks/phase-2.md:927` (`Both sides win > 20% of games.`) with the exact wording from `tasks/phase-2.md:959`: `Both decisive sides win > 20% of decisive games (CREWMATES and IMPOSTORS outcomes); \`TICK_BUDGET_REACHED\` games are reported separately and do not count toward decisive totals.` The `## Merge Criteria` block at the file's tail must not move; the criterion text there stays identical to the post-edit Task 2.9 bullet.
+- [ ] **R-14 — observation test helper ids renamed:** Rewrite the role-bearing helper ids in `tests/observation/test_service.py:49-58` (`"victim"`, `"observer"`, `"crew-2"`, `"impostor"`) to the role-neutral `p-N` convention from `orchestrator/seeder.py`. Update every downstream reference in the same file, including `cooldowns`, action `actor`, action `target`, `agent_id` arguments, `_visible_player` lookups, and assertion strings. The scenarios under test (kill-witnessed adjacency, body-after-discovery filter, cooldown emission, witness rules) must keep their existing semantics; the rewrite is purely id substitution.
+- [ ] After the Task 2.9 DoD edit, run `uv run python scripts/generate_prompts.py`. The diff to `agent_prompts/task-2-9-headless-tournament-harness.md` is expected as mechanical fallout from the contract edit and is the only out-of-scope file the PR is permitted to touch.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+For R-4, the smallest faithful change is to swap the role-bearing literals for sentinels that still contain one of the forbidden substrings (so the value-scanner still trips) but no longer match the legacy id regex. Example:
+
+```python
+# eval/leak_test.py:228 (test body) — before
+{"id": "impostor-1", "room": "STORAGE", "action": None},
+# after
+{"id": "crew_role_leak_fixture", "room": "STORAGE", "action": None},
+```
+
+The scanner regex `_FORBIDDEN_VALUE_SUBSTRINGS = ("impostor", "crewmate", "crew")` still trips on `crew_role_leak_fixture` (substring `crew`). The grep pattern `['"]((player|impostor)-[0-9]+)['"]` no longer matches. Update the docstring at `eval/leak_test.py:181` analogously — replace the example strings inside the comment with the same sentinel form. The `match=` regex in the `pytest.raises` blocks is keyed on JSON path (`$.visible_players[0].id`), not on value text, so it does not need to change.
+
+For R-7, model the historical note on the language already in Task 2.7.5's narrowing note (`tasks/phase-2.md:371-376`) — short, factual, marked with a date so future readers know it is a retroactive amendment:
+
+```markdown
+> Historical note (added 2026-05-15 by Task 2.11): the merged PR for this
+> task (commit `e3b2a60`) also touched `eval/determinism_test.py`,
+> `tests/engine/test_actions.py`, `tests/engine/test_events.py`,
+> `tests/engine/test_world_state.py`, `tests/orchestrator/test_seeder.py`,
+> and `agent_prompts/task-2-9-headless-tournament-harness.md` as
+> mechanical fallout of the `p-N` id rename. Those files are retroactively
+> considered in scope for that historical PR; the rename did not change
+> behavior.
+```
+
+For R-8, the edit is a single-line replacement at `tasks/phase-2.md:927`. The Phase 2 Merge Criteria block at `:959` already has the correct wording; copy it verbatim. Do not edit the Merge Criteria block — the goal is to make the two locations agree, and the criterion is the authoritative phrasing.
+
+For R-14, a clean substitution mapping keeps the rewrite mechanical and easy to review:
+
+| Old | New |
+| --- | --- |
+| `"victim"` | `"p-1"` |
+| `"observer"` | `"p-2"` |
+| `"crew-2"` | `"p-3"` |
+| `"impostor"` | `"p-4"` |
+
+Apply globally inside `tests/observation/test_service.py` only. After the rewrite, `git grep -nE "['\"](player|impostor|victim|observer|crew-[0-9]+)['\"]" tests/observation/test_service.py` should be empty. The witness/visibility scenarios continue to read naturally because the rooms (`STORAGE`, `REACTOR`, `ADMIN`) and the `cooldowns` dictionary still encode the same setup.
+
+**Public types introduced:**
+None.
+
+**Ready-to-paste prompt:** `agent_prompts/task-2-11-contract-hygiene-and-test-guard-cleanup.md`
+
+### Task 2.12 — Behavioral merge-criteria CI gates and remaining test hygiene
+**Branch:** `phase-2-behavioral-ci-gates`
+**Depends on:** 2.10 merged, 2.11 merged
+**Section refs:** DESIGN.md §11.2, DESIGN.md §11.3, DESIGN.md §11.4
+**Complexity:** Medium
+
+Close the three test-coverage findings in
+`audits/audit-2026-05-15-0225-reconciled.md` that prevent the Phase 2
+acceptance gates from regressing silently: R-11 (no automated guard for
+the decisive-outcome sweep or 100-game balance criterion — the repository
+was green while those gates were failing live), R-13 (audit-log
+append-mode regression absent — a future `"a"` → `"w"` change would slip
+past current single-instance tests), and R-12 (property-test action
+vocabulary intentionally limited to `move`/`wait`, leaving
+kill/vent/report interleavings unexplored). All three are test-only
+additions. None touches production code, and Task 2.10's behavioral
+fixes must be merged first so the new gate encodes the passing outcome
+rather than the pre-2.10 failing one.
+
+**Files in scope:**
+- tests/eval/test_balance_eval.py
+- tests/observation/test_service.py
+- tests/engine/test_tick_properties.py
+
+**Files NOT in scope:**
+- engine/
+- observation/
+- orchestrator/
+- agents/
+- llm/
+- api/
+- frontend/
+- eval/
+- scripts/
+- DESIGN.md
+- AGENTS.md
+- AGENT_IMPLEMENTATION.md
+- audits/
+- tasks/
+- agent_prompts/
+- README.md
+- open_issues.md
+- tests/agents/
+- tests/meetings/
+- tests/orchestrator/
+- tests/observation/test_boundary_contracts.py
+- tests/engine/test_actions.py
+- tests/engine/test_events.py
+- tests/engine/test_map_loader.py
+- tests/engine/test_rng.py
+- tests/engine/test_tick.py
+- tests/engine/test_visibility.py
+- tests/engine/test_world_state.py
+- tests/_helpers/
+- tests/fixtures/
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **R-11 — decisive-outcome CI guard:** `tests/eval/test_balance_eval.py` gains a test that runs a small, documented set of default-agent seeds (e.g. three to five seeds chosen so at least one is known-decisive post-2.10) through `HeadlessGame`, counts decisive outcomes (`CREWMATES` or `IMPOSTORS`), and fails if zero seeds are decisive. The seed list, the post-2.10 expected outcome for each seed, and a comment naming this guard as the R-11 CI floor must be encoded in the test file. The test must run within the existing pytest budget (target ≤ ~5s; bound it with a low `max_ticks` if necessary, e.g. 200). This test must encode the passing outcome from Task 2.10's R-2 sweep; it must not encode the pre-2.10 failing outcome.
+- [ ] **R-13 — audit-log append-mode regression:** `tests/observation/test_service.py` gains a test (e.g. named `test_audit_log_appends_across_two_instances`) that constructs one `ObservationService` (or its `ObservationAuditLog`) pointed at a tmp path, records at least one packet, discards the instance, opens a second instance pointed at the same path, records another packet, and asserts the file contains both packets in order (e.g. two JSON lines). The test must fail if `observation/audit.py:20-23` is ever changed from `"a"` to `"w"` and must not import from `engine/` directly (use existing test helpers).
+- [ ] **R-12 — broadened property-test vocabulary:** `tests/engine/test_tick_properties.py` gains a second `hypothesis` strategy (or a parametrized expansion of the existing strategy) that draws batches mixing role-valid `kill`, `vent`, `report`, and `wait` actions, plus a property covering the new vocabulary (at minimum: `advance_tick` does not raise on any drawn batch where roles and aliveness allow the action). The existing `move`/`wait` strategy stays untouched; the comment at `tests/engine/test_tick_properties.py:6-10` is updated to record that the broader vocabulary now ships alongside.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+For R-11, lean on the seed list Task 2.10's R-2 bullet records. Pick a subset that is small enough to be CI-friendly (≤ 5 seeds, ≤ 200 ticks each) and that includes at least one seed Task 2.10 ended at `CREWMATES` or `IMPOSTORS`:
+
+```python
+# tests/eval/test_balance_eval.py
+_R11_CI_GUARD_SEEDS: Final[tuple[int, ...]] = (0, 1, 2, 7, 42)
+_R11_CI_GUARD_MAX_TICKS: Final[int] = 200
+
+def test_default_agent_sweep_reaches_at_least_one_decisive_outcome(
+    tmp_path: Path,
+) -> None:
+    """R-11 CI floor: after Task 2.10 the small seed sweep must yield at
+    least one decisive outcome. If this test fails, the Phase 2 tactical
+    fixes (R-1/R-2/R-3) have regressed; investigate before reverting."""
+    decisive = 0
+    for seed in _R11_CI_GUARD_SEEDS:
+        result = HeadlessGame(
+            seed=seed,
+            game_map=load_canonical_map(),
+            replay_path=tmp_path / f"r-{seed}.jsonl",
+            max_ticks=_R11_CI_GUARD_MAX_TICKS,
+        ).run()
+        if result.outcome in {"CREWMATES", "IMPOSTORS"}:
+            decisive += 1
+    assert decisive >= 1, (
+        "R-11 regression: zero decisive outcomes across the CI guard "
+        "seeds; see audits/audit-2026-05-15-0225-reconciled.md §R-11."
+    )
+```
+
+If the existing test file does not import `HeadlessGame` / `load_canonical_map` / `Path` yet, add only the imports needed for the new test — do not reorganize the file. The 100-game tournament gate remains a local-only check; do not put a 100-game run in CI.
+
+For R-13, model the new test on the existing `test_audit_log_records_sanitized_packet` at `tests/observation/test_service.py:289`. The simplest form:
+
+```python
+def test_audit_log_appends_across_two_instances(tmp_path: Path) -> None:
+    state = _base_world_state()
+    service_one = _observation_service(tmp_path)
+    service_one.build_packet(world_state=state, agent_id="p-1", engine_events=[])
+    del service_one
+    service_two = ObservationService(
+        game_map=load_canonical_map(),
+        audit_log_path=tmp_path / "observation_audit.jsonl",
+    )
+    service_two.build_packet(world_state=state, agent_id="p-2", engine_events=[])
+    lines = (tmp_path / "observation_audit.jsonl").read_text().splitlines()
+    assert len(lines) == 2
+```
+
+Use whichever player ids Task 2.11's R-14 rewrite settled on; do not re-introduce role-bearing helper ids. The path string must match `_observation_service`'s default.
+
+For R-12, the existing strategy at `tests/engine/test_tick_properties.py:6-10` is the template. Add a sibling strategy (`hypothesis.strategies.composite`) that draws role-valid action tuples:
+
+```python
+@composite
+def _role_aware_action_batches(draw, *, world_state):
+    """Draw a batch mixing kill, vent, report, and wait actions, gated by
+    the actor's role and aliveness. Used by the role-vocabulary property
+    in addition to the existing move/wait property."""
+    ...
+
+@given(world_state=_world_states(), batch=_role_aware_action_batches(...))
+def test_role_aware_action_batches_do_not_raise(world_state, batch):
+    advance_tick(world_state, batch, game_map=load_canonical_map())
+```
+
+Keep the new property's invariant narrow: "does not raise" is enough; deeper invariants (e.g. role-correct event emission) can land later.
+
+**Public types introduced:**
+None.
+
+**Ready-to-paste prompt:** `agent_prompts/task-2-12-behavioral-merge-criteria-ci-gates-and-remaining-test-hygiene.md`
+
 ## Merge Criteria
 - 100-game headless tournament completes without crashes.
 - Both decisive sides win > 20% of decisive games (CREWMATES and IMPOSTORS outcomes); `TICK_BUDGET_REACHED` games are reported separately and do not count toward decisive totals.

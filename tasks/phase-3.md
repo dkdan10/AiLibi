@@ -120,6 +120,8 @@ agents/memory/store.py::render_for_prompt per §6.6.
 - [ ] Salience ordering is deterministic and covered by golden tests.
 - [ ] Rendered output includes open contradiction inputs when present.
 - [ ] No imports from engine/ under agents/.
+- [ ] **R-6 acceptance gate (per `audits/audit-2026-05-15-0225-reconciled.md` §R-6):** `agents/memory/store.py` exposes a composite memory surface that aggregates the episodic, working, and belief state introduced in Task 2.3 (`agents/memory/episodic.py`, `agents/memory/working.py`, `agents/memory/beliefs.py`). `render_for_prompt` produces its structured view by reading from all three components, not from any one of them in isolation. The composite surface is the integration point Phase 3 strategic agents import through.
+- [ ] **R-10 acceptance gate for rendered memory (per `audits/audit-2026-05-15-0225-reconciled.md` §R-10):** The packet field/value leak scanners from `eval/leak_test.py` (`_assert_no_recursive_hidden_fields` and `_assert_no_role_bearing_values`, or their canonical Phase 3 successors) are reused against `render_for_prompt` golden outputs in `tests/agents/test_memory_rendering.py`. At least one planted negative test pins that the scanner trips on a forbidden role-bearing string injected into the rendered surface (mirroring `test_role_bearing_value_scanner_trips_on_planted_visible_player_id` in `eval/leak_test.py:221-236`).
 - [ ] `uv run mypy --strict agents meetings` passes.
 - [ ] `uv run ruff check .` passes.
 
@@ -330,6 +332,7 @@ structured outputs.
 - [ ] Tests use `llm.fake_provider` and make no network calls.
 - [ ] No imports from engine/ under agents/.
 - [ ] No LLM calls in agents/tactical/.
+- [ ] **R-10 acceptance gate for strategic prompt inputs (per `audits/audit-2026-05-15-0225-reconciled.md` §R-10):** The packet field/value leak scanners from `eval/leak_test.py` (`_assert_no_recursive_hidden_fields` and `_assert_no_role_bearing_values`, or their canonical Phase 3 successors) are reused against the strategic prompt inputs the reasoner assembles before they reach `LLMClient`. `tests/agents/test_strategic_reasoner.py` includes at least one planted negative test pinning that the scanner trips on a forbidden role-bearing string injected into a prompt input.
 - [ ] `uv run mypy --strict agents llm meetings` passes.
 - [ ] `uv run ruff check .` passes.
 
@@ -438,6 +441,7 @@ meeting artifacts in replay/eval records.
 - [ ] Gameplay resumes after meetings with tick/cooldown behavior matching DESIGN.md §3.1 and §5.1.
 - [ ] Replay records meeting transcripts, ballots, contradiction flags, prompt versions, and LLM cost metadata.
 - [ ] Engine remains pure; MeetingManager does not mutate engine state directly.
+- [ ] **R-9 acceptance gate (per `audits/audit-2026-05-15-0225-reconciled.md` §R-9):** `ReplayEntry` — or its Phase 3 successor introduced by this task — records meeting transcripts, prompt versions, LLM outputs, and cost metadata per DESIGN.md §11.4. The replay-determinism test exercises at least one long-horizon replay (≥ 200 ticks or one full meeting cycle, whichever is longer) and asserts byte-for-byte identity. The existing short-horizon byte-identical test from Task 2.8 (`tests/orchestrator/test_game.py:139-155`) is preserved as a fast smoke check; it is not replaced.
 - [ ] Relevant integration tests pass with fake LLM outputs.
 - [ ] `uv run mypy --strict engine observation agents meetings orchestrator llm` passes.
 - [ ] `uv run ruff check .` passes.

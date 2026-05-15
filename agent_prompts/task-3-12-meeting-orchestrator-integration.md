@@ -38,6 +38,7 @@ meeting artifacts in replay/eval records.
 - [ ] Gameplay resumes after meetings with tick/cooldown behavior matching DESIGN.md §3.1 and §5.1.
 - [ ] Replay records meeting transcripts, ballots, contradiction flags, prompt versions, and LLM cost metadata.
 - [ ] Engine remains pure; MeetingManager does not mutate engine state directly.
+- [ ] **R-9 acceptance gate (per `audits/audit-2026-05-15-0225-reconciled.md` §R-9):** `ReplayEntry` — or its Phase 3 successor introduced by this task — records meeting transcripts, prompt versions, LLM outputs, and cost metadata per DESIGN.md §11.4. The replay-determinism test exercises at least one long-horizon replay (≥ 200 ticks or one full meeting cycle, whichever is longer) and asserts byte-for-byte identity. The existing short-horizon byte-identical test from Task 2.8 (`tests/orchestrator/test_game.py:139-155`) is preserved as a fast smoke check; it is not replaced.
 - [ ] Relevant integration tests pass with fake LLM outputs.
 - [ ] `uv run mypy --strict engine observation agents meetings orchestrator llm` passes.
 - [ ] `uv run ruff check .` passes.
