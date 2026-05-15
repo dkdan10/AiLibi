@@ -24,7 +24,7 @@ from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
-_ACTORS = ("player-1", "player-2", "impostor-1")
+_ACTORS = ("p-1", "p-2", "p-3")
 _ROOM_NEIGHBORS_FROM_CAFETERIA = ("CAFETERIA", "EAST_HALL", "UPPER_HALL", "WEST_HALL")
 
 
@@ -46,14 +46,14 @@ def _initial_state(seed: int) -> WorldState:
         phase="PLAY",
         map="canonical_1",
         players={
-            "player-1": _player("player-1", "CREWMATE"),
-            "player-2": _player("player-2", "CREWMATE"),
-            "impostor-1": _player("impostor-1", "IMPOSTOR"),
+            "p-1": _player("p-1", "CREWMATE"),
+            "p-2": _player("p-2", "CREWMATE"),
+            "p-3": _player("p-3", "IMPOSTOR"),
         },
         bodies={},
         tasks={},
         sabotage=None,
-        cooldowns={"impostor-1": 0},
+        cooldowns={"p-3": 0},
         emergency_uses={},
         rng_state=EngineRng.from_seed(seed).snapshot(),
         seed=seed,

@@ -4,6 +4,10 @@ Both `eval/leak_test.py` and `eval/determinism_test.py` need an identical
 initial `WorldState` to reproduce the scripted-game fixtures byte-for-byte.
 Centralizing the helper here keeps them in lockstep — drift between the two
 copies would silently break determinism guarantees.
+
+Player ids match the role-neutral convention from
+`orchestrator/seeder.py`: every player is `p-N` in lexical order and the
+role lives on `PlayerState.role` only, never in the id substring.
 """
 
 from __future__ import annotations
@@ -22,8 +26,8 @@ def scripted_initial_world_state(*, seed: int) -> WorldState:
         phase="PLAY",
         map=game_map.id,
         players={
-            "player-1": PlayerState(
-                id="player-1",
+            "p-1": PlayerState(
+                id="p-1",
                 role="CREWMATE",
                 alive=True,
                 room=game_map.spawn.room,
@@ -31,8 +35,8 @@ def scripted_initial_world_state(*, seed: int) -> WorldState:
                 last_action=None,
                 in_vent=False,
             ),
-            "player-2": PlayerState(
-                id="player-2",
+            "p-2": PlayerState(
+                id="p-2",
                 role="CREWMATE",
                 alive=True,
                 room=game_map.spawn.room,
@@ -40,8 +44,8 @@ def scripted_initial_world_state(*, seed: int) -> WorldState:
                 last_action=None,
                 in_vent=False,
             ),
-            "impostor-1": PlayerState(
-                id="impostor-1",
+            "p-3": PlayerState(
+                id="p-3",
                 role="IMPOSTOR",
                 alive=True,
                 room=game_map.spawn.room,
@@ -49,8 +53,8 @@ def scripted_initial_world_state(*, seed: int) -> WorldState:
                 last_action=None,
                 in_vent=False,
             ),
-            "player-3": PlayerState(
-                id="player-3",
+            "p-4": PlayerState(
+                id="p-4",
                 role="CREWMATE",
                 alive=True,
                 room=game_map.spawn.room,
@@ -63,7 +67,7 @@ def scripted_initial_world_state(*, seed: int) -> WorldState:
         tasks={
             "swipe_card": TaskState(
                 id="swipe_card",
-                owner="player-1",
+                owner="p-1",
                 room="ADMIN",
                 progress=0,
                 required_ticks=1,
@@ -71,7 +75,7 @@ def scripted_initial_world_state(*, seed: int) -> WorldState:
             ),
             "submit_scan": TaskState(
                 id="submit_scan",
-                owner="player-2",
+                owner="p-2",
                 room="MEDBAY",
                 progress=0,
                 required_ticks=1,
@@ -79,7 +83,7 @@ def scripted_initial_world_state(*, seed: int) -> WorldState:
             ),
             "empty_trash": TaskState(
                 id="empty_trash",
-                owner="player-3",
+                owner="p-4",
                 room="CAFETERIA",
                 progress=0,
                 required_ticks=1,
@@ -87,7 +91,7 @@ def scripted_initial_world_state(*, seed: int) -> WorldState:
             ),
         },
         sabotage=None,
-        cooldowns={"impostor-1": 0},
+        cooldowns={"p-3": 0},
         emergency_uses={},
         rng_state=EngineRng.from_seed(seed).snapshot(),
         seed=seed,

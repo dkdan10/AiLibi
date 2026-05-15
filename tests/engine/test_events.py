@@ -7,7 +7,7 @@ def test_typed_engine_event_serializes_to_legacy_shape() -> None:
     event = MovedEvent(
         type="Moved",
         tick=3,
-        actor="player-1",
+        actor="p-1",
         from_room="CAFETERIA",
         to_room="ADMIN",
     )
@@ -16,7 +16,7 @@ def test_typed_engine_event_serializes_to_legacy_shape() -> None:
     assert serialized == {
         "type": "Moved",
         "tick": 3,
-        "actor": "player-1",
+        "actor": "p-1",
         "details": {"from_room": "CAFETERIA", "to_room": "ADMIN"},
     }
     assert serialized["details"] == {"from_room": "CAFETERIA", "to_room": "ADMIN"}

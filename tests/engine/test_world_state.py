@@ -49,11 +49,11 @@ def _task(task_id: str, owner: str) -> TaskState:
 
 
 def test_world_state_defensively_copies_mapping_inputs() -> None:
-    players = {"player-1": _player("player-1")}
-    bodies = {"body-1": _body("body-1", "player-2")}
-    tasks = {"task-1": _task("task-1", "player-1")}
-    cooldowns = {"player-3": 5}
-    emergency_uses = {"player-1": 1}
+    players = {"p-1": _player("p-1")}
+    bodies = {"body-1": _body("body-1", "p-2")}
+    tasks = {"task-1": _task("task-1", "p-1")}
+    cooldowns = {"p-3": 5}
+    emergency_uses = {"p-1": 1}
 
     state = WorldState(
         tick=7,
@@ -69,17 +69,17 @@ def test_world_state_defensively_copies_mapping_inputs() -> None:
         seed=42,
     )
 
-    players["player-4"] = _player("player-4")
-    bodies["body-2"] = _body("body-2", "player-5")
-    tasks["task-2"] = _task("task-2", "player-4")
-    cooldowns["player-6"] = 1
-    emergency_uses["player-2"] = 1
+    players["p-4"] = _player("p-4")
+    bodies["body-2"] = _body("body-2", "p-5")
+    tasks["task-2"] = _task("task-2", "p-4")
+    cooldowns["p-6"] = 1
+    emergency_uses["p-2"] = 1
 
-    assert tuple(state.players) == ("player-1",)
+    assert tuple(state.players) == ("p-1",)
     assert tuple(state.bodies) == ("body-1",)
     assert tuple(state.tasks) == ("task-1",)
-    assert tuple(state.cooldowns) == ("player-3",)
-    assert tuple(state.emergency_uses) == ("player-1",)
+    assert tuple(state.cooldowns) == ("p-3",)
+    assert tuple(state.emergency_uses) == ("p-1",)
 
 
 def test_world_state_mapping_fields_reject_in_place_mutation() -> None:
@@ -87,26 +87,26 @@ def test_world_state_mapping_fields_reject_in_place_mutation() -> None:
         tick=0,
         phase="PLAY",
         map="canonical_1",
-        players={"player-1": _player("player-1")},
-        bodies={"body-1": _body("body-1", "player-2")},
-        tasks={"task-1": _task("task-1", "player-1")},
+        players={"p-1": _player("p-1")},
+        bodies={"body-1": _body("body-1", "p-2")},
+        tasks={"task-1": _task("task-1", "p-1")},
         sabotage=None,
-        cooldowns={"player-3": 5},
-        emergency_uses={"player-1": 1},
+        cooldowns={"p-3": 5},
+        emergency_uses={"p-1": 1},
         rng_state=b"rng",
         seed=42,
     )
 
     with pytest.raises(TypeError):
-        state.players["player-2"] = _player("player-2")  # type: ignore[index]
+        state.players["p-2"] = _player("p-2")  # type: ignore[index]
     with pytest.raises(TypeError):
-        state.bodies["body-2"] = _body("body-2", "player-3")  # type: ignore[index]
+        state.bodies["body-2"] = _body("body-2", "p-3")  # type: ignore[index]
     with pytest.raises(TypeError):
-        state.tasks["task-2"] = _task("task-2", "player-2")  # type: ignore[index]
+        state.tasks["task-2"] = _task("task-2", "p-2")  # type: ignore[index]
     with pytest.raises(TypeError):
-        state.cooldowns["player-4"] = 0  # type: ignore[index]
+        state.cooldowns["p-4"] = 0  # type: ignore[index]
     with pytest.raises(TypeError):
-        state.emergency_uses["player-2"] = 1  # type: ignore[index]
+        state.emergency_uses["p-2"] = 1  # type: ignore[index]
 
 
 def test_world_state_keeps_public_mapping_field_names() -> None:
@@ -132,17 +132,15 @@ def test_world_state_keeps_public_mapping_field_names() -> None:
 
 
 def test_player_state_accepts_none_last_action() -> None:
-    player = _player("player-1")
+    player = _player("p-1")
 
     assert player.last_action is None
 
 
 def test_player_state_accepts_engine_action_last_action() -> None:
-    action = _action(
-        {"type": "move", "actor": "player-1", "payload": {"to_room": "ADMIN"}}
-    )
+    action = _action({"type": "move", "actor": "p-1", "payload": {"to_room": "ADMIN"}})
     player = PlayerState(
-        id="player-1",
+        id="p-1",
         role="CREWMATE",
         alive=True,
         room="CAFETERIA",
@@ -157,7 +155,7 @@ def test_player_state_accepts_engine_action_last_action() -> None:
 def test_player_state_rejects_non_action_last_action() -> None:
     with pytest.raises(TypeError, match="last_action"):
         PlayerState(
-            id="player-1",
+            id="p-1",
             role="CREWMATE",
             alive=True,
             room="CAFETERIA",

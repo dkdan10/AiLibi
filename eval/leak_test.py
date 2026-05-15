@@ -33,6 +33,8 @@ _FORBIDDEN_RECURSIVE_FIELD_NAMES = frozenset(
     {"killed_by", "kill_attribution", "player_id"}
 )
 _ALLOWED_RECURSIVE_FIELD_PATHS = frozenset({("self_state", "role")})
+_FORBIDDEN_VALUE_SUBSTRINGS = ("impostor", "crewmate", "crew")
+_ALLOWED_VALUE_PATHS = frozenset({("self_state", "role")})
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
 JsonScalar: TypeAlias = str | int | float | bool | None
@@ -170,14 +172,41 @@ def _assert_no_recursive_hidden_fields(packet_dump: JsonValue) -> None:
             )
 
 
+def _assert_no_role_bearing_values(packet_dump: JsonValue) -> None:
+    """Scan every string value in the packet for role-bearing substrings.
+
+    The recursive field-name scanner catches keys named ``role``,
+    ``killed_by``, ``kill_attribution`` and ``player_id``. This pass
+    complements it by catching role information that leaks through a
+    value — most notably player ids like ``"impostor-1"`` or
+    ``"crewmate-2"`` in ``visible_players[].id``, which the field-name
+    scanner cannot see because the leaky string sits in an ``id`` slot
+    a packet legitimately uses for non-role-bearing ids. ``self_state.role``
+    is the single value path allowed to contain the role string because
+    the agent is allowed to know its own role.
+    """
+
+    for path, value in _walk_json(packet_dump):
+        if not isinstance(value, str):
+            continue
+        if path in _ALLOWED_VALUE_PATHS:
+            continue
+        lowered = value.lower()
+        for forbidden in _FORBIDDEN_VALUE_SUBSTRINGS:
+            if forbidden in lowered:
+                raise AssertionError(
+                    f"role-bearing value {value!r} leaked at {_format_json_path(path)}"
+                )
+
+
 def test_recursive_hidden_field_scanner_reports_nested_path() -> None:
     packet_dump: JsonValue = {
         "self_state": {"role": "CREWMATE"},
         "visible_bodies": [
             {
-                "id": "body-player-1-3",
+                "id": "body-p-1-3",
                 "room": "STORAGE",
-                "details": {"killed_by": "impostor-1"},
+                "details": {"killed_by": "p-3"},
             }
         ],
     }
@@ -189,6 +218,55 @@ def test_recursive_hidden_field_scanner_reports_nested_path() -> None:
         _assert_no_recursive_hidden_fields(packet_dump)
 
 
+def test_role_bearing_value_scanner_trips_on_planted_visible_player_id() -> None:
+    # Planted leak: a crewmate's packet whose visible_players carries the
+    # impostor's role inside the id. The recursive field-name scanner does
+    # not see this because the leaky string lives in an ``id`` value.
+    packet_dump: JsonValue = {
+        "self_state": {"role": "CREWMATE"},
+        "visible_players": [
+            {"id": "impostor-1", "room": "STORAGE", "action": None},
+        ],
+    }
+
+    with pytest.raises(
+        AssertionError,
+        match=r"\$\.visible_players\[0\]\.id",
+    ):
+        _assert_no_role_bearing_values(packet_dump)
+
+
+def test_role_bearing_value_scanner_allows_self_state_role() -> None:
+    # The single allowed value path is `self_state.role` — the agent is
+    # entitled to know its own role.
+    packet_dump: JsonValue = {
+        "self_state": {"role": "CREWMATE"},
+        "visible_players": [
+            {"id": "p-1", "room": "STORAGE", "action": None},
+        ],
+    }
+
+    _assert_no_role_bearing_values(packet_dump)
+
+
+def test_role_bearing_value_scanner_trips_on_nested_path() -> None:
+    # A role-bearing substring inside a free-text field anywhere in the
+    # packet should still trip the scanner — the audit log surfaces those
+    # strings to downstream consumers verbatim.
+    packet_dump: JsonValue = {
+        "self_state": {"role": "CREWMATE"},
+        "audible_events": [
+            {"kind": "sabotage_alarm", "room": None, "extra": "crewmate radio chatter"},
+        ],
+    }
+
+    with pytest.raises(
+        AssertionError,
+        match=r"\$\.audible_events\[0\]\.extra",
+    ):
+        _assert_no_role_bearing_values(packet_dump)
+
+
 def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
     for fixture_name in _SCRIPTED_GAMES:
         packet_records = _run_scripted_game(fixture_name, tmp_path)
@@ -197,6 +275,7 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
         for packet, engine_events in packet_records:
             packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
             _assert_no_recursive_hidden_fields(packet_dump)
+            _assert_no_role_bearing_values(packet_dump)
             for visible_player in packet.visible_players:
                 visible_player_dump = visible_player.model_dump(mode="json")
                 assert set(visible_player_dump.keys()) == {"id", "room", "action"}

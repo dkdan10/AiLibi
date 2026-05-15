@@ -2,11 +2,11 @@
   "name": "vent_path_and_emergency",
   "seed": 57,
   "actions": [
-    {"tick": 0, "type": "move", "actor": "impostor-1", "payload": {"to_room": "UPPER_HALL"}},
-    {"tick": 0, "type": "move", "actor": "player-1", "payload": {"to_room": "CAFETERIA"}},
-    {"tick": 1, "type": "move", "actor": "impostor-1", "payload": {"to_room": "ADMIN"}},
-    {"tick": 1, "type": "wait", "actor": "player-1", "payload": {}},
-    {"tick": 2, "type": "vent", "actor": "impostor-1", "payload": {"vent_id": "ADMIN_VENT"}},
-    {"tick": 2, "type": "emergency", "actor": "player-2", "payload": {"reason": "saw suspicious vent route"}}
+    {"tick": 0, "type": "move", "actor": "p-3", "payload": {"to_room": "UPPER_HALL"}},
+    {"tick": 0, "type": "move", "actor": "p-1", "payload": {"to_room": "CAFETERIA"}},
+    {"tick": 1, "type": "move", "actor": "p-3", "payload": {"to_room": "ADMIN"}},
+    {"tick": 1, "type": "wait", "actor": "p-1", "payload": {}},
+    {"tick": 2, "type": "vent", "actor": "p-3", "payload": {"vent_id": "ADMIN_VENT"}},
+    {"tick": 2, "type": "emergency", "actor": "p-2", "payload": {"reason": "saw suspicious vent route"}}
   ]
 }

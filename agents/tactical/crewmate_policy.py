@@ -14,6 +14,15 @@ with two override interrupts:
   ``public_map.emergency_button_room``; if it is already there, it raises an
   :class:`EmergencyMeetingIntent`.
 
+When the agent re-enters IDLE with no pending task (the canonical FSM step
+``DO_TASK -> IDLE``) the policy routes back to ``public_map.meeting_room``
+and waits there. Without this routing the agent would issue
+:class:`WaitIntent` from wherever the last task happened to finish, which
+strands surviving crewmates inside task rooms and prevents headless games
+from terminating — the impostor's stale ``saw_player`` sightings drive it
+toward the kill site, and waiting crewmates never re-enter the impostor's
+visibility window so no second kill or quorum body discovery is possible.
+
 The policy is stateless: every decision is a pure function of the agent's
 :class:`MemoryStore` and the :class:`PublicMapView`. Tie-breakers use sorted
 ids so replays are byte-identical, and no module under ``agents/`` imports
@@ -89,7 +98,7 @@ class CrewmatePolicy:
         own_room = self._room_from_self_state(self_state)
         pending_task_id = self._pending_task_from_self_state(self_state)
 
-        body_id = self._first_visible_body(latest_events)
+        body_id = self._first_visible_body(latest_events, own_room=own_room)
         if body_id is not None:
             return self._report(body_id=body_id)
 
@@ -97,11 +106,11 @@ class CrewmatePolicy:
             return self._flee_and_report(public_map=public_map, own_room=own_room)
 
         if pending_task_id is None:
-            return self._wait()
+            return self._return_to_hub(public_map=public_map, own_room=own_room)
 
         task_room = public_map.task_locations.get(pending_task_id)
         if task_room is None:
-            return self._wait()
+            return self._return_to_hub(public_map=public_map, own_room=own_room)
 
         if own_room == task_room:
             return self._do_task(task_id=pending_task_id)
@@ -140,7 +149,20 @@ class CrewmatePolicy:
         return pending
 
     @staticmethod
-    def _first_visible_body(events: tuple[EpisodicEvent, ...]) -> str | None:
+    def _first_visible_body(
+        events: tuple[EpisodicEvent, ...],
+        *,
+        own_room: RoomId,
+    ) -> str | None:
+        """Return the alphabetically-first body in ``own_room`` at the latest tick.
+
+        Bodies in adjacent rooms are visible to the agent (perception
+        records them as ``saw_body`` events) but ``ReportBodyAction``
+        requires the actor to share the body's room. The interrupt only
+        fires when a report would actually succeed, so the policy does
+        not stall against the engine rejecting every adjacent-body report.
+        """
+
         body_ids: list[str] = []
         for event in events:
             if event.type != EVENT_SAW_BODY:
@@ -150,6 +172,13 @@ class CrewmatePolicy:
                 raise ValueError(
                     f"saw_body event missing string 'body_id': {event.payload!r}"
                 )
+            body_room = event.payload.get("room")
+            if not isinstance(body_room, str):
+                raise ValueError(
+                    f"saw_body event missing string 'room': {event.payload!r}"
+                )
+            if body_room != own_room:
+                continue
             body_ids.append(body_id)
         if not body_ids:
             return None
@@ -187,6 +216,30 @@ class CrewmatePolicy:
                 }
             )
         return self._move_toward(public_map=public_map, own_room=own_room, goal=target)
+
+    def _return_to_hub(
+        self,
+        *,
+        public_map: PublicMapView,
+        own_room: RoomId,
+    ) -> ActionIntent:
+        """Idle behaviour: route back to the meeting room and wait.
+
+        Once the crewmate is at the meeting room there is nothing useful
+        for the rule-based policy to do, so it issues :class:`WaitIntent`.
+        Until then it walks one A* step toward the meeting room each tick.
+        Moving lets the surviving crewmate re-enter the impostor's
+        visibility window after the FSM exits ``DO_TASK``, which is the
+        only path to game termination without the strategic-layer meeting
+        manager (Phase 3.8) — sitting in the task room would otherwise
+        leave the impostor's stale sightings pointing at the kill site
+        and produce ``TICK_BUDGET_REACHED`` for every default seed.
+        """
+
+        hub = public_map.meeting_room
+        if own_room == hub:
+            return self._wait()
+        return self._move_toward(public_map=public_map, own_room=own_room, goal=hub)
 
     def _move_toward(
         self,

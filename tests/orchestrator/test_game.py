@@ -127,7 +127,7 @@ def test_headless_game_dispatches_only_public_types_to_agents(
 
     game.run()
 
-    assert set(seen) == {"player-1", "player-2", "player-3", "impostor-1"}
+    assert set(seen) == {"p-1", "p-2", "p-4", "p-3"}
     for agent in seen.values():
         assert len(agent.received_packets) == 2
         for packet in agent.received_packets:
@@ -185,10 +185,10 @@ def test_headless_game_stops_when_meeting_phase_reached(
     body_id = "body-1"
     body = BodyState(
         id=body_id,
-        player_id="player-2",
+        player_id="p-2",
         room=game_map.spawn.room,
         position=(0.0, 0.0),
-        killed_by="impostor-1",
+        killed_by="p-3",
         discovered_by=None,
     )
     state_with_body = replace(
@@ -196,20 +196,20 @@ def test_headless_game_stops_when_meeting_phase_reached(
         bodies={body_id: body},
         players={
             **initial.players,
-            "player-2": replace(initial.players["player-2"], alive=False),
+            "p-2": replace(initial.players["p-2"], alive=False),
         },
     )
     _override_seeder(monkeypatch, state=state_with_body)
 
     def factory(agent_id: PlayerId, role: Role) -> _ScriptedAgent:
-        if agent_id == "player-1":
+        if agent_id == "p-1":
             return _ScriptedAgent(
                 agent_id=agent_id,
                 intents=[
                     _intent(
                         {
                             "type": "report",
-                            "actor": "player-1",
+                            "actor": "p-1",
                             "payload": {"body_id": body_id},
                         }
                     )
@@ -228,7 +228,7 @@ def test_headless_game_stops_when_meeting_phase_reached(
 
     assert result.outcome == "MEETING_PHASE_REACHED"
     assert result.final_state.phase == "MEETING"
-    assert result.final_state.bodies[body_id].discovered_by == "player-1"
+    assert result.final_state.bodies[body_id].discovered_by == "p-1"
 
 
 def test_headless_game_emits_crewmates_outcome_when_all_tasks_complete(
@@ -293,11 +293,11 @@ def test_headless_game_emits_impostors_outcome_at_parity(
     game_map = load_canonical_map()
     initial = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
     # Cooldown 0 so consecutive kills work without waiting for cooldown decrement.
-    no_cooldown_state = replace(initial, cooldowns={"impostor-1": 0})
+    no_cooldown_state = replace(initial, cooldowns={"p-3": 0})
     _override_seeder(monkeypatch, state=no_cooldown_state)
 
     def factory(agent_id: PlayerId, role: Role) -> _ScriptedAgent:
-        if agent_id == "impostor-1":
+        if agent_id == "p-3":
             # Tick 0: kill player-1 → cooldown jumps to kill_cooldown_ticks.
             # Subsequent ticks: wait for cooldown.
             return _ScriptedAgent(
@@ -306,8 +306,8 @@ def test_headless_game_emits_impostors_outcome_at_parity(
                     _intent(
                         {
                             "type": "kill",
-                            "actor": "impostor-1",
-                            "payload": {"target": "player-1"},
+                            "actor": "p-3",
+                            "payload": {"target": "p-1"},
                         }
                     ),
                 ],
@@ -332,28 +332,28 @@ def test_headless_game_emits_impostors_outcome_at_parity(
         initial,
         players={
             **initial.players,
-            "player-2": replace(initial.players["player-2"], alive=False),
-            "player-3": replace(initial.players["player-3"], alive=False),
+            "p-2": replace(initial.players["p-2"], alive=False),
+            "p-4": replace(initial.players["p-4"], alive=False),
         },
         bodies={
-            "body-player-2": BodyState(
-                id="body-player-2",
-                player_id="player-2",
+            "body-p-2": BodyState(
+                id="body-p-2",
+                player_id="p-2",
                 room=game_map.spawn.room,
                 position=(0.0, 0.0),
-                killed_by="impostor-1",
+                killed_by="p-3",
                 discovered_by=None,
             ),
-            "body-player-3": BodyState(
-                id="body-player-3",
-                player_id="player-3",
+            "body-p-4": BodyState(
+                id="body-p-4",
+                player_id="p-4",
                 room=game_map.spawn.room,
                 position=(0.0, 0.0),
-                killed_by="impostor-1",
+                killed_by="p-3",
                 discovered_by=None,
             ),
         },
-        cooldowns={"impostor-1": 0},
+        cooldowns={"p-3": 0},
     )
     monkeypatch.setattr(
         "orchestrator.game.seed_initial_state",
@@ -361,15 +361,15 @@ def test_headless_game_emits_impostors_outcome_at_parity(
     )
 
     def parity_factory(agent_id: PlayerId, role: Role) -> _ScriptedAgent:
-        if agent_id == "impostor-1":
+        if agent_id == "p-3":
             return _ScriptedAgent(
                 agent_id=agent_id,
                 intents=[
                     _intent(
                         {
                             "type": "kill",
-                            "actor": "impostor-1",
-                            "payload": {"target": "player-1"},
+                            "actor": "p-3",
+                            "payload": {"target": "p-1"},
                         }
                     ),
                 ],
@@ -397,14 +397,14 @@ def test_headless_game_orders_intents_through_action_boundary(
     game_map = load_canonical_map()
 
     def factory(agent_id: PlayerId, role: Role) -> _ScriptedAgent:
-        if agent_id == "player-1":
+        if agent_id == "p-1":
             return _ScriptedAgent(
                 agent_id=agent_id,
                 intents=[
                     _intent(
                         {
                             "type": "move",
-                            "actor": "player-1",
+                            "actor": "p-1",
                             "payload": {"to_room": "UPPER_HALL"},
                         }
                     )
@@ -467,13 +467,13 @@ def test_discovered_body_is_hidden_from_every_observer(tmp_path: Path) -> None:
     game_map = load_canonical_map()
     initial = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
 
-    body_id = "body-player-2-2026"
+    body_id = "body-p-2-2026"
     fresh_body = BodyState(
         id=body_id,
-        player_id="player-2",
+        player_id="p-2",
         room=game_map.spawn.room,
         position=(0.0, 0.0),
-        killed_by="impostor-1",
+        killed_by="p-3",
         discovered_by=None,
     )
     state_with_fresh_body = replace(
@@ -481,7 +481,7 @@ def test_discovered_body_is_hidden_from_every_observer(tmp_path: Path) -> None:
         bodies={body_id: fresh_body},
         players={
             **initial.players,
-            "player-2": replace(initial.players["player-2"], alive=False),
+            "p-2": replace(initial.players["p-2"], alive=False),
         },
     )
 
@@ -490,7 +490,7 @@ def test_discovered_body_is_hidden_from_every_observer(tmp_path: Path) -> None:
         game_map=game_map, audit_log_path=audit_path
     )
 
-    observer_ids = ("player-1", "player-3", "impostor-1")
+    observer_ids = ("p-1", "p-4", "p-3")
     for observer_id in observer_ids:
         packet = observation_service.build_packet(
             world_state=state_with_fresh_body,
@@ -501,7 +501,7 @@ def test_discovered_body_is_hidden_from_every_observer(tmp_path: Path) -> None:
             f"observer {observer_id} should see the undiscovered body"
         )
 
-    discovered_body = replace(fresh_body, discovered_by="player-1")
+    discovered_body = replace(fresh_body, discovered_by="p-1")
     state_after_discovery = replace(
         state_with_fresh_body, bodies={body_id: discovered_body}
     )
@@ -520,8 +520,8 @@ def test_tactical_agent_rejects_packet_for_other_actor(tmp_path: Path) -> None:
     from agents.tactical.crewmate_policy import CrewmatePolicy
 
     agent = TacticalAgent(
-        agent_id="player-1",
-        policy=CrewmatePolicy(agent_id="player-1"),
+        agent_id="p-1",
+        policy=CrewmatePolicy(agent_id="p-1"),
     )
     game_map = load_canonical_map()
     initial = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
@@ -530,10 +530,10 @@ def test_tactical_agent_rejects_packet_for_other_actor(tmp_path: Path) -> None:
         game_map=game_map, audit_log_path=audit_path
     )
     foreign_packet = observation_service.build_packet(
-        world_state=initial, agent_id="player-2", engine_events=[]
+        world_state=initial, agent_id="p-2", engine_events=[]
     )
 
-    with pytest.raises(ValueError, match="player-1"):
+    with pytest.raises(ValueError, match="p-1"):
         agent.decide(foreign_packet, public_map_from_engine_map(game_map))
 
 
@@ -557,7 +557,7 @@ def test_headless_game_handles_num_players_override(tmp_path: Path) -> None:
 
     game.run()
 
-    assert set(seen) == {"player-1", "player-2", "impostor-1"}
+    assert set(seen) == {"p-1", "p-2", "p-3"}
 
 
 def test_headless_game_uses_default_player_count_constants() -> None:
