@@ -11,15 +11,15 @@ _ACTION_INTENT_ADAPTER: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
 
 def test_action_intent_union_accepts_supported_intent_types() -> None:
     payloads = [
-        {"type": "move", "actor": "player-1", "payload": {"to_room": "ADMIN"}},
-        {"type": "do_task", "actor": "player-1", "payload": {"task_id": "swipe_card"}},
-        {"type": "kill", "actor": "impostor", "payload": {"target": "player-1"}},
+        {"type": "move", "actor": "p-1", "payload": {"to_room": "ADMIN"}},
+        {"type": "do_task", "actor": "p-1", "payload": {"task_id": "swipe_card"}},
+        {"type": "kill", "actor": "impostor", "payload": {"target": "p-1"}},
         {"type": "vent", "actor": "impostor", "payload": {"vent_id": "ADMIN_VENT"}},
-        {"type": "report", "actor": "player-1", "payload": {"body_id": "body-1"}},
-        {"type": "emergency", "actor": "player-1", "payload": {"reason": "test"}},
+        {"type": "report", "actor": "p-1", "payload": {"body_id": "body-1"}},
+        {"type": "emergency", "actor": "p-1", "payload": {"reason": "test"}},
         {"type": "sabotage", "actor": "impostor", "payload": {"kind": "lights"}},
-        {"type": "repair_sabotage", "actor": "player-1", "payload": {"kind": "lights"}},
-        {"type": "wait", "actor": "player-1", "payload": {}},
+        {"type": "repair_sabotage", "actor": "p-1", "payload": {"kind": "lights"}},
+        {"type": "wait", "actor": "p-1", "payload": {}},
     ]
 
     intents = [_ACTION_INTENT_ADAPTER.validate_python(payload) for payload in payloads]
@@ -39,14 +39,14 @@ def test_action_intent_union_accepts_supported_intent_types() -> None:
 
 def test_action_intent_union_rejects_unknown_or_malformed_intents() -> None:
     invalid_payloads = [
-        {"type": "repair_sabotage", "actor": "player-1", "payload": {}},
-        {"type": "move", "actor": "player-1", "payload": {"room": "ADMIN"}},
+        {"type": "repair_sabotage", "actor": "p-1", "payload": {}},
+        {"type": "move", "actor": "p-1", "payload": {"room": "ADMIN"}},
         {
             "type": "do_task",
-            "actor": "player-1",
+            "actor": "p-1",
             "payload": {"task_id": "swipe_card", "unexpected": True},
         },
-        {"type": "kill", "actor": "player-1", "payload": {"target": "player-1"}},
+        {"type": "kill", "actor": "p-1", "payload": {"target": "p-1"}},
     ]
 
     for payload in invalid_payloads:

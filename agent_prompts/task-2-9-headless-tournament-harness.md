@@ -40,6 +40,7 @@ orchestrator.
 - [ ] Balance eval reports win rates across seeds.
 - [ ] 100-game headless tournament completes without crashes.
 - [ ] Both sides win > 20% of games.
+- [ ] `TICK_BUDGET_REACHED` is a first-class outcome bucket in the tournament report, reported alongside `CREWMATES` and `IMPOSTORS` (and `MEETING_PHASE_REACHED` when the meeting manager has not landed). Non-decisive outcomes must not be silently dropped or coerced into the decisive buckets.
 - [ ] Leak test still passes across all tournament games.
 - [ ] `uv run pytest tests/eval/test_balance_eval.py` passes.
 - [ ] `uv run ruff check .` passes.
@@ -53,6 +54,7 @@ class BalanceReport:
     games: int
     crew_wins: int
     impostor_wins: int
+    tick_budget_reached: int
     seeds_used: tuple[int, ...]
 
 def run_balance_eval(*, seeds: Sequence[int]) -> BalanceReport: ...

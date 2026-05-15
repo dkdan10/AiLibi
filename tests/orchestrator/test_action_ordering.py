@@ -18,42 +18,42 @@ def _action(data: object) -> Action:
 
 def test_order_actions_for_tick_sorts_by_actor_without_mutating_input() -> None:
     actions = [
-        _action({"type": "wait", "actor": "player-2", "payload": {}}),
+        _action({"type": "wait", "actor": "p-2", "payload": {}}),
         _action(
             {
                 "type": "move",
-                "actor": "player-1",
+                "actor": "p-1",
                 "payload": {"to_room": "ADMIN"},
             }
         ),
-        _action({"type": "wait", "actor": "impostor-1", "payload": {}}),
+        _action({"type": "wait", "actor": "p-3", "payload": {}}),
     ]
 
     ordered = order_actions_for_tick(actions)
 
     assert [action.actor for action in ordered] == [
-        "impostor-1",
-        "player-1",
-        "player-2",
+        "p-1",
+        "p-2",
+        "p-3",
     ]
     assert [action.actor for action in actions] == [
-        "player-2",
-        "player-1",
-        "impostor-1",
+        "p-2",
+        "p-1",
+        "p-3",
     ]
 
 
 def test_order_actions_for_tick_rejects_duplicate_actor_actions() -> None:
     actions = [
-        _action({"type": "wait", "actor": "player-1", "payload": {}}),
+        _action({"type": "wait", "actor": "p-1", "payload": {}}),
         _action(
             {
                 "type": "move",
-                "actor": "player-1",
+                "actor": "p-1",
                 "payload": {"to_room": "ADMIN"},
             }
         ),
     ]
 
-    with pytest.raises(ActionBatchValidationError, match="player-1"):
+    with pytest.raises(ActionBatchValidationError, match="p-1"):
         order_actions_for_tick(actions)

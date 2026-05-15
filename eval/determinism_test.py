@@ -83,7 +83,7 @@ def test_replay_log_writes_jsonl_for_dataclass_world_state(tmp_path: Path) -> No
 def test_replay_log_reads_written_entries(tmp_path: Path) -> None:
     state = scripted_initial_world_state(seed=303)
     action = _ACTION_ADAPTER.validate_python(
-        {"type": "move", "actor": "player-1", "payload": {"to_room": "UPPER_HALL"}}
+        {"type": "move", "actor": "p-1", "payload": {"to_room": "UPPER_HALL"}}
     )
     replay_path = tmp_path / "roundtrip.jsonl"
     replay = ReplayLog(replay_path, game_id="roundtrip")
@@ -99,7 +99,7 @@ def test_replay_log_reads_written_entries(tmp_path: Path) -> None:
     assert entries[0].game_id == "roundtrip"
     assert entries[0].actions == ()
     assert entries[1].actions == (
-        {"actor": "player-1", "payload": {"to_room": "UPPER_HALL"}, "type": "move"},
+        {"actor": "p-1", "payload": {"to_room": "UPPER_HALL"}, "type": "move"},
     )
     assert all(len(entry.state_hash) == 64 for entry in entries)
 

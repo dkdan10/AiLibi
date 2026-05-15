@@ -41,19 +41,40 @@ def test_seed_initial_state_spawns_every_player_at_spawn_room() -> None:
         assert player.last_action is None
 
 
-def test_seed_initial_state_partitions_roles_by_id_prefix() -> None:
+def test_seed_initial_state_uses_role_neutral_ids() -> None:
     game_map = load_canonical_map()
 
     state = seed_initial_state(
         seed=7, game_map=game_map, num_players=5, num_impostors=2
     )
 
+    assert set(state.players) == {"p-1", "p-2", "p-3", "p-4", "p-5"}
     crewmates = {pid for pid, p in state.players.items() if p.role == "CREWMATE"}
     impostors = {pid for pid, p in state.players.items() if p.role == "IMPOSTOR"}
 
-    assert crewmates == {"player-1", "player-2", "player-3"}
-    assert impostors == {"impostor-1", "impostor-2"}
-    assert state.cooldowns == {"impostor-1": 0, "impostor-2": 0}
+    # Seed=7 with num_players=5 shuffles the lexical id list to
+    # ['p-5', 'p-1', 'p-4', 'p-2', 'p-3']; the first two become impostors.
+    assert impostors == {"p-1", "p-5"}
+    assert crewmates == {"p-2", "p-3", "p-4"}
+    assert state.cooldowns == {pid: 0 for pid in impostors}
+
+
+def test_seed_initial_state_id_substring_does_not_encode_role() -> None:
+    game_map = load_canonical_map()
+
+    for seed in (0, 1, 2, 3, 7, 42, 100):
+        state = seed_initial_state(
+            seed=seed, game_map=game_map, num_players=4, num_impostors=1
+        )
+        for player_id, player in state.players.items():
+            # Role-bearing substrings would let a packet consumer decode
+            # the impostor from a visible player's id.
+            assert "impostor" not in player_id.lower()
+            assert "crewmate" not in player_id.lower()
+            assert "crew" not in player_id.lower()
+            assert player_id.startswith("p-")
+            # Role lives only on PlayerState.role, not in the id.
+            assert player.role in {"CREWMATE", "IMPOSTOR"}
 
 
 def test_seed_initial_state_assigns_only_crewmates_to_tasks() -> None:
@@ -131,8 +152,10 @@ def test_seed_initial_state_supports_three_player_two_one_split() -> None:
     )
 
     roles = {pid: player.role for pid, player in state.players.items()}
+    # Seed=11 with num_players=3 shuffles to ['p-1', 'p-3', 'p-2']; p-1 is
+    # the single impostor and the other two are crewmates.
     assert roles == {
-        "player-1": "CREWMATE",
-        "player-2": "CREWMATE",
-        "impostor-1": "IMPOSTOR",
+        "p-1": "IMPOSTOR",
+        "p-2": "CREWMATE",
+        "p-3": "CREWMATE",
     }

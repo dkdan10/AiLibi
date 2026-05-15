@@ -53,15 +53,15 @@ def _state() -> WorldState:
         phase="PLAY",
         map="canonical_1",
         players={
-            "player-1": _player("player-1", "CREWMATE", "CAFETERIA", (0.0, 0.0)),
-            "player-2": _player("player-2", "CREWMATE", "ADMIN", (0.0, 0.0)),
-            "player-3": _player("player-3", "CREWMATE", "MEDBAY", (0.0, 0.0)),
-            "impostor-1": _player("impostor-1", "IMPOSTOR", "CAFETERIA", (1.0, 0.0)),
+            "p-1": _player("p-1", "CREWMATE", "CAFETERIA", (0.0, 0.0)),
+            "p-2": _player("p-2", "CREWMATE", "ADMIN", (0.0, 0.0)),
+            "p-4": _player("p-4", "CREWMATE", "MEDBAY", (0.0, 0.0)),
+            "p-3": _player("p-3", "IMPOSTOR", "CAFETERIA", (1.0, 0.0)),
         },
         bodies={},
-        tasks={"swipe_card": _task("swipe_card", "player-2", "ADMIN")},
+        tasks={"swipe_card": _task("swipe_card", "p-2", "ADMIN")},
         sabotage=None,
-        cooldowns={"impostor-1": 0},
+        cooldowns={"p-3": 0},
         emergency_uses={},
         rng_state=EngineRng.from_seed(42).snapshot(),
         seed=42,
@@ -71,7 +71,7 @@ def _state() -> WorldState:
 def _long_task_state() -> WorldState:
     return replace(
         _state(),
-        tasks={"swipe_card": _task("swipe_card", "player-2", "ADMIN", 3)},
+        tasks={"swipe_card": _task("swipe_card", "p-2", "ADMIN", 3)},
     )
 
 
@@ -97,29 +97,29 @@ def test_valid_kill_mutates_state_and_emits_event() -> None:
             _action(
                 {
                     "type": "kill",
-                    "actor": "impostor-1",
-                    "payload": {"target": "player-1"},
+                    "actor": "p-3",
+                    "payload": {"target": "p-1"},
                 }
             )
         ],
         game_map=game_map,
     )
 
-    assert not next_state.players["player-1"].alive
-    assert "body-player-1-0" in next_state.bodies
-    assert next_state.cooldowns["impostor-1"] == 10
+    assert not next_state.players["p-1"].alive
+    assert "body-p-1-0" in next_state.bodies
+    assert next_state.cooldowns["p-3"] == 10
     killed_event = next(event for event in events if event.type == "Killed")
     assert event_to_dict(killed_event)["details"]["witnesses"] == ("crew-a", "crew-b")
     assert next_state.phase == "PLAY"
 
     later_state, _ = advance_tick(next_state, [], game_map=game_map)
 
-    assert later_state.cooldowns["impostor-1"] == 9
+    assert later_state.cooldowns["p-3"] == 9
 
 
 def test_invalid_kill_emits_rejection_and_leaves_state_unchanged() -> None:
     game_map = load_canonical_map()
-    state = replace(_state(), cooldowns={"impostor-1": 1})
+    state = replace(_state(), cooldowns={"p-3": 1})
 
     next_state, events = advance_tick(
         state,
@@ -127,17 +127,17 @@ def test_invalid_kill_emits_rejection_and_leaves_state_unchanged() -> None:
             _action(
                 {
                     "type": "kill",
-                    "actor": "impostor-1",
-                    "payload": {"target": "player-1"},
+                    "actor": "p-3",
+                    "payload": {"target": "p-1"},
                 }
             )
         ],
         game_map=game_map,
     )
 
-    assert next_state.players["player-1"].alive
+    assert next_state.players["p-1"].alive
     assert next_state.bodies == {}
-    assert next_state.cooldowns["impostor-1"] == 0
+    assert next_state.cooldowns["p-3"] == 0
     assert any(event.type == "ActionRejected" for event in events)
 
 
@@ -149,7 +149,7 @@ def test_continuing_task_progresses_without_repeated_action() -> None:
             _action(
                 {
                     "type": "do_task",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"task_id": "swipe_card"},
                 }
             )
@@ -184,7 +184,7 @@ def test_continuing_task_completes_and_can_trigger_crew_win() -> None:
             _action(
                 {
                     "type": "do_task",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"task_id": "swipe_card"},
                 }
             )
@@ -211,7 +211,7 @@ def test_submitted_wait_suppresses_continuing_task_progress() -> None:
             _action(
                 {
                     "type": "do_task",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"task_id": "swipe_card"},
                 }
             )
@@ -221,7 +221,7 @@ def test_submitted_wait_suppresses_continuing_task_progress() -> None:
 
     waited_state, events = advance_tick(
         started_state,
-        [_action({"type": "wait", "actor": "player-2", "payload": {}})],
+        [_action({"type": "wait", "actor": "p-2", "payload": {}})],
         game_map=game_map,
     )
 
@@ -238,7 +238,7 @@ def test_submitted_move_suppresses_continuing_task_progress() -> None:
             _action(
                 {
                     "type": "do_task",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"task_id": "swipe_card"},
                 }
             )
@@ -252,7 +252,7 @@ def test_submitted_move_suppresses_continuing_task_progress() -> None:
             _action(
                 {
                     "type": "move",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"to_room": "UPPER_HALL"},
                 }
             )
@@ -261,7 +261,7 @@ def test_submitted_move_suppresses_continuing_task_progress() -> None:
     )
 
     assert moved_state.tasks["swipe_card"].progress == 1
-    assert moved_state.players["player-2"].room == "UPPER_HALL"
+    assert moved_state.players["p-2"].room == "UPPER_HALL"
     assert [event.type for event in events].count("TaskProgressed") == 0
     assert events[0].type == "Moved"
 
@@ -274,7 +274,7 @@ def test_rejected_action_suppresses_continuing_task_progress_for_that_tick() -> 
             _action(
                 {
                     "type": "do_task",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"task_id": "swipe_card"},
                 }
             )
@@ -288,7 +288,7 @@ def test_rejected_action_suppresses_continuing_task_progress_for_that_tick() -> 
             _action(
                 {
                     "type": "move",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"to_room": "REACTOR"},
                 }
             )
@@ -316,7 +316,7 @@ def test_repeated_do_task_action_increments_once_per_tick() -> None:
             _action(
                 {
                     "type": "do_task",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"task_id": "swipe_card"},
                 }
             )
@@ -330,7 +330,7 @@ def test_repeated_do_task_action_increments_once_per_tick() -> None:
             _action(
                 {
                     "type": "do_task",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"task_id": "swipe_card"},
                 }
             )
@@ -350,7 +350,7 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
             _action(
                 {
                     "type": "move",
-                    "actor": "player-1",
+                    "actor": "p-1",
                     "payload": {"to_room": "UPPER_HALL"},
                 }
             )
@@ -361,9 +361,9 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
         moved_state,
         players={
             **dict(moved_state.players),
-            "player-2": replace(moved_state.players["player-2"], room="ADMIN"),
+            "p-2": replace(moved_state.players["p-2"], room="ADMIN"),
         },
-        tasks={"swipe_card": _task("swipe_card", "player-2", "ADMIN")},
+        tasks={"swipe_card": _task("swipe_card", "p-2", "ADMIN")},
     )
 
     next_state, task_events = advance_tick(
@@ -372,7 +372,7 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
             _action(
                 {
                     "type": "do_task",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"task_id": "swipe_card"},
                 }
             )
@@ -380,7 +380,7 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
         game_map=game_map,
     )
 
-    assert moved_state.players["player-1"].room == "UPPER_HALL"
+    assert moved_state.players["p-1"].room == "UPPER_HALL"
     assert any(event.type == "Moved" for event in move_events)
     assert next_state.tasks["swipe_card"].completed
     assert next_state.tasks["swipe_card"].progress == 1
@@ -394,16 +394,14 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
         base_state,
         players={
             **dict(base_state.players),
-            "impostor-1": replace(base_state.players["impostor-1"], room="ADMIN"),
-            "player-3": replace(
-                base_state.players["player-3"], room="ADMIN", in_vent=True
-            ),
+            "p-3": replace(base_state.players["p-3"], room="ADMIN"),
+            "p-4": replace(base_state.players["p-4"], room="ADMIN", in_vent=True),
             "dead-admin": replace(
                 _player("dead-admin", "CREWMATE", "ADMIN", (2.0, 0.0)),
                 alive=False,
             ),
         },
-        cooldowns={"impostor-1": 2},
+        cooldowns={"p-3": 2},
     )
 
     next_state, events = advance_tick(
@@ -412,14 +410,14 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
             _action(
                 {
                     "type": "vent",
-                    "actor": "impostor-1",
+                    "actor": "p-3",
                     "payload": {"vent_id": "ADMIN_VENT"},
                 }
             ),
             _action(
                 {
                     "type": "sabotage",
-                    "actor": "impostor-1",
+                    "actor": "p-3",
                     "payload": {"kind": "lights"},
                 }
             ),
@@ -427,15 +425,15 @@ def test_vent_sabotage_and_passive_effects_apply() -> None:
         game_map=game_map,
     )
 
-    assert next_state.players["impostor-1"].in_vent
+    assert next_state.players["p-3"].in_vent
     assert next_state.sabotage is not None
     assert next_state.sabotage.kind == "lights"
     assert next_state.sabotage.remaining_ticks == 89
-    assert next_state.cooldowns["impostor-1"] == 1
+    assert next_state.cooldowns["p-3"] == 1
     assert [event.type for event in events[:2]] == ["VentEntered", "SabotageStarted"]
-    assert event_to_dict(events[0])["details"]["witnesses"] == ("player-2",)
-    assert event_to_dict(events[0])["details"]["source_witnesses"] == ("player-2",)
-    assert event_to_dict(events[0])["details"]["destination_witnesses"] == ("player-2",)
+    assert event_to_dict(events[0])["details"]["witnesses"] == ("p-2",)
+    assert event_to_dict(events[0])["details"]["source_witnesses"] == ("p-2",)
+    assert event_to_dict(events[0])["details"]["destination_witnesses"] == ("p-2",)
 
 
 def _active_lights_state(*, remaining_ticks: int = 5) -> WorldState:
@@ -460,7 +458,7 @@ def test_timed_sabotage_repair_completes_after_configured_ticks() -> None:
             _action(
                 {
                     "type": "repair_sabotage",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"kind": "lights"},
                 }
             )
@@ -473,7 +471,7 @@ def test_timed_sabotage_repair_completes_after_configured_ticks() -> None:
             _action(
                 {
                     "type": "repair_sabotage",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"kind": "lights"},
                 }
             )
@@ -486,7 +484,7 @@ def test_timed_sabotage_repair_completes_after_configured_ticks() -> None:
             _action(
                 {
                     "type": "repair_sabotage",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"kind": "lights"},
                 }
             )
@@ -523,7 +521,7 @@ def test_repair_prevents_same_tick_sabotage_timeout_when_completed() -> None:
             _action(
                 {
                     "type": "repair_sabotage",
-                    "actor": "player-2",
+                    "actor": "p-2",
                     "payload": {"kind": "lights"},
                 }
             )
@@ -555,20 +553,18 @@ def test_unrepaired_sabotage_timeout_still_wins() -> None:
 @pytest.mark.parametrize(
     ("state", "action_actor", "kind", "match"),
     (
-        (_state(), "player-2", "lights", "no active sabotage"),
-        (_active_lights_state(), "player-1", "lights", "repair room"),
-        (_active_lights_state(), "player-2", "unknown", "unknown sabotage"),
+        (_state(), "p-2", "lights", "no active sabotage"),
+        (_active_lights_state(), "p-1", "lights", "repair room"),
+        (_active_lights_state(), "p-2", "unknown", "unknown sabotage"),
         (
             replace(
                 _active_lights_state(),
                 players={
                     **dict(_active_lights_state().players),
-                    "player-2": replace(
-                        _active_lights_state().players["player-2"], in_vent=True
-                    ),
+                    "p-2": replace(_active_lights_state().players["p-2"], in_vent=True),
                 },
             ),
-            "player-2",
+            "p-2",
             "lights",
             "while in vent",
         ),
@@ -608,8 +604,8 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
         base_state,
         players={
             **dict(base_state.players),
-            "impostor-1": replace(base_state.players["impostor-1"], room="ADMIN"),
-            "player-3": replace(base_state.players["player-3"], room="REACTOR"),
+            "p-3": replace(base_state.players["p-3"], room="ADMIN"),
+            "p-4": replace(base_state.players["p-4"], room="REACTOR"),
         },
     )
 
@@ -619,7 +615,7 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
             _action(
                 {
                     "type": "vent",
-                    "actor": "impostor-1",
+                    "actor": "p-3",
                     "payload": {"vent_id": "ADMIN_VENT"},
                 }
             )
@@ -632,7 +628,7 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
             _action(
                 {
                     "type": "vent",
-                    "actor": "impostor-1",
+                    "actor": "p-3",
                     "payload": {"vent_id": "REACTOR_VENT"},
                 }
             )
@@ -640,11 +636,11 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
         game_map=game_map,
     )
 
-    assert in_vent_state.players["impostor-1"].room == "ADMIN"
-    assert in_vent_state.players["impostor-1"].in_vent
+    assert in_vent_state.players["p-3"].room == "ADMIN"
+    assert in_vent_state.players["p-3"].in_vent
     assert enter_events[0].type == "VentEntered"
-    assert exited_state.players["impostor-1"].room == "REACTOR"
-    assert not exited_state.players["impostor-1"].in_vent
+    assert exited_state.players["p-3"].room == "REACTOR"
+    assert not exited_state.players["p-3"].in_vent
     assert exit_events[0].type == "VentExited"
     assert event_to_dict(exit_events[0])["details"]["source_vent_id"] == "ADMIN_VENT"
     assert (
@@ -652,13 +648,11 @@ def test_vent_can_exit_through_connected_destination_vent() -> None:
         == "REACTOR_VENT"
     )
     assert event_to_dict(exit_events[0])["details"]["witnesses"] == (
-        "player-2",
-        "player-3",
+        "p-2",
+        "p-4",
     )
-    assert event_to_dict(exit_events[0])["details"]["source_witnesses"] == ("player-2",)
-    assert event_to_dict(exit_events[0])["details"]["destination_witnesses"] == (
-        "player-3",
-    )
+    assert event_to_dict(exit_events[0])["details"]["source_witnesses"] == ("p-2",)
+    assert event_to_dict(exit_events[0])["details"]["destination_witnesses"] == ("p-4",)
 
 
 def test_vent_rejects_unconnected_destination_vent() -> None:
@@ -667,7 +661,7 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
         _state(),
         players={
             **dict(_state().players),
-            "impostor-1": replace(_state().players["impostor-1"], room="ADMIN"),
+            "p-3": replace(_state().players["p-3"], room="ADMIN"),
         },
     )
     in_vent_state, _ = advance_tick(
@@ -676,7 +670,7 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
             _action(
                 {
                     "type": "vent",
-                    "actor": "impostor-1",
+                    "actor": "p-3",
                     "payload": {"vent_id": "ADMIN_VENT"},
                 }
             )
@@ -690,7 +684,7 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
             _action(
                 {
                     "type": "vent",
-                    "actor": "impostor-1",
+                    "actor": "p-3",
                     "payload": {"vent_id": "STORAGE_VENT"},
                 }
             )
@@ -698,19 +692,19 @@ def test_vent_rejects_unconnected_destination_vent() -> None:
         game_map=game_map,
     )
 
-    assert next_state.players["impostor-1"].room == "ADMIN"
-    assert next_state.players["impostor-1"].in_vent
+    assert next_state.players["p-3"].room == "ADMIN"
+    assert next_state.players["p-3"].in_vent
     assert events[0].type == "ActionRejected"
 
 
 def test_report_and_emergency_transition_to_meeting() -> None:
     game_map = load_canonical_map()
     body = BodyState(
-        id="body-player-2-0",
-        player_id="player-2",
+        id="body-p-2-0",
+        player_id="p-2",
         room="CAFETERIA",
         position=(0.0, 0.0),
-        killed_by="impostor-1",
+        killed_by="p-3",
         discovered_by=None,
     )
     report_state = replace(_state(), bodies={body.id: body})
@@ -721,8 +715,8 @@ def test_report_and_emergency_transition_to_meeting() -> None:
             _action(
                 {
                     "type": "report",
-                    "actor": "player-1",
-                    "payload": {"body_id": "body-player-2-0"},
+                    "actor": "p-1",
+                    "payload": {"body_id": "body-p-2-0"},
                 }
             )
         ],
@@ -730,17 +724,17 @@ def test_report_and_emergency_transition_to_meeting() -> None:
     )
 
     assert next_state.phase == "MEETING"
-    assert next_state.bodies["body-player-2-0"].discovered_by == "player-1"
+    assert next_state.bodies["body-p-2-0"].discovered_by == "p-1"
     assert any(event.type == "MeetingTriggered" for event in report_events)
 
     emergency_state, emergency_events = advance_tick(
         _state(),
-        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
+        [_action({"type": "emergency", "actor": "p-1", "payload": {}})],
         game_map=game_map,
     )
 
     assert emergency_state.phase == "MEETING"
-    assert emergency_state.emergency_uses["player-1"] == 1
+    assert emergency_state.emergency_uses["p-1"] == 1
     assert any(event.type == "MeetingTriggered" for event in emergency_events)
 
 
@@ -749,11 +743,11 @@ def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks()
 ):
     game_map = load_canonical_map()
     body = BodyState(
-        id="body-player-2-0",
-        player_id="player-2",
+        id="body-p-2-0",
+        player_id="p-2",
         room="CAFETERIA",
         position=(0.0, 0.0),
-        killed_by="impostor-1",
+        killed_by="p-3",
         discovered_by=None,
     )
     state = replace(
@@ -773,8 +767,8 @@ def test_meeting_trigger_interrupts_tick_before_passive_effects_and_win_checks()
             _action(
                 {
                     "type": "report",
-                    "actor": "player-1",
-                    "payload": {"body_id": "body-player-2-0"},
+                    "actor": "p-1",
+                    "payload": {"body_id": "body-p-2-0"},
                 }
             )
         ],
@@ -805,7 +799,7 @@ def test_emergency_trigger_interrupts_tick_before_passive_effects_and_win_checks
 
     next_state, events = advance_tick(
         state,
-        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
+        [_action({"type": "emergency", "actor": "p-1", "payload": {}})],
         game_map=game_map,
     )
 
@@ -822,12 +816,12 @@ def test_emergency_requires_actor_in_button_room() -> None:
 
     next_state, events = advance_tick(
         _state(),
-        [_action({"type": "emergency", "actor": "player-2", "payload": {}})],
+        [_action({"type": "emergency", "actor": "p-2", "payload": {}})],
         game_map=game_map,
     )
 
     assert next_state.phase == "PLAY"
-    assert "player-2" not in next_state.emergency_uses
+    assert "p-2" not in next_state.emergency_uses
     assert events[0].type == "ActionRejected"
     assert "emergency button room" in event_to_dict(events[0])["reason"]
 
@@ -836,17 +830,17 @@ def test_emergency_rejects_actor_in_vent() -> None:
     game_map = load_canonical_map()
     state = _state()
     players = dict(state.players)
-    players["player-1"] = replace(players["player-1"], in_vent=True)
+    players["p-1"] = replace(players["p-1"], in_vent=True)
 
     next_state, events = advance_tick(
         replace(state, players=players),
-        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
+        [_action({"type": "emergency", "actor": "p-1", "payload": {}})],
         game_map=game_map,
     )
 
     assert next_state.phase == "PLAY"
-    assert "player-1" not in next_state.emergency_uses
-    assert next_state.players["player-1"].in_vent
+    assert "p-1" not in next_state.emergency_uses
+    assert next_state.players["p-1"].in_vent
     assert events[0].type == "ActionRejected"
     assert "while in vent" in event_to_dict(events[0])["reason"]
 
@@ -882,7 +876,7 @@ def test_advance_tick_uses_supplied_map_without_loading_canonical_map(
             _action(
                 {
                     "type": "move",
-                    "actor": "player-1",
+                    "actor": "p-1",
                     "payload": {"to_room": "UPPER_HALL"},
                 }
             )
@@ -890,7 +884,7 @@ def test_advance_tick_uses_supplied_map_without_loading_canonical_map(
         game_map=game_map,
     )
 
-    assert next_state.players["player-1"].room == "UPPER_HALL"
+    assert next_state.players["p-1"].room == "UPPER_HALL"
     assert any(event.type == "Moved" for event in events)
 
 
@@ -898,17 +892,17 @@ def test_repeated_emergency_use_is_rejected() -> None:
     game_map = load_canonical_map()
     meeting_state, _ = advance_tick(
         _state(),
-        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
+        [_action({"type": "emergency", "actor": "p-1", "payload": {}})],
         game_map=game_map,
     )
     resumed_state = replace(meeting_state, phase="PLAY")
 
     next_state, events = advance_tick(
         resumed_state,
-        [_action({"type": "emergency", "actor": "player-1", "payload": {}})],
+        [_action({"type": "emergency", "actor": "p-1", "payload": {}})],
         game_map=game_map,
     )
 
     assert next_state.phase == "PLAY"
-    assert next_state.emergency_uses["player-1"] == 1
+    assert next_state.emergency_uses["p-1"] == 1
     assert events[0].type == "ActionRejected"

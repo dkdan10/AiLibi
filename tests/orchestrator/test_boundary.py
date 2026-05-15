@@ -56,14 +56,14 @@ def test_translate_action_intent_returns_matching_engine_action() -> None:
         _intent(
             {
                 "type": "move",
-                "actor": "player-1",
+                "actor": "p-1",
                 "payload": {"to_room": "ADMIN"},
             }
         )
     )
 
     assert action.type == "move"
-    assert action.actor == "player-1"
+    assert action.actor == "p-1"
     assert action.payload.to_room == "ADMIN"
 
 
@@ -72,55 +72,55 @@ def test_translate_repair_sabotage_intent_returns_matching_engine_action() -> No
         _intent(
             {
                 "type": "repair_sabotage",
-                "actor": "player-1",
+                "actor": "p-1",
                 "payload": {"kind": "lights"},
             }
         )
     )
 
     assert action.type == "repair_sabotage"
-    assert action.actor == "player-1"
+    assert action.actor == "p-1"
     assert action.payload.kind == "lights"
 
 
 def test_translate_action_intents_for_tick_returns_deterministic_order() -> None:
     intents = [
-        _intent({"type": "wait", "actor": "player-2", "payload": {}}),
+        _intent({"type": "wait", "actor": "p-2", "payload": {}}),
         _intent(
             {
                 "type": "move",
-                "actor": "player-1",
+                "actor": "p-1",
                 "payload": {"to_room": "ADMIN"},
             }
         ),
-        _intent({"type": "wait", "actor": "impostor-1", "payload": {}}),
+        _intent({"type": "wait", "actor": "p-3", "payload": {}}),
     ]
 
     actions = translate_action_intents_for_tick(intents)
 
     assert [action.actor for action in actions] == [
-        "impostor-1",
-        "player-1",
-        "player-2",
+        "p-1",
+        "p-2",
+        "p-3",
     ]
     assert [intent.actor for intent in intents] == [
-        "player-2",
-        "player-1",
-        "impostor-1",
+        "p-2",
+        "p-1",
+        "p-3",
     ]
 
 
 def test_translate_action_intents_for_tick_rejects_duplicate_actors() -> None:
     intents = [
-        _intent({"type": "wait", "actor": "player-1", "payload": {}}),
+        _intent({"type": "wait", "actor": "p-1", "payload": {}}),
         _intent(
             {
                 "type": "move",
-                "actor": "player-1",
+                "actor": "p-1",
                 "payload": {"to_room": "ADMIN"},
             }
         ),
     ]
 
-    with pytest.raises(ActionBatchValidationError, match="player-1"):
+    with pytest.raises(ActionBatchValidationError, match="p-1"):
         translate_action_intents_for_tick(intents)

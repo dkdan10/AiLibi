@@ -399,6 +399,144 @@ class TestCrewmateAgentIdProperty:
         assert policy.agent_id == "p7"
 
 
+class TestCrewmateTaskCompletionCycle:
+    def test_consecutive_decide_calls_yield_do_task_until_completion(self) -> None:
+        # Drive a full task-completion cycle through CrewmatePolicy.decide:
+        # the crewmate sits at the task room across several ticks with a
+        # pending task; the policy must emit DoTaskIntent every tick until
+        # the task completes and pending_task_id becomes None.
+        store = MemoryStore()
+        public_map = _public_map(task_locations={"swipe_card": "ADMIN"})
+        policy = CrewmatePolicy(agent_id="p-1")
+
+        # While pending_task_id is set, consecutive decide() calls must
+        # return DoTaskIntent for the matching task_id.
+        for tick in range(5):
+            store.append(
+                _self_state_event(tick=tick, room="ADMIN", pending_task_id="swipe_card")
+            )
+            intent = policy.decide(store, public_map)
+            assert isinstance(intent, DoTaskIntent), (
+                f"tick {tick}: expected DoTaskIntent, got {type(intent).__name__}"
+            )
+            assert intent.payload.task_id == "swipe_card"
+
+        # After completion the agent stops emitting DoTaskIntent.
+        store.append(_self_state_event(tick=5, room="ADMIN", pending_task_id=None))
+        intent = policy.decide(store, public_map)
+        assert not isinstance(intent, DoTaskIntent)
+
+    def test_body_in_adjacent_room_does_not_interrupt_task_completion(self) -> None:
+        # Regression: bodies in *adjacent* rooms are visible to the agent
+        # (perception emits saw_body events for them) but
+        # ReportBodyAction requires the actor to share the body's room.
+        # The BODY_VISIBLE -> REPORT interrupt must restrict itself to
+        # bodies in the agent's own room, otherwise the crewmate fires
+        # ReportBodyIntent forever and the engine rejects every one,
+        # blocking the IDLE -> MOVE_TO_TASK -> DO_TASK cycle.
+        store = MemoryStore()
+        public_map = _public_map(task_locations={"swipe_card": "ADMIN"})
+        policy = CrewmatePolicy(agent_id="p-1")
+
+        # Body sits in CAFETERIA (adjacent to ADMIN). At every tick the
+        # crewmate is at the task room with the task pending; the policy
+        # must continue emitting DoTaskIntent until the task completes,
+        # ignoring the unreachable body interrupt.
+        for tick in range(5):
+            store.append(
+                _self_state_event(tick=tick, room="ADMIN", pending_task_id="swipe_card")
+            )
+            store.append(
+                _saw_body_event(tick=tick, body_id="leftover-body", room="CAFETERIA")
+            )
+            intent = policy.decide(store, public_map)
+            assert isinstance(intent, DoTaskIntent), (
+                f"tick {tick}: expected DoTaskIntent, got {type(intent).__name__}"
+            )
+            assert intent.payload.task_id == "swipe_card"
+
+
+class TestCrewmateIdleHubRouting:
+    def test_idle_with_no_pending_task_at_meeting_room_returns_wait(self) -> None:
+        # When the crewmate is already at the meeting room with nothing
+        # tactical to do, IDLE means wait. This is the natural terminal
+        # state of the IDLE -> MOVE_TO_TASK -> DO_TASK -> IDLE FSM.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA", pending_task_id=None),
+        )
+        policy = CrewmatePolicy(agent_id="p-1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, WaitIntent)
+
+    def test_idle_with_no_pending_task_away_from_meeting_room_moves_back(self) -> None:
+        # IDLE crewmate not at the meeting room walks one A* step toward it.
+        # Without this routing the surviving crewmates would stay inside
+        # their finished task rooms and never re-enter the impostor's
+        # visibility window.
+        store = _store_with(
+            _self_state_event(tick=10, room="ELECTRICAL", pending_task_id=None),
+        )
+        policy = CrewmatePolicy(agent_id="p-1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "CAFETERIA"
+
+    def test_idle_with_disconnected_meeting_room_falls_back_to_wait(self) -> None:
+        # If the meeting room is unreachable from the crewmate's current
+        # room (degenerate map), routing fails and the policy degrades
+        # to WaitIntent instead of raising.
+        rooms = ("ADMIN", "CAFETERIA", "ELECTRICAL")
+        neighbors: Mapping[RoomId, tuple[RoomId, ...]] = {
+            "ADMIN": (),
+            "CAFETERIA": ("ELECTRICAL",),
+            "ELECTRICAL": ("CAFETERIA",),
+        }
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id=None),
+        )
+        policy = CrewmatePolicy(agent_id="p-1")
+
+        intent = policy.decide(
+            store,
+            _public_map(
+                rooms=rooms,
+                neighbors=neighbors,
+                task_locations={},
+                meeting_room="CAFETERIA",
+                emergency_button_room="CAFETERIA",
+                spawn_room="ADMIN",
+            ),
+        )
+
+        assert isinstance(intent, WaitIntent)
+
+
+class TestCrewmateBodyInAdjacentRoom:
+    def test_body_in_adjacent_room_does_not_trigger_report(self) -> None:
+        # Bodies in adjacent rooms appear in saw_body events because
+        # the agent can see them, but the engine rejects ReportBodyAction
+        # unless the actor shares the body's room. The interrupt must
+        # only fire when the report would actually succeed.
+        store = _store_with(
+            _self_state_event(tick=10, room="MEDBAY", pending_task_id="swipe_card"),
+            _saw_body_event(tick=10, body_id="leftover-body", room="CAFETERIA"),
+        )
+        policy = CrewmatePolicy(agent_id="p-1")
+
+        intent = policy.decide(store, _public_map())
+
+        # The body sits in CAFETERIA (adjacent to MEDBAY). Without the
+        # own-room filter the policy would emit ReportBodyIntent (which
+        # the engine then rejects); with the filter the policy routes
+        # toward the pending task.
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "CAFETERIA"
+
+
 class TestCrewmateDisconnectedGoal:
     def test_disconnected_task_room_falls_back_to_wait(self) -> None:
         # ADMIN sits in its own component; ELECTRICAL is unreachable from there.
