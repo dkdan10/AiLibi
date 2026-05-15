@@ -284,6 +284,8 @@ Checked in order each tick:
 3. Active sabotage with `remaining_ticks == 0` → impostor win.
 4. Otherwise: continue.
 
+**Dead-crewmate task rule.** When a crewmate dies, their incomplete tasks are removed from `state.tasks`. Both `total_tasks` and `crew_tasks_done` are computed against the remaining (alive-owned) tasks; if every alive-owned task is complete, crew wins. Already-completed tasks owned by a dead crewmate stay in `state.tasks` and continue to count toward `crew_tasks_done`. Rationale: in Phase 2 there are no meetings, so crew has no path to victory other than completing tasks; if dead-owned incomplete tasks remained required, any early kill would make crew victory unreachable and the Phase 2 merge criterion would be unattainable. Ghost-completable mechanics (dead crewmates persist and continue completing tasks) are deferred to Phase 4+ when meetings give crew an alternative win path. `engine/win_conditions.py` is the win-check implementation anchor; the task-removal hook lives in `engine/tick.py`'s `KilledEvent` handler.
+
 ### 3.6 Hidden information
 
 The engine is the single source of truth and *contains* hidden info (roles, kill attribution, vent use). Containment is fine; what matters is that this state never leaves the engine except through ObservationService, which is the only privileged consumer that strips hidden fields.

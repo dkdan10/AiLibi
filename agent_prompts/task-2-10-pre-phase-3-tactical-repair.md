@@ -28,14 +28,13 @@ become re-runnable acceptance gates. This is a single bundled PR because
 splitting it leaves the seed sweep and tournament gates encoded against
 unfixed code.
 
-The R-5 decision is the first deliverable. The audit grades R-5 as
-Concern but documents it as the structural reason crew can never win
-after an early kill (`audits/audit-2026-05-15-0225-reconciled.md:218-223`).
-Pick one of `dropped` / `reassigned` / `ghost-completable` /
-`still-required`, document the choice and its rationale in DESIGN.md, and
-reference the design anchor from `engine/win_conditions.py`. Implement
-the chosen rule before fixing the impostor stale-target loop in R-3, then
-re-run the seed sweep (R-2) and the 100-game tournament (R-1).
+The R-5 rule is **dropped**: when a crewmate dies, their incomplete tasks
+are removed from `state.tasks`, and the win condition counts only
+alive-owned tasks. The rule and its rationale are documented at
+`DESIGN.md` §3.5 "Win conditions". This task implements the rule and the
+surrounding behavioural fixes; **do not re-litigate the choice**.
+Implement the rule before fixing the impostor stale-target loop in R-3,
+then re-run the seed sweep (R-2) and the 100-game tournament (R-1).
 
 **Files in scope:**
 - DESIGN.md
@@ -99,8 +98,8 @@ re-run the seed sweep (R-2) and the 100-game tournament (R-1).
 - tests/test_firewall.py
 
 **Definition of done:**
-- [ ] **R-5 — rule decision documented:** A short subsection added to DESIGN.md (anchored under §1.3 or §4) names the chosen rule for dead-crewmate-owned tasks. The choice must be one of: `dropped` (task removed from `state.tasks` on owner death), `reassigned` (ownership transferred to an alive crewmate on owner death), `ghost-completable` (task counted complete on owner death), or `still-required` (crew victory genuinely demands all original task slots, with the merge criterion updated accordingly). The subsection states the rationale in two to four sentences. `engine/win_conditions.py` gains a one-line comment naming the DESIGN.md anchor.
-- [ ] **R-5 — rule implemented and pinned:** If the chosen rule changes engine behavior, the implementation lives in `engine/win_conditions.py` (count adjustment for `ghost-completable`) or `engine/tick.py` (death handler for `dropped` / `reassigned`). A regression test in `tests/engine/test_tick.py` or `tests/orchestrator/test_game.py` constructs a state where a crewmate dies with an incomplete task and asserts crew can still reach `CREWMATE_TASKS` (for `dropped` / `reassigned` / `ghost-completable`) or that crew victory is unreachable until all crewmates complete their original tasks (for `still-required`). The test name encodes the chosen rule so future readers can map the rule to its pin.
+- [ ] **R-5 — `dropped` rule pinned in DESIGN.md:** `DESIGN.md` §3.5 already documents the `dropped` rule and its rationale (committed at design-decision time, before this task was dispatched). Verify the section reads correctly against the implementation; do not edit it unless wording needs minor cleanup. `engine/win_conditions.py` gains a one-line comment naming the §3.5 anchor (e.g. `# Dead-crewmate task rule lives in DESIGN.md §3.5 (dropped).`).
+- [ ] **R-5 — `dropped` rule implemented and pinned:** `engine/tick.py`'s `KilledEvent` handler removes the killed player's incomplete tasks from `state.tasks` (entries where `owner == killed_player_id` and `completed is False`). Already-completed tasks remain so they continue to count toward `crew_tasks_done`. `engine/win_conditions.py` requires no change — it already compares `crew_tasks_done == total_tasks` against the current `state.tasks`, so upstream removal is sufficient. A regression test in `tests/engine/test_tick.py` constructs a state where a crewmate dies with an incomplete task and asserts (a) the dead crewmate's incomplete task is no longer in `state.tasks`, (b) any already-completed task owned by the dead crewmate remains in `state.tasks`, and (c) crew can reach `CREWMATE_TASKS` by completing the remaining alive-owned tasks. Test name: `test_dead_crewmate_incomplete_task_is_dropped_and_crew_can_still_win` or equivalent.
 - [ ] **R-3 — staleness/dead-target pruning unit test:** `tests/agents/test_impostor_policy.py` adds a regression that drives `ImpostorPolicy.decide` with `EVENT_SAW_PLAYER` events whose target was last seen ≥ 30 ticks ago, plus an `EVENT_SAW_BODY` event naming the same target. The test asserts the policy does not produce a `MoveIntent` toward the stale-sighting room and does not select the dead/stale player as the scored target. The test must fail against the pre-fix `_scored_targets` and pass after the fix.
 - [ ] **R-3 — staleness/dead-target pruning implementation:** `agents/tactical/impostor_policy.py::_scored_targets` filters out (a) players the impostor has observed as dead (via `EVENT_SAW_BODY`-derived inference or an equivalent belief signal — see Implementation hint) and (b) sightings older than a documented staleness threshold (tick-based; default ~30 ticks, tuned against seed 0). The threshold is a module-level constant with a one-line comment. Existing scored-target ordering (`(-score, player_id)`) is preserved when at least one valid target remains.
 - [ ] **R-3 — default-agent integration regression:** `tests/orchestrator/test_game.py` adds a regression that runs `HeadlessGame` with seed 0 at default agents for ≥ 200 ticks and asserts the impostor's replayed actions do not contain the pre-fix `ENGINEERING → REACTOR → ENGINEERING → REACTOR` alternation pattern over any window of ≥ 30 consecutive ticks after a confirmed kill. The assertion may be expressed as: across any 30-tick window starting after the first `KilledEvent`, the impostor's distinct `MoveIntent.to_room` targets exceed 1.
@@ -116,7 +115,7 @@ re-run the seed sweep (R-2) and the 100-game tournament (R-1).
 
 ## Implementation hint
 
-The R-5 rule choice is yours and is the **first** thing to ship — document it in DESIGN.md before touching `_scored_targets` or any engine code, because the rule decision can change how `engine/tick.py` handles `KilledEvent` for crewmates. Do not pre-empt the decision with code.
+The R-5 rule is `dropped` (already documented at `DESIGN.md` §3.5). Implement it in `engine/tick.py`'s `KilledEvent` handler: on a crewmate kill, iterate `state.tasks` and remove entries whose `owner` equals the killed player and whose `completed` is `False`. Already-completed tasks remain — they count toward `crew_tasks_done`. Ship this before the R-3 staleness fix so the integration regressions (R-2, R-1) run against the new rule.
 
 For R-3, the staleness filter integrates into the existing `_scored_targets` loop. The current loop at `agents/tactical/impostor_policy.py:219-265` keeps every seen player in `latest_sighting`; the fix is to drop the stale and dead entries before they enter the bucket and score:
 
@@ -182,7 +181,7 @@ This task is the convergence point for the Phase 2 acceptance gates. It changes 
 - **Engine purity:** `engine/win_conditions.py` and `engine/tick.py` remain pure functions of state and actions. Do not add agent imports, randomness, or hidden state. The R-5 rule must be expressible as a state-only function.
 - **Observation firewall:** R-3's `confirmed_dead` set must be derived from agent-owned memory, not from engine state. If you choose Implementation-hint option 2, add `agents/memory/beliefs.py` to scope explicitly. Either way, run `uv run lint-imports` to confirm the firewall holds.
 - **Leak scan:** R-3 may add new fields or values to belief state; if so, re-run `uv run pytest eval/leak_test.py` and confirm the value-scanner still passes against all three scripted fixtures and the 100-game tournament audit logs.
-- **Merge-criterion text:** if the R-5 rule choice is `still-required`, update `tasks/phase-2.md:959` and the Phase 2 Merge Criteria block to make clear the criterion is reachable. That edit is OUT of scope for this task — it belongs to Task 2.11's R-8 cleanup. If you choose `still-required`, leave a `## Decisions` note flagging that 2.11 will need to amend the criterion.
+- **Merge-criterion text:** the R-5 rule is `dropped`, so no edit to the Phase 2 Merge Criteria wording is needed. Task 2.11's R-8 cleanup still owns the separate "games" vs "decisive games" wording fix.
 - **Tournament re-run cost:** `scripts/run_tournament.py` against 100 games at max-ticks 1000 takes ~minutes on a default workstation. Budget for it; do not gate the merge on faster runs.
 - **`audits/*` are read-only artifacts.** Do not edit the reconciled audit; this task addresses its findings, it does not amend the record.
 
