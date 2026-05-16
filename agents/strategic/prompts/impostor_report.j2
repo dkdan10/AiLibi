@@ -75,7 +75,7 @@ How to compose the report:
 {{ rendered_memory }}
 
 ## Public meeting transcript so far
-{% if public_transcript -%}
+{% if public_transcript and public_transcript|trim -%}
 {{ public_transcript }}
 {%- else -%}
 (no statements yet -- you are submitting the first report this meeting)
