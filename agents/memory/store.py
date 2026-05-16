@@ -218,11 +218,14 @@ def _build_observations(episodic: MemoryStore) -> list[_Observation]:
                 continue
             if body_id in seen_body_ids:
                 continue
-            seen_body_ids.add(body_id)
             victim_id = event.payload.get("victim_id")
             room = event.payload.get("room")
             if not isinstance(victim_id, str) or not isinstance(room, str):
+                # Don't mark the body as seen yet -- a later well-formed
+                # event for the same body_id should still surface its
+                # discovery.
                 continue
+            seen_body_ids.add(body_id)
             observations.append(
                 _Observation(
                     salience=_SALIENCE_FOUND_BODY,
@@ -344,7 +347,13 @@ def _build_belief_lines(beliefs: BeliefState, working: WorkingMemory) -> list[st
 def _format_belief_score(belief: PlayerBelief) -> str | None:
     suspicion_dev = abs(belief.suspicion - 0.5)
     trust_dev = abs(belief.trust - 0.5)
-    if suspicion_dev == 0.0 and trust_dev == 0.0:
+    # Anything within half of the displayed precision (0.01) rounds to
+    # "0.50" in the rendered line and carries no signal, so treat it as
+    # neutral. Float accumulation from repeated ``decay_suspicion``
+    # toward 0.5 can otherwise leave a non-zero residue that escapes an
+    # exact equality check and bloats the prompt with empty belief
+    # rows.
+    if suspicion_dev < 0.005 and trust_dev < 0.005:
         return None
     if suspicion_dev >= trust_dev:
         return f"suspicion {belief.suspicion:.2f}"
@@ -441,11 +450,14 @@ def _select_within_budget(
     observations: Iterable[_Observation],
     remaining_after_fixed: int,
 ) -> list[_Observation]:
-    """Greedily include observations in priority order until the budget is gone.
+    """Include observations in salience order until one cannot fit.
 
-    ``observations`` must already be sorted by salience descending. The
-    cost of each line includes its bullet prefix so the assembled text
-    fits inside the budget.
+    ``observations`` must already be sorted by salience descending. As
+    soon as an observation does not fit, we stop: every observation
+    past the cutoff is at lower-or-equal salience, so allowing any of
+    them through would violate "drop by lowest salience first"
+    (DESIGN.md §6.6, DoD bullet 1). The kept set is therefore always a
+    salience-ordered prefix of the input.
     """
 
     kept: list[_Observation] = []
@@ -453,7 +465,7 @@ def _select_within_budget(
     for obs in observations:
         cost = _estimate_tokens(f"- {obs.line}")
         if cost > remaining:
-            continue
+            break
         kept.append(obs)
         remaining -= cost
     return kept

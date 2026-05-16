@@ -657,3 +657,99 @@ class TestSawBodyDeduplication:
         view = render_for_prompt(memory)
 
         assert view.count("You discovered p-2's body in MEDBAY") == 1
+
+    def test_malformed_saw_body_does_not_suppress_later_valid_event(self) -> None:
+        """An early ``saw_body`` event with missing/invalid victim or
+        room is silently skipped today, but it must not poison the
+        dedup set for the same ``body_id``: a later well-formed event
+        for that body must still render the discovery.
+        """
+
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0))
+        # First event for body-p-2-20 is malformed (no victim_id).
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=10,
+                type="saw_body",
+                payload={"body_id": "body-p-2-20", "room": "MEDBAY"},
+                provenance="observed",
+            )
+        )
+        # Second event for the same body_id is well-formed.
+        memory.episodic.append(
+            _saw_body_event(
+                tick=20,
+                body_id="body-p-2-20",
+                victim_id="p-2",
+                room="MEDBAY",
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 20] You discovered p-2's body in MEDBAY." in view
+
+
+class TestSalienceCutoffStrictness:
+    def test_lower_salience_event_dropped_when_higher_event_does_not_fit(
+        self,
+    ) -> None:
+        """If the highest-salience event does not fit the budget, every
+        lower-salience event past that cutoff must also be dropped.
+        Otherwise a low-salience sighting could displace a high-salience
+        body discovery -- the exact perverse outcome
+        "drop by lowest salience first" forbids (DESIGN.md §6.6).
+        """
+
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0))
+        memory.episodic.append(_global_status_event(tick=0, completed=0, total=12))
+        # Short low-salience sighting that would individually fit a tight budget.
+        memory.episodic.append(
+            _saw_player_event(tick=100, player_id="x", room="A", action=None)
+        )
+        # Long high-salience body line (room name padded to force a large cost).
+        memory.episodic.append(
+            _saw_body_event(
+                tick=200,
+                body_id="body-p-1-200",
+                victim_id="p-1",
+                room="VERY_LONG_ROOM_NAME_FOR_BUDGET_CUTOFF_TEST",
+            )
+        )
+
+        view = render_for_prompt(memory, token_budget=35)
+
+        assert "You discovered p-1's body" not in view
+        assert "You saw x in A" not in view
+        assert "## Recent observations" not in view
+
+
+class TestBeliefNeutralityEpsilon:
+    def test_near_neutral_belief_after_decay_is_omitted(self) -> None:
+        """Beliefs that drift to a value rounding to 0.50 carry no
+        signal -- the rendered "suspicion 0.50" line just bloats the
+        prompt. With an exact-equality neutral filter, repeated decay
+        toward 0.5 from a non-neutral starting point can leave float
+        residue and surface a meaningless line; the epsilon-based
+        filter omits it.
+        """
+
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0))
+        # Push suspicion off neutral, then decay back toward 0.5 many
+        # times. With rate < 1 and a non-power-of-two arithmetic, the
+        # value asymptotes to 0.5 but never lands exactly on it.
+        memory.beliefs.adjust_suspicion("p-3", delta=0.3)
+        for _ in range(200):
+            memory.beliefs.decay_suspicion("p-3", toward=0.5, rate=0.3)
+
+        suspicion = memory.beliefs.view("p-3").suspicion
+        # Sanity: the value is *displayed* as 0.50 but is not exactly 0.5.
+        assert f"{suspicion:.2f}" == "0.50"
+
+        view = render_for_prompt(memory)
+
+        assert "p-3" not in view
+        assert "## Your current beliefs" not in view
