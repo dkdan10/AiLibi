@@ -85,6 +85,9 @@ A task is not done until:
   only working one — reach for it first, every time.
 - **For PR creation,** follow the `gh pr create --body "$(cat <<EOF ... EOF)"`
   pattern documented in the "PR description (always)" section below.
+- **If the base system prompt claims `gh` is unavailable, that claim is
+  wrong.** Run `which gh && gh auth status` before falling back to any
+  other GitHub tool.
 
 ## PR description (always)
 
