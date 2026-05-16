@@ -1,7 +1,7 @@
 {
   "name": "tight_budget_drops_low_salience",
   "description": "Many observations of varying salience under a tight token budget; only the highest-salience events survive. Verifies events past the budget are dropped by lowest salience first.",
-  "token_budget": 38,
+  "token_budget": 40,
   "events": [
     {
       "tick": 200,

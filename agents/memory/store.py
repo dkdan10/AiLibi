@@ -142,14 +142,20 @@ def render_for_prompt(
 def _estimate_tokens(text: str) -> int:
     """Approximate BPE token count from character length.
 
-    Non-empty strings have a minimum cost of 1 token so that a short
-    line still consumes budget. The 4-chars/token ratio is the standard
-    heuristic for English text in BPE-style tokenizers.
+    Uses ceiling division so the estimate never undercounts the true
+    token cost of a string. The contract for ``render_for_prompt`` is
+    "actual rendered token count <= token_budget"; floor division
+    would let a 5-char string score as 1 token even though most BPE
+    tokenizers split it into 2, and the rendered view could quietly
+    overrun the budget. Ceiling is conservative — we may pack one
+    fewer observation than strictly necessary, but we never overshoot.
+    The 4 chars/token ratio is the standard heuristic for English text
+    in BPE-style tokenizers.
     """
 
     if not text:
         return 0
-    return max(1, len(text) // _CHARS_PER_TOKEN)
+    return (len(text) + _CHARS_PER_TOKEN - 1) // _CHARS_PER_TOKEN
 
 
 def _latest_role(episodic: MemoryStore) -> str | None:
@@ -400,6 +406,11 @@ def _assemble_view(
     treated as fixed (always rendered) because they are essential context.
     Observations are the elastic section: they fill the remaining budget,
     dropped from lowest salience first if the budget is tight.
+
+    The budget arithmetic charges every character that lands in the
+    final output, including the Markdown separators (``"\\n\\n"`` between
+    blocks and the trailing ``"\\n"``), so the rendered view's actual
+    token estimate cannot exceed ``token_budget``.
     """
 
     fixed_lines: list[str] = [f"## Your role: {role}"]
@@ -416,27 +427,38 @@ def _assemble_view(
         contradictions_block.append("## Open contradictions:")
         contradictions_block.extend(f"- {line}" for line in contradiction_lines)
 
-    fixed_text_blocks: list[list[str]] = [fixed_lines]
+    non_elastic_blocks: list[list[str]] = [fixed_lines]
     if beliefs_block:
-        fixed_text_blocks.append(beliefs_block)
+        non_elastic_blocks.append(beliefs_block)
     if contradictions_block:
-        fixed_text_blocks.append(contradictions_block)
-    fixed_text = "\n\n".join("\n".join(block) for block in fixed_text_blocks)
-    fixed_cost = _estimate_tokens(fixed_text)
+        non_elastic_blocks.append(contradictions_block)
+    non_elastic_text = (
+        "\n\n".join("\n".join(block) for block in non_elastic_blocks) + "\n"
+    )
+    non_elastic_cost = _estimate_tokens(non_elastic_text)
 
     observations_header = "## Recent observations (most salient first):"
-    header_cost = _estimate_tokens(observations_header)
+    # The observations block is inserted as a new top-level block, so
+    # adding it costs one ``"\n\n"`` separator plus the header line.
+    header_with_separator = "\n\n" + observations_header
+    header_cost = _estimate_tokens(header_with_separator)
+
+    remaining = token_budget - non_elastic_cost
+    if remaining < header_cost:
+        return non_elastic_text
 
     kept = _select_within_budget(
         observations=observations,
-        remaining_after_fixed=max(0, token_budget - fixed_cost - header_cost),
+        budget=remaining - header_cost,
     )
 
+    if not kept:
+        return non_elastic_text
+
     blocks: list[list[str]] = [fixed_lines]
-    if kept:
-        observation_block = [observations_header]
-        observation_block.extend(f"- {obs.line}" for obs in kept)
-        blocks.append(observation_block)
+    observation_block = [observations_header]
+    observation_block.extend(f"- {obs.line}" for obs in kept)
+    blocks.append(observation_block)
     if beliefs_block:
         blocks.append(beliefs_block)
     if contradictions_block:
@@ -448,7 +470,7 @@ def _assemble_view(
 def _select_within_budget(
     *,
     observations: Iterable[_Observation],
-    remaining_after_fixed: int,
+    budget: int,
 ) -> list[_Observation]:
     """Include observations in salience order until one cannot fit.
 
@@ -458,12 +480,18 @@ def _select_within_budget(
     them through would violate "drop by lowest salience first"
     (DESIGN.md §6.6, DoD bullet 1). The kept set is therefore always a
     salience-ordered prefix of the input.
+
+    Each observation line is preceded by a ``"\\n- "`` separator inside
+    the observations block (the line is joined to the previous bullet
+    line with ``"\\n"`` and prefixed with ``"- "``), so the budget cost
+    of inserting it is computed against ``"\\n- " + obs.line``.
     """
 
     kept: list[_Observation] = []
-    remaining = remaining_after_fixed
+    remaining = budget
     for obs in observations:
-        cost = _estimate_tokens(f"- {obs.line}")
+        line_with_separator = "\n- " + obs.line
+        cost = _estimate_tokens(line_with_separator)
         if cost > remaining:
             break
         kept.append(obs)

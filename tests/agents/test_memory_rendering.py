@@ -294,7 +294,7 @@ class TestTokenBudget:
             )
         )
 
-        view = render_for_prompt(memory, token_budget=38)
+        view = render_for_prompt(memory, token_budget=40)
 
         assert "You discovered p-2's body in MEDBAY" in view
         assert "You saw p-3 in ADMIN" not in view
@@ -724,6 +724,68 @@ class TestSalienceCutoffStrictness:
         assert "You discovered p-1's body" not in view
         assert "You saw x in A" not in view
         assert "## Recent observations" not in view
+
+
+class TestTokenBudgetIsHardCap:
+    """Regression for the 'token-budgeted view' contract: the rendered
+    string's estimated tokens must not exceed ``token_budget`` (modulo
+    the non-elastic role/tasks/beliefs/contradictions sections, which
+    are always retained because they are agent-essential context).
+    Verifies the Markdown separators (``\\n\\n`` between blocks and the
+    trailing ``\\n``) are all charged against the budget."""
+
+    @staticmethod
+    def _estimate_tokens_of(text: str) -> int:
+        # Mirror agents.memory.store._estimate_tokens so the test
+        # asserts against the same arithmetic the renderer uses.
+        if not text:
+            return 0
+        return (len(text) + 3) // 4
+
+    @pytest.mark.parametrize("budget", [40, 50, 75, 100, 200, 500])
+    def test_rendered_view_does_not_exceed_budget(self, budget: int) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0))
+        memory.episodic.append(_global_status_event(tick=0, completed=2, total=12))
+        for i in range(20):
+            memory.episodic.append(
+                _saw_player_event(
+                    tick=10 + i, player_id=f"p-{i}", room="ADMIN", action=None
+                )
+            )
+
+        view = render_for_prompt(memory, token_budget=budget)
+
+        actual = self._estimate_tokens_of(view)
+        assert actual <= budget, (
+            f"budget {budget}: rendered view's estimated token count is "
+            f"{actual} (text len {len(view)}). View:\n{view}"
+        )
+
+    def test_separators_between_observations_block_and_beliefs_are_charged(
+        self,
+    ) -> None:
+        """With both an observations block and a beliefs block present,
+        the ``\\n\\n`` separator between them is part of the rendered
+        output. If the budget arithmetic ignored it, the rendered token
+        count could exceed the budget at the boundary."""
+
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0))
+        memory.episodic.append(_global_status_event(tick=0, completed=0, total=12))
+        memory.beliefs.adjust_suspicion("p-3", delta=0.4)
+        # Twelve sightings of varying tick give the renderer something
+        # to thin against the budget.
+        for i in range(12):
+            memory.episodic.append(
+                _saw_player_event(
+                    tick=20 + i, player_id=f"p-{i}", room="ADMIN", action=None
+                )
+            )
+
+        for budget in (60, 80, 120, 200):
+            view = render_for_prompt(memory, token_budget=budget)
+            assert self._estimate_tokens_of(view) <= budget
 
 
 class TestBeliefNeutralityEpsilon:
