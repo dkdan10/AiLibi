@@ -38,19 +38,51 @@ llm/client.py, provider adapter, fake provider, cache, and budget.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] `LLMClient` protocol exists.
-- [ ] Real provider adapter is behind `LLMClient` protocol.
-- [ ] Fake deterministic provider exists for tests and CI.
-- [ ] Prompt cache and per-game budget support exist.
-- [ ] CI tests use the fake provider and make no network calls.
-- [ ] No LLM calls are added to agents/tactical/.
+- [ ] **`LLMClient` Protocol exists and is provider-neutral.** The Protocol's public surface does not expose Anthropic-specific concepts (extended thinking, `cache_control`, prompt-caching beta headers, message-shape internals). Anthropic-specific behaviors live as private implementation details inside `AnthropicClient`. The Protocol is tight enough that adding a second provider (OpenAI, DeepSeek, local) is a new-file change — no edits required to call sites in `agents/`, `meetings/`, or `orchestrator/`.
+- [ ] **Real provider adapter (`AnthropicClient`) is behind the Protocol.** Defaults to `claude-sonnet-4-6` for meeting-strength calls and `claude-haiku-4-5-20251001` for triggered-check calls. The model id is a constructor parameter (not a hardcoded literal); the default selection is by call type and overridable per-call.
+- [ ] **Runtime provider/model selection.** The active provider and model are selected at construction time from configuration (environment variables like `AILIBI_LLM_PROVIDER=anthropic`, `AILIBI_LLM_MEETING_MODEL`, `AILIBI_LLM_TRIGGER_MODEL`, or an equivalent config object passed by the orchestrator). Document the chosen mechanism in the PR's `## Decisions` block.
+- [ ] **Cross-provider portability is documented.** A `llm/README.md` (or top-of-file docstring in `llm/client.py`) describes the minimum surface a hypothetical second-provider adapter must implement, with one worked sketch (10–20 lines, no real SDK calls) showing what an OpenAI or DeepSeek adapter would look like. You do not ship the second adapter — you show that it would slot in cleanly.
+- [ ] **Fake deterministic provider** exists for tests and CI; it produces schema-valid responses without recording or hashing. Tests pass the same prompt and always get the same response shape. The fake is the default for CI; the real provider is only invoked in explicit local/eval runs.
+- [ ] **Prompt cache and per-game budget support exist.** Cache key is provider-neutral (does not bake in Anthropic message structure). Budget enforcement is fail-loud on overrun (raises a typed exception), not silent truncation.
+- [ ] CI tests use the fake provider and make no network calls. The real provider adapter is exercised only by tests marked with an explicit `pytest.mark.real_provider` (or equivalent) that CI skips by default.
+- [ ] No LLM calls are added to `agents/tactical/`.
 - [ ] `uv run mypy --strict llm agents` passes.
 - [ ] `uv run ruff check .` passes.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
-See DESIGN.md §7 + §10.4 for the LLM-client surface. The fake deterministic provider is the most important piece — it is what every test in CI calls. `LLMClient` is a Protocol; the real and fake providers both implement it. Cache and budget are layered on.
+See DESIGN.md §7 + §10.4 for the LLM-client surface. The fake deterministic provider is the most important piece — it is what every test in CI calls. `LLMClient` is a Protocol; the real and fake providers both implement it. Cache and budget are layered on top.
+
+**Cross-provider portability is a hard requirement.** Anthropic Sonnet 4.6 and Haiku 4.5 are the Phase 3 defaults, but the architecture must support swapping the provider (to OpenAI, DeepSeek, or a local model) later without touching call sites. Keep the Protocol's surface minimal:
+
+```python
+# llm/client.py — illustrative shape; the implementing agent picks the exact signature
+class TokenUsage(BaseModel):
+    input_tokens: int
+    output_tokens: int
+
+class LLMResponse(BaseModel):
+    text: str
+    usage: TokenUsage          # provider-agnostic counts
+    cost_usd: float            # provider computes; Protocol consumers don't care how
+    model: str                 # identifier; opaque to the Protocol
+
+class LLMClient(Protocol):
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+    ) -> LLMResponse: ...
+```
+
+If you find yourself wanting to expose Anthropic-specific knobs (extended thinking, `cache_control`, beta headers) on the Protocol, stop — that's a smell. Add the knob as a private parameter on `AnthropicClient.__init__` instead. Phase 3 prompts that need Anthropic-only behavior get raised in the PR's `## Decisions` block for review rather than baked into the Protocol.
+
+The provider/model selection mechanism: env var is simplest (`AILIBI_LLM_PROVIDER`, `AILIBI_LLM_MEETING_MODEL`, `AILIBI_LLM_TRIGGER_MODEL`). A config dict passed by the orchestrator is also fine. Pick one and document; the next Phase 3 task will inherit whichever you choose.
 
 **Ready-to-paste prompt:** `agent_prompts/task-3-1-llm-client.md`
 

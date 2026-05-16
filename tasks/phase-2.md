@@ -1744,6 +1744,202 @@ This task adds two regression tests and one documentation edit. Low blast radius
 
 **Ready-to-paste prompt:** `agent_prompts/task-2-13-pre-phase-3-post-audit-cleanup.md`
 
+### Task 2.14 — Win-condition resolution order (impostor-win precedence)
+**Branch:** `phase-2-win-condition-order`
+**Depends on:** 2.13 merged
+**Section refs:** DESIGN.md §3.5
+**Complexity:** Small
+
+Change the engine win-condition evaluation order so that impostor-side
+conditions (parity, sabotage timeout) are checked **before** crew-side
+conditions (task completion). The intent: when an impostor kill
+simultaneously triggers parity (impostors_alive >= crewmates_alive) AND
+removes the last incomplete task (so `crew_tasks_done == total_tasks`
+post-drop), the impostor wins. The current order resolves that
+same-tick collision as a crew victory, which is counter to the design
+intent that an offensive action by the impostor should attribute the
+end-of-game outcome to the offense.
+
+This is the last Phase 2 engine-substrate change before Phase 3 begins.
+It is bounded to the win-condition function plus its documentation and
+test pins.
+
+**Files in scope:**
+- DESIGN.md
+- engine/win_conditions.py
+- tests/engine/test_tick.py
+
+**Files NOT in scope:**
+- engine/tick.py
+- engine/rules.py
+- engine/world.py
+- engine/actions.py
+- engine/events.py
+- engine/visibility.py
+- engine/rng.py
+- engine/entities.py
+- engine/maps/
+- observation/
+- orchestrator/
+- agents/
+- llm/
+- api/
+- frontend/
+- eval/
+- scripts/
+- AGENTS.md
+- AGENT_IMPLEMENTATION.md
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- tests/agents/
+- tests/eval/
+- tests/observation/
+- tests/orchestrator/
+- tests/engine/test_actions.py
+- tests/engine/test_events.py
+- tests/engine/test_map_loader.py
+- tests/engine/test_rng.py
+- tests/engine/test_tick_properties.py
+- tests/engine/test_visibility.py
+- tests/engine/test_world_state.py
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **DESIGN.md §3.5 reordered.** The numbered list under "Checked in order each tick:" is updated to:
+  1. `count(impostors_alive) >= count(crew_alive)` → impostor win.
+  2. Active sabotage with `remaining_ticks == 0` → impostor win.
+  3. `crew_tasks_done == total_tasks` → crew win.
+  4. Otherwise: continue.
+- [ ] **DESIGN.md §3.5 dropped-rule consequence paragraph updated.** The existing paragraph (added by Task 2.10.5) documenting that an impostor kill removing the last incomplete task can trigger crew victory on the kill tick is rewritten to reflect the new ordering: a kill that simultaneously satisfies impostor parity (or sabotage timeout) AND removes the last incomplete task now resolves as an impostor win. The "kill that hands crew the win reflects impostor losing the race" framing is replaced with: a kill that triggers impostor parity wins for the impostor on the same tick; a kill that drops the last incomplete task **without** reaching parity still resolves as a crew win on the same tick.
+- [ ] **`engine/win_conditions.py::evaluate_win_conditions` reordered.** The three checks now fire in the order (1) impostor parity (2) sabotage timeout (3) crew tasks. The docstring's "strict DESIGN.md §3.5 order" reference is preserved (the docstring text does not need to change beyond the function body) but the `Dead-crewmate task rule` anchor comment above the crew-tasks check is updated to note the impostor-precedence ordering: dead-task removal is still performed by `engine/tick.py::_apply_kill`, but the win check now considers impostor conditions before the (possibly reduced) crew-task total.
+- [ ] **New regression test: parity-on-kill yields impostor win.** `tests/engine/test_tick.py` gains one test named `test_kill_reaching_parity_with_last_task_completion_yields_impostor_win` or equivalent. Scenario: 1 impostor (p-3) alive, 2 crewmates alive (p-1 with an already-completed task, p-2 the victim with an incomplete task), no other tasks. Impostor kills p-2. Post-kill state has 1 impostor and 1 crewmate alive (parity), and `state.tasks` contains only p-1's completed task (`crew_tasks_done == total_tasks`). Assert the returned `events` contains exactly one `GameOverEvent` with `winner == "IMPOSTORS"` and `reason == "IMPOSTOR_PARITY"`. Manually verify the test fails against the pre-fix order (revert the reorder temporarily; the test should produce `winner == "CREWMATES"`).
+- [ ] **Existing R-2 test stays correct without modification.** `test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick` (`tests/engine/test_tick.py:991`) keeps its scenario (1 impostor + 4 crewmates pre-kill → 1 impostor + 3 crewmates post-kill); post-kill parity is `1 >= 3` (false), so the crew-tasks branch still fires and the test still asserts `winner == "CREWMATES"`. Re-run `uv run pytest tests/engine/test_tick.py -v -k "kill_removing_last_incomplete_task or kill_reaching_parity"` and confirm both pass.
+- [ ] **Tournament balance verified at new rule.** Run `uv run python scripts/run_tournament.py --num-games 100 --start-seed 0 --output-dir /tmp/tournament-post-2.14 --max-ticks 1000`. Record the four-bucket counts and the decisive split in the PR description's `## Decisions` block. Both decisive sides must continue to exceed 20% of decisive games per the Phase 2 Merge Criterion. If either side falls below 20%, **stop and report** — the rule change has shifted balance outside the merge criterion and needs follow-up tuning (a Task 2.14.5 or similar), not a workaround inside this PR.
+- [ ] **Determinism preserved.** `tests/orchestrator/test_game.py:139-155` (default-agent 20-tick byte-identical replay) and `eval/determinism_test.py` continue to pass. The win-condition reorder changes which seeds produce which outcome (crew vs impostor) for parity-on-kill cases, but byte identity of two runs of the same fixture against itself must still hold. Verify with `uv run pytest tests/orchestrator/test_game.py eval/determinism_test.py -v`.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+The engine change is mechanical — move the three `if` blocks in `evaluate_win_conditions` so impostor parity fires first, sabotage timeout second, crew tasks third. Suggested shape:
+
+```python
+# engine/win_conditions.py
+def evaluate_win_conditions(state: WorldState) -> WinResult | None:
+    """Evaluate win conditions in the strict DESIGN.md §3.5 order."""
+    alive_players = [player for player in state.players.values() if player.alive]
+    alive_impostors = sum(1 for player in alive_players if player.role == "IMPOSTOR")
+    alive_crewmates = sum(1 for player in alive_players if player.role == "CREWMATE")
+    if alive_impostors >= alive_crewmates:
+        return WinResult(winner="IMPOSTORS", reason="IMPOSTOR_PARITY")
+
+    if (
+        state.sabotage is not None
+        and state.sabotage.active
+        and state.sabotage.remaining_ticks == 0
+    ):
+        return WinResult(winner="IMPOSTORS", reason="IMPOSTOR_SABOTAGE")
+
+    # Dead-crewmate task rule lives in DESIGN.md §3.5 (dropped). The kill
+    # handler in engine/tick.py removes a victim's incomplete tasks, so
+    # the comparison below already counts only alive-owned tasks. Impostor
+    # parity is checked first per §3.5: a kill that simultaneously reaches
+    # parity AND drops the last incomplete task resolves as an impostor win.
+    total_tasks = len(state.tasks)
+    completed_tasks = sum(1 for task in state.tasks.values() if task.completed)
+    if completed_tasks == total_tasks and total_tasks > 0:
+        return WinResult(winner="CREWMATES", reason="CREWMATE_TASKS")
+
+    return None
+```
+
+For the new regression test, model setup on the existing R-2 test (`test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick` at `tests/engine/test_tick.py:991`). The difference is the alive-crewmate count: the new test uses **two** crewmates (one with a completed task, one the victim), so post-kill the impostor reaches parity. Sketch:
+
+```python
+def test_kill_reaching_parity_with_last_task_completion_yields_impostor_win() -> None:
+    """DESIGN.md §3.5 ordering: when a kill simultaneously reaches
+    impostor parity AND removes the last incomplete task, the impostor
+    wins (parity is checked before crew tasks). Counterpart to
+    test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick,
+    which exercises the same kill mechanic without reaching parity.
+    """
+    game_map = load_canonical_map()
+    state = _state()
+    # _state() supplies p-1/p-2/p-4 crewmates + p-3 impostor; we override
+    # to a tight 1 impostor + 2 crewmate setup so the kill reaches parity.
+    players = {
+        "p-3": _player("p-3", "IMPOSTOR", "CAFETERIA", (0.0, 0.0)),
+        "p-1": _player("p-1", "CREWMATE", "ADMIN", (1.0, 0.0)),
+        "victim": _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0)),
+    }
+    state = replace(
+        state,
+        players=players,
+        cooldowns={"p-3": 0},
+        tasks={
+            "swipe_card_done": replace(
+                _task("swipe_card_done", "p-1", "ADMIN", required_ticks=1),
+                progress=1,
+                completed=True,
+            ),
+            "victim_incomplete": _task(
+                "victim_incomplete", "victim", "CAFETERIA", required_ticks=1
+            ),
+        },
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [_action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}})],
+        game_map=game_map,
+    )
+
+    assert next_state.phase == "GAME_OVER"
+    game_over_events = [event for event in events if event.type == "GameOver"]
+    assert len(game_over_events) == 1
+    assert event_to_dict(game_over_events[0])["winner"] == "IMPOSTORS"
+    assert event_to_dict(game_over_events[0])["reason"] == "IMPOSTOR_PARITY"
+```
+
+The existing R-2 test stays untouched. Its scenario uses the default `_state()` setup (3 crewmates + 1 impostor) plus an added victim, so post-kill there are still 3 alive crewmates vs 1 impostor — parity does not fire and crew wins by tasks under either ordering.
+
+For the tournament balance check, the command is:
+
+```bash
+uv run python scripts/run_tournament.py \
+  --num-games 100 \
+  --start-seed 0 \
+  --output-dir /tmp/tournament-post-2.14 \
+  --max-ticks 1000
+```
+
+Paste the raw stdout summary into `## Decisions` verbatim. The pre-change baseline (PR #31, on `main`) was `crew_wins=68 impostor_wins=25 tick_budget_reached=0 meeting_phase_reached=7`, decisive split `CREWMATES=73.12% / IMPOSTORS=26.88% of 93 decisive`. The expected shift under the new ordering: a small number of seeds where the impostor previously lost a parity-on-kill race now win it; impostor share rises, crew share falls. If the new impostor share stays comfortably above 20% (and crew above 20%), the merge criterion still holds. If either drops below 20%, stop and report.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+This task changes engine win-condition resolution semantics for a narrow case (parity-on-kill same-tick). It is mechanical and bounded but the behavior change is observable.
+
+- **Replay byte content changes for affected seeds.** Any seed whose tournament outcome flips from CREW (under old order) to IMPOSTOR (under new order) will produce a different replay than before. The byte-identity tests compare two live runs of the same fixture against each other (not against a frozen reference), so byte identity must still hold post-change — verify explicitly. If any test compares against a frozen byte sequence, that's an unexpected coupling and warrants stopping to investigate before re-recording.
+- **Engine purity preserved.** No new state, no randomness, no agent imports. The change is a function-body reorder.
+- **Existing R-5 dropped-rule implementation unchanged.** `engine/tick.py::_apply_kill` still removes incomplete tasks on a crewmate death; only the order in which the win check consumes the resulting state changes.
+- **Existing R-2 test (`test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick`) is unaffected** because its scenario does not reach parity post-kill. Confirm by running the test under both orderings — the assertion text should not need to change.
+- **Tournament balance shift.** Expected impostor share rises by a small amount (parity-on-kill ties now go to impostor). If the shift puts CREW below 20% of decisive, that's a balance regression and warrants follow-up tuning rather than a workaround inside this PR. The DoD's `## Decisions` recording is the audit trail.
+- **No Phase 3 implication.** Phase 3.8 (meeting state machine) and 3.12 (orchestrator integration) inherit the new ordering automatically; meetings only fire from body reports / emergency buttons during `state.phase == "PLAY"`, so a same-tick game-end (under either ordering) suppresses meetings the same way.
+- **`audits/*` are read-only artifacts.** Do not edit any audit report.
+
+**Ready-to-paste prompt:** `agent_prompts/task-2-14-win-condition-resolution-order.md`
+
 ## Merge Criteria
 - 100-game headless tournament completes without crashes.
 - Both decisive sides win > 20% of decisive games (CREWMATES and IMPOSTORS outcomes); `TICK_BUDGET_REACHED` games are reported separately and do not count toward decisive totals.
