@@ -175,6 +175,15 @@ engine never emits `TaskCompleted`, the bug is in
 If `p-1` submits `MoveIntent` or `WaitIntent` even after reaching the
 task's room, the bug is in `CrewmatePolicy` and in scope here.
 
+> Historical note (added 2026-05-15 by Task 2.11): the merged PR for this
+> task (commit `e3b2a60`) also touched `eval/determinism_test.py`,
+> `tests/engine/test_actions.py`, `tests/engine/test_events.py`,
+> `tests/engine/test_world_state.py`, `tests/orchestrator/test_seeder.py`,
+> and `agent_prompts/task-2-9-headless-tournament-harness.md` as
+> mechanical fallout of the `p-N` id rename. Those files are retroactively
+> considered in scope for that historical PR; the rename did not change
+> behavior.
+
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
