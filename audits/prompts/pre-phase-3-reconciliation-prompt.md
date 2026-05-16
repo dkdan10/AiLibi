@@ -1,19 +1,27 @@
 # Pre-Phase-3 Audit Reconciliation — Prompt
 
-Two independent auditors have produced reports at:
+Two independent auditors have produced reports under `audits/` matching
+the pattern `audit-YYYY-MM-DD-HHMM-{claude,codex}.md`. Discover them
+yourself with:
 
-- `audits/audit-2026-05-15-0115-claude.md`
-- `audits/audit-2026-05-15-0124-codex.md`
+```
+ls -t audits/audit-*-{claude,codex}.md | head -2
+```
+
+These are the two newest unreconciled audit reports. They are your
+inputs.
 
 You are reconciling them into one canonical report. You are running
 **fresh** — you have no memory of either audit's intent, and you must
 not read the prompt that produced them
 (`audits/prompts/pre-phase-3-audit-prompt.md`). You read only:
 
-1. The two audit files above.
+1. The two audit files identified above.
 2. The repository at current `HEAD` of `main`.
-3. The prior audit `audits/audit-2026-05-10-0721.md` (as a regression
-   baseline reference only).
+3. The most recent prior reconciled audit
+   (`audits/audit-2026-05-15-0225-reconciled.md`) as a regression
+   baseline reference only — to know which findings the implementing
+   PRs were trying to close.
 
 Your job is **adjudication**, not merging. Anchoring on either
 auditor's wording, structure, or severity will defeat the point of
@@ -42,20 +50,32 @@ record.
 
 ## 2. Process (mandatory order)
 
-### Step 1 — Extract every finding into a comparison table
+### Step 1 — Identify the two source audits
+
+Run the discovery command above. Confirm exactly two files match. If
+only one matches, or more than two, stop and report — the
+prerequisite condition for reconciliation is not met. Both files
+must be newer than the most recent `audit-*-reconciled.md`.
+
+Print the two filenames you identified before doing anything else.
+
+### Step 2 — Extract every finding into a comparison table
 
 Build one table with one row per finding. A "finding" is anything
 either audit lists in §10 (Defects and Risks) or anything either
-audit calls a Fail, Concern, or Phase-3 blocker in §5, §6, §7, §8,
-§9, §11, or §12. Use these columns:
+audit calls a Fail, Concern, or Phase-3 blocker in any earlier
+section. Use these columns:
 
-| ID | Title | Claude says | Codex says | Verified | Final severity | Disposition |
+| ID | Title | Auditor A says | Auditor B says | Verified | Final severity | Disposition |
 
 - **ID:** sequential, `R-1` through `R-N`. This is the new canonical id.
 - **Title:** ≤ 100 chars, action-oriented.
-- **Claude says:** that auditor's severity + a one-line summary, or `—` if absent.
-- **Codex says:** same, or `—` if absent.
-- **Verified:** `yes`, `no`, or `partial` after you re-run the cited evidence.
+- **Auditor A says / Auditor B says:** that auditor's severity + a
+  one-line summary, or `—` if absent. Use the actual auditor names
+  (e.g. "Claude" / "Codex") in the column headers based on the
+  filenames you identified in Step 1.
+- **Verified:** `yes`, `no`, or `partial` after you re-run the cited
+  evidence.
 - **Final severity:** Critical / High / Medium / Low / Concern, or `dropped`.
 - **Disposition:** one of:
   - **Confirmed** — both audits cited it, evidence reproduces.
@@ -69,22 +89,20 @@ audit calls a Fail, Concern, or Phase-3 blocker in §5, §6, §7, §8,
 This table is the canonical contract. Every finding in the final
 report must trace back to a row. Findings without a row do not exist.
 
-### Step 2 — Re-run evidence for every Critical or High finding
+### Step 3 — Re-run evidence for every Critical or High finding
 
-Both prior audits famously missed the original id leak even though
-they both ran the leak test. Same blind spot is possible here. For
-each Critical or High finding, run the cited command(s) yourself at
-current `HEAD` and record the actual output in the table's "Verified"
-column. For findings that depend on running the orchestrator,
-re-run the actual seed sweep and tournament — do not trust either
-auditor's numbers.
+Both prior audit cycles have had blind spots that both auditors
+shared. Same risk applies here. For each Critical or High finding,
+run the cited command(s) yourself at current `HEAD` and record the
+actual output in the table's "Verified" column. For findings that
+depend on running the orchestrator or tournament, re-run yourself —
+do not trust either auditor's numbers.
 
-For Medium and below, you may rely on the cited file:line if you
-read the cited code and confirm the citation is accurate. If the
-citation is wrong or stale, mark `Verified: no` and consider
-`Dropped`.
+For Medium and below, you may rely on the cited file:line if you read
+the cited code and confirm the citation is accurate. If the citation
+is wrong or stale, mark `Verified: no` and consider `Dropped`.
 
-### Step 3 — Apply the severity tie-breaker rule
+### Step 4 — Apply the severity tie-breaker rule
 
 When the two audits disagree on severity:
 
@@ -102,15 +120,25 @@ that as a hint, not a binding instruction — you still apply rule (1)
 unless your re-verification supports the downgrade on its own
 merits.
 
-### Step 4 — Write the canonical report
+### Step 5 — Identify disagreement hotspots during Step 2
+
+While building the comparison table, mark every row where the two
+audits disagree on either presence (one cites it, the other doesn't)
+or severity (both cite it but grade differently). These rows are
+your "disagreement hotspots" — they require explicit adjudication in
+§13.2 of the final report. You do not need to pre-list hotspots; the
+table surfaces them naturally.
+
+### Step 6 — Write the canonical report
 
 After the table is complete and every row's evidence has been
 verified, write the canonical audit report in the same section
-structure as `audits/audit-2026-05-10-0721.md` (§1 Executive Summary
+structure as the most recent prior reconciled audit
+(`audits/audit-2026-05-15-0225-reconciled.md` — §1 Executive Summary
 through §12 Readiness for Phase 3), with one new section appended:
 
 **§13 Reconciliation** containing:
-- §13.1 The full comparison table from Step 1.
+- §13.1 The full comparison table from Step 2.
 - §13.2 Disagreements and resolutions — one paragraph per row whose
   Disposition is not `Confirmed`. Each paragraph names the auditor
   whose grading was rejected and why, and cites the specific
@@ -134,18 +162,17 @@ For each section of the canonical report:
   you ran during reconciliation (not the union of both audits'
   command lists). Both audits' command lists are an input to your
   work, not your output.
-- **§4 Regression Baseline** — adopt the table from
-  `audit-2026-05-10-0721.md` and reconcile any cells where the two
-  audits disagree. Re-verify any "Still Pass (no diff)" claim by
-  running `git diff 014cca5..HEAD -- <path>` for that row.
+- **§4 Regression Baseline** — adopt the table from the prior
+  reconciled audit and reconcile any cells where the two audits
+  disagree. Re-verify any "Still Pass (no diff)" claim by running
+  `git diff <prior-reconciled-HEAD>..HEAD -- <path>` for that row.
 - **§5 Prior Audit Follow-Through** — both source audits already
-  re-checked M-1 and L-1 through L-5. Where they agree, adopt. Where
-  they disagree, re-verify and decide.
-- **§6 Task-by-Task DoD Audit** — for each of 2.7.5, 2.8, 2.8.5,
-  2.9: take the union of DoD bullets both audits evaluated, and for
-  each bullet record Pass / Fail / Partial with the strongest
-  cited evidence from either audit (plus your re-verification if
-  the bullet is Fail).
+  re-checked the prior reconciled audit's findings. Where they
+  agree, adopt. Where they disagree, re-verify and decide.
+- **§6 Task-by-Task DoD Audit** — for each in-window task: take the
+  union of DoD bullets both audits evaluated, and for each bullet
+  record Pass / Fail / Partial with the strongest cited evidence from
+  either audit (plus your re-verification if the bullet is Fail).
 - **§7 Architectural Invariant Audit** — for each invariant (I-1
   through I-12 plus multi-agent): if both audits Pass it, Pass it.
   If either Fails it, re-run the invariant check yourself.
@@ -157,7 +184,7 @@ For each section of the canonical report:
   counts if you can re-verify the gap exists.
 - **§10 Defects and Risks** — populate exclusively from the
   reconciliation table. Number findings R-1 through R-N matching
-  the table. Use the same format as `audit-2026-05-10-0721.md` §11
+  the table. Use the same format as the prior reconciled audit §10
   (Status / Evidence / Why it matters / Recommended action). If
   you Promoted or Demoted a finding, note the original auditor's
   severity in the Status line.
@@ -167,43 +194,7 @@ For each section of the canonical report:
   divergence in §13.3.
 - **§13 Reconciliation** — as described above.
 
-## 4. Known disagreement hotspots to adjudicate
-
-You will need a verdict on these specifically. Both are real
-disagreements between the two source audits and the reconciliation
-exists in part to resolve them:
-
-1. **The id-grep guard finding.** Codex grades it **Critical**
-   (their finding #2); Claude grades it **High** (their §10.4) and
-   teed up a downgrade. The literal regex match exists in
-   `tests/eval/test_balance_eval.py:258` and `eval/leak_test.py:228`.
-   Both lines are deliberate negative-test fixtures inside the value
-   scanner's self-test. Decide whether the audit prompt's "any hit
-   in `tests/` is Critical" rule applies to negative-test fixtures.
-   Cite both the literal grep output and the surrounding test
-   function (read it, do not trust either summary).
-
-2. **The impostor-stalemate root cause.** Claude graded as **High**
-   (their §10.3) with a specific code trace through
-   `agents/tactical/impostor_policy.py:219-265` and a tick-970–999
-   action trace from seed 0. Codex does not name this finding. If
-   you confirm the trace by re-running seed 0 and reading the
-   policy code, this is `Unique-but-verified` at the original
-   severity; if the trace does not reproduce, this is `Dropped`. Do
-   not split the difference.
-
-3. **The Phase 3.3 memory-store gap.** Codex graded as **High**
-   (their finding #4); Claude addressed memory shape in §8 / §12 but
-   did not flag it as a discrete defect. Decide whether the gap is a
-   Phase-3 blocker (High) or an unresolved-contract-to-write
-   (Concern). The evidence is whether `agents/memory/store.py` is
-   absent and whether Task 3.3's DoD names it.
-
-4. **Verdict.** Codex says "Not ready to start Phase 3 safely".
-   Claude's §2 verdict — read it. If they agree, the question is
-   trivial; if they disagree, §13.3 must adjudicate.
-
-## 5. Output
+## 4. Output
 
 Write the canonical reconciled report to:
 
@@ -220,7 +211,7 @@ Write the canonical reconciled report to:
   before Phase 3 begins.
 
 Do not commit. Do not open a PR. Do not modify either source audit
-or the prior audit.
+or any prior audit.
 
 ---
 
@@ -240,6 +231,6 @@ or the prior audit.
 - Do not skip §13. The reconciliation section is the audit trail
   that justifies the canonical record; without it the reconciled
   audit is just one more opinion.
-- Do not exceed the prior audit's length. A reconciled audit at this
-  scope should be ~600–800 lines. If you are over, you are
-  re-auditing.
+- Do not exceed the prior reconciled audit's length. A reconciled
+  audit at this scope should be ~400–700 lines. If you are over, you
+  are re-auditing.
