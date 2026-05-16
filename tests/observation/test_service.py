@@ -383,3 +383,30 @@ def test_observation_packet_collections_are_immutable(tmp_path: Path) -> None:
     assert isinstance(packet.audible_events, tuple)
     with pytest.raises(AttributeError):
         packet.visible_players.append(PlayerView(id="x", room="ADMIN", action=None))  # type: ignore[attr-defined]
+
+
+def test_audit_log_appends_across_two_instances(tmp_path: Path) -> None:
+    """R-13 regression: two ``ObservationService`` instances pointed at the
+    same audit-log path must each *append*, not overwrite. Pins
+    ``observation/audit.py:20-23`` open mode ``"a"`` — flipping to ``"w"``
+    silently slips past single-instance tests today.
+    """
+
+    state = _base_world_state()
+    service_one = _observation_service(tmp_path)
+    service_one.build_packet(world_state=state, agent_id="p-1", engine_events=[])
+    del service_one
+
+    service_two = ObservationService(
+        game_map=load_canonical_map(),
+        audit_log_path=tmp_path / "observation_audit.jsonl",
+    )
+    service_two.build_packet(world_state=state, agent_id="p-2", engine_events=[])
+
+    audit_path = tmp_path / "observation_audit.jsonl"
+    lines = audit_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    first_entry = json.loads(lines[0])
+    second_entry = json.loads(lines[1])
+    assert first_entry["agent_id"] == "p-1"
+    assert second_entry["agent_id"] == "p-2"

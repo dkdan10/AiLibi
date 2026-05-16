@@ -3,11 +3,19 @@
 DESIGN.md §11.1 mandates that for any sequence of valid actions,
 ``advance_tick`` is total and never produces invalid state.
 
-This test deliberately scopes the action vocabulary to ``move`` and ``wait`` —
-the action types most likely to be generated en masse by Phase 2 tactical
-agents. The point is to prove the engine never crashes on weird sequences,
-not to model every kill scenario; richer action coverage belongs in dedicated
-unit tests.
+The original ``_safe_actions`` strategy below intentionally scopes its
+vocabulary to ``move`` and ``wait`` — the verbs Phase 2 tactical agents
+emit en masse. The point of that property is to prove the engine never
+crashes on weird movement sequences, not to model every kill scenario.
+
+R-12 (audits/audit-2026-05-15-0225-reconciled.md §R-12) adds a second,
+role-aware strategy alongside it that draws batches mixing ``kill``,
+``vent``, ``report``, and ``wait`` actions. Engine-level rejections
+(`ActionRejectedError`) are caught in ``advance_tick`` and turned into
+``ActionRejectedEvent``s, so the new property remains narrow:
+``advance_tick`` must never raise on a drawn batch. Deeper invariants
+(role-correct event emission, witness sets, etc.) stay in dedicated unit
+tests.
 """
 
 from __future__ import annotations
@@ -149,3 +157,87 @@ def test_property_test_setup_uses_canonical_map() -> None:
     initial = _initial_state(seed=0)
     assert all(player.room in game_map.rooms for player in initial.players.values())
     assert replace(initial, tick=initial.tick) == initial
+
+
+# R-12: role-aware action vocabulary. Constants below pin the actor / target
+# / vent pools to the canonical ``_initial_state`` shape: ``p-3`` is the
+# only impostor, ``p-1`` and ``p-2`` are crewmates, and the six vent ids
+# come from ``engine/maps/canonical_1.yaml``. Body ids are deliberately a
+# mix of plausible and missing strings so the engine's rejection path gets
+# exercised alongside the rare "real body" hit.
+_IMPOSTOR_ID = "p-3"
+_CREWMATE_IDS = ("p-1", "p-2")
+_VENT_IDS = (
+    "REACTOR_VENT",
+    "STORAGE_VENT",
+    "ENGINEERING_VENT",
+    "ADMIN_VENT",
+    "MEDBAY_VENT",
+    "LABS_VENT",
+)
+_BODY_ID_DRAWS = ("body-p-1-0", "body-p-2-0", "missing-body")
+
+
+@st.composite
+def _role_aware_actions(draw: st.DrawFn) -> Action:
+    """Draw a role-valid action from the broader kill / vent / report / wait
+    vocabulary. ``kill`` and ``vent`` are gated on the impostor role;
+    ``report`` and ``wait`` accept any actor in ``_ACTORS``. Aliveness is
+    *not* checked here on purpose — the engine catches dead-actor and
+    dead-target attempts via ``ActionRejectedError`` and converts them to
+    ``ActionRejectedEvent``s, which is exactly the rejection path this
+    property is meant to exercise.
+    """
+
+    kind = draw(st.sampled_from(("kill", "vent", "report", "wait")))
+    if kind == "kill":
+        target = draw(st.sampled_from(_CREWMATE_IDS))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "kill", "actor": _IMPOSTOR_ID, "payload": {"target": target}}
+        )
+    if kind == "vent":
+        vent_id = draw(st.sampled_from(_VENT_IDS))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "vent", "actor": _IMPOSTOR_ID, "payload": {"vent_id": vent_id}}
+        )
+    if kind == "report":
+        actor = draw(st.sampled_from(_ACTORS))
+        body_id = draw(st.sampled_from(_BODY_ID_DRAWS))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "report", "actor": actor, "payload": {"body_id": body_id}}
+        )
+    actor = draw(st.sampled_from(_ACTORS))
+    return _ACTION_ADAPTER.validate_python(
+        {"type": "wait", "actor": actor, "payload": {}}
+    )
+
+
+@given(
+    seed=st.integers(min_value=0, max_value=2**31 - 1),
+    action_batches=st.lists(st.lists(_role_aware_actions(), max_size=3), max_size=10),
+)
+@settings(max_examples=50, deadline=None)
+def test_advance_tick_does_not_raise_under_role_aware_actions(
+    seed: int,
+    action_batches: list[list[Action]],
+) -> None:
+    """R-12: ``advance_tick`` must not raise on any role-aware batch.
+
+    Pairs with ``test_advance_tick_is_total_under_arbitrary_safe_actions``
+    above: that property covers ``move`` / ``wait`` sequences; this one
+    covers the previously unexplored ``kill`` / ``vent`` / ``report`` /
+    ``wait`` interleavings. Engine rejections must surface as
+    ``ActionRejectedEvent``s (see ``engine/tick.py``), not exceptions.
+    """
+
+    game_map = load_canonical_map()
+    state = _initial_state(seed)
+
+    for batch in action_batches:
+        if state.phase != "PLAY":
+            break
+        state, _ = advance_tick(
+            state,
+            _unique_actions_per_actor(batch),
+            game_map=game_map,
+        )

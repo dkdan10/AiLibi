@@ -16,7 +16,8 @@ from eval.balance_eval import BalanceReport, run_balance_eval
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
-from orchestrator.game import build_default_agent_factory
+from orchestrator.game import HeadlessGame, build_default_agent_factory
+from orchestrator.scheduler import TickScheduler
 
 _INTENT_ADAPTER: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
 
@@ -335,3 +336,46 @@ def test_run_balance_eval_reuses_headless_game_outcomes(tmp_path: Path) -> None:
         "MEETING_PHASE_REACHED": report.meeting_phase_reached,
     }
     assert expected_counts[direct_result.outcome] == 1
+
+
+# R-11 CI floor: documented post-2.10 decisive-outcome guard. The 100-game
+# tournament gate stays a local-only check (see ``tasks/phase-2.md`` Merge
+# Criteria); this test enforces that *at least one* of a small, fixed seed
+# set produces a decisive ``CREWMATES`` / ``IMPOSTORS`` outcome under the
+# default agents. Probed at current HEAD with max_ticks=200:
+#   seed 0  -> CREWMATES (tick 11)
+#   seed 1  -> CREWMATES (tick  9)
+#   seed 2  -> CREWMATES (tick  7)
+#   seed 7  -> CREWMATES (tick  7)
+#   seed 42 -> CREWMATES (tick  8)
+# See ``audits/audit-2026-05-15-0225-reconciled.md`` §R-11 / Task 2.10's R-2
+# sweep.
+_R11_CI_GUARD_SEEDS = (0, 1, 2, 7, 42)
+_R11_CI_GUARD_MAX_TICKS = 200
+
+
+def test_default_agent_sweep_reaches_at_least_one_decisive_outcome(
+    tmp_path: Path,
+) -> None:
+    """R-11 CI floor: after Task 2.10 the small seed sweep must yield at
+    least one decisive outcome. If this test fails, the Phase 2 tactical
+    fixes (R-1 / R-2 / R-3) have regressed; investigate before reverting.
+    """
+
+    game_map = load_canonical_map()
+    factory = build_default_agent_factory()
+    decisive = 0
+    for seed in _R11_CI_GUARD_SEEDS:
+        result = HeadlessGame(
+            seed=seed,
+            game_map=game_map,
+            agent_factory=factory,
+            replay_path=tmp_path / f"r-{seed}.jsonl",
+            scheduler=TickScheduler(max_ticks=_R11_CI_GUARD_MAX_TICKS),
+        ).run()
+        if result.outcome in {"CREWMATES", "IMPOSTORS"}:
+            decisive += 1
+    assert decisive >= 1, (
+        "R-11 regression: zero decisive outcomes across the CI guard "
+        "seeds; see audits/audit-2026-05-15-0225-reconciled.md §R-11."
+    )
