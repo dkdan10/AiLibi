@@ -55,7 +55,6 @@ Conventions consumed from perception (DESIGN.md §4.2 / §6.2):
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Final
 
@@ -84,14 +83,6 @@ from observation.public_map import PublicMapView, RoomId
 # Thirty ticks is the documented default — wide enough to keep
 # legitimate stalk targets, tight enough to kill the perpetual loop.
 _STALENESS_THRESHOLD: Final[int] = 30
-
-# Phase-2 inference: engine-generated body ids carry the format
-# ``body-{victim_id}-{tick}`` (engine/rules.py). The impostor policy
-# parses the victim_id out of `saw_body` events to mark confirmed-dead
-# players so they cannot be re-scored as targets. Phase 3 should surface
-# the victim id explicitly on `BodyView` so this string coupling can be
-# retired.
-_BODY_ID_VICTIM_PATTERN: Final[re.Pattern[str]] = re.compile(r"^body-(.+)-\d+$")
 
 
 @dataclass(frozen=True)
@@ -246,25 +237,27 @@ class ImpostorPolicy:
     ) -> frozenset[PlayerId]:
         """Derive the set of confirmed-dead player ids from ``saw_body`` events.
 
-        See ``_BODY_ID_VICTIM_PATTERN`` for the Phase-2 body-id format. Body
-        ids that do not match the pattern are skipped silently — they
-        cannot identify a victim and so cannot contribute to the
-        confirmed-dead set.
+        ``victim_id`` is populated at the observation boundary by
+        :class:`observation.service.ObservationService` from
+        ``BodyState.player_id``; perception surfaces it on every
+        ``saw_body`` event payload. This used to parse a regex over the
+        body id format -- see R-4 in
+        ``audits/audit-2026-05-16-0036-reconciled.md`` for the
+        retired coupling. A missing or non-string ``victim_id`` is a
+        boundary contract violation: the impostor policy refuses to
+        guess and raises immediately.
         """
 
         dead: set[PlayerId] = set()
         for event in events:
             if event.type != EVENT_SAW_BODY:
                 continue
-            body_id = event.payload.get("body_id")
-            if not isinstance(body_id, str):
+            victim_id = event.payload.get("victim_id")
+            if not isinstance(victim_id, str):
                 raise ValueError(
-                    f"saw_body event missing string 'body_id': {event.payload!r}"
+                    f"saw_body event missing string 'victim_id': {event.payload!r}"
                 )
-            match = _BODY_ID_VICTIM_PATTERN.match(body_id)
-            if match is None:
-                continue
-            dead.add(match.group(1))
+            dead.add(victim_id)
         return frozenset(dead)
 
     @staticmethod

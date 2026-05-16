@@ -98,11 +98,17 @@ def _saw_player_event(
     )
 
 
-def _saw_body_event(*, tick: int, body_id: str, room: RoomId) -> EpisodicEvent:
+def _saw_body_event(
+    *,
+    tick: int,
+    body_id: str,
+    room: RoomId,
+    victim_id: str,
+) -> EpisodicEvent:
     return EpisodicEvent(
         tick=tick,
         type=EVENT_SAW_BODY,
-        payload={"body_id": body_id, "room": room},
+        payload={"body_id": body_id, "room": room, "victim_id": victim_id},
         provenance=PROVENANCE_OBSERVED,
     )
 
@@ -356,7 +362,12 @@ class TestImpostorCover:
         store = _store_with(
             _self_state_event(tick=10, room="CAFETERIA"),
             _cooldown_event(tick=10, cooldown=8),
-            _saw_body_event(tick=10, body_id="victim-body", room="CAFETERIA"),
+            _saw_body_event(
+                tick=10,
+                body_id="body-victim-10",
+                room="CAFETERIA",
+                victim_id="victim",
+            ),
         )
         policy = ImpostorPolicy(agent_id="imp")
 
@@ -372,7 +383,12 @@ class TestImpostorCover:
             _self_state_event(tick=10, room="CAFETERIA"),
             _cooldown_event(tick=10, cooldown=0),
             _saw_player_event(tick=10, player_id="victim", room="CAFETERIA"),
-            _saw_body_event(tick=10, body_id="other-body", room="CAFETERIA"),
+            _saw_body_event(
+                tick=10,
+                body_id="body-other-9",
+                room="CAFETERIA",
+                victim_id="other",
+            ),
         )
         policy = ImpostorPolicy(agent_id="imp")
 
@@ -387,7 +403,12 @@ class TestImpostorCover:
         store = _store_with(
             _self_state_event(tick=10, room="CAFETERIA"),
             _cooldown_event(tick=10, cooldown=8),
-            _saw_body_event(tick=10, body_id="far-body", room="MEDBAY"),
+            _saw_body_event(
+                tick=10,
+                body_id="body-far-9",
+                room="MEDBAY",
+                victim_id="far",
+            ),
         )
         policy = ImpostorPolicy(agent_id="imp")
 
@@ -508,13 +529,15 @@ class TestImpostorAgentIdProperty:
 
 
 class TestImpostorStaleAndDeadTargetPruning:
-    """R-3: stale and confirmed-dead targets must be pruned from scoring.
+    """R-3 / R-4: stale and confirmed-dead targets must be pruned from scoring.
 
     The audit's seed-0 reproduction shows the impostor oscillating between
     the room where it last saw a victim and the adjacent room forever.
     ``_scored_targets`` must drop sightings older than the documented
-    staleness threshold and players observed as dead (via the
-    ``body-{victim_id}-{tick}`` body-id format).
+    staleness threshold and players observed as dead. Confirmed-dead
+    derivation reads ``victim_id`` directly from the ``saw_body`` event
+    payload populated by ``observation/service.py`` (see R-4 retirement
+    in ``audits/audit-2026-05-16-0036-reconciled.md``).
     """
 
     def test_stale_sighting_with_matching_body_does_not_drive_stalk(self) -> None:
@@ -528,7 +551,12 @@ class TestImpostorStaleAndDeadTargetPruning:
             _self_state_event(tick=5, room="CAFETERIA"),
             _cooldown_event(tick=5, cooldown=0),
             _saw_player_event(tick=5, player_id="victim", room="MEDBAY"),
-            _saw_body_event(tick=5, body_id="body-victim-5", room="MEDBAY"),
+            _saw_body_event(
+                tick=5,
+                body_id="body-victim-5",
+                room="MEDBAY",
+                victim_id="victim",
+            ),
             _self_state_event(tick=40, room="CAFETERIA"),
             _cooldown_event(tick=40, cooldown=0),
         )
@@ -550,7 +578,12 @@ class TestImpostorStaleAndDeadTargetPruning:
             _self_state_event(tick=10, room="CAFETERIA"),
             _cooldown_event(tick=10, cooldown=0),
             _saw_player_event(tick=10, player_id="victim", room="MEDBAY"),
-            _saw_body_event(tick=10, body_id="body-victim-10", room="MEDBAY"),
+            _saw_body_event(
+                tick=10,
+                body_id="body-victim-10",
+                room="MEDBAY",
+                victim_id="victim",
+            ),
         )
         policy = ImpostorPolicy(agent_id="imp")
 
@@ -566,7 +599,12 @@ class TestImpostorStaleAndDeadTargetPruning:
             _self_state_event(tick=5, room="CAFETERIA"),
             _cooldown_event(tick=5, cooldown=0),
             _saw_player_event(tick=5, player_id="victim", room="MEDBAY"),
-            _saw_body_event(tick=5, body_id="body-victim-5", room="MEDBAY"),
+            _saw_body_event(
+                tick=5,
+                body_id="body-victim-5",
+                room="MEDBAY",
+                victim_id="victim",
+            ),
             _self_state_event(tick=8, room="CAFETERIA"),
             _cooldown_event(tick=8, cooldown=0),
             _saw_player_event(tick=8, player_id="alive", room="ELECTRICAL"),
@@ -581,15 +619,22 @@ class TestImpostorStaleAndDeadTargetPruning:
         # CAFETERIA neighbors ELECTRICAL directly.
         assert intent.payload.to_room == "ELECTRICAL"
 
-    def test_malformed_body_id_is_ignored_silently(self) -> None:
-        # A `saw_body` event whose body_id does not match the
-        # ``body-{victim_id}-{tick}`` pattern cannot identify a victim
-        # and must not be treated as confirming death.
+    def test_body_with_unfamiliar_victim_does_not_block_other_targets(self) -> None:
+        # R-4: with ``victim_id`` populated at the boundary, the policy
+        # always knows which player a body belongs to. A body whose
+        # victim is not among the impostor's sighted candidates simply
+        # contributes a confirmed-dead entry for that unknown id and
+        # does not affect scoring of other live targets.
         store = _store_with(
             _self_state_event(tick=5, room="CAFETERIA"),
             _cooldown_event(tick=5, cooldown=0),
             _saw_player_event(tick=5, player_id="alive", room="ELECTRICAL"),
-            _saw_body_event(tick=5, body_id="malformed", room="MEDBAY"),
+            _saw_body_event(
+                tick=5,
+                body_id="body-stranger-3",
+                room="MEDBAY",
+                victim_id="stranger",
+            ),
             _self_state_event(tick=10, room="CAFETERIA"),
             _cooldown_event(tick=10, cooldown=0),
         )
@@ -601,19 +646,32 @@ class TestImpostorStaleAndDeadTargetPruning:
         assert isinstance(intent, MoveIntent)
         assert intent.payload.to_room == "ELECTRICAL"
 
-    def test_confirmed_dead_from_bodies_raises_on_missing_body_id(self) -> None:
-        # R-3: the ValueError guard at ``impostor_policy.py:260-263`` is
-        # the Phase-2 type-safety bridge while body ids are parsed as
-        # strings. Pin the branch so a future change to the ``saw_body``
+    def test_confirmed_dead_from_bodies_raises_on_missing_victim_id(self) -> None:
+        # R-4: the ValueError guard at ``impostor_policy.py::_confirmed_dead_from_bodies``
+        # is the boundary-contract check after the body-id regex was
+        # retired. Pin the branch so a future change to the ``saw_body``
         # payload shape cannot silently disable confirmed-dead pruning.
-        # The ``_saw_body_event`` helper types ``body_id: str`` and so
+        # The ``_saw_body_event`` helper types ``victim_id: str`` and so
         # cannot reach this branch — construct the event directly.
         malformed = EpisodicEvent(
             tick=0,
             type=EVENT_SAW_BODY,
-            payload={"room": "MEDBAY"},
+            payload={"body_id": "body-victim-0", "room": "MEDBAY"},
             provenance=PROVENANCE_OBSERVED,
         )
 
-        with pytest.raises(ValueError, match="body_id"):
+        with pytest.raises(ValueError, match="victim_id"):
+            ImpostorPolicy._confirmed_dead_from_bodies((malformed,))
+
+    def test_confirmed_dead_from_bodies_raises_on_non_string_victim_id(self) -> None:
+        # The guard also rejects a non-string ``victim_id`` -- the only
+        # contract the policy accepts is "string player id".
+        malformed = EpisodicEvent(
+            tick=0,
+            type=EVENT_SAW_BODY,
+            payload={"body_id": "body-victim-0", "room": "MEDBAY", "victim_id": None},
+            provenance=PROVENANCE_OBSERVED,
+        )
+
+        with pytest.raises(ValueError, match="victim_id"):
             ImpostorPolicy._confirmed_dead_from_bodies((malformed,))

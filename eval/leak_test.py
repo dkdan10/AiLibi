@@ -293,7 +293,7 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
                     )
             for visible_body in packet.visible_bodies:
                 visible_body_dump = visible_body.model_dump(mode="json")
-                assert set(visible_body_dump.keys()) == {"id", "room"}
+                assert set(visible_body_dump.keys()) == {"id", "room", "victim_id"}
                 assert _FORBIDDEN_BODY_FIELDS.isdisjoint(visible_body_dump.keys())
             if packet.self_state.role == "CREWMATE":
                 assert packet.cooldown is None

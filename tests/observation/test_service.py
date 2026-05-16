@@ -371,6 +371,53 @@ def test_discovered_body_is_hidden_from_subsequent_packets(tmp_path: Path) -> No
     assert packet_after.visible_bodies == ()
 
 
+def test_visible_body_carries_victim_id_from_body_state(tmp_path: Path) -> None:
+    # R-4: ObservationService is the single privileged consumer of engine
+    # state (DESIGN.md §1.3). It reads ``BodyState.player_id`` and
+    # surfaces it as ``BodyView.victim_id``. The body-id format already
+    # encodes the victim id; this assertion pins that the typed field
+    # carries the same value across every visible body in every packet.
+    # REACTOR is adjacent to ENGINEERING in canonical_1, so an observer
+    # in REACTOR sees bodies in either room.
+    state = _base_world_state()
+    bodies = {
+        "body-p-1-3": BodyState(
+            id="body-p-1-3",
+            player_id="p-1",
+            room="REACTOR",
+            position=(0.0, 0.0),
+            killed_by="p-4",
+            discovered_by=None,
+        ),
+        "body-p-3-4": BodyState(
+            id="body-p-3-4",
+            player_id="p-3",
+            room="ENGINEERING",
+            position=(0.0, 0.0),
+            killed_by="p-4",
+            discovered_by=None,
+        ),
+    }
+    state_with_bodies = dataclasses.replace(state, bodies=bodies)
+    service = _observation_service(tmp_path)
+
+    packet = service.build_packet(
+        world_state=state_with_bodies,
+        agent_id="p-2",
+        engine_events=[],
+    )
+
+    bodies_by_id = {body.id: body for body in packet.visible_bodies}
+    assert set(bodies_by_id) == {"body-p-1-3", "body-p-3-4"}
+    assert bodies_by_id["body-p-1-3"].victim_id == bodies["body-p-1-3"].player_id
+    assert bodies_by_id["body-p-3-4"].victim_id == bodies["body-p-3-4"].player_id
+    # Every visible body has the field populated; victim_id is required by
+    # the Pydantic schema, so an unset value would have failed validation
+    # before the packet was returned.
+    for body in packet.visible_bodies:
+        assert body.victim_id, "victim_id must be a non-empty string"
+
+
 def test_observation_packet_collections_are_immutable(tmp_path: Path) -> None:
     packet = _observation_service(tmp_path).build_packet(
         world_state=_base_world_state(),

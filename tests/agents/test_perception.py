@@ -153,7 +153,9 @@ class TestIngestPacketSelfAndGlobal:
             packet=_packet(
                 tick=42,
                 visible_players=(PlayerView(id="p2", room="ADMIN", action=None),),
-                visible_bodies=(BodyView(id="p3-body", room="ELECTRICAL"),),
+                visible_bodies=(
+                    BodyView(id="p3-body", room="ELECTRICAL", victim_id="p3"),
+                ),
                 audible_events=(AudibleEvent(kind="sabotage_alarm"),),
                 cooldown=4,
             ),
@@ -226,8 +228,8 @@ class TestIngestPacketSightings:
     def test_one_saw_body_event_per_visible_body_in_packet_order(self) -> None:
         store = MemoryStore()
         bodies = (
-            BodyView(id="p3-body", room="ELECTRICAL"),
-            BodyView(id="p5-body", room="MEDBAY"),
+            BodyView(id="p3-body", room="ELECTRICAL", victim_id="p3"),
+            BodyView(id="p5-body", room="MEDBAY", victim_id="p5"),
         )
 
         ingest_packet(packet=_packet(visible_bodies=bodies), memory=store)
@@ -236,9 +238,34 @@ class TestIngestPacketSightings:
             e for e in store.recent(since_tick=0) if e.type == EVENT_SAW_BODY
         ]
         assert len(body_events) == 2
-        assert body_events[0].payload == {"body_id": "p3-body", "room": "ELECTRICAL"}
-        assert body_events[1].payload == {"body_id": "p5-body", "room": "MEDBAY"}
+        assert body_events[0].payload == {
+            "body_id": "p3-body",
+            "room": "ELECTRICAL",
+            "victim_id": "p3",
+        }
+        assert body_events[1].payload == {
+            "body_id": "p5-body",
+            "room": "MEDBAY",
+            "victim_id": "p5",
+        }
         assert {e.provenance for e in body_events} == {PROVENANCE_OBSERVED}
+
+    def test_saw_body_payload_carries_victim_id_from_body_view(self) -> None:
+        # R-4: ``BodyView.victim_id`` is the authoritative source for the
+        # body's victim player id; perception surfaces it on the
+        # ``saw_body`` event payload so downstream agent code (e.g.
+        # ``impostor_policy._confirmed_dead_from_bodies``) reads it
+        # without parsing the body-id string.
+        store = MemoryStore()
+        body = BodyView(id="body-p7-42", room="ELECTRICAL", victim_id="p7")
+
+        ingest_packet(packet=_packet(visible_bodies=(body,)), memory=store)
+
+        body_event = next(
+            e for e in store.recent(since_tick=0) if e.type == EVENT_SAW_BODY
+        )
+        assert body_event.payload["victim_id"] == body.victim_id
+        assert body_event.payload["victim_id"] == "p7"
 
     def test_no_saw_events_when_nothing_visible(self) -> None:
         store = MemoryStore()
@@ -320,7 +347,9 @@ class TestIngestPacketAppendOrder:
                 role="IMPOSTOR",
                 cooldown=3,
                 visible_players=(PlayerView(id="p2", room="ADMIN", action=None),),
-                visible_bodies=(BodyView(id="p4-body", room="ELECTRICAL"),),
+                visible_bodies=(
+                    BodyView(id="p4-body", room="ELECTRICAL", victim_id="p4"),
+                ),
                 audible_events=(AudibleEvent(kind="sabotage_alarm"),),
             ),
             memory=store,
@@ -354,7 +383,7 @@ class TestRuntimeIntegration:
         packet = _packet(
             agent_id="p1",
             visible_players=(PlayerView(id="p2", room="ADMIN", action=None),),
-            visible_bodies=(BodyView(id="p3-body", room="ELECTRICAL"),),
+            visible_bodies=(BodyView(id="p3-body", room="ELECTRICAL", victim_id="p3"),),
             audible_events=(AudibleEvent(kind="sabotage_alarm"),),
             cooldown=2,
             role="IMPOSTOR",
