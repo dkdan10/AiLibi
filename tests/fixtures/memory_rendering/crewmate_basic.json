@@ -1,0 +1,59 @@
+{
+  "name": "crewmate_basic",
+  "description": "Crewmate with body discovery, sighting, completed task, beliefs, contradiction, and a last-seen entry in working memory. Generous token budget; full view rendered.",
+  "token_budget": 1500,
+  "events": [
+    {
+      "tick": 200,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": "wiring_admin"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 200,
+      "type": "global_status",
+      "payload": {"tasks_completed": 2, "tasks_total": 12},
+      "provenance": "inferred"
+    },
+    {
+      "tick": 380,
+      "type": "self_state",
+      "payload": {"room": "ADMIN", "role": "CREWMATE", "pending_task_id": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 395,
+      "type": "saw_player",
+      "payload": {"player_id": "p-5", "room": "ELECTRICAL", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 410,
+      "type": "saw_body",
+      "payload": {"body_id": "body-p-2-410", "room": "MEDBAY", "victim_id": "p-2"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 412,
+      "type": "global_status",
+      "payload": {"tasks_completed": 7, "tasks_total": 12},
+      "provenance": "inferred"
+    }
+  ],
+  "beliefs": [
+    {"player_id": "p-1", "suspicion": 0.5, "trust": 0.7},
+    {"player_id": "p-5", "suspicion": 0.55, "trust": 0.5},
+    {"player_id": "p-7", "suspicion": 0.3, "trust": 0.5}
+  ],
+  "contradictions": [
+    {
+      "player_id": "p-4",
+      "summary": "p-4 claims STORAGE 400-410 but p-6 reports CAFETERIA 405",
+      "left_ref": "alibi:p-4@400-410",
+      "right_ref": "sighting:p-6:p-4@405"
+    }
+  ],
+  "last_seen": [
+    {"player_id": "p-5", "tick": 395, "room": "ELECTRICAL"}
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "name": "tight_budget_drops_low_salience",
+  "description": "Many observations of varying salience under a tight token budget; only the highest-salience events survive. Verifies events past the budget are dropped by lowest salience first.",
+  "token_budget": 40,
+  "events": [
+    {
+      "tick": 200,
+      "type": "self_state",
+      "payload": {"room": "CAFETERIA", "role": "CREWMATE", "pending_task_id": "fix_wiring"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 200,
+      "type": "global_status",
+      "payload": {"tasks_completed": 2, "tasks_total": 12},
+      "provenance": "inferred"
+    },
+    {
+      "tick": 390,
+      "type": "saw_player",
+      "payload": {"player_id": "p-4", "room": "CAFETERIA", "action": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 395,
+      "type": "heard_sabotage_alarm",
+      "payload": {"kind": "sabotage_alarm", "room": "REACTOR"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 400,
+      "type": "heard_vent_use",
+      "payload": {"kind": "vent_use_heard", "room": "MEDBAY"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 405,
+      "type": "saw_player",
+      "payload": {"player_id": "p-3", "room": "ELECTRICAL", "action": "vent"},
+      "provenance": "observed"
+    },
+    {
+      "tick": 410,
+      "type": "saw_body",
+      "payload": {"body_id": "body-p-2-410", "room": "MEDBAY", "victim_id": "p-2"},
+      "provenance": "observed"
+    }
+  ],
+  "beliefs": [],
+  "contradictions": [],
+  "last_seen": []
+}

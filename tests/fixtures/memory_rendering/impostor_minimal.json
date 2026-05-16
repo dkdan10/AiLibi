@@ -1,0 +1,28 @@
+{
+  "name": "impostor_minimal",
+  "description": "Impostor at game start with only self_state and global_status events; no observations, beliefs, contradictions, or working-memory enrichment. The renderer surfaces only the role and tasks-completed lines.",
+  "token_budget": 1500,
+  "events": [
+    {
+      "tick": 0,
+      "type": "self_state",
+      "payload": {"room": "CAFETERIA", "role": "IMPOSTOR", "pending_task_id": null},
+      "provenance": "observed"
+    },
+    {
+      "tick": 0,
+      "type": "global_status",
+      "payload": {"tasks_completed": 0, "tasks_total": 12},
+      "provenance": "inferred"
+    },
+    {
+      "tick": 0,
+      "type": "cooldown_status",
+      "payload": {"cooldown": 25},
+      "provenance": "observed"
+    }
+  ],
+  "beliefs": [],
+  "contradictions": [],
+  "last_seen": []
+}
