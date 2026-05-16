@@ -1586,6 +1586,164 @@ None.
 
 **Ready-to-paste prompt:** `agent_prompts/task-2-12-behavioral-merge-criteria-ci-gates-and-remaining-test-hygiene.md`
 
+### Task 2.13 — Pre-Phase-3 post-audit cleanup
+**Branch:** `phase-2-post-audit-cleanup`
+**Depends on:** 2.12 merged
+**Section refs:** DESIGN.md §3.5, DESIGN.md §4.4
+**Complexity:** Small
+
+Close the three actionable findings in
+`audits/audit-2026-05-16-0036-reconciled.md` §10 that block a clean
+DESIGN.md → code agreement and pin two documented-but-untested
+behaviors before Phase 3 begins: R-1 (DESIGN.md §3.5 names
+`tasks_per_crewmate` as a `seed_initial_state` parameter that does
+not exist), R-2 (the `dropped` rule's same-tick crew-win consequence
+is documented but unpinned), and R-3 (the
+`_confirmed_dead_from_bodies` `ValueError` branch for malformed
+`saw_body` payloads is uncovered). Optionally close R-7 (the
+`"victim-body"` synthetic body-id string still appears at
+`tests/observation/test_service.py:343, 358`). R-4, R-5, R-6 from
+the same audit are explicitly out of scope — they are already wired
+into Phase 3 task DoDs (3.3, 3.9, 3.12) for retirement or
+enforcement during Phase 3 implementation.
+
+No runtime code touched. The diff is one documentation edit, two
+new regression tests, and (optionally) one mechanical rename of an
+internal test-helper body-id string. None of the changes alter
+behavior.
+
+**Files in scope:**
+- DESIGN.md
+- tests/engine/test_tick.py
+- tests/agents/test_impostor_policy.py
+- tests/observation/test_service.py
+
+**Files NOT in scope:**
+- engine/
+- observation/
+- orchestrator/
+- agents/
+- llm/
+- api/
+- frontend/
+- eval/
+- scripts/
+- AGENTS.md
+- AGENT_IMPLEMENTATION.md
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- tests/agents/test_crewmate_policy.py
+- tests/agents/test_memory.py
+- tests/agents/test_pathing.py
+- tests/agents/test_perception.py
+- tests/agents/test_runtime.py
+- tests/engine/test_actions.py
+- tests/engine/test_events.py
+- tests/engine/test_map_loader.py
+- tests/engine/test_rng.py
+- tests/engine/test_tick_properties.py
+- tests/engine/test_visibility.py
+- tests/engine/test_world_state.py
+- tests/eval/
+- tests/observation/test_boundary_contracts.py
+- tests/orchestrator/
+- tests/_helpers/
+- tests/fixtures/
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **R-1 — DESIGN.md §3.5 `tasks_per_crewmate` drift resolved:** Edit the tuning-lever paragraph at `DESIGN.md:291` (the `(2) tasks_per_crewmate ∈ {2, 3}` line and the "Current canonical default" line that names `tasks_per_crewmate=1`). Replace the parenthetical "(a parameter on `orchestrator.seeder.seed_initial_state`)" with the explicit dependency: "(would require parameterizing `orchestrator.seeder.seed_initial_state`; currently hardcoded to one task per crewmate by `_build_tasks`)". Edit the "Current canonical default" line to drop `tasks_per_crewmate=1` and reflect only what is actually canonical: `kill_cooldown_ticks=4` and `sabotages.lights.duration_ticks=90`. The lever stays documented (preserves Path A search-space history); only the implementation claim is corrected.
+- [ ] **R-2 — same-tick crew-win regression pinned:** `tests/engine/test_tick.py` gains one regression test (~20 lines) named `test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick` or equivalent. The test constructs a `WorldState` with exactly one incomplete task owned by the kill victim and zero other incomplete tasks (i.e. all surviving alive-owned tasks are completed), advances through a `KillAction`, and asserts the returned `events` tuple contains a `GameOverEvent` with `winner == "CREWMATES"` and `reason == "CREWMATE_TASKS"`. The test must fail if `engine/tick.py::_apply_kill`'s task-drop logic is reverted (manually verify by temporarily commenting out the incomplete-task removal and confirming the test fails, then restoring).
+- [ ] **R-3 — `_confirmed_dead_from_bodies` missing-payload branch pinned:** `tests/agents/test_impostor_policy.py` gains one unit test (~10 lines) named `test_confirmed_dead_from_bodies_raises_on_missing_body_id` or equivalent. The test constructs a `saw_body` `EpisodicEvent` whose `payload` either omits `body_id` (e.g. `payload={"room": "MEDBAY"}`) or sets `body_id` to a non-string (e.g. `payload={"body_id": None}`), and asserts `ImpostorPolicy._confirmed_dead_from_bodies` raises `ValueError`. Use the existing `_saw_body_event` test helper only if it can be invoked with the missing-payload shape; otherwise construct the `EpisodicEvent` directly to bypass the helper's `body_id: str` typing.
+- [ ] **[Optional] R-7 — rename the `"victim-body"` synthetic body-id string:** `tests/observation/test_service.py` lines 343 and 358 use `"victim-body"` as the `BodyState.id` value in body-discovery filter tests. Rename to `"body-p-1-0"` (matches the canonical engine format from `engine/rules.py:69`'s `f"body-{target.id}-{state.tick}"`). The scenario semantics are unchanged. **Skip without penalty** if the existing PR #33 `## Decisions` acceptance is judged sufficient; the string does not match the post-2.11 grep guard or trip the leak scanner.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+For R-1, the current paragraph at `DESIGN.md:291` reads (paraphrased): `(2) tasks_per_crewmate ∈ {2, 3} (a parameter on orchestrator.seeder.seed_initial_state) paired with kill_cooldown_ticks ∈ {6, 4}` and `Current canonical default: kill_cooldown_ticks=4, tasks_per_crewmate=1, sabotages.lights.duration_ticks=90`. After the edit, the first line acknowledges the parameter does not yet exist while preserving the lever as a future option:
+
+```markdown
+(2) `tasks_per_crewmate ∈ {2, 3}` (would require parameterizing
+`orchestrator.seeder.seed_initial_state`; currently hardcoded to one
+task per crewmate by `_build_tasks`) paired with
+`kill_cooldown_ticks ∈ {6, 4}`
+```
+
+And the canonical-default line becomes:
+
+```markdown
+Current canonical defaults: `kill_cooldown_ticks=4`,
+`sabotages.lights.duration_ticks=90`.
+```
+
+For R-2, the test should re-use the existing tick-test scaffolding. The shape (illustrative; pick names consistent with the file's conventions):
+
+```python
+def test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick() -> None:
+    """R-2: documented in DESIGN.md §3.5 — an impostor kill that
+    removes the last incomplete task in state.tasks triggers the
+    crew win condition on the same tick. This pins the documented
+    consequence so a future refactor of the tick loop cannot
+    silently regress it.
+    """
+    # Build state: 1 incomplete task owned by p-2 (victim), 0 others.
+    state = ...  # one alive impostor, one alive crewmate (victim)
+    actions = (KillAction(actor="p-1", payload=...),)
+    next_state, events = advance_tick(state, actions, game_map=game_map)
+    game_over_events = [e for e in events if isinstance(e, GameOverEvent)]
+    assert game_over_events, "expected GameOverEvent on same-tick kill"
+    assert game_over_events[0].winner == "CREWMATES"
+    assert game_over_events[0].reason == "CREWMATE_TASKS"
+```
+
+The existing `test_dead_crewmate_incomplete_task_is_dropped_and_crew_can_still_win` test at `tests/engine/test_tick.py:911-988` is the closest neighbor; model setup helpers on it.
+
+For R-3, the malformed-payload test bypasses the helper's typing:
+
+```python
+def test_confirmed_dead_from_bodies_raises_on_missing_body_id() -> None:
+    """R-3: the ValueError guard at impostor_policy.py:260-263 is
+    the Phase-2 type-safety bridge while the body-id format is
+    parsed as a string. Pin the branch so a future change to the
+    saw_body payload shape cannot silently disable confirmed-dead
+    pruning.
+    """
+    malformed = EpisodicEvent(
+        tick=0,
+        type=EVENT_SAW_BODY,
+        payload={"room": "MEDBAY"},  # body_id missing
+    )
+    with pytest.raises(ValueError, match="body_id"):
+        ImpostorPolicy._confirmed_dead_from_bodies((malformed,))
+```
+
+If the test file does not already import `EpisodicEvent` or `EVENT_SAW_BODY` at the top, add only the imports the new test needs.
+
+For R-7 (optional), the rename is a literal find-and-replace within `tests/observation/test_service.py` at lines 343 and 358. After the rename, the test scenarios continue to read the same way because the body id is opaque to the filter logic. Skip if you prefer to leave the deviation in PR #33's audit trail.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+This task adds two regression tests and one documentation edit. Low blast radius.
+
+- **R-2 setup specificity:** The test must build a state whose initial `state.tasks` contains exactly one incomplete task (owned by the kill victim) and zero other tasks of any kind. If the seeder helper assigns multiple tasks per crewmate by default, you may need to construct the state directly rather than via `seed_initial_state`. Either approach is acceptable; the goal is the assertion, not the setup style.
+- **R-3 helper bypass:** The `_saw_body_event` helper at `tests/agents/test_impostor_policy.py:101-106` types `body_id: str`. Bypassing it is intentional — the test exercises the malformed-payload branch the helper cannot reach. Do not modify the helper.
+- **DESIGN.md edit scope:** Only the §3.5 tuning-lever paragraph at line 291 is in scope. Do not touch the surrounding `dropped`-rule paragraphs (those are correct as written) or any other section.
+- **`audits/*` are read-only artifacts.** Do not edit the reconciled audit; this task addresses its findings, it does not amend the record.
+
+**Ready-to-paste prompt:** `agent_prompts/task-2-13-pre-phase-3-post-audit-cleanup.md`
+
 ## Merge Criteria
 - 100-game headless tournament completes without crashes.
 - Both decisive sides win > 20% of decisive games (CREWMATES and IMPOSTORS outcomes); `TICK_BUDGET_REACHED` games are reported separately and do not count toward decisive totals.
