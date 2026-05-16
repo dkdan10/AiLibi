@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
@@ -82,7 +82,15 @@ ObservationClaim: TypeAlias = Annotated[
 
 
 class AlibiClaim(_FrozenModel):
-    """Self- or other-player alibi for a tick range."""
+    """Self- or other-player alibi for a tick range.
+
+    Tick ranges are inclusive and must be chronological
+    (``from_tick <= to_tick``). DESIGN.md §5.4 contradiction detection
+    indexes alibis by ``(agent, tick_range, location)``; a reversed
+    range would be silently interpreted as an empty/no-overlap window
+    and produce wrong contradiction flags rather than fail loud
+    (AGENTS.md "no silent fallbacks").
+    """
 
     type: Literal["alibi"]
     subject: PlayerId
@@ -90,6 +98,15 @@ class AlibiClaim(_FrozenModel):
     to_tick: int
     room: RoomId
     evidence: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _validate_chronological_range(self) -> AlibiClaim:
+        if self.from_tick > self.to_tick:
+            raise ValueError(
+                "AlibiClaim tick range must be chronological: "
+                f"from_tick={self.from_tick} > to_tick={self.to_tick}"
+            )
+        return self
 
 
 class AccusationClaim(_FrozenModel):
@@ -215,6 +232,15 @@ class MeetingResult(_FrozenModel):
     outcome to engine-owned state and to persist the meeting in the
     replay log. The orchestrator -- not the meeting manager -- mutates
     engine state.
+
+    ``outcome`` and ``ejected_player_id`` are coupled invariants:
+
+    * ``EJECTED`` requires a non-``None`` ``ejected_player_id``.
+    * ``SKIPPED`` and ``TIE`` require ``ejected_player_id is None``.
+
+    Enforcing this at parse time prevents structured LLM output (or a
+    buggy ``MeetingManager``) from producing a logically inconsistent
+    payload that the orchestrator would have to guess at.
     """
 
     meeting_id: str
@@ -225,6 +251,19 @@ class MeetingResult(_FrozenModel):
     ballots: tuple[VoteBallot, ...]
     contradictions: tuple[ContradictionRef, ...] = ()
     transcript: MeetingTranscript
+
+    @model_validator(mode="after")
+    def _validate_outcome_matches_ejection(self) -> MeetingResult:
+        if self.outcome == "EJECTED" and self.ejected_player_id is None:
+            raise ValueError(
+                "MeetingResult outcome='EJECTED' requires a non-None ejected_player_id"
+            )
+        if self.outcome != "EJECTED" and self.ejected_player_id is not None:
+            raise ValueError(
+                f"MeetingResult outcome={self.outcome!r} requires "
+                "ejected_player_id is None"
+            )
+        return self
 
 
 __all__ = [

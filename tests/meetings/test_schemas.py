@@ -194,6 +194,71 @@ class TestStatement:
         assert accusation.against == "p-5"
 
 
+class TestAlibiClaimChronology:
+    """Codex P2: alibi tick ranges must be chronological.
+
+    Reversed ranges silently corrupt DESIGN.md §5.4 contradiction
+    detection (which indexes alibis by ``(agent, tick_range, location)``);
+    pin the fail-loud behavior at the schema boundary.
+    """
+
+    def test_equal_from_and_to_tick_is_allowed(self) -> None:
+        claim = AlibiClaim(
+            type="alibi",
+            subject="p-3",
+            from_tick=400,
+            to_tick=400,
+            room="ADMIN",
+        )
+
+        assert claim.from_tick == claim.to_tick == 400
+
+    def test_chronological_range_is_allowed(self) -> None:
+        claim = AlibiClaim(
+            type="alibi",
+            subject="p-3",
+            from_tick=380,
+            to_tick=410,
+            room="ADMIN",
+        )
+
+        assert claim.from_tick == 380
+        assert claim.to_tick == 410
+
+    def test_reversed_range_is_rejected_at_parse_time(self) -> None:
+        with pytest.raises(ValidationError, match="chronological"):
+            AlibiClaim(
+                type="alibi",
+                subject="p-3",
+                from_tick=410,
+                to_tick=380,
+                room="ADMIN",
+            )
+
+    def test_reversed_range_inside_report_document_is_rejected(self) -> None:
+        # The chronology invariant also applies when ``AlibiClaim`` is
+        # parsed via the discriminated union inside a ``ReportDocument``.
+        with pytest.raises(ValidationError, match="chronological"):
+            ReportDocument.model_validate(
+                {
+                    "agent_id": "p-3",
+                    "tick": 412,
+                    "observations": [],
+                    "claims": [
+                        {
+                            "type": "alibi",
+                            "subject": "p-3",
+                            "from_tick": 410,
+                            "to_tick": 380,
+                            "room": "ADMIN",
+                            "evidence": [],
+                        }
+                    ],
+                    "free_text": "",
+                }
+            )
+
+
 class TestVoteBallot:
     def test_design_md_voting_example_validates(self) -> None:
         ballot = _vote_ballot()
@@ -311,6 +376,57 @@ class TestMeetingResult:
         assert result.contradictions == ()
         assert result.transcript.reports == ()
         assert result.transcript.statements == ()
+
+    def test_tie_outcome_has_no_ejected_player(self) -> None:
+        result = MeetingResult(
+            meeting_id="m-3",
+            triggered_by="p-3",
+            trigger_tick=410,
+            outcome="TIE",
+            ejected_player_id=None,
+            ballots=(),
+            transcript=MeetingTranscript(),
+        )
+
+        assert result.outcome == "TIE"
+        assert result.ejected_player_id is None
+
+    def test_ejected_outcome_without_ejected_id_is_rejected(self) -> None:
+        # Codex P1: enforce the outcome/ejection invariant at parse time.
+        with pytest.raises(ValidationError, match="EJECTED"):
+            MeetingResult(
+                meeting_id="m-4",
+                triggered_by="p-3",
+                trigger_tick=410,
+                outcome="EJECTED",
+                ejected_player_id=None,
+                ballots=(),
+                transcript=MeetingTranscript(),
+            )
+
+    def test_skipped_outcome_with_ejected_id_is_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="SKIPPED"):
+            MeetingResult(
+                meeting_id="m-5",
+                triggered_by="p-3",
+                trigger_tick=410,
+                outcome="SKIPPED",
+                ejected_player_id="p-5",
+                ballots=(),
+                transcript=MeetingTranscript(),
+            )
+
+    def test_tie_outcome_with_ejected_id_is_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="TIE"):
+            MeetingResult(
+                meeting_id="m-6",
+                triggered_by="p-3",
+                trigger_tick=410,
+                outcome="TIE",
+                ejected_player_id="p-5",
+                ballots=(),
+                transcript=MeetingTranscript(),
+            )
 
 
 class TestAgentOutputSchemasReExport:
