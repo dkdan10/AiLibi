@@ -600,3 +600,20 @@ class TestImpostorStaleAndDeadTargetPruning:
         # alive is still a valid target; impostor stalks toward ELECTRICAL.
         assert isinstance(intent, MoveIntent)
         assert intent.payload.to_room == "ELECTRICAL"
+
+    def test_confirmed_dead_from_bodies_raises_on_missing_body_id(self) -> None:
+        # R-3: the ValueError guard at ``impostor_policy.py:260-263`` is
+        # the Phase-2 type-safety bridge while body ids are parsed as
+        # strings. Pin the branch so a future change to the ``saw_body``
+        # payload shape cannot silently disable confirmed-dead pruning.
+        # The ``_saw_body_event`` helper types ``body_id: str`` and so
+        # cannot reach this branch — construct the event directly.
+        malformed = EpisodicEvent(
+            tick=0,
+            type=EVENT_SAW_BODY,
+            payload={"room": "MEDBAY"},
+            provenance=PROVENANCE_OBSERVED,
+        )
+
+        with pytest.raises(ValueError, match="body_id"):
+            ImpostorPolicy._confirmed_dead_from_bodies((malformed,))

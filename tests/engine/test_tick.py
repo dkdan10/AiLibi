@@ -986,3 +986,58 @@ def test_dead_crewmate_incomplete_task_is_dropped_and_crew_can_still_win() -> No
     game_over = next(event for event in final_events if event.type == "GameOver")
     assert event_to_dict(game_over)["winner"] == "CREWMATES"
     assert event_to_dict(game_over)["reason"] == "CREWMATE_TASKS"
+
+
+def test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick() -> None:
+    """R-2 (DESIGN.md §3.5 same-tick consequence of the ``dropped`` rule).
+
+    When an impostor kill removes the last incomplete task from
+    ``state.tasks`` and every surviving task is already completed,
+    ``advance_tick`` resolves crew victory on the same tick. Pin the
+    consequence so a future refactor of the tick loop cannot silently
+    regress it.
+    """
+
+    game_map = load_canonical_map()
+    state = _state()
+    players = dict(state.players)
+    players["victim"] = _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0))
+    # Tasks: one incomplete owned by the about-to-die victim (will be
+    # dropped on kill) and one already-completed task owned by an alive
+    # crewmate. After the kill, ``state.tasks`` contains only the
+    # completed task, so ``completed_tasks == total_tasks > 0`` and the
+    # CREWMATE_TASKS branch fires inside the same ``advance_tick`` call.
+    state = replace(
+        state,
+        players=players,
+        tasks={
+            "swipe_card_done": replace(
+                _task("swipe_card_done", "p-2", "ADMIN", required_ticks=1),
+                progress=1,
+                completed=True,
+            ),
+            "victim_incomplete": _task(
+                "victim_incomplete", "victim", "CAFETERIA", required_ticks=1
+            ),
+        },
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "kill",
+                    "actor": "p-3",
+                    "payload": {"target": "victim"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert next_state.phase == "GAME_OVER"
+    game_over_events = [event for event in events if event.type == "GameOver"]
+    assert len(game_over_events) == 1
+    assert event_to_dict(game_over_events[0])["winner"] == "CREWMATES"
+    assert event_to_dict(game_over_events[0])["reason"] == "CREWMATE_TASKS"
