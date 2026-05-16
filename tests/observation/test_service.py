@@ -340,7 +340,7 @@ def test_discovered_body_is_hidden_from_subsequent_packets(tmp_path: Path) -> No
     # visible_bodies — including the discoverer's own packet on the same tick.
     state = _base_world_state()
     body = BodyState(
-        id="victim-body",
+        id="body-p-1-0",
         player_id="p-1",
         room="REACTOR",
         position=(0.0, 0.0),
@@ -355,7 +355,7 @@ def test_discovered_body_is_hidden_from_subsequent_packets(tmp_path: Path) -> No
         agent_id="p-2",
         engine_events=[],
     )
-    assert "victim-body" in {b.id for b in packet_before.visible_bodies}
+    assert "body-p-1-0" in {b.id for b in packet_before.visible_bodies}
 
     discovered_body = dataclasses.replace(body, discovered_by="p-2")
     state_after_discovery = dataclasses.replace(
