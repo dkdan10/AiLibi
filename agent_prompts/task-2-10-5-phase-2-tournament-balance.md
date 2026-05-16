@@ -175,6 +175,16 @@ def _build_tasks(
 
 The edge case in the comment matters: the canonical map has 12 tasks; 3 crewmates × 4 tasks each fills the map without repeats. Beyond 4, the modulo cycles. Stay within bounds; this task does not authorize widening the map's task set.
 
+> Historical note (added 2026-05-15 by Task 2.11): the merged PR for this
+> task (commit `d278829`) also updated two cooldown-value literal
+> assertions in `tests/engine/test_tick.py` at lines 110 and 117
+> (`== 10` → `== 4`, `== 9` → `== 3`) as mechanical fallout of the
+> `kill_cooldown_ticks` 10 → 4 retune. The Task 2.10.5 `Test cascades
+> resolved` DoD bullet enumerated four cascade test files but missed
+> `tests/engine/test_tick.py`; the file is retroactively considered in
+> scope for that historical PR. The literal-value updates did not change
+> behavior.
+
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 

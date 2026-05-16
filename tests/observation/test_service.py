@@ -47,15 +47,15 @@ def _base_world_state(*, seed: int = 42) -> WorldState:
         phase="PLAY",
         map=game_map.id,
         players={
-            "victim": _player("victim", "CREWMATE", "STORAGE", (0.0, 0.0)),
-            "observer": _player("observer", "CREWMATE", "REACTOR", (0.0, 0.0)),
-            "crew-2": _player("crew-2", "CREWMATE", "ADMIN", (0.0, 0.0)),
-            "impostor": _player("impostor", "IMPOSTOR", "STORAGE", (1.0, 0.0)),
+            "p-1": _player("p-1", "CREWMATE", "STORAGE", (0.0, 0.0)),
+            "p-2": _player("p-2", "CREWMATE", "REACTOR", (0.0, 0.0)),
+            "p-3": _player("p-3", "CREWMATE", "ADMIN", (0.0, 0.0)),
+            "p-4": _player("p-4", "IMPOSTOR", "STORAGE", (1.0, 0.0)),
         },
         bodies={},
         tasks={},
         sabotage=None,
-        cooldowns={"impostor": 0},
+        cooldowns={"p-4": 0},
         emergency_uses={},
         rng_state=EngineRng.from_seed(seed).snapshot(),
         seed=seed,
@@ -77,7 +77,7 @@ def test_kill_witness_sees_killer_action(tmp_path: Path) -> None:
     game_map = load_canonical_map()
     state = _base_world_state()
     players = dict(state.players)
-    players["observer"] = _player("observer", "CREWMATE", "STORAGE", (2.0, 0.0))
+    players["p-2"] = _player("p-2", "CREWMATE", "STORAGE", (2.0, 0.0))
     state = WorldState(
         tick=state.tick,
         phase=state.phase,
@@ -94,21 +94,17 @@ def test_kill_witness_sees_killer_action(tmp_path: Path) -> None:
 
     state, events = advance_tick(
         state,
-        [
-            _action(
-                {"type": "kill", "actor": "impostor", "payload": {"target": "victim"}}
-            )
-        ],
+        [_action({"type": "kill", "actor": "p-4", "payload": {"target": "p-1"}})],
         game_map=game_map,
     )
 
     packet = _observation_service(tmp_path).build_packet(
         world_state=state,
-        agent_id="observer",
+        agent_id="p-2",
         engine_events=events,
     )
 
-    visible_impostor = _visible_player("impostor", packet.visible_players)
+    visible_impostor = _visible_player("p-4", packet.visible_players)
     assert visible_impostor.action == "kill"
 
 
@@ -116,11 +112,7 @@ def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> No
     game_map = load_canonical_map()
     state, _ = advance_tick(
         _base_world_state(),
-        [
-            _action(
-                {"type": "kill", "actor": "impostor", "payload": {"target": "victim"}}
-            )
-        ],
+        [_action({"type": "kill", "actor": "p-4", "payload": {"target": "p-1"}})],
         game_map=game_map,
     )
     state, events = advance_tick(
@@ -129,7 +121,7 @@ def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> No
             _action(
                 {
                     "type": "move",
-                    "actor": "observer",
+                    "actor": "p-2",
                     "payload": {"to_room": "ENGINEERING"},
                 }
             )
@@ -139,11 +131,11 @@ def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> No
 
     packet = _observation_service(tmp_path).build_packet(
         world_state=state,
-        agent_id="observer",
+        agent_id="p-2",
         engine_events=events,
     )
 
-    visible_impostor = _visible_player("impostor", packet.visible_players)
+    visible_impostor = _visible_player("p-4", packet.visible_players)
     assert visible_impostor.action is None
 
 
@@ -151,8 +143,8 @@ def test_vent_witness_sees_vent_action_and_audible_event(tmp_path: Path) -> None
     game_map = load_canonical_map()
     state = _base_world_state()
     players = dict(state.players)
-    players["impostor"] = _player("impostor", "IMPOSTOR", "ADMIN", (1.0, 0.0))
-    players["observer"] = _player("observer", "CREWMATE", "ADMIN", (0.0, 0.0))
+    players["p-4"] = _player("p-4", "IMPOSTOR", "ADMIN", (1.0, 0.0))
+    players["p-2"] = _player("p-2", "CREWMATE", "ADMIN", (0.0, 0.0))
     state = WorldState(
         tick=state.tick,
         phase=state.phase,
@@ -173,7 +165,7 @@ def test_vent_witness_sees_vent_action_and_audible_event(tmp_path: Path) -> None
             _action(
                 {
                     "type": "vent",
-                    "actor": "impostor",
+                    "actor": "p-4",
                     "payload": {"vent_id": "ADMIN_VENT"},
                 }
             )
@@ -183,11 +175,11 @@ def test_vent_witness_sees_vent_action_and_audible_event(tmp_path: Path) -> None
 
     packet = _observation_service(tmp_path).build_packet(
         world_state=state,
-        agent_id="observer",
+        agent_id="p-2",
         engine_events=events,
     )
 
-    visible_impostor = _visible_player("impostor", packet.visible_players)
+    visible_impostor = _visible_player("p-4", packet.visible_players)
     assert visible_impostor.action == "vent"
     assert [event.model_dump(mode="json") for event in packet.audible_events] == [
         {"kind": "vent_use_heard", "room": "ADMIN"},
@@ -198,8 +190,8 @@ def test_vented_player_is_hidden_without_same_tick_event(tmp_path: Path) -> None
     game_map = load_canonical_map()
     state = _base_world_state()
     players = dict(state.players)
-    players["impostor"] = _player("impostor", "IMPOSTOR", "ADMIN", (1.0, 0.0))
-    players["observer"] = _player("observer", "CREWMATE", "ADMIN", (0.0, 0.0))
+    players["p-4"] = _player("p-4", "IMPOSTOR", "ADMIN", (1.0, 0.0))
+    players["p-2"] = _player("p-2", "CREWMATE", "ADMIN", (0.0, 0.0))
     state = WorldState(
         tick=state.tick,
         phase=state.phase,
@@ -219,7 +211,7 @@ def test_vented_player_is_hidden_without_same_tick_event(tmp_path: Path) -> None
             _action(
                 {
                     "type": "vent",
-                    "actor": "impostor",
+                    "actor": "p-4",
                     "payload": {"vent_id": "ADMIN_VENT"},
                 }
             )
@@ -229,11 +221,11 @@ def test_vented_player_is_hidden_without_same_tick_event(tmp_path: Path) -> None
 
     packet = _observation_service(tmp_path).build_packet(
         world_state=state,
-        agent_id="observer",
+        agent_id="p-2",
         engine_events=[],
     )
 
-    assert "impostor" not in {player.id for player in packet.visible_players}
+    assert "p-4" not in {player.id for player in packet.visible_players}
 
 
 def test_crewmate_cooldown_is_never_exposed(tmp_path: Path) -> None:
@@ -246,7 +238,7 @@ def test_crewmate_cooldown_is_never_exposed(tmp_path: Path) -> None:
         bodies=state.bodies,
         tasks=state.tasks,
         sabotage=state.sabotage,
-        cooldowns={**dict(state.cooldowns), "observer": 7},
+        cooldowns={**dict(state.cooldowns), "p-2": 7},
         emergency_uses=state.emergency_uses,
         rng_state=state.rng_state,
         seed=state.seed,
@@ -254,7 +246,7 @@ def test_crewmate_cooldown_is_never_exposed(tmp_path: Path) -> None:
 
     packet = _observation_service(tmp_path).build_packet(
         world_state=state_with_bad_cooldown,
-        agent_id="observer",
+        agent_id="p-2",
         engine_events=[],
     )
 
@@ -271,7 +263,7 @@ def test_impostor_receives_own_cooldown(tmp_path: Path) -> None:
         bodies=state.bodies,
         tasks=state.tasks,
         sabotage=state.sabotage,
-        cooldowns={"impostor": 6},
+        cooldowns={"p-4": 6},
         emergency_uses=state.emergency_uses,
         rng_state=state.rng_state,
         seed=state.seed,
@@ -279,7 +271,7 @@ def test_impostor_receives_own_cooldown(tmp_path: Path) -> None:
 
     packet = _observation_service(tmp_path).build_packet(
         world_state=state_with_cooldown,
-        agent_id="impostor",
+        agent_id="p-4",
         engine_events=[],
     )
 
@@ -290,11 +282,7 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
     game_map = load_canonical_map()
     state, _ = advance_tick(
         _base_world_state(),
-        [
-            _action(
-                {"type": "kill", "actor": "impostor", "payload": {"target": "victim"}}
-            )
-        ],
+        [_action({"type": "kill", "actor": "p-4", "payload": {"target": "p-1"}})],
         game_map=game_map,
     )
     state, events = advance_tick(
@@ -303,7 +291,7 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
             _action(
                 {
                     "type": "move",
-                    "actor": "observer",
+                    "actor": "p-2",
                     "payload": {"to_room": "ENGINEERING"},
                 }
             )
@@ -318,7 +306,7 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
         bodies=state.bodies,
         tasks=state.tasks,
         sabotage=state.sabotage,
-        cooldowns={**dict(state.cooldowns), "observer": 7},
+        cooldowns={**dict(state.cooldowns), "p-2": 7},
         emergency_uses=state.emergency_uses,
         rng_state=state.rng_state,
         seed=state.seed,
@@ -331,7 +319,7 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
 
     packet = service.build_packet(
         world_state=state_with_bad_cooldown,
-        agent_id="observer",
+        agent_id="p-2",
         engine_events=events,
     )
 
@@ -339,9 +327,7 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
         json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()
     ]
     visible_impostor = next(
-        player
-        for player in audit_entry["visible_players"]
-        if player["id"] == "impostor"
+        player for player in audit_entry["visible_players"] if player["id"] == "p-4"
     )
     assert audit_entry == packet.model_dump(mode="json")
     assert visible_impostor["action"] is None
@@ -355,10 +341,10 @@ def test_discovered_body_is_hidden_from_subsequent_packets(tmp_path: Path) -> No
     state = _base_world_state()
     body = BodyState(
         id="victim-body",
-        player_id="victim",
+        player_id="p-1",
         room="REACTOR",
         position=(0.0, 0.0),
-        killed_by="impostor",
+        killed_by="p-4",
         discovered_by=None,
     )
     state_with_body = dataclasses.replace(state, bodies={body.id: body})
@@ -366,19 +352,19 @@ def test_discovered_body_is_hidden_from_subsequent_packets(tmp_path: Path) -> No
 
     packet_before = service.build_packet(
         world_state=state_with_body,
-        agent_id="observer",
+        agent_id="p-2",
         engine_events=[],
     )
     assert "victim-body" in {b.id for b in packet_before.visible_bodies}
 
-    discovered_body = dataclasses.replace(body, discovered_by="observer")
+    discovered_body = dataclasses.replace(body, discovered_by="p-2")
     state_after_discovery = dataclasses.replace(
         state_with_body, bodies={discovered_body.id: discovered_body}
     )
 
     packet_after = service.build_packet(
         world_state=state_after_discovery,
-        agent_id="observer",
+        agent_id="p-2",
         engine_events=[],
     )
 
@@ -388,7 +374,7 @@ def test_discovered_body_is_hidden_from_subsequent_packets(tmp_path: Path) -> No
 def test_observation_packet_collections_are_immutable(tmp_path: Path) -> None:
     packet = _observation_service(tmp_path).build_packet(
         world_state=_base_world_state(),
-        agent_id="observer",
+        agent_id="p-2",
         engine_events=[],
     )
 

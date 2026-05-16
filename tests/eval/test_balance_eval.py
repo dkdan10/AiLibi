@@ -255,7 +255,7 @@ def test_leak_scanner_trips_on_planted_visible_player_id() -> None:
     planted: JsonValue = {
         "self_state": {"role": "CREWMATE"},
         "visible_players": [
-            {"id": "impostor-1", "room": "STORAGE", "action": None},
+            {"id": "crew_role_leak_fixture", "room": "STORAGE", "action": None},
         ],
     }
 

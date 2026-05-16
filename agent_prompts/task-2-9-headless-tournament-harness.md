@@ -39,7 +39,7 @@ orchestrator.
 - [ ] Headless tournament harness runs multiple orchestrated games.
 - [ ] Balance eval reports win rates across seeds.
 - [ ] 100-game headless tournament completes without crashes.
-- [ ] Both sides win > 20% of games.
+- [ ] Both decisive sides win > 20% of decisive games (CREWMATES and IMPOSTORS outcomes); `TICK_BUDGET_REACHED` games are reported separately and do not count toward decisive totals.
 - [ ] `TICK_BUDGET_REACHED` is a first-class outcome bucket in the tournament report, reported alongside `CREWMATES` and `IMPOSTORS` (and `MEETING_PHASE_REACHED` when the meeting manager has not landed). Non-decisive outcomes must not be silently dropped or coerced into the decisive buckets.
 - [ ] Leak test still passes across all tournament games.
 - [ ] `uv run pytest tests/eval/test_balance_eval.py` passes.

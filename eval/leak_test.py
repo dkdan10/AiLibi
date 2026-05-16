@@ -178,12 +178,13 @@ def _assert_no_role_bearing_values(packet_dump: JsonValue) -> None:
     The recursive field-name scanner catches keys named ``role``,
     ``killed_by``, ``kill_attribution`` and ``player_id``. This pass
     complements it by catching role information that leaks through a
-    value — most notably player ids like ``"impostor-1"`` or
-    ``"crewmate-2"`` in ``visible_players[].id``, which the field-name
-    scanner cannot see because the leaky string sits in an ``id`` slot
-    a packet legitimately uses for non-role-bearing ids. ``self_state.role``
-    is the single value path allowed to contain the role string because
-    the agent is allowed to know its own role.
+    value — most notably player ids that encode the role inline (e.g.
+    a sentinel such as ``"crew_role_leak_fixture"`` planted into
+    ``visible_players[].id``), which the field-name scanner cannot see
+    because the leaky string sits in an ``id`` slot a packet legitimately
+    uses for non-role-bearing ids. ``self_state.role`` is the single
+    value path allowed to contain the role string because the agent is
+    allowed to know its own role.
     """
 
     for path, value in _walk_json(packet_dump):
@@ -225,7 +226,7 @@ def test_role_bearing_value_scanner_trips_on_planted_visible_player_id() -> None
     packet_dump: JsonValue = {
         "self_state": {"role": "CREWMATE"},
         "visible_players": [
-            {"id": "impostor-1", "room": "STORAGE", "action": None},
+            {"id": "crew_role_leak_fixture", "room": "STORAGE", "action": None},
         ],
     }
 

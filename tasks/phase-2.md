@@ -862,6 +862,15 @@ engine never emits `TaskCompleted`, the bug is in
 If `p-1` submits `MoveIntent` or `WaitIntent` even after reaching the
 task's room, the bug is in `CrewmatePolicy` and in scope here.
 
+> Historical note (added 2026-05-15 by Task 2.11): the merged PR for this
+> task (commit `e3b2a60`) also touched `eval/determinism_test.py`,
+> `tests/engine/test_actions.py`, `tests/engine/test_events.py`,
+> `tests/engine/test_world_state.py`, `tests/orchestrator/test_seeder.py`,
+> and `agent_prompts/task-2-9-headless-tournament-harness.md` as
+> mechanical fallout of the `p-N` id rename. Those files are retroactively
+> considered in scope for that historical PR; the rename did not change
+> behavior.
+
 **Integration risk:**
 
 This task is large in line count because the id rename cascades through
@@ -924,7 +933,7 @@ orchestrator.
 - [ ] Headless tournament harness runs multiple orchestrated games.
 - [ ] Balance eval reports win rates across seeds.
 - [ ] 100-game headless tournament completes without crashes.
-- [ ] Both sides win > 20% of games.
+- [ ] Both decisive sides win > 20% of decisive games (CREWMATES and IMPOSTORS outcomes); `TICK_BUDGET_REACHED` games are reported separately and do not count toward decisive totals.
 - [ ] `TICK_BUDGET_REACHED` is a first-class outcome bucket in the tournament report, reported alongside `CREWMATES` and `IMPOSTORS` (and `MEETING_PHASE_REACHED` when the meeting manager has not landed). Non-decisive outcomes must not be silently dropped or coerced into the decisive buckets.
 - [ ] Leak test still passes across all tournament games.
 - [ ] `uv run pytest tests/eval/test_balance_eval.py` passes.
@@ -1298,6 +1307,16 @@ def _build_tasks(
 ```
 
 The edge case in the comment matters: the canonical map has 12 tasks; 3 crewmates × 4 tasks each fills the map without repeats. Beyond 4, the modulo cycles. Stay within bounds; this task does not authorize widening the map's task set.
+
+> Historical note (added 2026-05-15 by Task 2.11): the merged PR for this
+> task (commit `d278829`) also updated two cooldown-value literal
+> assertions in `tests/engine/test_tick.py` at lines 110 and 117
+> (`== 10` → `== 4`, `== 9` → `== 3`) as mechanical fallout of the
+> `kill_cooldown_ticks` 10 → 4 retune. The Task 2.10.5 `Test cascades
+> resolved` DoD bullet enumerated four cascade test files but missed
+> `tests/engine/test_tick.py`; the file is retroactively considered in
+> scope for that historical PR. The literal-value updates did not change
+> behavior.
 
 **Public types introduced:**
 None. (`tasks_per_crewmate` is a new parameter on existing public `seed_initial_state`, not a new type.)
