@@ -45,6 +45,11 @@ structured outputs.
 
 See DESIGN.md §4.4 + §6.6. Strategic reasoner pattern: render_for_prompt(memory) → llm_client.complete(prompt) → parse_structured_output(...) → return ReportDocument | Statement | VoteBallot. Tests use the fake provider; no network.
 
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import meetings.manager"`
+
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
 - Inspect the current implementation before editing.

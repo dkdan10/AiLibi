@@ -404,40 +404,169 @@ Jinja2 template only; pair with §5.5 VoteBallot schema.
 
 ### Task 3.8 — Meeting state machine
 **Branch:** `phase-3-meeting-state-machine`
-**Depends on:** 3.3 merged
+**Depends on:** 3.3 merged, 3.4 merged, 3.5 merged, 3.6 merged, 3.7 merged
 **Section refs:** DESIGN.md §5.1, DESIGN.md §5.2
 **Complexity:** Medium
 
-meetings/manager.py and meetings/transcript.py per §5.1 + §5.2.
+`meetings/manager.py` and `meetings/transcript.py` per §5.1 + §5.2. The
+state machine moves through report intake → accusation rounds → voting →
+resolution, consuming the four prompt templates landed in Tasks 3.4–3.7
+and returning a structured `MeetingResult` for the orchestrator (3.12)
+to apply.
+
+**C-3 directive from
+`audits/audit-2026-05-16-0611-claude.md`:** the post-3.3 audit
+identified that `MeetingTranscript` (`meetings/schemas.py:217-225`) is
+`tuple[ReportDocument, ...]` + `tuple[Statement, ...]` with no
+guaranteed statement ordering, no `round_max` invariant, and no test
+exercising a multi-round transcript end-to-end. Without resolution
+here, every downstream consumer (3.9 strategic reasoner, 3.10 voting,
+3.11 contradiction detection) would have to invent its own sort
+convention, risking drift. Task 3.8 must close this. Pick one of two
+options (see DoD + Implementation hint) and document the choice in the
+PR's `## Decisions` block.
 
 **Files in scope:**
 - meetings/manager.py
 - meetings/transcript.py
 - tests/meetings/test_manager.py
 - tests/meetings/test_transcript.py
+- meetings/schemas.py
+- tests/meetings/test_schemas.py
 
 **Files NOT in scope:**
 - engine/ core rule changes
 - orchestrator/
 - agents/tactical/
+- agents/strategic/
+- agents/memory/
+- agents/perception.py
+- agents/runtime.py
+- agents/base.py
+- observation/
+- llm/
 - api/
 - frontend/
-- DESIGN.md
+- eval/
+- scripts/
+- AGENTS.md
 - AGENT_IMPLEMENTATION.md
+- DESIGN.md
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- tests/llm/
+- tests/agents/
+- tests/observation/
+- tests/orchestrator/
+- tests/engine/
+- tests/eval/
+- tests/_helpers/
+- tests/fixtures/
+- tests/test_firewall.py
 
 **Definition of done:**
-- [ ] `MeetingManager` follows trigger lifecycle in DESIGN.md §5.1.
-- [ ] Protocol implements report intake, accusation rounds, voting, and resolution per DESIGN.md §5.2.
-- [ ] Missed deadlines yield default no-statement/no-vote behavior as specified.
-- [ ] Manager returns `MeetingResult`; it does not mutate engine state.
-- [ ] Relevant meeting tests pass using fake strategic participants.
+- [ ] **`MeetingManager` follows trigger lifecycle in DESIGN.md §5.1.** Construction takes the LLM client, the four prompt callables (Tasks 3.4–3.7's deliverables), and a deadline configuration. It does not start until a meeting trigger fires; once triggered it runs to resolution.
+- [ ] **Protocol implements report intake, accusation rounds, voting, and resolution per DESIGN.md §5.2.** Each phase consumes the appropriate prompt template; the state machine wires them together.
+- [ ] **Missed deadlines yield default no-statement / no-vote behavior** as specified in §5.2. The default action is recorded in the transcript so the audit trail is complete.
+- [ ] **Manager returns `MeetingResult`; it does not mutate engine state.** The orchestrator (3.12) applies the result. `MeetingManager` does not import from `engine/`; `lint-imports` must pass.
+- [ ] **C-3 — statement ordering contract resolved.** Pick exactly one option and implement it:
+  - **Option (a) — recommended: producer-guaranteed canonical order.** `MeetingManager` emits `Statement` instances into the transcript in canonical order: ascending `round_index`, then ascending insertion order within a round (stable). The contract is documented as a docstring on `MeetingManager.run` (or wherever the state machine produces the transcript) stating: *"Consumers may read `transcript.statements` in tuple order and trust that statements are sorted by `(round_index, insertion_order)` without re-sorting."* No schema change required.
+  - **Option (b) — alternative: schemas add `round_max` + consumer sort discipline.** `meetings/schemas.py::MeetingTranscript` gains a `round_max: int = Field(ge=1)` field constraining the configured number of rounds, with a validator that no `Statement.round_index >= round_max`. Every consumer of the transcript is responsible for sorting. The contract is documented on the schema.
+- [ ] **C-3 — statement-ordering pin test.** `tests/meetings/test_manager.py` (or `test_transcript.py`, depending on where the contract lives) gains a regression that drives `MeetingManager` through at least two accusation rounds with multiple participants, captures the resulting `MeetingTranscript`, and asserts either (a) `statements` is already sorted by `(round_index, insertion_order)` if option (a) was picked, OR (b) the `round_max` invariant rejects an out-of-range `round_index` if option (b) was picked. The test must fail against an implementation that allows ambiguous ordering.
+- [ ] **Relevant meeting tests pass using fake strategic participants.** Use the existing `llm/fake_provider.py` plus shim participants — no real Anthropic calls.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
 - [ ] `uv run mypy --strict meetings agents llm` passes.
-- [ ] `uv run ruff check .` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
 See DESIGN.md §5.1 + §5.2. `MeetingManager` is a state machine that moves through report intake → accusation rounds → voting → resolution. It must NOT mutate engine state; it returns a `MeetingResult` that the orchestrator (3.12) applies.
+
+The four prompt templates from Tasks 3.4–3.7 are already wired through `meetings/schemas.py` types. The state machine's job is sequencing — it does not re-implement the prompt logic.
+
+**C-3 resolution — option (a) is the default.** Producer-guaranteed canonical order is cleaner because it scales: consumers (3.9 reasoner, 3.10 voting, 3.11 contradictions) read the tuple in order and trust the contract. Option (b) scatters sort discipline across every consumer and risks drift between consumers if they implement it differently.
+
+Suggested shape for option (a):
+
+```python
+# meetings/manager.py
+@dataclass(frozen=True)
+class _RoundOutput:
+    round_index: int
+    statements: tuple[Statement, ...]
+
+class MeetingManager:
+    """State machine for meetings (DESIGN.md §5.1, §5.2).
+
+    Statement-ordering contract: the `MeetingTranscript.statements` tuple
+    is guaranteed sorted by ascending `(round_index, insertion_order)`.
+    Insertion order within a round is the order in which participants
+    submitted statements (or their default-no-statement entry on
+    deadline). Consumers may trust this order and need not re-sort.
+    """
+
+    async def run(...) -> MeetingResult:
+        rounds: list[_RoundOutput] = []
+        for round_index in range(self._round_count):
+            round_statements = await self._collect_statements(round_index, ...)
+            rounds.append(_RoundOutput(round_index=round_index, statements=round_statements))
+
+        # Concatenation preserves (round_index, insertion_order) ordering
+        ordered = tuple(stmt for r in rounds for stmt in r.statements)
+        transcript = MeetingTranscript(reports=..., statements=ordered)
+        ...
+```
+
+If you pick option (b) instead, the schema change is:
+
+```python
+# meetings/schemas.py
+class MeetingTranscript(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    reports: tuple[ReportDocument, ...]
+    statements: tuple[Statement, ...]
+    round_max: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def _validate_round_indices(self) -> "MeetingTranscript":
+        for stmt in self.statements:
+            if stmt.round_index >= self.round_max:
+                raise ValueError(
+                    f"Statement.round_index {stmt.round_index} >= round_max {self.round_max}"
+                )
+        return self
+```
+
+Either path is acceptable; pick one and commit. Document the choice with a one-paragraph rationale in `## Decisions`.
+
+For the deadline / default-no-statement behavior, model on the existing prompt-template tests in `tests/meetings/` (Tasks 3.4–3.7 set the precedent for how missing-input scenarios are tested). The deadline timeout is a parameter, not hardcoded — `asyncio.wait_for` with the deadline value is the simplest implementation.
+
+**Public types introduced:**
+
+- `meetings.manager.MeetingManager`
+
+(`MeetingTranscript` already lives in `meetings/schemas.py` per `meetings/schemas.py:217-225`; this task does not relocate or re-export it. If option (b) is chosen, the schema gains a `round_max` field but the type's import path is unchanged.)
+
+**Integration risk:**
+
+This task is the join point for sub-phase B's four prompt templates. It introduces the state machine that orchestrator (3.12) will eventually drive.
+
+- **Statement ordering is the most important deliverable.** The C-3 directive above is non-negotiable. A 3.8 PR that ships without a documented ordering contract (either option a or b) is incomplete; the next audit will flag it as High.
+- **Determinism preserved.** `MeetingManager` consumes the LLM client. In CI the client is the fake deterministic provider — same prompt → same response shape → same transcript. Verify the state machine itself is deterministic given fake-provider responses (no `dict.items()` iteration over participant ids without explicit sort, no `set` ordering assumptions).
+- **Firewall preserved.** `meetings/` does not import from `engine/` or `orchestrator/`. `lint-imports` enforces; verify with `uv run lint-imports` post-implementation.
+- **No leak scanner extension needed at this task.** The leak scanner already covers packet emission and rendered memory. Transcript-level scanning is Task 3.9's R-10 acceptance gate (strategic prompt inputs), not 3.8's.
+- **Schema edits (option b only) must keep round-trip tests green.** `tests/meetings/test_schemas.py` already exercises round-trip serialization of `MeetingTranscript`; adding `round_max` requires every existing test to pass a value. Update the fixtures.
+- **`audits/*` are read-only artifacts.** Do not edit any audit report; this task addresses C-3, it does not amend the record.
 
 **Ready-to-paste prompt:** `agent_prompts/task-3-8-meeting-state-machine.md`
 

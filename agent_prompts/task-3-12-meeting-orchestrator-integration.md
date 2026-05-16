@@ -55,6 +55,11 @@ This is the Phase 3 convergence point. It depends on tasks 3.1–3.11 plus 2.8.
 - Memory consistency: meeting outcomes must update each agent's   belief state. Without this, post-meeting reasoning is stale.
 - Phase boundary: do not let MeetingManager touch engine state   directly — every state change goes through the orchestrator.
 
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import meetings.manager"`
+
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
 - Inspect the current implementation before editing.

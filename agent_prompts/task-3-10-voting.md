@@ -38,6 +38,11 @@ meetings/voting.py per §5.5.
 - [ ] `uv run mypy --strict meetings agents` passes.
 - [ ] `uv run ruff check .` passes.
 
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import meetings.manager"`
+
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
 - Inspect the current implementation before editing.
