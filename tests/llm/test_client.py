@@ -775,10 +775,12 @@ class TestRealProviderIsCISkipped:
         assert True
 
     def test_real_provider_marker_is_skipif_in_ci(self) -> None:
-        # Direct check that the marker is a skipif gate and that the gate
-        # condition is True under the CI environment.
+        # The marker is a `skipif` gate. The condition it carries should
+        # match the runtime env-var state — True (skip) when the opt-in
+        # var is unset, False (run) when it is set to "1".
         assert real_provider.mark.name == "skipif"
-        assert real_provider.mark.args[0] is True
+        expected_condition = os.environ.get("AILIBI_RUN_REAL_PROVIDER_TESTS") != "1"
+        assert real_provider.mark.args[0] is expected_condition
 
 
 def test_call_kind_literal_has_only_two_values() -> None:

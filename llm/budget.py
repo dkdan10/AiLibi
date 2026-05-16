@@ -22,6 +22,7 @@ budget would reject anyway.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Final
 
@@ -132,8 +133,27 @@ class GameBudget:
 
         Does not mutate state; safe to call before invoking the LLM to
         skip a doomed request.
+
+        Inputs must be finite and non-negative. NaN or negative deltas
+        would either poison the running totals (NaN propagation) or
+        silently restore budget headroom — both contradict the fail-loud
+        contract documented at the module level.
         """
 
+        if math.isnan(cost_usd) or cost_usd < 0:
+            raise ValueError(
+                f"cost_usd must be a non-negative finite number, got {cost_usd!r}"
+            )
+        if math.isinf(cost_usd):
+            raise ValueError(f"cost_usd must be finite, got {cost_usd!r}")
+        if usage.input_tokens < 0:
+            raise ValueError(
+                f"usage.input_tokens must be non-negative, got {usage.input_tokens}"
+            )
+        if usage.output_tokens < 0:
+            raise ValueError(
+                f"usage.output_tokens must be non-negative, got {usage.output_tokens}"
+            )
         if self._cost_usd + cost_usd > self._max_cost_usd:
             raise BudgetExceededError(
                 dimension="cost_usd",

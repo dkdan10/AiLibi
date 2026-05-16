@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from llm.budget import BudgetExceededError, BudgetSnapshot, GameBudget
@@ -174,6 +176,46 @@ class TestPreflight:
             budget.preflight(usage=_usage(input_tokens=10), cost_usd=0.0)
 
         assert excinfo.value.dimension == "input_tokens"
+
+
+class TestChargeInputValidation:
+    def test_nan_cost_is_rejected(self) -> None:
+        budget = GameBudget()
+
+        with pytest.raises(ValueError, match="cost_usd"):
+            budget.charge(usage=_usage(), cost_usd=math.nan)
+
+        # State stays clean.
+        assert budget.snapshot().cost_usd == 0.0
+
+    def test_inf_cost_is_rejected(self) -> None:
+        budget = GameBudget()
+
+        with pytest.raises(ValueError, match="finite"):
+            budget.charge(usage=_usage(), cost_usd=math.inf)
+
+    def test_negative_cost_is_rejected(self) -> None:
+        budget = GameBudget()
+        budget.charge(usage=_usage(), cost_usd=0.05)
+        before = budget.snapshot()
+
+        with pytest.raises(ValueError, match="cost_usd"):
+            budget.charge(usage=_usage(), cost_usd=-0.01)
+
+        # A negative delta must NOT free budget; running total is unchanged.
+        assert budget.snapshot() == before
+
+    def test_negative_input_tokens_rejected(self) -> None:
+        budget = GameBudget()
+
+        with pytest.raises(ValueError, match="input_tokens"):
+            budget.charge(usage=_usage(input_tokens=-1), cost_usd=0.0)
+
+    def test_negative_output_tokens_rejected(self) -> None:
+        budget = GameBudget()
+
+        with pytest.raises(ValueError, match="output_tokens"):
+            budget.charge(usage=_usage(output_tokens=-1), cost_usd=0.0)
 
 
 class TestBudgetValidation:
