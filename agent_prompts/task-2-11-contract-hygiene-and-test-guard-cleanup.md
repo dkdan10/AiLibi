@@ -12,7 +12,7 @@ Implement Task 2.11 — Contract hygiene and test-guard cleanup, anchored to DES
 The authoritative task contract is copied below from tasks/phase-2.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-2-contract-hygiene-cleanup`
-**Depends on:** 2.10 merged, 2.8.5 merged, 2.9 merged
+**Depends on:** 2.10 merged, 2.10.5 merged, 2.8.5 merged, 2.9 merged
 **Section refs:** DESIGN.md §1.3, DESIGN.md §11.2, DESIGN.md §11.3
 **Complexity:** Medium
 

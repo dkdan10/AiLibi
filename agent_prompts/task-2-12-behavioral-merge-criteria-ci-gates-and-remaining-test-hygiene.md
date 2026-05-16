@@ -12,7 +12,7 @@ Implement Task 2.12 — Behavioral merge-criteria CI gates and remaining test hy
 The authoritative task contract is copied below from tasks/phase-2.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-2-behavioral-ci-gates`
-**Depends on:** 2.10 merged, 2.11 merged
+**Depends on:** 2.10 merged, 2.10.5 merged, 2.11 merged
 **Section refs:** DESIGN.md §11.2, DESIGN.md §11.3, DESIGN.md §11.4
 **Complexity:** Medium
 
