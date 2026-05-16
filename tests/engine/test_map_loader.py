@@ -202,7 +202,7 @@ def test_load_canonical_map_counts() -> None:
 
     assert game_map.id == "canonical_1"
     assert game_map.tick_rate_hz == 2
-    assert game_map.kill_cooldown_ticks == 10
+    assert game_map.kill_cooldown_ticks == 4
     assert len(game_map.rooms) == 10
     assert len(game_map.edges) == 11
     assert len(game_map.vents) == 6

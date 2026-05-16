@@ -107,14 +107,14 @@ def test_valid_kill_mutates_state_and_emits_event() -> None:
 
     assert not next_state.players["p-1"].alive
     assert "body-p-1-0" in next_state.bodies
-    assert next_state.cooldowns["p-3"] == 10
+    assert next_state.cooldowns["p-3"] == 4
     killed_event = next(event for event in events if event.type == "Killed")
     assert event_to_dict(killed_event)["details"]["witnesses"] == ("crew-a", "crew-b")
     assert next_state.phase == "PLAY"
 
     later_state, _ = advance_tick(next_state, [], game_map=game_map)
 
-    assert later_state.cooldowns["p-3"] == 9
+    assert later_state.cooldowns["p-3"] == 3
 
 
 def test_invalid_kill_emits_rejection_and_leaves_state_unchanged() -> None:

@@ -274,6 +274,29 @@ def test_leak_scanner_allows_self_state_role() -> None:
     _assert_packet_has_no_leaks(legitimate)
 
 
+def test_canonical_balance_keeps_both_sides_alive(tmp_path: Path) -> None:
+    """Fast canary for Task 2.10.5 Phase 2 tournament balance (DESIGN.md §3.5).
+
+    A 10-game tournament against the canonical config with the default
+    agents must produce at least one ``CREWMATES`` and at least one
+    ``IMPOSTORS`` decisive outcome. This is a small-N regression test
+    on the canonical ``kill_cooldown_ticks`` tuning, not the full
+    100-game merge gate — the merge gate lives in
+    ``tasks/phase-2.md`` Merge Criteria and is exercised by
+    ``scripts/run_tournament.py``.
+    """
+
+    seeds = tuple(range(10))
+    report = run_balance_eval(
+        seeds=seeds,
+        output_dir=tmp_path,
+        max_ticks=1000,
+    )
+
+    assert report.crew_wins > 0
+    assert report.impostor_wins > 0
+
+
 def test_run_balance_eval_reuses_headless_game_outcomes(tmp_path: Path) -> None:
     """Sanity check: the tournament harness produces the same outcome a
     direct :class:`HeadlessGame` would for the same seed and config.
