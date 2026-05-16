@@ -82,7 +82,11 @@ class ObservationService:
             world_state.cooldowns.get(agent_id) if player.role == "IMPOSTOR" else None
         )
         visible_bodies = tuple(
-            BodyView(id=body_id, room=world_state.bodies[body_id].room)
+            BodyView(
+                id=body_id,
+                room=world_state.bodies[body_id].room,
+                victim_id=world_state.bodies[body_id].player_id,
+            )
             for body_id in visibility.visible_body_ids
         )
         packet = ObservationPacket(

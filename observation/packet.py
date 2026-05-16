@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 BodyId: TypeAlias = str
 PlayerId: TypeAlias = str
@@ -28,8 +28,20 @@ class PlayerView(_FrozenModel):
 
 
 class BodyView(_FrozenModel):
+    """A body visible to the observer.
+
+    ``victim_id`` formalizes the body's victim player id at the
+    observation boundary (DESIGN.md §1.3 / Appendix A). It carries the
+    same information that was previously inferrable from the
+    ``body-{victim_id}-{tick}`` id format emitted by ``engine/rules.py``,
+    so exposing it does not weaken the firewall -- it removes the
+    agent→engine string coupling flagged as R-4 in
+    ``audits/audit-2026-05-16-0036-reconciled.md``.
+    """
+
     id: BodyId
     room: RoomId
+    victim_id: PlayerId = Field(min_length=1)
 
 
 class AudibleEvent(_FrozenModel):

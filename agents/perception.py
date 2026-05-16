@@ -142,9 +142,14 @@ def _visible_player_payload(player: PlayerView) -> Mapping[str, Any]:
 
 
 def _visible_body_payload(body: BodyView) -> Mapping[str, Any]:
+    # ``body_id`` is the canonical body identifier for deduplication and
+    # replay references; ``victim_id`` is the authoritative source for
+    # downstream agent code that needs the body's victim player id
+    # (DESIGN.md §1.3, Task 3.2 R-4 retirement).
     return {
         "body_id": body.id,
         "room": body.room,
+        "victim_id": body.victim_id,
     }
 
 
