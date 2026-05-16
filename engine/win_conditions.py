@@ -16,6 +16,9 @@ class WinResult:
 
 def evaluate_win_conditions(state: WorldState) -> WinResult | None:
     """Evaluate win conditions in the strict DESIGN.md §3.5 order."""
+    # Dead-crewmate task rule lives in DESIGN.md §3.5 (dropped). The kill
+    # handler in engine/tick.py removes a victim's incomplete tasks, so
+    # the comparison below already counts only alive-owned tasks.
     total_tasks = len(state.tasks)
     completed_tasks = sum(1 for task in state.tasks.values() if task.completed)
     if completed_tasks == total_tasks and total_tasks > 0:

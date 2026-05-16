@@ -246,12 +246,33 @@ def _apply_kill(
 
     players = _with_actor_last_action(state, action)
     target = state.players[action.payload.target]
-    players[action.payload.target] = replace(target, alive=False)
+    # Dead-crewmate task rule: DESIGN.md §3.5 (dropped). Clear the victim's
+    # ``last_action`` so the next tick's `_advance_tasks` does not try to
+    # continue a `DoTaskAction` for a task that has just been removed.
+    players[action.payload.target] = replace(target, alive=False, last_action=None)
     bodies = dict(state.bodies)
     bodies[body.id] = body
     cooldowns = dict(state.cooldowns)
     cooldowns[action.actor] = game_map.kill_cooldown_ticks
-    return replace(state, players=players, bodies=bodies, cooldowns=cooldowns), event
+    # Dead-crewmate task rule: DESIGN.md §3.5 (dropped). Remove the killed
+    # player's incomplete tasks so the crew win check counts only alive-
+    # owned tasks; completed tasks remain so they still count toward
+    # `crew_tasks_done`.
+    tasks = {
+        task_id: task
+        for task_id, task in state.tasks.items()
+        if not (task.owner == action.payload.target and not task.completed)
+    }
+    return (
+        replace(
+            state,
+            players=players,
+            bodies=bodies,
+            cooldowns=cooldowns,
+            tasks=tasks,
+        ),
+        event,
+    )
 
 
 def _apply_vent(
