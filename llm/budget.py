@@ -33,6 +33,14 @@ _DEFAULT_MAX_COST_USD: Final[float] = 0.30
 _DEFAULT_MAX_INPUT_TOKENS: Final[int] = 1_000_000
 _DEFAULT_MAX_OUTPUT_TOKENS: Final[int] = 200_000
 
+# Slack tolerated when comparing a running USD total to the cap. LLM costs
+# accumulate from sub-cent floats and binary rounding can push exact
+# multiples (0.10 + 0.10 + 0.10 vs 0.30) past the cap by ~1e-17; without
+# slack the budget would false-trip on a logically-at-limit spend. One
+# millionth of a dollar is below any meaningful unit and well above
+# IEEE-754 noise.
+_COST_USD_CAP_SLACK: Final[float] = 1e-6
+
 
 class BudgetExceededError(RuntimeError):
     """Raised when an LLM call would push spending past the cap.
@@ -101,6 +109,10 @@ class GameBudget:
         max_input_tokens: int = _DEFAULT_MAX_INPUT_TOKENS,
         max_output_tokens: int = _DEFAULT_MAX_OUTPUT_TOKENS,
     ) -> None:
+        if math.isnan(max_cost_usd) or math.isinf(max_cost_usd):
+            raise ValueError(
+                f"max_cost_usd must be a finite number, got {max_cost_usd!r}"
+            )
         if max_cost_usd < 0:
             raise ValueError(f"max_cost_usd must be non-negative, got {max_cost_usd}")
         if max_input_tokens < 0:
@@ -154,7 +166,7 @@ class GameBudget:
             raise ValueError(
                 f"usage.output_tokens must be non-negative, got {usage.output_tokens}"
             )
-        if self._cost_usd + cost_usd > self._max_cost_usd:
+        if self._cost_usd + cost_usd > self._max_cost_usd + _COST_USD_CAP_SLACK:
             raise BudgetExceededError(
                 dimension="cost_usd",
                 current=self._cost_usd,

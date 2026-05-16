@@ -74,7 +74,11 @@ class FakeProvider:
 def _fake_model_for(call_kind: CallKind) -> str:
     if call_kind == "meeting":
         return _FAKE_MEETING_MODEL
-    return _FAKE_TRIGGER_MODEL
+    if call_kind == "trigger":
+        return _FAKE_TRIGGER_MODEL
+    # Unreachable under `mypy --strict` because `CallKind` is a
+    # `Literal`, but AGENTS.md mandates no silent fallbacks.
+    raise ValueError(f"unknown call_kind: {call_kind!r}")
 
 
 def _approx_tokens(text: str) -> int:

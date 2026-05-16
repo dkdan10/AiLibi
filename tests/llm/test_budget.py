@@ -231,6 +231,41 @@ class TestBudgetValidation:
         with pytest.raises(ValueError, match="max_output_tokens"):
             GameBudget(max_output_tokens=-1)
 
+    def test_nan_max_cost_is_rejected(self) -> None:
+        # A NaN cap would silently disable enforcement because every
+        # `x > nan` comparison is False; fail loud at construction.
+        with pytest.raises(ValueError, match="max_cost_usd"):
+            GameBudget(max_cost_usd=math.nan)
+
+    def test_inf_max_cost_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="max_cost_usd"):
+            GameBudget(max_cost_usd=math.inf)
+
+
+class TestFloatSafeCapComparison:
+    def test_three_dimes_does_not_false_trip_thirty_cent_cap(self) -> None:
+        # 0.10 + 0.10 + 0.10 == 0.30000000000000004 in IEEE-754; without
+        # cap slack this would raise BudgetExceededError on the third
+        # charge even though the logical spend is exactly at the cap.
+        budget = GameBudget(max_cost_usd=0.30)
+
+        budget.charge(usage=_usage(), cost_usd=0.10)
+        budget.charge(usage=_usage(), cost_usd=0.10)
+        budget.charge(usage=_usage(), cost_usd=0.10)
+
+        # We reached the cap; the snapshot total is whatever float math
+        # produced, but no overrun was raised.
+        assert budget.snapshot().cost_usd == pytest.approx(0.30)
+
+    def test_meaningful_overrun_still_raises(self) -> None:
+        # Slack is 1e-6; a charge of 0.01 over the cap is far above slack
+        # and must still raise.
+        budget = GameBudget(max_cost_usd=0.30)
+        budget.charge(usage=_usage(), cost_usd=0.30)
+
+        with pytest.raises(BudgetExceededError):
+            budget.charge(usage=_usage(), cost_usd=0.01)
+
 
 class TestBudgetExceededErrorMessage:
     def test_error_message_carries_all_dimensions(self) -> None:

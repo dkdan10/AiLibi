@@ -221,6 +221,54 @@ class TestFakeProviderDeterminism:
             )
 
 
+class TestCallKindNoSilentFallback:
+    """AGENTS.md: \"No silent fallbacks. If something is invalid, raise.\"
+
+    Static typing protects callers, but the project rule demands a
+    runtime raise even for branches that should be unreachable under
+    `mypy --strict`. These tests force the bad path via `cast`.
+    """
+
+    def test_fake_provider_raises_on_unknown_call_kind(self) -> None:
+        from typing import cast
+
+        provider = FakeProvider()
+
+        with pytest.raises(ValueError, match="call_kind"):
+            _run(
+                provider.complete(
+                    prompt="x",
+                    schema=None,
+                    max_tokens=8,
+                    temperature=0.0,
+                    call_kind=cast(CallKind, "bogus"),
+                )
+            )
+
+    def test_anthropic_client_raises_on_unknown_call_kind(self) -> None:
+        from typing import cast
+
+        async def fake_send(
+            **kwargs: object,
+        ) -> AnthropicRawResponse:  # pragma: no cover
+            return AnthropicRawResponse(
+                text="ok", model="m", input_tokens=1, output_tokens=1
+            )
+
+        client = AnthropicClient(api_key="k", send=fake_send)
+
+        with pytest.raises(ValueError, match="call_kind"):
+            _run(
+                client.complete(
+                    prompt="x",
+                    schema=None,
+                    max_tokens=8,
+                    temperature=0.0,
+                    call_kind=cast(CallKind, "bogus"),
+                )
+            )
+
+
 class TestFakeProviderSchemaCoverage:
     def test_handles_nested_pydantic_schema(self) -> None:
         provider = FakeProvider()

@@ -136,7 +136,12 @@ class AnthropicClient:
     def _model_for(self, call_kind: CallKind) -> str:
         if call_kind == "meeting":
             return self._meeting_model
-        return self._trigger_model
+        if call_kind == "trigger":
+            return self._trigger_model
+        # Unreachable under `mypy --strict` because `CallKind` is a
+        # `Literal`, but AGENTS.md mandates no silent fallbacks even for
+        # type-system-guarded branches.
+        raise ValueError(f"unknown call_kind: {call_kind!r}")
 
 
 def build_default_client(
