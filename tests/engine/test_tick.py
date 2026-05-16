@@ -1041,3 +1041,49 @@ def test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick() -> Non
     assert len(game_over_events) == 1
     assert event_to_dict(game_over_events[0])["winner"] == "CREWMATES"
     assert event_to_dict(game_over_events[0])["reason"] == "CREWMATE_TASKS"
+
+
+def test_kill_reaching_parity_with_last_task_completion_yields_impostor_win() -> None:
+    """DESIGN.md §3.5 ordering: when a kill simultaneously reaches
+    impostor parity AND removes the last incomplete task, the impostor
+    wins (parity is checked before crew tasks). Counterpart to
+    ``test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick``,
+    which exercises the same kill mechanic without reaching parity.
+    """
+
+    game_map = load_canonical_map()
+    state = _state()
+    # ``_state()`` supplies p-1/p-2/p-4 crewmates + p-3 impostor; override
+    # to a tight 1 impostor + 2 crewmate setup so the kill reaches parity.
+    players = {
+        "p-3": _player("p-3", "IMPOSTOR", "CAFETERIA", (0.0, 0.0)),
+        "p-1": _player("p-1", "CREWMATE", "ADMIN", (1.0, 0.0)),
+        "victim": _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0)),
+    }
+    state = replace(
+        state,
+        players=players,
+        cooldowns={"p-3": 0},
+        tasks={
+            "swipe_card_done": replace(
+                _task("swipe_card_done", "p-1", "ADMIN", required_ticks=1),
+                progress=1,
+                completed=True,
+            ),
+            "victim_incomplete": _task(
+                "victim_incomplete", "victim", "CAFETERIA", required_ticks=1
+            ),
+        },
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [_action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}})],
+        game_map=game_map,
+    )
+
+    assert next_state.phase == "GAME_OVER"
+    game_over_events = [event for event in events if event.type == "GameOver"]
+    assert len(game_over_events) == 1
+    assert event_to_dict(game_over_events[0])["winner"] == "IMPOSTORS"
+    assert event_to_dict(game_over_events[0])["reason"] == "IMPOSTOR_PARITY"
