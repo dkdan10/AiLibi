@@ -31,7 +31,7 @@ name: Canonical MVP Map
 version: "0.2"
 
 tick_rate_hz: 2
-kill_cooldown_ticks: 10
+kill_cooldown_ticks: 4
 
 # ---------------------------------------------------------------------------
 # VISIBILITY DEFAULTS
