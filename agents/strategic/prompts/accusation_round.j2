@@ -1,0 +1,175 @@
+{# Accusation-round speech turn prompt (DESIGN.md §5.2, §5.3).
+
+   prompt_id: accusation_round
+   version: 1
+
+   Targets the shared `Statement` schema (meetings/schemas.py). The orchestrator
+   substitutes the deterministic identity fields (`statement_id`, `speaker`,
+   `tick`, `round_index`) after parsing; the LLM produces `target`, `claims`,
+   and `free_text`.
+
+   Inputs (DESIGN.md §5.2 last paragraph + §5.3 + §5.4):
+     rendered_memory  -- string. Output of
+                         agents/memory/store.py::render_for_prompt: the agent's
+                         role, tasks-completed line, salience-ordered
+                         observations, beliefs, and pre-existing contradiction
+                         flags. The agent's role is in this view and nowhere
+                         else.
+     transcript       -- `meetings.schemas.MeetingTranscript`-shaped object
+                         with `.reports` (Phase-1 ReportDocuments) and
+                         `.statements` (earlier-round Statements). Together
+                         these are "the transcript so far" visible to every
+                         living agent.
+     contradictions   -- iterable of `meetings.schemas.ContradictionRef`-shaped
+                         flags raised by the transcript-update detector
+                         (DESIGN.md §5.4). Information, not verdicts.
+
+   These three inputs are exhaustive: the template references nothing else,
+   so no hidden engine state can reach the LLM through this prompt.
+-#}
+You are an agent in a multi-agent social-deduction simulation, taking your
+turn in an accusation round (DESIGN.md §5.2 Phase 2). You will read the
+public meeting transcript so far together with your private memory, then
+submit exactly one Statement.
+
+A Statement is either an accusation (you name a target you believe is the
+impostor) or a defensive turn (you give an alibi for yourself or
+corroborate another player's claim). Staying silent is not an option for
+this turn: a missing submission is treated as a default no-statement and
+wastes your round.
+
+## How to read this prompt
+- "Your private memory" is yours alone. Other agents do not see it.
+- "Public meeting transcript" is exactly what every living agent has read
+  by the time it is your turn. Reference it precisely; everyone can check
+  what you cite.
+- "Open contradiction flags" are pairs of public claims that cannot both
+  be true. They are evidence to weigh, not verdicts. The contradiction
+  detector flags them; the table decides what they mean.
+
+## Game-rule framing
+This is a game. If "Your role" in your private memory shows you as the
+**IMPOSTOR**, your job in this meeting is to mislead within the rules --
+do not reveal your role, do not refuse to participate. If your role is
+**CREWMATE**, your job is to identify the impostor using what you have
+seen and what others have said. Either way, every concrete claim about
+ticks, rooms, players, and tasks will be cross-checked against the
+public transcript; impossible alibis surface as contradiction flags in
+later turns.
+
+## Your private memory
+{{ rendered_memory }}
+
+## Public meeting transcript so far
+{%- if transcript.reports %}
+
+### Reports submitted in Phase 1
+{%- for report in transcript.reports %}
+- **{{ report.agent_id }}** at tick {{ report.tick }}:
+  {%- if report.observations %}
+  - Observations:
+    {%- for obs in report.observations %}
+    {%- if obs.type == "saw_player" %}
+    - tick {{ obs.tick }} -- saw {{ obs.subject }} in {{ obs.room }}
+      {%- if obs.co_present %} with {{ obs.co_present | join(", ") }}{% endif %}.
+    {%- elif obs.type == "completed_task" %}
+    - tick {{ obs.tick }} -- completed task {{ obs.task_id }} in {{ obs.room }}.
+    {%- elif obs.type == "found_body" %}
+    - tick {{ obs.tick }} -- found body of {{ obs.body_of }} in {{ obs.room }}.
+    {%- endif %}
+    {%- endfor %}
+  {%- endif %}
+  {%- if report.claims %}
+  - Claims:
+    {%- for claim in report.claims %}
+    {%- if claim.type == "alibi" %}
+    - alibi: {{ claim.subject }} in {{ claim.room }} from tick {{ claim.from_tick }} to {{ claim.to_tick }}
+      {%- if claim.evidence %} (evidence: {{ claim.evidence | join("; ") }}){% endif %}.
+    {%- elif claim.type == "accusation" %}
+    - accusation: against {{ claim.against }} (confidence {{ "%.2f" | format(claim.confidence) }}) -- {{ claim.reason }}
+    {%- elif claim.type == "corroboration" %}
+    - corroboration: supports {{ claim.supports }} on tick {{ claim.on_tick }} -- {{ claim.reason }}
+    {%- endif %}
+    {%- endfor %}
+  {%- endif %}
+  - Free text: "{{ report.free_text }}"
+{%- endfor %}
+{%- else %}
+
+### Reports submitted in Phase 1
+(No reports were submitted.)
+{%- endif %}
+{%- if transcript.statements %}
+
+### Statements in earlier accusation rounds
+{%- for statement in transcript.statements %}
+- Round {{ statement.round_index }} -- **{{ statement.speaker }}** at tick {{ statement.tick }}
+  {%- if statement.target %} -- targeting **{{ statement.target }}**{% else %} -- defensive (no target){% endif %}:
+  {%- if statement.claims %}
+  - Claims:
+    {%- for claim in statement.claims %}
+    {%- if claim.type == "alibi" %}
+    - alibi: {{ claim.subject }} in {{ claim.room }} from tick {{ claim.from_tick }} to {{ claim.to_tick }}
+      {%- if claim.evidence %} (evidence: {{ claim.evidence | join("; ") }}){% endif %}.
+    {%- elif claim.type == "accusation" %}
+    - accusation: against {{ claim.against }} (confidence {{ "%.2f" | format(claim.confidence) }}) -- {{ claim.reason }}
+    {%- elif claim.type == "corroboration" %}
+    - corroboration: supports {{ claim.supports }} on tick {{ claim.on_tick }} -- {{ claim.reason }}
+    {%- endif %}
+    {%- endfor %}
+  {%- endif %}
+  - Free text: "{{ statement.free_text }}"
+{%- endfor %}
+{%- else %}
+
+### Statements in earlier accusation rounds
+(No accusation-round statements have been made yet -- you are the first
+speaker this round.)
+{%- endif %}
+
+## Open contradiction flags
+{%- if contradictions %}
+{%- for contradiction in contradictions %}
+- [{{ contradiction.kind }}] {{ contradiction.description }}
+  {%- if contradiction.subjects %} (subjects: {{ contradiction.subjects | join(", ") }}){% endif %}
+{%- endfor %}
+{%- else %}
+(No contradictions have been flagged yet.)
+{%- endif %}
+
+## Your task
+Produce exactly one Statement that conforms to the shared `Statement`
+schema (`meetings/schemas.py`). The orchestrator fills the deterministic
+identity fields (`statement_id`, `speaker`, `tick`, `round_index`); you
+fill the content fields:
+
+- `target`: the player id you are accusing, or `null` if this turn is
+  purely defensive (alibi or corroboration only).
+- `claims`: zero or more of the structured claim types --
+  - `alibi`         -- `{type: "alibi", subject, from_tick, to_tick, room,
+                       evidence?}`. Places a player (usually yourself)
+                       in a room over a tick range. `from_tick` must be
+                       `<= to_tick`; the schema rejects reversed ranges.
+                       `evidence` is a list of free-text references
+                       (task ids, players you were with).
+  - `accusation`    -- `{type: "accusation", against, confidence, reason}`.
+                       `confidence` is in `[0.0, 1.0]`. Give a concrete
+                       reason grounded in the transcript or your memory.
+  - `corroboration` -- `{type: "corroboration", supports, on_tick, reason}`.
+                       Backs up another player's claim with what you saw.
+- `free_text`: one to three sentences in your own voice. It must be
+  consistent with the structured `claims`; the contradiction detector
+  cross-references both layers in subsequent rounds.
+
+## Constraints
+- Only reference ticks, rooms, players, and tasks that appear in your
+  private memory or the public transcript above. Made-up identifiers
+  fail validation and burn your turn.
+- If a contradiction flag involves you, address it -- either with an
+  alibi backed by evidence or by acknowledging the conflict. Ignoring
+  a flag against you is read by other agents as a tell.
+- If your memory and the transcript give you no honest target, prefer a
+  defensive Statement (no target, alibi or corroboration claims) over a
+  guessed accusation. Voting (DESIGN.md §5.5) treats low-confidence
+  accusations as skip-leaning, so a weak guess here does not help your
+  side and may help the impostor.
