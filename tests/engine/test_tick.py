@@ -906,3 +906,83 @@ def test_repeated_emergency_use_is_rejected() -> None:
     assert next_state.phase == "PLAY"
     assert next_state.emergency_uses["p-1"] == 1
     assert events[0].type == "ActionRejected"
+
+
+def test_dead_crewmate_incomplete_task_is_dropped_and_crew_can_still_win() -> None:
+    """R-5 (DESIGN.md §3.5 `dropped` rule).
+
+    When a crewmate dies with an incomplete task, that task is removed
+    from ``state.tasks`` so crew victory remains reachable via the
+    remaining alive-owned tasks. Already-completed tasks owned by the
+    dead crewmate stay so they continue to count toward ``crew_tasks_done``.
+    """
+
+    game_map = load_canonical_map()
+    state = _state()
+    players = dict(state.players)
+    # Add a second crewmate co-located with the impostor in CAFETERIA so
+    # the kill is valid, and three crewmate-owned tasks: one incomplete
+    # for the soon-to-die victim, one already complete for the victim
+    # (must survive removal), and one alive-owned task in ADMIN that the
+    # crew will complete after the kill.
+    players["victim"] = _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0))
+    state = replace(
+        state,
+        players=players,
+        tasks={
+            "swipe_card": _task("swipe_card", "p-2", "ADMIN"),
+            "victim_incomplete": _task(
+                "victim_incomplete", "victim", "CAFETERIA", required_ticks=1
+            ),
+            "victim_done": replace(
+                _task("victim_done", "victim", "CAFETERIA", required_ticks=1),
+                progress=1,
+                completed=True,
+            ),
+        },
+    )
+
+    after_kill, kill_events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "kill",
+                    "actor": "p-3",
+                    "payload": {"target": "victim"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert not after_kill.players["victim"].alive
+    assert any(event.type == "Killed" for event in kill_events)
+    # (a) Victim's incomplete task is gone.
+    assert "victim_incomplete" not in after_kill.tasks
+    # (b) Victim's already-completed task remains and still counts.
+    assert "victim_done" in after_kill.tasks
+    assert after_kill.tasks["victim_done"].completed
+    # The alive-owned task survives unchanged.
+    assert "swipe_card" in after_kill.tasks
+    assert not after_kill.tasks["swipe_card"].completed
+
+    # (c) Completing the surviving alive-owned task reaches CREWMATE_TASKS.
+    final_state, final_events = advance_tick(
+        after_kill,
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert final_state.phase == "GAME_OVER"
+    game_over = next(event for event in final_events if event.type == "GameOver")
+    assert event_to_dict(game_over)["winner"] == "CREWMATES"
+    assert event_to_dict(game_over)["reason"] == "CREWMATE_TASKS"

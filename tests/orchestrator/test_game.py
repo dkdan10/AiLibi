@@ -454,6 +454,92 @@ def test_headless_game_default_agents_run_without_crashing(
     assert result.replay_path == replay_path
 
 
+def test_headless_game_seed_0_impostor_does_not_oscillate_after_kill(
+    tmp_path: Path,
+) -> None:
+    """R-3 integration regression (DESIGN.md §4.4).
+
+    The audit's seed-0 reproduction had the impostor alternating
+    ``ENGINEERING <-> REACTOR`` for ~30 consecutive ticks after killing
+    p-4 at tick 4. Post-fix, the impostor must not exhibit that 30-
+    tick alternation pattern after a confirmed kill.
+
+    Concretely: across any 30-tick window of impostor actions that
+    begins after the first ``KillAction``, do not have 30 consecutive
+    ``MoveIntent`` actions whose destinations only span at most two
+    distinct rooms. Either the impostor mixes in non-move actions
+    (waits, kills) or the move destinations diversify beyond a 2-room
+    cycle.
+    """
+
+    replay_path = tmp_path / "seed-0-regression.jsonl"
+    game = HeadlessGame(
+        seed=0,
+        game_map=load_canonical_map(),
+        agent_factory=build_default_agent_factory(),
+        replay_path=replay_path,
+        scheduler=TickScheduler(max_ticks=200),
+    )
+    result = game.run()
+    entries = read_replay_entries(replay_path)
+
+    # The default-agent impostor is the player whose final state has
+    # role IMPOSTOR.
+    impostor_ids = {
+        player_id
+        for player_id, player in result.final_state.players.items()
+        if player.role == "IMPOSTOR"
+    }
+    assert impostor_ids, "the seed-0 game must have an impostor"
+    impostor_id = next(iter(impostor_ids))
+
+    actions_by_tick: dict[int, dict[str, str | None]] = {}
+    first_kill_tick: int | None = None
+    for entry in entries:
+        for action in entry.actions:
+            if action.get("actor") != impostor_id:
+                continue
+            action_type = action.get("type")
+            assert isinstance(action_type, str)
+            to_room: str | None = None
+            if action_type == "move":
+                payload = action.get("payload", {})
+                assert isinstance(payload, dict)
+                room_value = payload.get("to_room")
+                assert isinstance(room_value, str)
+                to_room = room_value
+            actions_by_tick[entry.tick] = {
+                "type": action_type,
+                "to_room": to_room,
+            }
+            if action_type == "kill" and first_kill_tick is None:
+                first_kill_tick = entry.tick
+
+    assert first_kill_tick is not None, (
+        "the seed-0 reproduction expects the default-agent impostor to "
+        "complete at least one kill within max_ticks"
+    )
+
+    ticks_after_kill = sorted(
+        tick for tick in actions_by_tick if tick > first_kill_tick
+    )
+    for window_start_index in range(len(ticks_after_kill)):
+        window_ticks = ticks_after_kill[window_start_index : window_start_index + 30]
+        if len(window_ticks) < 30:
+            break
+        window_actions = [actions_by_tick[tick] for tick in window_ticks]
+        all_moves = all(action["type"] == "move" for action in window_actions)
+        destinations: set[str] = set()
+        for action in window_actions:
+            destination = action["to_room"]
+            if action["type"] == "move" and isinstance(destination, str):
+                destinations.add(destination)
+        assert not (all_moves and len(destinations) <= 2), (
+            "impostor stuck in a 2-room move loop over a 30-tick window "
+            f"starting at tick {window_ticks[0]}: destinations={sorted(destinations)}"
+        )
+
+
 def test_discovered_body_is_hidden_from_every_observer(tmp_path: Path) -> None:
     """Regression: bodies with `discovered_by` set are hidden from all packets.
 

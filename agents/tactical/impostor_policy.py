@@ -55,7 +55,9 @@ Conventions consumed from perception (DESIGN.md §4.2 / §6.2):
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from typing import Final
 
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.perception import (
@@ -74,6 +76,22 @@ from observation.action_intent import (
     WaitIntent,
 )
 from observation.public_map import PublicMapView, RoomId
+
+# Stale sightings (a `saw_player` event older than this threshold) are
+# dropped from `_scored_targets`. The audit's seed-0 reproduction had
+# the impostor chasing a stale sighting near tick 4 for the rest of
+# the game; any threshold well below that range fixes the chase loop.
+# Thirty ticks is the documented default — wide enough to keep
+# legitimate stalk targets, tight enough to kill the perpetual loop.
+_STALENESS_THRESHOLD: Final[int] = 30
+
+# Phase-2 inference: engine-generated body ids carry the format
+# ``body-{victim_id}-{tick}`` (engine/rules.py). The impostor policy
+# parses the victim_id out of `saw_body` events to mark confirmed-dead
+# players so they cannot be re-scored as targets. Phase 3 should surface
+# the victim id explicitly on `BodyView` so this string coupling can be
+# retired.
+_BODY_ID_VICTIM_PATTERN: Final[re.Pattern[str]] = re.compile(r"^body-(.+)-\d+$")
 
 
 @dataclass(frozen=True)
@@ -132,7 +150,13 @@ class ImpostorPolicy:
         if self._body_visible_in(latest_events, own_room=own_room):
             return self._cover(public_map=public_map, own_room=own_room)
 
-        targets = self._scored_targets(events, cooldown=cooldown)
+        confirmed_dead = self._confirmed_dead_from_bodies(events)
+        targets = self._scored_targets(
+            events,
+            cooldown=cooldown,
+            current_tick=latest_tick,
+            confirmed_dead=confirmed_dead,
+        )
 
         if cooldown == 0 and targets:
             best = targets[0]
@@ -217,11 +241,54 @@ class ImpostorPolicy:
         return False
 
     @staticmethod
+    def _confirmed_dead_from_bodies(
+        events: tuple[EpisodicEvent, ...],
+    ) -> frozenset[PlayerId]:
+        """Derive the set of confirmed-dead player ids from ``saw_body`` events.
+
+        See ``_BODY_ID_VICTIM_PATTERN`` for the Phase-2 body-id format. Body
+        ids that do not match the pattern are skipped silently — they
+        cannot identify a victim and so cannot contribute to the
+        confirmed-dead set.
+        """
+
+        dead: set[PlayerId] = set()
+        for event in events:
+            if event.type != EVENT_SAW_BODY:
+                continue
+            body_id = event.payload.get("body_id")
+            if not isinstance(body_id, str):
+                raise ValueError(
+                    f"saw_body event missing string 'body_id': {event.payload!r}"
+                )
+            match = _BODY_ID_VICTIM_PATTERN.match(body_id)
+            if match is None:
+                continue
+            dead.add(match.group(1))
+        return frozenset(dead)
+
+    @staticmethod
     def _scored_targets(
         events: tuple[EpisodicEvent, ...],
         *,
         cooldown: int,
+        current_tick: int,
+        confirmed_dead: frozenset[PlayerId],
     ) -> tuple[_ScoredTarget, ...]:
+        """Rank ``saw_player`` sightings by isolation × witness × cooldown.
+
+        Two R-3 filters are applied before scoring (DESIGN.md §4.4):
+
+        * ``confirmed_dead`` sightings are dropped so the impostor never
+          re-scores a corpse.
+        * Sightings older than ``_STALENESS_THRESHOLD`` ticks are dropped
+          so a stale lead cannot drive an endless chase.
+
+        The cooldown factor preserves the original Task 2.7 scoring:
+        scores are zero while ``cooldown > 0`` so the policy does not
+        approach a target it cannot kill.
+        """
+
         latest_sighting: dict[PlayerId, EpisodicEvent] = {}
         bucket: dict[tuple[int, RoomId], int] = {}
         for event in events:
@@ -237,6 +304,10 @@ class ImpostorPolicy:
                 raise ValueError(
                     f"saw_player event missing string 'room': {event.payload!r}"
                 )
+            if player_id in confirmed_dead:
+                continue
+            if current_tick - event.tick > _STALENESS_THRESHOLD:
+                continue
             latest_sighting[player_id] = event
             key = (event.tick, room)
             bucket[key] = bucket.get(key, 0) + 1

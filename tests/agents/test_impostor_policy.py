@@ -505,3 +505,98 @@ class TestImpostorAgentIdProperty:
         policy = ImpostorPolicy(agent_id="imp42")
 
         assert policy.agent_id == "imp42"
+
+
+class TestImpostorStaleAndDeadTargetPruning:
+    """R-3: stale and confirmed-dead targets must be pruned from scoring.
+
+    The audit's seed-0 reproduction shows the impostor oscillating between
+    the room where it last saw a victim and the adjacent room forever.
+    ``_scored_targets`` must drop sightings older than the documented
+    staleness threshold and players observed as dead (via the
+    ``body-{victim_id}-{tick}`` body-id format).
+    """
+
+    def test_stale_sighting_with_matching_body_does_not_drive_stalk(self) -> None:
+        # Impostor saw "victim" in MEDBAY at tick 5 and saw victim's body
+        # back at tick 5 too. By tick 40 the sighting is 35 ticks old
+        # (over the 30-tick staleness threshold) AND the body confirms
+        # victim is dead. The policy must not stalk MEDBAY (the stale-
+        # sighting room) and must not pick the stale/dead target — with
+        # no valid targets it falls through to IDLE → wait.
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="victim", room="MEDBAY"),
+            _saw_body_event(tick=5, body_id="body-victim-5", room="MEDBAY"),
+            _self_state_event(tick=40, room="CAFETERIA"),
+            _cooldown_event(tick=40, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, KillIntent)
+        assert not isinstance(intent, MoveIntent) or intent.payload.to_room != "MEDBAY"
+        assert isinstance(intent, WaitIntent)
+
+    def test_dead_target_filtered_even_when_sighting_is_recent(self) -> None:
+        # Even within the staleness window, a sighting of a confirmed-dead
+        # player must be ignored. Impostor saw "victim" alone in MEDBAY
+        # at tick 10 (recent) but also saw victim's body in MEDBAY at
+        # tick 10 — confirming death. The policy must not move toward
+        # MEDBAY and must not pick victim as the scored target.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="MEDBAY"),
+            _saw_body_event(tick=10, body_id="body-victim-10", room="MEDBAY"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, MoveIntent) or intent.payload.to_room != "MEDBAY"
+
+    def test_alive_target_still_stalked_when_other_target_confirmed_dead(self) -> None:
+        # Two candidates: "victim" (confirmed dead at tick 5) and "alive"
+        # (seen alone in ELECTRICAL at tick 8). The policy must skip
+        # victim and stalk toward alive's room.
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="victim", room="MEDBAY"),
+            _saw_body_event(tick=5, body_id="body-victim-5", room="MEDBAY"),
+            _self_state_event(tick=8, room="CAFETERIA"),
+            _cooldown_event(tick=8, cooldown=0),
+            _saw_player_event(tick=8, player_id="alive", room="ELECTRICAL"),
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, MoveIntent)
+        # CAFETERIA neighbors ELECTRICAL directly.
+        assert intent.payload.to_room == "ELECTRICAL"
+
+    def test_malformed_body_id_is_ignored_silently(self) -> None:
+        # A `saw_body` event whose body_id does not match the
+        # ``body-{victim_id}-{tick}`` pattern cannot identify a victim
+        # and must not be treated as confirming death.
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="alive", room="ELECTRICAL"),
+            _saw_body_event(tick=5, body_id="malformed", room="MEDBAY"),
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        # alive is still a valid target; impostor stalks toward ELECTRICAL.
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "ELECTRICAL"
