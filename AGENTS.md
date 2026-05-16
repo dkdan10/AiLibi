@@ -70,6 +70,22 @@ A task is not done until:
 - The diff touches only the files listed as in scope.
 - The PR description references the DESIGN.md section(s) implemented.
 
+## GitHub operations
+
+- **Use `gh` CLI for all GitHub work.** PRs, issues, comments, diffs,
+  reviews — every GitHub interaction goes through `gh`. The sandbox
+  setup script pre-authenticates it; if a session ever seems to be
+  failing on auth, verify with `gh auth status`.
+- **Do NOT use MCP-based GitHub tools.** Any tool whose name contains
+  `github` (e.g. `mcp__github__*`, `github_create_pull_request`,
+  `create_pull_request`) appears in your tool list but is NOT
+  configured in this sandbox and will fail. Skip these entirely;
+  the failure mode is wasted tool calls and a manual-PR fallback that
+  forces the human to open the PR by hand. The `gh` CLI path is the
+  only working one — reach for it first, every time.
+- **For PR creation,** follow the `gh pr create --body "$(cat <<EOF ... EOF)"`
+  pattern documented in the "PR description (always)" section below.
+
 ## PR description (always)
 
 Every PR — task-driven or ad-hoc (audits, hygiene, hotfixes) — must
