@@ -83,14 +83,20 @@ How to compose the report:
 
 ## Required output
 Return one JSON object that validates against the `ReportDocument`
-schema:
+schema. The strategic reasoner owns and will validate/populate the
+bookkeeping fields (`agent_id`, `tick`) from its own call context;
+focus your effort on the substantive fields below. The rendered memory
+view above does not contain your own player id and may not contain the
+meeting tick, so do not try to derive those values from it.
 
-- `agent_id`: your own player id as it appears in the rendered memory.
-- `tick`: the meeting tick (read it from the most recent tick in the
-  rendered memory).
-- `observations`: a tuple of `saw_player` / `completed_task` /
-  `found_body` claims, each tagged with its own `tick`.
-- `claims`: a tuple of `alibi` / `accusation` / `corroboration`
+- `agent_id`: your own player id. The reasoner already knows this and
+  will override the value you emit; emit any non-empty string.
+- `tick`: the meeting tick. The reasoner already knows this and will
+  override the value you emit; emit any integer.
+- `observations`: a JSON array of `saw_player` / `completed_task` /
+  `found_body` claims, each tagged with its own `tick`. Every
+  observation must be derivable from the rendered memory view.
+- `claims`: a JSON array of `alibi` / `accusation` / `corroboration`
   claims. At least one `alibi` for yourself is expected.
 - `free_text`: one or two sentences of natural-language argument.
 
