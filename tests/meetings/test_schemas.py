@@ -377,20 +377,6 @@ class TestMeetingResult:
         assert result.transcript.reports == ()
         assert result.transcript.statements == ()
 
-    def test_tie_outcome_has_no_ejected_player(self) -> None:
-        result = MeetingResult(
-            meeting_id="m-3",
-            triggered_by="p-3",
-            trigger_tick=410,
-            outcome="TIE",
-            ejected_player_id=None,
-            ballots=(),
-            transcript=MeetingTranscript(),
-        )
-
-        assert result.outcome == "TIE"
-        assert result.ejected_player_id is None
-
     def test_ejected_outcome_without_ejected_id_is_rejected(self) -> None:
         # Codex P1: enforce the outcome/ejection invariant at parse time.
         with pytest.raises(ValidationError, match="EJECTED"):
@@ -416,16 +402,24 @@ class TestMeetingResult:
                 transcript=MeetingTranscript(),
             )
 
-    def test_tie_outcome_with_ejected_id_is_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="TIE"):
-            MeetingResult(
-                meeting_id="m-6",
-                triggered_by="p-3",
-                trigger_tick=410,
-                outcome="TIE",
-                ejected_player_id="p-5",
-                ballots=(),
-                transcript=MeetingTranscript(),
+    def test_unknown_outcome_string_is_rejected(self) -> None:
+        # ``MeetingOutcome`` is the closed set ``{EJECTED, SKIPPED}``;
+        # any other value (including the previously-accepted ``"TIE"``
+        # which DESIGN.md §5.1/§5.2 do not define) must fail Pydantic
+        # validation. Pinning this here is the canonical anti-drift
+        # guard for the protocol surface.
+        with pytest.raises(ValidationError):
+            MeetingResult.model_validate(
+                {
+                    "meeting_id": "m-7",
+                    "triggered_by": "p-3",
+                    "trigger_tick": 410,
+                    "outcome": "TIE",
+                    "ejected_player_id": None,
+                    "ballots": [],
+                    "contradictions": [],
+                    "transcript": {"reports": [], "statements": []},
+                }
             )
 
 

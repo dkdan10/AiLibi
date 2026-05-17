@@ -607,10 +607,14 @@ class TestAccusationRounds:
         # 3 participants * 3 rounds = 9 statements.
         assert len(result.transcript.statements) == 9
 
-    def test_speaker_order_is_reporter_then_ascending_agent_id(self) -> None:
+    def test_speaker_order_is_cyclic_rotation_starting_from_reporter(self) -> None:
         client = _ScriptedLLMClient(responder=_make_responder())
         manager = _make_manager(llm_client=client, round_count=1)
-        # Trigger reporter is p-2 (not the lexically-first id).
+        # Trigger reporter is p-2 (not the lexically-first id). True
+        # round-robin rotates the sorted sequence at the reporter's
+        # index: sorted=[p-1, p-2, p-3] rotated to start at p-2 ->
+        # [p-2, p-3, p-1]. NOT "reporter then ascending others"
+        # (which would be [p-2, p-1, p-3]).
         trigger = MeetingTrigger(
             triggered_by="p-2",
             trigger_tick=410,
@@ -626,9 +630,30 @@ class TestAccusationRounds:
         )
 
         speakers = [s.speaker for s in result.transcript.statements]
-        # Reporter first, then the other living participants in
-        # ascending agent_id order.
-        assert speakers == ["p-2", "p-1", "p-3"]
+        assert speakers == ["p-2", "p-3", "p-1"]
+
+    def test_speaker_order_cyclic_wraparound_from_last_id(self) -> None:
+        # If the reporter is the lexically-last id, the rotation must
+        # wrap around to the front of the sorted sequence. Pins the
+        # "cyclic" semantics directly.
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+        trigger = MeetingTrigger(
+            triggered_by="p-3",
+            trigger_tick=410,
+            description="p-3 reported",
+        )
+
+        result = _run(
+            manager.run(
+                meeting_id="m-wrap",
+                trigger=trigger,
+                participants=_make_participants(),
+            )
+        )
+
+        speakers = [s.speaker for s in result.transcript.statements]
+        assert speakers == ["p-3", "p-1", "p-2"]
 
     def test_speaker_order_falls_back_to_sorted_when_reporter_not_in_participants(
         self,
@@ -784,8 +809,13 @@ class TestVotingAndResolution:
         assert result.outcome == "EJECTED"
         assert result.ejected_player_id == "p-3"
 
-    def test_tie_when_two_targets_tied_at_top(self) -> None:
-        # p-1 -> p-2, p-2 -> p-1, p-3 -> SKIP
+    def test_tied_non_skip_targets_resolve_to_skipped(self) -> None:
+        # p-1 -> p-2, p-2 -> p-1, p-3 -> SKIP. With SKIP counted as a
+        # tally target, the leaders are sorted=[SKIP, p-1, p-2] all at
+        # 1 vote -- SKIP is in leaders so the meeting resolves to
+        # SKIPPED. DESIGN.md §5.1 + §5.2 only define ejection or
+        # skip; the previously-returned ``TIE`` outcome was removed in
+        # response to codex review.
         responder = _make_responder(
             vote_targets={"p-1": "p-2", "p-2": "p-1", "p-3": "SKIP"}
         )
@@ -800,7 +830,78 @@ class TestVotingAndResolution:
             )
         )
 
-        assert result.outcome == "TIE"
+        assert result.outcome == "SKIPPED"
+        assert result.ejected_player_id is None
+
+    def test_skip_plurality_skips_even_with_one_non_skip_vote(self) -> None:
+        # Codex P1 + P3 scenario: 2 SKIPs + 1 non-SKIP vote should
+        # resolve to SKIPPED. The previous tally dropped SKIPs and
+        # would have ejected the single non-SKIP target -- forcing
+        # a low-evidence elimination that the protocol says should
+        # skip.
+        responder = _make_responder(
+            vote_targets={"p-1": "SKIP", "p-2": "SKIP", "p-3": "p-2"}
+        )
+        client = _ScriptedLLMClient(responder=responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-skip-plurality",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert result.outcome == "SKIPPED"
+        assert result.ejected_player_id is None
+
+    def test_non_skip_target_with_strict_plurality_still_ejects(self) -> None:
+        # Regression: with SKIP counted, a real plurality still
+        # ejects. 2 votes for p-3 vs 1 SKIP -> p-3 leads -> EJECTED.
+        responder = _make_responder(
+            vote_targets={"p-1": "p-3", "p-2": "p-3", "p-3": "SKIP"}
+        )
+        client = _ScriptedLLMClient(responder=responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-strict-plurality",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert result.outcome == "EJECTED"
+        assert result.ejected_player_id == "p-3"
+
+    def test_skip_tied_with_player_resolves_to_skipped(self) -> None:
+        # Edge case for the SKIP-in-leaders rule. With p-1->p-3 and
+        # p-3->SKIP (p-2 missing here for the simplest 2-way tie),
+        # the tally is {p-3: 1, SKIP: 1}; SKIP is in leaders so the
+        # meeting resolves to SKIPPED -- the table did not converge.
+        responder = _make_responder(vote_targets={"p-1": "p-3", "p-3": "SKIP"})
+        client = _ScriptedLLMClient(responder=responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+        participants = (
+            MeetingParticipant(agent_id="p-1", role="CREWMATE", rendered_memory="m1"),
+            MeetingParticipant(agent_id="p-3", role="IMPOSTOR", rendered_memory="m3"),
+        )
+
+        result = _run(
+            manager.run(
+                meeting_id="m-skip-tied-with-player",
+                trigger=MeetingTrigger(
+                    triggered_by="p-1",
+                    trigger_tick=410,
+                    description="p-1 reported",
+                ),
+                participants=participants,
+            )
+        )
+
+        assert result.outcome == "SKIPPED"
         assert result.ejected_player_id is None
 
     def test_ballot_voter_is_overridden_to_participant_id(self) -> None:
@@ -980,12 +1081,13 @@ class TestStatementOrderingContract:
         assert len(statements) == 6
 
         # Insertion-order half of the contract: speaker order within a
-        # round is reporter-first then ascending agent_id, and that
-        # order is the same in every round.
+        # round is a cyclic rotation of the sorted ids starting from
+        # the reporter, and that order is the same in every round.
+        # Sorted=[p-1, p-2, p-3] rotated at p-2 -> [p-2, p-3, p-1].
         round0 = [s for s in statements if s.round_index == 0]
         round1 = [s for s in statements if s.round_index == 1]
-        assert [s.speaker for s in round0] == ["p-2", "p-1", "p-3"]
-        assert [s.speaker for s in round1] == ["p-2", "p-1", "p-3"]
+        assert [s.speaker for s in round0] == ["p-2", "p-3", "p-1"]
+        assert [s.speaker for s in round1] == ["p-2", "p-3", "p-1"]
 
         # The tuple order must literally be round0 first then round1
         # -- a sort that interleaves rounds (e.g. by speaker) would

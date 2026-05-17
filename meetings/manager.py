@@ -597,29 +597,42 @@ class MeetingManager:
         self,
         ballots: Sequence[VoteBallot],
     ) -> tuple[MeetingOutcome, PlayerId | None]:
-        """Plurality tally (DESIGN.md §5.2 PHASE 4).
+        """Plurality tally (DESIGN.md §5.2 PHASE 4 + §5.5).
 
-        Task 3.10 will refactor this into ``meetings/voting.py`` with
-        the proper uncertainty-aware skip behavior from DESIGN.md
-        §4.6 + §5.5. For Task 3.8 we implement plurality with
-        SKIP-as-abstention and tie -> ``TIE``:
+        ``SKIP`` is a real tally target -- a vote of ``SKIP`` competes
+        with non-``SKIP`` votes for plurality. Two reads from the
+        protocol motivate this:
 
-        * count votes per non-SKIP target;
-        * if the top target's count is strictly greater than every
-          other target's count and there is at least one non-SKIP
-          vote, the outcome is ``EJECTED``;
-        * if two or more targets tie at the top, the outcome is
-          ``TIE``;
-        * otherwise (no non-SKIP votes), the outcome is ``SKIPPED``.
+        * DESIGN.md §5.5 schemas ``VoteBallot.target`` as
+          ``PlayerId | Literal["SKIP"]`` -- ``SKIP`` is a first-class
+          target, not an abstention.
+        * DESIGN.md §5.2 PHASE 4 says "If tie or below threshold,
+          skip" -- if ``SKIP`` were dropped, a single non-``SKIP``
+          vote among many ``SKIP`` s would still eject, which
+          contradicts the "below threshold, skip" intent.
 
-        SKIP votes never tie with non-SKIP votes -- a vote of SKIP is
-        an abstention from the eject decision.
+        Resolution rules:
+
+        * Empty ballots -> ``SKIPPED`` (no votes to tally).
+        * ``SKIP`` has plurality (alone or tied at the top) ->
+          ``SKIPPED``. Tied with one or more players is treated as
+          skip because the table did not converge on an eject.
+        * Two or more non-``SKIP`` targets tied at the top ->
+          ``SKIPPED`` (DESIGN.md §5.2: "if tie ... skip"). The
+          schema-level ``TIE`` outcome was deliberately removed in
+          this task because DESIGN.md only defines ejection-or-skip.
+        * Single non-``SKIP`` target with strict plurality ->
+          ``EJECTED``.
+
+        Task 3.10 (``meetings/voting.py``) will layer in the
+        uncertainty-aware ballot-confidence threshold per §4.6 and
+        §5.5. That logic is per-voter (the LLM already enforces it
+        via ``skip_confidence_threshold`` in the vote prompt); the
+        tally surface above remains the right place for plurality.
         """
 
-        tallies: dict[PlayerId, int] = {}
+        tallies: dict[str, int] = {}
         for ballot in ballots:
-            if ballot.target == _SKIP_TARGET:
-                continue
             tallies[ballot.target] = tallies.get(ballot.target, 0) + 1
         if not tallies:
             return "SKIPPED", None
@@ -627,8 +640,10 @@ class MeetingManager:
         leaders = sorted(
             target for target, count in tallies.items() if count == max_votes
         )
+        if _SKIP_TARGET in leaders:
+            return "SKIPPED", None
         if len(leaders) > 1:
-            return "TIE", None
+            return "SKIPPED", None
         return "EJECTED", leaders[0]
 
     @staticmethod
@@ -663,23 +678,29 @@ def _speaker_order(
     participants: Sequence[MeetingParticipant],
     trigger: MeetingTrigger,
 ) -> tuple[MeetingParticipant, ...]:
-    """Round-robin order starting from the reporter (DESIGN.md §5.2).
+    """True round-robin order starting from the reporter (DESIGN.md §5.2).
 
-    The reporter (``trigger.triggered_by``) speaks first if they are
-    among the living participants; the remaining participants speak
-    in ascending ``agent_id`` order. If the reporter is not in the
-    participant set (e.g. they were ejected before the round started,
-    or the trigger came from a non-participant), all participants
-    speak in ascending ``agent_id`` order.
+    The canonical sequence is sorted by ``agent_id`` ascending; the
+    returned tuple is that sequence rotated so the reporter
+    (``trigger.triggered_by``) is at index 0. With sorted ids
+    ``[p-1, p-2, p-3, p-4]`` and reporter ``p-2`` the result is
+    ``[p-2, p-3, p-4, p-1]`` -- a cyclic rotation, not "reporter then
+    ascending others". This preserves the round-robin semantics from
+    DESIGN.md §5.2 where each speaker sees the prior speaker's
+    statement in the transcript-so-far and can react to it.
+
+    If the reporter is not in the participant set (e.g. they were
+    ejected before the round started, or the trigger came from a
+    non-participant), the canonical sorted order is used unrotated.
     """
 
     by_id = {p.agent_id: p for p in participants}
     sorted_ids = sorted(by_id)
-    reporter = by_id.get(trigger.triggered_by)
-    if reporter is None:
+    if trigger.triggered_by not in by_id:
         return tuple(by_id[agent_id] for agent_id in sorted_ids)
-    others = [agent_id for agent_id in sorted_ids if agent_id != reporter.agent_id]
-    return (reporter,) + tuple(by_id[agent_id] for agent_id in others)
+    reporter_index = sorted_ids.index(trigger.triggered_by)
+    rotated = sorted_ids[reporter_index:] + sorted_ids[:reporter_index]
+    return tuple(by_id[agent_id] for agent_id in rotated)
 
 
 def _statement_id(*, meeting_id: str, round_index: int, speaker: PlayerId) -> str:

@@ -211,7 +211,7 @@ class ContradictionRef(_FrozenModel):
 # ---------------------------------------------------------------------------
 
 
-MeetingOutcome: TypeAlias = Literal["EJECTED", "SKIPPED", "TIE"]
+MeetingOutcome: TypeAlias = Literal["EJECTED", "SKIPPED"]
 
 
 class MeetingTranscript(_FrozenModel):
@@ -236,7 +236,15 @@ class MeetingResult(_FrozenModel):
     ``outcome`` and ``ejected_player_id`` are coupled invariants:
 
     * ``EJECTED`` requires a non-``None`` ``ejected_player_id``.
-    * ``SKIPPED`` and ``TIE`` require ``ejected_player_id is None``.
+    * ``SKIPPED`` requires ``ejected_player_id is None``.
+
+    DESIGN.md §5.1 and §5.2 define meeting resolution as
+    ejection-or-skip; tied votes also collapse into ``SKIPPED`` per
+    "If tie or below threshold, skip" (§5.2 PHASE 4). The
+    ``MeetingOutcome`` alias therefore exposes only ``EJECTED`` and
+    ``SKIPPED`` -- any third outcome would leak protocol-incompatible
+    state that downstream consumers (Task 3.10 voting, Task 3.12
+    orchestrator integration) would have to special-case.
 
     Enforcing this at parse time prevents structured LLM output (or a
     buggy ``MeetingManager``) from producing a logically inconsistent
@@ -258,10 +266,9 @@ class MeetingResult(_FrozenModel):
             raise ValueError(
                 "MeetingResult outcome='EJECTED' requires a non-None ejected_player_id"
             )
-        if self.outcome != "EJECTED" and self.ejected_player_id is not None:
+        if self.outcome == "SKIPPED" and self.ejected_player_id is not None:
             raise ValueError(
-                f"MeetingResult outcome={self.outcome!r} requires "
-                "ejected_player_id is None"
+                "MeetingResult outcome='SKIPPED' requires ejected_player_id is None"
             )
         return self
 
