@@ -537,6 +537,276 @@ class TestHeadlessGameMeetingDispatch:
         with pytest.raises(ValueError, match="meeting_id"):
             game.run()
 
+    def test_runner_returning_wrong_triggered_by_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex P2: validate ``triggered_by`` against the engine trigger."""
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+
+        def _bad_builder(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
+            return MeetingResult(
+                meeting_id=meeting_id,
+                triggered_by="p-99",  # diverges from engine event actor.
+                trigger_tick=trigger.trigger_tick,
+                outcome="SKIPPED",
+                ejected_player_id=None,
+                ballots=(),
+                contradictions=(),
+                transcript=MeetingTranscript(reports=(), statements=()),
+            )
+
+        runner = _CannedMeetingRunner(result_builder=_bad_builder)
+        replay_path = tmp_path / "wrong-triggered-by.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=5),
+            meeting_runner=runner,
+        )
+
+        with pytest.raises(ValueError, match="triggered_by"):
+            game.run()
+
+    def test_runner_returning_wrong_trigger_tick_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex P2: validate ``trigger_tick`` against the engine trigger."""
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+
+        def _bad_builder(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
+            return MeetingResult(
+                meeting_id=meeting_id,
+                triggered_by=trigger.triggered_by,
+                trigger_tick=trigger.trigger_tick + 99,  # drift.
+                outcome="SKIPPED",
+                ejected_player_id=None,
+                ballots=(),
+                contradictions=(),
+                transcript=MeetingTranscript(reports=(), statements=()),
+            )
+
+        runner = _CannedMeetingRunner(result_builder=_bad_builder)
+        replay_path = tmp_path / "wrong-trigger-tick.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=5),
+            meeting_runner=runner,
+        )
+
+        with pytest.raises(ValueError, match="trigger_tick"):
+            game.run()
+
+    def test_resume_preserves_pre_meeting_engine_events(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex P1: pre-meeting engine events stay visible on the resume tick.
+
+        Pin: when a report shares a tick with another engine event
+        (e.g. a kill earlier in the same action queue), the
+        orchestrator's ``last_events`` after the meeting must contain
+        the pre-meeting events so the next observation pass surfaces
+        the kill / vent to witnesses via
+        ``ObservationService._observed_actions_for_agent``.
+
+        Setup: pre-seed roles so p-1 is the impostor (its actions
+        sort first in the action queue). On the meeting tick, p-1
+        kills p-3 (in the shared spawn room) and p-2 reports a
+        pre-existing body. The engine processes p-1's kill (emitting
+        ``KilledEvent``) before p-2's report (emitting
+        ``MeetingTriggeredEvent`` and returning early). After the
+        runner returns SKIP, the witness p-4 should see the kill in
+        its next observation packet.
+        """
+
+        from agents.tactical.crewmate_policy import CrewmatePolicy
+        from agents.tactical.impostor_policy import ImpostorPolicy
+
+        from orchestrator.game import TacticalAgent
+
+        game_map = load_canonical_map()
+        base = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
+
+        # Force role assignment: p-1 impostor, others crewmates.
+        forced_players: dict[PlayerId, PlayerState] = {}
+        for pid, player in base.players.items():
+            new_role: Role = "IMPOSTOR" if pid == "p-1" else "CREWMATE"
+            forced_players[pid] = replace(player, role=new_role)
+        # Seed a pre-existing body for p-2 to report.
+        body_id = "body-existing-1"
+        existing_body = BodyState(
+            id=body_id,
+            player_id="p-2",  # never-was-alive marker; only used as report target
+            room=game_map.spawn.room,
+            position=(0.0, 0.0),
+            killed_by="p-1",
+            discovered_by=None,
+        )
+        # p-2 needs to be alive to perform the report; pick a different victim
+        # id for the body so the discoverer isn't dead.
+        state_pre = replace(
+            base,
+            players=forced_players,
+            bodies={body_id: existing_body},
+            cooldowns={"p-1": 0},
+        )
+
+        def _stub_seed(
+            *, seed: int, game_map: Map, num_players: int, num_impostors: int = 1
+        ) -> WorldState:
+            return state_pre
+
+        monkeypatch.setattr("orchestrator.game.seed_initial_state", _stub_seed)
+
+        # p-4 is a passive witness that captures every observation
+        # packet it receives so we can inspect the post-meeting one.
+        captured: list[ObservationPacket] = []
+
+        class _WitnessAgent:
+            def __init__(self, agent_id: PlayerId, role: Role) -> None:
+                self._agent_id = agent_id
+                self._role: Role = role
+                policy = (
+                    ImpostorPolicy(agent_id=agent_id)
+                    if role == "IMPOSTOR"
+                    else CrewmatePolicy(agent_id=agent_id)
+                )
+                self._delegate = TacticalAgent(
+                    agent_id=agent_id, role=role, policy=policy
+                )
+
+            def decide(
+                self,
+                packet: ObservationPacket,
+                public_map: PublicMapView,
+            ) -> ActionIntent:
+                captured.append(packet)
+                self._delegate.decide(packet, public_map)
+                return _intent(
+                    {"type": "wait", "actor": packet.agent_id, "payload": {}}
+                )
+
+            @property
+            def agent_id(self) -> PlayerId:
+                return self._agent_id
+
+            @property
+            def role(self) -> Role:
+                return self._role
+
+            def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+                return self._delegate.render_memory_for_meeting(
+                    token_budget=token_budget
+                )
+
+            def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+                return self._delegate.suspicion_graph_for_meeting()
+
+        def factory(agent_id: PlayerId, role: Role):  # type: ignore[no-untyped-def]
+            if agent_id == "p-1":
+                return _ScriptedAgent(
+                    agent_id=agent_id,
+                    intents=[
+                        _intent(
+                            {
+                                "type": "kill",
+                                "actor": "p-1",
+                                "payload": {"target": "p-3"},
+                            }
+                        )
+                    ],
+                )
+            if agent_id == "p-2":
+                return _ScriptedAgent(
+                    agent_id=agent_id,
+                    intents=[
+                        _intent(
+                            {
+                                "type": "report",
+                                "actor": "p-2",
+                                "payload": {"body_id": body_id},
+                            }
+                        )
+                    ],
+                )
+            return _WitnessAgent(agent_id, role)
+
+        runner = _CannedMeetingRunner(result_builder=_skip_result)
+        replay_path = tmp_path / "preserve-events.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=factory,
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=3),
+            meeting_runner=runner,
+        )
+        game.run()
+
+        # The witness should receive at least two packets: tick 0
+        # (pre-kill) and tick 1 (post-meeting resume). The tick-1
+        # packet must surface p-1's kill via ``PlayerView.action``.
+        # Find p-4's packets in order.
+        p4_packets = [p for p in captured if p.agent_id == "p-4"]
+        assert len(p4_packets) >= 2, (
+            "expected p-4 to observe at least two ticks (pre + post meeting)"
+        )
+        resume_packet = p4_packets[1]
+        # ``PlayerView.action`` is the action label the observer saw
+        # the other player perform on the previous tick. The kill
+        # must be visible on the resume tick because p-4 was in the
+        # spawn room when p-1 killed p-3.
+        p1_view = next(
+            (view for view in resume_packet.visible_players if view.id == "p-1"),
+            None,
+        )
+        assert p1_view is not None, (
+            f"p-4 should see p-1 in visible_players on the resume tick; "
+            f"visible_players={[v.id for v in resume_packet.visible_players]}"
+        )
+        assert p1_view.action == "kill", (
+            f"p-4 should observe p-1's kill action on the resume tick; "
+            f"got action={p1_view.action!r}"
+        )
+
+    def test_reported_body_is_consumed_after_meeting(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex P2: the reported body is removed when gameplay resumes.
+
+        Defense in depth — visibility hides discovered bodies from
+        default tactical agents, but the engine's ``resolve_report``
+        does not reject already-discovered bodies. Consuming the body
+        on meeting close prevents an adversarial intent from
+        re-triggering the same meeting on the same corpse.
+        """
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+        runner = _CannedMeetingRunner(result_builder=_skip_result)
+
+        replay_path = tmp_path / "consume-body.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=4),
+            meeting_runner=runner,
+        )
+
+        result = game.run()
+
+        assert body_id not in result.final_state.bodies
+
 
 # ---------------------------------------------------------------------------
 # DefaultMeetingRunner — exercises the default LLM-backed wiring.
@@ -780,6 +1050,163 @@ class TestDefaultMeetingRunner:
         # Prompt versions metadata persisted.
         assert "crewmate_report" in meeting.prompt_versions
         assert "vote_ballot" in meeting.prompt_versions
+
+    def test_failed_meeting_does_not_leak_llm_calls_into_next_meeting(
+        self,
+    ) -> None:
+        """Codex P2: a mid-meeting failure drains the recording buffer.
+
+        If ``MeetingManager.run`` raises after one or more
+        ``complete()`` calls, the recorded calls must not be attached
+        to the next successful meeting's replay payload. Pin: dispatch
+        two meetings against the same :class:`DefaultMeetingRunner`,
+        force the first one to raise mid-meeting, and assert the
+        second meeting's artifacts only count the second meeting's
+        calls.
+        """
+
+        from meetings.manager import MeetingConfig
+
+        class _RaiseAfterFirstCallClient:
+            def __init__(self) -> None:
+                self._count = 0
+
+            async def complete(
+                self,
+                *,
+                prompt: str,
+                schema: type[BaseModel] | None,
+                max_tokens: int,
+                temperature: float,
+                call_kind: CallKind = "meeting",
+                model: str | None = None,
+            ) -> LLMResponse:
+                self._count += 1
+                if schema is ReportDocument and self._count == 1:
+                    return LLMResponse(
+                        text=ReportDocument(
+                            agent_id="x",
+                            tick=0,
+                            observations=(),
+                            claims=(),
+                            free_text="r",
+                        ).model_dump_json(),
+                        usage=TokenUsage(input_tokens=1, output_tokens=1),
+                        cost_usd=0.0,
+                        model="stub",
+                    )
+                raise RuntimeError("boom")
+
+        config = MeetingConfig(
+            round_count=1,
+            deadlines=MeetingDeadlines(
+                report_seconds=None, statement_seconds=None, vote_seconds=None
+            ),
+        )
+        runner = DefaultMeetingRunner(
+            llm_client=_RaiseAfterFirstCallClient(),
+            crewmate_report_prompt=_stub_crewmate_prompt,
+            impostor_report_prompt=_stub_impostor_prompt,
+            statement_prompt=_stub_statement_prompt,
+            vote_prompt=_stub_vote_prompt,
+            config=config,
+        )
+        trigger = MeetingTrigger(
+            triggered_by="p-1",
+            trigger_tick=10,
+            description="x",
+        )
+        participants_seed = seed_initial_state(
+            seed=1, game_map=load_canonical_map(), num_players=3
+        )
+
+        # Build a thin MeetingAware proxy over the seeded TacticalAgents
+        # so the runner's _build_participants can render memory.
+        class _MinimalAware:
+            def __init__(self, agent_id: PlayerId, role: Role) -> None:
+                from agents.tactical.crewmate_policy import CrewmatePolicy
+                from agents.tactical.impostor_policy import ImpostorPolicy
+
+                from orchestrator.game import TacticalAgent
+
+                policy = (
+                    ImpostorPolicy(agent_id=agent_id)
+                    if role == "IMPOSTOR"
+                    else CrewmatePolicy(agent_id=agent_id)
+                )
+                self._delegate = TacticalAgent(
+                    agent_id=agent_id, role=role, policy=policy
+                )
+                # Prime memory with a self-state event so the renderer
+                # doesn't raise on missing role.
+                from agents.memory.episodic import EpisodicEvent
+
+                self._delegate.memory.episodic.append(
+                    EpisodicEvent(
+                        tick=0,
+                        type="self_state",
+                        payload={"room": "CAFETERIA", "role": role},
+                        provenance="observed",
+                    )
+                )
+
+            def decide(self, packet, public_map):  # type: ignore[no-untyped-def]
+                return self._delegate.decide(packet, public_map)
+
+            @property
+            def agent_id(self) -> PlayerId:
+                return self._delegate.agent_id
+
+            @property
+            def role(self) -> Role:
+                return self._delegate.role
+
+            def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+                return self._delegate.render_memory_for_meeting(
+                    token_budget=token_budget
+                )
+
+            def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+                return self._delegate.suspicion_graph_for_meeting()
+
+        agents: dict[PlayerId, object] = {
+            pid: _MinimalAware(pid, players.role)
+            for pid, players in participants_seed.players.items()
+        }
+
+        # First meeting raises mid-flight.
+        with pytest.raises(RuntimeError, match="boom"):
+            _run(
+                runner.run_meeting(
+                    meeting_id="m-1",
+                    trigger=trigger,
+                    state=participants_seed,
+                    agents=agents,  # type: ignore[arg-type]
+                )
+            )
+
+        # Swap the client for a clean one so the next meeting succeeds.
+        runner._recording_client = runner._recording_client.__class__(
+            _ScriptedLLMClient(vote_target="SKIP")
+        )
+        runner._manager._llm_client = runner._recording_client
+
+        artifacts = _run(
+            runner.run_meeting(
+                meeting_id="m-2",
+                trigger=trigger.__class__(
+                    triggered_by="p-1", trigger_tick=20, description="y"
+                ),
+                state=participants_seed,
+                agents=agents,  # type: ignore[arg-type]
+            )
+        )
+
+        # The second meeting's artifacts must NOT include records
+        # from the first (failed) meeting. The second meeting issues
+        # 3 reports + 3 statements + 3 votes = 9 calls; if leakage
+        # occurred, we'd see > 9 here.
+        assert len(artifacts.llm_calls) == 9
 
 
 class TestMeetingFirewallContract:

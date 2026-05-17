@@ -34,7 +34,7 @@ from agents.memory.store import (
 from agents.perception import ingest_packet
 from agents.tactical.crewmate_policy import CrewmatePolicy
 from agents.tactical.impostor_policy import ImpostorPolicy
-from engine.entities import PlayerId, PlayerState, Role
+from engine.entities import BodyId, PlayerId, PlayerState, Role
 from engine.events import (
     EngineEvent,
     GameOverEvent,
@@ -269,16 +269,27 @@ class DefaultMeetingRunner:
         state: WorldState,
         agents: Mapping[PlayerId, AgentInterface],
     ) -> MeetingArtifacts:
+        # Drop any stale captures left over from a prior run that
+        # raised mid-meeting. Without this the leftover records would
+        # silently attach to this meeting's replay payload and
+        # contaminate llm_calls counts + cost metadata.
+        self._recording_client.drain()
         participants = _build_participants(
             state=state,
             agents=agents,
             token_budget=self._token_budget,
         )
-        result = await self._manager.run(
-            meeting_id=meeting_id,
-            trigger=trigger,
-            participants=participants,
-        )
+        try:
+            result = await self._manager.run(
+                meeting_id=meeting_id,
+                trigger=trigger,
+                participants=participants,
+            )
+        except BaseException:
+            # On failure, drop the partial captures so a retry against
+            # the same runner does not double-count completed prefixes.
+            self._recording_client.drain()
+            raise
         return MeetingArtifacts(
             result=result,
             llm_calls=self._recording_client.drain(),
@@ -338,11 +349,52 @@ def _build_participants(
 # ---------------------------------------------------------------------------
 
 
+def _validate_runner_result(
+    *,
+    result: MeetingResult,
+    expected_meeting_id: str,
+    expected_trigger: MeetingTrigger,
+) -> None:
+    """Reject a :class:`MeetingResult` whose trigger fields drift from the engine.
+
+    The orchestrator builds the canonical :class:`MeetingTrigger` from
+    the :class:`MeetingTriggeredEvent` the engine emitted; the runner
+    receives it verbatim. The returned :class:`MeetingResult` echoes
+    back ``meeting_id`` / ``triggered_by`` / ``trigger_tick`` and the
+    orchestrator persists those into the replay record. A buggy or
+    custom runner could swap any of those fields, causing the replay
+    log to contradict the engine event that actually opened the
+    meeting — which silently breaks downstream provenance for
+    eval / replay tooling. Fail loud here instead.
+    """
+
+    if result.meeting_id != expected_meeting_id:
+        raise ValueError(
+            "MeetingRunner returned a MeetingResult whose meeting_id "
+            f"{result.meeting_id!r} does not match the dispatched "
+            f"meeting_id {expected_meeting_id!r}; this is an "
+            "orchestrator-runner wiring bug"
+        )
+    if result.triggered_by != expected_trigger.triggered_by:
+        raise ValueError(
+            "MeetingRunner returned a MeetingResult whose triggered_by "
+            f"{result.triggered_by!r} does not match the engine-emitted "
+            f"trigger {expected_trigger.triggered_by!r}"
+        )
+    if result.trigger_tick != expected_trigger.trigger_tick:
+        raise ValueError(
+            "MeetingRunner returned a MeetingResult whose trigger_tick "
+            f"{result.trigger_tick} does not match the engine-emitted "
+            f"trigger_tick {expected_trigger.trigger_tick}"
+        )
+
+
 def apply_meeting_result(
     state: WorldState,
     result: MeetingResult,
     *,
     game_map: Map,
+    triggering_body_id: BodyId | None = None,
 ) -> tuple[WorldState, list[EngineEvent]]:
     """Apply a :class:`MeetingResult` to engine-owned state (DESIGN.md §3.1, §5.1).
 
@@ -421,6 +473,20 @@ def apply_meeting_result(
         cooldowns = dict(working.cooldowns)
         cooldowns.pop(ejected_id, None)
         working = replace(working, players=players, tasks=tasks, cooldowns=cooldowns)
+
+    # Consume the corpse that triggered a body-report meeting. The
+    # engine's visibility layer already hides bodies whose
+    # ``discovered_by`` is set, so default tactical agents cannot
+    # re-report the body via observation. But ``engine.rules.resolve_report``
+    # does not reject already-discovered bodies, so a hardcoded /
+    # adversarial intent with the same body_id would otherwise
+    # repeatedly re-trigger meetings after gameplay resumes. Drop
+    # the body here so the trigger surface is the same as the
+    # observation surface.
+    if triggering_body_id is not None and triggering_body_id in working.bodies:
+        bodies = dict(working.bodies)
+        del bodies[triggering_body_id]
+        working = replace(working, bodies=bodies)
 
     # Re-evaluate win conditions on the post-ejection (or
     # post-skip) world. A skipped meeting cannot newly satisfy a win
@@ -583,15 +649,24 @@ class HeadlessGame:
                         outcome="MEETING_PHASE_REACHED",
                         replay_path=self._replay_path,
                     )
+                pre_meeting_events = last_events
                 state, post_events = self._run_and_apply_meeting(
                     state=state,
-                    events=last_events,
+                    events=pre_meeting_events,
                     agents=agents,
                     replay=replay,
                     meeting_index=meeting_counter,
                 )
                 meeting_counter += 1
-                last_events = tuple(post_events)
+                # Preserve the events the engine emitted on the
+                # meeting-trigger tick (e.g. a ``KilledEvent`` that
+                # landed in the same action queue as the report).
+                # ``ObservationService._observed_actions_for_agent``
+                # reads ``engine_events`` to surface kills and vent
+                # uses as observed actions; dropping the pre-meeting
+                # events here would silently regress agent perception
+                # on the resume tick.
+                last_events = pre_meeting_events + tuple(post_events)
 
         return HeadlessGameResult(
             final_state=state,
@@ -612,7 +687,7 @@ class HeadlessGame:
             raise RuntimeError(
                 "_run_and_apply_meeting called without a configured meeting runner"
             )
-        trigger = _build_meeting_trigger(state=state, events=events)
+        trigger, triggering_body_id = _build_meeting_trigger(state=state, events=events)
         meeting_id = f"{self._game_id()}:meeting-{meeting_index}"
         artifacts = _drive_async(
             self._meeting_runner.run_meeting(
@@ -622,16 +697,17 @@ class HeadlessGame:
                 agents=agents,
             )
         )
-        if artifacts.result.meeting_id != meeting_id:
-            raise ValueError(
-                "MeetingRunner returned a MeetingResult whose meeting_id "
-                f"{artifacts.result.meeting_id!r} does not match the dispatched "
-                f"meeting_id {meeting_id!r}; this is an orchestrator-runner "
-                "wiring bug"
-            )
+        _validate_runner_result(
+            result=artifacts.result,
+            expected_meeting_id=meeting_id,
+            expected_trigger=trigger,
+        )
         state_hash_before = _state_hash(state)
         next_state, post_events = apply_meeting_result(
-            state, artifacts.result, game_map=self._game_map
+            state,
+            artifacts.result,
+            game_map=self._game_map,
+            triggering_body_id=triggering_body_id,
         )
         state_hash_after = _state_hash(next_state)
         replay.record_meeting(
@@ -698,7 +774,7 @@ def _build_meeting_trigger(
     *,
     state: WorldState,
     events: Sequence[EngineEvent],
-) -> MeetingTrigger:
+) -> tuple[MeetingTrigger, BodyId | None]:
     """Construct a :class:`MeetingTrigger` from the engine's transition events.
 
     The engine emits a :class:`MeetingTriggeredEvent` from
@@ -708,6 +784,16 @@ def _build_meeting_trigger(
     recent such event off the engine's emitted event list and renders
     it into the human-readable description the report prompt
     surfaces.
+
+    The second element of the returned tuple is the ``body_id`` of
+    the corpse that triggered a ``report`` meeting (``None`` for an
+    ``emergency`` meeting). :func:`apply_meeting_result` consumes
+    that body so a hardcoded second report cannot re-trigger a meeting
+    on the same corpse after gameplay resumes (defense in depth — the
+    visibility layer already hides discovered bodies from default
+    tactical agents, but the engine's ``resolve_report`` does not
+    reject already-discovered bodies, so an adversarial / scripted
+    intent could otherwise replay the trigger).
     """
 
     trigger_event: MeetingTriggeredEvent | None = None
@@ -719,6 +805,7 @@ def _build_meeting_trigger(
             "engine transitioned to MEETING phase without emitting a "
             "MeetingTriggeredEvent; this is an engine invariant violation"
         )
+    body_id: BodyId | None
     if trigger_event.trigger == "report":
         body_id = trigger_event.body_id
         description = (
@@ -727,15 +814,17 @@ def _build_meeting_trigger(
             + f"at tick {trigger_event.tick}"
         )
     else:
+        body_id = None
         description = (
             f"{trigger_event.actor} called an emergency meeting at tick "
             f"{trigger_event.tick}"
         )
-    return MeetingTrigger(
+    trigger = MeetingTrigger(
         triggered_by=trigger_event.actor,
         trigger_tick=trigger_event.tick,
         description=description,
     )
+    return trigger, body_id
 
 
 def _drive_async(coro: Coroutine[object, object, _T]) -> _T:
