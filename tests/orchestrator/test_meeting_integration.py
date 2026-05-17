@@ -1,0 +1,1333 @@
+"""Meeting / orchestrator integration tests (Task 3.12).
+
+Anchored to DESIGN.md §3.1, §5.1, §11.4. The orchestrator owns the
+engine ↔ MeetingManager handoff: when the engine transitions to
+``MEETING`` phase the runner is dispatched, the returned
+:class:`MeetingResult` flows through :func:`apply_meeting_result`, and
+the game loop resumes at tick ``t+1``. These tests pin the contract:
+
+* an ``EJECTED`` outcome marks the named player dead, drops their
+  incomplete tasks, removes their cooldown entry, and advances the
+  tick;
+* a ``SKIPPED`` outcome leaves living players untouched but still
+  advances tick + rng;
+* an ejection that satisfies a win condition emits a
+  :class:`GameOverEvent` instead of resuming;
+* the orchestrator refuses to apply a meeting result outside ``MEETING``
+  phase (engine purity gate);
+* the legacy ``MEETING_PHASE_REACHED`` outcome is preserved when no
+  :class:`MeetingRunner` is configured;
+* the runner sees the engine's :class:`MeetingTrigger` payload built
+  from the emitted :class:`MeetingTriggeredEvent`;
+* the runner cannot mutate engine state directly — every state change
+  goes through the orchestrator.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable, Iterable, Mapping
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+from typing import TypeVar
+
+import pytest
+from pydantic import BaseModel, TypeAdapter
+
+from engine.entities import BodyState, PlayerId, PlayerState, Role
+from engine.world import Map, WorldState, load_canonical_map
+from llm.client import CallKind, LLMResponse, TokenUsage
+from meetings.manager import MeetingDeadlines, MeetingTrigger, SuspicionEntry
+from meetings.schemas import (
+    ContradictionRef,
+    MeetingResult,
+    MeetingTranscript,
+    ReportDocument,
+    Statement,
+    VoteBallot,
+)
+from observation.action_intent import ActionIntent
+from observation.packet import ObservationPacket
+from observation.public_map import PublicMapView
+from orchestrator.game import (
+    DefaultMeetingRunner,
+    HeadlessGame,
+    MeetingArtifacts,
+    apply_meeting_result,
+    build_default_agent_factory,
+)
+from orchestrator.replay import MeetingReplayEntry, read_all_entries
+from orchestrator.scheduler import TickScheduler
+from orchestrator.seeder import seed_initial_state
+
+_INTENT_ADAPTER: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
+_T = TypeVar("_T")
+
+
+def _run(coro: Awaitable[_T]) -> _T:
+    return asyncio.new_event_loop().run_until_complete(coro)
+
+
+def _intent(data: object) -> ActionIntent:
+    return _INTENT_ADAPTER.validate_python(data)
+
+
+class _ScriptedAgent:
+    """Test-only agent that replays a fixed intent sequence."""
+
+    def __init__(
+        self,
+        *,
+        agent_id: PlayerId,
+        intents: Iterable[ActionIntent] = (),
+    ) -> None:
+        self._agent_id = agent_id
+        self._intents = list(intents)
+        self._default = _intent({"type": "wait", "actor": agent_id, "payload": {}})
+        self._cursor = 0
+
+    def decide(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+    ) -> ActionIntent:
+        if self._cursor < len(self._intents):
+            intent = self._intents[self._cursor]
+            self._cursor += 1
+            return intent
+        return self._default
+
+
+@dataclass
+class _CannedMeetingRunner:
+    """Test runner that returns a hand-built :class:`MeetingArtifacts`.
+
+    The runner records every dispatch it sees so tests can assert on
+    the trigger payload, the state snapshot it received, and the agent
+    mapping. It accepts a callable that maps ``meeting_id`` to a
+    :class:`MeetingResult`; the default returns a ``SKIPPED`` result.
+    """
+
+    result_builder: Callable[[str, MeetingTrigger], MeetingResult]
+    llm_calls_per_meeting: int = 0
+    prompt_versions: Mapping[str, str] = field(
+        default_factory=lambda: {"crewmate_report": "test.v0"}
+    )
+    received: list[tuple[str, MeetingTrigger, WorldState, tuple[PlayerId, ...]]] = (
+        field(default_factory=list)
+    )
+
+    async def run_meeting(
+        self,
+        *,
+        meeting_id: str,
+        trigger: MeetingTrigger,
+        state: WorldState,
+        agents: Mapping[PlayerId, object],
+    ) -> MeetingArtifacts:
+        self.received.append((meeting_id, trigger, state, tuple(sorted(agents))))
+        result = self.result_builder(meeting_id, trigger)
+        # Synthesize a fake ``llm_calls`` tuple of the requested
+        # length so the replay record carries non-trivial metadata.
+        from orchestrator.replay import LLMCallRecord
+
+        llm_calls = tuple(
+            LLMCallRecord(
+                call_kind="meeting",
+                model="canned-model",
+                prompt=f"prompt-{idx}",
+                response_text=f"response-{idx}",
+                input_tokens=10 + idx,
+                output_tokens=5 + idx,
+                cost_usd=0.001 * (idx + 1),
+            )
+            for idx in range(self.llm_calls_per_meeting)
+        )
+        return MeetingArtifacts(
+            result=result,
+            llm_calls=llm_calls,
+            prompt_versions=dict(self.prompt_versions),
+        )
+
+
+def _skip_result(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
+    return MeetingResult(
+        meeting_id=meeting_id,
+        triggered_by=trigger.triggered_by,
+        trigger_tick=trigger.trigger_tick,
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        ballots=(),
+        contradictions=(),
+        transcript=MeetingTranscript(reports=(), statements=()),
+    )
+
+
+def _eject_result(target: PlayerId) -> Callable[[str, MeetingTrigger], MeetingResult]:
+    def _build(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
+        ballot = VoteBallot(
+            voter=trigger.triggered_by,
+            target=target,
+            confidence=0.9,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text=f"eject {target}",
+        )
+        return MeetingResult(
+            meeting_id=meeting_id,
+            triggered_by=trigger.triggered_by,
+            trigger_tick=trigger.trigger_tick,
+            outcome="EJECTED",
+            ejected_player_id=target,
+            ballots=(ballot,),
+            contradictions=(),
+            transcript=MeetingTranscript(reports=(), statements=()),
+        )
+
+    return _build
+
+
+# ---------------------------------------------------------------------------
+# apply_meeting_result — pure orchestrator function.
+# ---------------------------------------------------------------------------
+
+
+def _meeting_state_with_body(game_map: Map) -> tuple[WorldState, str]:
+    """Build a state in MEETING phase with one dead player and a body."""
+
+    base = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
+    body_id = "body-p-2-1"
+    body = BodyState(
+        id=body_id,
+        player_id="p-2",
+        room=game_map.spawn.room,
+        position=(0.0, 0.0),
+        killed_by="p-3",
+        discovered_by="p-1",
+    )
+    players: dict[PlayerId, PlayerState] = dict(base.players)
+    players["p-2"] = replace(players["p-2"], alive=False)
+    return (
+        replace(
+            base,
+            phase="MEETING",
+            bodies={body_id: body},
+            players=players,
+            tick=42,
+        ),
+        body_id,
+    )
+
+
+class TestApplyMeetingResult:
+    def test_skip_advances_tick_and_phase(self) -> None:
+        game_map = load_canonical_map()
+        state, _ = _meeting_state_with_body(game_map)
+        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=42, description="x")
+        result = _skip_result("g-1:meeting-0", trigger)
+
+        next_state, events = apply_meeting_result(state, result, game_map=game_map)
+
+        assert next_state.phase == "PLAY"
+        assert next_state.tick == state.tick + 1
+        assert events == []
+        # Living players unchanged.
+        for player_id, before in state.players.items():
+            assert next_state.players[player_id].alive == before.alive
+
+    def test_eject_kills_player_and_drops_incomplete_tasks(self) -> None:
+        game_map = load_canonical_map()
+        # Use a larger lobby so ejecting one crewmate doesn't reach parity.
+        base = seed_initial_state(seed=2026, game_map=game_map, num_players=5)
+        state = replace(base, phase="MEETING", tick=42)
+        # Pick the first crewmate with an incomplete task; eject them.
+        target = next(
+            pid
+            for pid, p in sorted(state.players.items())
+            if p.alive and p.role == "CREWMATE"
+        )
+        assert any(
+            task.owner == target and not task.completed for task in state.tasks.values()
+        ), "fixture must include at least one incomplete task for the target"
+
+        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=42, description="x")
+        result = _eject_result(target)("g-1:meeting-0", trigger)
+
+        next_state, events = apply_meeting_result(state, result, game_map=game_map)
+
+        assert next_state.players[target].alive is False
+        assert next_state.players[target].last_action is None
+        assert target not in next_state.cooldowns
+        assert not any(
+            task.owner == target and not task.completed
+            for task in next_state.tasks.values()
+        )
+        # No game-over event because not at win condition yet.
+        from engine.events import GameOverEvent
+
+        assert not any(isinstance(e, GameOverEvent) for e in events)
+
+    def test_eject_triggering_impostor_parity_emits_game_over(self) -> None:
+        game_map = load_canonical_map()
+        base = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
+        # Build near-parity meeting state: 1 impostor, 2 crewmates alive.
+        impostor_id = next(
+            pid for pid, p in base.players.items() if p.role == "IMPOSTOR"
+        )
+        crewmates = [pid for pid, p in base.players.items() if p.role == "CREWMATE"]
+        players: dict[PlayerId, PlayerState] = dict(base.players)
+        players[crewmates[0]] = replace(players[crewmates[0]], alive=False)
+        state = replace(base, phase="MEETING", players=players, tick=99)
+
+        trigger = MeetingTrigger(
+            triggered_by=crewmates[1], trigger_tick=99, description="emergency"
+        )
+        # Ejecting another crewmate puts impostors at parity.
+        result = _eject_result(crewmates[1])("g-1:meeting-0", trigger)
+        next_state, events = apply_meeting_result(state, result, game_map=game_map)
+
+        from engine.events import GameOverEvent
+
+        assert next_state.phase == "GAME_OVER"
+        # Tick NOT advanced when game-over fires (mirrors engine).
+        assert next_state.tick == state.tick
+        assert any(
+            isinstance(e, GameOverEvent) and e.winner == "IMPOSTORS" for e in events
+        ), events
+        # And the ejected player is dead.
+        assert next_state.players[crewmates[1]].alive is False
+        # Impostor still alive.
+        assert next_state.players[impostor_id].alive is True
+
+    def test_eject_impostor_completing_crew_tasks_emits_crew_win(self) -> None:
+        """If ejecting the impostor drops all incomplete tasks (because crew
+        finished the rest), the win check resolves to CREWMATES."""
+
+        game_map = load_canonical_map()
+        base = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
+        impostor_id = next(
+            pid for pid, p in base.players.items() if p.role == "IMPOSTOR"
+        )
+        # Mark every crew-owned task as completed; no incomplete remains.
+        finished_tasks = {
+            task_id: replace(task, progress=task.required_ticks, completed=True)
+            for task_id, task in base.tasks.items()
+        }
+        state = replace(base, phase="MEETING", tasks=finished_tasks, tick=33)
+
+        trigger = MeetingTrigger(
+            triggered_by="p-1", trigger_tick=33, description="vote impostor"
+        )
+        result = _eject_result(impostor_id)("g-1:meeting-0", trigger)
+        next_state, events = apply_meeting_result(state, result, game_map=game_map)
+
+        from engine.events import GameOverEvent
+
+        assert next_state.phase == "GAME_OVER"
+        assert any(
+            isinstance(e, GameOverEvent) and e.winner == "CREWMATES" for e in events
+        ), events
+
+    def test_apply_outside_meeting_phase_fails_loud(self) -> None:
+        game_map = load_canonical_map()
+        state = seed_initial_state(seed=1, game_map=game_map, num_players=4)
+        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=0, description="x")
+        result = _skip_result("g-1:meeting-0", trigger)
+
+        with pytest.raises(ValueError, match="MEETING"):
+            apply_meeting_result(state, result, game_map=game_map)
+
+    def test_apply_eject_dead_player_fails_loud(self) -> None:
+        game_map = load_canonical_map()
+        state, _ = _meeting_state_with_body(game_map)
+        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=42, description="x")
+        # ``p-2`` is dead in the fixture.
+        result = _eject_result("p-2")("g-1:meeting-0", trigger)
+
+        with pytest.raises(ValueError, match="already-dead"):
+            apply_meeting_result(state, result, game_map=game_map)
+
+    def test_apply_advances_rng_state(self) -> None:
+        game_map = load_canonical_map()
+        state, _ = _meeting_state_with_body(game_map)
+        trigger = MeetingTrigger(triggered_by="p-1", trigger_tick=42, description="x")
+        result = _skip_result("g-1:meeting-0", trigger)
+
+        next_state, _ = apply_meeting_result(state, result, game_map=game_map)
+
+        assert next_state.rng_state != state.rng_state
+
+
+# ---------------------------------------------------------------------------
+# HeadlessGame end-to-end with a meeting runner.
+# ---------------------------------------------------------------------------
+
+
+def _report_body_factory(
+    body_id: str,
+) -> Callable[[PlayerId, Role], _ScriptedAgent]:
+    def factory(agent_id: PlayerId, role: Role) -> _ScriptedAgent:
+        if agent_id == "p-1":
+            return _ScriptedAgent(
+                agent_id=agent_id,
+                intents=[
+                    _intent(
+                        {
+                            "type": "report",
+                            "actor": "p-1",
+                            "payload": {"body_id": body_id},
+                        }
+                    )
+                ],
+            )
+        return _ScriptedAgent(agent_id=agent_id)
+
+    return factory
+
+
+def _seed_meeting_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    game_map: Map,
+    seed: int = 2026,
+) -> str:
+    """Pre-seed a world state with a corpse so the report action validates."""
+
+    initial = seed_initial_state(seed=seed, game_map=game_map, num_players=4)
+    body_id = "body-p-2-1"
+    body = BodyState(
+        id=body_id,
+        player_id="p-2",
+        room=game_map.spawn.room,
+        position=(0.0, 0.0),
+        killed_by="p-3",
+        discovered_by=None,
+    )
+    state_with_body = replace(
+        initial,
+        bodies={body_id: body},
+        players={
+            **initial.players,
+            "p-2": replace(initial.players["p-2"], alive=False),
+        },
+    )
+
+    def _stub(
+        *, seed: int, game_map: Map, num_players: int, num_impostors: int = 1
+    ) -> WorldState:
+        return state_with_body
+
+    monkeypatch.setattr("orchestrator.game.seed_initial_state", _stub)
+    return body_id
+
+
+class TestHeadlessGameMeetingDispatch:
+    def test_meeting_phase_reached_when_no_runner_configured(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Legacy behaviour: no runner → orchestrator pauses at MEETING."""
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+        replay_path = tmp_path / "no-runner.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=5),
+        )
+
+        result = game.run()
+
+        assert result.outcome == "MEETING_PHASE_REACHED"
+        assert result.final_state.phase == "MEETING"
+
+    def test_runner_dispatch_skip_resumes_game(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A configured runner returning SKIPPED resumes the game."""
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+        runner = _CannedMeetingRunner(result_builder=_skip_result)
+
+        replay_path = tmp_path / "skip-runner.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=8),
+            meeting_runner=runner,
+        )
+
+        result = game.run()
+
+        # Runner was called exactly once at the report tick.
+        assert len(runner.received) == 1
+        meeting_id, trigger, snapshot_state, _ = runner.received[0]
+        assert meeting_id == "headless-seed-2026:meeting-0"
+        assert trigger.triggered_by == "p-1"
+        assert snapshot_state.phase == "MEETING"
+        # Game ran past the meeting tick → outcome is hit-budget (skipped).
+        assert result.outcome == "TICK_BUDGET_REACHED"
+        assert result.final_state.phase == "PLAY"
+        # Replay log has both tick and meeting entries.
+        entries = read_all_entries(replay_path)
+        meeting_entries = [
+            entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+        ]
+        assert len(meeting_entries) == 1
+        meeting_entry = meeting_entries[0]
+        assert meeting_entry.outcome == "SKIPPED"
+        assert meeting_entry.meeting_id == "headless-seed-2026:meeting-0"
+        assert meeting_entry.state_hash_before != meeting_entry.state_hash_after
+
+    def test_runner_dispatch_eject_marks_player_dead_and_resumes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+        runner = _CannedMeetingRunner(result_builder=_eject_result("p-4"))
+
+        replay_path = tmp_path / "eject-runner.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=5),
+            meeting_runner=runner,
+        )
+
+        result = game.run()
+
+        assert result.final_state.players["p-4"].alive is False
+        assert "p-4" not in result.final_state.cooldowns
+        # And the runner's MeetingResult was persisted.
+        entries = read_all_entries(replay_path)
+        meeting_entries = [
+            entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+        ]
+        assert len(meeting_entries) == 1
+        assert meeting_entries[0].outcome == "EJECTED"
+        assert meeting_entries[0].ejected_player_id == "p-4"
+
+    def test_runner_returning_wrong_meeting_id_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+
+        def _bad_builder(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
+            return _skip_result("WRONG", trigger)
+
+        runner = _CannedMeetingRunner(result_builder=_bad_builder)
+        replay_path = tmp_path / "wrong-id.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=5),
+            meeting_runner=runner,
+        )
+
+        with pytest.raises(ValueError, match="meeting_id"):
+            game.run()
+
+    def test_runner_returning_wrong_triggered_by_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex P2: validate ``triggered_by`` against the engine trigger."""
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+
+        def _bad_builder(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
+            return MeetingResult(
+                meeting_id=meeting_id,
+                triggered_by="p-99",  # diverges from engine event actor.
+                trigger_tick=trigger.trigger_tick,
+                outcome="SKIPPED",
+                ejected_player_id=None,
+                ballots=(),
+                contradictions=(),
+                transcript=MeetingTranscript(reports=(), statements=()),
+            )
+
+        runner = _CannedMeetingRunner(result_builder=_bad_builder)
+        replay_path = tmp_path / "wrong-triggered-by.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=5),
+            meeting_runner=runner,
+        )
+
+        with pytest.raises(ValueError, match="triggered_by"):
+            game.run()
+
+    def test_runner_returning_wrong_trigger_tick_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex P2: validate ``trigger_tick`` against the engine trigger."""
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+
+        def _bad_builder(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
+            return MeetingResult(
+                meeting_id=meeting_id,
+                triggered_by=trigger.triggered_by,
+                trigger_tick=trigger.trigger_tick + 99,  # drift.
+                outcome="SKIPPED",
+                ejected_player_id=None,
+                ballots=(),
+                contradictions=(),
+                transcript=MeetingTranscript(reports=(), statements=()),
+            )
+
+        runner = _CannedMeetingRunner(result_builder=_bad_builder)
+        replay_path = tmp_path / "wrong-trigger-tick.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=5),
+            meeting_runner=runner,
+        )
+
+        with pytest.raises(ValueError, match="trigger_tick"):
+            game.run()
+
+    def test_resume_preserves_pre_meeting_engine_events(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex P1: pre-meeting engine events stay visible on the resume tick.
+
+        Pin: when a report shares a tick with another engine event
+        (e.g. a kill earlier in the same action queue), the
+        orchestrator's ``last_events`` after the meeting must contain
+        the pre-meeting events so the next observation pass surfaces
+        the kill / vent to witnesses via
+        ``ObservationService._observed_actions_for_agent``.
+
+        Setup: pre-seed roles so p-1 is the impostor (its actions
+        sort first in the action queue). On the meeting tick, p-1
+        kills p-3 (in the shared spawn room) and p-2 reports a
+        pre-existing body. The engine processes p-1's kill (emitting
+        ``KilledEvent``) before p-2's report (emitting
+        ``MeetingTriggeredEvent`` and returning early). After the
+        runner returns SKIP, the witness p-4 should see the kill in
+        its next observation packet.
+        """
+
+        from agents.tactical.crewmate_policy import CrewmatePolicy
+        from agents.tactical.impostor_policy import ImpostorPolicy
+
+        from orchestrator.game import TacticalAgent
+
+        game_map = load_canonical_map()
+        base = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
+
+        # Force role assignment: p-1 impostor, others crewmates.
+        forced_players: dict[PlayerId, PlayerState] = {}
+        for pid, player in base.players.items():
+            new_role: Role = "IMPOSTOR" if pid == "p-1" else "CREWMATE"
+            forced_players[pid] = replace(player, role=new_role)
+        # Seed a pre-existing body for p-2 to report.
+        body_id = "body-existing-1"
+        existing_body = BodyState(
+            id=body_id,
+            player_id="p-2",  # never-was-alive marker; only used as report target
+            room=game_map.spawn.room,
+            position=(0.0, 0.0),
+            killed_by="p-1",
+            discovered_by=None,
+        )
+        # p-2 needs to be alive to perform the report; pick a different victim
+        # id for the body so the discoverer isn't dead.
+        state_pre = replace(
+            base,
+            players=forced_players,
+            bodies={body_id: existing_body},
+            cooldowns={"p-1": 0},
+        )
+
+        def _stub_seed(
+            *, seed: int, game_map: Map, num_players: int, num_impostors: int = 1
+        ) -> WorldState:
+            return state_pre
+
+        monkeypatch.setattr("orchestrator.game.seed_initial_state", _stub_seed)
+
+        # p-4 is a passive witness that captures every observation
+        # packet it receives so we can inspect the post-meeting one.
+        captured: list[ObservationPacket] = []
+
+        class _WitnessAgent:
+            def __init__(self, agent_id: PlayerId, role: Role) -> None:
+                self._agent_id = agent_id
+                self._role: Role = role
+                policy = (
+                    ImpostorPolicy(agent_id=agent_id)
+                    if role == "IMPOSTOR"
+                    else CrewmatePolicy(agent_id=agent_id)
+                )
+                self._delegate = TacticalAgent(
+                    agent_id=agent_id, role=role, policy=policy
+                )
+
+            def decide(
+                self,
+                packet: ObservationPacket,
+                public_map: PublicMapView,
+            ) -> ActionIntent:
+                captured.append(packet)
+                self._delegate.decide(packet, public_map)
+                return _intent(
+                    {"type": "wait", "actor": packet.agent_id, "payload": {}}
+                )
+
+            @property
+            def agent_id(self) -> PlayerId:
+                return self._agent_id
+
+            @property
+            def role(self) -> Role:
+                return self._role
+
+            def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+                return self._delegate.render_memory_for_meeting(
+                    token_budget=token_budget
+                )
+
+            def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+                return self._delegate.suspicion_graph_for_meeting()
+
+        def factory(agent_id: PlayerId, role: Role):  # type: ignore[no-untyped-def]
+            if agent_id == "p-1":
+                return _ScriptedAgent(
+                    agent_id=agent_id,
+                    intents=[
+                        _intent(
+                            {
+                                "type": "kill",
+                                "actor": "p-1",
+                                "payload": {"target": "p-3"},
+                            }
+                        )
+                    ],
+                )
+            if agent_id == "p-2":
+                return _ScriptedAgent(
+                    agent_id=agent_id,
+                    intents=[
+                        _intent(
+                            {
+                                "type": "report",
+                                "actor": "p-2",
+                                "payload": {"body_id": body_id},
+                            }
+                        )
+                    ],
+                )
+            return _WitnessAgent(agent_id, role)
+
+        runner = _CannedMeetingRunner(result_builder=_skip_result)
+        replay_path = tmp_path / "preserve-events.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=factory,
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=3),
+            meeting_runner=runner,
+        )
+        game.run()
+
+        # The witness should receive at least two packets: tick 0
+        # (pre-kill) and tick 1 (post-meeting resume). The tick-1
+        # packet must surface p-1's kill via ``PlayerView.action``.
+        # Find p-4's packets in order.
+        p4_packets = [p for p in captured if p.agent_id == "p-4"]
+        assert len(p4_packets) >= 2, (
+            "expected p-4 to observe at least two ticks (pre + post meeting)"
+        )
+        resume_packet = p4_packets[1]
+        # ``PlayerView.action`` is the action label the observer saw
+        # the other player perform on the previous tick. The kill
+        # must be visible on the resume tick because p-4 was in the
+        # spawn room when p-1 killed p-3.
+        p1_view = next(
+            (view for view in resume_packet.visible_players if view.id == "p-1"),
+            None,
+        )
+        assert p1_view is not None, (
+            f"p-4 should see p-1 in visible_players on the resume tick; "
+            f"visible_players={[v.id for v in resume_packet.visible_players]}"
+        )
+        assert p1_view.action == "kill", (
+            f"p-4 should observe p-1's kill action on the resume tick; "
+            f"got action={p1_view.action!r}"
+        )
+
+    def test_reported_body_is_consumed_after_meeting(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Codex P2: the reported body is removed when gameplay resumes.
+
+        Defense in depth — visibility hides discovered bodies from
+        default tactical agents, but the engine's ``resolve_report``
+        does not reject already-discovered bodies. Consuming the body
+        on meeting close prevents an adversarial intent from
+        re-triggering the same meeting on the same corpse.
+        """
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+        runner = _CannedMeetingRunner(result_builder=_skip_result)
+
+        replay_path = tmp_path / "consume-body.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=4),
+            meeting_runner=runner,
+        )
+
+        result = game.run()
+
+        assert body_id not in result.final_state.bodies
+
+
+# ---------------------------------------------------------------------------
+# DefaultMeetingRunner — exercises the default LLM-backed wiring.
+# ---------------------------------------------------------------------------
+
+
+class _ScriptedLLMClient:
+    """Deterministic stub LLM client for default-runner tests."""
+
+    def __init__(
+        self,
+        *,
+        vote_target: str = "SKIP",
+        cost_usd: float = 0.0,
+    ) -> None:
+        self._vote_target = vote_target
+        self._cost_usd = cost_usd
+        self.calls: list[tuple[type[BaseModel] | None, CallKind]] = []
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+    ) -> LLMResponse:
+        self.calls.append((schema, call_kind))
+        if schema is ReportDocument:
+            text = ReportDocument(
+                agent_id="placeholder",
+                tick=0,
+                observations=(),
+                claims=(),
+                free_text="stub-report",
+            ).model_dump_json()
+        elif schema is Statement:
+            text = Statement(
+                statement_id="placeholder",
+                speaker="placeholder",
+                tick=0,
+                round_index=0,
+                target=None,
+                claims=(),
+                free_text="stub-statement",
+            ).model_dump_json()
+        elif schema is VoteBallot:
+            text = VoteBallot(
+                voter="placeholder",
+                target=self._vote_target,
+                confidence=0.9,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text="stub-vote",
+            ).model_dump_json()
+        else:
+            raise AssertionError(f"unexpected schema {schema!r}")
+
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=self._cost_usd,
+            model=model or "stub-model",
+        )
+
+
+def _stub_crewmate_prompt(
+    *,
+    agent_id: PlayerId,
+    current_tick: int,
+    meeting_trigger: str,
+    rendered_memory: str,
+    public_transcript: str,
+) -> str:
+    return f"CREWMATE_REPORT agent_id={agent_id} tick={current_tick}"
+
+
+def _stub_impostor_prompt(
+    *,
+    agent_id: PlayerId,
+    current_tick: int,
+    meeting_trigger: str,
+    rendered_memory: str,
+    public_transcript: str,
+) -> str:
+    return f"IMPOSTOR_REPORT agent_id={agent_id} tick={current_tick}"
+
+
+def _stub_statement_prompt(
+    *,
+    rendered_memory: str,
+    transcript: MeetingTranscript,
+    contradictions: tuple[ContradictionRef, ...],
+) -> str:
+    return "STATEMENT_PROMPT"
+
+
+def _stub_vote_prompt(
+    *,
+    voter_id: PlayerId,
+    rendered_memory: str,
+    transcript: MeetingTranscript,
+    contradiction_flags: tuple[ContradictionRef, ...],
+    suspicion_graph: tuple[SuspicionEntry, ...],
+    candidate_targets: tuple[PlayerId, ...],
+    skip_confidence_threshold: float,
+) -> str:
+    return f"VOTE voter={voter_id}"
+
+
+def _build_default_runner(
+    *,
+    llm_client: _ScriptedLLMClient,
+) -> DefaultMeetingRunner:
+    from meetings.manager import MeetingConfig
+
+    config = MeetingConfig(
+        round_count=1,
+        deadlines=MeetingDeadlines(
+            report_seconds=None, statement_seconds=None, vote_seconds=None
+        ),
+    )
+    return DefaultMeetingRunner(
+        llm_client=llm_client,
+        crewmate_report_prompt=_stub_crewmate_prompt,
+        impostor_report_prompt=_stub_impostor_prompt,
+        statement_prompt=_stub_statement_prompt,
+        vote_prompt=_stub_vote_prompt,
+        config=config,
+    )
+
+
+class TestDefaultMeetingRunner:
+    def test_default_runner_skips_when_votes_are_skip(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: report → meeting runs → SKIP → game resumes."""
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+        llm = _ScriptedLLMClient(vote_target="SKIP", cost_usd=0.01)
+        runner = _build_default_runner(llm_client=llm)
+
+        replay_path = tmp_path / "default-runner-skip.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=build_default_agent_factory(),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=20),
+            meeting_runner=runner,
+        )
+
+        # Inject a single report intent into a tactical agent through
+        # an action override: monkey-patch p-1's policy to call report
+        # at the first opportunity. Simpler: use a hybrid factory.
+        report_intent = _intent(
+            {
+                "type": "report",
+                "actor": "p-1",
+                "payload": {"body_id": body_id},
+            }
+        )
+
+        class _ReportThenDefault:
+            def __init__(self, agent_id: PlayerId, role: Role) -> None:
+                from orchestrator.game import TacticalAgent
+                from agents.tactical.crewmate_policy import CrewmatePolicy
+                from agents.tactical.impostor_policy import ImpostorPolicy
+
+                self._delegate = TacticalAgent(
+                    agent_id=agent_id,
+                    role=role,
+                    policy=(
+                        ImpostorPolicy(agent_id=agent_id)
+                        if role == "IMPOSTOR"
+                        else CrewmatePolicy(agent_id=agent_id)
+                    ),
+                )
+                self._fired = False
+
+            def decide(
+                self,
+                packet: ObservationPacket,
+                public_map: PublicMapView,
+            ) -> ActionIntent:
+                self._delegate.decide(packet, public_map)
+                if packet.agent_id == "p-1" and not self._fired:
+                    self._fired = True
+                    return report_intent
+                return _intent(
+                    {"type": "wait", "actor": packet.agent_id, "payload": {}}
+                )
+
+            def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+                return self._delegate.render_memory_for_meeting(
+                    token_budget=token_budget
+                )
+
+            def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+                return self._delegate.suspicion_graph_for_meeting()
+
+            @property
+            def agent_id(self) -> PlayerId:
+                return self._delegate.agent_id
+
+            @property
+            def role(self) -> Role:
+                return self._delegate.role
+
+        def factory(agent_id: PlayerId, role: Role) -> _ReportThenDefault:
+            return _ReportThenDefault(agent_id, role)
+
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=factory,
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=10),
+            meeting_runner=runner,
+        )
+        result = game.run()
+
+        assert result.outcome in {"TICK_BUDGET_REACHED", "IMPOSTORS", "CREWMATES"}
+        entries = read_all_entries(replay_path)
+        meeting_entries = [
+            entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+        ]
+        assert len(meeting_entries) == 1
+        meeting = meeting_entries[0]
+        assert meeting.outcome == "SKIPPED"
+        # 3 living crewmates × (1 report + 1 statement + 1 vote) = 9 LLM calls.
+        assert len(meeting.llm_calls) == 9
+        # Each call carries cost metadata.
+        assert all(call.cost_usd == 0.01 for call in meeting.llm_calls)
+        # Transcript fields are populated.
+        assert len(meeting.transcript.reports) == 3
+        assert len(meeting.transcript.statements) == 3
+        # Prompt versions metadata persisted.
+        assert "crewmate_report" in meeting.prompt_versions
+        assert "vote_ballot" in meeting.prompt_versions
+
+    def test_failed_meeting_does_not_leak_llm_calls_into_next_meeting(
+        self,
+    ) -> None:
+        """Codex P2: a mid-meeting failure drains the recording buffer.
+
+        If ``MeetingManager.run`` raises after one or more
+        ``complete()`` calls, the recorded calls must not be attached
+        to the next successful meeting's replay payload. Pin: dispatch
+        two meetings against the same :class:`DefaultMeetingRunner`,
+        force the first one to raise mid-meeting, and assert the
+        second meeting's artifacts only count the second meeting's
+        calls.
+        """
+
+        from meetings.manager import MeetingConfig
+
+        class _RaiseAfterFirstCallClient:
+            def __init__(self) -> None:
+                self._count = 0
+
+            async def complete(
+                self,
+                *,
+                prompt: str,
+                schema: type[BaseModel] | None,
+                max_tokens: int,
+                temperature: float,
+                call_kind: CallKind = "meeting",
+                model: str | None = None,
+            ) -> LLMResponse:
+                self._count += 1
+                if schema is ReportDocument and self._count == 1:
+                    return LLMResponse(
+                        text=ReportDocument(
+                            agent_id="x",
+                            tick=0,
+                            observations=(),
+                            claims=(),
+                            free_text="r",
+                        ).model_dump_json(),
+                        usage=TokenUsage(input_tokens=1, output_tokens=1),
+                        cost_usd=0.0,
+                        model="stub",
+                    )
+                raise RuntimeError("boom")
+
+        config = MeetingConfig(
+            round_count=1,
+            deadlines=MeetingDeadlines(
+                report_seconds=None, statement_seconds=None, vote_seconds=None
+            ),
+        )
+        runner = DefaultMeetingRunner(
+            llm_client=_RaiseAfterFirstCallClient(),
+            crewmate_report_prompt=_stub_crewmate_prompt,
+            impostor_report_prompt=_stub_impostor_prompt,
+            statement_prompt=_stub_statement_prompt,
+            vote_prompt=_stub_vote_prompt,
+            config=config,
+        )
+        trigger = MeetingTrigger(
+            triggered_by="p-1",
+            trigger_tick=10,
+            description="x",
+        )
+        participants_seed = seed_initial_state(
+            seed=1, game_map=load_canonical_map(), num_players=3
+        )
+
+        # Build a thin MeetingAware proxy over the seeded TacticalAgents
+        # so the runner's _build_participants can render memory.
+        class _MinimalAware:
+            def __init__(self, agent_id: PlayerId, role: Role) -> None:
+                from agents.tactical.crewmate_policy import CrewmatePolicy
+                from agents.tactical.impostor_policy import ImpostorPolicy
+
+                from orchestrator.game import TacticalAgent
+
+                policy = (
+                    ImpostorPolicy(agent_id=agent_id)
+                    if role == "IMPOSTOR"
+                    else CrewmatePolicy(agent_id=agent_id)
+                )
+                self._delegate = TacticalAgent(
+                    agent_id=agent_id, role=role, policy=policy
+                )
+                # Prime memory with a self-state event so the renderer
+                # doesn't raise on missing role.
+                from agents.memory.episodic import EpisodicEvent
+
+                self._delegate.memory.episodic.append(
+                    EpisodicEvent(
+                        tick=0,
+                        type="self_state",
+                        payload={"room": "CAFETERIA", "role": role},
+                        provenance="observed",
+                    )
+                )
+
+            def decide(self, packet, public_map):  # type: ignore[no-untyped-def]
+                return self._delegate.decide(packet, public_map)
+
+            @property
+            def agent_id(self) -> PlayerId:
+                return self._delegate.agent_id
+
+            @property
+            def role(self) -> Role:
+                return self._delegate.role
+
+            def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+                return self._delegate.render_memory_for_meeting(
+                    token_budget=token_budget
+                )
+
+            def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+                return self._delegate.suspicion_graph_for_meeting()
+
+        agents: dict[PlayerId, object] = {
+            pid: _MinimalAware(pid, players.role)
+            for pid, players in participants_seed.players.items()
+        }
+
+        # First meeting raises mid-flight.
+        with pytest.raises(RuntimeError, match="boom"):
+            _run(
+                runner.run_meeting(
+                    meeting_id="m-1",
+                    trigger=trigger,
+                    state=participants_seed,
+                    agents=agents,  # type: ignore[arg-type]
+                )
+            )
+
+        # Swap the client for a clean one so the next meeting succeeds.
+        runner._recording_client = runner._recording_client.__class__(
+            _ScriptedLLMClient(vote_target="SKIP")
+        )
+        runner._manager._llm_client = runner._recording_client
+
+        artifacts = _run(
+            runner.run_meeting(
+                meeting_id="m-2",
+                trigger=trigger.__class__(
+                    triggered_by="p-1", trigger_tick=20, description="y"
+                ),
+                state=participants_seed,
+                agents=agents,  # type: ignore[arg-type]
+            )
+        )
+
+        # The second meeting's artifacts must NOT include records
+        # from the first (failed) meeting. The second meeting issues
+        # 3 reports + 3 statements + 3 votes = 9 calls; if leakage
+        # occurred, we'd see > 9 here.
+        assert len(artifacts.llm_calls) == 9
+
+
+class TestMeetingFirewallContract:
+    """Engine purity — MeetingManager must not mutate engine state."""
+
+    def test_runner_cannot_observe_mutations_propagating_to_state(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The runner sees a frozen WorldState snapshot.
+
+        Any mutation attempt to ``state.players`` would fail because
+        the engine state stores ``MappingProxyType`` views. We assert
+        the snapshot the runner receives is read-only.
+        """
+
+        game_map = load_canonical_map()
+        body_id = _seed_meeting_setup(monkeypatch, game_map=game_map)
+        observed: list[WorldState] = []
+
+        def builder(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
+            return _skip_result(meeting_id, trigger)
+
+        @dataclass
+        class _Recording:
+            async def run_meeting(
+                self,
+                *,
+                meeting_id: str,
+                trigger: MeetingTrigger,
+                state: WorldState,
+                agents: Mapping[PlayerId, object],
+            ) -> MeetingArtifacts:
+                observed.append(state)
+                return MeetingArtifacts(
+                    result=builder(meeting_id, trigger),
+                    llm_calls=(),
+                    prompt_versions={},
+                )
+
+        replay_path = tmp_path / "firewall.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=_report_body_factory(body_id),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=5),
+            meeting_runner=_Recording(),
+        )
+
+        game.run()
+
+        assert len(observed) == 1
+        snapshot = observed[0]
+        # WorldState's player mapping is wrapped in MappingProxyType so
+        # mutation raises TypeError.
+        with pytest.raises(TypeError):
+            snapshot.players["p-99"] = snapshot.players["p-1"]  # type: ignore[index]
+
+
+class TestMeetingTriggerExtraction:
+    def test_emergency_trigger_renders_emergency_description(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        game_map = load_canonical_map()
+        initial = seed_initial_state(seed=2026, game_map=game_map, num_players=4)
+        # Move p-1 to the emergency button room so the action validates.
+        players: dict[PlayerId, PlayerState] = dict(initial.players)
+        players["p-1"] = replace(players["p-1"], room=game_map.emergency.button_room)
+        state = replace(initial, players=players)
+        monkeypatch.setattr(
+            "orchestrator.game.seed_initial_state",
+            lambda **_: state,
+        )
+
+        def factory(agent_id: PlayerId, role: Role) -> _ScriptedAgent:
+            if agent_id == "p-1":
+                return _ScriptedAgent(
+                    agent_id=agent_id,
+                    intents=[
+                        _intent(
+                            {
+                                "type": "emergency",
+                                "actor": "p-1",
+                                "payload": {},
+                            }
+                        )
+                    ],
+                )
+            return _ScriptedAgent(agent_id=agent_id)
+
+        observed_triggers: list[MeetingTrigger] = []
+
+        @dataclass
+        class _CaptureRunner:
+            async def run_meeting(
+                self,
+                *,
+                meeting_id: str,
+                trigger: MeetingTrigger,
+                state: WorldState,
+                agents: Mapping[PlayerId, object],
+            ) -> MeetingArtifacts:
+                observed_triggers.append(trigger)
+                return MeetingArtifacts(
+                    result=_skip_result(meeting_id, trigger),
+                    llm_calls=(),
+                    prompt_versions={},
+                )
+
+        replay_path = tmp_path / "emergency.jsonl"
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=factory,
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=3),
+            meeting_runner=_CaptureRunner(),
+        )
+        game.run()
+
+        assert len(observed_triggers) == 1
+        trigger = observed_triggers[0]
+        assert trigger.triggered_by == "p-1"
+        assert "emergency" in trigger.description.lower()
