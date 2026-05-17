@@ -41,6 +41,8 @@ meetings/voting.py per §5.5.
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import agents.strategic.reasoner"`
+- `uv run python -c "import llm.budgeted_client"`
 - `uv run python -c "import meetings.manager"`
 
 ## Pre-flight checklist

@@ -590,6 +590,8 @@ For scale (later phase): switch episodic store to SQLite per agent, add embeddin
 
 Token budget is enforced — events past the budget are dropped by salience.
 
+**Non-elastic block carve-out.** The role line, tasks-completed line, beliefs section, and open-contradictions section are **always retained** because they are agent-essential context the LLM cannot work around. Only the recent-observations section is elastic: under a tight `token_budget` it drops salience-sorted, lowest first. When the non-elastic block (role + tasks-completed + beliefs + contradictions) exceeds the budget on its own — uncommon at realistic budgets (8k–16k tokens) but possible if the orchestrator passes a very tight budget (e.g. 200 tokens) to an agent with many open suspicions or contradictions — the renderer still returns the non-elastic content and the budget is exceeded. This is documented behavior, not a defect; callers may detect overflow by comparing rendered length to budget and decide whether to widen the budget, defer the call, or accept the overrun. Implementation anchor: `agents/memory/store.py::_assemble_view`.
+
 ---
 
 ## 7. Tech Stack
