@@ -31,13 +31,14 @@ from typing import TypeVar
 import pytest
 from pydantic import BaseModel
 
-from llm.client import CallKind, LLMResponse, TokenUsage
+from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
 from meetings.manager import (
     DEFAULT_REPORT_FREE_TEXT,
     DEFAULT_STATEMENT_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
     INVALID_VOTE_TARGET_MARKER,
+    LLMProviderError,
     MeetingConfig,
     MeetingDeadlines,
     MeetingManager,
@@ -306,7 +307,7 @@ def _make_participants() -> tuple[MeetingParticipant, ...]:
 
 def _make_manager(
     *,
-    llm_client: _ScriptedLLMClient,
+    llm_client: LLMClient,
     deadlines: MeetingDeadlines | None = None,
     round_count: int = 2,
 ) -> MeetingManager:
@@ -1811,3 +1812,362 @@ class TestConfidenceThresholdEnforcement:
 
         assert result.outcome == "SKIPPED"
         assert result.ejected_player_id is None
+
+
+class TestProviderTimeoutDistinctFromDeadline:
+    """Codex P1: provider timeouts must not silently become defaults.
+
+    In Python 3.11+, :class:`asyncio.TimeoutError` is the same class
+    as :class:`TimeoutError`. The manager's deadline handler used to
+    catch the unified type and would coerce *any* ``TimeoutError`` --
+    including transport / provider failures from the SDK -- into a
+    default no-report / no-statement / default-skip entry. The fix
+    wraps the LLM call with :func:`_isolate_provider_timeout` which
+    re-tags inner timeouts as :class:`LLMProviderError`; only true
+    deadline expiry from :func:`asyncio.wait_for` reaches the
+    handler.
+    """
+
+    @dataclass
+    class _ProviderTimeoutClient:
+        """LLM client that always raises ``TimeoutError`` from inside.
+
+        Mimics a transport / SDK timeout. With the prior code this
+        would be indistinguishable from a meeting-deadline expiry and
+        would silently produce a default response.
+        """
+
+        async def complete(
+            self,
+            *,
+            prompt: str,
+            schema: type[BaseModel] | None,
+            max_tokens: int,
+            temperature: float,
+            call_kind: CallKind = "meeting",
+            model: str | None = None,
+        ) -> LLMResponse:
+            raise TimeoutError("simulated provider timeout")
+
+    def test_provider_timeout_in_report_phase_propagates_as_llm_provider_error(
+        self,
+    ) -> None:
+        manager = MeetingManager(
+            llm_client=self._ProviderTimeoutClient(),
+            crewmate_report_prompt=_crewmate_report_prompt,
+            impostor_report_prompt=_impostor_report_prompt,
+            statement_prompt=_statement_prompt,
+            vote_prompt=_vote_prompt,
+            config=MeetingConfig(round_count=1),
+        )
+
+        # Should NOT silently default. The provider error must
+        # propagate so the orchestrator can decide how to handle the
+        # infrastructure failure.
+        with pytest.raises(LLMProviderError):
+            _run(
+                manager.run(
+                    meeting_id="m-provider-timeout-report",
+                    trigger=_default_trigger(),
+                    participants=_make_participants(),
+                )
+            )
+
+    def test_provider_timeout_in_statement_phase_propagates(self) -> None:
+        # Reports succeed; statements raise provider timeout. We use
+        # a client that succeeds on the report schema and raises on
+        # the statement schema so the meeting reaches phase 2 before
+        # failing.
+        @dataclass
+        class _PhaseSpecificClient:
+            async def complete(
+                self,
+                *,
+                prompt: str,
+                schema: type[BaseModel] | None,
+                max_tokens: int,
+                temperature: float,
+                call_kind: CallKind = "meeting",
+                model: str | None = None,
+            ) -> LLMResponse:
+                if schema is not None and schema.__name__ == "Statement":
+                    raise TimeoutError("simulated provider timeout")
+                # Reports + ballots succeed via the normal responder.
+                text = _make_responder()(prompt, schema)
+                if schema is not None:
+                    schema.model_validate_json(text)
+                return LLMResponse(
+                    text=text,
+                    usage=TokenUsage(input_tokens=1, output_tokens=1),
+                    cost_usd=0.0,
+                    model="phase-specific",
+                )
+
+        manager = MeetingManager(
+            llm_client=_PhaseSpecificClient(),
+            crewmate_report_prompt=_crewmate_report_prompt,
+            impostor_report_prompt=_impostor_report_prompt,
+            statement_prompt=_statement_prompt,
+            vote_prompt=_vote_prompt,
+            config=MeetingConfig(round_count=1),
+        )
+
+        with pytest.raises(LLMProviderError):
+            _run(
+                manager.run(
+                    meeting_id="m-provider-timeout-statement",
+                    trigger=_default_trigger(),
+                    participants=_make_participants(),
+                )
+            )
+
+    def test_provider_timeout_in_vote_phase_propagates(self) -> None:
+        @dataclass
+        class _PhaseSpecificClient:
+            async def complete(
+                self,
+                *,
+                prompt: str,
+                schema: type[BaseModel] | None,
+                max_tokens: int,
+                temperature: float,
+                call_kind: CallKind = "meeting",
+                model: str | None = None,
+            ) -> LLMResponse:
+                if schema is not None and schema.__name__ == "VoteBallot":
+                    raise TimeoutError("simulated provider timeout")
+                text = _make_responder()(prompt, schema)
+                if schema is not None:
+                    schema.model_validate_json(text)
+                return LLMResponse(
+                    text=text,
+                    usage=TokenUsage(input_tokens=1, output_tokens=1),
+                    cost_usd=0.0,
+                    model="phase-specific",
+                )
+
+        manager = MeetingManager(
+            llm_client=_PhaseSpecificClient(),
+            crewmate_report_prompt=_crewmate_report_prompt,
+            impostor_report_prompt=_impostor_report_prompt,
+            statement_prompt=_statement_prompt,
+            vote_prompt=_vote_prompt,
+            config=MeetingConfig(round_count=1),
+        )
+
+        with pytest.raises(LLMProviderError):
+            _run(
+                manager.run(
+                    meeting_id="m-provider-timeout-vote",
+                    trigger=_default_trigger(),
+                    participants=_make_participants(),
+                )
+            )
+
+    def test_meeting_deadline_still_defaults_when_inner_does_not_raise(
+        self,
+    ) -> None:
+        # Regression: the legitimate deadline-expiry path (LLM is just
+        # slow, deadline trips) must still produce the default
+        # response. We re-use the sleeping client pattern from the
+        # earlier deadline tests but only sleep for the report phase.
+        async def _slow_responder(prompt: str) -> str:  # noqa: ARG001
+            await asyncio.sleep(1.0)
+            return _stub_report_json(agent_id="never", tick=0)
+
+        @dataclass
+        class _SleepingClient:
+            async def complete(
+                self,
+                *,
+                prompt: str,
+                schema: type[BaseModel] | None,
+                max_tokens: int,
+                temperature: float,
+                call_kind: CallKind = "meeting",
+                model: str | None = None,
+            ) -> LLMResponse:
+                if "PHASE=REPORT" in prompt:
+                    text = await _slow_responder(prompt)
+                else:
+                    text = _make_responder()(prompt, schema)
+                if schema is not None:
+                    schema.model_validate_json(text)
+                return LLMResponse(
+                    text=text,
+                    usage=TokenUsage(input_tokens=1, output_tokens=1),
+                    cost_usd=0.0,
+                    model="sleeping",
+                )
+
+        manager = MeetingManager(
+            llm_client=_SleepingClient(),
+            crewmate_report_prompt=_crewmate_report_prompt,
+            impostor_report_prompt=_impostor_report_prompt,
+            statement_prompt=_statement_prompt,
+            vote_prompt=_vote_prompt,
+            config=MeetingConfig(
+                round_count=1,
+                deadlines=MeetingDeadlines(
+                    report_seconds=0.01,
+                    statement_seconds=None,
+                    vote_seconds=None,
+                ),
+            ),
+        )
+
+        result = _run(
+            manager.run(
+                meeting_id="m-real-deadline",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        # No raise: the deadline branch is still reachable and still
+        # produces default reports.
+        for report in result.transcript.reports:
+            assert report.free_text == DEFAULT_REPORT_FREE_TEXT
+
+
+class TestSiblingCancellationOnFailure:
+    """Codex P2: failing phase tasks must cancel sibling LLM calls.
+
+    ``asyncio.gather`` raises on the first exception but leaves
+    sibling tasks running in the background, leaking token spend and
+    side effects after the meeting has already aborted. The manager
+    now uses :class:`asyncio.TaskGroup` (Python 3.11+) which gives
+    all-or-nothing semantics: any task failure cancels every sibling.
+    The tests below pin that contract for the two parallel phases
+    (reports and ballots).
+    """
+
+    def _build_cancellation_client(
+        self,
+        *,
+        failing_voter: str,
+        target_phase: str,
+    ) -> tuple["_GatherCancellationClient", asyncio.Event]:
+        never_set = asyncio.Event()
+        return _GatherCancellationClient(
+            failing_voter=failing_voter,
+            target_phase=target_phase,
+            never_set=never_set,
+        ), never_set
+
+    def test_failing_report_cancels_sibling_report_calls(self) -> None:
+        client, _ = self._build_cancellation_client(
+            failing_voter="p-2", target_phase="REPORT"
+        )
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        # The meeting raises with the propagated RuntimeError; we
+        # then assert that the siblings were cancelled rather than
+        # silently completing.
+        with pytest.raises(RuntimeError, match="simulated"):
+            _run(
+                manager.run(
+                    meeting_id="m-cancel-report",
+                    trigger=_default_trigger(),
+                    participants=_make_participants(),
+                )
+            )
+
+        # The three report coroutines all started, but only the
+        # failing one finished. The other two were cancelled while
+        # blocking on the unset event.
+        assert client.started_calls >= 3
+        assert client.completed_calls == 0
+
+    def test_failing_ballot_cancels_sibling_ballot_calls(self) -> None:
+        client, _ = self._build_cancellation_client(
+            failing_voter="p-2", target_phase="VOTE"
+        )
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        with pytest.raises(RuntimeError, match="simulated"):
+            _run(
+                manager.run(
+                    meeting_id="m-cancel-vote",
+                    trigger=_default_trigger(),
+                    participants=_make_participants(),
+                )
+            )
+
+        # Reports + statements all completed normally; voting saw 3
+        # starts but only the failing one finished.
+        vote_starts = [call for call in client.recorded_calls if "PHASE=VOTE" in call]
+        assert len(vote_starts) == 3
+        assert client.vote_completed_calls == 0
+
+
+@dataclass
+class _GatherCancellationClient:
+    """Helper LLM client for the sibling-cancellation tests.
+
+    Behavior:
+
+    * For every call whose prompt does NOT match ``target_phase``,
+      respond normally (via the standard responder) so the meeting
+      progresses to the target phase.
+    * Within the target phase, the failing voter's call raises
+      :class:`RuntimeError` immediately. Sibling calls await an
+      ``asyncio.Event`` that is never set; they only complete by
+      being cancelled.
+    """
+
+    failing_voter: str
+    target_phase: str
+    never_set: asyncio.Event
+    started_calls: int = 0
+    completed_calls: int = 0
+    vote_completed_calls: int = 0
+    recorded_calls: list[str] = field(default_factory=list)
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+    ) -> LLMResponse:
+        self.recorded_calls.append(prompt)
+        if f"PHASE={self.target_phase}" not in prompt:
+            text = _make_responder()(prompt, schema)
+            if schema is not None:
+                schema.model_validate_json(text)
+            return LLMResponse(
+                text=text,
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+                cost_usd=0.0,
+                model="cancellation-test",
+            )
+        self.started_calls += 1
+        # The failing voter is identified either by voter= (vote
+        # phase) or by agent_id= (report phase).
+        is_failing = (
+            f"voter={self.failing_voter}" in prompt
+            or f"agent_id={self.failing_voter}" in prompt
+        )
+        if is_failing:
+            raise RuntimeError("simulated phase failure")
+        try:
+            await self.never_set.wait()
+        except asyncio.CancelledError:
+            # The TaskGroup cancelled us. Re-raise as the protocol
+            # expects; do NOT count this as a completed call.
+            raise
+        # Unreachable in this test (the event is never set).
+        self.completed_calls += 1
+        if "PHASE=VOTE" in prompt:
+            self.vote_completed_calls += 1
+        text = "{}"
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model="cancellation-test",
+        )

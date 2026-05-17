@@ -39,9 +39,9 @@ fails against any implementation that violates this contract.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
-from typing import Final, Literal, Protocol, runtime_checkable
+from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 
 from llm.client import LLMClient
 from meetings.schemas import (
@@ -96,6 +96,75 @@ INVALID_VOTE_TARGET_MARKER: Final[str] = (
 
 _SKIP_TARGET: Final[str] = "SKIP"
 _VALID_ROLES: Final[frozenset[str]] = frozenset({"CREWMATE", "IMPOSTOR"})
+
+
+_T = TypeVar("_T")
+
+
+class LLMProviderError(RuntimeError):
+    """LLM provider / transport failure (e.g. SDK or network timeout).
+
+    Distinct from :class:`asyncio.TimeoutError` raised by the
+    manager's per-phase deadlines (:class:`MeetingDeadlines`). In
+    Python 3.11+ :class:`asyncio.TimeoutError` is an alias of
+    built-in :class:`TimeoutError`, so without an explicit conversion
+    the manager's deadline handler would silently coerce provider
+    timeouts into default no-report / no-statement / default-skip
+    entries. This class is the canonical infrastructure-failure
+    signal; meeting callers can catch it explicitly (e.g. for retry
+    or for a kill-meeting decision in the orchestrator).
+    """
+
+
+async def _isolate_provider_timeout(
+    coro: Coroutine[Any, Any, _T],
+) -> _T:
+    """Re-tag any inner :class:`TimeoutError` as :class:`LLMProviderError`.
+
+    Used to wrap LLM client calls before they are passed to
+    :func:`asyncio.wait_for`. Without this, the manager's
+    ``except asyncio.TimeoutError`` handler cannot distinguish a
+    deadline-driven cancellation from an infrastructure timeout
+    surfaced by the provider's own transport / SDK, and would default
+    the participant's response when it should fail loud (AGENTS.md
+    "no silent fallbacks").
+    """
+
+    try:
+        return await coro
+    except TimeoutError as e:
+        raise LLMProviderError("LLM provider timeout") from e
+
+
+async def _gather_all_or_cancel(
+    coros: list[Coroutine[Any, Any, _T]],
+) -> tuple[_T, ...]:
+    """Run coroutines concurrently, cancelling siblings on failure.
+
+    Replaces :func:`asyncio.gather` which propagates the first
+    exception but lets sibling coroutines keep running -- leaking
+    LLM token spend and side effects after the caller has already
+    decided to fail. :class:`asyncio.TaskGroup` (Python 3.11+) gives
+    the all-or-nothing semantics we want: any task failure cancels
+    every sibling.
+
+    Successful runs return results in input order (matching the
+    previous ``gather()`` shape). On failure the resulting
+    :class:`BaseExceptionGroup` is unwrapped to the first underlying
+    exception so callers see a regular single exception (matching
+    the previous ``gather()`` semantics) instead of an exception
+    group. Cancellation already prevents follow-on side effects;
+    surfacing every concurrent failure to the caller would force
+    every call site to learn the exception-group API for no
+    additional debugging value.
+    """
+
+    try:
+        async with asyncio.TaskGroup() as tg:
+            tasks = [tg.create_task(coro) for coro in coros]
+    except BaseExceptionGroup as eg:
+        raise eg.exceptions[0] from None
+    return tuple(task.result() for task in tasks)
 
 
 @dataclass(frozen=True)
@@ -418,14 +487,16 @@ class MeetingManager:
         trigger: MeetingTrigger,
         participants: Sequence[MeetingParticipant],
     ) -> tuple[ReportDocument, ...]:
-        # gather() preserves input order in its return, so report order
-        # is deterministically participant-input order. The transcript
-        # ordering test pins this.
-        coroutines = [
+        # All-or-nothing parallel collection: if any single report
+        # fails (provider error, parse error, etc.) the sibling LLM
+        # calls are cancelled before they incur additional token
+        # spend. Successful results preserve input order so the
+        # transcript ordering test still holds.
+        coroutines: list[Coroutine[Any, Any, ReportDocument]] = [
             self._collect_one_report(trigger=trigger, participant=participant)
             for participant in participants
         ]
-        return tuple(await asyncio.gather(*coroutines))
+        return await _gather_all_or_cancel(coroutines)
 
     async def _collect_one_report(
         self,
@@ -447,12 +518,14 @@ class MeetingManager:
         )
         try:
             response = await asyncio.wait_for(
-                self._llm_client.complete(
-                    prompt=prompt,
-                    schema=ReportDocument,
-                    max_tokens=self._config.report_max_tokens,
-                    temperature=self._config.report_temperature,
-                    call_kind="meeting",
+                _isolate_provider_timeout(
+                    self._llm_client.complete(
+                        prompt=prompt,
+                        schema=ReportDocument,
+                        max_tokens=self._config.report_max_tokens,
+                        temperature=self._config.report_temperature,
+                        call_kind="meeting",
+                    )
                 ),
                 timeout=self._config.deadlines.report_seconds,
             )
@@ -496,12 +569,14 @@ class MeetingManager:
         )
         try:
             response = await asyncio.wait_for(
-                self._llm_client.complete(
-                    prompt=prompt,
-                    schema=Statement,
-                    max_tokens=self._config.statement_max_tokens,
-                    temperature=self._config.statement_temperature,
-                    call_kind="meeting",
+                _isolate_provider_timeout(
+                    self._llm_client.complete(
+                        prompt=prompt,
+                        schema=Statement,
+                        max_tokens=self._config.statement_max_tokens,
+                        temperature=self._config.statement_temperature,
+                        call_kind="meeting",
+                    )
                 ),
                 timeout=self._config.deadlines.statement_seconds,
             )
@@ -535,7 +610,10 @@ class MeetingManager:
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
     ) -> tuple[VoteBallot, ...]:
-        coroutines = [
+        # All-or-nothing parallel collection: see _collect_reports
+        # docstring. A failing ballot cancels siblings so the tally
+        # is not corrupted by partially-collected votes.
+        coroutines: list[Coroutine[Any, Any, VoteBallot]] = [
             self._collect_one_ballot(
                 trigger=trigger,
                 participant=participant,
@@ -545,7 +623,7 @@ class MeetingManager:
             )
             for participant in participants
         ]
-        return tuple(await asyncio.gather(*coroutines))
+        return await _gather_all_or_cancel(coroutines)
 
     async def _collect_one_ballot(
         self,
@@ -574,12 +652,14 @@ class MeetingManager:
         )
         try:
             response = await asyncio.wait_for(
-                self._llm_client.complete(
-                    prompt=prompt,
-                    schema=VoteBallot,
-                    max_tokens=self._config.vote_max_tokens,
-                    temperature=self._config.vote_temperature,
-                    call_kind="meeting",
+                _isolate_provider_timeout(
+                    self._llm_client.complete(
+                        prompt=prompt,
+                        schema=VoteBallot,
+                        max_tokens=self._config.vote_max_tokens,
+                        temperature=self._config.vote_temperature,
+                        call_kind="meeting",
+                    )
                 ),
                 timeout=self._config.deadlines.vote_seconds,
             )
@@ -832,6 +912,7 @@ __all__ = [
     "DEFAULT_VOTE_RATIONALE",
     "DEFAULT_VOTE_TEMPERATURE",
     "INVALID_VOTE_TARGET_MARKER",
+    "LLMProviderError",
     "MeetingConfig",
     "MeetingDeadlines",
     "MeetingManager",
