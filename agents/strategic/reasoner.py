@@ -123,6 +123,38 @@ _TRIGGER_CALL_KIND: Final[dict[StrategicTrigger, CallKind]] = {
     "body_found": "trigger",
 }
 
+# Per-method allowed-trigger subsets. Each ``produce_*`` method
+# validates against its own subset so cross-method mismatches (e.g.
+# ``produce_statement(trigger="kill_witnessed")``) are rejected
+# fail-loud instead of silently mis-routing the call to the trigger
+# tier. ``produce_report`` admits the kill/body reactive labels
+# because DESIGN.md §4.4 names them as out-of-meeting strategic
+# trigger points that produce a report-shaped LLM output; the
+# accusation-round and vote phases only happen inside a meeting and
+# therefore admit only their corresponding meeting label.
+_REPORT_ALLOWED_TRIGGERS: Final[frozenset[StrategicTrigger]] = frozenset(
+    {"meeting_report", "kill_witnessed", "body_found"}
+)
+_STATEMENT_ALLOWED_TRIGGERS: Final[frozenset[StrategicTrigger]] = frozenset(
+    {"meeting_statement"}
+)
+_VOTE_ALLOWED_TRIGGERS: Final[frozenset[StrategicTrigger]] = frozenset({"meeting_vote"})
+
+# Defense-in-depth: hidden field NAMES from the engine packet
+# vocabulary that could leak as TEXT substrings inside the rendered
+# memory or auxiliary inputs. The canonical
+# :func:`eval.leak_test._assert_no_recursive_hidden_fields` scanner
+# walks JSON keys, not string values, so a contradiction summary or
+# free-text input containing ``killed_by p-5`` slips past it. The
+# substring check below catches that text-surface case. ``player_id``
+# is intentionally excluded because the literal substring appears in
+# benign contexts (every player belief line mentions ``p-X`` ids; the
+# string ``player_id`` itself is not a leak surface in rendered text).
+_FORBIDDEN_TEXT_SUBSTRINGS: Final[tuple[str, ...]] = (
+    "killed_by",
+    "kill_attribution",
+)
+
 # Mirror the patterns the memory-rendering tests use to map the
 # legitimate ``## Your role: X`` line onto the canonical
 # ``self_state.role`` path so the leak scanner does not trip on it.
@@ -166,6 +198,19 @@ def _scan_prompt_inputs(
     the body (e.g. inside a contradiction summary or other free text)
     is left in place so the scanner sees and rejects it.
 
+    Defense-in-depth substring check
+    --------------------------------
+
+    :func:`~eval.leak_test._assert_no_recursive_hidden_fields` checks
+    JSON KEY names, not string VALUES. Hidden-field NAMES like
+    ``killed_by`` / ``kill_attribution`` could still appear inside the
+    rendered text (e.g. a contradiction summary that says
+    ``"killed_by p-5"``) and slip past the canonical scanner — the
+    rendered body lives in a single ``rendered_body`` JSON value, so
+    the recursive scanner only sees the wrapper key. The substring
+    check below catches the text-surface case explicitly, as a
+    supplement to (not a replacement for) the canonical scanners.
+
     Raises :class:`AssertionError` if any scanner trips. The reasoner
     treats this as fail-loud — a leak in a strategic prompt input is
     a wiring bug, not a recoverable condition (AGENTS.md "no silent
@@ -195,6 +240,40 @@ def _scan_prompt_inputs(
     payload_value = cast(JsonValue, payload)
     _assert_no_recursive_hidden_fields(payload_value)
     _assert_no_role_bearing_values(payload_value)
+    # Supplementary substring scan for hidden-field NAMES that may
+    # appear as TEXT inside rendered_body / auxiliary inputs.
+    _assert_no_forbidden_field_substrings(
+        rendered_memory=body,
+        auxiliary_text_inputs=auxiliary_text_inputs,
+    )
+
+
+def _assert_no_forbidden_field_substrings(
+    *,
+    rendered_memory: str,
+    auxiliary_text_inputs: dict[str, str] | None,
+) -> None:
+    """Defense-in-depth scan for forbidden hidden-field NAMES in text.
+
+    Complements the canonical
+    :func:`eval.leak_test._assert_no_recursive_hidden_fields` (which
+    walks JSON keys) by catching the same forbidden field names when
+    they appear as TEXT substrings inside the rendered memory body or
+    free-text auxiliary inputs. Raises :class:`AssertionError` on a
+    hit with the offending substring and surface name in the message
+    so the wiring bug is easy to trace.
+    """
+
+    surfaces: list[tuple[str, str]] = [("rendered_body", rendered_memory)]
+    if auxiliary_text_inputs is not None:
+        surfaces.extend(auxiliary_text_inputs.items())
+    for name, text in surfaces:
+        for forbidden in _FORBIDDEN_TEXT_SUBSTRINGS:
+            if forbidden in text:
+                raise AssertionError(
+                    f"forbidden field-name substring {forbidden!r} leaked "
+                    f"into strategic prompt input {name!r}"
+                )
 
 
 class StrategicReasoner:
@@ -296,7 +375,11 @@ class StrategicReasoner:
 
         if role not in ("CREWMATE", "IMPOSTOR"):
             raise ValueError(f"role must be 'CREWMATE' or 'IMPOSTOR', got {role!r}")
-        _validate_meeting_trigger(trigger)
+        _validate_trigger_for_method(
+            trigger,
+            method="produce_report",
+            allowed=_REPORT_ALLOWED_TRIGGERS,
+        )
         rendered_memory = render_for_prompt(memory, token_budget=self._token_budget)
         _scan_prompt_inputs(
             rendered_memory=rendered_memory,
@@ -348,7 +431,11 @@ class StrategicReasoner:
             raise ValueError("meeting_id must be a non-empty string")
         if round_index < 0:
             raise ValueError(f"round_index must be non-negative, got {round_index}")
-        _validate_meeting_trigger(trigger)
+        _validate_trigger_for_method(
+            trigger,
+            method="produce_statement",
+            allowed=_STATEMENT_ALLOWED_TRIGGERS,
+        )
         rendered_memory = render_for_prompt(memory, token_budget=self._token_budget)
         _scan_prompt_inputs(rendered_memory=rendered_memory)
         prompt = self._statement_prompt(
@@ -395,7 +482,11 @@ class StrategicReasoner:
         (DESIGN.md §5.5 + meeting-manager contract), not the reasoner's.
         """
 
-        _validate_meeting_trigger(trigger)
+        _validate_trigger_for_method(
+            trigger,
+            method="produce_vote",
+            allowed=_VOTE_ALLOWED_TRIGGERS,
+        )
         threshold = (
             self._skip_confidence_threshold
             if skip_confidence_threshold is None
@@ -427,24 +518,29 @@ class StrategicReasoner:
         return parsed.model_copy(update={"voter": voter})
 
 
-def _validate_meeting_trigger(trigger: StrategicTrigger) -> None:
-    """Reject an unknown trigger label fail-loud.
+def _validate_trigger_for_method(
+    trigger: StrategicTrigger,
+    *,
+    method: str,
+    allowed: frozenset[StrategicTrigger],
+) -> None:
+    """Reject a trigger label that does not match this entrypoint.
 
-    The :class:`StrategicTrigger` ``Literal`` is enforced by mypy at
-    call sites, but :class:`StrategicReasoner` is also instantiated by
-    runtime dispatch code where a typo'd trigger string would slip
-    through. AGENTS.md "no silent fallbacks" rules out a default-to-
-    meeting-report path; rejecting here surfaces the wiring error at
-    the call instead of mis-attributing the call in replay logs.
-
-    ``_TRIGGER_CALL_KIND`` is the single source of truth for the valid
-    set, so adding a new trigger label is a one-line dict change.
+    Each ``produce_*`` method calls this with its own ``allowed``
+    subset so cross-method mismatches (e.g.
+    ``produce_statement(trigger="kill_witnessed")``) are rejected
+    fail-loud rather than silently routing the call to the wrong
+    model tier. The :class:`StrategicTrigger` ``Literal`` is enforced
+    by mypy at compile-time call sites, but runtime dispatch code can
+    still pass a stringly-typed label that slips past static checks;
+    this guard surfaces the wiring error at the call instead of
+    mis-attributing the call in replay logs.
     """
 
-    if trigger not in _TRIGGER_CALL_KIND:
+    if trigger not in allowed:
         raise ValueError(
-            f"unknown StrategicTrigger {trigger!r}; "
-            f"expected one of {sorted(_TRIGGER_CALL_KIND.keys())}"
+            f"StrategicReasoner.{method} does not accept trigger {trigger!r}; "
+            f"allowed triggers: {sorted(allowed)}"
         )
 
 

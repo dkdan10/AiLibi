@@ -700,6 +700,64 @@ class TestR10LeakScannerAcceptanceGate:
                 )
             )
 
+    def test_killed_by_substring_in_contradiction_summary_trips_scanner(
+        self,
+    ) -> None:
+        """Defense-in-depth pin (P2 review, round 2): the canonical
+        ``_assert_no_recursive_hidden_fields`` scanner walks JSON KEY
+        names, not string VALUES. A free-text input containing the
+        forbidden field-name substring ``killed_by`` would slip past
+        it. The supplementary substring check catches the text-surface
+        case.
+        """
+
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory(role="CREWMATE")
+        memory.beliefs.record_contradiction(
+            "p-4",
+            MemoryContradictionRef(
+                summary="p-2 was killed_by p-5 based on alibi conflict",
+                left_ref="alibi:p-4",
+                right_ref="sighting:p-5:p-4",
+            ),
+        )
+
+        with pytest.raises(AssertionError, match="killed_by"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-3",
+                    tick=420,
+                    round_index=0,
+                    transcript=MeetingTranscript(),
+                )
+            )
+
+    def test_kill_attribution_substring_in_meeting_trigger_trips_scanner(
+        self,
+    ) -> None:
+        """Defense-in-depth pin: forbidden field-name substring
+        ``kill_attribution`` planted into the meeting_trigger auxiliary
+        input also trips the supplementary scanner.
+        """
+
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory(role="CREWMATE")
+
+        with pytest.raises(AssertionError, match="kill_attribution"):
+            _run(
+                reasoner.produce_report(
+                    memory=memory,
+                    agent_id="p-3",
+                    role="CREWMATE",
+                    current_tick=412,
+                    meeting_trigger=(
+                        "p-3 reported a body; kill_attribution: p-5 (smuggled)"
+                    ),
+                )
+            )
+
     def test_injected_role_header_in_contradiction_summary_trips_scanner(
         self,
     ) -> None:
@@ -832,7 +890,7 @@ class TestTriggerValidation:
         reasoner = StrategicReasoner(llm_client=FakeProvider())
         memory = _build_memory()
 
-        with pytest.raises(ValueError, match="StrategicTrigger"):
+        with pytest.raises(ValueError, match="does not accept trigger"):
             _run(
                 reasoner.produce_report(
                     memory=memory,
@@ -841,6 +899,91 @@ class TestTriggerValidation:
                     current_tick=412,
                     meeting_trigger="trigger",
                     trigger="malformed_trigger_label",  # type: ignore[arg-type]
+                )
+            )
+
+    def test_statement_rejects_kill_witnessed_trigger(self) -> None:
+        # produce_statement is only valid for meeting-phase calls;
+        # a kill_witnessed label is a wiring bug that would otherwise
+        # silently route to the trigger model tier. The label itself
+        # is a valid StrategicTrigger so mypy accepts it; the per-
+        # method runtime guard is what rejects it.
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="produce_statement.*kill_witnessed"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-3",
+                    tick=420,
+                    round_index=0,
+                    transcript=MeetingTranscript(),
+                    trigger="kill_witnessed",
+                )
+            )
+
+    def test_statement_rejects_meeting_vote_trigger(self) -> None:
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="produce_statement.*meeting_vote"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-3",
+                    tick=420,
+                    round_index=0,
+                    transcript=MeetingTranscript(),
+                    trigger="meeting_vote",
+                )
+            )
+
+    def test_vote_rejects_body_found_trigger(self) -> None:
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="produce_vote.*body_found"):
+            _run(
+                reasoner.produce_vote(
+                    memory=memory,
+                    voter="p-3",
+                    transcript=MeetingTranscript(),
+                    candidate_targets=("p-1", "p-2"),
+                    trigger="body_found",
+                )
+            )
+
+    def test_vote_rejects_meeting_report_trigger(self) -> None:
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="produce_vote.*meeting_report"):
+            _run(
+                reasoner.produce_vote(
+                    memory=memory,
+                    voter="p-3",
+                    transcript=MeetingTranscript(),
+                    candidate_targets=("p-1", "p-2"),
+                    trigger="meeting_report",
+                )
+            )
+
+    def test_report_rejects_meeting_statement_trigger(self) -> None:
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="produce_report.*meeting_statement"):
+            _run(
+                reasoner.produce_report(
+                    memory=memory,
+                    agent_id="p-3",
+                    role="CREWMATE",
+                    current_tick=412,
+                    meeting_trigger="trigger",
+                    trigger="meeting_statement",
                 )
             )
 

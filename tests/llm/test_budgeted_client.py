@@ -656,3 +656,142 @@ class TestConcurrentBudgetChecks:
         assert sum(1 for r in results if not r) == 1
         # The rejected call's inner is never invoked.
         assert inner_calls == 1
+
+
+class TestProviderAwaitNotSerialized:
+    """The adapter must NOT hold its lock across the inner ``complete``
+    await. ``MeetingManager`` issues parallel calls under per-call
+    ``asyncio.wait_for`` deadlines; serializing the provider await
+    would cause late callers to time out queued behind earlier
+    callers' provider latency. The fix uses an in-flight reservation
+    pool so concurrent preflights see each other's pending charges
+    while their provider awaits overlap.
+    """
+
+    def test_concurrent_provider_awaits_overlap_when_budget_admits(self) -> None:
+        # Budget cap and per-call estimate sized so all three calls
+        # individually fit (3 * $0.05 = $0.15 < $0.30 cap). Each
+        # inner call blocks on a shared event. Without the in-flight
+        # tracking refactor, the second/third callers' provider
+        # awaits would queue behind the first under a held lock; with
+        # the fix, all three inner.complete() awaits run in parallel.
+        budget = GameBudget(max_cost_usd=0.30)
+        release = asyncio.Event()
+        started = asyncio.Event()
+        seen_starts: list[str] = []
+
+        async def _drive() -> tuple[list[str], list[bool]]:
+            inner = _ControllableInnerClient(
+                response_cost_usd=0.05,
+                release=release,
+            )
+
+            # Patch the inner so we can observe the start of each call
+            # before it suspends on the release event. The
+            # ``_ControllableInnerClient`` stores its prompt in
+            # ``calls`` BEFORE awaiting the release event, so we can
+            # read ``calls`` to see how many providers are in flight.
+
+            adapter = BudgetedLLMClient(
+                inner=inner,
+                budget=budget,
+                cost_per_input_token_usd=0.0,
+                cost_per_output_token_usd=0.05,
+            )
+
+            async def _one(label: str) -> bool:
+                try:
+                    await adapter.complete(
+                        prompt=label,
+                        schema=None,
+                        max_tokens=1,
+                        temperature=0.0,
+                    )
+                except BudgetExceededError:
+                    return False
+                return True
+
+            # Launch three concurrent calls; they will all start the
+            # provider await before any can complete (the event is
+            # unset).
+            tasks = [asyncio.create_task(_one(label)) for label in ("a", "b", "c")]
+
+            # Yield repeatedly until all three inner calls have
+            # started (recorded their prompts on inner.calls). The
+            # spin-yield is bounded to a few iterations because we
+            # are inside the same event loop.
+            for _ in range(20):
+                if len(inner.calls) >= 3:
+                    break
+                await asyncio.sleep(0)
+            seen_starts.extend(inner.calls)
+            started.set()
+
+            # Release the inner calls so they complete.
+            release.set()
+            results = await asyncio.gather(*tasks)
+            return seen_starts, list(results)
+
+        starts, results = _run(_drive())
+
+        # The decisive assertion: all three provider awaits ran
+        # concurrently. If the lock were held across the provider
+        # await, only one call would have reached inner.complete()
+        # before the test snapshot.
+        assert len(starts) == 3, (
+            f"BudgetedLLMClient held its lock across the provider await: "
+            f"only {len(starts)} inner.complete() calls had started after "
+            "all three coroutines were launched (expected 3)."
+        )
+        # And all three calls succeed because the budget admits them.
+        assert all(results)
+        assert budget.snapshot().cost_usd == pytest.approx(0.15)
+
+    def test_in_flight_reservation_released_on_provider_failure(self) -> None:
+        # If the provider raises, the in-flight reservation must be
+        # released so subsequent calls and retries against a fresh
+        # ceiling see the correct headroom. Without the release, a
+        # transient provider failure would permanently consume budget
+        # headroom on the adapter side.
+        class _RaisingClient:
+            calls: list[str] = []
+
+            async def complete(
+                self,
+                *,
+                prompt: str,
+                schema: type[BaseModel] | None,
+                max_tokens: int,
+                temperature: float,
+                call_kind: CallKind = "meeting",
+                model: str | None = None,
+            ) -> LLMResponse:
+                self.calls.append(prompt)
+                raise RuntimeError("provider down")
+
+        budget = GameBudget(max_cost_usd=0.10)
+        adapter = BudgetedLLMClient(
+            inner=_RaisingClient(),
+            budget=budget,
+            cost_per_input_token_usd=0.0,
+            cost_per_output_token_usd=0.05,
+        )
+
+        async def _drive() -> None:
+            with pytest.raises(RuntimeError, match="provider down"):
+                await adapter.complete(
+                    prompt="will fail",
+                    schema=None,
+                    max_tokens=1,
+                    temperature=0.0,
+                )
+
+        _run(_drive())
+
+        # The in-flight reservation released; budget shows zero spend.
+        # If the reservation leaked, a second call would see the
+        # in-flight pool include the failed call's estimate.
+        assert budget.snapshot().cost_usd == 0.0
+        assert adapter._in_flight_cost_usd == 0.0  # noqa: SLF001
+        assert adapter._in_flight_input_tokens == 0  # noqa: SLF001
+        assert adapter._in_flight_output_tokens == 0  # noqa: SLF001

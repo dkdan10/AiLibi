@@ -98,13 +98,15 @@ class BudgetedLLMClient:
     1. Estimate the call's cost (input tokens from prompt length,
        output tokens from ``max_tokens``, USD from the configured
        per-token rates).
-    2. Invoke :meth:`GameBudget.preflight` with that estimate. If the
-       running total + estimate would exceed any cap,
+    2. Atomically pre-flight against the budget's running total plus
+       any in-flight reservations from sibling concurrent calls. If
+       the combined total would exceed a cap,
        :class:`~llm.budget.BudgetExceededError` raises *before* the
-       underlying call.
-    3. Invoke the wrapped client's ``complete``.
-    4. Charge the actual response cost via
-       :meth:`GameBudget.charge_response`.
+       underlying call. On pass, the estimate is added to the
+       in-flight reservation pool.
+    3. Invoke the wrapped client's ``complete`` (no lock held).
+    4. Atomically release the in-flight reservation and charge the
+       actual response cost via :meth:`GameBudget.charge_response`.
 
     The adapter conforms to :class:`LLMClient` structurally so it slots
     into :class:`meetings.manager.MeetingManager` and the strategic
@@ -115,19 +117,20 @@ class BudgetedLLMClient:
 
     :class:`meetings.manager.MeetingManager` runs Phase-1 reports and
     Phase-3 votes through :func:`asyncio.TaskGroup` so multiple agents'
-    :meth:`complete` calls are in flight at once. Without
-    synchronization, every concurrent caller would race past the same
-    pre-charge snapshot (preflight passes for all of them, then each
-    awaits the inner call, then each charges in turn), defeating the
-    "reject before invoking the inner client" guarantee under load.
+    :meth:`complete` calls are in flight at once, each under its own
+    :func:`asyncio.wait_for` deadline. The adapter must therefore (a)
+    prevent the "all preflights pass against the same stale snapshot"
+    race, AND (b) allow the actual provider awaits to overlap so a
+    late caller does not eat its own deadline waiting in a queue.
 
-    The adapter therefore holds an :class:`asyncio.Lock` across the
-    full preflight -> inner-call -> charge sequence. Concurrent
-    callers serialize through the lock so the running total is
-    consistent at each preflight, and a doomed call cannot slip past
-    a stale snapshot. The trade-off is that strict parallelism inside
-    a meeting becomes effective serialism at the budget boundary; the
-    correctness gain is documented in the PR's Decisions block.
+    The implementation tracks in-flight reservations in an adapter-
+    local counter pool (``_in_flight_*``). The :class:`asyncio.Lock`
+    is held ONLY for the brief synchronous budget mutations
+    (preflight + reserve, then release-reserve + charge) — never
+    across the ``await self._inner.complete(...)``. Concurrent callers
+    therefore (1) see each other's reservations during preflight so
+    no overrun slips through, and (2) overlap their provider awaits
+    so deadlines are not artificially serialized.
     """
 
     def __init__(
@@ -156,6 +159,13 @@ class BudgetedLLMClient:
         # loop at construction time (the MeetingManager constructs the
         # adapter outside its own event-loop context).
         self._lock: asyncio.Lock | None = None
+        # In-flight reservation pool: the sum of every concurrent
+        # call's estimated cost / token usage that has passed preflight
+        # but has not yet been charged. Mutated only under ``_lock`` so
+        # preflight and charge see a consistent view.
+        self._in_flight_cost_usd: float = 0.0
+        self._in_flight_input_tokens: int = 0
+        self._in_flight_output_tokens: int = 0
 
     def _ensure_lock(self) -> asyncio.Lock:
         """Return the per-adapter :class:`asyncio.Lock`, creating it lazily.
@@ -216,22 +226,43 @@ class BudgetedLLMClient:
     ) -> LLMResponse:
         """Pre-flight, call inner, charge actual cost.
 
-        Holds :attr:`_lock` across the full preflight -> inner-call ->
-        charge sequence so concurrent callers (``MeetingManager``'s
-        parallel report / vote phases) cannot all pass preflight
-        against the same stale snapshot and then individually spend
-        past the cap. See the class docstring for the trade-off.
+        The :attr:`_lock` is held only for the brief synchronous
+        budget mutations (preflight + reserve up front, then
+        release-reserve + charge after the inner call returns); the
+        ``await self._inner.complete(...)`` runs *outside* the lock so
+        concurrent callers' provider awaits overlap and each retains
+        its own deadline budget. The in-flight reservation pool
+        (``_in_flight_*``) ensures concurrent preflights see each
+        other's pending charges and reject doomed calls before they
+        touch the inner client.
         """
 
         estimated_usage, estimated_cost_usd = self.estimate(
             prompt=prompt, max_tokens=max_tokens
         )
+
+        # Step 1: brief locked region -- preflight against
+        # budget + in-flight reservations, then reserve.
         async with self._ensure_lock():
-            # Pre-flight raises BudgetExceededError if the estimate
-            # would push us past any cap. Crucially, this happens
-            # BEFORE the wrapped client is invoked so no token spend
-            # leaks on a doomed call.
-            self._budget.preflight(usage=estimated_usage, cost_usd=estimated_cost_usd)
+            self._budget.preflight(
+                usage=TokenUsage(
+                    input_tokens=(
+                        estimated_usage.input_tokens + self._in_flight_input_tokens
+                    ),
+                    output_tokens=(
+                        estimated_usage.output_tokens + self._in_flight_output_tokens
+                    ),
+                ),
+                cost_usd=estimated_cost_usd + self._in_flight_cost_usd,
+            )
+            self._in_flight_cost_usd += estimated_cost_usd
+            self._in_flight_input_tokens += estimated_usage.input_tokens
+            self._in_flight_output_tokens += estimated_usage.output_tokens
+
+        # Step 2: provider call -- NO lock held. Sibling concurrent
+        # callers' provider awaits run in parallel; each retains its
+        # own asyncio.wait_for deadline.
+        try:
             response = await self._inner.complete(
                 prompt=prompt,
                 schema=schema,
@@ -240,13 +271,28 @@ class BudgetedLLMClient:
                 call_kind=call_kind,
                 model=model,
             )
-            # Charge the actual response cost. ``charge_response``
-            # itself raises BudgetExceededError if the actual cost
-            # would overrun (e.g. estimator under-counted), but only
-            # after the inner call has already returned -- the
-            # orchestrator can still log the response for audit before
-            # the overrun cascades.
-            self._budget.charge_response(response)
+        except BaseException:
+            # The provider failed; release the in-flight reservation
+            # so future calls and retries against a fresh ceiling see
+            # the correct headroom.
+            async with self._ensure_lock():
+                self._in_flight_cost_usd -= estimated_cost_usd
+                self._in_flight_input_tokens -= estimated_usage.input_tokens
+                self._in_flight_output_tokens -= estimated_usage.output_tokens
+            raise
+
+        # Step 3: brief locked region -- settle up. Charge the actual
+        # response cost and release the in-flight reservation. The
+        # release happens in ``finally`` so even when the actual cost
+        # overruns the cap (charge_response raises) the in-flight
+        # counter stays consistent with no leak.
+        async with self._ensure_lock():
+            try:
+                self._budget.charge_response(response)
+            finally:
+                self._in_flight_cost_usd -= estimated_cost_usd
+                self._in_flight_input_tokens -= estimated_usage.input_tokens
+                self._in_flight_output_tokens -= estimated_usage.output_tokens
         return response
 
 
