@@ -82,7 +82,17 @@ DEFAULT_REPORT_FREE_TEXT: Final[str] = "(missed deadline; no report submitted)"
 DEFAULT_STATEMENT_FREE_TEXT: Final[str] = "(missed deadline; no statement)"
 DEFAULT_VOTE_RATIONALE: Final[str] = "(missed deadline; default skip)"
 
+# Audit-trail marker prefix prepended to ``rationale_text`` when the LLM
+# returns a ``target`` that is neither ``"SKIP"`` nor a valid candidate.
+# Such a ballot is defensively normalized to ``SKIP`` so the tally cannot
+# be corrupted by a hallucinated player id; the marker preserves the
+# original (invalid) target for replay analysis.
+INVALID_VOTE_TARGET_MARKER: Final[str] = (
+    "[invalid target {target!r} normalized to SKIP] "
+)
+
 _SKIP_TARGET: Final[str] = "SKIP"
+_VALID_ROLES: Final[frozenset[str]] = frozenset({"CREWMATE", "IMPOSTOR"})
 
 
 @dataclass(frozen=True)
@@ -281,6 +291,24 @@ class MeetingManager:
                 "MeetingConfig.skip_confidence_threshold must be in [0, 1], "
                 f"got {config.skip_confidence_threshold}"
             )
+        # Reject misconfigured deadlines fail-loud. A negative or zero
+        # deadline reaches ``asyncio.wait_for`` and trips ``TimeoutError``
+        # before the LLM call can complete, silently routing every
+        # participant into the default no-report/no-statement/skip path.
+        # That would change meeting outcomes without any explicit
+        # configuration error (AGENTS.md "no silent fallbacks").
+        # ``None`` is the explicit opt-out (headless mode, §1.4).
+        for name, value in (
+            ("report_seconds", config.deadlines.report_seconds),
+            ("statement_seconds", config.deadlines.statement_seconds),
+            ("vote_seconds", config.deadlines.vote_seconds),
+        ):
+            if value is None:
+                continue
+            if value <= 0:
+                raise ValueError(
+                    f"MeetingDeadlines.{name} must be None or > 0, got {value}"
+                )
         self._llm_client = llm_client
         self._crewmate_report_prompt = crewmate_report_prompt
         self._impostor_report_prompt = impostor_report_prompt
@@ -316,16 +344,28 @@ class MeetingManager:
             raise ValueError(
                 "MeetingManager.run requires at least one living participant"
             )
-        self._validate_unique_participants(participants)
+        self._validate_participants(participants)
+
+        # Canonicalise participant order at entry. Real callers may
+        # iterate over a set/dict whose order is hash-seeded and not
+        # determinism-preserving; without this normalisation, the
+        # transcript ordering, the report order embedded into every
+        # statement prompt, and the gather()'d ballot order would all
+        # drift between runs with the same seed. Sorting by ``agent_id``
+        # is deterministic and matches the lexical ``p-N`` convention
+        # used everywhere else in the project.
+        ordered_participants = tuple(sorted(participants, key=lambda p: p.agent_id))
 
         # Phase 1: report intake (parallel).
         reports = await self._collect_reports(
-            trigger=trigger, participants=participants
+            trigger=trigger, participants=ordered_participants
         )
 
         # Phase 2: accusation rounds (sequential rounds, ordered speakers).
         contradictions: tuple[ContradictionRef, ...] = ()
-        speaker_order = _speaker_order(participants=participants, trigger=trigger)
+        speaker_order = _speaker_order(
+            participants=ordered_participants, trigger=trigger
+        )
         statements: list[Statement] = []
         for round_index in range(self._config.round_count):
             for participant in speaker_order:
@@ -345,7 +385,7 @@ class MeetingManager:
         # Phase 3: voting (parallel).
         ballots = await self._collect_ballots(
             trigger=trigger,
-            participants=participants,
+            participants=ordered_participants,
             transcript=transcript,
             contradictions=contradictions,
         )
@@ -539,7 +579,17 @@ class MeetingManager:
         except asyncio.TimeoutError:
             return _default_vote(voter=participant.agent_id)
         parsed = VoteBallot.model_validate_json(response.text)
-        return parsed.model_copy(update={"voter": participant.agent_id})
+        # Defensive normalization: if the LLM hallucinates a target id
+        # that is not in ``candidate_targets`` (and not ``"SKIP"``),
+        # ``_tally`` would otherwise count it as a real eject and could
+        # resolve to ``EJECTED`` with a non-participant id, corrupting
+        # outcome application and replay integrity. Replace the target
+        # with ``"SKIP"`` and mark the rationale so the original (bad)
+        # target is preserved for audit / replay.
+        normalized = _normalize_ballot_target(
+            ballot=parsed, candidate_targets=candidate_targets
+        )
+        return normalized.model_copy(update={"voter": participant.agent_id})
 
     # -- Phase 4: resolution ----------------------------------------------
 
@@ -582,7 +632,7 @@ class MeetingManager:
         return "EJECTED", leaders[0]
 
     @staticmethod
-    def _validate_unique_participants(
+    def _validate_participants(
         participants: Sequence[MeetingParticipant],
     ) -> None:
         seen: set[PlayerId] = set()
@@ -593,6 +643,19 @@ class MeetingManager:
                     f"duplicate: {participant.agent_id!r}"
                 )
             seen.add(participant.agent_id)
+            # ``MeetingParticipant`` is a runtime dataclass; the
+            # ``Role`` ``Literal`` is enforced by mypy --strict at the
+            # call site but not at runtime. A typo like ``"impostor"``
+            # or ``"UNKNOWN"`` would otherwise fall through the
+            # ``role == "IMPOSTOR"`` check in ``_collect_one_report``
+            # and silently route the agent to the crewmate prompt,
+            # which would be hard to diagnose. Fail-loud at entry.
+            if participant.role not in _VALID_ROLES:
+                raise ValueError(
+                    "MeetingParticipant.role must be one of "
+                    f"{sorted(_VALID_ROLES)}; got {participant.role!r} "
+                    f"for agent {participant.agent_id!r}"
+                )
 
 
 def _speaker_order(
@@ -662,6 +725,32 @@ def _default_vote(*, voter: PlayerId) -> VoteBallot:
     )
 
 
+def _normalize_ballot_target(
+    *,
+    ballot: VoteBallot,
+    candidate_targets: tuple[PlayerId, ...],
+) -> VoteBallot:
+    """Defensively normalize an LLM-produced ballot target.
+
+    Returns the ballot unchanged when ``target`` is ``"SKIP"`` or in
+    ``candidate_targets``. When the LLM hallucinates an unknown id, the
+    ballot is rewritten to ``"SKIP"`` with a marker prefix on
+    ``rationale_text`` preserving the original (invalid) target. The
+    tally cannot then resolve to ``EJECTED`` against a non-participant
+    id; the audit trail records what the LLM actually emitted.
+    """
+
+    if ballot.target == _SKIP_TARGET or ballot.target in candidate_targets:
+        return ballot
+    marker = INVALID_VOTE_TARGET_MARKER.format(target=ballot.target)
+    return ballot.model_copy(
+        update={
+            "target": _SKIP_TARGET,
+            "rationale_text": marker + ballot.rationale_text,
+        }
+    )
+
+
 __all__ = [
     "DEFAULT_REPORT_DEADLINE_SECONDS",
     "DEFAULT_REPORT_FREE_TEXT",
@@ -677,6 +766,7 @@ __all__ = [
     "DEFAULT_VOTE_MAX_TOKENS",
     "DEFAULT_VOTE_RATIONALE",
     "DEFAULT_VOTE_TEMPERATURE",
+    "INVALID_VOTE_TARGET_MARKER",
     "MeetingConfig",
     "MeetingDeadlines",
     "MeetingManager",

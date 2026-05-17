@@ -37,6 +37,7 @@ from meetings.manager import (
     DEFAULT_REPORT_FREE_TEXT,
     DEFAULT_STATEMENT_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
+    INVALID_VOTE_TARGET_MARKER,
     MeetingConfig,
     MeetingDeadlines,
     MeetingManager,
@@ -1211,3 +1212,328 @@ class TestStatementPromptInputs:
         ]
         for prompt in statement_prompts:
             assert "REPORTS_COUNT=3" in prompt
+
+
+# --- Codex P1 + P2 review feedback pins -----------------------------------
+
+
+class TestNegativeDeadlinesRejected:
+    """Codex P2: negative per-phase deadlines must fail-loud at config time.
+
+    Without this check, a misconfigured deadline (e.g. ``-1.0``) would
+    reach :func:`asyncio.wait_for`, immediately raise ``TimeoutError``,
+    and silently default every report / statement / vote to the
+    no-response branch -- a configuration error masquerading as a real
+    meeting outcome.
+    """
+
+    def test_negative_report_deadline_is_rejected(self) -> None:
+        client = _ScriptedLLMClient(responder=_make_responder())
+        with pytest.raises(ValueError, match="report_seconds"):
+            MeetingManager(
+                llm_client=client,
+                crewmate_report_prompt=_crewmate_report_prompt,
+                impostor_report_prompt=_impostor_report_prompt,
+                statement_prompt=_statement_prompt,
+                vote_prompt=_vote_prompt,
+                config=MeetingConfig(deadlines=MeetingDeadlines(report_seconds=-1.0)),
+            )
+
+    def test_negative_statement_deadline_is_rejected(self) -> None:
+        client = _ScriptedLLMClient(responder=_make_responder())
+        with pytest.raises(ValueError, match="statement_seconds"):
+            MeetingManager(
+                llm_client=client,
+                crewmate_report_prompt=_crewmate_report_prompt,
+                impostor_report_prompt=_impostor_report_prompt,
+                statement_prompt=_statement_prompt,
+                vote_prompt=_vote_prompt,
+                config=MeetingConfig(
+                    deadlines=MeetingDeadlines(statement_seconds=-0.5)
+                ),
+            )
+
+    def test_negative_vote_deadline_is_rejected(self) -> None:
+        client = _ScriptedLLMClient(responder=_make_responder())
+        with pytest.raises(ValueError, match="vote_seconds"):
+            MeetingManager(
+                llm_client=client,
+                crewmate_report_prompt=_crewmate_report_prompt,
+                impostor_report_prompt=_impostor_report_prompt,
+                statement_prompt=_statement_prompt,
+                vote_prompt=_vote_prompt,
+                config=MeetingConfig(deadlines=MeetingDeadlines(vote_seconds=-10.0)),
+            )
+
+    def test_zero_deadline_is_rejected(self) -> None:
+        # A deadline of exactly 0 is also a misconfiguration: it
+        # ensures every call times out before the LLM can respond.
+        client = _ScriptedLLMClient(responder=_make_responder())
+        with pytest.raises(ValueError, match="report_seconds"):
+            MeetingManager(
+                llm_client=client,
+                crewmate_report_prompt=_crewmate_report_prompt,
+                impostor_report_prompt=_impostor_report_prompt,
+                statement_prompt=_statement_prompt,
+                vote_prompt=_vote_prompt,
+                config=MeetingConfig(deadlines=MeetingDeadlines(report_seconds=0.0)),
+            )
+
+    def test_none_deadline_is_accepted_for_headless_mode(self) -> None:
+        # ``None`` opts out of the deadline entirely (DESIGN.md §1.4
+        # headless mode). Construction must not raise.
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = MeetingManager(
+            llm_client=client,
+            crewmate_report_prompt=_crewmate_report_prompt,
+            impostor_report_prompt=_impostor_report_prompt,
+            statement_prompt=_statement_prompt,
+            vote_prompt=_vote_prompt,
+            config=MeetingConfig(
+                deadlines=MeetingDeadlines(
+                    report_seconds=None,
+                    statement_seconds=None,
+                    vote_seconds=None,
+                )
+            ),
+        )
+        assert isinstance(manager, MeetingManager)
+
+
+class TestUnknownRoleRejected:
+    """Codex P2: unknown participant roles must fail-loud at entry.
+
+    Without this check, any role string other than ``"IMPOSTOR"``
+    silently falls through to the crewmate prompt path in
+    ``_collect_one_report`` -- a typo like ``"impostor"`` would be
+    treated as a crewmate without any error signal.
+    """
+
+    def test_typo_role_is_rejected(self) -> None:
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+        # Bypass the ``Role`` Literal at the call site by going through
+        # a `cast`-like dict; the dataclass accepts the wrong string
+        # at runtime so the manager must catch it.
+        bad_participants = (
+            MeetingParticipant(
+                agent_id="p-1",
+                role="impostor",  # type: ignore[arg-type]
+                rendered_memory="memory",
+            ),
+        )
+
+        with pytest.raises(ValueError, match="MeetingParticipant.role"):
+            _run(
+                manager.run(
+                    meeting_id="m-typo",
+                    trigger=_default_trigger(),
+                    participants=bad_participants,
+                )
+            )
+
+    def test_unknown_role_string_is_rejected(self) -> None:
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+        bad_participants = (
+            MeetingParticipant(
+                agent_id="p-1",
+                role="GHOST",  # type: ignore[arg-type]
+                rendered_memory="memory",
+            ),
+        )
+
+        with pytest.raises(ValueError, match="GHOST"):
+            _run(
+                manager.run(
+                    meeting_id="m-ghost",
+                    trigger=_default_trigger(),
+                    participants=bad_participants,
+                )
+            )
+
+
+class TestParticipantOrderCanonicalised:
+    """Codex P1: meeting must be deterministic regardless of caller order.
+
+    Real callers (orchestrator, eval harness) may build the participant
+    list from a ``set``, ``dict.values()``, or another container whose
+    iteration order is not seed-stable. Without canonicalisation, the
+    transcript embedded into every statement prompt would change byte
+    content between runs with the same seed, breaking the
+    determinism contract.
+    """
+
+    def test_meeting_outcome_is_independent_of_input_order(self) -> None:
+        # Two runs with the same trigger and participants but different
+        # input order must produce equal MeetingResults.
+        responder = _make_responder(
+            vote_targets={"p-1": "p-3", "p-2": "p-3", "p-3": "SKIP"}
+        )
+
+        def _produce(participants: tuple[MeetingParticipant, ...]) -> MeetingResult:
+            client = _ScriptedLLMClient(responder=responder)
+            manager = _make_manager(llm_client=client, round_count=2)
+            return _run(
+                manager.run(
+                    meeting_id="m-order-indep",
+                    trigger=_default_trigger(),
+                    participants=participants,
+                )
+            )
+
+        sorted_participants = _make_participants()
+        reverse_participants = tuple(reversed(sorted_participants))
+
+        sorted_result = _produce(sorted_participants)
+        reverse_result = _produce(reverse_participants)
+
+        # Reports, statements, ballots, contradictions, and outcome
+        # are all byte-identical between the two runs.
+        assert sorted_result == reverse_result
+
+    def test_reports_are_in_canonical_order_regardless_of_input(self) -> None:
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+        # Pass participants in reverse-lexical order; the manager must
+        # rebuild them in ascending agent_id order before phase 1.
+        reverse_participants = tuple(reversed(_make_participants()))
+
+        result = _run(
+            manager.run(
+                meeting_id="m-canon-reports",
+                trigger=_default_trigger(),
+                participants=reverse_participants,
+            )
+        )
+
+        assert [r.agent_id for r in result.transcript.reports] == [
+            "p-1",
+            "p-2",
+            "p-3",
+        ]
+
+    def test_ballots_are_in_canonical_order_regardless_of_input(self) -> None:
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+        reverse_participants = tuple(reversed(_make_participants()))
+
+        result = _run(
+            manager.run(
+                meeting_id="m-canon-ballots",
+                trigger=_default_trigger(),
+                participants=reverse_participants,
+            )
+        )
+
+        assert [b.voter for b in result.ballots] == ["p-1", "p-2", "p-3"]
+
+
+class TestInvalidBallotTargetNormalised:
+    """Codex P1: hallucinated or stale eject targets must not corrupt the tally.
+
+    If the LLM returns a ``target`` that is neither ``"SKIP"`` nor in
+    the voter's ``candidate_targets``, the manager normalises the
+    ballot to ``SKIP`` and marks ``rationale_text`` so the audit trail
+    preserves the original (invalid) target. Without this, ``_tally``
+    would count the bogus id as a real vote and could resolve to
+    ``EJECTED`` against a non-participant -- corrupting outcome
+    application and replay.
+    """
+
+    def test_hallucinated_target_is_normalised_to_skip(self) -> None:
+        # Every voter returns target="ghost" (not a participant).
+        def _ghost_responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=VOTE" in prompt:
+                voter = _extract_marker(prompt, "voter=")
+                return VoteBallot(
+                    voter=voter,
+                    target="ghost",
+                    confidence=0.9,
+                    primary_reason_id=None,
+                    considered_alternatives=(),
+                    rationale_text="ghost did it",
+                ).model_dump_json()
+            return _make_responder()(prompt, schema)
+
+        client = _ScriptedLLMClient(responder=_ghost_responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-ghost-target",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        # Tally must NOT have counted "ghost" as an eject -- every
+        # ballot was normalised to SKIP, so the outcome is SKIPPED
+        # and no non-participant is ejected.
+        assert result.outcome == "SKIPPED"
+        assert result.ejected_player_id is None
+        for ballot in result.ballots:
+            assert ballot.target == "SKIP"
+            assert ballot.rationale_text.startswith(
+                INVALID_VOTE_TARGET_MARKER.format(target="ghost")
+            )
+            # The original rationale is preserved after the marker.
+            assert "ghost did it" in ballot.rationale_text
+
+    def test_voter_voting_for_self_is_normalised_to_skip(self) -> None:
+        # Voting for oneself is excluded from candidate_targets; it is
+        # treated the same as a hallucinated id and normalised to SKIP.
+        def _self_responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=VOTE" in prompt:
+                voter = _extract_marker(prompt, "voter=")
+                return VoteBallot(
+                    voter=voter,
+                    target=voter,  # voting for self
+                    confidence=0.5,
+                    primary_reason_id=None,
+                    considered_alternatives=(),
+                    rationale_text="meta vote",
+                ).model_dump_json()
+            return _make_responder()(prompt, schema)
+
+        client = _ScriptedLLMClient(responder=_self_responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-self-vote",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        for ballot in result.ballots:
+            assert ballot.target == "SKIP"
+            marker = INVALID_VOTE_TARGET_MARKER.format(target=ballot.voter)
+            assert ballot.rationale_text.startswith(marker)
+
+    def test_valid_target_passes_through_unchanged(self) -> None:
+        # Regression: a ballot with a real candidate target must NOT
+        # be modified.
+        responder = _make_responder(
+            vote_targets={"p-1": "p-3", "p-2": "p-3", "p-3": "SKIP"}
+        )
+        client = _ScriptedLLMClient(responder=responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-valid-target",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        ballots_by_voter = {b.voter: b for b in result.ballots}
+        assert ballots_by_voter["p-1"].target == "p-3"
+        assert ballots_by_voter["p-2"].target == "p-3"
+        assert ballots_by_voter["p-3"].target == "SKIP"
+        for ballot in result.ballots:
+            assert not ballot.rationale_text.startswith("[invalid target")
+        assert result.outcome == "EJECTED"
+        assert result.ejected_player_id == "p-3"
