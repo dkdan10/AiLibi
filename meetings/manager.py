@@ -21,10 +21,13 @@ This module implements **option (a)** of the C-3 directive:
 producer-guaranteed canonical order. The
 ``MeetingResult.transcript.statements`` tuple is sorted by
 ``(round_index, insertion_order)``. Insertion order within a round
-matches the manager's speaker order: the meeting opener
-(``trigger.triggered_by``) speaks first, then every other living
-participant in ascending ``agent_id`` order. Default no-statement
-entries from deadline timeouts share their speaker's insertion slot.
+is the speaker order returned by :func:`_speaker_order`: a true
+round-robin cyclic rotation of the canonical sorted ``agent_id``
+sequence so that ``trigger.triggered_by`` is at index 0. With
+sorted ids ``[p-1, p-2, p-3, p-4]`` and reporter ``p-2`` the order
+is ``[p-2, p-3, p-4, p-1]`` (DESIGN.md §5.2 "round-robin starting
+from reporter"). Default no-statement entries from deadline
+timeouts share their speaker's insertion slot.
 
 Consumers may read ``transcript.statements`` in tuple order and trust
 that statements are sorted by ``(round_index, insertion_order)``
@@ -252,9 +255,10 @@ class MeetingManager:
        every living participant. Crewmates use the crewmate prompt;
        impostors use the impostor prompt.
     2. **Accusation rounds** -- ``config.round_count`` sequential
-       rounds (default 2). Within each round, participants speak
-       round-robin starting from ``trigger.triggered_by`` and then
-       ascending ``agent_id``.
+       rounds (default 2). Within each round, participants speak in
+       true round-robin order: the canonical sorted ``agent_id``
+       sequence rotated so ``trigger.triggered_by`` is at index 0
+       (see :func:`_speaker_order`).
     3. **Voting** -- parallel ``VoteBallot`` collection from every
        living participant.
     4. **Resolution** -- plurality tally produces the
@@ -329,10 +333,13 @@ class MeetingManager:
         ``MeetingResult.transcript.statements`` is sorted by
         ``(round_index, insertion_order)`` per option (a) of the C-3
         directive (see module docstring). Insertion order within a
-        round is the speaker order:
-        ``trigger.triggered_by`` first (if alive), then every other
-        living participant in ascending ``agent_id`` order. Default
-        no-statement entries from missed deadlines share their
+        round is the true round-robin speaker order returned by
+        :func:`_speaker_order`: the canonical sorted ``agent_id``
+        sequence cyclically rotated so ``trigger.triggered_by`` is at
+        index 0. ``trigger.triggered_by`` MUST be present in
+        ``participants`` -- a non-participant reporter is rejected at
+        entry rather than silently demoted to sorted-only order.
+        Default no-statement entries from missed deadlines share their
         speaker's insertion slot. Consumers may read
         ``transcript.statements`` in tuple order and trust the order
         without re-sorting.
@@ -344,7 +351,7 @@ class MeetingManager:
             raise ValueError(
                 "MeetingManager.run requires at least one living participant"
             )
-        self._validate_participants(participants)
+        self._validate_participants(participants, trigger=trigger)
 
         # Canonicalise participant order at entry. Real callers may
         # iterate over a set/dict whose order is hash-seeded and not
@@ -597,7 +604,7 @@ class MeetingManager:
         self,
         ballots: Sequence[VoteBallot],
     ) -> tuple[MeetingOutcome, PlayerId | None]:
-        """Plurality tally (DESIGN.md §5.2 PHASE 4 + §5.5).
+        """Plurality tally with confidence threshold (DESIGN.md §5.2 + §4.6 + §5.5).
 
         ``SKIP`` is a real tally target -- a vote of ``SKIP`` competes
         with non-``SKIP`` votes for plurality. Two reads from the
@@ -621,14 +628,23 @@ class MeetingManager:
           ``SKIPPED`` (DESIGN.md §5.2: "if tie ... skip"). The
           schema-level ``TIE`` outcome was deliberately removed in
           this task because DESIGN.md only defines ejection-or-skip.
-        * Single non-``SKIP`` target with strict plurality ->
-          ``EJECTED``.
+        * Single non-``SKIP`` target with strict plurality AND at
+          least one ballot for that target has ``confidence >=
+          skip_confidence_threshold`` -> ``EJECTED``.
+        * Otherwise (strict plurality but no confident ballot) ->
+          ``SKIPPED``. This is the mechanical "meets threshold"
+          check from DESIGN.md §5.2 PHASE 4: the tally enforces it
+          independent of LLM compliance with the vote prompt's
+          ``skip_confidence_threshold`` instruction. The "max
+          confidence across the target's ballots" reading matches
+          DESIGN.md §4.6 "max suspicion confidence < 0.6 ... skip" --
+          the eject requires at least one voter to be confident, not
+          all of them.
 
-        Task 3.10 (``meetings/voting.py``) will layer in the
-        uncertainty-aware ballot-confidence threshold per §4.6 and
-        §5.5. That logic is per-voter (the LLM already enforces it
-        via ``skip_confidence_threshold`` in the vote prompt); the
-        tally surface above remains the right place for plurality.
+        Task 3.10 (``meetings/voting.py``) may refactor this body
+        into a dedicated module; the threshold semantics above are
+        the protocol contract and should be preserved across the
+        refactor.
         """
 
         tallies: dict[str, int] = {}
@@ -644,11 +660,20 @@ class MeetingManager:
             return "SKIPPED", None
         if len(leaders) > 1:
             return "SKIPPED", None
-        return "EJECTED", leaders[0]
+        leader = leaders[0]
+        threshold = self._config.skip_confidence_threshold
+        leader_max_confidence = max(
+            ballot.confidence for ballot in ballots if ballot.target == leader
+        )
+        if leader_max_confidence < threshold:
+            return "SKIPPED", None
+        return "EJECTED", leader
 
     @staticmethod
     def _validate_participants(
         participants: Sequence[MeetingParticipant],
+        *,
+        trigger: MeetingTrigger,
     ) -> None:
         seen: set[PlayerId] = set()
         for participant in participants:
@@ -671,6 +696,20 @@ class MeetingManager:
                     f"{sorted(_VALID_ROLES)}; got {participant.role!r} "
                     f"for agent {participant.agent_id!r}"
                 )
+        # The protocol requires round-robin starting from the reporter
+        # (DESIGN.md §5.2). A trigger whose ``triggered_by`` is not in
+        # the participant set is an upstream orchestrator bug -- not
+        # something to silently demote to sorted-only order. Failing
+        # loud here surfaces the wiring error at meeting entry, before
+        # any LLM traffic is spent on a transcript whose speaker order
+        # is no longer tied to the reporter (AGENTS.md "no silent
+        # fallbacks").
+        if trigger.triggered_by not in seen:
+            raise ValueError(
+                f"MeetingTrigger.triggered_by={trigger.triggered_by!r} is not in "
+                f"the participant set ({sorted(seen)}); the protocol requires "
+                "the reporter to be a living participant"
+            )
 
 
 def _speaker_order(
@@ -689,15 +728,20 @@ def _speaker_order(
     DESIGN.md §5.2 where each speaker sees the prior speaker's
     statement in the transcript-so-far and can react to it.
 
-    If the reporter is not in the participant set (e.g. they were
-    ejected before the round started, or the trigger came from a
-    non-participant), the canonical sorted order is used unrotated.
+    ``trigger.triggered_by`` MUST be present in ``participants``;
+    :meth:`MeetingManager._validate_participants` rejects the meeting
+    at entry otherwise. This helper assumes the invariant and raises
+    ``ValueError`` if it is violated (defense-in-depth).
     """
 
     by_id = {p.agent_id: p for p in participants}
-    sorted_ids = sorted(by_id)
     if trigger.triggered_by not in by_id:
-        return tuple(by_id[agent_id] for agent_id in sorted_ids)
+        raise ValueError(
+            f"_speaker_order: reporter {trigger.triggered_by!r} is not in "
+            f"the participant set ({sorted(by_id)}); this is a wiring bug, "
+            "MeetingManager._validate_participants should have rejected it"
+        )
+    sorted_ids = sorted(by_id)
     reporter_index = sorted_ids.index(trigger.triggered_by)
     rotated = sorted_ids[reporter_index:] + sorted_ids[:reporter_index]
     return tuple(by_id[agent_id] for agent_id in rotated)

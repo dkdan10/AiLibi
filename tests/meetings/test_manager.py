@@ -655,9 +655,16 @@ class TestAccusationRounds:
         speakers = [s.speaker for s in result.transcript.statements]
         assert speakers == ["p-3", "p-1", "p-2"]
 
-    def test_speaker_order_falls_back_to_sorted_when_reporter_not_in_participants(
+    def test_non_participant_reporter_is_rejected_at_meeting_entry(
         self,
     ) -> None:
+        # Codex P2: a trigger whose ``triggered_by`` is not in the
+        # living participant set is an upstream orchestrator bug.
+        # Silently falling back to a sorted-only speaker order would
+        # produce a transcript whose ordering is no longer tied to the
+        # reporter -- masking the wiring error. AGENTS.md "no silent
+        # fallbacks" applies; meeting entry rejects the trigger before
+        # any LLM traffic is spent.
         client = _ScriptedLLMClient(responder=_make_responder())
         manager = _make_manager(llm_client=client, round_count=1)
         trigger = MeetingTrigger(
@@ -666,16 +673,17 @@ class TestAccusationRounds:
             description="p-99 (ejected) reported",
         )
 
-        result = _run(
-            manager.run(
-                meeting_id="m-no-reporter",
-                trigger=trigger,
-                participants=_make_participants(),
+        with pytest.raises(ValueError, match="triggered_by"):
+            _run(
+                manager.run(
+                    meeting_id="m-no-reporter",
+                    trigger=trigger,
+                    participants=_make_participants(),
+                )
             )
-        )
 
-        speakers = [s.speaker for s in result.transcript.statements]
-        assert speakers == ["p-1", "p-2", "p-3"]
+        # No LLM traffic was spent before the validation raised.
+        assert client.calls == []
 
     def test_statement_identity_fields_are_authoritative(self) -> None:
         # The LLM returns garbage statement_id, speaker, tick, and
@@ -1639,3 +1647,167 @@ class TestInvalidBallotTargetNormalised:
             assert not ballot.rationale_text.startswith("[invalid target")
         assert result.outcome == "EJECTED"
         assert result.ejected_player_id == "p-3"
+
+
+class TestConfidenceThresholdEnforcement:
+    """Codex P1: ``_tally`` mechanically enforces ``skip_confidence_threshold``.
+
+    DESIGN.md §5.2 PHASE 4: "If a player has plurality and meets
+    threshold, eject. If tie or below threshold, skip." DESIGN.md
+    §4.6: "the default voting heuristic does not vote-eject if max
+    suspicion confidence < 0.6; instead it skips".
+
+    The vote prompt already instructs the LLM to ``SKIP`` when
+    confidence is below the threshold (decision rule 1 in
+    ``vote_ballot.j2``). The mechanical check below is the
+    fail-loud backstop: protocol behavior is deterministic even
+    when the LLM fails to follow the prompt instruction. The check
+    uses the *max* of the plurality target's ballot confidences,
+    matching §4.6 ("max suspicion confidence") -- the eject
+    requires at least one voter to be confident, not all of them.
+    """
+
+    @staticmethod
+    def _low_confidence_responder() -> Callable[[str, type[BaseModel] | None], str]:
+        # Every non-SKIP voter votes for p-3 with confidence below
+        # the default threshold (0.6); p-3 itself SKIPs. Without the
+        # threshold check the tally would eject on plurality alone.
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=VOTE" in prompt:
+                voter = _extract_marker(prompt, "voter=")
+                if voter == "p-3":
+                    return _stub_vote_json(voter=voter, target="SKIP")
+                return _stub_vote_json(voter=voter, target="p-3", confidence=0.4)
+            return _make_responder()(prompt, schema)
+
+        return _responder
+
+    def test_low_confidence_plurality_skips_not_ejects(self) -> None:
+        # Two non-SKIP voters both pick p-3 with confidence=0.4
+        # (below the default threshold of 0.6). Without the threshold
+        # check, the tally would return EJECTED p-3 -- a low-evidence
+        # ejection the protocol says should resolve to SKIP.
+        client = _ScriptedLLMClient(responder=self._low_confidence_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-low-conf",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert result.outcome == "SKIPPED"
+        assert result.ejected_player_id is None
+        # Confidence levels in the recorded ballots match what the
+        # LLM produced (the manager does not rewrite them; the tally
+        # just refuses to eject).
+        targets = [b.target for b in result.ballots]
+        assert targets.count("p-3") == 2
+
+    def test_max_confidence_above_threshold_does_eject(self) -> None:
+        # Two voters pick p-3: one at the threshold (0.6) and one
+        # well below it (0.2). Because *max* across the plurality
+        # target's ballots is >= threshold (per §4.6), the eject
+        # proceeds even though the other ballot is low-confidence.
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=VOTE" in prompt:
+                voter = _extract_marker(prompt, "voter=")
+                if voter == "p-1":
+                    return _stub_vote_json(voter=voter, target="p-3", confidence=0.2)
+                if voter == "p-2":
+                    return _stub_vote_json(voter=voter, target="p-3", confidence=0.6)
+                return _stub_vote_json(voter=voter, target="SKIP")
+            return _make_responder()(prompt, schema)
+
+        client = _ScriptedLLMClient(responder=_responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-max-conf",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert result.outcome == "EJECTED"
+        assert result.ejected_player_id == "p-3"
+
+    def test_threshold_is_inclusive_at_exactly_the_cutoff(self) -> None:
+        # confidence == threshold must allow ejection -- the rule is
+        # "below threshold, skip", so the threshold itself is the
+        # eject side.
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=VOTE" in prompt:
+                voter = _extract_marker(prompt, "voter=")
+                if voter in {"p-1", "p-2"}:
+                    return _stub_vote_json(voter=voter, target="p-3", confidence=0.6)
+                return _stub_vote_json(voter=voter, target="SKIP")
+            return _make_responder()(prompt, schema)
+
+        client = _ScriptedLLMClient(responder=_responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-cutoff",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert result.outcome == "EJECTED"
+        assert result.ejected_player_id == "p-3"
+
+    def test_configurable_threshold_is_respected(self) -> None:
+        # Override the default threshold to 0.9 via MeetingConfig;
+        # ballots at 0.8 (which would normally eject) must now skip.
+        responder = _make_responder(
+            vote_targets={"p-1": "p-3", "p-2": "p-3", "p-3": "SKIP"}
+        )
+        client = _ScriptedLLMClient(responder=responder)
+        manager = MeetingManager(
+            llm_client=client,
+            crewmate_report_prompt=_crewmate_report_prompt,
+            impostor_report_prompt=_impostor_report_prompt,
+            statement_prompt=_statement_prompt,
+            vote_prompt=_vote_prompt,
+            config=MeetingConfig(round_count=1, skip_confidence_threshold=0.9),
+        )
+
+        result = _run(
+            manager.run(
+                meeting_id="m-high-threshold",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        # Default stub confidence is 0.8, which is below the
+        # configured 0.9 threshold -- so even with a clean plurality
+        # the tally must skip.
+        assert result.outcome == "SKIPPED"
+        assert result.ejected_player_id is None
+
+    def test_threshold_does_not_apply_when_skip_wins(self) -> None:
+        # Even with the threshold check in place, SKIP-as-leader
+        # short-circuits to SKIPPED before the threshold logic runs.
+        # This documents the resolution-rule ordering in ``_tally``.
+        responder = _make_responder(
+            vote_targets={"p-1": "SKIP", "p-2": "SKIP", "p-3": "SKIP"}
+        )
+        client = _ScriptedLLMClient(responder=responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-skip-wins",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert result.outcome == "SKIPPED"
+        assert result.ejected_player_id is None
