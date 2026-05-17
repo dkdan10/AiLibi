@@ -50,6 +50,7 @@ changes.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Final
 
 from pydantic import BaseModel
@@ -108,6 +109,25 @@ class BudgetedLLMClient:
     The adapter conforms to :class:`LLMClient` structurally so it slots
     into :class:`meetings.manager.MeetingManager` and the strategic
     reasoner without signature changes.
+
+    Concurrency
+    -----------
+
+    :class:`meetings.manager.MeetingManager` runs Phase-1 reports and
+    Phase-3 votes through :func:`asyncio.TaskGroup` so multiple agents'
+    :meth:`complete` calls are in flight at once. Without
+    synchronization, every concurrent caller would race past the same
+    pre-charge snapshot (preflight passes for all of them, then each
+    awaits the inner call, then each charges in turn), defeating the
+    "reject before invoking the inner client" guarantee under load.
+
+    The adapter therefore holds an :class:`asyncio.Lock` across the
+    full preflight -> inner-call -> charge sequence. Concurrent
+    callers serialize through the lock so the running total is
+    consistent at each preflight, and a doomed call cannot slip past
+    a stale snapshot. The trade-off is that strict parallelism inside
+    a meeting becomes effective serialism at the budget boundary; the
+    correctness gain is documented in the PR's Decisions block.
     """
 
     def __init__(
@@ -132,6 +152,23 @@ class BudgetedLLMClient:
         self._budget = budget
         self._cost_per_input_token_usd = cost_per_input_token_usd
         self._cost_per_output_token_usd = cost_per_output_token_usd
+        # Lazily-created lock so the adapter does not bind to an event
+        # loop at construction time (the MeetingManager constructs the
+        # adapter outside its own event-loop context).
+        self._lock: asyncio.Lock | None = None
+
+    def _ensure_lock(self) -> asyncio.Lock:
+        """Return the per-adapter :class:`asyncio.Lock`, creating it lazily.
+
+        Created on first use so callers that construct the adapter on
+        a different thread/loop than they call it on do not bind to a
+        stale loop. The lock itself is loop-agnostic in Python 3.10+
+        as long as it is awaited from the right loop.
+        """
+
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     @property
     def budget(self) -> GameBudget:
@@ -177,30 +214,39 @@ class BudgetedLLMClient:
         call_kind: CallKind = "meeting",
         model: str | None = None,
     ) -> LLMResponse:
-        """Pre-flight, call inner, charge actual cost."""
+        """Pre-flight, call inner, charge actual cost.
+
+        Holds :attr:`_lock` across the full preflight -> inner-call ->
+        charge sequence so concurrent callers (``MeetingManager``'s
+        parallel report / vote phases) cannot all pass preflight
+        against the same stale snapshot and then individually spend
+        past the cap. See the class docstring for the trade-off.
+        """
 
         estimated_usage, estimated_cost_usd = self.estimate(
             prompt=prompt, max_tokens=max_tokens
         )
-        # Pre-flight raises BudgetExceededError if the estimate would
-        # push us past any cap. Crucially, this happens BEFORE the
-        # wrapped client is invoked so no token spend leaks on a
-        # doomed call.
-        self._budget.preflight(usage=estimated_usage, cost_usd=estimated_cost_usd)
-        response = await self._inner.complete(
-            prompt=prompt,
-            schema=schema,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            call_kind=call_kind,
-            model=model,
-        )
-        # Charge the actual response cost. ``charge_response`` itself
-        # raises BudgetExceededError if the actual cost would overrun
-        # (e.g. estimator under-counted), but only after the inner
-        # call has already returned — the orchestrator can still log
-        # the response for audit before the overrun cascades.
-        self._budget.charge_response(response)
+        async with self._ensure_lock():
+            # Pre-flight raises BudgetExceededError if the estimate
+            # would push us past any cap. Crucially, this happens
+            # BEFORE the wrapped client is invoked so no token spend
+            # leaks on a doomed call.
+            self._budget.preflight(usage=estimated_usage, cost_usd=estimated_cost_usd)
+            response = await self._inner.complete(
+                prompt=prompt,
+                schema=schema,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                call_kind=call_kind,
+                model=model,
+            )
+            # Charge the actual response cost. ``charge_response``
+            # itself raises BudgetExceededError if the actual cost
+            # would overrun (e.g. estimator under-counted), but only
+            # after the inner call has already returned -- the
+            # orchestrator can still log the response for audit before
+            # the overrun cascades.
+            self._budget.charge_response(response)
         return response
 
 

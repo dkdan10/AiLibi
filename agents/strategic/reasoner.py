@@ -70,12 +70,7 @@ from agents.strategic.prompts import (
 from agents.strategic.prompts import (
     vote_ballot_prompt as _default_vote_ballot_prompt,
 )
-from eval.leak_test import (
-    JsonValue,
-    _assert_no_recursive_hidden_fields,
-    _assert_no_role_bearing_values,
-)
-from llm.client import LLMClient
+from llm.client import CallKind, LLMClient
 from meetings.manager import (
     DEFAULT_REPORT_MAX_TOKENS,
     DEFAULT_REPORT_TEMPERATURE,
@@ -101,10 +96,9 @@ from meetings.schemas import (
 Role = Literal["CREWMATE", "IMPOSTOR"]
 
 # Trigger points at which the reasoner may be invoked (DESIGN.md §4.4).
-# The reasoner does NOT police callers; the tag is recorded on each
-# invocation for downstream replay / cost attribution and to make the
-# "strategic calls occur only at meetings or specified trigger points"
-# contract visible at every call site.
+# The tag is recorded on each invocation for downstream replay / cost
+# attribution and to route the LLM call to the right model tier (meeting
+# vs trigger; see :data:`_TRIGGER_CALL_KIND`).
 StrategicTrigger = Literal[
     "meeting_report",
     "meeting_statement",
@@ -113,9 +107,28 @@ StrategicTrigger = Literal[
     "body_found",
 ]
 
+# Map each :class:`StrategicTrigger` label to the :class:`CallKind` the
+# wrapped :class:`LLMClient` consumes. Meeting-protocol calls use the
+# meeting-strength tier (Sonnet in production); the
+# out-of-meeting trigger points (kill-witnessed, body-found) per
+# DESIGN.md §4.4 are short reactive checks that route to the cheaper
+# triggered-check tier (Haiku in production). Without this mapping the
+# reasoner would always invoke the meeting tier even for triggered
+# checks, mis-attributing cost and selecting the wrong model.
+_TRIGGER_CALL_KIND: Final[dict[StrategicTrigger, CallKind]] = {
+    "meeting_report": "meeting",
+    "meeting_statement": "meeting",
+    "meeting_vote": "meeting",
+    "kill_witnessed": "trigger",
+    "body_found": "trigger",
+}
+
 # Mirror the patterns the memory-rendering tests use to map the
-# legitimate `## Your role: X` line onto the canonical
-# `self_state.role` path so the leak scanner does not trip on it.
+# legitimate ``## Your role: X`` line onto the canonical
+# ``self_state.role`` path so the leak scanner does not trip on it.
+# The renderer guarantees this header is the first line of the rendered
+# view; only the first match is stripped so injected lines later in the
+# body (e.g. inside a contradiction summary) still reach the scanner.
 _ROLE_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^## Your role: .+$\n?", re.MULTILINE
 )
@@ -137,12 +150,21 @@ def _scan_prompt_inputs(
     (``audits/audit-2026-05-15-0225-reconciled.md`` §R-10) and the
     C-1 hedge closure (``audits/audit-2026-05-16-2239-claude.md``).
 
+    The scanner imports are function-local so that importing
+    :mod:`agents.strategic.reasoner` does not pull
+    :mod:`eval.leak_test` (and its transitive engine + test-helper
+    dependencies) into the importing process at module-load time.
+    Engine is loaded only when a scan actually runs.
+
     The single allowed appearance of a role-bearing string is the
-    agent's own ``## Your role: X`` header line, which is mapped onto
-    the canonical ``self_state.role`` path the scanner already
-    allow-lists. Every other surface (the rest of the rendered memory
-    body, any auxiliary text input such as the free-text meeting
-    trigger) is scanned in full.
+    agent's own ``## Your role: X`` header line — the
+    :func:`~agents.memory.store.render_for_prompt` renderer guarantees
+    this is the first line of the rendered view. We strip only that
+    first match (``count=1``) and map its captured role onto the
+    canonical ``self_state.role`` path the scanner already
+    allow-lists. Any further occurrence of the same prefix later in
+    the body (e.g. inside a contradiction summary or other free text)
+    is left in place so the scanner sees and rejects it.
 
     Raises :class:`AssertionError` if any scanner trips. The reasoner
     treats this as fail-loud — a leak in a strategic prompt input is
@@ -150,9 +172,19 @@ def _scan_prompt_inputs(
     fallbacks").
     """
 
+    # Function-local import: defers loading eval.leak_test (which
+    # transitively imports engine/* and tests/_helpers/*) until a scan
+    # actually runs. Importing StrategicReasoner alone does not trigger
+    # the chain.
+    from eval.leak_test import (  # noqa: PLC0415
+        JsonValue,
+        _assert_no_recursive_hidden_fields,
+        _assert_no_role_bearing_values,
+    )
+
     role_match = _ROLE_VALUE_PATTERN.search(rendered_memory)
     role = role_match.group(1) if role_match else ""
-    body = _ROLE_LINE_PATTERN.sub("", rendered_memory)
+    body = _ROLE_LINE_PATTERN.sub("", rendered_memory, count=1)
     payload: dict[str, JsonValue] = {
         "self_state": {"role": role},
         "rendered_body": body,
@@ -287,7 +319,7 @@ class StrategicReasoner:
             schema=ReportDocument,
             max_tokens=self._report_max_tokens,
             temperature=self._report_temperature,
-            call_kind="meeting",
+            call_kind=_TRIGGER_CALL_KIND[trigger],
         )
         parsed = ReportDocument.model_validate_json(response.text)
         return parsed.model_copy(update={"agent_id": agent_id, "tick": current_tick})
@@ -329,7 +361,7 @@ class StrategicReasoner:
             schema=Statement,
             max_tokens=self._statement_max_tokens,
             temperature=self._statement_temperature,
-            call_kind="meeting",
+            call_kind=_TRIGGER_CALL_KIND[trigger],
         )
         parsed = Statement.model_validate_json(response.text)
         statement_id = f"{meeting_id}:r{round_index}:{speaker}"
@@ -389,7 +421,7 @@ class StrategicReasoner:
             schema=VoteBallot,
             max_tokens=self._vote_max_tokens,
             temperature=self._vote_temperature,
-            call_kind="meeting",
+            call_kind=_TRIGGER_CALL_KIND[trigger],
         )
         parsed = VoteBallot.model_validate_json(response.text)
         return parsed.model_copy(update={"voter": voter})
@@ -404,18 +436,15 @@ def _validate_meeting_trigger(trigger: StrategicTrigger) -> None:
     through. AGENTS.md "no silent fallbacks" rules out a default-to-
     meeting-report path; rejecting here surfaces the wiring error at
     the call instead of mis-attributing the call in replay logs.
+
+    ``_TRIGGER_CALL_KIND`` is the single source of truth for the valid
+    set, so adding a new trigger label is a one-line dict change.
     """
 
-    valid = {
-        "meeting_report",
-        "meeting_statement",
-        "meeting_vote",
-        "kill_witnessed",
-        "body_found",
-    }
-    if trigger not in valid:
+    if trigger not in _TRIGGER_CALL_KIND:
         raise ValueError(
-            f"unknown StrategicTrigger {trigger!r}; expected one of {sorted(valid)}"
+            f"unknown StrategicTrigger {trigger!r}; "
+            f"expected one of {sorted(_TRIGGER_CALL_KIND.keys())}"
         )
 
 

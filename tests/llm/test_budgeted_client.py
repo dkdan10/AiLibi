@@ -490,3 +490,169 @@ class TestBudgetExposure:
         adapter = BudgetedLLMClient(inner=FakeProvider(), budget=budget)
 
         assert adapter.budget is budget
+
+
+# ---------------------------------------------------------------------------
+# Concurrency / serialized budget checks
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _ControllableInnerClient:
+    """Inner client that blocks on an external event before responding.
+
+    Lets the concurrency tests force several ``complete`` coroutines
+    into the same in-flight window so a race against budget state is
+    observable. Without serialization, multiple coroutines would all
+    pass preflight against the same un-charged snapshot, then all
+    invoke the inner client. With the adapter's :class:`asyncio.Lock`
+    in place, only one coroutine holds the lock at a time so the
+    second's preflight sees the first's charge.
+    """
+
+    response_cost_usd: float = 0.0
+    response_input_tokens: int = 1
+    response_output_tokens: int = 1
+    calls: list[str] = field(default_factory=list)
+    release: asyncio.Event | None = None
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+    ) -> LLMResponse:
+        self.calls.append(prompt)
+        if self.release is not None:
+            await self.release.wait()
+        return LLMResponse(
+            text="ok",
+            usage=TokenUsage(
+                input_tokens=self.response_input_tokens,
+                output_tokens=self.response_output_tokens,
+            ),
+            cost_usd=self.response_cost_usd,
+            model="controllable",
+        )
+
+
+class TestConcurrentBudgetChecks:
+    """Concurrent ``complete`` calls must NOT all pass preflight against
+    the same un-charged snapshot before any charge lands.
+
+    ``MeetingManager`` runs Phase-1 reports and Phase-3 votes through
+    :func:`asyncio.TaskGroup`, so the adapter sees several in-flight
+    calls per phase. Without the per-adapter :class:`asyncio.Lock`,
+    every concurrent caller would see budget=0 in preflight, all pass,
+    all spend, and the cumulative charge would overrun the cap silently.
+    """
+
+    def test_concurrent_calls_do_not_all_pass_stale_preflight(self) -> None:
+        # Budget cap at $0.30, three concurrent calls each estimating
+        # $0.20 in preflight and charging $0.20 on completion. Without
+        # serialization all three preflights would see a zero spend
+        # snapshot and all three would race past into the inner client.
+        # With the lock in place, the second call's preflight sees the
+        # first's charge ($0.20) and rejects ($0.20 + $0.20 = $0.40 >
+        # $0.30) BEFORE invoking the inner client.
+        budget = GameBudget(max_cost_usd=0.30)
+
+        async def _drive() -> tuple[int, int, int]:
+            inner = _ControllableInnerClient(response_cost_usd=0.20)
+            adapter = BudgetedLLMClient(
+                inner=inner,
+                budget=budget,
+                cost_per_input_token_usd=0.0,
+                # 1 output token * $0.20/token = $0.20 estimated cost.
+                cost_per_output_token_usd=0.20,
+            )
+
+            async def _one(label: str) -> bool:
+                try:
+                    await adapter.complete(
+                        prompt=label,
+                        schema=None,
+                        max_tokens=1,
+                        temperature=0.0,
+                    )
+                except BudgetExceededError:
+                    return False
+                return True
+
+            results = await asyncio.gather(
+                _one("c1"),
+                _one("c2"),
+                _one("c3"),
+                return_exceptions=False,
+            )
+            successes = sum(1 for r in results if r)
+            failures = sum(1 for r in results if not r)
+            return successes, failures, len(inner.calls)
+
+        successes, failures, inner_calls = _run(_drive())
+
+        # Exactly one call can succeed: the second's preflight sees
+        # the first's $0.20 charge and rejects.
+        assert successes == 1, (
+            f"BudgetedLLMClient let {successes} of 3 concurrent calls succeed "
+            "with a $0.30 cap and $0.20-per-call estimates; budget state "
+            "was raced past."
+        )
+        assert successes + failures == 3
+        # The inner client is only invoked for the call that passed
+        # preflight; doomed calls short-circuit at the lock with no
+        # spend on the underlying provider.
+        assert inner_calls == 1, (
+            f"BudgetedLLMClient invoked the inner client {inner_calls} times "
+            "when only 1 call's preflight should have passed; the other "
+            "calls bypassed the 'reject before invoking inner client' guarantee."
+        )
+        # And the final budget total never exceeds the cap.
+        assert budget.snapshot().cost_usd <= 0.30 + 1e-6
+
+    def test_serialization_preserves_first_to_arrive_ordering(self) -> None:
+        # When two calls race for a budget that admits exactly one of
+        # them, the lock guarantees one succeeds and one fails -- not
+        # both succeed or both fail.
+        budget = GameBudget(max_cost_usd=0.10)
+
+        async def _drive() -> tuple[list[bool], int]:
+            inner = _ControllableInnerClient(response_cost_usd=0.10)
+            adapter = BudgetedLLMClient(
+                inner=inner,
+                budget=budget,
+                cost_per_input_token_usd=0.0,
+                # $0.10/token * 1 token = $0.10 estimated cost; the
+                # first call fills the cap and the second's preflight
+                # ($0.10 + $0.10 > $0.10 + slack) rejects before
+                # invoking inner.
+                cost_per_output_token_usd=0.10,
+            )
+
+            async def _one(label: str) -> bool:
+                try:
+                    await adapter.complete(
+                        prompt=label,
+                        schema=None,
+                        max_tokens=1,
+                        temperature=0.0,
+                    )
+                except BudgetExceededError:
+                    return False
+                return True
+
+            results = list(
+                await asyncio.gather(_one("a"), _one("b"), return_exceptions=False)
+            )
+            return results, len(inner.calls)
+
+        results, inner_calls = _run(_drive())
+
+        assert sum(results) == 1
+        assert sum(1 for r in results if not r) == 1
+        # The rejected call's inner is never invoked.
+        assert inner_calls == 1
