@@ -267,6 +267,38 @@ class TestFloatSafeCapComparison:
             budget.charge(usage=_usage(), cost_usd=0.01)
 
 
+class TestSlackBoundary:
+    """L-1 boundary pin (audits/audit-2026-05-16-2239-claude.md §L-1).
+
+    ``llm.budget._COST_USD_CAP_SLACK`` is currently ``1e-6``. The two
+    tests below pin the documented slack size at the boundary: a
+    charge ``1e-3`` over the cap must raise; a charge ``1e-9`` over
+    must not. A future silent slack widening (e.g. ``1e-6`` -> ``1e-3``)
+    would let the strictly-over-slack case slip through and would fail
+    this test.
+    """
+
+    def test_charge_exceeding_slack_raises(self) -> None:
+        # 1e-3 is 1000x larger than the documented 1e-6 slack so this
+        # is a clear overrun; if the slack ever silently widens to 1e-3
+        # this test fails.
+        budget = GameBudget(max_cost_usd=0.30)
+
+        with pytest.raises(BudgetExceededError) as excinfo:
+            budget.charge(usage=_usage(), cost_usd=0.30 + 1e-3)
+
+        assert excinfo.value.dimension == "cost_usd"
+
+    def test_charge_within_slack_does_not_raise(self) -> None:
+        # 1e-9 is well below the 1e-6 slack so this must not raise;
+        # the budget is at the cap and we accept it as such.
+        budget = GameBudget(max_cost_usd=0.30)
+
+        snapshot = budget.charge(usage=_usage(), cost_usd=0.30 + 1e-9)
+
+        assert snapshot.cost_usd == pytest.approx(0.30 + 1e-9)
+
+
 class TestBudgetExceededErrorMessage:
     def test_error_message_carries_all_dimensions(self) -> None:
         err = BudgetExceededError(

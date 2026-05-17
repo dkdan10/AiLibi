@@ -691,6 +691,46 @@ class TestSawBodyDeduplication:
         assert "[tick 20] You discovered p-2's body in MEDBAY." in view
 
 
+class TestLastSeenOnConfirmedDead:
+    """L-2 coverage pin (audits/audit-2026-05-16-2239-claude.md §L-2).
+
+    A player whose body has been discovered (``saw_body``) remains
+    confirmed-dead, but the agent's ``working.last_seen`` record for
+    that player still carries useful timing information (where and
+    when the agent last saw them alive). The renderer must surface
+    that ``(last seen in ROOM at tick N)`` suffix on the dead player's
+    belief line. A future refactor that silently strips ``last_seen``
+    for confirmed-dead players would fail this regression.
+    """
+
+    def test_last_seen_suffix_renders_for_confirmed_dead_player(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0))
+        # Record a sighting of p-2 alive at tick 10 in MEDBAY...
+        memory.episodic.append(
+            _saw_player_event(tick=10, player_id="p-2", room="MEDBAY", action=None)
+        )
+        memory.working.record_sighting(player_id="p-2", room="MEDBAY", tick=10)
+        # ...then the body discovery at tick 15.
+        memory.episodic.append(
+            _saw_body_event(
+                tick=15, body_id="body-p-2-15", victim_id="p-2", room="MEDBAY"
+            )
+        )
+        # Drive p-2's suspicion off-neutral so the belief line is rendered
+        # (the renderer omits neutral beliefs).
+        memory.beliefs.adjust_suspicion("p-2", delta=0.4)
+
+        rendered = render_for_prompt(memory, token_budget=8000)
+
+        assert "(last seen in MEDBAY at tick 10)" in rendered
+        assert "p-2: suspicion 0.90 (last seen in MEDBAY at tick 10)" in rendered
+        # And the body discovery itself is rendered too, so the agent
+        # and the reader both see "confirmed dead, last seen here at
+        # tick N" together.
+        assert "You discovered p-2's body in MEDBAY" in rendered
+
+
 class TestSalienceCutoffStrictness:
     def test_lower_salience_event_dropped_when_higher_event_does_not_fit(
         self,
