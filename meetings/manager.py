@@ -70,7 +70,12 @@ DEFAULT_SKIP_CONFIDENCE_THRESHOLD: Final[float] = 0.6
 # 3.9 (strategic reasoner) may want to expose these through the
 # orchestrator. Public defaults so the orchestrator can override per
 # call without monkey-patching constants.
-DEFAULT_REPORT_MAX_TOKENS: Final[int] = 1024
+#
+# The report budget is larger than statement / vote because a
+# ReportDocument is the largest meeting artifact (opener, observations,
+# claims, and free-text prose in one object); too tight a cap truncates
+# the model mid-JSON and yields an unparseable response.
+DEFAULT_REPORT_MAX_TOKENS: Final[int] = 2048
 DEFAULT_REPORT_TEMPERATURE: Final[float] = 0.4
 DEFAULT_STATEMENT_MAX_TOKENS: Final[int] = 512
 DEFAULT_STATEMENT_TEMPERATURE: Final[float] = 0.4

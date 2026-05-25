@@ -29,6 +29,7 @@ import asyncio
 import os
 
 import pytest
+from pydantic_core import ValidationError
 
 from agents.strategic.prompts.loader import (
     accusation_round_prompt,
@@ -115,10 +116,24 @@ class TestStripJsonCodeFences:
     def test_whitespace_outside_the_fences_is_trimmed(self) -> None:
         assert _strip_json_code_fences(f"  ```json\n{_INNER}\n```  ") == _INNER
 
-    def test_open_fence_without_close_passes_through_unchanged(self) -> None:
-        # Conservative: an unmatched open fence is left intact so Pydantic
-        # fails loud rather than the helper guessing at a boundary.
-        text = f"```json\n{_INNER}"
+    def test_unclosed_open_fence_is_stripped(self) -> None:
+        # A response truncated by max_tokens may end mid-prose without ever
+        # emitting the closing fence. Strip the open fence anyway so Pydantic
+        # gets a chance to fail on the incomplete JSON body rather than on a
+        # leading backtick (pre-Phase-4 eval crash 2026-05-25-2138).
+        text = '```json\n{"agent_id": "p-1", "incomplete":'
+        expected = '{"agent_id": "p-1", "incomplete":'
+        assert _strip_json_code_fences(text) == expected
+
+    def test_unclosed_open_fence_without_language_tag(self) -> None:
+        text = '```\n{"foo":'
+        expected = '{"foo":'
+        assert _strip_json_code_fences(text) == expected
+
+    def test_closing_fence_only_passes_through_unchanged(self) -> None:
+        # No opening fence to strip — passing through is safe (the trailing
+        # fence is left for Pydantic to reject as part of the JSON body).
+        text = '{"foo": "bar"}\n```'
         assert _strip_json_code_fences(text) == text
 
     def test_inner_backticks_preserved_when_outer_fences_stripped(self) -> None:
@@ -347,3 +362,42 @@ class TestProductionTemplateSchemaRoundTrips:
         ballot = VoteBallot.model_validate_json(response.text)
         # The vote template instructs voter == the passed voter_id.
         assert ballot.voter == "p-3"
+
+
+class TestAnthropicTruncationFailureMode:
+    """A meeting-report response truncated by ``max_tokens`` must fail with a
+    Pydantic ``ValidationError`` on the incomplete JSON, NOT with an
+    ``Invalid JSON … line 1 column 1`` error caused by a leading backtick
+    from an unclosed markdown fence (pre-Phase-4 eval crash 2026-05-25-2138,
+    ``audits/audit-2026-05-25-2138-pre-phase-4-real-provider-eval.md``).
+
+    Driven with ``asyncio.run`` rather than ``pytest-asyncio`` to match the
+    module convention (see module docstring); ``@real_provider`` keeps it
+    skipped in CI. Per-invocation cost ~$0.001 — the ``max_tokens=50`` cap
+    makes the call deliberately tiny.
+    """
+
+    @real_provider
+    def test_truncated_report_fails_with_validation_error_not_backtick(
+        self,
+    ) -> None:
+        client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
+        prompt = (
+            "You are agent p-1 in a social-deduction game. Output a "
+            "ReportDocument as a single JSON object with realistic, detailed "
+            "observations, claims, and free-text prose."
+        )
+
+        with pytest.raises(ValidationError) as exc:
+            asyncio.run(
+                client.complete(
+                    prompt=prompt,
+                    schema=ReportDocument,
+                    max_tokens=50,  # tight cap forces truncation mid-output
+                    temperature=0.0,
+                )
+            )
+
+        # The leading-backtick failure mode is what the 2138 eval saw;
+        # confirm the fence strip means we no longer hit it.
+        assert "line 1 column 1" not in str(exc.value)
