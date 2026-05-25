@@ -54,7 +54,7 @@ from llm.budget import GameBudget
 from llm.budgeted_client import BudgetedLLMClient
 from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
-from llm.fake_provider import FakeProvider
+from llm.provider import build_default_client
 from meetings.manager import (
     MeetingConfig,
     MeetingManager,
@@ -323,11 +323,14 @@ def build_default_meeting_runner(
     It binds the four canonical ``agents/strategic/prompts`` Jinja
     callables to a :class:`DefaultMeetingRunner`.
 
-    ``llm_client`` defaults to the canonical
-    :class:`llm.fake_provider.FakeProvider` so CI / headless runs never
-    touch the network; explicit local / eval runs pass an
-    :class:`llm.provider.AnthropicClient`. When ``budget`` is provided
-    the client is wrapped in
+    ``llm_client`` defaults to :func:`llm.provider.build_default_client`,
+    which selects the adapter from ``AILIBI_LLM_PROVIDER`` (defaulting to
+    :class:`llm.fake_provider.FakeProvider` when the env var is unset, so
+    CI / headless runs still never touch the network). Setting
+    ``AILIBI_LLM_PROVIDER=anthropic`` routes the public entry-points
+    through :class:`llm.provider.AnthropicClient`; callers may still pass
+    an explicit ``llm_client`` to bypass env selection. When ``budget`` is
+    provided the client is wrapped in
     :class:`llm.budgeted_client.BudgetedLLMClient` *before* the runner's
     :class:`_RecordingLLMClient` layer, so the per-game cost cap is
     enforced at call time (pre-flight) rather than measured post-hoc
@@ -339,7 +342,7 @@ def build_default_meeting_runner(
     not share one runner (or one budget) across a tournament.
     """
 
-    inner: LLMClient = llm_client if llm_client is not None else FakeProvider()
+    inner: LLMClient = llm_client if llm_client is not None else build_default_client()
     client: LLMClient = (
         BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner
     )

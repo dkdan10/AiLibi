@@ -214,10 +214,47 @@ async def _default_send(
     extended_thinking: bool,
     prompt_caching_beta: bool,
 ) -> AnthropicRawResponse:
-    raise RuntimeError(
-        "AnthropicClient was constructed without a `send` hook and the real "
-        "Anthropic SDK is not wired in this build; pass `send=` for tests or "
-        "configure a real transport before invoking complete()"
+    # Lazy import per the module docstring (lines 9-11): the real SDK is
+    # only imported when an AnthropicClient is actually invoked, so
+    # FakeProvider-only test runs and `bash scripts/check.sh` never need
+    # it loaded at import time.
+    import anthropic
+
+    # extended_thinking and prompt_caching_beta are plumbed through the
+    # signature for a future task; wiring them to the SDK is a separate
+    # concern (see PR ## Decisions). Bind them so they read as
+    # intentionally-unused rather than dropped.
+    _ = extended_thinking
+    _ = prompt_caching_beta
+
+    # Use the client as an async context manager so its underlying httpx
+    # connection pool is closed deterministically after each call.
+    # `_default_send` is a stateless module-level send-hook, so there is no
+    # AnthropicClient instance on which to hang a long-lived pooled client
+    # without introducing module-level state (which the design forbids).
+    async with anthropic.AsyncAnthropic(api_key=api_key) as client:
+        response = await client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+    text_blocks = [
+        block.text
+        for block in response.content
+        if isinstance(block, anthropic.types.TextBlock)
+    ]
+    if not text_blocks:
+        raise RuntimeError(
+            f"Anthropic returned no text content blocks (model={model!r})"
+        )
+
+    return AnthropicRawResponse(
+        model=response.model,
+        text="".join(text_blocks),
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
     )
 
 
