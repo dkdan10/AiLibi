@@ -227,13 +227,18 @@ async def _default_send(
     _ = extended_thinking
     _ = prompt_caching_beta
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    response = await client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    # Use the client as an async context manager so its underlying httpx
+    # connection pool is closed deterministically after each call.
+    # `_default_send` is a stateless module-level send-hook, so there is no
+    # AnthropicClient instance on which to hang a long-lived pooled client
+    # without introducing module-level state (which the design forbids).
+    async with anthropic.AsyncAnthropic(api_key=api_key) as client:
+        response = await client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[{"role": "user", "content": prompt}],
+        )
 
     text_blocks = [
         block.text
