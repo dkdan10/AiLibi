@@ -1191,6 +1191,233 @@ This task is the production wire-up that closes the gap between the substrate Ph
 
 **Ready-to-paste prompt:** `agent_prompts/task-3-13-production-meeting-wireup.md`
 
+### Task 3.14 — Real-provider transport wire-up
+**Branch:** `phase-3-real-provider-transport`
+**Depends on:** 3.13 merged
+**Section refs:** DESIGN.md §7, DESIGN.md §10.4
+**Complexity:** Medium
+
+Close the two compounding gaps surfaced by the Pre-Phase-4 real-provider
+eval report (`audits/audit-2026-05-25-0547-pre-phase-4-real-provider-eval.md`),
+which exited at pre-flight with verdict **Pre-flight failed — live
+provider unreachable**. Total eval spend so far: $0.00. The eval's new
+direct-sanity-call gate caught the failure before any tournament-wrapped
+API spend.
+
+**Gap A — `AILIBI_LLM_PROVIDER` is ignored by the production path.**
+`orchestrator/game.py::build_default_meeting_runner` at line 342 defaults
+a missing `llm_client` to `FakeProvider()` rather than to
+`build_default_client()`. The public scripts (`scripts/run_game.py`,
+`scripts/run_tournament.py`) and `eval/balance_eval.py::run_balance_eval`
+all call the factory without `llm_client=`, so the env-var selector
+exists but never flows through the public CLI.
+
+**Gap B — `AnthropicClient` has no real transport.**
+`llm/provider.py::_default_send` is a one-line
+`raise RuntimeError("...real Anthropic SDK is not wired in this build...")`.
+`grep -rn "import anthropic" --include='*.py'` returns zero hits outside
+`.venv`; the `anthropic` SDK is not declared in `pyproject.toml`
+dependencies. The adapter scaffold exists from Task 3.1, but the SDK
+transport was never wired in — CI never noticed because every test uses
+`FakeProvider`, and prior audits explicitly forbade real-provider calls.
+
+This task closes both gaps so the real-provider eval can be re-attempted.
+No new merge criteria are introduced; the existing Phase 3 Merge
+Criteria become *measurable* after this task lands.
+
+**Files in scope:**
+- pyproject.toml
+- uv.lock
+- llm/provider.py
+- orchestrator/game.py
+- tests/llm/test_real_provider.py
+
+**Files NOT in scope:**
+- engine/
+- observation/
+- agents/
+- meetings/
+- llm/client.py
+- llm/budget.py
+- llm/budgeted_client.py
+- llm/cache.py
+- llm/fake_provider.py
+- llm/README.md
+- llm/__init__.py
+- orchestrator/replay.py
+- orchestrator/scheduler.py
+- orchestrator/boundary.py
+- orchestrator/action_ordering.py
+- orchestrator/seeder.py
+- scripts/run_game.py
+- scripts/run_tournament.py
+- eval/
+- api/
+- frontend/
+- AGENTS.md
+- AGENT_IMPLEMENTATION.md
+- DESIGN.md
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- tests/agents/
+- tests/engine/
+- tests/meetings/
+- tests/observation/
+- tests/orchestrator/
+- tests/eval/
+- tests/llm/test_client.py
+- tests/llm/test_budget.py
+- tests/llm/test_budgeted_client.py
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **Gap B step 1 — `anthropic` declared as a dependency.** Add the `anthropic` Python SDK to `pyproject.toml` `dependencies` using an **exact version pin** to match the project's existing convention (every other dep in the block is exact-pinned, e.g. `fastapi==0.136.1`). Choose a current stable version that supports the `claude-sonnet-4-6` and `claude-haiku-4-5-20251001` model ids. Regenerate `uv.lock` with `uv lock` and commit both files. Document the chosen version + reasoning in `## Decisions`.
+- [ ] **Gap B step 2 — `_default_send` implements the real SDK call.** `llm/provider.py::_default_send` becomes a real implementation, NOT a `RuntimeError` stub. The implementation:
+  - **Lazy-imports** the `anthropic` package inside the function body (not at module top-level). The existing module docstring at `llm/provider.py:9-11` describes this lazy-import design; honor it. Lazy import keeps the `anthropic` dependency optional at module load time so `FakeProvider`-only test runs and `bash scripts/check.sh` don't require the SDK to be installed (though it will be installed via `uv sync` after `pyproject.toml` changes).
+  - Constructs an `anthropic.AsyncAnthropic(api_key=api_key)` client. Reuses the function-scoped client; do not introduce module-level state.
+  - Calls `messages.create(model=..., max_tokens=..., temperature=..., messages=[{"role": "user", "content": prompt}])`. Use a single `user` message; the `LLMClient.complete` Protocol surface does not currently carry a system prompt parameter (DESIGN.md §7 / `llm/client.py`).
+  - Translates the response into `AnthropicRawResponse(model=..., text=..., input_tokens=..., output_tokens=...)`. The text is the first content block's text. Token counts come from `response.usage.input_tokens` / `response.usage.output_tokens`.
+  - The `extended_thinking` and `prompt_caching_beta` parameters are already plumbed through the call signature but stay **no-ops** in this task — wiring them through to the SDK is a separate concern. Document the no-op decision in `## Decisions`.
+- [ ] **Gap A — `build_default_meeting_runner` honors `AILIBI_LLM_PROVIDER`.** In `orchestrator/game.py::build_default_meeting_runner`, change the `llm_client=None` fallback from `FakeProvider()` to `build_default_client()` (imported from `llm.provider`). Single-line behavior change: the env-var selector now flows through whenever the factory is called without an explicit `llm_client`. The default case (`AILIBI_LLM_PROVIDER` unset) still produces a `FakeProvider` via `build_default_client`'s own default, so existing tests that rely on the FakeProvider fallback continue to pass without modification. Remove the unused `FakeProvider` import from `orchestrator/game.py` if it becomes unused after the change.
+- [ ] **Real-provider round-trip test.** `tests/llm/test_real_provider.py` is a new test file containing at least one test decorated with `@real_provider` (the existing marker defined in `tests/llm/test_client.py`, which wraps `pytest.mark.skipif` keyed on `os.environ.get("AILIBI_RUN_REAL_PROVIDER_TESTS") != "1"`). The test:
+  - Imports `real_provider` from `tests.llm.test_client` (or re-defines the same marker locally; either is acceptable).
+  - Constructs `AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])` directly (not via `build_default_client`) so the test is self-contained.
+  - Calls `await client.complete(prompt="Respond with the single token: OK", schema=None, max_tokens=8, temperature=0.0)`.
+  - Asserts `response.text` is a non-empty string, `response.usage.input_tokens > 0`, `response.usage.output_tokens > 0`, `response.cost_usd > 0.0`, `response.model` is a non-empty string. The exact response text is not asserted (LLM output varies).
+  - CI continues to skip the test by default (the env-var gate is unset in CI per `llm/README.md`).
+- [ ] **Static gates pass without the env var set.** `bash scripts/check.sh` passes on a fresh checkout with `AILIBI_LLM_PROVIDER` unset (and `AILIBI_RUN_REAL_PROVIDER_TESTS` unset). All 667+ existing tests continue to pass; the new `tests/llm/test_real_provider.py` test reports as skipped.
+- [ ] **Post-merge sanity check (developer-only; not a CI gate).** After merge, run the direct sanity call from `audits/prompts/pre-phase-4-real-provider-eval-prompt.md` §2 with `AILIBI_LLM_PROVIDER=anthropic` and a real `ANTHROPIC_API_KEY` set. Expected outcome: non-zero `cost_usd`, sensible response text, model id matches `AILIBI_LLM_MEETING_MODEL`. The PR description's `## Decisions` block records the post-merge sanity-call output verbatim (model + cost + response text), with the API key NOT printed.
+- [ ] No imports from `engine/` under `agents/`, `llm/`, or `meetings/` (firewall preserved). `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes (with the new test skipped).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run mypy --strict agents observation orchestrator engine llm meetings` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+The Anthropic Python SDK exposes an async client (`anthropic.AsyncAnthropic`) and a `messages.create` method that returns a typed response. The minimal call shape:
+
+```python
+# llm/provider.py — illustrative; pick exact names matching the SDK version chosen
+async def _default_send(
+    *,
+    api_key: str,
+    model: str,
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    extended_thinking: bool,
+    prompt_caching_beta: bool,
+) -> AnthropicRawResponse:
+    # Lazy import per the design intent at llm/provider.py:9-11. Keeps
+    # the SDK optional at module-load time; tests that never touch the
+    # real provider don't import it.
+    import anthropic
+
+    # extended_thinking and prompt_caching_beta are plumbed through the
+    # signature but unused in this task. Wiring them through is a
+    # separate concern; document in ## Decisions.
+    _ = extended_thinking
+    _ = prompt_caching_beta
+
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    response = await client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    text_blocks = [
+        block.text for block in response.content
+        if getattr(block, "type", None) == "text"
+    ]
+    if not text_blocks:
+        raise RuntimeError(
+            f"Anthropic returned no text content blocks (model={model!r})"
+        )
+
+    return AnthropicRawResponse(
+        model=response.model,
+        text="".join(text_blocks),
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+    )
+```
+
+**Gap A fix is a one-line behavioral change** plus an import swap:
+
+```python
+# orchestrator/game.py — current at line 342
+inner: LLMClient = llm_client if llm_client is not None else FakeProvider()
+
+# After Gap A fix
+inner: LLMClient = llm_client if llm_client is not None else build_default_client()
+```
+
+Add `from llm.provider import build_default_client` to the imports; remove `from llm.fake_provider import FakeProvider` if no other reference in the file uses it (the new fallback delegates the env-var routing — including the fake-provider default — to `build_default_client`).
+
+**Real-provider test shape:**
+
+```python
+# tests/llm/test_real_provider.py — illustrative
+import os
+import pytest
+from llm.provider import AnthropicClient
+from tests.llm.test_client import real_provider  # the existing marker
+
+
+class TestAnthropicRoundTrip:
+    @real_provider
+    @pytest.mark.asyncio
+    async def test_real_provider_round_trip(self) -> None:
+        api_key = os.environ["ANTHROPIC_API_KEY"]
+        client = AnthropicClient(api_key=api_key)
+        response = await client.complete(
+            prompt="Respond with the single token: OK",
+            schema=None,
+            max_tokens=8,
+            temperature=0.0,
+        )
+        assert response.text, "Expected a non-empty response from the live provider"
+        assert response.usage.input_tokens > 0
+        assert response.usage.output_tokens > 0
+        assert response.cost_usd > 0.0
+        assert response.model
+```
+
+To run this test locally:
+```bash
+set -a; source .env; set +a
+AILIBI_RUN_REAL_PROVIDER_TESTS=1 uv run pytest tests/llm/test_real_provider.py -v
+```
+
+CI runs `uv run pytest` without `AILIBI_RUN_REAL_PROVIDER_TESTS=1` and the test is reported as skipped.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+This task closes a substrate gap rather than introducing new behavior. Low risk per file; high signal value (re-enables the real-provider eval).
+
+- **CI must remain free of network calls.** The `@real_provider` marker is the only thing that protects against accidental live calls in CI. Verify by reading the marker definition at `tests/llm/test_client.py` and confirming it gates on the env var. Do NOT introduce a new test that calls the real provider without the marker.
+- **`anthropic` SDK version compatibility.** Pin a version that supports the Claude 4-series models (`claude-sonnet-4-6`, `claude-haiku-4-5-20251001`). If the chosen version's `messages.create` signature differs from the illustrative snippet, adjust accordingly; the `AnthropicRawResponse` shape is what consumers depend on, not the SDK call shape.
+- **`build_default_client()` behavior preserved.** The function already reads `AILIBI_LLM_PROVIDER` and defaults to `FakeProvider` when unset. Changing the `build_default_meeting_runner` fallback to call `build_default_client()` does NOT change behavior in tests that leave `AILIBI_LLM_PROVIDER` unset — both `FakeProvider()` (the old default) and `build_default_client()` (the new default) produce a `FakeProvider` in that environment. Confirm by running the full test suite before opening the PR.
+- **Lazy import is non-negotiable.** If `import anthropic` is moved to module top-level, every module that imports from `llm.provider` (including `orchestrator/game.py` via the new `build_default_client` import) pulls in the SDK at module-load time. This breaks the design principle that fake-provider runs don't depend on the real SDK being installed. Pin via `## Decisions` and confirm with `python -c "import orchestrator.game"` succeeding without `anthropic` installed (i.e., with the dependency present but never actually imported at load time — verify by inspecting the lazy import is inside the function).
+- **Post-merge sanity-call verification is part of the PR description, not a CI gate.** The implementing agent runs the sanity call locally after the PR's tests pass and pastes the output verbatim (model, cost, response text) into `## Decisions`. CI cannot run this because CI does not have an API key.
+- **Cost from a single sanity call: ~$0.001.** Negligible. The `pytest.mark.real_provider` round-trip test will charge the same when opted into.
+- **`audits/*` are read-only artifacts.** Do not edit the Pre-Phase-4 real-provider eval report; this task closes the gaps it surfaces, it does not amend the record.
+
+**Ready-to-paste prompt:** `agent_prompts/task-3-14-real-provider-transport.md`
+
 ## Merge Criteria
 - 50-game eval: full-LLM games complete end-to-end using fake-provider tests in CI and real provider only in explicit local/eval runs.
 - Impostor win rate in [25%, 65%] band.

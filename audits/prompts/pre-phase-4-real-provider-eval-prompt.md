@@ -76,8 +76,50 @@ proceeding to §3.
 If any pre-flight check fails, stop and report. The verdict in §1
 of your report becomes **Pre-flight failed — eval not run.**
 
-Then run a **3-game smoke** to verify the live provider is reachable
-and produces sane output BEFORE committing to the 50-game spend:
+Then run a **direct real-provider sanity call** to verify the API key
+and live provider are reachable BEFORE any tournament-wrapped spend.
+The meeting trigger rate is only ~7–10% per game (per post-3.8 baseline
+and post-3.13 smoke), so a small tournament-based smoke would often
+fail to invoke the LLM at all — completing successfully while never
+validating that the live provider works. The direct call sidesteps
+this:
+
+```bash
+uv run python -c "
+import asyncio
+from llm.provider import build_default_client
+
+async def main():
+    client = build_default_client()
+    resp = await client.complete(
+        prompt='Respond with the single token: OK',
+        schema=None,
+        max_tokens=8,
+        temperature=0.0,
+    )
+    print(f'model={resp.model} cost_usd={resp.cost_usd:.6f} text={resp.text!r}')
+
+asyncio.run(main())
+"
+```
+
+Required sanity-call outcomes:
+
+- Command exits 0 with no exception.
+- `cost_usd` is **non-zero** (proves the live provider was actually
+  called; a `0.0` cost means `build_default_client` returned the fake
+  provider — re-check `AILIBI_LLM_PROVIDER`).
+- `text` is a sensible English response (does not need to be
+  literally "OK"; the LLM may decline / preamble — what matters is
+  that a non-empty response came back).
+- The model id in the printed line matches `AILIBI_LLM_MEETING_MODEL`.
+
+If the sanity call fails, **stop and report**. Verdict: **Pre-flight
+failed — live provider unreachable.** Do not run the smoke or the
+50-game eval.
+
+Then run a **3-game tournament smoke** to verify the tournament
+harness wraps the live provider correctly:
 
 ```bash
 uv run python scripts/run_tournament.py \
@@ -90,12 +132,23 @@ uv run python scripts/run_tournament.py \
 Read the printed summary. Required smoke outcomes:
 
 - All 3 games completed (no crashes, no `pytest`-style errors).
-- At least one game produced at least one meeting (`meeting_phase_reached > 0`
-  in the bucket counts OR meetings fired internally — check
-  `/tmp/eval-smoke/*.replay.jsonl` for `MeetingReplayEntry` rows).
-- Per-game cost from the 3-game replay is computable. If
-  `LLMCallRecord` rows exist in the replay JSONL, sum their
-  `cost_usd` per `game_id`.
+- Per-game cost computable via `compute_cost_usd` (the helper added
+  by Task 3.13):
+
+  ```python
+  from pathlib import Path
+  from orchestrator.replay import compute_cost_usd
+  for p in sorted(Path("/tmp/eval-smoke").glob("*.jsonl")):
+      if p.name.endswith(".audit.jsonl"): continue
+      print(p.name, compute_cost_usd(p))
+  ```
+
+- Meeting firing is **not** a smoke requirement. At ~7–10% trigger
+  rate per game, a 3-game smoke will often fire zero meetings —
+  that is fine. The direct sanity call above already verified the
+  live provider works; the smoke verifies the tournament wrapper
+  works. If `MeetingReplayEntry` rows do appear, note them; if not,
+  proceed.
 
 If the smoke shows any single game cost > $1.00 or any game crash,
 **stop and report**. Do not run the 50-game eval. Verdict: **Smoke
@@ -130,32 +183,57 @@ If the tournament completes normally, record the printed summary
 
 Then collect the per-game data:
 
-- **Cost analysis.** Parse `/tmp/eval-50/*.replay.jsonl` for
-  `LLMCallRecord` rows; sum `cost_usd` per `game_id`. Compute mean,
-  median, max, min, std dev. Compare each to the $0.30 target.
+- **Cost analysis.** Use `orchestrator.replay.compute_cost_usd(path)`
+  (the canonical helper added by Task 3.13 for exactly this) to
+  compute per-game cost across `/tmp/eval-50/*.replay.jsonl`
+  (excluding `*.audit.jsonl`). Compute mean, median, max, min, std
+  dev across the 50 games. Compare each to the $0.30 target. Inline
+  reduction is equivalent but the helper is the canonical contract.
+
+  ```python
+  from pathlib import Path
+  from orchestrator.replay import compute_cost_usd
+  costs = [
+      compute_cost_usd(p)
+      for p in sorted(Path("/tmp/eval-50").glob("*.jsonl"))
+      if not p.name.endswith(".audit.jsonl")
+  ]
+  ```
+
 - **Win-rate analysis.** From the tournament summary, compute
   decisive split (CREWMATES% / IMPOSTORS%). Compare to the [25%, 65%]
   band for impostor win rate.
 - **Leak scan.** Walk all 50 audit logs through
   `eval/leak_test.py::_assert_no_recursive_hidden_fields` +
   `_assert_no_role_bearing_values`. Zero violations required.
-- **Replay record completeness.** Sample 5 games (deterministic
-  selection: games at seeds 0, 12, 25, 37, 49 — assuming seed
-  ordering matches game numbering). For each, verify the replay
-  JSONL contains:
+- **Replay record completeness.** Sample the **first 5 games (lowest
+  game_id first) that contain at least one `MeetingReplayEntry`**.
+  At ~7–10% meeting trigger rate, expect roughly 4–6 games-with-
+  meetings out of 50; fewer is possible. If fewer than 5 such games
+  exist in the full 50-game eval, sample whatever is available and
+  note the partial coverage explicitly. For each sampled game,
+  verify the replay JSONL contains:
   - At least one `MeetingReplayEntry` with a populated
     `MeetingTranscript` (reports, statements, votes, result).
   - Multiple `LLMCallRecord` rows, each with `model`,
-    `prompt_version`, parsed output, and `cost_usd`.
-  - Per-game cost is reconstructable by summing `LLMCallRecord.cost_usd`.
+    `prompt_version` (at meeting level on the parent entry — see
+    Concern R-3 in `audits/audit-2026-05-25-0414-reconciled.md`),
+    parsed output, and `cost_usd`.
+  - Per-game cost is reconstructable via `compute_cost_usd(path)`.
 
 ## 4. Transcript readability protocol
 
-Sample the same 5 games (seeds 0, 12, 25, 37, 49). For each game,
-extract every `MeetingReplayEntry` from its replay JSONL and read
-the meeting transcripts (reports + statements + votes). Rate each
-sampled game on the following dimensions, scoring **Pass** /
-**Partial** / **Fail**:
+Sample the **same 5 games used in the replay-record-completeness
+check** (the first 5 games, lowest game_id first, that contain at
+least one `MeetingReplayEntry`). At ~7–10% meeting trigger rate,
+sampling 5 fixed seeds would likely land on 0–1 games with
+transcripts; adaptive sampling is necessary to make the criterion
+actually evaluable.
+
+For each sampled game, extract every `MeetingReplayEntry` from its
+replay JSONL and read the meeting transcripts (reports + statements
++ votes). Rate each sampled game on the following dimensions,
+scoring **Pass** / **Partial** / **Fail**:
 
 | Dimension | Pass criterion |
 |---|---|
@@ -167,9 +245,13 @@ sampled game on the following dimensions, scoring **Pass** /
 The pass criterion for each game: **at least 3 of 4 dimensions Pass**
 (no Fails; Partials are tolerated).
 
-The pass criterion for transcript readability overall: **at least 4
-of 5 sampled games pass**. (Allowing one sub-par game accounts for
-LLM variance and small seed-specific behaviors.)
+The pass criterion for transcript readability overall: **≥ 80% of
+sampled games pass** (e.g. 5/5, 4/5, 4/4, 3/4, 3/3 all pass; 2/3 or
+3/5 fail). At least **3 games must be sampled** for the criterion
+to be evaluable; if the 50-game eval produces fewer than 3 games
+with meetings, verdict the criterion as **Cannot evaluate** and
+recommend a longer eval run (the eval did not generate enough
+meeting data to validate transcript readability statistically).
 
 Readability is necessarily a judgment call. Document your reasoning
 per sampled game in §5 of the report. Do not pretend the assessment
@@ -211,19 +293,25 @@ Required sections:
    ([25%, 65%]). Pass / Fail.
 6. **Leak scan result.** Counts: games scanned, packets scanned,
    violations. Zero violations required.
-7. **Replay record completeness.** For each of the 5 sampled games
-   (seeds 0, 12, 25, 37, 49):
-   - `MeetingReplayEntry` present? Yes/No.
+7. **Replay record completeness.** For each of the sampled games
+   (first 5 — or fewer if < 5 exist — with `MeetingReplayEntry`
+   rows; list which game_ids / seeds were sampled and note any
+   partial-coverage caveat):
+   - `MeetingReplayEntry` present? Yes/No (all sampled should be Yes
+     by construction; if No, the sampling itself failed).
    - `LLMCallRecord` rows: count + sample shape (one row's
-     `model` + `prompt_version` + presence of `cost_usd`).
-   - Per-game cost reconstructable from records? Yes/No (matches
-     §4 mean computation?).
+     `model` + presence of `cost_usd`; `prompt_version` lives at
+     meeting-entry level per the reconciled audit's R-3 note).
+   - Per-game cost reconstructable via `compute_cost_usd(path)`?
+     Yes/No (matches §4 mean computation?).
 8. **Transcript readability.** Per-sampled-game table:
 
-   | Seed | Coherent English | Role-appropriate | Grounded | Vote justifications | Game verdict |
+   | game_id / seed | Coherent English | Role-appropriate | Grounded | Vote justifications | Game verdict |
    |---|---|---|---|---|---|
 
-   Pass / Fail on the readability criterion (≥ 4 of 5 games pass).
+   Pass / Fail on the readability criterion (≥ 80% of sampled
+   games pass, with at least 3 games sampled). If < 3 games could
+   be sampled, mark **Cannot evaluate** and note the count.
 9. **Observations.** One paragraph (≤ 200 words) noting anything
    worth flagging that is outside the merge criteria. Code-level
    defects spotted during transcript review go here, NOT in a
@@ -236,11 +324,15 @@ Required sections:
 - **Phase 3 complete** requires all five merge criteria to Pass:
   1. 50 games complete without crashes.
   2. Impostor win rate in [25%, 65%].
-  3. Mean cost / game ≤ $0.30.
-  4. ≥ 4 of 5 sampled games pass the readability rubric.
-  5. All 5 sampled replay records contain the required metadata
-     (meeting transcripts, prompt versions, LLM outputs, cost
-     metadata).
+  3. Mean cost / game ≤ $0.30 (computed via `compute_cost_usd`).
+  4. ≥ 80% of sampled games pass the readability rubric, with at
+     least 3 games sampled. If fewer than 3 games could be sampled
+     (insufficient meeting data), the criterion is **Cannot evaluate**
+     and the overall verdict is **Phase 3 blocked — eval data
+     insufficient**.
+  5. All sampled replay records contain the required metadata
+     (meeting transcripts, prompt versions at meeting level, LLM
+     outputs, cost metadata).
 - **Phase 3 blocked** if any of the five fails. The remediation
   path differs by which:
   - Cost overrun → prompt brevity / cache-key review / consider
