@@ -1418,6 +1418,237 @@ This task closes a substrate gap rather than introducing new behavior. Low risk 
 
 **Ready-to-paste prompt:** `agent_prompts/task-3-14-real-provider-transport.md`
 
+### Task 3.15 — Anthropic markdown-fence stripping + schema round-trip test
+**Branch:** `phase-3-anthropic-fence-strip`
+**Depends on:** 3.14 merged
+**Section refs:** DESIGN.md §7, DESIGN.md §10.4
+**Complexity:** Small
+
+Close the single reproducible defect surfaced by the second
+Pre-Phase-4 real-provider eval at
+`audits/audit-2026-05-25-1539-pre-phase-4-real-provider-eval.md`,
+which exited with verdict **Phase 3 blocked — eval crashed** when the
+first live meeting fired (seed 22 of 50). Confirmed live spend on the
+crashed run: $0.000105 (sanity call) plus an estimated $0.20–$0.50 of
+unrecorded in-flight charges for the ~10 concurrent crashed-meeting
+report calls. Total well under any cost gate; the crash is purely a
+code defect at the adapter boundary.
+
+**The defect:** `llm/provider.py::AnthropicClient.complete` calls
+`schema.model_validate_json(raw.text)` at line 121 directly on the
+SDK's text content. Anthropic Sonnet 4.6 (and Claude models in
+general) wraps JSON output in markdown code fences (`` ```json … ``` ``)
+by default for any structured-output text response. Pydantic rejects
+the fenced text:
+
+```
+ValidationError: Invalid JSON: expected value at line 1 column 1
+input_value='```json\n{\n  "agent_id"...}\n```'
+```
+
+The `FakeProvider` at `llm/fake_provider.py:61` hand-emits clean JSON,
+which masked the gap until the first live meeting fired. **Not a
+transient failure** — markdown fencing is the model's default and
+reproduces on every meeting-report call.
+
+This task introduces defensive fence-stripping at the Protocol-parsing
+boundary so the adapter is responsible for producing schema-validatable
+text. It does NOT migrate to Anthropic's tool-use forced-JSON mechanism
+(structurally cleaner but a larger refactor that introduces
+Anthropic-specific patterns; deferred to a separate Phase 4-or-later
+optimization task if needed).
+
+This task also adds the schema round-trip real-provider test that
+would have caught the current crash before any tournament spend.
+
+**Files in scope:**
+- llm/provider.py
+- tests/llm/test_real_provider.py
+
+**Files NOT in scope:**
+- llm/fake_provider.py
+- llm/client.py
+- llm/budget.py
+- llm/budgeted_client.py
+- llm/cache.py
+- llm/README.md
+- llm/__init__.py
+- agents/strategic/prompts/
+- agents/
+- meetings/
+- engine/
+- observation/
+- orchestrator/
+- api/
+- frontend/
+- eval/
+- scripts/
+- pyproject.toml
+- uv.lock
+- AGENTS.md
+- AGENT_IMPLEMENTATION.md
+- DESIGN.md
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- tests/agents/
+- tests/engine/
+- tests/meetings/
+- tests/observation/
+- tests/orchestrator/
+- tests/eval/
+- tests/llm/test_client.py
+- tests/llm/test_budget.py
+- tests/llm/test_budgeted_client.py
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **Defensive fence-stripping in `complete()`.** In `llm/provider.py::AnthropicClient.complete`, immediately before the existing `schema.model_validate_json(raw.text)` call at line 121 (and only when `schema is not None`), strip surrounding markdown code fences from `raw.text` if present. The stripping is permissive within bounds:
+  - Strip leading `` ```json\n`` or `` ```json `` (with or without trailing newline) or `` ```\n`` or just `` ``` `` openers — case-insensitive on the language tag.
+  - Strip a matching trailing `` ``` `` (with or without preceding whitespace / newline).
+  - Trim incidental whitespace.
+  - Do NOT attempt to handle nested fences or fenced-inside-prose patterns; if the model emits multiple fenced blocks or fences inside prose, let Pydantic fail loud as it does today — those are different defects and warrant a separate audit.
+  The implementation lives in a small private helper (e.g. `_strip_json_code_fences(text: str) -> str`) so it can be unit-tested independently. The fence-strip is provider-neutral in placement (it runs inside the Protocol's `complete()` method, not inside `_default_send`), so a future OpenAI / DeepSeek adapter that occasionally fences inherits the protection automatically.
+- [ ] **`LLMResponse.text` reflects the stripped content.** The returned `LLMResponse` carries the post-strip text — not the original fenced text. Rationale: downstream replay records (`LLMCallRecord.response_text`) should record what the schema validator saw, not what arrived from the wire. This also makes the response usable for non-schema cost/transcript analysis (the fence noise has no semantic value).
+- [ ] **Unit tests for the fence-strip helper.** `tests/llm/test_real_provider.py` (or a new helper-only test class within it) exercises the strip helper across the documented cases: (a) `` ```json\n{...}\n``` ``, (b) `` ```\n{...}\n``` ``, (c) `` ```json {...} ``` `` (no inner newlines), (d) plain `{...}` (no fences — passes through unchanged), (e) `{...}\n\n` (whitespace-only fringe — passes through unchanged), (f) text containing `` ``` `` characters but not as fences (passes through unchanged or whatever the chosen heuristic does — document the rule in `## Decisions`). These tests are NOT `@real_provider`-marked — they exercise pure string logic and must run in CI.
+- [ ] **New real-provider schema round-trip test.** `tests/llm/test_real_provider.py` adds a new `@real_provider`-marked test that asks the live Anthropic provider to emit a `ReportDocument` (the canonical schema for meeting reports — import from `meetings/schemas.py`) for a trivial fixture meeting. The test:
+  - Constructs `AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])`.
+  - Calls `await client.complete(prompt=<short fixture prompt asking for a ReportDocument>, schema=ReportDocument, max_tokens=512, temperature=0.0)`.
+  - Asserts the call returns without raising (i.e. fence stripping + Pydantic validation succeeds).
+  - Asserts `response.cost_usd > 0` and the parsed text validates as a `ReportDocument` via a follow-up `ReportDocument.model_validate_json(response.text)` call.
+  - The test is skipped in CI by default via the existing `@real_provider` marker keyed on `AILIBI_RUN_REAL_PROVIDER_TESTS=1` (per [tests/llm/test_client.py](tests/llm/test_client.py)).
+  - The fixture prompt is short (≤ 200 tokens input) to keep the test cost ≤ $0.01 per run.
+- [ ] **Post-merge local verification.** Before opening the PR, the implementing agent runs (with `AILIBI_LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` set in the shell session):
+  - The eval prompt's direct sanity call (must still pass; this is a smoke for Task 3.14's transport).
+  - `AILIBI_RUN_REAL_PROVIDER_TESTS=1 uv run pytest tests/llm/test_real_provider.py -v` (must pass; the new schema round-trip test exercises the fix).
+  Paste the verbatim outputs into `## Decisions`. API key prefix only (8 chars), never the full key.
+- [ ] No imports from `engine/` under `agents/`, `llm/`, or `meetings/` (firewall preserved). `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes (with `tests/llm/test_real_provider.py` real-provider tests skipped by default; the fence-strip unit tests run in CI).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run mypy --strict agents observation orchestrator engine llm meetings` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+The fence-strip helper is a small private function. A robust shape:
+
+```python
+# llm/provider.py — illustrative; pick exact names consistent with the file
+
+_FENCE_OPEN_PATTERN = re.compile(r"^\s*```(?:json|JSON)?\s*\n?", re.IGNORECASE)
+_FENCE_CLOSE_PATTERN = re.compile(r"\n?\s*```\s*$")
+
+
+def _strip_json_code_fences(text: str) -> str:
+    """Strip surrounding markdown code fences from an LLM JSON response.
+
+    Anthropic models (Claude Sonnet 4.6, etc.) wrap JSON in
+    ``` ```json … ``` ``` fences by default. This helper removes them so
+    downstream ``model_validate_json`` sees clean JSON. Provider-neutral
+    by placement: OpenAI / DeepSeek adapters that occasionally fence
+    inherit the protection automatically.
+
+    Conservative: only strips when BOTH an open fence (with or without
+    a ``json`` language tag) and a matching close fence are present.
+    Text with no fences passes through unchanged. Multi-fence and
+    fence-inside-prose cases are out of scope — they are different
+    defects and will surface as Pydantic validation errors.
+    """
+    open_match = _FENCE_OPEN_PATTERN.match(text)
+    if open_match is None:
+        return text
+    close_match = _FENCE_CLOSE_PATTERN.search(text[open_match.end():])
+    if close_match is None:
+        # Open fence without a matching close — let Pydantic fail loud.
+        return text
+    stripped = text[open_match.end() : open_match.end() + close_match.start()]
+    return stripped.strip()
+```
+
+Then in `complete()`:
+
+```python
+raw = await self._send(...)
+text = _strip_json_code_fences(raw.text) if schema is not None else raw.text
+if schema is not None:
+    schema.model_validate_json(text)
+return LLMResponse(
+    text=text,  # ← post-strip; replay records the validatable form
+    usage=TokenUsage(...),
+    cost_usd=_compute_cost_usd(...),
+    model=raw.model,
+)
+```
+
+For the new real-provider schema round-trip test, model on the existing
+single-call test in `tests/llm/test_real_provider.py`:
+
+```python
+# tests/llm/test_real_provider.py — illustrative
+import os
+import pytest
+from llm.provider import AnthropicClient
+from meetings.schemas import ReportDocument
+from tests.llm.test_client import real_provider
+
+
+class TestAnthropicSchemaRoundTrip:
+    @real_provider
+    @pytest.mark.asyncio
+    async def test_report_document_schema_validates_against_live_provider(
+        self,
+    ) -> None:
+        """If the live provider's structured output cannot be parsed
+        as the schema requested, the meeting flow will crash at the
+        first report. This test would have caught the 2026-05-25-1539
+        eval crash before any tournament spend.
+        """
+        api_key = os.environ["ANTHROPIC_API_KEY"]
+        client = AnthropicClient(api_key=api_key)
+        prompt = (
+            "You are p-1, a CREWMATE in a social-deduction game. "
+            "Emit a ReportDocument JSON object with fields agent_id "
+            "(\"p-1\"), tick (5), and a single observation_claim. "
+            "Output ONLY the JSON object."
+        )
+        response = await client.complete(
+            prompt=prompt,
+            schema=ReportDocument,
+            max_tokens=512,
+            temperature=0.0,
+        )
+        assert response.cost_usd > 0.0
+        # The adapter has already validated via model_validate_json; this
+        # round-trip is a belt-and-suspenders check that the returned
+        # text reflects the post-strip form.
+        doc = ReportDocument.model_validate_json(response.text)
+        assert doc.agent_id == "p-1"
+```
+
+Note: the prompt's text is intentionally explicit about emitting only JSON, but the test does NOT rely on instruction-following to avoid fences — the fence-strip is the defense. The test verifies that EVEN IF the model returns fenced JSON (which it usually does), the adapter parses it correctly.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+This is a focused adapter-layer fix. Low risk.
+
+- **Behavior change is observable in `LLMResponse.text`.** Pre-fix, the stored text included the markdown fences (when the model fenced). Post-fix, it doesn't. Replay records (`LLMCallRecord.response_text`) for `schema is not None` calls now carry post-strip text. This is the desired contract: replay should record what the schema saw. Existing fake-provider tests are unaffected because `FakeProvider` never emits fences. If any downstream consumer depends on the fences being present in `LLMResponse.text` (none does today; verify with `grep -rn "response_text.*```" tests/`), surface in `## Decisions`.
+- **Determinism preserved.** The fence-strip is a pure string transformation — same input always produces same output. The fake-provider path is unaffected.
+- **Cross-provider portability.** The strip lives in `complete()` (the Protocol-implementing method), not in `_default_send`. A future OpenAI / DeepSeek adapter that fences gets the protection for free. If a future adapter has a meaningfully different fence dialect, the helper accepts case-insensitive language tags and tolerates whitespace variation; if more dialects emerge, the helper grows additional patterns rather than each adapter rolling its own.
+- **Tool-use migration deferred.** Anthropic's `messages.create(tools=[...])` forced-JSON mechanism would structurally eliminate the fence problem rather than papering over it. Out of scope here. A future task may revisit if the fence-strip turns out to be insufficient under stress (e.g. Sonnet emits nested fences or fences inside prose).
+- **Cost.** The new `@real_provider` schema round-trip test charges ~$0.005–$0.01 per opt-in invocation (a short prompt + short structured response). Negligible. CI never runs it.
+- **`audits/*` are read-only artifacts.** Do not edit the eval report; this task addresses its finding, it does not amend the record.
+
+**Ready-to-paste prompt:** `agent_prompts/task-3-15-anthropic-fence-strip.md`
+
 ## Merge Criteria
 - 50-game eval: full-LLM games complete end-to-end using fake-provider tests in CI and real provider only in explicit local/eval runs.
 - Impostor win rate in [25%, 65%] band.
