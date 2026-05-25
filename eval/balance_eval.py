@@ -106,6 +106,18 @@ def run_balance_eval(
     cap is enforced at call time. A new runner + budget is constructed
     per game so the budget resets and the per-game recording state is
     not shared across the tournament.
+
+    Because the runner is always wired, a custom ``agent_factory`` must
+    yield agents that satisfy the
+    :class:`~orchestrator.game.MeetingAwareAgent` protocol whenever a
+    seed can reach a meeting; the default factory
+    (:func:`orchestrator.game.build_default_agent_factory`) does. A
+    non-MeetingAware factory only stays valid for sweeps whose tick
+    budget is too small to trigger any meeting (e.g. the wait-agent
+    unit tests). If such a factory is paired with a budget large enough
+    to open a meeting, participant construction raises ``TypeError``
+    fail-loud rather than silently degrading (AGENTS.md "no silent
+    fallbacks").
     """
 
     if not seeds:
