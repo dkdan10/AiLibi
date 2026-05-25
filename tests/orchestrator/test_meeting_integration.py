@@ -36,6 +36,7 @@ from pydantic import BaseModel, TypeAdapter
 
 from engine.entities import BodyState, PlayerId, PlayerState, Role
 from engine.world import Map, WorldState, load_canonical_map
+from llm.budget import GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
 from meetings.manager import MeetingDeadlines, MeetingTrigger, SuspicionEntry
 from meetings.schemas import (
@@ -55,8 +56,13 @@ from orchestrator.game import (
     MeetingArtifacts,
     apply_meeting_result,
     build_default_agent_factory,
+    build_default_meeting_runner,
 )
-from orchestrator.replay import MeetingReplayEntry, read_all_entries
+from orchestrator.replay import (
+    MeetingReplayEntry,
+    read_all_entries,
+    read_meeting_entries,
+)
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
 
@@ -1331,3 +1337,76 @@ class TestMeetingTriggerExtraction:
         trigger = observed_triggers[0]
         assert trigger.triggered_by == "p-1"
         assert "emergency" in trigger.description.lower()
+
+
+class TestPublicCliMeetingWireUp:
+    """R-1 / R-5 regression: meetings fire from the public CLI factory path.
+
+    Pins that a :class:`HeadlessGame` constructed exactly the way
+    :mod:`scripts.run_game` constructs it -- the default tactical agent
+    factory plus a :func:`build_default_meeting_runner` wrapping the
+    canonical :class:`llm.fake_provider.FakeProvider` and a per-game
+    :class:`GameBudget` -- runs an LLM-driven meeting end-to-end and
+    resumes the game. This is the gap the Pre-Phase-4 audit flagged as
+    R-1: before Task 3.13 the public path constructed ``HeadlessGame``
+    with no ``meeting_runner`` and every game stalled at
+    ``MEETING_PHASE_REACHED`` (``meeting_entries=0`` across a 100-game
+    reconstruction). The R-5 closure is folded in for free: this routes
+    the full ``HeadlessGame`` + ``DefaultMeetingRunner`` +
+    ``MeetingManager`` path through the canonical ``FakeProvider`` rather
+    than an inline stub.
+    """
+
+    # Seed whose default-agent game fires a body-report meeting (~tick 7)
+    # under the canonical map. Used by the budget-cap regression in
+    # tests/llm/test_budgeted_client.py too.
+    _MEETING_SEED = 22
+
+    def test_meetings_fire_and_game_resumes_from_public_factory_path(
+        self, tmp_path: Path
+    ) -> None:
+        replay_path = tmp_path / "public-cli.jsonl"
+        # Mirror scripts/run_game.py: default agents + FakeProvider-backed
+        # runner + a fresh per-game GameBudget. No inline LLM stub.
+        game = HeadlessGame(
+            seed=self._MEETING_SEED,
+            game_map=load_canonical_map(),
+            agent_factory=build_default_agent_factory(),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=40),
+            meeting_runner=build_default_meeting_runner(budget=GameBudget()),
+        )
+
+        result = game.run()
+
+        # (b) the game resumed past the meeting and reached a real
+        # terminal state -- never the engine-only opt-out outcome.
+        assert result.outcome != "MEETING_PHASE_REACHED"
+        # (a) at least one meeting actually ran and was recorded. A
+        # reverted wire-up (meeting_runner=None) would stall at
+        # MEETING_PHASE_REACHED and write zero meeting entries, failing
+        # both assertions.
+        meeting_entries = read_meeting_entries(replay_path)
+        assert len(meeting_entries) >= 1
+
+    def test_no_runner_still_reaches_meeting_phase_opt_out(
+        self, tmp_path: Path
+    ) -> None:
+        """Counterpart: the same seed with meeting_runner=None (the Phase 2
+        byte-identity opt-out) stalls at MEETING_PHASE_REACHED and writes
+        no meeting entry. This is what the public path looked like before
+        Task 3.13 and is the assertion the wire-up regression flips."""
+
+        replay_path = tmp_path / "no-runner.jsonl"
+        game = HeadlessGame(
+            seed=self._MEETING_SEED,
+            game_map=load_canonical_map(),
+            agent_factory=build_default_agent_factory(),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=40),
+        )
+
+        result = game.run()
+
+        assert result.outcome == "MEETING_PHASE_REACHED"
+        assert read_meeting_entries(replay_path) == ()

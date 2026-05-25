@@ -6,13 +6,22 @@ its own tick loop. :func:`run_balance_eval` runs one game per seed and
 returns a :class:`BalanceReport` whose buckets account for every outcome
 :data:`orchestrator.game.Outcome` can produce.
 
-``TICK_BUDGET_REACHED`` and ``MEETING_PHASE_REACHED`` are first-class
-fields alongside the decisive ``CREWMATES`` / ``IMPOSTORS`` totals: a
-non-decisive outcome must never be silently dropped or coerced into a
-decisive bucket. The Phase 2 merge criteria say "both decisive sides win
-> 20% of decisive games"; consumers can compute that ratio from
-``crew_wins`` / ``impostor_wins`` without touching the non-decisive
-buckets.
+``TICK_BUDGET_REACHED`` is a first-class field alongside the decisive
+``CREWMATES`` / ``IMPOSTORS`` totals: a non-decisive outcome must never be
+silently dropped or coerced into a decisive bucket. The Phase 2 merge
+criteria say "both decisive sides win > 20% of decisive games"; consumers
+can compute that ratio from ``crew_wins`` / ``impostor_wins`` without
+touching the non-decisive buckets.
+
+``MEETING_PHASE_REACHED`` is **not** a bucket here. Task 3.13 made the
+meeting runner the production default (every game runs through a
+:func:`orchestrator.game.build_default_meeting_runner`), so the public
+tournament path always resumes after a meeting and can never end at
+``MEETING_PHASE_REACHED``. That outcome is the engine-only opt-out for
+Phase 2 byte-identity tests; if a public tournament game ever produces
+it, the runner wire-up has regressed and :func:`run_balance_eval` raises
+fail-loud rather than silently bucketing it (AGENTS.md "no silent
+fallbacks").
 """
 
 from __future__ import annotations
@@ -23,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from engine.world import Map, load_canonical_map
+from llm.budget import GameBudget
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
@@ -31,6 +41,7 @@ from orchestrator.game import (
     HeadlessGame,
     Outcome,
     build_default_agent_factory,
+    build_default_meeting_runner,
 )
 from orchestrator.scheduler import TickScheduler
 
@@ -39,31 +50,26 @@ from orchestrator.scheduler import TickScheduler
 class BalanceReport:
     """Aggregated outcomes for one tournament run.
 
-    ``games == crew_wins + impostor_wins + tick_budget_reached +
-    meeting_phase_reached``. The constructor verifies this invariant so a
-    bucket can never be silently dropped.
+    ``games == crew_wins + impostor_wins + tick_budget_reached``. The
+    constructor verifies this invariant so a bucket can never be silently
+    dropped. There is no ``meeting_phase_reached`` bucket: meetings fire
+    end-to-end from the public tournament path (Task 3.13), so every game
+    is decisive or hits the tick budget.
     """
 
     games: int
     crew_wins: int
     impostor_wins: int
     tick_budget_reached: int
-    meeting_phase_reached: int
     seeds_used: tuple[int, ...]
 
     def __post_init__(self) -> None:
-        bucket_total = (
-            self.crew_wins
-            + self.impostor_wins
-            + self.tick_budget_reached
-            + self.meeting_phase_reached
-        )
+        bucket_total = self.crew_wins + self.impostor_wins + self.tick_budget_reached
         if bucket_total != self.games:
             raise ValueError(
                 "BalanceReport bucket totals must sum to games: "
                 f"crew={self.crew_wins} impostors={self.impostor_wins} "
-                f"tick_budget={self.tick_budget_reached} "
-                f"meeting={self.meeting_phase_reached} != games={self.games}"
+                f"tick_budget={self.tick_budget_reached} != games={self.games}"
             )
         if self.games != len(self.seeds_used):
             raise ValueError(
@@ -91,6 +97,15 @@ def run_balance_eval(
     ``agent_factory`` default to :func:`engine.world.load_canonical_map`
     and :func:`orchestrator.game.build_default_agent_factory` so the
     common case is a one-line call.
+
+    Each game runs through a fresh meeting runner and a fresh
+    :class:`llm.budget.GameBudget` built by
+    :func:`orchestrator.game.build_default_meeting_runner` (Task 3.13):
+    meetings fire end-to-end via the canonical
+    :class:`llm.fake_provider.FakeProvider`, and the ``<= $0.30/game``
+    cap is enforced at call time. A new runner + budget is constructed
+    per game so the budget resets and the per-game recording state is
+    not shared across the tournament.
     """
 
     if not seeds:
@@ -117,8 +132,15 @@ def run_balance_eval(
             num_players=num_players,
             num_impostors=num_impostors,
             scheduler=TickScheduler(max_ticks=max_ticks),
+            meeting_runner=build_default_meeting_runner(budget=GameBudget()),
         )
         result = game.run()
+        if result.outcome == "MEETING_PHASE_REACHED":
+            raise RuntimeError(
+                f"seed {seed} ended at MEETING_PHASE_REACHED; the public "
+                "tournament path always wires a meeting runner, so this "
+                "outcome indicates the Task 3.13 runner wire-up regressed"
+            )
         counter[result.outcome] += 1
 
     return BalanceReport(
@@ -126,7 +148,6 @@ def run_balance_eval(
         crew_wins=counter["CREWMATES"],
         impostor_wins=counter["IMPOSTORS"],
         tick_budget_reached=counter["TICK_BUDGET_REACHED"],
-        meeting_phase_reached=counter["MEETING_PHASE_REACHED"],
         seeds_used=seeds_tuple,
     )
 

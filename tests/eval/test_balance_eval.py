@@ -13,10 +13,15 @@ from agents.base import AgentInterface
 from engine.entities import PlayerId, Role
 from engine.world import load_canonical_map
 from eval.balance_eval import BalanceReport, run_balance_eval
+from llm.budget import GameBudget
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
-from orchestrator.game import HeadlessGame, build_default_agent_factory
+from orchestrator.game import (
+    HeadlessGame,
+    build_default_agent_factory,
+    build_default_meeting_runner,
+)
 from orchestrator.scheduler import TickScheduler
 
 _INTENT_ADAPTER: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
@@ -141,12 +146,7 @@ def test_run_balance_eval_bucket_totals_match_games(tmp_path: Path) -> None:
         max_ticks=3,
     )
 
-    bucket_total = (
-        report.crew_wins
-        + report.impostor_wins
-        + report.tick_budget_reached
-        + report.meeting_phase_reached
-    )
+    bucket_total = report.crew_wins + report.impostor_wins + report.tick_budget_reached
     assert bucket_total == report.games == len(seeds)
 
 
@@ -168,7 +168,6 @@ def test_run_balance_eval_classifies_tick_budget_reached(tmp_path: Path) -> None
     assert report.tick_budget_reached == 2
     assert report.crew_wins == 0
     assert report.impostor_wins == 0
-    assert report.meeting_phase_reached == 0
 
 
 def test_run_balance_eval_writes_one_replay_per_seed(tmp_path: Path) -> None:
@@ -202,7 +201,6 @@ def test_balance_report_rejects_inconsistent_bucket_sum() -> None:
             crew_wins=3,
             impostor_wins=3,
             tick_budget_reached=3,
-            meeting_phase_reached=0,
             seeds_used=tuple(range(10)),
         )
 
@@ -214,7 +212,6 @@ def test_balance_report_rejects_seeds_length_mismatch() -> None:
             crew_wins=1,
             impostor_wins=1,
             tick_budget_reached=1,
-            meeting_phase_reached=0,
             seeds_used=(0, 1),
         )
 
@@ -306,11 +303,12 @@ def test_run_balance_eval_reuses_headless_game_outcomes(tmp_path: Path) -> None:
     game loop" requirement at runtime.
     """
 
-    from orchestrator.game import HeadlessGame
-    from orchestrator.scheduler import TickScheduler
-
     seed = 4
     direct_path = tmp_path / "direct.jsonl"
+    # Mirror run_balance_eval's per-game wiring exactly: a fresh
+    # FakeProvider-backed runner + per-game GameBudget. Without this the
+    # direct game would lack a meeting runner and could diverge from the
+    # tournament outcome on any seed that fires a meeting.
     direct_game = HeadlessGame(
         seed=seed,
         game_map=load_canonical_map(),
@@ -319,6 +317,7 @@ def test_run_balance_eval_reuses_headless_game_outcomes(tmp_path: Path) -> None:
         num_players=4,
         num_impostors=1,
         scheduler=TickScheduler(max_ticks=10),
+        meeting_runner=build_default_meeting_runner(budget=GameBudget()),
     )
     direct_result = direct_game.run()
 
@@ -333,7 +332,6 @@ def test_run_balance_eval_reuses_headless_game_outcomes(tmp_path: Path) -> None:
         "CREWMATES": report.crew_wins,
         "IMPOSTORS": report.impostor_wins,
         "TICK_BUDGET_REACHED": report.tick_budget_reached,
-        "MEETING_PHASE_REACHED": report.meeting_phase_reached,
     }
     assert expected_counts[direct_result.outcome] == 1
 

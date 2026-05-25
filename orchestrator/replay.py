@@ -226,6 +226,33 @@ def read_meeting_entries(path: Path) -> tuple[MeetingReplayEntry, ...]:
     )
 
 
+def compute_cost_usd(path: Path) -> float:
+    """Sum LLM cost (USD) across every meeting in a replay log (DESIGN.md §11.4).
+
+    Walks the ``kind == "meeting"`` records via :func:`read_meeting_entries`
+    and sums :attr:`LLMCallRecord.cost_usd` over every captured call. This
+    is the canonical per-game cost reduction: future eval code (including
+    the real-provider 50-game eval that checks the ``<= $0.30`` merge
+    criterion) consumes it rather than re-deriving the sum inline, so the
+    "only meeting records carry cost" detail lives in one place.
+
+    Returns ``0.0`` for replay logs with no meeting entries (e.g. games
+    that ended before any meeting fired) and for meetings whose
+    ``llm_calls`` list is empty. The sum is seeded with a float so the
+    return value is always a finite, non-negative float (fake-provider
+    runs report ``cost_usd == 0.0`` per call).
+    """
+
+    return sum(
+        (
+            call.cost_usd
+            for entry in read_meeting_entries(path)
+            for call in entry.llm_calls
+        ),
+        0.0,
+    )
+
+
 def read_all_entries(path: Path) -> tuple[ReplayLogEntry, ...]:
     """Read every replay record (tick + meeting) from the JSONL file."""
 
@@ -322,6 +349,7 @@ __all__ = [
     "ReplayEntry",
     "ReplayLog",
     "ReplayLogEntry",
+    "compute_cost_usd",
     "read_all_entries",
     "read_meeting_entries",
     "read_replay_entries",

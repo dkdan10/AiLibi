@@ -24,15 +24,24 @@ import asyncio
 import inspect
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TypeVar
 
 import pytest
 from pydantic import BaseModel
 
+from engine.world import load_canonical_map
 from llm.budget import BudgetExceededError, GameBudget
 from llm.budgeted_client import BudgetedLLMClient
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
+from orchestrator.game import (
+    HeadlessGame,
+    build_default_agent_factory,
+    build_default_meeting_runner,
+)
+from orchestrator.replay import read_meeting_entries
+from orchestrator.scheduler import TickScheduler
 
 _T = TypeVar("_T")
 
@@ -795,3 +804,117 @@ class TestProviderAwaitNotSerialized:
         assert adapter._in_flight_cost_usd == 0.0  # noqa: SLF001
         assert adapter._in_flight_input_tokens == 0  # noqa: SLF001
         assert adapter._in_flight_output_tokens == 0  # noqa: SLF001
+
+
+@dataclass
+class _CountingProvider:
+    """Spy that forwards to the canonical :class:`FakeProvider`.
+
+    Counts how many times the inner provider is actually invoked so the
+    production-wire-up budget test can assert pre-flight rejects a doomed
+    meeting *before* any provider call. Delegates to the real
+    :class:`FakeProvider` so a call that does slip through still returns
+    schema-valid meeting output rather than a hand-rolled stub.
+    """
+
+    _inner: FakeProvider = field(default_factory=FakeProvider)
+    calls: int = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+    ) -> LLMResponse:
+        self.calls += 1
+        return await self._inner.complete(
+            prompt=prompt,
+            schema=schema,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            call_kind=call_kind,
+            model=model,
+        )
+
+
+class TestProductionWireUpBudgetCap:
+    """R-2 regression: the budget cap propagates from the production wire-up.
+
+    Builds the exact path :mod:`scripts.run_game` uses --
+    :func:`orchestrator.game.build_default_meeting_runner` with a
+    per-game :class:`GameBudget` wrapping the canonical
+    :class:`FakeProvider`, the default tactical agent factory, and a
+    :class:`HeadlessGame` -- with a tight per-game cap and a seed whose
+    default agents fire a body-report meeting early. The decisive pins:
+    :class:`BudgetExceededError` propagates out of the run-meeting flow
+    (not silent truncation), the inner provider is never called
+    (pre-flight rejects before any spend), and no meeting record is
+    persisted.
+
+    The test fails against any wire-up that constructs ``MeetingManager``
+    without the :class:`BudgetedLLMClient` wrap: without it the
+    ``FakeProvider`` (``cost_usd == 0.0``) never trips the cap and the
+    game runs to completion instead of raising.
+    """
+
+    # Seed whose default-agent game fires a body-report meeting around
+    # tick 7 (mirrors the meeting-fires regression in
+    # tests/orchestrator/test_meeting_integration.py). The meeting's
+    # first report pre-flight is where the tight cap trips.
+    _MEETING_SEED = 22
+
+    def test_tight_cap_propagates_budget_exceeded_from_run_meeting(
+        self, tmp_path: Path
+    ) -> None:
+        spy = _CountingProvider()
+        # $0.01 is below a single report call's pre-flight estimate
+        # (max_tokens=1024 output at the conservative default rate), so
+        # the first report in the meeting trips the cap.
+        runner = build_default_meeting_runner(
+            llm_client=spy,
+            budget=GameBudget(max_cost_usd=0.01),
+        )
+        replay_path = tmp_path / "tight-cap.jsonl"
+        game = HeadlessGame(
+            seed=self._MEETING_SEED,
+            game_map=load_canonical_map(),
+            agent_factory=build_default_agent_factory(),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=40),
+            meeting_runner=runner,
+        )
+
+        with pytest.raises(BudgetExceededError) as excinfo:
+            game.run()
+
+        assert excinfo.value.dimension == "cost_usd"
+        # Pre-flight rejected before the provider was ever called: no
+        # silent partial spend, no "rejected after N calls".
+        assert spy.calls == 0
+        # The meeting never resolved, so no meeting record was persisted.
+        assert read_meeting_entries(replay_path) == ()
+
+    def test_default_cap_admits_fake_provider_meeting(self, tmp_path: Path) -> None:
+        """Control: the production $0.30 default cap does NOT trip on a
+        fake-provider meeting, so a tight-cap raise is attributable to the
+        cap and not to the wire-up being broken."""
+
+        runner = build_default_meeting_runner(budget=GameBudget())
+        replay_path = tmp_path / "default-cap.jsonl"
+        game = HeadlessGame(
+            seed=self._MEETING_SEED,
+            game_map=load_canonical_map(),
+            agent_factory=build_default_agent_factory(),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=40),
+            meeting_runner=runner,
+        )
+
+        result = game.run()
+
+        assert result.outcome != "MEETING_PHASE_REACHED"
+        assert len(read_meeting_entries(replay_path)) >= 1

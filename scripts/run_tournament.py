@@ -74,7 +74,6 @@ def _format_report(report: BalanceReport) -> str:
         f"crew_wins:            {report.crew_wins}",
         f"impostor_wins:        {report.impostor_wins}",
         f"tick_budget_reached:  {report.tick_budget_reached}",
-        f"meeting_phase_reached:{report.meeting_phase_reached}",
     ]
     decisive = report.crew_wins + report.impostor_wins
     if decisive > 0:
