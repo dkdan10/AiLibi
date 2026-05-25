@@ -93,11 +93,21 @@ meeting tick, so do not try to derive those values from it.
   will override the value you emit; emit any non-empty string.
 - `tick`: the meeting tick. The reasoner already knows this and will
   override the value you emit; emit any integer.
-- `observations`: a JSON array of `saw_player` / `completed_task` /
-  `found_body` claims, each tagged with its own `tick`. Every
-  observation must be derivable from the rendered memory view.
-- `claims`: a JSON array of `alibi` / `accusation` / `corroboration`
-  claims. At least one `alibi` for yourself is expected.
+- `observations`: a JSON array of first-hand observations, each tagged
+  with its own `tick`. Each entry is one of the discriminated-union
+  variants below; use the `type` string and the field names exactly as
+  shown (do not rename them):
+    - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
+    - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
+    - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
+  Every observation must be derivable from the rendered memory view.
+- `claims`: a JSON array of higher-level claims. Each entry is one of;
+  use the field names exactly as shown (do not rename them):
+    - `{"type": "alibi", "subject": "<player_id>", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short evidence ref>", ...]}`
+      (use chronological ticks: `from_tick <= to_tick`).
+    - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0..1.0>, "reason": "<short reason>"}`
+    - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`
+  At least one `alibi` for yourself is expected.
 - `free_text`: one or two sentences of natural-language argument.
 
 Output the JSON object and nothing else.

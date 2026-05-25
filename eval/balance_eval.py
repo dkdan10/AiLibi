@@ -101,11 +101,13 @@ def run_balance_eval(
     Each game runs through a fresh meeting runner and a fresh
     :class:`llm.budget.GameBudget` built by
     :func:`orchestrator.game.build_default_meeting_runner` (Task 3.13):
-    meetings fire end-to-end via the canonical
-    :class:`llm.fake_provider.FakeProvider`, and the ``<= $0.30/game``
-    cap is enforced at call time. A new runner + budget is constructed
-    per game so the budget resets and the per-game recording state is
-    not shared across the tournament.
+    meetings fire end-to-end and the per-game cost cap is enforced at
+    call time. The cap is raised to ``$1.00`` here as a safety stop for
+    live-provider meeting traffic (the ``GameBudget`` default stays
+    ``$0.30``); the Phase 3 merge gate is mean cost ``<= $0.30/game``
+    across 50 games, not the per-game cap (Task 3.16). A new runner +
+    budget is constructed per game so the budget resets and the per-game
+    recording state is not shared across the tournament.
 
     Because the runner is always wired, a custom ``agent_factory`` must
     yield agents that satisfy the
@@ -144,7 +146,9 @@ def run_balance_eval(
             num_players=num_players,
             num_impostors=num_impostors,
             scheduler=TickScheduler(max_ticks=max_ticks),
-            meeting_runner=build_default_meeting_runner(budget=GameBudget()),
+            meeting_runner=build_default_meeting_runner(
+                budget=GameBudget(max_cost_usd=1.00)
+            ),
         )
         result = game.run()
         if result.outcome == "MEETING_PHASE_REACHED":
