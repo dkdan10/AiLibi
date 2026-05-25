@@ -1921,6 +1921,267 @@ This task closes a defect class that was structurally invisible to fake-provider
 
 **Ready-to-paste prompt:** `agent_prompts/task-3-16-prompt-schema-alignment.md`
 
+### Task 3.17 — Meeting-report max_tokens raise + unclosed-fence strip
+**Branch:** `phase-3-truncation-fence-handling`
+**Depends on:** 3.16 merged
+**Section refs:** DESIGN.md §7, DESIGN.md §10.4
+**Complexity:** Small
+
+Close the defect surfaced by the fourth Pre-Phase-4 real-provider eval
+at `audits/audit-2026-05-25-2138-pre-phase-4-real-provider-eval.md`,
+which exited with verdict **Phase 3 blocked — tournament crashed** when
+the first live meeting fired (seed 23 of 50). Confirmed live spend on
+the crashed run: ~$0.0001 (sanity call) + 1 truncated meeting call
+(~$0.02–$0.05 estimated, never returned). The eval pre-flight, smoke,
+and the 23 pre-meeting games all completed cleanly; the crash is in a
+narrow new defect class that prior tasks did not surface.
+
+**The defect — truncation produces an unclosed markdown fence.** Live
+Anthropic Sonnet 4.6 emits a `ReportDocument` that:
+1. Opens with `` ```json\n `` (the documented markdown-fenced shape).
+2. Contains a JSON body.
+3. Gets truncated at `DEFAULT_REPORT_MAX_TOKENS=1024` mid-output (the
+   audit's stack-trace input value ends mid-prose with `"…of p-2 after"`).
+4. Never emits the closing `` ``` `` fence.
+
+Task 3.15's `_strip_json_code_fences` is intentionally conservative —
+it strips only when BOTH an opening AND a closing fence are present at
+string edges (`^\s*```(?:json)?\s*` matched, `\s*```\s*$` matched). The
+unclosed-open case falls through unchanged; `model_validate_json` then
+fails with `Invalid JSON: expected value at line 1 column 1` on the
+leading backtick.
+
+This task closes two compounding root causes:
+
+- **`report_max_tokens=1024` is too tight** for typical Sonnet 4.6
+  meeting-report outputs (observed: the model had time for opener +
+  several observations + multiple claims + the start of another
+  sentence before truncating). Raising to **2048** doubles the
+  headroom while staying comfortably under Task 3.16's $1.00 per-game
+  budget cap (2048 output tokens × $15/Mtok = $0.031/call cap;
+  ~20 calls/meeting = up to $0.62/meeting at the new cap; empirically
+  meetings won't approach the cap because the model stops when it's
+  done).
+- **`_strip_json_code_fences` is too conservative** for the
+  truncated-response case. Even after raising max_tokens, a future
+  longer report could still hit the cap; the stripper should
+  defensively strip an unmatched-open fence so the failure mode is
+  "JSON incomplete — Pydantic ValidationError on missing fields" (a
+  clear, actionable signal) rather than "Invalid JSON at column 1
+  because of a leading backtick" (a misleading symptom).
+
+**Out of scope** (explicit decisions deferred):
+
+- **`DEFAULT_STATEMENT_MAX_TOKENS=512` and `DEFAULT_VOTE_MAX_TOKENS=384`
+  stay at their current values.** The audit's evidence is for report
+  truncation only; statement and vote outputs are inherently smaller
+  schemas. The unclosed-fence strip below provides the defense-in-depth
+  if either ever truncates in a future eval. If a future eval surfaces
+  truncation on statement or vote, raise those constants in a follow-up
+  task.
+- **Permissive trailing-partial-fence stripping** (e.g. trimming a
+  trailing `` `` `` or `` ` ``) is NOT in scope. Risk of stripping
+  legitimate content. The Pydantic error from a truly-truncated
+  response (`Field required`, etc.) is the right failure mode.
+- **Migration to Anthropic's tool-use forced-JSON mechanism** (which
+  would structurally eliminate the fence class entirely) is deferred to
+  a Phase 4-or-later optimization task. Larger refactor of
+  `_default_send`; introduces Anthropic-specific patterns that don't
+  translate cleanly to OpenAI/DeepSeek. Revisit only if the
+  fence-class keeps recurring after 3.17.
+
+**Files in scope:**
+- meetings/manager.py
+- llm/provider.py
+- tests/llm/test_real_provider.py
+
+**Files NOT in scope:**
+- meetings/schemas.py
+- meetings/transcript.py
+- meetings/voting.py
+- meetings/__init__.py
+- llm/client.py
+- llm/budget.py
+- llm/budgeted_client.py
+- llm/cache.py
+- llm/fake_provider.py
+- llm/README.md
+- llm/__init__.py
+- agents/strategic/prompts/
+- agents/strategic/reasoner.py
+- agents/strategic/output_schemas.py
+- agents/
+- engine/
+- observation/
+- orchestrator/
+- api/
+- frontend/
+- eval/
+- scripts/
+- AGENTS.md
+- AGENT_IMPLEMENTATION.md
+- DESIGN.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- tests/agents/
+- tests/engine/
+- tests/meetings/
+- tests/observation/
+- tests/orchestrator/
+- tests/eval/
+- tests/llm/test_client.py
+- tests/llm/test_budget.py
+- tests/llm/test_budgeted_client.py
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **`DEFAULT_REPORT_MAX_TOKENS` raised from 1024 to 2048** at `meetings/manager.py:73`. The other two constants (`DEFAULT_STATEMENT_MAX_TOKENS=512` at line 75, `DEFAULT_VOTE_MAX_TOKENS=384` at line 77) are NOT changed — the audit's evidence is for report truncation only, and statement / vote outputs are inherently smaller. Document the unchanged constants in `## Decisions` with a one-sentence rationale referencing the audit.
+- [ ] **`_strip_json_code_fences` strips unmatched-open fences.** At `llm/provider.py:211-234`, extend the helper so that when an opening fence is found (`_FENCE_OPEN_PATTERN` matches) but no matching closing fence is present, the opening fence is still stripped and the remainder of the text is returned trimmed. The behavior matrix becomes:
+  - Both opening and closing fences present → strip both (current behavior; unchanged).
+  - Only opening fence present (truncated response) → strip opener; return remainder trimmed.
+  - Only closing fence present (extremely unusual; not observed) → return text unchanged (no opener to strip; passing through is safe).
+  - No fences present → return text unchanged (current behavior; unchanged).
+  - Empty / whitespace-only text → return unchanged (current behavior; unchanged).
+  The strict variant: only strip the opening fence, not trailing partial fences. Risk of stripping legitimate content outweighs the benefit.
+- [ ] **Unit test for the unclosed-open-fence case in `_strip_json_code_fences`** (NOT `@real_provider`-marked; runs in CI). Add to the existing `TestStripJsonCodeFences` class at `tests/llm/test_real_provider.py:70`:
+  - **Required test**: a truncated JSON-fenced response with no closing fence (e.g. `` ```json\n{"agent_id": "p-1", "incomplete": ``) returns the post-opener content trimmed.
+  - **Required test**: an opening fence without a `json` language tag also strips correctly (e.g. `` ```\n{"foo": `` → `{"foo":`).
+  - **Required test**: the existing both-fences-present case STILL works (regression pin).
+  - **Required test**: the existing no-fences case STILL passes through unchanged (regression pin).
+- [ ] **`@real_provider` truncation test** in `tests/llm/test_real_provider.py`. Add a new test that exercises the truncation scenario end-to-end:
+  - Constructs `AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])` directly.
+  - Calls `await client.complete(prompt=<a short prompt asking for a ReportDocument>, schema=ReportDocument, max_tokens=50, temperature=0.0)`. The deliberately tight `max_tokens=50` forces truncation.
+  - Asserts the call raises `pydantic_core.ValidationError` (the truncated JSON is incomplete after fence stripping; Pydantic correctly fails on missing required fields).
+  - Asserts the ValidationError message does NOT contain "expected value at line 1 column 1" (which would indicate the leading-backtick failure mode). Use a substring check like `"line 1 column 1" not in str(exc.value)` to pin the desired failure mode.
+  - Skipped in CI by default via the existing `@real_provider` marker. Per-invocation cost ~$0.001 (the call is tiny by design).
+- [ ] **Post-merge local verification.** Before opening the PR, with `AILIBI_LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` set:
+  - Run `AILIBI_RUN_REAL_PROVIDER_TESTS=1 uv run pytest tests/llm/test_real_provider.py -v` — all existing `@real_provider` tests (including Task 3.16's 4 production-template tests) must still pass; the new truncation test must pass with the expected failure-mode assertion.
+  - Re-run the eval prompt's direct sanity call — must still pass (this confirms the raised report budget didn't break the simple-call path).
+  - Paste verbatim outputs (model + cost_usd + first 100 chars of response for each test) into `## Decisions`. API key 8-char prefix only.
+- [ ] No imports from `engine/` under `agents/`, `llm/`, or `meetings/` (firewall preserved). `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes (with the new `@real_provider` test skipped by default in CI; the new unit tests for `_strip_json_code_fences` run in CI).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run mypy --strict agents observation orchestrator engine llm meetings` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+The `DEFAULT_REPORT_MAX_TOKENS` change is one line. Find at `meetings/manager.py:73`:
+
+```python
+DEFAULT_REPORT_MAX_TOKENS: Final[int] = 1024
+```
+
+Change to:
+
+```python
+DEFAULT_REPORT_MAX_TOKENS: Final[int] = 2048
+```
+
+That's it for the constant. Do NOT touch `DEFAULT_STATEMENT_MAX_TOKENS` (512) or `DEFAULT_VOTE_MAX_TOKENS` (384) — the audit's evidence is specific to report truncation.
+
+The `_strip_json_code_fences` change extends the existing helper at `llm/provider.py:211-234`. The current implementation requires both an opener match AND a closer match before stripping. The extension: if the opener matches but the closer does not, still strip the opener. Suggested shape (illustrative; pick exact names consistent with the existing code):
+
+```python
+# llm/provider.py — extension to the existing helper
+def _strip_json_code_fences(text: str) -> str:
+    """..."""  # preserve existing docstring; extend with the new case
+    open_match = _FENCE_OPEN_PATTERN.match(text)
+    if open_match is None:
+        return text  # no opener → pass through unchanged (existing)
+
+    remainder = text[open_match.end():]
+    close_match = _FENCE_CLOSE_PATTERN.search(remainder)
+
+    if close_match is None:
+        # NEW: unmatched-open case — strip the opener but not any
+        # trailing content. Truncated responses fall here.
+        # Pydantic will fail loudly on the incomplete JSON, which is
+        # the right failure mode.
+        return remainder.strip()
+
+    # Existing: both opener and closer present → strip both
+    stripped = remainder[: close_match.start()]
+    return stripped.strip()
+```
+
+The unit-test additions sit in the existing `TestStripJsonCodeFences` class:
+
+```python
+# tests/llm/test_real_provider.py — illustrative additions to existing class
+def test_unclosed_open_fence_is_stripped(self) -> None:
+    """A truncated response from the live provider may end mid-prose
+    without emitting the closing fence. Strip the open fence anyway
+    so Pydantic gets a chance to fail on missing JSON content rather
+    than on a leading backtick. (Pre-Phase-4 eval crash 2026-05-25-2138.)
+    """
+    text = '```json\n{"agent_id": "p-1", "incomplete":'
+    expected = '{"agent_id": "p-1", "incomplete":'
+    assert _strip_json_code_fences(text) == expected
+
+def test_unclosed_open_fence_without_language_tag(self) -> None:
+    text = '```\n{"foo": "bar"'
+    expected = '{"foo": "bar"'
+    assert _strip_json_code_fences(text) == expected
+```
+
+The `@real_provider` truncation test sits alongside the existing classes in `tests/llm/test_real_provider.py`:
+
+```python
+class TestAnthropicTruncationFailureMode:
+    @real_provider
+    @pytest.mark.asyncio
+    async def test_truncated_report_fails_with_validation_error_not_backtick(
+        self,
+    ) -> None:
+        """If a meeting-report response is truncated by max_tokens, the
+        failure mode should be ValidationError on incomplete JSON, NOT
+        'Invalid JSON: expected value at line 1 column 1' from a
+        leading backtick. (Pre-Phase-4 eval crash 2026-05-25-2138.)
+        """
+        api_key = os.environ["ANTHROPIC_API_KEY"]
+        client = AnthropicClient(api_key=api_key)
+        prompt = "Emit a ReportDocument JSON object with realistic content."
+        with pytest.raises(ValidationError) as exc:
+            await client.complete(
+                prompt=prompt,
+                schema=ReportDocument,
+                max_tokens=50,  # tight cap forces truncation
+                temperature=0.0,
+            )
+        # The leading-backtick failure mode is what 2138 saw; confirm
+        # we no longer hit it.
+        assert "line 1 column 1" not in str(exc.value)
+```
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+This is a narrow defensive fix bounded to two files. Low risk.
+
+- **Per-meeting cost shifts upward.** Raising `report_max_tokens` from 1024 → 2048 doubles the OUTPUT cost ceiling on report calls. Empirically the model rarely fills the cap; the actual per-meeting cost change should be modest. With 5 agents × 1 report each = 5 report calls per meeting at the new cap: ($0.031 - $0.015) × 5 = +$0.08 worst case per meeting. Total meeting cost ceiling rises from ~$0.50 to ~$0.62 — well under Task 3.16's $1.00 per-game budget cap.
+- **`LLMResponse.text` shape unchanged for non-truncated responses.** The new branch only fires when the closer is missing. The existing both-fences-present path is untouched. Regression-pinned by the existing unit tests in `TestStripJsonCodeFences`.
+- **Determinism preserved.** The strip change is a pure string transformation; same input always produces same output. The max_tokens change affects only the cost ceiling, not the model's deterministic behavior at the same prompt + seed.
+- **Defense in depth for statement / vote truncation.** Statement and vote schemas may also truncate in some future eval. The strip change protects them too — if a statement response ever truncates, the failure mode becomes a clean ValidationError instead of a leading-backtick crash. No additional change needed at those call sites.
+- **Tool-use migration explicitly deferred.** If the next eval surfaces yet another fence-class defect (e.g. the model emits nested fences or fences-inside-prose), the right answer is to migrate to Anthropic's `tool_use`-based structured output rather than expand the strip helper further. Not in scope here.
+- **CI cost stays $0.** The new `@real_provider` test is skipped by default. The new unit tests for `_strip_json_code_fences` are pure string logic and run in CI without any provider call.
+- **Live provider opt-in cost.** Running the new truncation test costs ~$0.001. The implementing agent's post-merge verification (existing + new `@real_provider` tests) costs ~$0.05 total.
+- **Eval re-run is the acceptance gate.** After this task lands, the next real-provider eval should pass through the report phase (no truncation crash, no leading-backtick failure mode) and exercise the accusation + voting phases for the first time. If a NEW defect class surfaces at accusation or voting, that's Task 3.18; if not, the merge criteria become evaluable.
+- **`audits/*` are read-only artifacts.** Do not edit the eval report.
+
+**Ready-to-paste prompt:** `agent_prompts/task-3-17-truncation-fence-handling.md`
+
 ## Merge Criteria
 - 50-game eval: full-LLM games complete end-to-end using fake-provider tests in CI and real provider only in explicit local/eval runs.
 - Impostor win rate in [25%, 65%] band.
