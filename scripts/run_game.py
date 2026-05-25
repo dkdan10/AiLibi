@@ -17,13 +17,16 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from engine.world import load_canonical_map  # noqa: E402
+from llm.budget import GameBudget  # noqa: E402
 from orchestrator.game import (  # noqa: E402
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
     DEFAULT_NUM_PLAYERS,
     HeadlessGame,
     build_default_agent_factory,
+    build_default_meeting_runner,
 )
+from orchestrator.replay import compute_cost_usd  # noqa: E402
 from orchestrator.scheduler import TickScheduler  # noqa: E402
 
 
@@ -68,6 +71,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     game_map = load_canonical_map()
+    # Production default: a FakeProvider-backed meeting runner with a
+    # fresh per-game GameBudget so meetings fire end-to-end and the
+    # <= $0.30/game cap is enforced at call time (DESIGN.md §5.1, §11.4).
+    runner = build_default_meeting_runner(budget=GameBudget())
     game = HeadlessGame(
         seed=args.seed,
         game_map=game_map,
@@ -77,11 +84,13 @@ def main(argv: list[str] | None = None) -> int:
         num_players=args.num_players,
         num_impostors=args.num_impostors,
         scheduler=TickScheduler(max_ticks=args.max_ticks),
+        meeting_runner=runner,
     )
     result = game.run()
     print(f"outcome: {result.outcome}")
     print(f"final_tick: {result.final_state.tick}")
     print(f"replay_path: {result.replay_path}")
+    print(f"cost_usd: {compute_cost_usd(result.replay_path):.6f}")
     return 0
 
 

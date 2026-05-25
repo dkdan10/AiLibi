@@ -32,6 +32,12 @@ from agents.memory.store import (
     render_for_prompt,
 )
 from agents.perception import ingest_packet
+from agents.strategic.prompts import (
+    accusation_round_prompt,
+    crewmate_report_prompt,
+    impostor_report_prompt,
+    vote_ballot_prompt,
+)
 from agents.tactical.crewmate_policy import CrewmatePolicy
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.entities import BodyId, PlayerId, PlayerState, Role
@@ -44,8 +50,11 @@ from engine.rng import EngineRng
 from engine.rules import resolve_win_conditions
 from engine.tick import advance_tick
 from engine.world import Map, WorldState
+from llm.budget import GameBudget
+from llm.budgeted_client import BudgetedLLMClient
 from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
+from llm.fake_provider import FakeProvider
 from meetings.manager import (
     MeetingConfig,
     MeetingManager,
@@ -297,6 +306,55 @@ class DefaultMeetingRunner:
         )
 
 
+def build_default_meeting_runner(
+    *,
+    llm_client: LLMClient | None = None,
+    budget: GameBudget | None = None,
+    config: MeetingConfig | None = None,
+    prompt_versions: Mapping[str, str] = DEFAULT_PROMPT_VERSIONS,
+    token_budget: int = DEFAULT_TOKEN_BUDGET,
+) -> DefaultMeetingRunner:
+    """Construct the production default meeting runner (DESIGN.md §5.1, §11.4).
+
+    This is the single wire-up surface the public entry-points
+    (:mod:`scripts.run_game`, and :mod:`scripts.run_tournament` via
+    :func:`eval.balance_eval.run_balance_eval`) use to turn the meeting
+    machinery Tasks 3.8-3.12 built into a runnable production default.
+    It binds the four canonical ``agents/strategic/prompts`` Jinja
+    callables to a :class:`DefaultMeetingRunner`.
+
+    ``llm_client`` defaults to the canonical
+    :class:`llm.fake_provider.FakeProvider` so CI / headless runs never
+    touch the network; explicit local / eval runs pass an
+    :class:`llm.provider.AnthropicClient`. When ``budget`` is provided
+    the client is wrapped in
+    :class:`llm.budgeted_client.BudgetedLLMClient` *before* the runner's
+    :class:`_RecordingLLMClient` layer, so the per-game cost cap is
+    enforced at call time (pre-flight) rather than measured post-hoc
+    from the replay log.
+
+    Production callers construct a fresh runner + a fresh
+    :class:`llm.budget.GameBudget` per game: the budget must reset
+    between games and the recording client carries per-game state. Do
+    not share one runner (or one budget) across a tournament.
+    """
+
+    inner: LLMClient = llm_client if llm_client is not None else FakeProvider()
+    client: LLMClient = (
+        BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner
+    )
+    return DefaultMeetingRunner(
+        llm_client=client,
+        crewmate_report_prompt=crewmate_report_prompt,
+        impostor_report_prompt=impostor_report_prompt,
+        statement_prompt=accusation_round_prompt,
+        vote_prompt=vote_ballot_prompt,
+        config=config,
+        prompt_versions=prompt_versions,
+        token_budget=token_budget,
+    )
+
+
 def _build_participants(
     *,
     state: WorldState,
@@ -538,7 +596,10 @@ class HeadlessGameResult:
       intent transitioned the engine to ``MEETING`` and no
       :class:`MeetingRunner` was configured to resume the game. The
       orchestrator pauses here without mutating state. ``final_state``
-      has ``phase == "MEETING"``.
+      has ``phase == "MEETING"``. This is the engine-only opt-out for
+      Phase 2 byte-identity tests; production paths always pass a
+      runner (see :func:`build_default_meeting_runner`) and never reach
+      this outcome.
     - ``TICK_BUDGET_REACHED``: :class:`TickScheduler` capped the game
       before it ended naturally. ``final_state.phase`` is ``PLAY``.
       The partial replay is still written to ``replay_path``.
@@ -644,6 +705,13 @@ class HeadlessGame:
 
             if state.phase == "MEETING":
                 if self._meeting_runner is None:
+                    # Engine-only opt-out for Phase 2 byte-identity tests;
+                    # production paths always pass a runner. The public
+                    # entry-points (scripts/run_*.py, eval/balance_eval.py)
+                    # build a DefaultMeetingRunner via
+                    # build_default_meeting_runner and never reach this
+                    # branch; only callers that explicitly pass
+                    # meeting_runner=None (engine-only replay) land here.
                     return HeadlessGameResult(
                         final_state=state,
                         outcome="MEETING_PHASE_REACHED",
@@ -993,4 +1061,5 @@ __all__ = [
     "TacticalAgent",
     "apply_meeting_result",
     "build_default_agent_factory",
+    "build_default_meeting_runner",
 ]
