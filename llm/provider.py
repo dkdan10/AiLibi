@@ -14,6 +14,7 @@ CI never imports the real SDK: the adapter does the import lazily inside
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Awaitable, Callable
 from typing import Final
 
@@ -117,10 +118,16 @@ class AnthropicClient:
             extended_thinking=self._extended_thinking,
             prompt_caching_beta=self._prompt_caching_beta,
         )
+        # Anthropic (and Claude models generally) wrap structured-output
+        # JSON in markdown code fences by default. Strip them at the
+        # Protocol boundary so Pydantic — and the recorded LLMResponse.text
+        # — see schema-validatable JSON. Placement inside complete() (not
+        # _default_send) means a future fencing adapter inherits this.
+        text = _strip_json_code_fences(raw.text) if schema is not None else raw.text
         if schema is not None:
-            schema.model_validate_json(raw.text)
+            schema.model_validate_json(text)
         return LLMResponse(
-            text=raw.text,
+            text=text,
             usage=TokenUsage(
                 input_tokens=raw.input_tokens,
                 output_tokens=raw.output_tokens,
@@ -188,6 +195,43 @@ def build_default_client(
         f"unknown {ENV_PROVIDER} value: {provider!r}; "
         f"expected one of {PROVIDER_ANTHROPIC!r} or {PROVIDER_FAKE!r}"
     )
+
+
+# Surrounding markdown code fences as emitted by Claude models for
+# structured-output text. Open fence is anchored at the start (after any
+# leading whitespace) with an optional, case-insensitive ``json`` tag;
+# close fence is anchored at the end (before any trailing whitespace).
+# The anchors mean backticks inside the JSON body are never touched.
+_FENCE_OPEN_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^\s*```(?:json)?\s*", re.IGNORECASE
+)
+_FENCE_CLOSE_PATTERN: Final[re.Pattern[str]] = re.compile(r"\s*```\s*$")
+
+
+def _strip_json_code_fences(text: str) -> str:
+    """Strip surrounding markdown code fences from an LLM JSON response.
+
+    Anthropic models (Claude Sonnet 4.6, etc.) wrap JSON in
+    ``` ```json … ``` ``` fences by default; this removes them so
+    downstream ``model_validate_json`` sees clean JSON. Provider-neutral
+    by placement: OpenAI / DeepSeek adapters that occasionally fence
+    inherit the protection automatically.
+
+    Conservative: only strips when BOTH an open fence (with or without a
+    ``json`` language tag) and a matching close fence are present, and the
+    fences sit at the very edges of the text. Text with no fences passes
+    through unchanged. Nested fences and fence-inside-prose are out of
+    scope — they surface as Pydantic validation errors, a different defect.
+    """
+    open_match = _FENCE_OPEN_PATTERN.match(text)
+    if open_match is None:
+        return text
+    remainder = text[open_match.end() :]
+    close_match = _FENCE_CLOSE_PATTERN.search(remainder)
+    if close_match is None:
+        # Open fence without a matching close — let Pydantic fail loud.
+        return text
+    return remainder[: close_match.start()].strip()
 
 
 def _compute_cost_usd(
