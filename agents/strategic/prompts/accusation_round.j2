@@ -138,11 +138,20 @@ speaker this round.)
 {%- endif %}
 
 ## Your task
-Produce exactly one Statement that conforms to the shared `Statement`
-schema (`meetings/schemas.py`). The orchestrator fills the deterministic
-identity fields (`statement_id`, `speaker`, `tick`, `round_index`); you
-fill the content fields:
+Produce exactly one JSON object that validates against the shared
+`Statement` schema (`meetings/schemas.py`). The orchestrator is
+authoritative for the identity fields and overrides whatever you emit
+for them, but structured-output validation still requires every field to
+be present, so emit a placeholder for each identity field and put your
+real turn in the content fields.
 
+Identity fields (emit a placeholder; the orchestrator overrides each):
+- `statement_id`: any non-empty string (e.g. `"s"`).
+- `speaker`: any non-empty string (your own player id is fine).
+- `tick`: any integer.
+- `round_index`: any integer.
+
+Content fields (your actual turn):
 - `target`: the player id you are accusing, or `null` if this turn is
   purely defensive (alibi or corroboration only).
 - `claims`: zero or more of the structured claim types --
@@ -173,3 +182,8 @@ fill the content fields:
   guessed accusation. Voting (DESIGN.md §5.5) treats low-confidence
   accusations as skip-leaning, so a weak guess here does not help your
   side and may help the impostor.
+
+## Output
+Your in-character voice belongs in the `free_text` field, not before the
+JSON. Output ONLY the JSON object -- no prose, preamble, or commentary
+before or after it. Start your response with `{` and end with `}`.

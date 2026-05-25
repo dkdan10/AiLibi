@@ -71,10 +71,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     game_map = load_canonical_map()
-    # Production default: a FakeProvider-backed meeting runner with a
-    # fresh per-game GameBudget so meetings fire end-to-end and the
-    # <= $0.30/game cap is enforced at call time (DESIGN.md §5.1, §11.4).
-    runner = build_default_meeting_runner(budget=GameBudget())
+    # Production default: a meeting runner with a fresh per-game
+    # GameBudget so meetings fire end-to-end and the per-game cost cap is
+    # enforced at call time (DESIGN.md §5.1, §7, §11.4). The cap is raised
+    # to $1.00 as a safety stop for live-provider meeting traffic (the
+    # GameBudget default stays $0.30). The Phase 3 merge gate is mean cost
+    # <= $0.30/game across 50 games, not the per-game cap (Task 3.16).
+    runner = build_default_meeting_runner(budget=GameBudget(max_cost_usd=1.00))
     game = HeadlessGame(
         seed=args.seed,
         game_map=game_map,
