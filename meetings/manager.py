@@ -71,15 +71,17 @@ DEFAULT_SKIP_CONFIDENCE_THRESHOLD: Final[float] = 0.6
 # orchestrator. Public defaults so the orchestrator can override per
 # call without monkey-patching constants.
 #
-# The report budget is larger than statement / vote because a
-# ReportDocument is the largest meeting artifact (opener, observations,
-# claims, and free-text prose in one object); too tight a cap truncates
-# the model mid-JSON and yields an unparseable response.
+# The report and statement budgets are the largest: a ReportDocument
+# and a multi-claim Statement are the most verbose meeting artifacts
+# (observations, claims, and free-text prose in one object), and too
+# tight a cap truncates the model mid-JSON into an unterminated string
+# that fails to parse. Vote ballots are smaller but get the same
+# defense-in-depth headroom.
 DEFAULT_REPORT_MAX_TOKENS: Final[int] = 2048
 DEFAULT_REPORT_TEMPERATURE: Final[float] = 0.4
-DEFAULT_STATEMENT_MAX_TOKENS: Final[int] = 512
+DEFAULT_STATEMENT_MAX_TOKENS: Final[int] = 2048
 DEFAULT_STATEMENT_TEMPERATURE: Final[float] = 0.4
-DEFAULT_VOTE_MAX_TOKENS: Final[int] = 384
+DEFAULT_VOTE_MAX_TOKENS: Final[int] = 1024
 DEFAULT_VOTE_TEMPERATURE: Final[float] = 0.2
 
 # Free-text recorded on the transcript when a participant misses a

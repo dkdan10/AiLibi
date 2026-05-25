@@ -365,11 +365,14 @@ class TestProductionTemplateSchemaRoundTrips:
 
 
 class TestAnthropicTruncationFailureMode:
-    """A meeting-report response truncated by ``max_tokens`` must fail with a
-    Pydantic ``ValidationError`` on the incomplete JSON, NOT with an
-    ``Invalid JSON … line 1 column 1`` error caused by a leading backtick
-    from an unclosed markdown fence (pre-Phase-4 eval crash 2026-05-25-2138,
-    ``audits/audit-2026-05-25-2138-pre-phase-4-real-provider-eval.md``).
+    """A meeting-protocol response (report, statement, or vote) truncated by
+    ``max_tokens`` must fail with a Pydantic ``ValidationError`` on the
+    incomplete JSON, NOT with an ``Invalid JSON … line 1 column 1`` error
+    caused by a leading backtick from an unclosed markdown fence (pre-Phase-4
+    eval crash 2026-05-25-2138,
+    ``audits/audit-2026-05-25-2138-pre-phase-4-real-provider-eval.md``). The
+    statement case is the seed-22 production crash characterized in
+    ``audits/audit-2026-05-25-2320-seed-23-deep-debug.md``.
 
     Driven with ``asyncio.run`` rather than ``pytest-asyncio`` to match the
     module convention (see module docstring); ``@real_provider`` keeps it
@@ -393,6 +396,56 @@ class TestAnthropicTruncationFailureMode:
                 client.complete(
                     prompt=prompt,
                     schema=ReportDocument,
+                    max_tokens=50,  # tight cap forces truncation mid-output
+                    temperature=0.0,
+                )
+            )
+
+        # The leading-backtick failure mode is what the 2138 eval saw;
+        # confirm the fence strip means we no longer hit it.
+        assert "line 1 column 1" not in str(exc.value)
+
+    @real_provider
+    def test_truncated_statement_fails_with_validation_error_not_backtick(
+        self,
+    ) -> None:
+        client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
+        prompt = (
+            "You are agent p-1 in a social-deduction game meeting. Output a "
+            "Statement as a single JSON object with a detailed accusation, "
+            "structured claims, and free-text prose."
+        )
+
+        with pytest.raises(ValidationError) as exc:
+            asyncio.run(
+                client.complete(
+                    prompt=prompt,
+                    schema=Statement,
+                    max_tokens=50,  # tight cap forces truncation mid-output
+                    temperature=0.0,
+                )
+            )
+
+        # The leading-backtick failure mode is what the 2138 eval saw;
+        # confirm the fence strip means we no longer hit it.
+        assert "line 1 column 1" not in str(exc.value)
+
+    @real_provider
+    def test_truncated_vote_fails_with_validation_error_not_backtick(
+        self,
+    ) -> None:
+        client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
+        prompt = (
+            "You are agent p-1 in a social-deduction game meeting. Output a "
+            "VoteBallot as a single JSON object with a target, a confidence, "
+            "and a detailed free-text rationale."
+        )
+
+        with pytest.raises(ValidationError) as exc:
+            asyncio.run(
+                client.complete(
+                    prompt=prompt,
+                    schema=VoteBallot,
                     max_tokens=50,  # tight cap forces truncation mid-output
                     temperature=0.0,
                 )
