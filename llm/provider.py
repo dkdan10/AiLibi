@@ -217,11 +217,24 @@ def _strip_json_code_fences(text: str) -> str:
     by placement: OpenAI / DeepSeek adapters that occasionally fence
     inherit the protection automatically.
 
-    Conservative: only strips when BOTH an open fence (with or without a
-    ``json`` language tag) and a matching close fence are present, and the
-    fences sit at the very edges of the text. Text with no fences passes
-    through unchanged. Nested fences and fence-inside-prose are out of
-    scope — they surface as Pydantic validation errors, a different defect.
+    Behavior matrix (fences are anchored at the text edges, so backticks
+    inside the JSON body are never touched):
+
+    * Both open and close fence present → strip both, return trimmed.
+    * Only an open fence present (a response truncated mid-output before
+      the closing fence was emitted) → strip the opener, return the
+      remainder trimmed. The remainder is incomplete JSON, so
+      ``model_validate_json`` fails loud with a missing-fields / EOF
+      ``ValidationError`` — an actionable signal — rather than an
+      ``Invalid JSON … line 1 column 1`` error on the leading backtick.
+    * Only a close fence present (no opener to strip) → return unchanged.
+    * No fences present → return unchanged.
+
+    Strict on the trailing edge: only the opening fence is stripped, never
+    a trailing partial fence. The risk of trimming legitimate content
+    outweighs the benefit; a truly-truncated response should surface as a
+    Pydantic ``ValidationError``. Nested fences and fence-inside-prose are
+    likewise out of scope — they surface as validation errors too.
     """
     open_match = _FENCE_OPEN_PATTERN.match(text)
     if open_match is None:
@@ -229,8 +242,10 @@ def _strip_json_code_fences(text: str) -> str:
     remainder = text[open_match.end() :]
     close_match = _FENCE_CLOSE_PATTERN.search(remainder)
     if close_match is None:
-        # Open fence without a matching close — let Pydantic fail loud.
-        return text
+        # Open fence with no matching close (truncated response): strip the
+        # opener so Pydantic fails on the incomplete JSON body rather than
+        # on the leading backtick.
+        return remainder.strip()
     return remainder[: close_match.start()].strip()
 
 
