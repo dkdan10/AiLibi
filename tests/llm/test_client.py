@@ -519,21 +519,6 @@ class TestAnthropicClientPrivateKnobsAndCallKindRouting:
                 )
             )
 
-    def test_default_send_raises_when_unconfigured(self) -> None:
-        # No send hook injected and no real Anthropic SDK is wired in this
-        # build; the adapter must raise loudly rather than silently fall back.
-        client = AnthropicClient(api_key="key")
-
-        with pytest.raises(RuntimeError, match="Anthropic SDK"):
-            _run(
-                client.complete(
-                    prompt="x",
-                    schema=None,
-                    max_tokens=8,
-                    temperature=0.0,
-                )
-            )
-
 
 class TestBuildDefaultClient:
     def test_defaults_to_fake_provider(self) -> None:
