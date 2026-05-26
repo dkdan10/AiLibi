@@ -189,6 +189,32 @@ class TestJsonBlockExtraction:
         second = '{"agent_id": "p-2", "tick": 6, "free_text": "second"}'
         assert _extract_json_block(f"{_INNER}\n{second}") == _INNER
 
+    def test_prose_brace_span_in_preamble_is_skipped(self) -> None:
+        # A preamble brace span that balances but is not JSON ("{steps}")
+        # must not be returned: the scanner skips it (json.loads rejects it)
+        # and continues to the real object that follows. Without the skip
+        # the call aborts on "{steps}" though valid JSON is present later.
+        text = "I used {steps} before answering.\n" + _INNER
+        assert _extract_json_block(text) == _INNER
+
+    def test_unmatched_preamble_brace_is_skipped(self) -> None:
+        # A stray unmatched "{" in the preamble never closes, so depth from
+        # it never returns to zero; the scanner must move on to the next "{"
+        # rather than give up and hand the whole prose to Pydantic.
+        text = "Here is my analysis { and more prose\n" + _INNER
+        assert _extract_json_block(text) == _INNER
+
+    def test_prose_preamble_then_truncated_json_drops_preamble(self) -> None:
+        # Preamble + fenced JSON truncated mid-object (no closing brace or
+        # fence). No candidate parses, so the fallback returns the body from
+        # the first "{" — the incomplete object reaches Pydantic as an
+        # actionable EOF/missing-field error, not a "line 1 column 1" parse
+        # error on the leading prose/backtick (which start-anchored fence
+        # stripping would have left in place).
+        body = '{"agent_id": "p-1", "tick": 5,'
+        text = f"Some thinking prose.\n```json\n{body}"
+        assert _extract_json_block(text) == body
+
     def test_no_json_content_falls_back_unchanged(self) -> None:
         # No "{" at all -> fall back to the fence strip, which passes
         # non-fenced prose through unchanged for Pydantic to reject loud.

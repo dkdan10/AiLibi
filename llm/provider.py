@@ -13,6 +13,7 @@ CI never imports the real SDK: the adapter does the import lazily inside
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections.abc import Awaitable, Callable
@@ -290,37 +291,16 @@ def extract_parse_failure(exc: BaseException) -> LLMCallFailure | None:
     return failure if isinstance(failure, LLMCallFailure) else None
 
 
-def _extract_json_block(text: str) -> str:
-    """Extract the first balanced JSON object from an LLM response.
+def _find_matching_brace(text: str, open_index: int) -> int:
+    """Return the index of the ``}`` that closes the ``{`` at ``open_index``.
 
-    Claude models emit structured-output JSON in several shapes across
-    the Pre-Phase-4 evals; this normalises all of them to the bare JSON
-    object ``model_validate_json`` expects:
-
-    * **Clean JSON** (``{...}`` start to finish) → returned unchanged.
-    * **Fenced JSON** (```` ```json\\n{...}\\n``` ````) → fences dropped.
-    * **Prose preamble + fenced/bare JSON** (``I need to analyze...\\n{...}``)
-      → the prose is ignored and the JSON extracted. Task 3.19 finding 1:
-      Sonnet 4.6 nondeterministically emits "thinking" prose before its
-      fenced output, which the open-anchored fence strip could not handle.
-    * **JSON + trailing prose** (``{...}\\n\\nDone!``) → trailing prose
-      dropped.
-
-    Strategy: find the first ``{``, then walk forward tracking brace
-    depth with string-literal awareness (braces inside ``"..."`` do not
-    count, and ``\\`` escape sequences are respected) and return the
-    substring from that ``{`` to its matching ``}``, stripped of
-    surrounding whitespace. When the input has no ``{`` at all, or the
-    object never closes (a response truncated mid-output — Task 3.17's
-    case), fall back to :func:`_strip_json_code_fences` so its documented
-    unclosed-fence / no-JSON semantics are preserved (the incomplete body
-    reaches Pydantic as an actionable ``ValidationError`` rather than a
-    leading-backtick parse error).
+    Walks forward from ``open_index`` tracking brace depth with string-
+    literal awareness: braces inside ``"..."`` do not count toward depth,
+    and a ``\\`` escape protects the next character (so ``\\"`` does not
+    end the string and ``\\}`` is not a closing brace). Returns ``-1`` if
+    depth never returns to zero — the object was truncated mid-output, or
+    ``open_index`` is a stray opener with no matching close.
     """
-
-    open_index = text.find("{")
-    if open_index == -1:
-        return _strip_json_code_fences(text)
 
     depth = 0
     in_string = False
@@ -343,11 +323,63 @@ def _extract_json_block(text: str) -> str:
         elif char == "}":
             depth -= 1
             if depth == 0:
-                return text[open_index : index + 1].strip()
-    # The first ``{`` never closed (truncated mid-object): fall back to
-    # the fence-strip behavior so truncated responses keep Task 3.17's
-    # semantics rather than returning a half-object here.
-    return _strip_json_code_fences(text)
+                return index
+    return -1
+
+
+def _extract_json_block(text: str) -> str:
+    """Extract the first valid JSON object from an LLM response.
+
+    Claude models emit structured-output JSON in several shapes across
+    the Pre-Phase-4 evals; this normalises all of them to the bare JSON
+    object ``model_validate_json`` expects:
+
+    * **Clean JSON** (``{...}`` start to finish) → returned unchanged.
+    * **Fenced JSON** (```` ```json\\n{...}\\n``` ````) → fences dropped.
+    * **Prose preamble + fenced/bare JSON** (``I need to analyze...\\n{...}``)
+      → the prose is ignored and the JSON extracted. Task 3.19 finding 1:
+      Sonnet 4.6 nondeterministically emits "thinking" prose before its
+      fenced output, which the open-anchored fence strip could not handle.
+    * **JSON + trailing prose** (``{...}\\n\\nDone!``) → trailing prose
+      dropped.
+
+    Strategy: scan each ``{`` left to right; for each, find its matching
+    ``}`` (:func:`_find_matching_brace`, string-literal aware) and return
+    the first balanced span that itself parses as JSON. Validating each
+    candidate means a brace that merely *appears* in the prose preamble —
+    a balanced-but-not-JSON span like ``{steps}`` or a stray unmatched
+    ``{`` — is skipped in favour of the real object that follows, rather
+    than aborting the call on it (Task 3.19 finding 1, hardening).
+
+    Fallbacks, both yielding an actionable ``ValidationError`` rather than
+    a ``line 1 column 1`` parse error on a leading prose/backtick char:
+
+    * No ``{`` at all → :func:`_strip_json_code_fences` (passes non-fenced
+      prose through, strips a truncated leading fence).
+    * A ``{`` exists but no candidate parsed (the real object was
+      truncated mid-output — Task 3.17's case — possibly behind a prose
+      preamble) → the body from the first ``{`` onward, so the incomplete
+      object reaches Pydantic without the preamble/fence in front of it.
+    """
+
+    first_open = text.find("{")
+    if first_open == -1:
+        return _strip_json_code_fences(text)
+
+    search_from = first_open
+    while search_from != -1:
+        close_index = _find_matching_brace(text, search_from)
+        if close_index != -1:
+            candidate = text[search_from : close_index + 1].strip()
+            try:
+                json.loads(candidate)
+            except ValueError:
+                pass  # balanced but not JSON (e.g. a "{steps}" prose span)
+            else:
+                return candidate
+        search_from = text.find("{", search_from + 1)
+
+    return text[first_open:].strip()
 
 
 # Surrounding markdown code fences as emitted by Claude models for
