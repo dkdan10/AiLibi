@@ -23,6 +23,7 @@ from tests.api.fixtures.sample_replay import (
     corrupt_tick_hash,
     write_meeting_replay,
     write_partial_replay,
+    write_roster_replay,
     write_sample_replay,
     write_unresolved_meeting_replay,
 )
@@ -188,10 +189,59 @@ def test_get_meeting_memory_fields(tmp_path: Path) -> None:
     assert memory.role == "CREWMATE"
     assert memory.tasks_assigned == 1
     assert memory.rendered_memory_text.startswith("## Your role: CREWMATE")
-    # The reporter's report carried one found_body observation.
-    assert [type(o) for o in memory.observations] == [FoundBodyObsView]
+    # Observations are projected from the reconstructed episodic memory (the
+    # same store rendered_memory_text draws from): the reporter saw the body, so
+    # a found_body observation is present, ordered ahead of any sightings.
+    assert any(isinstance(o, FoundBodyObsView) for o in memory.observations)
+    assert isinstance(memory.observations[0], FoundBodyObsView)
     # The fixture's contradiction lists the reporter as a subject.
     assert len(memory.open_contradictions) == 1
+
+
+def test_dead_player_memory_is_retrievable(tmp_path: Path) -> None:
+    # A player who died before the meeting is a known agent; ThoughtStream must
+    # still be able to inspect their (frozen-at-death) memory.
+    expected = write_meeting_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    memory = loader.get_meeting_memory(
+        "headless-seed-0", expected.meeting_id, expected.victim
+    )
+    assert memory.agent_id == expected.victim
+    assert memory.rendered_memory_text.startswith("## Your role:")
+
+
+def test_non_default_roster_is_inferred_from_actions(tmp_path: Path) -> None:
+    # The replay format doesn't persist num_players; the loader recovers it from
+    # the action stream so a non-default-roster replay loads without a 500.
+    write_roster_replay(tmp_path / "replay-seed-0.jsonl", seed=0, num_players=6)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    replay = loader.load_replay("headless-seed-0")
+    assert {player.agent_id for player in replay.players} == {
+        f"p-{n}" for n in range(1, 7)
+    }
+
+
+def test_zero_padded_filename_is_fetchable_by_advertised_game_id(
+    tmp_path: Path,
+) -> None:
+    # list_replays advertises a zero-padded file as game_id=headless-seed-1;
+    # load_replay must resolve the same file rather than 404.
+    write_sample_replay(tmp_path / "replay-seed-01.jsonl", seed=1)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    (meta,) = loader.list_replays()
+    assert meta.game_id == "headless-seed-1"
+    assert loader.load_replay(meta.game_id).metadata.game_id == "headless-seed-1"
+
+
+def test_directory_matching_glob_is_skipped(tmp_path: Path) -> None:
+    write_sample_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
+    (tmp_path / "replay-seed-7.jsonl").mkdir()  # directory, not a replay file
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    assert [meta.seed for meta in loader.list_replays()] == [0]
 
 
 def test_get_meeting_memory_unknown_meeting_and_agent(tmp_path: Path) -> None:

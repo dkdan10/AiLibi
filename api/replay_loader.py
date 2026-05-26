@@ -38,7 +38,7 @@ from fastapi import Request
 from pydantic import TypeAdapter
 
 from agents.memory.store import DEFAULT_TOKEN_BUDGET, AgentMemory, render_for_prompt
-from agents.perception import ingest_packet
+from agents.perception import EVENT_SAW_BODY, EVENT_SAW_PLAYER, ingest_packet
 from api.schemas import (
     AccusationClaimView,
     AgentMemoryView,
@@ -328,7 +328,7 @@ class ReplayLoader:
         initial_state = seed_initial_state(
             seed=seed,
             game_map=self._game_map,
-            num_players=DEFAULT_NUM_PLAYERS,
+            num_players=_infer_num_players(replay_entries),
             num_impostors=DEFAULT_NUM_IMPOSTORS,
         )
         state = initial_state
@@ -399,9 +399,12 @@ class ReplayLoader:
                     break
 
                 if collect_memory:
+                    # Snapshot every known player, alive or dead. The endpoint
+                    # contract is agent-based (ThoughtStream selects by agent),
+                    # so a player who died before this meeting must still be
+                    # retrievable; their memory is frozen at death (perception
+                    # stops ingesting once they are dead).
                     for pid in sorted(state.players):
-                        if not state.players[pid].alive:
-                            continue
                         memory_views[(meeting_id, pid)] = self._agent_memory_view(
                             agent_id=pid,
                             tick=entry.tick,
@@ -622,19 +625,17 @@ class ReplayLoader:
             task for task in meeting_state.tasks.values() if task.owner == agent_id
         ]
 
-        observations: tuple[
-            SawPlayerView | CompletedTaskObsView | FoundBodyObsView, ...
-        ] = ()
+        # Observations are projected from the agent's own reconstructed episodic
+        # memory (the same store ``rendered_memory_text`` renders), NOT from the
+        # agent's submitted report — the report is a selective output and would
+        # leave ``observations`` empty/inconsistent with the rendered view (and
+        # empty for dead non-participants). Only the structured-claim event
+        # types map: ``saw_body`` -> found_body and ``saw_player``. Heard cues
+        # and completed-task inferences surface only in ``rendered_memory_text``.
+        observations = _observations_from_memory(memory)
+
         open_contradictions: tuple[ContradictionView, ...] = ()
         if meeting_entry is not None:
-            report = next(
-                (r for r in meeting_entry.transcript.reports if r.agent_id == agent_id),
-                None,
-            )
-            if report is not None:
-                observations = tuple(
-                    _observation_claim_view(obs) for obs in report.observations
-                )
             open_contradictions = tuple(
                 _contradiction_view(c)
                 for c in meeting_entry.contradictions
@@ -737,6 +738,8 @@ class ReplayLoader:
             return []
         pairs: list[tuple[int, Path]] = []
         for path in self._replay_dir.glob("replay-seed-*.jsonl"):
+            if not path.is_file():
+                continue
             seed = _parse_seed_from_filename(path.name)
             if seed is None:
                 continue
@@ -745,11 +748,17 @@ class ReplayLoader:
         return pairs
 
     def _resolve_path(self, game_id: str) -> Path | None:
+        # Resolve by matching the discovered seed rather than reconstructing the
+        # canonical filename, so a file `list_replays` advertised (e.g. a
+        # zero-padded `replay-seed-01.jsonl` surfaced as `headless-seed-1`) is
+        # always fetchable by the game_id it was advertised under.
         seed = _parse_seed_from_game_id(game_id)
         if seed is None:
             return None
-        path = self._replay_dir / f"replay-seed-{seed}.jsonl"
-        return path if path.exists() else None
+        for found_seed, path in self._replay_paths():
+            if found_seed == seed:
+                return path
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -797,6 +806,33 @@ def _iso_mtime(path: Path) -> str | None:
 
 def _deserialize_actions(raw_actions: Sequence[Mapping[str, Any]]) -> list[Action]:
     return [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in raw_actions]
+
+
+def _infer_num_players(replay_entries: Sequence[ReplayEntry]) -> int:
+    """Recover the player count from the recorded action stream.
+
+    The replay format does not persist the roster (only the seed, via
+    ``game_id``), and producers accept non-default ``--num-players``. The seeder
+    names players ``p-1 .. p-{num_players}`` and the orchestrator solicits one
+    action per alive agent every tick, so a real game's actions name every
+    player; the max ``p-N`` index across all recorded actions therefore recovers
+    ``num_players``. Falls back to :data:`DEFAULT_NUM_PLAYERS` when no actions
+    were recorded (e.g. a synthetic no-op replay). ``num_impostors`` is not
+    inferable and stays pinned to the MVP-invariant default (DESIGN.md §8.1/§8.2:
+    one impostor). A wrong inference cannot corrupt output: the per-tick
+    state-hash check fails loud instead.
+    """
+
+    max_index = 0
+    for entry in replay_entries:
+        for raw_action in entry.actions:
+            actor = raw_action.get("actor")
+            if not isinstance(actor, str):
+                continue
+            match = _PLAYER_ID_PATTERN.fullmatch(actor)
+            if match is not None:
+                max_index = max(max_index, int(match.group(1)))
+    return max_index if max_index > 0 else DEFAULT_NUM_PLAYERS
 
 
 def _meeting_trigger_from_events(
@@ -849,6 +885,60 @@ def _current_action(
     if kind == "repair_sabotage":
         return "TASK"
     return "IDLE"
+
+
+def _observations_from_memory(
+    memory: AgentMemory,
+) -> tuple[SawPlayerView | CompletedTaskObsView | FoundBodyObsView, ...]:
+    """Project an agent's reconstructed episodic memory into observation DTOs.
+
+    Only the two episodic event types that map onto the structured-claim union
+    are surfaced: ``saw_body`` -> :class:`FoundBodyObsView` (deduplicated by
+    body id, as the renderer does) and ``saw_player`` -> :class:`SawPlayerView`.
+    Salience order matches DESIGN.md §6.2: body discoveries first, then
+    sightings; within each group, most-recent tick first. ``co_present`` is not
+    captured per-sighting in the episodic store, so it is left empty.
+    """
+
+    found: list[FoundBodyObsView] = []
+    seen_bodies: set[str] = set()
+    sightings: list[SawPlayerView] = []
+    for event in memory.episodic.recent(since_tick=0):
+        if event.type == EVENT_SAW_BODY:
+            body_id = event.payload.get("body_id")
+            victim = event.payload.get("victim_id")
+            room = event.payload.get("room")
+            if not (
+                isinstance(body_id, str)
+                and isinstance(victim, str)
+                and isinstance(room, str)
+            ):
+                continue
+            if body_id in seen_bodies:
+                continue
+            seen_bodies.add(body_id)
+            found.append(
+                FoundBodyObsView(
+                    type="found_body", tick=event.tick, body_of=victim, room=room
+                )
+            )
+        elif event.type == EVENT_SAW_PLAYER:
+            subject = event.payload.get("player_id")
+            room = event.payload.get("room")
+            if not (isinstance(subject, str) and isinstance(room, str)):
+                continue
+            sightings.append(
+                SawPlayerView(
+                    type="saw_player",
+                    tick=event.tick,
+                    subject=subject,
+                    room=room,
+                    co_present=(),
+                )
+            )
+    found.sort(key=lambda obs: obs.tick, reverse=True)
+    sightings.sort(key=lambda obs: obs.tick, reverse=True)
+    return (*found, *sightings)
 
 
 def _observation_claim_view(

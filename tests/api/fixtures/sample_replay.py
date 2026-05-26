@@ -19,7 +19,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from engine.actions import KillAction, ReportBodyAction
+from engine.actions import Action, KillAction, ReportBodyAction, WaitAction
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from meetings.schemas import (
@@ -37,6 +37,32 @@ from orchestrator.seeder import seed_initial_state
 _NUM_PLAYERS = 4
 _NUM_IMPOSTORS = 1
 _BAD_HASH = "0" * 64
+
+
+def _wait(actor: str) -> WaitAction:
+    return WaitAction.model_validate({"actor": actor, "type": "wait", "payload": {}})
+
+
+def _opening_kill_tick(
+    player_ids: list[str], *, impostor: str, victim: str
+) -> list[Action]:
+    """Tick-0 actions: every non-impostor waits, then the impostor kills.
+
+    Naming every player (as a real headless game does — one action per alive
+    agent per tick) lets the loader recover ``num_players`` from the stream. The
+    kill is ordered last so each waiter is still alive when its WaitAction is
+    applied (no rejections).
+    """
+
+    actions: list[Action] = [
+        _wait(pid) for pid in sorted(player_ids) if pid != impostor
+    ]
+    actions.append(
+        KillAction.model_validate(
+            {"actor": impostor, "type": "kill", "payload": {"target": victim}}
+        )
+    )
+    return actions
 
 
 @dataclass(frozen=True)
@@ -119,13 +145,12 @@ def write_meeting_replay(path: Path, *, seed: int = 0) -> MeetingReplayExpectati
     reporter = crewmates[1]
     living = tuple(sorted(p for p in state.players if p != victim))
 
-    # Tick 0 — impostor kills a crewmate (both in CAFETERIA, cooldown 0).
-    kill = KillAction.model_validate(
-        {"actor": impostor, "type": "kill", "payload": {"target": victim}}
-    )
+    # Tick 0 — every player acts (so the loader can recover num_players); the
+    # impostor's action is a kill on a co-located crewmate.
+    tick0 = _opening_kill_tick(list(state.players), impostor=impostor, victim=victim)
     input_tick = state.tick
-    state, _events = advance_tick(state, [kill], game_map=game_map)
-    log.record_tick(input_tick, [kill], state)
+    state, _events = advance_tick(state, tick0, game_map=game_map)
+    log.record_tick(input_tick, tick0, state)
     body_id = f"body-{victim}-0"
 
     # Tick 1 — a living crewmate reports the body, opening the meeting.
@@ -177,6 +202,32 @@ def write_meeting_replay(path: Path, *, seed: int = 0) -> MeetingReplayExpectati
     )
 
 
+def write_roster_replay(
+    path: Path, *, seed: int = 0, num_players: int = 6, ticks: int = 2
+) -> None:
+    """Write a game seeded with a non-default roster size.
+
+    Every player submits a WaitAction each tick, so the recorded action stream
+    names every ``p-1 .. p-{num_players}`` — letting the loader recover
+    ``num_players`` even though the replay format doesn't persist it.
+    """
+
+    game_map = load_canonical_map()
+    log = ReplayLog(path=path, game_id=f"headless-seed-{seed}")
+    state = seed_initial_state(
+        seed=seed,
+        game_map=game_map,
+        num_players=num_players,
+        num_impostors=_NUM_IMPOSTORS,
+    )
+    for _ in range(ticks):
+        actions: list[Action] = [_wait(pid) for pid in sorted(state.players)]
+        input_tick = state.tick
+        state, _events = advance_tick(state, actions, game_map=game_map)
+        log.record_tick(input_tick, actions, state)
+    log.record_game_end(winner="CREWMATES", reason="all_tasks_complete", tick=ticks - 1)
+
+
 def write_unresolved_meeting_replay(path: Path, *, seed: int = 0) -> str:
     """Write a game that opens a meeting but crashes before it resolves.
 
@@ -201,12 +252,10 @@ def write_unresolved_meeting_replay(path: Path, *, seed: int = 0) -> str:
     victim = crewmates[0]
     reporter = crewmates[1]
 
-    kill = KillAction.model_validate(
-        {"actor": impostor, "type": "kill", "payload": {"target": victim}}
-    )
+    tick0 = _opening_kill_tick(list(state.players), impostor=impostor, victim=victim)
     input_tick = state.tick
-    state, _events = advance_tick(state, [kill], game_map=game_map)
-    log.record_tick(input_tick, [kill], state)
+    state, _events = advance_tick(state, tick0, game_map=game_map)
+    log.record_tick(input_tick, tick0, state)
 
     report = ReportBodyAction.model_validate(
         {
