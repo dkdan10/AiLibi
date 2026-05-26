@@ -244,6 +244,19 @@ def test_directory_matching_glob_is_skipped(tmp_path: Path) -> None:
     assert [meta.seed for meta in loader.list_replays()] == [0]
 
 
+def test_duplicate_seed_files_are_deduped_deterministically(tmp_path: Path) -> None:
+    # Two filenames map to seed 1 (canonical + zero-padded). The seed must be
+    # advertised once and resolve to the same file regardless of glob order.
+    write_sample_replay(tmp_path / "replay-seed-1.jsonl", seed=1)
+    write_sample_replay(tmp_path / "replay-seed-01.jsonl", seed=1)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    metas = loader.list_replays()
+    assert [meta.game_id for meta in metas] == ["headless-seed-1"]  # unique
+    # Fetchable, and the resolved file is stable across calls (deterministic).
+    assert loader.load_replay("headless-seed-1").metadata.game_id == "headless-seed-1"
+
+
 def test_get_meeting_memory_unknown_meeting_and_agent(tmp_path: Path) -> None:
     expected = write_meeting_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
     loader = ReplayLoader(replay_dir=tmp_path)

@@ -744,8 +744,21 @@ class ReplayLoader:
             if seed is None:
                 continue
             pairs.append((seed, path))
-        pairs.sort(key=lambda pair: pair[0])
-        return pairs
+        # Sort by (seed, filename) and keep one canonical file per seed. Two
+        # filenames can map to the same seed (e.g. ``replay-seed-1`` vs
+        # ``replay-seed-01``); deduplicating with a deterministic tie-break (the
+        # lexicographically-first filename) keeps ``game_id`` unique in
+        # ``list_replays`` and makes ``_resolve_path`` pick the same file across
+        # runs despite ``Path.glob`` having unspecified order.
+        pairs.sort(key=lambda pair: (pair[0], pair[1].name))
+        deduped: list[tuple[int, Path]] = []
+        seen: set[int] = set()
+        for seed, path in pairs:
+            if seed in seen:
+                continue
+            seen.add(seed)
+            deduped.append((seed, path))
+        return deduped
 
     def _resolve_path(self, game_id: str) -> Path | None:
         # Resolve by matching the discovered seed rather than reconstructing the
