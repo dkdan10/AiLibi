@@ -44,6 +44,15 @@ agent during meetings.
 
 See DESIGN.md §6.6. Per-agent memory + belief view. The agent's role is in this view per the firewall design — the spectator API exposes it because the spectator is privileged (post-game replay). For live-game spectator (deferred), role would be redacted.
 
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import frontend/src/types/api.ts::*` (every DTO from 4"`
+- `uv run python -c "import frontend/src/api/client"`
+- `uv run python -c "import api.replay_loader"`
+- `uv run python -c "import api.schemas"`
+- `uv run python -c "import api.main"`
+
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
 - Inspect the current implementation before editing.

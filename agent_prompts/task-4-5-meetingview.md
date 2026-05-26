@@ -43,6 +43,15 @@ tick is inside a meeting window.
 
 See DESIGN.md §5. React component for meeting transcript + ballots. The MeetingView is hidden when the current tick is outside any meeting; replace MapView (or overlay on top of it — implementing agent picks based on layout sketch). Document the choice in `## Decisions`.
 
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import frontend/src/types/api.ts::*` (every DTO from 4"`
+- `uv run python -c "import frontend/src/api/client"`
+- `uv run python -c "import api.replay_loader"`
+- `uv run python -c "import api.schemas"`
+- `uv run python -c "import api.main"`
+
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
 - Inspect the current implementation before editing.
