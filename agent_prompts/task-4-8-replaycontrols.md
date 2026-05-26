@@ -12,11 +12,12 @@ Implement Task 4.8 — ReplayControls, anchored to DESIGN.md §7, DESIGN.md §11
 The authoritative task contract is copied below from tasks/phase-4.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-4-replaycontrols`
-**Depends on:** 4.3 merged
+**Depends on:** 4.4 merged + mid-phase DTO audit passed
 **Section refs:** DESIGN.md §7, DESIGN.md §11.4
 **Complexity:** Medium
 
-Scrubber, speed control.
+Scrubber + speed control. Drives the current-tick index in the Zustand
+store; every component re-renders against the new tick.
 
 **Files in scope:**
 - frontend/src/components/ReplayControls.tsx
@@ -31,13 +32,16 @@ Scrubber, speed control.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] ReplayControls provides scrubber and speed controls for sanitized replay DTOs.
+- [ ] Scrubber lets the spectator seek to any tick in the replay.
+- [ ] Speed control: 0.5×, 1×, 2×, 4× playback (1 tick advance per N ms).
+- [ ] Pause / play / step-forward / step-backward buttons.
+- [ ] Snap-to-meeting: a "next meeting" button skips to the next meeting trigger tick.
 - [ ] Component consumes the shared store/API shape from 4.3.
-- [ ] Frontend build/check command passes if configured.
+- [ ] Frontend build/check command passes.
 
 ## Implementation hint
 
-See DESIGN.md §11.4. Replay scrubber with seek-to-tick.
+See DESIGN.md §11.4. Replay scrubber with seek-to-tick. The store owns the current-tick state; this component only emits store actions. No PixiJS, no per-tick rendering — pure React + Tailwind.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

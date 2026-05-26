@@ -1,4 +1,4 @@
-# Agent Prompt — 4.3 React + Vite + Tailwind setup
+# Agent Prompt — 4.3 React + Vite + Tailwind + PixiJS setup
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-4.md.
 
@@ -6,7 +6,7 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 4.3 — React + Vite + Tailwind setup, anchored to DESIGN.md §7. Do not implement work outside these references.
+Implement Task 4.3 — React + Vite + Tailwind + PixiJS setup, anchored to DESIGN.md §7. Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-4.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
@@ -16,8 +16,9 @@ The authoritative task contract is copied below from tasks/phase-4.md. Follow it
 **Section refs:** DESIGN.md §7
 **Complexity:** Small
 
-frontend/ skeleton, type-safe API client, and shared store interface. Use npm
-with package-lock.json unless a frontend package manager has already been
+`frontend/` skeleton, type-safe API client matching the DTOs from 4.1,
+and a Zustand store interface that components consume. Use npm with
+`package-lock.json` unless a frontend package manager has already been
 chosen in the repo before this task starts.
 
 **Files in scope:**
@@ -26,9 +27,11 @@ chosen in the repo before this task starts.
 - frontend/vite.config.ts
 - frontend/tailwind.config.js
 - frontend/postcss.config.js
+- frontend/tsconfig.json
 - frontend/src/App.tsx
 - frontend/src/api/client.ts
 - frontend/src/store/index.ts
+- frontend/src/types/api.ts
 - scripts/setup_env.sh
 - scripts/check.sh
 
@@ -42,13 +45,12 @@ chosen in the repo before this task starts.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] React, Vite, and Tailwind frontend skeleton exists.
-- [ ] Type-safe API client exists for the sanitized API DTOs from 4.1.
-- [ ] Shared store interface is defined before component fan-out.
-- [ ] Frontend package manager is npm with `package-lock.json`, unless an existing repo choice requires otherwise.
-- [ ] scripts/setup_env.sh installs frontend dependencies once frontend/package.json exists, without changing Python setup behavior.
-- [ ] scripts/check.sh runs the configured frontend build/check command, without changing Python check behavior.
-- [ ] Frontend build/check command passes if configured.
+- [ ] React + Vite + TypeScript + Tailwind + PixiJS skeleton compiles.
+- [ ] Zustand store exposes a single `useReplayStore` (or equivalent) that holds the currently-loaded replay + a current-tick index.
+- [ ] Type-safe API client (`frontend/src/api/client.ts`) consumes the DTOs from 4.1 via a generated or hand-authored TypeScript type module that mirrors the Pydantic schemas. Implementing agent picks: hand-authored is simpler; generated via `openapi-typescript` is more drift-resistant. Document the choice in `## Decisions`.
+- [ ] `scripts/setup_env.sh` installs frontend dependencies once `frontend/package.json` exists, without changing Python setup behavior.
+- [ ] `scripts/check.sh` runs the configured frontend `tsc --noEmit && vite build` (or equivalent), without changing Python check behavior.
+- [ ] Frontend build/check command passes.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
@@ -71,5 +73,5 @@ Do not implement work outside this task.
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-4-react-vite-tailwind-setup` with a title like `task 4.3: react + vite + tailwind setup`.
+Open a PR from branch `phase-4-react-vite-tailwind-setup` with a title like `task 4.3: react + vite + tailwind + pixijs setup`.
 The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §7), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

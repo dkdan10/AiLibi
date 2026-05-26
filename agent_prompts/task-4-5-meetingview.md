@@ -12,11 +12,13 @@ Implement Task 4.5 — MeetingView, anchored to DESIGN.md §5, DESIGN.md §7. Do
 The authoritative task contract is copied below from tasks/phase-4.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-4-meetingview`
-**Depends on:** 4.3 merged
+**Depends on:** 4.4 merged + mid-phase DTO audit passed
 **Section refs:** DESIGN.md §5, DESIGN.md §7
 **Complexity:** Medium
 
-Transcript renderer.
+Transcript renderer for one meeting: reports + accusation rounds +
+ballots + contradiction flags. Activated when the replay's current
+tick is inside a meeting window.
 
 **Files in scope:**
 - frontend/src/components/MeetingView.tsx
@@ -31,13 +33,15 @@ Transcript renderer.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] MeetingView renders meeting transcripts, ballots, and contradiction flags exposed by the API DTOs.
+- [ ] MeetingView renders the full transcript exposed by the API DTOs: per-speaker reports with structured claims, statements per round, ballots with rationale text, contradiction flags inline.
+- [ ] Prose `rationale_text` and `free_text` are foregrounded; structured fields are secondary.
+- [ ] Prompt version + per-call cost are surfaced (small metadata footer per meeting).
 - [ ] Component consumes the shared store/API shape from 4.3.
-- [ ] Frontend build/check command passes if configured.
+- [ ] Frontend build/check command passes.
 
 ## Implementation hint
 
-See DESIGN.md §5. React component for meeting transcript + ballots.
+See DESIGN.md §5. React component for meeting transcript + ballots. The MeetingView is hidden when the current tick is outside any meeting; replace MapView (or overlay on top of it — implementing agent picks based on layout sketch). Document the choice in `## Decisions`.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

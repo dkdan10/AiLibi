@@ -12,11 +12,14 @@ Implement Task 4.6 — ThoughtStream, anchored to DESIGN.md §6, DESIGN.md §7. 
 The authoritative task contract is copied below from tasks/phase-4.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-4-thoughtstream`
-**Depends on:** 4.3 merged
+**Depends on:** 4.4 merged + mid-phase DTO audit passed
 **Section refs:** DESIGN.md §6, DESIGN.md §7
 **Complexity:** Medium
 
-Per-agent memory + LLM call viewer.
+Per-agent memory + LLM call viewer for one selected agent. Spectator
+selects an agent; sees that agent's `render_for_prompt`-style view +
+the LLM call records (prompt + response + cost) attached to that
+agent during meetings.
 
 **Files in scope:**
 - frontend/src/components/ThoughtStream.tsx
@@ -31,14 +34,15 @@ Per-agent memory + LLM call viewer.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] ThoughtStream displays per-agent memory and LLM reasoning/call information exposed by the spectator API.
+- [ ] ThoughtStream displays the selected agent's memory view (role, tasks-completed, salience-ordered observations, beliefs, contradictions) as exposed by the spectator API.
+- [ ] LLM call records for the agent: prompt template id, model id, input/output tokens, cost in USD, prompt + response text (truncated with expand-on-click for long responses).
 - [ ] Component consumes the shared store/API shape from 4.3.
 - [ ] Component renders prompt versions and cost metadata when present.
-- [ ] Frontend build/check command passes if configured.
+- [ ] Frontend build/check command passes.
 
 ## Implementation hint
 
-See DESIGN.md §6.6. Per-agent memory + belief view.
+See DESIGN.md §6.6. Per-agent memory + belief view. The agent's role is in this view per the firewall design — the spectator API exposes it because the spectator is privileged (post-game replay). For live-game spectator (deferred), role would be redacted.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

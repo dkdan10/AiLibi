@@ -16,17 +16,16 @@ The authoritative task contract is copied below from tasks/phase-4.md. Follow it
 **Section refs:** DESIGN.md §7
 **Complexity:** Medium
 
-api/main.py, basic routes, WebSocket endpoint registration, and sanitized API
-DTO schemas per §7.
+`api/main.py`, REST routes for replay listing / fetch, and sanitized
+spectator DTOs per §7. No WebSocket in MVP (live game streaming
+deferred per phase scope decision above).
 
 **Files in scope:**
 - api/main.py
 - api/schemas.py
-- api/routes/games.py
 - api/routes/replays.py
 - api/routes/eval.py
 - api/routes/__init__.py
-- api/ws.py
 - tests/api/test_schemas.py
 - tests/api/test_routes.py
 
@@ -35,21 +34,23 @@ DTO schemas per §7.
 - agents/
 - llm/
 - frontend/
+- api/ws.py (deferred — no WebSocket in MVP)
+- api/routes/games.py (live game streaming deferred)
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] FastAPI app skeleton exists.
-- [ ] Basic routes and WebSocket endpoint are registered per DESIGN.md §7.
-- [ ] `api/schemas.py` defines sanitized spectator DTOs separate from engine schemas.
-- [ ] DTO tests prove role, kill attribution, private cooldowns, and raw replay internals are not exposed.
-- [ ] API remains a thin adapter.
+- [ ] FastAPI app skeleton exists with REST routes registered per DESIGN.md §7 (replays, eval; games-live deferred).
+- [ ] `api/schemas.py` defines the concrete DTO inventory (the elaboration of this task — to be filled before dispatch — must list every DTO with its fields and explicitly mark fields that exist in the engine but are deliberately excluded).
+- [ ] DTO leak tests prove role, kill attribution, private cooldowns, observation-firewall internals, and raw replay JSONL internals are not exposed.
+- [ ] Replay listing endpoint returns sanitized replay metadata; replay fetch endpoint returns a sanitized tick + meeting timeline for a single saved replay.
+- [ ] API remains a thin adapter — no engine logic in `api/`.
 - [ ] Relevant API tests pass.
 - [ ] `uv run ruff check .` passes.
 
 ## Implementation hint
 
-See DESIGN.md §7. FastAPI app gains `/games`, `/replays`, `/eval` routes plus a WebSocket endpoint at `/ws/games/{id}`. DTOs in `api/schemas.py` are sanitized — never embed raw `WorldState`.
+See DESIGN.md §7. FastAPI app gains `/replays` (list + fetch) and `/eval` routes. DTOs in `api/schemas.py` are sanitized — never embed raw `WorldState`, raw `ReplayEntry`, or engine-internal types. Mirror the firewall pattern from `observation/` — DTOs are a sanitized view over engine state, never the state itself.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
