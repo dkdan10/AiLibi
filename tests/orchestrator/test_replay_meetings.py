@@ -152,11 +152,12 @@ def _impostor_prompt(
 
 def _statement_prompt(
     *,
+    agent_id: PlayerId,
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
 ) -> str:
-    return f"ST:{len(transcript.reports)}:{len(transcript.statements)}"
+    return f"ST:{agent_id}:{len(transcript.reports)}:{len(transcript.statements)}"
 
 
 def _vote_prompt(
@@ -341,6 +342,9 @@ class TestReplayRecordsMeetingArtifacts:
             "accusation_round",
             "vote_ballot",
         }
+        # Task 3.20 bumped the accusation_round template to v2; a fresh
+        # replay entry must carry the new version string end-to-end.
+        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v2"
         # LLM cost metadata recorded per call. With round_count=2:
         #   reports: 4 calls
         #   statements: 4 voters × 2 rounds = 8 calls

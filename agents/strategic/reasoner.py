@@ -439,6 +439,7 @@ class StrategicReasoner:
         rendered_memory = render_for_prompt(memory, token_budget=self._token_budget)
         _scan_prompt_inputs(rendered_memory=rendered_memory)
         prompt = self._statement_prompt(
+            agent_id=speaker,
             rendered_memory=rendered_memory,
             transcript=transcript,
             contradictions=contradictions,

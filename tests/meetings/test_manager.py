@@ -45,8 +45,12 @@ from meetings.manager import (
     MeetingParticipant,
     MeetingTrigger,
     SuspicionEntry,
+    _normalize_self_alibi_subjects,  # noqa: PLC2701
 )
 from meetings.schemas import (
+    AccusationClaim,
+    AlibiClaim,
+    Claim,
     ContradictionRef,
     MeetingResult,
     MeetingTranscript,
@@ -101,12 +105,14 @@ def _impostor_report_prompt(
 
 def _statement_prompt(
     *,
+    agent_id: PlayerId,
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
 ) -> str:
     return (
         "PHASE=STATEMENT\n"
+        f"agent_id={agent_id}\n"
         f"MEMORY:\n{rendered_memory}\n"
         f"REPORTS_COUNT={len(transcript.reports)}\n"
         f"STATEMENTS_COUNT={len(transcript.statements)}\n"
@@ -2171,3 +2177,250 @@ class _GatherCancellationClient:
             cost_usd=0.0,
             model="cancellation-test",
         )
+
+
+# --- Task 3.20: self-alibi subject normalization ---------------------------
+
+
+def _alibi_subjects(claims: tuple[Claim, ...]) -> list[PlayerId]:
+    """Extract the ``subject`` of every ``AlibiClaim`` (order-preserving)."""
+
+    return [claim.subject for claim in claims if isinstance(claim, AlibiClaim)]
+
+
+class TestSelfAlibiSubjectNormalization:
+    """`_normalize_self_alibi_subjects` (Task 3.20, DESIGN.md §5.3, §5.4).
+
+    The normalizer rewrites the deterministic self-alibi placeholder
+    subjects the model leaks ("self", "p-self", an unrendered Jinja
+    placeholder) to the speaker's canonical id, and passes every other
+    subject through untouched (it does NOT validate against the roster).
+    """
+
+    def test_rewrites_placeholder_variants_to_speaker_id(self) -> None:
+        # Three AlibiClaims: two placeholders ("self", "p-self") and the
+        # real speaker id ("p-4"). After normalization for speaker "p-4"
+        # all three subjects must equal "p-4".
+        report = ReportDocument(
+            agent_id="p-4",
+            tick=10,
+            claims=(
+                AlibiClaim(
+                    type="alibi", subject="self", from_tick=1, to_tick=5, room="ADMIN"
+                ),
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-self",
+                    from_tick=2,
+                    to_tick=6,
+                    room="CAFETERIA",
+                ),
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-4",
+                    from_tick=3,
+                    to_tick=7,
+                    room="STORAGE",
+                ),
+            ),
+            free_text="report",
+        )
+
+        normalized = _normalize_self_alibi_subjects(report.claims, speaker_id="p-4")
+
+        assert _alibi_subjects(normalized) == ["p-4", "p-4", "p-4"]
+
+    def test_passes_non_self_subjects_through_unchanged(self) -> None:
+        # "p-2" (another real player) and "p-99" (a hallucination that is
+        # neither in the self-placeholder set nor in the roster) must
+        # both pass through unchanged: this task does not validate
+        # subjects against the meeting roster.
+        statement = Statement(
+            statement_id="s",
+            speaker="p-4",
+            tick=10,
+            round_index=0,
+            target=None,
+            claims=(
+                AlibiClaim(
+                    type="alibi", subject="p-2", from_tick=1, to_tick=5, room="ADMIN"
+                ),
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-99",
+                    from_tick=2,
+                    to_tick=6,
+                    room="CAFETERIA",
+                ),
+            ),
+            free_text="statement",
+        )
+
+        normalized = _normalize_self_alibi_subjects(statement.claims, speaker_id="p-4")
+
+        assert _alibi_subjects(normalized) == ["p-2", "p-99"]
+
+    def test_unrendered_jinja_placeholder_is_rewritten(self) -> None:
+        claims: tuple[Claim, ...] = (
+            AlibiClaim(
+                type="alibi",
+                subject="{{ agent_id }}",
+                from_tick=1,
+                to_tick=5,
+                room="ADMIN",
+            ),
+        )
+
+        normalized = _normalize_self_alibi_subjects(claims, speaker_id="p-4")
+
+        assert _alibi_subjects(normalized) == ["p-4"]
+
+    def test_non_alibi_claims_pass_through_untouched(self) -> None:
+        # Only AlibiClaims are inspected; accusation / corroboration
+        # claims are returned as-is even when an alibi is rewritten.
+        claims: tuple[Claim, ...] = (
+            AccusationClaim(
+                type="accusation", against="p-2", confidence=0.5, reason="near body"
+            ),
+            AlibiClaim(
+                type="alibi", subject="self", from_tick=1, to_tick=5, room="ADMIN"
+            ),
+        )
+
+        normalized = _normalize_self_alibi_subjects(claims, speaker_id="p-4")
+
+        accusation = normalized[0]
+        assert isinstance(accusation, AccusationClaim)
+        assert accusation.against == "p-2"
+        assert _alibi_subjects(normalized) == ["p-4"]
+
+    def test_empty_claims_returns_empty_tuple(self) -> None:
+        assert _normalize_self_alibi_subjects((), speaker_id="p-4") == ()
+
+
+class TestSelfAlibiNormalizationWiring:
+    """The normalizer is invoked on both meeting parse paths (Task 3.20).
+
+    A scripted provider emits a self-alibi placeholder subject in every
+    report ("self") and every statement ("p-self"); after the meeting
+    the persisted transcript must carry the speaker's canonical id, not
+    the placeholder.
+    """
+
+    @staticmethod
+    def _placeholder_responder(prompt: str, schema: type[BaseModel] | None) -> str:
+        if "PHASE=REPORT" in prompt:
+            agent_id = _extract_marker(prompt, "agent_id=")
+            return ReportDocument(
+                agent_id=agent_id,
+                tick=0,
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject="self",
+                        from_tick=1,
+                        to_tick=2,
+                        room="ADMIN",
+                    ),
+                ),
+                free_text=f"report-{agent_id}",
+            ).model_dump_json()
+        if "PHASE=STATEMENT" in prompt:
+            return Statement(
+                statement_id="ignored",
+                speaker="ignored",
+                tick=0,
+                round_index=0,
+                target=None,
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-self",
+                        from_tick=1,
+                        to_tick=2,
+                        room="ADMIN",
+                    ),
+                ),
+                free_text="statement",
+            ).model_dump_json()
+        if "PHASE=VOTE" in prompt:
+            voter = _extract_marker(prompt, "voter=")
+            return _stub_vote_json(voter=voter, target="SKIP")
+        raise AssertionError(f"unrecognised prompt: {prompt!r}")
+
+    def test_report_and_statement_self_alibis_are_canonicalized(self) -> None:
+        client = _ScriptedLLMClient(responder=self._placeholder_responder)
+        manager = _make_manager(llm_client=client)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-normalize",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        # Report path (`_collect_one_report`): every report's self-alibi
+        # "self" placeholder is rewritten to the report's own agent_id.
+        for report in result.transcript.reports:
+            subjects = _alibi_subjects(report.claims)
+            assert subjects, "expected a self-alibi on every report"
+            assert all(subject == report.agent_id for subject in subjects)
+
+        # Statement path (`_collect_statement`): every statement's
+        # "p-self" placeholder is rewritten to the statement's speaker.
+        for statement in result.transcript.statements:
+            subjects = _alibi_subjects(statement.claims)
+            assert subjects, "expected a self-alibi on every statement"
+            assert all(subject == statement.speaker for subject in subjects)
+
+        # And no placeholder token survives anywhere in the transcript.
+        dumped = result.transcript.model_dump_json()
+        assert '"subject":"self"' not in dumped
+        assert '"subject":"p-self"' not in dumped
+
+
+class TestAccusationRoundPromptVersionInReplay:
+    """The bumped accusation_round version reaches the replay record.
+
+    Task 3.20 bumps the template header to v2; the orchestrator's
+    `DEFAULT_PROMPT_VERSIONS` map (copied verbatim into every
+    `MeetingReplayEntry`) must carry "accusation_round.v2".
+    """
+
+    def test_meeting_replay_entry_shows_accusation_round_v2(self) -> None:
+        from orchestrator.game import DEFAULT_PROMPT_VERSIONS
+        from orchestrator.replay import MeetingReplayEntry
+
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client)
+        result = _run(
+            manager.run(
+                meeting_id="m-version",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        # Build the replay entry exactly as
+        # `orchestrator.replay.ReplayWriter.record_meeting` does: the
+        # prompt-version map flows in verbatim from the production
+        # default. A fresh entry must show the bumped v2 string.
+        entry = MeetingReplayEntry(
+            game_id="g-version",
+            meeting_id=result.meeting_id,
+            tick=result.trigger_tick,
+            triggered_by=result.triggered_by,
+            outcome=result.outcome,
+            ejected_player_id=result.ejected_player_id,
+            transcript=result.transcript,
+            ballots=result.ballots,
+            contradictions=result.contradictions,
+            llm_calls=(),
+            prompt_versions=dict(DEFAULT_PROMPT_VERSIONS),
+            state_hash_before="hash-before",
+            state_hash_after="hash-after",
+        )
+
+        assert entry.prompt_versions["accusation_round"] == "accusation_round.v2"
+        assert entry.prompt_versions["accusation_round"] != "accusation_round.v1"

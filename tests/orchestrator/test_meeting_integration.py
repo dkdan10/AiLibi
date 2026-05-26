@@ -905,11 +905,12 @@ def _stub_impostor_prompt(
 
 def _stub_statement_prompt(
     *,
+    agent_id: PlayerId,
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
 ) -> str:
-    return "STATEMENT_PROMPT"
+    return f"STATEMENT_PROMPT agent_id={agent_id}"
 
 
 def _stub_vote_prompt(

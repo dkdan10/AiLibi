@@ -45,6 +45,8 @@ from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 
 from llm.client import LLMClient
 from meetings.schemas import (
+    AlibiClaim,
+    Claim,
     ContradictionRef,
     MeetingOutcome,
     MeetingResult,
@@ -103,6 +105,29 @@ INVALID_VOTE_TARGET_MARKER: Final[str] = (
 
 _SKIP_TARGET: Final[str] = "SKIP"
 _VALID_ROLES: Final[frozenset[str]] = frozenset({"CREWMATE", "IMPOSTOR"})
+
+# Self-alibi placeholder subjects the model occasionally emits in an
+# ``AlibiClaim`` instead of its own canonical player id. Each leaks a
+# prompt-template / few-shot artifact into the structured ``subject``
+# field; :func:`_normalize_self_alibi_subjects` rewrites them to the
+# speaker's id so DESIGN.md §5.4 contradiction detection can match the
+# claim across speakers (Task 3.20):
+#
+# * ``"self"``         -- Task 3.18 reference token (prompt-fix covered;
+#                          kept here for defense-in-depth).
+# * ``"p-self"``       -- the ``p-`` sibling-example prefix concatenated
+#                          with the ``self`` token; the post-3.18
+#                          prompt-only fix did not catch this variant.
+# * ``"{{ agent_id }}"`` -- an unrendered Jinja placeholder; only
+#                          reachable via a template rendering bug, but
+#                          rewriting it costs nothing and fails safe.
+_SELF_ALIBI_PLACEHOLDERS: Final[frozenset[str]] = frozenset(
+    {
+        "self",
+        "p-self",
+        "{{ agent_id }}",
+    }
+)
 
 
 _T = TypeVar("_T")
@@ -278,6 +303,10 @@ class StatementPromptRenderer(Protocol):
 
     Template inputs match
     ``agents/strategic/prompts/accusation_round.j2`` (Task 3.6).
+    ``agent_id`` is the speaker's own player id; it anchors the
+    self-alibi example in the template to a concrete id so the model
+    does not mis-substitute a placeholder (Task 3.20, matching the
+    ``ReportPromptRenderer`` ``agent_id`` thread from Task 3.18).
     ``transcript`` is the transcript-so-far including all prior
     rounds' statements in canonical order; ``contradictions`` is the
     :class:`ContradictionRef` flags that Task 3.11 will populate
@@ -287,6 +316,7 @@ class StatementPromptRenderer(Protocol):
     def __call__(
         self,
         *,
+        agent_id: PlayerId,
         rendered_memory: str,
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
@@ -541,6 +571,14 @@ class MeetingManager:
                 agent_id=participant.agent_id, tick=trigger.trigger_tick
             )
         parsed = ReportDocument.model_validate_json(response.text)
+        # Defense-in-depth: rewrite self-alibi placeholder subjects
+        # (e.g. "p-self") to the speaker's canonical id before the
+        # identity override, so DESIGN.md §5.4 contradiction detection
+        # can match this report's self-alibi against other speakers
+        # (Task 3.20).
+        normalized_claims = _normalize_self_alibi_subjects(
+            parsed.claims, speaker_id=participant.agent_id
+        )
         # Override identity fields with the canonical values; the LLM
         # is told to emit any non-empty string and the manager is
         # authoritative for who said what (see crewmate_report.j2 line
@@ -549,6 +587,7 @@ class MeetingManager:
             update={
                 "agent_id": participant.agent_id,
                 "tick": trigger.trigger_tick,
+                "claims": normalized_claims,
             }
         )
 
@@ -565,6 +604,7 @@ class MeetingManager:
         contradictions: tuple[ContradictionRef, ...],
     ) -> Statement:
         prompt = self._statement_prompt(
+            agent_id=participant.agent_id,
             rendered_memory=participant.rendered_memory,
             transcript=transcript_so_far,
             contradictions=contradictions,
@@ -595,6 +635,14 @@ class MeetingManager:
                 round_index=round_index,
             )
         parsed = Statement.model_validate_json(response.text)
+        # Defense-in-depth: rewrite self-alibi placeholder subjects
+        # (e.g. "p-self") to the speaker's canonical id before the
+        # identity override, so DESIGN.md §5.4 contradiction detection
+        # can match this turn's self-alibi against other speakers
+        # (Task 3.20).
+        normalized_claims = _normalize_self_alibi_subjects(
+            parsed.claims, speaker_id=participant.agent_id
+        )
         # Override identity fields. The accusation_round.j2 contract
         # is "the orchestrator fills the deterministic identity
         # fields (statement_id, speaker, tick, round_index)".
@@ -604,6 +652,7 @@ class MeetingManager:
                 "speaker": participant.agent_id,
                 "tick": trigger.trigger_tick,
                 "round_index": round_index,
+                "claims": normalized_claims,
             }
         )
 
@@ -875,6 +924,50 @@ def _default_vote(*, voter: PlayerId) -> VoteBallot:
         considered_alternatives=(),
         rationale_text=DEFAULT_VOTE_RATIONALE,
     )
+
+
+def _normalize_self_alibi_subjects(
+    claims: tuple[Claim, ...],
+    *,
+    speaker_id: PlayerId,
+) -> tuple[Claim, ...]:
+    """Rewrite known self-alibi placeholder subjects to ``speaker_id``.
+
+    The model occasionally emits ``subject: "self"`` or
+    ``subject: "p-self"`` in an :class:`~meetings.schemas.AlibiClaim`,
+    leaking a prompt-template / few-shot placeholder into the
+    structured ``subject`` field (Task 3.20 Findings 1 & 2). Those
+    claims are unambiguously the speaker's own self-alibi; this helper
+    rewrites their ``subject`` to the speaker's canonical player id so
+    DESIGN.md §5.4 contradiction detection -- which indexes alibis by
+    ``(subject, tick_range, location)`` -- can match them against
+    other speakers' claims. The full placeholder set is
+    :data:`_SELF_ALIBI_PLACEHOLDERS`.
+
+    Out-of-roster pass-through: a ``subject`` that is NOT in the
+    self-alibi placeholder set is passed through unchanged. This helper
+    deliberately does NOT validate ``subject`` against the meeting's
+    player roster; that broader ``PlayerId``-validation refactor is
+    explicitly deferred. Rationale: an unknown subject (e.g. a
+    hallucinated ``"p-99"`` or an other-player id the speaker invented)
+    simply fails to match in contradiction detection, which is no worse
+    than today -- the goal of THIS normalizer is to fix only the
+    deterministic self-alibi placeholder leaks, not to mechanically
+    validate every subject. The contract is "fix the speaker's
+    self-alibi only"; non-self alibis MUST pass through untouched.
+
+    Only :class:`~meetings.schemas.AlibiClaim`s are inspected;
+    accusation / corroboration claims are returned as-is. The rewrite
+    is via ``model_copy`` so frozen-model immutability is preserved.
+    """
+
+    normalized: list[Claim] = []
+    for claim in claims:
+        if isinstance(claim, AlibiClaim) and claim.subject in _SELF_ALIBI_PLACEHOLDERS:
+            normalized.append(claim.model_copy(update={"subject": speaker_id}))
+        else:
+            normalized.append(claim)
+    return tuple(normalized)
 
 
 def _normalize_ballot_target(

@@ -103,7 +103,7 @@ DEFAULT_NUM_IMPOSTORS: Final[int] = 1
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "crewmate_report": "crewmate_report.v1",
     "impostor_report": "impostor_report_v1",
-    "accusation_round": "accusation_round.v1",
+    "accusation_round": "accusation_round.v2",
     "vote_ballot": "vote_ballot/v1",
 }
 
