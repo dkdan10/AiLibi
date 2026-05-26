@@ -59,10 +59,14 @@ function memoryKey(meetingId: string, agentId: string): string {
   return `${meetingId}:${agentId}`;
 }
 
-// Monotonic token guarding selectReplay against out-of-order responses: if a
-// newer selection starts before an older getReplay resolves, the stale older
-// completion is dropped so it can't overwrite the newer selection.
+// Monotonic tokens guarding async actions against out-of-order responses: when
+// a newer call starts before an older request resolves, the stale older
+// completion is dropped so it can't clobber newer state. selectReplay and
+// loadReplayList each keep a "newest call wins" token; fetchMemoryView instead
+// compares the in-flight game id to the current selection after the await, so
+// keyed cache writes for distinct meetings/agents on one replay still coexist.
 let latestReplayRequest = 0;
+let latestReplayListRequest = 0;
 
 export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
   (set, get) => ({
@@ -78,10 +82,17 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
     memoryCache: {},
 
     async loadReplayList() {
+      const requestToken = ++latestReplayListRequest;
       try {
         const list = await api.listReplays();
+        if (requestToken !== latestReplayListRequest) {
+          return;
+        }
         set({ replayList: list, replayListError: null });
       } catch (error) {
+        if (requestToken !== latestReplayListRequest) {
+          return;
+        }
         set({ replayList: null, replayListError: errorMessage(error) });
       }
     },
@@ -139,16 +150,23 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       if (replay === null) {
         return;
       }
+      const gameId = replay.metadata.game_id;
       try {
-        const memory = await api.getMemory(
-          replay.metadata.game_id,
-          meetingId,
-          agentId,
-        );
+        const memory = await api.getMemory(gameId, meetingId, agentId);
+        // Drop the result if the selected replay changed while in flight, so a
+        // stale snapshot can't land in (and become a cache hit for) another
+        // replay's memoryCache.
+        if (get().currentReplay?.metadata.game_id !== gameId) {
+          return;
+        }
         set((state) => ({
           memoryCache: { ...state.memoryCache, [key]: memory },
         }));
       } catch (error) {
+        // Likewise, don't surface an error for a replay no longer selected.
+        if (get().currentReplay?.metadata.game_id !== gameId) {
+          return;
+        }
         set({ currentReplayError: errorMessage(error) });
       }
     },
