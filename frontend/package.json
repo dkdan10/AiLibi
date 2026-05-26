@@ -1,0 +1,28 @@
+{
+  "name": "ailibi-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "tsc:check": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@pixi/react": "^8.0.5",
+    "pixi.js": "^8.18.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "zustand": "^5.0.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react-swc": "^4.3.1",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.14"
+  }
+}

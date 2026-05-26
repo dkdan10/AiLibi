@@ -10,3 +10,6 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+
+# Node / frontend (frontend/.gitignore covers dist/, .vite/, coverage/)
+node_modules/
