@@ -1,21 +1,25 @@
 """Eval routes (DESIGN.md §11.4).
 
-Task 4.1 registers the endpoint signature with its response DTO and a ``501``
-placeholder body. Task 4.2 fills the body via the replay loader without
-changing the signature. Thin adapter: route declarations only.
+Thin adapter over :class:`api.replay_loader.ReplayLoader`: the cost-summary
+handler delegates the cross-replay aggregation to the loader. The endpoint
+signature is frozen from Task 4.1; 4.2 only fills the body and adds the loader
+dependency.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
 
+from fastapi import APIRouter, Depends
+
+from api.replay_loader import ReplayLoader, get_replay_loader
 from api.schemas import EvalCostSummaryView
 
 router = APIRouter()
 
-_NOT_IMPLEMENTED_DETAIL = "Not implemented in 4.1; lands in 4.2"
+_LoaderDep = Annotated[ReplayLoader, Depends(get_replay_loader)]
 
 
 @router.get("/cost-summary", response_model=EvalCostSummaryView)
-def get_cost_summary() -> EvalCostSummaryView:
-    raise HTTPException(status_code=501, detail=_NOT_IMPLEMENTED_DETAIL)
+def get_cost_summary(loader: _LoaderDep) -> EvalCostSummaryView:
+    return loader.cost_summary()
