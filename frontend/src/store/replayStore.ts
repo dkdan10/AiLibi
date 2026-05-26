@@ -59,120 +59,134 @@ function memoryKey(meetingId: string, agentId: string): string {
   return `${meetingId}:${agentId}`;
 }
 
-// Monotonic tokens guarding async actions against out-of-order responses: when
-// a newer call starts before an older request resolves, the stale older
-// completion is dropped so it can't clobber newer state. selectReplay and
-// loadReplayList each keep a "newest call wins" token; fetchMemoryView instead
-// compares the in-flight game id to the current selection after the await, so
-// keyed cache writes for distinct meetings/agents on one replay still coexist.
-let latestReplayRequest = 0;
-let latestReplayListRequest = 0;
-
 export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
-  (set, get) => ({
-    replayList: null,
-    replayListError: null,
-    currentReplay: null,
-    currentReplayError: null,
-    currentTick: 0,
-    isPlaying: false,
-    playbackSpeed: 1,
-    selectedMeetingId: null,
-    selectedAgentId: null,
-    memoryCache: {},
+  (set, get) => {
+    // Monotonic tokens guarding async actions against out-of-order responses,
+    // scoped to this store instance (closure-owned, not module-level) so
+    // request ordering is isolated per store. When a newer call starts before
+    // an older request resolves, the stale completion is dropped so it can't
+    // clobber newer state. selectReplay and loadReplayList each use a "newest
+    // call wins" token; fetchMemoryView instead compares the in-flight game id
+    // to the current selection after the await, so keyed cache writes for
+    // distinct meetings/agents on one replay still coexist.
+    let latestReplayRequest = 0;
+    let latestReplayListRequest = 0;
 
-    async loadReplayList() {
-      const requestToken = ++latestReplayListRequest;
-      try {
-        const list = await api.listReplays();
-        if (requestToken !== latestReplayListRequest) {
+    return {
+      replayList: null,
+      replayListError: null,
+      currentReplay: null,
+      currentReplayError: null,
+      currentTick: 0,
+      isPlaying: false,
+      playbackSpeed: 1,
+      selectedMeetingId: null,
+      selectedAgentId: null,
+      memoryCache: {},
+
+      async loadReplayList() {
+        const requestToken = ++latestReplayListRequest;
+        try {
+          const list = await api.listReplays();
+          if (requestToken !== latestReplayListRequest) {
+            return;
+          }
+          set({ replayList: list, replayListError: null });
+        } catch (error) {
+          if (requestToken !== latestReplayListRequest) {
+            return;
+          }
+          set({ replayList: null, replayListError: errorMessage(error) });
+        }
+      },
+
+      async selectReplay(gameId) {
+        const requestToken = ++latestReplayRequest;
+        try {
+          const replay = await api.getReplay(gameId);
+          if (requestToken !== latestReplayRequest) {
+            return;
+          }
+          set({
+            currentReplay: replay,
+            currentReplayError: null,
+            currentTick: 0,
+            isPlaying: false,
+            selectedMeetingId: null,
+            selectedAgentId: null,
+            memoryCache: {},
+          });
+        } catch (error) {
+          if (requestToken !== latestReplayRequest) {
+            return;
+          }
+          // Reset all replay-scoped state too, so a failed selection can't
+          // leave stale playback/selection context alongside a null replay.
+          set({
+            currentReplay: null,
+            currentReplayError: errorMessage(error),
+            currentTick: 0,
+            isPlaying: false,
+            selectedMeetingId: null,
+            selectedAgentId: null,
+            memoryCache: {},
+          });
+        }
+      },
+
+      setCurrentTick(tick) {
+        set({ currentTick: tick });
+      },
+
+      setIsPlaying(playing) {
+        set({ isPlaying: playing });
+      },
+
+      setPlaybackSpeed(speed) {
+        set({ playbackSpeed: speed });
+      },
+
+      selectMeeting(meetingId) {
+        set({ selectedMeetingId: meetingId });
+      },
+
+      selectAgent(agentId) {
+        set({ selectedAgentId: agentId });
+      },
+
+      async fetchMemoryView(meetingId, agentId) {
+        const key = memoryKey(meetingId, agentId);
+        if (get().memoryCache[key] !== undefined) {
           return;
         }
-        set({ replayList: list, replayListError: null });
-      } catch (error) {
-        if (requestToken !== latestReplayListRequest) {
+        const replay = get().currentReplay;
+        if (replay === null) {
           return;
         }
-        set({ replayList: null, replayListError: errorMessage(error) });
-      }
-    },
-
-    async selectReplay(gameId) {
-      const requestToken = ++latestReplayRequest;
-      try {
-        const replay = await api.getReplay(gameId);
-        if (requestToken !== latestReplayRequest) {
-          return;
+        const gameId = replay.metadata.game_id;
+        try {
+          const memory = await api.getMemory(gameId, meetingId, agentId);
+          // Drop the result if the selected replay changed while in flight, so
+          // a stale snapshot can't land in (and become a cache hit for)
+          // another replay's memoryCache.
+          if (get().currentReplay?.metadata.game_id !== gameId) {
+            return;
+          }
+          set((state) => ({
+            memoryCache: { ...state.memoryCache, [key]: memory },
+          }));
+        } catch (error) {
+          // Likewise, don't surface an error for a replay no longer selected.
+          if (get().currentReplay?.metadata.game_id !== gameId) {
+            return;
+          }
+          set({ currentReplayError: errorMessage(error) });
         }
-        set({
-          currentReplay: replay,
-          currentReplayError: null,
-          currentTick: 0,
-          isPlaying: false,
-          selectedMeetingId: null,
-          selectedAgentId: null,
-          memoryCache: {},
-        });
-      } catch (error) {
-        if (requestToken !== latestReplayRequest) {
-          return;
-        }
-        set({ currentReplay: null, currentReplayError: errorMessage(error) });
-      }
-    },
+      },
 
-    setCurrentTick(tick) {
-      set({ currentTick: tick });
-    },
-
-    setIsPlaying(playing) {
-      set({ isPlaying: playing });
-    },
-
-    setPlaybackSpeed(speed) {
-      set({ playbackSpeed: speed });
-    },
-
-    selectMeeting(meetingId) {
-      set({ selectedMeetingId: meetingId });
-    },
-
-    selectAgent(agentId) {
-      set({ selectedAgentId: agentId });
-    },
-
-    async fetchMemoryView(meetingId, agentId) {
-      const key = memoryKey(meetingId, agentId);
-      if (get().memoryCache[key] !== undefined) {
-        return;
-      }
-      const replay = get().currentReplay;
-      if (replay === null) {
-        return;
-      }
-      const gameId = replay.metadata.game_id;
-      try {
-        const memory = await api.getMemory(gameId, meetingId, agentId);
-        // Drop the result if the selected replay changed while in flight, so a
-        // stale snapshot can't land in (and become a cache hit for) another
-        // replay's memoryCache.
-        if (get().currentReplay?.metadata.game_id !== gameId) {
-          return;
-        }
-        set((state) => ({
-          memoryCache: { ...state.memoryCache, [key]: memory },
-        }));
-      } catch (error) {
-        // Likewise, don't surface an error for a replay no longer selected.
-        if (get().currentReplay?.metadata.game_id !== gameId) {
-          return;
-        }
-        set({ currentReplayError: errorMessage(error) });
-      }
-    },
-
-    clearError() {
-      set({ replayListError: null, currentReplayError: null });
-    },
-  }),
+      clearError() {
+        set({ replayListError: null, currentReplayError: null });
+      },
+    };
+  },
 );

@@ -44,8 +44,13 @@ async function getJson<T>(path: string): Promise<T> {
     const body = await response.text().catch(() => "");
     throw new ApiError(response.status, url, body);
   }
-  const data: unknown = await response.json();
-  return data as T;
+  try {
+    const data: unknown = await response.json();
+    return data as T;
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    throw new ApiError(response.status, url, `invalid JSON response: ${message}`);
+  }
 }
 
 function seg(value: string): string {
