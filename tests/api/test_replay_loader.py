@@ -24,6 +24,7 @@ from tests.api.fixtures.sample_replay import (
     write_meeting_replay,
     write_partial_replay,
     write_sample_replay,
+    write_unresolved_meeting_replay,
 )
 
 
@@ -131,6 +132,29 @@ def test_partial_replay_has_no_winner_but_intact_timeline(tmp_path: Path) -> Non
     assert replay.metadata.winner is None
     assert replay.metadata.winner_reason is None
     assert [tick.tick for tick in replay.ticks] == [0, 1, 2, 3]
+
+
+def test_unresolved_meeting_is_not_exposed_via_memory(tmp_path: Path) -> None:
+    # A meeting that opened but never resolved (crash mid-meeting) has no
+    # MeetingReplayEntry, so it is absent from `replay.meetings`; memory for it
+    # must be absent too, so /meetings/{id} and /memory/{id} agree (both 404).
+    meeting_id = write_unresolved_meeting_replay(
+        tmp_path / "replay-seed-0.jsonl", seed=0
+    )
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    replay = loader.load_replay("headless-seed-0")
+    assert replay.meetings == ()
+    assert replay.metadata.winner is None
+    assert [tick.tick for tick in replay.ticks] == [0, 1]
+    # The tick timeline still surfaces the meeting_triggered event...
+    assert any(
+        isinstance(event, MeetingTriggeredEventView) and event.meeting_id == meeting_id
+        for event in replay.ticks[1].events
+    )
+    # ...but memory for the unresolved meeting is not exposed.
+    with pytest.raises(KeyError):
+        loader.get_meeting_memory("headless-seed-0", meeting_id, "p-2")
 
 
 def test_unknown_game_raises_file_not_found(loader: ReplayLoader) -> None:

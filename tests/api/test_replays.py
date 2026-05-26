@@ -22,6 +22,7 @@ from tests.api.fixtures.sample_replay import (
     corrupt_tick_hash,
     write_meeting_replay,
     write_sample_replay,
+    write_unresolved_meeting_replay,
 )
 
 
@@ -167,6 +168,24 @@ def test_get_meeting_memory_unknown_meeting_returns_404(client: TestClient) -> N
 def test_get_meeting_memory_unknown_game_returns_404(client: TestClient) -> None:
     response = client.get("/replays/headless-seed-999/meetings/m/memory/p-2")
     assert response.status_code == 404
+
+
+def test_unresolved_meeting_memory_and_meeting_endpoints_agree(tmp_path: Path) -> None:
+    # A crashed-mid-meeting replay: /meetings/{id} and /memory/{id} must both
+    # 404 for the unresolved meeting (no MeetingReplayEntry was written).
+    meeting_id = write_unresolved_meeting_replay(
+        tmp_path / "replay-seed-0.jsonl", seed=0
+    )
+    test_app = create_app()
+    loader = ReplayLoader(replay_dir=tmp_path)
+    test_app.dependency_overrides[get_replay_loader] = lambda: loader
+    with TestClient(test_app) as test_client:
+        meeting = test_client.get(f"/replays/headless-seed-0/meetings/{meeting_id}")
+        memory = test_client.get(
+            f"/replays/headless-seed-0/meetings/{meeting_id}/memory/p-2"
+        )
+    assert meeting.status_code == 404
+    assert memory.status_code == 404
 
 
 # -- registration / OpenAPI smoke (migrated from Task 4.1 test_routes) ---

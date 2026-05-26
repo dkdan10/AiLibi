@@ -389,6 +389,15 @@ class ReplayLoader:
                     continue
 
                 assert meeting_id is not None  # set above when phase == MEETING
+
+                if meeting_entry is None:
+                    # Partial replay: the meeting opened but never resolved
+                    # (the run crashed mid-meeting per Task 3.19). It is not
+                    # exposed via /meetings/{meeting_id}, so do NOT snapshot
+                    # memory for it either — keep the two endpoints consistent.
+                    # The tick timeline is intact up to here; stop the walk.
+                    break
+
                 if collect_memory:
                     for pid in sorted(state.players):
                         if not state.players[pid].alive:
@@ -400,12 +409,6 @@ class ReplayLoader:
                             memory=memories[pid],
                             meeting_entry=meeting_entry,
                         )
-
-                if meeting_entry is None:
-                    # Partial replay: the meeting opened but never resolved
-                    # (the run crashed mid-meeting per Task 3.19). The tick
-                    # timeline is intact up to here; stop the walk.
-                    break
 
                 pre_meeting_events = tuple(events)
                 result = _meeting_result_from_entry(meeting_entry)

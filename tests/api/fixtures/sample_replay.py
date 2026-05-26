@@ -177,6 +177,51 @@ def write_meeting_replay(path: Path, *, seed: int = 0) -> MeetingReplayExpectati
     )
 
 
+def write_unresolved_meeting_replay(path: Path, *, seed: int = 0) -> str:
+    """Write a game that opens a meeting but crashes before it resolves.
+
+    Tick 0 kills a crewmate; tick 1 reports the body (engine enters MEETING);
+    then the run "crashes" — no ``MeetingReplayEntry`` and no game-end record are
+    written. Returns the synthetic ``meeting_id`` the loader assigns to the
+    unresolved meeting (the id surfaced by the tick timeline's
+    ``meeting_triggered`` event).
+    """
+
+    game_map = load_canonical_map()
+    game_id = f"headless-seed-{seed}"
+    log = ReplayLog(path=path, game_id=game_id)
+    state = seed_initial_state(
+        seed=seed,
+        game_map=game_map,
+        num_players=_NUM_PLAYERS,
+        num_impostors=_NUM_IMPOSTORS,
+    )
+    impostor = next(p for p, s in state.players.items() if s.role == "IMPOSTOR")
+    crewmates = sorted(p for p, s in state.players.items() if s.role == "CREWMATE")
+    victim = crewmates[0]
+    reporter = crewmates[1]
+
+    kill = KillAction.model_validate(
+        {"actor": impostor, "type": "kill", "payload": {"target": victim}}
+    )
+    input_tick = state.tick
+    state, _events = advance_tick(state, [kill], game_map=game_map)
+    log.record_tick(input_tick, [kill], state)
+
+    report = ReportBodyAction.model_validate(
+        {
+            "actor": reporter,
+            "type": "report",
+            "payload": {"body_id": f"body-{victim}-0"},
+        }
+    )
+    input_tick = state.tick
+    state, _events = advance_tick(state, [report], game_map=game_map)
+    log.record_tick(input_tick, [report], state)
+    # Crash: no record_meeting, no record_game_end.
+    return f"{game_id}:meeting-0"
+
+
 def corrupt_tick_hash(path: Path, *, tick: int) -> None:
     """Overwrite the recorded ``state_hash`` of one tick record with a bad value."""
 
