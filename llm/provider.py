@@ -18,7 +18,7 @@ import re
 from collections.abc import Awaitable, Callable
 from typing import Final
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 
@@ -56,6 +56,31 @@ class AnthropicRawResponse(BaseModel):
     model: str
     input_tokens: int
     output_tokens: int
+
+
+class LLMCallFailure(BaseModel):
+    """Cost + partial-response metadata for a schema-validation failure.
+
+    Constructed inside :meth:`AnthropicClient.complete` when a non-empty
+    provider response fails ``model_validate_json`` and attached to the
+    propagating :class:`~pydantic.ValidationError` (see
+    :func:`extract_parse_failure`). The orchestrator's recording layer
+    reads it off the exception and persists a failed-call audit row so
+    post-mortem analysis can reconstruct how much was paid for the
+    response that broke the meeting, even though the meeting still aborts
+    (DESIGN.md §11.4; Task 3.19 finding 2).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    model: str
+    prompt_length: int
+    raw_response: str
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    error_type: str
+    error_message: str
 
 
 SendHook = Callable[..., Awaitable[AnthropicRawResponse]]
@@ -118,25 +143,54 @@ class AnthropicClient:
             extended_thinking=self._extended_thinking,
             prompt_caching_beta=self._prompt_caching_beta,
         )
-        # Anthropic (and Claude models generally) wrap structured-output
-        # JSON in markdown code fences by default. Strip them at the
-        # Protocol boundary so Pydantic — and the recorded LLMResponse.text
-        # — see schema-validatable JSON. Placement inside complete() (not
-        # _default_send) means a future fencing adapter inherits this.
-        text = _strip_json_code_fences(raw.text) if schema is not None else raw.text
+        # Cost is computed up front so the same figure is available both
+        # for the successful LLMResponse and for the failure carrier
+        # attached to a ValidationError below: the model already burned
+        # these tokens regardless of whether the response parses, so the
+        # crashing-meeting cost must be recoverable (Task 3.19 finding 2).
+        cost_usd = _compute_cost_usd(
+            model=raw.model,
+            input_tokens=raw.input_tokens,
+            output_tokens=raw.output_tokens,
+        )
+        # Claude models wrap (and sometimes precede) structured-output
+        # JSON with markdown fences and "thinking" prose by default.
+        # Extract the balanced JSON object at the Protocol boundary so
+        # Pydantic — and the recorded LLMResponse.text — see schema-
+        # validatable JSON. Placement inside complete() (not _default_send)
+        # means a future fencing adapter inherits this.
+        text = _extract_json_block(raw.text) if schema is not None else raw.text
         if schema is not None:
-            schema.model_validate_json(text)
+            try:
+                schema.model_validate_json(text)
+            except ValidationError as exc:
+                # Attach the cost + partial response to the propagating
+                # ValidationError so the orchestrator's recording layer
+                # can persist a failed-call audit trail before the meeting
+                # aborts. The exception type and message are left untouched
+                # so callers that catch ValidationError (including the
+                # truncation-failure-mode tests) are unaffected.
+                _attach_parse_failure(
+                    exc,
+                    LLMCallFailure(
+                        model=raw.model,
+                        prompt_length=len(prompt),
+                        raw_response=raw.text[:_RAW_RESPONSE_CHARS],
+                        input_tokens=raw.input_tokens,
+                        output_tokens=raw.output_tokens,
+                        cost_usd=cost_usd,
+                        error_type=type(exc).__name__,
+                        error_message=str(exc)[:_ERROR_MESSAGE_CHARS],
+                    ),
+                )
+                raise
         return LLMResponse(
             text=text,
             usage=TokenUsage(
                 input_tokens=raw.input_tokens,
                 output_tokens=raw.output_tokens,
             ),
-            cost_usd=_compute_cost_usd(
-                model=raw.model,
-                input_tokens=raw.input_tokens,
-                output_tokens=raw.output_tokens,
-            ),
+            cost_usd=cost_usd,
             model=raw.model,
         )
 
@@ -195,6 +249,105 @@ def build_default_client(
         f"unknown {ENV_PROVIDER} value: {provider!r}; "
         f"expected one of {PROVIDER_ANTHROPIC!r} or {PROVIDER_FAKE!r}"
     )
+
+
+# Caps on the metadata captured for a failed structured-output call
+# (Task 3.19 finding 2). The raw response is truncated to the first ~1KB
+# and the exception message to the first 200 chars so a pathologically
+# long response or error message cannot bloat the replay log.
+_RAW_RESPONSE_CHARS: Final[int] = 1024
+_ERROR_MESSAGE_CHARS: Final[int] = 200
+
+# Private attribute under which a :class:`LLMCallFailure` is stashed on a
+# ValidationError so the failure metadata rides the propagating exception
+# up to the orchestrator's recording layer. Carrying it on the exception
+# (rather than changing the exception type) keeps every caller that
+# catches ``ValidationError`` unaffected; carrying it on an instance
+# attribute (rather than a module-level structure) keeps the adapter free
+# of mutable global state (AGENTS.md). The name is project-namespaced to
+# avoid colliding with any pydantic internals.
+_PARSE_FAILURE_ATTR: Final[str] = "_ailibi_parse_failure"
+
+
+def _attach_parse_failure(exc: BaseException, failure: LLMCallFailure) -> None:
+    setattr(exc, _PARSE_FAILURE_ATTR, failure)
+
+
+def extract_parse_failure(exc: BaseException) -> LLMCallFailure | None:
+    """Return the :class:`LLMCallFailure` carried by ``exc``, if any.
+
+    :meth:`AnthropicClient.complete` attaches an :class:`LLMCallFailure`
+    to the :class:`~pydantic.ValidationError` it re-raises when a
+    structured-output response fails to validate. The orchestrator calls
+    this on the meeting-failure path to recover the cost + partial-
+    response metadata for the replay log. Returns ``None`` for any
+    exception that carries no such metadata (a provider/deadline timeout,
+    or a fake-provider run that never fails validation), so the caller
+    records a failed-call row only for genuine schema-validation crashes.
+    """
+
+    failure = getattr(exc, _PARSE_FAILURE_ATTR, None)
+    return failure if isinstance(failure, LLMCallFailure) else None
+
+
+def _extract_json_block(text: str) -> str:
+    """Extract the first balanced JSON object from an LLM response.
+
+    Claude models emit structured-output JSON in several shapes across
+    the Pre-Phase-4 evals; this normalises all of them to the bare JSON
+    object ``model_validate_json`` expects:
+
+    * **Clean JSON** (``{...}`` start to finish) → returned unchanged.
+    * **Fenced JSON** (```` ```json\\n{...}\\n``` ````) → fences dropped.
+    * **Prose preamble + fenced/bare JSON** (``I need to analyze...\\n{...}``)
+      → the prose is ignored and the JSON extracted. Task 3.19 finding 1:
+      Sonnet 4.6 nondeterministically emits "thinking" prose before its
+      fenced output, which the open-anchored fence strip could not handle.
+    * **JSON + trailing prose** (``{...}\\n\\nDone!``) → trailing prose
+      dropped.
+
+    Strategy: find the first ``{``, then walk forward tracking brace
+    depth with string-literal awareness (braces inside ``"..."`` do not
+    count, and ``\\`` escape sequences are respected) and return the
+    substring from that ``{`` to its matching ``}``, stripped of
+    surrounding whitespace. When the input has no ``{`` at all, or the
+    object never closes (a response truncated mid-output — Task 3.17's
+    case), fall back to :func:`_strip_json_code_fences` so its documented
+    unclosed-fence / no-JSON semantics are preserved (the incomplete body
+    reaches Pydantic as an actionable ``ValidationError`` rather than a
+    leading-backtick parse error).
+    """
+
+    open_index = text.find("{")
+    if open_index == -1:
+        return _strip_json_code_fences(text)
+
+    depth = 0
+    in_string = False
+    escape_next = False
+    for index in range(open_index, len(text)):
+        char = text[index]
+        if escape_next:
+            escape_next = False
+            continue
+        if in_string:
+            if char == "\\":
+                escape_next = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_index : index + 1].strip()
+    # The first ``{`` never closed (truncated mid-object): fall back to
+    # the fence-strip behavior so truncated responses keep Task 3.17's
+    # semantics rather than returning a half-object here.
+    return _strip_json_code_fences(text)
 
 
 # Surrounding markdown code fences as emitted by Claude models for
@@ -326,8 +479,10 @@ __all__ = [
     "ENV_MEETING_MODEL",
     "ENV_PROVIDER",
     "ENV_TRIGGER_MODEL",
+    "LLMCallFailure",
     "PROVIDER_ANTHROPIC",
     "PROVIDER_FAKE",
     "SendHook",
     "build_default_client",
+    "extract_parse_failure",
 ]
