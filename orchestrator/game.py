@@ -54,7 +54,7 @@ from llm.budget import GameBudget
 from llm.budgeted_client import BudgetedLLMClient
 from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
-from llm.provider import build_default_client
+from llm.provider import build_default_client, extract_parse_failure
 from meetings.manager import (
     MeetingConfig,
     MeetingManager,
@@ -739,9 +739,20 @@ class HeadlessGame:
                 # on the resume tick.
                 last_events = pre_meeting_events + tuple(post_events)
 
+        # The engine fired a GameOverEvent (the while loop only exits
+        # GAME_OVER via that event). Persist the decisive outcome as the
+        # final replay row so win-rate is recoverable from any replay log,
+        # including a partial tournament that crashed mid-run (Task 3.19
+        # finding 3).
+        game_over_event = self._game_over_event(last_events)
+        replay.record_game_end(
+            winner=game_over_event.winner,
+            reason=game_over_event.reason,
+            tick=game_over_event.tick,
+        )
         return HeadlessGameResult(
             final_state=state,
-            outcome=self._game_over_outcome(last_events),
+            outcome=game_over_event.winner,
             replay_path=self._replay_path,
         )
 
@@ -760,14 +771,39 @@ class HeadlessGame:
             )
         trigger, triggering_body_id = _build_meeting_trigger(state=state, events=events)
         meeting_id = f"{self._game_id()}:meeting-{meeting_index}"
-        artifacts = _drive_async(
-            self._meeting_runner.run_meeting(
-                meeting_id=meeting_id,
-                trigger=trigger,
-                state=state,
-                agents=agents,
+        try:
+            artifacts = _drive_async(
+                self._meeting_runner.run_meeting(
+                    meeting_id=meeting_id,
+                    trigger=trigger,
+                    state=state,
+                    agents=agents,
+                )
             )
-        )
+        except BaseException as exc:
+            # A meeting that aborts because a structured-output response
+            # failed schema validation carries the rejected call's cost +
+            # partial response on the propagating ValidationError (see
+            # llm.provider.extract_parse_failure). Persist it before the
+            # crash propagates so per-meeting cost is auditable for the
+            # meeting that broke the run (Task 3.19 finding 2). The meeting
+            # still aborts — the caller cannot proceed without a valid
+            # response — so the exception is re-raised unchanged.
+            failure = extract_parse_failure(exc)
+            if failure is not None:
+                replay.record_failed_call(
+                    meeting_id=meeting_id,
+                    tick=trigger.trigger_tick,
+                    model=failure.model,
+                    prompt_length=failure.prompt_length,
+                    raw_response=failure.raw_response,
+                    input_tokens=failure.input_tokens,
+                    output_tokens=failure.output_tokens,
+                    cost_usd=failure.cost_usd,
+                    error_type=failure.error_type,
+                    error_message=failure.error_message,
+                )
+            raise
         _validate_runner_result(
             result=artifacts.result,
             expected_meeting_id=meeting_id,
@@ -829,12 +865,10 @@ class HeadlessGame:
             for player_id in sorted(packets)
         ]
 
-    def _game_over_outcome(
-        self, last_events: tuple[EngineEvent, ...]
-    ) -> Literal["CREWMATES", "IMPOSTORS"]:
+    def _game_over_event(self, last_events: tuple[EngineEvent, ...]) -> GameOverEvent:
         for event in last_events:
             if isinstance(event, GameOverEvent):
-                return event.winner
+                return event
         raise RuntimeError("game loop exited PLAY without emitting a GameOverEvent")
 
     def _game_id(self) -> str:

@@ -38,7 +38,13 @@ from agents.strategic.prompts.loader import (
     vote_ballot_prompt,
 )
 from llm.client import LLMResponse
-from llm.provider import AnthropicClient, _strip_json_code_fences
+from llm.provider import (
+    AnthropicClient,
+    AnthropicRawResponse,
+    _extract_json_block,
+    _strip_json_code_fences,
+    extract_parse_failure,
+)
 from meetings.manager import SuspicionEntry
 from meetings.schemas import (
     MeetingTranscript,
@@ -141,6 +147,130 @@ class TestStripJsonCodeFences:
         # the JSON body survive even when the surrounding fences are removed.
         inner = '{"agent_id": "p-1", "free_text": "see ``` for code"}'
         assert _strip_json_code_fences(f"```json\n{inner}\n```") == inner
+
+
+class TestJsonBlockExtraction:
+    """Unit coverage for the balanced-block extractor (Task 3.19 finding 1).
+
+    Not ``@real_provider``-marked: pure string logic that runs in CI. The
+    extractor handles the prose-preamble and trailing-prose shapes the
+    open-anchored fence strip (``TestStripJsonCodeFences``) could not,
+    while delegating the no-JSON / truncated-mid-object shapes back to it.
+    """
+
+    def test_prose_preamble_then_fenced_json_extracts_json(self) -> None:
+        # The crash shape from the sixth Pre-Phase-4 eval: "thinking" prose
+        # before a ```json fence. The open-anchored strip left the prose +
+        # fence in place and model_validate_json died on the leading "I".
+        text = f"I need to analyze my memory first.\n```json\n{_INNER}\n```"
+        assert _extract_json_block(text) == _INNER
+
+    def test_prose_preamble_then_bare_json_extracts_json(self) -> None:
+        text = f"Let me think step by step about my role.\n{_INNER}"
+        assert _extract_json_block(text) == _INNER
+
+    def test_json_with_trailing_prose_extracts_json(self) -> None:
+        text = f"{_INNER}\n\nThat is my report. Hope it helps!"
+        assert _extract_json_block(text) == _INNER
+
+    def test_string_embedded_braces_do_not_break_depth_tracking(self) -> None:
+        # The braces live inside a string literal; without string-awareness
+        # the lone "}" would close the object early and truncate the body.
+        text = '{"agent_id": "p-1", "free_text": "braces } and { inside"}'
+        assert _extract_json_block(text) == text
+
+    def test_escaped_quotes_inside_strings_are_respected(self) -> None:
+        # The escaped quote must not end the string early (which would make
+        # the following "}" look unquoted and close the object prematurely).
+        text = '{"agent_id": "p-1", "free_text": "she said \\"hi\\" today"}'
+        assert _extract_json_block(text) == text
+
+    def test_multiple_balanced_blocks_returns_only_the_first(self) -> None:
+        second = '{"agent_id": "p-2", "tick": 6, "free_text": "second"}'
+        assert _extract_json_block(f"{_INNER}\n{second}") == _INNER
+
+    def test_prose_brace_span_in_preamble_is_skipped(self) -> None:
+        # A preamble brace span that balances but is not JSON ("{steps}")
+        # must not be returned: the scanner skips it (json.loads rejects it)
+        # and continues to the real object that follows. Without the skip
+        # the call aborts on "{steps}" though valid JSON is present later.
+        text = "I used {steps} before answering.\n" + _INNER
+        assert _extract_json_block(text) == _INNER
+
+    def test_unmatched_preamble_brace_is_skipped(self) -> None:
+        # A stray unmatched "{" in the preamble never closes, so depth from
+        # it never returns to zero; the scanner must move on to the next "{"
+        # rather than give up and hand the whole prose to Pydantic.
+        text = "Here is my analysis { and more prose\n" + _INNER
+        assert _extract_json_block(text) == _INNER
+
+    def test_prose_preamble_then_truncated_json_drops_preamble(self) -> None:
+        # Preamble + fenced JSON truncated mid-object (no closing brace or
+        # fence). No candidate parses, so the fallback returns the body from
+        # the first "{" — the incomplete object reaches Pydantic as an
+        # actionable EOF/missing-field error, not a "line 1 column 1" parse
+        # error on the leading prose/backtick (which start-anchored fence
+        # stripping would have left in place).
+        body = '{"agent_id": "p-1", "tick": 5,'
+        text = f"Some thinking prose.\n```json\n{body}"
+        assert _extract_json_block(text) == body
+
+    def test_no_json_content_falls_back_unchanged(self) -> None:
+        # No "{" at all -> fall back to the fence strip, which passes
+        # non-fenced prose through unchanged for Pydantic to reject loud.
+        assert _extract_json_block("there is no json here") == "there is no json here"
+
+
+class TestFailedCallRecording:
+    """The provider attaches cost + partial-response metadata to the
+    ``ValidationError`` it re-raises when a structured-output response fails
+    schema validation, so the orchestrator can persist a failed-call audit
+    trail before the meeting aborts (Task 3.19 finding 2).
+
+    Pure unit test: an injected ``send`` hook returns a schema-invalid body,
+    so there is no network call and no ``@real_provider`` gate. Verifies the
+    surfacing contract works even without a real provider call.
+    """
+
+    def test_validation_error_carries_failed_call_metadata(self) -> None:
+        async def _send_invalid_body(**_kwargs: object) -> AnthropicRawResponse:
+            # Valid JSON, but missing ReportDocument's required ``tick`` and
+            # ``free_text`` fields -> model_validate_json raises.
+            return AnthropicRawResponse(
+                text='{"agent_id": "p-1"}',
+                model="claude-sonnet-4-6",
+                input_tokens=123,
+                output_tokens=45,
+            )
+
+        client = AnthropicClient(api_key="test-key", send=_send_invalid_body)
+        prompt = "x" * 40
+
+        with pytest.raises(ValidationError) as exc_info:
+            asyncio.run(
+                client.complete(
+                    prompt=prompt,
+                    schema=ReportDocument,
+                    max_tokens=512,
+                    temperature=0.0,
+                )
+            )
+
+        failure = extract_parse_failure(exc_info.value)
+        assert failure is not None, "expected an LLMCallFailure on the exception"
+        assert failure.model == "claude-sonnet-4-6"
+        assert failure.input_tokens == 123
+        assert failure.output_tokens == 45
+        assert failure.prompt_length == len(prompt)
+        # Sonnet list pricing makes a non-zero cost for 123 in + 45 out.
+        assert failure.cost_usd > 0.0
+        assert failure.error_type == "ValidationError"
+        assert failure.raw_response == '{"agent_id": "p-1"}'
+
+    def test_extract_parse_failure_returns_none_for_plain_exception(self) -> None:
+        # An exception that never went through the provider carries no
+        # metadata -> the recording layer records no failed-call row for it.
+        assert extract_parse_failure(ValueError("unrelated")) is None
 
 
 class TestAnthropicSchemaRoundTrip:
@@ -454,3 +584,52 @@ class TestAnthropicTruncationFailureMode:
         # The leading-backtick failure mode is what the 2138 eval saw;
         # confirm the fence strip means we no longer hit it.
         assert "line 1 column 1" not in str(exc.value)
+
+
+class TestAnthropicProsePreamble:
+    """A live response that emits "thinking" prose before its fenced JSON
+    must still parse (Task 3.19 finding 1).
+
+    The sixth Pre-Phase-4 eval
+    (``audits/audit-2026-05-25-2018-pre-phase-4-real-provider-eval.md``)
+    crashed at game 28 when Sonnet 4.6 emitted a prose preamble before its
+    ```json fence: the open-anchored ``_strip_json_code_fences`` did not
+    match, leaving the prose in place, and ``model_validate_json`` died on
+    the leading "I". The balanced-block extractor ignores the preamble and
+    pulls the JSON object out.
+
+    Driven with ``asyncio.run`` rather than ``pytest-asyncio`` to match the
+    module convention; ``@real_provider`` keeps it skipped in CI.
+    Per-invocation cost ~$0.01.
+    """
+
+    @real_provider
+    def test_prose_preamble_report_parses_without_raising(self) -> None:
+        client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
+        prompt = (
+            "Think step by step about your role in this meeting, narrating "
+            "your reasoning in a sentence or two of prose FIRST. THEN, after "
+            "that prose, emit a single ReportDocument JSON object with "
+            'EXACTLY these fields: "agent_id" (the string "p-1"), "tick" '
+            '(the integer 5), "observations" (an empty array), "claims" (an '
+            'empty array), and "free_text" (a one-sentence status string).'
+        )
+
+        # The contract under test is simply that complete() returns without
+        # raising: the extractor must strip the prose preamble before
+        # validation. A pre-3.19 adapter raised ValidationError here.
+        response = asyncio.run(
+            client.complete(
+                prompt=prompt,
+                schema=ReportDocument,
+                max_tokens=2048,
+                temperature=0.0,
+            )
+        )
+
+        assert isinstance(response, LLMResponse)
+        assert response.cost_usd > 0.0
+        # The recorded text is the post-extraction JSON object, so it
+        # re-parses cleanly as the requested schema.
+        doc = ReportDocument.model_validate_json(response.text)
+        assert doc.agent_id

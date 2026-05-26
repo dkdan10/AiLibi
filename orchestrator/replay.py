@@ -116,8 +116,65 @@ class MeetingReplayEntry(BaseModel):
     state_hash_after: str
 
 
+WinnerSide: TypeAlias = Literal["CREWMATES", "IMPOSTORS"]
+
+
+class GameEndReplayEntry(BaseModel):
+    """One game-outcome replay record (DESIGN.md §11.4; Task 3.19 finding 3).
+
+    Written once per game by :meth:`ReplayLog.record_game_end` after the
+    engine emits its ``GameOverEvent``, as the LAST row of a completed
+    game's replay. Persisting the decisive outcome makes win-rate
+    computable from any replay log via :func:`read_game_outcome` —
+    including a partial tournament that crashed mid-run, where a
+    ``game_over`` row is present for every game that finished before the
+    crash. ``winner`` is ``None`` only for an unfinished / drawn game; the
+    engine always names a side, so orchestrator-written rows always carry
+    a winner.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["game_over"] = "game_over"
+    game_id: str
+    tick: int | None = None
+    winner: WinnerSide | None
+    reason: str
+
+
+class FailedCallReplayEntry(BaseModel):
+    """One failed-LLM-call replay record (DESIGN.md §11.4; Task 3.19 finding 2).
+
+    Written by :meth:`ReplayLog.record_failed_call` when a meeting aborts
+    because a structured-output response failed schema validation. The
+    ``ValidationError`` fires inside the provider before an
+    :class:`~llm.client.LLMResponse` exists, so the tokens the model
+    already burned would otherwise be invisible to both the budget layer
+    and :meth:`ReplayLog.record_meeting` (which never runs for the crashed
+    meeting). This row captures that spend — plus enough of the raw
+    response and the error to reconstruct what broke — so per-meeting cost
+    is auditable even for the meeting that crashed the run.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["failed_call"] = "failed_call"
+    game_id: str
+    meeting_id: str
+    tick: int
+    model: str
+    prompt_length: int
+    raw_response: str
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    error_type: str
+    error_message: str
+
+
 ReplayLogEntry: TypeAlias = Annotated[
-    ReplayEntry | MeetingReplayEntry, Field(discriminator="kind")
+    ReplayEntry | MeetingReplayEntry | GameEndReplayEntry | FailedCallReplayEntry,
+    Field(discriminator="kind"),
 ]
 
 
@@ -182,6 +239,72 @@ class ReplayLog:
         )
         self._append(entry.model_dump(mode="json"))
 
+    def record_game_end(
+        self,
+        *,
+        winner: WinnerSide | None,
+        reason: str,
+        tick: int | None = None,
+    ) -> None:
+        """Persist the decisive game outcome (DESIGN.md §11.4; Task 3.19).
+
+        Emitted once by :meth:`HeadlessGame.run` after the engine fires
+        its ``GameOverEvent``, as the final row of a completed game's
+        replay. :func:`read_game_outcome` reads it back so win-rate is
+        evaluable from any replay log, including partial tournaments.
+        ``tick`` defaults to ``None`` for callers (e.g. unit tests) that
+        only care about the winner; the orchestrator passes the
+        game-over tick.
+        """
+
+        entry = GameEndReplayEntry(
+            game_id=self._game_id,
+            tick=tick,
+            winner=winner,
+            reason=reason,
+        )
+        self._append(entry.model_dump(mode="json"))
+
+    def record_failed_call(
+        self,
+        *,
+        meeting_id: str,
+        tick: int,
+        model: str,
+        prompt_length: int,
+        raw_response: str,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float,
+        error_type: str,
+        error_message: str,
+    ) -> None:
+        """Persist a meeting-aborting failed LLM call (DESIGN.md §11.4; Task 3.19).
+
+        Called by the orchestrator on the meeting-failure path when a
+        structured-output response failed schema validation (the metadata
+        rides the propagating ``ValidationError`` and is recovered via
+        :func:`llm.provider.extract_parse_failure`). Captures the spend
+        and partial response for the rejected call so per-meeting cost is
+        reconstructable even though the meeting crashed and
+        :meth:`record_meeting` never ran.
+        """
+
+        entry = FailedCallReplayEntry(
+            game_id=self._game_id,
+            meeting_id=meeting_id,
+            tick=tick,
+            model=model,
+            prompt_length=prompt_length,
+            raw_response=raw_response,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost_usd,
+            error_type=error_type,
+            error_message=error_message,
+        )
+        self._append(entry.model_dump(mode="json"))
+
     def read_entries(self) -> tuple[ReplayEntry, ...]:
         return read_replay_entries(self._path)
 
@@ -226,31 +349,66 @@ def read_meeting_entries(path: Path) -> tuple[MeetingReplayEntry, ...]:
     )
 
 
+def read_failed_call_entries(path: Path) -> tuple[FailedCallReplayEntry, ...]:
+    """Read the failed-call records (``kind == "failed_call"``) from the JSONL file.
+
+    These are the LLM calls that aborted a meeting on schema-validation
+    failure (Task 3.19 finding 2). Empty for any game whose meetings all
+    completed; carries the rejected-call spend otherwise.
+    """
+
+    return tuple(
+        entry
+        for entry in read_all_entries(path)
+        if isinstance(entry, FailedCallReplayEntry)
+    )
+
+
+def read_game_outcome(path: Path) -> WinnerSide | None:
+    """Return the winner from the last game-end record in a replay log.
+
+    Scans for ``kind == "game_over"`` records and returns the winner of
+    the last one (a game writes exactly one, as its final row). Returns
+    ``None`` when no game-end record is present — a partial / crashed game
+    whose outcome was never decided (Task 3.19 finding 3) — so a
+    tournament's win rate can be computed across every replay log,
+    skipping the undecided ones.
+    """
+
+    outcome: WinnerSide | None = None
+    for entry in read_all_entries(path):
+        if isinstance(entry, GameEndReplayEntry):
+            outcome = entry.winner
+    return outcome
+
+
 def compute_cost_usd(path: Path) -> float:
-    """Sum LLM cost (USD) across every meeting in a replay log (DESIGN.md §11.4).
+    """Sum LLM cost (USD) across a replay log (DESIGN.md §11.4; Task 3.19).
 
-    Walks the ``kind == "meeting"`` records via :func:`read_meeting_entries`
-    and sums :attr:`LLMCallRecord.cost_usd` over every captured call. This
-    is the canonical per-game cost reduction: future eval code (including
-    the real-provider 50-game eval that checks the ``<= $0.30`` merge
-    criterion) consumes it rather than re-deriving the sum inline, so the
-    "only meeting records carry cost" detail lives in one place.
+    Reads every record once and sums :attr:`LLMCallRecord.cost_usd` over
+    each ``kind == "meeting"`` record's captured calls *plus* each
+    ``kind == "failed_call"`` record's cost. This is the canonical
+    per-game cost reduction: future eval code (including the real-provider
+    50-game eval that checks the ``<= $0.30`` merge criterion) consumes it
+    rather than re-deriving the sum inline. Folding in the failed-call
+    rows means a meeting that aborted on a rejected response still
+    contributes the tokens the model already burned, so a crashed run's
+    spend is not silently undercounted (Task 3.19 finding 2).
 
-    Returns ``0.0`` for replay logs with no meeting entries (e.g. games
-    that ended before any meeting fired) and for meetings whose
-    ``llm_calls`` list is empty. The sum is seeded with a float so the
-    return value is always a finite, non-negative float (fake-provider
+    Returns ``0.0`` for replay logs with no meeting or failed-call entries
+    (e.g. games that ended before any meeting fired) and for meetings
+    whose ``llm_calls`` list is empty. The sum is seeded with a float so
+    the return value is always a finite, non-negative float (fake-provider
     runs report ``cost_usd == 0.0`` per call).
     """
 
-    return sum(
-        (
-            call.cost_usd
-            for entry in read_meeting_entries(path)
-            for call in entry.llm_calls
-        ),
-        0.0,
-    )
+    total = 0.0
+    for entry in read_all_entries(path):
+        if isinstance(entry, MeetingReplayEntry):
+            total += sum((call.cost_usd for call in entry.llm_calls), 0.0)
+        elif isinstance(entry, FailedCallReplayEntry):
+            total += entry.cost_usd
+    return total
 
 
 def read_all_entries(path: Path) -> tuple[ReplayLogEntry, ...]:
@@ -286,6 +444,10 @@ def _parse_entry(raw_entry: Any) -> ReplayLogEntry:
         return ReplayEntry.model_validate({**raw_entry, "kind": "tick"})
     if kind == "meeting":
         return MeetingReplayEntry.model_validate(raw_entry)
+    if kind == "game_over":
+        return GameEndReplayEntry.model_validate(raw_entry)
+    if kind == "failed_call":
+        return FailedCallReplayEntry.model_validate(raw_entry)
     raise ValueError(f"unknown replay entry kind: {kind!r}")
 
 
@@ -344,13 +506,18 @@ def _stable_json(data: Any) -> str:
 
 
 __all__ = [
+    "FailedCallReplayEntry",
+    "GameEndReplayEntry",
     "LLMCallRecord",
     "MeetingReplayEntry",
     "ReplayEntry",
     "ReplayLog",
     "ReplayLogEntry",
+    "WinnerSide",
     "compute_cost_usd",
     "read_all_entries",
+    "read_failed_call_entries",
+    "read_game_outcome",
     "read_meeting_entries",
     "read_replay_entries",
 ]
