@@ -59,6 +59,11 @@ function memoryKey(meetingId: string, agentId: string): string {
   return `${meetingId}:${agentId}`;
 }
 
+// Monotonic token guarding selectReplay against out-of-order responses: if a
+// newer selection starts before an older getReplay resolves, the stale older
+// completion is dropped so it can't overwrite the newer selection.
+let latestReplayRequest = 0;
+
 export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
   (set, get) => ({
     replayList: null,
@@ -82,8 +87,12 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
     },
 
     async selectReplay(gameId) {
+      const requestToken = ++latestReplayRequest;
       try {
         const replay = await api.getReplay(gameId);
+        if (requestToken !== latestReplayRequest) {
+          return;
+        }
         set({
           currentReplay: replay,
           currentReplayError: null,
@@ -94,6 +103,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           memoryCache: {},
         });
       } catch (error) {
+        if (requestToken !== latestReplayRequest) {
+          return;
+        }
         set({ currentReplay: null, currentReplayError: errorMessage(error) });
       }
     },
