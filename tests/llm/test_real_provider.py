@@ -47,6 +47,7 @@ from llm.provider import (
 )
 from meetings.manager import SuspicionEntry
 from meetings.schemas import (
+    AlibiClaim,
     MeetingTranscript,
     ReportDocument,
     Statement,
@@ -443,6 +444,7 @@ class TestProductionTemplateSchemaRoundTrips:
     def test_accusation_round_template_produces_valid_statement(self) -> None:
         client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
         prompt = accusation_round_prompt(
+            agent_id="p-3",
             rendered_memory=_REAL_CREWMATE_MEMORY,
             transcript=_real_transcript(),
             contradictions=(),
@@ -461,6 +463,39 @@ class TestProductionTemplateSchemaRoundTrips:
         assert response.cost_usd > 0.0
         stmt = Statement.model_validate_json(response.text)
         assert stmt.free_text
+
+    @real_provider
+    def test_accusation_round_statement_has_no_placeholder_self_subject(self) -> None:
+        # Task 3.20 regression: with agent_id threaded into the template,
+        # the live model must emit a concrete player id (its own id) as
+        # an alibi `subject`, never the placeholder tokens "self" or
+        # "p-self" that DESIGN.md §5.4 contradiction detection cannot
+        # match across speakers. Skipped in CI (cost ~$0.10); the next
+        # 50-game real-provider eval is the canonical acceptance gate.
+        client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
+        prompt = accusation_round_prompt(
+            agent_id="p-3",
+            rendered_memory=_REAL_CREWMATE_MEMORY,
+            transcript=_real_transcript(),
+            contradictions=(),
+        )
+
+        response = asyncio.run(
+            client.complete(
+                prompt=prompt,
+                schema=Statement,
+                max_tokens=1024,
+                temperature=0.0,
+            )
+        )
+
+        stmt = Statement.model_validate_json(response.text)
+        alibi_subjects = [
+            claim.subject for claim in stmt.claims if isinstance(claim, AlibiClaim)
+        ]
+        assert all(subject not in {"self", "p-self"} for subject in alibi_subjects), (
+            f"leaked self-alibi placeholder subject: {alibi_subjects}"
+        )
 
     @real_provider
     def test_vote_ballot_template_produces_valid_vote_ballot(self) -> None:

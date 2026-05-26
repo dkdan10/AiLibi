@@ -116,13 +116,23 @@ def impostor_report_prompt(
 
 def accusation_round_prompt(
     *,
+    agent_id: PlayerId,
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
 ) -> str:
-    """Render an accusation-round speech-turn prompt (DESIGN.md §5.2)."""
+    """Render an accusation-round speech-turn prompt (DESIGN.md §5.2).
+
+    ``agent_id`` is threaded into the template so the self-alibi
+    example renders the speaker's own canonical player id (e.g.
+    ``"subject": "p-3"``) rather than a generic placeholder the model
+    might mis-substitute. This mirrors :func:`impostor_report_prompt`
+    (Task 3.18) and keeps DESIGN.md §5.4 contradiction detection able
+    to match self-alibis across speakers.
+    """
 
     return _ENV.get_template(ACCUSATION_ROUND_TEMPLATE).render(
+        agent_id=agent_id,
         rendered_memory=rendered_memory,
         transcript=transcript,
         contradictions=contradictions,

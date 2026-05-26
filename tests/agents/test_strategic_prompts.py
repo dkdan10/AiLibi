@@ -275,6 +275,7 @@ class TestImpostorReportTemplate:
 class TestAccusationRoundTemplate:
     def test_rendered_output_is_non_empty(self) -> None:
         prompt = accusation_round_prompt(
+            agent_id="p-3",
             rendered_memory=_STUB_CREWMATE_MEMORY,
             transcript=_stub_transcript(),
             contradictions=(),
@@ -285,6 +286,7 @@ class TestAccusationRoundTemplate:
 
     def test_rendered_output_contains_version_marker(self) -> None:
         prompt = accusation_round_prompt(
+            agent_id="p-3",
             rendered_memory=_STUB_CREWMATE_MEMORY,
             transcript=_stub_transcript(),
             contradictions=(),
@@ -294,6 +296,7 @@ class TestAccusationRoundTemplate:
 
     def test_renders_transcript_reports_and_statements(self) -> None:
         prompt = accusation_round_prompt(
+            agent_id="p-3",
             rendered_memory=_STUB_CREWMATE_MEMORY,
             transcript=_stub_transcript(),
             contradictions=(),
@@ -315,6 +318,7 @@ class TestAccusationRoundTemplate:
         )
 
         prompt = accusation_round_prompt(
+            agent_id="p-3",
             rendered_memory=_STUB_CREWMATE_MEMORY,
             transcript=_stub_transcript(),
             contradictions=contradictions,
@@ -326,13 +330,30 @@ class TestAccusationRoundTemplate:
     def test_missing_kwarg_raises_under_strict_undefined(self) -> None:
         with pytest.raises(UndefinedError):
             _ENV.get_template(ACCUSATION_ROUND_TEMPLATE).render(
+                agent_id="p-3",
                 rendered_memory=_STUB_CREWMATE_MEMORY,
                 # transcript deliberately omitted.
                 contradictions=(),
             )
 
+    def test_renders_speaker_self_alibi_example_with_own_id(self) -> None:
+        # Task 3.20: the template must anchor the self-alibi example to
+        # the speaker's own player id so the model emits
+        # `"subject": "p-3"` rather than a placeholder (e.g. "p-0" /
+        # "p-self") that DESIGN.md §5.4 contradiction detection cannot
+        # match across speakers.
+        prompt = accusation_round_prompt(
+            agent_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradictions=(),
+        )
+
+        assert '"subject": "p-3"' in prompt
+
     def test_fake_provider_response_parses_into_schema(self) -> None:
         prompt = accusation_round_prompt(
+            agent_id="p-3",
             rendered_memory=_STUB_CREWMATE_MEMORY,
             transcript=_stub_transcript(),
             contradictions=(),

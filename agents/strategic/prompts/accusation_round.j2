@@ -1,7 +1,7 @@
 {# Accusation-round speech turn prompt (DESIGN.md §5.2, §5.3).
 
    prompt_id: accusation_round
-   version: 1
+   version: 2
 
    Targets the shared `Statement` schema (meetings/schemas.py). The orchestrator
    substitutes the deterministic identity fields (`statement_id`, `speaker`,
@@ -160,7 +160,10 @@ Content fields (your actual turn):
                        in a room over a tick range. `from_tick` must be
                        `<= to_tick`; the schema rejects reversed ranges.
                        `evidence` is a list of free-text references
-                       (task ids, players you were with).
+                       (task ids, players you were with). For a
+                       self-alibi (the common case), `subject` is your
+                       own player id; emit it exactly as
+                       `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short evidence ref>", ...]}`.
   - `accusation`    -- `{type: "accusation", against, confidence, reason}`.
                        `confidence` is in `[0.0, 1.0]`. Give a concrete
                        reason grounded in the transcript or your memory.
