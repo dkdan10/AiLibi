@@ -1,0 +1,208 @@
+"""Leak tests for the spectator DTO surface (DESIGN.md §1.3, §7).
+
+The spectator API is a privileged surface: it intentionally exposes role,
+kill attribution, and impostor-only state (that is what makes a replay
+watchable). These tests do NOT redact those fields. Their job is to assert
+every DTO field is *intentional* and to keep ``api/schemas.py`` from
+accidentally embedding an engine / meetings / orchestrator internal type
+(``WorldState``, ``ReplayEntry``, ``MeetingResult``, ...), which would couple
+the frontend to engine shape and re-introduce leakage paths via copy-paste.
+
+Implementation note — why AST, not a raw source grep. The DoD sketch suggests
+``inspect.getsource(api.schemas) | grep`` for forbidden type names. A literal
+whole-source substring grep is unworkable with this DTO inventory: several
+required DTO *names* contain a forbidden name as a prefix (``StatementView``
+contains ``Statement``; ``MeetingTriggeredEventView`` contains
+``MeetingTrigger``; ``AlibiClaimView`` contains ``AlibiClaim``), and the DoD
+also requires each DTO docstring to *name* the source type it shadows. So we
+parse the module with ``ast`` and inspect only field/alias *annotations*
+(never docstrings or class names), tokenized on identifier boundaries. This is
+the "import_linter-style assertion" the DoD offers as the alternative to grep,
+and it is both stricter (catches ``x: WorldState``) and free of false
+positives.
+"""
+
+from __future__ import annotations
+
+import ast
+import inspect
+import re
+from typing import Final
+
+import pydantic
+
+import api.schemas
+
+# The concrete spectator DTOs. Adding or removing a DTO must update BOTH this
+# set AND ``api.schemas.__all__`` AND the "Public types introduced" section of
+# the PR — keeping accidental surface changes visible in review. The three
+# discriminated-union aliases (TickEventView, ObservationClaimView,
+# StatementClaimView) are public importable symbols but are intentionally not
+# inventoried here: they are compositions of the DTOs below, not standalone
+# DTOs.
+EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
+    {
+        "PositionView",
+        "SizeView",
+        "RoomView",
+        "VentView",
+        "EdgeView",
+        "MapLayoutView",
+        "PlayerView",
+        "AgentTickStateView",
+        "KillEventView",
+        "ReportBodyEventView",
+        "SabotageEventView",
+        "TaskCompletedEventView",
+        "MeetingTriggeredEventView",
+        "TickView",
+        "SawPlayerView",
+        "CompletedTaskObsView",
+        "FoundBodyObsView",
+        "AlibiClaimView",
+        "AccusationClaimView",
+        "CorroborationClaimView",
+        "ReportView",
+        "StatementView",
+        "ContradictionView",
+        "BallotView",
+        "LLMCallView",
+        "MeetingView",
+        "BeliefEntryView",
+        "AgentMemoryView",
+        "SuspicionEntryView",
+        "SuspicionGraphView",
+        "ReplayMetadataView",
+        "FailedCallView",
+        "ReplayView",
+        "EvalCostSummaryView",
+    }
+)
+
+# Internal engine / meetings / orchestrator types that must never appear in a
+# DTO field annotation. DTOs *shadow* these (re-declare the spectator-relevant
+# slice); they must not embed them.
+FORBIDDEN_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        "WorldState",
+        "PlayerState",
+        "BodyState",
+        "TaskState",
+        "SabotageState",
+        "ReplayEntry",
+        "MeetingReplayEntry",
+        "LLMCallRecord",
+        "GameEndReplayEntry",
+        "FailedCallReplayEntry",
+        "MeetingResult",
+        "MeetingTrigger",
+        "Action",
+        "Statement",
+        "ReportDocument",
+        "VoteBallot",
+        "ContradictionRef",
+        "AlibiClaim",
+        "AccusationClaim",
+        "CorroborationClaim",
+    }
+)
+
+# Backend packages the DTO module must never import from. ``api/schemas.py``
+# needs only ``pydantic`` + stdlib typing.
+FORBIDDEN_IMPORT_ROOTS: Final[frozenset[str]] = frozenset(
+    {
+        "engine",
+        "observation",
+        "orchestrator",
+        "meetings",
+        "agents",
+        "llm",
+        "eval",
+    }
+)
+
+# Discriminated-union aliases: public + importable, but excluded from __all__.
+_UNION_ALIASES: Final[frozenset[str]] = frozenset(
+    {"TickEventView", "ObservationClaimView", "StatementClaimView"}
+)
+
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _schemas_ast() -> ast.Module:
+    return ast.parse(inspect.getsource(api.schemas))
+
+
+def _imported_roots() -> set[str]:
+    roots: set[str] = set()
+    for node in ast.walk(_schemas_ast()):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
+    return roots
+
+
+def _annotation_identifiers() -> set[str]:
+    """Identifiers used in field/alias annotations (not docstrings or names).
+
+    Walks every ``AnnAssign`` (class fields + the module-level union-alias
+    declarations) and every ``Assign`` value, unparses the annotation/value
+    expression, and tokenizes it on identifier boundaries. Docstrings (bare
+    string ``Expr`` statements) and ``ClassDef`` names are never read.
+    """
+
+    identifiers: set[str] = set()
+    for node in ast.walk(_schemas_ast()):
+        if isinstance(node, ast.AnnAssign):
+            identifiers.update(_IDENTIFIER.findall(ast.unparse(node.annotation)))
+            if node.value is not None:
+                identifiers.update(_IDENTIFIER.findall(ast.unparse(node.value)))
+        elif isinstance(node, ast.Assign) and node.value is not None:
+            identifiers.update(_IDENTIFIER.findall(ast.unparse(node.value)))
+    return identifiers
+
+
+def test_dto_inventory_matches_expected() -> None:
+    actual = frozenset(api.schemas.__all__)
+    assert actual == EXPECTED_DTOS, (
+        "api.schemas.__all__ drifted from the documented DTO inventory. "
+        "Adding/removing a DTO requires updating EXPECTED_DTOS in this test, "
+        "api.schemas.__all__, AND the PR's 'Public types introduced' section."
+    )
+
+
+def test_schemas_imports_no_backend_package() -> None:
+    leaked = _imported_roots() & FORBIDDEN_IMPORT_ROOTS
+    assert not leaked, (
+        f"api/schemas.py imports from backend package(s) {sorted(leaked)}; "
+        "DTOs must shadow internal types, not import them."
+    )
+
+
+def test_no_forbidden_types_in_field_annotations() -> None:
+    leaked = _annotation_identifiers() & FORBIDDEN_TYPES
+    assert not leaked, (
+        f"api/schemas.py references internal type(s) {sorted(leaked)} in a field "
+        "annotation. DTOs must shadow these, not embed them."
+    )
+
+
+def test_every_inventoried_dto_is_a_frozen_model() -> None:
+    for name in EXPECTED_DTOS:
+        obj = getattr(api.schemas, name)
+        assert isinstance(obj, type) and issubclass(obj, pydantic.BaseModel), (
+            f"{name} is inventoried but is not a Pydantic model."
+        )
+        assert obj.model_config.get("frozen") is True, f"{name} must be frozen."
+        assert obj.model_config.get("extra") == "forbid", (
+            f"{name} must forbid extra fields."
+        )
+
+
+def test_union_aliases_are_importable_but_not_inventoried() -> None:
+    for name in _UNION_ALIASES:
+        assert hasattr(api.schemas, name), f"{name} must be importable."
+        assert name not in api.schemas.__all__, (
+            f"{name} is a union alias and must stay out of __all__."
+        )
