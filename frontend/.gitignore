@@ -1,0 +1,13 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.vite/
+
+# test coverage
+coverage/
+
+# local env & logs
+*.local
+npm-debug.log*
