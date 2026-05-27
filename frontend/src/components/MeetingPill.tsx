@@ -15,7 +15,10 @@ export function MeetingPill() {
     return null;
   }
 
-  const meetingsHere = replay.meetings.filter((m) => m.tick === currentTick);
+  // currentTick is an index into replay.ticks; ticks[0] is the synthesized
+  // tick=-1 "Start" frame, so match on the engine tick NUMBER at this index.
+  const currentTickNumber = replay.ticks[currentTick]?.tick ?? -1;
+  const meetingsHere = replay.meetings.filter((m) => m.tick === currentTickNumber);
   if (meetingsHere.length === 0) {
     return null;
   }

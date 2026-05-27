@@ -76,7 +76,9 @@ def test_get_replay_returns_full_view(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["metadata"]["game_id"] == "headless-seed-1"
-    assert len(body["ticks"]) == 3
+    # 3 recorded ticks + 1 synthesized tick=-1 "Start" frame (Finding 1).
+    assert len(body["ticks"]) == 4
+    assert body["metadata"]["total_ticks"] == 3
     assert len(body["meetings"]) == 1
 
 
@@ -115,8 +117,24 @@ def test_get_tick_returns_tick_view(client: TestClient) -> None:
     assert any(event["type"] == "meeting_triggered" for event in body["events"])
 
 
+def test_get_tick_initial_state_returns_spawn(client: TestClient) -> None:
+    # Finding 1 (DESIGN.md §3.1, §11.4): the synthesized tick=-1 "Start" frame
+    # is fetchable through the existing route and shows all four players alive
+    # in the canonical spawn room.
+    response = client.get("/replays/headless-seed-1/ticks/-1")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tick"] == -1
+    assert len(body["agent_states"]) == 4
+    assert all(state["room_id"] == "CAFETERIA" for state in body["agent_states"])
+    assert all(state["is_alive"] for state in body["agent_states"])
+
+
 def test_get_tick_out_of_range_returns_404(client: TestClient) -> None:
+    # Above the recorded range (total_ticks == 3) and below the -1 sentinel
+    # both 404; only -1 and 0..total_ticks-1 resolve.
     assert client.get("/replays/headless-seed-1/ticks/99").status_code == 404
+    assert client.get("/replays/headless-seed-1/ticks/-2").status_code == 404
 
 
 def test_get_tick_unknown_game_returns_404(client: TestClient) -> None:

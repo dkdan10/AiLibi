@@ -16,20 +16,22 @@ const BASE_TICK_INTERVAL_MS = 500;
 
 const SPEEDS: readonly PlaybackSpeed[] = [0.5, 1, 2, 4];
 
+// Meeting lookups compare against the engine tick NUMBER, not the array index
+// (see the currentTickNumber note in the component below).
 function findNextMeeting(
   meetings: readonly MeetingView[],
-  currentTick: number,
+  currentTickNumber: number,
 ): MeetingView | null {
-  return meetings.find((m) => m.tick > currentTick) ?? null;
+  return meetings.find((m) => m.tick > currentTickNumber) ?? null;
 }
 
 function findPrevMeeting(
   meetings: readonly MeetingView[],
-  currentTick: number,
+  currentTickNumber: number,
 ): MeetingView | null {
   for (let i = meetings.length - 1; i >= 0; i--) {
     const meeting = meetings[i];
-    if (meeting !== undefined && meeting.tick < currentTick) {
+    if (meeting !== undefined && meeting.tick < currentTickNumber) {
       return meeting;
     }
   }
@@ -77,19 +79,36 @@ export function ReplayControls() {
     return null;
   }
 
-  const lastTick = replay.ticks.length - 1;
+  // Bound to a const so the snapTo closure below sees a non-null ticks array
+  // (TypeScript drops the `replay !== null` narrowing inside nested functions).
+  const ticks = replay.ticks;
+  const lastTick = ticks.length - 1;
+  // currentTick is an INDEX into replay.ticks (the store contract, see
+  // tasks/phase-4.md). ticks[0] is the synthesized tick=-1 "Start" frame, so an
+  // index and its engine tick NUMBER differ by one. Derive the number for any
+  // tick-number-keyed logic (label text, meeting matching) instead of reusing
+  // the index, which would be off by one.
+  const currentTickNumber = ticks[currentTick]?.tick ?? -1;
+  const lastTickNumber = ticks[lastTick]?.tick ?? lastTick;
+  const isStart = currentTickNumber === -1;
   const canStepBack = currentTick > 0;
   const canStepForward = currentTick < lastTick;
-  const isAtMeeting = replay.meetings.some((m) => m.tick === currentTick);
+  const isAtMeeting = replay.meetings.some((m) => m.tick === currentTickNumber);
 
-  const nextMeeting = findNextMeeting(replay.meetings, currentTick);
-  const prevMeeting = findPrevMeeting(replay.meetings, currentTick);
+  const nextMeeting = findNextMeeting(replay.meetings, currentTickNumber);
+  const prevMeeting = findPrevMeeting(replay.meetings, currentTickNumber);
 
   function snapTo(meeting: MeetingView | null): void {
     if (meeting === null) {
       return;
     }
-    setCurrentTick(meeting.tick);
+    // Map the meeting's engine tick number to its index in the Start-prepended
+    // ticks array so the map lands on the meeting tick, not one frame off.
+    const index = ticks.findIndex((t) => t.tick === meeting.tick);
+    if (index === -1) {
+      return;
+    }
+    setCurrentTick(index);
     selectMeeting(meeting.meeting_id);
   }
 
@@ -179,7 +198,7 @@ export function ReplayControls() {
           className="w-full cursor-pointer accent-emerald-500"
         />
         <span className="whitespace-nowrap font-mono text-sm text-slate-200">
-          Tick {currentTick} / {lastTick}
+          {isStart ? "Start" : `Tick ${currentTickNumber} / ${lastTickNumber}`}
           {isAtMeeting && (
             <span className="ml-2 rounded-full border border-amber-500 bg-amber-900/40 px-2 py-0.5 text-xs font-semibold text-amber-100">
               meeting

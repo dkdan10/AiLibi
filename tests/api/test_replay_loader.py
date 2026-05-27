@@ -43,7 +43,9 @@ def test_load_replay_reconstructs_ticks_meetings_and_winner(
 
     replay = loader.load_replay("headless-seed-0")
 
-    assert [tick.tick for tick in replay.ticks] == [0, 1, 2]
+    # ticks[0] is the synthesized tick=-1 "Start" frame (Finding 1); the
+    # recorded ticks (0, 1, 2) follow it.
+    assert [tick.tick for tick in replay.ticks] == [-1, 0, 1, 2]
     assert len(replay.meetings) == 1
     meeting = replay.meetings[0]
     assert meeting.meeting_id == expected.meeting_id
@@ -55,7 +57,10 @@ def test_load_replay_reconstructs_ticks_meetings_and_winner(
         expected.living_agents
     )
     assert replay.metadata.winner == "CREWMATES"
+    # total_ticks counts only recorded ReplayEntrys; the synthesized initial
+    # entry is extra, so ticks has exactly one more element than total_ticks.
     assert replay.metadata.total_ticks == 3
+    assert len(replay.ticks) == replay.metadata.total_ticks + 1
     assert replay.metadata.meeting_count == 1
     assert {player.agent_id for player in replay.players} == {
         "p-1",
@@ -66,15 +71,47 @@ def test_load_replay_reconstructs_ticks_meetings_and_winner(
     assert replay.map.rooms  # canonical map geometry is populated
 
 
+def test_initial_state_tick_is_synthesized_at_spawn(
+    tmp_path: Path, loader: ReplayLoader
+) -> None:
+    # Finding 1 (DESIGN.md §3.1, §11.4): record_tick snapshots post-advance_tick
+    # state, so the recorded tick 0 no longer shows the pre-action spawn. The
+    # loader prepends a synthesized tick=-1 "Start" frame with every player
+    # alive in the canonical map's spawn room (CAFETERIA).
+    write_sample_replay(tmp_path / "replay-seed-22.jsonl", seed=22, ticks=3)
+
+    replay = loader.load_replay("headless-seed-22")
+
+    start = replay.ticks[0]
+    assert start.tick == -1
+    assert len(start.agent_states) == 4
+    for agent in start.agent_states:
+        assert agent.is_alive is True
+        assert agent.room_id == "CAFETERIA"
+        assert agent.is_venting is False
+        assert agent.current_action == "IDLE"
+    assert start.tasks_completed_total == 0
+    assert start.tasks_required_total > 0
+    assert start.events == ()
+    assert start.sabotage_active == ()
+    # total_ticks counts recorded entries only; the synthesized frame is extra.
+    assert len(replay.ticks) == replay.metadata.total_ticks + 1
+
+
 def test_tick_event_projection(tmp_path: Path, loader: ReplayLoader) -> None:
     write_meeting_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
     replay = loader.load_replay("headless-seed-0")
 
-    kill_events = [e for e in replay.ticks[0].events if isinstance(e, KillEventView)]
+    # Select by tick number, not array index: ticks[0] is the synthesized
+    # tick=-1 "Start" frame, so the recorded ticks are offset by one.
+    tick0 = next(t for t in replay.ticks if t.tick == 0)
+    tick1 = next(t for t in replay.ticks if t.tick == 1)
+
+    kill_events = [e for e in tick0.events if isinstance(e, KillEventView)]
     assert len(kill_events) == 1
     assert kill_events[0].victim_id == "p-1"
 
-    tick1_types = {type(e) for e in replay.ticks[1].events}
+    tick1_types = {type(e) for e in tick1.events}
     assert MeetingTriggeredEventView in tick1_types
     assert ReportBodyEventView in tick1_types
 
@@ -134,7 +171,8 @@ def test_partial_replay_has_no_winner_but_intact_timeline(tmp_path: Path) -> Non
     replay = loader.load_replay("headless-seed-7")
     assert replay.metadata.winner is None
     assert replay.metadata.winner_reason is None
-    assert [tick.tick for tick in replay.ticks] == [0, 1, 2, 3]
+    # Synthesized "Start" (tick=-1) precedes the recorded ticks.
+    assert [tick.tick for tick in replay.ticks] == [-1, 0, 1, 2, 3]
 
 
 def test_unresolved_meeting_is_not_exposed_via_memory(tmp_path: Path) -> None:
@@ -149,11 +187,13 @@ def test_unresolved_meeting_is_not_exposed_via_memory(tmp_path: Path) -> None:
     replay = loader.load_replay("headless-seed-0")
     assert replay.meetings == ()
     assert replay.metadata.winner is None
-    assert [tick.tick for tick in replay.ticks] == [0, 1]
-    # The tick timeline still surfaces the meeting_triggered event...
+    # Synthesized "Start" (tick=-1) precedes the two recorded ticks.
+    assert [tick.tick for tick in replay.ticks] == [-1, 0, 1]
+    # The tick timeline still surfaces the meeting_triggered event (tick 1)...
+    tick1 = next(t for t in replay.ticks if t.tick == 1)
     assert any(
         isinstance(event, MeetingTriggeredEventView) and event.meeting_id == meeting_id
-        for event in replay.ticks[1].events
+        for event in tick1.events
     )
     # ...but memory for the unresolved meeting is not exposed.
     with pytest.raises(KeyError):
