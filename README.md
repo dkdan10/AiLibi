@@ -81,20 +81,12 @@ The replay JSONL records per-tick actions and a SHA-256 hash of the full engine 
 The spectator UI reads saved replay JSONL files and renders the game tick by tick — map, agents moving room to room, meeting transcripts, contradiction flags, per-agent memory snapshots, and a suspicion heatmap.
 
 ```bash
-# 1. Generate a replay (or use any existing one)
-uv run python scripts/run_game.py --seed 42 \
-  --replay-path replays/replay-seed-42.jsonl
-
-# 2. Start the API (leave running)
-AILIBI_REPLAY_DIR=./replays uv run uvicorn api.main:app
-
-# 3. In a second terminal, start the frontend
-cd frontend && npm install && npm run dev
-
-# 4. Open http://localhost:5173. Pick the replay,
-#    scrub through ticks, click meeting markers,
-#    select an agent to see what they "remembered."
+bash scripts/run_spectator.sh
 ```
+
+That starts the API + frontend, waits until both are healthy, and opens `http://localhost:5173` in your browser. Ctrl-C stops both. (One-time prerequisite: `bash scripts/setup_env.sh`. macOS + Linux only.)
+
+A fresh clone ships with 50 sample replays under `replays/samples/` — the full Phase 3 closing real-provider eval (50/50 games, 38% impostor win rate, $0.886 total spend). Once the UI is up, pick any replay to scrub through ticks, click meeting markers to read transcripts with ballots and contradiction flags, and select an agent to see their memory snapshot and the suspicion heatmap at that moment. Any replays you generate locally into `replays/` (e.g. via `scripts/run_game.py`) override the bundled samples; the API logs which directory it picked at startup.
 
 The UI is intentionally minimal in MVP — a polish pass lands after Phase 5. The spectator API exposes sanitized DTOs (`api/schemas.py`) covering everything visible: agent positions per tick, meeting transcripts with ballots and contradiction flags, per-agent memory snapshots at meeting boundaries, and the full LLM call log with prompts, responses, and cost.
 
