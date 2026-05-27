@@ -54,21 +54,36 @@ done
 # Process lifecycle ------------------------------------------------------------
 api_pid=""
 ui_pid=""
+
+# SIGTERM the given PID and every descendant, leaves-first. Needed because
+# `npm` spawns `vite` and `uv run` spawns `python` as children, and a bare
+# `kill $pid` against the parent can orphan the child (which then keeps the
+# port bound after the script exits).
+kill_tree() {
+  local pid="$1"
+  [ -z "$pid" ] && return
+  local children
+  children=$(pgrep -P "$pid" 2>/dev/null || true)
+  for child in $children; do
+    kill_tree "$child"
+  done
+  kill "$pid" 2>/dev/null || true
+}
+
 cleanup() {
-  if [ -n "$api_pid" ]; then
-    kill "$api_pid" 2>/dev/null || true
-  fi
-  if [ -n "$ui_pid" ]; then
-    kill "$ui_pid" 2>/dev/null || true
-  fi
+  kill_tree "$api_pid"
+  kill_tree "$ui_pid"
   wait 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
-# Start API + frontend with prefixed logs --------------------------------------
-uv run uvicorn api.main:app --port 8000 2>&1 | sed 's/^/[api] /' &
+# Start API + frontend with prefixed logs. Use process substitution
+# (`> >(sed …) 2>&1`) rather than a pipe (`| sed …`) so `$!` captures the
+# PID of the actual server command — pipe semantics give `$!` the trailing
+# `sed`, and SIGTERM-ing only `sed` lets a quiet uvicorn/Vite keep listening.
+uv run uvicorn api.main:app --port 8000 > >(sed 's/^/[api] /') 2>&1 &
 api_pid=$!
-(cd frontend && npm run dev) 2>&1 | sed 's/^/[ui] /' &
+(cd frontend && npm run dev) > >(sed 's/^/[ui] /') 2>&1 &
 ui_pid=$!
 
 # Health-check loop ------------------------------------------------------------
