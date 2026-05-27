@@ -841,6 +841,7 @@ class _ScriptedLLMClient:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         self.calls.append((schema, call_kind))
         if schema is ReportDocument:
@@ -1087,6 +1088,7 @@ class TestDefaultMeetingRunner:
                 temperature: float,
                 call_kind: CallKind = "meeting",
                 model: str | None = None,
+                agent_id: str | None = None,
             ) -> LLMResponse:
                 self._count += 1
                 if schema is ReportDocument and self._count == 1:

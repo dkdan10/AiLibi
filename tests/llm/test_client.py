@@ -60,7 +60,11 @@ class TestLLMClientProtocolSurface:
             "temperature",
             "call_kind",
             "model",
+            "agent_id",
         )
+        agent_id_param = signature.parameters["agent_id"]
+        assert agent_id_param.kind is inspect.Parameter.KEYWORD_ONLY
+        assert agent_id_param.default is None
 
     def test_fake_provider_is_an_llm_client(self) -> None:
         assert isinstance(FakeProvider(), LLMClient)

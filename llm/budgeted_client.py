@@ -223,6 +223,7 @@ class BudgetedLLMClient:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         """Pre-flight, call inner, charge actual cost.
 
@@ -270,6 +271,7 @@ class BudgetedLLMClient:
                 temperature=temperature,
                 call_kind=call_kind,
                 model=model,
+                agent_id=agent_id,
             )
         except BaseException:
             # The provider failed; release the in-flight reservation

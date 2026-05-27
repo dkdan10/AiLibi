@@ -246,6 +246,7 @@ export interface LLMCallView {
   input_tokens: number;
   output_tokens: number;
   cost_usd: number;
+  agent_id: string | null;
 }
 
 export interface MeetingView {

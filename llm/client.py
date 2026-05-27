@@ -144,6 +144,14 @@ class LLMClient(Protocol):
     ``schema`` is an opaque Pydantic class. The adapter is responsible
     for telling the underlying provider to emit structured output and
     for validating the result before returning.
+
+    ``agent_id`` identifies which game-agent originated this call; it is
+    ``None`` for system-level calls that no single agent owns. It is
+    call-attribution metadata, not a provider knob: adapters never send
+    it to the upstream provider. The recording layer
+    (``orchestrator.game._RecordingLLMClient``) stamps it onto the
+    captured ``LLMCallRecord`` so replay tooling can attribute each call
+    to its speaker (DESIGN.md §5, §11.4).
     """
 
     async def complete(
@@ -155,6 +163,7 @@ class LLMClient(Protocol):
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse: ...
 
 

@@ -358,6 +358,9 @@ class LLMCallView(_FrozenView):
     """Shadows ``orchestrator.replay.LLMCallRecord``.
 
     ``prompt_template_id`` is derived from the ``prompt_versions`` lookup.
+    ``agent_id`` is the originating game-agent (the speaker for meeting
+    calls); ``None`` for system-level calls or replays recorded before the
+    field existed.
     """
 
     call_kind: Literal["meeting", "trigger"]
@@ -368,6 +371,7 @@ class LLMCallView(_FrozenView):
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    agent_id: str | None
 
 
 class MeetingView(_FrozenView):

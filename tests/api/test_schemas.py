@@ -223,6 +223,7 @@ def _meeting_view() -> MeetingView:
                 input_tokens=120,
                 output_tokens=40,
                 cost_usd=0.0,
+                agent_id="p1",
             ),
         ),
         prompt_versions={"crewmate_report": "v1", "vote_ballot": "v2"},

@@ -58,6 +58,14 @@ class LLMCallRecord(BaseModel):
     ``call_kind`` ("meeting" / "trigger") tag mirrors the LLM Protocol
     so replay records preserve which model-tier the call routed
     through.
+
+    ``agent_id`` records which game-agent originated the call (the
+    speaking participant for meeting calls), so per-call attribution
+    survives into replay tooling (DESIGN.md §5, §11.4). It defaults to
+    ``None`` so replay JSONLs written before this field existed still
+    deserialize: ``extra="forbid"`` rejects unknown fields but permits a
+    missing optional one. ``None`` also stands for genuinely agentless
+    (system-level) calls.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -69,6 +77,7 @@ class LLMCallRecord(BaseModel):
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    agent_id: str | None = None
 
 
 class ReplayEntry(BaseModel):
