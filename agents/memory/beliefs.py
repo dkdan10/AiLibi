@@ -12,11 +12,16 @@ in Phase 3 (Task 3.3).
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
-from typing import TypeAlias
+from typing import Final, TypeAlias
+
+from observation.packet import ObservationPacket
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
+BodyId: TypeAlias = str
 
 _TRUST_FLOOR = 0.0
 _TRUST_CEIL = 1.0
@@ -24,6 +29,28 @@ _SUSPICION_FLOOR = 0.0
 _SUSPICION_CEIL = 1.0
 _DEFAULT_TRUST = 0.5
 _DEFAULT_SUSPICION = 0.5
+
+# DESIGN.md §6.3 belief-update weights. The design is explicit that "these
+# weights are config, not constants -- they will be tuned against the eval
+# harness", so they live here as the single tuning point (a one-line edit
+# each) until a Phase-5 config layer lands. Task 4.14 wires only Rules 1 and
+# 4; Rules 2, 3, and 5 from §6.3 are deferred to Phase 5.
+VENTING_SUSPICION_DELTA: Final[float] = 0.5
+"""DESIGN.md §6.3 Rule 4: suspicion added when a player is observed venting."""
+
+BODY_PROXIMITY_SUSPICION_DELTA: Final[float] = 0.2
+"""DESIGN.md §6.3 Rule 1: suspicion added for co-presence near a fresh body."""
+
+BODY_PROXIMITY_WINDOW_TICKS: Final[int] = 3
+"""DESIGN.md §6.3 Rule 1 window: how many ticks before a body's discovery
+count as "shortly before" for the proximity adjustment."""
+
+# The action label the observation layer stamps on a ``PlayerView`` when the
+# observer *witnesses* a player using a vent (observation/service.py
+# ``_vent_observation_for_agent``). Seeing the vent is the player-attributed
+# signal Rule 4 keys on; the room-only ``vent_use_heard`` AudibleEvent carries
+# no subject and is deliberately not used.
+OBSERVED_VENT_ACTION: Final[str] = "vent"
 
 
 @dataclass(frozen=True)
@@ -86,6 +113,17 @@ class _MutableBelief:
             alibis=tuple(self.alibis),
             inconsistencies=tuple(self.inconsistencies),
         )
+
+
+def _clone_belief(belief: _MutableBelief) -> _MutableBelief:
+    # ``alibis``/``inconsistencies`` hold frozen dataclasses, so copying the
+    # list containers is a sufficient deep copy.
+    return _MutableBelief(
+        trust=belief.trust,
+        suspicion=belief.suspicion,
+        alibis=list(belief.alibis),
+        inconsistencies=list(belief.inconsistencies),
+    )
 
 
 class BeliefState:
@@ -164,6 +202,33 @@ class BeliefState:
         )
         return belief.snapshot()
 
+    def copy(self) -> BeliefState:
+        """Return a deep copy whose mutations do not touch this instance.
+
+        :func:`apply_observation_rules` uses this to stay a pure function:
+        it mutates the copy and returns it, leaving the caller's state intact.
+        """
+
+        clone = BeliefState()
+        clone._beliefs = {
+            player_id: _clone_belief(belief)
+            for player_id, belief in self._beliefs.items()
+        }
+        return clone
+
+    def load_from(self, other: BeliefState) -> None:
+        """Replace this state's contents with a deep copy of ``other``.
+
+        Lets perception keep :func:`apply_observation_rules` pure while still
+        updating the ``AgentMemory``-owned :class:`BeliefState` in place: the
+        rule function returns a fresh state and the live instance adopts it.
+        """
+
+        self._beliefs = {
+            player_id: _clone_belief(belief)
+            for player_id, belief in other._beliefs.items()
+        }
+
     def _ensure(self, player_id: PlayerId) -> _MutableBelief:
         belief = self._beliefs.get(player_id)
         if belief is None:
@@ -172,9 +237,63 @@ class BeliefState:
         return belief
 
 
+def apply_observation_rules(
+    beliefs: BeliefState,
+    *,
+    observation: ObservationPacket,
+    previous_visible_bodies: AbstractSet[BodyId],
+    recent_co_presence: Mapping[RoomId, Sequence[tuple[int, PlayerId]]],
+) -> BeliefState:
+    """Apply DESIGN.md §6.3 rule-based belief updates (Rules 1 and 4).
+
+    Pure: returns a new :class:`BeliefState`; ``beliefs`` is not mutated.
+
+    Rule 4 -- observed venting (``VENTING_SUSPICION_DELTA``). Venting is
+    impostor-exclusive, so a *witnessed* vent is the strongest signal an agent
+    can hold ("almost certain"). The witness lands as a ``PlayerView`` carrying
+    ``action == "vent"`` in ``visible_players``; the room-only
+    ``vent_use_heard`` AudibleEvent is deliberately ignored because it has no
+    player attribution and would smear suspicion across the whole room.
+
+    Rule 1 -- body proximity (``BODY_PROXIMITY_SUSPICION_DELTA``). On the tick a
+    body is *first* seen (``body.id`` absent from ``previous_visible_bodies``),
+    every other player the agent observed in that body's room within the prior
+    ``BODY_PROXIMITY_WINDOW_TICKS`` ticks gains suspicion. Firing only on first
+    sighting keeps a lingering body from re-elevating bystanders every tick.
+
+    ``recent_co_presence`` is keyed by room and pre-computed by the caller from
+    the agent's own episodic memory; this function never reaches into a store,
+    which preserves both the observation firewall and its own purity.
+    """
+
+    result = beliefs.copy()
+
+    for player in observation.visible_players:
+        if player.action == OBSERVED_VENT_ACTION:
+            result.adjust_suspicion(player.id, delta=VENTING_SUSPICION_DELTA)
+
+    for body in observation.visible_bodies:
+        if body.id in previous_visible_bodies:
+            continue
+        co_present = {
+            player_id
+            for tick, player_id in recent_co_presence.get(body.room, ())
+            if 0 <= observation.tick - tick <= BODY_PROXIMITY_WINDOW_TICKS
+        }
+        for player_id in sorted(co_present):
+            result.adjust_suspicion(player_id, delta=BODY_PROXIMITY_SUSPICION_DELTA)
+
+    return result
+
+
 __all__ = [
+    "BODY_PROXIMITY_SUSPICION_DELTA",
+    "BODY_PROXIMITY_WINDOW_TICKS",
+    "OBSERVED_VENT_ACTION",
+    "VENTING_SUSPICION_DELTA",
     "AlibiClaim",
     "BeliefState",
     "ContradictionRef",
     "PlayerBelief",
+    "apply_observation_rules",
 ]

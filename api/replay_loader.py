@@ -468,7 +468,11 @@ class ReplayLoader:
             packet = service.build_packet(
                 world_state=state, agent_id=pid, engine_events=last_events
             )
-            ingest_packet(packet=packet, memory=memories[pid].episodic)
+            ingest_packet(
+                packet=packet,
+                memory=memories[pid].episodic,
+                beliefs=memories[pid].beliefs,
+            )
 
     # -- DTO builders -----------------------------------------------------
 

@@ -1028,7 +1028,11 @@ class TacticalAgent:
                 f"observation packet for agent {packet.agent_id!r} given to "
                 f"tactical agent bound to {self._agent_id!r}"
             )
-        ingest_packet(packet=packet, memory=self._memory.episodic)
+        ingest_packet(
+            packet=packet,
+            memory=self._memory.episodic,
+            beliefs=self._memory.beliefs,
+        )
         return self._policy.decide(self._memory.episodic, public_map)
 
     def render_memory_for_meeting(

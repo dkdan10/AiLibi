@@ -5,6 +5,11 @@ from typing import get_args
 import pytest
 
 import agents.perception
+from agents.memory.beliefs import (
+    BODY_PROXIMITY_SUSPICION_DELTA,
+    BeliefState,
+    VENTING_SUSPICION_DELTA,
+)
 from agents.memory.episodic import MemoryStore
 from agents.perception import (
     EVENT_COOLDOWN_STATUS,
@@ -413,6 +418,130 @@ class TestRuntimeIntegration:
         runtime = AgentRuntime(agent_id="p1", memory=store)
 
         assert runtime.memory is store
+
+
+class TestIngestPacketBeliefRules:
+    _DEFAULT_SUSPICION = 0.5
+
+    def test_witnessed_vent_raises_venter_suspicion(self) -> None:
+        # DESIGN.md §6.3 Rule 4: observing a vent use is impostor-exclusive
+        # evidence. The witness arrives as a ``visible_players`` entry whose
+        # ``action`` is ``"vent"`` (the player-attributed signal), so ingestion
+        # must lift that player's suspicion by ``VENTING_SUSPICION_DELTA``.
+        store = MemoryStore()
+        beliefs = BeliefState()
+
+        ingest_packet(
+            packet=_packet(
+                tick=5,
+                room="ELECTRICAL",
+                visible_players=(
+                    PlayerView(id="p2", room="ELECTRICAL", action="vent"),
+                ),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+
+        suspicion = beliefs.view("p2").suspicion
+        assert suspicion > self._DEFAULT_SUSPICION
+        assert suspicion == pytest.approx(
+            self._DEFAULT_SUSPICION + VENTING_SUSPICION_DELTA
+        )
+
+    def test_fresh_body_elevates_only_in_window_co_presence(self) -> None:
+        # DESIGN.md §6.3 Rule 1: discovering a body elevates suspicion of
+        # players seen in that room within the prior BODY_PROXIMITY_WINDOW_TICKS
+        # ticks. With the window = 3 and discovery at tick 8, a sighting at
+        # tick 6 counts (8 - 6 = 2) but a sighting at tick 4 does not (8 - 4 = 4).
+        store = MemoryStore()
+        beliefs = BeliefState()
+
+        # tick 4 — Y co-present in ELECTRICAL, but outside the window at tick 8.
+        ingest_packet(
+            packet=_packet(
+                tick=4,
+                room="ELECTRICAL",
+                visible_players=(PlayerView(id="Y", room="ELECTRICAL", action=None),),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+        # tick 6 — X co-present in ELECTRICAL, inside the window at tick 8.
+        ingest_packet(
+            packet=_packet(
+                tick=6,
+                room="ELECTRICAL",
+                visible_players=(PlayerView(id="X", room="ELECTRICAL", action=None),),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+        # tick 8 — the body is discovered in ELECTRICAL for the first time.
+        ingest_packet(
+            packet=_packet(
+                tick=8,
+                room="ELECTRICAL",
+                visible_bodies=(
+                    BodyView(id="p9-body", room="ELECTRICAL", victim_id="p9"),
+                ),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+
+        x_suspicion = beliefs.view("X").suspicion
+        assert x_suspicion > self._DEFAULT_SUSPICION
+        assert x_suspicion == pytest.approx(
+            self._DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
+        )
+        assert beliefs.view("Y").suspicion == self._DEFAULT_SUSPICION
+
+    def test_lingering_body_fires_rule_once(self) -> None:
+        # A body that stays visible across ticks must not re-elevate the same
+        # bystander every tick: Rule 1 fires only on first sighting.
+        store = MemoryStore()
+        beliefs = BeliefState()
+
+        ingest_packet(
+            packet=_packet(
+                tick=6,
+                room="ELECTRICAL",
+                visible_players=(PlayerView(id="X", room="ELECTRICAL", action=None),),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+        body = BodyView(id="p9-body", room="ELECTRICAL", victim_id="p9")
+        ingest_packet(
+            packet=_packet(tick=7, room="ELECTRICAL", visible_bodies=(body,)),
+            memory=store,
+            beliefs=beliefs,
+        )
+        ingest_packet(
+            packet=_packet(tick=8, room="ELECTRICAL", visible_bodies=(body,)),
+            memory=store,
+            beliefs=beliefs,
+        )
+
+        assert beliefs.view("X").suspicion == pytest.approx(
+            self._DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
+        )
+
+    def test_no_beliefs_argument_leaves_belief_path_untouched(self) -> None:
+        # The runtime stub calls ingest_packet without a BeliefState; ingestion
+        # must remain a pure episodic write in that case.
+        store = MemoryStore()
+
+        ingest_packet(
+            packet=_packet(
+                tick=5,
+                visible_players=(PlayerView(id="p2", room="ADMIN", action="vent"),),
+            ),
+            memory=store,
+        )
+
+        assert len(store) > 0
 
 
 class TestAudibleEventEnumCoupling:
