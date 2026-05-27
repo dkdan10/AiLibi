@@ -31,6 +31,17 @@ if ! command -v uv >/dev/null 2>&1 || [ ! -d frontend/node_modules ]; then
   exit 1
 fi
 
+# lsof is required for the port check below. Without this guard, a missing lsof
+# causes the `if lsof ...; then` test to be silently false, the port check is
+# skipped, and an unrelated server already bound to 8000 or 5173 can fool the
+# downstream health probe into reporting AiLibi healthy. macOS ships lsof;
+# minimal Linux images (Alpine, slim Debian containers) often do not.
+if ! command -v lsof >/dev/null 2>&1; then
+  echo "lsof is required to verify ports 8000 and 5173 are free." >&2
+  echo "Install it: Debian/Ubuntu \`apt install lsof\`, Fedora/RHEL \`dnf install lsof\`, Alpine \`apk add lsof\`." >&2
+  exit 1
+fi
+
 # Port check -------------------------------------------------------------------
 for port in 8000 5173; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
