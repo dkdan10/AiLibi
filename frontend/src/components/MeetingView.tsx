@@ -321,11 +321,15 @@ export function MeetingView() {
   }
 
   return (
+    // The left BeliefMatrix (z-[55], ≤24rem) and right ThoughtStream (z-[60],
+    // ≤20rem) rails mount alongside an open meeting and paint above this z-50
+    // overlay. Reserve a gutter wider than each rail (lg+ only) so the centered
+    // panel lands in the gap between them instead of being clipped beneath them.
     <div
       role="dialog"
       aria-modal="true"
       aria-label={`Meeting at tick ${meeting.tick}`}
-      className="fixed inset-0 z-50 overflow-auto bg-black/70"
+      className="fixed inset-0 z-50 overflow-auto bg-black/70 lg:pl-[25rem] lg:pr-[21rem]"
       onClick={() => {
         selectMeeting(null);
       }}
