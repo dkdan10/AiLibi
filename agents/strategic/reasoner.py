@@ -403,6 +403,7 @@ class StrategicReasoner:
             max_tokens=self._report_max_tokens,
             temperature=self._report_temperature,
             call_kind=_TRIGGER_CALL_KIND[trigger],
+            agent_id=agent_id,
         )
         parsed = ReportDocument.model_validate_json(response.text)
         return parsed.model_copy(update={"agent_id": agent_id, "tick": current_tick})
@@ -450,6 +451,7 @@ class StrategicReasoner:
             max_tokens=self._statement_max_tokens,
             temperature=self._statement_temperature,
             call_kind=_TRIGGER_CALL_KIND[trigger],
+            agent_id=speaker,
         )
         parsed = Statement.model_validate_json(response.text)
         statement_id = f"{meeting_id}:r{round_index}:{speaker}"
@@ -514,6 +516,7 @@ class StrategicReasoner:
             max_tokens=self._vote_max_tokens,
             temperature=self._vote_temperature,
             call_kind=_TRIGGER_CALL_KIND[trigger],
+            agent_id=voter,
         )
         parsed = VoteBallot.model_validate_json(response.text)
         return parsed.model_copy(update={"voter": voter})

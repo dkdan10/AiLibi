@@ -181,6 +181,7 @@ class _RecordingClient:
                 "temperature": temperature,
                 "call_kind": call_kind,
                 "model": model,
+                "agent_id": agent_id,
             }
         )
         return LLMResponse(
@@ -544,6 +545,69 @@ class TestProduceVote:
         prompt = str(client.calls[0]["prompt"])
         assert "suspicion 0.80" in prompt
         assert "trust 0.20" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Per-call agent_id attribution (Task 4.7 follow-up: trigger-path calls)
+# ---------------------------------------------------------------------------
+
+
+class TestTriggerCallAgentIdAttribution:
+    """The reasoner tags every trigger-path ``complete()`` with its agent id.
+
+    Mirrors the meeting-manager attribution so the recording wrapper stamps a
+    non-None ``LLMCallRecord.agent_id`` on calls made through the per-agent
+    ``kill_witnessed`` / ``body_found`` trigger paths (Task 4.7, DESIGN.md §5,
+    §11.4).
+    """
+
+    def test_produce_report_passes_agent_id(self) -> None:
+        client = _RecordingClient(responder=_default_responder)
+        reasoner = StrategicReasoner(llm_client=client)
+
+        _run(
+            reasoner.produce_report(
+                memory=_build_memory(role="CREWMATE"),
+                agent_id="p-3",
+                role="CREWMATE",
+                current_tick=412,
+                meeting_trigger="trigger",
+            )
+        )
+
+        assert client.calls[0]["agent_id"] == "p-3"
+
+    def test_produce_statement_passes_speaker_as_agent_id(self) -> None:
+        client = _RecordingClient(responder=_default_responder)
+        reasoner = StrategicReasoner(llm_client=client)
+
+        _run(
+            reasoner.produce_statement(
+                memory=_build_memory(),
+                meeting_id="m-1",
+                speaker="p-2",
+                tick=420,
+                round_index=1,
+                transcript=MeetingTranscript(),
+            )
+        )
+
+        assert client.calls[0]["agent_id"] == "p-2"
+
+    def test_produce_vote_passes_voter_as_agent_id(self) -> None:
+        client = _RecordingClient(responder=_default_responder)
+        reasoner = StrategicReasoner(llm_client=client)
+
+        _run(
+            reasoner.produce_vote(
+                memory=_build_memory(),
+                voter="p-4",
+                transcript=MeetingTranscript(),
+                candidate_targets=("p-1", "p-2"),
+            )
+        )
+
+        assert client.calls[0]["agent_id"] == "p-4"
 
 
 # ---------------------------------------------------------------------------
