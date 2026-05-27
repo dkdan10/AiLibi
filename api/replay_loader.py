@@ -344,7 +344,15 @@ class ReplayLoader:
             )
             memories = {pid: AgentMemory() for pid in initial_state.players}
 
-        ticks: list[TickView] = []
+        # Finding 1 (DESIGN.md §3.1, §11.4): ReplayLog.record_tick snapshots
+        # state AFTER advance_tick, so the recorded tick 0 already reflects the
+        # agents' first-turn moves; the pre-action spawn state is never
+        # persisted. Synthesize it here, before the entry loop, as a tick=-1
+        # "Start" frame (all players in the seeder's spawn room) so the
+        # spectator's first frame is the intuitive initial state, not agents
+        # already mid-motion. Read-side only: it is not written back to JSONL
+        # and never touches a state hash.
+        ticks: list[TickView] = [self._tick_view(-1, initial_state, (), None)]
         trigger_kind_by_meeting_id: dict[str, _TriggerKind] = {}
         memory_views: dict[tuple[str, str], AgentMemoryView] = {}
         last_events: tuple[EngineEvent, ...] = ()
