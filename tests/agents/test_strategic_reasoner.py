@@ -168,6 +168,7 @@ class _RecordingClient:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         text = self.responder(prompt, schema)
         if schema is not None:

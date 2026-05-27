@@ -155,6 +155,7 @@ class _CallRecord:
     prompt: str
     schema_name: str | None
     call_kind: CallKind
+    agent_id: str | None = None
 
 
 @dataclass
@@ -181,6 +182,7 @@ class _ScriptedLLMClient:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         text = self.responder(prompt, schema)
         if schema is not None:
@@ -190,6 +192,7 @@ class _ScriptedLLMClient:
                 prompt=prompt,
                 schema_name=schema.__name__ if schema is not None else None,
                 call_kind=call_kind,
+                agent_id=agent_id,
             )
         )
         return LLMResponse(
@@ -546,6 +549,7 @@ class TestReportIntake:
                 temperature: float,
                 call_kind: CallKind = "meeting",
                 model: str | None = None,
+                agent_id: str | None = None,
             ) -> LLMResponse:
                 if "PHASE=REPORT" in prompt:
                     text = await _slow_responder(prompt)
@@ -592,6 +596,56 @@ class TestReportIntake:
             assert report.free_text == DEFAULT_REPORT_FREE_TEXT
             assert report.observations == ()
             assert report.claims == ()
+
+
+# --- LLM-call agent_id attribution (Task 4.7, DESIGN.md §5, §11.4) ----------
+
+
+class TestLLMCallAgentIdAttribution:
+    """Every meeting ``complete()`` call is tagged with the speaking agent.
+
+    Task 4.7 threads ``agent_id`` from the participant through the
+    ``LLMClient`` protocol so the recording layer attributes each captured
+    ``LLMCallRecord`` to its originating agent (R-3 substrate for the 4.8
+    ThoughtStream).
+    """
+
+    def test_each_call_carries_the_speaking_participants_agent_id(self) -> None:
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=2)
+        participants = _make_participants()
+        participant_ids = {p.agent_id for p in participants}
+
+        _run(
+            manager.run(
+                meeting_id="m-agent-id",
+                trigger=_default_trigger(),
+                participants=participants,
+            )
+        )
+
+        # The meeting drove LLM calls, and every one is attributed to a
+        # participant -- never None, never a stray id.
+        assert client.calls
+        assert all(c.agent_id is not None for c in client.calls)
+        assert all(c.agent_id in participant_ids for c in client.calls)
+
+        # Phase-1 reports: exactly one per participant, each tagged with that
+        # participant's own id (cross-checked against the speaker the prompt
+        # was rendered for).
+        report_calls = [c for c in client.calls if "PHASE=REPORT" in c.prompt]
+        assert len(report_calls) == len(participants)
+        assert {c.agent_id for c in report_calls} == participant_ids
+        for call in report_calls:
+            assert call.agent_id == _extract_marker(call.prompt, "agent_id=")
+
+        # Phase-3 ballots: one per participant, the kwarg matching the voter
+        # the prompt was rendered for.
+        vote_calls = [c for c in client.calls if "PHASE=VOTE" in c.prompt]
+        assert len(vote_calls) == len(participants)
+        assert {c.agent_id for c in vote_calls} == participant_ids
+        for call in vote_calls:
+            assert call.agent_id == _extract_marker(call.prompt, "voter=")
 
 
 # --- Phase 2: accusation rounds --------------------------------------------
@@ -740,6 +794,7 @@ class TestAccusationRounds:
                 temperature: float,
                 call_kind: CallKind = "meeting",
                 model: str | None = None,
+                agent_id: str | None = None,
             ) -> LLMResponse:
                 if "PHASE=STATEMENT" in prompt:
                     text = await _slow_responder(prompt)
@@ -954,6 +1009,7 @@ class TestVotingAndResolution:
                 temperature: float,
                 call_kind: CallKind = "meeting",
                 model: str | None = None,
+                agent_id: str | None = None,
             ) -> LLMResponse:
                 if "PHASE=VOTE" in prompt:
                     text = await _slow_responder(prompt)
@@ -1852,6 +1908,7 @@ class TestProviderTimeoutDistinctFromDeadline:
             temperature: float,
             call_kind: CallKind = "meeting",
             model: str | None = None,
+            agent_id: str | None = None,
         ) -> LLMResponse:
             raise TimeoutError("simulated provider timeout")
 
@@ -1895,6 +1952,7 @@ class TestProviderTimeoutDistinctFromDeadline:
                 temperature: float,
                 call_kind: CallKind = "meeting",
                 model: str | None = None,
+                agent_id: str | None = None,
             ) -> LLMResponse:
                 if schema is not None and schema.__name__ == "Statement":
                     raise TimeoutError("simulated provider timeout")
@@ -1939,6 +1997,7 @@ class TestProviderTimeoutDistinctFromDeadline:
                 temperature: float,
                 call_kind: CallKind = "meeting",
                 model: str | None = None,
+                agent_id: str | None = None,
             ) -> LLMResponse:
                 if schema is not None and schema.__name__ == "VoteBallot":
                     raise TimeoutError("simulated provider timeout")
@@ -1992,6 +2051,7 @@ class TestProviderTimeoutDistinctFromDeadline:
                 temperature: float,
                 call_kind: CallKind = "meeting",
                 model: str | None = None,
+                agent_id: str | None = None,
             ) -> LLMResponse:
                 if "PHASE=REPORT" in prompt:
                     text = await _slow_responder(prompt)
@@ -2139,6 +2199,7 @@ class _GatherCancellationClient:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         self.recorded_calls.append(prompt)
         if f"PHASE={self.target_phase}" not in prompt:

@@ -51,11 +51,15 @@ class FakeProvider:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         if max_tokens <= 0:
             raise ValueError(f"max_tokens must be positive, got {max_tokens}")
         if not 0.0 <= temperature <= 2.0:
             raise ValueError(f"temperature must be in [0, 2], got {temperature}")
+        # ``agent_id`` is replay-attribution metadata, not part of the
+        # deterministic response contract; the fake accepts and ignores it.
+        del agent_id
         text = _build_response_text(prompt=prompt, schema=schema)
         if schema is not None:
             schema.model_validate_json(text)

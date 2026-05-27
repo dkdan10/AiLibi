@@ -21,6 +21,7 @@ from pathlib import Path
 from orchestrator.replay import (
     FailedCallReplayEntry,
     GameEndReplayEntry,
+    LLMCallRecord,
     ReplayLog,
     compute_cost_usd,
     read_all_entries,
@@ -176,3 +177,38 @@ class TestFailedCallRecording:
         )
 
         assert compute_cost_usd(path) == 0.0
+
+
+class TestLLMCallRecordAgentId:
+    """``LLMCallRecord.agent_id`` per-call attribution (Task 4.7, §5, §11.4)."""
+
+    def test_agent_id_round_trips_through_jsonl(self) -> None:
+        record = LLMCallRecord(
+            call_kind="meeting",
+            model="claude-test",
+            prompt="## Your role: CREWMATE",
+            response_text='{"ok": true}',
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.01,
+            agent_id="p-2",
+        )
+
+        restored = LLMCallRecord.model_validate_json(record.model_dump_json())
+
+        assert restored == record
+        assert restored.agent_id == "p-2"
+
+    def test_missing_agent_id_defaults_to_none(self) -> None:
+        # A replay JSONL written before this field existed has no agent_id
+        # key. ``extra="forbid"`` rejects unknown fields but still permits a
+        # missing optional one, so old replays load with agent_id=None.
+        legacy_line = (
+            '{"call_kind": "meeting", "model": "claude-test", "prompt": "p", '
+            '"response_text": "r", "input_tokens": 1, "output_tokens": 1, '
+            '"cost_usd": 0.0}'
+        )
+
+        record = LLMCallRecord.model_validate_json(legacy_line)
+
+        assert record.agent_id is None

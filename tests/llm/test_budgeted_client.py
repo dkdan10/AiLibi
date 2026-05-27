@@ -75,6 +75,7 @@ class _RecordingClient:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         self.calls.append(
             {
@@ -114,6 +115,7 @@ class _BlowUpClient:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         raise AssertionError(
             "BudgetedLLMClient invoked the inner client when pre-flight "
@@ -534,6 +536,7 @@ class _ControllableInnerClient:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         self.calls.append(prompt)
         if self.release is not None:
@@ -774,6 +777,7 @@ class TestProviderAwaitNotSerialized:
                 temperature: float,
                 call_kind: CallKind = "meeting",
                 model: str | None = None,
+                agent_id: str | None = None,
             ) -> LLMResponse:
                 self.calls.append(prompt)
                 raise RuntimeError("provider down")
@@ -829,6 +833,7 @@ class _CountingProvider:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         self.calls += 1
         return await self._inner.complete(

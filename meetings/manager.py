@@ -562,6 +562,7 @@ class MeetingManager:
                         max_tokens=self._config.report_max_tokens,
                         temperature=self._config.report_temperature,
                         call_kind="meeting",
+                        agent_id=participant.agent_id,
                     )
                 ),
                 timeout=self._config.deadlines.report_seconds,
@@ -623,6 +624,7 @@ class MeetingManager:
                         max_tokens=self._config.statement_max_tokens,
                         temperature=self._config.statement_temperature,
                         call_kind="meeting",
+                        agent_id=participant.agent_id,
                     )
                 ),
                 timeout=self._config.deadlines.statement_seconds,
@@ -715,6 +717,7 @@ class MeetingManager:
                         max_tokens=self._config.vote_max_tokens,
                         temperature=self._config.vote_temperature,
                         call_kind="meeting",
+                        agent_id=participant.agent_id,
                     )
                 ),
                 timeout=self._config.deadlines.vote_seconds,

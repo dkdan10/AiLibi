@@ -1078,6 +1078,7 @@ def _llm_call_view(
         input_tokens=call.input_tokens,
         output_tokens=call.output_tokens,
         cost_usd=call.cost_usd,
+        agent_id=call.agent_id,
     )
 
 

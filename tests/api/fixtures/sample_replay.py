@@ -117,13 +117,22 @@ def write_partial_replay(path: Path, *, seed: int = 0, ticks: int = 3) -> None:
     # Intentionally no ``record_game_end`` — winner must surface as None.
 
 
-def write_meeting_replay(path: Path, *, seed: int = 0) -> MeetingReplayExpectations:
+def write_meeting_replay(
+    path: Path,
+    *,
+    seed: int = 0,
+    llm_calls: tuple[LLMCallRecord, ...] | None = None,
+) -> MeetingReplayExpectations:
     """Write a 3-tick game with one body-report meeting; return expectations.
 
     Tick 0: the impostor (``p-3``) kills ``p-1`` in CAFETERIA. Tick 1: ``p-2``
     reports the body, opening a meeting that resolves SKIPPED. Tick 2: a no-op
     tick after the meeting resumes play. Returns a dict of the values tests
     assert against (meeting id, reporter, costs, ...).
+
+    ``llm_calls`` overrides the synthetic LLM-call records written into the
+    meeting entry; callers use it to pin specific ``agent_id`` values for
+    per-call attribution tests. Defaults to :func:`_build_llm_calls`.
     """
 
     game_map = load_canonical_map()
@@ -165,7 +174,7 @@ def write_meeting_replay(path: Path, *, seed: int = 0) -> MeetingReplayExpectati
     result = _build_meeting_result(
         meeting_id=meeting_id, reporter=reporter, living=living
     )
-    llm_calls = _build_llm_calls()
+    llm_calls = _build_llm_calls() if llm_calls is None else llm_calls
     prompt_versions = {"crewmate_report": "crewmate_report.v1"}
 
     state_hash_before = _state_hash(state)
@@ -286,6 +295,27 @@ def corrupt_tick_hash(path: Path, *, tick: int) -> None:
     path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
 
 
+def strip_llm_call_agent_ids(path: Path) -> None:
+    """Remove the ``agent_id`` key from every recorded LLM call in-place.
+
+    Simulates a replay written before Task 4.7 added ``LLMCallRecord.agent_id``,
+    so the loader's backward-compatible default (``agent_id=None``) is exercised
+    against on-disk JSONL that predates the field.
+    """
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    rewritten: list[str] = []
+    for raw in lines:
+        if not raw:
+            continue
+        record = json.loads(raw)
+        if record.get("kind") == "meeting":
+            for call in record.get("llm_calls", []):
+                call.pop("agent_id", None)
+        rewritten.append(json.dumps(record, sort_keys=True))
+    path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+
+
 def _build_meeting_result(
     *, meeting_id: str, reporter: str, living: tuple[str, ...]
 ) -> MeetingResult:
@@ -358,6 +388,7 @@ def _build_llm_calls() -> tuple[LLMCallRecord, ...]:
             input_tokens=10,
             output_tokens=5,
             cost_usd=0.01,
+            agent_id="p-1",
         ),
         LLMCallRecord(
             call_kind="meeting",
@@ -367,5 +398,6 @@ def _build_llm_calls() -> tuple[LLMCallRecord, ...]:
             input_tokens=12,
             output_tokens=6,
             cost_usd=0.02,
+            agent_id="p-3",
         ),
     )

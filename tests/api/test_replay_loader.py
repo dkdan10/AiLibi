@@ -19,8 +19,10 @@ from api.schemas import (
     MeetingTriggeredEventView,
     ReportBodyEventView,
 )
+from orchestrator.replay import LLMCallRecord
 from tests.api.fixtures.sample_replay import (
     corrupt_tick_hash,
+    strip_llm_call_agent_ids,
     write_meeting_replay,
     write_partial_replay,
     write_roster_replay,
@@ -291,3 +293,40 @@ def test_cost_summary_empty_dir_is_zeroed(tmp_path: Path) -> None:
     assert summary.mean_cost_per_replay == 0.0
     assert summary.max_cost_per_replay == 0.0
     assert summary.decisive_split == {}
+
+
+def test_llm_call_agent_id_round_trips_to_dto(tmp_path: Path) -> None:
+    # Task 4.7: a recorded LLMCallRecord.agent_id survives the full pipeline
+    # (JSONL -> loader -> DTO) and surfaces on LLMCallView.agent_id.
+    custom_calls = (
+        LLMCallRecord(
+            call_kind="meeting",
+            model="fake-model",
+            prompt="## Your role: CREWMATE\nEmit one ReportDocument.",
+            response_text='{"ok": true}',
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.01,
+            agent_id="p-2",
+        ),
+    )
+    write_meeting_replay(
+        tmp_path / "replay-seed-0.jsonl", seed=0, llm_calls=custom_calls
+    )
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    meeting = loader.load_replay("headless-seed-0").meetings[0]
+    assert [call.agent_id for call in meeting.llm_calls] == ["p-2"]
+
+
+def test_llm_call_agent_id_is_none_for_pre_4_7_replay(tmp_path: Path) -> None:
+    # A replay written before the agent_id field existed has no agent_id key on
+    # its LLM-call records; the loader must surface agent_id=None, not crash.
+    path = tmp_path / "replay-seed-0.jsonl"
+    write_meeting_replay(path, seed=0)
+    strip_llm_call_agent_ids(path)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    meeting = loader.load_replay("headless-seed-0").meetings[0]
+    assert meeting.llm_calls  # the fixture wrote LLM calls
+    assert all(call.agent_id is None for call in meeting.llm_calls)

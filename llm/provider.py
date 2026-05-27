@@ -133,7 +133,12 @@ class AnthropicClient:
         temperature: float,
         call_kind: CallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
+        # ``agent_id`` is call-attribution metadata for the replay layer
+        # (DESIGN.md §11.4), not a provider knob — it is deliberately not
+        # forwarded to the upstream Anthropic SDK.
+        del agent_id
         chosen_model = model if model is not None else self._model_for(call_kind)
         raw = await self._send(
             api_key=self._api_key,

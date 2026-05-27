@@ -210,6 +210,7 @@ class _RecordingLLMClient:
         temperature: float,
         call_kind: _LLMCallKind = "meeting",
         model: str | None = None,
+        agent_id: str | None = None,
     ) -> LLMResponse:
         response = await self._inner.complete(
             prompt=prompt,
@@ -218,6 +219,7 @@ class _RecordingLLMClient:
             temperature=temperature,
             call_kind=call_kind,
             model=model,
+            agent_id=agent_id,
         )
         self._calls.append(
             LLMCallRecord(
@@ -228,6 +230,7 @@ class _RecordingLLMClient:
                 input_tokens=response.usage.input_tokens,
                 output_tokens=response.usage.output_tokens,
                 cost_usd=response.cost_usd,
+                agent_id=agent_id,
             )
         )
         return response
