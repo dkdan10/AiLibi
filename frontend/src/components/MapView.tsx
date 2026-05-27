@@ -146,13 +146,23 @@ export function MapView() {
   const currentReplay = useReplayStore((s) => s.currentReplay);
   const currentTick = useReplayStore((s) => s.currentTick);
 
-  // Track the previously-rendered tick so we can tell a single-step advance
-  // (tween) from a multi-tick jump (snap). Updated after each render.
+  // Track the previously-rendered tick and replay so we can tell a single-step
+  // advance (tween) from a multi-tick jump or a replay switch (both snap). Both
+  // refs lag the current render by one commit (updated in effects below).
+  const gameId = currentReplay?.metadata.game_id ?? null;
   const prevTickRef = useRef(currentTick);
+  const prevGameIdRef = useRef<string | null>(gameId);
   const prevTick = prevTickRef.current;
+  // selectReplay resets currentTick to 0, which could read as a 1->0 single
+  // step; gate animation on the replay being unchanged so a switch always snaps
+  // (otherwise reused-by-agent_id tokens would tween from the prior game).
+  const sameReplay = prevGameIdRef.current === gameId;
   useEffect(() => {
     prevTickRef.current = currentTick;
   }, [currentTick]);
+  useEffect(() => {
+    prevGameIdRef.current = gameId;
+  }, [gameId]);
 
   if (currentReplay === null) {
     return (
@@ -180,8 +190,9 @@ export function MapView() {
   const ventEdges = buildVentEdges(currentReplay.map.vents, roomsById);
   const bodies = visibleBodies(currentReplay.ticks, currentTick);
   const sabotageActive = tick?.sabotage_active ?? [];
-  // A single-tick step animates; scrubs / snap-to-meeting jumps snap instantly.
-  const animate = Math.abs(currentTick - prevTick) === 1;
+  // A single-tick step within the same replay animates; scrubs / snap-to-meeting
+  // jumps and replay switches snap instantly.
+  const animate = sameReplay && Math.abs(currentTick - prevTick) === 1;
 
   const agentStates = tick?.agent_states ?? [];
   const tokens = agentStates
@@ -216,7 +227,7 @@ export function MapView() {
       <BodyMarker
         key={body.victimId}
         room={room}
-        victimId={body.victimId}
+        placementIndex={playerIndexById.get(body.victimId) ?? 0}
         isDiscovered={body.isDiscovered}
         scale={scale}
         offsetX={offsetX}
