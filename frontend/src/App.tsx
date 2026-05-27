@@ -1,13 +1,17 @@
 import { useEffect } from "react";
 
 import { MapView } from "./components/MapView";
+import { MeetingPill } from "./components/MeetingPill";
+import { MeetingView } from "./components/MeetingView";
 import { ReplayPicker } from "./components/ReplayPicker";
 import { TickStepper } from "./components/TickStepper";
 import { useReplayStore } from "./store/replayStore";
 
 // Phase 4.4 vertical slice (DESIGN.md §7): pick a replay, see the map, step
 // through ticks and watch agents move. Top: ReplayPicker. Middle: the PixiJS
-// MapView canvas. Bottom: TickStepper.
+// MapView canvas. Bottom: TickStepper + a MeetingPill at meeting ticks. Phase
+// 4.6 (DESIGN.md §5) adds the MeetingView transcript overlay, mounted at the
+// app root above all other content.
 export default function App() {
   const loadReplayList = useReplayStore((s) => s.loadReplayList);
 
@@ -30,8 +34,13 @@ export default function App() {
         <div className="flex justify-center">
           <MapView />
         </div>
-        <TickStepper />
+        <div className="flex flex-wrap items-center gap-4">
+          <TickStepper />
+          <MeetingPill />
+        </div>
       </main>
+
+      <MeetingView />
     </div>
   );
 }
