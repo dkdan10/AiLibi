@@ -91,9 +91,12 @@ export function AgentToken(props: AgentTokenProps) {
       progressRef.current = 1;
       setPos(target);
     }
-    // `target`/`animate` come from this render's closure; the effect only needs
-    // to re-run when the destination room changes (transform is fixed).
-  }, [room.id]);
+    // `target` is read from this render's closure — it's a pure function of
+    // `room.id` since jitter and the map transform are fixed. Re-run when the
+    // destination room changes OR when the snap/tween mode flips, so a
+    // multi-tick jump (animate=false) snaps immediately even when it lands in
+    // the room the token was already tweening toward.
+  }, [room.id, animate]);
 
   const advance = useCallback((ticker: Ticker) => {
     if (progressRef.current >= 1) {
