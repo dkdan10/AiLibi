@@ -13,3 +13,11 @@ __pycache__/
 
 # Node / frontend (frontend/.gitignore covers dist/, .vite/, coverage/)
 node_modules/
+
+# Replays: user-generated replay JSONL files in the top-level replays/ dir
+# are local artifacts; the curated samples under replays/samples/ are the
+# only replays committed to the repo (see task 4.12 / DESIGN.md §7).
+replays/*.jsonl
+!replays/samples/
+# Internal leak-test packet logs from the observation firewall — never commit.
+**/*.audit.jsonl
