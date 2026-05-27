@@ -35,7 +35,7 @@ export function BeliefRow({ belief }: { belief: BeliefEntryView }) {
         {belief.suspicion.toFixed(2)}
       </span>
       <span
-        title={`confidence ${belief.confidence.toFixed(2)} · updated tick ${belief.last_updated_tick}`}
+        title={`confidence ${belief.confidence.toFixed(2)} · snapshot tick ${belief.snapshot_tick}`}
         className="shrink-0 rounded-full bg-neutral-700/70 px-2 py-0.5 text-[10px] font-semibold text-neutral-300"
       >
         conf {belief.confidence.toFixed(2)}
