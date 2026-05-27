@@ -321,15 +321,19 @@ export function MeetingView() {
   }
 
   return (
-    // The left BeliefMatrix (z-[55], ≤24rem) and right ThoughtStream (z-[60],
-    // ≤20rem) rails mount alongside an open meeting and paint above this z-50
-    // overlay. Reserve a gutter wider than each rail (lg+ only) so the centered
-    // panel lands in the gap between them instead of being clipped beneath them.
+    // Coexist with the rails that mount alongside an open meeting — the left
+    // BeliefMatrix (z-[55], ≤24rem) and right ThoughtStream (z-[60], ≤20rem).
+    // At xl+ there is room for all three: drop below the rails (z-50) and
+    // reserve a gutter wider than each so the centered panel lands in the gap.
+    // Below xl that gap would squeeze the transcript into a too-narrow column,
+    // so instead lift the overlay above the rails (z-[61], still under the
+    // z-[65] ReplayControls) and let the panel use the full width as a focus
+    // modal — readable, and never clipped by a rail.
     <div
       role="dialog"
       aria-modal="true"
       aria-label={`Meeting at tick ${meeting.tick}`}
-      className="fixed inset-0 z-50 overflow-auto bg-black/70 lg:pl-[25rem] lg:pr-[21rem]"
+      className="fixed inset-0 z-[61] overflow-auto bg-black/70 xl:z-50 xl:pl-[25rem] xl:pr-[21rem]"
       onClick={() => {
         selectMeeting(null);
       }}
