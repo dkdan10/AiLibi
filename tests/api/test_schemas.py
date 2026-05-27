@@ -241,7 +241,7 @@ def _agent_memory_view() -> AgentMemoryView:
         observations=_all_observation_claims(),
         beliefs=(
             BeliefEntryView(
-                subject="p2", suspicion=0.7, confidence=0.6, last_updated_tick=9
+                subject="p2", suspicion=0.7, confidence=0.6, snapshot_tick=9
             ),
         ),
         open_contradictions=(_contradiction(),),
@@ -382,3 +382,13 @@ def test_tick_events_cover_every_variant_and_round_trip() -> None:
 def test_extra_fields_are_rejected() -> None:
     with pytest.raises(pydantic.ValidationError):
         PositionView.model_validate({"x": 1.0, "y": 2.0, "z": 3.0})
+
+
+def test_belief_entry_rejects_old_field_name() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        BeliefEntryView(  # type: ignore[call-arg]
+            subject="p-2",
+            suspicion=0.7,
+            confidence=0.4,
+            last_updated_tick=5,  # old name
+        )

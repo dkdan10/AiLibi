@@ -405,13 +405,15 @@ class MeetingView(_FrozenView):
 
 
 class BeliefEntryView(_FrozenView):
-    """Shadows one ``agents.memory.beliefs.PlayerBelief`` entry at a meeting
-    boundary. ``confidence`` is derived; decay timestamps are excluded."""
+    """Meeting boundary tick at which this belief snapshot was taken. Beliefs
+    themselves are timeless; this field timestamps when the spectator API
+    observed the belief, not when the belief mutated. All BeliefEntryView
+    entries within one AgentMemoryView share the same snapshot_tick."""
 
     subject: str
     suspicion: float
     confidence: float
-    last_updated_tick: int
+    snapshot_tick: int
 
 
 class AgentMemoryView(_FrozenView):

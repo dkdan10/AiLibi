@@ -273,7 +273,7 @@ export interface BeliefEntryView {
   subject: string;
   suspicion: number;
   confidence: number;
-  last_updated_tick: number;
+  snapshot_tick: number;
 }
 
 export interface AgentMemoryView {

@@ -1117,7 +1117,7 @@ def _belief_entry_view(memory: AgentMemory, subject: str, tick: int) -> BeliefEn
         subject=subject,
         suspicion=belief.suspicion,
         confidence=min(1.0, abs(belief.suspicion - 0.5) * 2.0),
-        last_updated_tick=tick,
+        snapshot_tick=tick,
     )
 
 
