@@ -23,8 +23,11 @@ You will produce **one audit report** in `audits/` following the
 format, rigor, and section structure of recent post-checkpoint
 audits (`audits/audit-2026-05-25-1539-pre-phase-4-real-provider-eval.md`
 is one structural reference; `audits/audit-2026-05-25-1823-pre-phase-4-real-provider-eval.md`
-is another). Single-tool — there is no reconciliation step for this
-audit. The verdict you write is the verdict the project acts on.
+is another). This is one of two parallel audits — a separate
+reconciliation session will adjudicate both reports against the code
+before the project acts. Write your audit as if it stands alone; do
+not soften a finding expecting the reconciler to catch it. The final
+verdict comes from the reconciliation, not from your report.
 
 ---
 
@@ -230,7 +233,12 @@ DTO leak, but it's load-bearing for the audit:
 
 ## 5. Report format
 
-Your report goes to `audits/audit-YYYY-MM-DD-HHMM-mid-phase-4-dto.md`.
+Your report goes to `audits/audit-YYYY-MM-DD-HHMM-mid-phase-4-dto-{tool}.md`
+where `{tool}` is your own tool name in lowercase — `claude` or
+`codex` (whichever you actually are). The pairing with the other
+auditor's report (using the same convention) is what enables the
+downstream reconciliation step.
+
 Required sections:
 
 1. **Verdict.** Exactly one of:

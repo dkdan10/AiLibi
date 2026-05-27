@@ -15,11 +15,12 @@ not raw engine state or replay internals.
   minimal end-to-end path (one replay rendering one room with agents
   visibly moving). The mid-phase DTO audit fires here. Only after the
   audit lands do 4.4.5–4.8 fan out.
-- **Mid-phase DTO audit, no real-provider analog.** Single-tool audit
-  (Claude or Codex), no reconciliation. Focused on DTO/leak coverage
-  after the substrate exists. The phase-closing acceptance gate is a
-  manual UX session (a non-technical viewer follows a replay end-to-
-  end without reading logs).
+- **Mid-phase DTO audit, no real-provider analog.** Double-tool audit
+  (Claude + Codex) with a separate reconciliation pass. The substrate
+  gates five downstream PRs; a second opinion is worth the cost.
+  Focused on DTO/leak coverage after the substrate exists. The
+  phase-closing acceptance gate is a manual UX session (a non-
+  technical viewer follows a replay end-to-end without reading logs).
 
 ## Parallelism
 4.1 → 4.2 → 4.3 → 4.4 in series. Mid-phase DTO audit runs after 4.4.
@@ -1397,10 +1398,18 @@ Lowest-risk task in Phase 4. The substrate is built; this task just exercises it
 ### Mid-phase DTO audit
 
 After 4.4 merges, run the Phase 4 mid-phase DTO audit before
-dispatching 4.4.5–4.8. The audit prompt lives at
-`audits/prompts/mid-phase-4-dto-audit-prompt.md` (to be authored after
-4.4 is in flight; do not author it prematurely against substrate that
-doesn't exist yet).
+dispatching 4.4.5–4.8. The audit is double-tool (Claude + Codex)
+followed by a reconciliation pass — the substrate gates five
+downstream PRs, so a second opinion is worth the cost. Both auditors
+run the same audit prompt in independent sessions; a third session
+reconciles.
+
+**Prompts:**
+- `audits/prompts/mid-phase-4-dto-audit-prompt.md` — run by Claude
+  and by Codex in two independent sessions.
+- `audits/prompts/mid-phase-4-reconciliation-prompt.md` — run in a
+  fresh session after both audits land. The reconciler does not read
+  the audit prompt; only the two reports + the code.
 
 **Audit scope:**
 - Every DTO in `api/schemas.py` is reviewed against the engine /
@@ -1416,8 +1425,11 @@ doesn't exist yet).
 out 4.4.5–4.8" OR "Mid-phase DTO audit blocks fan-out — repair tasks
 required: …"
 
-Single-tool, no reconciliation. Output: one Markdown audit at
-`audits/audit-YYYY-MM-DD-HHMM-mid-phase-4-dto.md`.
+**Outputs:**
+- `audits/audit-YYYY-MM-DD-HHMM-mid-phase-4-dto-claude.md`
+- `audits/audit-YYYY-MM-DD-HHMM-mid-phase-4-dto-codex.md`
+- `audits/audit-YYYY-MM-DD-HHMM-mid-phase-4-dto-reconciled.md` —
+  the one the project acts on.
 
 ### Task 4.4.5 — MapView full
 **Branch:** `phase-4-mapview-full`
