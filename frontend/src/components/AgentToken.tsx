@@ -77,8 +77,8 @@ export function AgentToken(props: AgentTokenProps) {
   // Start "complete" so a freshly-mounted token sits still at its target.
   const progressRef = useRef<number>(1);
 
-  // Re-target whenever the agent's room changes. (The map transform is fixed
-  // per the single canonical map, so room.id changing is the only trigger.)
+  // Re-target when the agent's room changes (start/continue a tween) or when
+  // the snap/tween mode flips (force an immediate snap on a multi-tick jump).
   useEffect(() => {
     if (animate) {
       fromRef.current = posRef.current;
