@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { BeliefMatrix } from "./components/BeliefMatrix";
 import { MapView } from "./components/MapView";
 import { MeetingPill } from "./components/MeetingPill";
 import { MeetingView } from "./components/MeetingView";
@@ -13,7 +14,9 @@ import { useReplayStore } from "./store/replayStore";
 // MapView canvas. Bottom: TickStepper + a MeetingPill at meeting ticks. Phase
 // 4.6 (DESIGN.md §5) adds the MeetingView transcript overlay, mounted at the
 // app root above all other content. Phase 4.8 (DESIGN.md §6) adds the
-// ThoughtStream right rail, which mounts alongside an open meeting.
+// ThoughtStream right rail, which mounts alongside an open meeting. Phase 4.10
+// (DESIGN.md §6.3) adds the BeliefMatrix who-suspects-whom heatmap as a left
+// rail above the MeetingView modal, also gated on a selected meeting.
 export default function App() {
   const loadReplayList = useReplayStore((s) => s.loadReplayList);
 
@@ -43,6 +46,7 @@ export default function App() {
       </main>
 
       <MeetingView />
+      <BeliefMatrix />
       <ThoughtStream />
     </div>
   );
