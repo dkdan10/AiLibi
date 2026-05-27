@@ -3157,9 +3157,561 @@ Lowest-risk task in Phase 4. No new dependencies, no new abstractions, no engine
 
 **Ready-to-paste prompt:** `agent_prompts/task-4-12-easy-setup-script.md`
 
+### Task 4.13 — Initial-state TickView synthesis (pre-UX-session Finding 1)
+**Branch:** `phase-4-initial-state-tick`
+**Depends on:** 4.12 merged
+**Section refs:** DESIGN.md §3.1, DESIGN.md §11.4
+**Complexity:** Small
+
+UX self-audit Finding 1: the MapView's "tick 0" shows agents already
+spread across rooms — p-2 in WEST_HALL, p-3 in EAST_HALL, p-4 in
+CAFETERIA for seed 22 — instead of the expected initial spawn state
+where every player starts in CAFETERIA. The data is honestly what the
+recording captures: `ReplayLog.record_tick(input_tick=0, actions,
+state=state_after_advance_tick)` snapshots state AFTER `advance_tick`
+has processed tick 0's actions (including any `move` actions agents
+submitted on their first turn). The pre-action initial state from
+`seed_initial_state` is never persisted.
+
+For a non-technical viewer, "tick 0 = start of game" is the only
+intuitive mental model, and the current behavior breaks it on the
+first impression. This is comprehension-breaking for the UX session;
+fix before dispatching the non-tech viewer.
+
+**Scope decision: synthesize on the loader side, no JSONL format
+change.** The seeded initial state is fully recoverable from the
+`game_id` (which encodes the seed). The loader already calls
+`seed_initial_state(seed=N, game_map=...)` at
+[api/replay_loader.py:328](api/replay_loader.py#L328); we snapshot
+that state into a synthetic `TickView` with `tick=-1` and prepend it
+to the `ticks` array. The JSONL format is unchanged; backward-compat
+is trivial; old replays inherit the synthesis for free.
+
+The `tick=-1` sentinel is intentional. Existing tick numbers stay
+0-indexed and continue to match logs / audit reports / meeting tick
+references. The frontend special-cases `tick=-1` to display "Start"
+on the scrubber and tick label, so the viewer sees "Start" → "Tick 0"
+→ "Tick 1" → ... rather than a confusing negative number.
+
+**Out of scope** (explicit decisions deferred):
+
+- **Changing `record_tick` semantics to capture pre-advance state.**
+  That would break every committed replay's `state_hash` baseline and
+  require re-running every eval. Synthesis on read is cheaper and
+  doesn't invalidate the recorded artifacts.
+- **Persisting the synthesized initial entry to JSONL.** No write
+  changes; this task is read-side only.
+- **Reshaping `TickView.tick` to be a string or enum.** Stays
+  `int`; `-1` is the sentinel. Frontend handles the display label.
+- **Adding `tick=-1` as a separately-fetchable endpoint slot.** The
+  existing `GET /replays/{id}/ticks/{tick}` endpoint accepts the
+  sentinel naturally; no new route needed.
+- **Updating `ReplayMetadataView.total_ticks` to include the
+  synthesized entry.** `total_ticks` continues to mean "number of
+  recorded tick entries", which equals the engine's actual play
+  length. `ticks[]` has length `total_ticks + 1` (the synthesized
+  initial plus the recorded ticks). The frontend reads
+  `ticks.length` for scrubber bounds, not `total_ticks`.
+
+**Files in scope:**
+- api/replay_loader.py
+- frontend/src/components/ReplayControls.tsx
+- tests/api/test_replay_loader.py
+- tests/api/test_replays.py
+
+**Files NOT in scope:**
+- engine/
+- agents/
+- llm/
+- meetings/
+- observation/
+- orchestrator/
+- api/schemas.py (no DTO change; `int` accommodates `-1`)
+- api/routes/ (existing endpoints handle `tick=-1` naturally)
+- frontend/src/store/replayStore.ts
+- frontend/src/api/client.ts
+- frontend/src/types/api.ts
+- frontend/src/components/MapView.tsx (reads `currentReplay.ticks[currentTick]` — synthesized entry renders naturally)
+- frontend/src/components/MeetingPill.tsx (no meetings at `tick=-1`; pill stays hidden — correct behavior)
+- frontend/src/components/MeetingView.tsx
+- frontend/src/components/ThoughtStream.tsx
+- frontend/src/components/BeliefMatrix.tsx
+- frontend/src/components/ReplayPicker.tsx
+- frontend/package.json
+- DESIGN.md
+- AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+
+**Definition of done:**
+- [ ] **Loader synthesizes the initial `TickView`.** [api/replay_loader.py](api/replay_loader.py) `load_replay` (or its `_walk`) constructs a `TickView` from `initial_state` immediately after `seed_initial_state(...)` returns and before the entry loop begins. The synthesized view has: `tick=-1`, `agent_states` derived from `initial_state.players` (all players alive, `room_id=spawn_room` from the seeder, `is_venting=False`, `current_action="IDLE"`, `task_progress=0.0` for crewmates / `None` for impostors), `events=()`, `sabotage_active=()`, `tasks_completed_total=0`, `tasks_required_total=len(initial_state.tasks)`. Prepended to the `ticks` list at index 0.
+- [ ] **`ReplayMetadataView.total_ticks` unchanged.** `total_ticks` still equals the number of recorded `ReplayEntry`s in the JSONL — it does NOT include the synthesized initial entry. Verify by asserting `len(replay.ticks) == replay.metadata.total_ticks + 1` in a test.
+- [ ] **`GET /replays/{game_id}/ticks/-1`** returns the synthesized initial `TickView`. The existing route handler accepts negative ticks (or is extended to do so); endpoint test confirms 200 with the expected spawn state.
+- [ ] **Out-of-range tick returns 404 unchanged.** Tick values < -1 or >= total_ticks still 404. Test covers both.
+- [ ] **Loader test asserts spawn semantics.** In [tests/api/test_replay_loader.py](tests/api/test_replay_loader.py), a new test loads a real replay (the `sample_replay` fixture or one of `replays/samples/`) and asserts `replay.ticks[0].tick == -1` AND every `agent_states[*].room_id` equals the canonical map's spawn room (`"CAFETERIA"` per `engine/maps/canonical_1.yaml`).
+- [ ] **Endpoint test in [tests/api/test_replays.py](tests/api/test_replays.py)** drives `GET /ticks/-1` via `TestClient` and asserts the response JSON contains all four players in `CAFETERIA`.
+- [ ] **ReplayControls handles `tick=-1` as "Start".** [frontend/src/components/ReplayControls.tsx](frontend/src/components/ReplayControls.tsx): the scrubber's `min` becomes `-1` (or `0` if currentTick is mapped through an index, depending on the existing implementation), the tick label displays the literal text `"Start"` when `currentReplay.ticks[currentTick].tick === -1`, and `"Tick {n}"` otherwise. Step-backward from tick 0 lands at "Start"; step-forward from "Start" lands at tick 0.
+- [ ] **Play-from-Start works.** Click "Start" → press Play → auto-advance walks through tick 0, 1, 2, ... at the configured speed. No off-by-one in the advance loop. Verify manually + assert in a smoke note in the PR description.
+- [ ] **MapView renders the initial state correctly.** Manual check: at the synthesized "Start" position, all 4 player tokens cluster in the CAFETERIA rectangle. No jitter-overflow concerns are introduced (this task does NOT fix the jitter-overflow if any remains; the data fix alone resolves Finding 1 even if jitter is imperfect).
+- [ ] **Screenshot in PR.** One screenshot of the "Start" scrubber position showing all 4 agents in CAFETERIA for seed 22. This is the visible proof Finding 1 is closed.
+- [ ] No imports from `engine/` under `agents/`, `llm/`, or `meetings/`. `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run mypy --strict agents observation orchestrator engine llm meetings` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+The synthesis lives at the top of `_walk` (or wherever `load_replay` constructs `ticks: list[TickView] = []` — see [api/replay_loader.py:347](api/replay_loader.py#L347)). Insert before the existing loop:
+
+```python
+initial_tick_view = self._initial_tick_view(initial_state)
+ticks: list[TickView] = [initial_tick_view]
+```
+
+And add a private helper:
+
+```python
+def _initial_tick_view(self, initial_state: WorldState) -> TickView:
+    """Synthesize the pre-action initial state as a TickView with tick=-1.
+
+    The recording loop captures state AFTER each advance_tick, so the
+    spawn-moment state is never persisted to JSONL. We reconstruct it
+    here so the spectator UI can show 'Start' before any actions fired.
+    """
+    return TickView(
+        tick=-1,
+        agent_states=tuple(
+            self._initial_agent_state(player)
+            for player in sorted(initial_state.players.values(), key=lambda p: p.id)
+        ),
+        events=(),
+        sabotage_active=(),
+        tasks_completed_total=0,
+        tasks_required_total=len(initial_state.tasks),
+    )
+
+def _initial_agent_state(self, player: PlayerState) -> AgentTickStateView:
+    return AgentTickStateView(
+        agent_id=player.id,
+        room_id=player.room,
+        is_alive=True,
+        is_venting=False,
+        task_progress=None if player.role == "IMPOSTOR" else 0.0,
+        current_action="IDLE",
+    )
+```
+
+For the frontend, the cleanest pattern is reading the TickView's `tick` field directly when labeling:
+
+```tsx
+function tickLabel(view: TickView): string {
+  return view.tick === -1 ? "Start" : `Tick ${view.tick}`;
+}
+```
+
+And for the scrubber, since `currentTick` is documented as "index into `ticks[]`", the scrubber's min stays at 0 and max stays at `ticks.length - 1`. The displayed label uses `ticks[currentTick].tick` for the underlying value:
+
+```tsx
+const view = currentReplay.ticks[currentTick];
+return <span>{tickLabel(view)} / {currentReplay.metadata.total_ticks}</span>;
+```
+
+Test fixture pattern — extend the existing `sample_replay` helper if needed, but the real `replays/samples/replay-seed-22.jsonl` is the higher-confidence test target since it exercises the actual seeder + map data.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+The risk is in the seam between TickView's tick field semantics ("recorded input_tick" vs "scrubber position") and existing consumers.
+
+- **`tick=-1` in `TickView`.** No existing consumer should crash on a negative tick. ThoughtStream uses `tick` for memory pairing (meeting-boundary only); BeliefMatrix uses meeting tick; MapView reads `agent_states` directly; MeetingPill checks `meetings.some(m => m.tick === currentTick)` which won't match `-1`. None of these need changes.
+- **MeetingPill at tick=-1.** Hidden (no meeting fires at -1). Correct.
+- **ReplayControls' snap-to-meeting from tick=-1.** Should find the next meeting (tick ≥ 0). Confirm the snap logic uses `m.tick > currentTick` (which works for `currentTick === -1`) rather than `m.tick > 0`.
+- **`ticks.length` vs `total_ticks`.** Frontend consumers may have used either interchangeably. After this task, they differ by 1. Audit any place reading either; the contract is "`ticks.length === total_ticks + 1`."
+- **Endpoint URL `/ticks/-1`.** The FastAPI route uses `{tick}` as a path parameter. Negative ints in URL paths are unambiguous (`-1` is valid). Confirm via curl in the smoke test.
+- **No backend persistence change.** Existing JSONLs work unchanged; no migration needed.
+- **No CI cost.** Static gates only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-13-initial-state-tick.md`
+
+### Task 4.14 — Belief-rule wiring for observed venting and body proximity (pre-UX-session Finding 2)
+**Branch:** `phase-4-belief-rule-wiring`
+**Depends on:** 4.12 merged
+**Section refs:** DESIGN.md §6.3, DESIGN.md §6.6, mid-phase DTO audit R-2
+**Complexity:** Medium
+
+UX self-audit Finding 2: the API returns `beliefs: []` for every
+agent at every meeting. Verified via direct curl against the live
+loader (`/replays/headless-seed-22/meetings/.../memory/p-2` →
+`beliefs: []`). The BeliefMatrix renders empty cells across the
+board, not because the matrix component is broken but because the
+data is genuinely empty.
+
+Root cause: `agents/memory/beliefs.py` exposes `BeliefState` with
+mutation methods (`adjust_suspicion`, `adjust_trust`, etc.) but
+nothing in the perception or memory-ingestion pipeline ever calls
+them. DESIGN.md §6.3 specifies five rule-based belief updates; none
+are wired. Beliefs stay at the default-empty `BeliefState` for every
+agent, every tick, every meeting. The promise of the BeliefMatrix
+spectator panel (DESIGN.md §6.3, §7) cannot be delivered.
+
+**Scope decision: minimum-viable rule set (Rules 1 + 4), not the
+full §6.3 list.**
+
+DESIGN.md §6.3 lists five rule types:
+1. +0.2 suspicion if seen near a body shortly before discovery.
+2. +0.3 if claimed alibi contradicts another agent's testimony.
+3. -0.4 trust adjustment if a verifiable shared task is completed.
+4. +0.5 suspicion if observed venting (almost certain).
+5. Time decay toward 0.5 over rounds without new evidence.
+
+This task implements Rules 1 and 4 only. Rationale:
+- **Rule 4 (observed venting):** the single strongest informational
+  signal in Among Us — venting is impostor-exclusive. One witness
+  collapses uncertainty almost to certainty. Without it the matrix
+  can never reflect the strongest evidence agents actually have.
+- **Rule 1 (body proximity):** the bread-and-butter Among Us
+  deduction. Every meeting at a body-discovery trigger should
+  surface elevated suspicion for agents recently co-present in that
+  room.
+- Rules 2, 3, 5 add nuance but require either meeting-transcript
+  analysis (Rule 2) or per-tick scaffolding (Rule 5) that this task
+  doesn't need to deliver to close Finding 2.
+
+Rules 2, 3, 5 land as a Phase 5 follow-up (probably under "eval &
+polish") when the belief-tuning loop becomes a measured concern.
+
+**Suspicion weights as config, not constants.** DESIGN.md §6.3
+explicitly says: "These weights are config, not constants — they
+will be tuned against the eval harness." This task introduces a
+single module-level constant per implemented rule (e.g.
+`VENTING_SUSPICION_DELTA = 0.5`, `BODY_PROXIMITY_DELTA = 0.2`,
+`BODY_PROXIMITY_WINDOW_TICKS = 3`). Future tuning is a one-line
+edit. No external config file or dependency added.
+
+**Out of scope** (explicit decisions deferred):
+
+- **Rules 2, 3, 5.** Deferred to Phase 5.
+- **Per-belief recency timestamping.** Task 4.9 deliberately renamed
+  `last_updated_tick` → `snapshot_tick` and kept `PlayerBelief` as
+  a timeless dataclass. This task does NOT add a `last_updated_tick`
+  field to `PlayerBelief`. If a future task wants per-rule recency
+  tracking it can add it then.
+- **External config file for weights.** Module-level constants
+  suffice for the MVP. A YAML / TOML config layer is Phase 5+.
+- **Belief decay loops.** Rule 5 requires per-tick decay; this task
+  doesn't implement it. Beliefs that fire from Rules 1/4 stay
+  elevated for the rest of the game.
+- **Wiring the rules into the LIVE tournament path.** The loader's
+  memory reconstruction (via `_ingest_tick`) is what populates
+  BeliefMatrix; both paths exercise the same `agents/perception.py`
+  ingestion code, so a single fix unblocks both.
+
+**Files in scope:**
+- agents/memory/beliefs.py
+- agents/perception.py
+- tests/agents/test_perception.py
+- tests/agents/test_beliefs.py
+
+**Files NOT in scope:**
+- engine/
+- llm/
+- meetings/
+- observation/
+- orchestrator/
+- api/ (the loader's existing `_ingest_tick` → `agents/perception.py` path delivers populated beliefs to the DTO layer with zero changes)
+- frontend/ (BeliefMatrix renders whatever the API serves; populated cells appear automatically)
+- agents/strategic/ (rule firing is per-tick perception work, not strategic LLM reasoning)
+- agents/tactical/
+- agents/memory/episodic.py (no episodic-store changes; rules read from observation packets and write to BeliefState)
+- agents/memory/working.py
+- agents/memory/meeting_memo.py
+- agents/memory/store.py
+- agents/runtime.py (the per-tick AgentRuntime call already routes through perception)
+- DESIGN.md
+- AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+
+**Definition of done:**
+- [ ] **Module-level weight constants** declared in [agents/memory/beliefs.py](agents/memory/beliefs.py): `VENTING_SUSPICION_DELTA: Final[float] = 0.5`, `BODY_PROXIMITY_SUSPICION_DELTA: Final[float] = 0.2`, `BODY_PROXIMITY_WINDOW_TICKS: Final[int] = 3`. All three reference DESIGN.md §6.3 in their docstring.
+- [ ] **`apply_observation_rules` (or equivalently-named) function** in [agents/memory/beliefs.py](agents/memory/beliefs.py) takes `(beliefs: BeliefState, observation_packet, recent_co_presence) → BeliefState`. Pure function, returns a new `BeliefState`. Inputs:
+  - `beliefs`: current belief state for the observing agent
+  - `observation_packet`: the `ObservationPacket` for this tick (per [observation/packet.py](observation/packet.py))
+  - `recent_co_presence`: a `Mapping[PlayerId, Sequence[tuple[int, RoomId]]]` describing which other players the agent has been co-located with in the prior `BODY_PROXIMITY_WINDOW_TICKS` ticks, derived from the agent's own episodic memory. The function does NOT reach into episodic store; the caller passes pre-computed co-presence.
+  - Returns: updated `BeliefState` with Rule-4 and Rule-1 deltas applied.
+- [ ] **Rule 4 (observed venting) fires.** When `observation_packet.audible_events` (or wherever vent-use observations land per the firewall design) contains a vent-use event attributed to a specific player, the function calls `beliefs.adjust_suspicion(player_id, delta=VENTING_SUSPICION_DELTA)`. Clamped to `[0, 1]` per the existing `adjust_suspicion` semantics.
+- [ ] **Rule 1 (body proximity) fires.** When `observation_packet.visible_bodies` contains a newly-discovered body (one not present in the previous tick's packet — implementing agent decides how to detect "new"; simplest is to compare current vs prior packet), the function reads `recent_co_presence` for the body's room over the prior `BODY_PROXIMITY_WINDOW_TICKS` ticks and applies `beliefs.adjust_suspicion(other_player_id, delta=BODY_PROXIMITY_SUSPICION_DELTA)` for every other player who was in that room during the window.
+- [ ] **`agents/perception.py::ingest_packet`** (or whichever function processes an `ObservationPacket` into memory updates — implementing agent identifies the right call site) invokes `apply_observation_rules` with the current packet + a co-presence map derived from the agent's episodic store. The episodic store's existing query API is used; do NOT add new episodic methods if existing ones suffice.
+- [ ] **`tests/agents/test_perception.py` integration test.** Scripted scenario: observing agent witnesses a vent use by another player at tick 5; assert the observing agent's `BeliefState.view(venter).suspicion >= 0.5 + epsilon` after ingestion.
+- [ ] **`tests/agents/test_perception.py` second test.** Scripted scenario: observing agent finds a body at tick 8 in room R; the agent was co-located with player X in room R at tick 6 (within the 3-tick window) and with player Y in room R at tick 4 (outside the window). Assert X's suspicion is elevated; Y's suspicion is unchanged at default 0.5.
+- [ ] **`tests/agents/test_beliefs.py` unit test** asserts `apply_observation_rules` is a pure function: given identical inputs it returns equal `BeliefState`s; the input `BeliefState` is not mutated.
+- [ ] **Loader/API integration.** After this task, a manual `curl /replays/headless-seed-22/meetings/.../memory/p-2 | jq '.beliefs'` returns a non-empty array for at least one agent (the one who witnessed the body discovery in seed 22, which triggered the meeting). Document the curl + response in `## Decisions` of the PR.
+- [ ] **No leaks.** Belief rules read only from the agent's own packet and own episodic memory — never from engine state or other agents' beliefs. The firewall is unchanged. `uv run lint-imports` passes.
+- [ ] **`mypy --strict`** on `agents/` continues to pass.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run mypy --strict agents observation orchestrator engine llm meetings` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+Step 1 — Read [agents/memory/beliefs.py](agents/memory/beliefs.py) to confirm `BeliefState`'s existing mutation API (`adjust_suspicion`, `adjust_trust`) returns a new `BeliefState` (frozen dataclass per Phase 2 design). The new function chains those mutations.
+
+Step 2 — Read [agents/perception.py](agents/perception.py) to find the per-packet ingestion entry point. The substrate report from the mid-phase DTO audit noted this function exists and is called by the loader's `_ingest_tick` ([api/replay_loader.py:471](api/replay_loader.py#L471)).
+
+Step 3 — Read [observation/packet.py](observation/packet.py) to confirm the field names for vent-use events and body sightings. The cleanest detection of "newly-discovered body" is comparing `current_packet.visible_bodies` to `previous_packet.visible_bodies`; the perception module already tracks the prior packet for similar diffs (verify).
+
+Step 4 — Implement `apply_observation_rules`:
+
+```python
+# agents/memory/beliefs.py — illustrative
+def apply_observation_rules(
+    beliefs: BeliefState,
+    *,
+    observation: ObservationPacket,
+    previous_visible_bodies: Set[BodyId],
+    recent_co_presence: Mapping[RoomId, Sequence[tuple[int, PlayerId]]],
+) -> BeliefState:
+    """Apply DESIGN.md §6.3 rule-based belief updates (Rules 1 + 4)."""
+    result = beliefs
+    # Rule 4 — observed venting
+    for event in observation.audible_events:
+        if event.kind == "vent_use":
+            result = result.adjust_suspicion(
+                event.subject, delta=VENTING_SUSPICION_DELTA,
+            )
+    # Rule 1 — body proximity (new bodies only)
+    new_bodies = [
+        body for body in observation.visible_bodies
+        if body.body_id not in previous_visible_bodies
+    ]
+    for body in new_bodies:
+        for tick, player_id in recent_co_presence.get(body.room, ()):
+            if observation.tick - tick <= BODY_PROXIMITY_WINDOW_TICKS:
+                result = result.adjust_suspicion(
+                    player_id, delta=BODY_PROXIMITY_SUSPICION_DELTA,
+                )
+    return result
+```
+
+Step 5 — Wire into `ingest_packet`:
+
+```python
+# agents/perception.py — illustrative
+def ingest_packet(self, packet: ObservationPacket) -> None:
+    # ... existing episodic ingestion ...
+    co_presence = self._episodic.co_presence_by_room(
+        from_tick=packet.tick - BODY_PROXIMITY_WINDOW_TICKS,
+        to_tick=packet.tick - 1,
+    )
+    previous_bodies = self._previous_visible_body_ids
+    self._beliefs = apply_observation_rules(
+        self._beliefs,
+        observation=packet,
+        previous_visible_bodies=previous_bodies,
+        recent_co_presence=co_presence,
+    )
+    self._previous_visible_body_ids = {b.body_id for b in packet.visible_bodies}
+```
+
+If `co_presence_by_room` doesn't exist on the episodic store, add it OR derive co-presence inline from the existing query API.
+
+Step 6 — Tests. The integration tests should be against synthetic scripted scenarios, not real replays — keeps them deterministic and fast.
+
+Step 7 — End-to-end smoke. Boot the API, curl `/replays/headless-seed-22/meetings/.../memory/p-3` (or whichever agent discovered the body for the meeting that fires in seed 22), assert `beliefs` is non-empty. Paste the curl + JSON snippet in `## Decisions`.
+
+**Public types introduced:**
+
+- `agents.memory.beliefs.apply_observation_rules`
+- `agents.memory.beliefs.VENTING_SUSPICION_DELTA`
+- `agents.memory.beliefs.BODY_PROXIMITY_SUSPICION_DELTA`
+- `agents.memory.beliefs.BODY_PROXIMITY_WINDOW_TICKS`
+
+**Integration risk:**
+
+The risk is in the seam between perception and the belief store, and in correctly identifying "newly discovered" bodies vs ongoing visibility.
+
+- **Body re-discovery.** Once a body is reported and a meeting fires, the body may stay visible in subsequent ticks. Without the "new only" filter, Rule 1 would fire repeatedly each tick, runaway-elevating suspicions of bystanders. The implementing agent must use the previous-packet diff (or an equivalent "seen-this-body-before" tracker) to fire Rule 1 exactly once per body per observing agent.
+- **Co-presence query cost.** `co_presence_by_room` over the last 3 ticks for every observing agent on every observation ingestion is O(N × K) where N is players and K is the window. Fine for K=3, N=4-7. If a future task widens the window significantly, revisit.
+- **Multiple impostors.** DESIGN.md is single-impostor MVP. Rule 4 is "vent → almost certainly impostor" — true for single-impostor games. If multi-impostor lands, the rule still fires correctly (each impostor's vent witness elevates that impostor specifically); no rework needed.
+- **Loader vs live agent parity.** The loader's `_ingest_tick` and the live `AgentRuntime`'s perception ingestion go through the same `agents/perception.py` entry. A single wiring change benefits both — BeliefMatrix populates for both replay viewing AND any future live spectator path.
+- **Firewall preservation.** Rules read only from the agent's own packet (`ObservationPacket` is the firewall surface) and own episodic memory. No engine touches, no cross-agent reads. `lint-imports` continues to pass.
+- **DESIGN.md §10.4 weight tuning.** The constants are intentionally hardcoded so they can be grepped and tuned later. A Phase 5 task may extract them to YAML; that's out of scope here.
+- **No replay regeneration needed.** Existing committed samples replay correctly through the new perception code path; beliefs populate on read, not on record. The doubled-files / re-eval workflow we just resolved is not re-triggered.
+- **No CI cost.** Static gates + synthetic tests only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-14-belief-rule-wiring.md`
+
+### Task 4.15 — MeetingView width/overflow polish (pre-UX-session Finding 3)
+**Branch:** `phase-4-meetingview-overflow-fix`
+**Depends on:** 4.12 merged
+**Section refs:** DESIGN.md §5, DESIGN.md §7
+**Complexity:** Small
+
+UX self-audit Finding 3: the MeetingView overlay reads fine at 90%
+browser zoom but clips content at 100%. The overlay's outer panel is
+[max-w-4xl (896px) at MeetingView.tsx:332](frontend/src/components/MeetingView.tsx#L332);
+the overlay width itself doesn't change with zoom. Something inside
+the panel is forcing horizontal overflow at native zoom that's
+clipped by the panel boundary or the viewport edge. Most likely
+culprits per the 4.6 contract structure: the 3 `ReportCard` instances
+laid out horizontally without `flex-wrap`, OR a `<pre>` rendering
+`free_text` without `whitespace-pre-wrap`, OR a child with implicit
+fixed width (e.g. a `<code>` block, an unbroken long string like a
+contradiction id).
+
+Cosmetic per se — the viewer can zoom out as a workaround — but
+fixing it removes a stumble in the UX session ("why does it look
+weird?") that costs nothing to address.
+
+**Out of scope** (explicit decisions deferred):
+
+- **Responsive redesign for mobile / narrow viewports.** This task
+  targets desktop at 100% zoom on typical laptop/desktop widths
+  (1280–1920px). A general mobile/tablet pass is a separate effort.
+- **Sidebar layout (split MapView + MeetingView).** The 4.6 contract
+  chose the overlay pattern. This task does not redesign; only fixes
+  the overflow within the existing pattern.
+- **Tailwind theme / design-system extraction.** No new design
+  tokens, no shared CSS abstractions. Local fixes only.
+- **MapView, ThoughtStream, BeliefMatrix overflow audits.** Only
+  MeetingView is in scope. If the UX session surfaces overflow in
+  other components, file separately.
+
+**Files in scope:**
+- frontend/src/components/MeetingView.tsx
+- frontend/src/components/ReportCard.tsx
+- frontend/src/components/StatementCard.tsx
+- frontend/src/components/BallotCard.tsx
+- frontend/src/components/ContradictionBadge.tsx
+
+**Files NOT in scope:**
+- engine/
+- agents/
+- llm/
+- meetings/
+- observation/
+- orchestrator/
+- api/
+- frontend/src/store/replayStore.ts
+- frontend/src/api/client.ts
+- frontend/src/types/api.ts
+- frontend/src/components/MapView.tsx
+- frontend/src/components/AgentToken.tsx
+- frontend/src/components/RoomRect.tsx
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/ReplayControls.tsx
+- frontend/src/components/ThoughtStream.tsx
+- frontend/src/components/BeliefMatrix.tsx
+- frontend/src/components/MeetingPill.tsx
+- frontend/src/components/AgentSelector.tsx
+- frontend/src/components/MemoryPanel.tsx
+- frontend/src/components/BeliefRow.tsx
+- frontend/src/components/BeliefCell.tsx
+- frontend/src/components/LLMCallCard.tsx
+- frontend/src/components/SabotageOverlay.tsx
+- frontend/src/components/VentEdge.tsx
+- frontend/src/components/BodyMarker.tsx
+- frontend/src/App.tsx
+- frontend/package.json
+- DESIGN.md
+- AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+- tests/
+
+**Definition of done:**
+- [ ] **Overlay reads cleanly at 100% browser zoom on a 1440×900 viewport.** No horizontal clipping inside the overlay panel; no horizontal scrollbar appearing inside the panel itself. Vertical scrolling inside the modal is fine.
+- [ ] **Root-cause fix, not a workaround.** Identify the specific child whose layout forces overflow (likely the reports row, possibly a `<pre>` block, possibly an unbroken long string). Fix the offending element with `min-w-0`, `flex-wrap`, `break-words`, `whitespace-pre-wrap`, OR widening the panel's `max-w-*` — whichever is the minimum sufficient fix. Document the diagnosis + fix choice in `## Decisions`.
+- [ ] **Long free_text doesn't break the layout.** Test with the longest `free_text` value in any committed sample (likely the impostor's defensive report in one of seeds 22/24/26/49). The text wraps without forcing horizontal scroll.
+- [ ] **Long structured content doesn't break the layout.** Test with `rendered_memory_text` if it leaks into MeetingView via ContradictionBadge or similar — confirm it wraps.
+- [ ] **Long agent_ids and contradiction_ids don't break the layout.** Even a hypothetical 60-char agent_id should wrap or truncate gracefully. Use `break-all` or `truncate` as appropriate.
+- [ ] **All four card types render correctly at 100% zoom.** Manually exercise: open the meeting in one of `replays/samples/replay-seed-{22,24,26,49}.jsonl`, confirm `ReportCard`, `StatementCard`, `BallotCard`, `ContradictionBadge` each render without clipping.
+- [ ] **No regression at 90%, 110%, 125% zoom.** Spot-check these three additional zoom levels. The original "fits at 90%" behavior must be preserved.
+- [ ] **No new npm dependencies.** Pure Tailwind class changes.
+- [ ] **TypeScript strict still passes.** `npm run tsc:check`.
+- [ ] **`npm run build` succeeds** with zero warnings.
+- [ ] **Two screenshots in PR.** (a) 100% zoom showing the full meeting overlay for seed 22 with no clipping. (b) The pre-fix state, captured before the edit lands, showing the clipping for comparison. The before/after pair is the cleanest evidence.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes (Python tests unaffected).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+Diagnostic order:
+
+Step 1 — Open the dev server with one of the meeting-bearing samples. Open the meeting overlay at 100% zoom. Open browser devtools' Elements panel. Click each child of the panel and look at its computed width vs the panel's 896px. The first child wider than 896px is the culprit.
+
+Step 2 — Common culprits and their fixes:
+
+- **3 ReportCards in a row** without `flex-wrap`: parent gets `flex flex-wrap` and children get `min-w-0 flex-1 basis-72` (or similar). The cards wrap to two rows on narrow viewports.
+- **A `<pre>` block** without `whitespace-pre-wrap`: add `whitespace-pre-wrap break-words` to the `<pre>`. Optionally `max-w-full overflow-x-auto` if the content has genuinely unbreakable tokens.
+- **An unbroken string** (e.g. an LLM-generated contradiction_id like `contradiction_acc73b1d2c-p3-vs-p4-tick-7`): add `break-all` or `break-words` to the containing element.
+- **A flex child without `min-w-0`**: flex children default to `min-width: auto` which prevents shrinking. Explicit `min-w-0` lets them honor their parent's width constraint.
+
+Step 3 — If the panel itself is too narrow (the root cause is "896px isn't enough for the natural content"), widen to `max-w-5xl` (1024px) or `max-w-6xl` (1152px). Prefer `5xl` — `6xl` becomes uncomfortably wide on smaller laptops.
+
+Step 4 — Verify the fix doesn't regress narrower viewports. Drag the browser window narrower than the panel width; content should wrap, not clip.
+
+Tailwind reference:
+- `max-w-4xl` = 896px (current)
+- `max-w-5xl` = 1024px
+- `max-w-6xl` = 1152px
+- `max-w-7xl` = 1280px
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+Lowest-risk task in the post-UX-audit batch. Pure styling.
+
+- **No data path change.** Component props unchanged. No store reads change. No backend interaction.
+- **CSS specificity / Tailwind v4 behavior.** Tailwind v4's class composition is mostly the same as v3 for these utilities; nothing exotic needed. If the agent encounters a v4-specific quirk, document it.
+- **Visual regression risk on other zooms.** The DoD requires spot-checking 90%, 110%, 125%. A `max-w-5xl` change can subtly affect proportions; the implementing agent should sanity-check.
+- **Screenshot evidence.** Required in the DoD; before/after pair makes the fix self-documenting and reviewable.
+- **No CI cost.** Static gates only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-15-meetingview-overflow-fix.md`
+
 ### Phase-closing UX acceptance session
 
-After 4.5–4.11 all merge, run a manual UX acceptance session. A
+After 4.5–4.15 all merge (foundation + R-2/R-3 substrate + components
++ setup + pre-UX-session bug fixes), run a manual UX acceptance
+session. A
 non-technical viewer (not the developer, not Claude) loads a saved
 replay in the browser and follows the game end-to-end without reading
 any logs, terminal output, or task documents. Outcome:
