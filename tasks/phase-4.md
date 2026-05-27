@@ -14,7 +14,7 @@ not raw engine state or replay internals.
 - **Vertical slice first.** Tasks 4.1 → 4.2 → 4.3 → 4.4 build a
   minimal end-to-end path (one replay rendering one room with agents
   visibly moving). The mid-phase DTO audit fires here. Only after the
-  audit lands do 4.4.5–4.8 fan out.
+  audit lands do 4.5–4.11 fan out.
 - **Mid-phase DTO audit, no real-provider analog.** Double-tool audit
   (Claude + Codex) with a separate reconciliation pass. The substrate
   gates five downstream PRs; a second opinion is worth the cost.
@@ -24,8 +24,37 @@ not raw engine state or replay internals.
 
 ## Parallelism
 4.1 → 4.2 → 4.3 → 4.4 in series. Mid-phase DTO audit runs after 4.4.
-Then 4.4.5, 4.5, 4.6, 4.7, 4.8 can run in parallel once the audit
-confirms the substrate is leak-free.
+After the audit passes, seven downstream tasks dispatch with this
+dependency graph:
+
+- **First wave (parallel after audit):** 4.5 (MapView full),
+  4.6 (MeetingView), 4.7 (R-3 LLMCallRecord agent_id substrate).
+  None depends on another. 4.5 doesn't touch `App.tsx` or the
+  DTO substrate. 4.6 is first to touch `App.tsx`. 4.7 is the
+  first DTO-substrate change.
+- **Second wave (after first-wave deps clear):**
+  4.8 (ThoughtStream) — needs `4.6` (App.tsx slot order) + `4.7`
+  (per-call agent_id).
+  4.9 (R-2 BeliefEntryView snapshot_tick) — needs `4.7` (shared
+  DTO/loader/TS/fixture file scope; serialized to avoid merge
+  churn, not a logical prereq).
+- **Third wave:** 4.10 (BeliefMatrix) — needs `4.8` (App.tsx) +
+  `4.9` (DTO rename).
+- **Fourth wave:** 4.11 (ReplayControls) — needs `4.10` (App.tsx;
+  ReplayControls is the last component to integrate).
+
+R-3 (4.7) and R-2 (4.9) are mid-phase audit follow-ups; they exist
+as standalone repair tasks rather than baked into the consuming
+components so that the consumer tasks stay scoped to
+`frontend/src/components/`.
+
+The serial `4.6 → 4.8 → 4.10 → 4.11` chain exists because all four
+edit `frontend/src/App.tsx` to mount their component. Without the
+chain, four PRs would race on the same file. The cost is ~3 extra
+serial merges instead of full parallel dispatch; the benefit is
+zero merge-conflict resolution in dispatched sessions. Phase 5 can
+revisit if a build-out task ever needs maximal frontend
+parallelism.
 
 ## Tasks
 
@@ -1398,8 +1427,8 @@ Lowest-risk task in Phase 4. The substrate is built; this task just exercises it
 ### Mid-phase DTO audit
 
 After 4.4 merges, run the Phase 4 mid-phase DTO audit before
-dispatching 4.4.5–4.8. The audit is double-tool (Claude + Codex)
-followed by a reconciliation pass — the substrate gates five
+dispatching 4.5–4.11. The audit is double-tool (Claude + Codex)
+followed by a reconciliation pass — the substrate gates seven
 downstream PRs, so a second opinion is worth the cost. Both auditors
 run the same audit prompt in independent sessions; a third session
 reconciles.
@@ -1422,8 +1451,17 @@ reconciles.
   checked for drift from the Pydantic DTOs.
 
 **Audit verdict shape:** "Mid-phase DTO audit passes — proceed to fan
-out 4.4.5–4.8" OR "Mid-phase DTO audit blocks fan-out — repair tasks
+out 4.5–4.11" OR "Mid-phase DTO audit blocks fan-out — repair tasks
 required: …"
+
+**Audit outcome (2026-05-26 23:16):** Passes. Zero blocking findings.
+Three Class A informational notes from Claude (Codex silent), all
+Unique-but-verified by the reconciler. R-1 (`AgentTickStateView`
+docstring stale) is a ride-along on any PR touching `api/schemas.py`.
+R-2 and R-3 land as repair tasks **4.9** and **4.7** respectively
+because they're prerequisites for **4.10** (BeliefMatrix) and **4.8**
+(ThoughtStream). Reconciled report:
+[audits/audit-2026-05-26-2316-mid-phase-4-dto-reconciled.md](audits/audit-2026-05-26-2316-mid-phase-4-dto-reconciled.md).
 
 **Outputs:**
 - `audits/audit-YYYY-MM-DD-HHMM-mid-phase-4-dto-claude.md`
@@ -1431,188 +1469,1356 @@ required: …"
 - `audits/audit-YYYY-MM-DD-HHMM-mid-phase-4-dto-reconciled.md` —
   the one the project acts on.
 
-### Task 4.4.5 — MapView full
+### Task 4.5 — MapView full (sabotage, vents, bodies, tween)
 **Branch:** `phase-4-mapview-full`
 **Depends on:** 4.4 merged + mid-phase DTO audit passed
-**Section refs:** DESIGN.md §7
+**Section refs:** DESIGN.md §7, DESIGN.md §8.3
 **Complexity:** Medium
 
-Expand MapView from the vertical slice into the full spectator view:
-sabotage state, vent network, body markers, smooth interpolation
-between ticks.
+Expand MapView from the vertical slice into the full spectator
+rendering: sabotage state overlay, vent network as static edges,
+body markers from past `KillEventView`s, and smooth interpolation
+between adjacent ticks. The vertical slice (4.4) ships rooms and
+agent tokens snapping to room centers; this task adds everything
+that makes the map watchable.
+
+**Privileged spectator reminder.** `KillEventView` exposes
+`killer_id`, `victim_id`, and `room_id` (the mid-phase DTO audit
+confirmed this is intentional — the replay viewer is post-game
+privileged). Body markers therefore render directly from kill
+events; no derivation from `MeetingTriggeredEventView` is needed.
+The original 4.4.5 sketch said the kill room was not in the DTO —
+that was wrong; the substrate audit confirmed it is.
+
+**Out of scope** (explicit decisions deferred):
+
+- **Live game streaming.** Replay-only, same as 4.4.
+- **Sabotage kinds other than lights.** MVP scope per DESIGN.md
+  §8.3; the DTO's `sabotage_active: tuple[str, ...]` already
+  encodes "lights" as the only literal today, but the rendering
+  should branch on the string so future kinds don't crash.
+- **Animated body discovery.** A body appears in its kill room
+  from the kill tick onward; once a `ReportBodyEventView` fires for
+  that body, the marker is replaced by a "discovered" variant (a
+  one-time CSS class swap, not an animation).
+- **Vent traversal animation.** Vents render as static edges. An
+  agent who's `is_venting=true` is hidden (per the 4.4 filter); no
+  animated traversal between vent endpoints.
+- **Camera zoom / pan / click-to-focus.** Static fit-to-canvas as
+  in 4.4. Camera controls land in a polish task if the UX session
+  flags them.
 
 **Files in scope:**
 - frontend/src/components/MapView.tsx
+- frontend/src/components/AgentToken.tsx
+- frontend/src/components/VentEdge.tsx
+- frontend/src/components/BodyMarker.tsx
+- frontend/src/components/SabotageOverlay.tsx
 
 **Files NOT in scope:**
 - engine/
 - agents/
 - llm/
+- meetings/
+- observation/
+- orchestrator/
 - api/
-- frontend/src/store/
+- frontend/src/store/replayStore.ts
+- frontend/src/api/client.ts
+- frontend/src/types/api.ts
+- frontend/package.json (locked at 4.3; no new deps without `## Decisions` justification)
+- frontend/src/components/RoomRect.tsx (frozen — vertical slice's room rendering still applies)
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/TickStepper.tsx
+- frontend/src/App.tsx
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+- tests/
 
 **Definition of done:**
-- [ ] Sabotage visualization (lights-out reduces room visibility per DESIGN.md §8.1).
-- [ ] Vent network rendered (static graph from the DTO).
-- [ ] Body markers appear at the room where a kill was reported (the body's room is in the meeting trigger DTO, not the kill event itself — role/kill attribution stay in the engine, not the DTO).
-- [ ] Smooth interpolation between adjacent ticks (configurable tween duration).
-- [ ] Component consumes the shared store/API shape from 4.3. No raw engine imports.
-- [ ] Frontend build/check command passes.
+- [ ] **Vent network rendering.** Each `VentView` in `currentReplay.map.vents` becomes a `VentEdge` for every `(room_id, connected_room_id)` pair — a thin gray line from one room's center to the other's center, dashed or low-opacity to distinguish from doors. Edges are deduplicated (vent A↔B and vent B↔A produce one edge).
+- [ ] **Body markers from kill events.** Scan `currentReplay.ticks[0..currentTick].events` for every event with `type === "kill"`. For each, render a `BodyMarker` (e.g. an X glyph or skull) at the room center indicated by `room_id`, offset deterministically so a body doesn't overlap living agents in the same room. When a subsequent `ReportBodyEventView` exists for the same `body_of`, swap the marker style to "discovered" (CSS class change or color shift).
+- [ ] **Sabotage overlay.** When `currentReplay.ticks[currentTick].sabotage_active` includes `"lights"`, a `SabotageOverlay` renders a translucent dark tint over the canvas (or a subtle vignette). When the array is empty, the overlay renders nothing. The implementation branches on string kind so unknown kinds are silently skipped (no crash).
+- [ ] **Smooth interpolation between ticks.** When `currentTick` advances by 1 (via TickStepper or future ReplayControls), agent tokens tween from their previous-tick room center to their new-tick room center over a configurable duration (default 250 ms). Use PixiJS `Ticker` registered inside `AgentToken` (or a shared tween coordinator in `MapView`). When `currentTick` jumps by more than 1 (scrubber, snap-to-meeting), tweens snap immediately (no multi-tick interpolation).
+- [ ] **Tween is interruptible.** Mid-tween tick change cancels the in-progress tween and starts a new one from the current interpolated position. Test by spamming next-tick; tokens should never desync from their room.
+- [ ] **No PixiJS leaks on unmount or HMR.** `useEffect` cleanup destroys PixiJS objects (Ticker, Graphics) on component unmount. Verify under Vite HMR by editing MapView mid-dev session and confirming the canvas doesn't multiply or leak Tickers (`app.ticker.count` stays stable).
+- [ ] **No new npm dependencies.** PixiJS 8, `@pixi/react` 8, React 19, Zustand 5 from 4.3 are sufficient. If a tween utility is genuinely required, justify in `## Decisions` and pin the version.
+- [ ] **TypeScript strict.** No `any`, no `// @ts-ignore`. `npm run tsc:check` passes.
+- [ ] **`npm run build` succeeds** with zero warnings.
+- [ ] **Screenshots attached to PR.** Three minimum: (a) vertical-slice-equivalent state for comparison (tick 0 of a real replay), (b) a tick with bodies + sabotage visible, (c) mid-tween state (capture during animation if possible — otherwise document the tween duration setting).
+- [ ] **Manual visual smoke documented.** PR description states the replay used (e.g. `replays/replay-seed-22.jsonl` if it has a kill + meeting; otherwise the next real replay that does); the tick sequence stepped through; confirms vents visible, body appears at kill tick, sabotage tint visible if any `lights` sabotage fired; no console errors.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes (Python tests unaffected).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally (includes frontend block from 4.3).
 
 
 **Implementation hint:**
 
-See DESIGN.md §7 (frontend). PixiJS canvas renders rooms by `position` + `size` from the sanitized layout DTO. Use PixiJS `Ticker` for the tween; tween targets are the next tick's room positions.
+The 4.4 vertical slice uses `@pixi/react` v8 declarative with an `extend({ Container, Graphics, Text })` registration (see `frontend/src/components/MapView.tsx` lines 22, 116-132). Stay on that pattern; do not pivot to vanilla PixiJS + `useEffect` mount.
 
-**Ready-to-paste prompt:** `agent_prompts/task-4-4-5-mapview-full.md`
+Vent edge rendering pattern:
 
-### Task 4.5 — MeetingView
+```tsx
+function VentEdge({ from, to, transform }: VentEdgeProps) {
+  return (
+    <pixiGraphics
+      draw={(g) => {
+        g.clear();
+        g.moveTo(from.x, from.y);
+        g.lineTo(to.x, to.y);
+        g.stroke({ width: 2, color: 0x555555, alpha: 0.5 });
+      }}
+    />
+  );
+}
+```
+
+For deduplication, build a `Set<string>` of `min(a,b)|max(a,b)` keys before mapping to `<VentEdge>` elements.
+
+Body marker derivation pattern:
+
+```typescript
+function visibleBodies(ticks: TickView[], currentTick: number) {
+  const kills = new Map<string, KillEventView>(); // body_of → kill
+  const discovered = new Set<string>();           // body_of ids
+  for (let t = 0; t <= currentTick; t++) {
+    for (const ev of ticks[t].events) {
+      if (ev.type === "kill") kills.set(ev.victim_id, ev);
+      if (ev.type === "report_body") discovered.add(ev.body_of);
+    }
+  }
+  return [...kills.values()].map(k => ({
+    ...k,
+    isDiscovered: discovered.has(k.victim_id),
+  }));
+}
+```
+
+For the tween, the simplest pattern in `@pixi/react` v8 is per-token interpolation state stored in a `useRef` with progress tracked via `useTick`. Sketch:
+
+```tsx
+function AgentToken({ targetRoom, prevRoom, color, jitter }: Props) {
+  const progress = useRef(0);
+  const [pos, setPos] = useState(roomCenter(prevRoom));
+  useTick((delta) => {
+    if (progress.current >= 1) return;
+    progress.current = Math.min(1, progress.current + delta / TWEEN_TICKS);
+    setPos(lerp(roomCenter(prevRoom), roomCenter(targetRoom), progress.current));
+  });
+  // Reset progress when targetRoom changes
+  useEffect(() => { progress.current = 0; }, [targetRoom.id]);
+  return <pixiGraphics draw={(g) => drawCircle(g, pos, color)} />;
+}
+```
+
+Document the exact tween-duration constant in `## Decisions` so 4.11 (ReplayControls) can coordinate speed if needed.
+
+For the sabotage overlay, a single full-canvas `<pixiGraphics>` with a fill at `alpha=0.3` covering the entire bounding box is the simplest. Render last in the tree so it sits above rooms/agents.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+This task adds rendering polish on top of a working vertical slice. The risk is in tween correctness and PixiJS lifecycle hygiene.
+
+- **Tween cleanup under HMR.** `useTick` registrations must unregister on unmount or HMR will accumulate Tickers. Verify with `app.ticker.count` in the browser console after multiple HMR cycles.
+- **Tween + scrubber interaction.** When 4.11's scrubber jumps by >1 tick, the tween should snap, not animate through intermediate ticks. The `useEffect` reset on `targetRoom.id` handles single-tick changes; multi-tick changes need `progress.current = 1` (immediate completion). Test against 4.11 once it lands.
+- **Body marker O(N·T) scan.** Scanning all events from 0..currentTick on every render is fine for 1000-tick games (≤2000 events) but inefficient for longer. If profiling flags it, memoize the visible-bodies derivation keyed on `(gameId, currentTick)`. Not a launch blocker.
+- **Sabotage tint as full-canvas overlay.** A simple translucent rect is fine; if it visually clashes with a vignette / radial-gradient approach the implementing agent prefers, that's a styling choice — document. The behavior is "user sees lights are out at a glance," not "user can see only same-room agents" (the spectator is privileged).
+- **No backend changes.** Every DTO field consumed here already exists per the 4.1 inventory. If a missing field surfaces, that's a backend gap — file a follow-up, don't widen this task's scope.
+- **No CI cost.** Static gates only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-5-mapview-full.md`
+
+### Task 4.6 — MeetingView (reports, statements, ballots, contradictions)
 **Branch:** `phase-4-meetingview`
 **Depends on:** 4.4 merged + mid-phase DTO audit passed
 **Section refs:** DESIGN.md §5, DESIGN.md §7
 **Complexity:** Medium
 
-Transcript renderer for one meeting: reports + accusation rounds +
-ballots + contradiction flags. Activated when the replay's current
-tick is inside a meeting window.
+Transcript renderer for one meeting: reports + accusation-round
+statements + ballots + contradiction flags + a small metadata footer
+(prompt versions, total cost). Activated when the spectator selects
+a meeting via the store's `selectedMeetingId`. The store already
+holds `selectMeeting(id | null)` from 4.3; this task wires the UI.
+
+**Layout choice — overlay vs replace.** The MeetingView is a focused
+reading surface — there's no reason to render alongside the map at
+small viewport widths. Recommendation: render as a modal-style
+overlay (full-canvas dim + centered panel) when `selectedMeetingId
+!== null`, with a close button that clears the selection. This keeps
+MapView's PixiJS canvas un-touched (no unmount cost) and gives the
+reading surface the screen real estate it needs. The implementing
+agent may pick the side-by-side split-view alternative if the
+viewport calculation justifies it; document the choice in `##
+Decisions`.
+
+**Meeting-trigger discovery.** A "Meeting" pill / button appears
+next to TickStepper when `currentReplay.meetings.some(m => m.tick
+=== currentTick)`. Clicking it calls `selectMeeting(m.meeting_id)`.
+This is the primary UI affordance for opening a meeting; users can
+also scroll to a meeting tick first (via TickStepper) and then click
+the pill. 4.11 (ReplayControls) adds a "next meeting" snap-to button
+that calls both `setCurrentTick(m.tick)` and `selectMeeting(m.id)`
+in one action.
+
+**Out of scope** (explicit decisions deferred):
+
+- **Meeting search / filter UI.** N meetings per game is typically
+  ≤ 3 in MVP scope; pagination / search would be premature.
+- **Inline LLM call drilldown.** The meeting metadata footer lists
+  `total_cost_usd` and `llm_call` count; the actual prompt / response
+  text drilldown happens in 4.8 (ThoughtStream), keyed by
+  `selectedAgentId`. Don't duplicate the LLM call rendering here.
+- **Contradiction graph view.** Contradictions render as inline
+  badges inside the affected statements / reports; a separate
+  contradiction-network visualization is out of scope.
+- **Editable / interactive transcript.** Read-only render. The
+  spectator does not vote, accuse, or annotate.
+- **Translations / TTS.** Free text renders as-is.
 
 **Files in scope:**
 - frontend/src/components/MeetingView.tsx
+- frontend/src/components/ReportCard.tsx
+- frontend/src/components/StatementCard.tsx
+- frontend/src/components/BallotCard.tsx
+- frontend/src/components/ContradictionBadge.tsx
+- frontend/src/components/MeetingPill.tsx
+- frontend/src/App.tsx
 
 **Files NOT in scope:**
 - engine/
 - agents/
 - llm/
+- meetings/
+- observation/
+- orchestrator/
 - api/
-- frontend/src/store/
+- frontend/src/store/replayStore.ts (frozen)
+- frontend/src/api/client.ts (frozen)
+- frontend/src/types/api.ts (frozen)
+- frontend/src/components/MapView.tsx
+- frontend/src/components/AgentToken.tsx
+- frontend/src/components/RoomRect.tsx
+- frontend/src/components/VentEdge.tsx (lands in 4.5)
+- frontend/src/components/BodyMarker.tsx (lands in 4.5)
+- frontend/src/components/SabotageOverlay.tsx (lands in 4.5)
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/TickStepper.tsx
+- frontend/package.json (locked at 4.3)
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+- tests/
 
 **Definition of done:**
-- [ ] MeetingView renders the full transcript exposed by the API DTOs: per-speaker reports with structured claims, statements per round, ballots with rationale text, contradiction flags inline.
-- [ ] Prose `rationale_text` and `free_text` are foregrounded; structured fields are secondary.
-- [ ] Prompt version + per-call cost are surfaced (small metadata footer per meeting).
-- [ ] Component consumes the shared store/API shape from 4.3.
-- [ ] Frontend build/check command passes.
+- [ ] **MeetingPill in TickStepper-adjacent slot.** When the current replay has a meeting at `currentTick`, a button labeled `Meeting @ tick N` is visible and clickable. Click → `selectMeeting(meeting_id)`. When no meeting is at currentTick, the pill is hidden (not greyed-out).
+- [ ] **MeetingView mounts iff `selectedMeetingId !== null`.** The view fetches the meeting from `currentReplay.meetings.find(m => m.meeting_id === selectedMeetingId)`. If the meeting isn't found (e.g. stale selection after replay switch), call `selectMeeting(null)` and render nothing. Renders an overlay with a close button (`selectMeeting(null)`) and the transcript.
+- [ ] **Reports section.** One `ReportCard` per item in `meeting.reports`. Card header: `agent_id` + reporter color swatch (from `currentReplay.players[].color`) + tick. Body: `free_text` foregrounded in a larger / readable font. Below: collapsed-by-default structured detail — observations list (one row per `ObservationClaimView`, discriminated render: `saw_player` shows subject + room + co_present; `completed_task` shows task_id + room; `found_body` shows body_of + room) and claims list (one row per `StatementClaimView`, similarly discriminated).
+- [ ] **Statements section, grouped by round.** Group `meeting.statements` by `round_index`. Render rounds in numeric order. Within a round, statements in their original order (one per speaker per round). Each `StatementCard` shows: speaker (with color swatch), target (if non-null, as a chip; if null, "general" or omitted), `free_text` foregrounded, claims collapsed-by-default. Contradictions reference a `contradiction_id` — render a small `ContradictionBadge` inline next to any claim implicated.
+- [ ] **Ballots section.** One `BallotCard` per item in `meeting.ballots`. Voter color swatch + voter id; target (player id with color swatch, or the literal text "SKIP" with neutral styling); confidence rendered as a horizontal bar (0.0–1.0 width); `rationale_text` foregrounded. Tally summary at the section header: e.g. `p-2: 2 votes · p-5: 1 vote · SKIP: 0 votes`.
+- [ ] **Contradictions inline + summary.** Each `ContradictionView` renders as a `ContradictionBadge` (small chip with `kind` color-coded). The badge appears (a) inline next to any report / statement whose `event_a_id` or `event_b_id` matches, and (b) in a `Contradictions` summary section at the bottom of the meeting overlay, listing all contradictions with their `description` text and involved `subjects`.
+- [ ] **Outcome banner.** Top of the overlay: large prominent banner showing `outcome` (`EJECTED` or `SKIPPED`) and, if ejected, the player name + color. Includes triggered-by (`triggered_by` agent + `trigger_kind`).
+- [ ] **Metadata footer.** Small footer (collapsible / muted styling): `meeting_id`, `tick`, `total_cost_usd` (formatted as `$0.0123`), `prompt_versions` rendered as a `key: value` list (e.g. `crewmate_report: crewmate_report.v1`, one per line). `llm_call` count rendered as `N LLM calls (drill into ThoughtStream for details)`.
+- [ ] **App.tsx layout updated.** Pill rendered near TickStepper. Overlay mounted at the App root (above all other content via z-index or React Portal). Pre-existing MapView / ReplayPicker / TickStepper remain intact.
+- [ ] **No new npm dependencies.** React 19, Zustand 5, Tailwind v4 from 4.3 are sufficient. No PixiJS in this component (it's pure DOM).
+- [ ] **TypeScript strict.** No `any`, no `// @ts-ignore`.
+- [ ] **`npm run build` succeeds** with zero warnings.
+- [ ] **Screenshots attached to PR.** Minimum: (a) MeetingPill visible on the map view at a meeting tick, (b) the open MeetingView overlay for that meeting showing at least one report, statements across both rounds, ballots with a clear tally, and the outcome banner.
+- [ ] **Manual smoke documented.** PR description states the replay used (any of `replays/replay-seed-{22,24,26,49}.jsonl` from the Phase 3 eval — those are the 4 games with meetings; pick whichever is in `$AILIBI_REPLAY_DIR`), the meeting opened, and confirms all four card types render without console errors.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
-See DESIGN.md §5. React component for meeting transcript + ballots. The MeetingView is hidden when the current tick is outside any meeting; replace MapView (or overlay on top of it — implementing agent picks based on layout sketch). Document the choice in `## Decisions`.
+MeetingView is pure React + Tailwind — no PixiJS. The overlay pattern:
 
-**Ready-to-paste prompt:** `agent_prompts/task-4-5-meetingview.md`
+```tsx
+export function MeetingView() {
+  const meetingId = useReplayStore((s) => s.selectedMeetingId);
+  const replay = useReplayStore((s) => s.currentReplay);
+  const selectMeeting = useReplayStore((s) => s.selectMeeting);
+  if (!meetingId || !replay) return null;
+  const meeting = replay.meetings.find((m) => m.meeting_id === meetingId);
+  if (!meeting) {
+    selectMeeting(null);
+    return null;
+  }
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 overflow-auto">
+      <div className="max-w-4xl mx-auto my-8 bg-neutral-900 rounded p-6">
+        <OutcomeBanner meeting={meeting} players={replay.players} />
+        <ReportsSection reports={meeting.reports} players={replay.players} />
+        <StatementsSection statements={meeting.statements} contradictions={meeting.contradictions} players={replay.players} />
+        <BallotsSection ballots={meeting.ballots} players={replay.players} />
+        <ContradictionsSection contradictions={meeting.contradictions} />
+        <MetadataFooter meeting={meeting} />
+      </div>
+    </div>
+  );
+}
+```
 
-### Task 4.6 — ThoughtStream
-**Branch:** `phase-4-thoughtstream`
+Grouping statements by round:
+
+```tsx
+function StatementsSection({ statements, contradictions, players }: Props) {
+  const byRound = new Map<number, StatementView[]>();
+  for (const s of statements) {
+    if (!byRound.has(s.round_index)) byRound.set(s.round_index, []);
+    byRound.get(s.round_index)!.push(s);
+  }
+  const rounds = [...byRound.keys()].sort((a, b) => a - b);
+  return rounds.map((r) => (
+    <RoundSection key={r} round={r} statements={byRound.get(r)!} ... />
+  ));
+}
+```
+
+Contradiction-to-statement linking: build a `Set<string>` of contradiction event ids; check each statement's `statement_id` against `event_a_id` / `event_b_id`.
+
+Color swatch helper — re-use the deterministic-hash pattern from 4.4's `RoomRect`:
+
+```typescript
+function playerColor(agentId: string, players: PlayerView[]) {
+  return players.find((p) => p.agent_id === agentId)?.color ?? "#888";
+}
+```
+
+Discriminated-union render for ObservationClaimView:
+
+```tsx
+function ObservationLine({ obs }: { obs: ObservationClaimView }) {
+  switch (obs.type) {
+    case "saw_player": return <span>saw {obs.subject} in {obs.room} (with {obs.co_present.join(", ")})</span>;
+    case "completed_task": return <span>completed {obs.task_id} in {obs.room}</span>;
+    case "found_body": return <span>found body of {obs.body_of} in {obs.room}</span>;
+  }
+}
+```
+
+TypeScript's discriminated union narrowing makes this exhaustive.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+This task introduces six new components plus an App.tsx edit. The risk is in coupling MapView and MeetingView state through the store correctly.
+
+- **MeetingPill click does NOT change currentTick.** The pill only sets `selectedMeetingId`. The map continues to display the current tick. The user can choose to scrub to the meeting tick separately; auto-seek is a UX choice owned by 4.11.
+- **Selection cleared on replay switch.** When `selectReplay` is called (4.3 store action), `selectedMeetingId` already resets to null per the existing store implementation. Verify by switching replays mid-overlay: the overlay should close.
+- **z-index ordering vs PixiJS canvas.** The MeetingView overlay must stack above the PixiJS canvas. PixiJS renders into a `<canvas>` element which is a regular DOM child; standard `z-index` works.
+- **Outcome banner color choice.** EJECTED in green when the ejected player was an impostor (a "good" outcome for crew) might encode role information at the banner level. Recommended: outcome color is neutral; only the ejected player's color swatch shows their role coloring. Document in `## Decisions`.
+- **Ballot tally calculation.** Compute client-side from `meeting.ballots` — the DTO doesn't include a pre-computed tally. Group by `target`, count entries. A skipped vote has `target === "SKIP"`; treat as a distinct bucket.
+- **Long free_text scroll.** Some report `free_text` runs 200+ chars; ensure cards don't overflow the overlay panel. Use Tailwind `whitespace-pre-wrap` and a sensible `max-w` per card.
+- **No backend changes.** All consumed fields exist per the 4.1 DTO inventory + 4.2 endpoint coverage.
+- **No CI cost.** Static gates only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-6-meetingview.md`
+
+### Task 4.7 — LLMCallRecord agent_id propagation (R-3 substrate)
+**Branch:** `phase-4-llmcall-agent-id`
 **Depends on:** 4.4 merged + mid-phase DTO audit passed
+**Section refs:** DESIGN.md §5, DESIGN.md §11.4, mid-phase DTO audit R-3
+**Complexity:** Medium
+
+Mid-phase DTO audit R-3 informational finding (Unique-but-verified):
+`orchestrator.replay.LLMCallRecord` carries no `agent_id` field;
+therefore neither does `api.schemas.LLMCallView`. ThoughtStream
+(4.8) needs per-call attribution; today the only recovery path is
+parsing rendered_memory text inside `prompt_text` — fragile and
+template-dependent. This task threads `agent_id` from the meeting
+manager through the LLM client protocol into the captured record
+and out to the DTO layer + TS types. Reconciler explicitly flagged
+this as a prerequisite for 4.8 dispatch.
+
+**Scope is wider than the audit hinted.** The audit cited
+`participant.agent_id` as "in scope at `meetings/manager.py:555-565`"
+but the recording client in `orchestrator/game.py:223-231` is
+stateless — it sees only the prompt + response from `LLMClient.
+complete()`. To capture `agent_id` at record time, the `LLMClient`
+protocol must take an `agent_id` parameter; every implementation
+(claude provider, fake) passes through; every call site in
+`meetings/manager.py` populates the parameter. The call chain
+covered:
+
+```
+meetings/manager.py call site
+   ↓ (passes agent_id=participant.agent_id)
+LLMClient.complete(prompt, *, agent_id=...)
+   ↓
+_RecordingLLMClient.complete in orchestrator/game.py
+   ↓ (stores agent_id on the constructed LLMCallRecord)
+LLMCallRecord (gains optional agent_id field)
+   ↓ (JSONL persistence; backward-compat for old replays)
+api/replay_loader.py _llm_call_view
+   ↓
+api.schemas.LLMCallView (gains optional agent_id field)
+   ↓
+frontend/src/types/api.ts (mirror)
+```
+
+**Backward-compatibility decision.** `agent_id: str | None`, not
+`str`. Reason: existing replay JSONLs (the Phase 3 eval's
+`/tmp/eval-50/replay-seed-{22,24,26,49}.jsonl` and anything else on
+disk) were written before this task. Deserializing those with a
+required-string field would crash. With `str | None` defaulting to
+`None`, old replays still load and ThoughtStream gracefully shows
+`agent_id: unknown` for those calls. Pinning the field as required
+later is a one-line tightening once we're confident no old replays
+matter — that's a Phase 5 hygiene call, not this task's.
+
+**Out of scope** (explicit decisions deferred):
+
+- **Replay format versioning.** No `format_version` field on
+  `ReplayLog`. Adding versioning is a Phase 5 concern; this task
+  relies on Pydantic's default-on-missing behavior.
+- **Retroactive backfill of old replays.** The audit asked us to
+  "decide between patch existing replays and leave at None." We
+  leave at None. No migration script is written; if a Phase 5 task
+  decides to backfill, that's a separate effort.
+- **`agent_id` for non-meeting triggered calls.** The
+  `call_kind="trigger"` case (per-agent LLM triggers per
+  DESIGN.md §4.4 #3) similarly knows the calling agent; the
+  parameter propagates there too. If a future call kind is genuinely
+  agentless (system-level), `None` remains a valid value.
+- **Renaming `LLMCallRecord.prompt` → `prompt_text`.** Already
+  named `prompt` on the source type and `prompt_text` on the DTO
+  per 4.1's deliberate mapping. Don't rename.
+
+**Files in scope:**
+- llm/client.py
+- llm/claude_provider.py
+- llm/fake.py
+- orchestrator/game.py
+- orchestrator/replay.py
+- meetings/manager.py
+- api/schemas.py
+- api/replay_loader.py
+- frontend/src/types/api.ts
+- tests/llm/test_client.py (or equivalent — match existing test naming)
+- tests/orchestrator/test_game.py
+- tests/orchestrator/test_replay.py
+- tests/meetings/test_manager.py
+- tests/api/test_schemas.py
+- tests/api/test_replays.py
+- tests/api/test_replay_loader.py
+- tests/api/fixtures/sample_replay.py
+
+**Files NOT in scope:**
+- engine/
+- agents/
+- observation/
+- frontend/src/components/
+- frontend/src/store/replayStore.ts
+- frontend/src/api/client.ts
+- frontend/package.json
+- DESIGN.md
+- AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+- tests/engine/
+- tests/agents/
+- tests/observation/
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **`LLMClient.complete()` protocol extended.** [llm/client.py](llm/client.py)'s `LLMClient.complete()` signature gains `agent_id: str | None = None` as a keyword-only parameter (use `*,` to enforce keyword). Existing positional parameters unchanged. Docstring updated to describe the field's purpose ("identifies which game-agent originated this call; None for system-level calls").
+- [ ] **All implementations updated to accept the parameter.** [llm/claude_provider.py](llm/claude_provider.py)'s adapter, [llm/fake.py](llm/fake.py) (or whatever the fake / recording client is named), and the `_RecordingLLMClient` in [orchestrator/game.py:204-233](orchestrator/game.py#L204) accept `agent_id` as a kwarg. The Anthropic adapter does NOT pass it to the upstream SDK (it's metadata, not provider-relevant); the fake stores it on its captured-call history for assertions.
+- [ ] **`_RecordingLLMClient` captures `agent_id` on `LLMCallRecord`.** [orchestrator/game.py:223-231](orchestrator/game.py#L223) populates `agent_id=agent_id` on the constructed record.
+- [ ] **`LLMCallRecord` gains the field.** [orchestrator/replay.py:51-71](orchestrator/replay.py#L51) adds `agent_id: str | None = None` (default-None for backward-compat). Pydantic `model_config` remains `frozen=True, extra="forbid"`. Schema validates a JSONL line that omits `agent_id` as `agent_id=None`; verify with a test.
+- [ ] **Every call site in `meetings/manager.py` passes `agent_id`.** Audit with `grep -n "complete(" meetings/manager.py`. Each surfaced call passes `agent_id=<the speaking agent's id>`. The participant context object already carries `agent_id` per the audit reference; this is a parameter pass-through, not new bookkeeping. If a call genuinely has no agent (e.g. a manager-level system call), pass `agent_id=None` explicitly and add a code comment explaining why.
+- [ ] **DTO exposure.** [api/schemas.py](api/schemas.py)'s `LLMCallView` (lines 357-370) gains `agent_id: str | None` as a new field. Update the `EXPECTED_DTOS` and `FORBIDDEN_TYPES` fixtures in [tests/api/test_leak.py](tests/api/test_leak.py) IF they reference the field set — but only if they do; the leak test is field-agnostic by design.
+- [ ] **Loader propagation.** [api/replay_loader.py:1069-1081](api/replay_loader.py#L1069)'s `_llm_call_view` passes `agent_id=call.agent_id` (mapping the `LLMCallRecord.agent_id` straight through).
+- [ ] **Frontend types mirror.** [frontend/src/types/api.ts:240-249](frontend/src/types/api.ts#L240) adds `agent_id: string | null` to the `LLMCallView` interface.
+- [ ] **Backward-compat test.** A test in [tests/api/test_replay_loader.py](tests/api/test_replay_loader.py) writes a fixture JSONL that omits the `agent_id` field on `LLMCallRecord` entries (use `model_dump(mode="json", exclude={"agent_id"})` or hand-write a minimal valid JSON line); loads it; asserts the resulting `LLMCallView.agent_id is None`.
+- [ ] **Round-trip test.** A test asserts that constructing an `LLMCallRecord(agent_id="p-2", ...)`, JSONL-roundtripping it, and loading it through the DTO yields `LLMCallView.agent_id == "p-2"`.
+- [ ] **Manager call-site test.** A test in [tests/meetings/test_manager.py](tests/meetings/test_manager.py) uses the fake LLM client to assert that for a meeting with N participants, the fake's captured calls each carry the correct `agent_id` matching the speaking participant.
+- [ ] **Sample replay fixture updated.** [tests/api/fixtures/sample_replay.py](tests/api/fixtures/sample_replay.py)'s helper that constructs synthetic LLM calls populates `agent_id` so downstream loader tests use the new field naturally.
+- [ ] **No firewall change.** `agents/` still does not import from `engine/`. The `LLMClient` protocol lives in `llm/`, which `agents/` may import. Firewall preserved.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run mypy --strict agents observation orchestrator engine llm meetings` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+Order the work to minimize broken intermediate states:
+
+Step 1 — Add the field to `LLMCallRecord` with `default=None`. This is backward-compatible at the schema layer immediately. Existing replays continue to load.
+
+Step 2 — Extend the `LLMClient` protocol. Add `agent_id: str | None = None` as a keyword-only parameter. Update all implementers to accept it (no-ops for the real provider; capture-and-store for fakes).
+
+Step 3 — In `_RecordingLLMClient.complete`, pass `agent_id` through to the `LLMCallRecord` constructor.
+
+Step 4 — Walk every call site in `meetings/manager.py` and add `agent_id=<...>` to each. Use the participant or speaker context object already in scope.
+
+Step 5 — Add the field to `LLMCallView` and propagate in the loader. Add to TS types.
+
+Step 6 — Write the backward-compat test (fixture JSONL without `agent_id`) and the round-trip test (with `agent_id`).
+
+Step 7 — Run full check suite; fix any captured assertions in existing tests that need to be aware of the new field (likely few since field is None-defaulted).
+
+Pydantic v2 default-None pattern for `LLMCallRecord`:
+
+```python
+class LLMCallRecord(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    call_kind: Literal["meeting", "trigger"]
+    model: str
+    prompt: str
+    response_text: str
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    agent_id: str | None = None
+```
+
+`extra="forbid"` still allows missing optional fields (Pydantic distinguishes "extra unknown field" from "missing optional field with default"). Verify by loading a JSONL line that lacks `agent_id` — should validate cleanly.
+
+The protocol extension:
+
+```python
+class LLMClient(Protocol):
+    def complete(
+        self,
+        prompt: str,
+        *,
+        call_kind: Literal["meeting", "trigger"] = "meeting",
+        agent_id: str | None = None,
+    ) -> LLMResponse: ...
+```
+
+Keep keyword-only via the `*,` separator; positional `agent_id` would be too easy to miswire.
+
+**Public types introduced:**
+None — these are field additions on existing types. The schema deltas are:
+
+- `orchestrator.replay.LLMCallRecord` gains field `agent_id: str | None`
+- `api.schemas.LLMCallView` gains field `agent_id: str | None`
+- `LLMClient.complete()` protocol gains keyword parameter `agent_id`
+
+**Integration risk:**
+
+This task modifies a load-bearing protocol and a load-bearing replay schema. The risk is in subtle test breakage and in pre-existing replays' behavior under the new schema.
+
+- **Protocol change ripple.** Every `LLMClient` implementation must accept the new kwarg. If a test fake uses a `Callable` instead of a `Protocol` instance, that fake also needs the kwarg. `grep -rn "def complete" llm/ tests/` to find every implementation.
+- **Pydantic missing-vs-extra distinction.** Confirm that `extra="forbid"` does NOT reject a JSON line that omits a defaulted field. Pydantic v2 behavior is "forbid" applies only to unknown extra fields, not to missing-with-default fields. Verify with the backward-compat test.
+- **Old replays' `LLMCallView.agent_id` is None everywhere.** ThoughtStream (4.8) consumes this; the 4.8 contract assumes None-handling. Document in 4.7's `## Decisions` so 4.8's implementing agent doesn't get blindsided.
+- **`call_kind="trigger"` calls.** DESIGN.md §4.4 #3 describes triggered strategic calls (e.g., on body discovery). If those are wired today (verify with grep), the trigger call site also needs `agent_id=<the witnessing agent>`. If they're not wired today (Phase 3 may have only implemented meeting calls), skip them — but document in `## Decisions`.
+- **No DTO leak surface widening.** `agent_id` is the game-internal agent id (e.g. `p-2`), which is already exposed via `PlayerView.agent_id`, `BallotView.voter`, etc. No new privilege surface; reviewer should confirm.
+- **No real-provider call needed.** The protocol change is metadata-only; the Anthropic adapter ignores `agent_id`. Static tests + fake-LLM tests cover the change.
+- **mypy strict reminder.** `llm/`, `meetings/`, `orchestrator/` are all in the strict list. The new parameter must be properly typed everywhere.
+- **No CI cost.** No real-provider calls added.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-7-llmcall-agent-id.md`
+
+### Task 4.8 — ThoughtStream (per-agent memory + LLM call viewer)
+**Branch:** `phase-4-thoughtstream`
+**Depends on:** 4.4 merged + mid-phase DTO audit passed + **4.6 merged** (for App.tsx slot ordering) + **4.7 merged** (for per-call `agent_id` attribution)
 **Section refs:** DESIGN.md §6, DESIGN.md §7
 **Complexity:** Medium
 
-Per-agent memory + LLM call viewer for one selected agent. Spectator
-selects an agent; sees that agent's `render_for_prompt`-style view +
-the LLM call records (prompt + response + cost) attached to that
-agent during meetings.
+Per-agent reasoning viewer. Spectator selects an agent (in addition
+to a meeting); sees that agent's rendered memory view + every LLM
+call that agent originated during the selected meeting. Memory comes
+from the existing `AgentMemoryView` endpoint (cached in the store);
+LLM calls come from `MeetingView.llm_calls` filtered by `agent_id`
+(which 4.7 added).
+
+**Privileged spectator note.** Per the 4.1 privilege model and the
+mid-phase audit's Class A summary, the agent's `role` is
+intentionally exposed in `AgentMemoryView.role` because the
+spectator IS privileged (post-game replay). The `rendered_memory_
+text` correctly carries only the *selected* agent's role, not other
+agents' roles (cross-agent contamination check passed in both
+audits). ThoughtStream therefore renders the role badge without
+guarding — it's an authorized view by design.
+
+**Meeting + agent selection coupling.** ThoughtStream is meaningful
+only when BOTH `selectedMeetingId !== null` and `selectedAgentId
+!== null`. When either is null, the panel renders a hint ("Open a
+meeting and pick an agent to see their reasoning"). The
+`AgentSelector` is the new affordance for picking — a button row
+showing every player in `currentReplay.players` keyed by color
+swatch + agent_id. Clicking selects that agent.
+
+**Out of scope** (explicit decisions deferred):
+
+- **Between-meeting memory.** MVP exposes `AgentMemoryView` only at
+  meeting boundaries (4.1 decision). ThoughtStream therefore only
+  shows memory snapshots paired with the currently-selected meeting.
+  Per-tick memory streams are a Phase 5 concern.
+- **Diff view between meetings.** "How did p-2's beliefs change
+  between meeting 1 and meeting 2?" is a compelling feature but out
+  of MVP scope — it would need cross-meeting state coordination.
+- **LLM call rerun / replay.** No "re-run this prompt" button. The
+  view is read-only.
+- **Inline prompt-template source view.** The prompt_template_id is
+  shown as text (e.g. `crewmate_report.v1`); a link to the
+  underlying jinja2 template is out of scope.
+- **Filter / search over many LLM calls.** A typical meeting has 12
+  LLM calls (3 reports + 6 statements + 3 votes); too few to warrant
+  search.
 
 **Files in scope:**
 - frontend/src/components/ThoughtStream.tsx
+- frontend/src/components/AgentSelector.tsx
+- frontend/src/components/MemoryPanel.tsx
+- frontend/src/components/BeliefRow.tsx
+- frontend/src/components/LLMCallCard.tsx
+- frontend/src/App.tsx
 
 **Files NOT in scope:**
 - engine/
 - agents/
 - llm/
+- meetings/
+- observation/
+- orchestrator/
 - api/
-- frontend/src/store/
+- frontend/src/store/replayStore.ts (already has selectAgent + fetchMemoryView)
+- frontend/src/api/client.ts (frozen)
+- frontend/src/types/api.ts (frozen — 4.7 added agent_id; 4.8 only consumes)
+- frontend/src/components/MapView.tsx
+- frontend/src/components/MeetingView.tsx (lands in 4.6)
+- frontend/src/components/RoomRect.tsx
+- frontend/src/components/AgentToken.tsx
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/TickStepper.tsx
+- frontend/package.json (locked)
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+- tests/
 
 **Definition of done:**
-- [ ] ThoughtStream displays the selected agent's memory view (role, tasks-completed, salience-ordered observations, beliefs, contradictions) as exposed by the spectator API.
-- [ ] LLM call records for the agent: prompt template id, model id, input/output tokens, cost in USD, prompt + response text (truncated with expand-on-click for long responses).
-- [ ] Component consumes the shared store/API shape from 4.3.
-- [ ] Component renders prompt versions and cost metadata when present.
-- [ ] Frontend build/check command passes.
+- [ ] **AgentSelector visible when `selectedMeetingId !== null`.** Renders one button per `currentReplay.players` entry. Each button: color swatch + `display_name` + `agent_id` + a small "(IMPOSTOR)" / "(CREWMATE)" badge in muted text (role is privileged-spectator info). Click → `selectAgent(agent_id)`. The selected button is visually highlighted. When `selectedMeetingId === null`, the selector is hidden.
+- [ ] **ThoughtStream panel visible when both selections present.** Layout: AgentSelector at top, then MemoryPanel, then a divider, then the LLM call list. Panel docks to a side (right rail, ~30% viewport width) so MapView + MeetingView remain visible if open. Implementing agent picks layout; document.
+- [ ] **MemoryPanel renders `AgentMemoryView`.** Fetched via `fetchMemoryView(meetingId, agentId)`; loading state shows a spinner; error state shows the cached error. Fields rendered: role badge, `tasks_completed / tasks_assigned` (formatted `7 / 12`), observations as a list (newest first, discriminated by `type`), beliefs as a `BeliefRow` per `BeliefEntryView` (subject + suspicion bar + confidence pill), open_contradictions as inline `ContradictionBadge` entries (component shared with 4.6 — implementing agent: if 4.6 already merged, reuse; otherwise define locally and refactor in a follow-up).
+- [ ] **`rendered_memory_text` collapsible.** Below the structured memory: a `<details>` block (closed by default) labeled "Raw rendered memory (sent to LLM)". When expanded, shows the raw `rendered_memory_text` in a monospace preformatted block. Useful for debugging prompt-render decisions.
+- [ ] **LLM call list filtered to agent.** `meeting.llm_calls.filter(c => c.agent_id === selectedAgentId)` — depends on 4.7. Render each remaining call as an `LLMCallCard`.
+- [ ] **`LLMCallCard` content.** Header: `call_kind` chip + `model` + `prompt_template_id`. Stats row: input tokens, output tokens, `cost_usd` (formatted `$0.0042`). Prompt section: collapsible (closed by default), monospace preformatted, no truncation when expanded — first 200 chars shown when collapsed with a "show more" hint. Response section: same pattern.
+- [ ] **Fallback for old replays without `agent_id`.** When `selectedAgentId !== null` but `meeting.llm_calls` contains entries with `agent_id === null` (pre-4.7 replays), render a single "Older replay — per-call agent attribution unavailable" notice instead of an empty list. Do not crash.
+- [ ] **No new npm dependencies.** Reuse what 4.3/4.4/4.5/4.6 already pinned.
+- [ ] **TypeScript strict.** No `any`, no `// @ts-ignore`.
+- [ ] **`npm run build` succeeds** with zero warnings.
+- [ ] **Screenshots attached to PR.** Minimum: (a) AgentSelector visible with one agent highlighted, (b) ThoughtStream panel populated showing role badge, beliefs, and at least one expanded LLM call card with prompt + response visible.
+- [ ] **Manual smoke documented.** PR description states the replay used (any of `replays/replay-seed-{22,24,26,49}.jsonl`), the meeting + agent selected, and confirms memory loads + at least 3 LLM calls render attributed to the picked agent.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
-See DESIGN.md §6.6. Per-agent memory + belief view. The agent's role is in this view per the firewall design — the spectator API exposes it because the spectator is privileged (post-game replay). For live-game spectator (deferred), role would be redacted.
+Memory fetch pattern using the existing store:
 
-**Ready-to-paste prompt:** `agent_prompts/task-4-6-thoughtstream.md`
+```tsx
+export function ThoughtStream() {
+  const meetingId = useReplayStore((s) => s.selectedMeetingId);
+  const agentId = useReplayStore((s) => s.selectedAgentId);
+  const memoryCache = useReplayStore((s) => s.memoryCache);
+  const fetchMemoryView = useReplayStore((s) => s.fetchMemoryView);
+  const replay = useReplayStore((s) => s.currentReplay);
 
-### Task 4.7 — BeliefMatrix
+  useEffect(() => {
+    if (meetingId && agentId) fetchMemoryView(meetingId, agentId);
+  }, [meetingId, agentId, fetchMemoryView]);
+
+  if (!meetingId || !agentId) {
+    return <Hint>Open a meeting and pick an agent to see their reasoning.</Hint>;
+  }
+  const memory = memoryCache[`${meetingId}:${agentId}`];
+  if (!memory) return <Spinner />;
+  const meeting = replay?.meetings.find((m) => m.meeting_id === meetingId);
+  const calls = meeting?.llm_calls.filter((c) => c.agent_id === agentId) ?? [];
+
+  return (
+    <aside className="...">
+      <RoleBadge role={memory.role} />
+      <TaskProgress completed={memory.tasks_completed} assigned={memory.tasks_assigned} />
+      <ObservationsList observations={memory.observations} />
+      <BeliefsList beliefs={memory.beliefs} />
+      <ContradictionsList contradictions={memory.open_contradictions} />
+      <RenderedMemoryDetails text={memory.rendered_memory_text} />
+      <LLMCallList calls={calls} agentId={agentId} meeting={meeting} />
+    </aside>
+  );
+}
+```
+
+Belief row visualization — suspicion as a horizontal bar:
+
+```tsx
+function BeliefRow({ belief }: { belief: BeliefEntryView }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-mono">{belief.subject}</span>
+      <div className="flex-1 h-2 bg-neutral-700 rounded">
+        <div
+          className="h-full rounded"
+          style={{
+            width: `${belief.suspicion * 100}%`,
+            background: belief.suspicion > 0.5 ? "var(--color-red)" : "var(--color-green)",
+          }}
+        />
+      </div>
+      <span className="text-xs text-neutral-400">{belief.suspicion.toFixed(2)}</span>
+    </div>
+  );
+}
+```
+
+LLM call collapsible content — use native `<details>` to avoid managing open/closed state:
+
+```tsx
+function LLMCallCard({ call }: { call: LLMCallView }) {
+  return (
+    <div className="border rounded p-2 my-2">
+      <header>...stats...</header>
+      <details>
+        <summary>Prompt ({truncate(call.prompt_text, 80)})</summary>
+        <pre className="whitespace-pre-wrap">{call.prompt_text}</pre>
+      </details>
+      <details>
+        <summary>Response ({truncate(call.response_text, 80)})</summary>
+        <pre className="whitespace-pre-wrap">{call.response_text}</pre>
+      </details>
+    </div>
+  );
+}
+```
+
+For the contradiction badge shared with 4.6: if 4.6's `ContradictionBadge` component already exists at merge time, import and reuse. If 4.6 has not yet merged, define a local copy and note in `## Decisions` that a refactor follow-up will deduplicate. Don't block on inter-task ordering — both tasks can dispatch in parallel after 4.7 and the audit clear.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+This task adds five components and depends on 4.7 having landed. The risks are around the AgentMemoryView fetch lifecycle and the LLM-call filtering.
+
+- **`fetchMemoryView` race.** The store already guards against stale responses (per 4.3's third Codex review). If the user rapidly switches agents, the latest fetch wins; the cache only holds the winning result. Verify by selecting agents in quick succession.
+- **Hard dependency on 4.7.** If 4.7 is not merged when 4.8 dispatches, LLM call filtering produces an empty list for every agent. The "fallback for old replays" UI catches this case too — but the contract dependency is real. Confirm in `## Decisions` that 4.7 was merged before this PR opens.
+- **Contradiction badge duplication.** If 4.6 also defines a `ContradictionBadge`, both tasks ship one. The first one merged wins; the second's PR review should flag the conflict and refactor in-PR. Acceptable churn for parallel dispatch.
+- **Role badge in privileged view.** Showing "IMPOSTOR" badges in the AgentSelector reveals roles to the spectator — that's intentional per the 4.1 privilege model. Document in PR description that this is a known-and-authorized leak for the post-game spectator surface.
+- **Long prompt_text rendering.** Some prompts are 8k+ characters. `<pre>` with `whitespace-pre-wrap` handles wrap; ensure a `max-h` + scroll on the expanded `<details>` so a single prompt doesn't crowd out the rest of the panel.
+- **No backend changes.** All fields consumed exist post-4.7.
+- **No CI cost.** Static gates only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-8-thoughtstream.md`
+
+### Task 4.9 — BeliefEntryView snapshot_tick rename (R-2 substrate)
+**Branch:** `phase-4-belief-snapshot-tick`
+**Depends on:** 4.4 merged + mid-phase DTO audit passed + **4.7 merged** (shared edits to `api/schemas.py`, `api/replay_loader.py`, TS types, and DTO test fixtures — serialize to avoid merge churn)
+**Section refs:** DESIGN.md §6.3, mid-phase DTO audit R-2
+**Complexity:** Small
+
+Mid-phase DTO audit R-2 informational finding (Unique-but-verified):
+`api.schemas.BeliefEntryView.last_updated_tick` is the enclosing
+meeting boundary tick, not a per-belief mutation timestamp. Every
+row in a snapshot carries the same value, which will mislead
+`BeliefMatrix` (4.10) if its component reads `last_updated_tick`
+as a recency signal. The audit reconciler explicitly framed this as
+"before Task 4.10 dispatch" — this task is the prereq.
+
+**Why a rename, not a real recency wire.** Two options were on the
+table:
+
+1. **Rename `last_updated_tick` → `snapshot_tick`.** Cheap, honest,
+   one PR. Documents the field's actual semantics (the tick at
+   which the spectator API took the snapshot). Does NOT change
+   `agents.memory.beliefs.PlayerBelief` — beliefs remain immutable
+   snapshots that don't carry per-mutation timestamps.
+
+2. **Wire a real per-belief recency** through `PlayerBelief`.
+   Requires adding `last_updated_tick` to the belief store,
+   threading a tick parameter through every mutation site
+   (`adjust_suspicion`, `adjust_trust`, `record_alibi`,
+   `record_contradiction`, `decay_suspicion`), updating all callers
+   in `agents/` and `meetings/`, plus the loader propagation.
+   Multi-file repair task, ~5x the surface area.
+
+This task picks Option 1. The semantic question that motivated R-2
+("a BeliefMatrix shouldn't claim per-cell recency it doesn't have")
+is fully resolved by the rename — 4.10's contract notes that
+`snapshot_tick` is per-meeting, not per-cell, and renders it once
+in the footer ("all beliefs as of meeting tick N") rather than
+per-cell. If Phase 5 decides per-belief recency adds product
+value, that's a separate scoped task — not this one.
+
+**Out of scope** (explicit decisions deferred):
+
+- **`PlayerBelief` schema changes.** No change. The belief store
+  stays timeless.
+- **Belief mutation tick parameter threading.** Not done. See
+  rationale above.
+- **`AgentMemoryView` tick semantics.** Already clear (`tick` is
+  the meeting boundary tick). No change.
+- **TypeScript codegen.** Frontend types are hand-authored; this
+  task hand-edits one line in `frontend/src/types/api.ts`.
+
+**Files in scope:**
+- api/schemas.py
+- api/replay_loader.py
+- frontend/src/types/api.ts
+- tests/api/test_schemas.py
+- tests/api/test_replay_loader.py
+- tests/api/test_replays.py
+- tests/api/fixtures/sample_replay.py
+
+**Files NOT in scope:**
+- engine/
+- agents/ (PlayerBelief is NOT modified)
+- llm/
+- meetings/
+- observation/
+- orchestrator/
+- frontend/src/components/
+- frontend/src/store/replayStore.ts
+- frontend/src/api/client.ts
+- frontend/package.json
+- DESIGN.md
+- AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+
+**Definition of done:**
+- [ ] **`BeliefEntryView.last_updated_tick` renamed to `snapshot_tick`.** [api/schemas.py:410](api/schemas.py#L410). Docstring updated to: "Meeting boundary tick at which this belief snapshot was taken. Beliefs themselves are timeless; this field timestamps when the spectator API observed the belief, not when the belief mutated. All BeliefEntryView entries within one AgentMemoryView share the same snapshot_tick."
+- [ ] **Loader updated.** [api/replay_loader.py:1119](api/replay_loader.py#L1119) constructs `BeliefEntryView(snapshot_tick=tick, ...)` — field-name rename only; the `tick` parameter pass-through is unchanged.
+- [ ] **Frontend types mirror.** [frontend/src/types/api.ts:275](frontend/src/types/api.ts#L275) renames `last_updated_tick: number` → `snapshot_tick: number`.
+- [ ] **Test updates.** Every test that references `last_updated_tick` is updated. Grep `grep -rn "last_updated_tick" tests/` to find them; expect them in [tests/api/test_schemas.py](tests/api/test_schemas.py), [tests/api/test_replay_loader.py](tests/api/test_replay_loader.py), [tests/api/test_replays.py](tests/api/test_replays.py), and possibly [tests/api/fixtures/sample_replay.py](tests/api/fixtures/sample_replay.py).
+- [ ] **No code outside the files-in-scope references `last_updated_tick`.** Confirm with `grep -rn "last_updated_tick" .` after edits; only `audits/` (historical) and possibly `tasks/phase-4.md` (this task's own description) should still contain the string.
+- [ ] **`extra="forbid"` confirms strict rejection.** A test asserts that constructing `BeliefEntryView(last_updated_tick=5, ...)` (the OLD field name) raises a Pydantic validation error. This documents the rename.
+- [ ] **DTO leak test updated if it references the field.** [tests/api/test_leak.py](tests/api/test_leak.py)'s `EXPECTED_DTOS` is field-list-agnostic per the 4.1 design — no edit expected. Confirm by running.
+- [ ] **No backend semantics change.** No new endpoint; no new field elsewhere; the loader still pulls from the same per-meeting tick.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run mypy --strict agents observation orchestrator engine llm meetings` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+Step 1 — Rename in `api/schemas.py`. Update the docstring to describe the semantics clearly.
+
+Step 2 — Rename in `api/replay_loader.py`. The constructor call is the only loader site touching this field.
+
+Step 3 — Rename in `frontend/src/types/api.ts`. One-line edit.
+
+Step 4 — Search-and-update tests:
+
+```bash
+grep -rln "last_updated_tick" tests/ frontend/
+```
+
+Step 5 — Add the strict-rejection test:
+
+```python
+def test_belief_entry_rejects_old_field_name() -> None:
+    with pytest.raises(ValidationError):
+        BeliefEntryView(
+            subject="p-2",
+            suspicion=0.7,
+            confidence=0.4,
+            last_updated_tick=5,  # old name
+        )
+```
+
+This guards against any consumer that didn't get the rename memo.
+
+Step 6 — Verify no leftover references outside `audits/` and the task contract:
+
+```bash
+grep -rn "last_updated_tick" . --exclude-dir=audits --exclude-dir=node_modules
+```
+
+**Public types introduced:**
+None — this is a field rename on an existing type. The schema delta:
+
+- `api.schemas.BeliefEntryView.snapshot_tick` (renamed from `last_updated_tick`)
+
+**Integration risk:**
+
+The smallest task in Phase 4. Risk is in missing a reference.
+
+- **Old replays in the cache.** Replays are loaded fresh on process restart, so a renamed field doesn't break the cache — but any process running the OLD code reading a NEW JSONL produced by NEW code wouldn't see the field. Since the field is constructed at DTO-build time (not persisted to JSONL), this isn't a concern: the rename touches only the in-memory DTO shape.
+- **4.10's dependency.** BeliefMatrix (4.10) reads `snapshot_tick` per the elaborated 4.10 contract. Confirm 4.10 dispatches after 4.9 merges (already encoded in the dependency line).
+- **Documentation consistency.** The `## Decisions` section of the PR should explicitly state "We chose rename over per-belief recency wiring; rationale in tasks/phase-4.md Task 4.9."
+- **No backend behavior change.** No new endpoint. No engine touch. No observation-firewall implication.
+- **No CI cost.** Static gates only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-9-belief-snapshot-tick.md`
+
+### Task 4.10 — BeliefMatrix (who-suspects-whom heatmap)
 **Branch:** `phase-4-beliefmatrix`
-**Depends on:** 4.4 merged + mid-phase DTO audit passed
-**Section refs:** DESIGN.md §6, DESIGN.md §7
+**Depends on:** 4.4 merged + mid-phase DTO audit passed + **4.8 merged** (App.tsx slot ordering) + **4.9 merged** (for `snapshot_tick` field rename)
+**Section refs:** DESIGN.md §6.3, DESIGN.md §7
 **Complexity:** Medium
 
-Heatmap of who suspects whom. Reads the suspicion graph DTO per tick;
-renders a (N × N) grid with cell color encoding suspicion intensity.
+N×N heatmap of who suspects whom at a meeting boundary. Rows are
+observers, columns are subjects, cell color encodes suspicion
+intensity (green→yellow→red). Derived client-side from per-agent
+`AgentMemoryView` snapshots; the BeliefMatrix is visible only when
+a meeting is selected, mirroring ThoughtStream's meeting-boundary
+constraint.
+
+**Why meeting-boundary-only, not per-tick.** The mid-phase DTO
+audit's Section 6 substrate report confirmed `SuspicionGraphView`
+is a declared DTO with NO endpoint today. Two paths existed:
+
+1. **Add a backend endpoint** (`GET /replays/{game_id}/suspicion/
+   {tick}`) that walks all agents' belief stores per-tick and
+   serializes the graph. Widens 4.10 into a backend-and-frontend
+   task; adds a loader method; touches `api/routes/`, `api/replay_
+   loader.py`, and `api/schemas.py` (the SuspicionGraphView DTO
+   already exists). Costs: ~3x the task surface; introduces
+   per-tick memory reconstruction outside meeting boundaries
+   (currently the loader only reconstructs at meeting boundaries
+   per the substrate audit).
+
+2. **Derive client-side from per-agent `AgentMemoryView`** fetched
+   at the currently-selected meeting boundary. Each agent's
+   `AgentMemoryView.beliefs[*]` already carries `(subject,
+   suspicion, confidence, snapshot_tick)`. Aggregating N agents'
+   beliefs gives the full N×N matrix at that meeting. No backend
+   changes; reuses the existing `fetchMemoryView` action and
+   memory cache.
+
+This task picks Option 2 — keeps the scope at
+`frontend/src/components/`, no backend touch. Per-tick coverage is
+a Phase 5 expansion if the UX session shows it matters; meeting-
+boundary coverage is sufficient for the merge gate (a non-technical
+viewer following a game can see the suspicion landscape at every
+decision point — i.e., every meeting).
+
+**Out of scope** (explicit decisions deferred):
+
+- **Per-tick suspicion graphs.** Per the design choice above.
+- **Trust matrix variant.** DESIGN.md §6.3 distinguishes trust and
+  suspicion as separate scores. The MVP heatmap renders suspicion
+  only; a trust matrix is a Phase 5 expansion if useful.
+- **Belief-edge animation between meetings.** A "watch beliefs
+  shift from meeting 1 to meeting 2" view is compelling but out of
+  scope.
+- **Cell click → ThoughtStream pivot.** Clicking a cell could
+  select the row agent and jump to ThoughtStream. Nice-to-have; out
+  of MVP scope. Pivot via existing AgentSelector + BeliefMatrix
+  side-by-side is fine.
 
 **Files in scope:**
 - frontend/src/components/BeliefMatrix.tsx
+- frontend/src/components/BeliefCell.tsx
+- frontend/src/App.tsx
 
 **Files NOT in scope:**
 - engine/
 - agents/
 - llm/
+- meetings/
+- observation/
+- orchestrator/
 - api/
-- frontend/src/store/
+- frontend/src/store/replayStore.ts (uses existing fetchMemoryView)
+- frontend/src/api/client.ts (frozen)
+- frontend/src/types/api.ts (frozen — 4.9 already renamed the field)
+- frontend/src/components/MapView.tsx
+- frontend/src/components/MeetingView.tsx (lands in 4.6)
+- frontend/src/components/ThoughtStream.tsx (lands in 4.8)
+- frontend/src/components/AgentSelector.tsx (lands in 4.8 — reuse if available)
+- frontend/src/components/RoomRect.tsx
+- frontend/src/components/AgentToken.tsx
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/TickStepper.tsx
+- frontend/package.json (locked)
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+- tests/
 
 **Definition of done:**
-- [ ] BeliefMatrix renders a heatmap of suspicion/trust relationships from sanitized spectator DTOs.
-- [ ] Component consumes the shared store/API shape from 4.3.
-- [ ] Frontend build/check command passes.
+- [ ] **BeliefMatrix visible when `selectedMeetingId !== null`.** When the selection is null, the panel renders nothing (or a small hint similar to ThoughtStream's). Mounted in App.tsx alongside (or below) MeetingView / ThoughtStream depending on layout.
+- [ ] **Per-agent memory fetch on mount + selection change.** For every `agent_id` in `currentReplay.players`, call `fetchMemoryView(selectedMeetingId, agent_id)` via the existing store action. The store caches and dedupes; subsequent renders hit the cache. Use a single `useEffect` keyed on `selectedMeetingId`.
+- [ ] **Render the N×N matrix.** Rows: each player in `currentReplay.players`. Columns: same. Top row + left column: player color swatch + agent_id labels. Diagonal cell (observer = subject): blank or muted (an agent has no belief about itself).
+- [ ] **Cell color encodes suspicion.** For row `i`, column `j` (i ≠ j): look up the row agent's `AgentMemoryView.beliefs.find(b => b.subject === players[j].agent_id)`. If found: cell color = a deterministic mapping of `suspicion ∈ [0,1]` to a heat scale. Recommended: HSL with hue = `120 - 120*suspicion` (green at 0, yellow at 0.5, red at 1.0); lightness adjustable by `confidence`. If not found (no belief recorded): cell is grey/empty.
+- [ ] **Cell hover tooltip.** Hovering a cell shows `observer → subject: suspicion=0.72 (confidence=0.44)`. Use a simple title attribute or a Tailwind tooltip pattern (no new dependency).
+- [ ] **Snapshot footer.** Below the matrix: a single line "All beliefs as of meeting tick N" derived from the snapshot_tick (4.9). All snapshot_tick values across all rendered cells are identical by construction; assert this in a defensive check (`new Set(allTicks).size === 1`) and log a warning if violated (data integrity hint).
+- [ ] **Loading + partial states.** Until all N memory fetches resolve, render a loading state (e.g. "Loading agent memories..."). If any fetch errors, render the matrix with grey cells for missing rows and an error chip near the affected agent's label.
+- [ ] **No new npm dependencies.** React 19, Zustand 5, Tailwind v4 are sufficient.
+- [ ] **TypeScript strict.** No `any`, no `// @ts-ignore`.
+- [ ] **`npm run build` succeeds** with zero warnings.
+- [ ] **Screenshots attached to PR.** Minimum: BeliefMatrix populated for a meeting from a real replay, showing varied suspicion across cells (green/yellow/red distribution) and the snapshot tick footer.
+- [ ] **Manual smoke documented.** PR description states the replay used and the meeting selected, and confirms the matrix populates with no console errors. Mention any cells that were grey (no belief recorded) so reviewers know that's the expected sparse state.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
-See DESIGN.md §6.3. Suspicion graph as a matrix view. Row = observer, column = subject, cell color = suspicion confidence. Diagonal is N/A (an agent doesn't suspect themselves).
+The matrix is a CSS grid (or a simple table). Pure React + Tailwind; no PixiJS.
 
-**Ready-to-paste prompt:** `agent_prompts/task-4-7-beliefmatrix.md`
+Fetching pattern — orchestrate N parallel fetches via the store:
 
-### Task 4.8 — ReplayControls
+```tsx
+export function BeliefMatrix() {
+  const meetingId = useReplayStore((s) => s.selectedMeetingId);
+  const replay = useReplayStore((s) => s.currentReplay);
+  const memoryCache = useReplayStore((s) => s.memoryCache);
+  const fetchMemoryView = useReplayStore((s) => s.fetchMemoryView);
+
+  const players = replay?.players ?? [];
+
+  useEffect(() => {
+    if (!meetingId) return;
+    for (const p of players) fetchMemoryView(meetingId, p.agent_id);
+  }, [meetingId, players, fetchMemoryView]);
+
+  if (!meetingId) return null;
+  const memories = players.map((p) => memoryCache[`${meetingId}:${p.agent_id}`]);
+  if (memories.some((m) => !m)) return <Loading />;
+
+  return <Matrix players={players} memories={memories} />;
+}
+```
+
+Cell rendering with HSL heat:
+
+```tsx
+function BeliefCell({ observer, subject, belief }: Props) {
+  if (observer.agent_id === subject.agent_id) {
+    return <div className="bg-neutral-800" />;  // diagonal
+  }
+  if (!belief) {
+    return <div className="bg-neutral-700" title="no belief recorded" />;
+  }
+  const hue = 120 - 120 * belief.suspicion;          // 120=green, 0=red
+  const lightness = 30 + 20 * belief.confidence;     // more confident → lighter
+  return (
+    <div
+      className="w-8 h-8 cursor-help"
+      style={{ background: `hsl(${hue}, 70%, ${lightness}%)` }}
+      title={`${observer.agent_id} → ${subject.agent_id}: suspicion=${belief.suspicion.toFixed(2)} (conf=${belief.confidence.toFixed(2)})`}
+    />
+  );
+}
+```
+
+Belief lookup per `(observer, subject)` pair:
+
+```typescript
+function lookupBelief(memory: AgentMemoryView, subjectId: string) {
+  return memory.beliefs.find((b) => b.subject === subjectId);
+}
+```
+
+Defensive snapshot-tick check:
+
+```typescript
+const snapshotTicks = memories.flatMap((m) => m.beliefs.map((b) => b.snapshot_tick));
+if (new Set(snapshotTicks).size > 1) {
+  console.warn("BeliefMatrix: snapshot_tick values diverge across cells", snapshotTicks);
+}
+const footerTick = memories[0]?.tick ?? "?";
+```
+
+`memories[0].tick` is the AgentMemoryView's tick (always the meeting tick) — equivalent to snapshot_tick across all beliefs in this view; use it for the footer.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+The risk is in the multi-agent fetch coordination and in unstated assumptions about belief population density.
+
+- **Multi-agent fetch fan-out.** For N=4 players, 4 parallel API calls on meeting select. With the loader's LRU cache (4.2), repeat selections of the same meeting are instant. First-load cost scales with N.
+- **Sparse belief data.** If an agent hasn't recorded a belief about another agent (e.g. early-game with no observation), the lookup returns undefined and the cell renders grey. Make sure the loading state distinguishes "not yet fetched" (still loading) from "fetched but empty" (sparse data). The `memoryCache[key] === undefined` check covers the former.
+- **snapshot_tick semantics.** Per 4.9's clarification, snapshot_tick is per-snapshot not per-belief — all cells in the matrix carry the same value. The footer renders it once; cells don't repeat the tick in tooltips (it would be visual noise).
+- **Color choice and accessibility.** Green→yellow→red is the conventional heat scale but is hostile to red-green colorblind viewers. Recommend including the numeric value in the tooltip (already in the DoD) so the color is supplementary, not load-bearing. If the UX session flags an issue, the polish task is a colorblind-safe palette swap.
+- **Diagonal styling.** The diagonal must visibly differ from "no belief recorded" — both are empty cells but mean different things. Use a distinct styling (e.g. striped or darker shade) for the diagonal.
+- **No backend changes.** Per the design choice; document the per-tick alternative in `## Decisions` as a flagged future direction.
+- **No CI cost.** Static gates only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-10-beliefmatrix.md`
+
+### Task 4.11 — ReplayControls (scrubber, speed, play/pause, snap-to-meeting)
 **Branch:** `phase-4-replaycontrols`
-**Depends on:** 4.4 merged + mid-phase DTO audit passed
+**Depends on:** 4.4 merged + mid-phase DTO audit passed + **4.10 merged** (App.tsx slot ordering — ReplayControls is the last component to integrate)
 **Section refs:** DESIGN.md §7, DESIGN.md §11.4
 **Complexity:** Medium
 
-Scrubber + speed control. Drives the current-tick index in the Zustand
-store; every component re-renders against the new tick.
+The primary playback control surface. Replaces TickStepper (from
+4.4) as the main control bar: scrubber for arbitrary seek, speed
+selector for playback rate, play/pause for auto-advance, fine-grained
+step buttons for single-tick movement, and snap-to-meeting buttons
+for fast navigation between meetings. The component drives the
+Zustand store's `currentTick`, `isPlaying`, `playbackSpeed`, and
+`selectedMeetingId`; every other component re-renders against the
+store.
+
+**Why this is a UX cornerstone.** The Phase 4 merge gate is "a
+non-technical viewer can follow a saved replay end-to-end without
+reading logs." Without ReplayControls, the viewer is stepping
+tick-by-tick through 1000+ ticks via TickStepper — unwatchable.
+ReplayControls is what turns the spectator UI into a watchable
+artifact.
+
+**TickStepper transition.** 4.4 shipped TickStepper as a minimal
+prev/next + label. ReplayControls subsumes it. The implementing
+agent picks one of two paths:
+
+1. **Replace TickStepper** with ReplayControls in App.tsx. Delete
+   the TickStepper component file. Cleaner long-term.
+2. **Keep TickStepper as a fine-control widget** inside
+   ReplayControls (e.g. a "single-tick" pair of buttons distinct
+   from the scrubber). Preserves the existing component as a
+   building block.
+
+Recommendation: Path 1. The "step ±1 tick" affordance is in
+ReplayControls per the DoD; a duplicated TickStepper is bloat.
+Document the choice in `## Decisions`.
+
+**Out of scope** (explicit decisions deferred):
+
+- **Keyboard shortcuts.** Spacebar to play/pause, arrows to step,
+  etc., are nice-to-have but not required for the merge gate.
+  Polish task if the UX session calls for it.
+- **Per-tick thumbnails / scrubber preview.** Hovering the scrubber
+  doesn't show a mini-MapView preview. That'd require pre-rendering
+  the map at every tick; out of MVP scope.
+- **Loop / repeat playback.** No "loop" button. Playback stops at
+  the last tick.
+- **Bookmarking arbitrary ticks.** Snap-to-meeting is the only
+  bookmark; user-defined bookmarks are out of scope.
+- **Variable-speed slider.** The speed control is a discrete
+  4-button selector (0.5×, 1×, 2×, 4×). A continuous slider would
+  invite interaction churn without UX gain at this stage.
 
 **Files in scope:**
 - frontend/src/components/ReplayControls.tsx
+- frontend/src/App.tsx
 
 **Files NOT in scope:**
 - engine/
 - agents/
 - llm/
+- meetings/
+- observation/
+- orchestrator/
 - api/
-- frontend/src/store/
+- frontend/src/store/replayStore.ts (already has all needed state + actions from 4.3)
+- frontend/src/api/client.ts (frozen)
+- frontend/src/types/api.ts (frozen)
+- frontend/src/components/MapView.tsx
+- frontend/src/components/MeetingView.tsx (lands in 4.6)
+- frontend/src/components/ThoughtStream.tsx (lands in 4.8)
+- frontend/src/components/BeliefMatrix.tsx (lands in 4.10)
+- frontend/src/components/RoomRect.tsx
+- frontend/src/components/AgentToken.tsx
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/TickStepper.tsx (delete if subsumed; otherwise leave frozen)
+- frontend/package.json (locked)
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- scripts/
+- tests/
 
 **Definition of done:**
-- [ ] Scrubber lets the spectator seek to any tick in the replay.
-- [ ] Speed control: 0.5×, 1×, 2×, 4× playback (1 tick advance per N ms).
-- [ ] Pause / play / step-forward / step-backward buttons.
-- [ ] Snap-to-meeting: a "next meeting" button skips to the next meeting trigger tick.
-- [ ] Component consumes the shared store/API shape from 4.3.
-- [ ] Frontend build/check command passes.
+- [ ] **Scrubber.** `<input type="range">` (or a custom range slider) with `min=0`, `max=currentReplay.ticks.length - 1`, `value=currentTick`, `onChange → setCurrentTick(value)`. Use `onInput` for live-update during drag, `onChange` for final commit. Styled with Tailwind to fit the control bar.
+- [ ] **Speed selector.** Four buttons: `0.5×`, `1×`, `2×`, `4×`. Clicking sets `setPlaybackSpeed(speed)`. The active speed's button is visually highlighted (different background or ring).
+- [ ] **Play / Pause toggle.** Single button that flips `isPlaying`. When playing: button shows pause icon (or "Pause" text). When paused: shows play icon ("Play"). Disabled when at the last tick.
+- [ ] **Step backward / Step forward.** Two buttons that call `setCurrentTick(currentTick - 1)` / `setCurrentTick(currentTick + 1)`. Clamped at 0 and `ticks.length - 1`. Active regardless of `isPlaying`.
+- [ ] **Snap to next meeting / Snap to previous meeting.** Two buttons. "Next meeting" finds the next entry in `currentReplay.meetings` with `tick > currentTick`; if found, calls `setCurrentTick(meeting.tick)` AND `selectMeeting(meeting.meeting_id)`. "Previous meeting" symmetric (largest tick < currentTick). Disabled (visibly greyed) when no such meeting exists in the given direction.
+- [ ] **Auto-advance on play.** When `isPlaying === true`, advance `currentTick` by 1 every `BASE_TICK_INTERVAL_MS / playbackSpeed` (e.g. `BASE=500`, so 1× = 500 ms/tick, 2× = 250 ms/tick, 4× = 125 ms/tick, 0.5× = 1000 ms/tick). Use `setInterval` registered in a `useEffect` keyed on `[isPlaying, playbackSpeed]`; clean up on unmount or dependency change. At the last tick, set `isPlaying = false` (don't loop).
+- [ ] **Tick label.** Text like `Tick 247 / 999` displayed near the scrubber. If the current tick is also a meeting tick, append a small chip "(meeting)".
+- [ ] **Layout.** Bottom of the App as a fixed or sticky control bar. Single row on wide screens; wraps responsibly on narrow. Tailwind for layout — no fancy CSS.
+- [ ] **TickStepper removal (if Path 1).** If subsuming, delete `frontend/src/components/TickStepper.tsx` and remove the import + render call from App.tsx. Document the deletion in PR description.
+- [ ] **No new npm dependencies.**
+- [ ] **TypeScript strict.** No `any`, no `// @ts-ignore`.
+- [ ] **`npm run build` succeeds** with zero warnings.
+- [ ] **Screenshots attached to PR.** Minimum: (a) the ReplayControls bar at rest with a mid-replay tick selected, (b) the bar mid-play with a non-1× speed highlighted, (c) the snap-to-meeting button used and the resulting MeetingView open (proves the selectMeeting integration works).
+- [ ] **Manual smoke documented.** PR description states the replay used, confirms: (1) scrubbing seeks immediately; (2) play/pause works; (3) each of the 4 speeds advances at visibly different rates; (4) snap-to-meeting opens the right meeting; (5) no console errors during a full play-through from tick 0 to last tick.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
-See DESIGN.md §11.4. Replay scrubber with seek-to-tick. The store owns the current-tick state; this component only emits store actions. No PixiJS, no per-tick rendering — pure React + Tailwind.
+Pure React + Tailwind. No PixiJS. The store from 4.3 already exposes every action this component needs.
 
-**Ready-to-paste prompt:** `agent_prompts/task-4-8-replaycontrols.md`
+Auto-advance pattern:
+
+```tsx
+const BASE_TICK_INTERVAL_MS = 500;
+
+export function ReplayControls() {
+  const replay = useReplayStore((s) => s.currentReplay);
+  const currentTick = useReplayStore((s) => s.currentTick);
+  const isPlaying = useReplayStore((s) => s.isPlaying);
+  const playbackSpeed = useReplayStore((s) => s.playbackSpeed);
+  const setCurrentTick = useReplayStore((s) => s.setCurrentTick);
+  const setIsPlaying = useReplayStore((s) => s.setIsPlaying);
+  const setPlaybackSpeed = useReplayStore((s) => s.setPlaybackSpeed);
+  const selectMeeting = useReplayStore((s) => s.selectMeeting);
+
+  // Auto-advance
+  useEffect(() => {
+    if (!isPlaying || !replay) return;
+    const intervalMs = BASE_TICK_INTERVAL_MS / playbackSpeed;
+    const id = setInterval(() => {
+      const lastTick = replay.ticks.length - 1;
+      const nextTick = useReplayStore.getState().currentTick + 1;
+      if (nextTick > lastTick) {
+        setIsPlaying(false);
+      } else {
+        setCurrentTick(nextTick);
+      }
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [isPlaying, playbackSpeed, replay, setCurrentTick, setIsPlaying]);
+
+  // ... render scrubber + buttons ...
+}
+```
+
+Note the `useReplayStore.getState().currentTick` read inside the interval — reading from the closure-captured `currentTick` would freeze the value at interval-registration time. The `useEffect` dependency on `currentTick` would re-register the interval on every tick (causing drift); reading fresh from the store avoids both bugs.
+
+Snap-to-meeting helpers:
+
+```typescript
+function findNextMeeting(meetings: MeetingView[], currentTick: number) {
+  return meetings.find((m) => m.tick > currentTick) ?? null;
+}
+function findPrevMeeting(meetings: MeetingView[], currentTick: number) {
+  for (let i = meetings.length - 1; i >= 0; i--) {
+    if (meetings[i].tick < currentTick) return meetings[i];
+  }
+  return null;
+}
+```
+
+`meetings` is already sorted by tick per the loader contract.
+
+Scrubber as range input:
+
+```tsx
+<input
+  type="range"
+  min={0}
+  max={replay.ticks.length - 1}
+  value={currentTick}
+  onChange={(e) => setCurrentTick(Number(e.target.value))}
+  className="w-full"
+/>
+```
+
+For the meeting-tick chip in the label, scan `replay.meetings` for an entry matching `currentTick`:
+
+```tsx
+const isAtMeeting = replay.meetings.some((m) => m.tick === currentTick);
+return <span>Tick {currentTick} / {replay.ticks.length - 1}{isAtMeeting && " (meeting)"}</span>;
+```
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+The risk is in `setInterval` lifecycle bugs — the classic "stale closure" and "compound intervals" failure modes.
+
+- **Stale closure on `currentTick`.** Reading `currentTick` from the React closure inside the interval freezes it. Use `useReplayStore.getState().currentTick` for fresh reads. The sketch above shows the pattern.
+- **Compound intervals.** If the `useEffect` deps include `currentTick` and the effect re-registers on every tick, two intervals end up running. The DoD's deps list `[isPlaying, playbackSpeed, replay]` deliberately omits `currentTick`. Verify by toggling play and watching the network tab or console (advance should be steady, not accelerating).
+- **Cleanup on unmount.** Always return the `clearInterval` cleanup. React Strict Mode double-renders the effect in dev; cleanup must be idempotent.
+- **Scrubber + auto-advance race.** If the user scrubs while playing, the next interval tick may advance from the new position immediately (which is correct). Pause-on-scrub is a UX call — recommend NOT pausing on scrub (the user can pause explicitly). Document the choice.
+- **Snap-to-meeting also-selects-meeting interaction.** The "next meeting" button calls both `setCurrentTick` and `selectMeeting`. The latter opens MeetingView (from 4.6). If 4.6 hasn't merged when 4.11 dispatches, `selectMeeting` is a no-op visually — but the store action is still safe (no-op on undefined component). Test order doesn't matter.
+- **Last-tick play stop.** When playback reaches the last tick, `setIsPlaying(false)` fires. The play button then shows "play" again and clicking it tries to advance from the last tick — which the auto-advance immediately stops again (correct). UX-wise, consider showing the play button as disabled when at the last tick.
+- **Range input native styling.** Tailwind's `range` plugin is optional; without it, native browser styling shows. Acceptable for MVP. If the UX session flags it as ugly, that's a polish PR.
+- **No backend changes.**
+- **No CI cost.** Static gates only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-11-replaycontrols.md`
 
 ### Phase-closing UX acceptance session
 
-After 4.4.5–4.8 all merge, run a manual UX acceptance session. A
+After 4.5–4.11 all merge, run a manual UX acceptance session. A
 non-technical viewer (not the developer, not Claude) loads a saved
 replay in the browser and follows the game end-to-end without reading
 any logs, terminal output, or task documents. Outcome:
@@ -1635,7 +2841,7 @@ is no real-provider-eval analog for the UI.
 - Spectator API payloads expose sanitized DTOs only — no role, kill
   attribution, private cooldowns, observation-firewall internals, or
   raw replay-entry state.
-- Mid-phase DTO audit passed before 4.4.5–4.8 fan-out.
+- Mid-phase DTO audit passed before 4.5–4.11 fan-out.
 - Frontend `tsc --noEmit` + `vite build` passes in CI.
 - All Phase 3 static gates still green (`bash scripts/check.sh`).
 - Live game broadcast deferred to Phase 5 (or a post-Phase-4 task) is
