@@ -4,6 +4,7 @@ import { MapView } from "./components/MapView";
 import { MeetingPill } from "./components/MeetingPill";
 import { MeetingView } from "./components/MeetingView";
 import { ReplayPicker } from "./components/ReplayPicker";
+import { ThoughtStream } from "./components/ThoughtStream";
 import { TickStepper } from "./components/TickStepper";
 import { useReplayStore } from "./store/replayStore";
 
@@ -11,7 +12,8 @@ import { useReplayStore } from "./store/replayStore";
 // through ticks and watch agents move. Top: ReplayPicker. Middle: the PixiJS
 // MapView canvas. Bottom: TickStepper + a MeetingPill at meeting ticks. Phase
 // 4.6 (DESIGN.md §5) adds the MeetingView transcript overlay, mounted at the
-// app root above all other content.
+// app root above all other content. Phase 4.8 (DESIGN.md §6) adds the
+// ThoughtStream right rail, which mounts alongside an open meeting.
 export default function App() {
   const loadReplayList = useReplayStore((s) => s.loadReplayList);
 
@@ -41,6 +43,7 @@ export default function App() {
       </main>
 
       <MeetingView />
+      <ThoughtStream />
     </div>
   );
 }
