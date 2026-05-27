@@ -34,16 +34,18 @@ interface PlayerChipProps {
 // the agent/voter id explicitly, so it is always shown alongside the name.
 export function PlayerChip({ agentId, players }: PlayerChipProps) {
   return (
-    <span className="inline-flex items-center gap-1.5 align-middle">
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle">
       <span
         aria-hidden
         className="inline-block h-3 w-3 shrink-0 rounded-full ring-1 ring-black/50"
         style={{ backgroundColor: playerColor(agentId, players) }}
       />
-      <span className="font-medium text-neutral-100">
+      <span className="min-w-0 break-words font-medium text-neutral-100">
         {playerName(agentId, players)}
       </span>
-      <span className="font-mono text-xs text-neutral-400">{agentId}</span>
+      <span className="min-w-0 break-all font-mono text-xs text-neutral-400">
+        {agentId}
+      </span>
     </span>
   );
 }
@@ -54,7 +56,7 @@ export function ClaimLine({ claim }: { claim: StatementClaimView }) {
   switch (claim.type) {
     case "alibi":
       return (
-        <span>
+        <span className="min-w-0 break-words">
           <span className="font-semibold text-sky-300">alibi</span> · {claim.subject}{" "}
           in {claim.room} (ticks {claim.from_tick}–{claim.to_tick})
           {claim.evidence.length > 0 && (
@@ -67,14 +69,14 @@ export function ClaimLine({ claim }: { claim: StatementClaimView }) {
       );
     case "accusation":
       return (
-        <span>
+        <span className="min-w-0 break-words">
           <span className="font-semibold text-rose-300">accusation</span> · against{" "}
           {claim.against} (confidence {claim.confidence.toFixed(2)}) — {claim.reason}
         </span>
       );
     case "corroboration":
       return (
-        <span>
+        <span className="min-w-0 break-words">
           <span className="font-semibold text-emerald-300">corroboration</span> ·
           supports {claim.supports} at tick {claim.on_tick} — {claim.reason}
         </span>

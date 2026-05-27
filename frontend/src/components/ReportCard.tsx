@@ -30,7 +30,7 @@ function ObservationLine({ obs }: { obs: ObservationClaimView }) {
   switch (obs.type) {
     case "saw_player":
       return (
-        <span>
+        <span className="min-w-0 break-words">
           <span className="font-semibold text-amber-300">saw</span> {obs.subject} in{" "}
           {obs.room} at tick {obs.tick}
           {obs.co_present.length > 0 && (
@@ -40,14 +40,14 @@ function ObservationLine({ obs }: { obs: ObservationClaimView }) {
       );
     case "completed_task":
       return (
-        <span>
+        <span className="min-w-0 break-words">
           <span className="font-semibold text-amber-300">completed</span>{" "}
           {obs.task_id} in {obs.room} at tick {obs.tick}
         </span>
       );
     case "found_body":
       return (
-        <span>
+        <span className="min-w-0 break-words">
           <span className="font-semibold text-amber-300">found body</span> of{" "}
           {obs.body_of} in {obs.room} at tick {obs.tick}
         </span>
@@ -80,7 +80,7 @@ export function ReportCard({ report, players, contradictions }: ReportCardProps)
         ))}
       </header>
 
-      <p className="whitespace-pre-wrap text-base leading-relaxed text-neutral-100">
+      <p className="whitespace-pre-wrap break-words text-base leading-relaxed text-neutral-100">
         {report.free_text}
       </p>
 
