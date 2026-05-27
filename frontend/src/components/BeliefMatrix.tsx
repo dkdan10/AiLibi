@@ -45,7 +45,7 @@ function Rail({ children }: { children: ReactNode }) {
   return (
     <aside
       aria-label="BeliefMatrix — who suspects whom"
-      className="fixed left-0 top-0 z-[55] flex h-screen w-fit min-w-[320px] max-w-[42vw] flex-col overflow-auto border-r border-neutral-700 bg-neutral-900/95 p-4 text-neutral-100 shadow-2xl backdrop-blur"
+      className="fixed left-0 top-0 z-[55] flex h-screen w-fit min-w-[320px] max-w-[24rem] flex-col overflow-auto border-r border-neutral-700 bg-neutral-900/95 p-4 text-neutral-100 shadow-2xl backdrop-blur"
     >
       <header className="mb-3">
         <h2 className="text-lg font-bold">BeliefMatrix</h2>

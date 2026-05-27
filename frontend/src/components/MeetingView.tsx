@@ -52,7 +52,7 @@ function OutcomeBanner({
         <h2 className="text-3xl font-extrabold tracking-tight text-neutral-100">
           {meeting.outcome}
         </h2>
-        <span className="text-sm text-neutral-400">
+        <span className="min-w-0 break-words text-sm text-neutral-400">
           triggered by{" "}
           <span className="font-medium text-neutral-200">{meeting.triggered_by}</span>{" "}
           ({meeting.trigger_kind})
@@ -188,7 +188,7 @@ function BallotsSection({
         <Empty>No ballots.</Empty>
       ) : (
         <>
-          <p className="mb-3 font-mono text-sm text-neutral-300">{summary}</p>
+          <p className="mb-3 break-words font-mono text-sm text-neutral-300">{summary}</p>
           <div className="space-y-3">
             {ballots.map((ballot, index) => (
               <BallotCard
@@ -221,9 +221,11 @@ function ContradictionsSection({
               className="flex flex-wrap items-center gap-2 rounded border border-neutral-700 bg-neutral-800/40 p-2 text-sm"
             >
               <ContradictionBadge contradiction={contradiction} />
-              <span className="text-neutral-200">{contradiction.description}</span>
+              <span className="min-w-0 break-words text-neutral-200">
+                {contradiction.description}
+              </span>
               {contradiction.subjects.length > 0 && (
-                <span className="text-xs text-neutral-400">
+                <span className="min-w-0 break-words text-xs text-neutral-400">
                   subjects: {contradiction.subjects.join(", ")}
                 </span>
               )}
@@ -242,7 +244,7 @@ function MetadataFooter({ meeting }: { meeting: MeetingViewDTO }) {
   return (
     <details className="mt-6 border-t border-neutral-700 pt-3 text-xs text-neutral-500">
       <summary className="cursor-pointer select-none">Meeting metadata</summary>
-      <dl className="mt-2 space-y-1">
+      <dl className="mt-2 space-y-1 break-words">
         <div>
           <span className="text-neutral-400">meeting_id:</span>{" "}
           <span className="font-mono">{meeting.meeting_id}</span>
@@ -319,11 +321,19 @@ export function MeetingView() {
   }
 
   return (
+    // Coexist with the rails that mount alongside an open meeting — the left
+    // BeliefMatrix (z-[55], ≤24rem) and right ThoughtStream (z-[60], ≤20rem).
+    // At xl+ there is room for all three: drop below the rails (z-50) and
+    // reserve a gutter wider than each so the centered panel lands in the gap.
+    // Below xl that gap would squeeze the transcript into a too-narrow column,
+    // so instead lift the overlay above the rails (z-[61], still under the
+    // z-[65] ReplayControls) and let the panel use the full width as a focus
+    // modal — readable, and never clipped by a rail.
     <div
       role="dialog"
       aria-modal="true"
       aria-label={`Meeting at tick ${meeting.tick}`}
-      className="fixed inset-0 z-50 overflow-auto bg-black/70"
+      className="fixed inset-0 z-[61] overflow-auto bg-black/70 xl:z-50 xl:pl-[25rem] xl:pr-[21rem]"
       onClick={() => {
         selectMeeting(null);
       }}

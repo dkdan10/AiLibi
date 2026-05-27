@@ -25,7 +25,7 @@ export function BallotCard({ ballot, players }: BallotCardProps) {
             SKIP
           </span>
         ) : (
-          <span className="inline-flex items-center rounded bg-neutral-700/70 px-2 py-0.5">
+          <span className="inline-flex min-w-0 max-w-full items-center rounded bg-neutral-700/70 px-2 py-0.5">
             <PlayerChip agentId={ballot.target} players={players} />
           </span>
         )}
@@ -44,7 +44,7 @@ export function BallotCard({ ballot, players }: BallotCardProps) {
         </span>
       </div>
 
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-100">
+      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-100">
         {ballot.rationale_text}
       </p>
     </article>

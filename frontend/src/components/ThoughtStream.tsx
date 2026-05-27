@@ -68,7 +68,7 @@ export function ThoughtStream() {
   return (
     <aside
       aria-label="ThoughtStream — agent reasoning"
-      className="fixed right-0 top-0 z-[60] flex h-screen w-[30vw] min-w-[300px] max-w-[440px] flex-col overflow-y-auto border-l border-neutral-700 bg-neutral-900/95 p-4 text-neutral-100 shadow-2xl backdrop-blur"
+      className="fixed right-0 top-0 z-[60] flex h-screen w-[30vw] min-w-[300px] max-w-[20rem] flex-col overflow-y-auto border-l border-neutral-700 bg-neutral-900/95 p-4 text-neutral-100 shadow-2xl backdrop-blur"
     >
       <header className="mb-3">
         <h2 className="text-lg font-bold">ThoughtStream</h2>

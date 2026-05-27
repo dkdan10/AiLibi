@@ -39,7 +39,7 @@ export function StatementCard({
         <PlayerChip agentId={statement.speaker} players={players} />
         <span className="text-neutral-500">→</span>
         {statement.target !== null ? (
-          <span className="inline-flex items-center rounded bg-neutral-700/70 px-2 py-0.5">
+          <span className="inline-flex min-w-0 max-w-full items-center rounded bg-neutral-700/70 px-2 py-0.5">
             <PlayerChip agentId={statement.target} players={players} />
           </span>
         ) : (
@@ -53,7 +53,7 @@ export function StatementCard({
         ))}
       </header>
 
-      <p className="whitespace-pre-wrap text-base leading-relaxed text-neutral-100">
+      <p className="whitespace-pre-wrap break-words text-base leading-relaxed text-neutral-100">
         {statement.free_text}
       </p>
 
