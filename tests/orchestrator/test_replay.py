@@ -1,7 +1,7 @@
-"""Unit coverage for the replay-log game-end + failed-call records.
+"""Unit coverage for the replay-log records and fail-loud guards.
 
-These exercise the additive replay records introduced by Task 3.19
-(DESIGN.md §11.4):
+These exercise the additive replay records introduced by Task 3.19 and the
+fail-loud / doubled-file guards added by Task 4.16 (DESIGN.md §11.4):
 
 * ``record_game_end`` / ``read_game_outcome`` — persist and recover the
   decisive game outcome so win-rate is evaluable from any replay log,
@@ -10,24 +10,32 @@ These exercise the additive replay records introduced by Task 3.19
   call that aborted a meeting on schema-validation failure, so per-meeting
   cost is auditable even for the crashed meeting (finding 2), and is folded
   into ``compute_cost_usd``.
+* ``ReplayLog.__init__`` fail-loud on an existing path (write side) and
+  ``read_all_entries`` doubled-file detection (read side) — Task 4.16
+  guards against the silent run-over-run concatenation that broke the
+  loader's dedup in Phase 4 UX prep.
 
-Pure replay-layer tests: no engine run, no LLM call.
+Pure replay-layer tests: no full game loop, no LLM call.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from orchestrator.replay import (
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
+    ReplayEntry,
     ReplayLog,
     compute_cost_usd,
     read_all_entries,
     read_failed_call_entries,
     read_game_outcome,
 )
+from tests._helpers.world_state import scripted_initial_world_state
 
 
 class TestGameEndRecording:
@@ -89,17 +97,21 @@ class TestGameEndRecording:
 
         assert read_game_outcome(path) is None
 
-    def test_read_game_outcome_returns_last_game_end_winner(
+    def test_read_game_outcome_raises_on_doubled_game_over(
         self, tmp_path: Path
     ) -> None:
-        # Defensive: a game writes exactly one game-end row, but if more than
-        # one is present the LAST decides (it reflects the final outcome).
+        # A game writes exactly one game-end row. Two ``game_over`` rows mean
+        # two games' records were concatenated into one file (the Phase 4
+        # doubled-write). ``read_game_outcome`` routes through
+        # ``read_all_entries``, so it now fails loud (Task 4.16) instead of
+        # silently returning the last winner.
         path = tmp_path / "multi.jsonl"
         log = ReplayLog(path, game_id="g-3")
         log.record_game_end(winner="CREWMATES", reason="CREWMATE_TASKS")
         log.record_game_end(winner="IMPOSTORS", reason="IMPOSTOR_PARITY")
 
-        assert read_game_outcome(path) == "IMPOSTORS"
+        with pytest.raises(ReplayLog.CorruptedFileError):
+            read_game_outcome(path)
 
     def test_record_game_end_accepts_none_winner_as_undecided(
         self, tmp_path: Path
@@ -212,3 +224,112 @@ class TestLLMCallRecordAgentId:
         record = LLMCallRecord.model_validate_json(legacy_line)
 
         assert record.agent_id is None
+
+
+class TestWriteSideFailLoud:
+    """``ReplayLog.__init__`` refuses an existing path unless ``force=True``.
+
+    Write-side guard for Task 4.16 (DESIGN.md §11.4): re-using a replay path
+    used to silently append a second game's rows, doubling the file.
+    """
+
+    def test_constructing_against_existing_file_raises(self, tmp_path: Path) -> None:
+        path = tmp_path / "replay.jsonl"
+        state = scripted_initial_world_state(seed=1)
+        ReplayLog(path, game_id="g-1").record_tick(0, [], state)
+
+        with pytest.raises(ReplayLog.AlreadyExistsError) as excinfo:
+            ReplayLog(path, game_id="g-1")
+
+        assert str(path) in str(excinfo.value)
+
+    def test_already_exists_error_is_a_file_exists_error(self, tmp_path: Path) -> None:
+        # Subclassing FileExistsError lets callers that only catch the stdlib
+        # type still intercept the fail-loud.
+        path = tmp_path / "replay.jsonl"
+        ReplayLog(path, game_id="g-1").record_game_end(
+            winner="CREWMATES", reason="done"
+        )
+
+        with pytest.raises(FileExistsError):
+            ReplayLog(path, game_id="g-1")
+
+    def test_force_true_truncates_previous_content(self, tmp_path: Path) -> None:
+        path = tmp_path / "replay.jsonl"
+        state = scripted_initial_world_state(seed=1)
+        ReplayLog(path, game_id="g-old").record_tick(0, [], state)
+
+        # force=True deletes the old file before recording, so the previous
+        # game's rows are gone and no doubled-write can happen. Nothing is on
+        # disk until the next append.
+        reopened = ReplayLog(path, game_id="g-new", force=True)
+        assert not path.exists()
+
+        reopened.record_tick(0, [], state)
+        entries = read_all_entries(path)
+        assert len(entries) == 1
+        entry = entries[0]
+        assert isinstance(entry, ReplayEntry)
+        assert entry.game_id == "g-new"
+        assert entry.tick == 0
+
+    def test_constructing_against_fresh_path_succeeds(self, tmp_path: Path) -> None:
+        # The common case: a brand-new path needs no force.
+        path = tmp_path / "fresh.jsonl"
+        ReplayLog(path, game_id="g-1").record_game_end(
+            winner="CREWMATES", reason="done"
+        )
+
+        assert read_game_outcome(path) == "CREWMATES"
+
+
+class TestReadSideDoubledFileDetection:
+    """``read_all_entries`` fails loud on the doubled-file pattern (Task 4.16).
+
+    The lived incident: two tournament runs against the same ``--output-dir``
+    concatenated per-seed JSONLs. A doubled file has overlapping ``tick``
+    values and/or two ``game_over`` rows.
+    """
+
+    def test_duplicate_tick_raises_naming_path_and_tick(self, tmp_path: Path) -> None:
+        path = tmp_path / "doubled-ticks.jsonl"
+        tick_row = (
+            '{"kind":"tick","game_id":"g-1","tick":0,"actions":[],'
+            '"state_hash":"deadbeef"}'
+        )
+        path.write_text(f"{tick_row}\n{tick_row}\n", encoding="utf-8")
+
+        with pytest.raises(ReplayLog.CorruptedFileError) as excinfo:
+            read_all_entries(path)
+
+        message = str(excinfo.value)
+        assert "Duplicate tick 0" in message
+        assert str(path) in message
+
+    def test_two_game_over_rows_raise_naming_path(self, tmp_path: Path) -> None:
+        path = tmp_path / "doubled-overs.jsonl"
+        over_row = (
+            '{"kind":"game_over","game_id":"g-1","winner":"CREWMATES","reason":"done"}'
+        )
+        path.write_text(f"{over_row}\n{over_row}\n", encoding="utf-8")
+
+        with pytest.raises(ReplayLog.CorruptedFileError) as excinfo:
+            read_all_entries(path)
+
+        message = str(excinfo.value)
+        assert "game_over" in message
+        assert str(path) in message
+
+    def test_clean_single_game_reads_without_raising(self, tmp_path: Path) -> None:
+        # A normal game — strictly increasing ticks, exactly one game_over —
+        # is unaffected by the doubled-file detection.
+        path = tmp_path / "clean.jsonl"
+        state = scripted_initial_world_state(seed=1)
+        log = ReplayLog(path, game_id="g-1")
+        log.record_tick(0, [], state)
+        log.record_tick(1, [], state)
+        log.record_game_end(winner="CREWMATES", reason="done")
+
+        entries = read_all_entries(path)
+
+        assert len(entries) == 3
