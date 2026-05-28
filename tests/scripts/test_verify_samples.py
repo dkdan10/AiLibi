@@ -17,11 +17,13 @@ from pathlib import Path
 import pytest
 
 import _verify_samples as vs
+from api.replay_loader import ReplayLoader
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _REAL_SAMPLES = _REPO_ROOT / "replays" / "samples"
 _VERIFY_SH = _REPO_ROOT / "scripts" / "verify_samples.sh"
 _SEED = 0  # smallest committed sample: fast to reconstruct
+_MEETING_SEED = 22  # a committed sample that contains a meeting
 
 
 def _copy_seed(dst_dir: Path, seed: int) -> Path:
@@ -128,3 +130,54 @@ def test_verify_sh_detects_corruption(tmp_path: Path) -> None:
     )
     assert proc.returncode == 1
     assert f"tick {tick}" in proc.stdout
+
+
+def _corrupt_meeting_before_hash(path: Path) -> int:
+    """Flip one hex char of the first meeting's recorded ``state_hash_before``.
+
+    Returns the meeting tick. ``load_replay`` never checks this field, so the
+    verifier's cross-check is the only thing that catches the corruption.
+    """
+
+    lines = path.read_text().splitlines()
+    corrupted_tick: int | None = None
+    out: list[str] = []
+    for line in lines:
+        obj = json.loads(line)
+        if corrupted_tick is None and obj.get("kind") == "meeting":
+            digest = obj["state_hash_before"]
+            obj["state_hash_before"] = ("1" if digest[0] != "1" else "0") + digest[1:]
+            corrupted_tick = int(obj["tick"])
+            line = json.dumps(obj, sort_keys=True, separators=(",", ":"))
+        out.append(line)
+    assert corrupted_tick is not None
+    path.write_text("\n".join(out) + "\n")
+    return corrupted_tick
+
+
+def test_meeting_state_hash_before_corruption_detected(tmp_path: Path) -> None:
+    path = _copy_seed(tmp_path, _MEETING_SEED)
+    tick = _corrupt_meeting_before_hash(path)
+    # load_replay alone does NOT inspect state_hash_before, so it still passes —
+    # this is the gap the cross-check closes.
+    ReplayLoader(tmp_path).load_replay(f"headless-seed-{_MEETING_SEED}")
+    failures = vs.verify_samples(tmp_path)
+    assert len(failures) == 1
+    failure = failures[0]
+    assert failure.game_id == f"headless-seed-{_MEETING_SEED}"
+    assert failure.tick == tick
+    assert "state_hash_before" in failure.reason
+    assert failure.expected != failure.actual
+
+
+def test_duplicate_seed_alias_rejected(tmp_path: Path) -> None:
+    _copy_seed(tmp_path, _SEED)  # replay-seed-0.jsonl
+    # A zero-padded second file maps to the same numeric seed; ReplayLoader would
+    # dedup it to one canonical path, so the verifier must reject the ambiguity.
+    (tmp_path / "replay-seed-00.jsonl").write_bytes(
+        (_REAL_SAMPLES / f"replay-seed-{_SEED}.jsonl").read_bytes()
+    )
+    failures = vs.verify_samples(tmp_path)
+    assert len(failures) == 1
+    assert failures[0].game_id == f"headless-seed-{_SEED}"
+    assert "map to seed 0" in failures[0].reason

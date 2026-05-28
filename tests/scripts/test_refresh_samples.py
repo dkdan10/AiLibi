@@ -142,3 +142,12 @@ def test_preflight_requires_api_key_before_spend() -> None:
     proc = _run("--seeds", "0", env=env)
     assert proc.returncode != 0
     assert "ANTHROPIC_API_KEY must be set" in proc.stdout + proc.stderr
+
+
+def test_dry_run_forces_anthropic_provider() -> None:
+    # The refresh must force the real provider: build_default_client() defaults
+    # to the fake provider when AILIBI_LLM_PROVIDER is unset, which would
+    # silently re-record fake output over the real samples.
+    proc = _run("--seeds", "22", "--dry-run")
+    assert proc.returncode == 0
+    assert "AILIBI_LLM_PROVIDER=anthropic" in proc.stdout

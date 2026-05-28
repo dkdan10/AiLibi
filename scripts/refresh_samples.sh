@@ -152,8 +152,9 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
   echo "[dry-run] seeds: $seeds_csv"
   echo "[dry-run] sample dir: $SAMPLE_DIR"
+  echo "[dry-run] provider: AILIBI_LLM_PROVIDER=anthropic (forced)"
   echo "[dry-run] per seed, would run:"
-  echo "[dry-run]   uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir $SAMPLE_DIR --force"
+  echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir $SAMPLE_DIR --force"
   echo "[dry-run] would then update manifest: $MANIFEST"
   echo "[dry-run] no API calls made; no files written."
   exit 0
@@ -166,6 +167,15 @@ if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
   exit 1
 fi
 echo "Using API key prefix: ${ANTHROPIC_API_KEY:0:8}"
+
+# Force the real provider. llm.provider.build_default_client() defaults to the
+# FAKE provider whenever AILIBI_LLM_PROVIDER is unset (its documented default so
+# CI never hits the network), even when ANTHROPIC_API_KEY is present. Without
+# this a refresh run with only the key set would silently re-record
+# fake-provider output (zero spend, fake model) over the real samples and
+# corrupt MANIFEST provenance + every Phase 5 metric derived from it.
+export AILIBI_LLM_PROVIDER=anthropic
+echo "Using LLM provider: $AILIBI_LLM_PROVIDER (forced for real-provider refresh)"
 echo "Refreshing seeds: $seeds_csv"
 
 IFS=',' read -ra seed_list <<<"$seeds_csv"

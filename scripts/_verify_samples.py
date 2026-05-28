@@ -29,7 +29,12 @@ if str(_REPO_ROOT) not in sys.path:
 from pydantic import ValidationError  # noqa: E402
 
 from api.replay_loader import ReplayLoader, ReplayStateMismatchError  # noqa: E402
-from orchestrator.replay import ReplayLog  # noqa: E402
+from orchestrator.replay import (  # noqa: E402
+    MeetingReplayEntry,
+    ReplayEntry,
+    ReplayLog,
+    read_all_entries,
+)
 
 _DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples"
 _FILENAME_PREFIX = "replay-seed-"
@@ -73,15 +78,68 @@ def sample_paths(sample_dir: Path) -> list[Path]:
     return [path for _, path in sorted(paths)]
 
 
+def _paths_by_seed(sample_dir: Path) -> dict[int, list[Path]]:
+    by_seed: dict[int, list[Path]] = {}
+    for path in sample_paths(sample_dir):
+        seed = _seed_from_filename(path.name)
+        assert seed is not None  # sample_paths only returns matching names
+        by_seed.setdefault(seed, []).append(path)
+    return by_seed
+
+
+def _check_meeting_pre_hashes(game_id: str, path: Path) -> VerifyFailure | None:
+    """Cross-check each meeting's recorded ``state_hash_before``.
+
+    ``ReplayLoader.load_replay`` verifies every tick hash and each meeting's
+    ``state_hash_after`` against engine playback, but not ``state_hash_before``.
+    That field equals the trigger-tick state, i.e. the tick hash at the meeting
+    tick — which load_replay *does* verify against reconstruction — so checking
+    ``state_hash_before == tick_hash[tick]`` pins it to a verified value and
+    catches a corrupted pre-hash the loader would otherwise accept.
+    """
+
+    entries = read_all_entries(path)
+    tick_hash = {e.tick: e.state_hash for e in entries if isinstance(e, ReplayEntry)}
+    for entry in entries:
+        if isinstance(entry, MeetingReplayEntry):
+            expected = tick_hash.get(entry.tick)
+            if expected is not None and entry.state_hash_before != expected:
+                return VerifyFailure(
+                    game_id=game_id,
+                    tick=entry.tick,
+                    expected=expected,
+                    actual=entry.state_hash_before,
+                    reason="meeting state_hash_before diverged from the tick hash",
+                )
+    return None
+
+
 def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
     """Engine-replay every sample; return the failures (empty == all clean)."""
 
     loader = ReplayLoader(sample_dir)
     failures: list[VerifyFailure] = []
-    for path in sample_paths(sample_dir):
-        seed = _seed_from_filename(path.name)
-        assert seed is not None  # sample_paths only returns matching names
+    for seed, paths in sorted(_paths_by_seed(sample_dir).items()):
         game_id = f"headless-seed-{seed}"
+        # ReplayLoader resolves a game_id to a single canonical path per seed, so
+        # two files mapping to the same seed (e.g. replay-seed-0 and
+        # replay-seed-00) would let a corrupted duplicate slip through unchecked.
+        # The contract is "walk every replay-seed-*.jsonl"; reject the ambiguity.
+        if len(paths) > 1:
+            names = ", ".join(sorted(p.name for p in paths))
+            failures.append(
+                VerifyFailure(
+                    game_id=game_id,
+                    tick=None,
+                    expected=None,
+                    actual=None,
+                    reason=(
+                        f"{len(paths)} files map to seed {seed} ({names}); "
+                        "ambiguous — only one would be verified"
+                    ),
+                )
+            )
+            continue
         try:
             loader.load_replay(game_id)
         except ReplayStateMismatchError as exc:
@@ -94,6 +152,7 @@ def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
                     reason="state-hash mismatch",
                 )
             )
+            continue
         except ReplayLog.CorruptedFileError as exc:
             failures.append(
                 VerifyFailure(
@@ -104,6 +163,7 @@ def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
                     reason=f"corrupted replay file: {exc}",
                 )
             )
+            continue
         except (FileNotFoundError, ValueError, ValidationError) as exc:
             failures.append(
                 VerifyFailure(
@@ -114,6 +174,10 @@ def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
                     reason=f"{type(exc).__name__}: {exc}",
                 )
             )
+            continue
+        pre_hash_failure = _check_meeting_pre_hashes(game_id, paths[0])
+        if pre_hash_failure is not None:
+            failures.append(pre_hash_failure)
     return failures
 
 
