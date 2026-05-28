@@ -100,6 +100,31 @@ class TestApplyObservationRulesPurity:
             _DEFAULT_SUSPICION + 0.1
         )
 
+    def test_victim_is_not_suspected_for_own_body(self) -> None:
+        # The corpse was alive in the room moments before discovery, so it sits
+        # in recent_co_presence; Rule 1 must skip body.victim_id and only
+        # elevate the genuine bystander.
+        base = BeliefState()
+        packet = _packet(
+            tick=10,
+            visible_bodies=(BodyView(id="b1", room="R", victim_id="victim"),),
+        )
+        co_presence: Mapping[str, Sequence[tuple[int, str]]] = {
+            "R": ((9, "victim"), (9, "bystander")),
+        }
+
+        result = apply_observation_rules(
+            base,
+            observation=packet,
+            previous_visible_bodies=set(),
+            recent_co_presence=co_presence,
+        )
+
+        assert result.view("victim").suspicion == _DEFAULT_SUSPICION
+        assert result.view("bystander").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
+        )
+
     def test_seen_body_does_not_refire(self) -> None:
         base = BeliefState()
         packet = _packet(

@@ -259,7 +259,9 @@ def apply_observation_rules(
     body is *first* seen (``body.id`` absent from ``previous_visible_bodies``),
     every other player the agent observed in that body's room within the prior
     ``BODY_PROXIMITY_WINDOW_TICKS`` ticks gains suspicion. Firing only on first
-    sighting keeps a lingering body from re-elevating bystanders every tick.
+    sighting keeps a lingering body from re-elevating bystanders every tick, and
+    the body's own ``victim_id`` is skipped -- a corpse seen alive in the room
+    moments earlier is not a suspect.
 
     ``recent_co_presence`` is keyed by room and pre-computed by the caller from
     the agent's own episodic memory; this function never reaches into a store,
@@ -279,6 +281,7 @@ def apply_observation_rules(
             player_id
             for tick, player_id in recent_co_presence.get(body.room, ())
             if 0 <= observation.tick - tick <= BODY_PROXIMITY_WINDOW_TICKS
+            and player_id != body.victim_id
         }
         for player_id in sorted(co_present):
             result.adjust_suspicion(player_id, delta=BODY_PROXIMITY_SUSPICION_DELTA)
