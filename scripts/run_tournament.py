@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 # Allow `uv run python scripts/run_tournament.py ...` to find top-level packages.
@@ -65,6 +66,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=DEFAULT_MAX_TICKS,
         help=f"per-game tick budget (default: {DEFAULT_MAX_TICKS})",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "overwrite existing per-seed replay files in --output-dir. "
+            "Without it, re-using an --output-dir whose replay files already "
+            "exist raises ReplayLog.AlreadyExistsError and exits non-zero, "
+            "guarding against the silent doubled-file corruption that broke "
+            "replay reads in Phase 4 (DESIGN.md §11.4)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -89,11 +101,32 @@ def _format_report(report: BalanceReport) -> str:
     return "\n".join(lines)
 
 
+def _clear_existing_replays(output_dir: Path, seeds: Iterable[int]) -> None:
+    """Truncate per-seed replay files so a ``--force`` re-run overwrites them.
+
+    Mirrors the ``replay-seed-{seed}.jsonl`` naming that
+    :func:`eval.balance_eval.run_balance_eval` writes, deleting each
+    conflicting file before the tournament re-creates it. Without ``--force``
+    these files are left untouched and :class:`orchestrator.replay.ReplayLog`
+    raises :class:`~orchestrator.replay.ReplayLog.AlreadyExistsError`
+    fail-loud on the first one it re-opens (DESIGN.md §11.4). Audit logs keep
+    their existing append behavior; replay-data integrity, which the Phase 5
+    metrics read, is the scope of this guard.
+    """
+
+    for seed in seeds:
+        replay_path = output_dir / f"replay-seed-{seed}.jsonl"
+        if replay_path.exists():
+            replay_path.unlink()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     if args.num_games < 1:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
     seeds = range(args.start_seed, args.start_seed + args.num_games)
+    if args.force:
+        _clear_existing_replays(args.output_dir, seeds)
     report = run_balance_eval(
         seeds=seeds,
         output_dir=args.output_dir,
