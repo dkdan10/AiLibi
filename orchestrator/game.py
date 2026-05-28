@@ -631,11 +631,18 @@ class HeadlessGame:
         num_impostors: int = DEFAULT_NUM_IMPOSTORS,
         scheduler: TickScheduler | None = None,
         meeting_runner: MeetingRunner | None = None,
+        force: bool = False,
     ) -> None:
         self._seed = seed
         self._game_map = game_map
         self._agent_factory = agent_factory
         self._replay_path = replay_path
+        # Passed through to ReplayLog: force=True truncates a pre-existing
+        # replay file at construction (just before this game writes it),
+        # force=False (default) makes a re-run against an existing path fail
+        # loud (DESIGN.md §11.4; Task 4.16). run() keeps its existing
+        # signature; the flag rides the constructor.
+        self._force = force
         self._audit_log_path = (
             audit_log_path
             if audit_log_path is not None
@@ -684,7 +691,9 @@ class HeadlessGame:
             game_map=self._game_map,
             audit_log_path=self._audit_log_path,
         )
-        replay = ReplayLog(self._replay_path, game_id=self._game_id())
+        replay = ReplayLog(
+            self._replay_path, game_id=self._game_id(), force=self._force
+        )
         agents = self._build_agents(state.players)
 
         last_events: tuple[EngineEvent, ...] = ()

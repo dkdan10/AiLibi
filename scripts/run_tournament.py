@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Iterable
 from pathlib import Path
 
 # Allow `uv run python scripts/run_tournament.py ...` to find top-level packages.
@@ -101,38 +100,24 @@ def _format_report(report: BalanceReport) -> str:
     return "\n".join(lines)
 
 
-def _clear_existing_replays(output_dir: Path, seeds: Iterable[int]) -> None:
-    """Truncate per-seed replay files so a ``--force`` re-run overwrites them.
-
-    Mirrors the ``replay-seed-{seed}.jsonl`` naming that
-    :func:`eval.balance_eval.run_balance_eval` writes, deleting each
-    conflicting file before the tournament re-creates it. Without ``--force``
-    these files are left untouched and :class:`orchestrator.replay.ReplayLog`
-    raises :class:`~orchestrator.replay.ReplayLog.AlreadyExistsError`
-    fail-loud on the first one it re-opens (DESIGN.md §11.4). Audit logs keep
-    their existing append behavior; replay-data integrity, which the Phase 5
-    metrics read, is the scope of this guard.
-    """
-
-    for seed in seeds:
-        replay_path = output_dir / f"replay-seed-{seed}.jsonl"
-        if replay_path.exists():
-            replay_path.unlink()
-
-
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     if args.num_games < 1:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
     seeds = range(args.start_seed, args.start_seed + args.num_games)
-    if args.force:
-        _clear_existing_replays(args.output_dir, seeds)
+    # ``force`` is threaded into each per-seed ReplayLog construction inside
+    # run_balance_eval, so a conflicting replay-seed-{seed}.jsonl is truncated
+    # immediately before that game writes it. A crash partway through a re-run
+    # therefore never deletes a later seed's replay that was never reached;
+    # without --force, the first existing file raises and exits non-zero
+    # (DESIGN.md §11.4; Task 4.16).
     report = run_balance_eval(
         seeds=seeds,
         output_dir=args.output_dir,
         num_players=args.num_players,
         num_impostors=args.num_impostors,
         max_ticks=args.max_ticks,
+        force=args.force,
     )
     print(_format_report(report))
     return 0

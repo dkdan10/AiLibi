@@ -86,6 +86,7 @@ def run_balance_eval(
     num_players: int = DEFAULT_NUM_PLAYERS,
     num_impostors: int = DEFAULT_NUM_IMPOSTORS,
     max_ticks: int = DEFAULT_MAX_TICKS,
+    force: bool = False,
 ) -> BalanceReport:
     """Run one :class:`HeadlessGame` per seed and aggregate outcomes.
 
@@ -120,6 +121,15 @@ def run_balance_eval(
     to open a meeting, participant construction raises ``TypeError``
     fail-loud rather than silently degrading (AGENTS.md "no silent
     fallbacks").
+
+    ``force`` is threaded into each per-seed
+    :class:`~orchestrator.replay.ReplayLog`: ``force=True`` truncates a
+    pre-existing ``replay-seed-{seed}.jsonl`` at construction — immediately
+    before that seed's game writes it, so a crash partway through a re-run
+    never deletes a later seed's replay that was never reached. The default
+    (``False``) makes a re-run against an ``output_dir`` whose replay files
+    exist fail loud rather than silently doubling them (DESIGN.md §11.4;
+    Task 4.16).
     """
 
     if not seeds:
@@ -149,6 +159,7 @@ def run_balance_eval(
             meeting_runner=build_default_meeting_runner(
                 budget=GameBudget(max_cost_usd=1.00)
             ),
+            force=force,
         )
         result = game.run()
         if result.outcome == "MEETING_PHASE_REACHED":
