@@ -1,0 +1,233 @@
+"""Unit tests for scripts/_manifest_writer.py (Task 4.17).
+
+Provenance extraction, manifest render/parse round-trips, the row-update merge
+path (and its idempotency), and the argparse-driven CLI. Hermetic: reads the
+committed samples but only ever writes into ``tmp_path``.
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import pytest
+
+import _manifest_writer as mw
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REAL_SAMPLES = _REPO_ROOT / "replays" / "samples"
+_MEETING_SEED = 22
+_NO_MEETING_SEED = 0
+
+
+@pytest.fixture
+def small_samples(tmp_path: Path) -> Path:
+    """A tmp sample dir holding one meeting-bearing and one meeting-free replay."""
+
+    dst = tmp_path / "samples"
+    dst.mkdir()
+    for seed in (_NO_MEETING_SEED, _MEETING_SEED):
+        src = _REAL_SAMPLES / f"replay-seed-{seed}.jsonl"
+        (dst / src.name).write_bytes(src.read_bytes())
+    return dst
+
+
+def test_parse_seed_csv_accepts_ints_and_spaces() -> None:
+    assert mw._parse_seed_csv("22,24,26") == [22, 24, 26]
+    assert mw._parse_seed_csv("7, 13 , 40") == [7, 13, 40]
+
+
+@pytest.mark.parametrize("bad", ["3,x", "", "   ", "-5", "1.5", "abc", ","])
+def test_parse_seed_csv_rejects_bad(bad: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        mw._parse_seed_csv(bad)
+
+
+def test_discover_seeds_sorted(small_samples: Path) -> None:
+    assert mw.discover_seeds(small_samples) == [0, 22]
+
+
+def test_provenance_meeting_seed(small_samples: Path) -> None:
+    fallback = mw.fallback_model(small_samples)
+    model, prompt_versions, cost, winner = mw.sample_provenance(
+        small_samples, _MEETING_SEED, fallback
+    )
+    assert model == "claude-sonnet-4-6"
+    # The union of the recorded prompt-version *values*, sorted — using the
+    # actual recorded values (e.g. "vote_ballot/v1"), not the idealized hint.
+    assert "accusation_round.v2" in prompt_versions
+    assert "vote_ballot/v1" in prompt_versions
+    parts = prompt_versions.split(", ")
+    assert parts == sorted(parts)
+    assert float(cost) > 0.0
+    assert winner == "CREWMATES"
+
+
+def test_provenance_no_meeting_seed(small_samples: Path) -> None:
+    fallback = mw.fallback_model(small_samples)
+    model, prompt_versions, cost, winner = mw.sample_provenance(
+        small_samples, _NO_MEETING_SEED, fallback
+    )
+    assert prompt_versions == mw._NO_MEETINGS
+    assert cost == "0.0000"
+    # No LLM call recorded -> attributed to the directory's meeting model.
+    assert model == fallback == "claude-sonnet-4-6"
+    assert winner in {"CREWMATES", "IMPOSTORS", "null"}
+
+
+def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    written = mw.rebuild_manifest(manifest, small_samples)
+    assert written == 2
+    text = manifest.read_text()
+    assert mw._COLUMNS in text
+    assert mw._SEPARATOR in text
+    rows = mw.parse_manifest(text)
+    assert list(rows) == [0, 22]  # parsed in file order -> ascending
+    assert rows[22].prompt_versions.startswith("accusation_round.v2")
+    assert rows[0].prompt_versions == mw._NO_MEETINGS
+
+
+def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    written = mw.rebuild_manifest(manifest, _REAL_SAMPLES)
+    assert written == 50
+    rows = mw.parse_manifest(manifest.read_text())
+    assert set(rows) == set(range(50))
+    for seed in (22, 24, 26, 49):
+        assert "accusation_round.v2" in rows[seed].prompt_versions
+        assert rows[seed].git_sha  # non-empty provenance
+    assert rows[0].prompt_versions == mw._NO_MEETINGS
+
+
+def test_parse_manifest_ignores_prose_and_separators() -> None:
+    text = (
+        "# Title\n\nsome prose | with a pipe\n"
+        f"{mw._COLUMNS}\n{mw._SEPARATOR}\n"
+        "| 3 | m | (none — no meetings) | d | sha | 0.0000 | CREWMATES |\n"
+    )
+    rows = mw.parse_manifest(text)
+    assert set(rows) == {3}
+    assert rows[3].winner == "CREWMATES"
+
+
+def test_render_parse_round_trip(small_samples: Path) -> None:
+    fallback = mw.fallback_model(small_samples)
+    original = {
+        seed: mw.build_row(small_samples, seed, fallback, "abc1234", "2026-05-28")
+        for seed in (0, 22)
+    }
+    reparsed = mw.parse_manifest(mw.render_manifest(original.values()))
+    assert reparsed == original
+
+
+def test_update_merges_without_touching_other_rows(
+    small_samples: Path, tmp_path: Path
+) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    mw.rebuild_manifest(manifest, small_samples)
+    before = mw.parse_manifest(manifest.read_text())
+    mw.update_manifest(
+        manifest, small_samples, [22], git_sha="abc1234", refreshed_at="2026-05-28"
+    )
+    after = mw.parse_manifest(manifest.read_text())
+    assert after[22].git_sha == "abc1234"
+    assert after[22].refreshed_at == "2026-05-28"
+    assert after[0] == before[0]  # untouched
+    assert set(after) == set(before)
+
+
+def test_update_is_idempotent(small_samples: Path, tmp_path: Path) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    mw.rebuild_manifest(manifest, small_samples)
+    mw.update_manifest(
+        manifest, small_samples, [0, 22], git_sha="cafe123", refreshed_at="2026-05-28"
+    )
+    first = manifest.read_text()
+    mw.update_manifest(
+        manifest, small_samples, [0, 22], git_sha="cafe123", refreshed_at="2026-05-28"
+    )
+    assert manifest.read_text() == first
+
+
+def test_update_creates_manifest_when_absent(
+    small_samples: Path, tmp_path: Path
+) -> None:
+    manifest = tmp_path / "sub" / "MANIFEST.md"  # parent dir does not exist yet
+    mw.update_manifest(
+        manifest, small_samples, [22], git_sha="x", refreshed_at="2026-05-28"
+    )
+    assert set(mw.parse_manifest(manifest.read_text())) == {22}
+
+
+def test_sum_cost(small_samples: Path) -> None:
+    assert mw.sum_cost(small_samples, [_NO_MEETING_SEED]) == 0.0
+    assert mw.sum_cost(small_samples, [_NO_MEETING_SEED, _MEETING_SEED]) > 0.0
+
+
+def test_main_rebuild(
+    small_samples: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    rc = mw.main(
+        ["rebuild", "--sample-dir", str(small_samples), "--manifest", str(manifest)]
+    )
+    assert rc == 0
+    assert manifest.exists()
+    assert "Wrote" in capsys.readouterr().err
+
+
+def test_main_sum_cost_prints_single_float(
+    small_samples: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rc = mw.main(["sum-cost", "--seeds", "0,22", "--sample-dir", str(small_samples)])
+    assert rc == 0
+    out = capsys.readouterr().out.strip()
+    assert float(out) > 0.0  # the only thing on stdout is a parseable float
+
+
+def test_main_update_stamps_sha(
+    small_samples: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    mw.main(
+        ["rebuild", "--sample-dir", str(small_samples), "--manifest", str(manifest)]
+    )
+    rc = mw.main(
+        [
+            "update",
+            "--seeds",
+            "22",
+            "--git-sha",
+            "deadbee",
+            "--refreshed-at",
+            "2026-05-28",
+            "--sample-dir",
+            str(small_samples),
+            "--manifest",
+            str(manifest),
+        ]
+    )
+    assert rc == 0
+    rows = mw.parse_manifest(manifest.read_text())
+    assert rows[22].git_sha == "deadbee"
+
+
+def test_main_requires_subcommand() -> None:
+    with pytest.raises(SystemExit):
+        mw.main([])
+
+
+def test_main_update_rejects_bad_seeds(small_samples: Path, tmp_path: Path) -> None:
+    with pytest.raises(SystemExit):
+        mw.main(
+            [
+                "update",
+                "--seeds",
+                "3,x",
+                "--sample-dir",
+                str(small_samples),
+                "--manifest",
+                str(tmp_path / "M.md"),
+            ]
+        )

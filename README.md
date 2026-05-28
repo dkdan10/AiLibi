@@ -88,6 +88,8 @@ That starts the API + frontend, waits until both are healthy, and opens `http://
 
 A fresh clone ships with 50 sample replays under `replays/samples/` — the full Phase 3 closing real-provider eval (50/50 games, 38% impostor win rate, $0.886 total spend). Once the UI is up, pick any replay to scrub through ticks, click meeting markers to read transcripts with ballots and contradiction flags, and select an agent to see their memory snapshot and the suspicion heatmap at that moment. Any replays you generate locally into `replays/` (e.g. via `scripts/run_game.py`) override the bundled samples; the API logs which directory it picked at startup.
 
+Those samples are managed by a refresh workflow. `scripts/refresh_samples.sh` regenerates them against the real provider — `--full` (all 50 seeds), `--meetings` (only the meeting-bearing seeds), or `--seeds N,N,N` (a subset) — recording each sample's prompt-template versions, model, spend, and outcome in `replays/samples/MANIFEST.md` so Phase 5 metrics can be attributed to a specific prompt version + model snapshot. Its free, API-free counterpart `scripts/verify_samples.sh` replays every sample through the engine and fails loud if any recorded state-hash no longer reconstructs, catching determinism drift before a metric reads a stale sample — e.g. `bash scripts/verify_samples.sh` checks all 50 in seconds.
+
 The UI is intentionally minimal in MVP — a polish pass lands after Phase 5. The spectator API exposes sanitized DTOs (`api/schemas.py`) covering everything visible: agent positions per tick, meeting transcripts with ballots and contradiction flags, per-agent memory snapshots at meeting boundaries, and the full LLM call log with prompts, responses, and cost.
 
 ---
