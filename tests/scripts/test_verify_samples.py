@@ -202,3 +202,57 @@ def test_no_manifest_skips_completeness_check(tmp_path: Path) -> None:
     # single clean sample passes (completeness is only enforced via a manifest).
     _copy_seed(tmp_path, _SEED)
     assert vs.verify_samples(tmp_path) == []
+
+
+def _manifest_for_seeds(*seeds: int) -> str:
+    header = (
+        "| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner |\n"
+        "|------|-------|-----------------|--------------|---------|----------|--------|\n"
+    )
+    rows = "".join(
+        f"| {seed} | m | (none) | d | s | 0.0000 | CREWMATES |\n" for seed in seeds
+    )
+    return header + rows
+
+
+def test_unmanifested_sample_rejected(tmp_path: Path) -> None:
+    # The manifest lists only seed 0, but seed 22's replay is also on disk. It
+    # would be consumed by ReplayLoader (and any Phase 5 directory walk) with no
+    # provenance row, so verification must reject the unmanifested extra.
+    _copy_seed(tmp_path, _SEED)  # replay-seed-0.jsonl
+    _copy_seed(tmp_path, _MEETING_SEED)  # replay-seed-22.jsonl (unmanifested)
+    (tmp_path / "MANIFEST.md").write_text(_manifest_for_seeds(_SEED))
+    failures = vs.verify_samples(tmp_path)
+    assert [f.game_id for f in failures] == [f"headless-seed-{_MEETING_SEED}"]
+    assert "not listed in MANIFEST.md" in failures[0].reason
+
+
+def _corrupt_meeting_tick(path: Path, new_tick: int) -> None:
+    """Point the first meeting record at a tick with no recorded tick row."""
+
+    lines = path.read_text().splitlines()
+    done = False
+    out: list[str] = []
+    for line in lines:
+        obj = json.loads(line)
+        if not done and obj.get("kind") == "meeting":
+            obj["tick"] = new_tick
+            done = True
+            line = json.dumps(obj, sort_keys=True, separators=(",", ":"))
+        out.append(line)
+    assert done
+    path.write_text("\n".join(out) + "\n")
+
+
+def test_orphaned_meeting_tick_detected(tmp_path: Path) -> None:
+    path = _copy_seed(tmp_path, _MEETING_SEED)
+    _corrupt_meeting_tick(path, 9999)  # no tick row exists at 9999
+    # load_replay only attaches a meeting when a *reconstructed* tick enters
+    # MEETING phase, so it silently drops the orphaned meeting and still
+    # "succeeds" — this is the gap the tick-presence check closes.
+    ReplayLoader(tmp_path).load_replay(f"headless-seed-{_MEETING_SEED}")
+    failures = vs.verify_samples(tmp_path)
+    assert len(failures) == 1
+    assert failures[0].game_id == f"headless-seed-{_MEETING_SEED}"
+    assert "9999" in failures[0].reason
+    assert "orphaned" in failures[0].reason

@@ -201,6 +201,16 @@ def test_full_dry_run_announces_canonical_cleanup() -> None:
     assert "non-canonical samples" in proc.stdout
 
 
+def test_full_dry_run_announces_alias_cleanup() -> None:
+    # Full mode must also drop zero-padded aliases (e.g. replay-seed-01.jsonl),
+    # not just seeds outside 0-49, since ReplayLoader would otherwise serve the
+    # stale alias ahead of the fresh canonical sample.
+    proc = _run("--full", "--dry-run")
+    assert proc.returncode == 0
+    assert "zero-padded aliases" in proc.stdout
+    assert "replay-seed-01.jsonl" in proc.stdout
+
+
 def test_non_full_dry_run_has_no_cleanup() -> None:
     # Cleanup is a --full-only behavior; targeted refreshes must not announce it.
     proc = _run("--seeds", "22", "--dry-run")

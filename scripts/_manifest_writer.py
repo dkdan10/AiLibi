@@ -334,6 +334,44 @@ def prune_manifest(manifest_path: Path, sample_dir: Path) -> int:
     return dropped
 
 
+def remove_noncanonical_replays(
+    sample_dir: Path, canonical_seeds: Iterable[int]
+) -> list[Path]:
+    """Delete replay files that are not a canonical sample for ``canonical_seeds``.
+
+    After ``refresh_samples.sh --full`` regenerates ``replay-seed-<seed>.jsonl``
+    for every seed in ``canonical_seeds``, the directory may still hold:
+
+    * a stray sample for a seed outside the set (left by a prior ``--seeds``
+      run), and
+    * a zero-padded alias such as ``replay-seed-01.jsonl``. Its canonical
+      ``replay-seed-1.jsonl`` was just (re)written, but
+      ``ReplayLoader._replay_paths`` dedups duplicate seeds to the
+      lexicographically-first filename — and ``replay-seed-01`` sorts *ahead* of
+      ``replay-seed-1`` — so the stale alias would shadow the fresh sample for
+      every API/eval consumer.
+
+    Both are non-canonical and removed here, so a full refresh leaves exactly one
+    canonical file per seed. A file whose seed core is non-numeric (e.g. a
+    hand-named ``replay-seed-debug.jsonl``) declares no seed and is ignored by
+    ReplayLoader, so it is left untouched. Returns the deleted paths (sorted).
+    """
+
+    canonical = set(canonical_seeds)
+    removed: list[Path] = []
+    for path in sorted(sample_dir.glob(f"{_FILENAME_PREFIX}*{_FILENAME_SUFFIX}")):
+        core = path.name[len(_FILENAME_PREFIX) : -len(_FILENAME_SUFFIX)]
+        if not core.isdigit():
+            continue  # non-numeric core declares no seed; not ours to remove
+        seed = int(core)
+        canonical_name = f"{_FILENAME_PREFIX}{seed}{_FILENAME_SUFFIX}"
+        if seed in canonical and path.name == canonical_name:
+            continue  # the canonical sample for an in-set seed; keep it
+        path.unlink()
+        removed.append(path)
+    return removed
+
+
 def rebuild_manifest(manifest_path: Path, sample_dir: Path) -> int:
     """Regenerate the whole manifest from the samples on disk.
 
@@ -408,6 +446,22 @@ def _build_parser() -> argparse.ArgumentParser:
     prune.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
     prune.add_argument("--manifest", type=Path, default=None)
 
+    canonicalize = sub.add_parser(
+        "canonicalize",
+        help=(
+            "(full refresh) delete non-canonical replay files for --seeds "
+            "(strays + zero-padded aliases), then prune their manifest rows"
+        ),
+    )
+    canonicalize.add_argument(
+        "--seeds",
+        type=_parse_seed_csv,
+        required=True,
+        help="the canonical seed set the full refresh regenerated (e.g. 0..49)",
+    )
+    canonicalize.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
+    canonicalize.add_argument("--manifest", type=Path, default=None)
+
     sum_cost_parser = sub.add_parser(
         "sum-cost", help="print summed cost_usd across --seeds (stdout, one float)"
     )
@@ -442,6 +496,18 @@ def main(argv: list[str] | None = None) -> int:
         manifest = _manifest_for(args)
         dropped = prune_manifest(manifest, args.sample_dir)
         print(f"Pruned {dropped} stale row(s) from {manifest}.", file=sys.stderr)
+        return 0
+    if args.command == "canonicalize":
+        manifest = _manifest_for(args)
+        removed = remove_noncanonical_replays(args.sample_dir, args.seeds)
+        for path in removed:
+            print(f"Removed non-canonical sample: {path.name}", file=sys.stderr)
+        dropped = prune_manifest(manifest, args.sample_dir)
+        print(
+            f"Canonicalized {args.sample_dir}: removed {len(removed)} "
+            f"non-canonical sample(s), pruned {dropped} stale row(s).",
+            file=sys.stderr,
+        )
         return 0
     if args.command == "sum-cost":
         print(f"{sum_cost(args.sample_dir, args.seeds):.4f}")

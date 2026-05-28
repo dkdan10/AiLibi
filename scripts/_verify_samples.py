@@ -120,6 +120,11 @@ def _check_meeting_pre_hashes(game_id: str, path: Path) -> VerifyFailure | None:
     tick — which load_replay *does* verify against reconstruction — so checking
     ``state_hash_before == tick_hash[tick]`` pins it to a verified value and
     catches a corrupted pre-hash the loader would otherwise accept.
+
+    A meeting whose ``tick`` matches no recorded tick row is also rejected:
+    load_replay only consults a meeting entry when a *reconstructed* tick enters
+    MEETING phase, so a meeting pointing past the end of the replay is silently
+    dropped there and would otherwise pass as clean.
     """
 
     entries = read_all_entries(path)
@@ -127,7 +132,21 @@ def _check_meeting_pre_hashes(game_id: str, path: Path) -> VerifyFailure | None:
     for entry in entries:
         if isinstance(entry, MeetingReplayEntry):
             expected = tick_hash.get(entry.tick)
-            if expected is not None and entry.state_hash_before != expected:
+            if expected is None:
+                # No tick row at the meeting's tick (e.g. a tick corrupted beyond
+                # the replay). load_replay never attaches such a meeting, leaving
+                # orphaned meeting/transcript metadata Phase 5 might still read.
+                return VerifyFailure(
+                    game_id=game_id,
+                    tick=None,
+                    expected=None,
+                    actual=None,
+                    reason=(
+                        f"meeting references tick {entry.tick}, which has no "
+                        "recorded tick row (orphaned meeting metadata)"
+                    ),
+                )
+            if entry.state_hash_before != expected:
                 return VerifyFailure(
                     game_id=game_id,
                     tick=entry.tick,
@@ -203,9 +222,13 @@ def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
         if pre_hash_failure is not None:
             failures.append(pre_hash_failure)
 
-    # Completeness: every seed the manifest declares must be present. A bundled
-    # sample silently going missing would otherwise pass ("All 49 ... clean")
-    # and skew Phase 5 aggregates that expect the full committed set.
+    # Completeness: the manifest is the provenance source of truth, so the seeds
+    # it declares must match the replay files on disk exactly. A bundled sample
+    # silently going missing would otherwise pass ("All 49 ... clean") and skew
+    # Phase 5 aggregates that expect the full committed set; an *extra*
+    # unmanifested file is still consumed by ReplayLoader._replay_paths() — and
+    # by any Phase 5 walk over the directory — with no provenance row. Fail loud
+    # on either gap.
     expected = _manifest_seeds(sample_dir)
     if expected is not None:
         present = set(_paths_by_seed(sample_dir))
@@ -219,6 +242,19 @@ def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
                     reason=(
                         f"MANIFEST.md lists seed {seed} but "
                         f"replay-seed-{seed}.jsonl is missing"
+                    ),
+                )
+            )
+        for seed in sorted(present - expected):
+            failures.append(
+                VerifyFailure(
+                    game_id=f"headless-seed-{seed}",
+                    tick=None,
+                    expected=None,
+                    actual=None,
+                    reason=(
+                        f"replay-seed-{seed}.jsonl is present but not listed in "
+                        "MANIFEST.md (unmanifested sample — no provenance)"
                     ),
                 )
             )

@@ -293,3 +293,66 @@ def test_main_prune_keeps_rows_with_files(small_samples: Path, tmp_path: Path) -
     )
     assert rc == 0
     assert set(mw.parse_manifest(manifest.read_text())) == {0, 22}
+
+
+def test_remove_noncanonical_replays_drops_aliases_and_strays(tmp_path: Path) -> None:
+    sample_dir = tmp_path / "samples"
+    sample_dir.mkdir()
+    src = (_REAL_SAMPLES / "replay-seed-1.jsonl").read_bytes()
+    # Canonical seed-1 sample, a zero-padded alias of it, a stray seed > 49, and a
+    # non-numeric hand-named file that must be left alone.
+    (sample_dir / "replay-seed-1.jsonl").write_bytes(src)
+    (sample_dir / "replay-seed-01.jsonl").write_bytes(src)
+    (sample_dir / "replay-seed-50.jsonl").write_bytes(src)
+    (sample_dir / "replay-seed-debug.jsonl").write_bytes(src)
+    removed = mw.remove_noncanonical_replays(sample_dir, range(50))
+    assert sorted(p.name for p in removed) == [
+        "replay-seed-01.jsonl",
+        "replay-seed-50.jsonl",
+    ]
+    remaining = sorted(p.name for p in sample_dir.glob("replay-seed-*.jsonl"))
+    assert remaining == ["replay-seed-1.jsonl", "replay-seed-debug.jsonl"]
+
+
+def test_remove_noncanonical_replays_keeps_canonical_set(tmp_path: Path) -> None:
+    sample_dir = tmp_path / "samples"
+    sample_dir.mkdir()
+    src = (_REAL_SAMPLES / "replay-seed-1.jsonl").read_bytes()
+    for seed in (0, 1, 49):
+        (sample_dir / f"replay-seed-{seed}.jsonl").write_bytes(src)
+    assert mw.remove_noncanonical_replays(sample_dir, range(50)) == []
+    assert len(list(sample_dir.glob("replay-seed-*.jsonl"))) == 3
+
+
+def test_canonicalize_removes_alias_and_prunes_stray_row(tmp_path: Path) -> None:
+    sample_dir = tmp_path / "samples"
+    sample_dir.mkdir()
+    src = (_REAL_SAMPLES / "replay-seed-1.jsonl").read_bytes()
+    (sample_dir / "replay-seed-1.jsonl").write_bytes(src)
+    (sample_dir / "replay-seed-01.jsonl").write_bytes(src)  # alias to drop
+    (sample_dir / "replay-seed-50.jsonl").write_bytes(src)  # stray to drop
+    manifest = sample_dir / "MANIFEST.md"
+    manifest.write_text(
+        "| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner |\n"
+        "|------|-------|-----------------|--------------|---------|----------|--------|\n"
+        "| 1 | m | (none) | d | s | 0.0000 | CREWMATES |\n"
+        "| 50 | m | (none) | d | s | 0.0000 | CREWMATES |\n"
+    )
+    rc = mw.main(
+        [
+            "canonicalize",
+            "--seeds",
+            ",".join(str(s) for s in range(50)),
+            "--sample-dir",
+            str(sample_dir),
+            "--manifest",
+            str(manifest),
+        ]
+    )
+    assert rc == 0
+    # Only the canonical seed-1 sample survives; the alias and the stray are gone.
+    assert sorted(p.name for p in sample_dir.glob("replay-seed-*.jsonl")) == [
+        "replay-seed-1.jsonl"
+    ]
+    # The stray seed-50 row is pruned (no file); seed-1 keeps its row.
+    assert set(mw.parse_manifest(manifest.read_text())) == {1}

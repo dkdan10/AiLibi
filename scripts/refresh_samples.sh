@@ -169,7 +169,7 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
   echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --force"
   if [[ "$mode" == "full" ]]; then
-    echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49) and prune their manifest rows"
+    echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49 and zero-padded aliases like replay-seed-01.jsonl) and prune their manifest rows"
   fi
   echo "[dry-run] manifest: $MANIFEST"
   echo "[dry-run] no API calls made; no files written."
@@ -241,25 +241,18 @@ for seed in "${seed_list[@]}"; do
     --manifest "$MANIFEST"
 done
 
-# Full mode = the canonical 0-49 set. All 50 are now regenerated in place, so
-# drop any stray non-canonical samples (numeric seed > 49) a prior --seeds run
-# left behind, plus their manifest rows. Done only after a successful full regen
-# so a mid-run failure never deletes data, and only for seeds outside 0-49 so a
-# canonical sample is never removed.
+# Full mode = the canonical 0-49 set, now all regenerated in place. Reconcile the
+# directory to exactly those canonical files and prune any orphaned manifest
+# rows. This drops both stray samples for seeds outside 0-49 (left by a prior
+# --seeds run) AND zero-padded aliases like replay-seed-01.jsonl -- which
+# ReplayLoader._replay_paths dedups *ahead* of the fresh replay-seed-1.jsonl
+# (lexicographically-first filename), so a surviving alias would shadow the
+# canonical sample for every API/eval consumer. Run only after a successful full
+# regen, so a mid-run failure never deletes data and the canonical sample for
+# every kept seed is already on disk.
 if [[ "$mode" == "full" ]]; then
-  for path in "$SAMPLE_DIR"/replay-seed-*.jsonl; do
-    [[ -e "$path" ]] || continue
-    n="$(basename "$path")"
-    n="${n#replay-seed-}"
-    n="${n%.jsonl}"
-    [[ "$n" =~ ^[0-9]+$ ]] || continue # not a numeric seed file; leave it
-    if ((10#$n <= 49)); then
-      continue # canonical seed; keep
-    fi
-    echo "Removing stale non-canonical sample: $(basename "$path") (seed $n outside 0-49)"
-    rm -f "$path"
-  done
-  uv run python "$REPO_ROOT/scripts/_manifest_writer.py" prune \
+  uv run python "$REPO_ROOT/scripts/_manifest_writer.py" canonicalize \
+    --seeds "$seeds_csv" \
     --sample-dir "$SAMPLE_DIR" \
     --manifest "$MANIFEST"
 fi
