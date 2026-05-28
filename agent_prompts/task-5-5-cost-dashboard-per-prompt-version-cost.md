@@ -49,6 +49,7 @@ See DESIGN.md §10.4. Aggregate `llm.budget` records by prompt version × game; 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import eval.report_schema"`
 - `uv run python -c "import orchestrator.replay.ReplayLog"`
 - `uv run python -c "import api.schemas.BeliefEntryView"`
 - `uv run python -c "import orchestrator.replay"`
