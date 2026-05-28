@@ -290,10 +290,19 @@ def update_manifest(
     *,
     git_sha: str | None,
     refreshed_at: str | None,
+    model_override: str | None = None,
 ) -> None:
-    """Recompute rows for ``seeds`` and merge into the existing manifest."""
+    """Recompute rows for ``seeds`` and merge into the existing manifest.
 
-    fallback = fallback_model(sample_dir)
+    ``model_override`` is the model the refresh actually ran with; it is used
+    for seeds whose replay recorded no LLM call (no meeting), so a refresh with
+    a non-default ``AILIBI_LLM_MEETING_MODEL`` attributes those rows to the
+    active model rather than a stale directory-derived one. Seeds that *did*
+    record calls always use their own recorded model. When ``None``, the
+    no-call fallback is derived from the directory's meetings.
+    """
+
+    fallback = model_override if model_override else fallback_model(sample_dir)
     rows = (
         parse_manifest(manifest_path.read_text(encoding="utf-8"))
         if manifest_path.exists()
@@ -303,6 +312,26 @@ def update_manifest(
         rows[seed] = build_row(sample_dir, seed, fallback, git_sha, refreshed_at)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(render_manifest(rows.values()), encoding="utf-8")
+
+
+def prune_manifest(manifest_path: Path, sample_dir: Path) -> int:
+    """Drop manifest rows whose ``replay-seed-<seed>.jsonl`` is gone.
+
+    Reconciles the manifest with the files on disk so a stale row cannot
+    outlive its replay. Returns the number of rows dropped. Used by
+    ``refresh_samples.sh --full`` after it removes non-canonical samples, so a
+    full refresh leaves the manifest describing exactly the samples present.
+    """
+
+    if not manifest_path.exists():
+        return 0
+    rows = parse_manifest(manifest_path.read_text(encoding="utf-8"))
+    present = set(discover_seeds(sample_dir))
+    kept = {seed: row for seed, row in rows.items() if seed in present}
+    dropped = len(rows) - len(kept)
+    if dropped:
+        manifest_path.write_text(render_manifest(kept.values()), encoding="utf-8")
+    return dropped
 
 
 def rebuild_manifest(manifest_path: Path, sample_dir: Path) -> int:
@@ -365,8 +394,19 @@ def _build_parser() -> argparse.ArgumentParser:
     update.add_argument("--seeds", type=_parse_seed_csv, required=True)
     update.add_argument("--git-sha", default=None)
     update.add_argument("--refreshed-at", default=None)
+    update.add_argument(
+        "--model",
+        default=None,
+        help="model the refresh ran with; used for seeds that recorded no calls",
+    )
     update.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
     update.add_argument("--manifest", type=Path, default=None)
+
+    prune = sub.add_parser(
+        "prune", help="drop manifest rows whose replay file no longer exists"
+    )
+    prune.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
+    prune.add_argument("--manifest", type=Path, default=None)
 
     sum_cost_parser = sub.add_parser(
         "sum-cost", help="print summed cost_usd across --seeds (stdout, one float)"
@@ -393,9 +433,15 @@ def main(argv: list[str] | None = None) -> int:
             args.seeds,
             git_sha=args.git_sha,
             refreshed_at=args.refreshed_at,
+            model_override=args.model,
         )
         seeds_csv = ",".join(str(seed) for seed in args.seeds)
         print(f"Updated {manifest} for seeds {seeds_csv}.", file=sys.stderr)
+        return 0
+    if args.command == "prune":
+        manifest = _manifest_for(args)
+        dropped = prune_manifest(manifest, args.sample_dir)
+        print(f"Pruned {dropped} stale row(s) from {manifest}.", file=sys.stderr)
         return 0
     if args.command == "sum-cost":
         print(f"{sum_cost(args.sample_dir, args.seeds):.4f}")

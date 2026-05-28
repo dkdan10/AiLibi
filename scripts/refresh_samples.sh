@@ -164,8 +164,12 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] seeds: $seeds_csv"
   echo "[dry-run] sample dir: $SAMPLE_DIR"
   echo "[dry-run] provider: AILIBI_LLM_PROVIDER=anthropic (forced)"
+  echo "[dry-run] meeting model: ${AILIBI_LLM_MEETING_MODEL:-(provider default)}"
   echo "[dry-run] per seed, would run (then update that seed's manifest row):"
   echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir $SAMPLE_DIR --force"
+  if [[ "$mode" == "full" ]]; then
+    echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49) and prune their manifest rows"
+  fi
   echo "[dry-run] manifest: $MANIFEST"
   echo "[dry-run] no API calls made; no files written."
   exit 0
@@ -193,6 +197,17 @@ echo "Refreshing seeds: $seeds_csv"
 git_sha="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 refreshed_at="$(date -u +%F)"
 
+# Resolve the meeting model this refresh runs with, so seeds that record no LLM
+# call (no meeting) are attributed in MANIFEST to the active model rather than a
+# stale directory-derived one. Defaults to the provider's meeting model when
+# AILIBI_LLM_MEETING_MODEL is unset.
+active_model="${AILIBI_LLM_MEETING_MODEL:-}"
+if [[ -z "$active_model" ]]; then
+  active_model="$(uv run python -c \
+    'from llm.provider import DEFAULT_MEETING_MODEL; print(DEFAULT_MEETING_MODEL)')"
+fi
+echo "Attributing no-meeting seeds to model: $active_model"
+
 IFS=',' read -ra seed_list <<<"$seeds_csv"
 for seed in "${seed_list[@]}"; do
   echo "--- Refreshing seed $seed ---"
@@ -209,9 +224,33 @@ for seed in "${seed_list[@]}"; do
     --seeds "$seed" \
     --git-sha "$git_sha" \
     --refreshed-at "$refreshed_at" \
+    --model "$active_model" \
     --sample-dir "$SAMPLE_DIR" \
     --manifest "$MANIFEST"
 done
+
+# Full mode = the canonical 0-49 set. All 50 are now regenerated in place, so
+# drop any stray non-canonical samples (numeric seed > 49) a prior --seeds run
+# left behind, plus their manifest rows. Done only after a successful full regen
+# so a mid-run failure never deletes data, and only for seeds outside 0-49 so a
+# canonical sample is never removed.
+if [[ "$mode" == "full" ]]; then
+  for path in "$SAMPLE_DIR"/replay-seed-*.jsonl; do
+    [[ -e "$path" ]] || continue
+    n="$(basename "$path")"
+    n="${n#replay-seed-}"
+    n="${n%.jsonl}"
+    [[ "$n" =~ ^[0-9]+$ ]] || continue # not a numeric seed file; leave it
+    if ((10#$n <= 49)); then
+      continue # canonical seed; keep
+    fi
+    echo "Removing stale non-canonical sample: $(basename "$path") (seed $n outside 0-49)"
+    rm -f "$path"
+  done
+  uv run python "$REPO_ROOT/scripts/_manifest_writer.py" prune \
+    --sample-dir "$SAMPLE_DIR" \
+    --manifest "$MANIFEST"
+fi
 
 total="$(uv run python "$REPO_ROOT/scripts/_manifest_writer.py" sum-cost \
   --seeds "$seeds_csv" --sample-dir "$SAMPLE_DIR")"

@@ -236,3 +236,43 @@ def test_main_update_rejects_bad_seeds(small_samples: Path, tmp_path: Path) -> N
                 str(tmp_path / "M.md"),
             ]
         )
+
+
+def test_update_model_override_attributes_no_call_seed(
+    small_samples: Path, tmp_path: Path
+) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    mw.update_manifest(
+        manifest,
+        small_samples,
+        [0, 22],
+        git_sha="s",
+        refreshed_at="2026-05-28",
+        model_override="claude-opus-4-8",
+    )
+    rows = mw.parse_manifest(manifest.read_text())
+    # No meetings -> attributed to the active (override) model...
+    assert rows[0].model == "claude-opus-4-8"
+    # ...but a seed that recorded calls keeps its own recorded model.
+    assert rows[22].model == "claude-sonnet-4-6"
+
+
+def test_prune_drops_rows_without_files(small_samples: Path, tmp_path: Path) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    mw.rebuild_manifest(manifest, small_samples)  # rows for seeds 0 and 22
+    stale = "| 99 | m | (none — no meetings) | d | s | 0.0000 | CREWMATES |\n"
+    manifest.write_text(manifest.read_text() + stale)
+    assert set(mw.parse_manifest(manifest.read_text())) == {0, 22, 99}
+    dropped = mw.prune_manifest(manifest, small_samples)
+    assert dropped == 1  # seed 99 has no replay file
+    assert set(mw.parse_manifest(manifest.read_text())) == {0, 22}
+
+
+def test_main_prune_keeps_rows_with_files(small_samples: Path, tmp_path: Path) -> None:
+    manifest = tmp_path / "MANIFEST.md"
+    mw.rebuild_manifest(manifest, small_samples)
+    rc = mw.main(
+        ["prune", "--sample-dir", str(small_samples), "--manifest", str(manifest)]
+    )
+    assert rc == 0
+    assert set(mw.parse_manifest(manifest.read_text())) == {0, 22}

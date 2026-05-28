@@ -171,3 +171,22 @@ def test_dry_run_mentions_per_seed_manifest_update() -> None:
     proc = _run("--seeds", "22", "--dry-run")
     assert proc.returncode == 0
     assert "update that seed's manifest row" in proc.stdout
+
+
+def test_dry_run_shows_meeting_model() -> None:
+    proc = _run("--seeds", "22", "--dry-run")
+    assert proc.returncode == 0
+    assert "meeting model:" in proc.stdout
+
+
+def test_full_dry_run_announces_canonical_cleanup() -> None:
+    proc = _run("--full", "--dry-run")
+    assert proc.returncode == 0
+    assert "non-canonical samples" in proc.stdout
+
+
+def test_non_full_dry_run_has_no_cleanup() -> None:
+    # Cleanup is a --full-only behavior; targeted refreshes must not announce it.
+    proc = _run("--seeds", "22", "--dry-run")
+    assert proc.returncode == 0
+    assert "non-canonical" not in proc.stdout
