@@ -65,6 +65,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=DEFAULT_MAX_TICKS,
         help=f"per-game tick budget (default: {DEFAULT_MAX_TICKS})",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "overwrite existing per-seed replay files in --output-dir. "
+            "Without it, re-using an --output-dir whose replay files already "
+            "exist raises ReplayLog.AlreadyExistsError and exits non-zero, "
+            "guarding against the silent doubled-file corruption that broke "
+            "replay reads in Phase 4 (DESIGN.md §11.4)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -94,12 +105,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.num_games < 1:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
     seeds = range(args.start_seed, args.start_seed + args.num_games)
+    # ``force`` is threaded into each per-seed ReplayLog construction inside
+    # run_balance_eval, so a conflicting replay-seed-{seed}.jsonl is truncated
+    # immediately before that game writes it. A crash partway through a re-run
+    # therefore never deletes a later seed's replay that was never reached;
+    # without --force, the first existing file raises and exits non-zero
+    # (DESIGN.md §11.4; Task 4.16).
     report = run_balance_eval(
         seeds=seeds,
         output_dir=args.output_dir,
         num_players=args.num_players,
         num_impostors=args.num_impostors,
         max_ticks=args.max_ticks,
+        force=args.force,
     )
     print(_format_report(report))
     return 0

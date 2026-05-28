@@ -188,9 +188,47 @@ ReplayLogEntry: TypeAlias = Annotated[
 
 
 class ReplayLog:
-    """Append-only JSONL replay log for deterministic game replays."""
+    """Append-only JSONL replay log for deterministic game replays.
 
-    def __init__(self, path: Path, game_id: str) -> None:
+    Fail-loud on an already-existing target (DESIGN.md §11.4; Task 4.16):
+    constructing a log against a path that already holds a file raises
+    :class:`AlreadyExistsError` unless ``force=True`` is passed, which
+    truncates the existing file first. This guards the silent doubled-file
+    corruption that bit the project in Phase 4 UX prep — two tournament runs
+    against the same ``--output-dir`` concatenated per-seed JSONL files,
+    breaking the loader's ``meeting_by_tick`` dedup. The read side
+    (:func:`read_all_entries`) detects the same doubled pattern after the
+    fact and raises :class:`CorruptedFileError`.
+    """
+
+    class AlreadyExistsError(FileExistsError):
+        """Raised when a :class:`ReplayLog` targets an existing path without
+        ``force=True``.
+
+        Prevents the doubled-files corruption pattern (two runs appending to
+        the same per-seed JSONL) that broke ``meeting_by_tick`` dedup in
+        Phase 4 UX prep. Subclasses :class:`FileExistsError` so callers that
+        only catch the stdlib type still intercept it.
+        """
+
+    class CorruptedFileError(RuntimeError):
+        """Raised by :func:`read_all_entries` when it detects the doubled-file
+        pattern: two ``kind="tick"`` rows sharing a ``tick`` value, or more
+        than one ``kind="game_over"`` row in a single replay file.
+        """
+
+    def __init__(self, path: Path, game_id: str, *, force: bool = False) -> None:
+        if path.exists():
+            if not force:
+                raise self.AlreadyExistsError(
+                    f"Replay file already exists: {path}. Pass force=True to "
+                    "overwrite it, or choose a different path. (Re-using a "
+                    "replay path silently doubled per-seed files in Phase 4 "
+                    "and broke the loader's dedup — DESIGN.md §11.4.)"
+                )
+            # force=True: truncate via delete-then-recreate so the new game
+            # starts from an empty file rather than appending to the old one.
+            path.unlink()
         self._path = path
         self._game_id = game_id
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -421,12 +459,25 @@ def compute_cost_usd(path: Path) -> float:
 
 
 def read_all_entries(path: Path) -> tuple[ReplayLogEntry, ...]:
-    """Read every replay record (tick + meeting) from the JSONL file."""
+    """Read every replay record (tick + meeting) from the JSONL file.
+
+    Walks the file once and fails loud on the doubled-file corruption
+    pattern (DESIGN.md §11.4; Task 4.16): if two ``kind="tick"`` rows share
+    a ``tick`` value, or more than one ``kind="game_over"`` row is present,
+    raise :class:`ReplayLog.CorruptedFileError`. Both signatures mean two
+    games' records were concatenated into one file — the silent doubled
+    write that broke the loader in Phase 4 UX prep. The error names the file
+    and the conflicting tick (or game_over count). Broader corruption
+    hardening (mid-line partial writes, etc.) is deferred; Pydantic
+    validation already rejects malformed rows.
+    """
 
     if not path.exists():
         raise FileNotFoundError(path)
 
     entries: list[ReplayLogEntry] = []
+    first_tick_line: dict[int, int] = {}
+    game_over_count = 0
     for line_number, raw_line in enumerate(
         path.read_text(encoding="utf-8").splitlines(), start=1
     ):
@@ -436,7 +487,27 @@ def read_all_entries(path: Path) -> tuple[ReplayLogEntry, ...]:
             raw_entry = json.loads(raw_line)
         except json.JSONDecodeError as exc:
             raise ValueError(f"invalid replay JSON at line {line_number}") from exc
-        entries.append(_parse_entry(raw_entry))
+        entry = _parse_entry(raw_entry)
+        if isinstance(entry, ReplayEntry):
+            if entry.tick in first_tick_line:
+                raise ReplayLog.CorruptedFileError(
+                    f"Duplicate tick {entry.tick} in {path} (first at line "
+                    f"{first_tick_line[entry.tick]}, again at line "
+                    f"{line_number}). The file is likely a doubled-write from "
+                    "re-using a tournament --output-dir without --force; "
+                    "truncate the file and re-run."
+                )
+            first_tick_line[entry.tick] = line_number
+        elif isinstance(entry, GameEndReplayEntry):
+            game_over_count += 1
+            if game_over_count > 1:
+                raise ReplayLog.CorruptedFileError(
+                    f"Multiple game_over rows in {path} ({game_over_count} "
+                    "found). The file is likely a doubled-write from re-using "
+                    "a tournament --output-dir without --force; truncate the "
+                    "file and re-run."
+                )
+        entries.append(entry)
     return tuple(entries)
 
 
