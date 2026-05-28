@@ -9,9 +9,12 @@ or LLM dependency.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pytest
 from pydantic import ValidationError
 
+from engine.entities import Role
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -25,12 +28,22 @@ from meetings.schemas import (
     ContradictionRef,
     MeetingOutcome,
     MeetingTranscript,
+    PlayerId,
     ReportDocument,
     SawPlayerObservation,
     Statement,
     VoteBallot,
 )
 from orchestrator.replay import LLMCallRecord, WinnerSide
+
+# A coherent 4-player roster with p-3 as the impostor; the default for fixture
+# games where the specific assignment does not matter.
+_ROLES_P3_IMPOSTOR: Mapping[PlayerId, Role] = {
+    "p-0": "CREWMATE",
+    "p-1": "CREWMATE",
+    "p-2": "CREWMATE",
+    "p-3": "IMPOSTOR",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -152,12 +165,16 @@ def _game_report(
     winner: WinnerSide | None,
     reason: str,
     meetings: tuple[MeetingReport, ...],
+    final_tick: int | None = 60,
+    roles: Mapping[PlayerId, Role] = _ROLES_P3_IMPOSTOR,
 ) -> GameReport:
     return GameReport(
         game_id=game_id,
         seed=seed,
         winner=winner,
         reason=reason,
+        final_tick=final_tick,
+        roles=roles,
         replay_ref=f"replay-seed-{seed}.jsonl",
         meetings=meetings,
         prompt_versions={"meeting_v": "2026-05-01", "trigger_v": "2026-04-12"},
@@ -173,10 +190,12 @@ def _game_report(
 def _realistic_tournament() -> TournamentReport:
     """A multi-game / multi-meeting tournament covering every winner kind.
 
-    Game 11 ejects the impostor (CREWMATES win), game 12 reaches the tick
-    budget (no decisive winner), game 13 has two meetings and the impostors
-    win. This exercises decisive + non-decisive outcomes and 0/1/2-meeting
-    games in one fixture.
+    Game 11 ejects the impostor p-3 (CREWMATES win, a *correct* ejection),
+    game 12 reaches the tick budget (no decisive winner, no meetings), game 13
+    has two meetings and wrongly ejects crewmate p-1 while impostor p-3 survives
+    (IMPOSTORS win). This exercises decisive + non-decisive outcomes, 0/1/2-
+    meeting games, and both correct and incorrect ejections relative to the
+    role ground truth in one fixture.
     """
 
     return TournamentReport(
@@ -186,6 +205,8 @@ def _realistic_tournament() -> TournamentReport:
                 seed=11,
                 winner="CREWMATES",
                 reason="impostor ejected",
+                final_tick=52,
+                roles=_ROLES_P3_IMPOSTOR,
                 meetings=(
                     _meeting_report(meeting_id="m-11-0", tick=40, ejected="p-3"),
                 ),
@@ -195,6 +216,13 @@ def _realistic_tournament() -> TournamentReport:
                 seed=12,
                 winner=None,
                 reason="TICK_BUDGET_REACHED",
+                final_tick=1000,
+                roles={
+                    "p-0": "CREWMATE",
+                    "p-1": "CREWMATE",
+                    "p-2": "IMPOSTOR",
+                    "p-3": "CREWMATE",
+                },
                 meetings=(),
             ),
             _game_report(
@@ -202,6 +230,8 @@ def _realistic_tournament() -> TournamentReport:
                 seed=13,
                 winner="IMPOSTORS",
                 reason="crew reduced to parity",
+                final_tick=88,
+                roles=_ROLES_P3_IMPOSTOR,
                 meetings=(
                     _meeting_report(meeting_id="m-13-0", tick=30, ejected=None),
                     _meeting_report(meeting_id="m-13-1", tick=70, ejected="p-1"),
@@ -349,6 +379,41 @@ def test_report_schema_reuses_canonical_leaf_types_not_forks() -> None:
     assert module_ns["PlayerId"] is meetings_schemas.PlayerId
     assert module_ns["LLMCallRecord"] is replay.LLMCallRecord
     assert module_ns["WinnerSide"] is replay.WinnerSide
+
+
+# ---------------------------------------------------------------------------
+# Metric inputs: role ground truth + game length
+# ---------------------------------------------------------------------------
+
+
+def test_roles_ground_truth_enables_vote_correctness_lookup() -> None:
+    """The role map lets a pure analyzer judge an ejection without engine state.
+
+    This is the input Task 5.2 needs: vote correctness =
+    ``roles[ejected] == "IMPOSTOR"``. The fixture's game 11 correctly ejects
+    impostor p-3; game 13 wrongly ejects crewmate p-1.
+    """
+
+    report = TournamentReport.model_validate(_realistic_tournament().model_dump())
+
+    game11 = report.games[0]
+    ejected_11 = game11.meetings[0].ejected_player_id
+    assert ejected_11 is not None
+    assert game11.roles[ejected_11] == "IMPOSTOR"  # correct ejection
+
+    game13 = report.games[2]
+    ejected_13 = game13.meetings[1].ejected_player_id
+    assert ejected_13 is not None
+    assert game13.roles[ejected_13] == "CREWMATE"  # wrong ejection
+
+
+def test_final_tick_round_trips_and_yields_game_length_distribution() -> None:
+    """``final_tick`` survives round-trip, so §11.3 game-length is report-only."""
+
+    report = TournamentReport.model_validate(_realistic_tournament().model_dump())
+
+    lengths = [g.final_tick for g in report.games]
+    assert lengths == [52, 1000, 88]
 
 
 # ---------------------------------------------------------------------------

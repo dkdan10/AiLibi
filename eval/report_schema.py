@@ -20,6 +20,17 @@ Phase 3/4 (DESIGN.md §11.4):
 * :class:`orchestrator.replay.LLMCallRecord` -- per LLM call: model, token
   usage, USD cost, originating agent, call kind.
 
+One required input is NOT in those replay records: the per-game **role ground
+truth** (which players are impostors). The leak firewall keeps roles out of
+agent-visible data, and the replay JSONL never persists them, but the Phase 5
+meeting-quality metrics are defined as pure analyzers over *this* report
+(DESIGN.md §11.3): vote correctness is ``roles[ejected] == "IMPOSTOR"`` (Task
+5.2), accusation calibration needs the actual-impostor rate of accusation
+targets (Task 5.3), and alibi fabrication counts impostor alibis (Task 5.4).
+So :class:`GameReport` carries a ``roles`` map -- post-game ground truth the
+loader (Task 5.6) fills from the seeded game setup, never exposed to agents --
+so those metrics never re-derive engine state.
+
 The leaf meeting artifact types (:class:`~meetings.schemas.MeetingTranscript`,
 :class:`~meetings.schemas.VoteBallot`,
 :class:`~meetings.schemas.ContradictionRef`,
@@ -34,9 +45,10 @@ Three-level nesting -- tournament -> game -> meeting:
 
 * :class:`TournamentReport` -- the top-level artifact, carrying the
   ``format_version`` and every game.
-* :class:`GameReport` -- one game: decisive outcome, a reference to the game's
-  replay file, the prompt-template versions in play, the per-game LLM cost
-  roll-up, and its meetings.
+* :class:`GameReport` -- one game: decisive outcome, the final tick, the
+  impostor/crewmate role ground truth, a reference to the game's replay file,
+  the prompt-template versions in play, the per-game LLM cost roll-up, and its
+  meetings.
 * :class:`MeetingReport` -- one resolved meeting: the structured artifacts a
   metric reads (transcript, ballots, contradictions, outcome, ejected player)
   plus the per-call LLM telemetry.
@@ -58,6 +70,7 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from engine.entities import Role
 from meetings.schemas import (
     ContradictionRef,
     MeetingOutcome,
@@ -135,12 +148,26 @@ class GameReport(_FrozenModel):
     """One game's decisive outcome and meeting artifacts (DESIGN.md §11.3, §11.4).
 
     Composes :class:`orchestrator.replay.GameEndReplayEntry` (``winner`` /
-    ``reason``) with the game's meetings. ``winner`` is ``None`` for a
-    non-decisive game (e.g. the tick budget was reached, or a partial/crashed
+    ``reason`` / ``tick``) with the game's meetings. ``winner`` is ``None`` for
+    a non-decisive game (e.g. the tick budget was reached, or a partial/crashed
     run that never wrote a ``game_over`` record) -- matching
     :data:`orchestrator.replay.WinnerSide`'s nullability -- so the report stays
     faithful to a partial tournament rather than coercing an undecided game
-    into a decisive bucket.
+    into a decisive bucket. ``final_tick`` carries
+    :attr:`~orchestrator.replay.GameEndReplayEntry.tick` so the game-length
+    distribution DESIGN.md §11.3 asks of balance eval is computable from this
+    report alone; it is ``None`` for a game whose ``game_over`` record carried
+    no tick (or was never written).
+
+    ``roles`` is the post-game role ground truth: every player mapped to
+    ``"CREWMATE"`` / ``"IMPOSTOR"`` (:data:`engine.entities.Role`). The replay
+    JSONL never persists roles -- the leak firewall keeps them out of
+    agent-visible data -- but the meeting-quality metrics (tasks 5.2-5.4) are
+    pure analyzers over this report and need ``roles[player] == "IMPOSTOR"`` to
+    judge whether an ejection/accusation was correct (DESIGN.md §11.3). The
+    loader (Task 5.6) fills it from the seeded game setup; it is eval ground
+    truth only and is never shown to an agent, so it does not touch the
+    observation firewall.
 
     ``replay_ref`` is the bare per-seed replay filename
     (``replay-seed-{seed}.jsonl``), matching how
@@ -157,6 +184,8 @@ class GameReport(_FrozenModel):
     seed: int
     winner: WinnerSide | None
     reason: str
+    final_tick: int | None
+    roles: Mapping[PlayerId, Role]
     replay_ref: str
     meetings: tuple[MeetingReport, ...]
     prompt_versions: Mapping[str, str]
