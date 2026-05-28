@@ -46,6 +46,18 @@ Alibi-fabrication-rate metric.
 
 See DESIGN.md §11.3. Count impostor alibis that survive the contradiction detector. Pure analyzer over meeting transcripts.
 
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import orchestrator.replay.ReplayLog"`
+- `uv run python -c "import api.schemas.BeliefEntryView"`
+- `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import api.schemas"`
+- `uv run python -c "import frontend/src/types/api.ts::*` (every DTO from 4"`
+- `uv run python -c "import frontend/src/api/client"`
+- `uv run python -c "import api.replay_loader"`
+- `uv run python -c "import api.main"`
+
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
 - Inspect the current implementation before editing.

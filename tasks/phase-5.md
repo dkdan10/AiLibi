@@ -3,26 +3,68 @@
 ## Goal
 Every prompt or rule change produces a measurable signal in a typed eval report.
 Metric tasks stay parallel-safe by writing only their own modules and tests; one
-integration task wires them into tournament JSON output.
+integration task wires them into tournament JSON output. Phase closes when a
+prompt-template change can be demonstrated to produce a measurable metric
+delta — the regression test suite (5.8) IS the close gate.
+
+**Scope decisions (lock these before dispatching any task):**
+
+- **Hub + eager parallel fan-out.** Task 5.1 (eval report schema) is the hub;
+  5.2–5.5 (the four independent metric modules) fan out in parallel after 5.1
+  merges. Task 5.6 integrates them. After the mid-phase metric audit, 5.7
+  (dashboard frontend) and 5.8 (regression suite) fan out in parallel.
+- **Phase 4 carryover preludes: 4.16 and 4.17 land first.** Two
+  post-Phase-4 hygiene tasks must merge BEFORE Phase 5 dispatch
+  begins: Task 4.16 (ReplayLog fail-loud — fixes the silent doubled-
+  files corruption pattern that would otherwise pollute every Phase 5
+  metric output) and Task 4.17 (refresh-samples workflow + verify-
+  samples + MANIFEST.md — provides the fixture-system substrate that
+  Task 5.8's prompt regression suite needs). Format versioning is
+  folded into Task 5.1 (eval report schema). The remaining Phase 4
+  carryover items (belief rules 2/3/5, per-tick BeliefMatrix coverage,
+  `BeliefEntryView.snapshot_tick` semantics tightening) stay
+  deferred — they are not Phase 5 prerequisites and belong to a later
+  agent-intelligence or UI-enrichment axis.
+- **Mid-phase metric correctness audit** runs after 5.6 integrates, before
+  5.7/5.8 fan out. Single-tool or two-tool with reconciliation (decide at
+  audit-authoring time). Different from the Phase 4 DTO leak audit — the
+  defect class is "does the metric compute what it claims?", not "does this
+  DTO field leak?". Audit prompt lives at
+  `audits/prompts/mid-phase-5-metric-audit-prompt.md` (to be authored after
+  5.6 is in flight; do not author it prematurely against substrate that
+  doesn't exist yet).
+- **Performance pass deferred to 5.9.** DESIGN.md §9 names "≥ 1 game/min
+  headless on a laptop" as Phase 5 scope. Lands as a discrete task AFTER the
+  dashboard ships. The dashboard works at current rates; perf is polish.
+- **Acceptance gate is automated, not manual.** Phase 4 closed on a manual
+  UX session; Phase 5 closes on the regression suite (5.8) demonstrating
+  one full prompt-change → metric-diff loop. No UX session needed.
 
 ## Parallelism
-Task 5.1 is first. Tasks 5.2 through 5.5 can fan out after 5.1 because they
-touch independent metric modules. Task 5.6 integrates them after 5.2 through
-5.5 merge. Tasks 5.7 and 5.8 run after the report shape is stable.
+Preludes: Task 4.16 (ReplayLog fail-loud) merges first, then Task 4.17
+(refresh-samples workflow + MANIFEST). Then Phase 5 begins at Task 5.1.
+Tasks 5.2 through 5.5 fan out after 5.1 because they touch independent
+metric modules. Task 5.6 integrates them after 5.2 through 5.5 merge.
+Mid-phase metric audit runs after 5.6. Then 5.7 + 5.8 fan out in parallel.
+Task 5.9 (performance pass) lands after 5.7 and 5.8.
 
 ## Tasks
 
-### Task 5.1 — Eval report schema
+### Task 5.1 — Eval report schema (with format versioning)
 **Branch:** `phase-5-eval-report-schema`
-**Depends on:** Phase 4 merged
+**Depends on:** 4.16 merged, 4.17 merged
 **Section refs:** DESIGN.md §11.3, DESIGN.md §11.4
 **Complexity:** Small
 
 Define the typed tournament/eval JSON report schema consumed by all Phase 5
-metrics and the dashboard.
+metrics and the dashboard. Includes a `format_version` field (carryover
+from Phase 4's deferred replay-format-versioning item) so future schema
+evolution is explicit rather than relying on Pydantic default-on-missing
+backward compatibility.
 
 **Files in scope:**
 - eval/report_schema.py
+- orchestrator/replay.py (add `format_version` field to ReplayLogEntry variants if the implementing agent decides report and replay should share a version namespace; otherwise leave replay.py untouched and version the report only)
 - tests/eval/test_report_schema.py
 
 **Files NOT in scope:**
@@ -37,7 +79,9 @@ metrics and the dashboard.
 
 **Definition of done:**
 - [ ] Eval report schema represents game outcomes, replay references, meeting artifacts, prompt versions, LLM cost metadata, and metric inputs.
+- [ ] Schema includes a top-level `format_version: int` field, current value 1. Pydantic validator rejects unknown future versions.
 - [ ] Schema supports adding Phase 5 metric outputs without changing raw replay records.
+- [ ] Decision documented in `## Decisions`: whether `format_version` is namespaced to the report only OR shared across report + replay JSONL records. Either is defensible; pick and document.
 - [ ] Relevant schema tests pass.
 - [ ] `uv run mypy --strict eval` passes.
 - [ ] `uv run ruff check .` passes.
@@ -247,6 +291,38 @@ Convergence point for Phase 5 metrics. Each metric module ships independently; t
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-6-tournament-metric-integration.md`
 
+### Mid-phase metric correctness audit
+
+After 5.6 merges, run the Phase 5 mid-phase metric correctness audit
+before dispatching 5.7 and 5.8. The audit prompt lives at
+`audits/prompts/mid-phase-5-metric-audit-prompt.md` (to be authored
+after 5.6 is in flight; do not author it prematurely against substrate
+that doesn't exist yet).
+
+**Audit scope:**
+- For each metric in `eval/` (`vote_correctness`, `accusation_calibration`,
+  `alibi_fabrication`, `cost_dashboard`): does the computed number match
+  the docstring claim? Construct a synthetic fixture replay where the
+  ground-truth metric value is known by inspection; confirm the metric
+  matches.
+- Partial-replay robustness: does each metric handle replays with no
+  meetings, ejected impostors, partial runs (no `game_over` record)?
+- Schema integrity: does the `eval.report_schema` artifact emitted by
+  `scripts/run_tournament.py` validate against the 5.1 schema? Are
+  there fields populated that the schema doesn't promise, or schema
+  fields that the integration leaves empty?
+- Prompt-version provenance: does the report correctly attribute each
+  metric value to the prompt-template versions in play?
+
+**Audit verdict shape:** "Mid-phase metric audit passes — proceed to
+fan out 5.7 + 5.8" OR "Mid-phase metric audit blocks fan-out —
+repair tasks required: ..."
+
+Two-tool with reconciliation (per the Phase 4 pattern) is the
+recommended shape; single-tool is acceptable if the audit surface is
+small. Output: one Markdown audit at
+`audits/audit-YYYY-MM-DD-HHMM-mid-phase-5-metric.md`.
+
 ### Task 5.7 — Tournament dashboard frontend page
 **Branch:** `phase-5-tournament-dashboard-frontend-page`
 **Depends on:** 5.6 merged
@@ -320,7 +396,61 @@ Determinism is essential — flaky tests destroy the regression signal. Use the 
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-8-prompt-regression-test-suite.md`
 
+### Task 5.9 — Performance pass
+**Branch:** `phase-5-performance-pass`
+**Depends on:** 5.7 merged, 5.8 merged
+**Section refs:** DESIGN.md §9
+**Complexity:** Medium
+
+Hit the DESIGN.md §9 Phase 5 target: ≥ 1 headless game per minute on a
+laptop. Measure current rate; identify bottlenecks; apply targeted
+fixes (engine hot paths, observation packet construction, replay-write
+cadence, LLM-call concurrency limits). The performance pass is polish
+work — the dashboard and regression suite ship at the current rate.
+
+**Files in scope:**
+- engine/ (hot paths only; no behavior change)
+- orchestrator/ (concurrency tuning)
+- eval/ (benchmark harness if needed)
+- tests/eval/test_performance.py (or similar benchmark recording)
+- scripts/run_tournament.py (only if perf surfaces a tuning knob)
+
+**Files NOT in scope:**
+- agents/ behavior (FSM or strategic prompt changes)
+- llm/ provider behavior
+- api/, frontend/ (perf affects engine + orchestrator, not the spectator UI which is read-only)
+- meetings/ behavior (cap raises etc. are Phase 3 territory)
+- DESIGN.md
+- AGENT_IMPLEMENTATION.md
+
+**Definition of done:**
+- [ ] Benchmark recorded showing the BEFORE rate (game/min on the target laptop hardware).
+- [ ] Bottlenecks identified via profiling (cProfile or py-spy output captured in `## Decisions`).
+- [ ] Targeted fixes applied; no behavior change (determinism tests still pass byte-identically).
+- [ ] Benchmark recorded showing the AFTER rate; meets or exceeds ≥ 1 game/min.
+- [ ] No regression in any existing test, including determinism + leak tests.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes.
+
+
+**Implementation hint:**
+
+DESIGN.md §9 names "≥ 1 game/min headless on a laptop" as the target. The current rate is unmeasured; the implementing agent's first action is to record a baseline. Profile with `cProfile` or `py-spy`; the hot paths are likely (a) observation packet construction (called per agent per tick), (b) replay JSONL serialization (per-tick write), (c) state-hash computation. Avoid premature optimization — only target paths that appear in the profile output.
+
+**Integration risk:**
+
+- **Determinism must hold.** Any change to engine hot paths risks breaking byte-identical replay determinism. Determinism tests are the load-bearing gate.
+- **Single-laptop variance.** Benchmarks on different hardware will differ. Pin the BEFORE and AFTER runs to the same hardware; document the hardware in `## Decisions`.
+- **No behavior change.** This task does NOT modify agent reasoning, prompt content, FSM rules, or LLM behavior. Perf-only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-5-9-performance-pass.md`
+
 ## Merge Criteria
-- running `python scripts/run_tournament.py --N=200` produces a JSON report with all metrics.
-- The frontend dashboard renders the report.
-- Metric task parallelism does not require simultaneous edits to shared tournament files.
+- **Preludes landed:** Tasks 4.16 (ReplayLog fail-loud) and 4.17 (refresh-samples workflow + MANIFEST) merged before any Phase 5 task.
+- **Schema-driven reporting:** running `python scripts/run_tournament.py --N=200` produces a JSON report with all Phase 5 metrics (5.2–5.5) validated against the 5.1 schema.
+- **Dashboard renders:** the frontend tournament dashboard renders the report end-to-end.
+- **Mid-phase metric audit passes** before 5.7/5.8 fan-out.
+- **Close gate:** the prompt regression suite (5.8) demonstrates one full loop — a prompt-template change produces a measurable metric delta in the tournament report. This is the Phase 5 acceptance criterion; no manual UX session.
+- **Performance target met:** ≥ 1 headless game/min on the target laptop (Task 5.9).
+- **Metric task parallelism preserved:** 5.2–5.5 do not require simultaneous edits to shared tournament files; 5.7/5.8 do not require simultaneous edits to shared frontend files.
+- **All Phase 4 static + behavioral gates still green:** `bash scripts/check.sh`, determinism tests, leak tests, frontend `tsc:check` + `vite build`.

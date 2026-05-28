@@ -3707,6 +3707,446 @@ Lowest-risk task in the post-UX-audit batch. Pure styling.
 
 **Ready-to-paste prompt:** `agent_prompts/task-4-15-meetingview-overflow-fix.md`
 
+### Task 4.16 — ReplayLog fail-loud on existing file
+**Branch:** `phase-4-replaylog-fail-loud`
+**Depends on:** Phase 4 closure (4.15 merged, dev self-audit declared closed 2026-05-27)
+**Section refs:** DESIGN.md §11.4
+**Complexity:** Small
+
+Phase 5 metric correctness depends on replay-data integrity. Today,
+`orchestrator/replay.py::ReplayLog.__init__` accepts any path and
+silently appends if the file already exists. This bit the project once:
+during Phase 4 UX prep, two tournament runs against the same
+`--output-dir` silently concatenated per-seed JSONL files, producing
+26-line files that broke the loader's `meeting_by_tick` dedup and made
+`AgentMemoryView` requests fail. The data corruption was invisible until
+the loader crashed — the worst kind of failure mode for a substrate
+that downstream metric work will trust.
+
+This task hardens `ReplayLog` to fail-loud on existing-file and adds
+a read-side sanity check that detects the doubled-file pattern. Critical-
+path prelude for Phase 5: the eval metrics (5.2–5.5) and prompt
+regression suite (5.8) read every replay JSONL in the configured
+directory; silently-doubled files would produce silently-wrong metrics.
+
+**Two fail-loud surfaces:**
+
+1. **Write-side: `ReplayLog.__init__` raises on existing target.** If
+   `path` already exists, raise `ReplayLog.AlreadyExistsError` (or
+   reuse `FileExistsError` — implementing agent picks based on whether
+   custom typed exceptions exist elsewhere in `orchestrator/`).
+   Override gate: a `force: bool = False` keyword that intentionally
+   re-opens the file in truncate mode. The orchestrator's
+   `HeadlessGame.run` (which constructs the log) keeps its existing
+   signature; callers that want overwrite semantics pass `force=True`
+   through `--force` style CLI flags on downstream scripts.
+
+2. **Read-side: `read_all_entries(path)` detects multiple "game start"
+   patterns.** A doubled file has TWO sets of `kind="tick"` entries with
+   overlapping `tick` values, plus TWO `kind="game_over"` entries (if
+   both runs completed). The reader walks the JSONL once and raises
+   `ReplayLog.CorruptedFileError` (or sibling type) if it sees either
+   pattern. The error message names the file path and the conflicting
+   tick value.
+
+**Out of scope** (explicit decisions deferred):
+
+- **Comprehensive read-side hardening** (corrupted JSON, missing
+  required field, partial-write mid-line detection). The doubled-file
+  case is the lived incident; broader corruption hardening can be
+  incremental (caught when Pydantic validation fires today). If a
+  future incident proves otherwise, file a follow-up.
+- **State-hash mismatch detection.** Already handled in
+  `api/replay_loader.py:_assert_hash` via the engine-playback
+  reconstruction (Task 4.2). Not a `ReplayLog` concern.
+- **Replay format versioning.** Carried in the Phase 5 carryover
+  list; folded into Task 5.1 (Eval report schema). Don't add a
+  format version field in this task.
+
+**Files in scope:**
+- orchestrator/replay.py
+- orchestrator/game.py (only if `HeadlessGame.run` passes a `force` flag to `ReplayLog`; otherwise untouched)
+- scripts/run_tournament.py (add `--force` flag if it currently overwrites silently)
+- tests/orchestrator/test_replay.py (or test_replay_fail_loud.py if a new file is cleaner)
+
+**Files NOT in scope:**
+- engine/
+- agents/
+- llm/
+- meetings/
+- observation/
+- api/
+- frontend/
+- DESIGN.md
+- AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- README.md
+- open_issues.md
+- replays/samples/ (samples are read-only test fixtures; do not regenerate or modify)
+- tests/agents/
+- tests/engine/
+- tests/llm/
+- tests/meetings/
+- tests/observation/
+- tests/api/
+- tests/eval/
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **`ReplayLog.__init__` raises on existing file.** New behavior: if `path.exists()` and `force=False`, raise an exception (`ReplayLog.AlreadyExistsError` or `FileExistsError`) with a message naming the path. Default `force=False`. Caller may opt in via `force=True`.
+- [ ] **`scripts/run_tournament.py` exposes `--force`** that propagates to `ReplayLog` construction. Without `--force`, attempting to re-use an existing `--output-dir` with overlapping seeds raises and exits non-zero. With `--force`, the script truncates each conflicting file before writing.
+- [ ] **Read-side doubled-file detection.** `read_all_entries(path)` (or a sibling helper) walks the JSONL and raises `ReplayLog.CorruptedFileError` if (a) two or more `kind="tick"` entries share the same `tick` value, OR (b) two or more `kind="game_over"` entries exist. The error message names the file path and the duplicate tick number (or game_over count).
+- [ ] **Unit tests cover both surfaces.** Write-side: construct a `ReplayLog`, write one tick, construct a second `ReplayLog` to the same path with `force=False`, assert raises. Construct a third with `force=True`, assert succeeds and previous content is gone. Read-side: hand-craft a JSONL with two overlapping `tick=0` entries; assert `read_all_entries` raises with the duplicate tick mentioned in the message. Also: a hand-crafted file with two `game_over` entries; assert raises.
+- [ ] **No regression on existing replay reads.** All 50 samples at `replays/samples/` still load cleanly via `api.replay_loader.ReplayLoader.load_replay`. Smoke: `for s in $(seq 0 49); do uv run python -c "from api.replay_loader import ReplayLoader; from pathlib import Path; ReplayLoader(Path('replays/samples')).load_replay(f'headless-seed-{$s}')" || echo "FAIL $s"; done` produces zero FAIL lines. Capture in `## Decisions`.
+- [ ] No imports from `engine/` under `agents/`, `llm/`, or `meetings/` (firewall preserved). `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes (new tests included).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run mypy --strict agents observation orchestrator engine llm meetings` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+The write-side fix is small. Today's `ReplayLog.__init__` (around `orchestrator/replay.py:184`) takes `path` + `game_id`. New signature (illustrative):
+
+```python
+# orchestrator/replay.py — illustrative
+class ReplayLog:
+    class AlreadyExistsError(FileExistsError):
+        """Raised when ReplayLog is constructed against an already-existing
+        path without force=True. Prevents the doubled-files corruption
+        pattern that broke meeting_by_tick dedup in Phase 4 UX prep."""
+
+    class CorruptedFileError(RuntimeError):
+        """Raised when read_all_entries detects the doubled-file pattern:
+        overlapping tick values or multiple game_over rows in one file."""
+
+    def __init__(
+        self, path: Path, game_id: str, *, force: bool = False
+    ) -> None:
+        if path.exists() and not force:
+            raise self.AlreadyExistsError(
+                f"Replay file already exists: {path}. "
+                f"Pass force=True to overwrite, or choose a different path."
+            )
+        if path.exists() and force:
+            path.unlink()  # truncate via delete-then-recreate
+        self._path = path
+        self._game_id = game_id
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+```
+
+For `run_tournament.py`, the existing argparse block gains:
+
+```python
+# scripts/run_tournament.py — illustrative
+parser.add_argument(
+    "--force",
+    action="store_true",
+    help="Overwrite existing replay files in --output-dir. "
+         "Without this, re-using an output-dir raises and exits.",
+)
+# ... pass args.force into the ReplayLog constructor
+```
+
+The read-side detection walks the JSONL once:
+
+```python
+# orchestrator/replay.py — illustrative
+def read_all_entries(path: Path) -> tuple[ReplayLogEntry, ...]:
+    entries = []
+    tick_indices: dict[int, int] = {}  # tick -> first occurrence index
+    game_over_count = 0
+    for index, raw in enumerate(path.read_text().splitlines()):
+        entry = _parse_entry(json.loads(raw))
+        if entry.kind == "tick":
+            if entry.tick in tick_indices:
+                raise ReplayLog.CorruptedFileError(
+                    f"Duplicate tick {entry.tick} in {path} "
+                    f"(first at index {tick_indices[entry.tick]}, "
+                    f"again at index {index}). File is likely a "
+                    f"doubled-write from re-using an --output-dir without "
+                    f"--force; truncate and re-run."
+                )
+            tick_indices[entry.tick] = index
+        elif entry.kind == "game_over":
+            game_over_count += 1
+            if game_over_count > 1:
+                raise ReplayLog.CorruptedFileError(
+                    f"Multiple game_over rows in {path}. "
+                    f"File is likely a doubled-write from re-using an "
+                    f"--output-dir without --force; truncate and re-run."
+                )
+        entries.append(entry)
+    return tuple(entries)
+```
+
+Verify the loader at `api/replay_loader.py` invokes `read_all_entries` (not `read_replay_entries`) for the corruption detection path; adjust accordingly.
+
+**Public types introduced:**
+
+- `orchestrator.replay.ReplayLog.AlreadyExistsError`
+- `orchestrator.replay.ReplayLog.CorruptedFileError`
+
+**Integration risk:**
+
+Lowest-risk hygiene task in the post-Phase-4 batch.
+
+- **Behavior change is opt-out via `force`.** Existing callers that legitimately overwrite (e.g. a re-run with the same seed for debugging) opt in explicitly. Anything else surfaces the bug.
+- **`scripts/run_tournament.py` may currently rely on silent overwrite.** Check before adding `--force`; if the script currently uses a fresh directory per run, `--force` is opt-in only. If it re-uses the same directory across runs, the default change is a breaking change that needs documenting.
+- **No engine touches.** Determinism unaffected.
+- **Read-side detection cost is O(n) in lines.** Same complexity as the existing parse; negligible.
+- **Critical-path for Phase 5.** Failing to land this before Phase 5 metric tasks risks silently-wrong metric outputs in the dashboard. The doubled-file pattern is invisible until the loader crashes; metrics computed against doubled data are wrong without crashing.
+- **No CI cost.** Static gates only. No real-provider.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-16-replaylog-fail-loud.md`
+
+### Task 4.17 — Refresh-samples workflow + verify-samples + MANIFEST
+**Branch:** `phase-4-refresh-samples-workflow`
+**Depends on:** 4.16 merged
+**Section refs:** DESIGN.md §9, DESIGN.md §11.4
+**Complexity:** Medium
+
+Phase 5 Task 5.8 (prompt regression test suite) needs a fixture system
+that captures (prompt template version, seed, model response) tuples
+and can be regenerated when prompt changes ship intentionally. Today
+the only sample-management mechanism is "ran a tournament once, copied
+files into `replays/samples/`." That's not a workflow; it's an artifact.
+
+This task ships the workflow: `scripts/refresh_samples.sh` regenerates
+samples with three modes, `scripts/verify_samples.sh` does a free
+CPU re-play through the loader to catch state-hash drift without API
+spend, and `replays/samples/MANIFEST.md` records provenance for every
+sample so Phase 5 metric outputs can be attributed to a specific prompt
+version + model snapshot.
+
+**Three refresh modes:**
+
+- `--full` — Re-run the full 50-game tournament; replaces all samples.
+  Real-provider spend ~$1; takes ~3 minutes wall clock. Use when a
+  Phase 5 prompt-version delta makes the existing samples stale.
+- `--meetings` — Re-run only the 4 meeting-bearing seeds (22, 24, 26,
+  49 in the current sample set; let the script derive these
+  dynamically from `MANIFEST.md`). ~$0.10 spend; ~30s wall clock. Use
+  when the only thing that changed is meeting-prompt-relevant.
+- `--seeds N,N,N` — Re-run a specific subset. Custom spend. Use for
+  one-off prompt-debug or regression-test-fixture generation.
+
+**Verify-samples (CPU only, no API):**
+
+`scripts/verify_samples.sh` walks every JSONL in `replays/samples/`,
+loads it through `api.replay_loader.ReplayLoader`, and asserts the
+state-hash chain reconstructs cleanly. If any sample's recorded
+state-hash diverges from the engine-playback reconstruction, the
+script fails loud with the sample id and the divergent tick. Detects
+silent drift from engine changes that violate the byte-identity
+contract.
+
+**MANIFEST.md provenance:**
+
+`replays/samples/MANIFEST.md` is a markdown table maintained by
+`refresh_samples.sh`. Columns: seed, model id (e.g.
+`claude-sonnet-4-6`), prompt template versions in play (the union of
+`prompt_versions` maps across the sample's meetings, formatted as
+`accusation_round.v2, crewmate_report.v1, ...`), refresh timestamp,
+git commit at refresh time, total cost, decisive outcome
+(`CREWMATES` / `IMPOSTORS` / `null`). The script appends a row per
+sample on `--full` or `--meetings`; on `--seeds`, it updates the
+matching rows.
+
+**Out of scope** (explicit decisions deferred):
+
+- **`MANIFEST.md` enforcement at load time.** This task ships the
+  provenance log; reading it programmatically (e.g. asserting the
+  current prompt version matches the manifest before computing a
+  metric) is a 5.8 concern.
+- **Cost projection / budget enforcement.** The script reports actual
+  spend after the refresh; pre-flight budget check is a follow-up if
+  refresh runs balloon in cost.
+- **Per-replay re-record of specific LLM call responses.** Phase 5.8
+  may want this for prompt regression fixtures, but it's a separate
+  surface from the bulk-sample refresh — defer to 5.8 elaboration.
+
+**Files in scope:**
+- scripts/refresh_samples.sh
+- scripts/verify_samples.sh
+- replays/samples/MANIFEST.md
+- tests/scripts/test_refresh_samples.py (or similar; verifies argparse + dry-run modes)
+- tests/scripts/test_verify_samples.py
+- README.md (one-paragraph addition under "Watch a replay" about the refresh workflow)
+
+**Files NOT in scope:**
+- engine/
+- agents/
+- llm/
+- meetings/
+- observation/
+- orchestrator/replay.py (frozen at 4.16)
+- orchestrator/ everything else
+- api/
+- frontend/
+- DESIGN.md
+- AGENT_IMPLEMENTATION.md
+- pyproject.toml
+- uv.lock
+- tasks/
+- agent_prompts/
+- audits/
+- open_issues.md
+- replays/samples/*.jsonl (the sample contents themselves — do NOT regenerate as part of THIS task; the workflow is delivered, but the user runs it when needed)
+- scripts/setup_env.sh
+- scripts/check.sh
+- scripts/run_game.py
+- scripts/run_tournament.py (consumed; not modified beyond what 4.16 changes)
+- scripts/run_spectator.sh
+- scripts/generate_prompts.py
+- scripts/validate_task_docs.py
+- tests/agents/
+- tests/engine/
+- tests/llm/
+- tests/meetings/
+- tests/observation/
+- tests/orchestrator/
+- tests/api/
+- tests/eval/
+- tests/test_firewall.py
+
+**Definition of done:**
+- [ ] **`scripts/refresh_samples.sh` exists and is executable.** Implements `--full`, `--meetings`, `--seeds N,N,N` modes per the description above. Modes are mutually exclusive; passing more than one is an error. Default mode (no flags): print usage and exit non-zero.
+- [ ] **Real-provider preflight.** Before any API call, the script verifies `ANTHROPIC_API_KEY` is set and prints the prefix (first 8 chars). Exits non-zero if unset.
+- [ ] **Cost transparency.** After the refresh completes, the script prints total spend (sum of `LLMCallRecord.cost_usd` across all written replays). Captured in MANIFEST.md.
+- [ ] **MANIFEST.md schema.** Markdown table with columns: `seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner`. Table sorted by seed ascending. Script idempotent in the row-update path (running the same `--seeds 22` twice produces the same MANIFEST output).
+- [ ] **`scripts/verify_samples.sh` exists and is executable.** Walks every `replays/samples/replay-seed-*.jsonl`, invokes `ReplayLoader.load_replay`, asserts the state-hash chain reconstructs without divergence. Failure mode: prints sample id + divergent tick + expected/actual hashes, exits non-zero.
+- [ ] **`replays/samples/MANIFEST.md` committed** with rows for the existing 50 samples (the implementing agent generates this by inspecting the existing samples; do NOT re-refresh as part of THIS task).
+- [ ] **README addition.** One paragraph under the "Watch a replay" section explaining the refresh workflow with one example command. Keep concise.
+- [ ] **Unit tests via `pytest`.** Argparse coverage for refresh_samples (each mode parses correctly, mutually-exclusive flags error). Dry-run mode if implemented (`--dry-run` prints planned actions without API calls). Verify-samples can be tested against a fixture with a deliberately-corrupted state-hash; assert the script detects it.
+- [ ] **Smoke run.** Run `bash scripts/verify_samples.sh` against the current `replays/samples/` directory; assert exit 0 (all 50 samples reconstruct cleanly under the current engine). Paste output into `## Decisions`.
+- [ ] No imports from `engine/` under `agents/`, `llm/`, or `meetings/` (firewall preserved). `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run mypy --strict agents observation orchestrator engine llm meetings` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `bash scripts/check.sh` passes locally.
+
+
+**Implementation hint:**
+
+The `refresh_samples.sh` script wraps `scripts/run_tournament.py` (which 4.16 just hardened with `--force`). High-level shape:
+
+```bash
+#!/usr/bin/env bash
+# scripts/refresh_samples.sh — illustrative
+
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: $0 --full | --meetings | --seeds N,N,N
+  --full        Re-run all 50 sample seeds (~\$1, ~3 min)
+  --meetings    Re-run only seeds that had meetings (~\$0.10, ~30s)
+  --seeds X,Y   Re-run a specific subset
+EOF
+}
+
+case "${1:-}" in
+  --full)     seeds=$(seq 0 49 | tr '\n' ',') ;;
+  --meetings) seeds=$(_extract_meeting_seeds_from_manifest) ;;
+  --seeds)    seeds="${2:?Provide comma-separated seed list}" ;;
+  *)          usage; exit 1 ;;
+esac
+
+# Preflight: API key required
+: "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY must be set for sample refresh}"
+echo "Using API key prefix: $(echo "$ANTHROPIC_API_KEY" | cut -c1-8)"
+
+# Run the tournament with --force; writes to replays/samples/
+uv run python scripts/run_tournament.py \
+  --seeds "$seeds" \
+  --output-dir replays/samples \
+  --force
+
+# Update MANIFEST.md for each refreshed seed
+python -m scripts._manifest_writer --seeds "$seeds"
+
+# Print total cost
+total=$(python -m scripts._manifest_writer --sum-cost-for-seeds "$seeds")
+echo "Refresh complete. Total spend: \$${total}"
+```
+
+(The `scripts/_manifest_writer` helper is a small Python module — not a separate task — that reads the new replay JSONLs and writes/updates MANIFEST.md rows. Implementing agent picks the exact split between bash and Python.)
+
+For `verify_samples.sh`:
+
+```bash
+#!/usr/bin/env bash
+# scripts/verify_samples.sh — illustrative
+
+set -euo pipefail
+
+fail=0
+for path in replays/samples/replay-seed-*.jsonl; do
+  seed=$(basename "$path" | sed 's/replay-seed-\(.*\)\.jsonl/\1/')
+  if ! uv run python -c "
+from pathlib import Path
+from api.replay_loader import ReplayLoader
+ReplayLoader(Path('replays/samples')).load_replay('headless-seed-${seed}')
+"; then
+    echo "FAIL: seed ${seed}"
+    fail=1
+  fi
+done
+
+if [ "$fail" -eq 1 ]; then
+  echo "Sample verification failed. Some samples have drifted from engine determinism."
+  exit 1
+fi
+echo "All samples verified clean."
+```
+
+The verify script is the free safety net — it catches drift before any Phase 5 metric computation reads the sample and produces a wrong number.
+
+MANIFEST.md initial structure (illustrative; implementing agent populates from actual sample inspection):
+
+```markdown
+# Sample Replay Manifest
+
+Provenance for replays under `replays/samples/`. Updated by
+`scripts/refresh_samples.sh`. See [Task 4.17] for the workflow.
+
+| Seed | Model | Prompt Versions | Refreshed At | Git SHA | Cost (USD) | Winner |
+|------|-------|-----------------|--------------|---------|------------|--------|
+| 0    | claude-sonnet-4-6 | (none — no meetings) | 2026-05-26 | a1b2c3d | 0.0000 | CREWMATES |
+| 22   | claude-sonnet-4-6 | accusation_round.v2, crewmate_report.v1, impostor_report.v1, vote_ballot.v1 | 2026-05-26 | a1b2c3d | 0.2080 | CREWMATES |
+| ... (rows for each of 50 seeds) |
+```
+
+**Public types introduced:**
+
+None. (Scripts and a Markdown artifact; no new Python types exposed.)
+
+**Integration risk:**
+
+Medium-blast-radius hygiene task. Wraps an existing script (`run_tournament.py`) and writes to a stable artifact (`replays/samples/`).
+
+- **Real-provider spend.** `--full` runs the actual 50-game tournament against the Anthropic API. Cost is real (~$1). Mitigation: opt-in (no auto-refresh), preflight key check, transparent cost reporting.
+- **MANIFEST.md as source of truth for sample provenance.** Phase 5 metric tasks may want to read this programmatically; the schema needs to be stable. Specified in the DoD; future schema changes need a versioning bump.
+- **`verify_samples.sh` is the load-bearing free check.** Phase 5 metric work runs against samples; verify-samples is the gate that protects against silent drift. Worth running as part of `bash scripts/check.sh` or pre-commit if drift becomes a concern (follow-up; not THIS task).
+- **Determinism preserved.** The refresh script invokes the existing tournament harness; no engine touches.
+- **Meeting-seed list discovery.** `--meetings` mode needs to derive which seeds had meetings. Source of truth: MANIFEST.md `Prompt Versions` column non-empty (a sample with no meetings has no prompt versions). Implementing agent picks; could also derive from filenames if MANIFEST.md is missing.
+- **No CI cost.** Static gates only; `verify_samples.sh` is opt-in. The unit tests use synthetic fixtures, no real API calls.
+- **Phase 5 prerequisite.** Task 5.8 (prompt regression test suite) builds on this. Land 4.17 first.
+
+**Ready-to-paste prompt:** `agent_prompts/task-4-17-refresh-samples-workflow.md`
+
 ### Phase-closing UX acceptance session
 
 After 4.5–4.15 all merge (foundation + R-2/R-3 substrate + components

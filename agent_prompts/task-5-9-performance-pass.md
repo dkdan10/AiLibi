@@ -1,4 +1,4 @@
-# Agent Prompt — 5.6 Tournament metric integration
+# Agent Prompt — 5.9 Performance pass
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-5.md.
 
@@ -6,53 +6,49 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 5.6 — Tournament metric integration, anchored to DESIGN.md §11.3. Do not implement work outside these references.
+Implement Task 5.9 — Performance pass, anchored to DESIGN.md §9. Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-5.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
-**Branch:** `phase-5-tournament-metric-integration`
-**Depends on:** 5.2 merged, 5.3 merged, 5.4 merged, 5.5 merged
-**Section refs:** DESIGN.md §11.3
-**Complexity:** Integration
+**Branch:** `phase-5-performance-pass`
+**Depends on:** 5.7 merged, 5.8 merged
+**Section refs:** DESIGN.md §9
+**Complexity:** Medium
 
-Wire Phase 5 metric modules into the tournament JSON report after the parallel
-metric tasks have merged.
+Hit the DESIGN.md §9 Phase 5 target: ≥ 1 headless game per minute on a
+laptop. Measure current rate; identify bottlenecks; apply targeted
+fixes (engine hot paths, observation packet construction, replay-write
+cadence, LLM-call concurrency limits). The performance pass is polish
+work — the dashboard and regression suite ship at the current rate.
 
 **Files in scope:**
-- eval/meeting_quality.py
-- eval/balance_eval.py
-- scripts/run_tournament.py
-- tests/eval/test_tournament_report.py
+- engine/ (hot paths only; no behavior change)
+- orchestrator/ (concurrency tuning)
+- eval/ (benchmark harness if needed)
+- tests/eval/test_performance.py (or similar benchmark recording)
+- scripts/run_tournament.py (only if perf surfaces a tuning knob)
 
 **Files NOT in scope:**
-- engine/
-- agents/
+- agents/ behavior (FSM or strategic prompt changes)
 - llm/ provider behavior
-- api/
-- frontend/
-- eval/vote_correctness.py
-- eval/accusation_calibration.py
-- eval/alibi_fabrication.py
-- eval/cost_dashboard.py
+- api/, frontend/ (perf affects engine + orchestrator, not the spectator UI which is read-only)
+- meetings/ behavior (cap raises etc. are Phase 3 territory)
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Tournament JSON report includes outputs from vote correctness, accusation calibration, alibi fabrication, and cost metrics.
-- [ ] Integration consumes metric module APIs rather than duplicating metric logic.
-- [ ] `python scripts/run_tournament.py --N=200` produces a JSON report with all Phase 5 metrics.
-- [ ] Relevant integration tests pass.
-- [ ] `uv run mypy --strict eval scripts` passes if scripts are included by mypy config; otherwise `uv run mypy --strict eval` passes.
-- [ ] `uv run ruff check .` passes.
+- [ ] Benchmark recorded showing the BEFORE rate (game/min on the target laptop hardware).
+- [ ] Bottlenecks identified via profiling (cProfile or py-spy output captured in `## Decisions`).
+- [ ] Targeted fixes applied; no behavior change (determinism tests still pass byte-identically).
+- [ ] Benchmark recorded showing the AFTER rate; meets or exceeds ≥ 1 game/min.
+- [ ] No regression in any existing test, including determinism + leak tests.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes.
 
 ## Implementation hint
 
-See DESIGN.md §11.3. Read all metric outputs from 5.2–5.5 and fold them into the unified `eval.report_schema` artifact emitted by `scripts/run_tournament.py`.
-
-## Integration risk
-
-Convergence point for Phase 5 metrics. Each metric module ships independently; this task wires them. Risk: breaking the report_schema breaks every downstream consumer (dashboard, regression tests). Add the schema-version field early.
+DESIGN.md §9 names "≥ 1 game/min headless on a laptop" as the target. The current rate is unmeasured; the implementing agent's first action is to record a baseline. Profile with `cProfile` or `py-spy`; the hot paths are likely (a) observation packet construction (called per agent per tick), (b) replay JSONL serialization (per-tick write), (c) state-hash computation. Avoid premature optimization — only target paths that appear in the profile output.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
@@ -87,5 +83,5 @@ Do not implement work outside this task.
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-5-tournament-metric-integration` with a title like `task 5.6: tournament metric integration`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §11.3), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+Open a PR from branch `phase-5-performance-pass` with a title like `task 5.9: performance pass`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §9), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
