@@ -20,13 +20,21 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Final
 
+from agents.memory.beliefs import (
+    BODY_PROXIMITY_WINDOW_TICKS,
+    BeliefState,
+    apply_observation_rules,
+)
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from observation.packet import (
     AudibleEvent,
+    BodyId,
     BodyView,
     GlobalView,
     ObservationPacket,
+    PlayerId,
     PlayerView,
+    RoomId,
     SelfView,
 )
 
@@ -51,6 +59,7 @@ def ingest_packet(
     *,
     packet: ObservationPacket,
     memory: MemoryStore,
+    beliefs: BeliefState | None = None,
 ) -> None:
     """Append typed :class:`EpisodicEvent` rows for one observation tick.
 
@@ -62,6 +71,13 @@ def ingest_packet(
     4. ``saw_body`` for each entry in ``visible_bodies`` (packet order)
     5. one ``heard_*`` per ``audible_events`` entry (packet order)
     6. ``global_status`` (inferred system-wide aggregate)
+
+    When ``beliefs`` is supplied, the agent's DESIGN.md §6.3 rule-based belief
+    updates (Rules 1 and 4) run after the episodic append: the proximity and
+    co-presence inputs are derived from the just-updated episodic store and
+    fed to :func:`agents.memory.beliefs.apply_observation_rules`, whose result
+    is adopted in place so the caller's ``BeliefState`` reflects the update.
+    Callers that only need episodic ingestion (e.g. the runtime stub) omit it.
     """
 
     tick = packet.tick
@@ -123,6 +139,57 @@ def ingest_packet(
             provenance=PROVENANCE_INFERRED,
         )
     )
+
+    if beliefs is not None:
+        beliefs.load_from(
+            apply_observation_rules(
+                beliefs,
+                observation=packet,
+                previous_visible_bodies=_previously_seen_body_ids(
+                    memory, before_tick=tick
+                ),
+                recent_co_presence=_recent_co_presence(memory, current_tick=tick),
+            )
+        )
+
+
+def _previously_seen_body_ids(memory: MemoryStore, *, before_tick: int) -> set[BodyId]:
+    """Body ids the agent recorded seeing strictly before ``before_tick``.
+
+    Rule 1 fires only on a body's first sighting; a body already present in
+    this set was seen on an earlier tick and must not re-elevate suspicion.
+    The current tick's ``saw_body`` rows are excluded by the strict ``<``
+    comparison, so call order relative to the episodic append does not matter.
+    """
+
+    return {
+        event.payload["body_id"]
+        for event in memory.recent(since_tick=0)
+        if event.type == EVENT_SAW_BODY and event.tick < before_tick
+    }
+
+
+def _recent_co_presence(
+    memory: MemoryStore, *, current_tick: int
+) -> dict[RoomId, list[tuple[int, PlayerId]]]:
+    """Map each room to the ``(tick, player_id)`` sightings in the proximity
+    window ``[current_tick - BODY_PROXIMITY_WINDOW_TICKS, current_tick - 1]``.
+
+    Built only from the agent's own first-hand ``saw_player`` rows, so it
+    carries no information the agent did not directly observe -- the firewall
+    is preserved. The current tick is excluded (the window is "shortly before"
+    a discovery), so this is safe to call after the tick's rows are appended.
+    """
+
+    earliest_tick = current_tick - BODY_PROXIMITY_WINDOW_TICKS
+    co_presence: dict[RoomId, list[tuple[int, PlayerId]]] = {}
+    for event in memory.recent(since_tick=earliest_tick):
+        if event.type != EVENT_SAW_PLAYER or event.tick >= current_tick:
+            continue
+        room = event.payload["room"]
+        player_id = event.payload["player_id"]
+        co_presence.setdefault(room, []).append((event.tick, player_id))
+    return co_presence
 
 
 def _self_state_payload(self_state: SelfView) -> Mapping[str, Any]:
