@@ -151,3 +151,23 @@ def test_dry_run_forces_anthropic_provider() -> None:
     proc = _run("--seeds", "22", "--dry-run")
     assert proc.returncode == 0
     assert "AILIBI_LLM_PROVIDER=anthropic" in proc.stdout
+
+
+def test_duplicate_seeds_deduped() -> None:
+    # A typo like 22,22 must not double-call the provider / double-count cost.
+    proc = _run("--seeds", "22,22,24", "--dry-run")
+    assert proc.returncode == 0
+    assert "[dry-run] seeds: 22,24" in proc.stdout
+
+
+def test_embedded_whitespace_in_seed_rejected() -> None:
+    # "1 2" must fail loud rather than silently collapse to seed 12.
+    proc = _run("--seeds", "1 2", "--dry-run")
+    assert proc.returncode != 0
+    assert "Invalid seed" in proc.stdout + proc.stderr
+
+
+def test_dry_run_mentions_per_seed_manifest_update() -> None:
+    proc = _run("--seeds", "22", "--dry-run")
+    assert proc.returncode == 0
+    assert "update that seed's manifest row" in proc.stdout

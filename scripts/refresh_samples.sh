@@ -74,25 +74,36 @@ extract_meeting_seeds() {
   ' "$MANIFEST" | paste -sd, -
 }
 
-# Validate a comma-separated seed list and echo the normalized form.
+# Validate a comma-separated seed list and echo the normalized, de-duplicated
+# form. Surrounding whitespace around a seed is tolerated; whitespace *inside* a
+# token (e.g. "1 2") is rejected rather than silently collapsed to seed 12.
 validate_seeds() {
-  local csv="$1" token
+  local csv="$1" token seen=""
   local -a normalized=()
   IFS=',' read -ra tokens <<<"$csv"
   for token in "${tokens[@]}"; do
-    token="${token// /}"
-    [[ -z "$token" ]] && continue
-    if [[ ! "$token" =~ ^[0-9]+$ ]]; then
+    [[ -z "${token//[[:space:]]/}" ]] && continue  # blank (e.g. a trailing comma)
+    if [[ ! "$token" =~ ^[[:space:]]*([0-9]+)[[:space:]]*$ ]]; then
       echo "Invalid seed (want a non-negative integer): '$token'" >&2
       return 1
     fi
+    token="${BASH_REMATCH[1]}"
+    # De-duplicate (keep first occurrence) so a typo like "22,22" cannot
+    # double-spend on the provider or double-count in the cost sum.
+    case ",$seen," in
+      *",$token,"*) continue ;;
+    esac
+    seen="${seen:+$seen,}$token"
     normalized+=("$token")
   done
   if [[ ${#normalized[@]} -eq 0 ]]; then
     echo "No seeds provided to --seeds." >&2
     return 1
   fi
-  (IFS=','; echo "${normalized[*]}")
+  (
+    IFS=','
+    echo "${normalized[*]}"
+  )
 }
 
 while [[ $# -gt 0 ]]; do
@@ -153,9 +164,9 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] seeds: $seeds_csv"
   echo "[dry-run] sample dir: $SAMPLE_DIR"
   echo "[dry-run] provider: AILIBI_LLM_PROVIDER=anthropic (forced)"
-  echo "[dry-run] per seed, would run:"
+  echo "[dry-run] per seed, would run (then update that seed's manifest row):"
   echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir $SAMPLE_DIR --force"
-  echo "[dry-run] would then update manifest: $MANIFEST"
+  echo "[dry-run] manifest: $MANIFEST"
   echo "[dry-run] no API calls made; no files written."
   exit 0
 fi
@@ -178,6 +189,10 @@ export AILIBI_LLM_PROVIDER=anthropic
 echo "Using LLM provider: $AILIBI_LLM_PROVIDER (forced for real-provider refresh)"
 echo "Refreshing seeds: $seeds_csv"
 
+# Compute provenance once so every seed in this refresh shares one sha + date.
+git_sha="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+refreshed_at="$(date -u +%F)"
+
 IFS=',' read -ra seed_list <<<"$seeds_csv"
 for seed in "${seed_list[@]}"; do
   echo "--- Refreshing seed $seed ---"
@@ -186,17 +201,17 @@ for seed in "${seed_list[@]}"; do
     --num-games 1 \
     --output-dir "$SAMPLE_DIR" \
     --force
+  # Sync THIS seed's manifest row immediately. Updating per seed rather than
+  # once after the loop keeps provenance consistent under partial failure: if a
+  # later seed's run fails, set -e aborts, but every replay already overwritten
+  # has a matching, up-to-date MANIFEST row instead of stale provenance.
+  uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
+    --seeds "$seed" \
+    --git-sha "$git_sha" \
+    --refreshed-at "$refreshed_at" \
+    --sample-dir "$SAMPLE_DIR" \
+    --manifest "$MANIFEST"
 done
-
-# Stamp the just-refreshed rows with the current commit + date.
-git_sha="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-refreshed_at="$(date -u +%F)"
-uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
-  --seeds "$seeds_csv" \
-  --git-sha "$git_sha" \
-  --refreshed-at "$refreshed_at" \
-  --sample-dir "$SAMPLE_DIR" \
-  --manifest "$MANIFEST"
 
 total="$(uv run python "$REPO_ROOT/scripts/_manifest_writer.py" sum-cost \
   --seeds "$seeds_csv" --sample-dir "$SAMPLE_DIR")"

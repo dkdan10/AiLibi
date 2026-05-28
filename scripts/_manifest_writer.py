@@ -334,7 +334,9 @@ def _parse_seed_csv(value: str) -> list[int]:
             raise argparse.ArgumentTypeError(
                 f"invalid seed (want a non-negative integer): {token!r}"
             )
-        seeds.append(int(token))
+        seed = int(token)
+        if seed not in seeds:  # de-dup so sum-cost cannot double-count a seed
+            seeds.append(seed)
     if not seeds:
         raise argparse.ArgumentTypeError("no seeds provided")
     return seeds

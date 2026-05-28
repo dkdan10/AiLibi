@@ -37,6 +37,11 @@ def test_parse_seed_csv_accepts_ints_and_spaces() -> None:
     assert mw._parse_seed_csv("7, 13 , 40") == [7, 13, 40]
 
 
+def test_parse_seed_csv_dedupes_preserving_order() -> None:
+    # sum-cost must not double-count a seed repeated by a typo.
+    assert mw._parse_seed_csv("22,22,24,22") == [22, 24]
+
+
 @pytest.mark.parametrize("bad", ["3,x", "", "   ", "-5", "1.5", "abc", ","])
 def test_parse_seed_csv_rejects_bad(bad: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
