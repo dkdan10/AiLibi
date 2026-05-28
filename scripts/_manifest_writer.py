@@ -51,10 +51,10 @@ _DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples"
 _FILENAME_PREFIX = "replay-seed-"
 _FILENAME_SUFFIX = ".jsonl"
 
-# Sentinel for the Prompt Versions column of a sample that had no meetings (no
+# Sentinel for the prompt_versions column of a sample that had no meetings (no
 # LLM calls, hence no prompt templates in play). refresh_samples.sh keys its
 # ``--meetings`` seed discovery off this: a row is meeting-bearing iff its
-# Prompt Versions cell is neither empty nor this sentinel.
+# prompt_versions cell is neither empty nor this sentinel.
 _NO_MEETINGS = "(none — no meetings)"
 _NULL_WINNER = "null"
 
@@ -70,10 +70,10 @@ _HEADER = (
     "byte-identically under the current engine.\n"
 )
 _COLUMNS = (
-    "| Seed | Model | Prompt Versions | Refreshed At | Git SHA | Cost (USD) | Winner |"
+    "| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner |"
 )
 _SEPARATOR = (
-    "|------|-------|-----------------|--------------|---------|------------|--------|"
+    "|------|-------|-----------------|--------------|---------|----------|--------|"
 )
 _NUM_COLUMNS = 7
 

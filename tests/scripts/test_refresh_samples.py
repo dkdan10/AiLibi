@@ -81,8 +81,8 @@ def test_meetings_dry_run_derives_from_manifest(tmp_path: Path) -> None:
     manifest = tmp_path / "MANIFEST.md"
     manifest.write_text(
         "# Sample Replay Manifest\n\n"
-        "| Seed | Model | Prompt Versions | Refreshed At | Git SHA | Cost (USD) | Winner |\n"
-        "|------|-------|-----------------|--------------|---------|------------|--------|\n"
+        "| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner |\n"
+        "|------|-------|-----------------|--------------|---------|----------|--------|\n"
         "| 1 | m | (none — no meetings) | d | s | 0.0000 | CREWMATES |\n"
         "| 5 | m | accusation_round.v2, vote_ballot/v1 | d | s | 0.1000 | IMPOSTORS |\n"
         "| 9 | m | crewmate_report.v1 | d | s | 0.0500 | CREWMATES |\n"

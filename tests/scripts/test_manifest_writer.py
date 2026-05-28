@@ -105,6 +105,23 @@ def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     assert rows[0].prompt_versions == mw._NO_MEETINGS
 
 
+def test_header_uses_contracted_snake_case_column_names() -> None:
+    # Phase 5 may read this schema programmatically (Task 4.17), so the header
+    # must carry the exact contracted column names, not title-cased display text.
+    for column in (
+        "seed",
+        "model",
+        "prompt_versions",
+        "refreshed_at",
+        "git_sha",
+        "cost_usd",
+        "winner",
+    ):
+        assert f"| {column} |" in mw._COLUMNS or f" {column} |" in mw._COLUMNS
+    assert "Prompt Versions" not in mw._COLUMNS
+    assert "Cost (USD)" not in mw._COLUMNS
+
+
 def test_parse_manifest_ignores_prose_and_separators() -> None:
     text = (
         "# Title\n\nsome prose | with a pipe\n"

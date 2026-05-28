@@ -40,7 +40,7 @@ Usage: $(basename "$0") (--full | --meetings | --seeds N,N,N) [--dry-run]
   -h, --help      Show this help
 
 Modes are mutually exclusive. The meeting-bearing seeds are derived from
-$MANIFEST (rows whose Prompt Versions column is populated).
+$MANIFEST (rows whose prompt_versions column is populated).
 EOF
 }
 
@@ -58,8 +58,8 @@ set_mode() {
 }
 
 # Derive meeting-bearing seeds from the manifest: a row is meeting-bearing iff
-# its Prompt Versions cell (column 4) is populated and not the no-meetings
-# sentinel. Columns are pipe-delimited: | seed | model | prompt versions | ...
+# its prompt_versions cell (column 4) is populated and not the no-meetings
+# sentinel. Columns are pipe-delimited: | seed | model | prompt_versions | ...
 extract_meeting_seeds() {
   if [[ ! -f "$MANIFEST" ]]; then
     echo "Manifest not found: $MANIFEST (needed to resolve --meetings)." >&2

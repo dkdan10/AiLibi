@@ -7,8 +7,8 @@ snapshot (DESIGN.md §9, §11.4). Maintained by `scripts/refresh_samples.sh` (Ta
 4.17); run `scripts/verify_samples.sh` to confirm every sample still reconstructs
 byte-identically under the current engine.
 
-| Seed | Model | Prompt Versions | Refreshed At | Git SHA | Cost (USD) | Winner |
-|------|-------|-----------------|--------------|---------|------------|--------|
+| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner |
+|------|-------|-----------------|--------------|---------|----------|--------|
 | 0 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | CREWMATES |
 | 1 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | CREWMATES |
 | 2 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | CREWMATES |
