@@ -160,6 +160,22 @@ def test_duplicate_seeds_deduped() -> None:
     assert "[dry-run] seeds: 22,24" in proc.stdout
 
 
+def test_seed_aliases_canonicalized() -> None:
+    # "1,01" both parse to seed 1; they must collapse to one, not double-spend.
+    proc = _run("--seeds", "1,01", "--dry-run")
+    assert proc.returncode == 0
+    seeds_line = next(
+        line for line in proc.stdout.splitlines() if line.startswith("[dry-run] seeds:")
+    )
+    assert seeds_line == "[dry-run] seeds: 1"
+
+
+def test_dry_run_mentions_staging() -> None:
+    proc = _run("--seeds", "22", "--dry-run")
+    assert proc.returncode == 0
+    assert "temp stage" in proc.stdout
+
+
 def test_embedded_whitespace_in_seed_rejected() -> None:
     # "1 2" must fail loud rather than silently collapse to seed 12.
     proc = _run("--seeds", "1 2", "--dry-run")

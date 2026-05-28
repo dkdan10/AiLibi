@@ -39,6 +39,7 @@ from orchestrator.replay import (  # noqa: E402
 _DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples"
 _FILENAME_PREFIX = "replay-seed-"
 _FILENAME_SUFFIX = ".jsonl"
+_MANIFEST_NAME = "MANIFEST.md"
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,29 @@ def sample_paths(sample_dir: Path) -> list[Path]:
         if seed is not None:
             paths.append((seed, path))
     return [path for _, path in sorted(paths)]
+
+
+def _manifest_seeds(sample_dir: Path) -> set[int] | None:
+    """Seeds listed in the directory's MANIFEST.md, or ``None`` if there is none.
+
+    The manifest is the provenance source of truth for the canonical sample set,
+    so every seed it lists must have a replay file present. Returns ``None`` when
+    no manifest exists (e.g. an ad-hoc or test directory), so completeness is
+    only enforced where an expected set is actually declared.
+    """
+
+    manifest = sample_dir / _MANIFEST_NAME
+    if not manifest.is_file():
+        return None
+    seeds: set[int] = set()
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        first = stripped.strip("|").split("|", 1)[0].strip()
+        if first.isdigit():
+            seeds.add(int(first))
+    return seeds
 
 
 def _paths_by_seed(sample_dir: Path) -> dict[int, list[Path]]:
@@ -178,6 +202,26 @@ def verify_samples(sample_dir: Path) -> list[VerifyFailure]:
         pre_hash_failure = _check_meeting_pre_hashes(game_id, paths[0])
         if pre_hash_failure is not None:
             failures.append(pre_hash_failure)
+
+    # Completeness: every seed the manifest declares must be present. A bundled
+    # sample silently going missing would otherwise pass ("All 49 ... clean")
+    # and skew Phase 5 aggregates that expect the full committed set.
+    expected = _manifest_seeds(sample_dir)
+    if expected is not None:
+        present = set(_paths_by_seed(sample_dir))
+        for seed in sorted(expected - present):
+            failures.append(
+                VerifyFailure(
+                    game_id=f"headless-seed-{seed}",
+                    tick=None,
+                    expected=None,
+                    actual=None,
+                    reason=(
+                        f"MANIFEST.md lists seed {seed} but "
+                        f"replay-seed-{seed}.jsonl is missing"
+                    ),
+                )
+            )
     return failures
 
 

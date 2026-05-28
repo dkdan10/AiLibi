@@ -88,8 +88,9 @@ validate_seeds() {
       return 1
     fi
     token="${BASH_REMATCH[1]}"
-    # De-duplicate (keep first occurrence) so a typo like "22,22" cannot
-    # double-spend on the provider or double-count in the cost sum.
+    token="$((10#$token))" # canonicalize (01 -> 1) so numeric aliases de-dup
+    # De-duplicate (keep first occurrence) so a typo like "22,22" or "1,01"
+    # cannot double-spend on the provider or double-count in the cost sum.
     case ",$seen," in
       *",$token,"*) continue ;;
     esac
@@ -165,8 +166,8 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] sample dir: $SAMPLE_DIR"
   echo "[dry-run] provider: AILIBI_LLM_PROVIDER=anthropic (forced)"
   echo "[dry-run] meeting model: ${AILIBI_LLM_MEETING_MODEL:-(provider default)}"
-  echo "[dry-run] per seed, would run (then update that seed's manifest row):"
-  echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir $SAMPLE_DIR --force"
+  echo "[dry-run] per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
+  echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --force"
   if [[ "$mode" == "full" ]]; then
     echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49) and prune their manifest rows"
   fi
@@ -208,18 +209,29 @@ if [[ -z "$active_model" ]]; then
 fi
 echo "Attributing no-meeting seeds to model: $active_model"
 
+# Stage each per-seed run in a temp dir on the same filesystem as the sample dir
+# so the replay can be moved into place atomically, and only after the run
+# succeeds. A mid-write provider/schema failure then leaves the live
+# replay-seed-N.jsonl and its MANIFEST row untouched (the partial write hit the
+# stage, which set -e + the trap discard) -- exactly the stale/partial-sample
+# state this workflow exists to prevent. It also keeps replays/samples/ to just
+# replay JSONLs: run_balance_eval writes a sibling <stem>.audit.jsonl that stays
+# behind in the stage.
+stage_dir="$(mktemp -d "$(dirname "$SAMPLE_DIR")/.ailibi-refresh-stage-XXXXXX")"
+trap 'rm -rf "$stage_dir"' EXIT
+
 IFS=',' read -ra seed_list <<<"$seeds_csv"
 for seed in "${seed_list[@]}"; do
   echo "--- Refreshing seed $seed ---"
   uv run python "$REPO_ROOT/scripts/run_tournament.py" \
     --start-seed "$seed" \
     --num-games 1 \
-    --output-dir "$SAMPLE_DIR" \
+    --output-dir "$stage_dir" \
     --force
-  # Sync THIS seed's manifest row immediately. Updating per seed rather than
-  # once after the loop keeps provenance consistent under partial failure: if a
-  # later seed's run fails, set -e aborts, but every replay already overwritten
-  # has a matching, up-to-date MANIFEST row instead of stale provenance.
+  # Atomic replace on success, THEN sync this seed's manifest row, so the live
+  # sample and its provenance never drift. Per-seed (rather than one update
+  # after the loop) keeps earlier seeds consistent if a later one fails.
+  mv -f "$stage_dir/replay-seed-$seed.jsonl" "$SAMPLE_DIR/replay-seed-$seed.jsonl"
   uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
     --seeds "$seed" \
     --git-sha "$git_sha" \

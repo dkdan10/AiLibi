@@ -181,3 +181,24 @@ def test_duplicate_seed_alias_rejected(tmp_path: Path) -> None:
     assert len(failures) == 1
     assert failures[0].game_id == f"headless-seed-{_SEED}"
     assert "map to seed 0" in failures[0].reason
+
+
+def test_missing_canonical_seed_detected(tmp_path: Path) -> None:
+    # A manifest declares seeds 0 and 22, but seed 22's replay is absent.
+    _copy_seed(tmp_path, _SEED)  # only replay-seed-0.jsonl present
+    (tmp_path / "MANIFEST.md").write_text(
+        "| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner |\n"
+        "|------|-------|-----------------|--------------|---------|----------|--------|\n"
+        "| 0 | m | (none) | d | s | 0.0000 | CREWMATES |\n"
+        "| 22 | m | accusation_round.v2 | d | s | 0.2000 | CREWMATES |\n"
+    )
+    failures = vs.verify_samples(tmp_path)
+    assert [f.game_id for f in failures] == ["headless-seed-22"]
+    assert "missing" in failures[0].reason
+
+
+def test_no_manifest_skips_completeness_check(tmp_path: Path) -> None:
+    # An ad-hoc directory without a manifest declares no expected set, so a
+    # single clean sample passes (completeness is only enforced via a manifest).
+    _copy_seed(tmp_path, _SEED)
+    assert vs.verify_samples(tmp_path) == []
