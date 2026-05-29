@@ -41,6 +41,7 @@ from eval.meeting_quality import (
 )
 from eval.report_schema import TournamentReport
 from eval.vote_correctness import VoteCorrectnessReport
+from llm.provider import LLMCallFailure, _attach_parse_failure
 from meetings.schemas import MeetingTranscript
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
@@ -338,3 +339,141 @@ def test_loader_fails_loud_on_doubled_file(tmp_path: Path) -> None:
             fallback_reason="CREWMATES",
             replay_path=path,
         )
+
+
+# ---------------------------------------------------------------------------
+# Per-seed meeting-abort recovery in run_tournament_eval
+# (a real-provider parse failure records spend + re-raises; the tournament must
+#  fold the partial game instead of discarding the whole run)
+# ---------------------------------------------------------------------------
+
+
+class _AbortingHeadlessGame:
+    """Stub game whose run() mimics a real-provider meeting abort.
+
+    Writes a partial replay (a tick + a FailedCallReplayEntry, no game_over),
+    exactly as ``HeadlessGame`` does before re-raising, then raises an exception
+    carrying the parse-failure metadata ``extract_parse_failure`` reads.
+    """
+
+    _COST = 0.02
+
+    def __init__(
+        self,
+        *,
+        seed: int,
+        game_map: object,
+        agent_factory: object,
+        replay_path: Path,
+        num_players: int,
+        num_impostors: int,
+        scheduler: object,
+        meeting_runner: object,
+        force: bool,
+    ) -> None:
+        self._seed = seed
+        self._replay_path = replay_path
+
+    @property
+    def replay_path(self) -> Path:
+        return self._replay_path
+
+    def run(self) -> object:
+        game_id = f"headless-seed-{self._seed}"
+        _write_jsonl(
+            self._replay_path,
+            [
+                ReplayEntry(game_id=game_id, tick=0, actions=(), state_hash="h0"),
+                FailedCallReplayEntry(
+                    game_id=game_id,
+                    meeting_id=f"{game_id}:meeting-0",
+                    tick=1,
+                    model="model-x",
+                    prompt_length=10,
+                    raw_response="{",
+                    input_tokens=100,
+                    output_tokens=10,
+                    cost_usd=self._COST,
+                    error_type="ValidationError",
+                    error_message="bad",
+                ),
+            ],
+        )
+        exc = RuntimeError("meeting aborted on parse failure")
+        _attach_parse_failure(
+            exc,
+            LLMCallFailure(
+                model="model-x",
+                prompt_length=10,
+                raw_response="{",
+                input_tokens=100,
+                output_tokens=10,
+                cost_usd=self._COST,
+                error_type="ValidationError",
+                error_message="bad",
+            ),
+        )
+        raise exc
+
+
+class _BuggyHeadlessGame:
+    """Stub game whose run() raises a plain (non-parse-failure) exception."""
+
+    def __init__(self, **kwargs: object) -> None:
+        pass
+
+    def run(self) -> object:
+        raise RuntimeError("genuine bug with no parse-failure metadata")
+
+
+def test_tournament_recovers_partial_game_on_meeting_abort(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A meeting abort yields a partial GameReport (winner=None) carrying the
+    failed-call spend — the whole tournament is not discarded, and the spend is
+    counted exactly once."""
+
+    monkeypatch.setattr("eval.balance_eval.HeadlessGame", _AbortingHeadlessGame)
+
+    report = run_tournament_eval(
+        seeds=(7,),
+        output_dir=tmp_path,
+        num_players=4,
+        num_impostors=1,
+        max_ticks=50,
+    )
+
+    assert len(report.games) == 1
+    game = report.games[0]
+    assert game.seed == 7
+    assert game.winner is None
+    assert game.final_tick is None
+    assert "aborted" in game.reason
+
+    # The failed call (and its spend) survives into the report.
+    assert len(game.failed_calls) == 1
+    assert game.failed_calls[0].cost_usd == pytest.approx(0.02)
+
+    # roles recovered from the seeded setup (re-seeded, not the replay JSONL).
+    assert game.roles
+    assert sum(1 for role in game.roles.values() if role == "IMPOSTOR") == 1
+
+    # No double-count: per-game total == the canonical reducer over the replay.
+    replay_path = tmp_path / game.replay_ref
+    assert game.cost.total_cost_usd == pytest.approx(0.02)
+    assert game.cost.total_cost_usd == pytest.approx(compute_cost_usd(replay_path))
+
+    # The failed-call spend reaches the cost dashboard exactly once.
+    eval_report = build_tournament_eval_report(report)
+    assert eval_report.cost_dashboard.total_cost_usd == pytest.approx(0.02)
+
+
+def test_tournament_reraises_non_parse_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-parse-failure exception is not swallowed — it propagates fail-loud."""
+
+    monkeypatch.setattr("eval.balance_eval.HeadlessGame", _BuggyHeadlessGame)
+
+    with pytest.raises(RuntimeError, match="genuine bug"):
+        run_tournament_eval(seeds=(7,), output_dir=tmp_path, max_ticks=50)

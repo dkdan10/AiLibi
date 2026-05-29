@@ -29,6 +29,15 @@ without it.
 ``final_tick=None`` (the partial-run-robustness contract). ``run_balance_eval``
 maps ``winner is None`` to its ``tick_budget_reached`` bucket.
 
+A meeting that aborts under a real provider (a structured-output response that
+fails schema validation) records its already-charged spend as a
+``FailedCallReplayEntry`` and then re-raises. ``run_tournament_eval`` catches
+that specific abort per seed, folds the partial replay (tick records + the
+failed call, no ``game_over``) into a ``GameReport`` with ``winner=None``, and
+continues — so one crashed meeting does not discard the whole tournament and the
+recorded failed-call spend still lands in the report. Any other exception is an
+unexpected bug and propagates fail-loud (AGENTS.md "no silent fallbacks").
+
 ``MEETING_PHASE_REACHED`` is **not** a reachable outcome here. Task 3.13 made
 the meeting runner the production default (every game runs through a
 :func:`orchestrator.game.build_default_meeting_runner`), so the public
@@ -53,6 +62,7 @@ from eval.report_schema import (
     TournamentReport,
 )
 from llm.budget import GameBudget
+from llm.provider import extract_parse_failure
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
@@ -71,6 +81,7 @@ from orchestrator.replay import (
     read_all_entries,
 )
 from orchestrator.scheduler import TickScheduler
+from orchestrator.seeder import seed_initial_state
 
 
 @dataclass(frozen=True)
@@ -165,8 +176,16 @@ def run_tournament_eval(
     exist fail loud rather than silently doubling them (DESIGN.md §11.4; Task
     4.16).
 
+    A meeting that aborts on a structured-output parse failure is caught per
+    seed: the orchestrator has already recorded the failed call's spend to the
+    replay, so this folds the partial replay into a ``winner=None``
+    :class:`~eval.report_schema.GameReport` (roles re-seeded from the game setup)
+    and continues. One crashed meeting therefore does not discard the whole
+    tournament, and the failed-call spend still appears in the report.
+
     Raises ``RuntimeError`` if any game ends at ``MEETING_PHASE_REACHED`` (the
-    Task 3.13 runner wire-up regressed; AGENTS.md "no silent fallbacks").
+    Task 3.13 runner wire-up regressed). Re-raises any non-parse-failure
+    exception from a game unchanged (AGENTS.md "no silent fallbacks").
     """
 
     if not seeds:
@@ -198,7 +217,41 @@ def run_tournament_eval(
             ),
             force=force,
         )
-        result = game.run()
+        try:
+            result = game.run()
+        except Exception as exc:
+            # A meeting that aborted on a structured-output parse failure has
+            # already recorded its FailedCallReplayEntry (the already-charged
+            # spend) to the replay before re-raising
+            # (orchestrator.game._run_and_apply_meeting). Recover the partial
+            # game from that replay so one crashed meeting does not discard the
+            # whole tournament AND the recorded failed-call spend still lands in
+            # the report — the partial-run case the failed_calls/cost path exists
+            # for. Anything else is an unexpected bug, so re-raise fail-loud
+            # (AGENTS.md "no silent fallbacks").
+            failure = extract_parse_failure(exc)
+            if failure is None:
+                raise
+            games.append(
+                _game_report_from_replay(
+                    seed=seed,
+                    # No HeadlessGameResult exists on the abort path, so re-seed
+                    # to recover the role ground truth from the seeded game setup
+                    # (still never the replay JSONL — the leak firewall keeps
+                    # roles out of replay).
+                    roles=_seeded_roles(
+                        seed=seed,
+                        game_map=resolved_map,
+                        num_players=num_players,
+                        num_impostors=num_impostors,
+                    ),
+                    fallback_reason=(
+                        f"meeting aborted before game_over ({failure.error_type})"
+                    ),
+                    replay_path=replay_path,
+                )
+            )
+            continue
         if result.outcome == "MEETING_PHASE_REACHED":
             raise RuntimeError(
                 f"seed {seed} ended at MEETING_PHASE_REACHED; the public "
@@ -255,6 +308,32 @@ def run_balance_eval(
         force=force,
     )
     return _balance_report_from_tournament(report)
+
+
+def _seeded_roles(
+    *,
+    seed: int,
+    game_map: Map,
+    num_players: int,
+    num_impostors: int,
+) -> dict[PlayerId, Role]:
+    """Recover a game's role ground truth by re-running the deterministic seeding.
+
+    Used only on the meeting-abort path, where no
+    :class:`~orchestrator.game.HeadlessGameResult` exists to read roles from.
+    :func:`orchestrator.seeder.seed_initial_state` is the same seeded game setup
+    the aborted game ran (same seed + config) and roles never change mid-game, so
+    this reconstructs the identical map the in-memory result would have carried —
+    still the seeded setup, never the replay JSONL (the leak firewall).
+    """
+
+    state = seed_initial_state(
+        seed=seed,
+        game_map=game_map,
+        num_players=num_players,
+        num_impostors=num_impostors,
+    )
+    return {player_id: player.role for player_id, player in state.players.items()}
 
 
 def _balance_report_from_tournament(report: TournamentReport) -> BalanceReport:
