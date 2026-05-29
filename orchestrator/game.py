@@ -696,6 +696,37 @@ class HeadlessGame:
         )
         agents = self._build_agents(state.players)
 
+        # Close the per-game replay + audit handles deterministically at every
+        # loop exit (game over, tick budget, meeting pause, or exception). Both
+        # logs flush each row as it is written, so this only releases the file
+        # descriptors (Task 5.9 write-cadence pass); the recorded bytes — and
+        # therefore the determinism contract — are unchanged.
+        try:
+            return self._run_loop(
+                state=state,
+                observation_service=observation_service,
+                replay=replay,
+                agents=agents,
+            )
+        finally:
+            replay.close()
+            observation_service.close()
+
+    def _run_loop(
+        self,
+        *,
+        state: WorldState,
+        observation_service: ObservationService,
+        replay: ReplayLog,
+        agents: dict[PlayerId, AgentInterface],
+    ) -> HeadlessGameResult:
+        """Drive the tick loop until terminate, meeting, or tick budget.
+
+        Extracted from :meth:`run` so the handle close lives in a single
+        ``finally`` around every loop exit (Task 5.9). The replay log and
+        observation service are owned by :meth:`run`, which closes them.
+        """
+
         last_events: tuple[EngineEvent, ...] = ()
         meeting_counter = 0
         while state.phase != "GAME_OVER":

@@ -33,6 +33,16 @@ class ObservationService:
         self._game_map = game_map
         self._audit_log = ObservationAuditLog(audit_log_path)
 
+    def close(self) -> None:
+        """Release the audit log's append handle (idempotent).
+
+        The service owns the :class:`ObservationAuditLog`; closing it flushes
+        and releases the file descriptor at end of game. Builds after a close
+        re-open the handle lazily, so close is safe to call between batches.
+        """
+
+        self._audit_log.close()
+
     def build_packet(
         self,
         *,
