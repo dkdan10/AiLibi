@@ -32,7 +32,7 @@ from dataclasses import fields, is_dataclass
 import hashlib
 import json
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -218,6 +218,9 @@ class ReplayLog:
         """
 
     def __init__(self, path: Path, game_id: str, *, force: bool = False) -> None:
+        # Assigned first so __del__ is safe even if construction raises below
+        # (e.g. AlreadyExistsError on an existing path).
+        self._handle: TextIO | None = None
         if path.exists():
             if not force:
                 raise self.AlreadyExistsError(
@@ -365,10 +368,59 @@ class ReplayLog:
 
         return read_meeting_entries(self._path)
 
+    def close(self) -> None:
+        """Flush and release the append handle (idempotent).
+
+        Per-tick games open and append thousands of times; re-opening the
+        file for every line (the original ``open("a")``-per-write) was a
+        per-tick syscall cost the Task 5.9 profile surfaced. The handle is
+        now opened lazily on the first append (:meth:`_append`) and reused,
+        and ``close`` releases the descriptor at end of game. This is a
+        write-cadence change only — the bytes written are byte-identical, so
+        the determinism contract (state hashes + recorded actions) is
+        unchanged.
+
+        Lazy open also preserves the force=True "nothing on disk until the
+        next append" contract (DESIGN.md §11.4, Task 4.16): a log that never
+        recorded anything closes to a no-op and leaves no file.
+        """
+
+        handle = self._handle
+        if handle is not None:
+            self._handle = None
+            handle.close()
+
+    def __enter__(self) -> ReplayLog:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        # Best-effort descriptor release for callers that never close the log
+        # (e.g. the direct-construction paths in eval/determinism_test.py).
+        # Per-write flush already persisted every line, so this only frees the
+        # file descriptor; swallow errors because __del__ must never raise.
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def _append(self, entry: Mapping[str, Any]) -> None:
-        with self._path.open("a", encoding="utf-8") as handle:
-            handle.write(_stable_json(entry))
-            handle.write("\n")
+        handle = self._handle
+        if handle is None:
+            # Lazy open: the file is created on the first append, not at
+            # construction, so force=True leaves nothing on disk until a row
+            # is written (DESIGN.md §11.4, Task 4.16).
+            handle = self._path.open("a", encoding="utf-8")
+            self._handle = handle
+        handle.write(_stable_json(entry))
+        handle.write("\n")
+        # Flush each row so a reader that opens the path while the log is still
+        # alive (eval/determinism_test.py reads bytes without closing the log)
+        # sees every recorded line — the same on-disk visibility the original
+        # open/close-per-write gave, minus the per-write open/close syscalls.
+        handle.flush()
 
 
 def read_replay_entries(path: Path) -> tuple[ReplayEntry, ...]:
