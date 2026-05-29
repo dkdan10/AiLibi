@@ -1,0 +1,86 @@
+{
+  "v_a": {
+    "game_count": 3,
+    "metrics": {
+      "accusation_claim_ece": 0.12115384615384618,
+      "alibi_survival_rate": 1.0,
+      "total_cost_usd": 0.672018,
+      "total_impostor_alibis": 5,
+      "vote_ballot_ece": 0.17888888888888893,
+      "vote_correctness_rate": 1.0
+    },
+    "prompt_versions": [
+      {
+        "game_count": 3,
+        "template_name": "accusation_round",
+        "total_cost_usd": 0.672018,
+        "version": "accusation_round.v2"
+      },
+      {
+        "game_count": 3,
+        "template_name": "crewmate_report",
+        "total_cost_usd": 0.672018,
+        "version": "crewmate_report.v1"
+      },
+      {
+        "game_count": 3,
+        "template_name": "impostor_report",
+        "total_cost_usd": 0.672018,
+        "version": "impostor_report_v1"
+      },
+      {
+        "game_count": 3,
+        "template_name": "vote_ballot",
+        "total_cost_usd": 0.672018,
+        "version": "vote_ballot/v1"
+      }
+    ],
+    "seeds": [
+      22,
+      24,
+      26
+    ]
+  },
+  "v_b": {
+    "game_count": 3,
+    "metrics": {
+      "accusation_claim_ece": 0.12115384615384618,
+      "alibi_survival_rate": 0.8,
+      "total_cost_usd": 0.672018,
+      "total_impostor_alibis": 5,
+      "vote_ballot_ece": 0.17888888888888893,
+      "vote_correctness_rate": 1.0
+    },
+    "prompt_versions": [
+      {
+        "game_count": 3,
+        "template_name": "accusation_round",
+        "total_cost_usd": 0.672018,
+        "version": "accusation_round.v2"
+      },
+      {
+        "game_count": 3,
+        "template_name": "crewmate_report",
+        "total_cost_usd": 0.672018,
+        "version": "crewmate_report.v1"
+      },
+      {
+        "game_count": 3,
+        "template_name": "impostor_report",
+        "total_cost_usd": 0.672018,
+        "version": "impostor_report_v2"
+      },
+      {
+        "game_count": 3,
+        "template_name": "vote_ballot",
+        "total_cost_usd": 0.672018,
+        "version": "vote_ballot/v1"
+      }
+    ],
+    "seeds": [
+      22,
+      24,
+      26
+    ]
+  }
+}
