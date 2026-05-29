@@ -344,3 +344,124 @@ export interface EvalCostSummaryView {
   max_cost_per_replay: number;
   decisive_split: Record<string, number>;
 }
+
+// ---------------------------------------------------------------------------
+// Tournament eval report (Task 5.7, DESIGN.md §11.3)
+//
+// Hand-mirrored from the frozen Pydantic models the `/eval/tournament-report`
+// endpoint serves directly: `eval.meeting_quality.TournamentEvalReport` plus
+// its four nested metric models (`eval.vote_correctness`,
+// `eval.accusation_calibration`, `eval.alibi_fabrication`,
+// `eval.cost_dashboard`) and the `eval.report_schema.TournamentReport` fields
+// the dashboard reads. Keep the nullable fields faithful — `number | null`
+// where the Pydantic model is `float | None` — or the dashboard silently
+// renders `undefined` (see `## Decisions`: TypeScript/Pydantic drift).
+// ---------------------------------------------------------------------------
+
+// `eval.report_schema.GameCostSummary` — per-game cost roll-up. Carried on each
+// GameReport; the dashboard reads the pre-aggregated `CostDashboard` instead,
+// but the shape is mirrored for faithfulness.
+export interface GameCostSummary {
+  total_cost_usd: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  by_model: Record<string, number>;
+}
+
+// `eval.report_schema.GameReport` — the dashboard reads only the per-game
+// outcome (`winner`, and `seed`/`final_tick`/`reason` for the per-game detail
+// table). The source model also carries `roles`, `replay_ref`, `meetings`,
+// `failed_calls`, `prompt_versions`, and `cost`; those feed the Python metric
+// analyzers (already pre-aggregated into the metric blocks below) and are not
+// read by the dashboard, so they are intentionally omitted from this mirror to
+// avoid mirroring the entire meeting-transcript graph (`## Decisions`).
+export interface GameReport {
+  game_id: string;
+  seed: number;
+  winner: Winner | null;
+  reason: string;
+  final_tick: number | null;
+}
+
+// `eval.report_schema.TournamentReport` — the top-level artifact. `winner ===
+// null` is the non-decisive tick-budget bucket (mirrors `WinnerSide | None`).
+export interface TournamentReport {
+  format_version: number;
+  games: GameReport[];
+  seeds_used: number[];
+}
+
+// `eval.vote_correctness.VoteCorrectnessReport`. `vote_correctness_rate` is
+// `null` (undefined, not 0.0) when there were no impostor ejections.
+export interface VoteCorrectnessReport {
+  total_ejections: number;
+  impostor_ejections: number;
+  crewmate_ejections: number;
+  evidence_backed_impostor_ejections: number;
+  vote_correctness_rate: number | null;
+}
+
+// `eval.accusation_calibration.CalibrationBin`. `actual_impostor_rate` and
+// `mean_confidence` are `null` (not 0.0, not NaN) for an empty bin.
+export interface CalibrationBin {
+  bin_index: number;
+  lo: number;
+  hi: number;
+  midpoint: number;
+  count: number;
+  impostor_hits: number;
+  actual_impostor_rate: number | null;
+  mean_confidence: number | null;
+}
+
+// `eval.accusation_calibration.AccusationCalibrationReport` — claim and ballot
+// curves reported separately, never pooled. Each `*_ece` is `null` when the
+// curve binned no accusations.
+export interface AccusationCalibrationReport {
+  n_bins: number;
+  accusation_claim_bins: CalibrationBin[];
+  accusation_claim_total: number;
+  accusation_claim_ece: number | null;
+  vote_ballot_bins: CalibrationBin[];
+  vote_ballot_total: number;
+  vote_ballot_ece: number | null;
+}
+
+// `eval.alibi_fabrication.AlibiFabricationReport`. `survival_rate` is `0.0`
+// (vacuous, division-safe) when there are no impostor alibis; gate
+// interpretation on `total_impostor_alibis > 0`.
+export interface AlibiFabricationReport {
+  total_impostor_alibis: number;
+  survived: number;
+  survival_rate: number;
+}
+
+// `eval.cost_dashboard.PromptVersionCost`. The per-version totals OVERLAP (the
+// full game cost is attributed once per template the game ran), so they do not
+// sum to the tournament total — see the source module docstring.
+export interface PromptVersionCost {
+  template_name: string;
+  version: string;
+  total_cost_usd: number;
+  game_count: number;
+}
+
+// `eval.cost_dashboard.CostDashboard`.
+export interface CostDashboard {
+  total_cost_usd: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  game_count: number;
+  mean_cost_per_game: number;
+  by_model: Record<string, number>;
+  per_prompt_version: PromptVersionCost[];
+}
+
+// `eval.meeting_quality.TournamentEvalReport` — the wrapper the endpoint serves.
+export interface TournamentEvalReport {
+  report: TournamentReport;
+  vote_correctness: VoteCorrectnessReport;
+  accusation_calibration: AccusationCalibrationReport;
+  alibi_fabrication: AlibiFabricationReport;
+  cost_dashboard: CostDashboard;
+}

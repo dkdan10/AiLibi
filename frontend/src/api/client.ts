@@ -12,6 +12,7 @@ import type {
   ReplayMetadataView,
   ReplayView,
   TickView,
+  TournamentEvalReport,
 } from "../types/api";
 
 const API_BASE = "/api";
@@ -90,4 +91,12 @@ export function getMemory(
 
 export function getEvalCostSummary(): Promise<EvalCostSummaryView> {
   return getJson<EvalCostSummaryView>("/eval/cost-summary");
+}
+
+// The latest tournament eval report served by the privileged eval surface
+// (Task 5.7). The eval router is mounted at `/eval`, so the path mirrors
+// `/eval/cost-summary`; raises `ApiError` (404 → no report present) like the
+// sibling methods.
+export function getTournamentReport(): Promise<TournamentEvalReport> {
+  return getJson<TournamentEvalReport>("/eval/tournament-report");
 }

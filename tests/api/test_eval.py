@@ -1,4 +1,13 @@
-"""Endpoint tests for the eval cost-summary route (DESIGN.md §11.4)."""
+"""Endpoint tests for the eval routes (DESIGN.md §11.3, §11.4).
+
+Covers ``/eval/cost-summary`` (Task 4.x) and ``/eval/tournament-report``
+(Task 5.7): the latter serves the latest ``tournament-eval-report.json`` from
+the configured eval dir (200), or 404 when none exists. The report fixture is
+assembled exactly as the real artifact is — via
+:func:`eval.meeting_quality.build_tournament_eval_report` over a hand-built
+:class:`~eval.report_schema.TournamentReport` — so the test exercises the real
+schema rather than a parallel hand-written JSON blob.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +19,8 @@ from fastapi.testclient import TestClient
 
 from api.main import create_app
 from api.replay_loader import ReplayLoader, get_replay_loader
+from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_report
+from eval.report_schema import GameCostSummary, GameReport, TournamentReport
 from tests.api.fixtures.sample_replay import write_meeting_replay, write_sample_replay
 
 
@@ -49,3 +60,93 @@ def test_cost_summary_empty_dir_returns_zeros(tmp_path: Path) -> None:
     assert body["mean_cost_per_replay"] == 0.0
     assert body["max_cost_per_replay"] == 0.0
     assert body["decisive_split"] == {}
+
+
+# ---------------------------------------------------------------------------
+# /eval/tournament-report (Task 5.7, DESIGN.md §11.3)
+# ---------------------------------------------------------------------------
+
+
+def _sample_eval_report() -> TournamentEvalReport:
+    """A minimal-but-valid TournamentEvalReport for endpoint tests.
+
+    Two no-meeting games (one crew win, one impostor win — the latter with a
+    ``None`` final_tick to cover the partial/non-decisive shape) carrying
+    distinct per-game cost, so the served body exercises the balance summary
+    and the cost dashboard. The four metric blocks fall out of
+    :func:`build_tournament_eval_report` (the empty case for no-meeting games),
+    exactly as the production artifact is assembled.
+    """
+
+    games = (
+        GameReport(
+            game_id="headless-seed-0",
+            seed=0,
+            winner="CREWMATES",
+            reason="CREWMATE_TASKS",
+            final_tick=42,
+            roles={"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
+            replay_ref="replay-seed-0.jsonl",
+            meetings=(),
+            failed_calls=(),
+            prompt_versions={"meeting": "v1"},
+            cost=GameCostSummary(
+                total_cost_usd=0.10,
+                total_input_tokens=100,
+                total_output_tokens=20,
+                by_model={"claude-sonnet": 0.10},
+            ),
+        ),
+        GameReport(
+            game_id="headless-seed-1",
+            seed=1,
+            winner="IMPOSTORS",
+            reason="IMPOSTOR_PARITY",
+            final_tick=None,
+            roles={"p-1": "CREWMATE", "p-2": "IMPOSTOR"},
+            replay_ref="replay-seed-1.jsonl",
+            meetings=(),
+            failed_calls=(),
+            prompt_versions={"meeting": "v1"},
+            cost=GameCostSummary(
+                total_cost_usd=0.05,
+                total_input_tokens=50,
+                total_output_tokens=10,
+                by_model={"claude-haiku": 0.05},
+            ),
+        ),
+    )
+    return build_tournament_eval_report(
+        TournamentReport(games=games, seeds_used=(0, 1))
+    )
+
+
+def test_tournament_report_present_returns_200(tmp_path: Path) -> None:
+    eval_report = _sample_eval_report()
+    (tmp_path / "tournament-eval-report.json").write_text(
+        eval_report.model_dump_json(), encoding="utf-8"
+    )
+
+    with _client(tmp_path) as client:
+        response = client.get("/eval/tournament-report")
+
+    assert response.status_code == 200
+    body = response.json()
+    # Served faithfully: the body round-trips back into an equal model.
+    assert TournamentEvalReport.model_validate(body) == eval_report
+    # Balance summary inputs: per-game winners, including the IMPOSTORS win.
+    assert [g["winner"] for g in body["report"]["games"]] == [
+        "CREWMATES",
+        "IMPOSTORS",
+    ]
+    # Cost dashboard: each game's spend counted once → 0.10 + 0.05.
+    assert body["cost_dashboard"]["total_cost_usd"] == pytest.approx(0.15)
+    # A nullable metric field is served as JSON null, never 0 / NaN (the
+    # no-impostor-ejection case), so the dashboard can render "n/a".
+    assert body["vote_correctness"]["vote_correctness_rate"] is None
+
+
+def test_tournament_report_absent_returns_404(tmp_path: Path) -> None:
+    with _client(tmp_path / "empty") as client:
+        response = client.get("/eval/tournament-report")
+    assert response.status_code == 404
