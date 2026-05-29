@@ -19,5 +19,6 @@ node_modules/
 # only replays committed to the repo (see task 4.12 / DESIGN.md §7).
 replays/*.jsonl
 !replays/samples/
+replays/tournament-eval-report.json
 # Internal leak-test packet logs from the observation firewall — never commit.
 **/*.audit.jsonl
