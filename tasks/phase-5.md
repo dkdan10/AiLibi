@@ -777,31 +777,115 @@ small. Output: one Markdown audit at
 **Branch:** `phase-5-tournament-dashboard-frontend-page`
 **Depends on:** 5.6 merged
 **Section refs:** DESIGN.md §11.3, DESIGN.md §7
-**Complexity:** Medium
+**Complexity:** Integration
 
-Tournament dashboard frontend page.
+Add a Tournament Dashboard view to the spectator frontend that renders the
+`eval.meeting_quality.TournamentEvalReport` (the artifact Task 5.6 emits as
+`tournament-eval-report.json`): the four Phase 5 metrics (vote correctness,
+accusation calibration, alibi fabrication, cost dashboard) plus the balance
+outcome summary. The Phase 4 app is a single-page replay viewer; this task adds
+a SECOND top-level view, reached by tab navigation, backed by its own store and
+a new read endpoint. This is a full-stack slice (backend read endpoint →
+typed client → store → component), so its scope is wider than the other Phase 5
+tasks; that is expected for the dashboard.
+
+The merged data shape it renders (`eval/meeting_quality.py`):
+`TournamentEvalReport { report: TournamentReport, vote_correctness:
+VoteCorrectnessReport, accusation_calibration: AccusationCalibrationReport,
+alibi_fabrication: AlibiFabricationReport, cost_dashboard: CostDashboard }`. All
+five are frozen Pydantic models that round-trip through JSON.
+
+**Decisions resolved (record any deviation in the PR's `## Decisions` block):**
+- **Navigation: tabs, not a router.** Add tab state to `App.tsx`
+  ("Replay Viewer" | "Tournament Dashboard"); render one view at a time. No
+  `react-router-dom` dependency (the app is single-page; a router is dead
+  weight for two views).
+- **Store: a sibling `useTournamentStore`, NOT an extension of
+  `useReplayStore`.** The Phase 4 store is explicitly frozen (its header says
+  adding a field requires touching all consumers). The dashboard's state is
+  independent (one fetched report, no playback), so it gets its own Zustand
+  store.
+- **Report source: a new read endpoint** `GET /api/tournament-report` (in
+  `api/routes/eval.py`, mirroring the existing `/cost-summary` thin-adapter
+  pattern) serving the latest `tournament-eval-report.json` from the configured
+  replay/eval directory via `ReplayLoader`. Returns 404 when no report is
+  present. This matches the replay-viewer architecture (frontend fetches typed
+  JSON via `api/client.ts`); a committed static asset would go stale. The
+  endpoint is privileged like the rest of the spectator API and intentionally
+  exposes `roles` ground truth for the dashboard.
+- **Rendering: plain React + CSS/SVG, NOT PixiJS.** The metric views are tables,
+  bars, a calibration curve (rate-vs-confidence), and a cost breakdown — data
+  widgets, not a spatial canvas. PixiJS is the map renderer; do not pull it into
+  a data view. No new charting dependency unless a clear need is documented.
 
 **Files in scope:**
-- frontend/src/components/TournamentDashboard.tsx
+- frontend/src/components/TournamentDashboard.tsx (and small co-located subcomponents if needed)
+- frontend/src/store/tournamentStore.ts (new sibling Zustand store)
+- frontend/src/api/client.ts (add `getTournamentReport()`)
+- frontend/src/types/api.ts (add the `TournamentEvalReport` TS types mirroring the Pydantic models)
+- frontend/src/App.tsx (tab navigation between the replay viewer and the dashboard)
+- api/routes/eval.py (add `GET /tournament-report`)
+- api/replay_loader.py (add a method that reads the eval-report JSON from the configured dir, mirroring `cost_summary()`)
+- tests/api/ (a test for the new endpoint: present → 200 + valid body; absent → 404)
 
 **Files NOT in scope:**
 - engine/
 - agents/
 - llm/
-- api/ unless a read endpoint already exists and needs wiring
-- eval/
+- eval/ (consume `TournamentEvalReport`'s JSON shape; do not modify the metric or schema modules)
+- frontend/src/store/replayStore.ts (frozen Phase 4 store — do not extend it)
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Frontend dashboard renders the typed tournament JSON report.
-- [ ] Dashboard includes metrics from 5.2 through 5.5.
-- [ ] Frontend build/check command passes if configured.
-
+- [ ] `GET /api/tournament-report` returns the `TournamentEvalReport` JSON for the configured eval dir (200) or 404 when no `tournament-eval-report.json` exists; the loader method mirrors `ReplayLoader.cost_summary()` and reads the same configured directory.
+- [ ] `frontend/src/types/api.ts` carries TS types mirroring `TournamentEvalReport` + its four nested metric models (and the `TournamentReport` fields the dashboard reads); `getTournamentReport()` in `api/client.ts` fetches `/tournament-report` and returns the typed shape, raising `ApiError` on failure like the sibling methods.
+- [ ] `useTournamentStore` (new) holds the fetched report + load/error state; it does not import or mutate `useReplayStore`.
+- [ ] `App.tsx` renders tab navigation; selecting "Tournament Dashboard" mounts `TournamentDashboard`, which renders: the balance summary (crew/impostor/tick-budget from `report` winners), vote-correctness rate, the accusation-calibration curve (per-bin actual-impostor-rate vs confidence, claim and ballot curves shown separately), the alibi-fabrication survival rate, and the cost dashboard (total, mean-per-game, per-`(template, version)` breakdown, per-model). Each metric's `None`/empty states render without crashing (e.g. `vote_correctness_rate === null` shows "n/a", not NaN).
+- [ ] The dashboard does NOT pull in PixiJS or a new charting dependency (or, if one is genuinely needed, the choice is justified in `## Decisions`).
+- [ ] `npm run build` (tsc + vite build) and any configured `tsc`/lint check pass; `bash scripts/check.sh` passes (backend gates green for the new endpoint).
+- [ ] `uv run mypy --strict` on the API surface it touches passes; `uv run ruff check .` passes.
 
 **Implementation hint:**
 
-See DESIGN.md §7. React + PixiJS dashboard reading the eval report.
+Backend: `api/routes/eval.py` already exposes `GET /cost-summary` as a thin
+adapter over `ReplayLoader`. Add `GET /tournament-report` the same way — a new
+`ReplayLoader` method reads `<replay_dir>/tournament-eval-report.json` (the file
+`scripts/run_tournament.py` writes), validates it against
+`eval.meeting_quality.TournamentEvalReport`, and returns it; missing file → a
+404 (`HTTPException`). Serve the model directly as `response_model` rather than
+re-modeling a parallel DTO — the structure is deep and the dashboard is
+privileged. Generate a sample `tournament-eval-report.json` for local testing
+with `uv run python scripts/run_tournament.py --num-games 5 --output-dir /tmp/tdash`
+(fake provider, no network).
+
+Frontend: model the tab on the existing single-page layout in `App.tsx`; the
+dashboard view is a sibling of the replay-viewer `<main>`. The calibration curve
+can be a simple inline SVG or styled divs (per-bin bar whose height is
+`actual_impostor_rate`, x = bin midpoint). Mirror `api/client.ts`'s `getJson`
+helper for the fetch.
+
+**Public types introduced:**
+None.
+
+**Integration risk:**
+
+- **Scope is full-stack.** Unlike 5.8 (which is parallel-safe in `eval/` +
+  `tests/`), this task touches `api/` and `frontend/`. It does not touch any
+  file 5.8 touches, so the two still fan out in parallel — but this one is the
+  larger PR.
+- **Privileged exposure is intentional.** The endpoint serves `roles` ground
+  truth. That is consistent with the spectator API's privileged model (the
+  replay viewer already exposes role), but note it explicitly so a future DTO
+  audit does not flag it as an accidental leak.
+- **Do not extend the frozen replay store.** Adding fields to `useReplayStore`
+  would force edits across every Phase 4 component; the sibling store keeps the
+  blast radius to this task.
+- **TypeScript/Pydantic drift.** The TS types are hand-mirrored from the
+  Pydantic models; keep them faithful (especially nullable fields like
+  `vote_correctness_rate: number | null` and the empty-bin
+  `actual_impostor_rate: number | null`) or the dashboard silently renders
+  `undefined`.
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-7-tournament-dashboard-frontend-page.md`
 
@@ -811,11 +895,51 @@ See DESIGN.md §7. React + PixiJS dashboard reading the eval report.
 **Section refs:** DESIGN.md §11.3
 **Complexity:** Integration
 
-Prompt regression test suite.
+The prompt regression suite — **this task IS the Phase 5 close gate**: it must
+demonstrate one full loop, a prompt-template change producing a measurable,
+attributable metric delta in the tournament report, deterministically in CI.
+
+The enabling insight: the Phase 5 metrics are pure analyzers over a
+`TournamentReport`, which is assembled from replay records — and recorded real
+meetings already exist as replay JSONL under `replays/samples/` (the
+meeting-bearing seeds carry real transcripts, ballots, and contradictions, with
+their prompt-template versions logged in `replays/samples/MANIFEST.md`). So the
+regression suite needs NO live model and NO engine re-run: build a
+`TournamentReport` from frozen recorded JSONL plus a deterministically-derived
+`roles` map, run the four metrics, and compare to a committed baseline. The
+`FakeProvider` is NOT usable here — it emits empty/stub outputs, so a fake run
+yields trivial metric values; the regression signal must come from recorded
+real outputs.
+
+`roles` is the one field not in the JSONL; derive it deterministically from the
+seed via `orchestrator.seeder.seed_initial_state(seed, num_players,
+num_impostors).players[id].role` — no LLM, no network, fully reproducible.
+
+**Decisions resolved (record any deviation in the PR's `## Decisions` block):**
+- **Fixture provenance: a frozen, owned copy under
+  `tests/fixtures/prompt_regression/`, NOT the live `replays/samples/`.** The
+  live samples are rewritten by `scripts/refresh_samples.sh`; a regression
+  baseline must be stable. Copy a small set of meeting-bearing seeds' replay
+  JSONL into the fixture dir, tagged by prompt version (from MANIFEST).
+- **Report build path: promote a public loader in `eval/balance_eval.py`.**
+  Extract the existing per-seed assembly (`_game_report_from_replay` +
+  `_game_cost_summary`) into a public `load_tournament_report(replay_dir, *,
+  roles_by_seed)` (refactor-only, no behavior change to `run_tournament_eval`,
+  which keeps using the same code). The regression module calls it — it does
+  NOT duplicate the record→`GameReport` mapping (avoids drift from 5.6).
+- **`roles` for fixtures: derived at test time via `seed_initial_state`**, not
+  stored in the fixture (decoupled, no duplicated ground truth).
+- **Regression signal: exact-match on frozen fixtures.** Because the fixtures
+  are recorded and the metrics are deterministic, the baseline metric scalars
+  are exact; any drift is a real regression in a metric, the loader, or the
+  schema. The `> X%` tolerance is the documented policy for the *manual*
+  real-provider re-record comparison (via `refresh_samples.sh`), which is out of
+  CI; state the chosen X and that CI uses exact match.
 
 **Files in scope:**
 - eval/prompt_regression.py
-- tests/fixtures/prompt_regression/
+- eval/balance_eval.py (promote `load_tournament_report` from the existing private assembly; refactor-only)
+- tests/fixtures/prompt_regression/ (frozen recorded replay JSONL tagged by prompt version + a committed baseline of expected metric scalars)
 - tests/eval/test_prompt_regression.py
 
 **Files NOT in scope:**
@@ -824,25 +948,72 @@ Prompt regression test suite.
 - llm/ provider behavior
 - api/
 - frontend/
+- eval/report_schema.py, eval/vote_correctness.py, eval/accusation_calibration.py, eval/alibi_fabrication.py, eval/cost_dashboard.py, eval/meeting_quality.py (consume their public APIs; do not modify)
+- scripts/refresh_samples.sh (the real-provider re-record path; referenced, not modified)
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Prompt regression tests exercise prompt versions against stable fixtures.
-- [ ] Regression results are tagged by prompt version.
-- [ ] Tests use recorded/fake LLM outputs and make no network calls.
-- [ ] Relevant eval tests pass.
+- [ ] `eval/prompt_regression.py` builds a `TournamentReport` from a fixture directory of recorded replay JSONL (via the promoted `eval.balance_eval.load_tournament_report`, with `roles` derived from `seed_initial_state`), runs `eval.meeting_quality.build_tournament_eval_report`, and produces a metric summary tagged by the prompt-template versions in play (from `GameReport.prompt_versions`). No network, no live/fake model call to generate outputs.
+- [ ] A committed baseline (e.g. `tests/fixtures/prompt_regression/baseline.json`) records the expected metric scalars per prompt version. `tests/eval/test_prompt_regression.py` asserts the computed summary matches the baseline EXACTLY for the frozen fixtures; a mismatch fails the test (a real metric/loader/schema regression). The `> X%` tolerance is documented as the policy for the manual real-provider re-record path; CI uses exact match.
+- [ ] **Close-gate demonstration:** the suite includes TWO prompt-version fixture sets — a baseline version `v_a` and a variant `v_b` whose recorded meeting outputs differ such that at least one metric (e.g. alibi-fabrication survival rate or vote-correctness rate) measurably changes. A test asserts the regression suite DETECTS the delta and ATTRIBUTES it to the prompt-version change (via `prompt_versions` provenance and/or the cost-per-version breakdown). This is the prompt-change → metric-diff loop, run deterministically without a model.
+- [ ] Results are tagged by prompt version (the summary keys by `(template_name, version)` or the per-version provenance), so a delta is traceable to which template changed.
+- [ ] Tests use recorded fixtures only and make no network calls; `AILIBI_LLM_PROVIDER` is irrelevant (no provider is invoked).
+- [ ] `load_tournament_report` is a behavior-preserving extraction: `run_tournament_eval` and the existing `test_balance_eval.py` / `test_tournament_report.py` still pass unchanged.
 - [ ] `uv run mypy --strict eval` passes.
-- [ ] `uv run ruff check .` passes.
-
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` and `uv run python scripts/validate_task_docs.py` pass.
+- [ ] `uv run pytest` passes; `bash scripts/check.sh` passes locally.
 
 **Implementation hint:**
 
-See DESIGN.md §11.3. For each prompt version × fixed seed set, compare metric deltas against a baseline. Block merge on regression > X%.
+For each fixture seed, derive roles with
+`seed_initial_state(seed, num_players=…, num_impostors=…).players` (the same
+deterministic setup the loader's `_seeded_roles` uses), call
+`load_tournament_report(fixture_dir, roles_by_seed=…)` → `TournamentReport`,
+then `build_tournament_eval_report(report)` → pull scalars
+(`vote_correctness.vote_correctness_rate`,
+`alibi_fabrication` survival rate, `accusation_calibration.*_ece`,
+`cost_dashboard.total_cost_usd` + `per_prompt_version`). Pick a couple of
+meeting-bearing sample seeds (e.g. 22/24/26 per MANIFEST) and copy their
+`replay-seed-N.jsonl` into `tests/fixtures/prompt_regression/v_a/`. For `v_b`,
+either copy a different recorded run of the same seeds at a different prompt
+version, or hand-author a minimal variant transcript that moves one metric
+(e.g. add an `alibi_conflict` contradiction so an impostor alibi flips from
+survived to caught); commit it under `…/v_b/` tagged with a distinct
+`prompt_versions`. Keep fixtures small — a few seeds is enough to pin the loop.
+
+To regenerate fixtures from a real provider (manual, out of CI): change the
+prompt template, run `scripts/refresh_samples.sh --meetings`, copy the new
+samples into the fixture dir, and update `baseline.json`. Document this
+provenance procedure in the module docstring.
+
+**Public types introduced:**
+- eval.prompt_regression.PromptRegressionSummary
+- eval.prompt_regression.run_prompt_regression
+- eval.balance_eval.load_tournament_report
 
 **Integration risk:**
 
-Determinism is essential — flaky tests destroy the regression signal. Use the fake LLM provider with recorded outputs; never call a real model in CI.
+This task is the Phase 5 acceptance gate; getting the loop genuinely
+demonstrated (not stubbed) is the point.
+
+- **Determinism is everything.** Recorded fixtures + pure analyzers + derived
+  roles = byte-stable metric values. Never invoke a real OR fake model to
+  generate outputs in the suite — a fake run produces empty meetings and a
+  meaningless signal. If a metric value is not reproducible from the frozen
+  fixture, the fixture or the loader is wrong.
+- **The `load_tournament_report` extraction must not change `run_tournament_eval`
+  behavior.** It is a pure refactor of code 5.6 already shipped; the existing
+  loader/integration tests are the guardrail.
+- **The close-gate demo must be a REAL delta, not a tautology.** `v_b` must
+  differ from `v_a` in recorded outputs such that a metric genuinely moves and
+  the suite reports it; a test that asserts `report_a != report_b` by comparing
+  unrelated fields does not demonstrate the loop. Tie the asserted delta to a
+  specific metric and to the changed prompt version.
+- **Fixtures are frozen.** Do not point the suite at `replays/samples/` (those
+  get rewritten); copy what you need into `tests/fixtures/prompt_regression/`.
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-8-prompt-regression-test-suite.md`
 

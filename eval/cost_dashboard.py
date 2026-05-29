@@ -33,8 +33,11 @@ Four semantic decisions are pinned here; each is load-bearing and tested:
 
 * **Single-run collapse → the comparison is cross-report.** Within one
   tournament run ``prompt_versions`` is constant across all games (one template
-  set is loaded per run), so every ``(template, version)`` key appears in every
-  game and each per-version total equals the tournament total. The breakdown's
+  set is loaded per run), so when every game ran a meeting each per-version
+  total equals the tournament total — but a game with spend yet empty
+  ``prompt_versions`` (e.g. a crashed meeting recovered by the 5.6 abort path)
+  contributes to the total and to no version key, so the equality does not hold
+  in that case (see "Empty inputs" below). The breakdown's
   comparative value (version A vs version B) is therefore a CROSS-report
   comparison of two runs — consumed by Task 5.8's regression loop — not a
   within-report delta. :class:`CostDashboard` is a frozen value object with a
