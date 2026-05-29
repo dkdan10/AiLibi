@@ -1023,46 +1023,101 @@ demonstrated (not stubbed) is the point.
 **Section refs:** DESIGN.md §9
 **Complexity:** Medium
 
-Hit the DESIGN.md §9 Phase 5 target: ≥ 1 headless game per minute on a
-laptop. Measure current rate; identify bottlenecks; apply targeted
-fixes (engine hot paths, observation packet construction, replay-write
-cadence, LLM-call concurrency limits). The performance pass is polish
-work — the dashboard and regression suite ship at the current rate.
+Hit the DESIGN.md §9 Phase 5 target: ≥ 1 headless game per minute on a laptop.
+Measure the current rate, profile to find the real bottlenecks, apply targeted
+fixes to the hot paths, and prove no behavior change. This is the final Phase 5
+task and pure polish — the dashboard (5.7) and regression suite (5.8) already
+ship at the current rate.
+
+**Benchmark on the FAKE provider.** The rate must be measured deterministically
+and network-free, so the benchmark runs headless games with
+`AILIBI_LLM_PROVIDER=fake` (instant LLM stubs). That means the measured cost is
+ENGINE + serialization throughput per tick — NOT LLM latency. The confirmed hot
+paths (cited, not guessed):
+
+- **Per-tick full-state hash** — `orchestrator.replay._state_hash`
+  (`orchestrator/replay.py:546`) sha256s the entire serialized `WorldState`
+  every tick.
+- **Per-tick replay JSONL write** — `ReplayLog.record_tick`
+  (`orchestrator/replay.py:244`) serializes via `_stable_json`
+  (`json.dumps(sort_keys=True…)`, `orchestrator/replay.py:585`) and writes one
+  line per tick.
+- **Per-agent-per-tick observation packet construction** —
+  `ObservationService.build_packet` (`observation/service.py:36`).
+
+LLM-call concurrency (`orchestrator/`) is a REAL-run lever only — it does not
+show up in a fake-provider benchmark (the fake is instant) — so it is secondary
+here and any change to it must not alter determinism or the recorded replay.
 
 **Files in scope:**
-- engine/ (hot paths only; no behavior change)
-- orchestrator/ (concurrency tuning)
-- eval/ (benchmark harness if needed)
-- tests/eval/test_performance.py (or similar benchmark recording)
-- scripts/run_tournament.py (only if perf surfaces a tuning knob)
+- engine/ (hot paths only; no rule/behavior change)
+- orchestrator/ (per-tick serialization / hash / write-cadence hot paths; concurrency tuning is secondary and determinism-preserving)
+- observation/ (packet-construction hot path, if it appears in the profile)
+- eval/benchmark.py (a small reusable throughput harness, if one is wanted; else inline in the test)
+- tests/eval/test_performance.py (records the benchmark; skipped by default — see DoD)
+- scripts/run_tournament.py (only if perf surfaces a tuning knob worth a CLI flag)
 
 **Files NOT in scope:**
 - agents/ behavior (FSM or strategic prompt changes)
 - llm/ provider behavior
-- api/, frontend/ (perf affects engine + orchestrator, not the spectator UI which is read-only)
 - meetings/ behavior (cap raises etc. are Phase 3 territory)
+- api/, frontend/ (the spectator UI is read-only; perf is engine + orchestrator)
+- eval/ metric modules, report_schema.py, meeting_quality.py (perf must not change metric values)
 - DESIGN.md
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Benchmark recorded showing the BEFORE rate (game/min on the target laptop hardware).
-- [ ] Bottlenecks identified via profiling (cProfile or py-spy output captured in `## Decisions`).
-- [ ] Targeted fixes applied; no behavior change (determinism tests still pass byte-identically).
-- [ ] Benchmark recorded showing the AFTER rate; meets or exceeds ≥ 1 game/min.
-- [ ] No regression in any existing test, including determinism + leak tests.
-- [ ] `uv run pytest` passes.
-- [ ] `bash scripts/check.sh` passes.
-
+- [ ] BEFORE rate recorded (games/min on the target laptop, fake provider) in the PR's `## Decisions`, with the exact command and hardware noted.
+- [ ] Bottlenecks identified via profiling (`cProfile` or `py-spy`); the profile output (top cumulative-time frames) captured in `## Decisions`. Only paths that actually appear in the profile are optimized — no speculative changes.
+- [ ] Targeted fixes applied with NO behavior change. The proof is byte-identity: for a fixed seed, the AFTER `replay-seed-{seed}.jsonl` is byte-identical to BEFORE, and `eval/determinism_test.py` (the three scripted games) still passes byte-identically. Any change to `_state_hash` / `_stable_json` serialization is forbidden unless provably output-identical, since the state hash IS the determinism contract.
+- [ ] AFTER rate recorded; meets or exceeds ≥ 1 game/min on the target laptop (documented alongside BEFORE).
+- [ ] A benchmark harness is committed that times N headless fake-provider games and reports games/min (e.g. via `time.perf_counter` over `HeadlessGame`/`run_balance_eval`; no `pytest-benchmark` dependency — it is not in `pyproject.toml`). It lives in `tests/eval/test_performance.py` and is **skipped by default** (behind an env-gate or marker) so it never flakes CI on hardware variance; running it is opt-in. Decision recorded: record-only vs a generous non-flaky floor — bias toward record-only (or a floor far below the target, e.g. a smoke assertion that the rate is finite/positive), with the real ≥ 1 game/min target verified manually and documented, never asserted as a tight CI threshold.
+- [ ] No regression in any existing test, including `eval/determinism_test.py` and `eval/leak_test.py` (byte-identity + leak firewall both still hold).
+- [ ] `uv run mypy .` passes; `uv run ruff check .` and `uv run ruff format --check .` pass; `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` and `uv run python scripts/validate_task_docs.py` pass.
+- [ ] `uv run pytest` passes; `bash scripts/check.sh` passes locally.
 
 **Implementation hint:**
 
-DESIGN.md §9 names "≥ 1 game/min headless on a laptop" as the target. The current rate is unmeasured; the implementing agent's first action is to record a baseline. Profile with `cProfile` or `py-spy`; the hot paths are likely (a) observation packet construction (called per agent per tick), (b) replay JSONL serialization (per-tick write), (c) state-hash computation. Avoid premature optimization — only target paths that appear in the profile output.
+First action is to record a baseline — do NOT optimize before measuring. Time a
+small batch of fake-provider games (e.g. `AILIBI_LLM_PROVIDER=fake` over a seed
+range that reaches meetings, so the meeting path is exercised) with
+`time.perf_counter`, and profile the same batch with `cProfile`
+(`python -m cProfile -s cumtime`). Then target only the frames the profile
+surfaces — the three cited hot paths are the likely candidates, but let the
+profile decide.
+
+When optimizing the per-tick hash/write: the determinism contract is that the
+recorded replay is byte-identical from a seed. So you may make `_state_hash` /
+`_stable_json` faster ONLY if the bytes are unchanged (e.g. caching, avoiding
+redundant re-serialization), never by changing the serialization format. Re-run
+a tournament for a fixed seed before and after and `diff` the replay files —
+they must be identical. `eval/determinism_test.py` is the automated guard.
+
+**Decisions to resolve and record in the PR's `## Decisions` block:**
+- CI gating of the benchmark: record-only / skip-by-default (bias) vs a hard threshold (rejected — hardware variance makes a tight `≥ 1 game/min` CI assertion flaky).
+- Benchmark provider: fake (bias — deterministic, network-free, measures engine throughput) vs real (network-bound, non-reproducible, costs money — rejected for the gate).
+- Harness home: `eval/benchmark.py` (reusable) vs inline in `tests/eval/test_performance.py`.
+
+**Public types introduced:**
+None.
 
 **Integration risk:**
 
-- **Determinism must hold.** Any change to engine hot paths risks breaking byte-identical replay determinism. Determinism tests are the load-bearing gate.
-- **Single-laptop variance.** Benchmarks on different hardware will differ. Pin the BEFORE and AFTER runs to the same hardware; document the hardware in `## Decisions`.
-- **No behavior change.** This task does NOT modify agent reasoning, prompt content, FSM rules, or LLM behavior. Perf-only.
+- **Determinism is the load-bearing gate.** Any engine/orchestrator hot-path
+  change risks breaking byte-identical replays. The state hash is the contract;
+  `eval/determinism_test.py` plus a before/after replay `diff` for a fixed seed
+  are the proof. A perf win that changes a single recorded byte is a regression,
+  not a win.
+- **No behavior change.** This task does NOT touch agent reasoning, prompt
+  content, FSM rules, LLM behavior, or any metric value. Perf-only.
+- **Single-laptop variance.** Pin BEFORE and AFTER to the same hardware and
+  document it; do not compare rates across machines. This is exactly why the
+  committed benchmark is record-only and not a CI threshold.
+- **Fake-provider benchmark scope.** The benchmark measures engine +
+  serialization throughput, not LLM latency, so it will not reflect
+  LLM-concurrency changes; keep the optimization focus on the per-tick hot
+  paths the profile surfaces.
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-9-performance-pass.md`
 
