@@ -6,17 +6,42 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 5.5 — Cost dashboard metric, anchored to DESIGN.md §11.3. Do not implement work outside these references.
+Implement Task 5.5 — Cost dashboard metric, anchored to DESIGN.md §10.4, DESIGN.md §11.3. Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-5.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-5-cost-dashboard`
 **Depends on:** 5.1 merged
-**Section refs:** DESIGN.md §11.3
+**Section refs:** DESIGN.md §10.4, DESIGN.md §11.3
 **Complexity:** Medium
 
-Cost metric data by prompt version.
+A pure analyzer over `eval.report_schema.TournamentReport` that produces the
+cost-dashboard data (DESIGN.md §10.4 Cost bullet for the ~$0.20/game target;
+§11.3 reporting; the per-game cost substrate is
+`orchestrator.replay.compute_cost_usd` / `eval.report_schema.GameCostSummary`):
+cost-per-game and cost-per-prompt-version, so a prompt change's cost impact
+is legible alongside its quality impact. This is the cost half of the Phase 5
+close loop — a prompt-template change should show both a metric delta (5.2–5.4)
+and a cost delta here.
+
+The inputs, all on the merged schema:
+
+- `GameReport.cost: GameCostSummary` — per game: `total_cost_usd`,
+  `total_input_tokens`, `total_output_tokens`, `by_model: Mapping[str,
+  float]` (USD keyed by model id).
+- `GameReport.prompt_versions: Mapping[str, str]` — template name → version
+  marker in play for that game (templates load once per run, so this is
+  game-granular).
+- `GameReport.failed_calls: tuple[FailedCallReplayEntry, ...]` — meeting-
+  aborting LLM calls whose `cost_usd` was still charged. `GameCostSummary.total_cost_usd`
+  ALREADY includes this spend: the canonical reducer
+  `orchestrator.replay.compute_cost_usd` sums meeting `llm_calls` cost PLUS
+  every `failed_call` cost (replay.py:452-458), and the `GameReport.failed_calls`
+  docstring states the total counts them. So the dashboard reads
+  `total_cost_usd` as authoritative and must NOT add `failed_calls` cost again.
+- `MeetingReport.llm_calls` — per-call `LLMCallRecord` (`model`, `cost_usd`,
+  tokens) if finer-than-game slicing is needed.
 
 **Files in scope:**
 - eval/cost_dashboard.py
@@ -29,6 +54,7 @@ Cost metric data by prompt version.
 - api/
 - frontend/
 - scripts/run_tournament.py
+- eval/report_schema.py
 - eval/vote_correctness.py
 - eval/accusation_calibration.py
 - eval/alibi_fabrication.py
@@ -36,15 +62,39 @@ Cost metric data by prompt version.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Per-prompt-version cost metric/dashboard data is implemented against eval report data.
-- [ ] Metric module has focused unit tests using typed report fixtures.
-- [ ] This task does not wire the metric into tournament JSON output.
+- [ ] `eval/cost_dashboard.py` exposes a pure function from a `TournamentReport` to a frozen Pydantic result model with at least: total tournament cost, mean cost-per-game, and a cost-per-prompt-version breakdown.
+- [ ] Cost-per-prompt-version is keyed by `(template_name, version)` drawn from each game's `prompt_versions`, summing the games that ran that version. A game runs several templates at once; bias: attribute the full game cost once under EACH `(template, version)` present (do NOT split it across templates). Document in the PR's `## Decisions` block that the per-version totals therefore OVERLAP and are NOT a partition — summing them across versions does not recover the tournament total and must not be presented as if it does.
+- [ ] Within a single tournament run `prompt_versions` is constant across all games (one template set is loaded per run), so for a real one-run report the per-`(template, version)` breakdown collapses to one key equal to the tournament total. Its comparative value (version A vs version B) is therefore a CROSS-REPORT comparison — two runs, consumed by Task 5.8's regression loop — not a within-report delta. The result model should be cleanly comparable/mergeable across two `CostDashboard`s for that purpose, or the contract states that 5.8 computes the cross-run delta from two dashboards.
+- [ ] The metric treats `GameCostSummary.total_cost_usd` as the authoritative complete per-game spend and does NOT add `sum(fc.cost_usd for fc in failed_calls)` on top — `total_cost_usd` already includes failed-call cost (via `orchestrator.replay.compute_cost_usd`; confirmed by the `GameReport.failed_calls` docstring). Note this no-double-count invariant in the PR's `## Decisions` block. (The matching loader-side obligation — Task 5.6 populates `total_cost_usd` via `compute_cost_usd` and does not double-add — is carried into 5.6's elaboration.)
+- [ ] A per-model cost roll-up is available (aggregating `GameCostSummary.by_model` across games), so a mixed-tier tournament is auditable per model.
+- [ ] Partial-replay robustness: a game with zero meetings/zero cost, an empty `prompt_versions`, or a tournament with one game all produce well-defined numbers (no division-by-zero, no NaN).
+- [ ] `tests/eval/test_cost_dashboard.py` builds report fixtures directly covering: a structural/constructibility fixture with two prompt-versions present (verify per-version keying and summation — labelled as a constructibility test, since a real single run carries one version set); a single-version report that collapses to one key equal to the total cost; a game carrying `failed_calls` (verify the dashboard does NOT double-count failed-call spend); and a mixed-`by_model` game.
 - [ ] `uv run mypy --strict eval` passes.
-- [ ] `uv run ruff check .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` and `uv run python scripts/validate_task_docs.py` pass.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
 
 ## Implementation hint
 
-See DESIGN.md §10.4. Aggregate `llm.budget` records by prompt version × game; emit cost-per-game and cost-per-prompt-version.
+See DESIGN.md §10.4. Aggregate over `report.games`: total cost is the sum of
+each game's `cost.total_cost_usd` (which already includes failed-call spend —
+do NOT add `failed_calls` again); cost-per-prompt-version groups games by
+their `prompt_versions` entries. `orchestrator.replay.compute_cost_usd` is the
+canonical file-level cost reducer (and is what already folds failed calls
+in), but this metric works over the already-aggregated report, not raw JSONL —
+do not re-read files. Build fixtures by instantiating the schema
+models directly; this task does NOT wire the dashboard into tournament JSON
+output (Task 5.6) and does NOT build the frontend (Task 5.7) — it produces
+the typed data those consume.
+
+## Public types this task introduces
+- `eval.cost_dashboard.CostDashboard`
+- `eval.cost_dashboard.PromptVersionCost`
+- `eval.cost_dashboard.compute_cost_dashboard`
+
+These are the symbols downstream tasks will import. Keep their signatures stable.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
@@ -81,4 +131,4 @@ Do not implement work outside this task.
 
 ## Output expectation
 Open a PR from branch `phase-5-cost-dashboard` with a title like `task 5.5: cost dashboard metric`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §11.3), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing DESIGN.md §10.4, DESIGN.md §11.3), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

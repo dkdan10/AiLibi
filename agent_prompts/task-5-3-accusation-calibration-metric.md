@@ -16,7 +16,23 @@ The authoritative task contract is copied below from tasks/phase-5.md. Follow it
 **Section refs:** DESIGN.md §11.3
 **Complexity:** Medium
 
-Accusation-calibration metric.
+A pure analyzer over `eval.report_schema.TournamentReport` that answers
+DESIGN.md §11.3's calibration question: are high-confidence accusations
+correct (the target really is an impostor) more often than low-confidence
+ones? A well-calibrated agent population shows actual-impostor-rate rising
+monotonically with stated confidence.
+
+Accusations carry an explicit confidence in two places, both reachable from
+the report:
+
+- `AccusationClaim` (`type="accusation"`, `against: PlayerId`, `confidence:
+  float` in [0,1], `reason: str`) — nested in `Statement.claims` and
+  `ReportDocument.claims` inside `MeetingReport.transcript`.
+- `VoteBallot` (`voter`, `target: PlayerId | "SKIP"`, `confidence: float`) on
+  `MeetingReport.ballots`.
+
+Correctness is decided by `GameReport.roles[target] == "IMPOSTOR"` — the
+ground-truth map the 5.6 loader fills, never an inferred role.
 
 **Files in scope:**
 - eval/accusation_calibration.py
@@ -29,6 +45,7 @@ Accusation-calibration metric.
 - api/
 - frontend/
 - scripts/run_tournament.py
+- eval/report_schema.py
 - eval/vote_correctness.py
 - eval/alibi_fabrication.py
 - eval/cost_dashboard.py
@@ -36,15 +53,41 @@ Accusation-calibration metric.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Accusation-calibration metric is implemented against eval report data.
-- [ ] Metric module has focused unit tests using typed report fixtures.
-- [ ] This task does not wire the metric into tournament JSON output.
+- [ ] `eval/accusation_calibration.py` exposes a pure function from a `TournamentReport` to a frozen Pydantic result model binning accusations by confidence and reporting per-bin actual-impostor-rate, count, and mean confidence.
+- [ ] Bin edges are an explicit, documented choice (e.g. fixed-width deciles or quartiles over [0,1]); the binning is deterministic and total. Because `confidence` is `Field(ge=0.0, le=1.0)`, `1.0` is a legal value: bins are half-open `[lo, hi)` except the final bin, which is closed `[lo, 1.0]`, so `confidence == 1.0` lands in the top bin (implement as `bin_index = min(int(c * n_bins), n_bins - 1)`).
+- [ ] Each accusation's correctness is `roles[target] == "IMPOSTOR"` (subscript, not `.get`); a `"SKIP"` ballot target is excluded BEFORE the lookup (it accuses no one). `roles` is post-game ground truth covering every player by construction, so a target absent from `roles` signals a malformed report and MUST fail loud (raise) — AGENTS.md "no silent fallbacks". Do not add an "unresolved" bucket and do not let a failed lookup silently count as a non-hit (which would bias that bin's actual-impostor-rate downward). The no-accusations / no-meetings / all-`SKIP` robustness below applies to the ABSENCE of accusations, never to a present accusation with an unresolvable target.
+- [ ] Decision recorded in the PR's `## Decisions` block: which confidence source(s) the metric consumes — `AccusationClaim` only, `VoteBallot` only, or both (and if both, whether they are pooled into one curve or reported as two). Bias: report `AccusationClaim`-based and `VoteBallot`-based calibration separately, since a vote and a mid-meeting accusation are different acts.
+- [ ] The result model exposes enough to judge calibration (per-bin actual-impostor-rate vs bin midpoint); a scalar calibration error (e.g. expected-calibration-error) is optional but, if included, documented.
+- [ ] Partial-replay robustness: a game with no accusations, no meetings, or all-`SKIP` ballots produces empty/zero bins without raising.
+- [ ] `tests/eval/test_accusation_calibration.py` builds report fixtures directly covering: high-confidence accusations against real impostors (well-calibrated); high-confidence accusations against crewmates (mis-calibrated); a spread across bins including `confidence` exactly `0.0` and exactly `1.0` (to pin the boundary convention); the no-accusations / all-`SKIP` case; and a malformed accusation whose target is absent from `roles`, asserting the analyzer raises.
 - [ ] `uv run mypy --strict eval` passes.
-- [ ] `uv run ruff check .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` and `uv run python scripts/validate_task_docs.py` pass.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
 
 ## Implementation hint
 
-See DESIGN.md §11.3. Bin accusations by confidence and compute actual-impostor-rate per bin. Calibrated when high-confidence accusations are correct more often than low-confidence ones.
+See DESIGN.md §11.3. Walk every `MeetingReport`; pull `AccusationClaim`s out
+of `transcript.reports[*].claims` and `transcript.statements[*].claims`
+(filter the `Claim` union on `type == "accusation"`), and/or `ballots` per
+the source decision. For each `AccusationClaim`, bucket by `confidence` and
+tally `roles[claim.against] == "IMPOSTOR"`. For a `VoteBallot` (if the source
+decision includes ballots), first skip `target == "SKIP"`, then tally
+`roles[ballot.target] == "IMPOSTOR"` — note the ballot field is `target` (not
+`against`) and may be the literal `"SKIP"`. A bin's actual-impostor-rate is
+`impostor_hits / accusations_in_bin`. Calibration is read off by comparing
+that rate to the bin's confidence midpoint. Build fixtures by instantiating
+the schema models directly; this task does NOT touch the tournament runner
+(that is Task 5.6).
+
+## Public types this task introduces
+- `eval.accusation_calibration.AccusationCalibrationReport`
+- `eval.accusation_calibration.CalibrationBin`
+- `eval.accusation_calibration.compute_accusation_calibration`
+
+These are the symbols downstream tasks will import. Keep their signatures stable.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.

@@ -57,6 +57,7 @@ Convergence point for Phase 5 metrics. Each metric module ships independently; t
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import eval.cost_dashboard"`
 - `uv run python -c "import eval.report_schema"`
 - `uv run python -c "import orchestrator.replay.ReplayLog"`
 - `uv run python -c "import api.schemas.BeliefEntryView"`
@@ -66,6 +67,9 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import frontend/src/api/client"`
 - `uv run python -c "import api.replay_loader"`
 - `uv run python -c "import api.main"`
+- `uv run python -c "import eval.alibi_fabrication"`
+- `uv run python -c "import eval.accusation_calibration"`
+- `uv run python -c "import eval.vote_correctness"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

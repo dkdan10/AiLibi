@@ -229,7 +229,34 @@ it. Breaking or reshaping it later breaks every downstream consumer.
 **Section refs:** DESIGN.md §11.3
 **Complexity:** Medium
 
-Vote-correctness metric.
+A pure analyzer over `eval.report_schema.TournamentReport` that answers
+DESIGN.md §11.3's vote-correctness question: when a meeting ejects an
+impostor, was the ejection *driven by real evidence* (a genuine contradiction
+against the ejected player, or a kill-witness chain) rather than a lucky or
+unfounded vote? A high impostor-ejection rate that is not evidence-backed is
+a worse signal than a lower rate that is — this metric separates the two.
+
+The metric reads only `eval.report_schema` data (no engine, agents, or LLM
+imports). The relevant fields, all already on the merged schema:
+
+- `GameReport.roles: Mapping[PlayerId, Role]` — post-game ground truth;
+  `roles[ejected_player_id] == "IMPOSTOR"` decides whether an ejection hit an
+  impostor. (`Role` is `Literal["CREWMATE", "IMPOSTOR"]` from
+  `engine.entities`.)
+- `MeetingReport.outcome` (`"EJECTED"` / `"SKIPPED"`) and
+  `MeetingReport.ejected_player_id`.
+- `MeetingReport.contradictions` — `ContradictionRef.subjects` and `.kind`
+  (`"alibi_conflict"` / `"alibi_vs_sighting"`) say whether a real
+  contradiction names the ejected player.
+- `MeetingReport.transcript.reports` — witness evidence lives on
+  `ReportDocument.observations` (the `ObservationClaim` union:
+  `FoundBodyObservation` / `SawPlayerObservation`), which is a DIFFERENT field
+  from `ReportDocument.claims` (the `Claim` union: alibi/accusation/
+  corroboration). Do not look for observations on `.claims`.
+- `MeetingReport.transcript.statements` — `Statement.claims` carries
+  `AccusationClaim` (accusations also appear on `ReportDocument.claims`).
+- `MeetingReport.ballots` — `VoteBallot.target` and `primary_reason_id`
+  (references a `Statement` id) for the ejecting-vote rationale.
 
 **Files in scope:**
 - eval/vote_correctness.py
@@ -242,6 +269,7 @@ Vote-correctness metric.
 - api/
 - frontend/
 - scripts/run_tournament.py
+- eval/report_schema.py
 - eval/accusation_calibration.py
 - eval/alibi_fabrication.py
 - eval/cost_dashboard.py
@@ -249,16 +277,52 @@ Vote-correctness metric.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Vote-correctness metric is implemented against eval report data.
-- [ ] Metric module has focused unit tests using typed report fixtures.
-- [ ] This task does not wire the metric into tournament JSON output.
+- [ ] `eval/vote_correctness.py` exposes a pure function from a `TournamentReport` (or a sequence of `GameReport`) to a frozen Pydantic result model — no I/O, no engine/LLM calls.
+- [ ] The metric considers only `EJECTED` meetings. For each, it classifies the ejection as (a) impostor vs crewmate via `roles[ejected_player_id]` (subscript — fail-loud if a real player is absent from `roles`; see the partial-replay bullet for the `ejected_player_id is None` case), and (b) evidence-backed vs not. "Evidence-backed" is computed from structured report data, not free text, via two schema-expressible signals: a `ContradictionRef` whose `subjects` include the ejected player, OR a kill-witness chain — a `FoundBodyObservation` reporting a body in room R at tick T, plus a `SawPlayerObservation` whose `subject == ejected_player_id` with `room == R` and `tick` within a documented window K of T. The accusation-at-scene variant is EXCLUDED: `AccusationClaim` carries no location or tick, so counting "someone accused the ejected player" collapses into the circular accusation/vote-driven signal this metric exists to avoid (DESIGN.md §11.3 names only "a real contradiction or kill witness"). The exact predicate and the window K are recorded in the PR's `## Decisions` block.
+- [ ] The result model reports at least: total ejections, impostor ejections, evidence-backed impostor ejections, and the vote-correctness rate (evidence-backed impostor ejections / impostor ejections, defined as 0.0 or `None`—pick and document—when there are no impostor ejections).
+- [ ] Decision recorded in the PR's `## Decisions` block: the precise "real evidence" predicate (contradiction-subjects and/or the precise kill-witness chain above; a ballot `primary_reason_id`→`Statement` chain may corroborate but must not be the sole signal, to avoid circularity), the kill-witness tick window K, and the denominator choice. DESIGN.md §11.3 frames it as impostor ejections backed by a real contradiction or kill witness; bias toward the impostor-ejection denominator.
+- [ ] Partial-replay robustness: meetings with no contradictions, an empty transcript, a `SKIPPED` outcome, or a game with no meetings never raise — they contribute zero to the relevant buckets. Note that `MeetingReport` (unlike `meetings.schemas.MeetingResult`, schemas.py:263-273) does NOT enforce the `outcome=="EJECTED"` ↔ non-None `ejected_player_id` coupling, so an `EJECTED` meeting with `ejected_player_id is None` is type-possible; treat it as malformed and skip it (or fail-loud) — pick one and record it in `## Decisions`.
+- [ ] `tests/eval/test_vote_correctness.py` builds `report_schema` fixtures directly (no tournament run) covering: ejected impostor with a naming contradiction (correct); ejected impostor with no evidence (incorrect); ejected crewmate; a `SKIPPED` meeting; and a game with zero meetings.
 - [ ] `uv run mypy --strict eval` passes.
-- [ ] `uv run ruff check .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` and `uv run python scripts/validate_task_docs.py` pass.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
-See DESIGN.md §11.3. Vote correctness = ejected_player.role == "IMPOSTOR" AND ejection rationale cites a real contradiction or kill witness. Pure analyzer over eval/report_schema records — no engine or LLM dependencies.
+Read `eval/report_schema.py` and `meetings/schemas.py` first — the metric is
+a fold over `GameReport.meetings`. Pseudocode:
+
+```python
+for game in report.games:
+    for meeting in game.meetings:
+        if meeting.outcome != "EJECTED":
+            continue
+        ejected = meeting.ejected_player_id
+        if ejected is None:
+            continue  # malformed: MeetingReport does not enforce EJECTED<->ejected_player_id
+        is_impostor = game.roles[ejected] == "IMPOSTOR"  # subscript: fail-loud if a real player is absent
+        backed = _has_real_evidence(meeting, ejected)  # ContradictionRef.subjects / FoundBody+SawPlayer co-location
+        ...
+```
+
+`AccusationClaim` carries no ground truth — only `roles` does; never infer a
+role from an accusation. The metric does NOT wire itself into tournament JSON
+output; that is Task 5.6. Construct test fixtures by instantiating
+`TournamentReport`/`GameReport`/`MeetingReport` directly.
+
+**Public types introduced:**
+- eval.vote_correctness.VoteCorrectnessReport
+- eval.vote_correctness.compute_vote_correctness
+
+**Integration risk:**
+
+- **Parallel-safe with 5.3–5.5.** This task writes only `eval/vote_correctness.py` and its test. It must not edit `eval/report_schema.py` or any sibling metric module; if it needs a schema change, that is a signal the 5.1 schema was wrong — stop and report rather than widening scope.
+- **Ground truth comes only from `roles`.** Deriving impostor identity from accusations or vote outcomes would make the metric circular (it would measure agreement with the vote, not correctness of it).
+- **Define the predicate once, test it adversarially.** The whole metric hinges on the "real evidence" predicate; a fixture where an impostor is ejected on *no* evidence must score as incorrect, or the metric is just the impostor-ejection rate.
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-2-vote-correctness-metric.md`
 
@@ -268,7 +332,23 @@ See DESIGN.md §11.3. Vote correctness = ejected_player.role == "IMPOSTOR" AND e
 **Section refs:** DESIGN.md §11.3
 **Complexity:** Medium
 
-Accusation-calibration metric.
+A pure analyzer over `eval.report_schema.TournamentReport` that answers
+DESIGN.md §11.3's calibration question: are high-confidence accusations
+correct (the target really is an impostor) more often than low-confidence
+ones? A well-calibrated agent population shows actual-impostor-rate rising
+monotonically with stated confidence.
+
+Accusations carry an explicit confidence in two places, both reachable from
+the report:
+
+- `AccusationClaim` (`type="accusation"`, `against: PlayerId`, `confidence:
+  float` in [0,1], `reason: str`) — nested in `Statement.claims` and
+  `ReportDocument.claims` inside `MeetingReport.transcript`.
+- `VoteBallot` (`voter`, `target: PlayerId | "SKIP"`, `confidence: float`) on
+  `MeetingReport.ballots`.
+
+Correctness is decided by `GameReport.roles[target] == "IMPOSTOR"` — the
+ground-truth map the 5.6 loader fills, never an inferred role.
 
 **Files in scope:**
 - eval/accusation_calibration.py
@@ -281,6 +361,7 @@ Accusation-calibration metric.
 - api/
 - frontend/
 - scripts/run_tournament.py
+- eval/report_schema.py
 - eval/vote_correctness.py
 - eval/alibi_fabrication.py
 - eval/cost_dashboard.py
@@ -288,16 +369,46 @@ Accusation-calibration metric.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Accusation-calibration metric is implemented against eval report data.
-- [ ] Metric module has focused unit tests using typed report fixtures.
-- [ ] This task does not wire the metric into tournament JSON output.
+- [ ] `eval/accusation_calibration.py` exposes a pure function from a `TournamentReport` to a frozen Pydantic result model binning accusations by confidence and reporting per-bin actual-impostor-rate, count, and mean confidence.
+- [ ] Bin edges are an explicit, documented choice (e.g. fixed-width deciles or quartiles over [0,1]); the binning is deterministic and total. Because `confidence` is `Field(ge=0.0, le=1.0)`, `1.0` is a legal value: bins are half-open `[lo, hi)` except the final bin, which is closed `[lo, 1.0]`, so `confidence == 1.0` lands in the top bin (implement as `bin_index = min(int(c * n_bins), n_bins - 1)`).
+- [ ] Each accusation's correctness is `roles[target] == "IMPOSTOR"` (subscript, not `.get`); a `"SKIP"` ballot target is excluded BEFORE the lookup (it accuses no one). `roles` is post-game ground truth covering every player by construction, so a target absent from `roles` signals a malformed report and MUST fail loud (raise) — AGENTS.md "no silent fallbacks". Do not add an "unresolved" bucket and do not let a failed lookup silently count as a non-hit (which would bias that bin's actual-impostor-rate downward). The no-accusations / no-meetings / all-`SKIP` robustness below applies to the ABSENCE of accusations, never to a present accusation with an unresolvable target.
+- [ ] Decision recorded in the PR's `## Decisions` block: which confidence source(s) the metric consumes — `AccusationClaim` only, `VoteBallot` only, or both (and if both, whether they are pooled into one curve or reported as two). Bias: report `AccusationClaim`-based and `VoteBallot`-based calibration separately, since a vote and a mid-meeting accusation are different acts.
+- [ ] The result model exposes enough to judge calibration (per-bin actual-impostor-rate vs bin midpoint); a scalar calibration error (e.g. expected-calibration-error) is optional but, if included, documented.
+- [ ] Partial-replay robustness: a game with no accusations, no meetings, or all-`SKIP` ballots produces empty/zero bins without raising.
+- [ ] `tests/eval/test_accusation_calibration.py` builds report fixtures directly covering: high-confidence accusations against real impostors (well-calibrated); high-confidence accusations against crewmates (mis-calibrated); a spread across bins including `confidence` exactly `0.0` and exactly `1.0` (to pin the boundary convention); the no-accusations / all-`SKIP` case; and a malformed accusation whose target is absent from `roles`, asserting the analyzer raises.
 - [ ] `uv run mypy --strict eval` passes.
-- [ ] `uv run ruff check .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` and `uv run python scripts/validate_task_docs.py` pass.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
-See DESIGN.md §11.3. Bin accusations by confidence and compute actual-impostor-rate per bin. Calibrated when high-confidence accusations are correct more often than low-confidence ones.
+See DESIGN.md §11.3. Walk every `MeetingReport`; pull `AccusationClaim`s out
+of `transcript.reports[*].claims` and `transcript.statements[*].claims`
+(filter the `Claim` union on `type == "accusation"`), and/or `ballots` per
+the source decision. For each `AccusationClaim`, bucket by `confidence` and
+tally `roles[claim.against] == "IMPOSTOR"`. For a `VoteBallot` (if the source
+decision includes ballots), first skip `target == "SKIP"`, then tally
+`roles[ballot.target] == "IMPOSTOR"` — note the ballot field is `target` (not
+`against`) and may be the literal `"SKIP"`. A bin's actual-impostor-rate is
+`impostor_hits / accusations_in_bin`. Calibration is read off by comparing
+that rate to the bin's confidence midpoint. Build fixtures by instantiating
+the schema models directly; this task does NOT touch the tournament runner
+(that is Task 5.6).
+
+**Public types introduced:**
+- eval.accusation_calibration.AccusationCalibrationReport
+- eval.accusation_calibration.CalibrationBin
+- eval.accusation_calibration.compute_accusation_calibration
+
+**Integration risk:**
+
+- **Parallel-safe with 5.2/5.4/5.5.** Writes only its own module + test; must not edit `report_schema.py` or siblings.
+- **Confidence-source ambiguity is the main trap.** `AccusationClaim` and `VoteBallot` both carry confidence but mean different things; pooling them silently would muddy the curve. Resolve and document before coding.
+- **Empty-bin handling.** Bins with zero accusations must report a count of 0 and a well-defined (not NaN) rate, or downstream rendering (5.7) breaks.
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-3-accusation-calibration-metric.md`
 
@@ -307,7 +418,44 @@ See DESIGN.md §11.3. Bin accusations by confidence and compute actual-impostor-
 **Section refs:** DESIGN.md §11.3
 **Complexity:** Medium
 
-Alibi-fabrication-rate metric.
+A pure analyzer over `eval.report_schema.TournamentReport` that answers
+DESIGN.md §11.3's alibi-fabrication question: how often do impostors produce
+alibis that *survive* contradiction detection? A high survival rate means
+impostors are getting away with fabricated cover; a low rate means the §5.4
+contradiction detector is catching them. This is an impostor-effectiveness /
+detector-effectiveness signal, not a per-agent score.
+
+The inputs, all on the merged schema:
+
+- `AlibiClaim` (`type="alibi"`, `subject: PlayerId`, `from_tick`, `to_tick`,
+  `room`, `evidence`) — nested in `ReportDocument.claims` and
+  `Statement.claims` inside `MeetingReport.transcript`. The *author* of the
+  alibi is the enclosing `ReportDocument.agent_id` / `Statement.speaker`; an
+  impostor alibi is one authored by a player with
+  `roles[author] == "IMPOSTOR"`.
+- `MeetingReport.contradictions` — `ContradictionRef` exposes only
+  `contradiction_id`, `kind` (in `{"alibi_conflict", "alibi_vs_sighting"}`),
+  `event_a_id`, `event_b_id`, `subjects: tuple[PlayerId, ...]`, and
+  `description`. It has **no `tick` and no `room` field**, so a
+  "subject + tick-overlap + room" join is NOT computable from a
+  `ContradictionRef`. Two join rules ARE available:
+  - **subject-membership** — the alibi's `subject` appears in an
+    `alibi_*`-kind contradiction's `subjects`. Public and stable, but coarse:
+    it credits a "catch" whenever the subject is named — even by a
+    contradiction between two OTHER authors' alibis about that subject (a
+    false positive), and it over-attributes when one subject has several
+    alibis.
+  - **event-id reconstruction** — `event_a_id`/`event_b_id` encode the
+    authoring artifact and claim index
+    (`report:{agent_id}@{tick}:claim:{index}` /
+    `stmt:{statement_id}:claim:{index}`, produced by the PRIVATE helpers
+    `_report_claim_id`/`_statement_claim_id` in `meetings/transcript.py`), so
+    the analyzer can reconstruct the exact alibi's id and test membership in a
+    contradiction's event ids. Precise, but couples `eval/` to private
+    transcript helpers whose format could drift.
+
+  An impostor alibi "survives" when no contradiction catches it under the
+  chosen rule.
 
 **Files in scope:**
 - eval/alibi_fabrication.py
@@ -320,6 +468,7 @@ Alibi-fabrication-rate metric.
 - api/
 - frontend/
 - scripts/run_tournament.py
+- eval/report_schema.py
 - eval/vote_correctness.py
 - eval/accusation_calibration.py
 - eval/cost_dashboard.py
@@ -327,26 +476,77 @@ Alibi-fabrication-rate metric.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Alibi-fabrication-rate metric is implemented against eval report data.
-- [ ] Metric module has focused unit tests using typed report fixtures.
-- [ ] This task does not wire the metric into tournament JSON output.
+- [ ] `eval/alibi_fabrication.py` exposes a pure function from a `TournamentReport` to a frozen Pydantic result model: total impostor-authored alibis, how many survived contradiction detection, and the fabrication-survival rate.
+- [ ] An "impostor alibi" is identified by the enclosing report/statement author's role (`roles[author] == "IMPOSTOR"`), NOT by `AlibiClaim.subject` alone (an impostor may file an alibi about another player). The author→role resolution is documented.
+- [ ] "Survived" is computed per meeting (the contradiction detector runs per-transcript) under the chosen join rule from the inputs above — subject-membership or event-id reconstruction. The "subject + tick + room" phrasing is NOT used, because `ContradictionRef` carries no tick or room. The exact rule and its accepted failure mode are recorded in the PR's `## Decisions` block.
+- [ ] Decision recorded in the PR's `## Decisions` block, covering three points: (a) the matching rule — **subject-membership** (`subject ∈ ContradictionRef.subjects` with an `alibi_*` kind; simple/public but credits cross-author conflicts about the subject and over-attributes across multiple same-subject alibis) vs **event-id reconstruction** (precise, but couples to private transcript helpers); pick one and state the accepted failure mode. (b) the denominator — bias toward impostor-authored self-alibis (`subject == author`), which makes the common single-author case exact under subject-membership. (c) multiplicity — when the SAME alibi value tuple `(author, subject, from_tick, to_tick, room)` appears in both an impostor's `ReportDocument` and one or more of their `Statement`s in one `MeetingTranscript`, it counts ONCE (dedup by that tuple, since `AlibiClaim` has no id), not per occurrence.
+- [ ] Partial-replay robustness: meetings with no alibis, no contradictions, or no impostor participants produce zero counts without raising; a game with no meetings contributes nothing.
+- [ ] `tests/eval/test_alibi_fabrication.py` builds report fixtures directly covering: an impostor self-alibi with NO matching contradiction (survived → counts as fabrication); an impostor alibi flagged by an `alibi_conflict` contradiction (caught); a crewmate alibi (excluded from numerator and denominator); the no-alibis case; a cross-author case (an `alibi_conflict` whose `subjects` name the impostor's subject but which is authored by two OTHER players — pins whether the chosen rule falsely counts the impostor's own alibi as caught); and a multiplicity case (the same alibi tuple restated in a report and a statement — asserts it counts once).
 - [ ] `uv run mypy --strict eval` passes.
-- [ ] `uv run ruff check .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` and `uv run python scripts/validate_task_docs.py` pass.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
-See DESIGN.md §11.3. Count impostor alibis that survive the contradiction detector. Pure analyzer over meeting transcripts.
+See DESIGN.md §11.3 and §5.4. Walk `MeetingReport`s; for each, collect
+`AlibiClaim`s from `transcript.reports` (author = `report.agent_id`) and
+`transcript.statements` (author = `statement.speaker`), keep those whose
+author is an impostor per `roles`, dedup by the `(author, subject, from_tick,
+to_tick, room)` tuple, and check each against the meeting's `contradictions`
+under the chosen join rule (subject-membership filtered to `alibi_*` kinds, or
+event-id reconstruction). `ContradictionRef` has no tick/room, so do not
+attempt a tick/room overlap join against it. Survival rate = survived / total
+impostor alibis. Build fixtures by instantiating the schema models directly;
+do NOT touch the tournament runner (Task 5.6).
+
+**Public types introduced:**
+- eval.alibi_fabrication.AlibiFabricationReport
+- eval.alibi_fabrication.compute_alibi_fabrication_rate
+
+**Integration risk:**
+
+- **Parallel-safe with 5.2/5.3/5.5.** Writes only its own module + test; must not edit `report_schema.py` or siblings.
+- **The alibi↔contradiction join is the core hazard.** `ContradictionRef` has no tick/room, so the choice is subject-membership (coarse: false-positive "catches" from cross-author same-subject conflicts, and over-attribution across multiple same-subject alibis) vs event-id reconstruction (precise, but couples to private transcript helpers). Pick a rule, document its accepted failure mode, and test both the survived and caught directions — including the cross-author case — so the rule is pinned.
+- **Author vs subject confusion.** "Impostor alibi" is by author role, not by the player the alibi is *about*. Getting this backwards silently changes what the metric measures.
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-4-alibi-fabrication-rate-metric.md`
 
 ### Task 5.5 — Cost dashboard metric
 **Branch:** `phase-5-cost-dashboard`
 **Depends on:** 5.1 merged
-**Section refs:** DESIGN.md §11.3
+**Section refs:** DESIGN.md §10.4, DESIGN.md §11.3
 **Complexity:** Medium
 
-Cost metric data by prompt version.
+A pure analyzer over `eval.report_schema.TournamentReport` that produces the
+cost-dashboard data (DESIGN.md §10.4 Cost bullet for the ~$0.20/game target;
+§11.3 reporting; the per-game cost substrate is
+`orchestrator.replay.compute_cost_usd` / `eval.report_schema.GameCostSummary`):
+cost-per-game and cost-per-prompt-version, so a prompt change's cost impact
+is legible alongside its quality impact. This is the cost half of the Phase 5
+close loop — a prompt-template change should show both a metric delta (5.2–5.4)
+and a cost delta here.
+
+The inputs, all on the merged schema:
+
+- `GameReport.cost: GameCostSummary` — per game: `total_cost_usd`,
+  `total_input_tokens`, `total_output_tokens`, `by_model: Mapping[str,
+  float]` (USD keyed by model id).
+- `GameReport.prompt_versions: Mapping[str, str]` — template name → version
+  marker in play for that game (templates load once per run, so this is
+  game-granular).
+- `GameReport.failed_calls: tuple[FailedCallReplayEntry, ...]` — meeting-
+  aborting LLM calls whose `cost_usd` was still charged. `GameCostSummary.total_cost_usd`
+  ALREADY includes this spend: the canonical reducer
+  `orchestrator.replay.compute_cost_usd` sums meeting `llm_calls` cost PLUS
+  every `failed_call` cost (replay.py:452-458), and the `GameReport.failed_calls`
+  docstring states the total counts them. So the dashboard reads
+  `total_cost_usd` as authoritative and must NOT add `failed_calls` cost again.
+- `MeetingReport.llm_calls` — per-call `LLMCallRecord` (`model`, `cost_usd`,
+  tokens) if finer-than-game slicing is needed.
 
 **Files in scope:**
 - eval/cost_dashboard.py
@@ -359,6 +559,7 @@ Cost metric data by prompt version.
 - api/
 - frontend/
 - scripts/run_tournament.py
+- eval/report_schema.py
 - eval/vote_correctness.py
 - eval/accusation_calibration.py
 - eval/alibi_fabrication.py
@@ -366,16 +567,44 @@ Cost metric data by prompt version.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Per-prompt-version cost metric/dashboard data is implemented against eval report data.
-- [ ] Metric module has focused unit tests using typed report fixtures.
-- [ ] This task does not wire the metric into tournament JSON output.
+- [ ] `eval/cost_dashboard.py` exposes a pure function from a `TournamentReport` to a frozen Pydantic result model with at least: total tournament cost, mean cost-per-game, and a cost-per-prompt-version breakdown.
+- [ ] Cost-per-prompt-version is keyed by `(template_name, version)` drawn from each game's `prompt_versions`, summing the games that ran that version. A game runs several templates at once; bias: attribute the full game cost once under EACH `(template, version)` present (do NOT split it across templates). Document in the PR's `## Decisions` block that the per-version totals therefore OVERLAP and are NOT a partition — summing them across versions does not recover the tournament total and must not be presented as if it does.
+- [ ] Within a single tournament run `prompt_versions` is constant across all games (one template set is loaded per run), so for a real one-run report the per-`(template, version)` breakdown collapses to one key equal to the tournament total. Its comparative value (version A vs version B) is therefore a CROSS-REPORT comparison — two runs, consumed by Task 5.8's regression loop — not a within-report delta. The result model should be cleanly comparable/mergeable across two `CostDashboard`s for that purpose, or the contract states that 5.8 computes the cross-run delta from two dashboards.
+- [ ] The metric treats `GameCostSummary.total_cost_usd` as the authoritative complete per-game spend and does NOT add `sum(fc.cost_usd for fc in failed_calls)` on top — `total_cost_usd` already includes failed-call cost (via `orchestrator.replay.compute_cost_usd`; confirmed by the `GameReport.failed_calls` docstring). Note this no-double-count invariant in the PR's `## Decisions` block. (The matching loader-side obligation — Task 5.6 populates `total_cost_usd` via `compute_cost_usd` and does not double-add — is carried into 5.6's elaboration.)
+- [ ] A per-model cost roll-up is available (aggregating `GameCostSummary.by_model` across games), so a mixed-tier tournament is auditable per model.
+- [ ] Partial-replay robustness: a game with zero meetings/zero cost, an empty `prompt_versions`, or a tournament with one game all produce well-defined numbers (no division-by-zero, no NaN).
+- [ ] `tests/eval/test_cost_dashboard.py` builds report fixtures directly covering: a structural/constructibility fixture with two prompt-versions present (verify per-version keying and summation — labelled as a constructibility test, since a real single run carries one version set); a single-version report that collapses to one key equal to the total cost; a game carrying `failed_calls` (verify the dashboard does NOT double-count failed-call spend); and a mixed-`by_model` game.
 - [ ] `uv run mypy --strict eval` passes.
-- [ ] `uv run ruff check .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` and `uv run python scripts/validate_task_docs.py` pass.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
 
 
 **Implementation hint:**
 
-See DESIGN.md §10.4. Aggregate `llm.budget` records by prompt version × game; emit cost-per-game and cost-per-prompt-version.
+See DESIGN.md §10.4. Aggregate over `report.games`: total cost is the sum of
+each game's `cost.total_cost_usd` (which already includes failed-call spend —
+do NOT add `failed_calls` again); cost-per-prompt-version groups games by
+their `prompt_versions` entries. `orchestrator.replay.compute_cost_usd` is the
+canonical file-level cost reducer (and is what already folds failed calls
+in), but this metric works over the already-aggregated report, not raw JSONL —
+do not re-read files. Build fixtures by instantiating the schema
+models directly; this task does NOT wire the dashboard into tournament JSON
+output (Task 5.6) and does NOT build the frontend (Task 5.7) — it produces
+the typed data those consume.
+
+**Public types introduced:**
+- eval.cost_dashboard.CostDashboard
+- eval.cost_dashboard.PromptVersionCost
+- eval.cost_dashboard.compute_cost_dashboard
+
+**Integration risk:**
+
+- **Parallel-safe with 5.2–5.4.** Writes only its own module + test; must not edit `report_schema.py` or siblings.
+- **Failed-call double-counting is the cost trap.** `failed_calls` carry real spend that `total_cost_usd` already includes (via `compute_cost_usd`). The risk is the dashboard adding it a second time, or the 5.6 loader populating `total_cost_usd` some other way and then the dashboard adding failed calls. The fix is one-sided and pinned here: read `total_cost_usd`, never add `failed_calls`; the loader-side half is carried into 5.6.
+- **Attribution semantics must be explicit.** "Cost per prompt version" is ambiguous when a game mixes templates; an undocumented choice makes the dashboard's numbers unfalsifiable. Document and test the attribution rule.
 
 **Ready-to-paste prompt:** `agent_prompts/task-5-5-cost-dashboard-per-prompt-version-cost.md`
 

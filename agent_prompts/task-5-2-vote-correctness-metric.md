@@ -16,7 +16,34 @@ The authoritative task contract is copied below from tasks/phase-5.md. Follow it
 **Section refs:** DESIGN.md §11.3
 **Complexity:** Medium
 
-Vote-correctness metric.
+A pure analyzer over `eval.report_schema.TournamentReport` that answers
+DESIGN.md §11.3's vote-correctness question: when a meeting ejects an
+impostor, was the ejection *driven by real evidence* (a genuine contradiction
+against the ejected player, or a kill-witness chain) rather than a lucky or
+unfounded vote? A high impostor-ejection rate that is not evidence-backed is
+a worse signal than a lower rate that is — this metric separates the two.
+
+The metric reads only `eval.report_schema` data (no engine, agents, or LLM
+imports). The relevant fields, all already on the merged schema:
+
+- `GameReport.roles: Mapping[PlayerId, Role]` — post-game ground truth;
+  `roles[ejected_player_id] == "IMPOSTOR"` decides whether an ejection hit an
+  impostor. (`Role` is `Literal["CREWMATE", "IMPOSTOR"]` from
+  `engine.entities`.)
+- `MeetingReport.outcome` (`"EJECTED"` / `"SKIPPED"`) and
+  `MeetingReport.ejected_player_id`.
+- `MeetingReport.contradictions` — `ContradictionRef.subjects` and `.kind`
+  (`"alibi_conflict"` / `"alibi_vs_sighting"`) say whether a real
+  contradiction names the ejected player.
+- `MeetingReport.transcript.reports` — witness evidence lives on
+  `ReportDocument.observations` (the `ObservationClaim` union:
+  `FoundBodyObservation` / `SawPlayerObservation`), which is a DIFFERENT field
+  from `ReportDocument.claims` (the `Claim` union: alibi/accusation/
+  corroboration). Do not look for observations on `.claims`.
+- `MeetingReport.transcript.statements` — `Statement.claims` carries
+  `AccusationClaim` (accusations also appear on `ReportDocument.claims`).
+- `MeetingReport.ballots` — `VoteBallot.target` and `primary_reason_id`
+  (references a `Statement` id) for the ejecting-vote rationale.
 
 **Files in scope:**
 - eval/vote_correctness.py
@@ -29,6 +56,7 @@ Vote-correctness metric.
 - api/
 - frontend/
 - scripts/run_tournament.py
+- eval/report_schema.py
 - eval/accusation_calibration.py
 - eval/alibi_fabrication.py
 - eval/cost_dashboard.py
@@ -36,15 +64,47 @@ Vote-correctness metric.
 - AGENT_IMPLEMENTATION.md
 
 **Definition of done:**
-- [ ] Vote-correctness metric is implemented against eval report data.
-- [ ] Metric module has focused unit tests using typed report fixtures.
-- [ ] This task does not wire the metric into tournament JSON output.
+- [ ] `eval/vote_correctness.py` exposes a pure function from a `TournamentReport` (or a sequence of `GameReport`) to a frozen Pydantic result model — no I/O, no engine/LLM calls.
+- [ ] The metric considers only `EJECTED` meetings. For each, it classifies the ejection as (a) impostor vs crewmate via `roles[ejected_player_id]` (subscript — fail-loud if a real player is absent from `roles`; see the partial-replay bullet for the `ejected_player_id is None` case), and (b) evidence-backed vs not. "Evidence-backed" is computed from structured report data, not free text, via two schema-expressible signals: a `ContradictionRef` whose `subjects` include the ejected player, OR a kill-witness chain — a `FoundBodyObservation` reporting a body in room R at tick T, plus a `SawPlayerObservation` whose `subject == ejected_player_id` with `room == R` and `tick` within a documented window K of T. The accusation-at-scene variant is EXCLUDED: `AccusationClaim` carries no location or tick, so counting "someone accused the ejected player" collapses into the circular accusation/vote-driven signal this metric exists to avoid (DESIGN.md §11.3 names only "a real contradiction or kill witness"). The exact predicate and the window K are recorded in the PR's `## Decisions` block.
+- [ ] The result model reports at least: total ejections, impostor ejections, evidence-backed impostor ejections, and the vote-correctness rate (evidence-backed impostor ejections / impostor ejections, defined as 0.0 or `None`—pick and document—when there are no impostor ejections).
+- [ ] Decision recorded in the PR's `## Decisions` block: the precise "real evidence" predicate (contradiction-subjects and/or the precise kill-witness chain above; a ballot `primary_reason_id`→`Statement` chain may corroborate but must not be the sole signal, to avoid circularity), the kill-witness tick window K, and the denominator choice. DESIGN.md §11.3 frames it as impostor ejections backed by a real contradiction or kill witness; bias toward the impostor-ejection denominator.
+- [ ] Partial-replay robustness: meetings with no contradictions, an empty transcript, a `SKIPPED` outcome, or a game with no meetings never raise — they contribute zero to the relevant buckets. Note that `MeetingReport` (unlike `meetings.schemas.MeetingResult`, schemas.py:263-273) does NOT enforce the `outcome=="EJECTED"` ↔ non-None `ejected_player_id` coupling, so an `EJECTED` meeting with `ejected_player_id is None` is type-possible; treat it as malformed and skip it (or fail-loud) — pick one and record it in `## Decisions`.
+- [ ] `tests/eval/test_vote_correctness.py` builds `report_schema` fixtures directly (no tournament run) covering: ejected impostor with a naming contradiction (correct); ejected impostor with no evidence (incorrect); ejected crewmate; a `SKIPPED` meeting; and a game with zero meetings.
 - [ ] `uv run mypy --strict eval` passes.
-- [ ] `uv run ruff check .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` and `uv run python scripts/validate_task_docs.py` pass.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
 
 ## Implementation hint
 
-See DESIGN.md §11.3. Vote correctness = ejected_player.role == "IMPOSTOR" AND ejection rationale cites a real contradiction or kill witness. Pure analyzer over eval/report_schema records — no engine or LLM dependencies.
+Read `eval/report_schema.py` and `meetings/schemas.py` first — the metric is
+a fold over `GameReport.meetings`. Pseudocode:
+
+```python
+for game in report.games:
+    for meeting in game.meetings:
+        if meeting.outcome != "EJECTED":
+            continue
+        ejected = meeting.ejected_player_id
+        if ejected is None:
+            continue  # malformed: MeetingReport does not enforce EJECTED<->ejected_player_id
+        is_impostor = game.roles[ejected] == "IMPOSTOR"  # subscript: fail-loud if a real player is absent
+        backed = _has_real_evidence(meeting, ejected)  # ContradictionRef.subjects / FoundBody+SawPlayer co-location
+        ...
+```
+
+`AccusationClaim` carries no ground truth — only `roles` does; never infer a
+role from an accusation. The metric does NOT wire itself into tournament JSON
+output; that is Task 5.6. Construct test fixtures by instantiating
+`TournamentReport`/`GameReport`/`MeetingReport` directly.
+
+## Public types this task introduces
+- `eval.vote_correctness.VoteCorrectnessReport`
+- `eval.vote_correctness.compute_vote_correctness`
+
+These are the symbols downstream tasks will import. Keep their signatures stable.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
