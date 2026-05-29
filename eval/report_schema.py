@@ -19,6 +19,10 @@ Phase 3/4 (DESIGN.md §11.4):
   and the prompt-template versions in play.
 * :class:`orchestrator.replay.LLMCallRecord` -- per LLM call: model, token
   usage, USD cost, originating agent, call kind.
+* :class:`orchestrator.replay.FailedCallReplayEntry` -- a meeting-aborting LLM
+  call that failed schema validation: the model / token / USD-cost metadata for
+  spend the provider already charged, recorded because the meeting crashed
+  before a ``MeetingReplayEntry`` was written.
 
 One required input is NOT in those replay records: the per-game **role ground
 truth** (which players are impostors). The leak firewall keeps roles out of
@@ -47,8 +51,9 @@ Three-level nesting -- tournament -> game -> meeting:
   ``format_version`` and every game.
 * :class:`GameReport` -- one game: decisive outcome, the final tick, the
   impostor/crewmate role ground truth, a reference to the game's replay file,
-  the prompt-template versions in play, the per-game LLM cost roll-up, and its
-  meetings.
+  the prompt-template versions in play, the per-game LLM cost roll-up, its
+  meetings, and any meeting-aborting failed LLM calls (so their already-charged
+  spend is not dropped).
 * :class:`MeetingReport` -- one resolved meeting: the structured artifacts a
   metric reads (transcript, ballots, contradictions, outcome, ejected player)
   plus the per-call LLM telemetry.
@@ -78,7 +83,7 @@ from meetings.schemas import (
     PlayerId,
     VoteBallot,
 )
-from orchestrator.replay import LLMCallRecord, WinnerSide
+from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord, WinnerSide
 
 # Current on-disk format of :class:`TournamentReport`. Bumped only when the
 # schema changes shape in a way older readers cannot interpret. The version is
@@ -169,6 +174,17 @@ class GameReport(_FrozenModel):
     truth only and is never shown to an agent, so it does not touch the
     observation firewall.
 
+    ``failed_calls`` carries the
+    :class:`~orchestrator.replay.FailedCallReplayEntry` records for this game:
+    LLM calls that aborted a meeting on schema-validation failure before a
+    completed :class:`MeetingReport` could exist. They live at game level (not
+    nested under a meeting, since that meeting never resolved) and are kept
+    because the canonical cost reducer
+    :func:`orchestrator.replay.compute_cost_usd` counts their already-charged
+    tokens; dropping them would make the Task 5.5 cost metric undercount spend
+    for any run where a meeting crashed. Empty for the common case where every
+    meeting completed.
+
     ``replay_ref`` is the bare per-seed replay filename
     (``replay-seed-{seed}.jsonl``), matching how
     :func:`eval.balance_eval.run_balance_eval` names files; it is resolved
@@ -188,6 +204,7 @@ class GameReport(_FrozenModel):
     roles: Mapping[PlayerId, Role]
     replay_ref: str
     meetings: tuple[MeetingReport, ...]
+    failed_calls: tuple[FailedCallReplayEntry, ...]
     prompt_versions: Mapping[str, str]
     cost: GameCostSummary
 

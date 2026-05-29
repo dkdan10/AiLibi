@@ -34,7 +34,7 @@ from meetings.schemas import (
     Statement,
     VoteBallot,
 )
-from orchestrator.replay import LLMCallRecord, WinnerSide
+from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord, WinnerSide
 
 # A coherent 4-player roster with p-3 as the impostor; the default for fixture
 # games where the specific assignment does not matter.
@@ -158,6 +158,22 @@ def _meeting_report(
     )
 
 
+def _failed_call(*, meeting_id: str, model: str, cost: float) -> FailedCallReplayEntry:
+    return FailedCallReplayEntry(
+        game_id="game-13",
+        meeting_id=meeting_id,
+        tick=70,
+        model=model,
+        prompt_length=4096,
+        raw_response='{"target": "p-9"',  # truncated / invalid JSON
+        input_tokens=1500,
+        output_tokens=40,
+        cost_usd=cost,
+        error_type="ValidationError",
+        error_message="target references unknown player",
+    )
+
+
 def _game_report(
     *,
     game_id: str,
@@ -167,6 +183,7 @@ def _game_report(
     meetings: tuple[MeetingReport, ...],
     final_tick: int | None = 60,
     roles: Mapping[PlayerId, Role] = _ROLES_P3_IMPOSTOR,
+    failed_calls: tuple[FailedCallReplayEntry, ...] = (),
 ) -> GameReport:
     return GameReport(
         game_id=game_id,
@@ -177,6 +194,7 @@ def _game_report(
         roles=roles,
         replay_ref=f"replay-seed-{seed}.jsonl",
         meetings=meetings,
+        failed_calls=failed_calls,
         prompt_versions={"meeting_v": "2026-05-01", "trigger_v": "2026-04-12"},
         cost=GameCostSummary(
             total_cost_usd=0.026,
@@ -235,6 +253,11 @@ def _realistic_tournament() -> TournamentReport:
                 meetings=(
                     _meeting_report(meeting_id="m-13-0", tick=30, ejected=None),
                     _meeting_report(meeting_id="m-13-1", tick=70, ejected="p-1"),
+                ),
+                failed_calls=(
+                    _failed_call(
+                        meeting_id="m-13-1", model="claude-sonnet", cost=0.004
+                    ),
                 ),
             ),
         ),
@@ -379,6 +402,7 @@ def test_report_schema_reuses_canonical_leaf_types_not_forks() -> None:
     assert module_ns["PlayerId"] is meetings_schemas.PlayerId
     assert module_ns["LLMCallRecord"] is replay.LLMCallRecord
     assert module_ns["WinnerSide"] is replay.WinnerSide
+    assert module_ns["FailedCallReplayEntry"] is replay.FailedCallReplayEntry
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +438,35 @@ def test_final_tick_round_trips_and_yields_game_length_distribution() -> None:
 
     lengths = [g.final_tick for g in report.games]
     assert lengths == [52, 1000, 88]
+
+
+def test_failed_calls_are_carried_so_cost_is_not_undercounted() -> None:
+    """Aborted-meeting LLM spend has a home and survives round-trip.
+
+    Mirrors ``orchestrator.replay.compute_cost_usd``, which folds failed-call
+    cost into the per-game total: a total computed from completed-meeting calls
+    plus ``failed_calls`` must include the crashed call's already-charged spend.
+    """
+
+    report = TournamentReport.model_validate(_realistic_tournament().model_dump())
+
+    game13 = report.games[2]
+    assert len(game13.failed_calls) == 1
+    failed = game13.failed_calls[0]
+    assert failed.model == "claude-sonnet"
+    assert failed.cost_usd == 0.004
+
+    # Total spend = completed-meeting calls + failed calls (the compute_cost_usd
+    # reduction). The failed call's cost is part of it, not dropped.
+    meeting_call_cost = sum(
+        call.cost_usd for m in game13.meetings for call in m.llm_calls
+    )
+    failed_cost = sum(fc.cost_usd for fc in game13.failed_calls)
+    assert failed_cost == 0.004
+    assert meeting_call_cost + failed_cost > meeting_call_cost
+
+    # Games with no crashed meeting carry an empty tuple, not a missing field.
+    assert report.games[0].failed_calls == ()
 
 
 # ---------------------------------------------------------------------------
