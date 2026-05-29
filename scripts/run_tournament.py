@@ -1,9 +1,20 @@
 """CLI: headless tournament harness (DESIGN.md §11.3).
 
-Aggregates many headless games into a single balance report. The single-
-game loop comes from :class:`orchestrator.game.HeadlessGame` (Task 2.8);
-this script only wires CLI flags, builds the seed range, calls
-:func:`eval.balance_eval.run_balance_eval`, and prints the report.
+Runs many headless games and emits a single typed
+:class:`~eval.meeting_quality.TournamentEvalReport` as JSON — the
+:class:`~eval.report_schema.TournamentReport` plus all four Phase 5 metrics
+(vote correctness, accusation calibration, alibi-fabrication rate, cost
+dashboard). The single-game loop comes from
+:class:`orchestrator.game.HeadlessGame` (Task 2.8); this script only wires CLI
+flags, builds the seed range, calls
+:func:`eval.balance_eval.run_tournament_eval` +
+:func:`eval.meeting_quality.build_tournament_eval_report`, writes the JSON, and
+prints a short summary.
+
+The JSON report supersedes the old ``BalanceReport`` text summary as the
+tournament artifact (Task 5.6 / Task 5.1 ``## Decisions``); the crew / impostor
+/ tick-budget buckets remain derivable from it and are still printed for the
+operator.
 """
 
 from __future__ import annotations
@@ -17,17 +28,23 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from eval.balance_eval import BalanceReport, run_balance_eval  # noqa: E402
+from eval.balance_eval import run_tournament_eval  # noqa: E402
+from eval.meeting_quality import (  # noqa: E402
+    TournamentEvalReport,
+    build_tournament_eval_report,
+)
 from orchestrator.game import (  # noqa: E402
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
     DEFAULT_NUM_PLAYERS,
 )
 
+_DEFAULT_REPORT_FILENAME = "tournament-eval-report.json"
+
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run a headless AiLibi tournament and report balance.",
+        description="Run a headless AiLibi tournament and emit a JSON eval report.",
     )
     parser.add_argument(
         "--num-games",
@@ -46,6 +63,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=Path,
         required=True,
         help="directory for per-seed replay and audit logs",
+    )
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        default=None,
+        help=(
+            "path for the JSON TournamentEvalReport "
+            f"(default: <output-dir>/{_DEFAULT_REPORT_FILENAME})"
+        ),
     )
     parser.add_argument(
         "--num-players",
@@ -79,25 +105,53 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _format_report(report: BalanceReport) -> str:
+def _format_summary(eval_report: TournamentEvalReport) -> str:
+    """Human-readable balance + cost summary derived from the eval report.
+
+    The crew / impostor / tick-budget buckets reduce out of
+    ``GameReport.winner`` (``winner is None`` is the non-decisive tick-budget
+    bucket); the cost numbers come from the bundled cost dashboard.
+    """
+
+    report = eval_report.report
+    games = len(report.games)
+    crew_wins = sum(1 for game in report.games if game.winner == "CREWMATES")
+    impostor_wins = sum(1 for game in report.games if game.winner == "IMPOSTORS")
+    tick_budget_reached = sum(1 for game in report.games if game.winner is None)
+    dashboard = eval_report.cost_dashboard
+
     lines = [
-        f"games:                {report.games}",
-        f"crew_wins:            {report.crew_wins}",
-        f"impostor_wins:        {report.impostor_wins}",
-        f"tick_budget_reached:  {report.tick_budget_reached}",
+        f"games:                {games}",
+        f"crew_wins:            {crew_wins}",
+        f"impostor_wins:        {impostor_wins}",
+        f"tick_budget_reached:  {tick_budget_reached}",
     ]
-    decisive = report.crew_wins + report.impostor_wins
+    decisive = crew_wins + impostor_wins
     if decisive > 0:
-        crew_ratio = report.crew_wins / decisive
-        impostor_ratio = report.impostor_wins / decisive
         lines.append(
-            f"decisive_split:       "
-            f"CREWMATES={crew_ratio:.2%} IMPOSTORS={impostor_ratio:.2%} "
-            f"of {decisive} decisive"
+            "decisive_split:       "
+            f"CREWMATES={crew_wins / decisive:.2%} "
+            f"IMPOSTORS={impostor_wins / decisive:.2%} of {decisive} decisive"
         )
     else:
         lines.append("decisive_split:       (no decisive games)")
+    lines.append(f"total_cost_usd:       {dashboard.total_cost_usd:.4f}")
+    lines.append(f"mean_cost_per_game:   {dashboard.mean_cost_per_game:.4f}")
     return "\n".join(lines)
+
+
+def _emit_report_json(eval_report: TournamentEvalReport, report_output: Path) -> None:
+    """Serialize the eval report to JSON, validating the round-trip first.
+
+    A report that cannot be read back is not a report: ``model_validate_json``
+    re-parses the dumped JSON and raises on any drift before it is persisted
+    (the DoD's ``model_validate_json(model_dump_json(...))`` gate).
+    """
+
+    json_text = eval_report.model_dump_json(indent=2)
+    TournamentEvalReport.model_validate_json(json_text)
+    report_output.parent.mkdir(parents=True, exist_ok=True)
+    report_output.write_text(json_text + "\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -106,12 +160,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
     seeds = range(args.start_seed, args.start_seed + args.num_games)
     # ``force`` is threaded into each per-seed ReplayLog construction inside
-    # run_balance_eval, so a conflicting replay-seed-{seed}.jsonl is truncated
+    # run_tournament_eval, so a conflicting replay-seed-{seed}.jsonl is truncated
     # immediately before that game writes it. A crash partway through a re-run
     # therefore never deletes a later seed's replay that was never reached;
     # without --force, the first existing file raises and exits non-zero
     # (DESIGN.md §11.4; Task 4.16).
-    report = run_balance_eval(
+    report = run_tournament_eval(
         seeds=seeds,
         output_dir=args.output_dir,
         num_players=args.num_players,
@@ -119,7 +173,17 @@ def main(argv: list[str] | None = None) -> int:
         max_ticks=args.max_ticks,
         force=args.force,
     )
-    print(_format_report(report))
+    eval_report = build_tournament_eval_report(report)
+
+    report_output: Path = (
+        args.report_output
+        if args.report_output is not None
+        else args.output_dir / _DEFAULT_REPORT_FILENAME
+    )
+    _emit_report_json(eval_report, report_output)
+
+    print(_format_summary(eval_report))
+    print(f"report:               {report_output}")
     return 0
 
 
