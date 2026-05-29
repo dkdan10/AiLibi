@@ -52,6 +52,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 from engine.entities import PlayerId, Role
 from engine.world import Map, load_canonical_map
@@ -310,6 +311,80 @@ def run_balance_eval(
     return _balance_report_from_tournament(report)
 
 
+# Reason recorded for a loaded game whose replay carries no ``game_over`` row
+# (a partial / non-decisive recorded game). On the live tournament path
+# ``run_tournament_eval`` supplies the in-memory outcome instead; the pure
+# loader has no such outcome, so it states the fact plainly rather than
+# inventing a winner (AGENTS.md "no silent fallbacks").
+_LOADED_REPLAY_FALLBACK_REASON: Final[str] = "no game_over record in replay"
+
+
+def load_tournament_report(
+    replay_dir: Path,
+    *,
+    roles_by_seed: Mapping[int, Mapping[PlayerId, Role]],
+) -> TournamentReport:
+    """Assemble a :class:`TournamentReport` from recorded replay JSONL on disk.
+
+    The public JSONL->report loader. For each seed in ``roles_by_seed`` (in
+    ascending seed order) it reads ``replay_dir / "replay-seed-{seed}.jsonl"``
+    and folds it into a :class:`~eval.report_schema.GameReport` via the SAME
+    per-seed assembly :func:`run_tournament_eval` uses
+    (:func:`_game_report_from_replay`, which in turn calls
+    :func:`_game_cost_summary`) -- it does not duplicate the record->report
+    mapping, so the two entry points cannot drift.
+
+    This is the report-build path that has no live model and no engine re-run:
+    given frozen recorded replays plus a deterministically-derived ``roles`` map,
+    it reconstructs the typed tournament artifact the Phase 5 metrics analyze.
+    ``run_tournament_eval`` (which runs games and captures roles from the
+    in-memory result) is unchanged -- this is a behavior-preserving promotion of
+    the existing private assembly to a public, directory-driven entry point
+    (the prompt-regression suite, Task 5.8, is the first consumer).
+
+    ``roles_by_seed`` supplies the per-game role ground truth (which players are
+    impostors) keyed by seed. It is NOT read from the replay JSONL -- the leak
+    firewall keeps roles out of replay -- so a caller derives it deterministically
+    from the seeded game setup (e.g. :func:`orchestrator.seeder.seed_initial_state`).
+    ``seeds_used`` on the returned report is the sorted tuple of those seeds.
+
+    Fail-loud (AGENTS.md "no silent fallbacks"):
+
+    * an empty ``roles_by_seed`` raises ``ValueError`` -- there is nothing to
+      load and a zero-game report is almost certainly a caller mistake;
+    * a seed whose ``replay-seed-{seed}.jsonl`` is absent raises
+      ``FileNotFoundError`` -- the caller asserted a recorded game for that seed,
+      so a missing file is an inconsistency, not something to skip silently;
+    * an empty ``roles`` map for any seed, or a doubled/corrupted replay file,
+      raises via :func:`_game_report_from_replay` exactly as on the live path.
+    """
+
+    if not roles_by_seed:
+        raise ValueError("roles_by_seed must be non-empty")
+
+    seeds = tuple(sorted(roles_by_seed))
+    games: list[GameReport] = []
+    for seed in seeds:
+        replay_path = replay_dir / f"replay-seed-{seed}.jsonl"
+        if not replay_path.exists():
+            raise FileNotFoundError(
+                f"seed {seed}: no recorded replay at {replay_path}. "
+                "load_tournament_report folds frozen recorded replays; a seed "
+                "with roles supplied but no replay file on disk is an "
+                "inconsistency, not a game to skip."
+            )
+        games.append(
+            _game_report_from_replay(
+                seed=seed,
+                roles=roles_by_seed[seed],
+                fallback_reason=_LOADED_REPLAY_FALLBACK_REASON,
+                replay_path=replay_path,
+            )
+        )
+
+    return TournamentReport(games=tuple(games), seeds_used=seeds)
+
+
 def _seeded_roles(
     *,
     seed: int,
@@ -495,4 +570,9 @@ def _game_cost_summary(
     )
 
 
-__all__ = ["BalanceReport", "run_balance_eval", "run_tournament_eval"]
+__all__ = [
+    "BalanceReport",
+    "load_tournament_report",
+    "run_balance_eval",
+    "run_tournament_eval",
+]
