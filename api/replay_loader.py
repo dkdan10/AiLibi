@@ -84,6 +84,7 @@ from engine.events import (
 )
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
+from eval.meeting_quality import TournamentEvalReport
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -119,6 +120,11 @@ from orchestrator.replay import (
 from orchestrator.seeder import seed_initial_state
 
 _DEFAULT_CACHE_SIZE: Final[int] = 16
+
+# Filename of the tournament eval report that ``scripts/run_tournament.py``
+# writes into the tournament output dir. The loader serves it read-only from
+# the same configured replay/eval directory it scans for replays (Task 5.7).
+_TOURNAMENT_REPORT_FILENAME: Final[str] = "tournament-eval-report.json"
 
 _GAME_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"headless-seed-(-?\d+)")
 _FILENAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"replay-seed-(-?\d+)\.jsonl")
@@ -245,6 +251,27 @@ class ReplayLoader:
             mean_cost_per_replay=(total_cost / total_replays if total_replays else 0.0),
             max_cost_per_replay=(max(costs) if costs else 0.0),
             decisive_split=decisive_split,
+        )
+
+    def tournament_report(self) -> TournamentEvalReport:
+        """Load + validate the latest tournament eval report from the replay dir.
+
+        Reads ``<replay_dir>/tournament-eval-report.json`` (the file
+        :mod:`scripts.run_tournament` writes) and validates it against
+        :class:`eval.meeting_quality.TournamentEvalReport`. Mirrors
+        :meth:`cost_summary` in reading the same configured directory — there is
+        a single authoritative tournament report per eval dir, so it is not
+        keyed by game id. Raises :class:`FileNotFoundError` when no report file
+        exists (the eval route maps that to HTTP 404). A malformed report fails
+        loud via Pydantic validation rather than being silently coerced
+        (AGENTS.md "no silent fallbacks").
+        """
+
+        path = self._replay_dir / _TOURNAMENT_REPORT_FILENAME
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        return TournamentEvalReport.model_validate_json(
+            path.read_text(encoding="utf-8")
         )
 
     def get_meeting_memory(
