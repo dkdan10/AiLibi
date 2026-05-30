@@ -22,6 +22,7 @@ from eval.alibi_fabrication import (
     compute_alibi_fabrication_rate,
 )
 from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
     GameCostSummary,
     GameReport,
     MeetingReport,
@@ -172,7 +173,11 @@ def _game(
 
 
 def _tournament(*games: GameReport) -> TournamentReport:
-    return TournamentReport(games=games, seeds_used=tuple(g.seed for g in games))
+    return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
+        games=games,
+        seeds_used=tuple(g.seed for g in games),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -472,7 +477,9 @@ def test_game_with_no_meetings_contributes_nothing() -> None:
 
 
 def test_empty_tournament_has_zero_rate() -> None:
-    report = TournamentReport(games=(), seeds_used=())
+    report = TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION, games=(), seeds_used=()
+    )
 
     assert compute_alibi_fabrication_rate(report) == AlibiFabricationReport(
         total_impostor_alibis=0, survived=0, survival_rate=0.0
@@ -549,7 +556,9 @@ def test_multi_game_aggregation_yields_fractional_rate() -> None:
 
 
 def test_result_model_is_frozen() -> None:
-    result = compute_alibi_fabrication_rate(TournamentReport(games=(), seeds_used=()))
+    result = compute_alibi_fabrication_rate(
+        TournamentReport(format_version=CURRENT_FORMAT_VERSION, games=(), seeds_used=())
+    )
 
     with pytest.raises(ValidationError):
         result.survived = 5

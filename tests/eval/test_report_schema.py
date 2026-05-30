@@ -16,6 +16,7 @@ import pytest
 from pydantic import ValidationError
 
 from engine.entities import Role
+from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_report
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -218,6 +219,7 @@ def _realistic_tournament() -> TournamentReport:
     """
 
     return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
         games=(
             _game_report(
                 game_id="game-11",
@@ -307,9 +309,17 @@ def test_current_format_version_is_one() -> None:
     assert CURRENT_FORMAT_VERSION == 1
 
 
-def test_format_version_defaults_to_current() -> None:
-    report = TournamentReport(games=(), seeds_used=())
-    assert report.format_version == CURRENT_FORMAT_VERSION
+def test_format_version_missing_on_construction_is_rejected() -> None:
+    """In-process construction without the marker fails loud (no default).
+
+    ``format_version`` is a required field with no default, so building a
+    report in Python without it raises rather than silently assuming v1
+    (audit E-E-1). The writer (``eval.balance_eval``) stamps the current
+    version explicitly.
+    """
+
+    with pytest.raises(ValidationError, match="missing report format_version"):
+        TournamentReport(games=(), seeds_used=())  # type: ignore[call-arg]
 
 
 def test_format_version_accepts_current_explicitly() -> None:
@@ -362,22 +372,34 @@ def test_format_version_marker_present_round_trips_through_json() -> None:
     assert report.format_version == CURRENT_FORMAT_VERSION
 
 
-def test_format_version_missing_on_python_construction_keeps_default() -> None:
-    """The read-time guard is deliberately scoped to deserialized JSON.
+def test_format_version_missing_on_dict_validate_is_rejected() -> None:
+    """``model_validate`` of a Python dict missing the marker also fails loud.
 
-    Pydantic runs ``model_validate`` of a Python dict in the same ``"python"``
-    mode as in-process ``__init__``, so the two are indistinguishable; the
-    tournament-report writer (``eval.balance_eval``) builds the report without
-    restating the version and leans on the field default. Both in-memory paths
-    therefore keep defaulting to the current version -- only a *serialized*
-    (JSON) report must carry the marker. This pins that deliberate asymmetry so a
-    later tightening does not silently break the writer.
+    Codex review follow-up to the original JSON-only guard: because
+    ``format_version`` is now a required field with no default, the common
+    ``json.loads(...)`` + ``model_validate(dict)`` read path raises the same
+    clear error as ``model_validate_json`` and as in-process construction, so
+    the no-silent-fallback rule (E-E-1) holds on every read path, not just JSON.
     """
 
-    constructed = TournamentReport(games=(), seeds_used=())
-    validated = TournamentReport.model_validate({"games": [], "seeds_used": []})
-    assert constructed.format_version == CURRENT_FORMAT_VERSION
-    assert validated.format_version == CURRENT_FORMAT_VERSION
+    with pytest.raises(ValidationError, match="missing report format_version"):
+        TournamentReport.model_validate({"games": [], "seeds_used": []})
+
+
+def test_format_version_missing_on_nested_dict_validate_is_rejected() -> None:
+    """The guard reaches a ``TournamentReport`` nested under the eval bundle.
+
+    A :class:`~eval.meeting_quality.TournamentEvalReport` whose embedded report
+    lost its marker is rejected even on the python-dict ``model_validate`` path:
+    the required field runs the guard in every mode, top-level and nested. This
+    closes the nested half of the no-silent-fallback guarantee (E-E-1).
+    """
+
+    bundle = build_tournament_eval_report(_realistic_tournament())
+    payload = bundle.model_dump()
+    del payload["report"]["format_version"]
+    with pytest.raises(ValidationError, match="missing report format_version"):
+        TournamentEvalReport.model_validate(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -551,6 +573,7 @@ def test_partial_tournament_allows_fewer_games_than_seeds() -> None:
     """A crashed run records fewer games than seeds attempted (no equality check)."""
 
     report = TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
         games=(
             _game_report(
                 game_id="game-11",
