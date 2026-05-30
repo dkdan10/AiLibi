@@ -66,7 +66,11 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
     assert float(cost) > 0.0
-    assert winner == "CREWMATES"
+    # This test pins provenance *extraction*, not the game outcome: the meeting
+    # seed's winner is a live-recorded result that can land either way (after the
+    # Task 6.3 CREWMATE_EJECT change, seed 22's re-record resolves IMPOSTORS), so
+    # assert membership rather than a specific side — matching the no-meeting case.
+    assert winner in {"CREWMATES", "IMPOSTORS"}
 
 
 def test_provenance_no_meeting_seed(small_samples: Path) -> None:

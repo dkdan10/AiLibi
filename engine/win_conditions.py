@@ -5,7 +5,12 @@ from typing import Literal
 
 from engine.world import WorldState
 
-WinResultType = Literal["CREWMATE_TASKS", "IMPOSTOR_PARITY", "IMPOSTOR_SABOTAGE"]
+WinResultType = Literal[
+    "CREWMATE_TASKS",
+    "CREWMATE_EJECT",
+    "IMPOSTOR_PARITY",
+    "IMPOSTOR_SABOTAGE",
+]
 
 
 @dataclass(frozen=True)
@@ -28,6 +33,17 @@ def evaluate_win_conditions(state: WorldState) -> WinResult | None:
         and state.sabotage.remaining_ticks == 0
     ):
         return WinResult(winner="IMPOSTORS", reason="IMPOSTOR_SABOTAGE")
+
+    # Impostor-elimination win (Task 6.3; audit J-J-8, I-I-3; DESIGN.md §3, §8.1).
+    # With every impostor dead/ejected the crew wins immediately, before the
+    # task-completion check, so a game whose last impostor is ejected before
+    # tasks finish attributes to the ejection win rather than running on as a
+    # zombie game (recording TICK_BUDGET_REACHED or a delayed CREWMATE_TASKS).
+    # Ordered after parity and sabotage — both impostor wins — so an offensive
+    # impostor action that resolves on the same tick still attributes to the
+    # offense per §3.5; ordered before tasks per the design-thread intent.
+    if alive_impostors == 0:
+        return WinResult(winner="CREWMATES", reason="CREWMATE_EJECT")
 
     # Dead-crewmate task rule lives in DESIGN.md §3.5 (dropped). The kill
     # handler in engine/tick.py removes a victim's incomplete tasks, so
