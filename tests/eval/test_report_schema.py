@@ -9,12 +9,14 @@ or LLM dependency.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 
 import pytest
 from pydantic import ValidationError
 
 from engine.entities import Role
+from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_report
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -217,6 +219,7 @@ def _realistic_tournament() -> TournamentReport:
     """
 
     return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
         games=(
             _game_report(
                 game_id="game-11",
@@ -306,9 +309,17 @@ def test_current_format_version_is_one() -> None:
     assert CURRENT_FORMAT_VERSION == 1
 
 
-def test_format_version_defaults_to_current() -> None:
-    report = TournamentReport(games=(), seeds_used=())
-    assert report.format_version == CURRENT_FORMAT_VERSION
+def test_format_version_missing_on_construction_is_rejected() -> None:
+    """In-process construction without the marker fails loud (no default).
+
+    ``format_version`` is a required field with no default, so building a
+    report in Python without it raises rather than silently assuming v1
+    (audit E-E-1). The writer (``eval.balance_eval``) stamps the current
+    version explicitly.
+    """
+
+    with pytest.raises(ValidationError, match="missing report format_version"):
+        TournamentReport(games=(), seeds_used=())  # type: ignore[call-arg]
 
 
 def test_format_version_accepts_current_explicitly() -> None:
@@ -330,6 +341,65 @@ def test_format_version_rejects_future_version_on_deserialize() -> None:
 def test_format_version_rejects_below_current_version() -> None:
     with pytest.raises(ValidationError, match="no migration path"):
         TournamentReport(format_version=0, games=(), seeds_used=())
+
+
+def test_format_version_missing_on_deserialize_is_rejected() -> None:
+    """A serialized report that lost its version marker fails loud (E-E-1).
+
+    The audit's concern is a *report JSON* with ``format_version`` entirely
+    absent: it previously defaulted silently to v1. Reading such a report back
+    via ``model_validate_json`` -- the on-disk read path -- must now raise a
+    clear error rather than coerce it, honoring the no-silent-fallback rule.
+    """
+
+    payload = json.dumps({"games": [], "seeds_used": []})
+    with pytest.raises(ValidationError, match="missing report format_version"):
+        TournamentReport.model_validate_json(payload)
+
+
+def test_format_version_marker_present_round_trips_through_json() -> None:
+    """The current marker ``1`` round-trips through the JSON read path.
+
+    The complement of the missing-marker rejection above: a serialized report
+    that DOES carry ``format_version == CURRENT_FORMAT_VERSION`` deserializes
+    cleanly.
+    """
+
+    payload = json.dumps(
+        {"format_version": CURRENT_FORMAT_VERSION, "games": [], "seeds_used": []}
+    )
+    report = TournamentReport.model_validate_json(payload)
+    assert report.format_version == CURRENT_FORMAT_VERSION
+
+
+def test_format_version_missing_on_dict_validate_is_rejected() -> None:
+    """``model_validate`` of a Python dict missing the marker also fails loud.
+
+    Codex review follow-up to the original JSON-only guard: because
+    ``format_version`` is now a required field with no default, the common
+    ``json.loads(...)`` + ``model_validate(dict)`` read path raises the same
+    clear error as ``model_validate_json`` and as in-process construction, so
+    the no-silent-fallback rule (E-E-1) holds on every read path, not just JSON.
+    """
+
+    with pytest.raises(ValidationError, match="missing report format_version"):
+        TournamentReport.model_validate({"games": [], "seeds_used": []})
+
+
+def test_format_version_missing_on_nested_dict_validate_is_rejected() -> None:
+    """The guard reaches a ``TournamentReport`` nested under the eval bundle.
+
+    A :class:`~eval.meeting_quality.TournamentEvalReport` whose embedded report
+    lost its marker is rejected even on the python-dict ``model_validate`` path:
+    the required field runs the guard in every mode, top-level and nested. This
+    closes the nested half of the no-silent-fallback guarantee (E-E-1).
+    """
+
+    bundle = build_tournament_eval_report(_realistic_tournament())
+    payload = bundle.model_dump()
+    del payload["report"]["format_version"]
+    with pytest.raises(ValidationError, match="missing report format_version"):
+        TournamentEvalReport.model_validate(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -503,6 +573,7 @@ def test_partial_tournament_allows_fewer_games_than_seeds() -> None:
     """A crashed run records fewer games than seeds attempted (no equality check)."""
 
     report = TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
         games=(
             _game_report(
                 game_id="game-11",

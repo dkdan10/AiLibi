@@ -32,6 +32,7 @@ from eval.cost_dashboard import (
     compute_cost_dashboard,
 )
 from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
     GameCostSummary,
     GameReport,
     TournamentReport,
@@ -105,6 +106,7 @@ def _game(
 
 def _tournament(*games: GameReport) -> TournamentReport:
     return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
         games=games,
         seeds_used=tuple(g.seed for g in games),
     )
@@ -347,7 +349,9 @@ def test_mean_cost_per_game_and_token_totals() -> None:
 def test_empty_tournament_is_well_defined() -> None:
     """A zero-game report: no division-by-zero, no NaN, empty breakdowns."""
 
-    dashboard = compute_cost_dashboard(TournamentReport(games=(), seeds_used=()))
+    dashboard = compute_cost_dashboard(
+        TournamentReport(format_version=CURRENT_FORMAT_VERSION, games=(), seeds_used=())
+    )
 
     assert dashboard.game_count == 0
     assert dashboard.total_cost_usd == 0.0

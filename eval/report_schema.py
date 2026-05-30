@@ -71,9 +71,14 @@ Phase 5 metric outputs are likewise attached by downstream tooling that
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Final
+from typing import Any, Final
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    field_validator,
+    model_validator,
+)
 
 from engine.entities import Role
 from meetings.schemas import (
@@ -235,12 +240,52 @@ class TournamentReport(_FrozenModel):
     greater than this build's :data:`CURRENT_FORMAT_VERSION`) raises rather
     than being coerced or warned past (AGENTS.md "no silent fallbacks"). A
     version below current is rejected too while no migration path exists -- for
-    v1 there is no prior version, so only ``1`` is valid.
+    v1 there is no prior version, so only ``1`` is valid. ``format_version`` is
+    a required field with no default: a report whose marker is entirely absent
+    raises rather than silently defaulting to v1 (audit E-E-1), on every path
+    that builds the report -- ``model_validate_json``, ``model_validate`` of a
+    Python dict, in-process construction, and the same paths for a report
+    nested under :class:`eval.meeting_quality.TournamentEvalReport`. A report
+    that lost its marker is corrupt or foreign, not a v1 report; the writer
+    (:mod:`eval.balance_eval`) stamps the current version explicitly on
+    construction.
     """
 
-    format_version: int = CURRENT_FORMAT_VERSION
+    format_version: int
     games: tuple[GameReport, ...]
     seeds_used: tuple[int, ...]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _require_format_version(cls, data: Any) -> Any:
+        """Reject any report whose ``format_version`` marker is absent.
+
+        ``format_version`` is a required field with no default, so every path
+        that produces a :class:`TournamentReport` -- in-process construction,
+        ``model_validate`` of a Python dict, ``model_validate_json``, and the
+        same paths for a report nested under
+        :class:`eval.meeting_quality.TournamentEvalReport` -- must carry the
+        marker. A mapping that lost it is corrupt or foreign; failing loud beats
+        silently coercing it to v1 (AGENTS.md "no silent fallbacks"; audit
+        E-E-1). The writer (:func:`eval.balance_eval.run_tournament_eval` /
+        :func:`eval.balance_eval.load_tournament_report`) stamps the current
+        version explicitly on construction.
+
+        This raises a clear, report-specific error in place of Pydantic's
+        generic "Field required", and runs in every validation mode: a missing
+        key cannot be distinguished from a constructor default in ``"python"``
+        mode, which is exactly why the field carries no default.
+        """
+
+        if isinstance(data, Mapping) and "format_version" not in data:
+            raise ValueError(
+                "missing report format_version: a TournamentReport without a "
+                "format_version marker cannot be read safely. Every report this "
+                f"build writes stamps version {CURRENT_FORMAT_VERSION}; one "
+                "without it is corrupt or was written by an incompatible tool, "
+                "so it is rejected rather than defaulted to v1."
+            )
+        return data
 
     @field_validator("format_version")
     @classmethod

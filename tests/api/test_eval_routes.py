@@ -28,7 +28,12 @@ from api.main import create_app
 from api.replay_loader import ReplayLoader, get_replay_loader
 from api.schemas import FailedCallEvalView, FailedCallView
 from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_report
-from eval.report_schema import GameCostSummary, GameReport, TournamentReport
+from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
+    GameCostSummary,
+    GameReport,
+    TournamentReport,
+)
 from orchestrator.replay import FailedCallReplayEntry
 
 # A raw failed-call record carrying every field the eval route must redact: a
@@ -81,7 +86,9 @@ def _eval_report_with_failed_call() -> TournamentEvalReport:
         ),
     )
     return build_tournament_eval_report(
-        TournamentReport(games=(game,), seeds_used=(0,))
+        TournamentReport(
+            format_version=CURRENT_FORMAT_VERSION, games=(game,), seeds_used=(0,)
+        )
     )
 
 
