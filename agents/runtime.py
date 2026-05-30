@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agents.memory.beliefs import BeliefState
 from agents.memory.episodic import MemoryStore
 from agents.perception import ingest_packet
 from observation.action_intent import ActionIntent, WaitIntent
@@ -26,9 +27,22 @@ class AgentRuntime:
         *,
         agent_id: PlayerId,
         memory: MemoryStore | None = None,
+        beliefs: BeliefState | None = None,
     ) -> None:
         self._agent_id = agent_id
         self._memory = memory
+        # The runtime owns a BeliefState whenever it owns a MemoryStore, so
+        # perception can run the DESIGN.md §6.3 belief rules (1 and 4) in a
+        # headless game rather than leaving them dormant (audit A-A-4). A
+        # caller may inject one (e.g. a shared belief store); otherwise a
+        # fresh state is created alongside the memory store. Without a memory
+        # store there is nothing to ingest, so no belief state is created.
+        if beliefs is not None:
+            self._beliefs: BeliefState | None = beliefs
+        elif memory is not None:
+            self._beliefs = BeliefState()
+        else:
+            self._beliefs = None
 
     @property
     def agent_id(self) -> PlayerId:
@@ -37,6 +51,10 @@ class AgentRuntime:
     @property
     def memory(self) -> MemoryStore | None:
         return self._memory
+
+    @property
+    def beliefs(self) -> BeliefState | None:
+        return self._beliefs
 
     def decide(
         self,
@@ -63,13 +81,17 @@ class AgentRuntime:
         When the runtime owns a :class:`MemoryStore`, perception writes
         directly into it via :func:`agents.perception.ingest_packet` and
         returns ``()`` (no events for ``_update_memory`` to re-process).
-        Without a store, this remains a pure stub so callers that have not
-        yet wired memory keep working.
+        The runtime's :class:`BeliefState` is threaded into ``ingest_packet``
+        so the DESIGN.md §6.3 rule-based belief updates (Rules 1 and 4) run
+        per tick in a headless game (audit A-A-4); ``ingest_packet`` adopts
+        the rule result into the passed state in place. Without a store, this
+        remains a pure stub so callers that have not yet wired memory keep
+        working.
         """
 
         if self._memory is None:
             return ()
-        ingest_packet(packet=packet, memory=self._memory)
+        ingest_packet(packet=packet, memory=self._memory, beliefs=self._beliefs)
         return ()
 
     def _update_memory(self, events: tuple[object, ...]) -> None:

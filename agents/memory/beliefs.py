@@ -17,6 +17,7 @@ from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import Final, TypeAlias
 
+from meetings.schemas import ContradictionRef as MeetingContradictionRef
 from observation.packet import ObservationPacket
 
 PlayerId: TypeAlias = str
@@ -44,6 +45,10 @@ BODY_PROXIMITY_SUSPICION_DELTA: Final[float] = 0.2
 BODY_PROXIMITY_WINDOW_TICKS: Final[int] = 3
 """DESIGN.md §6.3 Rule 1 window: how many ticks before a body's discovery
 count as "shortly before" for the proximity adjustment."""
+
+CONTRADICTION_SUSPICION_DELTA: Final[float] = 0.3
+"""DESIGN.md §6.3 Rule 2: suspicion added when a player's claimed alibi
+contradicts another agent's testimony (a detected meeting contradiction)."""
 
 # The action label the observation layer stamps on a ``PlayerView`` when the
 # observer *witnesses* a player using a vent (observation/service.py
@@ -136,6 +141,22 @@ class BeliefState:
 
     def __init__(self) -> None:
         self._beliefs: dict[PlayerId, _MutableBelief] = {}
+
+    def seed_player(
+        self, player_id: PlayerId, *, suspicion: float, trust: float
+    ) -> None:
+        """Initialise ``player_id``'s belief to the given prior scores.
+
+        Lets a caller reconstruct a :class:`BeliefState` from an existing
+        suspicion-graph snapshot (e.g. the meeting's per-voter graph) before
+        applying a belief rule on top, so the rule's delta lands on the real
+        prior rather than the default 0.5. Overwrites any existing entry.
+        """
+
+        self._beliefs[player_id] = _MutableBelief(
+            trust=_clamp(trust, floor=_TRUST_FLOOR, ceil=_TRUST_CEIL),
+            suspicion=_clamp(suspicion, floor=_SUSPICION_FLOOR, ceil=_SUSPICION_CEIL),
+        )
 
     def known_players(self) -> tuple[PlayerId, ...]:
         return tuple(self._beliefs.keys())
@@ -289,14 +310,56 @@ def apply_observation_rules(
     return result
 
 
+def apply_contradiction_rule(
+    beliefs: BeliefState,
+    contradictions: Sequence[MeetingContradictionRef],
+) -> BeliefState:
+    """Apply DESIGN.md §6.3 Rule 2 for detected meeting contradictions.
+
+    Pure: returns a new :class:`BeliefState`; ``beliefs`` is not mutated.
+
+    Each :class:`meetings.schemas.ContradictionRef` names one or more
+    ``subjects`` -- the players whose claims cannot both be true. For
+    every such subject this records the contradiction on that player's
+    belief (``record_contradiction``) and lifts their suspicion by
+    ``CONTRADICTION_SUSPICION_DELTA`` (``adjust_suspicion``), so the
+    vote suspicion graph reflects the detected lie (audit J-J-4). The
+    meeting-side :class:`ContradictionRef` is translated into the
+    agents-side belief :class:`ContradictionRef` so the inconsistency
+    list stays engine-free and renders in the §6.6 memory view; the
+    two shapes are deliberately distinct (the belief store predates the
+    detector's data model).
+
+    A subject appearing in multiple flags is bumped once per flag,
+    matching "each detected contradiction is one piece of evidence".
+    Subjects are processed in sorted order per flag so the resulting
+    state is deterministic regardless of subject tuple ordering -- a
+    precondition for replay-stable belief snapshots.
+    """
+
+    result = beliefs.copy()
+    for contradiction in contradictions:
+        belief_ref = ContradictionRef(
+            summary=contradiction.description,
+            left_ref=contradiction.event_a_id,
+            right_ref=contradiction.event_b_id,
+        )
+        for subject in sorted(contradiction.subjects):
+            result.record_contradiction(subject, belief_ref)
+            result.adjust_suspicion(subject, delta=CONTRADICTION_SUSPICION_DELTA)
+    return result
+
+
 __all__ = [
     "BODY_PROXIMITY_SUSPICION_DELTA",
     "BODY_PROXIMITY_WINDOW_TICKS",
+    "CONTRADICTION_SUSPICION_DELTA",
     "OBSERVED_VENT_ACTION",
     "VENTING_SUSPICION_DELTA",
     "AlibiClaim",
     "BeliefState",
     "ContradictionRef",
     "PlayerBelief",
+    "apply_contradiction_rule",
     "apply_observation_rules",
 ]
