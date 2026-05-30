@@ -27,8 +27,10 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
+import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -253,6 +255,32 @@ def render_manifest(rows: Iterable[ManifestRow]) -> str:
     return f"{_HEADER}\n{_COLUMNS}\n{_SEPARATOR}\n{body}\n"
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically (Audit H-H-3).
+
+    The manifest is rewritten in full on every ``update`` / ``prune`` /
+    ``rebuild``. A plain ``Path.write_text`` truncates the live file before
+    writing, so a crash mid-write leaves a half-written or empty MANIFEST. Here
+    the new content is written to a sibling temp file on the *same* filesystem
+    and ``os.replace``-d into place: ``os.replace`` is atomic, so a reader (or a
+    crash) sees either the complete old file or the complete new one, never a
+    truncated one. The temp file is removed if anything fails before the rename.
+    """
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def parse_manifest(text: str) -> dict[int, ManifestRow]:
     """Parse a rendered manifest back into ``{seed: ManifestRow}``.
 
@@ -310,8 +338,7 @@ def update_manifest(
     )
     for seed in seeds:
         rows[seed] = build_row(sample_dir, seed, fallback, git_sha, refreshed_at)
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(render_manifest(rows.values()), encoding="utf-8")
+    _atomic_write_text(manifest_path, render_manifest(rows.values()))
 
 
 def prune_manifest(manifest_path: Path, sample_dir: Path) -> int:
@@ -330,7 +357,7 @@ def prune_manifest(manifest_path: Path, sample_dir: Path) -> int:
     kept = {seed: row for seed, row in rows.items() if seed in present}
     dropped = len(rows) - len(kept)
     if dropped:
-        manifest_path.write_text(render_manifest(kept.values()), encoding="utf-8")
+        _atomic_write_text(manifest_path, render_manifest(kept.values()))
     return dropped
 
 
@@ -382,8 +409,7 @@ def rebuild_manifest(manifest_path: Path, sample_dir: Path) -> int:
     fallback = fallback_model(sample_dir)
     seeds = discover_seeds(sample_dir)
     rows = [build_row(sample_dir, seed, fallback, None, None) for seed in seeds]
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(render_manifest(rows), encoding="utf-8")
+    _atomic_write_text(manifest_path, render_manifest(rows))
     return len(rows)
 
 
