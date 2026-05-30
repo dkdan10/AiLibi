@@ -147,3 +147,12 @@ def test_docker_compose_publishes_on_loopback_only() -> None:
     # The host publish is scoped to 127.0.0.1 so `docker compose up` does not
     # expose the unauthenticated GM view to the LAN (audit C-C-1).
     assert "127.0.0.1:${AILIBI_API_PORT:-8000}:8000" in compose
+
+
+def test_docker_compose_forwards_cors_allowlist_into_container() -> None:
+    compose = Path("docker-compose.yml").read_text(encoding="utf-8")
+    # Compose does not pass host/.env vars into the container automatically, so
+    # the allowlist must be declared in the service environment or it is a
+    # silent no-op on the compose path. The empty default keeps the closed
+    # posture (an empty value installs no CORS middleware).
+    assert 'AILIBI_CORS_ORIGINS: "${AILIBI_CORS_ORIGINS:-}"' in compose

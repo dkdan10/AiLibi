@@ -44,6 +44,10 @@ highest-urgency operational finding).
   by the loopback-scoped publish, **not** by the container bind flag. A bare
   `"8000:8000"` would publish on `0.0.0.0` on the host and expose the GM view to
   the LAN — do not revert to it.
+* The compose service also forwards `AILIBI_CORS_ORIGINS` into the container
+  (empty by default). Compose does not propagate host/`.env` variables into a
+  container automatically, so this passthrough is what makes the allowlist below
+  actually configurable on the compose path; set it on the host or in `.env`.
 
 ## CORS posture (audit C-C-2)
 

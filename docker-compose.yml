@@ -21,6 +21,13 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       UV_PROJECT_ENVIRONMENT: /tmp/ailibi-venv
+      # Compose does NOT propagate host/.env variables into the container
+      # automatically — only what is listed here reaches the process. Without
+      # this line, an operator who sets AILIBI_CORS_ORIGINS (shell or .env) to
+      # configure the cross-origin allowlist would be silently ignored inside
+      # the container. The empty default preserves the closed CORS posture: an
+      # empty value installs no middleware (see api/main.py, docs/deployment.md).
+      AILIBI_CORS_ORIGINS: "${AILIBI_CORS_ORIGINS:-}"
     ports:
       # Publish to the host LOOPBACK only. The spectator API is an
       # unauthenticated GM view (roles, kill attribution, vent state, rendered
