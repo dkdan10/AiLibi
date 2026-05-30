@@ -71,9 +71,15 @@ Phase 5 metric outputs are likewise attached by downstream tooling that
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Final
+from typing import Any, Final
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from engine.entities import Role
 from meetings.schemas import (
@@ -235,12 +241,58 @@ class TournamentReport(_FrozenModel):
     greater than this build's :data:`CURRENT_FORMAT_VERSION`) raises rather
     than being coerced or warned past (AGENTS.md "no silent fallbacks"). A
     version below current is rejected too while no migration path exists -- for
-    v1 there is no prior version, so only ``1`` is valid.
+    v1 there is no prior version, so only ``1`` is valid. Reading a
+    *serialized* report whose ``format_version`` key is entirely absent also
+    raises rather than silently defaulting to v1 (audit E-E-1): a persisted
+    report (JSON, via ``model_validate_json`` -- directly or nested under
+    :class:`eval.meeting_quality.TournamentEvalReport`) that lost its version
+    marker is corrupt or foreign, not a v1 report. The field keeps a default so
+    in-process construction (the tournament-report writer in
+    :mod:`eval.balance_eval`) need not restate the current version; the
+    missing-marker guard is therefore scoped to the JSON read path because
+    Pydantic runs ``model_validate`` of a Python dict in the same ``"python"``
+    mode as ``__init__``, leaving the two indistinguishable.
     """
 
     format_version: int = CURRENT_FORMAT_VERSION
     games: tuple[GameReport, ...]
     seeds_used: tuple[int, ...]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _require_format_version_on_read(cls, data: Any, info: ValidationInfo) -> Any:
+        """Reject a serialized report whose ``format_version`` marker is absent.
+
+        A report deserialized from JSON (``model_validate_json`` -- the on-disk
+        read path, directly or nested under
+        :class:`eval.meeting_quality.TournamentEvalReport`) that lost its
+        version marker is corrupt or foreign; failing loud beats silently
+        coercing it to v1 (AGENTS.md "no silent fallbacks"; audit E-E-1).
+
+        The guard is scoped to the JSON read path (``info.mode == "json"``)
+        because Pydantic runs ``model_validate`` of a Python dict in the same
+        ``"python"`` mode as in-process ``__init__``, so a deserialized dict and
+        a constructor call are indistinguishable here -- and the
+        tournament-report writer (:func:`eval.balance_eval.run_tournament_eval`
+        / :func:`eval.balance_eval.load_tournament_report`) constructs the
+        report without restating the version, leaning on the field default. So
+        in-memory construction keeps the default; only reading back a serialized
+        report demands the marker.
+        """
+
+        if (
+            info.mode == "json"
+            and isinstance(data, Mapping)
+            and "format_version" not in data
+        ):
+            raise ValueError(
+                "missing report format_version: a serialized TournamentReport "
+                "without a format_version marker cannot be read safely. Every "
+                f"report this build writes stamps version {CURRENT_FORMAT_VERSION}; "
+                "one without it is corrupt or was written by an incompatible "
+                "tool, so it is rejected rather than defaulted to v1."
+            )
+        return data
 
     @field_validator("format_version")
     @classmethod

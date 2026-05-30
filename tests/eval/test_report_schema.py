@@ -9,6 +9,7 @@ or LLM dependency.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 
 import pytest
@@ -330,6 +331,53 @@ def test_format_version_rejects_future_version_on_deserialize() -> None:
 def test_format_version_rejects_below_current_version() -> None:
     with pytest.raises(ValidationError, match="no migration path"):
         TournamentReport(format_version=0, games=(), seeds_used=())
+
+
+def test_format_version_missing_on_deserialize_is_rejected() -> None:
+    """A serialized report that lost its version marker fails loud (E-E-1).
+
+    The audit's concern is a *report JSON* with ``format_version`` entirely
+    absent: it previously defaulted silently to v1. Reading such a report back
+    via ``model_validate_json`` -- the on-disk read path -- must now raise a
+    clear error rather than coerce it, honoring the no-silent-fallback rule.
+    """
+
+    payload = json.dumps({"games": [], "seeds_used": []})
+    with pytest.raises(ValidationError, match="missing report format_version"):
+        TournamentReport.model_validate_json(payload)
+
+
+def test_format_version_marker_present_round_trips_through_json() -> None:
+    """The current marker ``1`` round-trips through the JSON read path.
+
+    The complement of the missing-marker rejection above: a serialized report
+    that DOES carry ``format_version == CURRENT_FORMAT_VERSION`` deserializes
+    cleanly.
+    """
+
+    payload = json.dumps(
+        {"format_version": CURRENT_FORMAT_VERSION, "games": [], "seeds_used": []}
+    )
+    report = TournamentReport.model_validate_json(payload)
+    assert report.format_version == CURRENT_FORMAT_VERSION
+
+
+def test_format_version_missing_on_python_construction_keeps_default() -> None:
+    """The read-time guard is deliberately scoped to deserialized JSON.
+
+    Pydantic runs ``model_validate`` of a Python dict in the same ``"python"``
+    mode as in-process ``__init__``, so the two are indistinguishable; the
+    tournament-report writer (``eval.balance_eval``) builds the report without
+    restating the version and leans on the field default. Both in-memory paths
+    therefore keep defaulting to the current version -- only a *serialized*
+    (JSON) report must carry the marker. This pins that deliberate asymmetry so a
+    later tightening does not silently break the writer.
+    """
+
+    constructed = TournamentReport(games=(), seeds_used=())
+    validated = TournamentReport.model_validate({"games": [], "seeds_used": []})
+    assert constructed.format_version == CURRENT_FORMAT_VERSION
+    assert validated.format_version == CURRENT_FORMAT_VERSION
 
 
 # ---------------------------------------------------------------------------
