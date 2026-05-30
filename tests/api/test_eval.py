@@ -20,7 +20,12 @@ from fastapi.testclient import TestClient
 from api.main import create_app
 from api.replay_loader import ReplayLoader, get_replay_loader
 from eval.meeting_quality import TournamentEvalReport, build_tournament_eval_report
-from eval.report_schema import GameCostSummary, GameReport, TournamentReport
+from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
+    GameCostSummary,
+    GameReport,
+    TournamentReport,
+)
 from tests.api.fixtures.sample_replay import write_meeting_replay, write_sample_replay
 
 
@@ -117,7 +122,9 @@ def _sample_eval_report() -> TournamentEvalReport:
         ),
     )
     return build_tournament_eval_report(
-        TournamentReport(games=games, seeds_used=(0, 1))
+        TournamentReport(
+            format_version=CURRENT_FORMAT_VERSION, games=games, seeds_used=(0, 1)
+        )
     )
 
 

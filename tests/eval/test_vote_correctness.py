@@ -20,6 +20,7 @@ from pydantic import ValidationError
 
 from engine.entities import Role
 from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
     GameCostSummary,
     GameReport,
     MeetingReport,
@@ -182,7 +183,11 @@ def _game(
 
 
 def _tournament(*games: GameReport) -> TournamentReport:
-    return TournamentReport(games=games, seeds_used=tuple(game.seed for game in games))
+    return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
+        games=games,
+        seeds_used=tuple(game.seed for game in games),
+    )
 
 
 def _one_meeting_report(meeting: MeetingReport) -> TournamentReport:

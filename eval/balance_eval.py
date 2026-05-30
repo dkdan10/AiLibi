@@ -57,6 +57,7 @@ from typing import Final
 from engine.entities import PlayerId, Role
 from engine.world import Map, load_canonical_map
 from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
     GameCostSummary,
     GameReport,
     MeetingReport,
@@ -274,7 +275,11 @@ def run_tournament_eval(
             )
         )
 
-    return TournamentReport(games=tuple(games), seeds_used=seeds_tuple)
+    return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
+        games=tuple(games),
+        seeds_used=seeds_tuple,
+    )
 
 
 def run_balance_eval(
@@ -382,7 +387,11 @@ def load_tournament_report(
             )
         )
 
-    return TournamentReport(games=tuple(games), seeds_used=seeds)
+    return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
+        games=tuple(games),
+        seeds_used=seeds,
+    )
 
 
 def _seeded_roles(

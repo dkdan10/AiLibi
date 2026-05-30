@@ -24,6 +24,7 @@ from eval.accusation_calibration import (
     compute_accusation_calibration,
 )
 from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
     GameCostSummary,
     GameReport,
     MeetingReport,
@@ -138,7 +139,11 @@ def _game(
 
 
 def _tournament(*games: GameReport) -> TournamentReport:
-    return TournamentReport(games=games, seeds_used=tuple(g.seed for g in games))
+    return TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
+        games=games,
+        seeds_used=tuple(g.seed for g in games),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +253,9 @@ def test_n_bins_parameter_controls_bin_count() -> None:
 
 
 def test_n_bins_below_one_raises() -> None:
-    report = TournamentReport(games=(), seeds_used=())
+    report = TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION, games=(), seeds_used=()
+    )
     with pytest.raises(ValueError, match="n_bins"):
         compute_accusation_calibration(report, n_bins=0)
 
@@ -422,7 +429,9 @@ def test_absent_accusations_yield_empty_bins_without_raising() -> None:
 
 
 def test_empty_tournament_is_empty_without_raising() -> None:
-    report = TournamentReport(games=(), seeds_used=())
+    report = TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION, games=(), seeds_used=()
+    )
 
     result = compute_accusation_calibration(report)
 
