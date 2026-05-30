@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Final, Literal
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
@@ -22,6 +23,16 @@ _FALLBACK_PATHS: Final[tuple[Path, ...]] = (
     Path("./replays/samples"),
 )
 _REPLAY_GLOB: Final[str] = "replay-seed-*.jsonl"
+
+# Optional comma-separated cross-origin allowlist (documented in
+# docs/deployment.md and .env.example). The spectator API is an
+# unauthenticated GM view: it ships with a CLOSED CORS posture. When this var
+# is unset (or holds no non-empty origins) no CORS middleware is installed —
+# the same-origin Vite dev proxy and same-origin static serving need none.
+# When it lists explicit origins, ``CORSMiddleware`` is installed scoped to
+# exactly those origins. A literal ``*`` is rejected: never serve the GM view
+# with a wildcard CORS policy.
+ENV_CORS_ORIGINS: Final[str] = "AILIBI_CORS_ORIGINS"
 
 
 class HealthResponse(BaseModel):
@@ -92,12 +103,51 @@ async def _handle_state_mismatch(request: Request, exc: Exception) -> JSONRespon
     )
 
 
+def _parse_cors_origins(raw: str | None) -> list[str]:
+    """Parse the cross-origin allowlist from its comma-separated env value.
+
+    Returns the explicit list of origins. An unset value, a whitespace-only
+    value, or a value whose entries are all blank yields an empty list, which
+    the caller treats as "no cross-origin access" — no permissive middleware is
+    installed. This honors the project's no-silent-fallback discipline: an
+    explicitly-set-but-empty allowlist means "allow nothing", never "allow all".
+
+    A literal ``*`` entry raises: the spectator API is an unauthenticated GM
+    view and must never be served with a wildcard CORS policy.
+    """
+
+    if raw is None:
+        return []
+    origins = [origin.strip() for origin in raw.split(",")]
+    origins = [origin for origin in origins if origin]
+    if "*" in origins:
+        raise RuntimeError(
+            f"{ENV_CORS_ORIGINS} must be an explicit allowlist of origins; the "
+            "wildcard '*' is forbidden because the spectator API serves an "
+            "unauthenticated GM view. List explicit origins or leave it unset."
+        )
+    return origins
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="AiLibi API",
         version="0.1.0",
         description="Spectator and control-plane API for AiLibi.",
     )
+    # Closed-by-default CORS posture (see ENV_CORS_ORIGINS above and
+    # docs/deployment.md). Middleware is installed ONLY when an explicit
+    # allowlist is configured; the default (unset) path adds nothing, leaving
+    # the same-origin dev proxy and static serving untouched.
+    cors_origins = _parse_cors_origins(os.environ.get(ENV_CORS_ORIGINS))
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET"],
+            allow_headers=["Content-Type"],
+        )
     # The loader is constructed once at startup and injected via the
     # ``get_replay_loader`` dependency (which reads it back off app.state).
     app.state.replay_loader = ReplayLoader(replay_dir=_resolve_replay_dir())

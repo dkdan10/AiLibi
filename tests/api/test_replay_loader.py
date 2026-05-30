@@ -8,10 +8,13 @@ the recorded one, or :class:`ReplayStateMismatchError` is raised.
 
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
 import pytest
 
+from api import replay_loader
 from api.replay_loader import ReplayLoader, ReplayStateMismatchError
 from api.schemas import (
     FoundBodyObsView,
@@ -19,7 +22,7 @@ from api.schemas import (
     MeetingTriggeredEventView,
     ReportBodyEventView,
 )
-from orchestrator.replay import LLMCallRecord
+from orchestrator.replay import LLMCallRecord, ReplayLogEntry, read_all_entries
 from tests.api.fixtures.sample_replay import (
     corrupt_tick_hash,
     strip_llm_call_agent_ids,
@@ -370,3 +373,142 @@ def test_llm_call_agent_id_is_none_for_pre_4_7_replay(tmp_path: Path) -> None:
     meeting = loader.load_replay("headless-seed-0").meetings[0]
     assert meeting.llm_calls  # the fixture wrote LLM calls
     assert all(call.agent_id is None for call in meeting.llm_calls)
+
+
+# -- efficiency / pagination / resilience (Task 6.6) --------------------------
+
+
+def _count_reads(monkeypatch: pytest.MonkeyPatch) -> dict[Path, int]:
+    """Spy on ``read_all_entries``; return a live ``{path: read_count}`` map."""
+
+    reads: dict[Path, int] = {}
+    real = read_all_entries  # original, captured before the module attr is swapped
+
+    def counting(path: Path) -> tuple[ReplayLogEntry, ...]:
+        reads[Path(path)] = reads.get(Path(path), 0) + 1
+        return real(path)
+
+    monkeypatch.setattr(replay_loader, "read_all_entries", counting)
+    return reads
+
+
+def _bump_mtime(path: Path, *, by_ns: int = 2_000_000_000) -> None:
+    """Advance ``path``'s mtime so a cache key folding mtime changes for sure.
+
+    Guards the rewrite-invalidation tests against coarse filesystem timestamp
+    resolution, where a fast unlink+rewrite could reuse the previous mtime.
+    """
+
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + by_ns))
+
+
+def test_cost_summary_reads_each_file_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # G-G-2: cost AND decisive outcome come from one read_all_entries per file,
+    # not the pre-6.6 two passes (compute_cost_usd + read_game_outcome).
+    write_meeting_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
+    write_meeting_replay(tmp_path / "replay-seed-1.jsonl", seed=1)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    reads = _count_reads(monkeypatch)
+    loader.cost_summary()
+
+    assert reads == {
+        tmp_path / "replay-seed-0.jsonl": 1,
+        tmp_path / "replay-seed-1.jsonl": 1,
+    }
+
+
+def test_list_replays_reads_each_file_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # G-G-2: the metadata path folds its former double read into one per file.
+    write_meeting_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
+    write_sample_replay(tmp_path / "replay-seed-1.jsonl", seed=1)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    reads = _count_reads(monkeypatch)
+    loader.list_replays()
+
+    assert reads == {
+        tmp_path / "replay-seed-0.jsonl": 1,
+        tmp_path / "replay-seed-1.jsonl": 1,
+    }
+
+
+def test_metadata_summary_is_memoized_across_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # H-H-2: a per-file (path, mtime) cache means a second listing re-parses
+    # nothing while the files are unchanged.
+    write_sample_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    reads = _count_reads(monkeypatch)
+    loader.list_replays()
+    loader.list_replays()
+
+    assert reads == {tmp_path / "replay-seed-0.jsonl": 1}  # second call cached
+
+
+def test_in_place_rewrite_is_not_served_stale(tmp_path: Path) -> None:
+    # H-H-2: an in-place refresh (same path, new bytes, new mtime) must miss both
+    # the metadata-summary cache and the engine-playback cache.
+    path = tmp_path / "replay-seed-0.jsonl"
+    write_sample_replay(path, seed=0, ticks=3)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    assert loader.list_replays()[0].total_ticks == 3
+    assert loader.load_replay("headless-seed-0").metadata.total_ticks == 3
+
+    # Rewrite the same path with a longer game (ReplayLog refuses to overwrite,
+    # so remove first), then bump mtime to guarantee a new cache key regardless
+    # of filesystem timestamp resolution.
+    path.unlink()
+    write_sample_replay(path, seed=0, ticks=5)
+    _bump_mtime(path)
+
+    assert loader.list_replays()[0].total_ticks == 5
+    assert loader.load_replay("headless-seed-0").metadata.total_ticks == 5
+
+
+def test_list_replays_pagination_bounds(tmp_path: Path) -> None:
+    # G-G-3: limit/offset slice the seed-sorted path list before building views.
+    for seed in range(5):
+        write_sample_replay(tmp_path / f"replay-seed-{seed}.jsonl", seed=seed)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    # Absent params preserve the original "every replay" behavior.
+    assert [m.seed for m in loader.list_replays()] == [0, 1, 2, 3, 4]
+    assert [m.seed for m in loader.list_replays(limit=2)] == [0, 1]
+    assert [m.seed for m in loader.list_replays(offset=3)] == [3, 4]
+    assert [m.seed for m in loader.list_replays(limit=2, offset=1)] == [1, 2]
+    assert loader.list_replays(limit=0) == []
+    assert loader.list_replays(offset=99) == []
+    # A limit past the end clamps to what remains.
+    assert [m.seed for m in loader.list_replays(limit=10, offset=3)] == [3, 4]
+
+
+def test_list_replays_skips_corrupted_file_and_logs(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # K-K-8 (backend half): one corrupted replay must not 500 the whole picker.
+    write_sample_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
+    write_sample_replay(tmp_path / "replay-seed-2.jsonl", seed=2)
+    bad = tmp_path / "replay-seed-1.jsonl"
+    write_sample_replay(bad, seed=1)
+    # Doubled-write corruption (duplicate ticks) — the pattern read_all_entries
+    # rejects with CorruptedFileError (Task 4.16).
+    bad.write_text(bad.read_text(encoding="utf-8") * 2, encoding="utf-8")
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger="api.replay_loader"):
+        metas = loader.list_replays()
+
+    # Healthy replays still list; the corrupted one is excluded, not a 500.
+    assert [m.seed for m in metas] == [0, 2]
+    # The corruption is recorded, not silently swallowed.
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("replay-seed-1.jsonl" in r.getMessage() for r in warnings)

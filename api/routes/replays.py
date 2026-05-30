@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.replay_loader import ReplayLoader, get_replay_loader
 from api.schemas import (
@@ -30,8 +30,15 @@ _LoaderDep = Annotated[ReplayLoader, Depends(get_replay_loader)]
 
 
 @router.get("", response_model=list[ReplayMetadataView])
-def list_replays(loader: _LoaderDep) -> list[ReplayMetadataView]:
-    return loader.list_replays()
+def list_replays(
+    loader: _LoaderDep,
+    limit: Annotated[int | None, Query(ge=0)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[ReplayMetadataView]:
+    # Optional pagination (Audit G-G-3): absent params return every replay,
+    # preserving the original behavior; the loader slices its (seed-sorted) path
+    # list before building any metadata view so the work is bounded by the page.
+    return loader.list_replays(limit=limit, offset=offset)
 
 
 @router.get("/{game_id}", response_model=ReplayView)
