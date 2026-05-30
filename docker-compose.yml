@@ -5,6 +5,10 @@ services:
     volumes:
       - .:/app
     command:
+      # uvicorn binds 0.0.0.0 INSIDE the container so Docker's published-port
+      # forwarding can reach it (a process bound to the container's 127.0.0.1
+      # is unreachable through a published port). Host exposure is gated by the
+      # loopback-scoped publish under `ports` below — NOT by this flag.
       - uv
       - run
       - --locked
@@ -18,4 +22,9 @@ services:
       PYTHONUNBUFFERED: "1"
       UV_PROJECT_ENVIRONMENT: /tmp/ailibi-venv
     ports:
-      - "${AILIBI_API_PORT:-8000}:8000"
+      # Publish to the host LOOPBACK only. The spectator API is an
+      # unauthenticated GM view (roles, kill attribution, vent state, rendered
+      # prompts); a bare "8000:8000" publishes on 0.0.0.0 and exposes every
+      # hidden field to the LAN. Do NOT widen this to a non-loopback bind
+      # without first adding auth + network isolation — see docs/deployment.md.
+      - "127.0.0.1:${AILIBI_API_PORT:-8000}:8000"
