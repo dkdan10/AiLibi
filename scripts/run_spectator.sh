@@ -77,6 +77,12 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Serve the committed curated sample set by default. Without this the loader's
+# fallthrough prefers a local ./replays scratch dir if one exists, so the
+# spectator could show an ad-hoc run instead of the canonical committed games.
+# Override AILIBI_REPLAY_DIR to point at an ad-hoc run dir on purpose.
+export AILIBI_REPLAY_DIR="${AILIBI_REPLAY_DIR:-replays/samples}"
+
 # Start API + frontend with prefixed logs. Use process substitution
 # (`> >(sed …) 2>&1`) rather than a pipe (`| sed …`) so `$!` captures the
 # PID of the actual server command — pipe semantics give `$!` the trailing

@@ -1,8 +1,20 @@
 # AiLibi — System Design Document
 
-**Status:** v0.1 draft
+**Status:** v0.1 draft — reconciled to HEAD after the Phase 6 close (2026-05-30)
 **Audience:** engineers implementing or maintaining the system
 **Scope:** complete architecture and roadmap for a multi-agent social-deduction simulation platform
+
+> **Reading note — MVP vs vision.** This document is both the design vision and a
+> map of what is built. Where the implemented MVP diverges from the original
+> design, the divergence is annotated inline as **Implemented at MVP** / **Deferred**.
+> The load-bearing realities a reader should not be surprised by: persistence is
+> JSONL/JSON files on local disk — no PostgreSQL/JSONB yet; the spectator surface
+> is a static read-only replay + eval REST API consumed by a replay-scrubbing
+> React UI — the live WebSocket broadcast layer is not built; games are created
+> from the CLI — there is no `POST /games`; belief Rules 1, 2, and 4 are live and
+> Rules 3 and 5 are deferred. MVP (roadmap phases 0–5) is complete; post-MVP
+> repair/hardening is tracked in `tasks/` (the executed Phase 6 was a repair
+> phase, and the §9 "human player" work is deferred to Phase 7+).
 
 ---
 
@@ -12,7 +24,7 @@ Three load-bearing decisions shape everything else. If you disagree with these, 
 
 1. **Tick-based deterministic engine with a strict observation firewall.** The engine ticks at a fixed rate (target 2 Hz). Agents never touch engine state directly — they receive `ObservationPacket`s filtered by visibility rules. Replays are bit-exact from a seed. This is non-negotiable: it is what makes the system testable, debuggable, and provably non-cheating.
 
-2. **Two-tier agent reasoning.** Tactical decisions (move, do task, follow, vent) are rule-based and run every tick. Strategic decisions (meeting reports, voting, suspicion updates) use an LLM and run only at meetings or specific triggers (witnessing a kill, finding a body). A full game targets ≤ 100 LLM calls. Without this split, cost and latency make the system unviable.
+2. **Two-tier agent reasoning.** Tactical decisions (move, do task, follow, vent) are rule-based and run every tick. Strategic decisions (meeting reports, voting, suspicion updates) use an LLM and run only at meetings or specific triggers (witnessing a kill, finding a body). A full game targets ≤ 100 LLM calls (a design target, not an enforced invariant — `llm/budget.py` enforces USD and token ceilings, not a per-game call counter). Without this split, cost and latency make the system unviable.
 
 3. **Memory is structured first, natural-language second.** Each agent maintains a typed event log and a derived belief state (trust scores, alibi map, suspicion graph). The LLM sees a *rendered view* of that structure during meetings — never raw chat history as the source of truth. This makes reasoning auditable, testable, and replayable.
 
@@ -62,6 +74,18 @@ The product is therefore not a "game with AI players bolted on." It is a **multi
         └─────▶ Eval Harness  (offline replay analysis)
 ```
 
+> **Implemented at MVP (diagram reconciliation).** The diagram shows the target
+> architecture; HEAD differs in three ways. (1) **Persistence** is JSONL/JSON on
+> local disk (`orchestrator/replay.py` writes per-game replay JSONL; eval reports
+> are JSON files), not PostgreSQL — Postgres/JSONB is **deferred** to the scale
+> phase. (2) The **spectator API** is a static read-only replay + eval REST API
+> (`api/routes/replays.py`, `api/routes/eval.py`); the live WebSocket broadcast
+> path drawn here is **not built** — there is no `api/ws.py`, and live tick/meeting
+> fan-out is **deferred** (see §10.3 / H-1: the first real pre-scale task is to
+> design the single-process live-broadcast layer, since the Redis-pubsub scale
+> path presupposes it). (3) **Games are created from the CLI** (`scripts/run_game.py`,
+> `scripts/run_tournament.py`); there is no `POST /games` create route.
+
 ### 1.2 State ownership
 
 | State                              | Owner               | Visibility                                 |
@@ -95,6 +119,8 @@ This is the single most important architectural property. Enforced as follows:
 
 The tick clock is wall-clock-locked for live spectating but can run as fast as the slowest agent allows in headless mode (used for evals and tournaments).
 
+**Implemented at MVP:** only the headless path is built and exercised — games run headless and persist replays, which the spectator UI scrubs after the fact. Live wall-clock spectating over a WebSocket is **deferred** (it depends on the unbuilt live-broadcast layer; see §1.1 and §10.3).
+
 ---
 
 ## 2. Core Modules and File Structure
@@ -103,7 +129,7 @@ The tick clock is wall-clock-locked for live spectating but can run as fast as t
 ailibi/
 ├── README.md
 ├── pyproject.toml                   # uv / poetry; pinned versions
-├── docker-compose.yml               # postgres, redis, api, frontend
+├── docker-compose.yml               # MVP: `api` service only (postgres/redis/frontend deferred)
 ├── .env.example
 │
 ├── engine/                          # pure simulation; no LLM, no network
@@ -142,7 +168,7 @@ ailibi/
 │   │   ├── episodic.py              # timestamped observation events
 │   │   ├── beliefs.py               # trust scores, suspicion graph
 │   │   ├── working.py               # current goal, current path
-│   │   ├── meeting_memo.py          # cross-meeting belief updates
+│   │   ├── meeting_memo.py          # DEFERRED — no module at HEAD; cross-meeting memo not yet built
 │   │   └── store.py                 # serialization & retrieval
 │   └── runtime.py                   # AgentRuntime ties tactical + strategic + memory
 │
@@ -161,15 +187,15 @@ ailibi/
 │
 ├── llm/
 │   ├── client.py                    # LLMClient protocol
-│   ├── claude_provider.py           # Anthropic SDK adapter
+│   ├── provider.py                  # Anthropic SDK adapter (class AnthropicClient); also fake_provider.py + budgeted_client.py
 │   ├── cache.py                     # prompt-hash cache
 │   └── budget.py                    # token + dollar budget per game
 │
 ├── api/                             # spectator + control plane
 │   ├── main.py                      # FastAPI app
-│   ├── ws.py                        # /ws/games/{id} broadcaster
+│   ├── ws.py                        # DEFERRED — not built; live broadcast layer unwritten (see §1.1)
 │   ├── routes/
-│   │   ├── games.py                 # POST /games (create), GET /games/{id}
+│   │   ├── games.py                 # DEFERRED — not built; games are CLI-driven (no POST /games)
 │   │   ├── replays.py
 │   │   └── eval.py
 │   └── schemas.py                   # API DTOs (separate from engine schemas)
@@ -193,12 +219,14 @@ ailibi/
 │   ├── balance_eval.py              # win rates across N seeds
 │   ├── meeting_quality.py           # vote-correctness, accusation accuracy
 │   ├── report_schema.py             # tournament/eval JSON report DTOs
-│   └── fixtures/                    # canonical replays
+│   ├── prompt_regression.py         # frozen-fixture metric regression (close gate)
+│                                    # NOTE: test fixtures live under tests/fixtures/;
+│                                    # committed sample replays under replays/samples/
 │
 ├── scripts/
 │   ├── run_game.py                  # CLI: single headless game
 │   ├── run_tournament.py            # CLI: N games, aggregate stats
-│   └── render_replay.py             # produce inspectable HTML
+│   └── render_replay.py             # DEFERRED — not built; the live spectator UI (ThoughtStream/LLMCallCard) subsumes its role
 │
 └── tests/
     ├── engine/
@@ -208,6 +236,8 @@ ailibi/
 ```
 
 Module responsibilities are intentionally narrow. `engine/` is a pure function over state. `agents/` is the only place that talks to LLMs. `api/` is a thin adapter. This separation is what allows the eval harness to run thousands of games headlessly without booting the API.
+
+**The tree above is indicative, not exhaustive.** Entries marked DEFERRED are not built at HEAD. Modules present at HEAD but not drawn include `engine/events.py`, `orchestrator/action_ordering.py`, `llm/fake_provider.py`, `llm/budgeted_client.py`, and the spectator API's `replay_loader.py`. Test fixtures live under `tests/fixtures/`; committed sample replays under `replays/samples/`.
 
 ---
 
@@ -543,13 +573,15 @@ The full episodic log is kept on disk; only the rendered view goes into the prom
 
 Belief updates have explicit rules (no hidden ML model):
 
-- `+0.2 suspicion` if seen near a body shortly before discovery.
-- `+0.3 suspicion` if claimed alibi contradicts another agent's testimony.
-- `−0.4 suspicion` (clamped) if a verifiable shared task is completed.
-- `+0.5 suspicion` if observed venting (almost certain).
-- Time decay: suspicion drifts toward 0.5 over rounds without new evidence.
+- `+0.2 suspicion` if seen near a body shortly before discovery. **(Rule 1 — live.)**
+- `+0.3 suspicion` if claimed alibi contradicts another agent's testimony. **(Rule 2 — live; wired into the meeting loop + perception in Phase 6 Task 6.4.)**
+- `−0.4 suspicion` (clamped) if a verifiable shared task is completed. **(Rule 3 — deferred.)**
+- `+0.5 suspicion` if observed venting (almost certain). **(Rule 4 — live.)**
+- Time decay: suspicion drifts toward 0.5 over rounds without new evidence. **(Rule 5 — deferred.)**
 
 These weights are config, not constants — they will be tuned against the eval harness.
+
+**Implemented at MVP.** Rules 1, 2, and 4 are live; Rules 3 and 5 are deferred. Until Phase 6 the belief path was dormant in headless games because `AgentRuntime._perceive` did not pass a `BeliefState` into `ingest_packet`; Task 6.4 wired that through (and the contradiction subsystem into the meeting loop), so Rules 1/2/4 now fire in headless play. Rule 2's contradiction-derived suspicion is applied via `apply_contradiction_rule` on detected meeting contradictions.
 
 ### 6.4 Contradiction detection
 
@@ -601,9 +633,9 @@ Token budget is enforced — events past the budget are dropped by salience.
 | Engine + agents       | **Python 3.11**                               | One language across simulation, agent code, LLM SDK, eval. Pydantic for schemas, asyncio for parallelism. |
 | Schemas               | **Pydantic v2**                               | Strict typing across the firewall; structured LLM outputs.                                                |
 | Backend API           | **FastAPI**                                   | Async, OpenAPI, native WebSocket, low ceremony.                                                           |
-| Real-time push        | **WebSockets** via FastAPI                    | One persistent connection per spectator; broadcast tick + meeting events.                                 |
+| Real-time push        | **Deferred** (WebSockets via FastAPI planned) | NOT built at MVP — no live tick/meeting broadcast; the spectator UI reads saved replays (see §1.1).        |
 | Process orchestration | **asyncio in single process** for MVP         | Avoids premature distribution. Move to multiple workers + Redis pubsub in scale phase.                    |
-| Persistence           | **PostgreSQL 16**                             | Game records, replays, eval results. JSONB for event payloads.                                            |
+| Persistence           | **JSONL/JSON on local disk** (MVP)            | Replays as per-game JSONL (`orchestrator/replay.py`); eval reports as JSON. PostgreSQL 16 + JSONB deferred to scale. |
 | Cache / pubsub        | **Redis** (only when scaling beyond 1 worker) | Not in MVP.                                                                                               |
 | LLM                   | **Anthropic Claude** via the official SDK     | Sonnet for meeting reasoning, Haiku for triggered checks; tight structured-output support; honest about uncertainty. Provider is abstracted behind `LLMClient` so OpenAI / local models are pluggable. |
 | Frontend              | **React + Vite + TypeScript + PixiJS**        | React for layout, PixiJS for the map canvas (cheap 2D rendering). Zustand for state.                      |
@@ -612,8 +644,8 @@ Token budget is enforced — events past the budget are dropped by salience.
 | Type checking         | **mypy strict** on `engine/`, `observation/`, `agents/` | The firewall depends on type discipline.                                                                  |
 | Lint / boundaries     | **ruff + import-linter**                      | Enforces "agents must not import engine."                                                                 |
 | Packaging             | **uv** (or poetry)                            | Fast resolution, pinned lockfile.                                                                         |
-| Dev infra             | **docker-compose**                            | Postgres + api + frontend up with one command.                                                            |
-| Observability         | **structlog + OpenTelemetry**                 | Structured logs of ticks, LLM calls, costs; traces are free debugging.                                    |
+| Dev infra             | **docker-compose**                            | MVP: `api` service only; postgres/redis/frontend services deferred.                                       |
+| Observability         | **Deferred** (structlog + OpenTelemetry planned) | Not adopted at MVP — neither is a dependency nor imported.                                              |
 
 Two stack questions deserve explicit calls:
 
@@ -634,7 +666,7 @@ Two stack questions deserve explicit calls:
 - Meetings: structured reports + 2 accusation rounds + structured voting.
 - Memory: episodic + working + belief + meeting memo, structured (no embeddings).
 - LLM: Claude Sonnet for meetings; deterministic FSM for tactical.
-- Replay log persisted to Postgres; rerunnable from seed.
+- Replay log persisted to JSONL on local disk; rerunnable from seed. (PostgreSQL deferred to scale.)
 - Spectator UI: top-down map (PixiJS), thought stream, belief matrix, replay controls.
 - Eval harness: leak test, determinism test, balance eval (win rates over N seeds).
 - Headless tournament script.
@@ -731,6 +763,13 @@ This is realistic for a solo developer over ~10–14 weeks if they ship steadily
 
 ### Phase 6 — Human player (post-MVP)
 
+> **Reconciled (2026-05-30).** The *executed* Phase 6 was a repair/hardening phase
+> landing the MVP-close audit follow-ups (see `tasks/phase-6.md` and
+> `audits/audit-2026-05-30-0059-mvp-close.md`), closed on a real-provider eval. The
+> human-player work described below — which depends on the unbuilt live-broadcast
+> layer (§1.1) — is deferred to **Phase 7+**, alongside the agent-intelligence
+> deepening and the Claude-Design UI redesign.
+
 - Human seat on the WebSocket: receives observations, sends actions through the UI.
 - Human meeting input: free-text statements parsed against the structured schema.
 - Pacing: tick rate slows or pauses for human latency tolerance.
@@ -761,13 +800,13 @@ This is realistic for a solo developer over ~10–14 weeks if they ship steadily
 
 ### 10.3 Scaling challenges
 
-- **Multi-process simulation** if you ever want hundreds of concurrent games (eval throughput). Means moving game state to Redis and isolating engine workers. Cleanly factored already — orchestrator is the only piece that needs to know about it.
+- **Multi-process simulation** if you ever want hundreds of concurrent games (eval throughput). Means moving game state to Redis and isolating engine workers. Cleanly factored already — orchestrator is the only piece that needs to know about it. **Note (H-1):** the named scale path (workers + Redis pubsub fanning out live tick/meeting events) presupposes a live WebSocket broadcast layer that is **not yet built**. The first real pre-scale task is to design that single-process live-broadcast layer — not to port today's read-only replay API to Redis. Until it exists, the Postgres / Redis-pubsub / async-worker concerns have no live code to migrate.
 - **Vector memory** if games get longer than ~1000 ticks or agents need cross-game memory. Replace `memory/store.py` storage layer; render function changes; no other module affected.
 
 ### 10.4 LLM limitations
 
 - **Latency:** Sonnet meeting calls take seconds; in live mode the meeting feels slow. Acceptable for spectators; less so for human players. Mitigate by parallelizing report intake (all agents at once) and showing typing animations.
-- **Hallucination:** an agent may "remember" things that did not happen. Mitigation: structured output schema requires `tick` references for observations; the validator rejects any observation referencing a tick the agent has no episodic record of.
+- **Hallucination:** an agent may "remember" things that did not happen. Mitigation: the structured output schema requires `tick` references for observations and the prompt instructs the model to cite them. **Implemented at MVP:** this is prompt-instructed only; a code-level validator that rejects an observation referencing a tick the agent has no episodic record of is **deferred** (not present at HEAD).
 - **Cost:** target is ~$0.20 / game with Sonnet on the planned protocol. Eval at 1000 games = $200, manageable. Tournaments are the budget pressure, not single games.
 
 ---
@@ -808,8 +847,8 @@ A more general version walks the schema and asserts no field whose value should 
 
 ### 11.4 Replay & debug tooling
 
-- `scripts/render_replay.py` produces a static HTML file with: per-tick map state, every observation packet (privileged), every LLM call with prompt and response, every belief-state mutation. Indispensable for debugging "why did the agent do that?"
-- The spectator UI's "thought stream" panel surfaces the same data for live games.
+- **Implemented at MVP:** `scripts/render_replay.py` is **not built**. Its intended role — per-tick map state, every observation packet (privileged), every LLM call with prompt and response, every belief-state mutation — is subsumed by the live spectator UI (MapView, ThoughtStream, LLMCallCard, BeliefMatrix), which renders the same data from saved replays. A standalone static-HTML renderer was not needed once the React UI shipped.
+- The spectator UI's "thought stream" panel surfaces the same data from saved replays.
 - Replay/eval records must include meeting transcripts, ballots,
   `MeetingResult`s, prompt template versions, LLM usage/cost metadata, and the
   structured inputs needed by Phase 5 metrics. Engine determinism remains based
