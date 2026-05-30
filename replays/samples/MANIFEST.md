@@ -31,9 +31,9 @@ byte-identically under the current engine.
 | 19 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | IMPOSTORS |
 | 20 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | IMPOSTORS |
 | 21 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | IMPOSTORS |
-| 22 | claude-sonnet-4-6 | accusation_round.v2, crewmate_report.v1, impostor_report_v1, vote_ballot/v1 | 2026-05-27 | ef7325a | 0.2167 | CREWMATES |
+| 22 | claude-sonnet-4-6 | accusation_round.v2, crewmate_report.v1, impostor_report_v1, vote_ballot/v1 | 2026-05-30 | 8ac51b2 | 0.2145 | IMPOSTORS |
 | 23 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | IMPOSTORS |
-| 24 | claude-sonnet-4-6 | accusation_round.v2, crewmate_report.v1, impostor_report_v1, vote_ballot/v1 | 2026-05-27 | ef7325a | 0.2098 | CREWMATES |
+| 24 | claude-sonnet-4-6 | accusation_round.v2, crewmate_report.v1, impostor_report_v1, vote_ballot/v1 | 2026-05-30 | 8ac51b2 | 0.2178 | CREWMATES |
 | 25 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | CREWMATES |
 | 26 | claude-sonnet-4-6 | accusation_round.v2, crewmate_report.v1, impostor_report_v1, vote_ballot/v1 | 2026-05-27 | ef7325a | 0.2456 | CREWMATES |
 | 27 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | CREWMATES |
@@ -58,4 +58,4 @@ byte-identically under the current engine.
 | 46 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | IMPOSTORS |
 | 47 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | CREWMATES |
 | 48 | claude-sonnet-4-6 | (none — no meetings) | 2026-05-27 | b61d67e | 0.0000 | CREWMATES |
-| 49 | claude-sonnet-4-6 | accusation_round.v2, crewmate_report.v1, impostor_report_v1, vote_ballot/v1 | 2026-05-27 | ef7325a | 0.2354 | CREWMATES |
+| 49 | claude-sonnet-4-6 | accusation_round.v2, crewmate_report.v1, impostor_report_v1, vote_ballot/v1 | 2026-05-30 | 8ac51b2 | 0.2368 | CREWMATES |
