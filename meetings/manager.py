@@ -43,6 +43,7 @@ from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 
+from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 from llm.client import LLMClient
 from meetings.schemas import (
     AlibiClaim,
@@ -56,6 +57,7 @@ from meetings.schemas import (
     Statement,
     VoteBallot,
 )
+from meetings.transcript import detect_contradictions
 
 Role = Literal["CREWMATE", "IMPOSTOR"]
 
@@ -475,12 +477,24 @@ class MeetingManager:
         )
 
         # Phase 2: accusation rounds (sequential rounds, ordered speakers).
-        contradictions: tuple[ContradictionRef, ...] = ()
+        # Contradictions are recomputed from the transcript-so-far before each
+        # accusation round (and again before voting, below) so every speaker
+        # sees the flags warranted by the claims made up to their turn
+        # (DESIGN.md §5.4 "the detector runs on every meeting transcript
+        # update"; audit J-J-1). The roster of living participants anchors the
+        # subject-normalization that keeps detection from silently dropping a
+        # non-roster claim (J-J-9).
+        roster = frozenset(p.agent_id for p in ordered_participants)
         speaker_order = _speaker_order(
             participants=ordered_participants, trigger=trigger
         )
         statements: list[Statement] = []
+        contradictions: tuple[ContradictionRef, ...] = ()
         for round_index in range(self._config.round_count):
+            transcript_so_far = MeetingTranscript(
+                reports=reports, statements=tuple(statements)
+            )
+            contradictions = detect_contradictions(transcript_so_far, roster=roster)
             for participant in speaker_order:
                 statement = await self._collect_statement(
                     meeting_id=meeting_id,
@@ -494,6 +508,10 @@ class MeetingManager:
                 )
                 statements.append(statement)
         transcript = MeetingTranscript(reports=reports, statements=tuple(statements))
+
+        # Recompute over the full transcript so the ballot prompts and the
+        # persisted result reflect every claim made through the final round.
+        contradictions = detect_contradictions(transcript, roster=roster)
 
         # Phase 3: voting (parallel).
         ballots = await self._collect_ballots(
@@ -699,12 +717,24 @@ class MeetingManager:
                 if other.agent_id != participant.agent_id
             )
         )
+        # Belief Rule 2 (DESIGN.md §6.3; audit J-J-4): a detected
+        # contradiction lifts the contradicted subject's suspicion in this
+        # voter's graph before the ballot prompt renders, so the vote sees the
+        # detected lie reflected in its suspicion prior -- not just in the raw
+        # flag list. The adjustment runs through the agents-side belief
+        # write-path (``record_contradiction`` + ``adjust_suspicion`` inside
+        # :func:`apply_contradiction_rule`); engine state is never touched.
+        suspicion_graph = _suspicion_graph_with_contradictions(
+            voter_id=participant.agent_id,
+            suspicion_graph=participant.suspicion_graph,
+            contradictions=contradictions,
+        )
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
             rendered_memory=participant.rendered_memory,
             transcript=transcript,
             contradiction_flags=contradictions,
-            suspicion_graph=participant.suspicion_graph,
+            suspicion_graph=suspicion_graph,
             candidate_targets=candidate_targets,
             skip_confidence_threshold=self._config.skip_confidence_threshold,
         )
@@ -884,6 +914,55 @@ def _speaker_order(
     reporter_index = sorted_ids.index(trigger.triggered_by)
     rotated = sorted_ids[reporter_index:] + sorted_ids[:reporter_index]
     return tuple(by_id[agent_id] for agent_id in rotated)
+
+
+def _suspicion_graph_with_contradictions(
+    *,
+    voter_id: PlayerId,
+    suspicion_graph: tuple[SuspicionEntry, ...],
+    contradictions: tuple[ContradictionRef, ...],
+) -> tuple[SuspicionEntry, ...]:
+    """Apply belief Rule 2 to a voter's suspicion graph (DESIGN.md §6.3).
+
+    Reconstructs an agents-side :class:`BeliefState` from the voter's
+    incoming suspicion-graph snapshot, runs
+    :func:`agents.memory.beliefs.apply_contradiction_rule` over the
+    detected ``contradictions``, and projects the result back into a
+    sorted :class:`SuspicionEntry` tuple for the vote-ballot prompt.
+
+    A contradicted subject the voter had no prior row for is added (the
+    belief store materialises a default 0.5 prior before the +0.3 bump).
+    The voter never accrues suspicion about themselves: a flag naming the
+    voter as a subject still renders in the flag list but does not seed a
+    self-row in their own graph. With no contradictions the graph is
+    returned unchanged so the no-flag path is byte-identical to before
+    this wiring (a precondition for replay stability on no-contradiction
+    transcripts).
+    """
+
+    if not contradictions:
+        return suspicion_graph
+
+    beliefs = BeliefState()
+    for entry in suspicion_graph:
+        beliefs.seed_player(
+            entry.player_id, suspicion=entry.suspicion, trust=entry.trust
+        )
+    updated = apply_contradiction_rule(beliefs, contradictions)
+
+    entries: list[SuspicionEntry] = []
+    for player_id in sorted(updated.known_players()):
+        if player_id == voter_id:
+            continue
+        belief = updated.view(player_id)
+        entries.append(
+            SuspicionEntry(
+                player_id=player_id,
+                suspicion=belief.suspicion,
+                trust=belief.trust,
+            )
+        )
+    return tuple(entries)
 
 
 def _statement_id(*, meeting_id: str, round_index: int, speaker: PlayerId) -> str:

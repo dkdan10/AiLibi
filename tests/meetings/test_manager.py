@@ -63,6 +63,12 @@ from meetings.transcript import is_canonically_ordered
 
 _T = TypeVar("_T")
 
+# Default per-player suspicion prior in agents.memory.beliefs (the score a
+# player starts at before any belief rule fires). Mirrored here so the Rule-2
+# wiring tests can assert "strictly above the default" without importing the
+# agents-side constant.
+_DEFAULT_TEST_SUSPICION = 0.5
+
 
 def _run(coro: Awaitable[_T]) -> _T:
     return asyncio.new_event_loop().run_until_complete(coro)
@@ -269,6 +275,70 @@ def _make_responder(
             agent_id = _extract_marker(prompt, "agent_id=")
             tick_str = _extract_marker(prompt, "tick=")
             return _stub_report_json(agent_id=agent_id, tick=int(tick_str))
+        if "PHASE=STATEMENT" in prompt:
+            return _stub_statement_json(speaker="placeholder", round_index=0)
+        if "PHASE=VOTE" in prompt:
+            voter = _extract_marker(prompt, "voter=")
+            target = vote_targets.get(voter, "SKIP")
+            return _stub_vote_json(voter=voter, target=target)
+        raise AssertionError(f"unrecognised prompt: {prompt!r}")
+
+    return _responder
+
+
+def _stub_report_with_alibi_json(
+    *, agent_id: str, tick: int, subject: str, room: str, from_tick: int, to_tick: int
+) -> str:
+    return ReportDocument(
+        agent_id=agent_id,
+        tick=tick,
+        observations=(),
+        claims=(
+            AlibiClaim(
+                type="alibi",
+                subject=subject,
+                from_tick=from_tick,
+                to_tick=to_tick,
+                room=room,
+            ),
+        ),
+        free_text=f"stub-report-{agent_id}",
+    ).model_dump_json()
+
+
+def _make_contradiction_responder(
+    *,
+    subject: str,
+    vote_targets: dict[str, str] | None = None,
+) -> Callable[[str, type[BaseModel] | None], str]:
+    """Responder whose Phase-1 reports plant a genuine alibi conflict.
+
+    Every reporter submits an alibi for ``subject`` but in a different
+    room over an overlapping tick range, so ``detect_contradictions``
+    raises at least one ``alibi_conflict`` flag naming ``subject``.
+    Statements and votes use the standard stubs.
+    """
+
+    vote_targets = vote_targets or {}
+    # Distinct rooms per reporter id so the alibis genuinely conflict.
+    rooms = ("ADMIN", "CAFETERIA", "STORAGE", "MEDBAY", "ELECTRICAL")
+
+    def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+        if "PHASE=REPORT" in prompt:
+            agent_id = _extract_marker(prompt, "agent_id=")
+            tick = int(_extract_marker(prompt, "tick="))
+            # Index the room deterministically by the reporter's id suffix
+            # so each reporter names a different room for the same subject.
+            digit = "".join(ch for ch in agent_id if ch.isdigit()) or "0"
+            room = rooms[int(digit) % len(rooms)]
+            return _stub_report_with_alibi_json(
+                agent_id=agent_id,
+                tick=tick,
+                subject=subject,
+                room=room,
+                from_tick=1,
+                to_tick=20,
+            )
         if "PHASE=STATEMENT" in prompt:
             return _stub_statement_json(speaker="placeholder", round_index=0)
         if "PHASE=VOTE" in prompt:
@@ -1308,12 +1378,16 @@ class TestFakeProviderInterop:
 
 
 class TestContradictionsWiring:
-    """For Task 3.8 the contradiction surface is empty. Task 3.11 will
-    populate it; this test pins the manager's current behavior so a
-    future incidental change cannot silently inject contradictions.
+    """Task 6.4 (audit J-J-1): the manager runs ``detect_contradictions``
+    over the transcript-so-far and threads the live tuple into the
+    statement prompts, the ballot prompts, and the persisted result.
+
+    A claim-free transcript still yields no flags, so the no-contradiction
+    path is pinned alongside the populated path to catch any future change
+    that injects spurious flags.
     """
 
-    def test_result_carries_no_contradictions_in_task_3_8(self) -> None:
+    def test_claim_free_transcript_carries_no_contradictions(self) -> None:
         client = _ScriptedLLMClient(responder=_make_responder())
         manager = _make_manager(llm_client=client, round_count=1)
 
@@ -1334,6 +1408,93 @@ class TestContradictionsWiring:
         vote_prompts = [c.prompt for c in client.calls if "PHASE=VOTE" in c.prompt]
         for prompt in vote_prompts:
             assert "FLAGS_COUNT=0" in prompt
+
+    def test_detected_contradiction_is_threaded_into_prompts_and_result(self) -> None:
+        # Two reports place p-3 in different rooms over overlapping tick
+        # ranges -> one alibi_conflict flag. The manager must compute it
+        # from the transcript-so-far and thread it into the second-round
+        # statement prompts, the ballot prompts, and the persisted result.
+        client = _ScriptedLLMClient(
+            responder=_make_contradiction_responder(subject="p-3")
+        )
+        manager = _make_manager(llm_client=client, round_count=2)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-live-contradiction",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert len(result.contradictions) >= 1
+        assert all(
+            flag.kind in ("alibi_conflict", "alibi_vs_sighting")
+            for flag in result.contradictions
+        )
+        assert any("p-3" in flag.subjects for flag in result.contradictions)
+
+        # Round 0 sees no flags (no statements/reports indexed yet at the
+        # time the round-0 detector runs over the reports). The reports DO
+        # already conflict, so the first detector pass — before round 0 —
+        # already surfaces the flag; every statement prompt therefore sees
+        # a non-zero count.
+        statement_counts = [
+            int(_extract_marker(c.prompt, "CONTRADICTIONS_COUNT="))
+            for c in client.calls
+            if "PHASE=STATEMENT" in c.prompt
+        ]
+        assert max(statement_counts) >= 1
+
+        vote_flag_counts = [
+            int(_extract_marker(c.prompt, "FLAGS_COUNT="))
+            for c in client.calls
+            if "PHASE=VOTE" in c.prompt
+        ]
+        assert vote_flag_counts and all(count >= 1 for count in vote_flag_counts)
+
+    def test_contradiction_shifts_vote_suspicion_graph(self) -> None:
+        # Belief Rule 2 (audit J-J-4): a detected contradiction naming p-3
+        # must lift p-3's suspicion in every voter's rendered suspicion
+        # graph relative to its incoming prior. p-1's incoming graph has
+        # p-2 at 0.40 and no p-3 row; after the rule p-3 appears at
+        # 0.5 (default prior) + 0.3 (Rule 2 delta) = 0.8.
+        client = _ScriptedLLMClient(
+            responder=_make_contradiction_responder(subject="p-3")
+        )
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        _run(
+            manager.run(
+                meeting_id="m-rule2",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        # p-1's incoming graph had p-2 at 0.40 and no p-3 row. After Rule 2,
+        # p-3 appears in p-1's graph at an elevated suspicion (default 0.50
+        # prior + one or more +0.3 Rule-2 bumps, clamped to <= 1.0), strictly
+        # above the unflagged default. p-2 (unflagged) stays at its prior.
+        p1_block = next(
+            _extract_marker(c.prompt, "suspicion=")
+            for c in client.calls
+            if "PHASE=VOTE" in c.prompt and "voter=p-1" in c.prompt
+        )
+        p3_scores = {
+            entry.split(":")[0]: float(entry.split(":")[1].split("/")[0])
+            for entry in p1_block.split(",")
+            if entry
+        }
+        assert "p-3" in p3_scores
+        assert p3_scores["p-3"] > _DEFAULT_TEST_SUSPICION
+        # The voter never accrues suspicion about themselves.
+        p3_block = next(
+            _extract_marker(c.prompt, "suspicion=")
+            for c in client.calls
+            if "PHASE=VOTE" in c.prompt and "voter=p-3" in c.prompt
+        )
+        assert "p-3:" not in p3_block
 
 
 # --- Statement prompt receives transcript-so-far ---------------------------
@@ -2357,6 +2518,63 @@ class TestSelfAlibiSubjectNormalization:
 
     def test_empty_claims_returns_empty_tuple(self) -> None:
         assert _normalize_self_alibi_subjects((), speaker_id="p-4") == ()
+
+
+class TestRosterAwareContradictionMatching:
+    """Roster-aware subject matching in the live meeting path (J-J-9).
+
+    A non-roster subject (e.g. a hallucinated ``p-99``) is dropped
+    deterministically by ``detect_contradictions(roster=...)`` rather
+    than silently surviving into a half-matched flag, while a roster
+    subject is still matched. Self-placeholders are normalised to the
+    speaker (an in-roster id) before the detector runs, so a normalised
+    self-alibi remains matchable.
+    """
+
+    def test_non_roster_subject_conflict_is_dropped(self) -> None:
+        # Every reporter plants a conflicting alibi for "p-99", which is
+        # NOT a living participant. The roster filter must drop it so the
+        # persisted result and the rendered prompts carry zero flags.
+        client = _ScriptedLLMClient(
+            responder=_make_contradiction_responder(subject="p-99")
+        )
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-nonroster",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert result.contradictions == ()
+        vote_flag_counts = [
+            int(_extract_marker(c.prompt, "FLAGS_COUNT="))
+            for c in client.calls
+            if "PHASE=VOTE" in c.prompt
+        ]
+        assert vote_flag_counts and all(count == 0 for count in vote_flag_counts)
+
+    def test_roster_subject_conflict_is_kept(self) -> None:
+        # The same conflict shape, but the subject "p-3" IS a living
+        # participant: the flag must survive the roster filter. This is
+        # the positive control for the drop test above.
+        client = _ScriptedLLMClient(
+            responder=_make_contradiction_responder(subject="p-3")
+        )
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-roster",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert len(result.contradictions) >= 1
+        assert any("p-3" in flag.subjects for flag in result.contradictions)
 
 
 class TestSelfAlibiNormalizationWiring:

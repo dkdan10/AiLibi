@@ -55,6 +55,13 @@ from meetings.schemas import (
 
 _ContradictionKind = Literal["alibi_conflict", "alibi_vs_sighting"]
 
+# Sentinel distinguishing "no roster supplied" (legacy callers / unit tests
+# that exercise the detector in isolation: index every subject) from an
+# explicitly-empty roster (a meeting with no living participants: index
+# nothing). ``frozenset() is not _NO_ROSTER`` so the empty-roster case is
+# honoured rather than collapsed into "match everything".
+_NO_ROSTER: frozenset[PlayerId] = frozenset({"\x00__no_roster_sentinel__\x00"})
+
 
 def sort_statements_canonically(
     statements: Iterable[Statement],
@@ -96,6 +103,8 @@ def is_canonically_ordered(statements: Iterable[Statement]) -> bool:
 
 def detect_contradictions(
     transcript: MeetingTranscript,
+    *,
+    roster: frozenset[PlayerId] | None = None,
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
@@ -122,17 +131,53 @@ def detect_contradictions(
     silently ignored; the detector reports only what *cannot* both
     be true, not absence of evidence.
 
+    Roster-aware subject filtering (audit J-J-9). When ``roster`` is
+    supplied (the live-meeting path passes the set of living
+    participant ids), only alibis and sightings whose ``subject`` is in
+    the roster are indexed. A subject outside the roster -- a
+    hallucinated ``"p-99"`` or a self-placeholder the manager failed to
+    normalise -- is dropped *deterministically and explicitly here*
+    rather than silently surviving into a half-matched flag. Manager
+    self-alibi normalisation runs first (it rewrites ``"self"`` /
+    ``"p-self"`` to the speaker id), so a normalised self-alibi is in
+    the roster and still matched; this filter is the backstop for
+    everything normalisation cannot rescue. ``roster=None`` (the
+    default) indexes every subject, preserving the original behaviour
+    for callers/tests that exercise the detector without a roster.
+
     The function is pure: it does not mutate the transcript and has
     no side effects. The same input always produces the same output.
     """
 
-    alibis = tuple(_iter_alibis(transcript))
-    sightings = tuple(_iter_sightings(transcript))
+    effective_roster = _NO_ROSTER if roster is None else roster
+    alibis = tuple(
+        indexed
+        for indexed in _iter_alibis(transcript)
+        if _subject_in_roster(indexed.claim.subject, effective_roster)
+    )
+    sightings = tuple(
+        indexed
+        for indexed in _iter_sightings(transcript)
+        if _subject_in_roster(indexed.observation.subject, effective_roster)
+    )
 
     flags: list[ContradictionRef] = []
     flags.extend(_detect_alibi_conflicts(alibis))
     flags.extend(_detect_alibi_vs_sightings(alibis=alibis, sightings=sightings))
     return tuple(sorted(flags, key=lambda flag: flag.contradiction_id))
+
+
+def _subject_in_roster(subject: PlayerId, roster: frozenset[PlayerId]) -> bool:
+    """Whether ``subject`` should be indexed given the effective roster.
+
+    The :data:`_NO_ROSTER` sentinel means "no roster supplied": index
+    every subject (legacy / unit-test behaviour). Any other roster --
+    including an explicitly-empty one -- gates membership exactly.
+    """
+
+    if roster is _NO_ROSTER:
+        return True
+    return subject in roster
 
 
 # -- Internal: indexing -----------------------------------------------------
