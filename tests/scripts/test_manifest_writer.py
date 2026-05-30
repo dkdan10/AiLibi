@@ -8,6 +8,7 @@ committed samples but only ever writes into ``tmp_path``.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import pytest
@@ -180,6 +181,63 @@ def test_update_creates_manifest_when_absent(
         manifest, small_samples, [22], git_sha="x", refreshed_at="2026-05-28"
     )
     assert set(mw.parse_manifest(manifest.read_text())) == {22}
+
+
+def test_update_uses_atomic_temp_then_replace(
+    small_samples: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # H-H-3: the manifest is written to a sibling temp file and os.replace-d into
+    # place, never written through a truncating in-place write.
+    manifest = tmp_path / "MANIFEST.md"
+    mw.rebuild_manifest(manifest, small_samples)
+
+    calls: list[tuple[Path, Path]] = []
+    real_replace = os.replace
+
+    def spy_replace(src: Path, dst: Path) -> None:
+        calls.append((Path(src), Path(dst)))
+        real_replace(src, dst)
+
+    # os is a singleton module, so patching os.replace also patches the
+    # reference _manifest_writer calls through.
+    monkeypatch.setattr(os, "replace", spy_replace)
+    mw.update_manifest(
+        manifest, small_samples, [22], git_sha="abc1234", refreshed_at="2026-05-28"
+    )
+
+    assert len(calls) == 1
+    src, dst = calls[0]
+    assert dst == manifest
+    assert src != manifest
+    assert src.suffix == ".tmp"
+    assert src.parent == manifest.parent  # same filesystem -> atomic rename
+    assert not src.exists()  # consumed by the replace; no temp left behind
+    assert mw.parse_manifest(manifest.read_text())[22].git_sha == "abc1234"
+
+
+def test_update_does_not_truncate_manifest_on_crash(
+    small_samples: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # H-H-3: a crash at the replace step leaves the live MANIFEST fully intact
+    # (the truncating-write failure mode this fix removes).
+    manifest = tmp_path / "MANIFEST.md"
+    mw.rebuild_manifest(manifest, small_samples)
+    original = manifest.read_text()
+
+    def boom(src: Path, dst: Path) -> None:
+        raise OSError("simulated crash during replace")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        mw.update_manifest(
+            manifest, small_samples, [22], git_sha="x", refreshed_at="2026-05-28"
+        )
+
+    # The live manifest is byte-for-byte unchanged...
+    assert manifest.read_text() == original
+    # ...and the temp file was cleaned up rather than orphaned.
+    leftover = [p for p in tmp_path.iterdir() if p.name.endswith(".tmp")]
+    assert leftover == []
 
 
 def test_sum_cost(small_samples: Path) -> None:

@@ -17,14 +17,17 @@ surface and is intentionally outside the observation firewall (DESIGN.md §1.3),
 which forbids ``agents/``, ``llm/``, ``meetings/`` from importing ``engine/`` —
 not ``api/``.
 
-Per-game results are memoized in a per-process LRU cache keyed by ``game_id``;
-replays are immutable once written, so process-restart is the only
-invalidation. No cross-process cache (Redis) — that lands in Phase 5.
+Per-game results are memoized in per-process LRU caches. Replays are immutable
+once written, but the refresh-samples workflow rewrites a sample in place, so the
+cache keys fold in the file's mtime: an in-place rewrite is a cache miss and is
+never served stale (Audit H-H-2). No cross-process / cross-worker shared cache —
+that is the deferred scale boundary (Audit H-H-6).
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -112,14 +115,22 @@ from orchestrator.replay import (
     LLMCallRecord,
     MeetingReplayEntry,
     ReplayEntry,
+    ReplayLog,
+    WinnerSide,
     _state_hash,
-    compute_cost_usd,
     read_all_entries,
-    read_game_outcome,
 )
 from orchestrator.seeder import seed_initial_state
 
+_LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
+
 _DEFAULT_CACHE_SIZE: Final[int] = 16
+
+# The per-file metadata/cost summary is a handful of ints and floats, so a
+# generous bound lets the listing + cost endpoints reuse a parse across requests
+# for a large replay directory without re-reading every file. The cross-worker
+# shared cache the real scale phase needs is out of scope here (Audit H-H-6).
+_DEFAULT_METADATA_CACHE_SIZE: Final[int] = 1024
 
 # Filename of the tournament eval report that ``scripts/run_tournament.py``
 # writes into the tournament output dir. The loader serves it read-only from
@@ -186,6 +197,28 @@ class _WalkResult:
     memories: Mapping[tuple[str, str], AgentMemoryView]
 
 
+@dataclass(frozen=True)
+class _ReplaySummary:
+    """One-pass reduction of a replay file for the listing + cost endpoints.
+
+    Derived from a single :func:`read_all_entries` and memoized per
+    ``(path, mtime)``: replays are immutable once written (DESIGN.md §11.4), so
+    the file's mtime is a sufficient invalidation key — an in-place refresh (the
+    refresh-samples workflow rewrites the same path) bumps it and misses the
+    cache. Folds the cost reduction and decisive outcome ``cost_summary`` needs
+    together with the tick/meeting/prompt-version aggregates ``_metadata_view``
+    needs, so each file is parsed exactly once per request rather than the
+    two-to-four passes the pre-6.6 loader did (Audit G-G-2, H-H-2).
+    """
+
+    total_ticks: int
+    meeting_count: int
+    winner: WinnerSide | None
+    winner_reason: str | None
+    total_cost_usd: float
+    prompt_versions: Mapping[str, str]
+
+
 class ReplayLoader:
     """Loads + engine-replays JSONL replays into sanitized spectator DTOs.
 
@@ -202,6 +235,7 @@ class ReplayLoader:
         *,
         game_map: Map | None = None,
         cache_size: int = _DEFAULT_CACHE_SIZE,
+        metadata_cache_size: int = _DEFAULT_METADATA_CACHE_SIZE,
     ) -> None:
         self._replay_dir = replay_dir
         self._game_map = game_map if game_map is not None else load_canonical_map()
@@ -210,33 +244,67 @@ class ReplayLoader:
         self._cached_memories = lru_cache(maxsize=cache_size)(
             self._reconstruct_meeting_memories
         )
+        self._cached_summary = lru_cache(maxsize=metadata_cache_size)(
+            self._read_summary
+        )
 
     # -- public API -------------------------------------------------------
 
-    def list_replays(self) -> list[ReplayMetadataView]:
-        """Scan the replay dir and return metadata for every replay, by seed."""
+    def list_replays(
+        self, *, limit: int | None = None, offset: int = 0
+    ) -> list[ReplayMetadataView]:
+        """Return metadata for every replay in the dir, ordered by seed.
 
-        return [self._metadata_view(path, seed) for seed, path in self._replay_paths()]
+        ``limit``/``offset`` page the (seed-sorted) path list *before* any
+        metadata view is built, so a request's work is bounded by the page size
+        rather than the whole directory (Audit G-G-3). Absent params
+        (``limit=None, offset=0``) reproduce the original "every replay"
+        behavior.
+
+        A file that fails to parse — :class:`ReplayLog.CorruptedFileError`, the
+        doubled-write pattern Task 4.16 detects — is excluded from the listing
+        and logged at WARNING rather than aborting the whole request with a 500,
+        so one bad replay no longer blocks the picker (Audit K-K-8, backend
+        half).
+        """
+
+        paths = self._replay_paths()
+        window = paths[offset:] if limit is None else paths[offset : offset + limit]
+        views: list[ReplayMetadataView] = []
+        for seed, path in window:
+            try:
+                views.append(self._metadata_view(path, seed))
+            except ReplayLog.CorruptedFileError as exc:
+                _LOGGER.warning("Skipping corrupted replay file %s: %s", path, exc)
+        return views
 
     def load_replay(self, game_id: str) -> ReplayView:
         """Return the full reconstructed :class:`ReplayView` (LRU-cached).
 
         Raises :class:`FileNotFoundError` if no replay matches ``game_id`` and
         :class:`ReplayStateMismatchError` if engine playback diverges from the
-        recorded state hashes.
+        recorded state hashes. The cache key folds in the file's mtime so an
+        in-place refresh (same path, new bytes) is a cache miss rather than a
+        stale hit (Audit H-H-2).
         """
 
-        return self._cached_load(game_id)
+        path, seed = self._resolve(game_id)
+        return self._cached_load(seed, path, _mtime_ns(path))
 
     def cost_summary(self) -> EvalCostSummaryView:
-        """Aggregate LLM cost + decisive-outcome split across every replay."""
+        """Aggregate LLM cost + decisive-outcome split across every replay.
 
-        paths = [path for _, path in self._replay_paths()]
-        total_replays = len(paths)
-        costs = [compute_cost_usd(path) for path in paths]
+        Reads each replay file exactly once: both the per-game cost and the
+        decisive winner come from a single memoized :class:`_ReplaySummary`
+        rather than the two passes (``compute_cost_usd`` + ``read_game_outcome``)
+        the pre-6.6 loader did (Audit G-G-2).
+        """
+
+        summaries = [self._file_summary(path) for _, path in self._replay_paths()]
+        total_replays = len(summaries)
+        costs = [summary.total_cost_usd for summary in summaries]
         total_cost = sum(costs)
-        winners = [read_game_outcome(path) for path in paths]
-        decisive = [winner for winner in winners if winner is not None]
+        decisive = [s.winner for s in summaries if s.winner is not None]
 
         decisive_split: dict[str, float] = {}
         if decisive:
@@ -282,9 +350,12 @@ class ReplayLoader:
         Raises :class:`FileNotFoundError` for an unknown ``game_id`` and
         :class:`KeyError` for an unknown meeting or agent (routes map both to
         404). Memory is only exposed at meeting boundaries per the 4.1 decision.
+        The cache key folds in the file's mtime so an in-place refresh is a cache
+        miss rather than a stale hit (Audit H-H-2).
         """
 
-        memories = self._cached_memories(game_id)
+        path, seed = self._resolve(game_id)
+        memories = self._cached_memories(seed, path, _mtime_ns(path))
         known_meetings = {meeting for meeting, _ in memories}
         if meeting_id not in known_meetings:
             raise KeyError(f"meeting not found: {meeting_id}")
@@ -294,21 +365,19 @@ class ReplayLoader:
         return memories[key]
 
     def clear_cache(self) -> None:
-        """Drop both per-process caches (engine playback + memory walk)."""
+        """Drop the per-process caches (engine playback, memory walk, summary)."""
 
         self._cached_load.cache_clear()
         self._cached_memories.cache_clear()
+        self._cached_summary.cache_clear()
 
     # -- cached implementations ------------------------------------------
 
-    def _load_replay(self, game_id: str) -> ReplayView:
-        path = self._resolve_path(game_id)
-        if path is None:
-            raise FileNotFoundError(game_id)
-        seed = _parse_seed_from_game_id(game_id)
-        if seed is None:
-            raise FileNotFoundError(game_id)
-
+    def _load_replay(self, seed: int, path: Path, _mtime_key: int) -> ReplayView:
+        # ``_mtime_key`` participates in the LRU key only (Audit H-H-2): an
+        # in-place rewrite changes the file's mtime, so the refreshed replay is a
+        # cache miss and is never served stale. Resolution + seed parsing already
+        # happened in ``load_replay`` (via ``_resolve``).
         walk = self._walk(path, seed, collect_memory=False)
         return ReplayView(
             metadata=self._metadata_view(path, seed),
@@ -323,14 +392,9 @@ class ReplayLoader:
         )
 
     def _reconstruct_meeting_memories(
-        self, game_id: str
+        self, seed: int, path: Path, _mtime_key: int
     ) -> Mapping[tuple[str, str], AgentMemoryView]:
-        path = self._resolve_path(game_id)
-        if path is None:
-            raise FileNotFoundError(game_id)
-        seed = _parse_seed_from_game_id(game_id)
-        if seed is None:
-            raise FileNotFoundError(game_id)
+        # ``_mtime_key`` keys the cache only (Audit H-H-2); see ``_load_replay``.
         return self._walk(path, seed, collect_memory=True).memories
 
     # -- engine playback --------------------------------------------------
@@ -699,28 +763,55 @@ class ReplayLoader:
             ),
         )
 
-    def _metadata_view(self, path: Path, seed: int) -> ReplayMetadataView:
-        entries = read_all_entries(path)
-        tick_count = sum(1 for e in entries if isinstance(e, ReplayEntry))
-        meeting_entries = [e for e in entries if isinstance(e, MeetingReplayEntry)]
-        game_end: GameEndReplayEntry | None = None
-        for entry in entries:
-            if isinstance(entry, GameEndReplayEntry):
-                game_end = entry
+    def _file_summary(self, path: Path) -> _ReplaySummary:
+        """Return the memoized one-pass reduction for ``path`` (Audit G-G-2)."""
 
+        return self._cached_summary(path, _mtime_ns(path))
+
+    def _read_summary(self, path: Path, _mtime_key: int) -> _ReplaySummary:
+        # Walk the file once and derive every listing/cost field from the single
+        # entry list (Audit G-G-2): cost folds each meeting's ``llm_calls`` plus
+        # every failed-call row (mirrors ``compute_cost_usd``); ``winner`` is the
+        # game-end record (mirrors ``read_game_outcome``). ``_mtime_key`` keys the
+        # cache only (Audit H-H-2).
+        tick_count = 0
+        meeting_count = 0
+        winner: WinnerSide | None = None
+        winner_reason: str | None = None
+        total_cost = 0.0
         prompt_versions: dict[str, str] = {}
-        for meeting in meeting_entries:
-            prompt_versions.update(meeting.prompt_versions)
+        for entry in read_all_entries(path):
+            if isinstance(entry, ReplayEntry):
+                tick_count += 1
+            elif isinstance(entry, MeetingReplayEntry):
+                meeting_count += 1
+                total_cost += sum((call.cost_usd for call in entry.llm_calls), 0.0)
+                prompt_versions.update(entry.prompt_versions)
+            elif isinstance(entry, GameEndReplayEntry):
+                winner = entry.winner
+                winner_reason = entry.reason
+            elif isinstance(entry, FailedCallReplayEntry):
+                total_cost += entry.cost_usd
+        return _ReplaySummary(
+            total_ticks=tick_count,
+            meeting_count=meeting_count,
+            winner=winner,
+            winner_reason=winner_reason,
+            total_cost_usd=total_cost,
+            prompt_versions=prompt_versions,
+        )
 
+    def _metadata_view(self, path: Path, seed: int) -> ReplayMetadataView:
+        summary = self._file_summary(path)
         return ReplayMetadataView(
             game_id=_game_id_for_seed(seed),
             seed=seed,
-            total_ticks=tick_count,
-            winner=game_end.winner if game_end is not None else None,
-            winner_reason=game_end.reason if game_end is not None else None,
-            meeting_count=len(meeting_entries),
-            total_cost_usd=compute_cost_usd(path),
-            prompt_versions=prompt_versions,
+            total_ticks=summary.total_ticks,
+            winner=summary.winner,
+            winner_reason=summary.winner_reason,
+            meeting_count=summary.meeting_count,
+            total_cost_usd=summary.total_cost_usd,
+            prompt_versions=dict(summary.prompt_versions),
             created_at=_iso_mtime(path),
         )
 
@@ -799,6 +890,20 @@ class ReplayLoader:
             deduped.append((seed, path))
         return deduped
 
+    def _resolve(self, game_id: str) -> tuple[Path, int]:
+        """Resolve ``game_id`` to its ``(path, seed)`` or raise FileNotFoundError.
+
+        Centralizes the lookup the cached entry points share so the file's mtime
+        can be folded into their cache keys (Audit H-H-2) without each caller
+        re-deriving the path.
+        """
+
+        path = self._resolve_path(game_id)
+        seed = _parse_seed_from_game_id(game_id)
+        if path is None or seed is None:
+            raise FileNotFoundError(game_id)
+        return path, seed
+
     def _resolve_path(self, game_id: str) -> Path | None:
         # Resolve by matching the discovered seed rather than reconstructing the
         # canonical filename, so a file `list_replays` advertised (e.g. a
@@ -854,6 +959,19 @@ def _iso_mtime(path: Path) -> str | None:
     except OSError:
         return None
     return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+
+
+def _mtime_ns(path: Path) -> int:
+    """Nanosecond mtime of ``path`` for use as a cache-key component.
+
+    Nanosecond resolution (``st_mtime_ns``) so an in-place rewrite within the
+    same wall-clock second still changes the key (Audit H-H-2). Unlike
+    :func:`_iso_mtime` this does not swallow ``OSError``: a path being summarized
+    or loaded was already resolved to an existing file, so a stat failure here is
+    a real error rather than a missing-timestamp cosmetic.
+    """
+
+    return path.stat().st_mtime_ns
 
 
 def _deserialize_actions(raw_actions: Sequence[Mapping[str, Any]]) -> list[Action]:
@@ -1161,7 +1279,14 @@ def _belief_entry_view(memory: AgentMemory, subject: str, tick: int) -> BeliefEn
 
 
 def get_replay_loader(request: Request) -> ReplayLoader:
-    """FastAPI dependency: the process-wide loader stored on ``app.state``."""
+    """FastAPI dependency: the process-wide loader stored on ``app.state``.
+
+    Scale boundary (Audit H-H-6, deferred): the loader is constructed once at
+    import time in :mod:`api.main` and its caches are per-process. A cross-worker
+    shared cache — and moving construction out of import time — is the scale-phase
+    fix and is intentionally NOT built here; it would pull in ``api.main`` and a
+    shared cache backend, both out of this task's scope.
+    """
 
     loader = request.app.state.replay_loader
     if not isinstance(loader, ReplayLoader):
