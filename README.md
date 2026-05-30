@@ -29,7 +29,7 @@ Representative artifacts to skim:
 - A task contract — [tasks/phase-3.md](tasks/phase-3.md) Task 3.19 (robust JSON extraction + failure recording) shows the ~250-line full-contract shape that emerged once tasks started spawning audit-driven repair work.
 - An auto-generated prompt — [agent_prompts/task-3-19-robust-json-extraction-and-failure-recording.md](agent_prompts/task-3-19-robust-json-extraction-and-failure-recording.md).
 - A reconciled multi-tool audit — [audits/audit-2026-05-26-2316-mid-phase-4-dto-reconciled.md](audits/audit-2026-05-26-2316-mid-phase-4-dto-reconciled.md) — Phase 4 mid-phase DTO leak audit, adjudicating two parallel auditors' reports.
-- The iterative real-provider eval loop — seven reports under `audits/audit-2026-05-25-*pre-phase-4-real-provider-eval.md` plus the closing [audit-2026-05-26-0325-pre-phase-4-real-provider-eval.md](audits/audit-2026-05-26-0325-pre-phase-4-real-provider-eval.md).
+- The iterative real-provider eval loop — six reports under `audits/audit-2026-05-25-*pre-phase-4-real-provider-eval.md` plus the closing [audit-2026-05-26-0325-pre-phase-4-real-provider-eval.md](audits/audit-2026-05-26-0325-pre-phase-4-real-provider-eval.md).
 
 ---
 
@@ -86,7 +86,7 @@ bash scripts/run_spectator.sh
 
 That starts the API + frontend, waits until both are healthy, and opens `http://localhost:5173` in your browser. Ctrl-C stops both. (One-time prerequisite: `bash scripts/setup_env.sh`. macOS + Linux only.)
 
-A fresh clone ships with 50 sample replays under `replays/samples/` — the full Phase 3 closing real-provider eval (50/50 games, 38% impostor win rate, $0.886 total spend). Once the UI is up, pick any replay to scrub through ticks, click meeting markers to read transcripts with ballots and contradiction flags, and select an agent to see their memory snapshot and the suspicion heatmap at that moment. Any replays you generate locally into `replays/` (e.g. via `scripts/run_game.py`) override the bundled samples; the API logs which directory it picked at startup.
+A fresh clone ships with 50 sample replays under `replays/samples/` — a full 50-game real-provider tournament regenerated 2026-05-27, tallying a 36% impostor win rate (18/50) and ~$0.91 total spend per `replays/samples/MANIFEST.md`, the canonical provenance record. Once the UI is up, pick any replay to scrub through ticks, click meeting markers to read transcripts with ballots and contradiction flags, and select an agent to see their memory snapshot and the suspicion heatmap at that moment. Any replays you generate locally into `replays/` (e.g. via `scripts/run_game.py`) override the bundled samples; the API logs which directory it picked at startup.
 
 Those samples are managed by a refresh workflow. `scripts/refresh_samples.sh` regenerates them against the real provider — `--full` (all 50 seeds), `--meetings` (only the meeting-bearing seeds), or `--seeds N,N,N` (a subset) — recording each sample's prompt-template versions, model, spend, and outcome in `replays/samples/MANIFEST.md` so Phase 5 metrics can be attributed to a specific prompt version + model snapshot. Its free, API-free counterpart `scripts/verify_samples.sh` replays every sample through the engine and fails loud if any recorded state-hash no longer reconstructs, catching determinism drift before a metric reads a stale sample — e.g. `bash scripts/verify_samples.sh` checks all 50 in seconds.
 

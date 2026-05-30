@@ -43,8 +43,8 @@ contract for each PR.
 
 ## Coding conventions
 
-- Python 3.11. Type hints on every function. `mypy --strict` must pass on
-  `engine/`, `observation/`, `agents/`.
+- Python 3.11. Type hints on every function. `mypy --strict` is enforced
+  repo-wide (pyproject sets `strict = true`; `check.sh` runs `mypy .`).
 - Pydantic v2 for all data classes that cross module boundaries. Frozen
   dataclasses for engine state.
 - `asyncio` for concurrent agent dispatch. No threads.
