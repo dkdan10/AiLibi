@@ -32,6 +32,7 @@ from typing import Final
 import pydantic
 
 import api.schemas
+from eval.meeting_quality import TournamentEvalReport
 
 # The concrete spectator DTOs. Adding or removing a DTO must update BOTH this
 # set AND ``api.schemas.__all__`` AND the "Public types introduced" section of
@@ -74,6 +75,7 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "SuspicionGraphView",
         "ReplayMetadataView",
         "FailedCallView",
+        "FailedCallEvalView",
         "ReplayView",
         "EvalCostSummaryView",
     }
@@ -206,3 +208,207 @@ def test_union_aliases_are_importable_but_not_inventoried() -> None:
         assert name not in api.schemas.__all__, (
             f"{name} is a union alias and must stay out of __all__."
         )
+
+
+# ---------------------------------------------------------------------------
+# Eval-report surface firewall (Task 6.5, audit B-B-2 = D-D-2; DESIGN.md §11.2,
+# §11.3)
+# ---------------------------------------------------------------------------
+#
+# The structural firewall above pins only ``api.schemas``. The Phase 5 eval
+# route ``GET /eval/tournament-report`` serves
+# ``eval.meeting_quality.TournamentEvalReport`` — its three-level report tree
+# (tournament -> game -> meeting), the reused meeting/replay leaf types, and the
+# four §11.3 metric reports — which all ride entirely outside that guard. These
+# tests extend the firewall to that surface: a snapshot of its recursive field
+# set plus an assertion that no engine-state field is reachable, so a future
+# engine-state field added to any leaf type fails loudly here instead of
+# silently widening the served payload (B-B-2 = D-D-2).
+
+# Engine-internal / determinism fields that must never surface on the eval
+# report. ``state_hash`` (per-tick replay record) and ``state_hash_before`` /
+# ``state_hash_after`` (per-meeting record) exist on the replay *records* but are
+# intentionally dropped by the eval ``MeetingReport`` / ``GameReport`` shadows;
+# ``rng_state`` stands in for any future engine-state field name. None is
+# reachable today — these assertions keep it that way.
+FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "state_hash",
+        "state_hash_before",
+        "state_hash_after",
+        "rng_state",
+    }
+)
+
+# Snapshot of every field name reachable in the recursive JSON schema of
+# ``TournamentEvalReport``. Adding a field anywhere in the tree (the report
+# wrapper, a leaf DTO, or a metric report) changes this set and trips
+# ``test_eval_report_field_set_snapshot`` — forcing an explicit, reviewed update
+# rather than silently growing the served eval payload (D-D-2). Regenerate only
+# after confirming the new field is intentional and exposes no engine/role state.
+#
+# ``raw_response`` and ``prompt_length`` appear here because they live on the
+# underlying ``orchestrator.replay.FailedCallReplayEntry`` data model. The eval
+# ROUTE redacts them on the served payload via ``api.schemas.FailedCallEvalView``
+# (covered end-to-end in ``test_eval_routes.py``); this structural snapshot is
+# over the report TYPE, which still carries them, so they are listed.
+EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "accusation_calibration",
+        "accusation_claim_bins",
+        "accusation_claim_ece",
+        "accusation_claim_total",
+        "actual_impostor_rate",
+        "against",
+        "agent_id",
+        "alibi_fabrication",
+        "ballots",
+        "bin_index",
+        "body_of",
+        "by_model",
+        "call_kind",
+        "claims",
+        "co_present",
+        "confidence",
+        "considered_alternatives",
+        "contradiction_id",
+        "contradictions",
+        "cost",
+        "cost_dashboard",
+        "cost_usd",
+        "count",
+        "crewmate_ejections",
+        "description",
+        "ejected_player_id",
+        "error_message",
+        "error_type",
+        "event_a_id",
+        "event_b_id",
+        "evidence",
+        "evidence_backed_impostor_ejections",
+        "failed_calls",
+        "final_tick",
+        "format_version",
+        "free_text",
+        "from_tick",
+        "game_count",
+        "game_id",
+        "games",
+        "hi",
+        "impostor_ejections",
+        "impostor_hits",
+        "input_tokens",
+        "kind",
+        "llm_calls",
+        "lo",
+        "mean_confidence",
+        "mean_cost_per_game",
+        "meeting_id",
+        "meetings",
+        "midpoint",
+        "model",
+        "n_bins",
+        "observations",
+        "on_tick",
+        "outcome",
+        "output_tokens",
+        "per_prompt_version",
+        "primary_reason_id",
+        "prompt",
+        "prompt_length",
+        "prompt_versions",
+        "rationale_text",
+        "raw_response",
+        "reason",
+        "replay_ref",
+        "report",
+        "reports",
+        "response_text",
+        "roles",
+        "room",
+        "round_index",
+        "seed",
+        "seeds_used",
+        "speaker",
+        "statement_id",
+        "statements",
+        "subject",
+        "subjects",
+        "supports",
+        "survival_rate",
+        "survived",
+        "target",
+        "task_id",
+        "template_name",
+        "tick",
+        "to_tick",
+        "total_cost_usd",
+        "total_ejections",
+        "total_impostor_alibis",
+        "total_input_tokens",
+        "total_output_tokens",
+        "transcript",
+        "triggered_by",
+        "type",
+        "version",
+        "vote_ballot_bins",
+        "vote_ballot_ece",
+        "vote_ballot_total",
+        "vote_correctness",
+        "vote_correctness_rate",
+        "voter",
+        "winner",
+    }
+)
+
+
+def _recursive_field_names(model: type[pydantic.BaseModel]) -> frozenset[str]:
+    """Every property name reachable in ``model``'s recursive JSON schema.
+
+    ``model_json_schema`` inlines every nested model into ``$defs`` with a
+    ``properties`` block per object type; collecting those keys across the whole
+    tree yields the recursive field set. Dynamic mapping value-types
+    (``Mapping[str, X]``) render as ``additionalProperties`` with no
+    ``properties`` block, so their runtime keys never pollute the set — only
+    declared field names are collected.
+    """
+
+    names: set[str] = set()
+    _collect_field_names(model.model_json_schema(), names)
+    return frozenset(names)
+
+
+def _collect_field_names(node: object, acc: set[str]) -> None:
+    if isinstance(node, dict):
+        props = node.get("properties")
+        if isinstance(props, dict):
+            acc.update(str(key) for key in props)
+        for value in node.values():
+            _collect_field_names(value, acc)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_field_names(item, acc)
+
+
+def test_eval_report_surface_exposes_no_engine_state_field() -> None:
+    leaked = _recursive_field_names(TournamentEvalReport) & FORBIDDEN_EVAL_ENGINE_FIELDS
+    assert not leaked, (
+        f"TournamentEvalReport (the /eval/tournament-report surface) reaches "
+        f"engine-state field(s) {sorted(leaked)}. The eval report must shadow "
+        "engine/determinism state, not embed it; drop the field from the leaf "
+        "DTO or its eval shadow."
+    )
+
+
+def test_eval_report_field_set_snapshot() -> None:
+    actual = _recursive_field_names(TournamentEvalReport)
+    added = sorted(actual - EXPECTED_EVAL_REPORT_FIELDS)
+    removed = sorted(EXPECTED_EVAL_REPORT_FIELDS - actual)
+    assert actual == EXPECTED_EVAL_REPORT_FIELDS, (
+        "The recursive field set of TournamentEvalReport changed "
+        f"(added={added}, removed={removed}). A field was added to the eval "
+        "report, one of its leaf DTOs, or a metric report. Confirm the new field "
+        "is intentional and exposes no engine/role state, then update "
+        "EXPECTED_EVAL_REPORT_FIELDS (and FORBIDDEN_EVAL_ENGINE_FIELDS if it is "
+        "engine-internal). This tripwire is the durable value (D-D-2)."
+    )

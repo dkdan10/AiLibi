@@ -497,6 +497,39 @@ class FailedCallView(_FrozenView):
     error_message: str
 
 
+class FailedCallEvalView(_FrozenView):
+    """Sanitized failed-call DTO for the eval-report surface (DESIGN.md §11.2, §11.3).
+
+    The Phase 5 eval route ``GET /eval/tournament-report`` serves the deep
+    :class:`eval.meeting_quality.TournamentEvalReport`, which transitively
+    embeds :class:`orchestrator.replay.FailedCallReplayEntry` with its raw
+    ``raw_response`` blob, ``prompt_length``, and full ``error_message``. The
+    Phase 4 replay surface already redacts those via :class:`FailedCallView`, so
+    serving them raw over HTTP on the eval route re-exposed exactly what the
+    parallel surface suppresses (audit B-B-1 = D-D-1). This view mirrors
+    :class:`FailedCallView`'s exclusions so both privileged GM surfaces agree on
+    the failed-call contract; the eval route maps each entry through it at the
+    route boundary (it does not mutate the underlying replay record).
+
+    It is a *distinct* type from :class:`FailedCallView` rather than a reuse so
+    the two surfaces can diverge later without coupling — today their field sets
+    are identical by intent. Like :class:`FailedCallView`, ``error_message`` is
+    truncated to the first 200 chars at the mapping boundary, not enforced here.
+
+    Excludes: ``raw_response`` (the multi-KB blob), ``prompt_length``, and the
+    per-call ``input_tokens`` / ``output_tokens`` — the per-game cost roll-up on
+    ``GameCostSummary`` and the cost dashboard already carry token totals, so the
+    per-failed-call counts add no spectator value over the raw exposure risk.
+    """
+
+    meeting_id: str
+    tick: int
+    model: str
+    cost_usd: float
+    error_type: str
+    error_message: str
+
+
 class ReplayView(_FrozenView):
     """The full reconstructed replay: metadata, map, roster, tick timeline,
     meetings, and any failed LLM calls.
@@ -541,6 +574,7 @@ __all__ = [
     "CorroborationClaimView",
     "EdgeView",
     "EvalCostSummaryView",
+    "FailedCallEvalView",
     "FailedCallView",
     "FoundBodyObsView",
     "KillEventView",
