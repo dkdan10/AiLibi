@@ -10,10 +10,17 @@
 // the room bounding box and thread it through to children. Token jitter, body
 // offsets, radius, border, and label font stay in screen pixels so they read
 // consistently regardless of the scale.
+//
+// Performance (Task 6.7; audit K-K-2 / G-G-1, DESIGN.md §11.4): every value that
+// depends only on the loaded replay — the lookup Maps, color map, vent edges,
+// fit transform, and the per-tick cumulative body state — is memoized on
+// `currentReplay` identity, so a tick step rebuilds none of it. Body discovery
+// is precomputed into a tick-indexed array (one forward pass per replay) and
+// read in O(1), replacing the former 0..currentTick re-scan on every render.
 
 import { Application, extend } from "@pixi/react";
 import { Container, Graphics, Text } from "pixi.js";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useReplayStore } from "../store/replayStore";
 import type { RoomView, TickView, VentView } from "../types/api";
@@ -49,6 +56,8 @@ interface BodySpec {
   roomId: string;
   isDiscovered: boolean;
 }
+
+const NO_BODIES: readonly BodySpec[] = [];
 
 // Uniform transform that fits the rooms' bounding box into the padded canvas,
 // preserving aspect ratio and centering the content.
@@ -111,35 +120,44 @@ function buildVentEdges(
   return edges;
 }
 
-// Bodies visible at `currentTick`: one per victim killed at or before this tick,
-// flagged discovered once a report_body event has fired for that victim. Kill
-// events carry the room directly (privileged spectator DTO; see the mid-phase
-// DTO audit), so no derivation from meeting events is needed.
-function visibleBodies(
-  ticks: readonly TickView[],
-  currentTick: number,
-): BodySpec[] {
+// One forward pass over the whole replay yields the bodies visible at each tick:
+// `result[t]` is the body set as of tick `t` — one per victim killed at or
+// before `t`, flagged discovered once a report_body event has fired for that
+// victim. Kill events carry the room directly (privileged spectator DTO; see the
+// mid-phase DTO audit). The set changes only on kill / report_body events, so
+// the same array reference is shared across the unchanged runs between them; the
+// render path then indexes `result[currentTick]` in O(1) instead of re-scanning
+// 0..currentTick on every step (Task 6.7; audit K-K-2 / G-G-1).
+function buildBodyStatesByTick(ticks: readonly TickView[]): BodySpec[][] {
+  const result: BodySpec[][] = new Array<BodySpec[]>(ticks.length);
   const killRoomByVictim = new Map<string, string>();
   const discovered = new Set<string>();
-  const lastTick = Math.min(currentTick, ticks.length - 1);
-  for (let t = 0; t <= lastTick; t++) {
+  let current: BodySpec[] = [];
+
+  for (let t = 0; t < ticks.length; t++) {
     const tick = ticks[t];
-    if (tick === undefined) {
-      continue;
-    }
-    for (const event of tick.events) {
-      if (event.type === "kill") {
-        killRoomByVictim.set(event.victim_id, event.room_id);
-      } else if (event.type === "report_body") {
-        discovered.add(event.body_of);
+    let changed = false;
+    if (tick !== undefined) {
+      for (const event of tick.events) {
+        if (event.type === "kill") {
+          killRoomByVictim.set(event.victim_id, event.room_id);
+          changed = true;
+        } else if (event.type === "report_body" && !discovered.has(event.body_of)) {
+          discovered.add(event.body_of);
+          changed = true;
+        }
       }
     }
+    if (changed) {
+      current = [...killRoomByVictim.entries()].map(([victimId, roomId]) => ({
+        victimId,
+        roomId,
+        isDiscovered: discovered.has(victimId),
+      }));
+    }
+    result[t] = current;
   }
-  return [...killRoomByVictim.entries()].map(([victimId, roomId]) => ({
-    victimId,
-    roomId,
-    isDiscovered: discovered.has(victimId),
-  }));
+  return result;
 }
 
 export function MapView() {
@@ -164,6 +182,47 @@ export function MapView() {
     prevGameIdRef.current = gameId;
   }, [gameId]);
 
+  // Per-replay invariants, memoized on `currentReplay` identity so a tick step
+  // never rebuilds them (Task 6.7; audit K-K-2 / G-G-1). They collapse to empty
+  // defaults when no replay is loaded, keeping the hooks unconditional ahead of
+  // the null guard below (rules of hooks).
+  const transform = useMemo<MapTransform>(
+    () => computeTransform(currentReplay?.map.rooms ?? []),
+    [currentReplay],
+  );
+  const roomsById = useMemo<ReadonlyMap<string, RoomView>>(
+    () => new Map((currentReplay?.map.rooms ?? []).map((room) => [room.id, room])),
+    [currentReplay],
+  );
+  const playerIndexById = useMemo<ReadonlyMap<string, number>>(
+    () =>
+      new Map(
+        (currentReplay?.players ?? []).map((player, index) => [
+          player.agent_id,
+          index,
+        ]),
+      ),
+    [currentReplay],
+  );
+  const colorById = useMemo<ReadonlyMap<string, string>>(
+    () =>
+      new Map(
+        (currentReplay?.players ?? []).map((player) => [
+          player.agent_id,
+          player.color,
+        ]),
+      ),
+    [currentReplay],
+  );
+  const ventEdges = useMemo<VentEdgeSpec[]>(
+    () => buildVentEdges(currentReplay?.map.vents ?? [], roomsById),
+    [currentReplay, roomsById],
+  );
+  const bodyStatesByTick = useMemo<BodySpec[][]>(
+    () => buildBodyStatesByTick(currentReplay?.ticks ?? []),
+    [currentReplay],
+  );
+
   if (currentReplay === null) {
     return (
       <div
@@ -177,18 +236,14 @@ export function MapView() {
 
   const rooms = currentReplay.map.rooms;
   const tick = currentReplay.ticks[currentTick];
-  const { scale, offsetX, offsetY } = computeTransform(rooms);
+  const { scale, offsetX, offsetY } = transform;
 
-  const roomsById = new Map(rooms.map((room) => [room.id, room]));
-  const playerIndexById = new Map(
-    currentReplay.players.map((player, index) => [player.agent_id, index]),
-  );
-  const colorById = new Map(
-    currentReplay.players.map((player) => [player.agent_id, player.color]),
-  );
-
-  const ventEdges = buildVentEdges(currentReplay.map.vents, roomsById);
-  const bodies = visibleBodies(currentReplay.ticks, currentTick);
+  // O(1) lookup into the precomputed cumulative body state. Mirrors the former
+  // scan's `min(currentTick, ticks.length - 1)` clamp exactly: an out-of-range
+  // (or, defensively, negative) index falls through to no bodies, just as the
+  // old 0..lastTick loop yielded an empty set.
+  const bodyIndex = Math.min(currentTick, currentReplay.ticks.length - 1);
+  const bodies = bodyStatesByTick[bodyIndex] ?? NO_BODIES;
   const sabotageActive = tick?.sabotage_active ?? [];
   // A single-tick step within the same replay animates; scrubs / snap-to-meeting
   // jumps and replay switches snap instantly.
