@@ -520,3 +520,62 @@ def test_main_roster_writes_descriptor(
     assert rc == 0
     assert (tmp_path / "roster.json").exists()
     assert "wrote roster descriptor" in capsys.readouterr().err
+
+
+def test_ensure_roster_writes_sidecar_for_num_players_only_change(
+    tmp_path: Path,
+) -> None:
+    # A non-4p/1i set (e.g. 7p/1i/1task) is not the descriptor-less baseline, so it
+    # gets an explicit sidecar even with impostors/tasks at the defaults — "no
+    # descriptor" is reserved for the flat baseline and the browse track reads it.
+    status = mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=1, tasks_per_crewmate=1
+    )
+    assert "wrote roster descriptor" in status
+    assert json.loads((tmp_path / "roster.json").read_text()) == {
+        "num_players": 7,
+        "num_impostors": 1,
+        "tasks_per_crewmate": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    ("payload", "requested"),
+    [
+        # 7.0 == 7 and true == 1 under Python dict equality, so a plain `!=` check
+        # would treat these as matching — but the loader rejects float/bool, so
+        # they must be caught at this pre-spend gate, not after the money is spent.
+        (
+            '{"num_players": 7.0, "num_impostors": 2, "tasks_per_crewmate": 2}',
+            {"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 2},
+        ),
+        (
+            '{"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": true}',
+            {"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 1},
+        ),
+    ],
+)
+def test_ensure_roster_rejects_type_malformed_existing_descriptor(
+    tmp_path: Path, payload: str, requested: dict[str, int]
+) -> None:
+    (tmp_path / "roster.json").write_text(payload, encoding="utf-8")
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(tmp_path, **requested)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 0},
+        {"num_players": 0, "num_impostors": 1, "tasks_per_crewmate": 1},
+        {"num_players": 7, "num_impostors": -1, "tasks_per_crewmate": 2},
+    ],
+)
+def test_ensure_roster_rejects_non_positive_requested(
+    tmp_path: Path, bad: dict[str, int]
+) -> None:
+    # A mistyped non-positive env value must raise BEFORE writing, so no malformed
+    # sidecar is left in the directory to poison the set.
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(tmp_path, **bad)
+    assert not (tmp_path / "roster.json").exists()

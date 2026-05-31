@@ -694,6 +694,7 @@ def test_load_roster_config_parses_valid_descriptor(tmp_path: Path) -> None:
         # unexpected key
         '{"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 2, "x": 1}',
         '{"num_players": "7", "num_impostors": 2, "tasks_per_crewmate": 2}',  # type
+        '{"num_players": 7.0, "num_impostors": 2, "tasks_per_crewmate": 2}',  # float
         '{"num_players": 7, "num_impostors": 0, "tasks_per_crewmate": 2}',  # non-positive
         '{"num_players": 7, "num_impostors": true, "tasks_per_crewmate": 2}',  # bool
         "[7, 2, 2]",  # not a JSON object

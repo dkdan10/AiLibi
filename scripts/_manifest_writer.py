@@ -58,15 +58,17 @@ _DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples"
 _FILENAME_PREFIX = "replay-seed-"
 _FILENAME_SUFFIX = ".jsonl"
 
-# Per-set roster sidecar (Task 7.4). Mirrors api.replay_loader: a set whose
-# roster is the flat MVP default (num_impostors=1 AND tasks_per_crewmate=1, with
-# num_players inferred from the action stream) needs NO sidecar; any other roster
-# (multi-impostor and/or multi-task) is reconstructable only from this descriptor,
-# so a per-set refresh must write it BEFORE spending. Kept as literals (not an
+# Per-set roster sidecar (Task 7.4). Mirrors api.replay_loader: the flat MVP
+# baseline (4p/1i + 1 task) carries NO sidecar — the loader reconstructs it from
+# its defaults (num_impostors=1, tasks_per_crewmate=1, num_players inferred from
+# the action stream). EVERY other committed set carries an explicit roster.json
+# (also the deferred frontend browse track's metadata source), so a per-set
+# refresh must write + validate it BEFORE spending. Kept as literals (not an
 # orchestrator.game import) so this lightweight refresh helper stays cheap to load.
 _ROSTER_FILENAME = "roster.json"
-_DEFAULT_ROSTER_NUM_IMPOSTORS = 1
-_DEFAULT_ROSTER_TASKS_PER_CREWMATE = 1
+_ROSTER_FIELDS = ("num_players", "num_impostors", "tasks_per_crewmate")
+# (num_players, num_impostors, tasks_per_crewmate) of the descriptor-less baseline.
+_MVP_BASELINE_ROSTER = (4, 1, 1)
 
 # Sentinel for the prompt_versions column of a sample that had no meetings (no
 # LLM calls, hence no prompt templates in play). refresh_samples.sh keys its
@@ -432,18 +434,54 @@ def sum_cost(sample_dir: Path, seeds: Sequence[int]) -> float:
     return sum(compute_cost_usd(_sample_path(sample_dir, seed)) for seed in seeds)
 
 
-def _roster_needs_sidecar(num_impostors: int, tasks_per_crewmate: int) -> bool:
-    """True when a set's roster cannot reconstruct from the loader's defaults.
+def _roster_needs_sidecar(
+    num_players: int, num_impostors: int, tasks_per_crewmate: int
+) -> bool:
+    """True for every set except the descriptor-less flat MVP baseline (4p/1i).
 
-    The loader infers ``num_players`` from the action stream and defaults
-    ``num_impostors``/``tasks_per_crewmate`` to ``1`` when there is no sidecar, so
-    only a multi-impostor and/or multi-task set actually requires one.
+    The loader reconstructs the baseline from its defaults with no sidecar; any
+    other roster — multi-impostor, multi-task, OR a different player count — is
+    given an explicit descriptor so "no descriptor" unambiguously means the
+    baseline and the browse track can read each non-baseline set's roster.
     """
 
-    return (
-        num_impostors != _DEFAULT_ROSTER_NUM_IMPOSTORS
-        or tasks_per_crewmate != _DEFAULT_ROSTER_TASKS_PER_CREWMATE
-    )
+    return (num_players, num_impostors, tasks_per_crewmate) != _MVP_BASELINE_ROSTER
+
+
+def _validated_roster(raw: object, *, source: str) -> dict[str, int]:
+    """Validate a roster mapping with ``api.replay_loader``'s strict rules.
+
+    Mirrors ``api.replay_loader._load_roster_config``: ``raw`` must be a mapping
+    with EXACTLY :data:`_ROSTER_FIELDS`, each a positive ``int`` (``bool``
+    rejected — ``true`` is not ``1``). Raises :class:`ValueError` otherwise.
+
+    Used as the pre-spend gate for BOTH the requested roster (reject a mistyped /
+    non-positive env value before writing a malformed sidecar) and any existing
+    on-disk descriptor (reject a type-malformed sidecar — e.g. ``7.0`` or
+    ``true`` — that would ``==`` the requested ints under Python equality but be
+    rejected by the loader only AFTER the money is spent). ``source`` names the
+    subject for the error message.
+    """
+
+    if not isinstance(raw, dict):
+        raise ValueError(f"{source}: expected a JSON object, got {type(raw).__name__}")
+    keys = set(raw)
+    expected_keys = set(_ROSTER_FIELDS)
+    if keys != expected_keys:
+        raise ValueError(
+            f"{source}: keys must be exactly {sorted(expected_keys)}, "
+            f"got {sorted(keys)}"
+        )
+    validated: dict[str, int] = {}
+    for key in _ROSTER_FIELDS:
+        value = raw[key]
+        # ``bool`` is an ``int`` subclass; reject it so ``true`` is not read as 1.
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(f"{source}: {key} must be an integer, got {value!r}")
+        if value < 1:
+            raise ValueError(f"{source}: {key} must be a positive integer, got {value}")
+        validated[key] = value
+    return validated
 
 
 def ensure_roster_descriptor(
@@ -461,29 +499,37 @@ def ensure_roster_descriptor(
     carries ``num_impostors``/``tasks_per_crewmate``, which are not recoverable
     from the replay). Behaviour:
 
-    * if a sidecar exists and DISAGREES with the requested roster, raise — never
-      silently overwrite a committed set's descriptor; this also catches a
-      refresh that forgot (or mistyped) the roster env vars before spending;
+    * the REQUESTED roster is validated first — a mistyped / non-positive env
+      value raises here rather than being written into a malformed sidecar;
+    * if a sidecar exists it is validated with the SAME strict rules and must
+      MATCH the requested roster, else raise — never silently overwrite a
+      committed set's descriptor, and never let a type-malformed sidecar (e.g.
+      ``7.0`` or ``true``) slip past this gate only for the loader to reject it
+      after spending; this also catches a refresh that forgot/mistyped the env;
     * else if the requested roster needs a sidecar and none exists, write it;
-    * else (flat-default roster, or an already-matching sidecar) leave the
-      directory as-is so the loader's default path applies.
+    * else (flat 4p/1i baseline) leave the directory descriptor-less so the
+      loader's default path applies.
 
     Returns a one-line operator status. Idempotent: a matching sidecar is a no-op.
     The written JSON matches ``api.replay_loader.RosterConfig`` exactly (the three
     integer keys, no extras), so the loader parses it without falling back.
     """
 
-    expected = {
-        "num_players": num_players,
-        "num_impostors": num_impostors,
-        "tasks_per_crewmate": tasks_per_crewmate,
-    }
+    expected = _validated_roster(
+        {
+            "num_players": num_players,
+            "num_impostors": num_impostors,
+            "tasks_per_crewmate": tasks_per_crewmate,
+        },
+        source="requested roster",
+    )
     path = sample_dir / _ROSTER_FILENAME
     if path.exists():
         try:
-            existing = json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"unreadable roster descriptor {path}: {exc}") from exc
+        existing = _validated_roster(raw, source=f"roster descriptor {path}")
         if existing != expected:
             raise ValueError(
                 f"roster descriptor {path} disagrees with the requested roster "
@@ -492,7 +538,7 @@ def ensure_roster_descriptor(
                 "AILIBI_TASKS_PER_CREWMATE for this set."
             )
         return f"roster descriptor already matches: {path}"
-    if not _roster_needs_sidecar(num_impostors, tasks_per_crewmate):
+    if not _roster_needs_sidecar(num_players, num_impostors, tasks_per_crewmate):
         return (
             f"flat {num_players}p/{num_impostors}i default roster — no sidecar "
             f"needed in {sample_dir}"

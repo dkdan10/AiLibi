@@ -273,6 +273,23 @@ def test_dry_run_non_default_roster_previews_descriptor(tmp_path: Path) -> None:
     assert "{num_players: 7, num_impostors: 2, tasks_per_crewmate: 2}" in proc.stdout
 
 
+def test_dry_run_num_players_only_change_previews_descriptor(tmp_path: Path) -> None:
+    # A num-players-only change (7p/1i/1task) is still non-baseline, so the dry-run
+    # must preview a descriptor write — consistent with _roster_needs_sidecar.
+    set_dir = tmp_path / "7p1i"
+    env = _clean_env()
+    env.update(
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+        AILIBI_NUM_PLAYERS="7",
+        AILIBI_NUM_IMPOSTORS="1",
+        AILIBI_TASKS_PER_CREWMATE="1",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert f"would ensure {set_dir}/roster.json" in proc.stdout
+
+
 def test_dry_run_routes_per_set_for_7p2i(tmp_path: Path) -> None:
     # Task 7.5 generates the 7p/2i set by setting the roster + per-set dir/manifest
     # env hooks. The dry-run must show the resolved roster, the per-set SAMPLE_DIR
