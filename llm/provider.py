@@ -31,9 +31,12 @@ ENV_PROVIDER: Final[str] = "AILIBI_LLM_PROVIDER"
 ENV_MEETING_MODEL: Final[str] = "AILIBI_LLM_MEETING_MODEL"
 ENV_TRIGGER_MODEL: Final[str] = "AILIBI_LLM_TRIGGER_MODEL"
 ENV_ANTHROPIC_API_KEY: Final[str] = "ANTHROPIC_API_KEY"
+ENV_OLLAMA_HOST: Final[str] = "AILIBI_OLLAMA_HOST"
+ENV_OLLAMA_SEED: Final[str] = "AILIBI_OLLAMA_SEED"
 
 PROVIDER_ANTHROPIC: Final[str] = "anthropic"
 PROVIDER_FAKE: Final[str] = "fake"
+PROVIDER_OLLAMA: Final[str] = "ollama"
 
 # Anthropic per-million-token list pricing as of 2026-05. Kept private so
 # call sites never depend on it; if pricing changes only this file moves.
@@ -42,6 +45,16 @@ _ANTHROPIC_PRICING_USD_PER_MTOK: Final[dict[str, tuple[float, float]]] = {
     "claude-haiku-4-5-20251001": (1.00, 5.00),
 }
 _FALLBACK_PRICING_USD_PER_MTOK: Final[tuple[float, float]] = (3.00, 15.00)
+
+# Ollama runs a local open model for $0. The rate is keyed by PROVIDER,
+# not by model name: every Ollama model resolves to the (0.0, 0.0)
+# fallback, so an A/B swap (``qwen2.5:7b`` -> ``llama3.1:8b``) cannot
+# silently fall back to a non-zero frontier rate the way a model-keyed
+# lookup against the Anthropic table would. The per-model dict is the
+# optional override surface (empty today) for a hypothetical metered
+# local endpoint; absent an entry the zero fallback applies.
+_OLLAMA_PRICING_USD_PER_MTOK: Final[dict[str, tuple[float, float]]] = {}
+_OLLAMA_FALLBACK_PRICING_USD_PER_MTOK: Final[tuple[float, float]] = (0.0, 0.0)
 
 
 class AnthropicRawResponse(BaseModel):
@@ -215,6 +228,7 @@ def build_default_client(
     *,
     env: dict[str, str] | None = None,
     send: SendHook | None = None,
+    seed: int | None = None,
 ) -> LLMClient:
     """Construct the default :class:`LLMClient` from environment configuration.
 
@@ -225,7 +239,21 @@ def build_default_client(
     * ``AILIBI_LLM_PROVIDER=anthropic`` → :class:`AnthropicClient`, with model
       ids picked from ``AILIBI_LLM_MEETING_MODEL`` /
       ``AILIBI_LLM_TRIGGER_MODEL`` when set, otherwise their canonical
-      defaults.
+      defaults. Retained as a still-supported alternative (re-recording
+      the frozen baseline; cross-provider validation) — not dead code.
+    * ``AILIBI_LLM_PROVIDER=ollama`` → :class:`llm.ollama_client.OllamaClient`,
+      POSTing to ``AILIBI_OLLAMA_HOST`` (default ``localhost:11434``) and
+      reusing the same ``AILIBI_LLM_MEETING_MODEL`` /
+      ``AILIBI_LLM_TRIGGER_MODEL`` knobs, both defaulting to
+      ``qwen2.5:7b-instruct`` (the canonical Phase 7 local model).
+
+    ``seed`` is the per-game seed the Ollama client folds into
+    ``options.seed`` for reproducible-ish fresh generation; when ``None``
+    it is resolved from ``AILIBI_OLLAMA_SEED`` (falling back to
+    :data:`llm.ollama_client.DEFAULT_OLLAMA_SEED`). It is ignored by the
+    fake and Anthropic branches. ``send`` is the Anthropic transport hook
+    only; the Ollama client's transport is injected directly in its unit
+    tests, so it is deliberately not plumbed here.
 
     The function takes an ``env`` dict so callers can construct clients
     deterministically in tests; production callers pass ``env=None`` and
@@ -251,10 +279,50 @@ def build_default_client(
             trigger_model=environment.get(ENV_TRIGGER_MODEL, DEFAULT_TRIGGER_MODEL),
             send=send,
         )
+    if provider == PROVIDER_OLLAMA:
+        # Lazy import keeps the ollama SDK optional at module-import time,
+        # mirroring the fake/anthropic branches: a non-Ollama run never
+        # imports ollama_client (and thus never the ollama package).
+        from llm.ollama_client import (
+            DEFAULT_OLLAMA_HOST,
+            DEFAULT_OLLAMA_MODEL,
+            OllamaClient,
+        )
+
+        host = environment.get(ENV_OLLAMA_HOST, "").strip() or DEFAULT_OLLAMA_HOST
+        return OllamaClient(
+            host=host,
+            seed=seed if seed is not None else _ollama_seed_from_env(environment),
+            meeting_model=environment.get(ENV_MEETING_MODEL, DEFAULT_OLLAMA_MODEL),
+            trigger_model=environment.get(ENV_TRIGGER_MODEL, DEFAULT_OLLAMA_MODEL),
+        )
     raise ValueError(
-        f"unknown {ENV_PROVIDER} value: {provider!r}; "
-        f"expected one of {PROVIDER_ANTHROPIC!r} or {PROVIDER_FAKE!r}"
+        f"unknown {ENV_PROVIDER} value: {provider!r}; expected one of "
+        f"{PROVIDER_ANTHROPIC!r}, {PROVIDER_OLLAMA!r}, or {PROVIDER_FAKE!r}"
     )
+
+
+def _ollama_seed_from_env(environment: dict[str, str]) -> int:
+    """Resolve the Ollama per-game seed from ``AILIBI_OLLAMA_SEED``.
+
+    Parses the value as a base-10 integer (leading zeros tolerated, so a
+    shell-exported ``007`` is 7, never octal). Returns
+    :data:`llm.ollama_client.DEFAULT_OLLAMA_SEED` when the var is
+    unset/empty. A non-integer value is fail-loud (AGENTS.md: no silent
+    fallbacks) rather than silently substituting the default.
+    """
+
+    from llm.ollama_client import DEFAULT_OLLAMA_SEED
+
+    raw = environment.get(ENV_OLLAMA_SEED, "").strip()
+    if not raw:
+        return DEFAULT_OLLAMA_SEED
+    try:
+        return int(raw, 10)
+    except ValueError as exc:
+        raise ValueError(
+            f"{ENV_OLLAMA_SEED} must be a base-10 integer, got {raw!r}"
+        ) from exc
 
 
 # Caps on the metadata captured for a failed structured-output call
@@ -444,10 +512,25 @@ def _compute_cost_usd(
     model: str,
     input_tokens: int,
     output_tokens: int,
+    provider: str = PROVIDER_ANTHROPIC,
 ) -> float:
-    input_rate, output_rate = _ANTHROPIC_PRICING_USD_PER_MTOK.get(
-        model, _FALLBACK_PRICING_USD_PER_MTOK
-    )
+    """Cost in USD for a completion, keyed by ``provider`` then ``model``.
+
+    ``provider`` defaults to :data:`PROVIDER_ANTHROPIC` so the Anthropic
+    call site (and its recorded costs) is byte-identical to before this
+    parameter existed. :data:`PROVIDER_OLLAMA` selects the local-model
+    rate table, whose zero fallback makes every Ollama model free
+    regardless of name (see :data:`_OLLAMA_PRICING_USD_PER_MTOK`).
+    """
+
+    if provider == PROVIDER_OLLAMA:
+        input_rate, output_rate = _OLLAMA_PRICING_USD_PER_MTOK.get(
+            model, _OLLAMA_FALLBACK_PRICING_USD_PER_MTOK
+        )
+    else:
+        input_rate, output_rate = _ANTHROPIC_PRICING_USD_PER_MTOK.get(
+            model, _FALLBACK_PRICING_USD_PER_MTOK
+        )
     return (input_tokens / 1_000_000.0) * input_rate + (
         output_tokens / 1_000_000.0
     ) * output_rate
@@ -514,11 +597,14 @@ __all__ = [
     "DEFAULT_TRIGGER_MODEL",
     "ENV_ANTHROPIC_API_KEY",
     "ENV_MEETING_MODEL",
+    "ENV_OLLAMA_HOST",
+    "ENV_OLLAMA_SEED",
     "ENV_PROVIDER",
     "ENV_TRIGGER_MODEL",
     "LLMCallFailure",
     "PROVIDER_ANTHROPIC",
     "PROVIDER_FAKE",
+    "PROVIDER_OLLAMA",
     "SendHook",
     "build_default_client",
     "extract_parse_failure",

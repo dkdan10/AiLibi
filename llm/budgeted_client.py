@@ -35,7 +35,13 @@ accepts:
   from the token estimate. Defaults are calibrated to a generous tier
   so the estimator is conservative without baking in any
   provider-specific name; call sites that want a tighter estimate
-  pass their own rates.
+  pass their own rates. When neither is passed, the rates resolve from
+  the wrapped client's optional :class:`_SupportsPreflightCostRates`
+  hint — a free provider (the local Ollama client) exposes ``0.0`` so
+  the USD pre-flight dimension is disabled while the token caps stay
+  intact — falling back to the frontier defaults otherwise. The token
+  estimator is unaffected, so the token ceiling still backstops a
+  rambling local model.
 
 Cross-provider portability
 ==========================
@@ -51,7 +57,7 @@ changes.
 from __future__ import annotations
 
 import asyncio
-from typing import Final
+from typing import Final, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -88,6 +94,44 @@ def _estimate_input_tokens(prompt: str) -> int:
     if not prompt:
         return 1
     return max(1, (len(prompt) + _CHARS_PER_TOKEN - 1) // _CHARS_PER_TOKEN)
+
+
+@runtime_checkable
+class _SupportsPreflightCostRates(Protocol):
+    """Optional hint a provider client may expose to override the default
+    pre-flight cost-estimation rates (USD per single token).
+
+    This lets the budget layer zero the USD pre-flight dimension for a
+    free provider WITHOUT naming it here — the module stays
+    provider-neutral (it references no extended-thinking / cache-control /
+    provider-name concept). A provider whose completions are always free —
+    a local model that reports ``cost_usd == 0.0`` — exposes both rates as
+    ``0.0`` so the USD pre-flight cannot block a free run while the token
+    caps stay intact (a local model can ramble; the token ceiling is the
+    real backstop). Clients that do not implement this Protocol (Anthropic,
+    the fake) keep the frontier-calibrated defaults, so their budget
+    behavior is unchanged.
+    """
+
+    preflight_cost_per_input_token_usd: float
+    preflight_cost_per_output_token_usd: float
+
+
+def _default_cost_rates(inner: LLMClient) -> tuple[float, float]:
+    """Resolve the ``(input, output)`` pre-flight USD/token rates for ``inner``.
+
+    Reads the optional :class:`_SupportsPreflightCostRates` hint a provider
+    client may expose; falls back to the frontier-calibrated module
+    defaults for clients that don't (Anthropic, the fake), so their
+    pre-flight estimate is byte-identical to before the hint existed.
+    """
+
+    if isinstance(inner, _SupportsPreflightCostRates):
+        return (
+            inner.preflight_cost_per_input_token_usd,
+            inner.preflight_cost_per_output_token_usd,
+        )
+    return (_DEFAULT_COST_PER_INPUT_TOKEN_USD, _DEFAULT_COST_PER_OUTPUT_TOKEN_USD)
 
 
 class BudgetedLLMClient:
@@ -138,23 +182,38 @@ class BudgetedLLMClient:
         *,
         inner: LLMClient,
         budget: GameBudget,
-        cost_per_input_token_usd: float = _DEFAULT_COST_PER_INPUT_TOKEN_USD,
-        cost_per_output_token_usd: float = _DEFAULT_COST_PER_OUTPUT_TOKEN_USD,
+        cost_per_input_token_usd: float | None = None,
+        cost_per_output_token_usd: float | None = None,
     ) -> None:
-        if cost_per_input_token_usd < 0:
+        # An explicit rate always wins; ``None`` (the default) resolves from
+        # the inner client's optional hint, then the frontier defaults. This
+        # lets a free provider (the Ollama client) zero the USD pre-flight
+        # dimension via its hint without any change at the construction site
+        # (orchestrator.game wraps the provider with no explicit rates),
+        # while the Anthropic / fake path keeps the frontier defaults exactly.
+        default_input, default_output = _default_cost_rates(inner)
+        resolved_input = (
+            cost_per_input_token_usd
+            if cost_per_input_token_usd is not None
+            else default_input
+        )
+        resolved_output = (
+            cost_per_output_token_usd
+            if cost_per_output_token_usd is not None
+            else default_output
+        )
+        if resolved_input < 0:
             raise ValueError(
-                "cost_per_input_token_usd must be non-negative, "
-                f"got {cost_per_input_token_usd}"
+                f"cost_per_input_token_usd must be non-negative, got {resolved_input}"
             )
-        if cost_per_output_token_usd < 0:
+        if resolved_output < 0:
             raise ValueError(
-                "cost_per_output_token_usd must be non-negative, "
-                f"got {cost_per_output_token_usd}"
+                f"cost_per_output_token_usd must be non-negative, got {resolved_output}"
             )
         self._inner = inner
         self._budget = budget
-        self._cost_per_input_token_usd = cost_per_input_token_usd
-        self._cost_per_output_token_usd = cost_per_output_token_usd
+        self._cost_per_input_token_usd = resolved_input
+        self._cost_per_output_token_usd = resolved_output
         # Lazily-created lock so the adapter does not bind to an event
         # loop at construction time (the MeetingManager constructs the
         # adapter outside its own event-loop context).
