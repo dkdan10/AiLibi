@@ -196,12 +196,18 @@ done
 
 # The two-set contract reserves the descriptor-less default for EXACTLY the flat
 # 4p/1i baseline at $REPO_ROOT/replays/samples. Detect whether this refresh
-# targets it (realpath -m so a trailing slash / relative AILIBI_SAMPLE_DIR still
-# matches), and fail loud BEFORE any spend if a non-4p/1i roster is pointed at it
-# — e.g. a 7p/2i refresh that forgot AILIBI_SAMPLE_DIR would otherwise write
+# targets it (canonicalized so a trailing slash / relative AILIBI_SAMPLE_DIR
+# still matches), and fail loud BEFORE any spend if a non-4p/1i roster is pointed
+# at it — e.g. a 7p/2i refresh that forgot AILIBI_SAMPLE_DIR would otherwise write
 # replays/samples/roster.json and break the committed baseline's reconstruction.
+#
+# Portable canonicalization: BSD/macOS `realpath` lacks GNU's `-m` (which resolves
+# a not-yet-created subdir without requiring it to exist), so use Python's
+# os.path.realpath — it normalizes ./../trailing-slash and resolves symlinks
+# without needing the path to exist, on both macOS and Linux.
+canon() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 is_flat_baseline=0
-if [[ "$(realpath -m "$SAMPLE_DIR")" == "$(realpath -m "$REPO_ROOT/replays/samples")" ]]; then
+if [[ "$(canon "$SAMPLE_DIR")" == "$(canon "$REPO_ROOT/replays/samples")" ]]; then
   is_flat_baseline=1
 fi
 if [[ "$is_flat_baseline" -eq 1 ]] &&
