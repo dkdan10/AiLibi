@@ -12,8 +12,14 @@ from pydantic import TypeAdapter
 from agents.base import AgentInterface
 from engine.entities import PlayerId, Role
 from engine.world import load_canonical_map
-from eval.balance_eval import BalanceReport, run_balance_eval
+from eval.balance_eval import (
+    BalanceReport,
+    _seeded_roles,
+    run_balance_eval,
+    run_tournament_eval,
+)
 from llm.budget import GameBudget
+from orchestrator.seeder import seed_initial_state
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
@@ -293,6 +299,76 @@ def test_canonical_balance_keeps_both_sides_alive(tmp_path: Path) -> None:
 
     assert report.crew_wins > 0
     assert report.impostor_wins > 0
+
+
+def test_run_tournament_eval_threads_roster_and_task_config(tmp_path: Path) -> None:
+    """run_tournament_eval seeds the exact roster + task config it is given.
+
+    For 7p/2i + tasks_per_crewmate=2 the harness must seed that config: each
+    game's role ground truth has 7 players with exactly 2 impostors, matching an
+    independent ``seed_initial_state`` call for the same seed — which also
+    confirms the task count is 5 crew x 2 = 10 distinct tasks. This pins that the
+    harness seeds the same config the game ran with.
+    """
+
+    seeds = (0, 1)
+    report = run_tournament_eval(
+        seeds=seeds,
+        output_dir=tmp_path,
+        agent_factory=_wait_factory,
+        num_players=7,
+        num_impostors=2,
+        tasks_per_crewmate=2,
+        max_ticks=3,
+    )
+
+    game_map = load_canonical_map()
+    assert report.seeds_used == seeds
+    for game in report.games:
+        assert len(game.roles) == 7
+        assert sum(1 for role in game.roles.values() if role == "IMPOSTOR") == 2
+        seeded = seed_initial_state(
+            seed=game.seed,
+            game_map=game_map,
+            num_players=7,
+            num_impostors=2,
+            tasks_per_crewmate=2,
+        )
+        assert dict(game.roles) == {
+            pid: player.role for pid, player in seeded.players.items()
+        }
+        # 5 crewmates x 2 tasks each = 10 distinct tasks for this config.
+        assert len(seeded.tasks) == 5 * 2
+
+
+def test_seeded_roles_threads_tasks_per_crewmate(tmp_path: Path) -> None:
+    """The meeting-abort re-seed path recovers roles for the exact run config.
+
+    ``_seeded_roles`` reconstructs the role ground truth on the abort path; it
+    must accept and thread ``tasks_per_crewmate`` so the recovered roles come
+    from the identical seeded setup the game ran (roles are independent of the
+    task count, but the call must mirror the game's own seeding rather than rely
+    on a default that could drift).
+    """
+
+    game_map = load_canonical_map()
+    roles = _seeded_roles(
+        seed=0,
+        game_map=game_map,
+        num_players=7,
+        num_impostors=2,
+        tasks_per_crewmate=2,
+    )
+    seeded = seed_initial_state(
+        seed=0,
+        game_map=game_map,
+        num_players=7,
+        num_impostors=2,
+        tasks_per_crewmate=2,
+    )
+
+    assert roles == {pid: player.role for pid, player in seeded.players.items()}
+    assert sum(1 for role in roles.values() if role == "IMPOSTOR") == 2
 
 
 def test_run_balance_eval_reuses_headless_game_outcomes(tmp_path: Path) -> None:

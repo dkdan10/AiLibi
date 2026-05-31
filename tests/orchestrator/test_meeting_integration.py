@@ -419,7 +419,12 @@ def _seed_meeting_setup(
     )
 
     def _stub(
-        *, seed: int, game_map: Map, num_players: int, num_impostors: int = 1
+        *,
+        seed: int,
+        game_map: Map,
+        num_players: int,
+        num_impostors: int = 1,
+        tasks_per_crewmate: int = 1,
     ) -> WorldState:
         return state_with_body
 
@@ -666,7 +671,12 @@ class TestHeadlessGameMeetingDispatch:
         )
 
         def _stub_seed(
-            *, seed: int, game_map: Map, num_players: int, num_impostors: int = 1
+            *,
+            seed: int,
+            game_map: Map,
+            num_players: int,
+            num_impostors: int = 1,
+            tasks_per_crewmate: int = 1,
         ) -> WorldState:
             return state_pre
 
@@ -1361,8 +1371,11 @@ class TestPublicCliMeetingWireUp:
     """
 
     # Seed whose default-agent game fires a body-report meeting (~tick 7)
-    # under the canonical map. Used by the budget-cap regression in
-    # tests/llm/test_budgeted_client.py too.
+    # under the canonical map AT ONE TASK PER CREWMATE (the committed 4p/1i
+    # config). The harness default is now 2 tasks/crewmate (Task 7.1), which
+    # lengthens the game past this meeting, so these meeting-wireup tests pin
+    # tasks_per_crewmate=1 to keep exercising the body-report path. Used by the
+    # budget-cap regression in tests/llm/test_budgeted_client.py too.
     _MEETING_SEED = 22
 
     def test_meetings_fire_and_game_resumes_from_public_factory_path(
@@ -1376,6 +1389,7 @@ class TestPublicCliMeetingWireUp:
             game_map=load_canonical_map(),
             agent_factory=build_default_agent_factory(),
             replay_path=replay_path,
+            tasks_per_crewmate=1,
             scheduler=TickScheduler(max_ticks=40),
             meeting_runner=build_default_meeting_runner(budget=GameBudget()),
         )
@@ -1406,6 +1420,7 @@ class TestPublicCliMeetingWireUp:
             game_map=load_canonical_map(),
             agent_factory=build_default_agent_factory(),
             replay_path=replay_path,
+            tasks_per_crewmate=1,
             scheduler=TickScheduler(max_ticks=40),
         )
 

@@ -867,8 +867,11 @@ class TestProductionWireUpBudgetCap:
     """
 
     # Seed whose default-agent game fires a body-report meeting around
-    # tick 7 (mirrors the meeting-fires regression in
-    # tests/orchestrator/test_meeting_integration.py). The meeting's
+    # tick 7 at ONE TASK PER CREWMATE (mirrors the meeting-fires regression in
+    # tests/orchestrator/test_meeting_integration.py). The harness default is
+    # now 2 tasks/crewmate (Task 7.1), which lengthens the game past this
+    # meeting, so these cap-on-a-meeting tests pin tasks_per_crewmate=1. The
+    # meeting's
     # first report pre-flight is where the tight cap trips.
     _MEETING_SEED = 22
 
@@ -889,6 +892,7 @@ class TestProductionWireUpBudgetCap:
             game_map=load_canonical_map(),
             agent_factory=build_default_agent_factory(),
             replay_path=replay_path,
+            tasks_per_crewmate=1,
             scheduler=TickScheduler(max_ticks=40),
             meeting_runner=runner,
         )
@@ -915,6 +919,7 @@ class TestProductionWireUpBudgetCap:
             game_map=load_canonical_map(),
             agent_factory=build_default_agent_factory(),
             replay_path=replay_path,
+            tasks_per_crewmate=1,
             scheduler=TickScheduler(max_ticks=40),
             meeting_runner=runner,
         )

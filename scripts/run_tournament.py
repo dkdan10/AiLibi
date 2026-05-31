@@ -37,6 +37,8 @@ from orchestrator.game import (  # noqa: E402
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
     DEFAULT_NUM_PLAYERS,
+    DEFAULT_TASKS_PER_CREWMATE,
+    ROSTER_PRESETS,
 )
 
 _DEFAULT_REPORT_FILENAME = "tournament-eval-report.json"
@@ -73,17 +75,41 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             f"(default: <output-dir>/{_DEFAULT_REPORT_FILENAME})"
         ),
     )
+    # The roster flags default to None (not their constants) so main() can tell
+    # an explicitly-passed value from an omitted one and reject combining any of
+    # them with --roster-preset. Omitted flags resolve to the shared defaults in
+    # _resolve_roster.
     parser.add_argument(
         "--num-players",
         type=int,
-        default=DEFAULT_NUM_PLAYERS,
+        default=None,
         help=f"total players per game (default: {DEFAULT_NUM_PLAYERS})",
     )
     parser.add_argument(
         "--num-impostors",
         type=int,
-        default=DEFAULT_NUM_IMPOSTORS,
+        default=None,
         help=f"impostors per game (default: {DEFAULT_NUM_IMPOSTORS})",
+    )
+    parser.add_argument(
+        "--tasks-per-crewmate",
+        type=int,
+        default=None,
+        help=(
+            "distinct map tasks assigned to each crewmate "
+            f"(default: {DEFAULT_TASKS_PER_CREWMATE}). Raising this lengthens "
+            "games so bodies can outlive the win condition (Phase 7 W0.1)."
+        ),
+    )
+    parser.add_argument(
+        "--roster-preset",
+        choices=sorted(ROSTER_PRESETS),
+        default=None,
+        help=(
+            "named roster config supplying num-players, num-impostors, and "
+            "tasks-per-crewmate together; mutually exclusive with passing any of "
+            "those flags explicitly. Choices: " + ", ".join(sorted(ROSTER_PRESETS))
+        ),
     )
     parser.add_argument(
         "--max-ticks",
@@ -140,6 +166,51 @@ def _format_summary(eval_report: TournamentEvalReport) -> str:
     return "\n".join(lines)
 
 
+def _resolve_roster(args: argparse.Namespace) -> tuple[int, int, int]:
+    """Resolve ``(num_players, num_impostors, tasks_per_crewmate)`` from CLI args.
+
+    A ``--roster-preset`` supplies all three values at once and is mutually
+    exclusive with passing ``--num-players`` / ``--num-impostors`` /
+    ``--tasks-per-crewmate`` explicitly — combining them raises ``SystemExit``
+    rather than silently letting one win (AGENTS.md "no silent fallbacks"). When
+    no preset is given, each omitted roster flag falls back to its shared default
+    constant, so an unflagged run uses the 4p/1i roster at the locked default of
+    2 tasks/crewmate (``DEFAULT_TASKS_PER_CREWMATE``).
+    """
+
+    explicit = [
+        flag
+        for flag, value in (
+            ("--num-players", args.num_players),
+            ("--num-impostors", args.num_impostors),
+            ("--tasks-per-crewmate", args.tasks_per_crewmate),
+        )
+        if value is not None
+    ]
+    if args.roster_preset is not None:
+        if explicit:
+            raise SystemExit(
+                f"--roster-preset {args.roster_preset!r} is mutually exclusive "
+                f"with explicit roster flags ({', '.join(explicit)}); pass a "
+                "named preset or explicit roster flags, not both"
+            )
+        preset = ROSTER_PRESETS[args.roster_preset]
+        return preset.num_players, preset.num_impostors, preset.tasks_per_crewmate
+
+    num_players = (
+        args.num_players if args.num_players is not None else DEFAULT_NUM_PLAYERS
+    )
+    num_impostors = (
+        args.num_impostors if args.num_impostors is not None else DEFAULT_NUM_IMPOSTORS
+    )
+    tasks_per_crewmate = (
+        args.tasks_per_crewmate
+        if args.tasks_per_crewmate is not None
+        else DEFAULT_TASKS_PER_CREWMATE
+    )
+    return num_players, num_impostors, tasks_per_crewmate
+
+
 def _emit_report_json(eval_report: TournamentEvalReport, report_output: Path) -> None:
     """Serialize the eval report to JSON, validating the round-trip first.
 
@@ -158,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     if args.num_games < 1:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
+    num_players, num_impostors, tasks_per_crewmate = _resolve_roster(args)
     seeds = range(args.start_seed, args.start_seed + args.num_games)
     # ``force`` is threaded into each per-seed ReplayLog construction inside
     # run_tournament_eval, so a conflicting replay-seed-{seed}.jsonl is truncated
@@ -168,8 +240,9 @@ def main(argv: list[str] | None = None) -> int:
     report = run_tournament_eval(
         seeds=seeds,
         output_dir=args.output_dir,
-        num_players=args.num_players,
-        num_impostors=args.num_impostors,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
         max_ticks=args.max_ticks,
         force=args.force,
     )

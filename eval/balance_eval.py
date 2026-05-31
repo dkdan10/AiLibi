@@ -69,6 +69,7 @@ from orchestrator.game import (
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
     DEFAULT_NUM_PLAYERS,
+    DEFAULT_TASKS_PER_CREWMATE,
     AgentFactory,
     HeadlessGame,
     build_default_agent_factory,
@@ -133,6 +134,7 @@ def run_tournament_eval(
     agent_factory: AgentFactory | None = None,
     num_players: int = DEFAULT_NUM_PLAYERS,
     num_impostors: int = DEFAULT_NUM_IMPOSTORS,
+    tasks_per_crewmate: int = DEFAULT_TASKS_PER_CREWMATE,
     max_ticks: int = DEFAULT_MAX_TICKS,
     force: bool = False,
 ) -> TournamentReport:
@@ -213,6 +215,7 @@ def run_tournament_eval(
             replay_path=replay_path,
             num_players=num_players,
             num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
             scheduler=TickScheduler(max_ticks=max_ticks),
             meeting_runner=build_default_meeting_runner(
                 budget=GameBudget(max_cost_usd=1.00)
@@ -246,6 +249,7 @@ def run_tournament_eval(
                         game_map=resolved_map,
                         num_players=num_players,
                         num_impostors=num_impostors,
+                        tasks_per_crewmate=tasks_per_crewmate,
                     ),
                     fallback_reason=(
                         f"meeting aborted before game_over ({failure.error_type})"
@@ -400,6 +404,7 @@ def _seeded_roles(
     game_map: Map,
     num_players: int,
     num_impostors: int,
+    tasks_per_crewmate: int = DEFAULT_TASKS_PER_CREWMATE,
 ) -> dict[PlayerId, Role]:
     """Recover a game's role ground truth by re-running the deterministic seeding.
 
@@ -409,6 +414,12 @@ def _seeded_roles(
     the aborted game ran (same seed + config) and roles never change mid-game, so
     this reconstructs the identical map the in-memory result would have carried —
     still the seeded setup, never the replay JSONL (the leak firewall).
+
+    ``tasks_per_crewmate`` is threaded so the re-seed uses the exact config the
+    aborted game ran. Roles themselves are independent of the task count, but
+    passing it keeps this call identical to the game's own
+    :func:`seed_initial_state` invocation rather than relying on a default that
+    could drift from the harness.
     """
 
     state = seed_initial_state(
@@ -416,6 +427,7 @@ def _seeded_roles(
         game_map=game_map,
         num_players=num_players,
         num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
     )
     return {player_id: player.role for player_id, player in state.players.items()}
 

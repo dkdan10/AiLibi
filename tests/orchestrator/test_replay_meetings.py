@@ -229,7 +229,12 @@ def _seed_with_corpse(
     )
 
     def _stub(
-        *, seed: int, game_map: Map, num_players: int, num_impostors: int = 1
+        *,
+        seed: int,
+        game_map: Map,
+        num_players: int,
+        num_impostors: int = 1,
+        tasks_per_crewmate: int = 1,
     ) -> WorldState:
         return state_with_body
 

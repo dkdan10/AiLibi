@@ -93,6 +93,41 @@ Outcome: TypeAlias = Literal[
 DEFAULT_MAX_TICKS: Final[int] = 1000
 DEFAULT_NUM_PLAYERS: Final[int] = 4
 DEFAULT_NUM_IMPOSTORS: Final[int] = 1
+# Locked Phase 7 Wave 0 default (diagnosis audit 2026-05-30-1952 §1, §3): one
+# task per crewmate ends 4p/1i games by median tick 9, before any
+# kill->body->report chain can complete (4/50 meetings). Two tasks per crewmate
+# lengthens games so bodies can outlive the win condition. The seeder parameter
+# itself stays 1 (see ``orchestrator.seeder.seed_initial_state``); this
+# default-of-2 is applied only at the harness/CLI layer, so the committed-replay
+# loader keeps re-seeding the 4p/1i baseline byte-identically.
+DEFAULT_TASKS_PER_CREWMATE: Final[int] = 2
+
+
+@dataclass(frozen=True)
+class RosterPreset:
+    """A named, data-only roster configuration (DESIGN.md §1.4, §3.1).
+
+    Bundles the three roster knobs — ``num_players``, ``num_impostors``, and
+    ``tasks_per_crewmate`` — under one name so the eval harness (and, in a later
+    frontend task, the replay picker) can refer to a config by name instead of
+    restating all three values. Frozen and behaviour-free by design: a future
+    frontend task can surface the same names without a code change.
+    """
+
+    num_players: int
+    num_impostors: int
+    tasks_per_crewmate: int
+
+
+# The two Phase 7 Wave 0 roster presets (diagnosis audit 2026-05-30-1952 §3:
+# 4p/1i ~= 10% vs 7p/2i = 63% meeting rate). ``4p1i`` is pinned at
+# ``tasks_per_crewmate=1`` — NOT the new default of 2 — so it reproduces the
+# byte-identical committed 4p/1i baseline; ``7p2i`` is the new meeting-heavy
+# config at 2 tasks per crewmate.
+ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
+    "4p1i": RosterPreset(num_players=4, num_impostors=1, tasks_per_crewmate=1),
+    "7p2i": RosterPreset(num_players=7, num_impostors=2, tasks_per_crewmate=2),
+}
 
 # Static map of prompt-template id → version string. The versions are
 # embedded as comments in the .j2 files (see
@@ -629,6 +664,7 @@ class HeadlessGame:
         audit_log_path: Path | None = None,
         num_players: int = DEFAULT_NUM_PLAYERS,
         num_impostors: int = DEFAULT_NUM_IMPOSTORS,
+        tasks_per_crewmate: int = DEFAULT_TASKS_PER_CREWMATE,
         scheduler: TickScheduler | None = None,
         meeting_runner: MeetingRunner | None = None,
         force: bool = False,
@@ -650,6 +686,7 @@ class HeadlessGame:
         )
         self._num_players = num_players
         self._num_impostors = num_impostors
+        self._tasks_per_crewmate = tasks_per_crewmate
         self._scheduler = (
             scheduler
             if scheduler is not None
@@ -686,6 +723,7 @@ class HeadlessGame:
             game_map=self._game_map,
             num_players=self._num_players,
             num_impostors=self._num_impostors,
+            tasks_per_crewmate=self._tasks_per_crewmate,
         )
         observation_service = ObservationService(
             game_map=self._game_map,
@@ -1135,6 +1173,7 @@ __all__ = [
     "DEFAULT_NUM_IMPOSTORS",
     "DEFAULT_NUM_PLAYERS",
     "DEFAULT_PROMPT_VERSIONS",
+    "DEFAULT_TASKS_PER_CREWMATE",
     "DefaultMeetingRunner",
     "HeadlessGame",
     "HeadlessGameResult",
@@ -1142,6 +1181,8 @@ __all__ = [
     "MeetingAwareAgent",
     "MeetingRunner",
     "Outcome",
+    "ROSTER_PRESETS",
+    "RosterPreset",
     "TacticalAgent",
     "apply_meeting_result",
     "build_default_agent_factory",
