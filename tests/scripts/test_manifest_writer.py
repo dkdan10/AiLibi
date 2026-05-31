@@ -8,6 +8,7 @@ committed samples but only ever writes into ``tmp_path``.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 
@@ -347,6 +348,23 @@ def test_prune_drops_rows_without_files(small_samples: Path, tmp_path: Path) -> 
     assert set(mw.parse_manifest(manifest.read_text())) == {0, 22}
 
 
+def test_update_routes_to_per_set_subdir_manifest(small_samples: Path) -> None:
+    # Per-set routing (Task 7.4): an update targeting a 7p2i-style subdir defaults
+    # the manifest to that subdir's MANIFEST.md (from --sample-dir), never the flat
+    # set's — so a 7p/2i refresh cannot overwrite the 4p/1i baseline's provenance.
+    subset = small_samples / "7p2i"
+    subset.mkdir()
+    (subset / "replay-seed-22.jsonl").write_bytes(
+        (small_samples / "replay-seed-22.jsonl").read_bytes()
+    )
+    # No --manifest passed: it must default to <sample-dir>/MANIFEST.md.
+    rc = mw.main(["update", "--seeds", "22", "--sample-dir", str(subset)])
+    assert rc == 0
+    assert set(mw.parse_manifest((subset / "MANIFEST.md").read_text())) == {22}
+    # The flat set's manifest was never created or touched by the per-set update.
+    assert not (small_samples / "MANIFEST.md").exists()
+
+
 def test_main_prune_keeps_rows_with_files(small_samples: Path, tmp_path: Path) -> None:
     manifest = tmp_path / "MANIFEST.md"
     mw.rebuild_manifest(manifest, small_samples)
@@ -418,3 +436,200 @@ def test_canonicalize_removes_alias_and_prunes_stray_row(tmp_path: Path) -> None
     ]
     # The stray seed-50 row is pruned (no file); seed-1 keeps its row.
     assert set(mw.parse_manifest(manifest.read_text())) == {1}
+
+
+# -- roster descriptor (Task 7.4) ---------------------------------------------
+
+
+def test_ensure_roster_writes_sidecar_for_non_default(tmp_path: Path) -> None:
+    status = mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    assert "wrote roster descriptor" in status
+    assert json.loads((tmp_path / "roster.json").read_text()) == {
+        "num_players": 7,
+        "num_impostors": 2,
+        "tasks_per_crewmate": 2,
+    }
+
+
+def test_ensure_roster_written_sidecar_parses_via_loader(tmp_path: Path) -> None:
+    # The writer's output must round-trip through the loader's reader unchanged,
+    # or a generated 7p/2i set would fail to reconstruct after spend.
+    from api.replay_loader import RosterConfig, _load_roster_config
+
+    mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    assert _load_roster_config(tmp_path) == RosterConfig(
+        num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+
+
+def test_ensure_roster_flat_baseline_skips_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The flat baseline DIR + 4p/1i roster is the ONLY descriptor-less case: the
+    # loader reconstructs it from its defaults, so no sidecar is written.
+    monkeypatch.setattr(mw, "_DEFAULT_SAMPLE_DIR", tmp_path)
+    status = mw.ensure_roster_descriptor(
+        tmp_path, num_players=4, num_impostors=1, tasks_per_crewmate=1
+    )
+    assert "no sidecar" in status
+    assert not (tmp_path / "roster.json").exists()
+
+
+def test_ensure_roster_flat_baseline_rejects_non_4p1i(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A non-4p/1i roster pointed at the flat baseline dir (e.g. a 7p/2i refresh
+    # that forgot AILIBI_SAMPLE_DIR) must raise before any write — writing a
+    # sidecar there would break the committed 4p/1i baseline's reconstruction.
+    monkeypatch.setattr(mw, "_DEFAULT_SAMPLE_DIR", tmp_path)
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(
+            tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+        )
+    assert not (tmp_path / "roster.json").exists()
+
+
+def test_ensure_roster_is_idempotent_when_matching(tmp_path: Path) -> None:
+    mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    before = (tmp_path / "roster.json").read_bytes()
+    status = mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    assert "already matches" in status
+    assert (tmp_path / "roster.json").read_bytes() == before
+
+
+def test_ensure_roster_fails_loud_on_disagreement(tmp_path: Path) -> None:
+    # A pre-existing descriptor that disagrees with the requested roster must
+    # raise (before any spend), never be silently overwritten — this catches a
+    # refresh that forgot/mistyped the roster env vars for a committed set.
+    mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(
+            tmp_path, num_players=7, num_impostors=1, tasks_per_crewmate=2
+        )
+
+
+def test_main_roster_writes_descriptor(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rc = mw.main(
+        [
+            "roster",
+            "--sample-dir",
+            str(tmp_path),
+            "--num-players",
+            "7",
+            "--num-impostors",
+            "2",
+            "--tasks-per-crewmate",
+            "2",
+        ]
+    )
+    assert rc == 0
+    assert (tmp_path / "roster.json").exists()
+    assert "wrote roster descriptor" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "roster",
+    [
+        {
+            "num_players": 7,
+            "num_impostors": 1,
+            "tasks_per_crewmate": 1,
+        },  # num-players only
+        {
+            "num_players": 4,
+            "num_impostors": 1,
+            "tasks_per_crewmate": 1,
+        },  # baseline roster
+    ],
+)
+def test_ensure_roster_subdir_always_writes_descriptor(
+    tmp_path: Path, roster: dict[str, int]
+) -> None:
+    # A per-set subdir target is never the flat baseline DIR, so it ALWAYS gets an
+    # explicit descriptor — even a 4p/1i subdir set (e.g. a refresh that forgot the
+    # roster env vars). "No descriptor" is reserved for the flat baseline, so a
+    # subdir is never left descriptor-less and silently treated as 4p/1i.
+    status = mw.ensure_roster_descriptor(tmp_path, **roster)
+    assert "wrote roster descriptor" in status
+    assert json.loads((tmp_path / "roster.json").read_text()) == roster
+
+
+@pytest.mark.parametrize(
+    ("payload", "requested"),
+    [
+        # 7.0 == 7 and true == 1 under Python dict equality, so a plain `!=` check
+        # would treat these as matching — but the loader rejects float/bool, so
+        # they must be caught at this pre-spend gate, not after the money is spent.
+        (
+            '{"num_players": 7.0, "num_impostors": 2, "tasks_per_crewmate": 2}',
+            {"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 2},
+        ),
+        (
+            '{"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": true}',
+            {"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 1},
+        ),
+    ],
+)
+def test_ensure_roster_rejects_type_malformed_existing_descriptor(
+    tmp_path: Path, payload: str, requested: dict[str, int]
+) -> None:
+    (tmp_path / "roster.json").write_text(payload, encoding="utf-8")
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(tmp_path, **requested)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 0},
+        {"num_players": 0, "num_impostors": 1, "tasks_per_crewmate": 1},
+        {"num_players": 7, "num_impostors": -1, "tasks_per_crewmate": 2},
+    ],
+)
+def test_ensure_roster_rejects_non_positive_requested(
+    tmp_path: Path, bad: dict[str, int]
+) -> None:
+    # A mistyped non-positive env value must raise BEFORE writing, so no malformed
+    # sidecar is left in the directory to poison the set.
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(tmp_path, **bad)
+    assert not (tmp_path / "roster.json").exists()
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"num_players": 1, "num_impostors": 1, "tasks_per_crewmate": 1},  # players < 2
+        {
+            "num_players": 2,
+            "num_impostors": 2,
+            "tasks_per_crewmate": 1,
+        },  # impostors==players
+        {
+            "num_players": 10,
+            "num_impostors": 1,
+            "tasks_per_crewmate": 2,
+        },  # pool exhausted
+    ],
+)
+def test_ensure_roster_rejects_seeder_invalid_roster(
+    tmp_path: Path, invalid: dict[str, int]
+) -> None:
+    # Positive ints the SEEDER rejects (bad parity / exhausted task pool) must fail
+    # BEFORE writing, so a failed refresh leaves no poison sidecar that a later
+    # corrected refresh would refuse to overwrite (and the loader would fail on).
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(tmp_path, **invalid)
+    assert not (tmp_path / "roster.json").exists()

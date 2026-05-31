@@ -29,6 +29,18 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SAMPLE_DIR="${AILIBI_SAMPLE_DIR:-$REPO_ROOT/replays/samples}"
 MANIFEST="${AILIBI_MANIFEST:-$SAMPLE_DIR/MANIFEST.md}"
 
+# Per-set roster (Task 7.4). Threaded into scripts/run_tournament.py so a refresh
+# records each set at its own roster. The defaults reproduce the committed FLAT
+# 4p/1i baseline at ONE task per crewmate — NOT run_tournament.py's harness
+# default of 2 — so a default refresh re-records replays/samples/ byte-identically
+# (the committed loader re-seeds the flat set at 1 task/crewmate). Task 7.5 sets
+# these alongside AILIBI_SAMPLE_DIR/AILIBI_MANIFEST to generate the 7p/2i set:
+#   AILIBI_NUM_PLAYERS=7 AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2 \
+#   AILIBI_SAMPLE_DIR=replays/samples/7p2i AILIBI_MANIFEST=replays/samples/7p2i/MANIFEST.md
+NUM_PLAYERS="${AILIBI_NUM_PLAYERS:-4}"
+NUM_IMPOSTORS="${AILIBI_NUM_IMPOSTORS:-1}"
+TASKS_PER_CREWMATE="${AILIBI_TASKS_PER_CREWMATE:-1}"
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") (--full | --meetings | --seeds N,N,N) [--dry-run]
@@ -160,14 +172,64 @@ case "$mode" in
     ;;
 esac
 
+# Validate the roster env as positive integers up front (Task 7.4), for BOTH the
+# dry-run and real paths, and canonicalize to base 10. Without this a typo like
+# AILIBI_NUM_PLAYERS=7p makes the later `[[ -ne ]]` arithmetic error out but still
+# exit 0 with a misleading plan, and a leading-zero value like 08 is parsed as
+# octal (`value too great for base`) — which would likewise skip the positivity
+# check AND the flat-baseline guard below. Normalize with 10# (as seed parsing
+# does) so every later `-lt`/`-ne` and every threaded flag uses a clean base-10
+# integer. Fail loud here so the per-set routing the dry-run reports is trustworthy.
+for _roster_var in NUM_PLAYERS NUM_IMPOSTORS TASKS_PER_CREWMATE; do
+  _roster_val="${!_roster_var}"
+  if [[ ! "$_roster_val" =~ ^[0-9]+$ ]]; then
+    echo "Error: AILIBI_$_roster_var must be a positive integer, got '$_roster_val'." >&2
+    exit 1
+  fi
+  _roster_val="$((10#$_roster_val))" # 08 -> 8, 007 -> 7 (base 10, not octal)
+  if [[ "$_roster_val" -lt 1 ]]; then
+    echo "Error: AILIBI_$_roster_var must be a positive integer, got '${!_roster_var}'." >&2
+    exit 1
+  fi
+  printf -v "$_roster_var" '%s' "$_roster_val" # write the normalized value back
+done
+
+# The two-set contract reserves the descriptor-less default for EXACTLY the flat
+# 4p/1i baseline at $REPO_ROOT/replays/samples. Detect whether this refresh
+# targets it (realpath -m so a trailing slash / relative AILIBI_SAMPLE_DIR still
+# matches), and fail loud BEFORE any spend if a non-4p/1i roster is pointed at it
+# — e.g. a 7p/2i refresh that forgot AILIBI_SAMPLE_DIR would otherwise write
+# replays/samples/roster.json and break the committed baseline's reconstruction.
+is_flat_baseline=0
+if [[ "$(realpath -m "$SAMPLE_DIR")" == "$(realpath -m "$REPO_ROOT/replays/samples")" ]]; then
+  is_flat_baseline=1
+fi
+if [[ "$is_flat_baseline" -eq 1 ]] &&
+  [[ "$NUM_PLAYERS" -ne 4 || "$NUM_IMPOSTORS" -ne 1 || "$TASKS_PER_CREWMATE" -ne 1 ]]; then
+  echo "Error: refusing to refresh the flat 4p/1i baseline ($SAMPLE_DIR) with a" \
+    "non-4p/1i roster (${NUM_PLAYERS}p/${NUM_IMPOSTORS}i/${TASKS_PER_CREWMATE}t)." \
+    "Point AILIBI_SAMPLE_DIR at a per-set subdir (e.g. replays/samples/7p2i) --" \
+    "did you forget it?" >&2
+  exit 1
+fi
+
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
   echo "[dry-run] seeds: $seeds_csv"
+  echo "[dry-run] roster: num_players=$NUM_PLAYERS num_impostors=$NUM_IMPOSTORS tasks_per_crewmate=$TASKS_PER_CREWMATE"
+  # Mirror _manifest_writer.ensure_roster_descriptor: only the flat 4p/1i baseline
+  # dir is descriptor-less; every per-set subdir gets an explicit sidecar (even a
+  # 4p/1i subdir set). (A non-4p/1i roster on the flat dir already exited above.)
+  if [[ "$is_flat_baseline" -eq 1 ]]; then
+    echo "[dry-run] roster descriptor: flat 4p/1i baseline — no sidecar written"
+  else
+    echo "[dry-run] roster descriptor: would ensure $SAMPLE_DIR/roster.json = {num_players: $NUM_PLAYERS, num_impostors: $NUM_IMPOSTORS, tasks_per_crewmate: $TASKS_PER_CREWMATE} (fails loud if an existing one disagrees)"
+  fi
   echo "[dry-run] sample dir: $SAMPLE_DIR"
   echo "[dry-run] provider: AILIBI_LLM_PROVIDER=anthropic (forced)"
   echo "[dry-run] meeting model: ${AILIBI_LLM_MEETING_MODEL:-(provider default)}"
   echo "[dry-run] per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
-  echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --force"
+  echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $NUM_PLAYERS --num-impostors $NUM_IMPOSTORS --tasks-per-crewmate $TASKS_PER_CREWMATE --force"
   if [[ "$mode" == "full" ]]; then
     echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49 and zero-padded aliases like replay-seed-01.jsonl) and prune their manifest rows"
   fi
@@ -183,6 +245,27 @@ if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
   exit 1
 fi
 echo "Using API key prefix: ${ANTHROPIC_API_KEY:0:8}"
+
+# Create the target set directory before any spend (Task 7.4). A per-set refresh
+# (e.g. AILIBI_SAMPLE_DIR=replays/samples/7p2i) may point at a brand-new subdir;
+# without this the per-seed `mv` into $SAMPLE_DIR below would fail AFTER a
+# real-provider run had already spent. Done after the API-key preflight so a
+# dry-run still touches nothing and a missing-key run still fails first; it also
+# guarantees the staging dir's parent (dirname "$SAMPLE_DIR") exists. Idempotent.
+mkdir -p "$SAMPLE_DIR"
+
+# Ensure the per-set roster descriptor is consistent with the requested roster
+# BEFORE spending (Task 7.4). The loader reconstructs a non-default (multi-impostor
+# / multi-task) set only from roster.json, so without it the freshly generated
+# replays would fail the determinism check AFTER the money is spent. This writes
+# the sidecar for a non-default set, no-ops for the flat 4p/1i default (no
+# sidecar), and fails loud (set -e aborts before any provider call) if an existing
+# descriptor disagrees with the requested roster.
+uv run python "$REPO_ROOT/scripts/_manifest_writer.py" roster \
+  --sample-dir "$SAMPLE_DIR" \
+  --num-players "$NUM_PLAYERS" \
+  --num-impostors "$NUM_IMPOSTORS" \
+  --tasks-per-crewmate "$TASKS_PER_CREWMATE"
 
 # Force the real provider. llm.provider.build_default_client() defaults to the
 # FAKE provider whenever AILIBI_LLM_PROVIDER is unset (its documented default so
@@ -227,6 +310,9 @@ for seed in "${seed_list[@]}"; do
     --start-seed "$seed" \
     --num-games 1 \
     --output-dir "$stage_dir" \
+    --num-players "$NUM_PLAYERS" \
+    --num-impostors "$NUM_IMPOSTORS" \
+    --tasks-per-crewmate "$TASKS_PER_CREWMATE" \
     --force
   # Atomic replace on success, THEN sync this seed's manifest row, so the live
   # sample and its provenance never drift. Per-seed (rather than one update
