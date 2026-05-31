@@ -706,3 +706,45 @@ def test_load_roster_config_malformed_fails_loud(tmp_path: Path, payload: str) -
     (tmp_path / "roster.json").write_text(payload, encoding="utf-8")
     with pytest.raises(ValueError):
         replay_loader._load_roster_config(tmp_path)
+
+
+def test_roster_descriptor_added_after_construction_is_picked_up(
+    tmp_path: Path, multi_impostor_replay_bytes: bytes
+) -> None:
+    # The roster is read per-walk (not cached at construction): adding the correct
+    # descriptor to an already-constructed loader lets a multi-impostor set
+    # reconstruct without re-creating the loader.
+    (tmp_path / "replay-seed-0.jsonl").write_bytes(multi_impostor_replay_bytes)
+    loader = ReplayLoader(replay_dir=tmp_path)
+    # No descriptor yet -> flat 4p/1i default -> the 7p/2i replay can't reconstruct.
+    with pytest.raises(ReplayStateMismatchError):
+        loader.load_replay("headless-seed-0")
+
+    _write_roster(tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2)
+
+    replay = loader.load_replay("headless-seed-0")
+    assert sum(1 for p in replay.players if p.role == "IMPOSTOR") == 2
+
+
+def test_roster_descriptor_change_in_place_is_not_served_stale(
+    tmp_path: Path, multi_impostor_replay_bytes: bytes
+) -> None:
+    # H-H-2 parity for the sidecar: the roster.json mtime is folded into the
+    # reconstruction cache key, so an in-place descriptor rewrite on an
+    # already-constructed loader invalidates the cached walk rather than serving
+    # the stale roster. Start with the correct descriptor (cached success), then
+    # rewrite it wrong in place + bump its mtime; the SAME loader must re-seed
+    # with the new (wrong) roster and fail loud — not return the cached success.
+    (tmp_path / "replay-seed-0.jsonl").write_bytes(multi_impostor_replay_bytes)
+    _write_roster(tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    loader.load_replay("headless-seed-0")  # caches a successful reconstruction
+
+    # Replay file untouched; only the sidecar changes (+ mtime bump to beat coarse
+    # filesystem timestamp resolution).
+    _write_roster(tmp_path, num_players=7, num_impostors=1, tasks_per_crewmate=2)
+    _bump_mtime(tmp_path / "roster.json")
+
+    with pytest.raises(ReplayStateMismatchError):
+        loader.load_replay("headless-seed-0")

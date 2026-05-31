@@ -176,6 +176,11 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
   echo "[dry-run] seeds: $seeds_csv"
   echo "[dry-run] roster: num_players=$NUM_PLAYERS num_impostors=$NUM_IMPOSTORS tasks_per_crewmate=$TASKS_PER_CREWMATE"
+  if [[ "$NUM_IMPOSTORS" -ne 1 || "$TASKS_PER_CREWMATE" -ne 1 ]]; then
+    echo "[dry-run] roster descriptor: would ensure $SAMPLE_DIR/roster.json = {num_players: $NUM_PLAYERS, num_impostors: $NUM_IMPOSTORS, tasks_per_crewmate: $TASKS_PER_CREWMATE} (fails loud if an existing one disagrees)"
+  else
+    echo "[dry-run] roster descriptor: flat 4p/1i default — no sidecar written"
+  fi
   echo "[dry-run] sample dir: $SAMPLE_DIR"
   echo "[dry-run] provider: AILIBI_LLM_PROVIDER=anthropic (forced)"
   echo "[dry-run] meeting model: ${AILIBI_LLM_MEETING_MODEL:-(provider default)}"
@@ -204,6 +209,19 @@ echo "Using API key prefix: ${ANTHROPIC_API_KEY:0:8}"
 # dry-run still touches nothing and a missing-key run still fails first; it also
 # guarantees the staging dir's parent (dirname "$SAMPLE_DIR") exists. Idempotent.
 mkdir -p "$SAMPLE_DIR"
+
+# Ensure the per-set roster descriptor is consistent with the requested roster
+# BEFORE spending (Task 7.4). The loader reconstructs a non-default (multi-impostor
+# / multi-task) set only from roster.json, so without it the freshly generated
+# replays would fail the determinism check AFTER the money is spent. This writes
+# the sidecar for a non-default set, no-ops for the flat 4p/1i default (no
+# sidecar), and fails loud (set -e aborts before any provider call) if an existing
+# descriptor disagrees with the requested roster.
+uv run python "$REPO_ROOT/scripts/_manifest_writer.py" roster \
+  --sample-dir "$SAMPLE_DIR" \
+  --num-players "$NUM_PLAYERS" \
+  --num-impostors "$NUM_IMPOSTORS" \
+  --tasks-per-crewmate "$TASKS_PER_CREWMATE"
 
 # Force the real provider. llm.provider.build_default_client() defaults to the
 # FAKE provider whenever AILIBI_LLM_PROVIDER is unset (its documented default so

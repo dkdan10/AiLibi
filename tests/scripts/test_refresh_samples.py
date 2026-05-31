@@ -245,6 +245,34 @@ def test_dry_run_threads_roster_flags_into_tournament_invocation() -> None:
     assert "--num-players 4 --num-impostors 1 --tasks-per-crewmate 1" in proc.stdout
 
 
+def test_dry_run_default_roster_writes_no_descriptor() -> None:
+    # The flat 4p/1i default needs no sidecar; the dry-run must say so.
+    proc = _run("--seeds", "22", "--dry-run", env=_clean_env())
+    assert proc.returncode == 0
+    assert (
+        "[dry-run] roster descriptor: flat 4p/1i default — no sidecar written"
+        in proc.stdout
+    )
+
+
+def test_dry_run_non_default_roster_previews_descriptor(tmp_path: Path) -> None:
+    # A 7p/2i refresh must preview that it would ensure the set's roster.json,
+    # so the descriptor write is observable before any spend.
+    set_dir = tmp_path / "7p2i"
+    env = _clean_env()
+    env.update(
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+        AILIBI_NUM_PLAYERS="7",
+        AILIBI_NUM_IMPOSTORS="2",
+        AILIBI_TASKS_PER_CREWMATE="2",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert f"would ensure {set_dir}/roster.json" in proc.stdout
+    assert "{num_players: 7, num_impostors: 2, tasks_per_crewmate: 2}" in proc.stdout
+
+
 def test_dry_run_routes_per_set_for_7p2i(tmp_path: Path) -> None:
     # Task 7.5 generates the 7p/2i set by setting the roster + per-set dir/manifest
     # env hooks. The dry-run must show the resolved roster, the per-set SAMPLE_DIR

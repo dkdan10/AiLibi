@@ -22,11 +22,16 @@ Commands:
   passes ``--git-sha`` / ``--refreshed-at`` for the just-refreshed files.
 * ``sum-cost --seeds N,N`` — print (stdout, one float) the summed ``cost_usd``
   across the listed seeds' replays. Used for the post-refresh spend line.
+* ``roster --sample-dir DIR --num-players N --num-impostors M
+  --tasks-per-crewmate K`` — ensure the set's ``roster.json`` matches the
+  requested roster (write it for a non-default set, fail loud if an existing one
+  disagrees), so a per-set refresh produces a reconstructable set.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -52,6 +57,16 @@ from orchestrator.replay import (  # noqa: E402
 _DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples"
 _FILENAME_PREFIX = "replay-seed-"
 _FILENAME_SUFFIX = ".jsonl"
+
+# Per-set roster sidecar (Task 7.4). Mirrors api.replay_loader: a set whose
+# roster is the flat MVP default (num_impostors=1 AND tasks_per_crewmate=1, with
+# num_players inferred from the action stream) needs NO sidecar; any other roster
+# (multi-impostor and/or multi-task) is reconstructable only from this descriptor,
+# so a per-set refresh must write it BEFORE spending. Kept as literals (not an
+# orchestrator.game import) so this lightweight refresh helper stays cheap to load.
+_ROSTER_FILENAME = "roster.json"
+_DEFAULT_ROSTER_NUM_IMPOSTORS = 1
+_DEFAULT_ROSTER_TASKS_PER_CREWMATE = 1
 
 # Sentinel for the prompt_versions column of a sample that had no meetings (no
 # LLM calls, hence no prompt templates in play). refresh_samples.sh keys its
@@ -417,6 +432,75 @@ def sum_cost(sample_dir: Path, seeds: Sequence[int]) -> float:
     return sum(compute_cost_usd(_sample_path(sample_dir, seed)) for seed in seeds)
 
 
+def _roster_needs_sidecar(num_impostors: int, tasks_per_crewmate: int) -> bool:
+    """True when a set's roster cannot reconstruct from the loader's defaults.
+
+    The loader infers ``num_players`` from the action stream and defaults
+    ``num_impostors``/``tasks_per_crewmate`` to ``1`` when there is no sidecar, so
+    only a multi-impostor and/or multi-task set actually requires one.
+    """
+
+    return (
+        num_impostors != _DEFAULT_ROSTER_NUM_IMPOSTORS
+        or tasks_per_crewmate != _DEFAULT_ROSTER_TASKS_PER_CREWMATE
+    )
+
+
+def ensure_roster_descriptor(
+    sample_dir: Path,
+    *,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+) -> str:
+    """Make ``<sample_dir>/roster.json`` consistent with the requested roster.
+
+    Run by ``refresh_samples.sh`` BEFORE any real-provider spend so a per-set
+    refresh produces a set the loader can actually reconstruct, instead of
+    failing the per-tick state-hash check AFTER the money is spent (the sidecar
+    carries ``num_impostors``/``tasks_per_crewmate``, which are not recoverable
+    from the replay). Behaviour:
+
+    * if a sidecar exists and DISAGREES with the requested roster, raise — never
+      silently overwrite a committed set's descriptor; this also catches a
+      refresh that forgot (or mistyped) the roster env vars before spending;
+    * else if the requested roster needs a sidecar and none exists, write it;
+    * else (flat-default roster, or an already-matching sidecar) leave the
+      directory as-is so the loader's default path applies.
+
+    Returns a one-line operator status. Idempotent: a matching sidecar is a no-op.
+    The written JSON matches ``api.replay_loader.RosterConfig`` exactly (the three
+    integer keys, no extras), so the loader parses it without falling back.
+    """
+
+    expected = {
+        "num_players": num_players,
+        "num_impostors": num_impostors,
+        "tasks_per_crewmate": tasks_per_crewmate,
+    }
+    path = sample_dir / _ROSTER_FILENAME
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"unreadable roster descriptor {path}: {exc}") from exc
+        if existing != expected:
+            raise ValueError(
+                f"roster descriptor {path} disagrees with the requested roster "
+                f"(on disk {existing!r}, requested {expected!r}); refusing to "
+                "overwrite. Re-check AILIBI_NUM_PLAYERS / AILIBI_NUM_IMPOSTORS / "
+                "AILIBI_TASKS_PER_CREWMATE for this set."
+            )
+        return f"roster descriptor already matches: {path}"
+    if not _roster_needs_sidecar(num_impostors, tasks_per_crewmate):
+        return (
+            f"flat {num_players}p/{num_impostors}i default roster — no sidecar "
+            f"needed in {sample_dir}"
+        )
+    _atomic_write_text(path, json.dumps(expected, sort_keys=True) + "\n")
+    return f"wrote roster descriptor: {path}"
+
+
 def _parse_seed_csv(value: str) -> list[int]:
     seeds: list[int] = []
     for token in value.split(","):
@@ -494,6 +578,18 @@ def _build_parser() -> argparse.ArgumentParser:
     sum_cost_parser.add_argument("--seeds", type=_parse_seed_csv, required=True)
     sum_cost_parser.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
 
+    roster = sub.add_parser(
+        "roster",
+        help=(
+            "ensure <sample-dir>/roster.json matches the requested roster (write "
+            "it for a non-default set, fail loud if an existing one disagrees)"
+        ),
+    )
+    roster.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
+    roster.add_argument("--num-players", type=int, required=True)
+    roster.add_argument("--num-impostors", type=int, required=True)
+    roster.add_argument("--tasks-per-crewmate", type=int, required=True)
+
     return parser
 
 
@@ -537,6 +633,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "sum-cost":
         print(f"{sum_cost(args.sample_dir, args.seeds):.4f}")
+        return 0
+    if args.command == "roster":
+        status = ensure_roster_descriptor(
+            args.sample_dir,
+            num_players=args.num_players,
+            num_impostors=args.num_impostors,
+            tasks_per_crewmate=args.tasks_per_crewmate,
+        )
+        print(status, file=sys.stderr)
         return 0
     return 1  # unreachable: subparser is required
 

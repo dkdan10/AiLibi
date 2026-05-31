@@ -273,10 +273,6 @@ class ReplayLoader:
         metadata_cache_size: int = _DEFAULT_METADATA_CACHE_SIZE,
     ) -> None:
         self._replay_dir = replay_dir
-        # Read the per-set roster descriptor once at construction (Task 7.4). A
-        # flat dir with no ``roster.json`` yields ``None`` and the MVP 4p/1i
-        # re-seed default; a present-but-malformed descriptor fails loud here.
-        self._roster_config = _load_roster_config(replay_dir)
         self._game_map = game_map if game_map is not None else load_canonical_map()
         self._map_view = self._build_map_view()
         self._cached_load = lru_cache(maxsize=cache_size)(self._load_replay)
@@ -328,7 +324,7 @@ class ReplayLoader:
         """
 
         path, seed = self._resolve(game_id)
-        return self._cached_load(seed, path, _mtime_ns(path))
+        return self._cached_load(seed, path, _mtime_ns(path), self._roster_mtime())
 
     def cost_summary(self) -> EvalCostSummaryView:
         """Aggregate LLM cost + decisive-outcome split across every replay.
@@ -394,7 +390,9 @@ class ReplayLoader:
         """
 
         path, seed = self._resolve(game_id)
-        memories = self._cached_memories(seed, path, _mtime_ns(path))
+        memories = self._cached_memories(
+            seed, path, _mtime_ns(path), self._roster_mtime()
+        )
         known_meetings = {meeting for meeting, _ in memories}
         if meeting_id not in known_meetings:
             raise KeyError(f"meeting not found: {meeting_id}")
@@ -412,11 +410,15 @@ class ReplayLoader:
 
     # -- cached implementations ------------------------------------------
 
-    def _load_replay(self, seed: int, path: Path, _mtime_key: int) -> ReplayView:
-        # ``_mtime_key`` participates in the LRU key only (Audit H-H-2): an
-        # in-place rewrite changes the file's mtime, so the refreshed replay is a
-        # cache miss and is never served stale. Resolution + seed parsing already
-        # happened in ``load_replay`` (via ``_resolve``).
+    def _load_replay(
+        self, seed: int, path: Path, _mtime_key: int, _roster_mtime_key: int
+    ) -> ReplayView:
+        # ``_mtime_key`` / ``_roster_mtime_key`` participate in the LRU key only
+        # (Audit H-H-2): an in-place rewrite of the replay OR the per-set
+        # ``roster.json`` changes one of them, so the refreshed reconstruction is
+        # a cache miss and is never served stale (the roster is re-read in
+        # ``_walk``). Resolution + seed parsing already happened in
+        # ``load_replay`` (via ``_resolve``).
         walk = self._walk(path, seed, collect_memory=False)
         return ReplayView(
             metadata=self._metadata_view(path, seed),
@@ -431,9 +433,10 @@ class ReplayLoader:
         )
 
     def _reconstruct_meeting_memories(
-        self, seed: int, path: Path, _mtime_key: int
+        self, seed: int, path: Path, _mtime_key: int, _roster_mtime_key: int
     ) -> Mapping[tuple[str, str], AgentMemoryView]:
-        # ``_mtime_key`` keys the cache only (Audit H-H-2); see ``_load_replay``.
+        # ``_mtime_key`` / ``_roster_mtime_key`` key the cache only (Audit H-H-2);
+        # see ``_load_replay``.
         return self._walk(path, seed, collect_memory=True).memories
 
     # -- engine playback --------------------------------------------------
@@ -455,17 +458,21 @@ class ReplayLoader:
         failed_calls = tuple(e for e in entries if isinstance(e, FailedCallReplayEntry))
         meeting_by_tick = {entry.tick: entry for entry in meeting_entries}
 
-        # Re-seed with this set's roster (Task 7.4). When the set ships a
-        # ``roster.json`` descriptor, every knob comes from it — ``num_impostors``
-        # and ``tasks_per_crewmate`` are NOT recoverable from the action stream, so
-        # a multi-impostor / multi-task set can only reconstruct from the recorded
-        # roster. When there is NO descriptor (the flat 4p/1i baseline), keep the
-        # historical default verbatim: infer ``num_players`` from the actions, pin
-        # ``num_impostors`` to the MVP invariant, and let the seeder default
-        # ``tasks_per_crewmate`` to 1 — so the committed flat set stays
-        # byte-identical. A wrong descriptor cannot corrupt output: the per-tick
-        # ``state_hash`` check below fails loud (``ReplayStateMismatchError``).
-        roster = self._roster_config
+        # Re-seed with this set's roster (Task 7.4). The descriptor is read fresh
+        # here (not cached at construction) so an in-place ``roster.json`` add /
+        # change is picked up — its mtime is folded into the LRU key (see
+        # ``_load_replay``), so a stale loader is never served the old roster
+        # (Audit H-H-2 parity). When the set ships a ``roster.json``, every knob
+        # comes from it — ``num_impostors`` and ``tasks_per_crewmate`` are NOT
+        # recoverable from the action stream, so a multi-impostor / multi-task set
+        # can only reconstruct from the recorded roster. When there is NO
+        # descriptor (the flat 4p/1i baseline), keep the historical default
+        # verbatim: infer ``num_players`` from the actions, pin ``num_impostors``
+        # to the MVP invariant, and let the seeder default ``tasks_per_crewmate``
+        # to 1 — so the committed flat set stays byte-identical. A wrong descriptor
+        # cannot corrupt output: the per-tick ``state_hash`` check below fails loud
+        # (``ReplayStateMismatchError``).
+        roster = _load_roster_config(self._replay_dir)
         if roster is None:
             num_players = _infer_num_players(replay_entries)
             num_impostors = DEFAULT_NUM_IMPOSTORS
@@ -976,6 +983,20 @@ class ReplayLoader:
             if found_seed == seed:
                 return path
         return None
+
+    def _roster_mtime(self) -> int:
+        """Nanosecond mtime of the per-set ``roster.json`` for the LRU key.
+
+        Returns ``-1`` when the descriptor is absent — a sentinel distinct from
+        any real ``st_mtime_ns`` — so that adding, changing, or removing the
+        sidecar all change the reconstruction cache key and invalidate any
+        previously-cached walk (Audit H-H-2 parity for the roster sidecar).
+        """
+
+        try:
+            return (self._replay_dir / _ROSTER_FILENAME).stat().st_mtime_ns
+        except OSError:
+            return -1
 
 
 # ---------------------------------------------------------------------------

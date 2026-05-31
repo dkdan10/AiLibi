@@ -8,6 +8,7 @@ committed samples but only ever writes into ``tmp_path``.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 
@@ -435,3 +436,87 @@ def test_canonicalize_removes_alias_and_prunes_stray_row(tmp_path: Path) -> None
     ]
     # The stray seed-50 row is pruned (no file); seed-1 keeps its row.
     assert set(mw.parse_manifest(manifest.read_text())) == {1}
+
+
+# -- roster descriptor (Task 7.4) ---------------------------------------------
+
+
+def test_ensure_roster_writes_sidecar_for_non_default(tmp_path: Path) -> None:
+    status = mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    assert "wrote roster descriptor" in status
+    assert json.loads((tmp_path / "roster.json").read_text()) == {
+        "num_players": 7,
+        "num_impostors": 2,
+        "tasks_per_crewmate": 2,
+    }
+
+
+def test_ensure_roster_written_sidecar_parses_via_loader(tmp_path: Path) -> None:
+    # The writer's output must round-trip through the loader's reader unchanged,
+    # or a generated 7p/2i set would fail to reconstruct after spend.
+    from api.replay_loader import RosterConfig, _load_roster_config
+
+    mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    assert _load_roster_config(tmp_path) == RosterConfig(
+        num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+
+
+def test_ensure_roster_skips_sidecar_for_flat_default(tmp_path: Path) -> None:
+    # A flat 4p/1i set reconstructs from the loader's default path, so no sidecar
+    # is written (preserving the "flat dir + no sidecar = 4p/1i" invariant).
+    status = mw.ensure_roster_descriptor(
+        tmp_path, num_players=4, num_impostors=1, tasks_per_crewmate=1
+    )
+    assert "no sidecar" in status
+    assert not (tmp_path / "roster.json").exists()
+
+
+def test_ensure_roster_is_idempotent_when_matching(tmp_path: Path) -> None:
+    mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    before = (tmp_path / "roster.json").read_bytes()
+    status = mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    assert "already matches" in status
+    assert (tmp_path / "roster.json").read_bytes() == before
+
+
+def test_ensure_roster_fails_loud_on_disagreement(tmp_path: Path) -> None:
+    # A pre-existing descriptor that disagrees with the requested roster must
+    # raise (before any spend), never be silently overwritten — this catches a
+    # refresh that forgot/mistyped the roster env vars for a committed set.
+    mw.ensure_roster_descriptor(
+        tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(
+            tmp_path, num_players=7, num_impostors=1, tasks_per_crewmate=2
+        )
+
+
+def test_main_roster_writes_descriptor(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rc = mw.main(
+        [
+            "roster",
+            "--sample-dir",
+            str(tmp_path),
+            "--num-players",
+            "7",
+            "--num-impostors",
+            "2",
+            "--tasks-per-crewmate",
+            "2",
+        ]
+    )
+    assert rc == 0
+    assert (tmp_path / "roster.json").exists()
+    assert "wrote roster descriptor" in capsys.readouterr().err
