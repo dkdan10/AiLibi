@@ -36,7 +36,7 @@ still drift across Ollama/runtime versions.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -50,6 +50,12 @@ from llm.provider import (
     _compute_cost_usd,
     _extract_json_block,
 )
+
+if TYPE_CHECKING:
+    # Type-only import: the ``ollama`` SDK is imported lazily at call time
+    # inside :func:`_default_send` (see the module docstring), never at
+    # module-import time, so CI / fake-provider runs never load it.
+    from ollama import GenerateResponse
 
 
 DEFAULT_OLLAMA_HOST: Final[str] = "localhost:11434"
@@ -257,11 +263,44 @@ async def _default_send(
             f"generate call (model={model!r})"
         )
 
+    return _raw_from_generate_response(response, model=model)
+
+
+def _raw_from_generate_response(
+    response: GenerateResponse,
+    *,
+    model: str,
+) -> OllamaRawResponse:
+    """Map an Ollama ``GenerateResponse`` onto :class:`OllamaRawResponse`.
+
+    Fails loud when the OUTPUT counter (``eval_count``) is missing: a
+    completed non-streaming generation always reports it, so a ``None`` is
+    an anomalous response, and silently recording it as 0 output tokens
+    would under-count the per-game token budget — the real backstop for
+    Ollama, whose USD dimension is deliberately zeroed (AGENTS.md: no
+    silent fallbacks). ``prompt_eval_count`` is treated as 0 when absent:
+    Ollama omits it when the prompt is served entirely from the context
+    cache (no prompt evaluation ran), so 0 evaluated input tokens is the
+    correct charge for that call, not a papered-over error.
+
+    Split out of :func:`_default_send` so the mapping (which the live
+    transport otherwise hides) is unit-testable without a server.
+    """
+
+    if response.eval_count is None:
+        raise RuntimeError(
+            "Ollama response omitted eval_count (the output token counter) "
+            f"for a completed generation (model={model!r}); refusing to "
+            "record it as 0 tokens, which would under-count the per-game "
+            "token budget."
+        )
     return OllamaRawResponse(
         model=response.model or model,
         text=response.response or "",
+        # None/absent prompt_eval_count == fully-cached prompt: 0 input
+        # tokens were evaluated, which is the correct charge (see docstring).
         prompt_eval_count=response.prompt_eval_count or 0,
-        eval_count=response.eval_count or 0,
+        eval_count=response.eval_count,
     )
 
 

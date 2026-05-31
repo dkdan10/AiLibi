@@ -302,6 +302,77 @@ class TestTokenMappingAndCost:
         assert response.cost_usd == 0.0
 
 
+class TestTransportResponseMapping:
+    """The transport mapping (``_raw_from_generate_response``, split out of
+    ``_default_send``) fails loud when Ollama omits the OUTPUT token counter
+    and treats an absent prompt counter as a cached-prompt 0 — no silent
+    fallback on usage counters (Task 7.5 review fix)."""
+
+    def test_happy_path_maps_model_text_and_counters(self) -> None:
+        from ollama import GenerateResponse
+
+        from llm.ollama_client import _raw_from_generate_response
+
+        response = GenerateResponse(
+            model="server-model",
+            response="hello",
+            prompt_eval_count=11,
+            eval_count=7,
+        )
+        raw = _raw_from_generate_response(response, model="requested-model")
+
+        assert raw.model == "server-model"
+        assert raw.text == "hello"
+        assert raw.prompt_eval_count == 11
+        assert raw.eval_count == 7
+
+    def test_missing_eval_count_fails_loud(self) -> None:
+        from ollama import GenerateResponse
+
+        from llm.ollama_client import _raw_from_generate_response
+
+        # eval_count omitted -> None: a completed generation must report it,
+        # so recording 0 (which would under-count the token budget — the
+        # operative Ollama backstop) is refused, not papered over.
+        response = GenerateResponse(model="m", response="x", prompt_eval_count=5)
+        with pytest.raises(RuntimeError, match="eval_count"):
+            _raw_from_generate_response(response, model="m")
+
+    def test_zero_eval_count_is_kept_not_rejected(self) -> None:
+        from ollama import GenerateResponse
+
+        from llm.ollama_client import _raw_from_generate_response
+
+        # A genuine empty completion (0 output tokens) is distinct from a
+        # MISSING counter: 0 is a real, recordable value.
+        response = GenerateResponse(
+            model="m", response="", prompt_eval_count=5, eval_count=0
+        )
+        raw = _raw_from_generate_response(response, model="m")
+        assert raw.eval_count == 0
+
+    def test_absent_prompt_eval_count_is_zero_for_cache_hit(self) -> None:
+        from ollama import GenerateResponse
+
+        from llm.ollama_client import _raw_from_generate_response
+
+        # Ollama omits prompt_eval_count on a fully-cached prompt; 0 tokens
+        # were evaluated, which is the correct charge for that call.
+        response = GenerateResponse(model="m", response="x", eval_count=7)
+        raw = _raw_from_generate_response(response, model="m")
+        assert raw.prompt_eval_count == 0
+        assert raw.eval_count == 7
+
+    def test_model_falls_back_to_requested_when_absent(self) -> None:
+        from ollama import GenerateResponse
+
+        from llm.ollama_client import _raw_from_generate_response
+
+        response = GenerateResponse(response="x", prompt_eval_count=1, eval_count=1)
+        raw = _raw_from_generate_response(response, model="requested-model")
+        assert raw.model == "requested-model"
+
+
 class TestMalformedBodyBecomesFailedCall:
     """A malformed local output is a recoverable FailedCall (cost + partial
     response on the propagating ValidationError), NOT a hard crash — the
