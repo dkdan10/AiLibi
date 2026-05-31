@@ -8,9 +8,15 @@ happens here.
 
 from __future__ import annotations
 
+import contextlib
+import json
 import os
 import shutil
+import socket
 import subprocess
+import threading
+from collections.abc import Iterator, Sequence
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
@@ -19,13 +25,17 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _REFRESH_SH = _REPO_ROOT / "scripts" / "refresh_samples.sh"
 _MANIFEST = _REPO_ROOT / "replays" / "samples" / "MANIFEST.md"
 
+# The canonical Phase 7 local model the ollama preflight checks for (mirrors
+# llm.ollama_client.DEFAULT_OLLAMA_MODEL).
+_OLLAMA_MODEL = "qwen2.5:7b-instruct"
+
 pytestmark = pytest.mark.skipif(
     shutil.which("bash") is None, reason="bash required to run refresh_samples.sh"
 )
 
 
 def _run(
-    *args: str, env: dict[str, str] | None = None
+    *args: str, env: dict[str, str] | None = None, timeout: float | None = None
 ) -> subprocess.CompletedProcess[str]:
     # Default to the real defaults by stripping any ambient sample/manifest
     # overrides; callers that need a fixture manifest pass their own env.
@@ -41,6 +51,7 @@ def _run(
         capture_output=True,
         text=True,
         env=env,
+        timeout=timeout,
     )
 
 
@@ -144,13 +155,17 @@ def test_preflight_requires_api_key_before_spend() -> None:
     assert "ANTHROPIC_API_KEY must be set" in proc.stdout + proc.stderr
 
 
-def test_dry_run_forces_anthropic_provider() -> None:
-    # The refresh must force the real provider: build_default_client() defaults
-    # to the fake provider when AILIBI_LLM_PROVIDER is unset, which would
-    # silently re-record fake output over the real samples.
-    proc = _run("--seeds", "22", "--dry-run")
+def test_dry_run_default_provider_is_anthropic() -> None:
+    # With AILIBI_LLM_PROVIDER unset the refresh defaults to anthropic (never the
+    # fake provider, which would silently re-record fake output over the real
+    # samples) and the dry-run echoes the resolved provider + its preflight.
+    proc = _run("--seeds", "22", "--dry-run", env=_clean_env())
     assert proc.returncode == 0
-    assert "AILIBI_LLM_PROVIDER=anthropic" in proc.stdout
+    assert "[dry-run] provider: anthropic" in proc.stdout
+    assert "[dry-run] preflight: would require ANTHROPIC_API_KEY" in proc.stdout
+    # The threaded tournament command still pins the provider explicitly so the
+    # subprocess cannot fall through to build_default_client()'s fake default.
+    assert "AILIBI_LLM_PROVIDER=anthropic uv run python" in proc.stdout
 
 
 def test_duplicate_seeds_deduped() -> None:
@@ -400,3 +415,181 @@ def test_missing_key_creates_no_per_set_directory(tmp_path: Path) -> None:
     assert proc.returncode != 0
     assert "ANTHROPIC_API_KEY must be set" in proc.stdout + proc.stderr
     assert not set_dir.exists()  # mkdir runs only after the preflight passes
+
+
+# -- provider-aware preflight (Task 7.7) --------------------------------------
+
+
+@contextlib.contextmanager
+def _stub_ollama_server(model_names: Sequence[str]) -> Iterator[str]:
+    """Serve a stub Ollama ``/api/tags`` endpoint; yield its ``host:port``.
+
+    Lets the provider-aware preflight tests exercise the real reachability +
+    model-pulled check against a reachable server WITHOUT a real Ollama (and
+    without spend): the handler returns a ``models`` list built from
+    ``model_names``, so a test can include or omit the configured model.
+    """
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 (stdlib handler API)
+            if self.path.rstrip("/") == "/api/tags":
+                body = json.dumps(
+                    {"models": [{"name": name} for name in model_names]}
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_error(404)
+
+        def log_message(self, *args: object) -> None:  # silence test-server noise
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), _Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def _closed_port() -> int:
+    """Reserve then release an ephemeral port so nothing is listening on it.
+
+    A connection to the returned port is refused, which is what the
+    server-down preflight test needs.
+    """
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def test_dry_run_ollama_provider_shows_ollama_preflight() -> None:
+    # AILIBI_LLM_PROVIDER=ollama must be honored: the dry-run echoes provider
+    # ollama and describes the reachability + model-pulled preflight (default
+    # host + canonical model), without making any network call.
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "ollama"
+    proc = _run("--seeds", "22", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] provider: ollama" in proc.stdout
+    assert (
+        f"would ping http://localhost:11434/api/tags for reachability and confirm "
+        f"model {_OLLAMA_MODEL} is pulled" in proc.stdout
+    )
+    assert "no API calls made" in proc.stdout
+
+
+def test_dry_run_ollama_provider_honors_custom_host() -> None:
+    # The preflight description must reflect AILIBI_OLLAMA_HOST, so a non-default
+    # host is checked (and recorded against) rather than localhost.
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "ollama"
+    env["AILIBI_OLLAMA_HOST"] = "remote-box:9999"
+    proc = _run("--seeds", "22", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "http://remote-box:9999/api/tags" in proc.stdout
+
+
+def test_dry_run_provider_is_case_insensitive() -> None:
+    # Mirror build_default_client()'s lower-casing so "Ollama" / "ANTHROPIC"
+    # resolve like their canonical lower-case forms.
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "Ollama"
+    proc = _run("--seeds", "22", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] provider: ollama" in proc.stdout
+
+
+def test_dry_run_fake_provider_maps_to_anthropic() -> None:
+    # A refresh records REAL samples, so the fake provider is meaningless here.
+    # `fake` is the test/CI ambient convention (tests/conftest.py pins it), so it
+    # maps to the historical forced default (anthropic) rather than recording
+    # fake output -- preserving the original "works regardless of ambient shell".
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "fake"
+    proc = _run("--seeds", "22", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] provider: anthropic" in proc.stdout
+
+
+def test_dry_run_inherited_fake_provider_still_resolves_anthropic() -> None:
+    # The common real case: the ambient env (here, the inherited test env, which
+    # tests/conftest.py pins to fake) must not break the refresh -- it resolves to
+    # anthropic exactly as the historical forced-anthropic behavior did.
+    proc = _run("--seeds", "22", "--dry-run")
+    assert proc.returncode == 0
+    assert "[dry-run] provider: anthropic" in proc.stdout
+
+
+def test_dry_run_rejects_unknown_provider() -> None:
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "banana"
+    proc = _run("--seeds", "22", "--dry-run", env=env)
+    assert proc.returncode != 0
+    assert "unknown AILIBI_LLM_PROVIDER='banana'" in proc.stdout + proc.stderr
+
+
+def test_ollama_preflight_fails_loud_when_server_down() -> None:
+    # A real (non-dry-run) ollama refresh must fail BEFORE any spend if the local
+    # server is unreachable. Pointing at a closed port makes the reachability
+    # ping fail with a clear "ollama serve" remediation; no tournament runs.
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "ollama"
+    env["AILIBI_OLLAMA_HOST"] = f"127.0.0.1:{_closed_port()}"
+    proc = _run("--seeds", "0", env=env, timeout=60)
+    assert proc.returncode != 0
+    combined = proc.stdout + proc.stderr
+    assert "Ollama server unreachable" in combined
+    assert "ollama serve" in combined
+
+
+def test_ollama_preflight_fails_loud_when_model_missing(tmp_path: Path) -> None:
+    # Server reachable but the configured model not pulled -> fail loud with an
+    # "ollama pull" remediation, before any spend.
+    set_dir = tmp_path / "7p2i"
+    with _stub_ollama_server(model_names=["llama3.1:8b"]) as host:
+        env = _clean_env()
+        env.update(
+            AILIBI_LLM_PROVIDER="ollama",
+            AILIBI_OLLAMA_HOST=host,
+            AILIBI_SAMPLE_DIR=str(set_dir),
+            AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+        )
+        proc = _run("--seeds", "0", env=env, timeout=60)
+    assert proc.returncode != 0
+    combined = proc.stdout + proc.stderr
+    assert f"Ollama model {_OLLAMA_MODEL!r} is not pulled" in combined
+    assert f"ollama pull {_OLLAMA_MODEL}" in combined
+
+
+def test_ollama_preflight_proceeds_when_reachable_and_model_present(
+    tmp_path: Path,
+) -> None:
+    # Server reachable AND the configured model pulled -> the preflight passes and
+    # the run proceeds past it (the "Ollama preflight OK" gate line is printed).
+    # The stub does not serve /api/generate, so any later tournament step just
+    # fails fast against it -- this test asserts only that the GATE proceeded, and
+    # that it did NOT report a preflight failure. No real provider, no spend.
+    set_dir = tmp_path / "7p2i"
+    with _stub_ollama_server(model_names=[_OLLAMA_MODEL, "llama3.1:8b"]) as host:
+        env = _clean_env()
+        env.update(
+            AILIBI_LLM_PROVIDER="ollama",
+            AILIBI_OLLAMA_HOST=host,
+            AILIBI_SAMPLE_DIR=str(set_dir),
+            AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+        )
+        proc = _run("--seeds", "0", env=env, timeout=120)
+    combined = proc.stdout + proc.stderr
+    assert "Ollama preflight OK" in combined
+    assert f"model {_OLLAMA_MODEL} present" in combined
+    # The gate proceeded: no reachability / model-missing failure was reported.
+    assert "Ollama server unreachable" not in combined
+    assert "is not pulled" not in combined

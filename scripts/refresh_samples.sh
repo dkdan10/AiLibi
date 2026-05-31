@@ -119,6 +119,49 @@ validate_seeds() {
   )
 }
 
+# Provider-aware preflight for AILIBI_LLM_PROVIDER=ollama (Task 7.7). A local
+# Ollama refresh spends no money, but it must still fail loud BEFORE any
+# generate call if the local server is down or the configured model was never
+# pulled (AGENTS.md "no silent fallbacks") -- otherwise run_tournament.py would
+# crash mid-record. Pings the server's /api/tags endpoint for reachability and
+# confirms $2 is in the pulled-model list, printing an actionable remediation
+# ("ollama serve" / "ollama pull <model>") on failure. Uses python3 -- already a
+# hard dependency (see canon()) -- rather than curl, so the check is portable
+# across macOS/Linux without assuming curl is installed.
+ollama_preflight() {
+  local host="$1" model="$2"
+  python3 - "$host" "$model" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+host, model = sys.argv[1], sys.argv[2]
+base = host if host.startswith(("http://", "https://")) else "http://" + host
+tags_url = base.rstrip("/") + "/api/tags"
+try:
+    with urllib.request.urlopen(tags_url, timeout=5) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+except (urllib.error.URLError, OSError) as exc:
+    sys.stderr.write(
+        f"Error: Ollama server unreachable at {tags_url} ({exc}). "
+        f"Start it with `ollama serve` "
+        f"(set AILIBI_OLLAMA_HOST if it is not localhost:11434).\n"
+    )
+    raise SystemExit(1)
+except ValueError as exc:  # malformed JSON body
+    sys.stderr.write(f"Error: Ollama {tags_url} returned non-JSON ({exc}).\n")
+    raise SystemExit(1)
+names = {str(entry.get("name", "")) for entry in payload.get("models", [])}
+if model not in names:
+    sys.stderr.write(
+        f"Error: Ollama model {model!r} is not pulled on {base} "
+        f"(pulled models: {sorted(names)}). Pull it with `ollama pull {model}`.\n"
+    )
+    raise SystemExit(1)
+PY
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --full) set_mode full ;;
@@ -219,6 +262,38 @@ if [[ "$is_flat_baseline" -eq 1 ]] &&
   exit 1
 fi
 
+# Resolve the LLM provider for this refresh (Task 7.7). Historically this script
+# FORCED anthropic, overriding the ambient AILIBI_LLM_PROVIDER entirely so a
+# refresh recorded REAL samples regardless of the shell (the test suite pins
+# AILIBI_LLM_PROVIDER=fake; eval/dev sandboxes pin anthropic). It now
+# ADDITIONALLY honors an explicit `ollama` so a free local run is possible (Task
+# 7.8). Mirror llm.provider.build_default_client()'s lower-casing. Resolution:
+#   ollama                         -> ollama (explicit local provider)
+#   anthropic | fake | unset/empty -> anthropic (the real default; `fake` is the
+#                                     test/CI convention and a refresh records
+#                                     REAL samples, so it maps to the historical
+#                                     forced default rather than recording fake)
+#   anything else                  -> fail loud (a typo must not silently select a
+#                                     provider the user did not intend, AGENTS.md)
+# The resolved provider is echoed (dry-run + real path) and EXPORTED below, so it
+# is never silent and never falls through to build_default_client()'s fake default.
+DEFAULT_OLLAMA_HOST="localhost:11434"
+DEFAULT_OLLAMA_MODEL="qwen2.5:7b-instruct"
+PROVIDER="$(printf '%s' "${AILIBI_LLM_PROVIDER:-anthropic}" | tr '[:upper:]' '[:lower:]')"
+case "$PROVIDER" in
+  ollama) ;;
+  anthropic | fake) PROVIDER="anthropic" ;;
+  *)
+    echo "Error: unknown AILIBI_LLM_PROVIDER='$PROVIDER'; expected 'anthropic' or 'ollama'." >&2
+    exit 1
+    ;;
+esac
+# Ollama target host + model the preflight checks (and the run uses): mirror
+# build_default_client()'s defaults so the preflight cannot validate a different
+# model than the tournament records with.
+OLLAMA_HOST="${AILIBI_OLLAMA_HOST:-$DEFAULT_OLLAMA_HOST}"
+OLLAMA_MODEL="${AILIBI_LLM_MEETING_MODEL:-$DEFAULT_OLLAMA_MODEL}"
+
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
   echo "[dry-run] seeds: $seeds_csv"
@@ -232,10 +307,19 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] roster descriptor: would ensure $SAMPLE_DIR/roster.json = {num_players: $NUM_PLAYERS, num_impostors: $NUM_IMPOSTORS, tasks_per_crewmate: $TASKS_PER_CREWMATE} (fails loud if an existing one disagrees)"
   fi
   echo "[dry-run] sample dir: $SAMPLE_DIR"
-  echo "[dry-run] provider: AILIBI_LLM_PROVIDER=anthropic (forced)"
+  # Provider + the preflight that WOULD run on the real path (Task 7.7). Honors
+  # AILIBI_LLM_PROVIDER (anthropic|ollama, default anthropic); the dry-run only
+  # DESCRIBES the preflight -- it makes no network call (see the "no API calls"
+  # line below).
+  echo "[dry-run] provider: $PROVIDER"
+  if [[ "$PROVIDER" == "ollama" ]]; then
+    echo "[dry-run] preflight: would ping http://$OLLAMA_HOST/api/tags for reachability and confirm model $OLLAMA_MODEL is pulled"
+  else
+    echo "[dry-run] preflight: would require ANTHROPIC_API_KEY (real-provider spend)"
+  fi
   echo "[dry-run] meeting model: ${AILIBI_LLM_MEETING_MODEL:-(provider default)}"
   echo "[dry-run] per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
-  echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $NUM_PLAYERS --num-impostors $NUM_IMPOSTORS --tasks-per-crewmate $TASKS_PER_CREWMATE --force"
+  echo "[dry-run]   AILIBI_LLM_PROVIDER=$PROVIDER uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $NUM_PLAYERS --num-impostors $NUM_IMPOSTORS --tasks-per-crewmate $TASKS_PER_CREWMATE --force"
   if [[ "$mode" == "full" ]]; then
     echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49 and zero-padded aliases like replay-seed-01.jsonl) and prune their manifest rows"
   fi
@@ -244,13 +328,25 @@ if [[ "$dry_run" -eq 1 ]]; then
   exit 0
 fi
 
-# Real-provider preflight: a refresh spends money, so fail before any call if
-# the key is missing. Only the prefix is printed (never the full key).
-if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-  echo "Error: ANTHROPIC_API_KEY must be set for a sample refresh (real-provider spend)." >&2
-  exit 1
+# Provider-aware preflight (Task 7.7): fail BEFORE any provider call (no spend,
+# no partial record) when the selected provider cannot serve the refresh.
+#   anthropic -> the API key must be set (a refresh spends money); only the
+#                prefix is printed, never the full key.
+#   ollama    -> the local server must be reachable AND the configured model
+#                must be pulled (ollama_preflight, above) -- $0 spend, but a
+#                missing server/model would otherwise crash mid-record.
+if [[ "$PROVIDER" == "ollama" ]]; then
+  if ! ollama_preflight "$OLLAMA_HOST" "$OLLAMA_MODEL"; then
+    exit 1
+  fi
+  echo "Ollama preflight OK: $OLLAMA_HOST reachable, model $OLLAMA_MODEL present."
+else
+  if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+    echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2
+    exit 1
+  fi
+  echo "Using API key prefix: ${ANTHROPIC_API_KEY:0:8}"
 fi
-echo "Using API key prefix: ${ANTHROPIC_API_KEY:0:8}"
 
 # Create the target set directory before any spend (Task 7.4). A per-set refresh
 # (e.g. AILIBI_SAMPLE_DIR=replays/samples/7p2i) may point at a brand-new subdir;
@@ -273,14 +369,17 @@ uv run python "$REPO_ROOT/scripts/_manifest_writer.py" roster \
   --num-impostors "$NUM_IMPOSTORS" \
   --tasks-per-crewmate "$TASKS_PER_CREWMATE"
 
-# Force the real provider. llm.provider.build_default_client() defaults to the
-# FAKE provider whenever AILIBI_LLM_PROVIDER is unset (its documented default so
-# CI never hits the network), even when ANTHROPIC_API_KEY is present. Without
-# this a refresh run with only the key set would silently re-record
-# fake-provider output (zero spend, fake model) over the real samples and
-# corrupt MANIFEST provenance + every Phase 5 metric derived from it.
-export AILIBI_LLM_PROVIDER=anthropic
-echo "Using LLM provider: $AILIBI_LLM_PROVIDER (forced for real-provider refresh)"
+# Export the RESOLVED provider so run_tournament.py records on it. This is the
+# critical guard against silent fake recording: llm.provider.build_default_client()
+# defaults to the FAKE provider whenever AILIBI_LLM_PROVIDER is unset (its
+# documented default so CI never hits the network), even when ANTHROPIC_API_KEY
+# is present. Without an explicit export a refresh that left the var unset would
+# silently re-record fake-provider output (zero spend, fake model) over the real
+# samples and corrupt MANIFEST provenance + every Phase 5 metric derived from it.
+# $PROVIDER is anthropic by default (and only ever anthropic|ollama -- the case
+# guard above rejected fake/unknown), so this still never selects fake.
+export AILIBI_LLM_PROVIDER="$PROVIDER"
+echo "Using LLM provider: $AILIBI_LLM_PROVIDER (real-provider refresh)"
 echo "Refreshing seeds: $seeds_csv"
 
 # Compute provenance once so every seed in this refresh shares one sha + date.
@@ -290,11 +389,17 @@ refreshed_at="$(date -u +%F)"
 # Resolve the meeting model this refresh runs with, so seeds that record no LLM
 # call (no meeting) are attributed in MANIFEST to the active model rather than a
 # stale directory-derived one. Defaults to the provider's meeting model when
-# AILIBI_LLM_MEETING_MODEL is unset.
+# AILIBI_LLM_MEETING_MODEL is unset -- which is PROVIDER-SPECIFIC: anthropic's is
+# DEFAULT_MEETING_MODEL (Sonnet), ollama's is the local DEFAULT_OLLAMA_MODEL.
+# Attributing an ollama no-meeting seed to Sonnet would misrecord provenance.
 active_model="${AILIBI_LLM_MEETING_MODEL:-}"
 if [[ -z "$active_model" ]]; then
-  active_model="$(uv run python -c \
-    'from llm.provider import DEFAULT_MEETING_MODEL; print(DEFAULT_MEETING_MODEL)')"
+  if [[ "$PROVIDER" == "ollama" ]]; then
+    active_model="$DEFAULT_OLLAMA_MODEL"
+  else
+    active_model="$(uv run python -c \
+      'from llm.provider import DEFAULT_MEETING_MODEL; print(DEFAULT_MEETING_MODEL)')"
+  fi
 fi
 echo "Attributing no-meeting seeds to model: $active_model"
 

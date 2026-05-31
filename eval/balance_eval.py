@@ -49,6 +49,7 @@ ever produces ``MEETING_PHASE_REACHED`` the runner wire-up has regressed and
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -85,6 +86,85 @@ from orchestrator.replay import (
 )
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
+
+
+# --- Per-game budget configuration (Task 7.7; DESIGN.md §9, §11.4) -----------
+#
+# The per-game USD cap is env-overridable and the token caps scale with the
+# roster, so a higher-token local run (Task 7.8 on the free Ollama provider) is
+# possible without editing this module each time.
+
+# Env knob for the per-game USD cap. Unset/empty falls back to
+# ``_DEFAULT_MAX_COST_USD`` so the frozen baseline path is byte-identical to
+# before this knob existed (see :func:`run_tournament_eval`).
+_ENV_MAX_COST_USD: Final[str] = "AILIBI_MAX_COST_USD"
+
+# Historical per-game USD cap: a safety stop for live-provider meeting traffic
+# (the :class:`~llm.budget.GameBudget` default is the lower $0.30; the tournament
+# path raises it -- see :func:`run_tournament_eval`'s docstring). On the Ollama
+# provider the USD dimension is zeroed (Task 7.5), so this cap is moot there and
+# the roster-scaled TOKEN caps below are the operative ceiling.
+_DEFAULT_MAX_COST_USD: Final[float] = 1.00
+
+# Per-game TOKEN caps scale LINEARLY with roster size: a larger meeting (more
+# players speaking, longer transcripts threaded back into every agent's prompt)
+# needs proportionally more tokens, and the Phase 7 diagnosis found the fixed
+# caps too low for 7-player meetings. The caps follow:
+#   max_input_tokens  = _BASE_INPUT_TOKENS  + _PER_PLAYER_INPUT_TOKENS  * num_players
+#   max_output_tokens = _BASE_OUTPUT_TOKENS + _PER_PLAYER_OUTPUT_TOKENS * num_players
+# The constants are chosen so the canonical 4-player roster reproduces the
+# historical fixed caps EXACTLY -- 1_000_000 input / 200_000 output, the
+# ``GameBudget`` defaults the frozen baseline recorded against -- so an unset
+# knob at 4p is byte-identical to before this scaling existed. A 7-player meeting
+# then resolves to a strictly larger ceiling so it is not truncated (the
+# operative limit on the free local Ollama provider, whose USD dimension is
+# zeroed). Worked values:
+#   4p: 400_000 + 150_000*4 = 1_000_000 in ; 80_000 + 30_000*4 = 200_000 out
+#   7p: 400_000 + 150_000*7 = 1_450_000 in ; 80_000 + 30_000*7 = 290_000 out
+_BASE_INPUT_TOKENS: Final[int] = 400_000
+_PER_PLAYER_INPUT_TOKENS: Final[int] = 150_000
+_BASE_OUTPUT_TOKENS: Final[int] = 80_000
+_PER_PLAYER_OUTPUT_TOKENS: Final[int] = 30_000
+
+
+def _max_cost_usd_from_env(env: Mapping[str, str] | None = None) -> float:
+    """Resolve the per-game USD cap from ``AILIBI_MAX_COST_USD``.
+
+    Returns :data:`_DEFAULT_MAX_COST_USD` when the var is unset/empty so the
+    frozen baseline path is unchanged. A non-numeric value is fail-loud
+    (AGENTS.md "no silent fallbacks") rather than silently substituting the
+    default; range/finiteness validation (negative / NaN / inf) is delegated to
+    :class:`~llm.budget.GameBudget`, which raises on all three.
+    """
+
+    environment = env if env is not None else os.environ
+    raw = environment.get(_ENV_MAX_COST_USD, "").strip()
+    if not raw:
+        return _DEFAULT_MAX_COST_USD
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{_ENV_MAX_COST_USD} must be a number, got {raw!r}") from exc
+
+
+def _resolve_game_budget(
+    *, num_players: int, env: Mapping[str, str] | None = None
+) -> GameBudget:
+    """Build the per-game :class:`~llm.budget.GameBudget` for ``num_players``.
+
+    The USD cap comes from ``AILIBI_MAX_COST_USD`` (default ``$1.00``) and the
+    token caps scale linearly with the roster (see the module constants), so a
+    7-player meeting gets a strictly larger token ceiling than a 4-player one. A
+    4-player roster with the knob unset reproduces the historical fixed
+    ``GameBudget(max_cost_usd=1.00)`` caps exactly, leaving the frozen baseline
+    path unchanged.
+    """
+
+    return GameBudget(
+        max_cost_usd=_max_cost_usd_from_env(env),
+        max_input_tokens=_BASE_INPUT_TOKENS + _PER_PLAYER_INPUT_TOKENS * num_players,
+        max_output_tokens=_BASE_OUTPUT_TOKENS + _PER_PLAYER_OUTPUT_TOKENS * num_players,
+    )
 
 
 @dataclass(frozen=True)
@@ -158,12 +238,18 @@ def run_tournament_eval(
     Each game runs through a fresh meeting runner and a fresh
     :class:`llm.budget.GameBudget` built by
     :func:`orchestrator.game.build_default_meeting_runner` (Task 3.13): meetings
-    fire end-to-end and the per-game cost cap is enforced at call time. The cap
-    is raised to ``$1.00`` here as a safety stop for live-provider meeting
-    traffic (the ``GameBudget`` default stays ``$0.30``); the Phase 3 merge gate
-    is mean cost ``<= $0.30/game`` across 50 games, not the per-game cap (Task
-    3.16). A new runner + budget is constructed per game so the budget resets
-    and the per-game recording state is not shared across the tournament.
+    fire end-to-end and the per-game cost cap is enforced at call time. The
+    budget is resolved by :func:`_resolve_game_budget` (Task 7.7): the USD cap
+    comes from ``AILIBI_MAX_COST_USD`` (default ``$1.00`` -- a safety stop for
+    live-provider meeting traffic, well above the ``$0.30`` ``GameBudget``
+    default and the Phase 3 mean-cost merge gate, Task 3.16) and the token caps
+    scale linearly with ``num_players`` so a 7-player meeting is not truncated.
+    The 4-player roster with the knob unset reproduces the historical fixed caps
+    exactly, so the frozen baseline path is unchanged; on the Ollama provider the
+    USD dimension is zeroed (Task 7.5), leaving the roster-scaled token caps as
+    the operative ceiling. A new runner + budget is constructed per game so the
+    budget resets and the per-game recording state is not shared across the
+    tournament.
 
     Because the runner is always wired, a custom ``agent_factory`` must yield
     agents that satisfy the :class:`~orchestrator.game.MeetingAwareAgent`
@@ -218,7 +304,7 @@ def run_tournament_eval(
             tasks_per_crewmate=tasks_per_crewmate,
             scheduler=TickScheduler(max_ticks=max_ticks),
             meeting_runner=build_default_meeting_runner(
-                budget=GameBudget(max_cost_usd=1.00)
+                budget=_resolve_game_budget(num_players=num_players)
             ),
             force=force,
         )
