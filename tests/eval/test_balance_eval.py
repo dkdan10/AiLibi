@@ -13,7 +13,10 @@ from agents.base import AgentInterface
 from engine.entities import PlayerId, Role
 from engine.world import load_canonical_map
 from eval.balance_eval import (
+    _DEFAULT_MAX_COST_USD,
     BalanceReport,
+    _max_cost_usd_from_env,
+    _resolve_game_budget,
     _seeded_roles,
     run_balance_eval,
     run_tournament_eval,
@@ -453,3 +456,81 @@ def test_default_agent_sweep_reaches_at_least_one_decisive_outcome(
         "R-11 regression: zero decisive outcomes across the CI guard "
         "seeds; see audits/audit-2026-05-15-0225-reconciled.md §R-11."
     )
+
+
+# -- parametrized per-game budget (Task 7.7) ----------------------------------
+
+
+def test_resolve_game_budget_4p_reproduces_frozen_baseline_caps() -> None:
+    """The 4p preset with the knob unset == the historical fixed caps exactly.
+
+    The frozen baseline was recorded against ``GameBudget(max_cost_usd=1.00)``
+    (its token caps are the ``GameBudget`` defaults). With ``AILIBI_MAX_COST_USD``
+    unset, the roster-scaled budget for 4 players must reproduce those caps
+    byte-for-byte, so re-recording the baseline is unchanged.
+    """
+
+    legacy = GameBudget(max_cost_usd=1.00).snapshot()
+    resolved = _resolve_game_budget(num_players=4, env={}).snapshot()
+
+    assert resolved.max_cost_usd == legacy.max_cost_usd == 1.00
+    assert resolved.max_input_tokens == legacy.max_input_tokens
+    assert resolved.max_output_tokens == legacy.max_output_tokens
+
+
+def test_resolve_game_budget_scales_token_caps_with_roster() -> None:
+    """A 7-player meeting gets a strictly larger token ceiling than a 4-player one."""
+
+    four = _resolve_game_budget(num_players=4, env={}).snapshot()
+    seven = _resolve_game_budget(num_players=7, env={}).snapshot()
+
+    assert seven.max_input_tokens > four.max_input_tokens
+    assert seven.max_output_tokens > four.max_output_tokens
+    # Linear form BASE + PER_PLAYER * num_players, with the named constants:
+    #   input : 400_000 + 150_000 * 7 = 1_450_000
+    #   output:  80_000 +  30_000 * 7 =   290_000
+    assert seven.max_input_tokens == 1_450_000
+    assert seven.max_output_tokens == 290_000
+
+
+def test_max_cost_usd_unset_defaults_to_one_dollar() -> None:
+    assert _max_cost_usd_from_env(env={}) == _DEFAULT_MAX_COST_USD == 1.00
+
+
+def test_max_cost_usd_env_overrides_per_game_cap() -> None:
+    """``AILIBI_MAX_COST_USD`` overrides only the USD cap; tokens stay roster-scaled."""
+
+    assert _max_cost_usd_from_env(env={"AILIBI_MAX_COST_USD": "2.5"}) == 2.5
+
+    budget = _resolve_game_budget(
+        num_players=4, env={"AILIBI_MAX_COST_USD": "2.5"}
+    ).snapshot()
+    assert budget.max_cost_usd == 2.5
+    # The override leaves the roster-scaled token caps untouched (still the 4p
+    # baseline caps), proving it changes only the USD dimension.
+    assert budget.max_input_tokens == 1_000_000
+    assert budget.max_output_tokens == 200_000
+
+
+def test_max_cost_usd_reads_process_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The unset default path reads the real process environment (``env=None``)."""
+
+    monkeypatch.setenv("AILIBI_MAX_COST_USD", "3.0")
+    assert _max_cost_usd_from_env() == 3.0
+    monkeypatch.delenv("AILIBI_MAX_COST_USD", raising=False)
+    assert _max_cost_usd_from_env() == _DEFAULT_MAX_COST_USD
+
+
+def test_max_cost_usd_invalid_value_fails_loud() -> None:
+    # A non-numeric knob is fail-loud, not silently the default (AGENTS.md).
+    with pytest.raises(ValueError, match="AILIBI_MAX_COST_USD must be a number"):
+        _max_cost_usd_from_env(env={"AILIBI_MAX_COST_USD": "not-a-number"})
+
+
+def test_resolve_game_budget_rejects_negative_cap() -> None:
+    # Range / finiteness validation is delegated to GameBudget, which rejects a
+    # negative cap fail-loud.
+    with pytest.raises(ValueError, match="non-negative"):
+        _resolve_game_budget(num_players=4, env={"AILIBI_MAX_COST_USD": "-1"})
