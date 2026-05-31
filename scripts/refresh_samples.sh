@@ -415,8 +415,21 @@ stage_dir="$(mktemp -d "$(dirname "$SAMPLE_DIR")/.ailibi-refresh-stage-XXXXXX")"
 trap 'rm -rf "$stage_dir"' EXIT
 
 IFS=',' read -ra seed_list <<<"$seeds_csv"
+# Progress tracker (cosmetic, terminal-only). A local Ollama --full run is slow
+# (tens of minutes to hours), so stream a per-seed line: count, per-seed and
+# cumulative wall-clock, a rough ETA, and a running meeting tally -- meeting_rate
+# is the 7.8 gate, so seeing it converge live is the point. This reads only the
+# just-written replay and prints; it never touches the recorded replay, the
+# manifest, or determinism. The meeting probe is guarded in an `if` so a
+# no-meeting seed's non-zero grep cannot trip `set -e` and abort the refresh.
+total_seeds="${#seed_list[@]}"
+seed_idx=0
+meetings_seen=0
+refresh_start="$(date +%s)"
 for seed in "${seed_list[@]}"; do
-  echo "--- Refreshing seed $seed ---"
+  seed_idx=$((seed_idx + 1))
+  seed_start="$(date +%s)"
+  echo "--- [$seed_idx/$total_seeds] Refreshing seed $seed ---"
   uv run python "$REPO_ROOT/scripts/run_tournament.py" \
     --start-seed "$seed" \
     --num-games 1 \
@@ -436,6 +449,23 @@ for seed in "${seed_list[@]}"; do
     --model "$active_model" \
     --sample-dir "$SAMPLE_DIR" \
     --manifest "$MANIFEST"
+  # `meeting_id` appears only in a meeting record, so this guarded grep of the
+  # just-written replay flags whether the seed reached a meeting without parsing
+  # it. The `if` consumes grep's non-zero exit, keeping it `set -e`-safe.
+  if grep -q 'meeting_id' "$SAMPLE_DIR/replay-seed-$seed.jsonl"; then
+    meetings_seen=$((meetings_seen + 1))
+    seed_meeting="yes"
+  else
+    seed_meeting="no "
+  fi
+  now="$(date +%s)"
+  seed_secs=$((now - seed_start))
+  elapsed_secs=$((now - refresh_start))
+  rate_pct=$((meetings_seen * 100 / seed_idx))
+  eta_secs=$((elapsed_secs * (total_seeds - seed_idx) / seed_idx))
+  printf '    seed %s done in %3ds | meeting: %s | meetings %d/%d (%d%%) | elapsed %dm%02ds | ETA ~%dm\n' \
+    "$seed" "$seed_secs" "$seed_meeting" "$meetings_seen" "$seed_idx" "$rate_pct" \
+    "$((elapsed_secs / 60))" "$((elapsed_secs % 60))" "$((eta_secs / 60))"
 done
 
 # Full mode = the canonical 0-49 set, now all regenerated in place. Reconcile the
@@ -456,4 +486,6 @@ fi
 
 total="$(uv run python "$REPO_ROOT/scripts/_manifest_writer.py" sum-cost \
   --seeds "$seeds_csv" --sample-dir "$SAMPLE_DIR")"
-echo "Refresh complete. Total spend: \$$total (recorded in $MANIFEST)."
+refresh_wall=$(($(date +%s) - refresh_start))
+echo "Refresh complete in $((refresh_wall / 60))m$((refresh_wall % 60))s: $meetings_seen/$total_seeds seeds reached a meeting (~$((meetings_seen * 100 / total_seeds))%; authoritative meeting_rate is in the eval report)."
+echo "Total spend: \$$total (recorded in $MANIFEST)."
