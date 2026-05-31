@@ -22,6 +22,7 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
+from llm.report_normalize import normalize_report_payload
 
 
 DEFAULT_MEETING_MODEL: Final[str] = "claude-sonnet-4-6"
@@ -178,7 +179,7 @@ class AnthropicClient:
         # Pydantic — and the recorded LLMResponse.text — see schema-
         # validatable JSON. Placement inside complete() (not _default_send)
         # means a future fencing adapter inherits this.
-        text = _extract_json_block(raw.text) if schema is not None else raw.text
+        text = _extract_json_block(raw.text, schema) if schema is not None else raw.text
         if schema is not None:
             try:
                 schema.model_validate_json(text)
@@ -400,7 +401,50 @@ def _find_matching_brace(text: str, open_index: int) -> int:
     return -1
 
 
-def _extract_json_block(text: str) -> str:
+def _extract_json_block(text: str, schema: type[BaseModel] | None = None) -> str:
+    """Extract the JSON object from an LLM response, then normalize it (Task 7.6).
+
+    Raw extraction (markdown fences, prose preamble, mid-output truncation) is
+    delegated to :func:`_extract_raw_json_block`. When ``schema`` is supplied,
+    the extracted JSON additionally passes through discriminator-aware
+    normalization (:func:`_normalize_json_text`) so a near-miss model report —
+    e.g. a ``co_present`` key on a ``found_body`` observation — is salvaged into
+    a payload that survives ``extra="forbid"`` before ``model_validate_json``
+    runs. This is the single shared seam every provider adapter (Anthropic and
+    the Ollama client) routes through, so normalization is not duplicated per
+    client. With ``schema=None`` (free-text calls, or any non-structured use)
+    the extracted text is returned unchanged.
+    """
+
+    raw_block = _extract_raw_json_block(text)
+    if schema is None:
+        return raw_block
+    return _normalize_json_text(raw_block, schema)
+
+
+def _normalize_json_text(text: str, schema: type[BaseModel]) -> str:
+    """Strip discriminated-union variant extras from extracted JSON ``text``.
+
+    Parses ``text``, runs the pure
+    :func:`llm.report_normalize.normalize_report_payload` over it against
+    ``schema``, and re-serializes ONLY when normalization actually changed the
+    payload. An already-valid payload is therefore returned byte-identical (a
+    true no-op, so recorded outputs replay unchanged); text that does not parse
+    as JSON is returned unchanged so the downstream ``model_validate_json``
+    raises its actionable error rather than this helper masking it.
+    """
+
+    try:
+        payload = json.loads(text)
+    except ValueError:
+        return text
+    normalized = normalize_report_payload(payload, schema)
+    if normalized == payload:
+        return text
+    return json.dumps(normalized)
+
+
+def _extract_raw_json_block(text: str) -> str:
     """Extract the first valid JSON object from an LLM response.
 
     Claude models emit structured-output JSON in several shapes across

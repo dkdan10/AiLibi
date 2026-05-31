@@ -182,7 +182,7 @@ class OllamaClient:
         # Pull the JSON object out of the raw text through the SAME shared
         # extractor the Anthropic client uses, so 7.6's normalization (which
         # lands in that shared path) automatically covers Ollama too.
-        text = _extract_json_block(raw.text) if schema is not None else raw.text
+        text = _extract_json_block(raw.text, schema) if schema is not None else raw.text
         if schema is not None:
             try:
                 schema.model_validate_json(text)
