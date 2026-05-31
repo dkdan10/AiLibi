@@ -113,8 +113,8 @@ assignment, spawns, cooldowns, or the per-task RNG seeding. The leak firewall is
 untouched — this task adds no field to any observation packet.
 
 Out of scope: the `meeting_rate` metric (Task 7.3), regenerating / committing the
-7p/2i sample set (Task 7.5), balance validation of the new config (folded into
-Task 7.5), the roster-aware loader / two-set layout plumbing (Task 7.4), impostor
+7p/2i sample set (Task 7.8), balance validation of the new config (folded into
+Task 7.8), the roster-aware loader / two-set layout plumbing (Task 7.4), impostor
 mutual-awareness (Task 7.2), and any frontend work (the picker
 preset selector is a later frontend track). This task only makes the config
 reachable and deterministic; it does not run the eval.
@@ -135,7 +135,7 @@ reachable and deterministic; it does not run the eval.
 - agents/tactical/crewmate_policy.py (multi-task sequencing already works via pending_task_id)
 - eval/meeting_quality.py (the meeting_rate metric is Task 7.3)
 - scripts/run_game.py (single-game CLI; not the tournament path this task threads)
-- replays/samples/ (sample regeneration/commit is Task 7.5; do NOT regenerate fixtures here)
+- replays/samples/ (sample regeneration/commit is Task 7.8; do NOT regenerate fixtures here)
 - frontend/ (the picker preset selector is a later frontend task)
 - observation/packet.py (no new packet field; the firewall surface is unchanged)
 - api/replay_loader.py (the loader's `_walk` call to `seed_initial_state` must NOT change in this task; it keeps re-seeding at the seeder default of 1 task/crewmate so the committed 4p/1i baseline stays byte-identical. The loader's full roster-awareness — reading each set's recorded `tasks_per_crewmate` / `num_impostors` — is Task 7.4. The seeder default-driven call site must not silently change here, which is why `seed_initial_state`'s parameter default stays 1 and the default-of-2 lives only at the harness/CLI layer.)

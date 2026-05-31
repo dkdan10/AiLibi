@@ -17,10 +17,10 @@ The authoritative task contract is copied below from tasks/phase-7.md. Follow it
 **Complexity:** Integration
 
 This is the dispatchable CODE half of Wave 0's eval-set work (split from the
-real-provider OPERATIONAL half, Task 7.5). It teaches the replay loader to
+real-provider OPERATIONAL half, Task 7.8). It teaches the replay loader to
 reconstruct a SECOND committed roster set and lays the directory/manifest plumbing
 for it, validated entirely on the FAKE provider — NO real-provider spend and NO
-committed sample data here (that is Task 7.5). Splitting the plumbing out lets this
+committed sample data here (that is Task 7.8). Splitting the plumbing out lets this
 loader + firewall change land as a normal reviewed PR with the static gates green
 BEFORE any money is spent, and it has no dependency on the `meeting_rate` metric so
 it can run in PARALLEL with 7.3.
@@ -48,7 +48,7 @@ this unless you record a different one):** keep the existing **4p/1i set FLAT at
 `replays/samples/7p2i/` carrying its own `MANIFEST.md` and a small committed roster
 sidecar (`roster.json` with `num_players`/`num_impostors`/`tasks_per_crewmate`) —
 this task builds the SUPPORT for that layout (loader reads it, refresh/manifest
-route to it) and exercises it on tmp dirs; Task 7.5 commits the actual data into it.
+route to it) and exercises it on tmp dirs; Task 7.8 commits the actual data into it.
 The asymmetric shape (flat 4p/1i + one subdir) is deliberate — the symmetric
 "both sets in subdirs" layout is REJECTED because it cannot coexist with the
 "flat `replays/samples/` default = 4p/1i" invariant (if 4p/1i moves into
@@ -85,7 +85,7 @@ This task is dispatchable as a normal headless web session — it validates enti
 on the FAKE provider (the hermetic multi-impostor test below builds its own tiny
 2-impostor replay in `tmp_path`), commits NO `replays/samples/` data, and does NOT
 touch `frontend/`. The real-provider generation, balance validation, and commit of
-the 7p/2i set is Task 7.5, which depends on this task.
+the 7p/2i set is Task 7.8, which depends on this task.
 
 **Files in scope:**
 - scripts/refresh_samples.sh
@@ -96,12 +96,12 @@ the 7p/2i set is Task 7.5, which depends on this task.
 - tests/api/test_replay_loader.py
 
 **Files NOT in scope:**
-- replays/samples/ (committing the real 7p/2i data is Task 7.5; this task validates on tmp dirs only and commits no sample data)
+- replays/samples/ (committing the real 7p/2i data is Task 7.8; this task validates on tmp dirs only and commits no sample data)
 - scripts/run_tournament.py (the roster/task flags are owned by 7.1; consume them, do not edit)
 - orchestrator/seeder.py (the `tasks_per_crewmate` knob is 7.1's; consume it)
-- eval/meeting_quality.py (the `meeting_rate` metric is 7.3's; this task does NOT read it — the gate check is Task 7.5)
+- eval/meeting_quality.py (the `meeting_rate` metric is 7.3's; this task does NOT read it — the gate check is Task 7.8)
 - scripts/_verify_samples.py (reuses ReplayLoader for reconstruction; it must keep passing, but its own logic is unchanged)
-- scripts/verify_samples.sh (NOT edited — it already accepts an optional `SAMPLE_DIR` arg, used per-set by Task 7.5)
+- scripts/verify_samples.sh (NOT edited — it already accepts an optional `SAMPLE_DIR` arg, used per-set by Task 7.8)
 - frontend/ (the browse selector for the two sets is a separate later track)
 - api/main.py (replay-dir resolution is unchanged; the loader gains per-set roster awareness, not a new env contract)
 - DESIGN.md (design-thread-owned)
@@ -112,7 +112,7 @@ the 7p/2i set is Task 7.5, which depends on this task.
 - [ ] `scripts/refresh_samples.sh` + `scripts/_manifest_writer.py` route to the correct per-set directory + manifest (via the existing `AILIBI_SAMPLE_DIR`/`AILIBI_MANIFEST` env hooks) and thread 7.1's `--num-players`/`--num-impostors`/`--tasks-per-crewmate` flags into the `run_tournament.py` invocation; the `--dry-run` echo block additionally prints the resolved roster, the per-set `SAMPLE_DIR`/`MANIFEST`, and the threaded `run_tournament.py` invocation so per-set routing is observable without spend.
 - [ ] `tests/api/test_replay_loader.py` covers multi-impostor reconstruction HERMETICALLY: build a tiny `HeadlessGame(num_impostors=2, ...)` on the FAKE provider, persist it to `tmp_path` with a matching `roster.json`, read it back, and assert (a) it reconstructs byte-identically (no `ReplayStateMismatchError`) when the descriptor names 2 impostors; (b) a descriptor naming the WRONG `num_impostors`/`tasks_per_crewmate` raises `ReplayStateMismatchError` (descriptor is load-bearing); (c) a flat dir with no descriptor still defaults to 4p/1i. No dependency on any committed 7p/2i data.
 - [ ] `tests/scripts/test_refresh_samples.py` and `tests/scripts/test_manifest_writer.py` cover the per-set directory/manifest routing on tmp dirs (e.g. a `--dry-run` into a 7p2i set targets that set's directory + manifest), without spending on the real provider.
-- [ ] No real-provider spend; NO `replays/samples/` data is committed in this task (that is Task 7.5). The existing flat 4p/1i committed set still reconstructs byte-identically.
+- [ ] No real-provider spend; NO `replays/samples/` data is committed in this task (that is Task 7.8). The existing flat 4p/1i committed set still reconstructs byte-identically.
 - [ ] The PR `## Decisions` block records the chosen two-set directory layout + roster-descriptor format.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -149,7 +149,7 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 
 This task changes a loader contract that the determinism gate and the leak firewall
 both ride on — but it spends no money and commits no data, so it lands green on the
-fake provider before Task 7.5's spend.
+fake provider before Task 7.8's spend.
 
 - **Loader roster contract is the blast radius.** Re-seeding a replay with the
   wrong `num_impostors`/`tasks_per_crewmate` does not corrupt silently — the
@@ -160,13 +160,13 @@ fake provider before Task 7.5's spend.
 - **Two sets, two manifests, one refresh script.** `refresh_samples.sh` and
   `_manifest_writer.py` must route to the correct per-set directory/manifest via
   the existing `AILIBI_SAMPLE_DIR`/`AILIBI_MANIFEST` hooks; a mis-routed refresh
-  (in Task 7.5, using this plumbing) would overwrite the 4p/1i baseline, so the
+  (in Task 7.8, using this plumbing) would overwrite the 4p/1i baseline, so the
   routing must be proven on tmp dirs here.
 - **Firewall on multi-impostor reconstruction.** The hermetic 2-impostor test is
   the first multi-impostor reconstruction; confirm the 7.2 `fellow_impostor_ids`
   invariant holds on the rebuilt packets. The end-to-end check on a real committed
-  multi-impostor set is Task 7.5.
-- **Dispatchable, fake-validated.** Unlike Task 7.5, this task is a normal
+  multi-impostor set is Task 7.8.
+- **Dispatchable, fake-validated.** Unlike Task 7.8, this task is a normal
   reviewed PR — no `ANTHROPIC_API_KEY`, no committed sample data; the static gates
   + the hermetic tests are the whole acceptance surface.
 

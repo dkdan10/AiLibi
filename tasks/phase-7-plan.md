@@ -52,11 +52,16 @@ is already fully wired and CLI-exposed.
 **Nothing in agent-intelligence is measurable until this clears.** Mostly
 config/substrate; low risk.
 
-> **Contract mapping** (`tasks/phase-7.md`, written 2026-05-30): W0.1→Task 7.1,
-> W0.2→Task 7.2, W0.3→Task 7.3; W0.4 is split into Task 7.4 (roster-aware loader +
-> two-committed-set layout — dispatchable plumbing, fake-validated) and Task 7.5
-> (generate + commit the 7p/2i set — design-thread, real spend); W0.5 (balance
-> validation) is folded into Task 7.5. Dispatch order: (7.1 ∥ 7.2) → (7.3 ∥ 7.4) → 7.5.
+> **Contract mapping** (`tasks/phase-7.md`, written 2026-05-30; Ollama restructure
+> 2026-05-31): W0.1→Task 7.1, W0.2→Task 7.2, W0.3→Task 7.3; W0.4 is split into Task
+> 7.4 (roster-aware loader + two-committed-set layout — dispatchable plumbing,
+> fake-validated), the Ollama-enablement prep tasks 7.5 (Ollama provider client +
+> wiring), 7.6 (parse-tolerance / normalization), 7.7 (provider-agnostic refresh +
+> parametrized per-game budget), and Task 7.8 (generate + commit the 7p/2i set —
+> design-thread, run LOCALLY on Ollama, no spend); W0.5 (balance validation) is
+> folded into Task 7.8. The eval-set task was MOVED to last (was 7.5 → now 7.8) so
+> the Ollama substrate lands first. Dispatch order:
+> (7.1 ∥ 7.2) → (7.3 ∥ 7.4) → 7.5 → (7.6 ∥ 7.7) → 7.8.
 
 ### W0.1 — Configurable roster + tasks-per-crewmate
 - Add a `tasks_per_crewmate` parameter to `orchestrator/seeder.py::_build_tasks` /
@@ -110,11 +115,23 @@ config/substrate; low risk.
   bars.
 - Category: engine-balance / eval. Priority **p0**. Deps: W0.1, W0.4.
 
-> **Provider (Q2 resolved):** stick with Anthropic for Phase 7 (canonical model =
-> Sonnet for meetings, as today). Reassess cheaper/other models for cost AFTER
-> this phase. Bound Phase 7 cost by iterating on the fake/deterministic provider
-> and reserving real-provider runs for the Wave-1 / Wave-2 exit A/Bs only (per the
-> eval-cadence rule); cap N / sample seeds for those real-provider A/Bs if needed.
+> **Provider (Q2 SUPERSEDED 2026-05-31 → local Ollama `qwen2.5:7b-instruct`):** the
+> canonical agent-intelligence provider is now a **local Ollama** open model,
+> `qwen2.5:7b-instruct`, run on the owner's Mac for **$0** — chosen because a hosted
+> frontier model is both expensive (~$150+ over the phase) and brittle on the strict
+> report schemas. This supersedes Q2's original "stick with Anthropic". The Anthropic
+> path stays supported (Task 7.5 only ADDS the Ollama branch) and the 4p/1i Anthropic
+> baseline is kept + frozen (replays are model-agnostic). Task 7.8 runs LOCALLY on
+> Ollama with no spend; its balance sweep is bounded by a time-box rather than
+> dollars. (Original Q2 text, retained for history: stick with Anthropic / canonical
+> Sonnet, reassess cheaper models after the phase.)
+>
+> **Cross-phase incomparability:** Phase 6 (Anthropic Sonnet, 4p/1i) and Phase 7+
+> (Ollama `qwen2.5:7b-instruct`, 7p/2i) baselines are NOT directly comparable for
+> metrics — only byte-identical replay reconstruction is model-agnostic. Wave 1/2
+> A/Bs are internal to Ollama; the Phase 6 36%-impostor-win number is a historical
+> artifact, not a regression target. Label committed baselines with their
+> provider+roster.
 
 **Wave 0 exit criteria:** on the chosen config (7p/2i + 2 tasks unless W0.5
 re-balances it), `meeting_rate ≥ 0.60` with **≥ 30 resolved meetings**; the
@@ -143,6 +160,11 @@ not start Wave 1.
   design can be revisited at implementation time.
 - **Headline target:** `alibi_survival` 0.6 → **≤ 0.45** (crew catches more
   impostor lies) with `vote_correctness` holding **≥ 0.85** at n ≥ 30.
+- **Target rebaseline (provider change):** Wave 1's headline `alibi_survival
+  0.6 → ≤ 0.45` was anchored to Sonnet-quality crew and is INVALID as an absolute on
+  `qwen2.5:7b`. Once Wave 0 lands, MEASURE the Ollama baseline `alibi_survival`
+  first, then express Wave 1's target as a *relative* improvement off that measured
+  baseline (A/B deltas stay valid within one model; absolutes do not).
 - Deps: Wave 0.
 
 ## Wave 2 — Impostor intelligence (p1)
@@ -182,7 +204,9 @@ not start Wave 1.
   live/human-player track.
 
 ## Provider / eval-infra track
-- Cheaper-provider option (decision 6) for volume; canonical-model decision (Q2).
+- Cheaper-provider option (decision 6) for volume. Canonical-model decision (Q2)
+  is RESOLVED as **local Ollama `qwen2.5:7b-instruct`** ($0; see the Wave 0 provider
+  note and Q2 above) — Anthropic is retained only as an opt-in path.
 
 ---
 
@@ -213,9 +237,12 @@ Frontend + provider tracks run in parallel as capacity allows.
 - **Q1 Frontend scope — RESOLVED.** Phase 7 = browse the committed 4p/1i vs 7p/2i
   sets by preset (see Frontend track). Live game-launch-from-UI is deferred to the
   later live/broadcast track.
-- **Q2 Provider/model — RESOLVED.** Stick with Anthropic (canonical Sonnet) for
-  Phase 7; reassess cheaper models for cost after the phase. Bound cost via
-  fake-provider iteration + real-provider only at wave-exit A/Bs (see W0.5 note).
+- **Q2 Provider/model — SUPERSEDED 2026-05-31:** provider is now **local Ollama
+  `qwen2.5:7b-instruct`** ($0), not Anthropic (see the provider note). Anthropic
+  retained as an opt-in path. (Original RESOLVED text, retained for history: stick
+  with Anthropic / canonical Sonnet for Phase 7; reassess cheaper models after the
+  phase; bound cost via fake-provider iteration + real-provider only at wave-exit
+  A/Bs.)
 - **Q3 Balance — RESOLVED (must validate).** W0.5 validates the 7p/2i + 2-task
   decisive split is near-even; re-balance (tasks 2↔3 / roster) if degenerate.
 - **Q4 Impostor-roster delivery — RESOLVED.** Impostor-only `fellow_impostor_ids`

@@ -106,7 +106,7 @@ replay holds.
 - [ ] `visible_players` / `PlayerView` are unchanged; no role-bearing field is added to any crew-visible channel.
 - [ ] `agents/perception.py::_self_state_payload` surfaces `fellow_impostor_ids` so the self-state payload exposes the teammate list alongside `role`.
 - [ ] `eval/leak_test.py` asserts a new invariant: for every packet whose `self_state.role == "CREWMATE"`, `self_state.fellow_impostor_ids == ()`; the existing "no `PlayerView` carries role" and value/field scanners still pass unchanged.
-- [ ] `tests/observation/test_service.py` adds a multi-impostor (>=2 impostors) case proving each impostor sees the other impostor id (self excluded), each crewmate sees `()`, and a solo-impostor build yields `()` for the impostor. Because all three committed scripted fixtures are 4p/1i (single impostor), this unit case (together with the extended property sweep below) is what exercises a roster where a misroute could surface a non-empty CREW tuple — so this case MUST additionally run the crew-empty leak assertion (`self_state.fellow_impostor_ids == ()`) over each crewmate-recipient packet built from the 2-impostor `WorldState`, not just check the populate logic. End-to-end coverage over a real played multi-impostor game lands with Task 7.5's committed 7p/2i set.
+- [ ] `tests/observation/test_service.py` adds a multi-impostor (>=2 impostors) case proving each impostor sees the other impostor id (self excluded), each crewmate sees `()`, and a solo-impostor build yields `()` for the impostor. Because all three committed scripted fixtures are 4p/1i (single impostor), this unit case (together with the extended property sweep below) is what exercises a roster where a misroute could surface a non-empty CREW tuple — so this case MUST additionally run the crew-empty leak assertion (`self_state.fellow_impostor_ids == ()`) over each crewmate-recipient packet built from the 2-impostor `WorldState`, not just check the populate logic. End-to-end coverage over a real played multi-impostor game lands with Task 7.8's committed 7p/2i set.
 - [ ] `tests/observation/test_leak_property.py` (the DESIGN §11.2 many-seeds purity sweep) is extended to parametrize `num_impostors` (include ≥ 2 with a valid roster) AND to assert `self_state.fellow_impostor_ids == ()` for every crewmate-recipient packet in its per-packet loop — so the project's strongest leak test, not just one unit case, guards the first new self-channel field across many seeds and multi-impostor rosters.
 - [ ] `tests/agents/test_perception.py` updates the pinned self-state payload assertion to include `fellow_impostor_ids`.
 - [ ] Byte-identical replay determinism is preserved (the field is a pure function of roles in `WorldState`; no RNG, stable ordering).
@@ -180,7 +180,7 @@ allowed `self_state.role` path), and the value scanner trips only on the substri
 the EXPLICIT assertion — not the scanners — is the guard, and the extended
 multi-impostor sweep now exercises it across many random games (the single-impostor
 4p/1i scripted fixtures cannot surface a crew-tuple misroute, since every impostor's
-tuple is also `()` there). Task 7.5's committed 7p/2i set then adds end-to-end
+tuple is also `()` there). Task 7.8's committed 7p/2i set then adds end-to-end
 coverage on a real played multi-impostor game. The second risk is determinism: the field must be a
 pure, stably-ordered function of `WorldState` roles with no RNG and no dependence
 on visibility/alive state, so the committed replay goldens and the audit-log

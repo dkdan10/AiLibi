@@ -67,7 +67,7 @@ frozen 4p/1i replays so it carries `meeting_rate` — offline and free via
 `eval.balance_eval.load_tournament_report` + `build_tournament_eval_report` (no
 provider run; the 4p/1i replays themselves stay byte-identical, only the derived
 report JSON gains the field, consistent with the "4p/1i frozen" decision). The 7p/2i
-set's own report is generated fresh by Task 7.5 (post-this-task) and carries the
+set's own report is generated fresh by Task 7.8 (post-this-task) and carries the
 field natively.
 
 Surface the numbers in `scripts/run_tournament.py::_format_summary` (the operator
@@ -132,7 +132,7 @@ either — it lives only on the per-tick `engine.events.MeetingTriggeredEvent`
 (`eval/balance_eval.py::_meeting_report_from_entry`) does not fold in. Adding a
 real `trigger_kind` field to the report would balloon scope (it would touch
 `orchestrator/replay.py`, `eval/balance_eval.py`, and force re-recording every
-committed sample — that re-record is Task 7.5's job, and those files are NOT in
+committed sample — that re-record is Task 7.8's job, and those files are NOT in
 this task's scope). So derive the breakdown from data already on `MeetingReport`:
 classify a meeting as `body_report` iff the report submitted by the meeting's
 `triggered_by` player (found in `meeting.transcript.reports`, matched by
@@ -148,7 +148,7 @@ emergencies and a clean body-report path), so the bucket is accurate now; but a
 future Wave that revives emergency-button play MUST NOT trust `emergency` as a pure
 emergency count without first adding a real persisted `trigger_kind`. That cleaner
 fix is deferred to a LATER PHASE (not Wave 0): it would touch `orchestrator/replay.py`
-+ `eval/balance_eval.py`, which even Task 7.5 explicitly excludes — Task 7.5 only
++ `eval/balance_eval.py`, which even Task 7.8 explicitly excludes — Task 7.8 only
 re-records under THIS same derived heuristic, it does not add the field. Do NOT
 widen scope to add the field here.
 
@@ -170,7 +170,7 @@ widen scope to add the field here.
 - orchestrator/replay.py (MeetingReplayEntry stays as-is; no new persisted field)
 - eval/balance_eval.py (the report loader is untouched; the metric reads existing MeetingReport data)
 - scripts/run_tournament.py (the `_format_summary` surfacing is owned by Task 7.1's CLI edits this task depends on; coordinate the meeting-rate lines onto 7.1's merged version — listed here as the dependency edge, not an independent scope claim)
-- replays/samples/ and scripts/refresh_samples.sh (sample regeneration is Task 7.5)
+- replays/samples/ and scripts/refresh_samples.sh (sample regeneration is Task 7.8)
 - orchestrator/seeder.py (roster / tasks-per-crewmate config is Task 7.1)
 - frontend dashboard components (rendering the new field in the UI is optional/deferred; this task only mirrors the type)
 
