@@ -166,6 +166,54 @@ def test_served_payload_no_longer_validates_as_raw_report(tmp_path: Path) -> Non
         TournamentEvalReport.model_validate(body)
 
 
+def test_served_report_includes_meeting_rate(tmp_path: Path) -> None:
+    # The W0.3 meeting_rate metric survives the redaction round-trip and is
+    # served. The fixture game carries no meetings, so the rate is a defined 0.0
+    # (a game ran), not None.
+    report = _eval_report_with_failed_call()
+    (tmp_path / "tournament-eval-report.json").write_text(
+        report.model_dump_json(), encoding="utf-8"
+    )
+    with _client(tmp_path) as client:
+        body = client.get("/eval/tournament-report").json()
+
+    assert "meeting_rate" in body, "served eval payload dropped the meeting_rate block"
+    meeting_rate = body["meeting_rate"]
+    assert meeting_rate["games_total"] == 1
+    assert meeting_rate["games_with_meeting"] == 0
+    assert meeting_rate["meeting_rate"] == 0.0
+    assert meeting_rate["meetings_total"] == 0
+    assert (
+        meeting_rate["body_report_meetings"] + meeting_rate["emergency_meetings"]
+        == meeting_rate["meetings_total"]
+    )
+
+
+def test_committed_4p1i_report_loads_through_loader_with_meeting_rate() -> None:
+    """The committed 4p/1i report re-validates as a TournamentEvalReport.
+
+    Guards the latent runtime break this task's metric introduces: ``meeting_rate``
+    is a REQUIRED field on the frozen ``extra="forbid"`` ``TournamentEvalReport``,
+    so a committed report generated before this task would fail
+    ``ReplayLoader.tournament_report()``'s ``model_validate`` at runtime — 500ing
+    ``GET /eval/tournament-report`` — while the tmp-fixture eval-route tests above
+    stay green and miss it. The committed report was regenerated offline to carry
+    the field; this asserts it loads and matches the diagnosis ground truth (4/50
+    games reach a meeting, all body-reports, 0 emergency).
+    """
+
+    loader = ReplayLoader(replay_dir=Path("replays/samples"))
+    report = loader.tournament_report()
+
+    meeting_rate = report.meeting_rate
+    assert meeting_rate.games_total == 50
+    assert meeting_rate.games_with_meeting == 4
+    assert meeting_rate.meeting_rate == pytest.approx(0.08)
+    assert meeting_rate.meetings_total == 4
+    assert meeting_rate.body_report_meetings == 4
+    assert meeting_rate.emergency_meetings == 0
+
+
 def test_served_payload_exposes_no_engine_state_field(tmp_path: Path) -> None:
     # End-to-end mirror of the structural firewall in test_leak.py: no
     # engine/determinism field name appears anywhere in the served JSON tree.

@@ -23,7 +23,7 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from agents.base import AgentInterface
 from engine.entities import PlayerId, Role
@@ -36,13 +36,26 @@ from eval.balance_eval import (
 )
 from eval.cost_dashboard import CostDashboard
 from eval.meeting_quality import (
+    MeetingRateReport,
     TournamentEvalReport,
     build_tournament_eval_report,
+    compute_meeting_rate,
 )
-from eval.report_schema import TournamentReport
+from eval.report_schema import (
+    GameCostSummary,
+    GameReport,
+    MeetingReport,
+    TournamentReport,
+)
 from eval.vote_correctness import VoteCorrectnessReport
 from llm.provider import LLMCallFailure, _attach_parse_failure
-from meetings.schemas import MeetingTranscript
+from meetings.schemas import (
+    FoundBodyObservation,
+    MeetingTranscript,
+    ObservationClaim,
+    ReportDocument,
+    SawPlayerObservation,
+)
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
@@ -141,12 +154,21 @@ def test_tournament_eval_report_full_integration(tmp_path: Path) -> None:
     # The MeetingReplayEntry -> MeetingReport path is actually exercised.
     assert any(game.meetings for game in report.games)
 
-    # The wrapper carries all four Phase 5 metric blocks.
+    # The wrapper carries all four Phase 5 metric blocks plus the W0.3 fifth.
     eval_report = build_tournament_eval_report(report)
     assert isinstance(eval_report.vote_correctness, VoteCorrectnessReport)
     assert isinstance(eval_report.accusation_calibration, AccusationCalibrationReport)
     assert isinstance(eval_report.alibi_fabrication, AlibiFabricationReport)
     assert isinstance(eval_report.cost_dashboard, CostDashboard)
+    # meeting_rate is packed and consistent with the games (this seed set fires
+    # at least one meeting, so the rate is > 0 and the buckets partition).
+    mr = eval_report.meeting_rate
+    assert isinstance(mr, MeetingRateReport)
+    assert mr.games_total == len(report.games)
+    assert mr.games_with_meeting == sum(1 for game in report.games if game.meetings)
+    assert mr.meetings_total == sum(len(game.meetings) for game in report.games)
+    assert mr.body_report_meetings + mr.emergency_meetings == mr.meetings_total
+    assert mr.meeting_rate is not None and mr.meeting_rate > 0.0
 
     # The emitted JSON validates against the schema and round-trips byte-for-byte.
     json_text = eval_report.model_dump_json()
@@ -211,6 +233,15 @@ def test_partial_run_without_game_over_yields_none_winner(tmp_path: Path) -> Non
     eval_report = build_tournament_eval_report(report)
     assert eval_report.vote_correctness.total_ejections == 0
     assert eval_report.alibi_fabrication.total_impostor_alibis == 0
+    # Two games, neither reaching a meeting: rate is a defined 0.0 (games ran),
+    # not None (None is reserved for the zero-games case).
+    mr = eval_report.meeting_rate
+    assert mr.games_total == 2
+    assert mr.games_with_meeting == 0
+    assert mr.meeting_rate == 0.0
+    assert mr.meetings_total == 0
+    assert mr.body_report_meetings == 0
+    assert mr.emergency_meetings == 0
 
 
 # ---------------------------------------------------------------------------
@@ -478,3 +509,235 @@ def test_tournament_reraises_non_parse_failure(
 
     with pytest.raises(RuntimeError, match="genuine bug"):
         run_tournament_eval(seeds=(7,), output_dir=tmp_path, max_ticks=50)
+
+
+# ---------------------------------------------------------------------------
+# compute_meeting_rate unit coverage (Phase 7 W0.3, DESIGN.md §11.3)
+#
+# compute_meeting_rate lives in eval/meeting_quality.py (the wrapper/builder
+# module), so its focused unit tests live here rather than in a separate
+# test_meeting_quality.py (deliberate asymmetry vs. vote_correctness, which has
+# its own test module).
+# ---------------------------------------------------------------------------
+
+_EMPTY_COST = GameCostSummary(
+    total_cost_usd=0.0, total_input_tokens=0, total_output_tokens=0, by_model={}
+)
+_FOUND_BODY = FoundBodyObservation(
+    type="found_body", tick=9, body_of="p-2", room="MedBay"
+)
+_SAW_PLAYER = SawPlayerObservation(
+    type="saw_player", tick=9, subject="p-2", room="MedBay"
+)
+
+
+def _report_doc(
+    agent_id: PlayerId,
+    observations: tuple[ObservationClaim, ...] = (),
+) -> ReportDocument:
+    return ReportDocument(
+        agent_id=agent_id,
+        tick=10,
+        observations=observations,
+        claims=(),
+        free_text="",
+    )
+
+
+def _meeting(
+    meeting_id: str,
+    triggered_by: PlayerId,
+    *,
+    reports: tuple[ReportDocument, ...] = (),
+) -> MeetingReport:
+    return MeetingReport(
+        meeting_id=meeting_id,
+        tick=10,
+        triggered_by=triggered_by,
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        transcript=MeetingTranscript(reports=reports),
+        ballots=(),
+        contradictions=(),
+        llm_calls=(),
+    )
+
+
+def _game(seed: int, *, meetings: tuple[MeetingReport, ...] = ()) -> GameReport:
+    return GameReport(
+        game_id=f"g-{seed}",
+        seed=seed,
+        winner="CREWMATES",
+        reason="CREWMATE_TASKS",
+        final_tick=10,
+        roles={"p-1": "CREWMATE"},
+        replay_ref=f"replay-seed-{seed}.jsonl",
+        meetings=meetings,
+        failed_calls=(),
+        prompt_versions={},
+        cost=_EMPTY_COST,
+    )
+
+
+def test_meeting_rate_none_when_no_games() -> None:
+    """meeting_rate is None (undefined), not 0.0, when there are zero games."""
+
+    result = compute_meeting_rate(())
+    assert result.games_total == 0
+    assert result.games_with_meeting == 0
+    assert result.meeting_rate is None
+    assert result.meetings_total == 0
+    assert result.body_report_meetings == 0
+    assert result.emergency_meetings == 0
+
+
+def test_meeting_rate_counts_games_meetings_and_partitions() -> None:
+    """Rate / totals / partition over a mix of meeting and meeting-free games."""
+
+    body_meeting = _meeting(
+        "g-0:m0", "p-1", reports=(_report_doc("p-1", (_FOUND_BODY,)),)
+    )
+    second_meeting = _meeting(
+        "g-0:m1", "p-1", reports=(_report_doc("p-1", (_FOUND_BODY,)),)
+    )
+    games = (
+        _game(0, meetings=(body_meeting, second_meeting)),  # 2 meetings
+        _game(1, meetings=()),  # no meeting
+        _game(2, meetings=(body_meeting,)),  # 1 meeting
+    )
+
+    result = compute_meeting_rate(games)
+
+    assert result.games_total == 3
+    assert result.games_with_meeting == 2
+    assert result.meeting_rate == pytest.approx(2 / 3)
+    assert result.meetings_total == 3
+    assert result.body_report_meetings == 3
+    assert result.emergency_meetings == 0
+    assert result.body_report_meetings + result.emergency_meetings == 3
+
+
+def test_meeting_classified_body_report_when_trigger_report_found_body() -> None:
+    """A meeting whose triggering player's report names a body is body_report."""
+
+    meeting = _meeting("m", "p-1", reports=(_report_doc("p-1", (_FOUND_BODY,)),))
+    result = compute_meeting_rate((_game(0, meetings=(meeting,)),))
+    assert result.body_report_meetings == 1
+    assert result.emergency_meetings == 0
+
+
+def test_meeting_classified_emergency_when_trigger_report_lacks_found_body() -> None:
+    """A triggering report with no FoundBodyObservation falls into emergency.
+
+    This is the first half of the documented two-fold catch-all: a body-report
+    whose triggering report happened to carry only a sighting still classifies as
+    ``emergency`` because the derived heuristic keys off FoundBodyObservation.
+    """
+
+    meeting = _meeting("m", "p-1", reports=(_report_doc("p-1", (_SAW_PLAYER,)),))
+    result = compute_meeting_rate((_game(0, meetings=(meeting,)),))
+    assert result.body_report_meetings == 0
+    assert result.emergency_meetings == 1
+
+
+def test_meeting_classified_emergency_when_no_matching_report() -> None:
+    """No report by the triggering player → emergency, never raises (partial)."""
+
+    # Triggered by p-1, but the only report present is from p-2.
+    meeting = _meeting("m", "p-1", reports=(_report_doc("p-2", (_FOUND_BODY,)),))
+    result = compute_meeting_rate((_game(0, meetings=(meeting,)),))
+    assert result.body_report_meetings == 0
+    assert result.emergency_meetings == 1
+
+
+def test_meeting_rate_empty_transcript_is_emergency() -> None:
+    """A meeting with an empty transcript classifies as emergency, not a crash."""
+
+    meeting = _meeting("m", "p-1")  # no reports at all
+    result = compute_meeting_rate((_game(0, meetings=(meeting,)),))
+    assert result.meetings_total == 1
+    assert result.body_report_meetings == 0
+    assert result.emergency_meetings == 1
+
+
+def test_compute_meeting_rate_accepts_report_and_bare_sequence() -> None:
+    """A TournamentReport and a bare GameReport sequence yield the same result."""
+
+    meeting = _meeting("m", "p-1", reports=(_report_doc("p-1", (_FOUND_BODY,)),))
+    games = (_game(0, meetings=(meeting,)), _game(1))
+    via_sequence = compute_meeting_rate(games)
+    via_report = compute_meeting_rate(
+        TournamentReport(format_version=1, games=games, seeds_used=(0, 1))
+    )
+    assert via_sequence == via_report
+    assert via_report.meeting_rate == pytest.approx(0.5)
+
+
+def test_meeting_rate_validator_rejects_bad_partition() -> None:
+    """body + emergency must equal meetings_total (fail-loud)."""
+
+    with pytest.raises(ValidationError, match="must equal meetings_total"):
+        MeetingRateReport(
+            games_total=1,
+            games_with_meeting=1,
+            meeting_rate=1.0,
+            meetings_total=2,
+            body_report_meetings=1,
+            emergency_meetings=0,  # 1 + 0 != 2
+        )
+
+
+def test_meeting_rate_validator_rejects_games_with_meeting_over_total() -> None:
+    """games_with_meeting cannot exceed games_total (fail-loud)."""
+
+    with pytest.raises(ValidationError, match="cannot exceed games_total"):
+        MeetingRateReport(
+            games_total=1,
+            games_with_meeting=2,  # > games_total
+            meeting_rate=1.0,
+            meetings_total=0,
+            body_report_meetings=0,
+            emergency_meetings=0,
+        )
+
+
+def test_meeting_rate_validator_rejects_rate_set_with_zero_games() -> None:
+    """meeting_rate must be None when games_total == 0."""
+
+    with pytest.raises(ValidationError, match="must be None when there are no games"):
+        MeetingRateReport(
+            games_total=0,
+            games_with_meeting=0,
+            meeting_rate=0.0,  # must be None
+            meetings_total=0,
+            body_report_meetings=0,
+            emergency_meetings=0,
+        )
+
+
+def test_meeting_rate_validator_rejects_none_rate_with_games() -> None:
+    """meeting_rate must be set when games_total > 0."""
+
+    with pytest.raises(ValidationError, match="must be set when games_total"):
+        MeetingRateReport(
+            games_total=1,
+            games_with_meeting=0,
+            meeting_rate=None,  # must be a float
+            meetings_total=0,
+            body_report_meetings=0,
+            emergency_meetings=0,
+        )
+
+
+def test_meeting_rate_validator_rejects_negative_counts() -> None:
+    """Negative counts are rejected (fail-loud)."""
+
+    with pytest.raises(ValidationError, match="must be non-negative"):
+        MeetingRateReport(
+            games_total=1,
+            games_with_meeting=-1,
+            meeting_rate=0.0,
+            meetings_total=0,
+            body_report_meetings=0,
+            emergency_meetings=0,
+        )

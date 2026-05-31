@@ -457,6 +457,23 @@ export interface CostDashboard {
   per_prompt_version: PromptVersionCost[];
 }
 
+// `eval.meeting_quality.MeetingRateReport` — Phase 7 W0.3 enablement-gate
+// metric. `meeting_rate` is `null` (undefined, not 0.0) when there were no
+// games; keep it `number | null` faithful to `float | None` or the dashboard
+// silently renders `undefined` (see the header `## Decisions` note). The
+// trigger breakdown partitions exactly: `body_report_meetings +
+// emergency_meetings === meetings_total`. `emergency_meetings` is a catch-all
+// (derived, not a positively-identified emergency-button count) — see the
+// Python `MeetingRateReport` docstring.
+export interface MeetingRateReport {
+  games_total: number;
+  games_with_meeting: number;
+  meeting_rate: number | null;
+  meetings_total: number;
+  body_report_meetings: number;
+  emergency_meetings: number;
+}
+
 // `eval.meeting_quality.TournamentEvalReport` — the wrapper the endpoint serves.
 export interface TournamentEvalReport {
   report: TournamentReport;
@@ -464,4 +481,5 @@ export interface TournamentEvalReport {
   accusation_calibration: AccusationCalibrationReport;
   alibi_fabrication: AlibiFabricationReport;
   cost_dashboard: CostDashboard;
+  meeting_rate: MeetingRateReport;
 }

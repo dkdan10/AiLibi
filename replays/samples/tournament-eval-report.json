@@ -4809,5 +4809,13 @@
         "game_count": 4
       }
     ]
+  },
+  "meeting_rate": {
+    "games_total": 50,
+    "games_with_meeting": 4,
+    "meeting_rate": 0.08,
+    "meetings_total": 4,
+    "body_report_meetings": 4,
+    "emergency_meetings": 0
   }
 }

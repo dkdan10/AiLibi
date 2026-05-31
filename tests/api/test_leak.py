@@ -252,6 +252,13 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # ROUTE redacts them on the served payload via ``api.schemas.FailedCallEvalView``
 # (covered end-to-end in ``test_eval_routes.py``); this structural snapshot is
 # over the report TYPE, which still carries them, so they are listed.
+#
+# The Phase 7 W0.3 meeting-rate fields (``meeting_rate``, ``meetings_total``,
+# ``games_total``, ``games_with_meeting``, ``body_report_meetings``,
+# ``emergency_meetings``) come from ``eval.meeting_quality.MeetingRateReport``.
+# They are pure aggregate counts + a rate (no roles, transcripts, or engine
+# types), so they expose no engine/role state and stay out of
+# ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
@@ -265,6 +272,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "ballots",
         "bin_index",
         "body_of",
+        "body_report_meetings",
         "by_model",
         "call_kind",
         "claims",
@@ -280,6 +288,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "crewmate_ejections",
         "description",
         "ejected_player_id",
+        "emergency_meetings",
         "error_message",
         "error_type",
         "event_a_id",
@@ -294,6 +303,8 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "game_count",
         "game_id",
         "games",
+        "games_total",
+        "games_with_meeting",
         "hi",
         "impostor_ejections",
         "impostor_hits",
@@ -304,7 +315,9 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "mean_confidence",
         "mean_cost_per_game",
         "meeting_id",
+        "meeting_rate",
         "meetings",
+        "meetings_total",
         "midpoint",
         "model",
         "n_bins",

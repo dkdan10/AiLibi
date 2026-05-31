@@ -23,7 +23,7 @@ reconciled here). The route therefore maps each game's failed calls through the
 sanitized :class:`api.schemas.FailedCallEvalView` and serves the thin
 ``_TournamentEvalReportView`` chain below.
 
-That chain re-models ONLY the failed-call leaf: it reuses the four metric
+That chain re-models ONLY the failed-call leaf: it reuses the five metric
 reports, the meeting report, the cost roll-up, and the role/winner leaf types
 verbatim by import, and re-declares solely the three report-wrapper shapes
 (game / tournament / eval-wrapper) so the sole structural change is the failed
@@ -45,7 +45,7 @@ from engine.entities import Role
 from eval.accusation_calibration import AccusationCalibrationReport
 from eval.alibi_fabrication import AlibiFabricationReport
 from eval.cost_dashboard import CostDashboard
-from eval.meeting_quality import TournamentEvalReport
+from eval.meeting_quality import MeetingRateReport, TournamentEvalReport
 from eval.report_schema import GameCostSummary, MeetingReport
 from eval.vote_correctness import VoteCorrectnessReport
 from meetings.schemas import PlayerId
@@ -111,8 +111,10 @@ class _TournamentEvalReportView(BaseModel):
     """The served eval report: the source wrapper with redacted failed calls.
 
     Mirrors :class:`eval.meeting_quality.TournamentEvalReport` and reuses its
-    four metric reports verbatim by import; only the embedded ``report`` is the
-    redacted view.
+    metric reports verbatim by import; only the embedded ``report`` is the
+    redacted view. Because this view forbids extras, a new field on
+    ``TournamentEvalReport`` (here ``meeting_rate``) MUST be mirrored here or
+    :func:`_redact_failed_calls`'s ``model_validate`` round-trip raises.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -122,6 +124,7 @@ class _TournamentEvalReportView(BaseModel):
     accusation_calibration: AccusationCalibrationReport
     alibi_fabrication: AlibiFabricationReport
     cost_dashboard: CostDashboard
+    meeting_rate: MeetingRateReport
 
 
 def _sanitized_failed_call(call: Mapping[str, Any]) -> dict[str, Any]:
