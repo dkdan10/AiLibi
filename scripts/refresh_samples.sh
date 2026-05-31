@@ -189,16 +189,36 @@ for _roster_pair in \
   fi
 done
 
+# The two-set contract reserves the descriptor-less default for EXACTLY the flat
+# 4p/1i baseline at $REPO_ROOT/replays/samples. Detect whether this refresh
+# targets it (realpath -m so a trailing slash / relative AILIBI_SAMPLE_DIR still
+# matches), and fail loud BEFORE any spend if a non-4p/1i roster is pointed at it
+# — e.g. a 7p/2i refresh that forgot AILIBI_SAMPLE_DIR would otherwise write
+# replays/samples/roster.json and break the committed baseline's reconstruction.
+is_flat_baseline=0
+if [[ "$(realpath -m "$SAMPLE_DIR")" == "$(realpath -m "$REPO_ROOT/replays/samples")" ]]; then
+  is_flat_baseline=1
+fi
+if [[ "$is_flat_baseline" -eq 1 ]] &&
+  [[ "$NUM_PLAYERS" -ne 4 || "$NUM_IMPOSTORS" -ne 1 || "$TASKS_PER_CREWMATE" -ne 1 ]]; then
+  echo "Error: refusing to refresh the flat 4p/1i baseline ($SAMPLE_DIR) with a" \
+    "non-4p/1i roster (${NUM_PLAYERS}p/${NUM_IMPOSTORS}i/${TASKS_PER_CREWMATE}t)." \
+    "Point AILIBI_SAMPLE_DIR at a per-set subdir (e.g. replays/samples/7p2i) --" \
+    "did you forget it?" >&2
+  exit 1
+fi
+
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
   echo "[dry-run] seeds: $seeds_csv"
   echo "[dry-run] roster: num_players=$NUM_PLAYERS num_impostors=$NUM_IMPOSTORS tasks_per_crewmate=$TASKS_PER_CREWMATE"
-  # Mirror _manifest_writer._roster_needs_sidecar: only the flat 4p/1i baseline is
-  # descriptor-less; every other roster (incl. a num-players-only change) gets one.
-  if [[ "$NUM_PLAYERS" -ne 4 || "$NUM_IMPOSTORS" -ne 1 || "$TASKS_PER_CREWMATE" -ne 1 ]]; then
-    echo "[dry-run] roster descriptor: would ensure $SAMPLE_DIR/roster.json = {num_players: $NUM_PLAYERS, num_impostors: $NUM_IMPOSTORS, tasks_per_crewmate: $TASKS_PER_CREWMATE} (fails loud if an existing one disagrees)"
+  # Mirror _manifest_writer.ensure_roster_descriptor: only the flat 4p/1i baseline
+  # dir is descriptor-less; every per-set subdir gets an explicit sidecar (even a
+  # 4p/1i subdir set). (A non-4p/1i roster on the flat dir already exited above.)
+  if [[ "$is_flat_baseline" -eq 1 ]]; then
+    echo "[dry-run] roster descriptor: flat 4p/1i baseline — no sidecar written"
   else
-    echo "[dry-run] roster descriptor: flat 4p/1i default — no sidecar written"
+    echo "[dry-run] roster descriptor: would ensure $SAMPLE_DIR/roster.json = {num_players: $NUM_PLAYERS, num_impostors: $NUM_IMPOSTORS, tasks_per_crewmate: $TASKS_PER_CREWMATE} (fails loud if an existing one disagrees)"
   fi
   echo "[dry-run] sample dir: $SAMPLE_DIR"
   echo "[dry-run] provider: AILIBI_LLM_PROVIDER=anthropic (forced)"

@@ -466,13 +466,30 @@ def test_ensure_roster_written_sidecar_parses_via_loader(tmp_path: Path) -> None
     )
 
 
-def test_ensure_roster_skips_sidecar_for_flat_default(tmp_path: Path) -> None:
-    # A flat 4p/1i set reconstructs from the loader's default path, so no sidecar
-    # is written (preserving the "flat dir + no sidecar = 4p/1i" invariant).
+def test_ensure_roster_flat_baseline_skips_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The flat baseline DIR + 4p/1i roster is the ONLY descriptor-less case: the
+    # loader reconstructs it from its defaults, so no sidecar is written.
+    monkeypatch.setattr(mw, "_DEFAULT_SAMPLE_DIR", tmp_path)
     status = mw.ensure_roster_descriptor(
         tmp_path, num_players=4, num_impostors=1, tasks_per_crewmate=1
     )
     assert "no sidecar" in status
+    assert not (tmp_path / "roster.json").exists()
+
+
+def test_ensure_roster_flat_baseline_rejects_non_4p1i(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A non-4p/1i roster pointed at the flat baseline dir (e.g. a 7p/2i refresh
+    # that forgot AILIBI_SAMPLE_DIR) must raise before any write — writing a
+    # sidecar there would break the committed 4p/1i baseline's reconstruction.
+    monkeypatch.setattr(mw, "_DEFAULT_SAMPLE_DIR", tmp_path)
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(
+            tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2
+        )
     assert not (tmp_path / "roster.json").exists()
 
 
@@ -522,21 +539,31 @@ def test_main_roster_writes_descriptor(
     assert "wrote roster descriptor" in capsys.readouterr().err
 
 
-def test_ensure_roster_writes_sidecar_for_num_players_only_change(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "roster",
+    [
+        {
+            "num_players": 7,
+            "num_impostors": 1,
+            "tasks_per_crewmate": 1,
+        },  # num-players only
+        {
+            "num_players": 4,
+            "num_impostors": 1,
+            "tasks_per_crewmate": 1,
+        },  # baseline roster
+    ],
+)
+def test_ensure_roster_subdir_always_writes_descriptor(
+    tmp_path: Path, roster: dict[str, int]
 ) -> None:
-    # A non-4p/1i set (e.g. 7p/1i/1task) is not the descriptor-less baseline, so it
-    # gets an explicit sidecar even with impostors/tasks at the defaults — "no
-    # descriptor" is reserved for the flat baseline and the browse track reads it.
-    status = mw.ensure_roster_descriptor(
-        tmp_path, num_players=7, num_impostors=1, tasks_per_crewmate=1
-    )
+    # A per-set subdir target is never the flat baseline DIR, so it ALWAYS gets an
+    # explicit descriptor — even a 4p/1i subdir set (e.g. a refresh that forgot the
+    # roster env vars). "No descriptor" is reserved for the flat baseline, so a
+    # subdir is never left descriptor-less and silently treated as 4p/1i.
+    status = mw.ensure_roster_descriptor(tmp_path, **roster)
     assert "wrote roster descriptor" in status
-    assert json.loads((tmp_path / "roster.json").read_text()) == {
-        "num_players": 7,
-        "num_impostors": 1,
-        "tasks_per_crewmate": 1,
-    }
+    assert json.loads((tmp_path / "roster.json").read_text()) == roster
 
 
 @pytest.mark.parametrize(

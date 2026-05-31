@@ -246,13 +246,39 @@ def test_dry_run_threads_roster_flags_into_tournament_invocation() -> None:
 
 
 def test_dry_run_default_roster_writes_no_descriptor() -> None:
-    # The flat 4p/1i default needs no sidecar; the dry-run must say so.
+    # The flat 4p/1i baseline dir needs no sidecar; the dry-run must say so.
     proc = _run("--seeds", "22", "--dry-run", env=_clean_env())
     assert proc.returncode == 0
     assert (
-        "[dry-run] roster descriptor: flat 4p/1i default — no sidecar written"
+        "[dry-run] roster descriptor: flat 4p/1i baseline — no sidecar written"
         in proc.stdout
     )
+
+
+def test_dry_run_flat_baseline_rejects_non_4p1i_roster() -> None:
+    # A non-4p/1i roster pointed at the flat baseline (e.g. forgot AILIBI_SAMPLE_DIR)
+    # must fail loud before any spend — it would otherwise corrupt the committed
+    # 4p/1i baseline by writing replays/samples/roster.json.
+    env = _clean_env()  # no AILIBI_SAMPLE_DIR -> the flat replays/samples baseline
+    env["AILIBI_NUM_IMPOSTORS"] = "2"
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode != 0
+    assert "refusing to refresh the flat 4p/1i baseline" in proc.stdout + proc.stderr
+
+
+def test_dry_run_subdir_baseline_roster_previews_descriptor(tmp_path: Path) -> None:
+    # A subdir target with the baseline 4p/1i roster (e.g. forgot the roster env
+    # vars) still previews a descriptor write — "no descriptor" is reserved for the
+    # flat baseline, so a non-flat dir is never left descriptor-less.
+    set_dir = tmp_path / "some-set"
+    env = _clean_env()
+    env.update(
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert f"would ensure {set_dir}/roster.json" in proc.stdout
 
 
 def test_dry_run_non_default_roster_previews_descriptor(tmp_path: Path) -> None:

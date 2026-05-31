@@ -434,18 +434,16 @@ def sum_cost(sample_dir: Path, seeds: Sequence[int]) -> float:
     return sum(compute_cost_usd(_sample_path(sample_dir, seed)) for seed in seeds)
 
 
-def _roster_needs_sidecar(
-    num_players: int, num_impostors: int, tasks_per_crewmate: int
-) -> bool:
-    """True for every set except the descriptor-less flat MVP baseline (4p/1i).
+def _is_flat_baseline_dir(sample_dir: Path) -> bool:
+    """True iff ``sample_dir`` is the canonical flat baseline set directory.
 
-    The loader reconstructs the baseline from its defaults with no sidecar; any
-    other roster — multi-impostor, multi-task, OR a different player count — is
-    given an explicit descriptor so "no descriptor" unambiguously means the
-    baseline and the browse track can read each non-baseline set's roster.
+    The two-set contract reserves the descriptor-less default for exactly ONE
+    location — the committed flat 4p/1i baseline at :data:`_DEFAULT_SAMPLE_DIR`.
+    Every other (per-set subdir) target must carry an explicit ``roster.json``,
+    and only this directory may be refreshed with the baseline (4p/1i) roster.
     """
 
-    return (num_players, num_impostors, tasks_per_crewmate) != _MVP_BASELINE_ROSTER
+    return sample_dir.resolve() == _DEFAULT_SAMPLE_DIR.resolve()
 
 
 def _validated_roster(raw: object, *, source: str) -> dict[str, int]:
@@ -527,19 +525,25 @@ def ensure_roster_descriptor(
     refresh produces a set the loader can actually reconstruct, instead of
     failing the per-tick state-hash check AFTER the money is spent (the sidecar
     carries ``num_impostors``/``tasks_per_crewmate``, which are not recoverable
-    from the replay). Behaviour:
+    from the replay). The two-set contract is: "no descriptor" means EXACTLY the
+    flat 4p/1i baseline at :data:`_DEFAULT_SAMPLE_DIR`; every other (subdir)
+    target is a per-set committed set that always carries an explicit
+    ``roster.json``. So:
 
     * the REQUESTED roster is validated first — a mistyped / non-positive value,
       or one the seeder rejects (bad parity, exhausted task pool), raises here
       rather than being written into a malformed/poison sidecar;
+    * targeting the FLAT BASELINE dir with a non-4p/1i roster raises — that would
+      write a sidecar into (or overwrite) the committed 4p/1i baseline and break
+      its reconstruction (e.g. a 7p/2i refresh that forgot ``AILIBI_SAMPLE_DIR``);
     * if a sidecar exists it is validated with the SAME strict rules and must
       MATCH the requested roster, else raise — never silently overwrite a
       committed set's descriptor, and never let a type-malformed sidecar (e.g.
       ``7.0`` or ``true``) slip past this gate only for the loader to reject it
       after spending; this also catches a refresh that forgot/mistyped the env;
-    * else if the requested roster needs a sidecar and none exists, write it;
-    * else (flat 4p/1i baseline) leave the directory descriptor-less so the
-      loader's default path applies.
+    * the flat baseline (4p/1i) is left descriptor-less; EVERY other target gets
+      an explicit ``roster.json`` written (even a 4p/1i subdir set), so a non-flat
+      directory is never left descriptor-less and silently treated as 4p/1i.
 
     Returns a one-line operator status. Idempotent: a matching sidecar is a no-op.
     The written JSON matches ``api.replay_loader.RosterConfig`` exactly (the three
@@ -557,6 +561,22 @@ def ensure_roster_descriptor(
     # Reject a positive-but-seeder-invalid roster (bad parity, exhausted task
     # pool) before writing anything, so a failed refresh leaves no poison sidecar.
     _validate_roster_is_seedable(expected)
+
+    is_flat_baseline = _is_flat_baseline_dir(sample_dir)
+    roster_is_baseline = (
+        num_players,
+        num_impostors,
+        tasks_per_crewmate,
+    ) == _MVP_BASELINE_ROSTER
+    if is_flat_baseline and not roster_is_baseline:
+        raise ValueError(
+            f"refusing to write a non-4p/1i roster "
+            f"({num_players}p/{num_impostors}i/{tasks_per_crewmate}t) into the flat "
+            f"baseline {sample_dir}: that directory is reserved for the "
+            "descriptor-less 4p/1i set. Point AILIBI_SAMPLE_DIR at a per-set subdir "
+            "(e.g. replays/samples/7p2i) — did you forget it?"
+        )
+
     path = sample_dir / _ROSTER_FILENAME
     if path.exists():
         try:
@@ -572,11 +592,8 @@ def ensure_roster_descriptor(
                 "AILIBI_TASKS_PER_CREWMATE for this set."
             )
         return f"roster descriptor already matches: {path}"
-    if not _roster_needs_sidecar(num_players, num_impostors, tasks_per_crewmate):
-        return (
-            f"flat {num_players}p/{num_impostors}i default roster — no sidecar "
-            f"needed in {sample_dir}"
-        )
+    if is_flat_baseline:
+        return f"flat 4p/1i baseline — no sidecar needed in {sample_dir}"
     _atomic_write_text(path, json.dumps(expected, sort_keys=True) + "\n")
     return f"wrote roster descriptor: {path}"
 
