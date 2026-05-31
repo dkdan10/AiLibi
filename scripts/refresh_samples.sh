@@ -173,20 +173,25 @@ case "$mode" in
 esac
 
 # Validate the roster env as positive integers up front (Task 7.4), for BOTH the
-# dry-run and real paths. Without this a typo like AILIBI_NUM_PLAYERS=7p makes the
-# later `[[ -ne ]]` arithmetic error out but still exit 0 with a misleading plan,
-# and a real run would only fail deep inside run_tournament.py. Fail loud here so
-# the per-set routing the dry-run reports is trustworthy.
-for _roster_pair in \
-  "AILIBI_NUM_PLAYERS=$NUM_PLAYERS" \
-  "AILIBI_NUM_IMPOSTORS=$NUM_IMPOSTORS" \
-  "AILIBI_TASKS_PER_CREWMATE=$TASKS_PER_CREWMATE"; do
-  _roster_name="${_roster_pair%%=*}"
-  _roster_val="${_roster_pair#*=}"
-  if [[ ! "$_roster_val" =~ ^[0-9]+$ ]] || [[ "$_roster_val" -lt 1 ]]; then
-    echo "Error: $_roster_name must be a positive integer, got '$_roster_val'." >&2
+# dry-run and real paths, and canonicalize to base 10. Without this a typo like
+# AILIBI_NUM_PLAYERS=7p makes the later `[[ -ne ]]` arithmetic error out but still
+# exit 0 with a misleading plan, and a leading-zero value like 08 is parsed as
+# octal (`value too great for base`) — which would likewise skip the positivity
+# check AND the flat-baseline guard below. Normalize with 10# (as seed parsing
+# does) so every later `-lt`/`-ne` and every threaded flag uses a clean base-10
+# integer. Fail loud here so the per-set routing the dry-run reports is trustworthy.
+for _roster_var in NUM_PLAYERS NUM_IMPOSTORS TASKS_PER_CREWMATE; do
+  _roster_val="${!_roster_var}"
+  if [[ ! "$_roster_val" =~ ^[0-9]+$ ]]; then
+    echo "Error: AILIBI_$_roster_var must be a positive integer, got '$_roster_val'." >&2
     exit 1
   fi
+  _roster_val="$((10#$_roster_val))" # 08 -> 8, 007 -> 7 (base 10, not octal)
+  if [[ "$_roster_val" -lt 1 ]]; then
+    echo "Error: AILIBI_$_roster_var must be a positive integer, got '${!_roster_var}'." >&2
+    exit 1
+  fi
+  printf -v "$_roster_var" '%s' "$_roster_val" # write the normalized value back
 done
 
 # The two-set contract reserves the descriptor-less default for EXACTLY the flat

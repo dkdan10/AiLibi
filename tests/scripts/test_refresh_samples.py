@@ -328,6 +328,37 @@ def test_invalid_roster_env_fails_loud(bad: str) -> None:
     assert "must be a positive integer" in proc.stdout + proc.stderr
 
 
+def test_leading_zero_roster_env_does_not_bypass_flat_guard() -> None:
+    # A leading-zero value (08 == 8) must canonicalize to base 10, not be parsed as
+    # octal — otherwise the arithmetic errors out and silently skips the
+    # flat-baseline guard. So AILIBI_NUM_IMPOSTORS=08 (a non-4p/1i roster) on the
+    # flat baseline must fail loud, with no "value too great for base" octal error.
+    env = _clean_env()  # no AILIBI_SAMPLE_DIR -> the flat replays/samples baseline
+    env["AILIBI_NUM_IMPOSTORS"] = "08"
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode != 0
+    assert "refusing to refresh the flat 4p/1i baseline" in proc.stdout + proc.stderr
+    assert "value too great for base" not in proc.stderr
+
+
+def test_leading_zero_roster_env_normalized_for_subdir(tmp_path: Path) -> None:
+    # On a subdir, leading-zero roster values canonicalize to base 10 (08/02/02 ->
+    # 8/2/2) for the threaded flags + descriptor, with no octal arithmetic errors.
+    set_dir = tmp_path / "set"
+    env = _clean_env()
+    env.update(
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+        AILIBI_NUM_PLAYERS="08",
+        AILIBI_NUM_IMPOSTORS="02",
+        AILIBI_TASKS_PER_CREWMATE="02",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "value too great for base" not in proc.stderr
+    assert "{num_players: 8, num_impostors: 2, tasks_per_crewmate: 2}" in proc.stdout
+
+
 def test_dry_run_routes_per_set_for_7p2i(tmp_path: Path) -> None:
     # Task 7.5 generates the 7p/2i set by setting the roster + per-set dir/manifest
     # env hooks. The dry-run must show the resolved roster, the per-set SAMPLE_DIR
