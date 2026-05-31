@@ -62,6 +62,33 @@ def _base_world_state(*, seed: int = 42) -> WorldState:
     )
 
 
+def _multi_impostor_world_state(*, seed: int = 7) -> WorldState:
+    # Five players, two impostors (p-2, p-4), three crewmates (p-1, p-3, p-5).
+    # The three committed scripted fixtures are all 4p/1i, so this is the only
+    # service-level roster that exercises the impostor-sees-teammate path and a
+    # roster where a crew misroute into ``fellow_impostor_ids`` could surface.
+    game_map = load_canonical_map()
+    return WorldState(
+        tick=0,
+        phase="PLAY",
+        map=game_map.id,
+        players={
+            "p-1": _player("p-1", "CREWMATE", "STORAGE", (0.0, 0.0)),
+            "p-2": _player("p-2", "IMPOSTOR", "REACTOR", (0.0, 0.0)),
+            "p-3": _player("p-3", "CREWMATE", "ADMIN", (0.0, 0.0)),
+            "p-4": _player("p-4", "IMPOSTOR", "STORAGE", (1.0, 0.0)),
+            "p-5": _player("p-5", "CREWMATE", "ADMIN", (0.0, 0.0)),
+        },
+        bodies={},
+        tasks={},
+        sabotage=None,
+        cooldowns={"p-2": 0, "p-4": 0},
+        emergency_uses={},
+        rng_state=EngineRng.from_seed(seed).snapshot(),
+        seed=seed,
+    )
+
+
 def _observation_service(tmp_path: Path) -> ObservationService:
     return ObservationService(
         game_map=load_canonical_map(),
@@ -276,6 +303,46 @@ def test_impostor_receives_own_cooldown(tmp_path: Path) -> None:
     )
 
     assert packet.cooldown == 6
+
+
+def test_impostors_see_each_other_and_crew_see_empty_team(tmp_path: Path) -> None:
+    # Task 7.2 (DESIGN.md §1.3, locked decision 3): each impostor receives the
+    # identity of its fellow impostor(s) on the privileged self channel, with
+    # its own id excluded; every crewmate receives an empty tuple.
+    state = _multi_impostor_world_state()
+    service = _observation_service(tmp_path)
+
+    packets = {
+        player_id: service.build_packet(
+            world_state=state, agent_id=player_id, engine_events=[]
+        )
+        for player_id in state.players
+    }
+
+    # Each impostor sees exactly the OTHER impostor; its own id is excluded.
+    assert packets["p-2"].self_state.fellow_impostor_ids == ("p-4",)
+    assert packets["p-4"].self_state.fellow_impostor_ids == ("p-2",)
+    assert "p-2" not in packets["p-2"].self_state.fellow_impostor_ids
+    assert "p-4" not in packets["p-4"].self_state.fellow_impostor_ids
+
+    # Crew-empty leak invariant over every crewmate-recipient packet built from
+    # the 2-impostor world state -- a misroute into a crew tuple would surface
+    # here, where it cannot in the single-impostor scripted fixtures.
+    for crew_id in ("p-1", "p-3", "p-5"):
+        assert packets[crew_id].self_state.role == "CREWMATE"
+        assert packets[crew_id].self_state.fellow_impostor_ids == ()
+
+
+def test_sole_impostor_has_no_fellow_impostors(tmp_path: Path) -> None:
+    # An impostor with no teammates (the 4p/1i base roster) gets an empty
+    # tuple -- the same value a crewmate gets, by construction.
+    state = _base_world_state()
+    packet = _observation_service(tmp_path).build_packet(
+        world_state=state, agent_id="p-4", engine_events=[]
+    )
+
+    assert packet.self_state.role == "IMPOSTOR"
+    assert packet.self_state.fellow_impostor_ids == ()
 
 
 def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:

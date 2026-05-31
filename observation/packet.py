@@ -19,6 +19,14 @@ class SelfView(_FrozenModel):
     room: RoomId
     role: Role
     pending_task_id: TaskId | None
+    # Identities of the recipient's fellow impostor(s), excluding its own id.
+    # This rides the already-privileged self channel where ``role`` lives: an
+    # agent entitled to know its own role is, by the same logic, entitled to
+    # know its own team (locked decision 3). It is populated ONLY for impostor
+    # recipients (``()`` for every crewmate and for a sole impostor) and is
+    # never mirrored into the crew-visible ``PlayerView`` channel, so the
+    # DESIGN.md §1.3 observation firewall holds. Sorted for replay stability.
+    fellow_impostor_ids: tuple[PlayerId, ...] = ()
 
 
 class PlayerView(_FrozenModel):
