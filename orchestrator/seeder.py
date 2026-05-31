@@ -32,6 +32,7 @@ def seed_initial_state(
     game_map: Map,
     num_players: int,
     num_impostors: int = 1,
+    tasks_per_crewmate: int = 1,
 ) -> WorldState:
     """Build a deterministic initial :class:`WorldState` for one headless game.
 
@@ -44,10 +45,24 @@ def seed_initial_state(
 
     Spawns: every player starts in ``game_map.spawn.room``.
 
-    Task assignment: each crewmate owns exactly one task. Tasks are
-    drawn round-robin from a seed-shuffled list of all map task ids,
-    so the same seed produces the same per-crewmate task. Tasks not
-    assigned in this round are simply omitted from ``WorldState.tasks``.
+    Task assignment: each crewmate owns exactly ``tasks_per_crewmate``
+    *distinct* map task ids. The map's task ids are shuffled once with
+    ``random.Random(seed)`` and dealt out by a flat cursor — the first
+    crewmate takes the first ``tasks_per_crewmate`` ids, the next crewmate
+    the following ``tasks_per_crewmate``, and so on — so no two crewmates
+    ever share a task id (the engine keys ``WorldState.tasks`` by
+    :class:`~engine.world.TaskId` and enforces ``TaskState.id == <dict
+    key>``, so a shared id would corrupt the world). ``tasks_per_crewmate``
+    defaults to ``1`` — the historical value — so a caller that omits it
+    (e.g. the committed-replay loader) reproduces the original
+    one-task-per-crewmate assignment byte-for-byte. The harness/CLI layer
+    raises this to ``orchestrator.game.DEFAULT_TASKS_PER_CREWMATE`` for live
+    runs. Tasks not dealt out are simply omitted from ``WorldState.tasks``.
+
+    Fail-loud (AGENTS.md "no silent fallbacks"): ``tasks_per_crewmate < 1``
+    raises, and a roster that would need more distinct ids than the map has
+    (``num_crewmates * tasks_per_crewmate > len(game_map.tasks)``) raises
+    rather than reusing an id.
 
     Cooldowns: only impostors carry a kill cooldown, initialised to 0.
     """
@@ -60,6 +75,10 @@ def seed_initial_state(
         raise ValueError(
             "num_impostors must be strictly less than num_players: "
             f"got num_impostors={num_impostors}, num_players={num_players}"
+        )
+    if tasks_per_crewmate < 1:
+        raise ValueError(
+            f"tasks_per_crewmate must be at least 1, got {tasks_per_crewmate}"
         )
     if not game_map.tasks:
         raise ValueError("game map must define at least one task")
@@ -81,6 +100,7 @@ def seed_initial_state(
         seed=seed,
         game_map=game_map,
         crewmate_ids=crewmate_ids,
+        tasks_per_crewmate=tasks_per_crewmate,
     )
 
     return WorldState(
@@ -157,22 +177,50 @@ def _build_tasks(
     seed: int,
     game_map: Map,
     crewmate_ids: tuple[PlayerId, ...],
+    tasks_per_crewmate: int,
 ) -> dict[TaskId, TaskState]:
+    """Deal ``tasks_per_crewmate`` distinct map task ids to each crewmate.
+
+    Determinism contract: the shuffle prefix is unchanged from the original
+    one-task-per-crewmate implementation (``random.Random(seed)`` then
+    ``rng.shuffle(sorted(game_map.tasks))``), and the ids are dealt by a flat
+    cursor over the shuffled pool. For ``tasks_per_crewmate == 1`` this deals
+    ``shuffled[i]`` to crewmate ``i`` — identical to the historical
+    ``map_task_ids[index % len(map_task_ids)]`` for any roster that fits the
+    pool — so the committed 4p/1i baseline reconstructs byte-for-byte. A flat
+    cursor (never a modulo) guarantees every dealt id is unique, so the engine's
+    ``TaskState.id == <dict key>`` invariant (``engine/tick.py``) holds across
+    the whole roster.
+    """
+
+    required = len(crewmate_ids) * tasks_per_crewmate
+    if required > len(game_map.tasks):
+        raise ValueError(
+            "task pool exhausted: assigning tasks_per_crewmate="
+            f"{tasks_per_crewmate} distinct task(s) to each of "
+            f"{len(crewmate_ids)} crewmate(s) needs {required} distinct map task "
+            f"ids, but the map defines only {len(game_map.tasks)}. Lower "
+            "tasks_per_crewmate or num_players, or use a map with more tasks."
+        )
+
     rng = random.Random(seed)
     map_task_ids = sorted(game_map.tasks)
     rng.shuffle(map_task_ids)
     tasks: dict[TaskId, TaskState] = {}
-    for index, crewmate_id in enumerate(crewmate_ids):
-        task_id = map_task_ids[index % len(map_task_ids)]
-        task_definition = game_map.tasks[task_id]
-        tasks[task_id] = TaskState(
-            id=task_id,
-            owner=crewmate_id,
-            room=task_definition.room,
-            progress=0,
-            required_ticks=task_definition.duration_ticks,
-            completed=False,
-        )
+    cursor = 0
+    for crewmate_id in crewmate_ids:
+        for _ in range(tasks_per_crewmate):
+            task_id = map_task_ids[cursor]
+            cursor += 1
+            task_definition = game_map.tasks[task_id]
+            tasks[task_id] = TaskState(
+                id=task_id,
+                owner=crewmate_id,
+                room=task_definition.room,
+                progress=0,
+                required_ticks=task_definition.duration_ticks,
+                completed=False,
+            )
     return tasks
 
 

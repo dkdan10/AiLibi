@@ -367,6 +367,7 @@ class _AbortingHeadlessGame:
         replay_path: Path,
         num_players: int,
         num_impostors: int,
+        tasks_per_crewmate: int,
         scheduler: object,
         meeting_runner: object,
         force: bool,

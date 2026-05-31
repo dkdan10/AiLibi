@@ -159,3 +159,158 @@ def test_seed_initial_state_supports_three_player_two_one_split() -> None:
         "p-2": "CREWMATE",
         "p-3": "CREWMATE",
     }
+
+
+def test_seed_initial_state_defaults_to_one_task_per_crewmate() -> None:
+    """The seeder's own parameter default stays 1 (NOT 2).
+
+    The locked default-of-2 lives at the harness/CLI layer
+    (``orchestrator.game.DEFAULT_TASKS_PER_CREWMATE``); the seeder default must
+    remain 1 so ``api/replay_loader.py``'s default-driven ``_walk`` call keeps
+    re-seeding the committed 4p/1i baseline byte-identically (Task 7.1 contract).
+    """
+
+    game_map = load_canonical_map()
+
+    state = seed_initial_state(seed=3, game_map=game_map, num_players=4)
+    crewmate_ids = {pid for pid, p in state.players.items() if p.role == "CREWMATE"}
+
+    assert len(state.tasks) == len(crewmate_ids)
+
+
+def test_seed_initial_state_one_task_assignment_matches_historical_bytes() -> None:
+    """``tasks_per_crewmate=1`` reproduces the pre-task assignment byte-for-byte.
+
+    Pins the historical one-task-per-crewmate assignment for fixed seeds so the
+    committed 4p/1i baseline path stays unchanged. These golden ``(owner,
+    task_id)`` pairs — in dict-insertion order — were captured from the seeder
+    BEFORE Task 7.1 widened it; any drift in the RNG draw order or the
+    assignment would change them and break committed-replay reconstruction.
+    """
+
+    game_map = load_canonical_map()
+
+    for seed, expected in (
+        (
+            0,
+            [
+                ("p-1", "analyze_specimen"),
+                ("p-2", "submit_scan"),
+                ("p-4", "start_reactor"),
+            ],
+        ),
+        (
+            42,
+            [
+                ("p-1", "log_findings"),
+                ("p-2", "fuel_reserves"),
+                ("p-4", "calibrate_distributor"),
+            ],
+        ),
+    ):
+        # The explicit tasks_per_crewmate=1 and the omitted default must agree.
+        for kwargs in ({}, {"tasks_per_crewmate": 1}):
+            state = seed_initial_state(
+                seed=seed, game_map=game_map, num_players=4, num_impostors=1, **kwargs
+            )
+            assert [(t.owner, tid) for tid, t in state.tasks.items()] == expected
+
+
+def test_seed_initial_state_assigns_distinct_ids_per_crewmate() -> None:
+    """Each crewmate owns exactly ``tasks_per_crewmate`` distinct map task ids.
+
+    Covers the structural invariant the engine enforces
+    (``engine/tick.py``): ``len(state.tasks) == num_crewmates *
+    tasks_per_crewmate``, every assigned id is unique, and every
+    ``TaskState.id`` equals its ``WorldState.tasks`` dict key — so no two
+    crewmates can share a map task id.
+    """
+
+    game_map = load_canonical_map()
+    tasks_per_crewmate = 2
+
+    state = seed_initial_state(
+        seed=7,
+        game_map=game_map,
+        num_players=7,
+        num_impostors=2,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+    crewmate_ids = [pid for pid, p in state.players.items() if p.role == "CREWMATE"]
+
+    assert len(state.tasks) == len(crewmate_ids) * tasks_per_crewmate
+    # Every id unique and equal to its dict key (the engine invariant).
+    assert len(set(state.tasks)) == len(state.tasks)
+    for task_id, task in state.tasks.items():
+        assert task.id == task_id
+        assert task.owner in crewmate_ids
+    # Each crewmate owns exactly tasks_per_crewmate of them.
+    owners = [task.owner for task in state.tasks.values()]
+    for crewmate_id in crewmate_ids:
+        assert owners.count(crewmate_id) == tasks_per_crewmate
+
+
+def test_seed_initial_state_multi_task_uses_flat_cursor_not_modulo() -> None:
+    """Multiple tasks per crewmate are dealt by a flat cursor over the pool.
+
+    Pins the exact seed-0 two-task partition: crewmates [p-1, p-2, p-4] take the
+    shuffled pool's ids in consecutive pairs (NOT a modulo, which would repeat
+    ids). The shuffled seed-0 pool starts
+    ``[analyze_specimen, submit_scan, start_reactor, fuel_reserves, swipe_card,
+    calibrate_distributor, ...]``.
+    """
+
+    game_map = load_canonical_map()
+
+    state = seed_initial_state(
+        seed=0,
+        game_map=game_map,
+        num_players=4,
+        num_impostors=1,
+        tasks_per_crewmate=2,
+    )
+
+    assert [(t.owner, tid) for tid, t in state.tasks.items()] == [
+        ("p-1", "analyze_specimen"),
+        ("p-1", "submit_scan"),
+        ("p-2", "start_reactor"),
+        ("p-2", "fuel_reserves"),
+        ("p-4", "swipe_card"),
+        ("p-4", "calibrate_distributor"),
+    ]
+
+
+def test_seed_initial_state_rejects_tasks_per_crewmate_below_one() -> None:
+    game_map = load_canonical_map()
+
+    with pytest.raises(ValueError, match="tasks_per_crewmate"):
+        seed_initial_state(
+            seed=1,
+            game_map=game_map,
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=0,
+        )
+
+
+def test_seed_initial_state_rejects_exhausted_task_pool() -> None:
+    """A valid roster that needs more distinct ids than the map has fails loud.
+
+    The canonical map has 12 tasks; 10p/1i is 9 crewmates, and at
+    ``tasks_per_crewmate=2`` that needs 18 distinct ids > 12 — so the seeder
+    raises rather than silently reusing an id (which would violate the engine's
+    ``TaskState.id == <dict key>`` invariant). 0 impostors is rejected earlier,
+    so the pool can only be exhausted with a valid ``1 <= num_impostors <
+    num_players`` roster.
+    """
+
+    game_map = load_canonical_map()
+
+    with pytest.raises(ValueError, match="task pool exhausted"):
+        seed_initial_state(
+            seed=1,
+            game_map=game_map,
+            num_players=10,
+            num_impostors=1,
+            tasks_per_crewmate=2,
+        )

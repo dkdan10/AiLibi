@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 import pytest
@@ -16,8 +16,11 @@ from observation.service import ObservationService
 from orchestrator.boundary import public_map_from_engine_map
 from orchestrator.game import (
     DEFAULT_NUM_PLAYERS,
+    DEFAULT_TASKS_PER_CREWMATE,
+    ROSTER_PRESETS,
     HeadlessGame,
     HeadlessGameResult,
+    RosterPreset,
     TacticalAgent,
     build_default_agent_factory,
 )
@@ -86,7 +89,12 @@ def _override_seeder(monkeypatch: pytest.MonkeyPatch, *, state: WorldState) -> N
     """
 
     def _stub(
-        *, seed: int, game_map: Map, num_players: int, num_impostors: int = 1
+        *,
+        seed: int,
+        game_map: Map,
+        num_players: int,
+        num_impostors: int = 1,
+        tasks_per_crewmate: int = 1,
     ) -> WorldState:
         return state
 
@@ -650,3 +658,102 @@ def test_headless_game_uses_default_player_count_constants() -> None:
     """The implementation hint pins 4 players / 1 impostor as the default."""
 
     assert DEFAULT_NUM_PLAYERS == 4
+
+
+def _capture_seed_kwargs(
+    monkeypatch: pytest.MonkeyPatch, captured: dict[str, int]
+) -> None:
+    """Patch ``orchestrator.game.seed_initial_state`` with a recording spy.
+
+    The spy records ``tasks_per_crewmate`` (the value HeadlessGame threads
+    through) and delegates to the real seeder so the game still runs.
+    """
+
+    def spy(
+        *,
+        seed: int,
+        game_map: Map,
+        num_players: int,
+        num_impostors: int = 1,
+        tasks_per_crewmate: int = 1,
+    ) -> WorldState:
+        captured["tasks_per_crewmate"] = tasks_per_crewmate
+        return seed_initial_state(
+            seed=seed,
+            game_map=game_map,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+        )
+
+    monkeypatch.setattr("orchestrator.game.seed_initial_state", spy)
+
+
+def test_headless_game_threads_default_tasks_per_crewmate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HeadlessGame defaults tasks_per_crewmate to the locked harness default.
+
+    The seeder's own parameter default is 1, but every harness caller passes the
+    value explicitly; HeadlessGame's default is ``DEFAULT_TASKS_PER_CREWMATE``
+    (2), so a game constructed without the kwarg seeds 2 tasks per crewmate.
+    """
+
+    captured: dict[str, int] = {}
+    _capture_seed_kwargs(monkeypatch, captured)
+
+    HeadlessGame(
+        seed=2026,
+        game_map=load_canonical_map(),
+        agent_factory=_wait_factory({}),
+        replay_path=tmp_path / "default-tpc.jsonl",
+        scheduler=TickScheduler(max_ticks=1),
+    ).run()
+
+    assert captured["tasks_per_crewmate"] == DEFAULT_TASKS_PER_CREWMATE == 2
+
+
+def test_headless_game_threads_explicit_tasks_per_crewmate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicit tasks_per_crewmate overrides the default and reaches the seeder."""
+
+    captured: dict[str, int] = {}
+    _capture_seed_kwargs(monkeypatch, captured)
+
+    HeadlessGame(
+        seed=2026,
+        game_map=load_canonical_map(),
+        agent_factory=_wait_factory({}),
+        replay_path=tmp_path / "explicit-tpc.jsonl",
+        tasks_per_crewmate=1,
+        scheduler=TickScheduler(max_ticks=1),
+    ).run()
+
+    assert captured["tasks_per_crewmate"] == 1
+
+
+def test_default_tasks_per_crewmate_constant_is_two() -> None:
+    """The locked Phase 7 W0.1 default (diagnosis audit §3) is 2."""
+
+    assert DEFAULT_TASKS_PER_CREWMATE == 2
+
+
+def test_roster_presets_pin_baseline_and_meeting_heavy_configs() -> None:
+    """``4p1i`` reproduces the committed baseline; ``7p2i`` is meeting-heavy.
+
+    ``4p1i`` is pinned at ``tasks_per_crewmate=1`` (NOT the new default of 2) so
+    it reproduces the byte-identical committed 4p/1i baseline; ``7p2i`` carries
+    the new default of 2. ``RosterPreset`` is frozen and data-only.
+    """
+
+    assert set(ROSTER_PRESETS) == {"4p1i", "7p2i"}
+    assert ROSTER_PRESETS["4p1i"] == RosterPreset(
+        num_players=4, num_impostors=1, tasks_per_crewmate=1
+    )
+    assert ROSTER_PRESETS["7p2i"] == RosterPreset(
+        num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        ROSTER_PRESETS["7p2i"].num_players = 9  # type: ignore[misc]
