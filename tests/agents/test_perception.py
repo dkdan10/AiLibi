@@ -76,6 +76,7 @@ def _packet(
     role: str = "CREWMATE",
     room: str = "CAFETERIA",
     pending_task_id: str | None = "swipe_card",
+    fellow_impostor_ids: tuple[str, ...] = (),
     visible_players: tuple[PlayerView, ...] = (),
     visible_bodies: tuple[BodyView, ...] = (),
     audible_events: tuple[AudibleEvent, ...] = (),
@@ -89,6 +90,7 @@ def _packet(
             room=room,
             role=role,  # type: ignore[arg-type]
             pending_task_id=pending_task_id,
+            fellow_impostor_ids=fellow_impostor_ids,
         ),
         visible_players=visible_players,
         visible_bodies=visible_bodies,
@@ -123,7 +125,24 @@ class TestIngestPacketSelfAndGlobal:
             "room": "ADMIN",
             "role": "IMPOSTOR",
             "pending_task_id": None,
+            "fellow_impostor_ids": (),
         }
+
+    def test_self_state_payload_carries_fellow_impostor_ids(self) -> None:
+        # Task 7.2: the impostor-only teammate list rides the same self-state
+        # payload that carries ``role``, so the Wave-2 impostor layer can read
+        # its team from perception. The recipient's own id is already excluded
+        # by ObservationService; perception surfaces the tuple verbatim.
+        store = MemoryStore()
+
+        ingest_packet(
+            packet=_packet(role="IMPOSTOR", fellow_impostor_ids=("p-2", "p-5")),
+            memory=store,
+        )
+
+        self_event = store.recent(since_tick=0)[0]
+        assert self_event.type == EVENT_SELF_STATE
+        assert self_event.payload["fellow_impostor_ids"] == ("p-2", "p-5")
 
     def test_global_status_provenance_is_inferred(self) -> None:
         store = MemoryStore()

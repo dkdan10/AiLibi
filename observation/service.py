@@ -91,6 +91,24 @@ class ObservationService:
         cooldown = (
             world_state.cooldowns.get(agent_id) if player.role == "IMPOSTOR" else None
         )
+        # Mutual-awareness substrate (Task 7.2, DESIGN.md §1.3, locked
+        # decision 3): an impostor learns its fellow impostor(s) at game start
+        # so it never accuses or votes a teammate in meetings. This is a pure,
+        # role-derived value -- sorted for replay stability, independent of
+        # visibility/alive state (the identity is known even after a teammate
+        # dies) -- and lives only on the privileged self channel, never on
+        # ``visible_players``. Crewmates and a sole impostor get ``()``.
+        fellow_impostor_ids = (
+            tuple(
+                sorted(
+                    other_id
+                    for other_id, other in world_state.players.items()
+                    if other.role == "IMPOSTOR" and other_id != agent_id
+                )
+            )
+            if player.role == "IMPOSTOR"
+            else ()
+        )
         visible_bodies = tuple(
             BodyView(
                 id=body_id,
@@ -106,6 +124,7 @@ class ObservationService:
                 room=player.room,
                 role=player.role,
                 pending_task_id=pending_task_id,
+                fellow_impostor_ids=fellow_impostor_ids,
             ),
             visible_players=visible_players,
             visible_bodies=visible_bodies,

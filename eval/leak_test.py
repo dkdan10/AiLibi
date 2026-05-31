@@ -297,3 +297,14 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
                 assert _FORBIDDEN_BODY_FIELDS.isdisjoint(visible_body_dump.keys())
             if packet.self_state.role == "CREWMATE":
                 assert packet.cooldown is None
+                # Task 7.2 firewall invariant: the impostor-only
+                # ``fellow_impostor_ids`` self-channel field must never reach a
+                # crewmate recipient. The generic scanners cannot catch this --
+                # role-neutral ids (``p-2``) do not trip the value scanner and
+                # the field name is not in the recursive scanner's set -- so
+                # this explicit assertion is the guard. The three committed
+                # fixtures are 4p/1i, so every impostor's tuple is also ``()``
+                # here; the impostor-sees-teammate path and a multi-impostor
+                # crew-misroute are exercised by tests/observation/test_service
+                # .py and the extended property sweep in test_leak_property.py.
+                assert packet.self_state.fellow_impostor_ids == ()
