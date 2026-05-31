@@ -709,6 +709,15 @@ def test_load_roster_config_malformed_fails_loud(tmp_path: Path, payload: str) -
         replay_loader._load_roster_config(tmp_path)
 
 
+def test_load_roster_config_non_file_is_malformed(tmp_path: Path) -> None:
+    # A roster.json that exists but is NOT a regular file (e.g. a directory from a
+    # bad checkout) is present-but-malformed: fail loud, don't silently default to
+    # 4p/1i.
+    (tmp_path / "roster.json").mkdir()
+    with pytest.raises(ValueError):
+        replay_loader._load_roster_config(tmp_path)
+
+
 def test_roster_descriptor_added_after_construction_is_picked_up(
     tmp_path: Path, multi_impostor_replay_bytes: bytes
 ) -> None:

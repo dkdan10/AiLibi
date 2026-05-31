@@ -579,3 +579,30 @@ def test_ensure_roster_rejects_non_positive_requested(
     with pytest.raises(ValueError):
         mw.ensure_roster_descriptor(tmp_path, **bad)
     assert not (tmp_path / "roster.json").exists()
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"num_players": 1, "num_impostors": 1, "tasks_per_crewmate": 1},  # players < 2
+        {
+            "num_players": 2,
+            "num_impostors": 2,
+            "tasks_per_crewmate": 1,
+        },  # impostors==players
+        {
+            "num_players": 10,
+            "num_impostors": 1,
+            "tasks_per_crewmate": 2,
+        },  # pool exhausted
+    ],
+)
+def test_ensure_roster_rejects_seeder_invalid_roster(
+    tmp_path: Path, invalid: dict[str, int]
+) -> None:
+    # Positive ints the SEEDER rejects (bad parity / exhausted task pool) must fail
+    # BEFORE writing, so a failed refresh leaves no poison sidecar that a later
+    # corrected refresh would refuse to overwrite (and the loader would fail on).
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(tmp_path, **invalid)
+    assert not (tmp_path / "roster.json").exists()

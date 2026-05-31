@@ -484,6 +484,36 @@ def _validated_roster(raw: object, *, source: str) -> dict[str, int]:
     return validated
 
 
+def _validate_roster_is_seedable(roster: dict[str, int]) -> None:
+    """Reject a roster the seeder itself would reject, BEFORE writing a sidecar.
+
+    ``_validated_roster`` guarantees positive ints, but the seeder also enforces
+    cross-field invariants (``2 <= num_players``, ``1 <= num_impostors <
+    num_players``) and the map's task-pool capacity (``num_crewmates *
+    tasks_per_crewmate <= len(map.tasks)``). Run those EXACT checks by probing
+    :func:`orchestrator.seeder.seed_initial_state` against the canonical map
+    ``run_tournament.py`` uses, so an invalid-but-positive roster (e.g. ``1p/1i``,
+    or a task count that exhausts the map) fails loud here instead of being
+    written into a sidecar that ``run_tournament.py`` then rejects — which would
+    poison the directory with a descriptor a later corrected refresh refuses to
+    overwrite. Imported lazily so the per-seed ``update`` path stays cheap.
+    """
+
+    from engine.world import load_canonical_map
+    from orchestrator.seeder import seed_initial_state
+
+    try:
+        seed_initial_state(
+            seed=0,
+            game_map=load_canonical_map(),
+            num_players=roster["num_players"],
+            num_impostors=roster["num_impostors"],
+            tasks_per_crewmate=roster["tasks_per_crewmate"],
+        )
+    except ValueError as exc:
+        raise ValueError(f"requested roster is invalid for the seeder: {exc}") from exc
+
+
 def ensure_roster_descriptor(
     sample_dir: Path,
     *,
@@ -499,8 +529,9 @@ def ensure_roster_descriptor(
     carries ``num_impostors``/``tasks_per_crewmate``, which are not recoverable
     from the replay). Behaviour:
 
-    * the REQUESTED roster is validated first — a mistyped / non-positive env
-      value raises here rather than being written into a malformed sidecar;
+    * the REQUESTED roster is validated first — a mistyped / non-positive value,
+      or one the seeder rejects (bad parity, exhausted task pool), raises here
+      rather than being written into a malformed/poison sidecar;
     * if a sidecar exists it is validated with the SAME strict rules and must
       MATCH the requested roster, else raise — never silently overwrite a
       committed set's descriptor, and never let a type-malformed sidecar (e.g.
@@ -523,6 +554,9 @@ def ensure_roster_descriptor(
         },
         source="requested roster",
     )
+    # Reject a positive-but-seeder-invalid roster (bad parity, exhausted task
+    # pool) before writing anything, so a failed refresh leaves no poison sidecar.
+    _validate_roster_is_seedable(expected)
     path = sample_dir / _ROSTER_FILENAME
     if path.exists():
         try:

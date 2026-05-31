@@ -290,6 +290,18 @@ def test_dry_run_num_players_only_change_previews_descriptor(tmp_path: Path) -> 
     assert f"would ensure {set_dir}/roster.json" in proc.stdout
 
 
+@pytest.mark.parametrize("bad", ["7p", "0", "-1", "abc"])
+def test_invalid_roster_env_fails_loud(bad: str) -> None:
+    # A non-integer / non-positive roster env value must fail loud — even in
+    # --dry-run — rather than error out the arithmetic test and still exit 0 with
+    # a misleading no-sidecar plan.
+    env = _clean_env()
+    env["AILIBI_NUM_PLAYERS"] = bad
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode != 0
+    assert "must be a positive integer" in proc.stdout + proc.stderr
+
+
 def test_dry_run_routes_per_set_for_7p2i(tmp_path: Path) -> None:
     # Task 7.5 generates the 7p/2i set by setting the roster + per-set dir/manifest
     # env hooks. The dry-run must show the resolved roster, the per-set SAMPLE_DIR

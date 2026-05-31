@@ -1112,8 +1112,14 @@ def _load_roster_config(replay_dir: Path) -> RosterConfig | None:
     """
 
     path = replay_dir / _ROSTER_FILENAME
-    if not path.is_file():
+    if not path.exists():
         return None
+    # Present but not a regular file (e.g. a directory from a bad checkout/setup)
+    # is a malformed descriptor, NOT the absent/default case — the contract
+    # reserves "no descriptor" for an ABSENT ``roster.json``, so fail loud rather
+    # than silently re-seeding 4p/1i.
+    if not path.is_file():
+        raise ValueError(f"roster descriptor {path} exists but is not a regular file")
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:

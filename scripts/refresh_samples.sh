@@ -172,6 +172,23 @@ case "$mode" in
     ;;
 esac
 
+# Validate the roster env as positive integers up front (Task 7.4), for BOTH the
+# dry-run and real paths. Without this a typo like AILIBI_NUM_PLAYERS=7p makes the
+# later `[[ -ne ]]` arithmetic error out but still exit 0 with a misleading plan,
+# and a real run would only fail deep inside run_tournament.py. Fail loud here so
+# the per-set routing the dry-run reports is trustworthy.
+for _roster_pair in \
+  "AILIBI_NUM_PLAYERS=$NUM_PLAYERS" \
+  "AILIBI_NUM_IMPOSTORS=$NUM_IMPOSTORS" \
+  "AILIBI_TASKS_PER_CREWMATE=$TASKS_PER_CREWMATE"; do
+  _roster_name="${_roster_pair%%=*}"
+  _roster_val="${_roster_pair#*=}"
+  if [[ ! "$_roster_val" =~ ^[0-9]+$ ]] || [[ "$_roster_val" -lt 1 ]]; then
+    echo "Error: $_roster_name must be a positive integer, got '$_roster_val'." >&2
+    exit 1
+  fi
+done
+
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
   echo "[dry-run] seeds: $seeds_csv"
