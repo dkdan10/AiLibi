@@ -131,6 +131,12 @@ class PromptRegressionMetrics(_FrozenModel):
       :class:`eval.accusation_calibration.AccusationCalibrationReport` (each
       ``None`` when that channel had no samples).
     * ``total_cost_usd`` — :attr:`eval.cost_dashboard.CostDashboard.total_cost_usd`.
+    * ``meeting_rate`` / ``meetings_total`` / ``body_report_meetings`` /
+      ``emergency_meetings`` — the Phase 7 W0.3 Stage-A close-gate scalars from
+      :class:`eval.meeting_quality.MeetingRateReport` (``meeting_rate`` is
+      ``None`` when the fixture set holds no games). They make the
+      ``meeting_rate ≥ 0.60`` gate a byte-stable, committed-baseline scalar like
+      the other §11.3 metrics.
     """
 
     vote_correctness_rate: float | None
@@ -139,6 +145,10 @@ class PromptRegressionMetrics(_FrozenModel):
     accusation_claim_ece: float | None
     vote_ballot_ece: float | None
     total_cost_usd: float
+    meeting_rate: float | None
+    meetings_total: int
+    body_report_meetings: int
+    emergency_meetings: int
 
 
 class PromptRegressionSummary(_FrozenModel):
@@ -210,6 +220,10 @@ def run_prompt_regression(
         accusation_claim_ece=evaluated.accusation_calibration.accusation_claim_ece,
         vote_ballot_ece=evaluated.accusation_calibration.vote_ballot_ece,
         total_cost_usd=evaluated.cost_dashboard.total_cost_usd,
+        meeting_rate=evaluated.meeting_rate.meeting_rate,
+        meetings_total=evaluated.meeting_rate.meetings_total,
+        body_report_meetings=evaluated.meeting_rate.body_report_meetings,
+        emergency_meetings=evaluated.meeting_rate.emergency_meetings,
     )
     prompt_versions = tuple(
         PromptVersionProvenance(

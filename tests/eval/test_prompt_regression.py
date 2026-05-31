@@ -100,6 +100,25 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
     assert summary_a.metrics.vote_ballot_ece == summary_b.metrics.vote_ballot_ece
     assert summary_a.metrics.total_cost_usd == summary_b.metrics.total_cost_usd
 
+    # The W0.3 meeting-rate scalars are orthogonal to the prompt-version change
+    # (v_b only flips one alibi contradiction; it touches neither the meeting
+    # count nor the trigger classification), so they are identical across both
+    # fixtures. All three fixture games (seeds 22/24/26) reach a body-report
+    # meeting, so the rate is 1.0 and emergency is 0 — matching the diagnosis
+    # ground truth (no emergency meetings observed).
+    assert summary_a.metrics.meeting_rate == summary_b.metrics.meeting_rate == 1.0
+    assert summary_a.metrics.meetings_total == summary_b.metrics.meetings_total == 3
+    assert (
+        summary_a.metrics.body_report_meetings
+        == summary_b.metrics.body_report_meetings
+        == 3
+    )
+    assert (
+        summary_a.metrics.emergency_meetings
+        == summary_b.metrics.emergency_meetings
+        == 0
+    )
+
     # Attribution: the ONLY (template, version) pair that changed is
     # impostor_report v1 -> v2 — the template responsible for impostor alibis.
     versions_a = {pv.template_name: pv.version for pv in summary_a.prompt_versions}

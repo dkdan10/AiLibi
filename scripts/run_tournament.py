@@ -132,11 +132,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _format_summary(eval_report: TournamentEvalReport) -> str:
-    """Human-readable balance + cost summary derived from the eval report.
+    """Human-readable balance + meeting-rate + cost summary from the eval report.
 
     The crew / impostor / tick-budget buckets reduce out of
     ``GameReport.winner`` (``winner is None`` is the non-decisive tick-budget
-    bucket); the cost numbers come from the bundled cost dashboard.
+    bucket); the meeting numbers come from the Phase 7 W0.3
+    :class:`~eval.meeting_quality.MeetingRateReport` (``meeting_rate`` is
+    rendered as a percentage and guards the ``None``/no-games case the way
+    ``decisive_split`` guards the no-decisive-games case); the cost numbers come
+    from the bundled cost dashboard.
     """
 
     report = eval_report.report
@@ -144,6 +148,7 @@ def _format_summary(eval_report: TournamentEvalReport) -> str:
     crew_wins = sum(1 for game in report.games if game.winner == "CREWMATES")
     impostor_wins = sum(1 for game in report.games if game.winner == "IMPOSTORS")
     tick_budget_reached = sum(1 for game in report.games if game.winner is None)
+    meeting = eval_report.meeting_rate
     dashboard = eval_report.cost_dashboard
 
     lines = [
@@ -161,6 +166,20 @@ def _format_summary(eval_report: TournamentEvalReport) -> str:
         )
     else:
         lines.append("decisive_split:       (no decisive games)")
+    lines.append(f"meetings_total:       {meeting.meetings_total}")
+    if meeting.meeting_rate is not None:
+        lines.append(
+            "meeting_rate:         "
+            f"{meeting.meeting_rate:.2%} "
+            f"({meeting.games_with_meeting}/{meeting.games_total} games)"
+        )
+    else:
+        lines.append("meeting_rate:         (no games)")
+    lines.append(
+        "meeting_triggers:     "
+        f"body={meeting.body_report_meetings} "
+        f"emergency={meeting.emergency_meetings}"
+    )
     lines.append(f"total_cost_usd:       {dashboard.total_cost_usd:.4f}")
     lines.append(f"mean_cost_per_game:   {dashboard.mean_cost_per_game:.4f}")
     return "\n".join(lines)
