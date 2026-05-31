@@ -197,6 +197,14 @@ if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
 fi
 echo "Using API key prefix: ${ANTHROPIC_API_KEY:0:8}"
 
+# Create the target set directory before any spend (Task 7.4). A per-set refresh
+# (e.g. AILIBI_SAMPLE_DIR=replays/samples/7p2i) may point at a brand-new subdir;
+# without this the per-seed `mv` into $SAMPLE_DIR below would fail AFTER a
+# real-provider run had already spent. Done after the API-key preflight so a
+# dry-run still touches nothing and a missing-key run still fails first; it also
+# guarantees the staging dir's parent (dirname "$SAMPLE_DIR") exists. Idempotent.
+mkdir -p "$SAMPLE_DIR"
+
 # Force the real provider. llm.provider.build_default_client() defaults to the
 # FAKE provider whenever AILIBI_LLM_PROVIDER is unset (its documented default so
 # CI never hits the network), even when ANTHROPIC_API_KEY is present. Without

@@ -269,3 +269,20 @@ def test_dry_run_routes_per_set_for_7p2i(tmp_path: Path) -> None:
         in proc.stdout
     )
     assert "--num-players 7 --num-impostors 2 --tasks-per-crewmate 2" in proc.stdout
+
+
+def test_missing_key_creates_no_per_set_directory(tmp_path: Path) -> None:
+    # The per-set mkdir is gated behind the API-key preflight: a real (non-dry-run)
+    # refresh into a not-yet-existing set dir with no key must fail at preflight
+    # WITHOUT creating the directory or spending (no side effect before the check).
+    set_dir = tmp_path / "7p2i"
+    env = _clean_env()
+    env.pop("ANTHROPIC_API_KEY", None)
+    env.update(
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(set_dir / "MANIFEST.md"),
+    )
+    proc = _run("--seeds", "0", env=env)
+    assert proc.returncode != 0
+    assert "ANTHROPIC_API_KEY must be set" in proc.stdout + proc.stderr
+    assert not set_dir.exists()  # mkdir runs only after the preflight passes
