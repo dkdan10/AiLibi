@@ -216,3 +216,56 @@ def test_non_full_dry_run_has_no_cleanup() -> None:
     proc = _run("--seeds", "22", "--dry-run")
     assert proc.returncode == 0
     assert "non-canonical" not in proc.stdout
+
+
+# -- per-set roster routing (Task 7.4) ----------------------------------------
+
+
+def _clean_env() -> dict[str, str]:
+    """Ambient env with every ``AILIBI_*`` routing/roster override stripped."""
+
+    return {k: v for k, v in os.environ.items() if not k.startswith("AILIBI_")}
+
+
+def test_dry_run_shows_default_roster() -> None:
+    # With no roster overrides, the refresh threads the committed FLAT 4p/1i
+    # baseline at ONE task/crewmate (NOT run_tournament.py's harness default of
+    # 2), so a default refresh re-records replays/samples/ byte-identically.
+    proc = _run("--seeds", "22", "--dry-run", env=_clean_env())
+    assert proc.returncode == 0
+    assert (
+        "[dry-run] roster: num_players=4 num_impostors=1 tasks_per_crewmate=1"
+        in proc.stdout
+    )
+
+
+def test_dry_run_threads_roster_flags_into_tournament_invocation() -> None:
+    proc = _run("--seeds", "22", "--dry-run", env=_clean_env())
+    assert proc.returncode == 0
+    assert "--num-players 4 --num-impostors 1 --tasks-per-crewmate 1" in proc.stdout
+
+
+def test_dry_run_routes_per_set_for_7p2i(tmp_path: Path) -> None:
+    # Task 7.5 generates the 7p/2i set by setting the roster + per-set dir/manifest
+    # env hooks. The dry-run must show the resolved roster, the per-set SAMPLE_DIR
+    # / MANIFEST, and the threaded run_tournament.py invocation — all observable
+    # without spend, and proving the refresh cannot overwrite the 4p/1i baseline.
+    set_dir = tmp_path / "7p2i"
+    manifest = set_dir / "MANIFEST.md"
+    env = _clean_env()
+    env.update(
+        AILIBI_SAMPLE_DIR=str(set_dir),
+        AILIBI_MANIFEST=str(manifest),
+        AILIBI_NUM_PLAYERS="7",
+        AILIBI_NUM_IMPOSTORS="2",
+        AILIBI_TASKS_PER_CREWMATE="2",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert f"[dry-run] sample dir: {set_dir}" in proc.stdout
+    assert f"[dry-run] manifest: {manifest}" in proc.stdout
+    assert (
+        "[dry-run] roster: num_players=7 num_impostors=2 tasks_per_crewmate=2"
+        in proc.stdout
+    )
+    assert "--num-players 7 --num-impostors 2 --tasks-per-crewmate 2" in proc.stdout

@@ -8,6 +8,7 @@ the recorded one, or :class:`ReplayStateMismatchError` is raised.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -15,14 +16,22 @@ from pathlib import Path
 import pytest
 
 from api import replay_loader
-from api.replay_loader import ReplayLoader, ReplayStateMismatchError
+from api.replay_loader import ReplayLoader, ReplayStateMismatchError, RosterConfig
 from api.schemas import (
     FoundBodyObsView,
     KillEventView,
     MeetingTriggeredEventView,
     ReportBodyEventView,
 )
+from engine.world import load_canonical_map
+from llm.fake_provider import FakeProvider
+from orchestrator.game import (
+    HeadlessGame,
+    build_default_agent_factory,
+    build_default_meeting_runner,
+)
 from orchestrator.replay import LLMCallRecord, ReplayLogEntry, read_all_entries
+from orchestrator.scheduler import TickScheduler
 from tests.api.fixtures.sample_replay import (
     corrupt_tick_hash,
     strip_llm_call_agent_ids,
@@ -512,3 +521,188 @@ def test_list_replays_skips_corrupted_file_and_logs(
     # The corruption is recorded, not silently swallowed.
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert any("replay-seed-1.jsonl" in r.getMessage() for r in warnings)
+
+
+# -- roster-aware loader / two-committed-set layout (Task 7.4) -----------------
+#
+# Hermetic, FAKE-provider only: a tiny multi-impostor game is generated in
+# tmp_path and reconstructed through the loader's per-set roster mechanism. No
+# real-provider spend and NO committed replays/samples/ data — Task 7.5 commits
+# the real 7p/2i set; this proves the plumbing on the canonical 7p/2i + 2-task
+# roster.
+
+_MI_NUM_PLAYERS = 7
+_MI_NUM_IMPOSTORS = 2
+_MI_TASKS_PER_CREWMATE = 2
+
+
+def _run_multi_impostor_game(replay_path: Path, *, seed: int = 0) -> None:
+    """Run a hermetic 7p/2i + 2-task game on the FAKE provider into ``replay_path``.
+
+    Mirrors the canonical Phase 7 roster (Task 7.5's committed set) so the
+    loader's roster-aware re-seed is exercised against a real multi-impostor
+    replay. The fake provider is deterministic and never spends.
+    """
+
+    HeadlessGame(
+        seed=seed,
+        game_map=load_canonical_map(),
+        agent_factory=build_default_agent_factory(),
+        replay_path=replay_path,
+        num_players=_MI_NUM_PLAYERS,
+        num_impostors=_MI_NUM_IMPOSTORS,
+        tasks_per_crewmate=_MI_TASKS_PER_CREWMATE,
+        meeting_runner=build_default_meeting_runner(llm_client=FakeProvider()),
+        scheduler=TickScheduler(max_ticks=300),
+    ).run()
+
+
+def _write_roster(
+    directory: Path,
+    *,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+) -> None:
+    (directory / "roster.json").write_text(
+        json.dumps(
+            {
+                "num_players": num_players,
+                "num_impostors": num_impostors,
+                "tasks_per_crewmate": tasks_per_crewmate,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+@pytest.fixture(scope="module")
+def multi_impostor_replay_bytes(tmp_path_factory: pytest.TempPathFactory) -> bytes:
+    """Bytes of a hermetic 7p/2i replay, generated once for the module.
+
+    Generating the replay once and replaying its bytes into each test's tmp_path
+    (with a per-test ``roster.json``) keeps the suite fast while exercising the
+    same recorded multi-impostor game under several descriptors.
+    """
+
+    src = tmp_path_factory.mktemp("multi-impostor-src") / "replay-seed-0.jsonl"
+    _run_multi_impostor_game(src, seed=0)
+    return src.read_bytes()
+
+
+def test_multi_impostor_replay_reconstructs_with_matching_roster(
+    tmp_path: Path, multi_impostor_replay_bytes: bytes
+) -> None:
+    # (a) A descriptor naming the recorded roster re-seeds 2 impostors + 2
+    # tasks/crewmate, so engine playback reconstructs byte-identically (every
+    # per-tick state_hash matches; no ReplayStateMismatchError).
+    (tmp_path / "replay-seed-0.jsonl").write_bytes(multi_impostor_replay_bytes)
+    _write_roster(tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    replay = loader.load_replay("headless-seed-0")
+    assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 8)}
+    # The descriptor's num_impostors took effect — the flat default (1) would
+    # have mismatched on tick 0.
+    assert sum(1 for p in replay.players if p.role == "IMPOSTOR") == 2
+
+
+def test_multi_impostor_memory_walk_holds_firewall(
+    tmp_path: Path, multi_impostor_replay_bytes: bytes
+) -> None:
+    # The first multi-impostor reconstruction also drives the collect_memory walk:
+    # get_meeting_memory rebuilds every per-tick packet through ObservationService,
+    # which is where 7.2's impostor-only fellow_impostor_ids is populated. Confirm
+    # that rebuild path is reachable on multi-impostor data and an impostor's
+    # memory resolves (the crew-empty invariant itself is guarded by 7.2's leak
+    # property sweep over the same service).
+    (tmp_path / "replay-seed-0.jsonl").write_bytes(multi_impostor_replay_bytes)
+    _write_roster(tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    replay = loader.load_replay("headless-seed-0")
+    assert replay.meetings  # the hermetic 7p/2i seed-0 game resolves a meeting
+    meeting_id = replay.meetings[0].meeting_id
+    impostor = next(p.agent_id for p in replay.players if p.role == "IMPOSTOR")
+    memory = loader.get_meeting_memory("headless-seed-0", meeting_id, impostor)
+    assert memory.agent_id == impostor
+    assert memory.role == "IMPOSTOR"
+
+
+@pytest.mark.parametrize(
+    "wrong",
+    [
+        {"num_players": 7, "num_impostors": 1, "tasks_per_crewmate": 2},
+        {"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 1},
+    ],
+)
+def test_wrong_roster_descriptor_raises_state_mismatch(
+    tmp_path: Path, multi_impostor_replay_bytes: bytes, wrong: dict[str, int]
+) -> None:
+    # (b) The descriptor is load-bearing: naming the wrong num_impostors OR the
+    # wrong tasks_per_crewmate re-seeds different roles/tasks, so the per-tick
+    # state_hash check fails loud rather than serving a wrongly-reconstructed game.
+    (tmp_path / "replay-seed-0.jsonl").write_bytes(multi_impostor_replay_bytes)
+    _write_roster(tmp_path, **wrong)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    with pytest.raises(ReplayStateMismatchError):
+        loader.load_replay("headless-seed-0")
+
+
+def test_multi_impostor_replay_without_descriptor_fails_loud(
+    tmp_path: Path, multi_impostor_replay_bytes: bytes
+) -> None:
+    # A multi-impostor replay placed in a flat dir with NO roster.json defaults to
+    # 4p/1i and therefore cannot reconstruct — it fails loud rather than silently
+    # re-seeding the wrong roster. This is precisely why the descriptor exists.
+    (tmp_path / "replay-seed-0.jsonl").write_bytes(multi_impostor_replay_bytes)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    with pytest.raises(ReplayStateMismatchError):
+        loader.load_replay("headless-seed-0")
+
+
+def test_flat_directory_without_descriptor_defaults_to_4p1i(tmp_path: Path) -> None:
+    # (c) A flat dir with no roster.json keeps the MVP 4p/1i default verbatim: a
+    # genuine 4p/1i replay reconstructs byte-identically (1 impostor, 4 players),
+    # exactly as before Task 7.4 — the committed-baseline path is unchanged.
+    write_sample_replay(tmp_path / "replay-seed-0.jsonl", seed=0, ticks=3)
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    replay = loader.load_replay("headless-seed-0")
+    assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 5)}
+    assert sum(1 for p in replay.players if p.role == "IMPOSTOR") == 1
+
+
+def test_load_roster_config_absent_returns_none(tmp_path: Path) -> None:
+    # The ONLY defaulting path: no descriptor present -> None -> 4p/1i re-seed.
+    assert replay_loader._load_roster_config(tmp_path) is None
+
+
+def test_load_roster_config_parses_valid_descriptor(tmp_path: Path) -> None:
+    _write_roster(tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2)
+    assert replay_loader._load_roster_config(tmp_path) == RosterConfig(
+        num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"num_players": 7, "num_impostors": 2}',  # missing tasks_per_crewmate
+        # unexpected key
+        '{"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 2, "x": 1}',
+        '{"num_players": "7", "num_impostors": 2, "tasks_per_crewmate": 2}',  # type
+        '{"num_players": 7, "num_impostors": 0, "tasks_per_crewmate": 2}',  # non-positive
+        '{"num_players": 7, "num_impostors": true, "tasks_per_crewmate": 2}',  # bool
+        "[7, 2, 2]",  # not a JSON object
+        "not valid json",  # malformed JSON
+    ],
+)
+def test_load_roster_config_malformed_fails_loud(tmp_path: Path, payload: str) -> None:
+    # A present-but-malformed descriptor raises rather than falling back to the
+    # 4p/1i default (AGENTS.md "no silent fallbacks").
+    (tmp_path / "roster.json").write_text(payload, encoding="utf-8")
+    with pytest.raises(ValueError):
+        replay_loader._load_roster_config(tmp_path)

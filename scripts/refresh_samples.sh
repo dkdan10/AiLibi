@@ -29,6 +29,18 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SAMPLE_DIR="${AILIBI_SAMPLE_DIR:-$REPO_ROOT/replays/samples}"
 MANIFEST="${AILIBI_MANIFEST:-$SAMPLE_DIR/MANIFEST.md}"
 
+# Per-set roster (Task 7.4). Threaded into scripts/run_tournament.py so a refresh
+# records each set at its own roster. The defaults reproduce the committed FLAT
+# 4p/1i baseline at ONE task per crewmate — NOT run_tournament.py's harness
+# default of 2 — so a default refresh re-records replays/samples/ byte-identically
+# (the committed loader re-seeds the flat set at 1 task/crewmate). Task 7.5 sets
+# these alongside AILIBI_SAMPLE_DIR/AILIBI_MANIFEST to generate the 7p/2i set:
+#   AILIBI_NUM_PLAYERS=7 AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2 \
+#   AILIBI_SAMPLE_DIR=replays/samples/7p2i AILIBI_MANIFEST=replays/samples/7p2i/MANIFEST.md
+NUM_PLAYERS="${AILIBI_NUM_PLAYERS:-4}"
+NUM_IMPOSTORS="${AILIBI_NUM_IMPOSTORS:-1}"
+TASKS_PER_CREWMATE="${AILIBI_TASKS_PER_CREWMATE:-1}"
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") (--full | --meetings | --seeds N,N,N) [--dry-run]
@@ -163,11 +175,12 @@ esac
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
   echo "[dry-run] seeds: $seeds_csv"
+  echo "[dry-run] roster: num_players=$NUM_PLAYERS num_impostors=$NUM_IMPOSTORS tasks_per_crewmate=$TASKS_PER_CREWMATE"
   echo "[dry-run] sample dir: $SAMPLE_DIR"
   echo "[dry-run] provider: AILIBI_LLM_PROVIDER=anthropic (forced)"
   echo "[dry-run] meeting model: ${AILIBI_LLM_MEETING_MODEL:-(provider default)}"
   echo "[dry-run] per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
-  echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --force"
+  echo "[dry-run]   AILIBI_LLM_PROVIDER=anthropic uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $NUM_PLAYERS --num-impostors $NUM_IMPOSTORS --tasks-per-crewmate $TASKS_PER_CREWMATE --force"
   if [[ "$mode" == "full" ]]; then
     echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49 and zero-padded aliases like replay-seed-01.jsonl) and prune their manifest rows"
   fi
@@ -227,6 +240,9 @@ for seed in "${seed_list[@]}"; do
     --start-seed "$seed" \
     --num-games 1 \
     --output-dir "$stage_dir" \
+    --num-players "$NUM_PLAYERS" \
+    --num-impostors "$NUM_IMPOSTORS" \
+    --tasks-per-crewmate "$TASKS_PER_CREWMATE" \
     --force
   # Atomic replace on success, THEN sync this seed's manifest row, so the live
   # sample and its provenance never drift. Per-seed (rather than one update

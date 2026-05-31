@@ -27,6 +27,7 @@ that is the deferred scale boundary (Audit H-H-6).
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 import tempfile
@@ -137,6 +138,14 @@ _DEFAULT_METADATA_CACHE_SIZE: Final[int] = 1024
 # the same configured replay/eval directory it scans for replays (Task 5.7).
 _TOURNAMENT_REPORT_FILENAME: Final[str] = "tournament-eval-report.json"
 
+# Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
+# that is NOT the MVP-default flat 4p/1i set ships this sidecar so the loader can
+# re-seed it with the right roles + task pool (``num_impostors`` /
+# ``tasks_per_crewmate`` are not recoverable from the action stream). A flat
+# directory with NO ``roster.json`` is the only path that defaults to 4p/1i, so
+# the committed flat baseline keeps reconstructing byte-identically.
+_ROSTER_FILENAME: Final[str] = "roster.json"
+
 _GAME_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"headless-seed-(-?\d+)")
 _FILENAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"replay-seed-(-?\d+)\.jsonl")
 _PLAYER_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"p-(\d+)")
@@ -163,6 +172,32 @@ _COLOR_PALETTE: Final[tuple[str, ...]] = (
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
 _TriggerKind = Literal["body", "emergency"]
+
+
+@dataclass(frozen=True)
+class RosterConfig:
+    """Per-set roster descriptor parsed from a sample dir's ``roster.json``.
+
+    The replay JSONL persists no roster header — a tick row carries only
+    ``game_id``, ``tick``, ``actions``, ``state_hash`` (``orchestrator/replay.py``).
+    ``num_players`` is recoverable from the recorded action ids
+    (:func:`_infer_num_players`), but ``num_impostors`` and ``tasks_per_crewmate``
+    are NOT: a 7p/2i replay re-seeded as 7p/1i assigns the wrong roles (and a wrong
+    task count changes ``WorldState.tasks``), so the per-tick ``state_hash`` check
+    in :meth:`ReplayLoader._walk` raises :class:`ReplayStateMismatchError`.
+
+    A committed set that is not the MVP-default flat 4p/1i set therefore ships a
+    ``roster.json`` carrying exactly these three knobs, parsed here into a pinned,
+    frozen descriptor by :func:`_load_roster_config`. The helper FAILS LOUD on a
+    missing key, a wrong type, or a non-positive value (AGENTS.md "no silent
+    fallbacks"); only the *absence* of the descriptor defaults (to 4p/1i). This is
+    the metadata source the deferred frontend browse track reads, so the field set
+    is kept minimal and explicit (no inference).
+    """
+
+    num_players: int
+    num_impostors: int
+    tasks_per_crewmate: int
 
 
 class ReplayStateMismatchError(RuntimeError):
@@ -238,6 +273,10 @@ class ReplayLoader:
         metadata_cache_size: int = _DEFAULT_METADATA_CACHE_SIZE,
     ) -> None:
         self._replay_dir = replay_dir
+        # Read the per-set roster descriptor once at construction (Task 7.4). A
+        # flat dir with no ``roster.json`` yields ``None`` and the MVP 4p/1i
+        # re-seed default; a present-but-malformed descriptor fails loud here.
+        self._roster_config = _load_roster_config(replay_dir)
         self._game_map = game_map if game_map is not None else load_canonical_map()
         self._map_view = self._build_map_view()
         self._cached_load = lru_cache(maxsize=cache_size)(self._load_replay)
@@ -416,11 +455,32 @@ class ReplayLoader:
         failed_calls = tuple(e for e in entries if isinstance(e, FailedCallReplayEntry))
         meeting_by_tick = {entry.tick: entry for entry in meeting_entries}
 
+        # Re-seed with this set's roster (Task 7.4). When the set ships a
+        # ``roster.json`` descriptor, every knob comes from it — ``num_impostors``
+        # and ``tasks_per_crewmate`` are NOT recoverable from the action stream, so
+        # a multi-impostor / multi-task set can only reconstruct from the recorded
+        # roster. When there is NO descriptor (the flat 4p/1i baseline), keep the
+        # historical default verbatim: infer ``num_players`` from the actions, pin
+        # ``num_impostors`` to the MVP invariant, and let the seeder default
+        # ``tasks_per_crewmate`` to 1 — so the committed flat set stays
+        # byte-identical. A wrong descriptor cannot corrupt output: the per-tick
+        # ``state_hash`` check below fails loud (``ReplayStateMismatchError``).
+        roster = self._roster_config
+        if roster is None:
+            num_players = _infer_num_players(replay_entries)
+            num_impostors = DEFAULT_NUM_IMPOSTORS
+            tasks_per_crewmate = 1
+        else:
+            num_players = roster.num_players
+            num_impostors = roster.num_impostors
+            tasks_per_crewmate = roster.tasks_per_crewmate
+
         initial_state = seed_initial_state(
             seed=seed,
             game_map=self._game_map,
-            num_players=_infer_num_players(replay_entries),
-            num_impostors=DEFAULT_NUM_IMPOSTORS,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
         )
         state = initial_state
 
@@ -1005,6 +1065,79 @@ def _infer_num_players(replay_entries: Sequence[ReplayEntry]) -> int:
     return max_index if max_index > 0 else DEFAULT_NUM_PLAYERS
 
 
+_ROSTER_FIELDS: Final[tuple[str, ...]] = (
+    "num_players",
+    "num_impostors",
+    "tasks_per_crewmate",
+)
+
+
+def _load_roster_config(replay_dir: Path) -> RosterConfig | None:
+    """Parse ``<replay_dir>/roster.json`` into a :class:`RosterConfig`, or None.
+
+    Returns ``None`` when the directory has NO ``roster.json`` — the only path
+    that defaults: the flat 4p/1i baseline re-seeds with ``num_impostors=
+    DEFAULT_NUM_IMPOSTORS`` and ``tasks_per_crewmate=1`` and an inferred
+    ``num_players`` (see :meth:`ReplayLoader._walk`).
+
+    A descriptor that IS present must be well-formed: the JSON object must carry
+    exactly :data:`_ROSTER_FIELDS`, each a positive integer. A missing key, an
+    unexpected key, a non-integer (``bool`` included — ``true`` is not ``1``), or
+    a non-positive value raises :class:`ValueError` rather than silently falling
+    back to the default (AGENTS.md "no silent fallbacks"). Cross-field roster
+    validity (``2 <= num_players`` and ``num_impostors < num_players``) is left to
+    :func:`orchestrator.seeder.seed_initial_state`, the single source of truth for
+    it, which raises at re-seed time.
+    """
+
+    path = replay_dir / _ROSTER_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid roster descriptor {path}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"invalid roster descriptor {path}: expected a JSON object, got "
+            f"{type(raw).__name__}"
+        )
+    keys = set(raw)
+    expected = set(_ROSTER_FIELDS)
+    missing = expected - keys
+    if missing:
+        raise ValueError(
+            f"invalid roster descriptor {path}: missing key(s) "
+            f"{', '.join(sorted(missing))}"
+        )
+    unexpected = keys - expected
+    if unexpected:
+        raise ValueError(
+            f"invalid roster descriptor {path}: unexpected key(s) "
+            f"{', '.join(sorted(unexpected))}"
+        )
+    values: dict[str, int] = {}
+    for key in _ROSTER_FIELDS:
+        value = raw[key]
+        # ``bool`` is an ``int`` subclass; reject it so ``true`` is not read as 1.
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(
+                f"invalid roster descriptor {path}: {key} must be an integer, "
+                f"got {value!r}"
+            )
+        if value < 1:
+            raise ValueError(
+                f"invalid roster descriptor {path}: {key} must be a positive "
+                f"integer, got {value}"
+            )
+        values[key] = value
+    return RosterConfig(
+        num_players=values["num_players"],
+        num_impostors=values["num_impostors"],
+        tasks_per_crewmate=values["tasks_per_crewmate"],
+    )
+
+
 def _meeting_trigger_from_events(
     events: Sequence[EngineEvent],
 ) -> tuple[_TriggerKind, str | None]:
@@ -1294,4 +1427,9 @@ def get_replay_loader(request: Request) -> ReplayLoader:
     return loader
 
 
-__all__ = ["ReplayLoader", "ReplayStateMismatchError", "get_replay_loader"]
+__all__ = [
+    "ReplayLoader",
+    "ReplayStateMismatchError",
+    "RosterConfig",
+    "get_replay_loader",
+]

@@ -347,6 +347,23 @@ def test_prune_drops_rows_without_files(small_samples: Path, tmp_path: Path) -> 
     assert set(mw.parse_manifest(manifest.read_text())) == {0, 22}
 
 
+def test_update_routes_to_per_set_subdir_manifest(small_samples: Path) -> None:
+    # Per-set routing (Task 7.4): an update targeting a 7p2i-style subdir defaults
+    # the manifest to that subdir's MANIFEST.md (from --sample-dir), never the flat
+    # set's — so a 7p/2i refresh cannot overwrite the 4p/1i baseline's provenance.
+    subset = small_samples / "7p2i"
+    subset.mkdir()
+    (subset / "replay-seed-22.jsonl").write_bytes(
+        (small_samples / "replay-seed-22.jsonl").read_bytes()
+    )
+    # No --manifest passed: it must default to <sample-dir>/MANIFEST.md.
+    rc = mw.main(["update", "--seeds", "22", "--sample-dir", str(subset)])
+    assert rc == 0
+    assert set(mw.parse_manifest((subset / "MANIFEST.md").read_text())) == {22}
+    # The flat set's manifest was never created or touched by the per-set update.
+    assert not (small_samples / "MANIFEST.md").exists()
+
+
 def test_main_prune_keeps_rows_with_files(small_samples: Path, tmp_path: Path) -> None:
     manifest = tmp_path / "MANIFEST.md"
     mw.rebuild_manifest(manifest, small_samples)
