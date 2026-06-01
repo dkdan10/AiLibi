@@ -299,7 +299,7 @@ kill eligibility, and vent witnessing use `room`, not within-room coordinates.
 
 ### 3.4 Rules
 
-- **Kill:** impostor and crewmate must be in the same room; cooldown must be 0. Kill spawns a `Body` and emits `Killed` event. Witnesses are living non-vented players in the same room — used by ObservationService.
+- **Kill:** impostor-only; the target must be a CREWMATE — a fellow impostor is never a valid target, so `engine.rules.resolve_kill` rejects an IMPOSTOR target (Phase 7 Wave 0.5 friendly-fire guard). Impostor and target must be in the same room; cooldown must be 0. Kill spawns a `Body` and emits `Killed` event. Witnesses are living non-vented players in the same room — used by ObservationService.
 - **Report:** any living player in a room containing a body can `ReportBody`. Triggers meeting.
 - **Vent:** impostor-only; vent network is per-map; entering and exiting are explicit actions. Vent use is observable to living non-vented players in the source/destination room.
 - **Emergency Meeting:** any player can call once per game (configurable). Triggers meeting.

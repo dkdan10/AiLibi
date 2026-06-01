@@ -15,7 +15,8 @@ locked decisions (Daniel, 2026-05-30), and Wave 1–3 shape live in
 
 - **This file is built incrementally, Wave 0 first.** Per `tasks/phase-7-plan.md`,
   Phase 7 is sequenced Wave 0 → Wave 1 → Wave 2 → Wave 3. Only the **Wave 0
-  enablement-gate** contracts (7.1–7.8) are written here today. Wave 1 (crew
+  enablement-gate** contracts (7.1–7.8), plus the **Wave 0.5** audit-driven eval-set repair contracts (7.9–7.11,
+  appended 2026-06-01 after the gameplay-data audit), are written here today. Wave 1 (crew
   intelligence: new contradiction-detector kinds + deterministic wander idle),
   Wave 2 (impostor intelligence: vent/sabotage + teammate-defense meeting
   behavior using 7.2's mutual-awareness), and Wave 3 (depth/content) get their
@@ -34,6 +35,15 @@ locked decisions (Daniel, 2026-05-30), and Wave 1–3 shape live in
   7.7 (provider-agnostic refresh + parametrized per-game budget), and 7.8 (generate +
   balance-validate + commit the meeting-heavy eval set — design-thread-run, locally
   on Ollama, no spend).
+- **Wave 0.5 is audit-driven repair, not new capability (added 2026-06-01).** The
+  gameplay-data audit (`audits/audit-2026-06-01-1425-gameplay-data.md`) found the
+  committed 7p/2i baseline was confounded by an impostor friendly-fire bug (39/50
+  games self-destruct) plus 3 meeting-abort games, so the Wave-0 balance numbers are
+  a PROVISIONAL artifact. Wave 0.5 (7.9 teammate-aware kill + engine guard, 7.10
+  fail-soft meetings + R 2→1, 7.11 eval-reporting honesty) repairs the substrate and
+  gates the re-record that produces the first trustworthy baseline — it lands NO
+  crew/impostor intelligence (that is Wave 1+). Low-risk: a target-selection filter,
+  an engine reject, parse fail-soft, and reporting fields/caveats.
 - **The eval-set work is split: dispatchable plumbing (7.4) + Ollama substrate
   (7.5–7.7) + design-thread-run generation (7.8).** Task 7.4 (roster-aware loader +
   two-committed-set layout) is a normal reviewed PR validated on the FAKE provider —
@@ -121,6 +131,17 @@ Wave 0 has two independent roots and a short dependency chain:
   (shared with 7.4 under the dependency edge).
 
 Sequence: (7.1 ∥ 7.2) → (7.3 ∥ 7.4) → 7.5 → (7.6 ∥ 7.7) → 7.8.
+
+Wave 0.5 (eval-set repair, post-2026-06-01 gameplay-data audit) appends three more tasks. 7.9
+(impostor kill correctness + engine friendly-fire guard), 7.10 (meeting fail-soft + R 2→1), and 7.11
+(eval reporting hardening) have disjoint file scopes — agents/+engine, meetings/+llm, eval/ — and fan
+out in PARALLEL. The only edges are merge-serialization on shared files: 7.9 has none; 7.10 depends on
+7.6 merged (it extends `llm/report_normalize.py`); 7.11 depends on 7.3 merged (it extends
+`eval/meeting_quality.py` and the report mirror). After all three merge, the design thread re-records
+the 7p/2i set on Ollama (now friendly-fire-free and R=1) and re-runs the gameplay-data audit before
+any Wave-1 work.
+
+Wave 0.5 sequence: (7.9 ∥ 7.10 ∥ 7.11) → re-record → re-audit → Wave 1.
 
 ## Tasks
 
@@ -1405,6 +1426,151 @@ judgment.
 
 **Ready-to-paste prompt:** `agent_prompts/task-7-8-meeting-heavy-eval-set.md`
 
+### Task 7.9 — Teammate-aware impostor kill + engine friendly-fire guard
+**Branch:** `phase-7-impostor-kill-friendly-fire`
+**Depends on:** none (Wave 0.5 repair; the Wave-0 substrate 7.1–7.8 is merged)
+**Section refs:** audits/audit-2026-06-01-1425-gameplay-data.md (gp-1, gp-3, MECH-B-1, MECH-B-2, D-D-1, F-F-1); DESIGN.md §3.4 (kill resolution); locked decision 6 (FSM tactical determinism)
+**Complexity:** Medium
+
+The 2026-06-01 gameplay-data audit found the committed 7p/2i eval set is balance-invalid: in 39 of 50 games an impostor kills its own teammate (35% of all 111 resolved kills), which fully explains the 38-9 / 76%-crew split — in the 39 self-destruct games impostors won 0, in the 11 clean games they won 9. The cause is two-layered and this task closes both. At the agent layer, `agents/tactical/impostor_policy.py::_scored_targets` (audit cites lines 264-329) ranks every sighted player with no teammate filter, even though `self_state.fellow_impostor_ids` is already on the observation packet (`observation/service.py:101`, landed by 7.2). At the engine layer, `engine.rules.resolve_kill` only checks the actor is an IMPOSTOR and never checks the target is a CREWMATE, so a friendly-fire kill is legal and resolves. This is the gating blocker for re-recording a trustworthy eval set.
+
+The task also folds in the audit's gp-3 (co-location gate): 16 kills were queued against an out-of-room target and engine-rejected ("kill requires same room"), wasting the impostor's turn — the policy must not emit a kill intent unless the target is in the actor's current room. And it adds a light coordination heuristic for the tick-1 mutual-spawn case (10 games open with both impostors targeting each other in CAFETERIA on tick 1): two co-located impostors must not both emit a kill on the same tick.
+
+Because the engine guard re-resolves recorded kill actions on playback, the existing committed `replays/samples/7p2i/` set (39 recorded teammate-kills) can no longer reconstruct byte-identically — those kills are now rejected, the per-tick `state_hash` diverges, and `load_replay` raises. This task therefore SKIPS exactly one test — `test_committed_7p2i_set_reconstructs_byte_identically` in `tests/api/test_replay_loader.py` — with an explicit reason; the post-7.9 re-record re-records a clean set and re-enables it (restoring its committed ≥ 30 resolved-meeting floor). The 4p/1i baseline is unaffected (one impostor, no friendly fire). The DESIGN.md §3.4 friendly-fire reconciliation is design-thread-owned and handled separately (the design thread tightens §3.4's kill rule to require a CREWMATE target; tracked in the Wave 0.5 Merge Criteria).
+
+**Files in scope:**
+- agents/tactical/impostor_policy.py (exclude `self_state.fellow_impostor_ids` from `_scored_targets`; gate kill intent on target co-location; tick-1 mutual-kill coordination heuristic — all deterministic)
+- engine/rules.py (`resolve_kill` rejects a kill whose target is an IMPOSTOR — defense-in-depth; existing actor-is-impostor / same-room / cooldown checks unchanged)
+- tests/agents/ + tests/engine/test_rules.py (teammate never selected; out-of-room kill never emitted; engine rejects an IMPOSTOR-target kill; an invariant test that no resolved kill has `victim_role == IMPOSTOR` across seeded games)
+- tests/api/test_replay_loader.py (skip ONLY `test_committed_7p2i_set_reconstructs_byte_identically` with a reason referencing this guard + the pending re-record; leave `test_committed_7p2i_set_holds_crew_firewall` and the hermetic tmp_path multi-impostor tests untouched — they do not reconstruct the committed bytes)
+
+**Files NOT in scope:**
+- observation/service.py (`fellow_impostor_ids` is plumbed by 7.2 — consume it, do not edit)
+- DESIGN.md (design-thread-owned; the §3 friendly-fire note is the design thread's)
+- meetings/, eval/, llm/ (untouched)
+- replays/samples/ (the re-record is a separate operational step after this merges; do not regenerate data here, and never delete the 4p/1i set)
+
+**Definition of done:**
+- [ ] `_scored_targets` excludes every id in `self_state.fellow_impostor_ids` before ranking; an impostor never selects a fellow impostor as a kill target.
+- [ ] The policy emits a kill action only when the target is in the actor's current room (no "kill requires same room" rejections originate from the policy's own intents).
+- [ ] Two co-located impostors do not both emit a kill on the same tick; the tick-1 mutual-spawn self-destruct cannot occur. Determinism is preserved (no RNG that would break replay reconstruction).
+- [ ] `engine.rules.resolve_kill` rejects a kill whose target is an IMPOSTOR with a clear `ActionRejected` reason; the actor-is-impostor, same-room, and cooldown checks are unchanged; the legitimate impostor-kills-crewmate path still resolves.
+- [ ] An invariant test asserts no resolved kill has `victim_role == IMPOSTOR` across a representative seeded set. Repro anchors: seed 4 tick 1 (mutual, CAFETERIA), seed 0 tick 7 (mid-game, MEDBAY), seed 32 tick 1.
+- [ ] Exactly one test is skipped — `test_committed_7p2i_set_reconstructs_byte_identically` — with an explicit reason (the guard rejects the old set's recorded teammate-kills → `state_hash` drift; re-enabled by the post-7.9 re-record). Its sibling `test_committed_7p2i_set_holds_crew_firewall` is seed-derived and role-pure (it never reconstructs recorded ticks) and stays green; the hermetic tmp_path multi-impostor recon/firewall tests regenerate under the new rules and stay green; the 4p/1i reconstruction + leak suites stay green.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+Read `_scored_targets` and the packet's `self_state.fellow_impostor_ids`; filter teammates from the candidate set, then drop targets not co-located. For the engine guard, mirror the existing same-room/cooldown reject in `resolve_kill` with a target-role check. For the tick-1 coordination heuristic, keep it deterministic with no shared state: when a fellow impostor is co-located and would also emit a kill on the same tick, the lower-id impostor emits and the higher-id defers (`min(actor_id, fellow_id)` acts) — a pure function of ids, replay-safe, no RNG. Keep the FSM tactical layer deterministic (DESIGN.md §4 / locked decision 6) — this is target selection plus a reject, not new LLM behavior. The audit's MECH-B-3 "player is dead" same-tick rejection count shrinks automatically once teammate-kills stop (it was a downstream symptom). Confirm the 4p/1i frozen set still reconstructs after the change (the teammate filter and guard are no-ops at one impostor).
+
+**Integration risk:**
+
+The gating blocker for the re-record. The engine guard is defense-in-depth, not a behavior change for a correct policy, but it must not regress the only valid kill (impostor→crewmate). The coordination heuristic must stay deterministic. The stale-7p2i reconstruction-test skip is intentional and time-bound — the re-record un-skips it; do not leave it skipped indefinitely.
+
+**Ready-to-paste prompt:** `agent_prompts/task-7-9-impostor-kill-friendly-fire.md`
+
+### Task 7.10 — Fail-soft on malformed meeting statements + single accusation round
+**Branch:** `phase-7-meeting-failsoft-single-round`
+**Depends on:** 7.6 merged
+**Section refs:** audits/audit-2026-06-01-1425-gameplay-data.md (gp-2, E-E-1, A-A-2, and the R=2 statement-sink in §6); DESIGN.md §5.2 (meeting protocol)
+**Complexity:** Medium
+
+The audit found two independent meeting issues. First (gp-2, blocking): `qwen2.5:7b-instruct` sometimes emits an `AlibiClaim` with `from_tick > to_tick`; the Statement validator rejects it, the meeting aborts, and the game terminates with NO `game_over` record — corrupting 3 of 50 games (seeds 25/36/40) and wasting ~127K input tokens. Second (the owner's speed call): the sequential statement phase runs R=2 rounds — the dominant meeting token sink, roughly a third of meeting LLM calls — the operator's hypothesis is that round 2 is not currently earning its cost, but the audit raised this (E-lens) as an OPEN QUESTION and did not measure a round-2 vote delta — a speed call, not a measured finding; reduce R to 1 for Wave 0.5, readjustable if a Wave-1 measurement later shows round 2 changes outcomes. Both ride the same eval re-record; neither affects replay reconstruction (meetings reconstruct by applying the recorded outcome, so the committed sets are unaffected).
+
+For gp-2 there are two complementary fixes. Parse-tolerance: when an `AlibiClaim` arrives with `from_tick > to_tick`, normalize it (swap the bounds or coerce to a one-tick window at `to_tick`) and retry once — the natural home is 7.6's discriminator-aware normalizer (`llm/report_normalize.py`), extended to the chronological case. Fail-soft: a single rejected `Statement` must degrade to a missed-deadline placeholder (the same default-on-failure mechanism the report/statement collection already uses for timeouts, landed on main as `5407cc7`) so the meeting and game continue to `game_over` — a malformed statement never aborts the run.
+
+R 2→1 is `DEFAULT_ROUND_COUNT` in `meetings/manager.py`; reduce it and update the tests that pin 2 rounds and any round-indexed transcript handling. It is readjustable later if Wave-1 deliberation needs a second round.
+
+**Files in scope:**
+- llm/report_normalize.py (extend 7.6's normalizer with the non-chronological-alibi case: swap/coerce `from_tick`/`to_tick`)
+- meetings/manager.py (statement collection degrades a rejected `Statement` to a missed-deadline placeholder instead of aborting; `DEFAULT_ROUND_COUNT` 2→1)
+- tests/llm/ + tests/meetings/ (a non-chronological alibi normalizes and the meeting reaches `game_over`; a hard-malformed statement fails soft; round count is 1)
+
+**Files NOT in scope:**
+- meetings/schemas.py (the `AlibiClaim` chronological validator stays strict — the normalizer fixes the input before validation; the schema is not relaxed)
+- engine/, agents/, eval/ (untouched)
+- replays/samples/ (no data regeneration here; meetings reconstruct from recorded outcomes, so the committed sets are unaffected by R 2→1)
+
+**Definition of done:**
+- [ ] A non-chronological `AlibiClaim` (`from_tick > to_tick`) is normalized (bounds swapped or coerced to a one-tick window) before validation and validates on retry; the strict schema is not relaxed, and a claim still malformed after normalization fails only that single statement, not the run.
+- [ ] A single rejected `Statement` degrades to a missed-deadline placeholder and the meeting continues; every game reaches a `game_over` record (no run terminates on a malformed statement). Repro: seed 36 meeting-0 @tick 11 (the recorded `failed_call` with no following `game_over`); also seeds 25 and 40.
+- [ ] `DEFAULT_ROUND_COUNT` is 1; the statement phase runs one accusation round; tests pinning 2 rounds and round-indexed handling are updated.
+- [ ] The committed 4p/1i and 7p/2i sets still reconstruct byte-identically (meetings apply the recorded outcome; round count does not affect replay) — confirm.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+The normalizer (7.6, `llm/report_normalize.py`) already runs in the shared extract→validate path; add a chronological-alibi normalization there so it protects every provider plus the replay path. For fail-soft, reuse the missed-deadline default the sequential report/statement collection already returns on timeout (the `5407cc7` pattern) — catch the `ValidationError` on a single statement and substitute the placeholder rather than propagating. R 2→1 is a one-line constant plus test updates; grep for `round_count` / `DEFAULT_ROUND_COUNT` and round-index assumptions. Reconstruction is unaffected (the loader applies recorded meeting outcomes), so do not touch committed data.
+
+**Integration risk:**
+
+Fail-soft must not mask a genuine systemic parse failure — it degrades ONE statement, not the meeting; if every statement fails the meeting still resolves on whatever reports/votes landed. R 2→1 changes future recordings only (not replay), but it is a deliberate speed trade resting on the operator's hypothesis that round 2 is not currently earning its cost (NOT a measured vote-delta — the audit flagged it as an open question); record it as readjustable in the PR. `meetings/manager.py` is shared only with the merged sequential-collection change on main, not with another open task.
+
+**Ready-to-paste prompt:** `agent_prompts/task-7-10-meeting-failsoft-single-round.md`
+
+### Task 7.11 — Eval reporting hardening (no gameplay-behavior change)
+**Branch:** `phase-7-eval-reporting-hardening`
+**Depends on:** 7.3 merged
+**Section refs:** audits/audit-2026-06-01-1425-gameplay-data.md (gp-7, C-C-4, F-F-2, F-F-3, F-F-5, A-A-3); DESIGN.md §11.3 (eval metrics)
+**Complexity:** Medium
+
+The audit found the eval report's headline numbers mislead a Wave-1 reader even when computed correctly. This task hardens the reporting and interpretation surface only — no gameplay or engine behavior changes. The fixes: add a derived `ejection_accuracy` (impostor_ejections / total_ejections) next to `vote_correctness_rate`, because the latter is `evidence_backed_impostor_ejections / impostor_ejections` (1.0 in the artifact set) and silently excludes the wrong crewmate ejections — actual accuracy was 50%; report `vote_correctness` with an explicit small-n flag and a secondary "contradictions flagged but ignored" signal (36/45 SKIPPED meetings had at least one contradiction yet no ejection); report accusation-calibration per-bin counts alongside ECE and flag it low-power when the bins are sparse (qwen2.5 clusters confidences); pair `meeting_rate` with the SKIPPED/EJECTED breakdown and stop presenting `emergency_meetings` as a positive emergency count — it is a documented catch-all (body-report meetings whose triggering report lacked a `FoundBodyObservation`); document `cost_dashboard` as informational-only under Ollama ($0 — token counts are the cost proxy); and keep `first_zero_impostor_tick == game_over_tick` as an automated self-check so a §6.3 win-condition regression is caught.
+
+These make the post-re-record metrics trustworthy and readable. The metric math that is already correct (meeting_rate 0.74, the calibration computation) is not changed — only the surfacing, the new derived field, and the caveats.
+
+**Files in scope:**
+- eval/vote_correctness.py (add `ejection_accuracy`; small-n flag; the contradictions-ignored secondary signal)
+- eval/accusation_calibration.py (per-bin counts and a low-power flag alongside ECE)
+- eval/meeting_quality.py (pair `meeting_rate` with the SKIPPED/EJECTED split; document `emergency_meetings` as a catch-all, not a positive emergency count)
+- eval/cost_dashboard.py (document informational-only under a $0 provider)
+- eval/report_schema.py + api/routes/eval.py + frontend/src/types/api.ts (mirror any new report field 1:1)
+- replays/samples/tournament-eval-report.json (the FROZEN 4p/1i DERIVED report — regenerate offline so it carries the new fields; the `.jsonl` replays stay frozen and are never edited or deleted)
+- tests/ — including `tests/api/test_leak.py` (extend `EXPECTED_EVAL_REPORT_FIELDS` with the new field names) — the new field plus caveats; the `first_zero_impostor_tick == game_over_tick` self-check; and a test that the committed 4p/1i report loads/validates against the current model
+
+**Files NOT in scope:**
+- engine/, agents/, meetings/, llm/ (no behavior change — reporting only)
+- replays/samples/*.jsonl (the recorded replays stay FROZEN — never edited or deleted; only the DERIVED 4p/1i `tournament-eval-report.json` is regenerated offline from them, and the 7p/2i report is regenerated by the post-merge re-record)
+- eval/balance_eval.py (the win-bucket reducer is unchanged)
+
+**Definition of done:**
+- [ ] `ejection_accuracy` (= impostor_ejections / total_ejections) is reported next to `vote_correctness_rate`, and `vote_correctness` carries an explicit small-n flag plus a "contradictions flagged but ignored" secondary count.
+- [ ] accusation-calibration reports per-bin counts alongside ECE and flags low statistical power when bins are sparse.
+- [ ] `meeting_rate` is paired with the SKIPPED/EJECTED breakdown, and `emergency_meetings` is documented (schema field doc + route mirror) as a catch-all, not read as a positive emergency count.
+- [ ] `cost_dashboard` is documented informational-only under a $0 provider (token counts are the cost proxy).
+- [ ] An automated self-check asserts `first_zero_impostor_tick == game_over_tick` (no §6.3 regression).
+- [ ] Any new report field is mirrored 1:1 across `eval/report_schema.py` (or `eval/meeting_quality.py`, wherever the leaf model lives), `api/routes/eval.py`, and `frontend/src/types/api.ts`, and `EXPECTED_EVAL_REPORT_FIELDS` in `tests/api/test_leak.py` is extended with the new field names — the field-set snapshot is a deliberate tripwire, so it MUST be updated explicitly (as 7.3 did), and `test_eval_report_surface_exposes_no_engine_state_field` still passes.
+- [ ] New fields are added to the report model and the FROZEN committed 4p/1i `replays/samples/tournament-eval-report.json` is regenerated offline from its committed replays (the 7.3 pattern — replays stay frozen, only the derived report moves) so it still loads/serves via `GET /eval/tournament-report`; the model is `frozen=True, extra="forbid"`, so a stale report missing a now-required field would 500 at the route while check.sh (whose route tests use tmp_path) stays green — the regression 7.3 documented. The rebuild reproduces every pre-existing field byte-for-byte (only the new fields added), and a test loads the committed 4p/1i report and asserts it validates against the current model. The 7p/2i report is regenerated by the post-merge re-record.
+- [ ] The `vote_correctness_rate` docstring cross-references `ejection_accuracy`: the rate is computed over evidence-backed impostor ejections only, so it must be paired with `ejection_accuracy` for the full ejection denominator (a `1.0` rate read in isolation cannot be mistaken for full accuracy).
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+These are derived fields, doc strings, and a self-check — not new computation pipelines. Read `eval/vote_correctness.py` (the rate definition), `eval/accusation_calibration.py` (the binning), and `eval/meeting_quality.py` (the trigger split), and mirror any new field through `eval/report_schema.py` → `api/routes/eval.py` → `frontend/src/types/api.ts` exactly as 7.3 did for `meeting_rate` (the 1:1 type mirror plus the `tests/api/test_leak.py` field-set snapshot). Do not touch any gameplay code; this is the reporting layer only.
+
+**Integration risk:**
+
+Adding report fields touches the api/frontend type-mirror AND the frozen committed 4p/1i report — keep the type-mirror in lockstep (or the field-set snapshot test fails), AND make the new fields land in a regenerated 4p/1i report (or the `frozen`, `extra="forbid"` model 500s at the route while check.sh stays green — the exact regression 7.3 documented). No gameplay behavior changes, so no re-record is required for this task alone — but it should land before the re-record so the re-recorded 7p/2i report carries the hardened fields.
+
+**Ready-to-paste prompt:** `agent_prompts/task-7-11-eval-reporting-hardening.md`
+
 ## Merge Criteria (Wave 0 — enablement gate)
 - **Config reachable + deterministic:** Task 7.1 lands the `tasks_per_crewmate` knob (default 2), the `4p1i`/`7p2i` roster presets, and the CLI threading; the `tasks_per_crewmate=1` path stays byte-identical to the committed 4p/1i baseline.
 - **Firewall extended for multi-impostor play:** Task 7.2 lands impostor-only `fellow_impostor_ids` on `SelfView`, with the new leak invariant (`self_state.fellow_impostor_ids == ()` for every crew-recipient packet) green; `visible_players` / `PlayerView` unchanged.
@@ -1418,3 +1584,33 @@ judgment.
 - **All gates green:** `bash scripts/check.sh`, determinism tests, leak tests, and (for 7.3) frontend `tsc:check` + `vite build`.
 - **Wave boundary respected:** Wave 0 ships config/substrate + the meeting-heavy denominator only — NO new contradiction-detector kinds, crewmate wander idle, impostor vent/sabotage, or teammate-defense meeting behavior land here (those are Wave 1 / Wave 2). Wave 1+ contracts are appended to this file only after this gate clears.
 - **Intentional non-changes (NOT regressions — flagged so a Wave-1 reviewer doesn't mistake them for gaps):** (a) the spectator **dashboard renders no new metric** after Task 7.3 — 7.3 only adds the `meeting_rate` type to `frontend/src/types/api.ts` (the 1:1 mirror); surfacing it in the UI is deferred. (b) The live spectator app **continues to serve only the flat 4p/1i set**; the committed 7p/2i set is reachable programmatically (`ReplayLoader(replay_dir="replays/samples/7p2i")`) but not via the app until the deferred browse-selector frontend track lands.
+
+## Merge Criteria (Wave 0.5 — eval-set repair, post-audit)
+- **Friendly fire is impossible (Task 7.9):** the impostor policy never targets a fellow impostor and never emits an out-of-room kill; `engine.rules.resolve_kill` rejects an IMPOSTOR target; an invariant test confirms no resolved kill has `victim_role == IMPOSTOR`. The stale 7p/2i reconstruction test is skipped (re-enabled by the re-record); the 4p/1i baseline + leak suites stay green.
+- **Meetings never abort and run one round (Task 7.10):** a non-chronological alibi is normalized before validation and a malformed statement fails soft, so every game reaches a `game_over` record; `DEFAULT_ROUND_COUNT` is 1. Both committed sets still reconstruct byte-identically (meetings apply recorded outcomes; round count does not affect replay).
+- **The eval report is honest (Task 7.11):** `ejection_accuracy` sits beside `vote_correctness_rate`; calibration reports per-bin counts; `meeting_rate` is paired with the SKIPPED/EJECTED split; `emergency_meetings` is documented as a catch-all; `cost_dashboard` is informational-only on Ollama; the `first_zero_impostor_tick == game_over_tick` self-check guards §6.3. No gameplay behavior changed.
+- **Re-record validity gate (design thread, after 7.9–7.11 merge) — HARD, numeric:**
+  the 7p/2i set is re-recorded on Ollama (R=1) and the gameplay-data audit is re-run;
+  the re-record passes ONLY if (a) friendly-fire kills == 0 (no resolved kill has
+  `victim_role == IMPOSTOR`), (b) games aborting without a `game_over` record == 0
+  (all 50 reach `game_over`), (c) the new set reconstructs byte-identically and the
+  leak suite passes via the per-set roster loader, with 7.9's skipped reconstruction
+  test re-enabled and green, and (d) the Stage-A floor still holds at R=1
+  (`meeting_rate >= 0.60`, >= 30 resolved meetings).
+- **Degeneracy tripwire (numeric — catches a NEW artifact, not a balance target):**
+  both factions win >= 1 decisive game AND no single win-reason exceeds 70% of
+  decisive games — catches a fresh confound (e.g. all-budget-exhaustion or one
+  dominating bug). It is NOT a balance-band gate.
+- **Balance is measured + reported, NOT gated to a band:** the re-recorded
+  crew/impostor split is reported and becomes the anchor for Wave-1 gate targets. An
+  impostor-favored-but-valid split (the audit's provisional ~82%-impostor-on-clean
+  prediction) is a legitimate pre-Wave-1 baseline, NOT a re-record failure — closing
+  the crew-skill gap is precisely Wave 1's job. Do NOT gate the re-record on a
+  balanced 30–70% impostor band; that band is a Wave-1 OUTCOME target re-measured on
+  this baseline.
+- **DESIGN.md §3.4 reconciled (design thread, in this change):** §3.4's kill rule now
+  states the target must be a CREWMATE (a fellow impostor is never a valid target),
+  matching 7.9's engine guard; the full kill validator is actor IMPOSTOR + target
+  CREWMATE + same room + cooldown elapsed. (7.9 implements the guard; DESIGN.md is
+  design-thread-owned and edited here, not by 7.9.)
+- **Wave boundary respected:** Wave 0.5 repairs the eval substrate, the impostor kill bug, and the reporting surface only — NO crew-intelligence (gp-4), impostor coordination (gp-6), or body-report-rate (gp-5) work lands here (those are Wave 1 / Wave 2 / opportunistic). Wave 1 contracts are appended to this file only after the re-record + re-audit confirm a trustworthy baseline.
