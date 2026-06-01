@@ -25,6 +25,7 @@ from api.schemas import (
 )
 from engine.world import load_canonical_map
 from llm.fake_provider import FakeProvider
+from observation.service import ObservationService
 from orchestrator.game import (
     HeadlessGame,
     build_default_agent_factory,
@@ -32,6 +33,7 @@ from orchestrator.game import (
 )
 from orchestrator.replay import LLMCallRecord, ReplayLogEntry, read_all_entries
 from orchestrator.scheduler import TickScheduler
+from orchestrator.seeder import seed_initial_state
 from tests.api.fixtures.sample_replay import (
     corrupt_tick_hash,
     strip_llm_call_agent_ids,
@@ -758,3 +760,117 @@ def test_roster_descriptor_change_in_place_is_not_served_stale(
 
     with pytest.raises(ReplayStateMismatchError):
         loader.load_replay("headless-seed-0")
+
+
+# -- committed 7p/2i meeting-heavy set (Task 7.8) -----------------------------
+#
+# Unlike the hermetic Task 7.4 fixtures above (tmp_path, no committed data), the
+# two tests below point the loader at the COMMITTED replays/samples/7p2i/ set and
+# reconstruct it. This is the CI-enforced determinism gate for the committed
+# multi-impostor set: check.sh runs `uv run pytest` but does NOT invoke
+# scripts/verify_samples.sh, so without a pytest test the committed 7p/2i set's
+# byte-identical reconstruction would be unguarded in CI. It pairs with the flat
+# 4p/1i set's coverage in tests/scripts/test_verify_samples.py
+# (test_clean_sample_verifies), so BOTH committed sets are CI-gated.
+
+_COMMITTED_7P2I_DIR = (
+    Path(__file__).resolve().parents[2] / "replays" / "samples" / "7p2i"
+)
+
+# The Wave 0 exit-gate floor (DESIGN.md §11.4; tasks/phase-7-plan.md "Wave 0 exit
+# criteria"): >= 30 RESOLVED meetings over the committed denominator. Pinned in CI
+# so a future engine change can never silently drop the committed set below the
+# enablement gate without failing here.
+_GATE_MIN_RESOLVED_MEETINGS = 30
+
+# The committed 7p/2i set is exactly 50 replays, seeds 0-49. Pinned so the
+# reconstruction gate below verifies the WHOLE set rather than just "enough" of
+# it: a deleted seed shrinks the on-disk glob, and a corrupted one is silently
+# dropped by list_replays() (CorruptedFileError -> WARNING), either of which
+# would otherwise still clear the >=30 meeting floor while leaving committed
+# seeds un-reconstructed.
+_COMMITTED_7P2I_SEED_COUNT = 50
+
+
+def _committed_7p2i_seeds() -> list[int]:
+    return sorted(
+        int(p.stem.rsplit("-", 1)[1])
+        for p in _COMMITTED_7P2I_DIR.glob("replay-seed-*.jsonl")
+    )
+
+
+def test_committed_7p2i_set_reconstructs_byte_identically() -> None:
+    # Every committed 7p/2i replay reconstructs byte-identically under the current
+    # engine: load_replay re-seeds from the committed roster.json (7p/2i + 2
+    # tasks/crewmate) and raises ReplayStateMismatchError on ANY per-tick
+    # state_hash drift. num_impostors / tasks_per_crewmate are not recoverable from
+    # the action stream, so this only reconstructs because the committed descriptor
+    # is correct — making this both the determinism gate and a roster.json check.
+    assert replay_loader._load_roster_config(_COMMITTED_7P2I_DIR) == RosterConfig(
+        num_players=7, num_impostors=2, tasks_per_crewmate=2
+    )
+    # Pin the committed shape BEFORE the load loop. The meeting floor below is a
+    # count of resolved meetings, NOT a count of replays — reusing it as the
+    # replay-count check let a thinned/corrupted checkout pass: list_replays()
+    # silently skips a corrupted file and the glob misses a deleted one, so as
+    # long as >=30 readable files remained, the loop would never reconstruct the
+    # missing seeds despite this test's contract that EVERY committed replay does.
+    expected_seeds = list(range(_COMMITTED_7P2I_SEED_COUNT))
+    assert _committed_7p2i_seeds() == expected_seeds  # no deleted seed on disk
+
+    loader = ReplayLoader(replay_dir=_COMMITTED_7P2I_DIR)
+    metas = loader.list_replays()
+    # A corrupted file is dropped from the listing, so an exact-count match (not a
+    # floor) is what proves the whole committed set is readable before we load it.
+    assert len(metas) == _COMMITTED_7P2I_SEED_COUNT
+
+    resolved_meetings = 0
+    for meta in metas:
+        replay = loader.load_replay(meta.game_id)  # raises on determinism drift
+        assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 8)}
+        assert sum(1 for p in replay.players if p.role == "IMPOSTOR") == 2
+        resolved_meetings += len(replay.meetings)
+
+    # The whole point of the meeting-heavy set: the Stage-A enablement gate's
+    # resolved-meeting floor is committed and CI-enforced, not just asserted once
+    # at generation time.
+    assert resolved_meetings >= _GATE_MIN_RESOLVED_MEETINGS
+
+
+def test_committed_7p2i_set_holds_crew_firewall(tmp_path: Path) -> None:
+    # End-to-end firewall coverage (7.2's crew-empty invariant) on the REAL
+    # committed multi-impostor roster — the coverage the 7.2 contract defers to
+    # this task. The single-impostor 4p/1i fixtures cannot surface a crew-tuple
+    # misroute (every fellow_impostor_ids is () there regardless), so this re-seeds
+    # each committed seed at the recorded roster and confirms ObservationService
+    # gives every crewmate-recipient an empty fellow_impostor_ids while each
+    # impostor sees exactly the OTHER impostor (self excluded). The invariant is a
+    # pure function of roles, so the seeded initial state exercises it directly.
+    roster = replay_loader._load_roster_config(_COMMITTED_7P2I_DIR)
+    assert roster is not None
+    game_map = load_canonical_map()
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+    seeds = _committed_7p2i_seeds()
+    assert seeds  # the committed set is non-empty
+    for seed in seeds:
+        state = seed_initial_state(
+            seed=seed,
+            game_map=game_map,
+            num_players=roster.num_players,
+            num_impostors=roster.num_impostors,
+            tasks_per_crewmate=roster.tasks_per_crewmate,
+        )
+        impostor_ids = {pid for pid, p in state.players.items() if p.role == "IMPOSTOR"}
+        assert len(impostor_ids) == roster.num_impostors
+        for pid in state.players:
+            packet = service.build_packet(
+                world_state=state, agent_id=pid, engine_events=()
+            )
+            if state.players[pid].role == "CREWMATE":
+                assert packet.self_state.fellow_impostor_ids == ()
+            else:
+                assert set(packet.self_state.fellow_impostor_ids) == impostor_ids - {
+                    pid
+                }
