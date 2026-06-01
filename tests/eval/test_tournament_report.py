@@ -106,11 +106,16 @@ def _write_jsonl(path: Path, entries: list[ReplayLogEntry]) -> None:
 # Integration: a small FAKE-provider tournament end-to-end
 # ---------------------------------------------------------------------------
 
-# Seeds that fire at least one meeting under the fake provider at this config
-# (probed at HEAD: each ends CREWMATES after one meeting). Picked so the loader
+# Seeds that fire at least one meeting under the fake provider at this config.
+# Re-probed for the canonical 7p/2i roster after Task 7.9 made the impostor kill
+# policy teammate-aware: at the former 5p/2i config two impostors now reach parity
+# on a single kill before any body is reported, so every 5p/2i game ends in a fast
+# impostor win with zero meetings. The integration test therefore runs on the
+# meeting-heavy 7p/2i roster (5 crew, the canonical Phase 7 eval roster), where
+# bodies still outlive the win condition and trigger meetings. Picked so the loader
 # exercises the MeetingReplayEntry -> MeetingReport mapping, not just empty games.
-_MEETING_FIRING_SEEDS = (3, 4, 5)
-_NUM_PLAYERS = 5
+_MEETING_FIRING_SEEDS = (0, 1, 2)
+_NUM_PLAYERS = 7
 _NUM_IMPOSTORS = 2
 _MAX_TICKS = 300
 

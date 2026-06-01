@@ -61,6 +61,15 @@ def resolve_kill(
 
     if actor.role != "IMPOSTOR":
         raise ActionRejectedError("only impostors can kill")
+    # Friendly-fire guard (DESIGN.md §3.4; Phase 7 Wave 0.5): the target must be
+    # a CREWMATE — a fellow impostor is never a valid kill target. This is
+    # defense-in-depth: the impostor tactical policy already excludes teammates
+    # from target selection (agents/tactical/impostor_policy.py), but a buggy or
+    # future LLM-driven policy must not be able to self-sabotage the impostor
+    # team. The actor-is-impostor, cooldown, and same-room checks below are
+    # unchanged.
+    if target.role == "IMPOSTOR":
+        raise ActionRejectedError("kill target must be a crewmate")
     if state.cooldowns.get(action.actor, 0) != 0:
         raise ActionRejectedError("kill is on cooldown")
     if actor.room != target.room:

@@ -24,17 +24,16 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from pydantic import TypeAdapter
+
+from engine.actions import Action
 from engine.events import (
     ActionRejectedEvent,
-    GameOverEvent,
     KilledEvent,
     MeetingTriggeredEvent,
-    MovedEvent,
 )
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
@@ -54,11 +53,7 @@ SAMPLE_DIR = REPO_ROOT / "replays" / "samples" / "7p2i"
 SEEDSET = "7p2i"
 
 # Action adapter for deserializing recorded raw actions.
-from pydantic import TypeAdapter
-
-from engine.actions import Action
-
-_ACTION_ADAPTER = TypeAdapter(Action)
+_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
 
 def _deserialize_actions(raw_actions: list[dict[str, Any]]) -> list[Action]:
@@ -166,9 +161,7 @@ def main() -> int:
         failed_call_entries = [
             e for e in entries if isinstance(e, FailedCallReplayEntry)
         ]
-        game_end = next(
-            (e for e in entries if isinstance(e, GameEndReplayEntry)), None
-        )
+        game_end = next((e for e in entries if isinstance(e, GameEndReplayEntry)), None)
         meeting_by_tick = {e.tick: e for e in meeting_entries}
         total_meeting_records += len(meeting_entries)
 
@@ -177,9 +170,6 @@ def main() -> int:
         meetings_out: list[dict[str, Any]] = []
         # Win-condition-gap tracking: the first tick at which alive impostors hit 0.
         first_zero_impostor_tick: int | None = None
-        game_over_tick: int | None = None
-        game_over_winner: str | None = None
-        game_over_reason: str | None = None
 
         state = init_state
         last_state_for_final = state
@@ -290,13 +280,6 @@ def main() -> int:
             last_state_for_final = state
 
             if state.phase == "GAME_OVER":
-                go = next(
-                    (e for e in events if isinstance(e, GameOverEvent)), None
-                )
-                if go is not None:
-                    game_over_tick = go.tick
-                    game_over_winner = go.winner
-                    game_over_reason = go.reason
                 break
 
             if state.phase != "MEETING":
@@ -383,13 +366,6 @@ def main() -> int:
 
             last_state_for_final = state
             if state.phase == "GAME_OVER":
-                go = next(
-                    (e for e in post_events if isinstance(e, GameOverEvent)), None
-                )
-                if go is not None:
-                    game_over_tick = go.tick
-                    game_over_winner = go.winner
-                    game_over_reason = go.reason
                 break
 
         # Failed-call accounting (these carry burned tokens for the aborted run).
@@ -477,7 +453,9 @@ def main() -> int:
                     )
             elif recorded_reason == "CREWMATE_EJECT":
                 if alive_imp != 0:
-                    mismatch_reason = f"CREWMATE_EJECT but {alive_imp} impostor(s) alive"
+                    mismatch_reason = (
+                        f"CREWMATE_EJECT but {alive_imp} impostor(s) alive"
+                    )
             elif recorded_reason == "IMPOSTOR_PARITY":
                 if not (alive_imp >= alive_crew):
                     mismatch_reason = (
@@ -511,9 +489,9 @@ def main() -> int:
         game_output = sum(
             c.output_tokens for e in meeting_entries for c in e.llm_calls
         ) + sum(fc.output_tokens for fc in failed_call_entries)
-        game_cost = sum(
-            c.cost_usd for e in meeting_entries for c in e.llm_calls
-        ) + sum(fc.cost_usd for fc in failed_call_entries)
+        game_cost = sum(c.cost_usd for e in meeting_entries for c in e.llm_calls) + sum(
+            fc.cost_usd for fc in failed_call_entries
+        )
 
         # Self-check: every kill-derived death has its victim in deaths.
         for k in kills:
@@ -564,9 +542,7 @@ def main() -> int:
         f"{'OK' if ok_games else 'FAIL'}"
     )
     if not ok_games:
-        invariant_failures.append(
-            f"games_analyzed {games_analyzed} != files {n_files}"
-        )
+        invariant_failures.append(f"games_analyzed {games_analyzed} != files {n_files}")
 
     impostor_check_ok = all(
         sum(1 for r in g["roles"].values() if r == "IMPOSTOR") == num_impostors
@@ -618,7 +594,9 @@ def main() -> int:
 
     tmpdir = os.environ.get("TMPDIR", "/tmp")
     facts_path = Path(tmpdir) / f"ailibi-gameplay-facts-{SEEDSET}.json"
-    facts_path.write_text(json.dumps(facts, indent=2, sort_keys=False), encoding="utf-8")
+    facts_path.write_text(
+        json.dumps(facts, indent=2, sort_keys=False), encoding="utf-8"
+    )
 
     # Emit machine-readable summary for the caller on stdout.
     print(
