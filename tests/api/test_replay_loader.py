@@ -783,6 +783,14 @@ _COMMITTED_7P2I_DIR = (
 # enablement gate without failing here.
 _GATE_MIN_RESOLVED_MEETINGS = 30
 
+# The committed 7p/2i set is exactly 50 replays, seeds 0-49. Pinned so the
+# reconstruction gate below verifies the WHOLE set rather than just "enough" of
+# it: a deleted seed shrinks the on-disk glob, and a corrupted one is silently
+# dropped by list_replays() (CorruptedFileError -> WARNING), either of which
+# would otherwise still clear the >=30 meeting floor while leaving committed
+# seeds un-reconstructed.
+_COMMITTED_7P2I_SEED_COUNT = 50
+
 
 def _committed_7p2i_seeds() -> list[int]:
     return sorted(
@@ -801,9 +809,20 @@ def test_committed_7p2i_set_reconstructs_byte_identically() -> None:
     assert replay_loader._load_roster_config(_COMMITTED_7P2I_DIR) == RosterConfig(
         num_players=7, num_impostors=2, tasks_per_crewmate=2
     )
+    # Pin the committed shape BEFORE the load loop. The meeting floor below is a
+    # count of resolved meetings, NOT a count of replays — reusing it as the
+    # replay-count check let a thinned/corrupted checkout pass: list_replays()
+    # silently skips a corrupted file and the glob misses a deleted one, so as
+    # long as >=30 readable files remained, the loop would never reconstruct the
+    # missing seeds despite this test's contract that EVERY committed replay does.
+    expected_seeds = list(range(_COMMITTED_7P2I_SEED_COUNT))
+    assert _committed_7p2i_seeds() == expected_seeds  # no deleted seed on disk
+
     loader = ReplayLoader(replay_dir=_COMMITTED_7P2I_DIR)
     metas = loader.list_replays()
-    assert len(metas) >= _GATE_MIN_RESOLVED_MEETINGS  # a substantial denominator
+    # A corrupted file is dropped from the listing, so an exact-count match (not a
+    # floor) is what proves the whole committed set is readable before we load it.
+    assert len(metas) == _COMMITTED_7P2I_SEED_COUNT
 
     resolved_meetings = 0
     for meta in metas:
