@@ -352,3 +352,156 @@ class TestNonUnionSchemaUntouched:
         assert (
             normalize_report_payload("not-an-object", ReportDocument) == "not-an-object"
         )
+
+
+class TestNonChronologicalAlibi:
+    """Reversed ``from_tick``/``to_tick`` on an ``AlibiClaim`` (Task 7.10, gp-2).
+
+    ``qwen2.5:7b-instruct`` emits an ``AlibiClaim`` with ``from_tick > to_tick``
+    in ~6% of the committed 7p/2i set; the strict chronological validator on
+    ``AlibiClaim`` rejects it, and (before this) the whole game aborted with no
+    ``game_over``. The normalizer swaps the bounds *before* validation so the
+    strict schema accepts the claim — the schema itself is NOT relaxed.
+    """
+
+    def _reversed_alibi_statement(self) -> dict[str, Any]:
+        # The seed-36 repro shape: from_tick=8 > to_tick=1 inside a Statement.
+        return {
+            "statement_id": "s1",
+            "speaker": "p-3",
+            "tick": 11,
+            "round_index": 0,
+            "target": None,
+            "claims": [
+                {
+                    "type": "alibi",
+                    "subject": "p-3",
+                    "from_tick": 8,
+                    "to_tick": 1,
+                    "room": "CAFETERIA",
+                }
+            ],
+            "free_text": "I was around.",
+        }
+
+    def test_reversed_alibi_in_statement_is_swapped_and_validates(self) -> None:
+        payload = self._reversed_alibi_statement()
+        # Raw payload is a hard chronological-validator error.
+        with pytest.raises(ValidationError):
+            Statement.model_validate(payload)
+
+        normalized = normalize_report_payload(payload, Statement)
+
+        claim = normalized["claims"][0]
+        # Bounds swapped (both tick values preserved), not coerced away.
+        assert claim["from_tick"] == 1
+        assert claim["to_tick"] == 8
+        # Other fields untouched, and it now validates on the strict schema.
+        assert claim["subject"] == "p-3"
+        assert claim["room"] == "CAFETERIA"
+        Statement.model_validate(normalized)
+
+    def test_reversed_alibi_in_report_is_swapped_and_validates(self) -> None:
+        # The repair fires wherever AlibiClaim is reached via the Claim union —
+        # ReportDocument.claims as well as Statement.claims.
+        payload: dict[str, Any] = {
+            "agent_id": "p-3",
+            "tick": 14,
+            "observations": [],
+            "claims": [
+                {
+                    "type": "alibi",
+                    "subject": "p-3",
+                    "from_tick": 9,
+                    "to_tick": 1,
+                    "room": "MEDBAY",
+                }
+            ],
+            "free_text": "alibi",
+        }
+        normalized = normalize_report_payload(payload, ReportDocument)
+        assert normalized["claims"][0]["from_tick"] == 1
+        assert normalized["claims"][0]["to_tick"] == 9
+        ReportDocument.model_validate(normalized)
+
+    def test_chronological_alibi_is_deep_equal_no_op(self) -> None:
+        payload = _valid_report()  # its alibi is already chronological (380..410)
+        assert normalize_report_payload(payload, ReportDocument) == payload
+
+    def test_equal_bounds_alibi_is_no_op(self) -> None:
+        # from_tick == to_tick is a valid one-tick window: no swap, no change.
+        payload: dict[str, Any] = {
+            "agent_id": "p-1",
+            "tick": 5,
+            "observations": [],
+            "claims": [
+                {
+                    "type": "alibi",
+                    "subject": "p-1",
+                    "from_tick": 5,
+                    "to_tick": 5,
+                    "room": "R",
+                }
+            ],
+            "free_text": "f",
+        }
+        assert normalize_report_payload(payload, ReportDocument) == payload
+        ReportDocument.model_validate(payload)
+
+    def test_reversed_alibi_repair_does_not_mutate_input(self) -> None:
+        payload = self._reversed_alibi_statement()
+        before = copy.deepcopy(payload)
+        normalize_report_payload(payload, Statement)
+        assert payload == before  # pure function: input untouched
+
+    def test_reversed_alibi_missing_other_field_still_fails_loud(self) -> None:
+        # The swap fixes the ordering but never fabricates a missing required
+        # field: a reversed alibi that ALSO omits ``room`` is salvaged on the
+        # range but still fails validation — the "claim still malformed after
+        # normalization fails" half of the DoD.
+        payload: dict[str, Any] = {
+            "agent_id": "p-1",
+            "tick": 5,
+            "observations": [],
+            "claims": [
+                {
+                    "type": "alibi",
+                    "subject": "p-1",
+                    "from_tick": 8,
+                    "to_tick": 1,
+                    # ``room`` (required) is absent.
+                }
+            ],
+            "free_text": "f",
+        }
+        normalized = normalize_report_payload(payload, ReportDocument)
+        # Range was repaired...
+        assert normalized["claims"][0]["from_tick"] == 1
+        assert normalized["claims"][0]["to_tick"] == 8
+        # ...but the missing required field still fails loud.
+        with pytest.raises(ValidationError) as exc:
+            ReportDocument.model_validate(normalized)
+        assert any(err["type"] == "missing" for err in exc.value.errors())
+
+    def test_non_int_ticks_are_not_swapped(self) -> None:
+        # Float ticks are not the int the schema expects; the repair leaves them
+        # untouched (it never coerces field *types*) so validation fails loud
+        # rather than this helper masking a type error as a swap.
+        payload: dict[str, Any] = {
+            "agent_id": "p-1",
+            "tick": 5,
+            "observations": [],
+            "claims": [
+                {
+                    "type": "alibi",
+                    "subject": "p-1",
+                    "from_tick": 8.0,
+                    "to_tick": 1.0,
+                    "room": "R",
+                }
+            ],
+            "free_text": "f",
+        }
+        normalized = normalize_report_payload(payload, ReportDocument)
+        assert normalized["claims"][0]["from_tick"] == 8.0
+        assert normalized["claims"][0]["to_tick"] == 1.0

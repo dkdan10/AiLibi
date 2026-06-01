@@ -24,17 +24,20 @@ compatibility.
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TypeVar
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
+from llm.provider import _extract_json_block  # noqa: PLC2701
 from meetings.manager import (
     DEFAULT_REPORT_FREE_TEXT,
+    DEFAULT_ROUND_COUNT,
     DEFAULT_STATEMENT_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
     INVALID_VOTE_TARGET_MARKER,
@@ -388,7 +391,9 @@ def _make_manager(
     *,
     llm_client: LLMClient,
     deadlines: MeetingDeadlines | None = None,
-    round_count: int = 2,
+    # Matches the production default (DEFAULT_ROUND_COUNT, 1 since Task 7.10).
+    # Tests that exercise multi-round behavior pass round_count=2/3 explicitly.
+    round_count: int = 1,
 ) -> MeetingManager:
     config = MeetingConfig(
         round_count=round_count,
@@ -2658,3 +2663,253 @@ class TestAccusationRoundPromptVersionInReplay:
 
         assert entry.prompt_versions["accusation_round"] == "accusation_round.v2"
         assert entry.prompt_versions["accusation_round"] != "accusation_round.v1"
+
+
+# --- Task 7.10: fail-soft statements + single accusation round -------------
+
+
+@dataclass
+class _NormalizingScriptedClient:
+    """Scripted client that mirrors the real provider's extract→validate seam.
+
+    The plain :class:`_ScriptedLLMClient` validates ``responder`` output
+    directly, so it cannot exercise the Task 7.6/7.10 parse-tolerance
+    normalization the way a real run does. The Anthropic and Ollama adapters
+    route every structured response through
+    :func:`llm.provider._extract_json_block` (which runs the normalizer) before
+    validating; this client does the same, so a near-miss statement — e.g. a
+    reversed ``AlibiClaim`` range — is salvaged exactly as in production before
+    the manager consumes ``LLMResponse.text``.
+    """
+
+    responder: Callable[[str, type[BaseModel] | None], str]
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        raw = self.responder(prompt, schema)
+        text = _extract_json_block(raw, schema) if schema is not None else raw
+        if schema is not None:
+            schema.model_validate_json(text)
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "normalizing-test",
+        )
+
+
+def _reversed_alibi_statement_json(*, speaker: str) -> str:
+    """A Statement carrying a reversed (``from_tick > to_tick``) AlibiClaim.
+
+    Built via ``json.dumps`` rather than the Statement model so the invalid
+    range survives to the client (the model would reject it at construction).
+    This is the seed-25/36/40 crash shape.
+    """
+
+    return json.dumps(
+        {
+            "statement_id": "ignored",
+            "speaker": speaker,
+            "tick": 0,
+            "round_index": 0,
+            "target": None,
+            "claims": [
+                {
+                    "type": "alibi",
+                    "subject": speaker,
+                    "from_tick": 8,
+                    "to_tick": 1,
+                    "room": "CAFETERIA",
+                }
+            ],
+            "free_text": f"reversed-alibi-{speaker}",
+        }
+    )
+
+
+class TestStatementFailSoft:
+    """A malformed statement degrades to a placeholder; the meeting continues.
+
+    Task 7.10 / audit ``audits/audit-2026-06-01-1425-gameplay-data.md`` gp-2,
+    E-E-1, A-A-2: before this, a single statement whose structured output
+    failed schema validation (e.g. a reversed-chronology ``AlibiClaim``)
+    propagated out of the meeting and aborted the game with no ``game_over``
+    (seeds 25/36/40). The statement phase now fails soft: the bad statement
+    becomes the missed-deadline placeholder and the meeting runs to resolution.
+    """
+
+    def _statement_only_responder(
+        self,
+        *,
+        statement_for: Callable[[str], str],
+    ) -> Callable[[str, type[BaseModel] | None], str]:
+        # Reports/votes use the standard valid stubs; statements are produced by
+        # ``statement_for(speaker)`` so a single speaker can be made malformed.
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=STATEMENT" in prompt:
+                speaker = _extract_marker(prompt, "agent_id=")
+                return statement_for(speaker)
+            return _make_responder()(prompt, schema)
+
+        return _responder
+
+    def test_single_malformed_statement_degrades_and_meeting_resolves(self) -> None:
+        # p-3's statement is unparseable JSON (the hardest malformation); the
+        # other two speakers return valid stubs. The meeting must still resolve.
+        def _statement_for(speaker: str) -> str:
+            if speaker == "p-3":
+                return "this is not json at all {{"
+            return _stub_statement_json(speaker=speaker, round_index=0)
+
+        client = _ScriptedLLMClient(
+            responder=self._statement_only_responder(statement_for=_statement_for)
+        )
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-failsoft",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        # The meeting reached resolution (no raise) with a ballot per player.
+        assert result.outcome in {"EJECTED", "SKIPPED"}
+        assert len(result.ballots) == 3
+        # One statement per speaker (round_count=1). p-3's is the placeholder;
+        # the other two are the real stubbed statements, untouched.
+        by_speaker = {s.speaker: s for s in result.transcript.statements}
+        assert by_speaker["p-3"].free_text == DEFAULT_STATEMENT_FREE_TEXT
+        assert by_speaker["p-3"].claims == ()
+        assert by_speaker["p-1"].free_text != DEFAULT_STATEMENT_FREE_TEXT
+        assert by_speaker["p-2"].free_text != DEFAULT_STATEMENT_FREE_TEXT
+
+    def test_reversed_alibi_statement_fails_soft_without_normalization(self) -> None:
+        # If a reversed-chronology alibi reaches schema validation unrepaired
+        # (the _ScriptedLLMClient does not normalize), the manager must NOT
+        # abort: it degrades that one statement and resolves the meeting.
+        client = _ScriptedLLMClient(
+            responder=self._statement_only_responder(
+                statement_for=lambda speaker: _reversed_alibi_statement_json(
+                    speaker=speaker
+                )
+            )
+        )
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-reversed",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        # Every statement degraded to the placeholder; the meeting still
+        # resolved instead of raising a ValidationError out of the phase loop.
+        assert result.outcome in {"EJECTED", "SKIPPED"}
+        assert len(result.transcript.statements) == 3
+        for statement in result.transcript.statements:
+            assert statement.free_text == DEFAULT_STATEMENT_FREE_TEXT
+
+    def test_reversed_alibi_normalizes_then_meeting_resolves_with_real_statement(
+        self,
+    ) -> None:
+        # The primary fix (gp-2 part 1): through the real provider seam the
+        # reversed alibi is normalized to a chronological one, so the statement
+        # validates and lands as a REAL statement (bounds swapped), NOT the
+        # fail-soft placeholder. This is the path a live Ollama run takes.
+        client = _NormalizingScriptedClient(
+            responder=self._statement_only_responder(
+                statement_for=lambda speaker: _reversed_alibi_statement_json(
+                    speaker=speaker
+                )
+            )
+        )
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-normalized",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert result.outcome in {"EJECTED", "SKIPPED"}
+        assert len(result.transcript.statements) == 3
+        for statement in result.transcript.statements:
+            # Salvaged, not degraded: the real free_text survived...
+            assert statement.free_text != DEFAULT_STATEMENT_FREE_TEXT
+            alibis = [c for c in statement.claims if isinstance(c, AlibiClaim)]
+            assert len(alibis) == 1
+            # ...and the reversed range was swapped into chronological order.
+            assert alibis[0].from_tick == 1
+            assert alibis[0].to_tick == 8
+
+    def test_report_validation_error_still_propagates(self) -> None:
+        # Fail-soft is deliberately statement-only (Task 7.10 scope). A report
+        # whose structured output fails validation still propagates so the
+        # orchestrator records a failed_call — unchanged behavior.
+        def _bad_report_responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=REPORT" in prompt:
+                return "not json {{"
+            return _make_responder()(prompt, schema)
+
+        client = _ScriptedLLMClient(responder=_bad_report_responder)
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        with pytest.raises(ValidationError):
+            _run(
+                manager.run(
+                    meeting_id="m-bad-report",
+                    trigger=_default_trigger(),
+                    participants=_make_participants(),
+                )
+            )
+
+
+class TestDefaultRoundCount:
+    """R reduced 2→1 (Task 7.10, audit §6 R=2 statement-sink)."""
+
+    def test_default_round_count_constant_is_one(self) -> None:
+        assert DEFAULT_ROUND_COUNT == 1
+
+    def test_default_config_round_count_is_one(self) -> None:
+        assert MeetingConfig().round_count == 1
+
+    def test_default_config_runs_a_single_accusation_round(self) -> None:
+        # Build the manager with NO config so it exercises the PRODUCTION
+        # default (MeetingConfig() -> DEFAULT_ROUND_COUNT). 3 participants ×
+        # 1 round == 3 statements, all at round_index 0.
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = MeetingManager(
+            llm_client=client,
+            crewmate_report_prompt=_crewmate_report_prompt,
+            impostor_report_prompt=_impostor_report_prompt,
+            statement_prompt=_statement_prompt,
+            vote_prompt=_vote_prompt,
+        )
+
+        result = _run(
+            manager.run(
+                meeting_id="m-one-round",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        assert len(result.transcript.statements) == 3
+        assert {s.round_index for s in result.transcript.statements} == {0}
+        statement_calls = [c for c in client.calls if "PHASE=STATEMENT" in c.prompt]
+        assert len(statement_calls) == 3
