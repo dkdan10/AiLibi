@@ -259,11 +259,27 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # They are pure aggregate counts + a rate (no roles, transcripts, or engine
 # types), so they expose no engine/role state and stay out of
 # ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
+#
+# The Phase 7 W0.5 (Task 7.11) eval-reporting-hardening fields are likewise pure
+# derived counts / flags / rates with no engine/role state, so they too stay out
+# of ``FORBIDDEN_EVAL_ENGINE_FIELDS``:
+#   * ``ejection_accuracy``, ``vote_correctness_small_n``,
+#     ``contradictions_flagged_but_ignored`` — ``eval.vote_correctness``.
+#   * ``accusation_claim_populated_bins`` / ``accusation_claim_low_power`` /
+#     ``vote_ballot_populated_bins`` / ``vote_ballot_low_power`` —
+#     ``eval.accusation_calibration``.
+#   * ``skipped_meetings`` / ``ejected_meetings`` —
+#     ``eval.meeting_quality.MeetingRateReport``.
+# (The ``first_zero_impostor_tick == game_over_tick`` self-check lives in
+# ``eval.win_condition_selfcheck`` and is NOT a served report field, so it does
+# not appear in this snapshot.)
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
         "accusation_claim_bins",
         "accusation_claim_ece",
+        "accusation_claim_low_power",
+        "accusation_claim_populated_bins",
         "accusation_claim_total",
         "actual_impostor_rate",
         "against",
@@ -281,13 +297,16 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "considered_alternatives",
         "contradiction_id",
         "contradictions",
+        "contradictions_flagged_but_ignored",
         "cost",
         "cost_dashboard",
         "cost_usd",
         "count",
         "crewmate_ejections",
         "description",
+        "ejected_meetings",
         "ejected_player_id",
+        "ejection_accuracy",
         "emergency_meetings",
         "error_message",
         "error_type",
@@ -342,6 +361,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "round_index",
         "seed",
         "seeds_used",
+        "skipped_meetings",
         "speaker",
         "statement_id",
         "statements",
@@ -366,9 +386,12 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "version",
         "vote_ballot_bins",
         "vote_ballot_ece",
+        "vote_ballot_low_power",
+        "vote_ballot_populated_bins",
         "vote_ballot_total",
         "vote_correctness",
         "vote_correctness_rate",
+        "vote_correctness_small_n",
         "voter",
         "winner",
     }

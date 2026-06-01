@@ -392,13 +392,22 @@ export interface TournamentReport {
 }
 
 // `eval.vote_correctness.VoteCorrectnessReport`. `vote_correctness_rate` is
-// `null` (undefined, not 0.0) when there were no impostor ejections.
+// `null` (undefined, not 0.0) when there were no impostor ejections; it is the
+// evidence-backed share over the impostor-ejection denominator ONLY, so pair it
+// with `ejection_accuracy` (impostor_ejections / total_ejections, the full
+// denominator — `null` when there were no ejections at all) for honest accuracy.
+// `vote_correctness_small_n` flags an under-powered rate (few impostor
+// ejections); `contradictions_flagged_but_ignored` counts SKIPPED meetings that
+// carried a contradiction yet ejected no one (audit C-C-4 / F-F-2 / gp-7).
 export interface VoteCorrectnessReport {
   total_ejections: number;
   impostor_ejections: number;
   crewmate_ejections: number;
   evidence_backed_impostor_ejections: number;
   vote_correctness_rate: number | null;
+  ejection_accuracy: number | null;
+  vote_correctness_small_n: boolean;
+  contradictions_flagged_but_ignored: number;
 }
 
 // `eval.accusation_calibration.CalibrationBin`. `actual_impostor_rate` and
@@ -416,15 +425,22 @@ export interface CalibrationBin {
 
 // `eval.accusation_calibration.AccusationCalibrationReport` — claim and ballot
 // curves reported separately, never pooled. Each `*_ece` is `null` when the
-// curve binned no accusations.
+// curve binned no accusations. Each `*_populated_bins` counts how many bins held
+// a sample and `*_low_power` is `true` when that count is below the power
+// threshold — an ECE from a near-degenerate (clustered) distribution is
+// statistically weak (audit F-F-3 / gp-7).
 export interface AccusationCalibrationReport {
   n_bins: number;
   accusation_claim_bins: CalibrationBin[];
   accusation_claim_total: number;
   accusation_claim_ece: number | null;
+  accusation_claim_populated_bins: number;
+  accusation_claim_low_power: boolean;
   vote_ballot_bins: CalibrationBin[];
   vote_ballot_total: number;
   vote_ballot_ece: number | null;
+  vote_ballot_populated_bins: number;
+  vote_ballot_low_power: boolean;
 }
 
 // `eval.alibi_fabrication.AlibiFabricationReport`. `survival_rate` is `0.0`
@@ -464,7 +480,10 @@ export interface CostDashboard {
 // trigger breakdown partitions exactly: `body_report_meetings +
 // emergency_meetings === meetings_total`. `emergency_meetings` is a catch-all
 // (derived, not a positively-identified emergency-button count) — see the
-// Python `MeetingRateReport` docstring.
+// Python `MeetingRateReport` docstring. The OUTCOME breakdown
+// (`skipped_meetings` + `ejected_meetings === meetings_total`) pairs with
+// `meeting_rate` so "reached a meeting" is not mistaken for "the meeting
+// resolved anything" — most meetings skip (audit F-F-5 / gp-7).
 export interface MeetingRateReport {
   games_total: number;
   games_with_meeting: number;
@@ -472,6 +491,8 @@ export interface MeetingRateReport {
   meetings_total: number;
   body_report_meetings: number;
   emergency_meetings: number;
+  skipped_meetings: number;
+  ejected_meetings: number;
 }
 
 // `eval.meeting_quality.TournamentEvalReport` — the wrapper the endpoint serves.

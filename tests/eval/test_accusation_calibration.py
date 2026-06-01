@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from engine.entities import Role
 from eval.accusation_calibration import (
     DEFAULT_N_BINS,
+    MIN_POPULATED_BINS_FOR_POWER,
     AccusationCalibrationReport,
     CalibrationBin,
     compute_accusation_calibration,
@@ -512,7 +513,100 @@ def test_report_validates_bin_count_matches_n_bins() -> None:
             accusation_claim_bins=one_bin,
             accusation_claim_total=0,
             accusation_claim_ece=None,
+            accusation_claim_populated_bins=0,
+            accusation_claim_low_power=True,
             vote_ballot_bins=one_bin,
             vote_ballot_total=0,
             vote_ballot_ece=None,
+            vote_ballot_populated_bins=0,
+            vote_ballot_low_power=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Task 7.11 per-bin power flag (audit F-F-3 / gp-7)
+# ---------------------------------------------------------------------------
+
+
+def test_clustered_confidences_flag_low_power() -> None:
+    """Confidences clustered into a couple of bins -> low_power (the qwen2.5 case).
+
+    Accusation claims all at 0.55 / 0.85 (two bins) and ballots all at 0.85 (one
+    bin) populate far fewer than MIN_POPULATED_BINS_FOR_POWER bins, so both
+    curves are flagged low-power even though their ECE is a valid number.
+    """
+
+    meeting = _meeting(
+        statement_claims=(_acc("p-3", 0.55), _acc("p-1", 0.85), _acc("p-3", 0.85)),
+        ballots=(_ballot("p-3", 0.85), _ballot("p-1", 0.85)),
+    )
+    report = _tournament(_game(game_id="g", roles=_ROLES, meetings=(meeting,)))
+
+    result = compute_accusation_calibration(report)
+
+    assert result.accusation_claim_populated_bins == 2  # 0.55 bin + 0.85 bin
+    assert result.accusation_claim_populated_bins < MIN_POPULATED_BINS_FOR_POWER
+    assert result.accusation_claim_low_power is True
+    assert result.vote_ballot_populated_bins == 1  # all at 0.85
+    assert result.vote_ballot_low_power is True
+    # The flag is advisory: the ECE is still computed, not nulled.
+    assert result.accusation_claim_ece is not None
+
+
+def test_well_spread_confidences_are_not_low_power() -> None:
+    """Accusations spread across >= MIN_POPULATED_BINS_FOR_POWER bins: not flagged."""
+
+    # One accusation in each of MIN_POPULATED_BINS_FOR_POWER distinct deciles.
+    claims = tuple(
+        _acc("p-3", (bin_index + 0.5) / DEFAULT_N_BINS)
+        for bin_index in range(MIN_POPULATED_BINS_FOR_POWER)
+    )
+    meeting = _meeting(statement_claims=claims)
+    report = _tournament(_game(game_id="g", roles=_ROLES, meetings=(meeting,)))
+
+    result = compute_accusation_calibration(report)
+
+    assert result.accusation_claim_populated_bins == MIN_POPULATED_BINS_FOR_POWER
+    assert result.accusation_claim_low_power is False
+
+
+def test_empty_curve_is_low_power_with_zero_populated_bins() -> None:
+    """A curve that binned nothing has zero populated bins and is low-power."""
+
+    result = compute_accusation_calibration(_tournament())
+    assert result.accusation_claim_total == 0
+    assert result.accusation_claim_populated_bins == 0
+    assert result.accusation_claim_low_power is True
+    assert result.accusation_claim_ece is None
+
+
+def test_report_rejects_mismatched_populated_bin_count() -> None:
+    """The validator fails loud if declared populated_bins != actual non-empty bins."""
+
+    bins = tuple(
+        CalibrationBin(
+            bin_index=i,
+            lo=i / DEFAULT_N_BINS,
+            hi=(i + 1) / DEFAULT_N_BINS,
+            midpoint=(i + 0.5) / DEFAULT_N_BINS,
+            count=(1 if i == 0 else 0),
+            impostor_hits=0,
+            actual_impostor_rate=(0.0 if i == 0 else None),
+            mean_confidence=(0.05 if i == 0 else None),
+        )
+        for i in range(DEFAULT_N_BINS)
+    )
+    with pytest.raises(ValidationError, match="populated-bin count must equal"):
+        AccusationCalibrationReport(
+            n_bins=DEFAULT_N_BINS,
+            accusation_claim_bins=bins,
+            accusation_claim_total=1,
+            accusation_claim_ece=0.05,
+            accusation_claim_populated_bins=5,  # actual is 1
+            accusation_claim_low_power=True,
+            vote_ballot_bins=bins,
+            vote_ballot_total=1,
+            vote_ballot_ece=0.05,
+            vote_ballot_populated_bins=1,
+            vote_ballot_low_power=True,
         )

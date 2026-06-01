@@ -28,6 +28,7 @@ from eval.report_schema import (
 )
 from eval.vote_correctness import (
     KILL_WITNESS_TICK_WINDOW,
+    VOTE_CORRECTNESS_MIN_SAMPLE,
     VoteCorrectnessReport,
     compute_vote_correctness,
 )
@@ -544,6 +545,117 @@ def test_empty_tournament_yields_zero_with_none_rate() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Task 7.11 derived honesty fields (audit C-C-4, F-F-2, gp-7)
+# ---------------------------------------------------------------------------
+
+
+def test_ejection_accuracy_uses_full_denominator_while_rate_excludes_crewmates() -> (
+    None
+):
+    """The audit headline: rate 1.0 but ejection_accuracy 0.5 (gp-7 / C-C-4).
+
+    Three evidence-backed impostor ejections and three crewmate ejections:
+    vote_correctness_rate is 1.0 (3/3 backed impostor ejections), but
+    ejection_accuracy is 0.5 (3 impostor / 6 total) -- the wrong crewmate
+    ejections the rate silently drops.
+    """
+
+    impostor_ejections = tuple(
+        _meeting(
+            outcome="EJECTED",
+            ejected=_IMPOSTOR,
+            meeting_id=f"m-i{i}",
+            contradictions=(_contradiction(subjects=(_IMPOSTOR,)),),
+        )
+        for i in range(3)
+    )
+    crewmate_ejections = tuple(
+        _meeting(outcome="EJECTED", ejected=_CREWMATE, meeting_id=f"m-c{i}")
+        for i in range(3)
+    )
+    report = _tournament(
+        _game(meetings=impostor_ejections + crewmate_ejections),
+    )
+
+    result = compute_vote_correctness(report)
+
+    assert result.total_ejections == 6
+    assert result.impostor_ejections == 3
+    assert result.crewmate_ejections == 3
+    assert result.vote_correctness_rate == 1.0  # reads "perfect" in isolation
+    assert result.ejection_accuracy == 0.5  # the honest accuracy
+
+
+def test_ejection_accuracy_none_when_no_ejections() -> None:
+    result = compute_vote_correctness(
+        _one_meeting_report(_meeting(outcome="SKIPPED", ejected=None))
+    )
+    assert result.total_ejections == 0
+    assert result.ejection_accuracy is None
+
+
+def test_small_n_flag_tracks_impostor_ejection_count() -> None:
+    """vote_correctness_small_n is True below VOTE_CORRECTNESS_MIN_SAMPLE."""
+
+    # One impostor ejection: well under the threshold -> flagged.
+    few = compute_vote_correctness(
+        _one_meeting_report(
+            _meeting(
+                outcome="EJECTED",
+                ejected=_IMPOSTOR,
+                contradictions=(_contradiction(subjects=(_IMPOSTOR,)),),
+            )
+        )
+    )
+    assert few.impostor_ejections < VOTE_CORRECTNESS_MIN_SAMPLE
+    assert few.vote_correctness_small_n is True
+
+    # Exactly VOTE_CORRECTNESS_MIN_SAMPLE impostor ejections: not flagged.
+    many_meetings = tuple(
+        _meeting(
+            outcome="EJECTED",
+            ejected=_IMPOSTOR,
+            meeting_id=f"m-{i}",
+            contradictions=(_contradiction(subjects=(_IMPOSTOR,)),),
+        )
+        for i in range(VOTE_CORRECTNESS_MIN_SAMPLE)
+    )
+    many = compute_vote_correctness(_tournament(_game(meetings=many_meetings)))
+    assert many.impostor_ejections == VOTE_CORRECTNESS_MIN_SAMPLE
+    assert many.vote_correctness_small_n is False
+
+
+def test_contradictions_flagged_but_ignored_counts_skipped_with_contradiction() -> None:
+    """SKIPPED meetings carrying a contradiction feed the secondary signal (F-F-2)."""
+
+    skipped_with_contra = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        meeting_id="m-skip-contra",
+        contradictions=(_contradiction(subjects=(_IMPOSTOR,)),),
+    )
+    skipped_no_contra = _meeting(
+        outcome="SKIPPED", ejected=None, meeting_id="m-skip-clean"
+    )
+    # An EJECTED meeting with a contradiction does NOT count (it acted on it).
+    ejected_with_contra = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        meeting_id="m-eject",
+        contradictions=(_contradiction(subjects=(_IMPOSTOR,)),),
+    )
+    report = _tournament(
+        _game(
+            meetings=(skipped_with_contra, skipped_no_contra, ejected_with_contra),
+        )
+    )
+
+    result = compute_vote_correctness(report)
+
+    assert result.contradictions_flagged_but_ignored == 1
+
+
+# ---------------------------------------------------------------------------
 # Result model contract
 # ---------------------------------------------------------------------------
 
@@ -562,6 +674,9 @@ def test_result_model_rejects_inconsistent_buckets() -> None:
             crewmate_ejections=1,
             evidence_backed_impostor_ejections=0,
             vote_correctness_rate=0.0,
+            ejection_accuracy=1.0,
+            vote_correctness_small_n=True,
+            contradictions_flagged_but_ignored=0,
         )
 
 
@@ -573,6 +688,9 @@ def test_result_model_rejects_rate_when_no_impostor_ejections() -> None:
             crewmate_ejections=0,
             evidence_backed_impostor_ejections=0,
             vote_correctness_rate=0.0,
+            ejection_accuracy=None,
+            vote_correctness_small_n=True,
+            contradictions_flagged_but_ignored=0,
         )
 
 
@@ -584,4 +702,49 @@ def test_result_model_rejects_backed_exceeding_impostor() -> None:
             crewmate_ejections=0,
             evidence_backed_impostor_ejections=2,
             vote_correctness_rate=1.0,
+            ejection_accuracy=1.0,
+            vote_correctness_small_n=True,
+            contradictions_flagged_but_ignored=0,
+        )
+
+
+def test_result_model_rejects_ejection_accuracy_set_with_zero_ejections() -> None:
+    with pytest.raises(ValidationError, match="ejection_accuracy must be None"):
+        VoteCorrectnessReport(
+            total_ejections=0,
+            impostor_ejections=0,
+            crewmate_ejections=0,
+            evidence_backed_impostor_ejections=0,
+            vote_correctness_rate=None,
+            ejection_accuracy=0.0,  # must be None when there are no ejections
+            vote_correctness_small_n=True,
+            contradictions_flagged_but_ignored=0,
+        )
+
+
+def test_result_model_rejects_none_ejection_accuracy_with_ejections() -> None:
+    with pytest.raises(ValidationError, match="ejection_accuracy must be set"):
+        VoteCorrectnessReport(
+            total_ejections=1,
+            impostor_ejections=0,
+            crewmate_ejections=1,
+            evidence_backed_impostor_ejections=0,
+            vote_correctness_rate=None,
+            ejection_accuracy=None,  # must be set when total_ejections > 0
+            vote_correctness_small_n=True,
+            contradictions_flagged_but_ignored=0,
+        )
+
+
+def test_result_model_rejects_negative_contradictions_ignored() -> None:
+    with pytest.raises(ValidationError, match="must be non-negative"):
+        VoteCorrectnessReport(
+            total_ejections=0,
+            impostor_ejections=0,
+            crewmate_ejections=0,
+            evidence_backed_impostor_ejections=0,
+            vote_correctness_rate=None,
+            ejection_accuracy=None,
+            vote_correctness_small_n=True,
+            contradictions_flagged_but_ignored=-1,
         )

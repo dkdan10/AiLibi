@@ -60,7 +60,37 @@ Decisions baked into this metric (recorded in the PR's ``## Decisions`` block):
   impostor ejections backed by a real contradiction or kill witness). When
   there are zero impostor ejections the rate is :data:`None` -- the rate is
   *undefined*, not ``0.0`` (reporting ``0.0`` would falsely imply impostor
-  ejections occurred and were all unfounded).
+  ejections occurred and were all unfounded). Because this denominator
+  **excludes the wrong (crewmate) ejections**, the rate alone overstates how
+  accurate the table's ejections were: a ``1.0`` rate read in isolation can be
+  mistaken for "every ejection was correct" when half the ejections were
+  crewmates. The companion ``ejection_accuracy`` below closes that gap.
+
+* **``ejection_accuracy`` is the honest accuracy denominator (audit C-C-4,
+  gp-7).** ``ejection_accuracy = impostor_ejections / total_ejections`` -- the
+  share of *all* ejections that hit an impostor, NOT gated on evidence. It is
+  the field a Wave-1 reader should pair with ``vote_correctness_rate``: in the
+  audited 7p/2i artifact set ``vote_correctness_rate`` was ``1.0`` (3/3
+  evidence-backed impostor ejections) while ``ejection_accuracy`` was ``0.5``
+  (3 impostor / 6 total ejections), because the rate silently dropped the 3
+  wrong crewmate ejections. Like the rate it is :data:`None` (undefined, not
+  ``0.0``) when there were zero ejections at all.
+
+* **Small-n flag.** ``vote_correctness_small_n`` is ``True`` when the rate's
+  denominator (``impostor_ejections``) is below
+  :data:`VOTE_CORRECTNESS_MIN_SAMPLE` -- a blunt "do not trust this rate as a
+  gate yet" marker (the audit's vote_correctness rested on n=3, F-F-2). It is a
+  flag, not a verdict: a flagged rate is under-powered, not wrong.
+
+* **"Contradictions flagged but ignored" secondary signal (audit F-F-2).**
+  ``contradictions_flagged_but_ignored`` counts ``SKIPPED`` meetings that
+  carried at least one structured contradiction yet ejected no one -- the
+  table was handed a flagged inconsistency and skipped anyway (36/45 SKIPPED
+  meetings in the audit). It is a coarse "the deduction signal was present but
+  unused" counter that survives even when ``impostor_ejections`` is too small
+  for the rate to mean anything; it is NOT scoped to contradictions naming a
+  living impostor (that stricter C-C-3 cut needs role ground truth per
+  contradiction subject and is deferred).
 
 * **Malformed ``EJECTED`` meetings are skipped.** Unlike
   :class:`meetings.schemas.MeetingResult`, :class:`~eval.report_schema.MeetingReport`
@@ -93,6 +123,15 @@ from meetings.schemas import (
 # for the rationale (default 2 Hz engine, canonical kill cooldown of 4 ticks).
 KILL_WITNESS_TICK_WINDOW: Final[int] = 5
 
+# Minimum number of impostor ejections (the ``vote_correctness_rate``
+# denominator) below which the rate is flagged ``vote_correctness_small_n``.
+# An explicit, documented threshold (see the PR's ## Decisions block): a rate
+# over fewer than this many impostor ejections is under-powered as a gate -- the
+# audit's vote_correctness rested on n=3 (F-F-2). Chosen as a round "need >= 10
+# samples before trusting a proportion" rule of thumb; it flags interpretation
+# only and changes no computed number.
+VOTE_CORRECTNESS_MIN_SAMPLE: Final[int] = 10
+
 
 class VoteCorrectnessReport(BaseModel):
     """Aggregated vote-correctness result (DESIGN.md §11.3).
@@ -108,7 +147,21 @@ class VoteCorrectnessReport(BaseModel):
     (:func:`_has_real_evidence`). ``vote_correctness_rate`` is
     ``evidence_backed_impostor_ejections / impostor_ejections`` -- the share of
     impostor ejections actually driven by evidence -- and is ``None`` (undefined,
-    not ``0.0``) when there were no impostor ejections.
+    not ``0.0``) when there were no impostor ejections. **It must be paired with
+    ``ejection_accuracy`` to be read honestly:** the rate's denominator is
+    impostor ejections ONLY, so it excludes the wrong crewmate ejections and a
+    ``1.0`` rate read in isolation cannot be mistaken for full ejection accuracy
+    (audit C-C-4 / gp-7).
+
+    ``ejection_accuracy`` is ``impostor_ejections / total_ejections`` -- the
+    share of *all* ejections that hit an impostor (the full-denominator accuracy
+    the rate omits) -- and is ``None`` (undefined, not ``0.0``) when there were
+    no ejections at all. ``vote_correctness_small_n`` flags an under-powered rate
+    (``impostor_ejections < `` :data:`VOTE_CORRECTNESS_MIN_SAMPLE`).
+    ``contradictions_flagged_but_ignored`` is the secondary "deduction signal
+    present but unused" count: ``SKIPPED`` meetings that carried >= 1
+    contradiction yet ejected no one (audit F-F-2). All three are
+    interpretation aids; none changes the rate's value.
 
     The post-init validator enforces the bucket invariants fail-loud so an
     inconsistent result can never be constructed (mirrors
@@ -122,6 +175,9 @@ class VoteCorrectnessReport(BaseModel):
     crewmate_ejections: int
     evidence_backed_impostor_ejections: int
     vote_correctness_rate: float | None
+    ejection_accuracy: float | None
+    vote_correctness_small_n: bool
+    contradictions_flagged_but_ignored: int
 
     @model_validator(mode="after")
     def _validate_buckets(self) -> VoteCorrectnessReport:
@@ -130,6 +186,7 @@ class VoteCorrectnessReport(BaseModel):
             self.impostor_ejections,
             self.crewmate_ejections,
             self.evidence_backed_impostor_ejections,
+            self.contradictions_flagged_but_ignored,
         )
         if any(count < 0 for count in counts):
             raise ValueError("vote-correctness counts must be non-negative")
@@ -144,6 +201,24 @@ class VoteCorrectnessReport(BaseModel):
                 "evidence_backed_impostor_ejections cannot exceed impostor_ejections: "
                 f"{self.evidence_backed_impostor_ejections} > {self.impostor_ejections}"
             )
+        # ejection_accuracy is defined over total_ejections (None iff there were
+        # no ejections at all), mirroring the rate's None-iff-undefined contract
+        # but on the full denominator.
+        if self.total_ejections == 0:
+            if self.ejection_accuracy is not None:
+                raise ValueError(
+                    "ejection_accuracy must be None when there are no ejections: "
+                    "the accuracy is undefined, not 0.0"
+                )
+        else:
+            if self.ejection_accuracy is None:
+                raise ValueError(
+                    "ejection_accuracy must be set when total_ejections > 0"
+                )
+            if not 0.0 <= self.ejection_accuracy <= 1.0:
+                raise ValueError(
+                    f"ejection_accuracy must be in [0.0, 1.0]: {self.ejection_accuracy}"
+                )
         if self.impostor_ejections == 0:
             if self.vote_correctness_rate is not None:
                 raise ValueError(
@@ -172,13 +247,17 @@ def compute_vote_correctness(
     sequence of :class:`~eval.report_schema.GameReport` (the metric only needs
     the games). Pure: no I/O, no engine/agent/LLM calls.
 
-    Considers only ``EJECTED`` meetings. For each, the ejected player's role is
-    looked up by subscript on the game's ``roles`` ground truth (fail-loud if a
-    *real* ejected player is absent -- that is an internal inconsistency, not
-    partial-replay data). A malformed ``EJECTED`` meeting whose
-    ``ejected_player_id`` is ``None`` is skipped (see the module docstring).
-    ``SKIPPED`` meetings, meetings with no contradictions or an empty transcript,
-    and games with no meetings contribute nothing and never raise.
+    The ejection buckets consider only ``EJECTED`` meetings. For each, the
+    ejected player's role is looked up by subscript on the game's ``roles``
+    ground truth (fail-loud if a *real* ejected player is absent -- that is an
+    internal inconsistency, not partial-replay data). A malformed ``EJECTED``
+    meeting whose ``ejected_player_id`` is ``None`` is skipped (see the module
+    docstring). ``ejection_accuracy`` and ``vote_correctness_small_n`` are
+    derived from those buckets. The separate
+    ``contradictions_flagged_but_ignored`` counter folds every ``SKIPPED``
+    meeting that carried >= 1 contradiction (the secondary "signal present but
+    unused" cut). Meetings with an empty transcript and games with no meetings
+    contribute nothing and never raise.
     """
 
     games = report.games if isinstance(report, TournamentReport) else tuple(report)
@@ -187,9 +266,16 @@ def compute_vote_correctness(
     impostor_ejections = 0
     crewmate_ejections = 0
     evidence_backed = 0
+    contradictions_flagged_but_ignored = 0
 
     for game in games:
         for meeting in game.meetings:
+            # Secondary signal: a SKIPPED meeting that nonetheless carried a
+            # flagged contradiction is "deduction signal present but unused"
+            # (audit F-F-2). Counted for every game, independent of the ejection
+            # buckets below.
+            if meeting.outcome == "SKIPPED" and meeting.contradictions:
+                contradictions_flagged_but_ignored += 1
             if meeting.outcome != "EJECTED":
                 continue
             ejected = meeting.ejected_player_id
@@ -209,6 +295,9 @@ def compute_vote_correctness(
                 crewmate_ejections += 1
 
     rate = evidence_backed / impostor_ejections if impostor_ejections > 0 else None
+    ejection_accuracy = (
+        impostor_ejections / total_ejections if total_ejections > 0 else None
+    )
 
     return VoteCorrectnessReport(
         total_ejections=total_ejections,
@@ -216,6 +305,9 @@ def compute_vote_correctness(
         crewmate_ejections=crewmate_ejections,
         evidence_backed_impostor_ejections=evidence_backed,
         vote_correctness_rate=rate,
+        ejection_accuracy=ejection_accuracy,
+        vote_correctness_small_n=impostor_ejections < VOTE_CORRECTNESS_MIN_SAMPLE,
+        contradictions_flagged_but_ignored=contradictions_flagged_but_ignored,
     )
 
 
@@ -270,6 +362,7 @@ def _has_kill_witness_chain(meeting: MeetingReport, ejected: PlayerId) -> bool:
 
 __all__ = [
     "KILL_WITNESS_TICK_WINDOW",
+    "VOTE_CORRECTNESS_MIN_SAMPLE",
     "VoteCorrectnessReport",
     "compute_vote_correctness",
 ]

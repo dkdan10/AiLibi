@@ -594,6 +594,8 @@ def test_meeting_rate_none_when_no_games() -> None:
     assert result.meetings_total == 0
     assert result.body_report_meetings == 0
     assert result.emergency_meetings == 0
+    assert result.skipped_meetings == 0
+    assert result.ejected_meetings == 0
 
 
 def test_meeting_rate_counts_games_meetings_and_partitions() -> None:
@@ -620,6 +622,10 @@ def test_meeting_rate_counts_games_meetings_and_partitions() -> None:
     assert result.body_report_meetings == 3
     assert result.emergency_meetings == 0
     assert result.body_report_meetings + result.emergency_meetings == 3
+    # All fixture meetings default to SKIPPED, so the outcome split is 3/0.
+    assert result.skipped_meetings == 3
+    assert result.ejected_meetings == 0
+    assert result.skipped_meetings + result.ejected_meetings == 3
 
 
 def test_meeting_classified_body_report_when_trigger_report_found_body() -> None:
@@ -678,6 +684,31 @@ def test_compute_meeting_rate_accepts_report_and_bare_sequence() -> None:
     assert via_report.meeting_rate == pytest.approx(0.5)
 
 
+def test_meeting_rate_outcome_split_counts_ejected_and_skipped() -> None:
+    """ejected_meetings / skipped_meetings split each meeting's outcome (F-F-5)."""
+
+    ejected = MeetingReport(
+        meeting_id="g-0:m-eject",
+        tick=10,
+        triggered_by="p-1",
+        outcome="EJECTED",
+        ejected_player_id="p-2",
+        transcript=MeetingTranscript(reports=(_report_doc("p-1", (_FOUND_BODY,)),)),
+        ballots=(),
+        contradictions=(),
+        llm_calls=(),
+    )
+    skipped = _meeting(
+        "g-0:m-skip", "p-1", reports=(_report_doc("p-1", (_FOUND_BODY,)),)
+    )
+    result = compute_meeting_rate((_game(0, meetings=(ejected, skipped)),))
+
+    assert result.meetings_total == 2
+    assert result.ejected_meetings == 1
+    assert result.skipped_meetings == 1
+    assert result.skipped_meetings + result.ejected_meetings == result.meetings_total
+
+
 def test_meeting_rate_validator_rejects_bad_partition() -> None:
     """body + emergency must equal meetings_total (fail-loud)."""
 
@@ -689,6 +720,26 @@ def test_meeting_rate_validator_rejects_bad_partition() -> None:
             meetings_total=2,
             body_report_meetings=1,
             emergency_meetings=0,  # 1 + 0 != 2
+            skipped_meetings=2,
+            ejected_meetings=0,
+        )
+
+
+def test_meeting_rate_validator_rejects_bad_outcome_partition() -> None:
+    """skipped + ejected must equal meetings_total (fail-loud)."""
+
+    with pytest.raises(
+        ValidationError, match="skipped_meetings \\+ ejected_meetings must equal"
+    ):
+        MeetingRateReport(
+            games_total=1,
+            games_with_meeting=1,
+            meeting_rate=1.0,
+            meetings_total=2,
+            body_report_meetings=2,
+            emergency_meetings=0,
+            skipped_meetings=1,
+            ejected_meetings=0,  # 1 + 0 != 2
         )
 
 
@@ -703,6 +754,8 @@ def test_meeting_rate_validator_rejects_games_with_meeting_over_total() -> None:
             meetings_total=0,
             body_report_meetings=0,
             emergency_meetings=0,
+            skipped_meetings=0,
+            ejected_meetings=0,
         )
 
 
@@ -717,6 +770,8 @@ def test_meeting_rate_validator_rejects_rate_set_with_zero_games() -> None:
             meetings_total=0,
             body_report_meetings=0,
             emergency_meetings=0,
+            skipped_meetings=0,
+            ejected_meetings=0,
         )
 
 
@@ -731,6 +786,8 @@ def test_meeting_rate_validator_rejects_none_rate_with_games() -> None:
             meetings_total=0,
             body_report_meetings=0,
             emergency_meetings=0,
+            skipped_meetings=0,
+            ejected_meetings=0,
         )
 
 
@@ -745,4 +802,6 @@ def test_meeting_rate_validator_rejects_negative_counts() -> None:
             meetings_total=0,
             body_report_meetings=0,
             emergency_meetings=0,
+            skipped_meetings=0,
+            ejected_meetings=0,
         )

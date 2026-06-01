@@ -157,3 +157,41 @@ def test_tournament_report_absent_returns_404(tmp_path: Path) -> None:
     with _client(tmp_path / "empty") as client:
         response = client.get("/eval/tournament-report")
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Committed 4p/1i report loads against the current model (Task 7.11)
+# ---------------------------------------------------------------------------
+#
+# The eval model is frozen/``extra="forbid"``, so a committed report missing a
+# now-required field would 500 at ``GET /eval/tournament-report`` at runtime
+# while the tmp_path route tests above stay green (the runtime break 7.3
+# documented). These two tests load the REAL committed 4p/1i report through the
+# runtime paths — the loader and the HTTP route — so a stale committed report
+# fails the suite here instead of only in production.
+
+_COMMITTED_SAMPLES_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples"
+
+
+def test_committed_4p1i_report_validates_against_current_model() -> None:
+    report = ReplayLoader(replay_dir=_COMMITTED_SAMPLES_DIR).tournament_report()
+    assert isinstance(report, TournamentEvalReport)
+    # The regenerated committed report carries every Task 7.11 field.
+    assert report.vote_correctness.ejection_accuracy is not None
+    assert isinstance(report.vote_correctness.vote_correctness_small_n, bool)
+    assert report.vote_correctness.contradictions_flagged_but_ignored >= 0
+    assert isinstance(report.accusation_calibration.vote_ballot_low_power, bool)
+    assert (
+        report.meeting_rate.skipped_meetings + report.meeting_rate.ejected_meetings
+        == report.meeting_rate.meetings_total
+    )
+
+
+def test_committed_4p1i_report_serves_via_route() -> None:
+    with _client(_COMMITTED_SAMPLES_DIR) as client:
+        response = client.get("/eval/tournament-report")
+    assert response.status_code == 200
+    body = response.json()
+    assert "ejection_accuracy" in body["vote_correctness"]
+    assert "skipped_meetings" in body["meeting_rate"]
+    assert "vote_ballot_low_power" in body["accusation_calibration"]
