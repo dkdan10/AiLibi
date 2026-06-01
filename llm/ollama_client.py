@@ -66,6 +66,14 @@ DEFAULT_OLLAMA_MODEL: Final[str] = "qwen2.5:7b-instruct"
 # constructor is what folds into generation, so distinct games stay
 # distinct. See :func:`llm.provider.build_default_client`.
 DEFAULT_OLLAMA_SEED: Final[int] = 0
+# Default context window (``num_ctx``). Ollama's own default is small and bounds
+# prompt + output TOGETHER, so the largest 7p/2i meeting prompts (~4040 tokens,
+# measured) plus their ~150-token report/vote output overflow it and trigger
+# output truncation / context-shift that silently drops the prompt head. 8192
+# clears the measured max with headroom; prefill cost scales with the actual
+# prompt length (~2.4k median), NOT this cap, so normal calls are unaffected.
+# Overridable via ``AILIBI_OLLAMA_NUM_CTX`` (see build_default_client).
+DEFAULT_OLLAMA_NUM_CTX: Final[int] = 8192
 
 
 class OllamaRawResponse(BaseModel):
@@ -122,14 +130,18 @@ class OllamaClient:
         *,
         host: str,
         seed: int,
+        num_ctx: int = DEFAULT_OLLAMA_NUM_CTX,
         meeting_model: str = DEFAULT_OLLAMA_MODEL,
         trigger_model: str = DEFAULT_OLLAMA_MODEL,
         send: OllamaSendHook | None = None,
     ) -> None:
         if not host:
             raise ValueError("OllamaClient requires a non-empty host")
+        if num_ctx <= 0:
+            raise ValueError(f"OllamaClient requires num_ctx > 0, got {num_ctx}")
         self._host = host
         self._seed = seed
+        self._num_ctx = num_ctx
         self._meeting_model = meeting_model
         self._trigger_model = trigger_model
         self._send: OllamaSendHook = send if send is not None else _default_send
@@ -161,6 +173,12 @@ class OllamaClient:
             "temperature": temperature,
             "seed": self._seed,
             "num_predict": max_tokens,
+            # Context window: Ollama's default bounds prompt + output together and
+            # is small enough that the largest meeting prompts plus their output
+            # overflow it (silent output truncation / context-shift dropping the
+            # prompt head). Set it explicitly so the recorded generation sees the
+            # full prompt and isn't cut off mid-JSON.
+            "num_ctx": self._num_ctx,
         }
         raw = await self._send(
             host=self._host,
@@ -307,6 +325,7 @@ def _raw_from_generate_response(
 __all__ = [
     "DEFAULT_OLLAMA_HOST",
     "DEFAULT_OLLAMA_MODEL",
+    "DEFAULT_OLLAMA_NUM_CTX",
     "DEFAULT_OLLAMA_SEED",
     "OllamaClient",
     "OllamaRawResponse",

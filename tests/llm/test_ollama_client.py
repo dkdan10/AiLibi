@@ -44,6 +44,7 @@ from llm.fake_provider import FakeProvider
 from llm.ollama_client import (
     DEFAULT_OLLAMA_HOST,
     DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OLLAMA_NUM_CTX,
     DEFAULT_OLLAMA_SEED,
     OllamaClient,
     OllamaRawResponse,
@@ -153,7 +154,7 @@ class TestRequestShape:
         call = send.calls[0]
         assert call["format_schema"] == _SampleReport.model_json_schema()
 
-    def test_options_carry_temperature_seed_and_num_predict(self) -> None:
+    def test_options_carry_temperature_seed_num_predict_and_num_ctx(self) -> None:
         send = _send_returning()
         client = OllamaClient(host="localhost:11434", seed=42, send=send)
 
@@ -167,7 +168,29 @@ class TestRequestShape:
         )
 
         options = send.calls[0]["options"]
-        assert options == {"temperature": 0.3, "seed": 42, "num_predict": 128}
+        assert options == {
+            "temperature": 0.3,
+            "seed": 42,
+            "num_predict": 128,
+            "num_ctx": DEFAULT_OLLAMA_NUM_CTX,
+        }
+
+    def test_num_ctx_override_is_forwarded(self) -> None:
+        send = _send_returning()
+        client = OllamaClient(host="localhost:11434", seed=1, num_ctx=16384, send=send)
+
+        asyncio.run(
+            client.complete(
+                prompt="p", schema=_SampleReport, max_tokens=8, temperature=0.0
+            )
+        )
+
+        assert send.calls[0]["options"] == {
+            "temperature": 0.0,
+            "seed": 1,
+            "num_predict": 8,
+            "num_ctx": 16384,
+        }
 
     def test_host_and_meeting_model_default_are_forwarded(self) -> None:
         send = _send_returning()

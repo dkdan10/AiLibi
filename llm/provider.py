@@ -34,6 +34,7 @@ ENV_TRIGGER_MODEL: Final[str] = "AILIBI_LLM_TRIGGER_MODEL"
 ENV_ANTHROPIC_API_KEY: Final[str] = "ANTHROPIC_API_KEY"
 ENV_OLLAMA_HOST: Final[str] = "AILIBI_OLLAMA_HOST"
 ENV_OLLAMA_SEED: Final[str] = "AILIBI_OLLAMA_SEED"
+ENV_OLLAMA_NUM_CTX: Final[str] = "AILIBI_OLLAMA_NUM_CTX"
 
 PROVIDER_ANTHROPIC: Final[str] = "anthropic"
 PROVIDER_FAKE: Final[str] = "fake"
@@ -294,6 +295,7 @@ def build_default_client(
         return OllamaClient(
             host=host,
             seed=seed if seed is not None else _ollama_seed_from_env(environment),
+            num_ctx=_ollama_num_ctx_from_env(environment),
             meeting_model=environment.get(ENV_MEETING_MODEL, DEFAULT_OLLAMA_MODEL),
             trigger_model=environment.get(ENV_TRIGGER_MODEL, DEFAULT_OLLAMA_MODEL),
         )
@@ -324,6 +326,30 @@ def _ollama_seed_from_env(environment: dict[str, str]) -> int:
         raise ValueError(
             f"{ENV_OLLAMA_SEED} must be a base-10 integer, got {raw!r}"
         ) from exc
+
+
+def _ollama_num_ctx_from_env(environment: dict[str, str]) -> int:
+    """Resolve the Ollama context window from ``AILIBI_OLLAMA_NUM_CTX``.
+
+    Returns :data:`llm.ollama_client.DEFAULT_OLLAMA_NUM_CTX` when the var is
+    unset/empty. A non-integer or non-positive value is fail-loud (AGENTS.md:
+    no silent fallbacks) rather than silently substituting the default.
+    """
+
+    from llm.ollama_client import DEFAULT_OLLAMA_NUM_CTX
+
+    raw = environment.get(ENV_OLLAMA_NUM_CTX, "").strip()
+    if not raw:
+        return DEFAULT_OLLAMA_NUM_CTX
+    try:
+        value = int(raw, 10)
+    except ValueError as exc:
+        raise ValueError(
+            f"{ENV_OLLAMA_NUM_CTX} must be a base-10 integer, got {raw!r}"
+        ) from exc
+    if value <= 0:
+        raise ValueError(f"{ENV_OLLAMA_NUM_CTX} must be positive, got {value}")
+    return value
 
 
 # Caps on the metadata captured for a failed structured-output call
@@ -642,6 +668,7 @@ __all__ = [
     "ENV_ANTHROPIC_API_KEY",
     "ENV_MEETING_MODEL",
     "ENV_OLLAMA_HOST",
+    "ENV_OLLAMA_NUM_CTX",
     "ENV_OLLAMA_SEED",
     "ENV_PROVIDER",
     "ENV_TRIGGER_MODEL",
