@@ -31,10 +31,30 @@ State derivation each tick (highest priority first):
   in the room and the impostor must not file a report.
 * ``KILL`` -- ``cooldown == 0`` AND the best-scoring target was seen
   in our current room at the latest tick with no co-present
-  witnesses. Emit :class:`KillIntent` against the target.
+  witnesses. Emit :class:`KillIntent` against the target. A fellow
+  impostor is never a candidate (see teammate-awareness below), so a
+  kill always targets a crewmate.
 * ``KILL_OPPORTUNITY`` -- ``cooldown == 0`` AND the best-scoring
   target was seen in our current room at the latest tick but
   co-present witnesses keep the score at zero. Hold position.
+
+Teammate-awareness (Phase 7 Task 7.9, audit gp-1/gp-3, DESIGN.md §3.4):
+
+* The recipient's ``fellow_impostor_ids`` (delivered on the privileged
+  self channel by Task 7.2) are excluded from ``_scored_targets``
+  entirely — both as kill/stalk candidates and from the co-present
+  witness count, since a teammate is no witness risk. An impostor
+  therefore never selects a fellow impostor as a target, which closes
+  the friendly-fire trend the gameplay-data audit found.
+* Co-location: a kill is only ever emitted against a target seen in the
+  impostor's own room at the latest tick, so the policy never queues a
+  kill against an out-of-room target (audit gp-3).
+* Coordination: when a fellow impostor is co-located in the same room on
+  the same tick and would also reach a kill, only the lower-id impostor
+  emits the kill and the higher-id defers (a pure ``min(actor_id,
+  fellow_id)`` tie-break over ids — no RNG, replay-safe). This prevents
+  two co-located impostors from both killing on one tick (e.g. the
+  tick-1 mutual-spawn case).
 * ``STALK`` -- ``cooldown == 0`` AND the best-scoring target's most
   recent sighting puts them in a different reachable room. Take one
   A* step toward that room.
@@ -44,8 +64,9 @@ State derivation each tick (highest priority first):
 
 Conventions consumed from perception (DESIGN.md §4.2 / §6.2):
 
-* ``self_state`` events carry the impostor's current room and (optional)
-  pending pretend-task id.
+* ``self_state`` events carry the impostor's current room, (optional)
+  pending pretend-task id, and ``fellow_impostor_ids`` (the impostor's
+  teammates; ``()`` for a sole impostor or when the field is absent).
 * ``cooldown_status`` events carry the impostor's kill cooldown for the
   observation tick.
 * ``saw_player`` events at any tick are candidate-target sightings.
@@ -55,6 +76,7 @@ Conventions consumed from perception (DESIGN.md §4.2 / §6.2):
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Final
 
@@ -131,6 +153,7 @@ class ImpostorPolicy:
             )
         own_room = self._room_from_self_state(self_state)
         pending_task_id = self._pending_task_from_self_state(self_state)
+        fellow_impostor_ids = self._fellow_impostor_ids_from_self_state(self_state)
 
         cooldown = self._latest_cooldown(latest_events)
         if cooldown is None:
@@ -147,12 +170,22 @@ class ImpostorPolicy:
             cooldown=cooldown,
             current_tick=latest_tick,
             confirmed_dead=confirmed_dead,
+            fellow_impostor_ids=fellow_impostor_ids,
         )
 
         if cooldown == 0 and targets:
             best = targets[0]
             in_own_room_now = best.room == own_room and best.last_tick == latest_tick
             if in_own_room_now and best.co_present == 0:
+                if self._defers_to_colocated_fellow(
+                    latest_events,
+                    own_room=own_room,
+                    fellow_impostor_ids=fellow_impostor_ids,
+                ):
+                    # A lower-id fellow impostor is co-located this tick and
+                    # would also reach this kill; the lower id acts and we
+                    # defer so two impostors never both kill on one tick.
+                    return self._wait()
                 return self._kill(target_id=best.player_id)
             if in_own_room_now:
                 return self._wait()
@@ -198,6 +231,39 @@ class ImpostorPolicy:
                 f"self_state event has non-string pending_task_id: {event.payload!r}"
             )
         return pending
+
+    @staticmethod
+    def _fellow_impostor_ids_from_self_state(
+        event: EpisodicEvent,
+    ) -> frozenset[PlayerId]:
+        """Extract the impostor's teammates from the self_state payload.
+
+        ``fellow_impostor_ids`` rides the privileged self channel (Task 7.2,
+        ``observation/service.py``) and is serialized by
+        ``agents.perception._self_state_payload``. It is absent on pre-7.2 /
+        engine-only self_state events and empty for a sole impostor; both map
+        to the empty set (no teammates), which is not a silent fallback — it
+        is the correct meaning. A present-but-malformed value (a bare string
+        or non-string entry) is a boundary-contract violation and raises.
+        """
+
+        raw = event.payload.get("fellow_impostor_ids")
+        if raw is None:
+            return frozenset()
+        if isinstance(raw, str) or not isinstance(raw, Iterable):
+            raise ValueError(
+                f"self_state event has non-iterable fellow_impostor_ids: "
+                f"{event.payload!r}"
+            )
+        fellows: set[PlayerId] = set()
+        for fellow_id in raw:
+            if not isinstance(fellow_id, str):
+                raise ValueError(
+                    f"self_state event has non-string fellow_impostor id: "
+                    f"{event.payload!r}"
+                )
+            fellows.add(fellow_id)
+        return frozenset(fellows)
 
     @staticmethod
     def _latest_cooldown(latest_events: tuple[EpisodicEvent, ...]) -> int | None:
@@ -260,6 +326,47 @@ class ImpostorPolicy:
             dead.add(victim_id)
         return frozenset(dead)
 
+    def _defers_to_colocated_fellow(
+        self,
+        latest_events: tuple[EpisodicEvent, ...],
+        *,
+        own_room: RoomId,
+        fellow_impostor_ids: frozenset[PlayerId],
+    ) -> bool:
+        """Return ``True`` when a lower-id fellow impostor is co-located now.
+
+        The coordination tie-break (Task 7.9, audit gp-1): among the impostors
+        co-located in ``own_room`` at the latest tick, only the lowest id acts,
+        so two co-located impostors never both emit a kill on the same tick —
+        the tick-1 mutual-spawn self-destruct cannot occur. It is a pure
+        function of ids: ``min(actor_id, fellow_id)`` acts, with no RNG, so
+        replay reconstruction stays byte-identical (DESIGN.md §4 / locked
+        decision 6). Ids compare lexically, matching the id ordering used
+        throughout the policy and the observation service's sorted
+        ``fellow_impostor_ids``.
+        """
+
+        if not fellow_impostor_ids:
+            return False
+        for event in latest_events:
+            if event.type != EVENT_SAW_PLAYER:
+                continue
+            player_id = event.payload.get("player_id")
+            if not isinstance(player_id, str):
+                raise ValueError(
+                    f"saw_player event missing string 'player_id': {event.payload!r}"
+                )
+            if player_id not in fellow_impostor_ids:
+                continue
+            room = event.payload.get("room")
+            if not isinstance(room, str):
+                raise ValueError(
+                    f"saw_player event missing string 'room': {event.payload!r}"
+                )
+            if room == own_room and player_id < self._agent_id:
+                return True
+        return False
+
     @staticmethod
     def _scored_targets(
         events: tuple[EpisodicEvent, ...],
@@ -267,11 +374,17 @@ class ImpostorPolicy:
         cooldown: int,
         current_tick: int,
         confirmed_dead: frozenset[PlayerId],
+        fellow_impostor_ids: frozenset[PlayerId],
     ) -> tuple[_ScoredTarget, ...]:
         """Rank ``saw_player`` sightings by isolation × witness × cooldown.
 
-        Two R-3 filters are applied before scoring (DESIGN.md §4.4):
+        Three filters are applied before scoring (DESIGN.md §4.4, §3.4):
 
+        * ``fellow_impostor_ids`` sightings are dropped entirely (Task 7.9,
+          audit gp-1) — a teammate is never a kill/stalk candidate, and it is
+          also excluded from the co-present witness count because a fellow
+          impostor is no witness risk. This is what stops the impostor from
+          self-sabotaging its own team.
         * ``confirmed_dead`` sightings are dropped so the impostor never
           re-scores a corpse.
         * Sightings older than ``_STALENESS_THRESHOLD`` ticks are dropped
@@ -297,6 +410,8 @@ class ImpostorPolicy:
                 raise ValueError(
                     f"saw_player event missing string 'room': {event.payload!r}"
                 )
+            if player_id in fellow_impostor_ids:
+                continue
             if player_id in confirmed_dead:
                 continue
             if current_tick - event.tick > _STALENESS_THRESHOLD:

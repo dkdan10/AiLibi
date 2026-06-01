@@ -60,11 +60,13 @@ def _self_state_event(
     room: RoomId,
     pending_task_id: str | None = None,
     role: str = "IMPOSTOR",
+    fellow_impostor_ids: tuple[str, ...] = (),
 ) -> EpisodicEvent:
     payload: dict[str, Any] = {
         "room": room,
         "role": role,
         "pending_task_id": pending_task_id,
+        "fellow_impostor_ids": fellow_impostor_ids,
     }
     return EpisodicEvent(
         tick=tick,
@@ -255,6 +257,100 @@ class TestImpostorKillOpportunity:
         intent = policy.decide(store, _public_map())
 
         assert isinstance(intent, WaitIntent)
+
+
+class TestImpostorTeammateAwareness:
+    """Task 7.9 (audit gp-1/gp-3): teammate filter + co-location + coordination."""
+
+    def test_fellow_impostor_never_selected_as_kill_target(self) -> None:
+        # p-1 is alone in CAFETERIA with only its fellow impostor p-2 in view.
+        # Pre-7.9 the policy would have scored p-2 as a perfectly isolated
+        # target and killed it (the friendly-fire trend). With the teammate
+        # filter p-2 is not a candidate, so there is no target and the policy
+        # idles instead of self-sabotaging the team.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA", fellow_impostor_ids=("p-2",)),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="p-2", room="CAFETERIA"),
+        )
+        policy = ImpostorPolicy(agent_id="p-1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, WaitIntent)
+
+    def test_out_of_room_target_never_emits_kill(self) -> None:
+        # gp-3 co-location: the only candidate was last seen in another room, so
+        # the policy stalks toward it and never queues a kill against an
+        # out-of-room target (which the engine would reject "kill requires same
+        # room").
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="MEDBAY"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, KillIntent)
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "MEDBAY"
+
+    def test_crewmate_killed_despite_co_located_fellow_impostor(self) -> None:
+        # A fellow impostor is no witness risk, so it is excluded from the
+        # co-present count: a lone crewmate sharing the room with the impostor
+        # and its teammate still scores co_present == 0 and is killable. p-1 is
+        # the lower id among the co-located impostors, so it is the one that
+        # acts.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA", fellow_impostor_ids=("p-2",)),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="p-2", room="CAFETERIA"),
+            _saw_player_event(tick=10, player_id="victim", room="CAFETERIA"),
+        )
+        policy = ImpostorPolicy(agent_id="p-1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, KillIntent)
+        assert intent.payload.target == "victim"
+
+    def test_higher_id_impostor_defers_kill_to_co_located_lower_id_fellow(
+        self,
+    ) -> None:
+        # Mirror of the case above from the higher-id impostor's seat: p-2 sees
+        # the same killable crewmate but a co-located lower-id fellow (p-1), so
+        # it defers (waits). Only the lower id emits, so the two co-located
+        # impostors never both kill on the same tick.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA", fellow_impostor_ids=("p-1",)),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="p-1", room="CAFETERIA"),
+            _saw_player_event(tick=10, player_id="victim", room="CAFETERIA"),
+        )
+        policy = ImpostorPolicy(agent_id="p-2")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, WaitIntent)
+
+    def test_lower_id_fellow_in_other_room_does_not_force_defer(self) -> None:
+        # The coordination tie-break is gated on co-location: a lower-id fellow
+        # in a different room is not competing for this kill, so p-2 still kills
+        # the co-located crewmate.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA", fellow_impostor_ids=("p-1",)),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="p-1", room="MEDBAY"),
+            _saw_player_event(tick=10, player_id="victim", room="CAFETERIA"),
+        )
+        policy = ImpostorPolicy(agent_id="p-2")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, KillIntent)
+        assert intent.payload.target == "victim"
 
 
 class TestImpostorStalk:
