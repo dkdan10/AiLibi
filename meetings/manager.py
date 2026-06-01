@@ -660,6 +660,20 @@ class MeetingManager:
             # scope). ``model_validate_json`` is inside the ``try`` so a
             # re-validation failure here is caught alongside the provider's
             # own (the fake provider does not pre-validate).
+            #
+            # Cost-telemetry trade-off (matches the timeout path this
+            # mirrors): a swallowed call is not separately accounted --
+            # ``_RecordingLLMClient`` logs only a returned response and
+            # ``BudgetedLLMClient`` releases its in-flight reservation on
+            # the exception -- so this one malformed statement's tokens are
+            # neither charged nor written as a ``failed_call``. Report/vote
+            # parse-failures still record one (they propagate). Capturing
+            # that single call's cost (its ``LLMCallFailure`` is available
+            # via ``llm.provider.extract_parse_failure``) is a
+            # recording-layer / budget concern outside this task's scope;
+            # net accounting still improves sharply because the game now
+            # completes and records every other call instead of aborting
+            # and losing all of them.
             return _default_statement(
                 statement_id=statement_id,
                 speaker=participant.agent_id,
