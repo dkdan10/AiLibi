@@ -170,37 +170,6 @@ async def _isolate_provider_timeout(
         raise LLMProviderError("LLM provider timeout") from e
 
 
-async def _gather_all_or_cancel(
-    coros: list[Coroutine[Any, Any, _T]],
-) -> tuple[_T, ...]:
-    """Run coroutines concurrently, cancelling siblings on failure.
-
-    Replaces :func:`asyncio.gather` which propagates the first
-    exception but lets sibling coroutines keep running -- leaking
-    LLM token spend and side effects after the caller has already
-    decided to fail. :class:`asyncio.TaskGroup` (Python 3.11+) gives
-    the all-or-nothing semantics we want: any task failure cancels
-    every sibling.
-
-    Successful runs return results in input order (matching the
-    previous ``gather()`` shape). On failure the resulting
-    :class:`BaseExceptionGroup` is unwrapped to the first underlying
-    exception so callers see a regular single exception (matching
-    the previous ``gather()`` semantics) instead of an exception
-    group. Cancellation already prevents follow-on side effects;
-    surfacing every concurrent failure to the caller would force
-    every call site to learn the exception-group API for no
-    additional debugging value.
-    """
-
-    try:
-        async with asyncio.TaskGroup() as tg:
-            tasks = [tg.create_task(coro) for coro in coros]
-    except BaseExceptionGroup as eg:
-        raise eg.exceptions[0] from None
-    return tuple(task.result() for task in tasks)
-
-
 @dataclass(frozen=True)
 class SuspicionEntry:
     """One row of the agent's suspicion graph (DESIGN.md §5.5).
@@ -542,16 +511,25 @@ class MeetingManager:
         trigger: MeetingTrigger,
         participants: Sequence[MeetingParticipant],
     ) -> tuple[ReportDocument, ...]:
-        # All-or-nothing parallel collection: if any single report
-        # fails (provider error, parse error, etc.) the sibling LLM
-        # calls are cancelled before they incur additional token
-        # spend. Successful results preserve input order so the
-        # transcript ordering test still holds.
-        coroutines: list[Coroutine[Any, Any, ReportDocument]] = [
-            self._collect_one_report(trigger=trigger, participant=participant)
-            for participant in participants
-        ]
-        return await _gather_all_or_cancel(coroutines)
+        # Sequential collection (mirrors the Phase-2 statement loop). A local
+        # single-GPU Ollama gives NO concurrency speedup -- measured at 0.71x,
+        # i.e. running the N report calls together is *slower* than one-by-one
+        # and inflates each call's wall-clock past its own report_seconds
+        # deadline, so every report times out into a default "(missed deadline)"
+        # entry. Run one at a time and each call gets its full ~5s of GPU time
+        # well inside the deadline (the statement phase, already sequential,
+        # never times out). Each _collect_one_report keeps its own deadline +
+        # default fallback, so a slow call defaults only itself; a genuine parse
+        # error still propagates and fails the meeting (recorded as a FailedCall),
+        # exactly as the old all-or-nothing batch did. Cancelling siblings to
+        # save token spend is moot on a free local provider. Input order is
+        # preserved for the transcript-ordering contract.
+        reports: list[ReportDocument] = []
+        for participant in participants:
+            reports.append(
+                await self._collect_one_report(trigger=trigger, participant=participant)
+            )
+        return tuple(reports)
 
     async def _collect_one_report(
         self,
@@ -686,20 +664,24 @@ class MeetingManager:
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
     ) -> tuple[VoteBallot, ...]:
-        # All-or-nothing parallel collection: see _collect_reports
-        # docstring. A failing ballot cancels siblings so the tally
-        # is not corrupted by partially-collected votes.
-        coroutines: list[Coroutine[Any, Any, VoteBallot]] = [
-            self._collect_one_ballot(
-                trigger=trigger,
-                participant=participant,
-                participants=participants,
-                transcript=transcript,
-                contradictions=contradictions,
+        # Sequential collection: see _collect_reports. Concurrent ballots on a
+        # single local GPU inflate each call's wall-clock past vote_seconds
+        # (measured 0.71x concurrency), so votes time out into default SKIP and
+        # nothing is ever ejected. One-by-one keeps each call inside its
+        # deadline. Each _collect_one_ballot retains its own deadline + default;
+        # a genuine parse error still propagates and fails the meeting.
+        ballots: list[VoteBallot] = []
+        for participant in participants:
+            ballots.append(
+                await self._collect_one_ballot(
+                    trigger=trigger,
+                    participant=participant,
+                    participants=participants,
+                    transcript=transcript,
+                    contradictions=contradictions,
+                )
             )
-            for participant in participants
-        ]
-        return await _gather_all_or_cancel(coroutines)
+        return tuple(ballots)
 
     async def _collect_one_ballot(
         self,

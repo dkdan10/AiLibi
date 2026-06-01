@@ -2257,98 +2257,71 @@ class TestProviderTimeoutDistinctFromDeadline:
             assert report.free_text == DEFAULT_REPORT_FREE_TEXT
 
 
-class TestSiblingCancellationOnFailure:
-    """Codex P2: failing phase tasks must cancel sibling LLM calls.
+class TestSequentialPhaseShortCircuitsOnFailure:
+    """A failing phase call stops sequential collection before the rest.
 
-    ``asyncio.gather`` raises on the first exception but leaves
-    sibling tasks running in the background, leaking token spend and
-    side effects after the meeting has already aborted. The manager
-    now uses :class:`asyncio.TaskGroup` (Python 3.11+) which gives
-    all-or-nothing semantics: any task failure cancels every sibling.
-    The tests below pin that contract for the two parallel phases
-    (reports and ballots).
+    Report and ballot collection run sequentially -- one LLM call at a
+    time -- because a local single-GPU provider gets no speedup from
+    concurrency and concurrent calls bust their own per-call deadlines
+    (see ``MeetingManager._collect_reports``). So when one participant's
+    call raises, the error propagates out of the phase loop and the
+    participants ordered after it are never called: the meeting fails and
+    no work is spent on calls past the failure. These tests pin that
+    contract for the two phases that were previously collected in parallel.
     """
 
-    def _build_cancellation_client(
-        self,
-        *,
-        failing_voter: str,
-        target_phase: str,
-    ) -> tuple["_GatherCancellationClient", asyncio.Event]:
-        never_set = asyncio.Event()
-        return _GatherCancellationClient(
-            failing_voter=failing_voter,
-            target_phase=target_phase,
-            never_set=never_set,
-        ), never_set
-
-    def test_failing_report_cancels_sibling_report_calls(self) -> None:
-        client, _ = self._build_cancellation_client(
-            failing_voter="p-2", target_phase="REPORT"
-        )
-        manager = _make_manager(llm_client=client, round_count=1)
-
-        # The meeting raises with the propagated RuntimeError; we
-        # then assert that the siblings were cancelled rather than
-        # silently completing.
-        with pytest.raises(RuntimeError, match="simulated"):
-            _run(
-                manager.run(
-                    meeting_id="m-cancel-report",
-                    trigger=_default_trigger(),
-                    participants=_make_participants(),
-                )
-            )
-
-        # The three report coroutines all started, but only the
-        # failing one finished. The other two were cancelled while
-        # blocking on the unset event.
-        assert client.started_calls >= 3
-        assert client.completed_calls == 0
-
-    def test_failing_ballot_cancels_sibling_ballot_calls(self) -> None:
-        client, _ = self._build_cancellation_client(
-            failing_voter="p-2", target_phase="VOTE"
-        )
+    def test_failing_report_short_circuits_later_reports(self) -> None:
+        # p-2 is the 2nd of three participants; its report call raises.
+        client = _SequentialFailureClient(failing_voter="p-2", target_phase="REPORT")
         manager = _make_manager(llm_client=client, round_count=1)
 
         with pytest.raises(RuntimeError, match="simulated"):
             _run(
                 manager.run(
-                    meeting_id="m-cancel-vote",
+                    meeting_id="m-fail-report",
                     trigger=_default_trigger(),
                     participants=_make_participants(),
                 )
             )
 
-        # Reports + statements all completed normally; voting saw 3
-        # starts but only the failing one finished.
+        # p-1's report ran and p-2's raised, so the loop stopped before
+        # p-3: exactly two report calls started, the third never attempted.
+        assert client.started_calls == 2
+
+    def test_failing_ballot_short_circuits_later_ballots(self) -> None:
+        client = _SequentialFailureClient(failing_voter="p-2", target_phase="VOTE")
+        manager = _make_manager(llm_client=client, round_count=1)
+
+        with pytest.raises(RuntimeError, match="simulated"):
+            _run(
+                manager.run(
+                    meeting_id="m-fail-vote",
+                    trigger=_default_trigger(),
+                    participants=_make_participants(),
+                )
+            )
+
+        # Reports + statements completed; voting started p-1 then p-2
+        # (which raised) and never reached p-3.
         vote_starts = [call for call in client.recorded_calls if "PHASE=VOTE" in call]
-        assert len(vote_starts) == 3
-        assert client.vote_completed_calls == 0
+        assert len(vote_starts) == 2
 
 
 @dataclass
-class _GatherCancellationClient:
-    """Helper LLM client for the sibling-cancellation tests.
+class _SequentialFailureClient:
+    """Helper LLM client for the sequential short-circuit tests.
 
-    Behavior:
-
-    * For every call whose prompt does NOT match ``target_phase``,
-      respond normally (via the standard responder) so the meeting
-      progresses to the target phase.
+    * Calls whose prompt does NOT match ``target_phase`` respond normally
+      (via the standard responder) so the meeting reaches the target phase.
     * Within the target phase, the failing voter's call raises
-      :class:`RuntimeError` immediately. Sibling calls await an
-      ``asyncio.Event`` that is never set; they only complete by
-      being cancelled.
+      :class:`RuntimeError`; every other call also responds normally. With
+      sequential collection the failure propagates out of the phase loop,
+      so participants ordered after the failing one are never called.
     """
 
     failing_voter: str
     target_phase: str
-    never_set: asyncio.Event
     started_calls: int = 0
-    completed_calls: int = 0
-    vote_completed_calls: int = 0
     recorded_calls: list[str] = field(default_factory=list)
 
     async def complete(
@@ -2363,41 +2336,23 @@ class _GatherCancellationClient:
         agent_id: str | None = None,
     ) -> LLMResponse:
         self.recorded_calls.append(prompt)
-        if f"PHASE={self.target_phase}" not in prompt:
-            text = _make_responder()(prompt, schema)
-            if schema is not None:
-                schema.model_validate_json(text)
-            return LLMResponse(
-                text=text,
-                usage=TokenUsage(input_tokens=1, output_tokens=1),
-                cost_usd=0.0,
-                model="cancellation-test",
+        if f"PHASE={self.target_phase}" in prompt:
+            self.started_calls += 1
+            # Failing voter id appears as voter= (vote) or agent_id= (report).
+            is_failing = (
+                f"voter={self.failing_voter}" in prompt
+                or f"agent_id={self.failing_voter}" in prompt
             )
-        self.started_calls += 1
-        # The failing voter is identified either by voter= (vote
-        # phase) or by agent_id= (report phase).
-        is_failing = (
-            f"voter={self.failing_voter}" in prompt
-            or f"agent_id={self.failing_voter}" in prompt
-        )
-        if is_failing:
-            raise RuntimeError("simulated phase failure")
-        try:
-            await self.never_set.wait()
-        except asyncio.CancelledError:
-            # The TaskGroup cancelled us. Re-raise as the protocol
-            # expects; do NOT count this as a completed call.
-            raise
-        # Unreachable in this test (the event is never set).
-        self.completed_calls += 1
-        if "PHASE=VOTE" in prompt:
-            self.vote_completed_calls += 1
-        text = "{}"
+            if is_failing:
+                raise RuntimeError("simulated phase failure")
+        text = _make_responder()(prompt, schema)
+        if schema is not None:
+            schema.model_validate_json(text)
         return LLMResponse(
             text=text,
             usage=TokenUsage(input_tokens=1, output_tokens=1),
             cost_usd=0.0,
-            model="cancellation-test",
+            model="sequential-failure-test",
         )
 
 
