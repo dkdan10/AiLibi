@@ -50,9 +50,8 @@ from eval.alibi_fabrication import (
     compute_alibi_fabrication_rate,
 )
 from eval.cost_dashboard import CostDashboard, compute_cost_dashboard
-from eval.report_schema import GameReport, MeetingReport, TournamentReport
+from eval.report_schema import GameReport, TournamentReport
 from eval.vote_correctness import VoteCorrectnessReport, compute_vote_correctness
-from meetings.schemas import FoundBodyObservation
 
 
 class MeetingRateReport(BaseModel):
@@ -83,23 +82,24 @@ class MeetingRateReport(BaseModel):
       reads ``ejected_meetings`` / ``skipped_meetings`` to judge whether those
       meetings actually resolved anything.
 
-    **Trigger-breakdown heuristic and its two-fold catch-all limitation.** The
-    real trigger kind (body-report vs emergency-button) lives only on the
-    per-tick :class:`engine.events.MeetingTriggeredEvent`; it is not carried on
-    :class:`~eval.report_schema.MeetingReport` or the persisted replay record,
-    so this metric *derives* the breakdown (:func:`_is_body_report`): a meeting
-    is ``body_report`` iff the report submitted by its ``triggered_by`` player
-    contains at least one :class:`~meetings.schemas.FoundBodyObservation`, and
-    ``emergency`` otherwise. Consequently ``emergency_meetings`` is a CATCH-ALL,
-    not a positively-identified emergency-button count: it equals
-    {true emergency-button meetings} ∪ {body-report meetings whose triggering
-    report carried no ``FoundBodyObservation`` — e.g. malformed / partial
-    replay}. Today both addends are ~0 (the Phase 7 diagnosis observed 0/50
-    emergencies and a clean body-report path), so the bucket is accurate now;
-    but a future Wave that revives emergency-button play MUST NOT trust
-    ``emergency_meetings`` as a pure emergency count without first adding a real
-    persisted ``trigger_kind`` (a later-phase change to ``orchestrator/replay.py``
-    + ``eval/balance_eval.py``, out of scope for Wave 0).
+    **Trigger breakdown is authoritative (engine-recorded).** The real trigger
+    kind (body-report vs emergency-button) originates on the per-tick
+    :class:`engine.events.MeetingTriggeredEvent`. It is not stored on the
+    persisted meeting replay row, so the loader
+    (:func:`eval.balance_eval._meeting_report_from_entry`) recovers it from the
+    ``report`` / ``emergency`` action recorded in the trigger tick's per-tick
+    replay row and stamps it onto :attr:`~eval.report_schema.MeetingReport.trigger`.
+    This metric then counts ``body_report_meetings`` as the meetings whose
+    ``trigger == "report"`` and ``emergency_meetings`` as the complement. The
+    breakdown therefore matches the engine exactly — ``emergency_meetings`` is a
+    positively-identified emergency-button count, NOT the old catch-all that
+    leaked mislabeled body-reports (which derived the kind from the agent's
+    self-reported ``FoundBodyObservation`` and so over-counted emergencies). A
+    meeting whose trigger action is missing is a corrupt/truncated replay and is
+    fail-loud in the loader, never silently bucketed (AGENTS.md "no silent
+    fallbacks"). Replacing this loader-side reconstruction with a trigger kind
+    persisted directly on the replay row (so it self-describes) is the deferred
+    Option-B follow-up, only worthwhile once emergency-button play is revived.
 
     **Leak-safety.** Every field is a pure aggregate of counts (a rate and five
     integers). The report carries no roles, no transcripts, and no engine-owned
@@ -179,17 +179,19 @@ def compute_meeting_rate(
     only needs the games). Pure: no I/O, no engine/agent/LLM calls.
 
     ``games_with_meeting`` counts games with a non-empty ``meetings`` tuple;
-    ``meetings_total`` sums their lengths. The trigger breakdown is derived from
-    :class:`~eval.report_schema.MeetingReport` data only (see
-    :func:`_is_body_report` and the :class:`MeetingRateReport` docstring's
-    two-fold catch-all note). The outcome breakdown
+    ``meetings_total`` sums their lengths. The trigger breakdown reads each
+    meeting's engine-recorded ``trigger`` directly (``body_report_meetings`` =
+    ``trigger == "report"``, ``emergency_meetings`` the complement); see the
+    :class:`MeetingRateReport` docstring for why that field is authoritative
+    rather than a derived heuristic. The outcome breakdown
     (``ejected_meetings`` / ``skipped_meetings``) counts each meeting's
     ``outcome`` directly (``MeetingOutcome`` is binary, so ``skipped`` is the
     complement of ``ejected``) — the pairing that distinguishes "reached a
     meeting" from "the meeting resolved anything". ``meeting_rate`` is ``None``
-    when ``games_total == 0``. A meeting with no matching triggering report
-    (malformed / partial replay) classifies as ``emergency`` and never raises —
-    matching the partial-replay robustness the other §11.3 analyzers state.
+    when ``games_total == 0``. This metric is pure over the report; a corrupt
+    replay whose meeting has no recorded trigger action is rejected upstream in
+    the loader (:func:`eval.balance_eval._meeting_report_from_entry`), so every
+    ``MeetingReport`` reaching here already carries a valid ``trigger``.
     """
 
     games = report.games if isinstance(report, TournamentReport) else tuple(report)
@@ -198,7 +200,7 @@ def compute_meeting_rate(
     games_with_meeting = sum(1 for game in games if game.meetings)
     meetings_total = sum(len(game.meetings) for game in games)
     body_report_meetings = sum(
-        1 for game in games for meeting in game.meetings if _is_body_report(meeting)
+        1 for game in games for meeting in game.meetings if meeting.trigger == "report"
     )
     emergency_meetings = meetings_total - body_report_meetings
     ejected_meetings = sum(
@@ -216,28 +218,6 @@ def compute_meeting_rate(
         emergency_meetings=emergency_meetings,
         skipped_meetings=skipped_meetings,
         ejected_meetings=ejected_meetings,
-    )
-
-
-def _is_body_report(meeting: MeetingReport) -> bool:
-    """True iff the meeting's triggering report names a found body.
-
-    Scans ``meeting.transcript.reports`` for the report submitted by the
-    meeting's ``triggered_by`` player (matched by ``document.agent_id ==
-    meeting.triggered_by``) and returns ``True`` iff that report carries any
-    :class:`~meetings.schemas.FoundBodyObservation`. A meeting with no matching
-    report (malformed / partial replay) yields ``False`` and never raises, so it
-    falls into the ``emergency`` catch-all bucket. See the
-    :class:`MeetingRateReport` docstring for why this derived classification is
-    accurate today but must not be trusted as a pure emergency count by a future
-    emergency-reviving Wave.
-    """
-
-    return any(
-        isinstance(observation, FoundBodyObservation)
-        for document in meeting.transcript.reports
-        if document.agent_id == meeting.triggered_by
-        for observation in document.observations
     )
 
 

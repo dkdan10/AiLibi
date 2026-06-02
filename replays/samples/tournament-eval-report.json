@@ -526,6 +526,7 @@
             "meeting_id": "headless-seed-22:meeting-0",
             "tick": 7,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-4",
             "transcript": {
@@ -1280,6 +1281,7 @@
             "meeting_id": "headless-seed-24:meeting-0",
             "tick": 10,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-2",
             "transcript": {
@@ -2042,6 +2044,7 @@
             "meeting_id": "headless-seed-26:meeting-0",
             "tick": 8,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-4",
             "transcript": {
@@ -3611,6 +3614,7 @@
             "meeting_id": "headless-seed-49:meeting-0",
             "tick": 8,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-4",
             "transcript": {

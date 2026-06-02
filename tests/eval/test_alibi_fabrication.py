@@ -141,6 +141,7 @@ def _meeting(
         meeting_id=meeting_id,
         tick=tick,
         triggered_by="crew-a",
+        trigger="report",
         outcome="SKIPPED",
         ejected_player_id=None,
         transcript=MeetingTranscript(reports=reports, statements=statements),

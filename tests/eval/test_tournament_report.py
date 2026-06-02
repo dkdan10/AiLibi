@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -260,6 +261,15 @@ def test_loader_does_not_double_count_failed_call_cost(tmp_path: Path) -> None:
     path = tmp_path / "replay-seed-99.jsonl"
     entries: list[ReplayLogEntry] = [
         ReplayEntry(game_id="g", tick=0, actions=(), state_hash="h0"),
+        # The trigger tick records the report action that opened the meeting;
+        # the loader recovers MeetingReport.trigger from it (no trigger field is
+        # persisted on the meeting row).
+        ReplayEntry(
+            game_id="g",
+            tick=1,
+            actions=({"type": "report", "actor": "p-0", "payload": {"body_id": "b"}},),
+            state_hash="h1",
+        ),
         MeetingReplayEntry(
             game_id="g",
             meeting_id="g:meeting-0",
@@ -337,6 +347,8 @@ def test_loader_does_not_double_count_failed_call_cost(tmp_path: Path) -> None:
     assert game.replay_ref == "replay-seed-99.jsonl"
     assert len(game.meetings) == 1
     assert game.meetings[0].meeting_id == "g:meeting-0"
+    # trigger is reconstructed from the trigger-tick's report action.
+    assert game.meetings[0].trigger == "report"
     assert len(game.failed_calls) == 1
     assert dict(game.prompt_versions) == {"meeting_v": "v1"}
 
@@ -553,12 +565,14 @@ def _meeting(
     meeting_id: str,
     triggered_by: PlayerId,
     *,
+    trigger: Literal["report", "emergency"] = "report",
     reports: tuple[ReportDocument, ...] = (),
 ) -> MeetingReport:
     return MeetingReport(
         meeting_id=meeting_id,
         tick=10,
         triggered_by=triggered_by,
+        trigger=trigger,
         outcome="SKIPPED",
         ejected_player_id=None,
         transcript=MeetingTranscript(reports=reports),
@@ -601,14 +615,10 @@ def test_meeting_rate_none_when_no_games() -> None:
 def test_meeting_rate_counts_games_meetings_and_partitions() -> None:
     """Rate / totals / partition over a mix of meeting and meeting-free games."""
 
-    body_meeting = _meeting(
-        "g-0:m0", "p-1", reports=(_report_doc("p-1", (_FOUND_BODY,)),)
-    )
-    second_meeting = _meeting(
-        "g-0:m1", "p-1", reports=(_report_doc("p-1", (_FOUND_BODY,)),)
-    )
+    body_meeting = _meeting("g-0:m0", "p-1", trigger="report")
+    emergency_meeting = _meeting("g-0:m1", "p-1", trigger="emergency")
     games = (
-        _game(0, meetings=(body_meeting, second_meeting)),  # 2 meetings
+        _game(0, meetings=(body_meeting, emergency_meeting)),  # 2 meetings
         _game(1, meetings=()),  # no meeting
         _game(2, meetings=(body_meeting,)),  # 1 meeting
     )
@@ -619,8 +629,9 @@ def test_meeting_rate_counts_games_meetings_and_partitions() -> None:
     assert result.games_with_meeting == 2
     assert result.meeting_rate == pytest.approx(2 / 3)
     assert result.meetings_total == 3
-    assert result.body_report_meetings == 3
-    assert result.emergency_meetings == 0
+    # Two report-triggered (body_meeting x2) + one emergency-triggered.
+    assert result.body_report_meetings == 2
+    assert result.emergency_meetings == 1
     assert result.body_report_meetings + result.emergency_meetings == 3
     # All fixture meetings default to SKIPPED, so the outcome split is 3/0.
     assert result.skipped_meetings == 3
@@ -628,46 +639,61 @@ def test_meeting_rate_counts_games_meetings_and_partitions() -> None:
     assert result.skipped_meetings + result.ejected_meetings == 3
 
 
-def test_meeting_classified_body_report_when_trigger_report_found_body() -> None:
-    """A meeting whose triggering player's report names a body is body_report."""
+def test_meeting_classified_body_report_when_trigger_is_report() -> None:
+    """A report-triggered meeting counts as body_report (engine trigger decides)."""
 
-    meeting = _meeting("m", "p-1", reports=(_report_doc("p-1", (_FOUND_BODY,)),))
+    meeting = _meeting("m", "p-1", trigger="report")
     result = compute_meeting_rate((_game(0, meetings=(meeting,)),))
     assert result.body_report_meetings == 1
     assert result.emergency_meetings == 0
 
 
-def test_meeting_classified_emergency_when_trigger_report_lacks_found_body() -> None:
-    """A triggering report with no FoundBodyObservation falls into emergency.
+def test_meeting_classified_emergency_when_trigger_is_emergency() -> None:
+    """An emergency-triggered meeting counts as emergency (engine trigger decides)."""
 
-    This is the first half of the documented two-fold catch-all: a body-report
-    whose triggering report happened to carry only a sighting still classifies as
-    ``emergency`` because the derived heuristic keys off FoundBodyObservation.
+    meeting = _meeting("m", "p-1", trigger="emergency")
+    result = compute_meeting_rate((_game(0, meetings=(meeting,)),))
+    assert result.body_report_meetings == 0
+    assert result.emergency_meetings == 1
+
+
+def test_trigger_breakdown_ignores_transcript_contents() -> None:
+    """Classification keys off the engine trigger, not the report transcript.
+
+    The old heuristic derived the kind from the triggering player's
+    ``FoundBodyObservation``; the breakdown now reads the engine-recorded
+    ``trigger``. So a found-body report on an *emergency* meeting still counts as
+    emergency, and a found-body-less *report* meeting still counts as a body
+    report — the transcript no longer drives the bucket.
     """
 
-    meeting = _meeting("m", "p-1", reports=(_report_doc("p-1", (_SAW_PLAYER,)),))
-    result = compute_meeting_rate((_game(0, meetings=(meeting,)),))
-    assert result.body_report_meetings == 0
+    emergency_with_body = _meeting(
+        "m-e",
+        "p-1",
+        trigger="emergency",
+        reports=(_report_doc("p-1", (_FOUND_BODY,)),),
+    )
+    report_without_body = _meeting(
+        "m-r",
+        "p-2",
+        trigger="report",
+        reports=(_report_doc("p-2", (_SAW_PLAYER,)),),
+    )
+    result = compute_meeting_rate(
+        (_game(0, meetings=(emergency_with_body, report_without_body)),)
+    )
+    assert result.body_report_meetings == 1
     assert result.emergency_meetings == 1
 
 
-def test_meeting_classified_emergency_when_no_matching_report() -> None:
-    """No report by the triggering player → emergency, never raises (partial)."""
+def test_meeting_rate_empty_transcript_classifies_by_trigger() -> None:
+    """An empty transcript no longer forces emergency; the engine trigger decides."""
 
-    # Triggered by p-1, but the only report present is from p-2.
-    meeting = _meeting("m", "p-1", reports=(_report_doc("p-2", (_FOUND_BODY,)),))
-    result = compute_meeting_rate((_game(0, meetings=(meeting,)),))
-    assert result.body_report_meetings == 0
-    assert result.emergency_meetings == 1
-
-
-def test_meeting_rate_empty_transcript_is_emergency() -> None:
-    """A meeting with an empty transcript classifies as emergency, not a crash."""
-
-    meeting = _meeting("m", "p-1")  # no reports at all
-    result = compute_meeting_rate((_game(0, meetings=(meeting,)),))
-    assert result.meetings_total == 1
-    assert result.body_report_meetings == 0
+    report = _meeting("m-r", "p-1", trigger="report")  # empty transcript
+    emergency = _meeting("m-e", "p-2", trigger="emergency")  # empty transcript
+    result = compute_meeting_rate((_game(0, meetings=(report, emergency)),))
+    assert result.meetings_total == 2
+    assert result.body_report_meetings == 1
     assert result.emergency_meetings == 1
 
 
@@ -691,6 +717,7 @@ def test_meeting_rate_outcome_split_counts_ejected_and_skipped() -> None:
         meeting_id="g-0:m-eject",
         tick=10,
         triggered_by="p-1",
+        trigger="report",
         outcome="EJECTED",
         ejected_player_id="p-2",
         transcript=MeetingTranscript(reports=(_report_doc("p-1", (_FOUND_BODY,)),)),

@@ -71,7 +71,7 @@ Phase 5 metric outputs are likewise attached by downstream tooling that
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from pydantic import (
     BaseModel,
@@ -138,6 +138,17 @@ class MeetingReport(_FrozenModel):
     ballots, contradictions, outcome) and :mod:`orchestrator.replay`
     (``llm_calls``), never redefined.
 
+    ``trigger`` is the engine-recorded reason the meeting opened
+    (:attr:`engine.events.MeetingTriggeredEvent.trigger`): ``"report"`` (a body
+    was reported) or ``"emergency"`` (the emergency button). The replay row
+    (:class:`orchestrator.replay.MeetingReplayEntry`) does not carry it, so the
+    loader (:func:`eval.balance_eval._meeting_report_from_entry`) reconstructs it
+    from the triggering ``report`` / ``emergency`` action recorded in the
+    trigger-tick's per-tick replay row -- authoritative and equivalent to the
+    engine event, never the agent's self-reported ``FoundBodyObservation``. The
+    meeting-rate metric (:func:`eval.meeting_quality.compute_meeting_rate`) reads
+    this field directly for its trigger breakdown.
+
     Engine-determinism artifacts (the before/after state hashes on the replay
     entry) are intentionally omitted: they pin the engine-owned mutation for
     byte-identity replay, not anything a Phase 5 behavioral metric consumes.
@@ -146,6 +157,7 @@ class MeetingReport(_FrozenModel):
     meeting_id: str
     tick: int
     triggered_by: PlayerId
+    trigger: Literal["report", "emergency"]
     outcome: MeetingOutcome
     ejected_player_id: PlayerId | None
     transcript: MeetingTranscript

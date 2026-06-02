@@ -23,6 +23,7 @@
             "meeting_id": "headless-seed-0:meeting-0",
             "tick": 12,
             "triggered_by": "p-1",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -852,6 +853,7 @@
             "meeting_id": "headless-seed-1:meeting-0",
             "tick": 10,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -1564,6 +1566,7 @@
             "meeting_id": "headless-seed-2:meeting-0",
             "tick": 16,
             "triggered_by": "p-7",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -2380,6 +2383,7 @@
             "meeting_id": "headless-seed-4:meeting-0",
             "tick": 16,
             "triggered_by": "p-2",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -3003,6 +3007,7 @@
             "meeting_id": "headless-seed-5:meeting-0",
             "tick": 10,
             "triggered_by": "p-2",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -3574,6 +3579,7 @@
             "meeting_id": "headless-seed-5:meeting-1",
             "tick": 15,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -4171,6 +4177,7 @@
             "meeting_id": "headless-seed-6:meeting-0",
             "tick": 8,
             "triggered_by": "p-2",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -4892,6 +4899,7 @@
             "meeting_id": "headless-seed-6:meeting-1",
             "tick": 16,
             "triggered_by": "p-7",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -5696,6 +5704,7 @@
             "meeting_id": "headless-seed-7:meeting-0",
             "tick": 20,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-3",
             "transcript": {
@@ -6575,6 +6584,7 @@
             "meeting_id": "headless-seed-8:meeting-0",
             "tick": 8,
             "triggered_by": "p-7",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -7330,6 +7340,7 @@
             "meeting_id": "headless-seed-8:meeting-1",
             "tick": 14,
             "triggered_by": "p-2",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -7974,6 +7985,7 @@
             "meeting_id": "headless-seed-9:meeting-0",
             "tick": 7,
             "triggered_by": "p-6",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -8771,6 +8783,7 @@
             "meeting_id": "headless-seed-10:meeting-0",
             "tick": 8,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -9459,6 +9472,7 @@
             "meeting_id": "headless-seed-11:meeting-0",
             "tick": 12,
             "triggered_by": "p-5",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -10288,6 +10302,7 @@
             "meeting_id": "headless-seed-12:meeting-0",
             "tick": 8,
             "triggered_by": "p-5",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -11011,6 +11026,7 @@
             "meeting_id": "headless-seed-12:meeting-1",
             "tick": 11,
             "triggered_by": "p-6",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -11781,6 +11797,7 @@
             "meeting_id": "headless-seed-13:meeting-0",
             "tick": 8,
             "triggered_by": "p-7",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -12420,6 +12437,7 @@
             "meeting_id": "headless-seed-13:meeting-1",
             "tick": 12,
             "triggered_by": "p-2",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -13157,6 +13175,7 @@
             "meeting_id": "headless-seed-15:meeting-0",
             "tick": 14,
             "triggered_by": "p-1",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -13944,6 +13963,7 @@
             "meeting_id": "headless-seed-17:meeting-0",
             "tick": 7,
             "triggered_by": "p-7",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -14572,6 +14592,7 @@
             "meeting_id": "headless-seed-17:meeting-1",
             "tick": 10,
             "triggered_by": "p-2",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -15203,6 +15224,7 @@
             "meeting_id": "headless-seed-17:meeting-2",
             "tick": 19,
             "triggered_by": "p-4",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -15770,6 +15792,7 @@
             "meeting_id": "headless-seed-18:meeting-0",
             "tick": 5,
             "triggered_by": "p-4",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -16586,6 +16609,7 @@
             "meeting_id": "headless-seed-18:meeting-1",
             "tick": 16,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -17268,6 +17292,7 @@
             "meeting_id": "headless-seed-19:meeting-0",
             "tick": 5,
             "triggered_by": "p-6",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -18014,6 +18039,7 @@
             "meeting_id": "headless-seed-19:meeting-1",
             "tick": 13,
             "triggered_by": "p-6",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -18706,6 +18732,7 @@
             "meeting_id": "headless-seed-20:meeting-0",
             "tick": 8,
             "triggered_by": "p-7",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -19397,6 +19424,7 @@
             "meeting_id": "headless-seed-21:meeting-0",
             "tick": 10,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -20093,6 +20121,7 @@
             "meeting_id": "headless-seed-22:meeting-0",
             "tick": 13,
             "triggered_by": "p-2",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -20748,6 +20777,7 @@
             "meeting_id": "headless-seed-25:meeting-0",
             "tick": 9,
             "triggered_by": "p-4",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -21490,6 +21520,7 @@
             "meeting_id": "headless-seed-26:meeting-0",
             "tick": 16,
             "triggered_by": "p-2",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -22185,6 +22216,7 @@
             "meeting_id": "headless-seed-27:meeting-0",
             "tick": 15,
             "triggered_by": "p-4",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -22721,6 +22753,7 @@
             "meeting_id": "headless-seed-28:meeting-0",
             "tick": 17,
             "triggered_by": "p-1",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-3",
             "transcript": {
@@ -23613,6 +23646,7 @@
             "meeting_id": "headless-seed-30:meeting-0",
             "tick": 8,
             "triggered_by": "p-6",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -24271,6 +24305,7 @@
             "meeting_id": "headless-seed-30:meeting-1",
             "tick": 10,
             "triggered_by": "p-5",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -24980,6 +25015,7 @@
             "meeting_id": "headless-seed-32:meeting-0",
             "tick": 8,
             "triggered_by": "p-6",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -25715,6 +25751,7 @@
             "meeting_id": "headless-seed-33:meeting-0",
             "tick": 9,
             "triggered_by": "p-5",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -26146,6 +26183,7 @@
             "meeting_id": "headless-seed-33:meeting-1",
             "tick": 11,
             "triggered_by": "p-5",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -26692,6 +26730,7 @@
             "meeting_id": "headless-seed-34:meeting-0",
             "tick": 11,
             "triggered_by": "p-4",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -27456,6 +27495,7 @@
             "meeting_id": "headless-seed-38:meeting-0",
             "tick": 6,
             "triggered_by": "p-1",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -28217,6 +28257,7 @@
             "meeting_id": "headless-seed-39:meeting-0",
             "tick": 15,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -28855,6 +28896,7 @@
             "meeting_id": "headless-seed-40:meeting-0",
             "tick": 7,
             "triggered_by": "p-1",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -29709,6 +29751,7 @@
             "meeting_id": "headless-seed-42:meeting-0",
             "tick": 13,
             "triggered_by": "p-1",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -30544,6 +30587,7 @@
             "meeting_id": "headless-seed-43:meeting-0",
             "tick": 7,
             "triggered_by": "p-3",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-6",
             "transcript": {
@@ -31484,6 +31528,7 @@
             "meeting_id": "headless-seed-45:meeting-0",
             "tick": 11,
             "triggered_by": "p-4",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -32276,6 +32321,7 @@
             "meeting_id": "headless-seed-45:meeting-1",
             "tick": 15,
             "triggered_by": "p-1",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-2",
             "transcript": {
@@ -33026,6 +33072,7 @@
             "meeting_id": "headless-seed-46:meeting-0",
             "tick": 8,
             "triggered_by": "p-4",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-2",
             "transcript": {
@@ -33867,6 +33914,7 @@
             "meeting_id": "headless-seed-46:meeting-1",
             "tick": 13,
             "triggered_by": "p-7",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -34381,6 +34429,7 @@
             "meeting_id": "headless-seed-47:meeting-0",
             "tick": 6,
             "triggered_by": "p-5",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -35121,6 +35170,7 @@
             "meeting_id": "headless-seed-47:meeting-1",
             "tick": 16,
             "triggered_by": "p-4",
+            "trigger": "report",
             "outcome": "SKIPPED",
             "ejected_player_id": null,
             "transcript": {
@@ -35822,6 +35872,7 @@
             "meeting_id": "headless-seed-49:meeting-0",
             "tick": 15,
             "triggered_by": "p-2",
+            "trigger": "report",
             "outcome": "EJECTED",
             "ejected_player_id": "p-2",
             "transcript": {
@@ -36748,7 +36799,10 @@
     "impostor_ejections": 3,
     "crewmate_ejections": 3,
     "evidence_backed_impostor_ejections": 3,
-    "vote_correctness_rate": 1.0
+    "vote_correctness_rate": 1.0,
+    "ejection_accuracy": 0.5,
+    "vote_correctness_small_n": true,
+    "contradictions_flagged_but_ignored": 36
   },
   "accusation_calibration": {
     "n_bins": 10,
@@ -36856,6 +36910,8 @@
     ],
     "accusation_claim_total": 182,
     "accusation_claim_ece": 0.31263736263736286,
+    "accusation_claim_populated_bins": 7,
+    "accusation_claim_low_power": false,
     "vote_ballot_bins": [
       {
         "bin_index": 0,
@@ -36959,7 +37015,9 @@
       }
     ],
     "vote_ballot_total": 94,
-    "vote_ballot_ece": 0.5228723404255323
+    "vote_ballot_ece": 0.5228723404255323,
+    "vote_ballot_populated_bins": 4,
+    "vote_ballot_low_power": true
   },
   "alibi_fabrication": {
     "total_impostor_alibis": 101,
@@ -37007,7 +37065,9 @@
     "games_with_meeting": 37,
     "meeting_rate": 0.74,
     "meetings_total": 51,
-    "body_report_meetings": 22,
-    "emergency_meetings": 29
+    "body_report_meetings": 51,
+    "emergency_meetings": 0,
+    "skipped_meetings": 45,
+    "ejected_meetings": 6
   }
 }

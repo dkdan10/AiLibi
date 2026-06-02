@@ -147,6 +147,7 @@ def _meeting(
         meeting_id=meeting_id,
         tick=tick,
         triggered_by="p-0",
+        trigger="report",
         outcome=outcome,
         ejected_player_id=ejected,
         transcript=MeetingTranscript(reports=reports, statements=statements),

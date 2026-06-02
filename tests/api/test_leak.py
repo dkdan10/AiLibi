@@ -381,6 +381,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "total_input_tokens",
         "total_output_tokens",
         "transcript",
+        "trigger",
         "triggered_by",
         "type",
         "version",

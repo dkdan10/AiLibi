@@ -53,7 +53,7 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 from engine.entities import PlayerId, Role
 from engine.world import Map, load_canonical_map
@@ -80,6 +80,7 @@ from orchestrator.replay import (
     FailedCallReplayEntry,
     GameEndReplayEntry,
     MeetingReplayEntry,
+    ReplayEntry,
     ReplayLogEntry,
     compute_cost_usd,
     read_all_entries,
@@ -590,8 +591,11 @@ def _game_report_from_replay(
         entries = ()
         total_cost_usd = 0.0
 
+    trigger_index = _trigger_kind_index(entries)
     meeting_entries = [e for e in entries if isinstance(e, MeetingReplayEntry)]
-    meetings = tuple(_meeting_report_from_entry(entry) for entry in meeting_entries)
+    meetings = tuple(
+        _meeting_report_from_entry(entry, trigger_index) for entry in meeting_entries
+    )
     failed_calls = tuple(e for e in entries if isinstance(e, FailedCallReplayEntry))
     end = next((e for e in entries if isinstance(e, GameEndReplayEntry)), None)
 
@@ -617,7 +621,39 @@ def _game_report_from_replay(
     )
 
 
-def _meeting_report_from_entry(entry: MeetingReplayEntry) -> MeetingReport:
+def _trigger_kind_index(
+    entries: tuple[ReplayLogEntry, ...],
+) -> dict[tuple[int, PlayerId], Literal["report", "emergency"]]:
+    """Index the meeting-triggering action kind by ``(tick, actor)``.
+
+    A meeting opens only when the engine applies a ``report`` or ``emergency``
+    action, and :meth:`orchestrator.replay.ReplayLog.record_tick` persists that
+    action in the trigger tick's per-tick row. This walks the ``kind="tick"``
+    rows and maps ``(tick, actor) -> action_type`` for those two action kinds, so
+    :func:`_meeting_report_from_entry` can recover the engine-recorded trigger
+    (equivalent to :attr:`engine.events.MeetingTriggeredEvent.trigger`) without a
+    replay-format change. ``(tick, actor)`` is unique — a tick is unique per game
+    (``read_all_entries`` rejects duplicate ticks) and an actor submits one
+    action per tick — so the map is unambiguous; a rejected ``report`` by a
+    different actor at the same tick keys to that actor, never the one whose
+    action actually opened the meeting (``MeetingReplayEntry.triggered_by``).
+    """
+
+    index: dict[tuple[int, PlayerId], Literal["report", "emergency"]] = {}
+    for entry in entries:
+        if not isinstance(entry, ReplayEntry):
+            continue
+        for action in entry.actions:
+            kind = action.get("type")
+            if kind in ("report", "emergency"):
+                index[(entry.tick, action["actor"])] = kind
+    return index
+
+
+def _meeting_report_from_entry(
+    entry: MeetingReplayEntry,
+    trigger_index: Mapping[tuple[int, PlayerId], Literal["report", "emergency"]],
+) -> MeetingReport:
     """Map a ``MeetingReplayEntry`` to a :class:`MeetingReport` (near 1:1).
 
     The replay entry's engine-determinism fields (``state_hash_before`` /
@@ -625,12 +661,32 @@ def _meeting_report_from_entry(entry: MeetingReplayEntry) -> MeetingReport:
     ``prompt_versions`` (collapsed to game level in
     :func:`_game_report_from_replay`) are intentionally dropped; everything a
     Phase 5 behavioral metric reads is carried over verbatim.
+
+    ``trigger`` is the one field NOT on the replay row: it is recovered from
+    ``trigger_index`` (:func:`_trigger_kind_index`) keyed by the meeting's
+    ``(tick, triggered_by)``. The lookup is the engine-recorded trigger action,
+    so the trigger breakdown is authoritative — never the agent's self-reported
+    ``FoundBodyObservation``. A meeting whose trigger action is absent (a corrupt
+    or truncated replay) is fail-loud: a meeting cannot open without one, so the
+    kind is recovered, never defaulted (AGENTS.md "no silent fallbacks").
     """
+
+    trigger = trigger_index.get((entry.tick, entry.triggered_by))
+    if trigger is None:
+        raise ValueError(
+            f"meeting {entry.meeting_id!r} (game {entry.game_id!r}, tick "
+            f"{entry.tick}) has no recorded report/emergency action by its "
+            f"triggering player {entry.triggered_by!r} in that tick's replay "
+            "row. A meeting cannot open without one, so the replay is corrupt or "
+            "truncated; the trigger kind is recovered from the engine-recorded "
+            "action, not defaulted."
+        )
 
     return MeetingReport(
         meeting_id=entry.meeting_id,
         tick=entry.tick,
         triggered_by=entry.triggered_by,
+        trigger=trigger,
         outcome=entry.outcome,
         ejected_player_id=entry.ejected_player_id,
         transcript=entry.transcript,

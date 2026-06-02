@@ -103,6 +103,7 @@ def _meeting(
         meeting_id=meeting_id,
         tick=10,
         triggered_by="p-0",
+        trigger="report",
         outcome="SKIPPED",
         ejected_player_id=None,
         transcript=transcript,

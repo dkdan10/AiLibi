@@ -123,6 +123,7 @@ def _meeting_report(
         meeting_id=meeting_id,
         tick=tick,
         triggered_by="p-0",
+        trigger="report",
         outcome=outcome,
         ejected_player_id=ejected,
         transcript=transcript,
