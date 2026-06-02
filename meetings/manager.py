@@ -43,6 +43,8 @@ from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 
+from pydantic import ValidationError
+
 from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 from llm.client import LLMClient
 from meetings.schemas import (
@@ -62,9 +64,20 @@ from meetings.transcript import detect_contradictions
 Role = Literal["CREWMATE", "IMPOSTOR"]
 
 # Protocol-default deadline values (DESIGN.md §5.2 default: T1 = 30 s,
-# T2 = 30 s, R = 2 rounds; statement deadline matches the report
-# deadline since both gate one LLM call per agent).
-DEFAULT_ROUND_COUNT: Final[int] = 2
+# T2 = 30 s; statement deadline matches the report deadline since both
+# gate one LLM call per agent).
+#
+# Accusation-round count. DESIGN.md §5.2 specifies R = 2 rounds for the
+# MVP, but Task 7.10 (Wave 0.5, audit
+# ``audits/audit-2026-06-01-1425-gameplay-data.md`` §6 R=2 statement-sink)
+# reduces the implementation default to 1: the sequential statement phase
+# is the dominant meeting token sink (~1/3 of meeting LLM calls) and the
+# audit raised round 2's value as an OPEN QUESTION without measuring a
+# round-2 vote delta. This is a speed call, readjustable to 2 if a Wave-1
+# measurement later shows the second round changes outcomes. Replay
+# reconstruction is unaffected (meetings reconstruct from the recorded
+# outcome, not by re-running rounds), so the committed sets are untouched.
+DEFAULT_ROUND_COUNT: Final[int] = 1
 DEFAULT_REPORT_DEADLINE_SECONDS: Final[float] = 30.0
 DEFAULT_STATEMENT_DEADLINE_SECONDS: Final[float] = 30.0
 DEFAULT_VOTE_DEADLINE_SECONDS: Final[float] = 30.0
@@ -332,10 +345,11 @@ class MeetingManager:
        every living participant. Crewmates use the crewmate prompt;
        impostors use the impostor prompt.
     2. **Accusation rounds** -- ``config.round_count`` sequential
-       rounds (default 2). Within each round, participants speak in
-       true round-robin order: the canonical sorted ``agent_id``
-       sequence rotated so ``trigger.triggered_by`` is at index 0
-       (see :func:`_speaker_order`).
+       rounds (default 1; see :data:`DEFAULT_ROUND_COUNT`). Within
+       each round, participants speak in true round-robin order: the
+       canonical sorted ``agent_id`` sequence rotated so
+       ``trigger.triggered_by`` is at index 0 (see
+       :func:`_speaker_order`).
     3. **Voting** -- parallel ``VoteBallot`` collection from every
        living participant.
     4. **Resolution** -- plurality tally produces the
@@ -625,14 +639,47 @@ class MeetingManager:
                 ),
                 timeout=self._config.deadlines.statement_seconds,
             )
-        except asyncio.TimeoutError:
+            parsed = Statement.model_validate_json(response.text)
+        except (asyncio.TimeoutError, ValidationError):
+            # Fail-soft on a single statement (Task 7.10, audit
+            # ``audits/audit-2026-06-01-1425-gameplay-data.md`` gp-2 /
+            # E-E-1 / A-A-2). A missed deadline (``TimeoutError``) and a
+            # malformed Statement that still fails schema validation after
+            # the provider's parse-tolerance normalization
+            # (``ValidationError`` — e.g. an ``AlibiClaim`` so broken the
+            # chronological-range swap cannot salvage it) BOTH degrade to
+            # the same missed-deadline placeholder. The meeting continues
+            # to its vote and the game reaches ``game_over``; a single bad
+            # statement never aborts the run (before this, the
+            # ``ValidationError`` propagated to the orchestrator, which
+            # recorded a ``failed_call`` and terminated the game with no
+            # ``game_over`` — corrupting seeds 25/36/40). Only the
+            # statement phase fails soft: a provider/transport timeout is
+            # still re-tagged ``LLMProviderError`` and propagates, and
+            # report/vote validation failures are unchanged (out of
+            # scope). ``model_validate_json`` is inside the ``try`` so a
+            # re-validation failure here is caught alongside the provider's
+            # own (the fake provider does not pre-validate).
+            #
+            # Cost-telemetry trade-off (matches the timeout path this
+            # mirrors): a swallowed call is not separately accounted --
+            # ``_RecordingLLMClient`` logs only a returned response and
+            # ``BudgetedLLMClient`` releases its in-flight reservation on
+            # the exception -- so this one malformed statement's tokens are
+            # neither charged nor written as a ``failed_call``. Report/vote
+            # parse-failures still record one (they propagate). Capturing
+            # that single call's cost (its ``LLMCallFailure`` is available
+            # via ``llm.provider.extract_parse_failure``) is a
+            # recording-layer / budget concern outside this task's scope;
+            # net accounting still improves sharply because the game now
+            # completes and records every other call instead of aborting
+            # and losing all of them.
             return _default_statement(
                 statement_id=statement_id,
                 speaker=participant.agent_id,
                 tick=trigger.trigger_tick,
                 round_index=round_index,
             )
-        parsed = Statement.model_validate_json(response.text)
         # Defense-in-depth: rewrite self-alibi placeholder subjects
         # (e.g. "p-self") to the speaker's canonical id before the
         # identity override, so DESIGN.md §5.4 contradiction detection

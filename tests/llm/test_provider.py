@@ -30,7 +30,7 @@ from llm.provider import (
     extract_parse_failure,
 )
 from llm.report_normalize import normalize_report_payload
-from meetings.schemas import ReportDocument, Statement, VoteBallot
+from meetings.schemas import AlibiClaim, ReportDocument, Statement, VoteBallot
 
 _T = TypeVar("_T")
 
@@ -59,6 +59,35 @@ def _bad_report_text() -> str:
             ],
             "claims": [],
             "free_text": "found a body",
+        }
+    )
+
+
+def _reversed_alibi_statement_text() -> str:
+    """A Statement whose AlibiClaim has ``from_tick > to_tick`` (Task 7.10, gp-2).
+
+    The seed-36 repro shape: ``qwen2.5:7b-instruct`` emits ``from_tick=8,
+    to_tick=1``. The strict ``AlibiClaim`` validator rejects it; the shared
+    seam must swap the bounds before validation so it survives.
+    """
+
+    return json.dumps(
+        {
+            "statement_id": "s1",
+            "speaker": "p-3",
+            "tick": 11,
+            "round_index": 0,
+            "target": None,
+            "claims": [
+                {
+                    "type": "alibi",
+                    "subject": "p-3",
+                    "from_tick": 8,
+                    "to_tick": 1,
+                    "room": "CAFETERIA",
+                }
+            ],
+            "free_text": "I was around.",
         }
     )
 
@@ -157,6 +186,15 @@ class TestExtractorNormalizationSeam:
         assert "Done" not in out
         ReportDocument.model_validate_json(out)
 
+    def test_schema_aware_call_repairs_reversed_alibi(self) -> None:
+        # Task 7.10: the shared seam swaps a reversed alibi range before
+        # validation, so it protects every provider AND the replay path.
+        out = _extract_json_block(_reversed_alibi_statement_text(), Statement)
+        statement = Statement.model_validate_json(out)
+        claim = statement.claims[0]
+        assert isinstance(claim, AlibiClaim)
+        assert (claim.from_tick, claim.to_tick) == (1, 8)
+
     def test_normalize_json_text_is_byte_identical_on_valid(self) -> None:
         valid = _valid_report_text()
         assert _normalize_json_text(valid, ReportDocument) == valid
@@ -228,6 +266,21 @@ class TestOllamaProviderNormalization:
         assert "co_present" not in resp.text
         assert resp.cost_usd == 0.0
         ReportDocument.model_validate_json(resp.text)
+
+    def test_complete_salvages_reversed_alibi_statement(self) -> None:
+        # Task 7.10 / gp-2: the local model's reversed-alibi statement (the
+        # seed-25/36/40 crash) is salvaged end-to-end through complete(), so
+        # the manager that consumes resp.text gets a valid Statement instead
+        # of a meeting-aborting ValidationError.
+        resp = _run(
+            _ollama_client(_reversed_alibi_statement_text()).complete(
+                prompt="p", schema=Statement, max_tokens=512, temperature=0.0
+            )
+        )
+        statement = Statement.model_validate_json(resp.text)
+        claim = statement.claims[0]
+        assert isinstance(claim, AlibiClaim)
+        assert (claim.from_tick, claim.to_tick) == (1, 8)
 
     def test_complete_is_byte_identical_on_valid(self) -> None:
         valid = _valid_report_text()
