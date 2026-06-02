@@ -73,6 +73,15 @@ class MeetingRateReport(BaseModel):
       may hold more than one meeting, so this is ``>= games_with_meeting``).
     * ``body_report_meetings`` / ``emergency_meetings`` — the trigger breakdown,
       which partitions exactly into ``meetings_total``.
+    * ``skipped_meetings`` / ``ejected_meetings`` — the OUTCOME breakdown
+      (``MeetingOutcome`` is binary: every meeting either ejected a player or
+      skipped), which also partitions exactly into ``meetings_total``. This is
+      the pairing the audit (F-F-5 / gp-7) asks for: ``meeting_rate`` measures
+      "a game *reached* a meeting", which overstates "the meeting *did
+      something*" when most meetings skip (88% SKIP in the audited set). A
+      reader gates on ``meeting_rate`` for the Stage-A enablement floor but
+      reads ``ejected_meetings`` / ``skipped_meetings`` to judge whether those
+      meetings actually resolved anything.
 
     **Trigger-breakdown heuristic and its two-fold catch-all limitation.** The
     real trigger kind (body-report vs emergency-button) lives only on the
@@ -110,6 +119,8 @@ class MeetingRateReport(BaseModel):
     meetings_total: int
     body_report_meetings: int
     emergency_meetings: int
+    skipped_meetings: int
+    ejected_meetings: int
 
     @model_validator(mode="after")
     def _validate_buckets(self) -> MeetingRateReport:
@@ -119,6 +130,8 @@ class MeetingRateReport(BaseModel):
             self.meetings_total,
             self.body_report_meetings,
             self.emergency_meetings,
+            self.skipped_meetings,
+            self.ejected_meetings,
         )
         if any(count < 0 for count in counts):
             raise ValueError("meeting-rate counts must be non-negative")
@@ -127,6 +140,12 @@ class MeetingRateReport(BaseModel):
                 "body_report_meetings + emergency_meetings must equal "
                 f"meetings_total: {self.body_report_meetings} + "
                 f"{self.emergency_meetings} != {self.meetings_total}"
+            )
+        if self.skipped_meetings + self.ejected_meetings != self.meetings_total:
+            raise ValueError(
+                "skipped_meetings + ejected_meetings must equal "
+                f"meetings_total: {self.skipped_meetings} + "
+                f"{self.ejected_meetings} != {self.meetings_total}"
             )
         if self.games_with_meeting > self.games_total:
             raise ValueError(
@@ -163,10 +182,14 @@ def compute_meeting_rate(
     ``meetings_total`` sums their lengths. The trigger breakdown is derived from
     :class:`~eval.report_schema.MeetingReport` data only (see
     :func:`_is_body_report` and the :class:`MeetingRateReport` docstring's
-    two-fold catch-all note). ``meeting_rate`` is ``None`` when ``games_total ==
-    0``. A meeting with no matching triggering report (malformed / partial
-    replay) classifies as ``emergency`` and never raises — matching the
-    partial-replay robustness the other §11.3 analyzers state.
+    two-fold catch-all note). The outcome breakdown
+    (``ejected_meetings`` / ``skipped_meetings``) counts each meeting's
+    ``outcome`` directly (``MeetingOutcome`` is binary, so ``skipped`` is the
+    complement of ``ejected``) — the pairing that distinguishes "reached a
+    meeting" from "the meeting resolved anything". ``meeting_rate`` is ``None``
+    when ``games_total == 0``. A meeting with no matching triggering report
+    (malformed / partial replay) classifies as ``emergency`` and never raises —
+    matching the partial-replay robustness the other §11.3 analyzers state.
     """
 
     games = report.games if isinstance(report, TournamentReport) else tuple(report)
@@ -178,6 +201,10 @@ def compute_meeting_rate(
         1 for game in games for meeting in game.meetings if _is_body_report(meeting)
     )
     emergency_meetings = meetings_total - body_report_meetings
+    ejected_meetings = sum(
+        1 for game in games for meeting in game.meetings if meeting.outcome == "EJECTED"
+    )
+    skipped_meetings = meetings_total - ejected_meetings
     meeting_rate = games_with_meeting / games_total if games_total > 0 else None
 
     return MeetingRateReport(
@@ -187,6 +214,8 @@ def compute_meeting_rate(
         meetings_total=meetings_total,
         body_report_meetings=body_report_meetings,
         emergency_meetings=emergency_meetings,
+        skipped_meetings=skipped_meetings,
+        ejected_meetings=ejected_meetings,
     )
 
 

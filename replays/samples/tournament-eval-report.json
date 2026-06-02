@@ -4556,7 +4556,10 @@
     "impostor_ejections": 4,
     "crewmate_ejections": 0,
     "evidence_backed_impostor_ejections": 4,
-    "vote_correctness_rate": 1.0
+    "vote_correctness_rate": 1.0,
+    "ejection_accuracy": 1.0,
+    "vote_correctness_small_n": true,
+    "contradictions_flagged_but_ignored": 0
   },
   "accusation_calibration": {
     "n_bins": 10,
@@ -4664,6 +4667,8 @@
     ],
     "accusation_claim_total": 38,
     "accusation_claim_ece": 0.146578947368421,
+    "accusation_claim_populated_bins": 6,
+    "accusation_claim_low_power": false,
     "vote_ballot_bins": [
       {
         "bin_index": 0,
@@ -4767,7 +4772,9 @@
       }
     ],
     "vote_ballot_total": 12,
-    "vote_ballot_ece": 0.11249999999999996
+    "vote_ballot_ece": 0.11249999999999996,
+    "vote_ballot_populated_bins": 2,
+    "vote_ballot_low_power": true
   },
   "alibi_fabrication": {
     "total_impostor_alibis": 5,
@@ -4816,6 +4823,8 @@
     "meeting_rate": 0.08,
     "meetings_total": 4,
     "body_report_meetings": 4,
-    "emergency_meetings": 0
+    "emergency_meetings": 0,
+    "skipped_meetings": 0,
+    "ejected_meetings": 4
   }
 }

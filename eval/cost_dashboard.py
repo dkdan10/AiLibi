@@ -51,6 +51,20 @@ Four semantic decisions are pinned here; each is load-bearing and tested:
   (guarded against division by zero), and a game with empty ``prompt_versions``
   contributes to no breakdown key while its cost still counts toward the total.
 
+**Informational-only under a $0 provider (audit F-F-6 / gp-7).** The Phase 7
+canonical eval provider is a local **Ollama** open model (DESIGN.md §7), which
+runs for **$0**. Under it, every USD field on this dashboard —
+``total_cost_usd``, ``mean_cost_per_game``, the ``by_model`` dollar map, and
+each :class:`PromptVersionCost.total_cost_usd` — is identically ``0.0`` and
+carries NO signal: it cannot anchor the DESIGN.md §10.4 ~$0.20/game target and a
+cross-run dollar delta is meaningless. The **token counts**
+(``total_input_tokens`` / ``total_output_tokens``) are the cost proxy in that
+regime — they still vary across runs and prompt versions and are what a Wave-1
+reader should compare. The dashboard is computed unconditionally (it is correct
+under a *priced* provider such as Anthropic, where the USD fields are live), so
+this is an interpretation caveat, not a code branch: read the USD fields as
+informational-only whenever the recording provider was $0.
+
 This task ships the metric module and its unit tests only. It does NOT wire the
 dashboard into tournament JSON output (Task 5.6) and does NOT build the frontend
 (Task 5.7) — it produces the typed data those consume.
@@ -108,6 +122,11 @@ class CostDashboard(_FrozenModel):
     (non-partition) per-``(template_name, version)`` breakdown, ordered
     deterministically by ``(template_name, version)`` so two dashboards from two
     runs compare cleanly (Task 5.8's cross-run delta).
+
+    Under a $0 provider (the Phase 7 Ollama default) every USD field here is
+    ``0.0`` and informational-only — use ``total_input_tokens`` /
+    ``total_output_tokens`` as the cost proxy. See the module docstring's
+    "Informational-only under a $0 provider" note (audit F-F-6 / gp-7).
     """
 
     total_cost_usd: float

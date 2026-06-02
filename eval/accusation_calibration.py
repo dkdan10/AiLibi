@@ -43,6 +43,19 @@ not NaN) ``actual_impostor_rate`` / ``mean_confidence`` so an empty bin is never
 confused with a populated bin whose accusations all missed (a genuine ``0.0``
 rate). A game with no accusations, no meetings, or all-``SKIP`` ballots yields
 all-empty bins and a ``None`` calibration error without raising.
+
+**Per-bin counts and the low-power flag (audit F-F-3 / gp-7).** Each curve's
+per-bin ``count`` is already on its :class:`CalibrationBin` entries, so the
+distribution behind a single ECE scalar is always inspectable. On top of that
+each curve carries ``*_populated_bins`` (how many bins actually held a sample)
+and ``*_low_power`` -- ``True`` when fewer than
+:data:`MIN_POPULATED_BINS_FOR_POWER` bins are populated. A provider whose
+confidences cluster into a couple of values (the audited ``qwen2.5`` emitted a
+near-constant ``0.55`` / ``0.85`` enum, so ECE was computed from 3-4 populated
+bins with no low/high anchors) produces a *technically valid but
+statistically weak* ECE; the flag warns a reader not to gate on an ECE delta
+from a near-degenerate distribution. It flags interpretation only and changes
+no computed number.
 """
 
 from __future__ import annotations
@@ -59,6 +72,15 @@ from meetings.schemas import AccusationClaim, MeetingTranscript, PlayerId
 # explicit, documented choice (DESIGN.md §11.3; see the PR's ## Decisions
 # block). Overridable per call via the keyword-only ``n_bins`` argument.
 DEFAULT_N_BINS: int = 10
+
+# Minimum number of populated (non-empty) bins a calibration curve needs before
+# its ECE is treated as adequately powered. Below this, ``*_low_power`` is set.
+# An explicit, documented threshold (see the PR's ## Decisions block): with
+# deciles, a provider that clusters confidences into a couple of values
+# populates only 2-4 bins, leaving ECE anchored to no low/high tail (audit
+# F-F-3). Chosen so such a near-degenerate curve is flagged while a curve
+# spread across half the range or more is not. It changes no computed metric.
+MIN_POPULATED_BINS_FOR_POWER: int = 5
 
 
 class _FrozenModel(BaseModel):
@@ -118,23 +140,42 @@ class AccusationCalibrationReport(_FrozenModel):
     "rate vs ``midpoint``" reading the DoD names is available per bin too. It is
     ``None`` when the curve binned no accusations (an undefined error over zero
     samples is reported as "no data", never a misleading ``0.0``).
+
+    Each curve also carries ``*_populated_bins`` (how many of its ``n_bins``
+    bins held >= 1 sample) and ``*_low_power`` (``True`` when that count is
+    below :data:`MIN_POPULATED_BINS_FOR_POWER`). These surface, next to the ECE
+    scalar, whether the ECE rests on a well-spread distribution or a couple of
+    clustered confidence values whose ECE delta is unreliable (audit F-F-3).
+    They are interpretation flags; the ECE value itself is unchanged.
     """
 
     n_bins: int
     accusation_claim_bins: tuple[CalibrationBin, ...]
     accusation_claim_total: int
     accusation_claim_ece: float | None
+    accusation_claim_populated_bins: int
+    accusation_claim_low_power: bool
     vote_ballot_bins: tuple[CalibrationBin, ...]
     vote_ballot_total: int
     vote_ballot_ece: float | None
+    vote_ballot_populated_bins: int
+    vote_ballot_low_power: bool
 
     @model_validator(mode="after")
     def _validate_bins(self) -> AccusationCalibrationReport:
         if self.n_bins < 1:
             raise ValueError(f"n_bins must be >= 1, got {self.n_bins}")
-        for label, bins in (
-            ("accusation_claim_bins", self.accusation_claim_bins),
-            ("vote_ballot_bins", self.vote_ballot_bins),
+        for label, bins, declared in (
+            (
+                "accusation_claim_bins",
+                self.accusation_claim_bins,
+                self.accusation_claim_populated_bins,
+            ),
+            (
+                "vote_ballot_bins",
+                self.vote_ballot_bins,
+                self.vote_ballot_populated_bins,
+            ),
         ):
             if len(bins) != self.n_bins:
                 raise ValueError(
@@ -147,6 +188,12 @@ class AccusationCalibrationReport(_FrozenModel):
                         f"{label} must be in ascending bin_index order: entry "
                         f"{expected_index} has bin_index={current_bin.bin_index}"
                     )
+            actual_populated = sum(1 for current_bin in bins if current_bin.count > 0)
+            if declared != actual_populated:
+                raise ValueError(
+                    f"{label} populated-bin count must equal the number of bins "
+                    f"with count > 0: declared {declared}, found {actual_populated}"
+                )
         return self
 
 
@@ -299,7 +346,9 @@ def compute_accusation_calibration(
     ``n_bins`` is the number of fixed-width bins over ``[0, 1]`` (default
     deciles). Raises ``ValueError`` if ``n_bins < 1``. Raises ``ValueError`` if
     any accusation targets a player absent from that game's ``roles`` (a
-    malformed report -- see :func:`_is_impostor`).
+    malformed report -- see :func:`_is_impostor`). Each curve's
+    ``*_populated_bins`` / ``*_low_power`` are derived from its binned counts
+    (see :func:`_populated_bins` and :data:`MIN_POPULATED_BINS_FOR_POWER`).
     """
 
     if n_bins < 1:
@@ -311,20 +360,33 @@ def compute_accusation_calibration(
     ballot_bins, ballot_total, ballot_ece = _bin_samples(
         _vote_ballot_samples(report), n_bins
     )
+    claim_populated = _populated_bins(claim_bins)
+    ballot_populated = _populated_bins(ballot_bins)
     return AccusationCalibrationReport(
         n_bins=n_bins,
         accusation_claim_bins=claim_bins,
         accusation_claim_total=claim_total,
         accusation_claim_ece=claim_ece,
+        accusation_claim_populated_bins=claim_populated,
+        accusation_claim_low_power=claim_populated < MIN_POPULATED_BINS_FOR_POWER,
         vote_ballot_bins=ballot_bins,
         vote_ballot_total=ballot_total,
         vote_ballot_ece=ballot_ece,
+        vote_ballot_populated_bins=ballot_populated,
+        vote_ballot_low_power=ballot_populated < MIN_POPULATED_BINS_FOR_POWER,
     )
+
+
+def _populated_bins(bins: tuple[CalibrationBin, ...]) -> int:
+    """Count the bins that held at least one sample (the curve's ECE support)."""
+
+    return sum(1 for current_bin in bins if current_bin.count > 0)
 
 
 __all__ = [
     "AccusationCalibrationReport",
     "CalibrationBin",
     "DEFAULT_N_BINS",
+    "MIN_POPULATED_BINS_FOR_POWER",
     "compute_accusation_calibration",
 ]
