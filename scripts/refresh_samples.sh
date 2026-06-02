@@ -324,6 +324,7 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] full mode would then remove non-canonical samples (seeds outside 0-49 and zero-padded aliases like replay-seed-01.jsonl) and prune their manifest rows"
   fi
   echo "[dry-run] manifest: $MANIFEST"
+  echo "[dry-run] eval report: would rebuild $SAMPLE_DIR/tournament-eval-report.json from the refreshed replays (scripts/build_sample_report.py; \$0, no provider)"
   echo "[dry-run] no API calls made; no files written."
   exit 0
 fi
@@ -489,3 +490,14 @@ total="$(uv run python "$REPO_ROOT/scripts/_manifest_writer.py" sum-cost \
 refresh_wall=$(($(date +%s) - refresh_start))
 echo "Refresh complete in $((refresh_wall / 60))m$((refresh_wall % 60))s: $meetings_seen/$total_seeds seeds reached a meeting (~$((meetings_seen * 100 / total_seeds))%; authoritative meeting_rate is in the eval report)."
 echo "Total spend: \$$total (recorded in $MANIFEST)."
+
+# Rebuild the derived eval report from the freshly-recorded replays. The refresh
+# above regenerates the replay JSONL + MANIFEST, but tournament-eval-report.json is
+# a separate offline build (roles re-seeded from roster.json); without this step a
+# refresh leaves a STALE report that still passes check.sh, since the determinism
+# gate only verifies replay state_hash reconstruction, never the report. Runs for
+# every real mode (full/meetings/seeds) and reads ALL on-disk seeds, so a partial
+# refresh still yields a report consistent with the whole committed set. $0, no
+# provider call; set -e makes a build failure fail the refresh loudly.
+echo "Rebuilding eval report from the refreshed replays ..."
+uv run python "$REPO_ROOT/scripts/build_sample_report.py" --sample-dir "$SAMPLE_DIR"
