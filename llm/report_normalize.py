@@ -171,11 +171,10 @@ def _repair_chronological_range(value: dict[Any, Any], model: type[BaseModel]) -
 
     Returns ``value`` unchanged unless ``model`` declares BOTH
     :data:`_CHRONOLOGICAL_LOWER_FIELD` and :data:`_CHRONOLOGICAL_UPPER_FIELD`
-    (the ``meetings.schemas.AlibiClaim`` shape) AND the payload carries them as
-    plain ``int``\\ s in the wrong order (``from_tick > to_tick``). In that one
-    case it returns a shallow copy with the two values swapped, turning a
-    reversed range into the chronological one the strict ``AlibiClaim``
-    ``model_validator`` accepts.
+    (the ``meetings.schemas.AlibiClaim`` shape) AND the payload carries them in
+    the wrong order (``from_tick > to_tick``). In that case it returns a shallow
+    copy with the two original values swapped, turning a reversed range into the
+    chronological one the strict ``AlibiClaim`` ``model_validator`` accepts.
 
     Swapping (rather than coercing to a one-tick window at ``to_tick``) keeps
     both tick values the model emitted, so DESIGN.md §5.4 contradiction
@@ -186,10 +185,15 @@ def _repair_chronological_range(value: dict[Any, Any], model: type[BaseModel]) -
     already-chronological payload is returned unchanged (the byte-identical
     no-op the replay path depends on).
 
-    Bools are excluded (``type(x) is int``, not ``isinstance``) because
-    ``bool`` is an ``int`` subclass; a non-int / float value is left untouched
-    so the downstream validator fails loud on it rather than this helper
-    masking it (the normalizer never fabricates or coerces field *types*).
+    "Wrong order" is decided by interpreting each bound the way Pydantic's lax
+    ``int`` coercion would (:func:`_as_int_tick`), so a reversed range expressed
+    as JSON strings (``"8"``/``"1"``) or whole floats (``8.0``/``1.0``) — both
+    of which ``from_tick: int`` accepts after coercion — is swapped too, not
+    just plain ints. The ORIGINAL values are reordered (their JSON type is
+    preserved); Pydantic applies its own coercion downstream, so this helper
+    never coerces field types itself. A bound that is not an integer Pydantic
+    would accept (``"abc"``, ``1.5``, a missing key) yields ``None`` and is left
+    untouched, so a genuinely-malformed bound still fails loud at validation.
     """
 
     if not (
@@ -197,14 +201,53 @@ def _repair_chronological_range(value: dict[Any, Any], model: type[BaseModel]) -
         and _CHRONOLOGICAL_UPPER_FIELD in model.model_fields
     ):
         return value
-    lower = value.get(_CHRONOLOGICAL_LOWER_FIELD)
-    upper = value.get(_CHRONOLOGICAL_UPPER_FIELD)
-    if type(lower) is int and type(upper) is int and lower > upper:
+    lower = _as_int_tick(value.get(_CHRONOLOGICAL_LOWER_FIELD))
+    upper = _as_int_tick(value.get(_CHRONOLOGICAL_UPPER_FIELD))
+    if lower is not None and upper is not None and lower > upper:
         repaired = dict(value)
-        repaired[_CHRONOLOGICAL_LOWER_FIELD] = upper
-        repaired[_CHRONOLOGICAL_UPPER_FIELD] = lower
+        repaired[_CHRONOLOGICAL_LOWER_FIELD] = value[_CHRONOLOGICAL_UPPER_FIELD]
+        repaired[_CHRONOLOGICAL_UPPER_FIELD] = value[_CHRONOLOGICAL_LOWER_FIELD]
         return repaired
     return value
+
+
+def _as_int_tick(value: Any) -> int | None:
+    """Interpret a JSON tick bound as the int Pydantic's lax ``int`` would accept.
+
+    Used by :func:`_repair_chronological_range` to decide whether a tick range
+    is reversed. Returns the integer value for the shapes a model realistically
+    emits for an ``int`` field — a plain ``int``, a whole-number ``float``
+    (``8.0``), or an int-parseable ``str`` (``"8"``, ``"8.0"``, ``" 8 "``,
+    ``"+8"``) — matching what ``AlibiClaim.from_tick: int`` accepts after
+    coercion. Returns ``None`` for anything Pydantic would reject (``"abc"``,
+    ``1.5``, ``None``, a missing key), so a non-numeric bound is left untouched
+    and still fails loud at validation.
+
+    ``bool`` is deliberately excluded: ``True``/``False`` are not meaningful
+    tick values even though lax mode would coerce them to ``1``/``0``. The
+    interpretation is intentionally a hair more lenient than Pydantic on exotic
+    strings (e.g. ``"1_000"``); leniency only ever reorders a payload that then
+    fails validation anyway, whereas being *stricter* than Pydantic would miss a
+    salvageable swap — the regression this guards against.
+    """
+
+    if value is True or value is False:
+        return None
+    if type(value) is int:
+        return value
+    if type(value) is float:
+        return int(value) if value.is_integer() else None
+    if type(value) is str:
+        stripped = value.strip()
+        try:
+            return int(stripped)
+        except ValueError:
+            try:
+                parsed = float(stripped)
+            except ValueError:
+                return None
+            return int(parsed) if parsed.is_integer() else None
+    return None
 
 
 def _unwrap_annotated(annotation: Any) -> tuple[Any, tuple[Any, ...]]:

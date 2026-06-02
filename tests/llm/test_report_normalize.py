@@ -483,11 +483,8 @@ class TestNonChronologicalAlibi:
             ReportDocument.model_validate(normalized)
         assert any(err["type"] == "missing" for err in exc.value.errors())
 
-    def test_non_int_ticks_are_not_swapped(self) -> None:
-        # Float ticks are not the int the schema expects; the repair leaves them
-        # untouched (it never coerces field *types*) so validation fails loud
-        # rather than this helper masking a type error as a swap.
-        payload: dict[str, Any] = {
+    def _report_with_bounds(self, from_tick: Any, to_tick: Any) -> dict[str, Any]:
+        return {
             "agent_id": "p-1",
             "tick": 5,
             "observations": [],
@@ -495,13 +492,68 @@ class TestNonChronologicalAlibi:
                 {
                     "type": "alibi",
                     "subject": "p-1",
-                    "from_tick": 8.0,
-                    "to_tick": 1.0,
+                    "from_tick": from_tick,
+                    "to_tick": to_tick,
                     "room": "R",
                 }
             ],
             "free_text": "f",
         }
+
+    def test_reversed_string_bounds_are_swapped_and_validate(self) -> None:
+        # A model can emit tick bounds as JSON strings; Pydantic's int field
+        # coerces "8"->8, so a reversed STRING range must be swapped too (the
+        # exact-int guard would have missed it and degraded a salvageable claim).
+        # The ORIGINAL string values are reordered; Pydantic coerces downstream.
+        payload = self._report_with_bounds("8", "1")
         normalized = normalize_report_payload(payload, ReportDocument)
-        assert normalized["claims"][0]["from_tick"] == 8.0
+        assert normalized["claims"][0]["from_tick"] == "1"
+        assert normalized["claims"][0]["to_tick"] == "8"
+        ReportDocument.model_validate(normalized)
+
+    def test_reversed_whole_float_bounds_are_swapped_and_validate(self) -> None:
+        # Whole floats (8.0) coerce to int 8 in Pydantic, so a reversed
+        # whole-float range is salvageable and must be swapped.
+        payload = self._report_with_bounds(8.0, 1.0)
+        normalized = normalize_report_payload(payload, ReportDocument)
+        assert normalized["claims"][0]["from_tick"] == 1.0
+        assert normalized["claims"][0]["to_tick"] == 8.0
+        ReportDocument.model_validate(normalized)
+
+    def test_reversed_mixed_str_int_bounds_are_swapped(self) -> None:
+        payload = self._report_with_bounds("8", 1)
+        normalized = normalize_report_payload(payload, ReportDocument)
+        assert normalized["claims"][0]["from_tick"] == 1
+        assert normalized["claims"][0]["to_tick"] == "8"
+        ReportDocument.model_validate(normalized)
+
+    def test_chronological_string_bounds_are_no_op(self) -> None:
+        # Already chronological after coercion ("1" <= "8"): no swap, deep-equal.
+        payload = self._report_with_bounds("1", "8")
+        assert normalize_report_payload(payload, ReportDocument) == payload
+        ReportDocument.model_validate(payload)
+
+    def test_non_coercible_string_bound_not_swapped_and_fails_loud(self) -> None:
+        # A non-numeric bound is not an int Pydantic accepts -> left untouched so
+        # it still fails loud at validation (the normalizer never masks it).
+        payload = self._report_with_bounds("abc", "1")
+        normalized = normalize_report_payload(payload, ReportDocument)
+        assert normalized == payload
+        with pytest.raises(ValidationError):
+            ReportDocument.model_validate(normalized)
+
+    def test_non_integer_float_bound_not_swapped(self) -> None:
+        # Pydantic rejects a non-integer float for an int field, so 8.5 is not a
+        # salvageable bound: leave it untouched (it fails validation regardless).
+        payload = self._report_with_bounds(8.5, 1.0)
+        normalized = normalize_report_payload(payload, ReportDocument)
+        assert normalized["claims"][0]["from_tick"] == 8.5
         assert normalized["claims"][0]["to_tick"] == 1.0
+
+    def test_bool_bounds_not_swapped(self) -> None:
+        # A boolean is not a meaningful tick; it is excluded even though lax mode
+        # would coerce True->1 / False->0. Left untouched (no swap).
+        payload = self._report_with_bounds(True, False)
+        normalized = normalize_report_payload(payload, ReportDocument)
+        assert normalized["claims"][0]["from_tick"] is True
+        assert normalized["claims"][0]["to_tick"] is False
