@@ -799,15 +799,6 @@ def _committed_7p2i_seeds() -> list[int]:
     )
 
 
-@pytest.mark.skip(
-    reason="Task 7.9 friendly-fire guard: engine.rules.resolve_kill now rejects an "
-    "IMPOSTOR-target kill, so the committed 7p/2i set's 39 recorded teammate-kills "
-    "(e.g. seed-0 tick 7 p-3->p-5) no longer resolve on playback — the per-tick "
-    "state_hash diverges and load_replay raises ReplayStateMismatchError. The set is "
-    "balance-invalid (audit-2026-06-01-1425-gameplay-data.md); the post-7.9 re-record "
-    "produces a friendly-fire-free set and re-enables this test (restoring its "
-    "committed >= 30 resolved-meeting floor). Sibling firewall + 4p/1i tests stay green."
-)
 def test_committed_7p2i_set_reconstructs_byte_identically() -> None:
     # Every committed 7p/2i replay reconstructs byte-identically under the current
     # engine: load_replay re-seeds from the committed roster.json (7p/2i + 2

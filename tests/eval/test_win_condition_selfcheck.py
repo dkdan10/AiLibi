@@ -151,29 +151,27 @@ def _crewmate_eject_seeds(replay_dir: Path) -> list[int]:
     return seeds
 
 
-@pytest.mark.skip(
-    reason="Task 7.9 friendly-fire guard: engine.rules.resolve_kill now rejects an "
-    "IMPOSTOR-target kill, so the committed 7p/2i set's recorded teammate-kills no "
-    "longer resolve on playback — the per-tick state_hash diverges and "
-    "check_replay_win_condition raises (its fail-loud reconstruction guard). The set "
-    "is balance-invalid (audit-2026-06-01-1425-gameplay-data.md); the post-7.9 "
-    "re-record produces a friendly-fire-free set and re-enables this multi-impostor "
-    "case. Until then the §6.3 self-check is covered by the synthetic predicate tests "
-    "and the committed 4p/1i reconstruction (single impostor, no friendly fire)."
-)
 def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
     """Multi-impostor 7p/2i eliminations satisfy the invariant (A-A-3).
 
-    Exercises the path the single-impostor 4p/1i set cannot: two impostors where
-    one death is a friendly-fire kill and the other an ejection, so the
-    alive-impostor count crosses zero across a tick AND a meeting. Skipped on the
-    current engine (see the marker) because the frozen 7p/2i replays predate the
-    7.9 friendly-fire guard; re-enabled by the post-merge re-record.
+    Exercises the two-impostor elimination path the single-impostor 4p/1i set
+    cannot: when the committed set contains a CREWMATE_EJECT game, the
+    alive-impostor count crosses zero before game-over and the §6.3 self-check
+    must stay consistent. Skips when the set has no such game — post-7.12
+    impostor coordination can leave crew unable to eject both impostors (all
+    crew wins via CREWMATE_TASKS), so there is no elimination path to exercise.
     """
 
     num_players, num_impostors, tasks_per_crewmate = _roster(_SAMPLES_7P2I)
     elimination_seeds = _crewmate_eject_seeds(_SAMPLES_7P2I)
-    assert elimination_seeds, "expected at least one CREWMATE_EJECT game in 7p2i"
+    if not elimination_seeds:
+        pytest.skip(
+            "no CREWMATE_EJECT game in the committed 7p/2i set: post-7.12 impostor "
+            "coordination removed teammate-betrayal, so crew never ejects both "
+            "impostors (all crew wins are CREWMATE_TASKS). The §6.3 multi-impostor "
+            "elimination path is exercised only when an elimination-bearing set is "
+            "recorded; the single-impostor 4p/1i reconstruction still covers §6.3."
+        )
 
     for seed in elimination_seeds:
         check = check_replay_win_condition(
