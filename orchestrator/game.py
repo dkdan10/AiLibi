@@ -135,11 +135,21 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # the replay record's :attr:`MeetingReplayEntry.prompt_versions` in
 # sync without a runtime regex over the loaded templates. Bump the
 # string here whenever the matching template header is bumped.
+#
+# Task 7.12 bumped ``impostor_report``, ``accusation_round``, and
+# ``vote_ballot`` because the gated teammate-coordination block is a
+# behavior-shifting prompt change: this is the AUTHORITATIVE revision
+# recorded into replay/eval, so the upcoming 7p/2i re-record is attributed
+# to the new revision instead of being conflated with the old committed
+# runs. This map is metadata only (never rendered into a prompt), so the
+# bump does not alter any rendered prompt — the frozen 4p/1i and crewmate
+# prompts stay byte-identical and both committed sets reconstruct
+# unchanged. ``crewmate_report`` is unbumped (its template is untouched).
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "crewmate_report": "crewmate_report.v1",
-    "impostor_report": "impostor_report_v1",
-    "accusation_round": "accusation_round.v2",
-    "vote_ballot": "vote_ballot/v1",
+    "impostor_report": "impostor_report_v2",
+    "accusation_round": "accusation_round.v3",
+    "vote_ballot": "vote_ballot/v2",
 }
 
 _T = TypeVar("_T")

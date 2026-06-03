@@ -1716,6 +1716,54 @@ class TestUnknownRoleRejected:
                 )
             )
 
+    def test_crewmate_with_nonempty_fellow_impostor_ids_is_rejected(self) -> None:
+        # Task 7.12 firewall: a non-impostor must never carry a teammate
+        # list — it would render the teammate block into a crewmate's shared
+        # statement/vote prompt, leaking impostor identities. The manager
+        # runs no leak scanner, so it fails loud at entry rather than leak.
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+        bad_participants = (
+            MeetingParticipant(
+                agent_id="p-1",
+                role="CREWMATE",
+                rendered_memory="## Your role: CREWMATE\nmemory",
+                fellow_impostor_ids=("p-3",),
+            ),
+        )
+
+        with pytest.raises(ValueError, match="must be empty for a non-impostor"):
+            _run(
+                manager.run(
+                    meeting_id="m-leak",
+                    trigger=_default_trigger(),
+                    participants=bad_participants,
+                )
+            )
+
+    def test_impostor_with_fellow_impostor_ids_is_accepted(self) -> None:
+        # Control: an impostor legitimately carries its teammate list; the
+        # firewall guard targets only non-impostors.
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+        participants = (
+            MeetingParticipant(
+                agent_id="p-1",
+                role="IMPOSTOR",
+                rendered_memory="## Your role: IMPOSTOR\nmemory",
+                fellow_impostor_ids=("p-3",),
+            ),
+        )
+
+        result = _run(
+            manager.run(
+                meeting_id="m-ok",
+                trigger=_default_trigger(),
+                participants=participants,
+            )
+        )
+        assert result.outcome == "SKIPPED"
+
 
 class TestParticipantOrderCanonicalised:
     """Codex P1: meeting must be deterministic regardless of caller order.
@@ -2647,12 +2695,14 @@ class TestSelfAlibiNormalizationWiring:
 class TestAccusationRoundPromptVersionInReplay:
     """The bumped accusation_round version reaches the replay record.
 
-    Task 3.20 bumps the template header to v2; the orchestrator's
-    `DEFAULT_PROMPT_VERSIONS` map (copied verbatim into every
-    `MeetingReplayEntry`) must carry "accusation_round.v2".
+    Task 3.20 bumped the template header to v2; Task 7.12 bumped it to v3
+    (the gated teammate-coordination block is a behavior-shifting prompt
+    change). The orchestrator's `DEFAULT_PROMPT_VERSIONS` map (copied
+    verbatim into every `MeetingReplayEntry`) must carry the current
+    "accusation_round.v3" so a re-record is attributed to the new revision.
     """
 
-    def test_meeting_replay_entry_shows_accusation_round_v2(self) -> None:
+    def test_meeting_replay_entry_shows_accusation_round_v3(self) -> None:
         from orchestrator.game import DEFAULT_PROMPT_VERSIONS
         from orchestrator.replay import MeetingReplayEntry
 
@@ -2669,7 +2719,7 @@ class TestAccusationRoundPromptVersionInReplay:
         # Build the replay entry exactly as
         # `orchestrator.replay.ReplayWriter.record_meeting` does: the
         # prompt-version map flows in verbatim from the production
-        # default. A fresh entry must show the bumped v2 string.
+        # default. A fresh entry must show the bumped v3 string.
         entry = MeetingReplayEntry(
             game_id="g-version",
             meeting_id=result.meeting_id,
@@ -2686,8 +2736,8 @@ class TestAccusationRoundPromptVersionInReplay:
             state_hash_after="hash-after",
         )
 
-        assert entry.prompt_versions["accusation_round"] == "accusation_round.v2"
-        assert entry.prompt_versions["accusation_round"] != "accusation_round.v1"
+        assert entry.prompt_versions["accusation_round"] == "accusation_round.v3"
+        assert entry.prompt_versions["accusation_round"] != "accusation_round.v2"
 
 
 # --- Task 7.10: fail-soft statements + single accusation round -------------

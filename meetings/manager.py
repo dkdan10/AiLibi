@@ -972,6 +972,22 @@ class MeetingManager:
                     f"{sorted(_VALID_ROLES)}; got {participant.role!r} "
                     f"for agent {participant.agent_id!r}"
                 )
+            # Task 7.12 firewall (mirrors the 7.2 crew-empty invariant):
+            # ``fellow_impostor_ids`` is impostor-only self-channel data, and
+            # the manager runs no leak scanner of its own before threading it
+            # into the shared statement/vote prompts. A non-impostor carrying a
+            # non-empty teammate list would render the teammate block into a
+            # crewmate's prompt, leaking impostor identities outside the self
+            # channel. The orchestrator always populates ``()`` for crew, so
+            # this only fires on a direct-caller / future construction bug --
+            # fail loud rather than leak (AGENTS.md "no silent fallbacks").
+            if participant.role != "IMPOSTOR" and participant.fellow_impostor_ids:
+                raise ValueError(
+                    "MeetingParticipant.fellow_impostor_ids must be empty for a "
+                    f"non-impostor; got {participant.fellow_impostor_ids!r} for "
+                    f"{participant.role!r} agent {participant.agent_id!r} "
+                    "(teammate identity is impostor-only self-channel data)"
+                )
         # The protocol requires round-robin starting from the reporter
         # (DESIGN.md §5.2). A trigger whose ``triggered_by`` is not in
         # the participant set is an upstream orchestrator bug -- not

@@ -1,7 +1,10 @@
 {# Accusation-round speech turn prompt (DESIGN.md §5.2, §5.3).
 
    prompt_id: accusation_round
-   version: 2
+   version: 3
+   (v3, Task 7.12: added the gated "Your fellow impostors" block, rendered
+    only when fellow_impostor_ids is non-empty — crewmate / sole-impostor
+    turns stay byte-identical.)
 
    Targets the shared `Statement` schema (meetings/schemas.py). The orchestrator
    substitutes the deterministic identity fields (`statement_id`, `speaker`,

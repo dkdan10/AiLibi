@@ -352,9 +352,10 @@ class TestReplayRecordsMeetingArtifacts:
             "accusation_round",
             "vote_ballot",
         }
-        # Task 3.20 bumped the accusation_round template to v2; a fresh
+        # Task 3.20 bumped the accusation_round template to v2; Task 7.12
+        # bumped it to v3 (gated teammate-coordination block). A fresh
         # replay entry must carry the new version string end-to-end.
-        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v2"
+        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v3"
         # LLM cost metadata recorded per call. With round_count=2:
         #   reports: 4 calls
         #   statements: 4 voters × 2 rounds = 8 calls
