@@ -1571,6 +1571,61 @@ Adding report fields touches the api/frontend type-mirror AND the frozen committ
 
 **Ready-to-paste prompt:** `agent_prompts/task-7-11-eval-reporting-hardening.md`
 
+### Task 7.12 — Teammate-aware impostor meeting behavior (J-5)
+**Branch:** `phase-7-impostor-meeting-coordination`
+**Depends on:** 7.1, 7.2, 7.9, 7.10 (all merged — Wave 0 substrate + Wave 0.5 repair; the 2026-06-02 re-record + re-audit cleared the Wave-1 gate)
+**Section refs:** audits/audit-2026-06-02-2112-gameplay-data.md (gp-imp-1, D-D-1, D-D-2, D-D-3, D-D-4, C-C-6); DESIGN.md §5.2–§5.3 (meeting protocol / reports), §6.6 (prompt rendering + leak firewall); the J-5 deferral marker at `agents/perception.py:196`
+**Complexity:** Medium
+
+The 2026-06-02 gameplay-data audit on the Wave-0.5 baseline found impostors actively help the crew in meetings. `fellow_impostor_ids` is delivered on the self channel (landed by 7.2) and consumed by the kill policy (7.9, why friendly-fire is now 0) but NOT by the meeting/vote path — `agents/perception.py:196` explicitly defers this to "Wave 2 (J-5)". From the recorded data: impostors voted to eject a fellow impostor in 40/91 ballots (44%), both impostors mutually betrayed each other in 11 meetings, and impostors fabricated eyewitness accusations against a teammate in 48/54 report accusations (0/19 corroborations supported a teammate). All 5 "correct" impostor ejections were aided by a teammate's betrayal vote, and in seed 6 that vote was outcome-pivotal — so the current 68% impostor win rate UNDER-states true impostor strength. This task closes the meeting-side teammate gap so the crew-intelligence A/B that follows is measured against a non-self-sabotaging opponent.
+
+Meeting output is LLM-driven (unlike the FSM kill policy), so the fix is two layers: a prompt layer that tells an impostor who its teammates are and to protect them, and a deterministic guard that hard-excludes a teammate from the produced accusation/ballot regardless of what the model emits — the same belt-and-suspenders the kill policy plus engine guard use. The teammate list is firewall-safe self-channel data: it must enter an impostor's own prompt but NEVER a crewmate's, preserving the 7.2 leak invariant (`self_state.fellow_impostor_ids == ()` for crew). The 4p/1i frozen set is single-impostor, so every change is a no-op there.
+
+This is a recorded-behavior change, so the committed 7p/2i set is re-recorded + re-audited after this merges (a separate operational step in the Wave-1 sequencing section); do not regenerate data here. It does not affect replay reconstruction of existing sets (meetings replay by applying the recorded outcome), so both committed sets stay byte-identical.
+
+**Files in scope:**
+- meetings/manager.py (`MeetingParticipant` gains `fellow_impostor_ids: tuple[PlayerId, ...] = ()`, threaded into the report/statement/vote prompt context the reasoner receives)
+- orchestrator/game.py (populate `MeetingParticipant.fellow_impostor_ids` at construction — `orchestrator/game.py:434` — from world-state roles when the participant is an impostor; `()` for crewmates and a sole impostor; never the participant's own id)
+- agents/strategic/reasoner.py (pass the teammate list into the impostor prompt context; after the LLM returns, hard-exclude teammates — a `VoteBallot` targeting a teammate coerces to `SKIP`, an `AccusationClaim` / `Statement.target` naming a teammate is dropped; allow an impostor's own `fellow_impostor_ids` through the prompt leak scanner the way the `## Your role:` line is already allowlisted)
+- agents/strategic/prompts/impostor_report.j2 + accusation_round.j2 + vote_ballot.j2 (surface the teammate list with an instruction never to accuse, incriminate, or vote a teammate, and optionally to corroborate one; render the teammate block only when the list is non-empty, so crewmate prompts stay byte-unchanged)
+- tests/agents/ (deterministic-guard unit tests over the reasoner: teammate-ballot coerces to SKIP, teammate-accusation dropped, crew + solo-impostor no-op; an impostor's own teammate ids do not trip the prompt leak scanner while a crewmate prompt carries no teammate block)
+- tests/meetings/ + tests/orchestrator/ (`MeetingParticipant` carries the field; the orchestrator populates the other impostors' ids for an impostor and `()` for every crewmate / sole impostor)
+
+**Files NOT in scope:**
+- observation/service.py + observation/packet.py + agents/perception.py (`fellow_impostor_ids` is plumbed by 7.2 — consume it, do not edit the substrate)
+- agents/tactical/impostor_policy.py + engine/ (the FSM kill layer is already teammate-aware via 7.9; no engine change)
+- meetings/schemas.py (the `VoteBallot` / `Statement` / `AccusationClaim` schemas are unchanged — the guard coerces produced values, it never relaxes validation)
+- eval/, replays/samples/ (no metric change here; the re-record is a separate step and never deletes the 4p/1i set)
+
+**Definition of done:**
+- [ ] `MeetingParticipant` carries `fellow_impostor_ids` (default `()`), populated by the orchestrator from world-state roles: the other impostors' ids for an impostor participant, `()` for every crewmate and for a sole impostor, never the participant's own id.
+- [ ] An impostor's meeting prompts surface the teammate list with an instruction never to accuse, incriminate, or vote a teammate (and optionally to corroborate one); the shared accusation/vote prompts render NO teammate block for a crewmate (empty list), so crewmate prompts are byte-unchanged.
+- [ ] A deterministic guard in the reasoner hard-excludes teammates from the produced output regardless of the model: a `VoteBallot` whose target is a `fellow_impostor_id` becomes `SKIP`; an `AccusationClaim` or `Statement.target` naming a teammate is dropped. The guard is a no-op for crewmates and a sole impostor, and is deterministic (no RNG, no new LLM call) so replay is unaffected.
+- [ ] The prompt leak scanner allows an impostor's own `fellow_impostor_ids` (legitimate self-channel data, like the `## Your role:` line) while every crewmate meeting prompt still carries no teammate-id block; the 7.2 leak invariant (`self_state.fellow_impostor_ids == ()` for crew) and the existing leak suites stay green.
+- [ ] Behavioral regression anchors (firewall-known, no role inference): an impostor never produces a ballot or accusation targeting a teammate across a seeded multi-impostor set. Repro fixture: seed 6 meeting-0 (the pivotal teammate-betrayal vote that, removed, turns a 2-vote eject into a 1-1-1-1 SKIP).
+- [ ] The frozen 4p/1i set still reconstructs byte-identically (single impostor → every change is a no-op); both committed sets' leak suites stay green.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+The teammate list already exists on the observation packet (`SelfView.fellow_impostor_ids`, 7.2) and the orchestrator holds the world-state roles where it builds `MeetingParticipant` (`orchestrator/game.py:434`); add the field there rather than re-deriving roles in the meeting layer. The reasoner (`agents/strategic/reasoner.py`) already branches the report prompt on role (crewmate vs impostor) — thread `fellow_impostor_ids` into that same context and into the shared accusation/vote renderers, gating the teammate block on a non-empty list so crewmate prompts are byte-unchanged. For the guard, post-process the parsed `VoteBallot` / `Statement` / `ReportDocument` before returning: coerce a teammate-targeted ballot to `SKIP` and drop teammate accusations — pure functions of `fellow_impostor_ids`, deterministic, replay-safe, mirroring the kill policy's teammate filter. For the leak scanner, the reasoner already allowlists the legitimate `## Your role: X` line before running `eval.leak_test._assert_no_role_bearing_values`; extend that allowlist so an impostor's own teammate ids in their own prompt are not flagged, WITHOUT loosening the scan for crewmate prompts (whose list is empty). Keep everything deterministic so replay reconstruction of the committed sets is unaffected.
+
+**Integration risk:**
+
+This is the first consumer of `fellow_impostor_ids` in the meeting path and it crosses the orchestrator → meeting → reasoner → prompt boundary plus the leak firewall, so the leak invariant is the load-bearing constraint: the teammate list must reach an impostor's prompt and NEVER a crewmate's. Keep the guard belt-and-suspenders (prompt instruction AND deterministic coercion) so the regression anchors hold even when the 7B model ignores the instruction. The change alters recorded meeting behavior, so it gates a re-record + re-audit (Wave-1 sequencing) — but it does not affect replay reconstruction of existing sets (meetings replay by applying the recorded outcome), so the committed 4p/1i and 7p/2i sets are untouched by this task. No schema relaxation: the guard coerces produced values, it never widens `VoteBallot` / `AccusationClaim`.
+
+**Dependency check:**
+- `uv run python -c "from observation.packet import SelfView; assert 'fellow_impostor_ids' in SelfView.model_fields"`
+- `uv run python -c "from meetings.manager import MeetingParticipant"`
+
+**Ready-to-paste prompt:** `agent_prompts/task-7-12-impostor-meeting-coordination.md`
+
 ## Merge Criteria (Wave 0 — enablement gate)
 - **Config reachable + deterministic:** Task 7.1 lands the `tasks_per_crewmate` knob (default 2), the `4p1i`/`7p2i` roster presets, and the CLI threading; the `tasks_per_crewmate=1` path stays byte-identical to the committed 4p/1i baseline.
 - **Firewall extended for multi-impostor play:** Task 7.2 lands impostor-only `fellow_impostor_ids` on `SelfView`, with the new leak invariant (`self_state.fellow_impostor_ids == ()` for every crew-recipient packet) green; `visible_players` / `PlayerView` unchanged.
@@ -1614,3 +1669,27 @@ Adding report fields touches the api/frontend type-mirror AND the frozen committ
   CREWMATE + same room + cooldown elapsed. (7.9 implements the guard; DESIGN.md is
   design-thread-owned and edited here, not by 7.9.)
 - **Wave boundary respected:** Wave 0.5 repairs the eval substrate, the impostor kill bug, and the reporting surface only — NO crew-intelligence (gp-4), impostor coordination (gp-6), or body-report-rate (gp-5) work lands here (those are Wave 1 / Wave 2 / opportunistic). Wave 1 contracts are appended to this file only after the re-record + re-audit confirm a trustworthy baseline.
+
+## Wave 1 — sequencing + baseline metrics (post 2026-06-02 audit)
+
+The Wave-0.5 re-record (commit `163f786`) and re-audit (`audits/audit-2026-06-02-2112-gameplay-data.md`, verdict MINOR_ISSUES — engine clean, friendly-fire 0/50, win-conditions consistent) cleared the Wave-1 gate. The audit's decisive finding is impostor self-sabotage: `fellow_impostor_ids` reaches the kill policy but not the meeting/vote path, so impostors betray teammates (44% of ballots, 11 mutual-betrayal meetings, 48/54 report accusations against a teammate) and all 5 "correct" impostor ejections were aided by a teammate's betrayal (seed-6 pivotal). The 68% impostor win therefore UNDER-states true impostor strength, and a crew-intel A/B run against this self-defeating opponent would be confounded.
+
+**Sequencing decision (owner, 2026-06-02): impostor-coordination first.** The Wave-2 impostor meeting-coordination work (J-5) is pulled BEFORE Wave-1 crew-intel, on purpose, for baseline validity:
+
+1. Task 7.12 (J-5 impostor meeting coordination) lands.
+2. Re-record the 7p/2i set ($0 Ollama, `refresh_samples.sh --full`) + re-run the `gameplay-data-audit` workflow → trustworthy impostor-competitive baseline. Expected: impostor win % rises (true strength), mutual-betrayal 0, the betrayal-aided "correct" ejections drop.
+3. Wave-1 crew-intel (gp-4 / audit gp-imp-2) A/B against that baseline — convert flagged contradictions into convictions and fix the threat model (the dominant crew failure is crew-on-crew false accusation, not impostor cascades). The full contract is authored after the re-audit anchors the numbers.
+
+Deferred, opportunistic (non-gating): gp-imp-4 (deterministic SKIP short-circuit — 80% of meeting tokens are spent on meetings that eject nobody; token efficiency only); gp-imp-5 (add seeds exercising the dead deduction-win / silent-game paths — revisit after the re-record, as gp-imp-1 may shift crew toward deduction wins naturally).
+
+### Baseline metrics — reading discipline (audit gp-imp-3; lock before any Wave-1 A/B)
+
+Task 7.11 surfaced the honest fields; this fixes how to READ them so an A/B gates on the right scalar:
+
+- `meeting_rate` is **0.74** (games-with-meeting / total, from `TournamentEvalReport`), NOT the facts-JSON **0.92** (meetings / game) — an 18-point gap from the same data.
+- Effective behavioral **n = 37 games / 46 meetings** (13 silent seeds make 0 LLM calls and contribute nothing); size A/B power around 37/46, not 50.
+- Do NOT gate on `vote_correctness_rate=0.8` (n=5, `small_n=True`) or `vote_ballot_ece` (`low_power=True`); lead with **`ejection_accuracy`** (0.556, full denominator) and inspect per-bin `impostor_rate` spread.
+- `alibi survival_rate=0.45` is a conservative **lower bound** (`alibi_fabrication.py:52-67`); compare only at comparable `total_impostor_alibis`.
+- Cost proxy = **tokens, never USD** ($0 structural under Ollama).
+
+Wave-1 crew-intel gates on `contradictions_flagged_but_ignored` (34 ↓) and `ejection_accuracy` (0.556 ↑), re-measured on the post-7.12 re-record — NOT the headline win %.
