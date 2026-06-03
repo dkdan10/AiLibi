@@ -38,8 +38,14 @@ from engine.entities import BodyState, PlayerId, PlayerState, Role
 from engine.world import Map, WorldState, load_canonical_map
 from llm.budget import GameBudget
 from llm.client import CallKind, LLMResponse, TokenUsage
-from meetings.manager import MeetingDeadlines, MeetingTrigger, SuspicionEntry
+from meetings.manager import (
+    MeetingConfig,
+    MeetingDeadlines,
+    MeetingTrigger,
+    SuspicionEntry,
+)
 from meetings.schemas import (
+    AccusationClaim,
     ContradictionRef,
     MeetingResult,
     MeetingTranscript,
@@ -54,6 +60,7 @@ from orchestrator.game import (
     DefaultMeetingRunner,
     HeadlessGame,
     MeetingArtifacts,
+    _build_participants,  # noqa: PLC2701
     apply_meeting_result,
     build_default_agent_factory,
     build_default_meeting_runner,
@@ -899,6 +906,7 @@ def _stub_crewmate_prompt(
     meeting_trigger: str,
     rendered_memory: str,
     public_transcript: str,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"CREWMATE_REPORT agent_id={agent_id} tick={current_tick}"
 
@@ -910,6 +918,7 @@ def _stub_impostor_prompt(
     meeting_trigger: str,
     rendered_memory: str,
     public_transcript: str,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"IMPOSTOR_REPORT agent_id={agent_id} tick={current_tick}"
 
@@ -920,6 +929,7 @@ def _stub_statement_prompt(
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"STATEMENT_PROMPT agent_id={agent_id}"
 
@@ -933,6 +943,7 @@ def _stub_vote_prompt(
     suspicion_graph: tuple[SuspicionEntry, ...],
     candidate_targets: tuple[PlayerId, ...],
     skip_confidence_threshold: float,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"VOTE voter={voter_id}"
 
@@ -1428,3 +1439,246 @@ class TestPublicCliMeetingWireUp:
 
         assert result.outcome == "MEETING_PHASE_REACHED"
         assert read_meeting_entries(replay_path) == ()
+
+
+# ---------------------------------------------------------------------------
+# Task 7.12 — orchestrator populates MeetingParticipant.fellow_impostor_ids,
+# and the seed-6 multi-impostor coordination anchor (population + guard).
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _MeetingAwareStub:
+    """Minimal :class:`~orchestrator.game.MeetingAwareAgent` for participant
+    construction tests — it only needs to render a (role-bearing) memory
+    string and an empty suspicion graph."""
+
+    _agent_id: PlayerId
+    _role: Role
+
+    @property
+    def agent_id(self) -> PlayerId:
+        return self._agent_id
+
+    @property
+    def role(self) -> Role:
+        return self._role
+
+    def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+        return f"## Your role: {self._role}\nmemory for {self._agent_id}"
+
+    def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+        return ()
+
+
+def _stub_agents_for(state: WorldState) -> dict[PlayerId, object]:
+    return {
+        pid: _MeetingAwareStub(_agent_id=pid, _role=player.role)
+        for pid, player in state.players.items()
+    }
+
+
+class TestBuildParticipantsFellowImpostorIds:
+    """The orchestrator derives ``fellow_impostor_ids`` from world-state
+    roles (Task 7.12): the other impostors for an impostor, ``()`` for a
+    crewmate / sole impostor, never the participant's own id."""
+
+    def test_multi_impostor_seed6_populates_teammates(self) -> None:
+        # Seed-6 7p/2i: impostors are p-3 and p-6 (matches the audit repro).
+        state = seed_initial_state(
+            seed=6,
+            game_map=load_canonical_map(),
+            num_players=7,
+            num_impostors=2,
+            tasks_per_crewmate=2,
+        )
+        participants = _build_participants(
+            state=state,
+            agents=_stub_agents_for(state),  # type: ignore[arg-type]
+            token_budget=1500,
+        )
+        by_id = {p.agent_id: p for p in participants}
+
+        assert by_id["p-3"].fellow_impostor_ids == ("p-6",)
+        assert by_id["p-6"].fellow_impostor_ids == ("p-3",)
+        # Every crewmate gets the empty tuple (the firewall-correct value).
+        for crew_id in ("p-1", "p-2", "p-4", "p-5", "p-7"):
+            assert by_id[crew_id].fellow_impostor_ids == ()
+        # An impostor's own id is never in its own teammate list.
+        for impostor_id in ("p-3", "p-6"):
+            assert impostor_id not in by_id[impostor_id].fellow_impostor_ids
+
+    def test_sole_impostor_gets_empty_teammate_list(self) -> None:
+        # The default 4p/1i roster has a single impostor → empty everywhere.
+        state = seed_initial_state(
+            seed=2026, game_map=load_canonical_map(), num_players=4
+        )
+        participants = _build_participants(
+            state=state,
+            agents=_stub_agents_for(state),  # type: ignore[arg-type]
+            token_budget=1500,
+        )
+        assert all(p.fellow_impostor_ids == () for p in participants)
+
+    def test_three_impostors_each_sees_the_other_two_sorted(self) -> None:
+        state = seed_initial_state(
+            seed=11,
+            game_map=load_canonical_map(),
+            num_players=7,
+            num_impostors=3,
+            tasks_per_crewmate=2,
+        )
+        impostor_ids = sorted(
+            pid for pid, p in state.players.items() if p.role == "IMPOSTOR"
+        )
+        assert len(impostor_ids) == 3
+        by_id = {
+            p.agent_id: p
+            for p in _build_participants(
+                state=state,
+                agents=_stub_agents_for(state),  # type: ignore[arg-type]
+                token_budget=1500,
+            )
+        }
+        for impostor_id in impostor_ids:
+            expected = tuple(pid for pid in impostor_ids if pid != impostor_id)
+            assert by_id[impostor_id].fellow_impostor_ids == expected
+
+
+class _Seed6BetrayalClient:
+    """LLM client that makes every impostor accuse + vote its teammate.
+
+    Drives the seed-6 meeting-0 repro end-to-end through the production
+    :class:`DefaultMeetingRunner` (orchestrator population + meeting guard):
+    the deterministic guard must strip every betrayal regardless of the
+    model output, so no impostor ballot or accusation targets a teammate.
+    """
+
+    def __init__(self, teammate_of: Mapping[PlayerId, PlayerId]) -> None:
+        self._teammate_of = teammate_of
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        mate = self._teammate_of.get(agent_id or "")
+        if schema is ReportDocument:
+            claims = (
+                (
+                    AccusationClaim(
+                        type="accusation",
+                        against=mate,
+                        confidence=0.9,
+                        reason="frame teammate",
+                    ),
+                )
+                if mate is not None
+                else ()
+            )
+            text = ReportDocument(
+                agent_id=agent_id or "x", tick=0, claims=claims, free_text="r"
+            ).model_dump_json()
+        elif schema is Statement:
+            text = Statement(
+                statement_id="ignored",
+                speaker=agent_id or "x",
+                tick=0,
+                round_index=0,
+                target=mate,
+                claims=(),
+                free_text="s",
+            ).model_dump_json()
+        elif schema is VoteBallot:
+            text = VoteBallot(
+                voter=agent_id or "x",
+                target=mate if mate is not None else "SKIP",
+                confidence=0.9,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text="v",
+            ).model_dump_json()
+        else:
+            raise AssertionError(f"unexpected schema {schema!r}")
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "stub",
+        )
+
+
+class TestSeed6ImpostorMeetingCoordination:
+    """Behavioral regression anchor (Task 7.12, audit D-D-1..D-D-4).
+
+    Repro fixture: seed-6 meeting-0 (impostors p-3 + p-6; in the recorded
+    baseline p-6's betrayal vote was the pivotal 2nd vote that ejected
+    teammate p-3). Run a meeting end-to-end through the production runner
+    with both impostors scripted to betray each other and assert the
+    orchestrator-populated teammate list + the meeting guard together stop
+    every betrayal — no impostor produces a ballot or accusation targeting
+    a teammate (firewall-known, no role inference).
+    """
+
+    def test_impostor_never_targets_teammate_end_to_end(self) -> None:
+        state = seed_initial_state(
+            seed=6,
+            game_map=load_canonical_map(),
+            num_players=7,
+            num_impostors=2,
+            tasks_per_crewmate=2,
+        )
+        teammate_of = {"p-3": "p-6", "p-6": "p-3"}
+        runner = DefaultMeetingRunner(
+            llm_client=_Seed6BetrayalClient(teammate_of),
+            crewmate_report_prompt=_stub_crewmate_prompt,
+            impostor_report_prompt=_stub_impostor_prompt,
+            statement_prompt=_stub_statement_prompt,
+            vote_prompt=_stub_vote_prompt,
+            config=MeetingConfig(
+                round_count=1,
+                deadlines=MeetingDeadlines(
+                    report_seconds=None, statement_seconds=None, vote_seconds=None
+                ),
+            ),
+        )
+        trigger = MeetingTrigger(
+            triggered_by="p-1", trigger_tick=8, description="p-1 reported a body"
+        )
+
+        artifacts = _run(
+            runner.run_meeting(
+                meeting_id="headless-seed-6:meeting-0",
+                trigger=trigger,
+                state=state,
+                agents=_stub_agents_for(state),  # type: ignore[arg-type]
+            )
+        )
+        result = artifacts.result
+
+        ballots = {b.voter: b for b in result.ballots}
+        for impostor_id, mate in teammate_of.items():
+            # The scripted betrayal ballot is coerced away from the teammate.
+            assert ballots[impostor_id].target != mate
+            assert ballots[impostor_id].target == "SKIP"
+        # No report or statement authored by an impostor names a teammate.
+        for report in result.transcript.reports:
+            report_mate = teammate_of.get(report.agent_id)
+            if report_mate is not None:
+                assert not any(
+                    isinstance(c, AccusationClaim) and c.against == report_mate
+                    for c in report.claims
+                )
+        for statement in result.transcript.statements:
+            statement_mate = teammate_of.get(statement.speaker)
+            if statement_mate is not None:
+                assert statement.target != statement_mate
+        # The teammate-betrayal votes removed, the table does not eject an
+        # impostor (the audit's seed-6 outcome flip).
+        assert result.outcome == "SKIPPED"

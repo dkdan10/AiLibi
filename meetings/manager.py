@@ -48,6 +48,7 @@ from pydantic import ValidationError
 from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 from llm.client import LLMClient
 from meetings.schemas import (
+    AccusationClaim,
     AlibiClaim,
     Claim,
     ContradictionRef,
@@ -116,6 +117,17 @@ DEFAULT_VOTE_RATIONALE: Final[str] = "(missed deadline; default skip)"
 # original (invalid) target for replay analysis.
 INVALID_VOTE_TARGET_MARKER: Final[str] = (
     "[invalid target {target!r} normalized to SKIP] "
+)
+
+# Audit-trail marker prepended to ``rationale_text`` when the teammate
+# firewall guard (Task 7.12) coerces a ballot that targets a fellow
+# impostor into ``SKIP``. A teammate is a *valid* living candidate, so the
+# invalid-target normalization above never catches it; this is the
+# belt-and-suspenders deterministic guard that backstops the prompt
+# instruction (the 7B model may still emit a teammate target). The marker
+# preserves the original (teammate) target for replay / audit analysis.
+TEAMMATE_VOTE_TARGET_MARKER: Final[str] = (
+    "[teammate target {target!r} coerced to SKIP] "
 )
 
 _SKIP_TARGET: Final[str] = "SKIP"
@@ -207,12 +219,25 @@ class MeetingParticipant:
     produced when the meeting opened, ``role`` selects which report
     prompt is used, and ``suspicion_graph`` populates the vote-ballot
     prompt input.
+
+    ``fellow_impostor_ids`` carries the impostor-only teammate list
+    (Task 7.12, audit ``audits/audit-2026-06-02-2112-gameplay-data.md``
+    gp-imp-1 / D-D-1..D-D-4) onto the meeting layer: the same firewall-safe
+    self-channel data ``SelfView.fellow_impostor_ids`` delivers (Task 7.2)
+    and the kill policy already consumes (Task 7.9). It is the sorted ids
+    of the OTHER impostors when ``role == "IMPOSTOR"`` and ``()`` for every
+    crewmate and for a sole impostor, never the participant's own id. The
+    orchestrator populates it from world-state roles (``orchestrator.game
+    ._build_participants``); the default of ``()`` keeps every existing
+    construction site valid and is the firewall-correct value for a
+    crewmate.
     """
 
     agent_id: PlayerId
     role: Role
     rendered_memory: str
     suspicion_graph: tuple[SuspicionEntry, ...] = ()
+    fellow_impostor_ids: tuple[PlayerId, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -268,6 +293,12 @@ class ReportPromptRenderer(Protocol):
     Jinja2 surface in ``agents/strategic/prompts/{crewmate,impostor}_report.j2``
     (Tasks 3.4 + 3.5). ``public_transcript`` is the empty string at
     Phase-1 since no statements have been made yet.
+
+    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate
+    list surfaced into the impostor report prompt so the model never
+    accuses or incriminates a teammate. It is ``()`` for a crewmate and
+    a sole impostor; the crewmate template ignores it, so a crewmate
+    prompt is byte-unchanged.
     """
 
     def __call__(
@@ -278,6 +309,7 @@ class ReportPromptRenderer(Protocol):
         meeting_trigger: str,
         rendered_memory: str,
         public_transcript: str,
+        fellow_impostor_ids: tuple[PlayerId, ...] = (),
     ) -> str: ...
 
 
@@ -295,6 +327,11 @@ class StatementPromptRenderer(Protocol):
     rounds' statements in canonical order; ``contradictions`` is the
     :class:`ContradictionRef` flags that Task 3.11 will populate
     (empty for now).
+
+    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate
+    list; the shared statement template renders a teammate block only
+    when it is non-empty, so a crewmate / sole-impostor prompt (empty
+    list) is byte-unchanged.
     """
 
     def __call__(
@@ -304,6 +341,7 @@ class StatementPromptRenderer(Protocol):
         rendered_memory: str,
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
+        fellow_impostor_ids: tuple[PlayerId, ...] = (),
     ) -> str: ...
 
 
@@ -316,6 +354,11 @@ class VotePromptRenderer(Protocol):
     eject targets (every living participant except the voter);
     ``skip_confidence_threshold`` matches
     :attr:`MeetingConfig.skip_confidence_threshold`.
+
+    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate
+    list; the shared ballot template renders a teammate block only when
+    it is non-empty (instructing the impostor to SKIP rather than vote a
+    teammate), so a crewmate / sole-impostor prompt is byte-unchanged.
     """
 
     def __call__(
@@ -328,6 +371,7 @@ class VotePromptRenderer(Protocol):
         suspicion_graph: tuple[SuspicionEntry, ...],
         candidate_targets: tuple[PlayerId, ...],
         skip_confidence_threshold: float,
+        fellow_impostor_ids: tuple[PlayerId, ...] = (),
     ) -> str: ...
 
 
@@ -562,6 +606,7 @@ class MeetingManager:
             meeting_trigger=trigger.description,
             rendered_memory=participant.rendered_memory,
             public_transcript="",
+            fellow_impostor_ids=participant.fellow_impostor_ids,
         )
         try:
             response = await asyncio.wait_for(
@@ -589,6 +634,15 @@ class MeetingManager:
         # (Task 3.20).
         normalized_claims = _normalize_self_alibi_subjects(
             parsed.claims, speaker_id=participant.agent_id
+        )
+        # Teammate firewall guard (Task 7.12, audit gp-imp-1 / D-D-3):
+        # drop any accusation claim an impostor makes against a fellow
+        # impostor regardless of what the model emitted. Deterministic,
+        # no RNG, and a no-op for a crewmate / sole impostor (empty
+        # ``fellow_impostor_ids``), so replay reconstruction is
+        # unaffected.
+        normalized_claims = exclude_teammate_accusation_claims(
+            normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
         )
         # Override identity fields with the canonical values; the LLM
         # is told to emit any non-empty string and the manager is
@@ -619,6 +673,7 @@ class MeetingManager:
             rendered_memory=participant.rendered_memory,
             transcript=transcript_so_far,
             contradictions=contradictions,
+            fellow_impostor_ids=participant.fellow_impostor_ids,
         )
         statement_id = _statement_id(
             meeting_id=meeting_id,
@@ -688,6 +743,17 @@ class MeetingManager:
         normalized_claims = _normalize_self_alibi_subjects(
             parsed.claims, speaker_id=participant.agent_id
         )
+        # Teammate firewall guard (Task 7.12, audit gp-imp-1 / D-D-3):
+        # drop accusation claims against a fellow impostor and null an
+        # accusation ``target`` that names a teammate, regardless of the
+        # model output. Deterministic and a no-op for a crewmate / sole
+        # impostor, so replay reconstruction is unaffected.
+        normalized_claims = exclude_teammate_accusation_claims(
+            normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
+        )
+        guarded_target = drop_teammate_statement_target(
+            parsed.target, fellow_impostor_ids=participant.fellow_impostor_ids
+        )
         # Override identity fields. The accusation_round.j2 contract
         # is "the orchestrator fills the deterministic identity
         # fields (statement_id, speaker, tick, round_index)".
@@ -697,6 +763,7 @@ class MeetingManager:
                 "speaker": participant.agent_id,
                 "tick": trigger.trigger_tick,
                 "round_index": round_index,
+                "target": guarded_target,
                 "claims": normalized_claims,
             }
         )
@@ -766,6 +833,7 @@ class MeetingManager:
             suspicion_graph=suspicion_graph,
             candidate_targets=candidate_targets,
             skip_confidence_threshold=self._config.skip_confidence_threshold,
+            fellow_impostor_ids=participant.fellow_impostor_ids,
         )
         try:
             response = await asyncio.wait_for(
@@ -793,6 +861,16 @@ class MeetingManager:
         # target is preserved for audit / replay.
         normalized = _normalize_ballot_target(
             ballot=parsed, candidate_targets=candidate_targets
+        )
+        # Teammate firewall guard (Task 7.12, audit gp-imp-1 / D-D-1,
+        # D-D-2, D-D-4): a teammate is a *valid* living candidate, so the
+        # invalid-target normalization above never catches it. Coerce a
+        # ballot that targets a fellow impostor to SKIP so an impostor
+        # can never supply the betrayal vote that ejects a teammate
+        # (seed-6 meeting-0 repro). Deterministic, no RNG, and a no-op
+        # for a crewmate / sole impostor, so replay is unaffected.
+        normalized = coerce_teammate_ballot_to_skip(
+            ballot=normalized, fellow_impostor_ids=participant.fellow_impostor_ids
         )
         return normalized.model_copy(update={"voter": participant.agent_id})
 
@@ -1107,6 +1185,98 @@ def _normalize_ballot_target(
     )
 
 
+# ---------------------------------------------------------------------------
+# Teammate firewall guard (Task 7.12, audit
+# ``audits/audit-2026-06-02-2112-gameplay-data.md`` gp-imp-1 / D-D-1..D-D-4).
+#
+# Meeting output is LLM-driven, so the fix is two layers: a prompt layer that
+# tells an impostor who its teammates are (the ``.j2`` templates) and these
+# deterministic guards that hard-exclude a teammate from the produced
+# accusation / ballot regardless of what the model emits — the same
+# belt-and-suspenders the kill policy (``agents/tactical/impostor_policy.py``)
+# plus the engine kill guard use. Each helper is a pure function of
+# ``fellow_impostor_ids`` with no RNG and no new LLM call, and is an exact
+# no-op when ``fellow_impostor_ids`` is empty (every crewmate and a sole
+# impostor), so replay reconstruction of the committed sets is unaffected.
+# Shared by :class:`MeetingManager` (the production meeting path that records
+# the eval sets) and :class:`agents.strategic.reasoner.StrategicReasoner`.
+# ---------------------------------------------------------------------------
+
+
+def exclude_teammate_accusation_claims(
+    claims: tuple[Claim, ...],
+    *,
+    fellow_impostor_ids: tuple[PlayerId, ...],
+) -> tuple[Claim, ...]:
+    """Drop every :class:`AccusationClaim` aimed at a fellow impostor.
+
+    Returns ``claims`` unchanged when ``fellow_impostor_ids`` is empty
+    (crewmate / sole impostor) so the no-coordination path is
+    byte-identical. Only :class:`AccusationClaim`s are filtered: an
+    :class:`AlibiClaim` for a teammate or a
+    :class:`CorroborationClaim` supporting a teammate *helps* the team
+    and is retained (the prompt may optionally encourage corroboration).
+    """
+
+    if not fellow_impostor_ids:
+        return claims
+    teammates = frozenset(fellow_impostor_ids)
+    return tuple(
+        claim
+        for claim in claims
+        if not (isinstance(claim, AccusationClaim) and claim.against in teammates)
+    )
+
+
+def drop_teammate_statement_target(
+    target: PlayerId | None,
+    *,
+    fellow_impostor_ids: tuple[PlayerId, ...],
+) -> PlayerId | None:
+    """Null a :class:`Statement` ``target`` that names a fellow impostor.
+
+    Returns ``target`` unchanged when ``fellow_impostor_ids`` is empty or
+    when ``target`` is not a teammate; a teammate-naming target degrades
+    to ``None`` (a defensive, no-target statement), so an impostor never
+    publicly incriminates its own team in the accusation round.
+    """
+
+    if not fellow_impostor_ids or target is None:
+        return target
+    if target in fellow_impostor_ids:
+        return None
+    return target
+
+
+def coerce_teammate_ballot_to_skip(
+    *,
+    ballot: VoteBallot,
+    fellow_impostor_ids: tuple[PlayerId, ...],
+) -> VoteBallot:
+    """Coerce a ballot that targets a fellow impostor to ``SKIP``.
+
+    A teammate is a *valid* living candidate, so the hallucinated-target
+    normalization (:func:`_normalize_ballot_target`) never catches it.
+    This guard is what stops an impostor from supplying the betrayal vote
+    that ejects a teammate (audit D-D-1, D-D-4; seed-6 meeting-0 repro).
+    Returns ``ballot`` unchanged when ``fellow_impostor_ids`` is empty or
+    the target is not a teammate; otherwise rewrites ``target`` to
+    ``SKIP`` and prepends :data:`TEAMMATE_VOTE_TARGET_MARKER` to
+    ``rationale_text`` so the original (teammate) target stays auditable
+    in the replay record.
+    """
+
+    if not fellow_impostor_ids or ballot.target not in fellow_impostor_ids:
+        return ballot
+    marker = TEAMMATE_VOTE_TARGET_MARKER.format(target=ballot.target)
+    return ballot.model_copy(
+        update={
+            "target": _SKIP_TARGET,
+            "rationale_text": marker + ballot.rationale_text,
+        }
+    )
+
+
 __all__ = [
     "DEFAULT_REPORT_DEADLINE_SECONDS",
     "DEFAULT_REPORT_FREE_TEXT",
@@ -1123,6 +1293,7 @@ __all__ = [
     "DEFAULT_VOTE_RATIONALE",
     "DEFAULT_VOTE_TEMPERATURE",
     "INVALID_VOTE_TARGET_MARKER",
+    "TEAMMATE_VOTE_TARGET_MARKER",
     "LLMProviderError",
     "MeetingConfig",
     "MeetingDeadlines",
@@ -1134,4 +1305,7 @@ __all__ = [
     "StatementPromptRenderer",
     "SuspicionEntry",
     "VotePromptRenderer",
+    "coerce_teammate_ballot_to_skip",
+    "drop_teammate_statement_target",
+    "exclude_teammate_accusation_claims",
 ]

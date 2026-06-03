@@ -410,7 +410,26 @@ def _build_participants(
     orchestrator can't synthesize them without the agent's
     cooperation. Fail-loud at the boundary rather than silently
     feeding the meeting an empty rendered memory.
+
+    ``fellow_impostor_ids`` (Task 7.12, audit gp-imp-1) is derived here
+    from world-state roles — the same firewall-safe self-channel data
+    :class:`observation.service.ObservationService` puts on
+    ``SelfView`` (Task 7.2) and the kill policy already consumes (Task
+    7.9). For an impostor participant it is the sorted ids of the OTHER
+    impostors (by role, independent of alive state, so an impostor
+    still knows a teammate ejected earlier in the game); it is ``()``
+    for every crewmate and for a sole impostor, and never contains the
+    participant's own id. The orchestrator is the right place to read
+    roles: the meeting layer is engine-pure and must not re-derive them.
     """
+
+    impostor_ids = tuple(
+        sorted(
+            player_id
+            for player_id, player in state.players.items()
+            if player.role == "IMPOSTOR"
+        )
+    )
 
     participants: list[MeetingParticipant] = []
     for player_id in sorted(state.players):
@@ -430,6 +449,15 @@ def _build_participants(
                 "meeting-enabled HeadlessGame requires agents that expose "
                 "render_memory_for_meeting() and suspicion_graph_for_meeting()"
             )
+        # Crewmates (and a sole impostor) get ``()``; an impostor gets the
+        # other impostors' ids, never its own. This is the meeting-side
+        # mirror of the SelfView firewall invariant: teammate identity
+        # enters only an impostor's own meeting inputs, never a crewmate's.
+        fellow_impostor_ids = (
+            tuple(pid for pid in impostor_ids if pid != player_id)
+            if player.role == "IMPOSTOR"
+            else ()
+        )
         participants.append(
             MeetingParticipant(
                 agent_id=player_id,
@@ -438,6 +466,7 @@ def _build_participants(
                     token_budget=token_budget
                 ),
                 suspicion_graph=agent.suspicion_graph_for_meeting(),
+                fellow_impostor_ids=fellow_impostor_ids,
             )
         )
     return tuple(participants)

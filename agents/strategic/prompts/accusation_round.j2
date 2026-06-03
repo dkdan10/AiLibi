@@ -56,6 +56,15 @@ seen and what others have said. Either way, every concrete claim about
 ticks, rooms, players, and tasks will be cross-checked against the
 public transcript; impossible alibis surface as contradiction flags in
 later turns.
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your fellow impostors (your team)
+These players are your fellow impostors and are on YOUR team:
+{{ fellow_impostor_ids | join(", ") }}. Never target a teammate -- do not
+accuse or incriminate one and do not name one as your Statement `target`. If
+it helps your cover you may corroborate a teammate's alibi instead. Aim the
+round at a crewmate or stay defensive.
+{% endif %}
 
 ## Your private memory
 {{ rendered_memory }}

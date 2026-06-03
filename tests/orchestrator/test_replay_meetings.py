@@ -136,6 +136,7 @@ def _crewmate_prompt(
     meeting_trigger: str,
     rendered_memory: str,
     public_transcript: str,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"CR:{agent_id}:{current_tick}"
 
@@ -147,6 +148,7 @@ def _impostor_prompt(
     meeting_trigger: str,
     rendered_memory: str,
     public_transcript: str,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"IM:{agent_id}:{current_tick}"
 
@@ -157,6 +159,7 @@ def _statement_prompt(
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"ST:{agent_id}:{len(transcript.reports)}:{len(transcript.statements)}"
 
@@ -170,6 +173,7 @@ def _vote_prompt(
     suspicion_graph: tuple[SuspicionEntry, ...],
     candidate_targets: tuple[PlayerId, ...],
     skip_confidence_threshold: float,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"VO:{voter_id}:{','.join(candidate_targets)}"
 

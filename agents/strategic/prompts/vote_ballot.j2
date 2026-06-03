@@ -87,6 +87,13 @@ is logged post-hoc for transparency.
 
 {% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %}
 {% endif %}
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your fellow impostors (your team)
+These players are your fellow impostors: {{ fellow_impostor_ids | join(", ") }}.
+Never vote to eject a teammate. If your suspicion points at a fellow impostor,
+set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
+{% endif %}
 ## Decision rules
 
 1. **Uncertainty-aware skip (DESIGN.md §4.6).** Treat your suspicion
