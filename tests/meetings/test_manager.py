@@ -41,6 +41,7 @@ from meetings.manager import (
     DEFAULT_STATEMENT_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
     INVALID_VOTE_TARGET_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
     LLMProviderError,
     MeetingConfig,
     MeetingDeadlines,
@@ -49,12 +50,16 @@ from meetings.manager import (
     MeetingTrigger,
     SuspicionEntry,
     _normalize_self_alibi_subjects,  # noqa: PLC2701
+    coerce_teammate_ballot_to_skip,
+    drop_teammate_statement_target,
+    exclude_teammate_accusation_claims,
 )
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
     Claim,
     ContradictionRef,
+    CorroborationClaim,
     MeetingResult,
     MeetingTranscript,
     PlayerId,
@@ -80,6 +85,18 @@ def _run(coro: Awaitable[_T]) -> _T:
 # --- Stub prompt callables -------------------------------------------------
 
 
+# Task 7.12: the four stub renderers accept ``fellow_impostor_ids`` so they
+# satisfy the updated renderer Protocols the manager now calls with the
+# teammate list. They surface it on a ``FELLOW_IMPOSTORS=`` line ONLY when
+# non-empty, so every existing (crewmate / sole-impostor) prompt assertion in
+# this module stays byte-stable while the multi-impostor tests can assert the
+# manager threaded the teammate list into the prompt.
+def _fellow_impostors_line(fellow_impostor_ids: tuple[PlayerId, ...]) -> str:
+    if not fellow_impostor_ids:
+        return ""
+    return f"FELLOW_IMPOSTORS={','.join(fellow_impostor_ids)}\n"
+
+
 def _crewmate_report_prompt(
     *,
     agent_id: PlayerId,
@@ -87,10 +104,12 @@ def _crewmate_report_prompt(
     meeting_trigger: str,
     rendered_memory: str,
     public_transcript: str,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return (
         f"PHASE=REPORT ROLE=CREWMATE agent_id={agent_id} tick={current_tick}\n"
         f"TRIGGER: {meeting_trigger}\n"
+        f"{_fellow_impostors_line(fellow_impostor_ids)}"
         f"MEMORY:\n{rendered_memory}\n"
         f"PUBLIC_TRANSCRIPT:\n{public_transcript}\n"
     )
@@ -103,10 +122,12 @@ def _impostor_report_prompt(
     meeting_trigger: str,
     rendered_memory: str,
     public_transcript: str,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return (
         f"PHASE=REPORT ROLE=IMPOSTOR agent_id={agent_id} tick={current_tick}\n"
         f"TRIGGER: {meeting_trigger}\n"
+        f"{_fellow_impostors_line(fellow_impostor_ids)}"
         f"MEMORY:\n{rendered_memory}\n"
         f"PUBLIC_TRANSCRIPT:\n{public_transcript}\n"
     )
@@ -118,10 +139,12 @@ def _statement_prompt(
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return (
         "PHASE=STATEMENT\n"
         f"agent_id={agent_id}\n"
+        f"{_fellow_impostors_line(fellow_impostor_ids)}"
         f"MEMORY:\n{rendered_memory}\n"
         f"REPORTS_COUNT={len(transcript.reports)}\n"
         f"STATEMENTS_COUNT={len(transcript.statements)}\n"
@@ -138,6 +161,7 @@ def _vote_prompt(
     suspicion_graph: tuple[SuspicionEntry, ...],
     candidate_targets: tuple[PlayerId, ...],
     skip_confidence_threshold: float,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     suspicion_block = ",".join(
         f"{entry.player_id}:{entry.suspicion:.2f}/{entry.trust:.2f}"
@@ -148,6 +172,7 @@ def _vote_prompt(
         f"voter={voter_id}\n"
         f"candidates={','.join(candidate_targets)}\n"
         f"skip_threshold={skip_confidence_threshold:.2f}\n"
+        f"{_fellow_impostors_line(fellow_impostor_ids)}"
         f"suspicion={suspicion_block}\n"
         f"MEMORY:\n{rendered_memory}\n"
         f"REPORTS_COUNT={len(transcript.reports)}\n"
@@ -1691,6 +1716,54 @@ class TestUnknownRoleRejected:
                 )
             )
 
+    def test_crewmate_with_nonempty_fellow_impostor_ids_is_rejected(self) -> None:
+        # Task 7.12 firewall: a non-impostor must never carry a teammate
+        # list — it would render the teammate block into a crewmate's shared
+        # statement/vote prompt, leaking impostor identities. The manager
+        # runs no leak scanner, so it fails loud at entry rather than leak.
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+        bad_participants = (
+            MeetingParticipant(
+                agent_id="p-1",
+                role="CREWMATE",
+                rendered_memory="## Your role: CREWMATE\nmemory",
+                fellow_impostor_ids=("p-3",),
+            ),
+        )
+
+        with pytest.raises(ValueError, match="must be empty for a non-impostor"):
+            _run(
+                manager.run(
+                    meeting_id="m-leak",
+                    trigger=_default_trigger(),
+                    participants=bad_participants,
+                )
+            )
+
+    def test_impostor_with_fellow_impostor_ids_is_accepted(self) -> None:
+        # Control: an impostor legitimately carries its teammate list; the
+        # firewall guard targets only non-impostors.
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client, round_count=1)
+        participants = (
+            MeetingParticipant(
+                agent_id="p-1",
+                role="IMPOSTOR",
+                rendered_memory="## Your role: IMPOSTOR\nmemory",
+                fellow_impostor_ids=("p-3",),
+            ),
+        )
+
+        result = _run(
+            manager.run(
+                meeting_id="m-ok",
+                trigger=_default_trigger(),
+                participants=participants,
+            )
+        )
+        assert result.outcome == "SKIPPED"
+
 
 class TestParticipantOrderCanonicalised:
     """Codex P1: meeting must be deterministic regardless of caller order.
@@ -2622,12 +2695,14 @@ class TestSelfAlibiNormalizationWiring:
 class TestAccusationRoundPromptVersionInReplay:
     """The bumped accusation_round version reaches the replay record.
 
-    Task 3.20 bumps the template header to v2; the orchestrator's
-    `DEFAULT_PROMPT_VERSIONS` map (copied verbatim into every
-    `MeetingReplayEntry`) must carry "accusation_round.v2".
+    Task 3.20 bumped the template header to v2; Task 7.12 bumped it to v3
+    (the gated teammate-coordination block is a behavior-shifting prompt
+    change). The orchestrator's `DEFAULT_PROMPT_VERSIONS` map (copied
+    verbatim into every `MeetingReplayEntry`) must carry the current
+    "accusation_round.v3" so a re-record is attributed to the new revision.
     """
 
-    def test_meeting_replay_entry_shows_accusation_round_v2(self) -> None:
+    def test_meeting_replay_entry_shows_accusation_round_v3(self) -> None:
         from orchestrator.game import DEFAULT_PROMPT_VERSIONS
         from orchestrator.replay import MeetingReplayEntry
 
@@ -2644,7 +2719,7 @@ class TestAccusationRoundPromptVersionInReplay:
         # Build the replay entry exactly as
         # `orchestrator.replay.ReplayWriter.record_meeting` does: the
         # prompt-version map flows in verbatim from the production
-        # default. A fresh entry must show the bumped v2 string.
+        # default. A fresh entry must show the bumped v3 string.
         entry = MeetingReplayEntry(
             game_id="g-version",
             meeting_id=result.meeting_id,
@@ -2661,8 +2736,8 @@ class TestAccusationRoundPromptVersionInReplay:
             state_hash_after="hash-after",
         )
 
-        assert entry.prompt_versions["accusation_round"] == "accusation_round.v2"
-        assert entry.prompt_versions["accusation_round"] != "accusation_round.v1"
+        assert entry.prompt_versions["accusation_round"] == "accusation_round.v3"
+        assert entry.prompt_versions["accusation_round"] != "accusation_round.v2"
 
 
 # --- Task 7.10: fail-soft statements + single accusation round -------------
@@ -2913,3 +2988,332 @@ class TestDefaultRoundCount:
         assert {s.round_index for s in result.transcript.statements} == {0}
         statement_calls = [c for c in client.calls if "PHASE=STATEMENT" in c.prompt]
         assert len(statement_calls) == 3
+
+
+# ---------------------------------------------------------------------------
+# Task 7.12 — teammate firewall guard on the production meeting path
+# ---------------------------------------------------------------------------
+
+
+# p-3 and p-6 are mutual-teammate impostors; p-1, p-2 are crewmates.
+_TEAMMATE_OF: dict[PlayerId, PlayerId] = {"p-3": "p-6", "p-6": "p-3"}
+
+
+def _multi_impostor_participants() -> tuple[MeetingParticipant, ...]:
+    return (
+        MeetingParticipant(
+            agent_id="p-1",
+            role="CREWMATE",
+            rendered_memory="## Your role: CREWMATE\np-1 memory",
+        ),
+        MeetingParticipant(
+            agent_id="p-2",
+            role="CREWMATE",
+            rendered_memory="## Your role: CREWMATE\np-2 memory",
+        ),
+        MeetingParticipant(
+            agent_id="p-3",
+            role="IMPOSTOR",
+            rendered_memory="## Your role: IMPOSTOR\np-3 memory",
+            fellow_impostor_ids=("p-6",),
+        ),
+        MeetingParticipant(
+            agent_id="p-6",
+            role="IMPOSTOR",
+            rendered_memory="## Your role: IMPOSTOR\np-6 memory",
+            fellow_impostor_ids=("p-3",),
+        ),
+    )
+
+
+def _betrayal_responder() -> Callable[[str, type[BaseModel] | None], str]:
+    """Make every impostor accuse and vote its own teammate.
+
+    The deterministic guard must neutralise all of it: ballots coerce to
+    SKIP, accusation claims against a teammate drop, and a teammate-naming
+    statement target degrades to ``None`` (audit gp-imp-1 / D-D-1..D-D-4;
+    seed-6 meeting-0 repro). Crewmates SKIP.
+    """
+
+    def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+        if "PHASE=REPORT" in prompt:
+            agent_id = _extract_marker(prompt, "agent_id=")
+            tick = int(_extract_marker(prompt, "tick="))
+            mate = _TEAMMATE_OF.get(agent_id)
+            if mate is not None:
+                return ReportDocument(
+                    agent_id=agent_id,
+                    tick=tick,
+                    claims=(
+                        AccusationClaim(
+                            type="accusation",
+                            against=mate,
+                            confidence=0.9,
+                            reason="fabricated frame of my teammate",
+                        ),
+                    ),
+                    free_text=f"betray-{agent_id}",
+                ).model_dump_json()
+            return _stub_report_json(agent_id=agent_id, tick=tick)
+        if "PHASE=STATEMENT" in prompt:
+            agent_id = _extract_marker(prompt, "agent_id=")
+            mate = _TEAMMATE_OF.get(agent_id)
+            if mate is not None:
+                return Statement(
+                    statement_id="ignored",
+                    speaker=agent_id,
+                    tick=0,
+                    round_index=0,
+                    target=mate,
+                    claims=(
+                        AccusationClaim(
+                            type="accusation",
+                            against=mate,
+                            confidence=0.9,
+                            reason="incriminate my teammate",
+                        ),
+                    ),
+                    free_text=f"betray-stmt-{agent_id}",
+                ).model_dump_json()
+            return _stub_statement_json(speaker="placeholder", round_index=0)
+        if "PHASE=VOTE" in prompt:
+            voter = _extract_marker(prompt, "voter=")
+            target = _TEAMMATE_OF.get(voter, "SKIP")
+            return _stub_vote_json(voter=voter, target=target)
+        raise AssertionError(f"unrecognised prompt: {prompt!r}")
+
+    return _responder
+
+
+class TestMeetingParticipantFellowImpostorIds:
+    """The new ``fellow_impostor_ids`` field (Task 7.12)."""
+
+    def test_default_is_empty_tuple(self) -> None:
+        participant = MeetingParticipant(
+            agent_id="p-1", role="CREWMATE", rendered_memory="m"
+        )
+        assert participant.fellow_impostor_ids == ()
+
+    def test_accepts_teammate_ids(self) -> None:
+        participant = MeetingParticipant(
+            agent_id="p-3",
+            role="IMPOSTOR",
+            rendered_memory="m",
+            fellow_impostor_ids=("p-6",),
+        )
+        assert participant.fellow_impostor_ids == ("p-6",)
+
+
+class TestTeammateGuardHelpers:
+    """Pure deterministic guard helpers (Task 7.12)."""
+
+    def test_coerce_teammate_ballot_to_skip(self) -> None:
+        ballot = VoteBallot(
+            voter="p-3",
+            target="p-6",
+            confidence=0.9,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text="vote my teammate",
+        )
+        guarded = coerce_teammate_ballot_to_skip(
+            ballot=ballot, fellow_impostor_ids=("p-6",)
+        )
+        assert guarded.target == "SKIP"
+        assert guarded.rationale_text.startswith(
+            TEAMMATE_VOTE_TARGET_MARKER.format(target="p-6")
+        )
+        # Original (teammate) target preserved for audit.
+        assert "p-6" in guarded.rationale_text
+
+    def test_coerce_leaves_non_teammate_and_skip_untouched(self) -> None:
+        ballot = VoteBallot(
+            voter="p-3",
+            target="p-1",
+            confidence=0.9,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text="vote a crewmate",
+        )
+        assert (
+            coerce_teammate_ballot_to_skip(ballot=ballot, fellow_impostor_ids=("p-6",))
+            is ballot
+        )
+        # Empty fellow list (sole impostor / crew) is an exact no-op.
+        teammate_shaped = ballot.model_copy(update={"target": "p-6"})
+        assert (
+            coerce_teammate_ballot_to_skip(
+                ballot=teammate_shaped, fellow_impostor_ids=()
+            )
+            is teammate_shaped
+        )
+
+    def test_exclude_teammate_accusation_claims(self) -> None:
+        accusation = AccusationClaim(
+            type="accusation", against="p-6", confidence=0.9, reason="frame"
+        )
+        corroboration = CorroborationClaim(
+            type="corroboration", supports="p-6", on_tick=10, reason="back"
+        )
+        other_accusation = AccusationClaim(
+            type="accusation", against="p-1", confidence=0.5, reason="real"
+        )
+        claims: tuple[Claim, ...] = (accusation, corroboration, other_accusation)
+        guarded = exclude_teammate_accusation_claims(
+            claims, fellow_impostor_ids=("p-6",)
+        )
+        assert accusation not in guarded
+        # Corroboration of a teammate HELPS them — kept. Accusation of a
+        # non-teammate is untouched.
+        assert corroboration in guarded
+        assert other_accusation in guarded
+        # Empty fellow list is an exact no-op (same object).
+        assert exclude_teammate_accusation_claims(claims, fellow_impostor_ids=()) is (
+            claims
+        )
+
+    def test_drop_teammate_statement_target(self) -> None:
+        assert drop_teammate_statement_target("p-6", fellow_impostor_ids=("p-6",)) is (
+            None
+        )
+        assert (
+            drop_teammate_statement_target("p-1", fellow_impostor_ids=("p-6",)) == "p-1"
+        )
+        assert drop_teammate_statement_target(None, fellow_impostor_ids=("p-6",)) is (
+            None
+        )
+        assert drop_teammate_statement_target("p-6", fellow_impostor_ids=()) == "p-6"
+
+
+class TestTeammateGuardOnProductionPath:
+    """End-to-end guard through ``MeetingManager.run`` (the recorded path).
+
+    This is the production meeting path that records the committed eval
+    sets; the seed-6 meeting-0 repro (impostors p-3 + p-6) is reproduced
+    here with a scripted client that makes both impostors betray each
+    other. The guard must neutralise every betrayal regardless of the
+    model output.
+    """
+
+    def test_impostor_ballots_against_teammate_are_coerced_to_skip(self) -> None:
+        client = _ScriptedLLMClient(responder=_betrayal_responder())
+        manager = _make_manager(llm_client=client)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-betray",
+                trigger=_default_trigger(),
+                participants=_multi_impostor_participants(),
+            )
+        )
+
+        ballots = {b.voter: b for b in result.ballots}
+        # Both impostors tried to vote their teammate; both coerced to SKIP.
+        assert ballots["p-3"].target == "SKIP"
+        assert ballots["p-6"].target == "SKIP"
+        assert "teammate target" in ballots["p-3"].rationale_text
+        assert "teammate target" in ballots["p-6"].rationale_text
+        # No ballot from any impostor targets a teammate.
+        for voter, mate in _TEAMMATE_OF.items():
+            assert ballots[voter].target != mate
+
+    def test_no_impostor_ejected_by_teammate_betrayal(self) -> None:
+        # With the betrayal votes removed (coerced to SKIP) and crew SKIP,
+        # the meeting resolves to SKIPPED — the audit's seed-6 outcome flip
+        # (a 2-vote eject becomes a SKIP once the teammate vote is gone).
+        client = _ScriptedLLMClient(responder=_betrayal_responder())
+        manager = _make_manager(llm_client=client)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-betray",
+                trigger=_default_trigger(),
+                participants=_multi_impostor_participants(),
+            )
+        )
+
+        assert result.outcome == "SKIPPED"
+        assert result.ejected_player_id is None
+
+    def test_impostor_report_and_statement_accusations_against_teammate_dropped(
+        self,
+    ) -> None:
+        client = _ScriptedLLMClient(responder=_betrayal_responder())
+        manager = _make_manager(llm_client=client)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-betray",
+                trigger=_default_trigger(),
+                participants=_multi_impostor_participants(),
+            )
+        )
+
+        # No report or statement authored by an impostor names a teammate
+        # in an accusation claim or as a statement target.
+        for report in result.transcript.reports:
+            mate = _TEAMMATE_OF.get(report.agent_id)
+            if mate is None:
+                continue
+            assert not any(
+                isinstance(c, AccusationClaim) and c.against == mate
+                for c in report.claims
+            )
+        for statement in result.transcript.statements:
+            mate = _TEAMMATE_OF.get(statement.speaker)
+            if mate is None:
+                continue
+            assert statement.target != mate
+            assert not any(
+                isinstance(c, AccusationClaim) and c.against == mate
+                for c in statement.claims
+            )
+
+    def test_manager_threads_teammate_list_into_impostor_prompts_only(self) -> None:
+        client = _ScriptedLLMClient(responder=_make_responder())
+        manager = _make_manager(llm_client=client)
+
+        _run(
+            manager.run(
+                meeting_id="m-thread",
+                trigger=_default_trigger(),
+                participants=_multi_impostor_participants(),
+            )
+        )
+
+        impostor_prompts = [
+            c.prompt for c in client.calls if "agent_id=p-3" in c.prompt
+        ] + [c.prompt for c in client.calls if "voter=p-3" in c.prompt]
+        crew_prompts = [
+            c.prompt for c in client.calls if "agent_id=p-1" in c.prompt
+        ] + [c.prompt for c in client.calls if "voter=p-1" in c.prompt]
+        assert impostor_prompts
+        assert crew_prompts
+        # The stub renderers surface a FELLOW_IMPOSTORS= line only when the
+        # teammate list is non-empty: every impostor (p-3) prompt carries
+        # its teammate p-6; no crewmate (p-1) prompt carries any.
+        assert all("FELLOW_IMPOSTORS=p-6" in p for p in impostor_prompts)
+        assert all("FELLOW_IMPOSTORS=" not in p for p in crew_prompts)
+
+    def test_crew_and_sole_impostor_meeting_is_unaffected(self) -> None:
+        # The default single-impostor roster (p-3 sole impostor) carries an
+        # empty teammate list everywhere, so the guard and the prompt block
+        # are no-ops — a sole impostor's vote for a crewmate survives.
+        client = _ScriptedLLMClient(
+            responder=_make_responder(vote_targets={"p-3": "p-1"})
+        )
+        manager = _make_manager(llm_client=client)
+
+        result = _run(
+            manager.run(
+                meeting_id="m-sole",
+                trigger=_default_trigger(),
+                participants=_make_participants(),
+            )
+        )
+
+        impostor_ballot = next(b for b in result.ballots if b.voter == "p-3")
+        assert impostor_ballot.target == "p-1"
+        assert "teammate target" not in impostor_ballot.rationale_text
+        # No teammate block leaked into any prompt (all lists empty).
+        assert all("FELLOW_IMPOSTORS=" not in c.prompt for c in client.calls)

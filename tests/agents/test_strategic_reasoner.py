@@ -53,7 +53,9 @@ from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
 from meetings.manager import SuspicionEntry
 from meetings.schemas import (
+    AccusationClaim,
     ContradictionRef,
+    CorroborationClaim,
     MeetingTranscript,
     PlayerId,
     ReportDocument,
@@ -1231,3 +1233,259 @@ class TestForwardedInputs:
         prompt = str(client.calls[0]["prompt"])
         for target in targets:
             assert f"`{target}`" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Task 7.12 — teammate firewall guard + leak-scanner allow-list
+# ---------------------------------------------------------------------------
+
+
+class TestTeammateFirewallGuard:
+    """Deterministic teammate guard over the reasoner (Task 7.12).
+
+    Anchored to audit ``audits/audit-2026-06-02-2112-gameplay-data.md``
+    gp-imp-1 / D-D-1..D-D-4: an impostor must never PRODUCE a ballot or
+    accusation that targets a fellow impostor, regardless of what the
+    model emits. The guard is a pure function of ``fellow_impostor_ids``
+    (no RNG, no new LLM call) and an exact no-op for a crewmate / sole
+    impostor, so replay reconstruction of the committed sets is
+    unaffected.
+    """
+
+    @staticmethod
+    def _vote_responder(target: str) -> Callable[[str, type[BaseModel] | None], str]:
+        def responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if schema is VoteBallot:
+                return _stub_vote_json(voter="lies", target=target)
+            return _default_responder(prompt, schema)
+
+        return responder
+
+    def test_ballot_targeting_teammate_coerced_to_skip(self) -> None:
+        client = _RecordingClient(responder=self._vote_responder("p-5"))
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        ballot = _run(
+            reasoner.produce_vote(
+                memory=memory,
+                voter="p-3",
+                transcript=MeetingTranscript(),
+                candidate_targets=("p-1", "p-5"),
+                fellow_impostor_ids=("p-5",),
+            )
+        )
+
+        assert ballot.target == "SKIP"
+        assert ballot.voter == "p-3"
+        # The original (teammate) target is preserved in the audit marker.
+        assert "teammate target" in ballot.rationale_text
+        assert "p-5" in ballot.rationale_text
+
+    def test_ballot_targeting_crewmate_is_unchanged(self) -> None:
+        # Control: a non-teammate target survives the guard untouched.
+        client = _RecordingClient(responder=self._vote_responder("p-1"))
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        ballot = _run(
+            reasoner.produce_vote(
+                memory=memory,
+                voter="p-3",
+                transcript=MeetingTranscript(),
+                candidate_targets=("p-1", "p-5"),
+                fellow_impostor_ids=("p-5",),
+            )
+        )
+
+        assert ballot.target == "p-1"
+        assert "teammate target" not in ballot.rationale_text
+
+    def test_report_accusation_against_teammate_dropped_corroboration_kept(
+        self,
+    ) -> None:
+        accusation = AccusationClaim(
+            type="accusation", against="p-5", confidence=0.8, reason="framing teammate"
+        )
+        corroboration = CorroborationClaim(
+            type="corroboration", supports="p-5", on_tick=10, reason="back teammate"
+        )
+
+        def responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if schema is ReportDocument:
+                return ReportDocument(
+                    agent_id="lies",
+                    tick=0,
+                    claims=(accusation, corroboration),
+                    free_text="r",
+                ).model_dump_json()
+            return _default_responder(prompt, schema)
+
+        client = _RecordingClient(responder=responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        report = _run(
+            reasoner.produce_report(
+                memory=memory,
+                agent_id="p-3",
+                role="IMPOSTOR",
+                current_tick=412,
+                meeting_trigger="trigger",
+                fellow_impostor_ids=("p-5",),
+            )
+        )
+
+        # The accusation against the teammate is gone; corroboration (which
+        # HELPS the teammate) is retained.
+        assert not any(
+            isinstance(c, AccusationClaim) and c.against == "p-5" for c in report.claims
+        )
+        assert any(
+            isinstance(c, CorroborationClaim) and c.supports == "p-5"
+            for c in report.claims
+        )
+
+    def test_statement_target_and_accusation_against_teammate_dropped(self) -> None:
+        accusation = AccusationClaim(
+            type="accusation", against="p-5", confidence=0.8, reason="x"
+        )
+
+        def responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if schema is Statement:
+                return Statement(
+                    statement_id="ignored",
+                    speaker="lies",
+                    tick=0,
+                    round_index=0,
+                    target="p-5",
+                    claims=(accusation,),
+                    free_text="s",
+                ).model_dump_json()
+            return _default_responder(prompt, schema)
+
+        client = _RecordingClient(responder=responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        statement = _run(
+            reasoner.produce_statement(
+                memory=memory,
+                meeting_id="m-1",
+                speaker="p-3",
+                tick=420,
+                round_index=0,
+                transcript=MeetingTranscript(),
+                fellow_impostor_ids=("p-5",),
+            )
+        )
+
+        assert statement.target is None
+        assert not any(
+            isinstance(c, AccusationClaim) and c.against == "p-5"
+            for c in statement.claims
+        )
+
+    def test_guard_is_noop_for_sole_impostor(self) -> None:
+        # Empty fellow list (a sole impostor) leaves a teammate-shaped
+        # target untouched — there is no teammate to protect.
+        client = _RecordingClient(responder=self._vote_responder("p-5"))
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        ballot = _run(
+            reasoner.produce_vote(
+                memory=memory,
+                voter="p-3",
+                transcript=MeetingTranscript(),
+                candidate_targets=("p-1", "p-5"),
+                fellow_impostor_ids=(),
+            )
+        )
+
+        assert ballot.target == "p-5"
+
+    def test_impostor_own_teammate_ids_do_not_trip_leak_scanner(self) -> None:
+        # The impostor's own teammate ids are legitimate self-channel data
+        # (like the role line) and must NOT trip the leak scanner; the
+        # teammate block reaches the impostor's prompt.
+        client = _RecordingClient(responder=_default_responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        # Should not raise.
+        _run(
+            reasoner.produce_report(
+                memory=memory,
+                agent_id="p-3",
+                role="IMPOSTOR",
+                current_tick=412,
+                meeting_trigger="trigger",
+                fellow_impostor_ids=("p-5",),
+            )
+        )
+
+        prompt = str(client.calls[0]["prompt"])
+        assert "fellow impostors" in prompt.lower()
+        assert "p-5" in prompt
+
+    def test_crewmate_meeting_prompt_carries_no_teammate_block(self) -> None:
+        client = _RecordingClient(responder=_default_responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="CREWMATE")
+
+        _run(
+            reasoner.produce_vote(
+                memory=memory,
+                voter="p-3",
+                transcript=MeetingTranscript(),
+                candidate_targets=("p-1", "p-2"),
+                fellow_impostor_ids=(),
+            )
+        )
+
+        prompt = str(client.calls[0]["prompt"])
+        assert "fellow impostors" not in prompt.lower()
+
+    def test_teammate_ids_on_a_crewmate_prompt_trip_the_leak_scanner(self) -> None:
+        # Firewall teeth: a crew-misroute — a non-empty teammate list on a
+        # CREWMATE prompt — is a leak (it would tell a crewmate who the
+        # impostors are) and must fail loud, mirroring the 7.2 crew-empty
+        # invariant.
+        client = _RecordingClient(responder=_default_responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="CREWMATE")
+
+        with pytest.raises(AssertionError, match="non-impostor prompt"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-3",
+                    tick=420,
+                    round_index=0,
+                    transcript=MeetingTranscript(),
+                    fellow_impostor_ids=("p-5",),
+                )
+            )
+
+    def test_determinism_guard_is_replay_stable(self) -> None:
+        # The guard is a pure function: two identical calls produce
+        # byte-identical guarded ballots (no RNG, no new LLM call).
+        memory = _build_memory(role="IMPOSTOR")
+        results = []
+        for _ in range(2):
+            client = _RecordingClient(responder=self._vote_responder("p-5"))
+            reasoner = StrategicReasoner(llm_client=client)
+            results.append(
+                _run(
+                    reasoner.produce_vote(
+                        memory=memory,
+                        voter="p-3",
+                        transcript=MeetingTranscript(),
+                        candidate_targets=("p-1", "p-5"),
+                        fellow_impostor_ids=("p-5",),
+                    )
+                ).model_dump_json()
+            )
+        assert results[0] == results[1]

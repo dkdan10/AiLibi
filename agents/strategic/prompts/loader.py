@@ -75,8 +75,17 @@ def crewmate_report_prompt(
     meeting_trigger: str,
     rendered_memory: str,
     public_transcript: str,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
-    """Render the Phase-1 crewmate report prompt (DESIGN.md §5.3)."""
+    """Render the Phase-1 crewmate report prompt (DESIGN.md §5.3).
+
+    ``fellow_impostor_ids`` (Task 7.12) is accepted so this wrapper
+    conforms to the same :class:`~meetings.manager.ReportPromptRenderer`
+    Protocol as :func:`impostor_report_prompt` and the meeting manager
+    can dispatch by role without an adapter. A crewmate has no teammate
+    list (the value is always ``()``) and the crewmate template never
+    references it, so the rendered prompt is byte-unchanged.
+    """
 
     return _ENV.get_template(CREWMATE_REPORT_TEMPLATE).render(
         agent_id=agent_id,
@@ -94,6 +103,7 @@ def impostor_report_prompt(
     meeting_trigger: str,
     rendered_memory: str,
     public_transcript: str,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     """Render the Phase-1 impostor report prompt (DESIGN.md §4.5, §5.3).
 
@@ -103,6 +113,11 @@ def impostor_report_prompt(
     template itself does not reference ``agent_id``, ``current_tick``,
     or ``meeting_trigger`` — they are accepted and passed through so
     a future template revision can opt in without breaking call sites.
+
+    ``fellow_impostor_ids`` (Task 7.12) is the impostor's teammate list;
+    the template renders the "never accuse / incriminate a teammate"
+    block only when it is non-empty, so a sole impostor (``()``) gets a
+    byte-unchanged prompt.
     """
 
     return _ENV.get_template(IMPOSTOR_REPORT_TEMPLATE).render(
@@ -111,6 +126,7 @@ def impostor_report_prompt(
         meeting_trigger=meeting_trigger,
         rendered_memory=rendered_memory,
         public_transcript=public_transcript,
+        fellow_impostor_ids=fellow_impostor_ids,
     )
 
 
@@ -120,6 +136,7 @@ def accusation_round_prompt(
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     """Render an accusation-round speech-turn prompt (DESIGN.md §5.2).
 
@@ -129,6 +146,11 @@ def accusation_round_prompt(
     might mis-substitute. This mirrors :func:`impostor_report_prompt`
     (Task 3.18) and keeps DESIGN.md §5.4 contradiction detection able
     to match self-alibis across speakers.
+
+    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate
+    list; the template renders the "never target a teammate" block only
+    when it is non-empty, so a crewmate / sole-impostor turn (``()``) is
+    byte-unchanged.
     """
 
     return _ENV.get_template(ACCUSATION_ROUND_TEMPLATE).render(
@@ -136,6 +158,7 @@ def accusation_round_prompt(
         rendered_memory=rendered_memory,
         transcript=transcript,
         contradictions=contradictions,
+        fellow_impostor_ids=fellow_impostor_ids,
     )
 
 
@@ -148,12 +171,18 @@ def vote_ballot_prompt(
     suspicion_graph: tuple[SuspicionEntry, ...],
     candidate_targets: tuple[PlayerId, ...],
     skip_confidence_threshold: float,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     """Render a vote-ballot prompt (DESIGN.md §5.5).
 
     Conforms to the :class:`~meetings.manager.VotePromptRenderer`
     Protocol; the meeting manager invokes this callable verbatim per
     voter to produce the ballot-phase prompt.
+
+    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate
+    list; the template renders the "never vote a teammate — SKIP
+    instead" block only when it is non-empty, so a crewmate /
+    sole-impostor ballot (``()``) is byte-unchanged.
     """
 
     return _ENV.get_template(VOTE_BALLOT_TEMPLATE).render(
@@ -164,6 +193,7 @@ def vote_ballot_prompt(
         suspicion_graph=suspicion_graph,
         candidate_targets=candidate_targets,
         skip_confidence_threshold=skip_confidence_threshold,
+        fellow_impostor_ids=fellow_impostor_ids,
     )
 
 

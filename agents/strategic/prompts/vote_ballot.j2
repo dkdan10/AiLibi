@@ -6,10 +6,20 @@
    that Pydantic schema; this template only produces the user-facing
    prompt body.
 
-   Prompt version: vote_ballot/v1
+   Prompt version: vote_ballot/v2
    Bump the version line below (and this header) whenever the prompt
    text changes in a way that could shift LLM behaviour, so eval runs
    and replay logs can attribute results to a known prompt revision.
+
+   Task 7.12 added the gated teammate-coordination block below (rendered
+   only when fellow_impostor_ids is non-empty), which is the v2 change.
+   The AUTHORITATIVE recorded revision is vote_ballot/v2 in
+   orchestrator.game.DEFAULT_PROMPT_VERSIONS (replay/eval read that, not
+   the body text). The rendered "Prompt: vote_ballot/v1" line in the body
+   is intentionally LEFT at v1 so a crewmate / sole-impostor ballot (empty
+   teammate list) renders byte-identically to the frozen committed sets
+   (Task 7.12 DoD: crewmate prompts byte-unchanged; 4p/1i every change a
+   no-op). Do not "fix" that line to v2 without re-recording both sets.
 
    Required render kwargs:
      voter_id            : PlayerId of the agent casting this ballot.
@@ -86,6 +96,13 @@ is logged post-hoc for transparency.
 ## Valid ejection targets
 
 {% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %}
+{% endif %}
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your fellow impostors (your team)
+These players are your fellow impostors: {{ fellow_impostor_ids | join(", ") }}.
+Never vote to eject a teammate. If your suspicion points at a fellow impostor,
+set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
 {% endif %}
 ## Decision rules
 

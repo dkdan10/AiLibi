@@ -83,6 +83,9 @@ from meetings.manager import (
     StatementPromptRenderer,
     SuspicionEntry,
     VotePromptRenderer,
+    coerce_teammate_ballot_to_skip,
+    drop_teammate_statement_target,
+    exclude_teammate_accusation_claims,
 )
 from meetings.schemas import (
     ContradictionRef,
@@ -172,6 +175,7 @@ _ROLE_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(
 def _scan_prompt_inputs(
     *,
     rendered_memory: str,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
     auxiliary_text_inputs: dict[str, str] | None = None,
 ) -> None:
     """Run the canonical packet leak scanners on strategic prompt inputs.
@@ -197,6 +201,20 @@ def _scan_prompt_inputs(
     allow-lists. Any further occurrence of the same prefix later in
     the body (e.g. inside a contradiction summary or other free text)
     is left in place so the scanner sees and rejects it.
+
+    Teammate self-channel allow-list (Task 7.12)
+    --------------------------------------------
+
+    ``fellow_impostor_ids`` is impostor-only self-channel data, exactly
+    like the role line: an impostor is entitled to know its own team
+    (Task 7.2). It rides the allow-listed ``self_state`` sub-object so
+    an impostor's own teammate ids are not flagged (they are also
+    role-neutral ``p-N`` ids that never match the value scanner). The
+    firewall teeth are the explicit assertion below: a NON-impostor
+    prompt carrying any teammate id is a leak (it would tell a crewmate
+    who the impostors are), so it fails loud — mirroring the 7.2
+    crew-empty invariant. A crewmate's list is always empty, so the
+    scan for a crewmate prompt is unchanged (not loosened).
 
     Defense-in-depth substring check
     --------------------------------
@@ -230,8 +248,20 @@ def _scan_prompt_inputs(
     role_match = _ROLE_VALUE_PATTERN.search(rendered_memory)
     role = role_match.group(1) if role_match else ""
     body = _ROLE_LINE_PATTERN.sub("", rendered_memory, count=1)
+    # Task 7.12 firewall: teammate ids may only ride an impostor's own
+    # prompt. A non-impostor prompt carrying any fellow_impostor_id is a
+    # crew-misroute leak (mirrors the 7.2 crew-empty invariant); fail
+    # loud. The crew path keeps an empty list, so this never fires for a
+    # crewmate and the scan is unchanged for crewmate prompts.
+    if fellow_impostor_ids and role.strip().upper() != "IMPOSTOR":
+        raise AssertionError(
+            "fellow_impostor_ids leaked into a non-impostor prompt: "
+            f"role={role!r}, fellow_impostor_ids={fellow_impostor_ids!r}"
+        )
     payload: dict[str, JsonValue] = {
-        "self_state": {"role": role},
+        # ``fellow_impostor_ids`` sits beside ``role`` in the allow-listed
+        # self-channel: legitimate impostor-only data, role-neutral ids.
+        "self_state": {"role": role, "fellow_impostor_ids": list(fellow_impostor_ids)},
         "rendered_body": body,
     }
     if auxiliary_text_inputs is not None:
@@ -361,6 +391,7 @@ class StrategicReasoner:
         current_tick: int,
         meeting_trigger: str,
         public_transcript: str = "",
+        fellow_impostor_ids: tuple[PlayerId, ...] = (),
         trigger: StrategicTrigger = "meeting_report",
     ) -> ReportDocument:
         """Phase-1 :class:`ReportDocument` from rendered memory.
@@ -371,6 +402,13 @@ class StrategicReasoner:
         meeting-manager precedent in :mod:`meetings.manager` -- the
         prompt templates explicitly say the reasoner will override
         those fields).
+
+        ``fellow_impostor_ids`` (Task 7.12) is the impostor's teammate
+        list. It is surfaced into the impostor report prompt and used by
+        the deterministic guard below to drop any accusation claim the
+        model makes against a teammate. It is ``()`` for a crewmate and a
+        sole impostor, where both the prompt block and the guard are
+        no-ops, so those reports are byte-unchanged.
         """
 
         if role not in ("CREWMATE", "IMPOSTOR"):
@@ -383,6 +421,7 @@ class StrategicReasoner:
         rendered_memory = render_for_prompt(memory, token_budget=self._token_budget)
         _scan_prompt_inputs(
             rendered_memory=rendered_memory,
+            fellow_impostor_ids=fellow_impostor_ids,
             auxiliary_text_inputs={"meeting_trigger": meeting_trigger},
         )
         renderer = (
@@ -396,6 +435,7 @@ class StrategicReasoner:
             meeting_trigger=meeting_trigger,
             rendered_memory=rendered_memory,
             public_transcript=public_transcript,
+            fellow_impostor_ids=fellow_impostor_ids,
         )
         response = await self._llm_client.complete(
             prompt=prompt,
@@ -406,7 +446,19 @@ class StrategicReasoner:
             agent_id=agent_id,
         )
         parsed = ReportDocument.model_validate_json(response.text)
-        return parsed.model_copy(update={"agent_id": agent_id, "tick": current_tick})
+        # Teammate firewall guard (Task 7.12): drop accusation claims
+        # against a fellow impostor regardless of model output. No-op when
+        # ``fellow_impostor_ids`` is empty, so replay is unaffected.
+        guarded_claims = exclude_teammate_accusation_claims(
+            parsed.claims, fellow_impostor_ids=fellow_impostor_ids
+        )
+        return parsed.model_copy(
+            update={
+                "agent_id": agent_id,
+                "tick": current_tick,
+                "claims": guarded_claims,
+            }
+        )
 
     async def produce_statement(
         self,
@@ -418,6 +470,7 @@ class StrategicReasoner:
         round_index: int,
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...] = (),
+        fellow_impostor_ids: tuple[PlayerId, ...] = (),
         trigger: StrategicTrigger = "meeting_statement",
     ) -> Statement:
         """Phase-2 :class:`Statement` from rendered memory + transcript.
@@ -426,6 +479,12 @@ class StrategicReasoner:
         ``(meeting_id, round_index, speaker)`` so replay logs can map a
         statement back to its slot without trusting the LLM with the
         identity.
+
+        ``fellow_impostor_ids`` (Task 7.12) surfaces the teammate block
+        into the shared accusation prompt and drives the deterministic
+        guard: an accusation claim against a teammate is dropped and a
+        ``target`` naming a teammate degrades to ``None``. No-op for a
+        crewmate / sole impostor (empty list).
         """
 
         if not meeting_id:
@@ -438,12 +497,16 @@ class StrategicReasoner:
             allowed=_STATEMENT_ALLOWED_TRIGGERS,
         )
         rendered_memory = render_for_prompt(memory, token_budget=self._token_budget)
-        _scan_prompt_inputs(rendered_memory=rendered_memory)
+        _scan_prompt_inputs(
+            rendered_memory=rendered_memory,
+            fellow_impostor_ids=fellow_impostor_ids,
+        )
         prompt = self._statement_prompt(
             agent_id=speaker,
             rendered_memory=rendered_memory,
             transcript=transcript,
             contradictions=contradictions,
+            fellow_impostor_ids=fellow_impostor_ids,
         )
         response = await self._llm_client.complete(
             prompt=prompt,
@@ -455,12 +518,22 @@ class StrategicReasoner:
         )
         parsed = Statement.model_validate_json(response.text)
         statement_id = f"{meeting_id}:r{round_index}:{speaker}"
+        # Teammate firewall guard (Task 7.12): drop teammate accusation
+        # claims and null a teammate-naming target. No-op when empty.
+        guarded_claims = exclude_teammate_accusation_claims(
+            parsed.claims, fellow_impostor_ids=fellow_impostor_ids
+        )
+        guarded_target = drop_teammate_statement_target(
+            parsed.target, fellow_impostor_ids=fellow_impostor_ids
+        )
         return parsed.model_copy(
             update={
                 "statement_id": statement_id,
                 "speaker": speaker,
                 "tick": tick,
                 "round_index": round_index,
+                "target": guarded_target,
+                "claims": guarded_claims,
             }
         )
 
@@ -474,6 +547,7 @@ class StrategicReasoner:
         contradiction_flags: tuple[ContradictionRef, ...] = (),
         suspicion_graph: tuple[SuspicionEntry, ...] = (),
         skip_confidence_threshold: float | None = None,
+        fellow_impostor_ids: tuple[PlayerId, ...] = (),
         trigger: StrategicTrigger = "meeting_vote",
     ) -> VoteBallot:
         """Phase-3 :class:`VoteBallot` from rendered memory + transcript.
@@ -483,6 +557,12 @@ class StrategicReasoner:
         the canonical caller-supplied id. Defensive normalization of an
         invalid ``target`` value is the meeting manager's responsibility
         (DESIGN.md §5.5 + meeting-manager contract), not the reasoner's.
+
+        ``fellow_impostor_ids`` (Task 7.12) surfaces the teammate block
+        into the ballot prompt and drives the deterministic guard: a
+        ballot whose ``target`` is a fellow impostor is coerced to
+        ``SKIP`` so an impostor can never cast the betrayal vote that
+        ejects a teammate. No-op for a crewmate / sole impostor.
         """
 
         _validate_trigger_for_method(
@@ -500,7 +580,10 @@ class StrategicReasoner:
                 f"skip_confidence_threshold must be in [0, 1], got {threshold}"
             )
         rendered_memory = render_for_prompt(memory, token_budget=self._token_budget)
-        _scan_prompt_inputs(rendered_memory=rendered_memory)
+        _scan_prompt_inputs(
+            rendered_memory=rendered_memory,
+            fellow_impostor_ids=fellow_impostor_ids,
+        )
         prompt = self._vote_prompt(
             voter_id=voter,
             rendered_memory=rendered_memory,
@@ -509,6 +592,7 @@ class StrategicReasoner:
             suspicion_graph=suspicion_graph,
             candidate_targets=candidate_targets,
             skip_confidence_threshold=threshold,
+            fellow_impostor_ids=fellow_impostor_ids,
         )
         response = await self._llm_client.complete(
             prompt=prompt,
@@ -519,7 +603,14 @@ class StrategicReasoner:
             agent_id=voter,
         )
         parsed = VoteBallot.model_validate_json(response.text)
-        return parsed.model_copy(update={"voter": voter})
+        # Teammate firewall guard (Task 7.12): a teammate is a valid
+        # living candidate, so coerce a teammate-targeted ballot to SKIP
+        # here. No-op when ``fellow_impostor_ids`` is empty.
+        guarded = coerce_teammate_ballot_to_skip(
+            ballot=parsed.model_copy(update={"voter": voter}),
+            fellow_impostor_ids=fellow_impostor_ids,
+        )
+        return guarded
 
 
 def _validate_trigger_for_method(

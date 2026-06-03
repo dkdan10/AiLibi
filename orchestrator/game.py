@@ -135,11 +135,21 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # the replay record's :attr:`MeetingReplayEntry.prompt_versions` in
 # sync without a runtime regex over the loaded templates. Bump the
 # string here whenever the matching template header is bumped.
+#
+# Task 7.12 bumped ``impostor_report``, ``accusation_round``, and
+# ``vote_ballot`` because the gated teammate-coordination block is a
+# behavior-shifting prompt change: this is the AUTHORITATIVE revision
+# recorded into replay/eval, so the upcoming 7p/2i re-record is attributed
+# to the new revision instead of being conflated with the old committed
+# runs. This map is metadata only (never rendered into a prompt), so the
+# bump does not alter any rendered prompt — the frozen 4p/1i and crewmate
+# prompts stay byte-identical and both committed sets reconstruct
+# unchanged. ``crewmate_report`` is unbumped (its template is untouched).
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "crewmate_report": "crewmate_report.v1",
-    "impostor_report": "impostor_report_v1",
-    "accusation_round": "accusation_round.v2",
-    "vote_ballot": "vote_ballot/v1",
+    "impostor_report": "impostor_report_v2",
+    "accusation_round": "accusation_round.v3",
+    "vote_ballot": "vote_ballot/v2",
 }
 
 _T = TypeVar("_T")
@@ -410,7 +420,26 @@ def _build_participants(
     orchestrator can't synthesize them without the agent's
     cooperation. Fail-loud at the boundary rather than silently
     feeding the meeting an empty rendered memory.
+
+    ``fellow_impostor_ids`` (Task 7.12, audit gp-imp-1) is derived here
+    from world-state roles — the same firewall-safe self-channel data
+    :class:`observation.service.ObservationService` puts on
+    ``SelfView`` (Task 7.2) and the kill policy already consumes (Task
+    7.9). For an impostor participant it is the sorted ids of the OTHER
+    impostors (by role, independent of alive state, so an impostor
+    still knows a teammate ejected earlier in the game); it is ``()``
+    for every crewmate and for a sole impostor, and never contains the
+    participant's own id. The orchestrator is the right place to read
+    roles: the meeting layer is engine-pure and must not re-derive them.
     """
+
+    impostor_ids = tuple(
+        sorted(
+            player_id
+            for player_id, player in state.players.items()
+            if player.role == "IMPOSTOR"
+        )
+    )
 
     participants: list[MeetingParticipant] = []
     for player_id in sorted(state.players):
@@ -430,6 +459,15 @@ def _build_participants(
                 "meeting-enabled HeadlessGame requires agents that expose "
                 "render_memory_for_meeting() and suspicion_graph_for_meeting()"
             )
+        # Crewmates (and a sole impostor) get ``()``; an impostor gets the
+        # other impostors' ids, never its own. This is the meeting-side
+        # mirror of the SelfView firewall invariant: teammate identity
+        # enters only an impostor's own meeting inputs, never a crewmate's.
+        fellow_impostor_ids = (
+            tuple(pid for pid in impostor_ids if pid != player_id)
+            if player.role == "IMPOSTOR"
+            else ()
+        )
         participants.append(
             MeetingParticipant(
                 agent_id=player_id,
@@ -438,6 +476,7 @@ def _build_participants(
                     token_budget=token_budget
                 ),
                 suspicion_graph=agent.suspicion_graph_for_meeting(),
+                fellow_impostor_ids=fellow_impostor_ids,
             )
         )
     return tuple(participants)
