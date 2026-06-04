@@ -1,11 +1,16 @@
-"""Tests for the shared meeting / output schemas (Task 3.2).
+"""Tests for the shared meeting / output schemas (Task 8.7).
 
 These tests pin the schema surface that strategic LLM outputs target
-(DESIGN.md §5.3, §5.5, Appendix A) and the engine-free DTO that
-:class:`MeetingManager` will return in Task 3.8. The agent-side
-re-export module (``agents/strategic/output_schemas.py``) must remain a
-pure re-export -- never a duplicate -- so the round-trip identity
-assertions below act as an anti-drift guard.
+(DESIGN.md §5.2, §5.3, §5.5, Appendix A) under the reactive
+accusation-chain record shape: one ordered ``transcript.turns`` list of
+:class:`MeetingTurn`, where the reporter's observations live on the
+``opening`` turn and the old ``(reports, statements)`` pair is gone.
+
+The agent-side re-export module (``agents/strategic/output_schemas.py``)
+is reshaped in Task 8.8; its re-export anti-drift test moves there with
+it, so it is intentionally not exercised here (importing it would pull in
+the pre-8.8 ``ReportDocument`` / ``Statement`` re-exports this task
+removed).
 """
 
 from __future__ import annotations
@@ -13,29 +18,28 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agents.strategic import output_schemas as agent_output_schemas
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
-    Claim,
     CompletedTaskObservation,
     ContradictionRef,
-    CorroborationClaim,
     FoundBodyObservation,
     MeetingResult,
     MeetingTranscript,
-    ObservationClaim,
-    ReportDocument,
+    MeetingTurn,
     SawPlayerObservation,
-    Statement,
     VoteBallot,
 )
 
 
-def _report_document(**overrides: object) -> ReportDocument:
+def _opening_turn(**overrides: object) -> MeetingTurn:
+    # DESIGN.md §5.3 worked example (turn_kind="opening").
     defaults: dict[str, object] = {
-        "agent_id": "p-3",
-        "tick": 412,
+        "turn_id": "m-7:turn-0",
+        "turn_index": 0,
+        "speaker": "p-3",
+        "turn_kind": "opening",
+        "reply_to": None,
         "observations": (
             SawPlayerObservation(
                 type="saw_player",
@@ -74,13 +78,12 @@ def _report_document(**overrides: object) -> ReportDocument:
             ),
         ),
         "free_text": (
-            "I was doing wiring in Admin from tick 380. "
-            "I saw p-5 head toward Electrical with p-7. "
-            "p-2's body was in MedBay; p-5 was in the right corridor."
+            "I found p-2 in MedBay. I was wiring in Admin from 380 and saw "
+            "p-5 head to Electrical with p-7 -- p-5 was near that corridor."
         ),
     }
     defaults.update(overrides)
-    return ReportDocument.model_validate(defaults)
+    return MeetingTurn.model_validate(defaults)
 
 
 def _vote_ballot(**overrides: object) -> VoteBallot:
@@ -88,7 +91,7 @@ def _vote_ballot(**overrides: object) -> VoteBallot:
         "voter": "p-3",
         "target": "p-5",
         "confidence": 0.65,
-        "primary_reason_id": "stmt_12",
+        "primary_reason_id": "m-7:turn-4",
         "considered_alternatives": ("p-7",),
         "rationale_text": (
             "p-5's claim to be in Electrical is contradicted by p-1's alibi..."
@@ -98,31 +101,85 @@ def _vote_ballot(**overrides: object) -> VoteBallot:
     return VoteBallot.model_validate(defaults)
 
 
-class TestReportDocument:
-    def test_design_md_example_round_trips_through_pydantic(self) -> None:
-        # DESIGN.md §5.3 worked example. The structured-plus-free-text
-        # contract round-trips through ``model_dump`` and ``model_validate``
-        # without losing or renaming fields.
-        report = _report_document()
+class TestMeetingTurn:
+    def test_design_md_opening_example_round_trips(self) -> None:
+        # DESIGN.md §5.3 worked example; the structured-plus-free-text
+        # contract round-trips through model_dump / model_validate.
+        turn = _opening_turn()
 
-        dumped = report.model_dump(mode="json")
+        dumped = turn.model_dump(mode="json")
 
-        assert dumped["agent_id"] == "p-3"
-        assert dumped["tick"] == 412
+        assert dumped["turn_id"] == "m-7:turn-0"
+        assert dumped["turn_index"] == 0
+        assert dumped["turn_kind"] == "opening"
+        assert dumped["reply_to"] is None
         assert dumped["observations"][0]["type"] == "saw_player"
         assert dumped["observations"][2]["type"] == "found_body"
         assert dumped["claims"][0]["type"] == "alibi"
         assert dumped["claims"][1]["type"] == "accusation"
-        assert ReportDocument.model_validate(dumped) == report
+        assert MeetingTurn.model_validate(dumped) == turn
+
+    def test_reply_turn_links_to_prior_turn(self) -> None:
+        reply = MeetingTurn(
+            turn_id="m-7:turn-1",
+            turn_index=1,
+            speaker="p-5",
+            turn_kind="reply",
+            reply_to="m-7:turn-0",
+            claims=(
+                AccusationClaim(
+                    type="accusation",
+                    against="p-3",
+                    confidence=0.5,
+                    reason="counter-accusation",
+                ),
+            ),
+            free_text="I was nowhere near MedBay; p-3 is deflecting.",
+        )
+
+        assert reply.turn_kind == "reply"
+        assert reply.reply_to == "m-7:turn-0"
+
+    def test_opt_in_turn_is_terminal(self) -> None:
+        opt_in = MeetingTurn(
+            turn_id="m-7:turn-3",
+            turn_index=3,
+            speaker="p-9",
+            turn_kind="opt_in",
+            reply_to=None,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=400, subject="p-5", room="MEDBAY"
+                ),
+            ),
+            free_text="I saw p-5 near MedBay around 400.",
+        )
+
+        assert opt_in.turn_kind == "opt_in"
+        assert opt_in.reply_to is None
+
+    def test_turn_kind_is_constrained(self) -> None:
+        with pytest.raises(ValidationError):
+            MeetingTurn.model_validate(
+                {
+                    "turn_id": "m-1:turn-0",
+                    "turn_index": 0,
+                    "speaker": "p-1",
+                    "turn_kind": "monologue",
+                    "reply_to": None,
+                    "free_text": "",
+                }
+            )
 
     def test_observations_use_discriminated_union(self) -> None:
-        # The ``type`` discriminator lets Pydantic dispatch to the right
-        # observation subclass and reject malformed entries.
         with pytest.raises(ValidationError):
-            ReportDocument.model_validate(
+            MeetingTurn.model_validate(
                 {
-                    "agent_id": "p-3",
-                    "tick": 1,
+                    "turn_id": "m-1:turn-0",
+                    "turn_index": 0,
+                    "speaker": "p-3",
+                    "turn_kind": "opening",
+                    "reply_to": None,
                     "observations": [{"type": "saw_player"}],
                     "claims": [],
                     "free_text": "",
@@ -131,67 +188,38 @@ class TestReportDocument:
 
     def test_extra_fields_are_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            ReportDocument.model_validate(
+            MeetingTurn.model_validate(
                 {
-                    "agent_id": "p-3",
-                    "tick": 1,
+                    "turn_id": "m-1:turn-0",
+                    "turn_index": 0,
+                    "speaker": "p-3",
+                    "turn_kind": "opening",
+                    "reply_to": None,
                     "observations": [],
                     "claims": [],
                     "free_text": "",
-                    "unexpected": True,
+                    "round_index": 0,
                 }
             )
 
     def test_default_collections_are_empty_tuples(self) -> None:
-        report = ReportDocument(agent_id="p-1", tick=0, free_text="")
+        turn = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-1",
+            turn_kind="opening",
+            reply_to=None,
+            free_text="",
+        )
 
-        assert report.observations == ()
-        assert report.claims == ()
+        assert turn.observations == ()
+        assert turn.claims == ()
 
-    def test_report_document_is_frozen(self) -> None:
-        report = _report_document()
+    def test_turn_is_frozen(self) -> None:
+        turn = _opening_turn()
 
         with pytest.raises(ValidationError):
-            report.agent_id = "p-9"
-
-
-class TestStatement:
-    def test_target_is_optional_for_defensive_statements(self) -> None:
-        statement = Statement(
-            statement_id="stmt_1",
-            speaker="p-3",
-            tick=420,
-            round_index=0,
-            target=None,
-            claims=(),
-            free_text="I was with p-1 in Storage between tick 145 and 160.",
-        )
-
-        assert statement.target is None
-        assert statement.round_index == 0
-
-    def test_accusation_statement_carries_target_and_claims(self) -> None:
-        statement = Statement(
-            statement_id="stmt_4",
-            speaker="p-3",
-            tick=422,
-            round_index=1,
-            target="p-5",
-            claims=(
-                AccusationClaim(
-                    type="accusation",
-                    against="p-5",
-                    confidence=0.6,
-                    reason="contradicted alibi",
-                ),
-            ),
-            free_text="I think p-5 is the impostor because their alibi conflicts.",
-        )
-
-        assert statement.target == "p-5"
-        accusation = statement.claims[0]
-        assert isinstance(accusation, AccusationClaim)
-        assert accusation.against == "p-5"
+            turn.speaker = "p-9"
 
 
 class TestAlibiClaimChronology:
@@ -235,14 +263,17 @@ class TestAlibiClaimChronology:
                 room="ADMIN",
             )
 
-    def test_reversed_range_inside_report_document_is_rejected(self) -> None:
+    def test_reversed_range_inside_turn_is_rejected(self) -> None:
         # The chronology invariant also applies when ``AlibiClaim`` is
-        # parsed via the discriminated union inside a ``ReportDocument``.
+        # parsed via the discriminated union inside a ``MeetingTurn``.
         with pytest.raises(ValidationError, match="chronological"):
-            ReportDocument.model_validate(
+            MeetingTurn.model_validate(
                 {
-                    "agent_id": "p-3",
-                    "tick": 412,
+                    "turn_id": "m-1:turn-0",
+                    "turn_index": 0,
+                    "speaker": "p-3",
+                    "turn_kind": "opening",
+                    "reply_to": None,
                     "observations": [],
                     "claims": [
                         {
@@ -265,7 +296,8 @@ class TestVoteBallot:
 
         assert ballot.target == "p-5"
         assert ballot.confidence == pytest.approx(0.65)
-        assert ballot.primary_reason_id == "stmt_12"
+        # primary_reason_id references a MeetingTurn turn_id (DESIGN.md §5.5).
+        assert ballot.primary_reason_id == "m-7:turn-4"
         assert ballot.considered_alternatives == ("p-7",)
 
     def test_skip_target_is_allowed(self) -> None:
@@ -290,8 +322,8 @@ class TestContradictionRef:
         contradiction = ContradictionRef(
             contradiction_id="c-1",
             kind="alibi_vs_sighting",
-            event_a_id="claim:p-4:alibi:400-410",
-            event_b_id="stmt:p-6:tick-405:saw_player:p-4",
+            event_a_id="turn:m-7:turn-0:claim:0",
+            event_b_id="turn:m-7:turn-2:obs:0",
             subjects=("p-4",),
             description="p-4 alibi places them in Storage; p-6 saw them in Cafeteria.",
         )
@@ -314,6 +346,28 @@ class TestContradictionRef:
             )
 
 
+class TestMeetingTranscript:
+    def test_default_turns_is_empty_tuple(self) -> None:
+        transcript = MeetingTranscript()
+
+        assert transcript.turns == ()
+
+    def test_turns_round_trip(self) -> None:
+        transcript = MeetingTranscript(turns=(_opening_turn(),))
+
+        dumped = transcript.model_dump(mode="json")
+
+        assert MeetingTranscript.model_validate(dumped) == transcript
+        assert dumped["turns"][0]["turn_kind"] == "opening"
+
+    def test_old_reports_statements_shape_is_rejected(self) -> None:
+        # The byte-breaker (Task 8.7): an old committed transcript carrying
+        # ``reports`` / ``statements`` keys fails ``extra='forbid'`` against
+        # the new ``turns``-only shape and is re-recorded in Task 8.12.
+        with pytest.raises(ValidationError):
+            MeetingTranscript.model_validate({"reports": [], "statements": []})
+
+
 class TestMeetingResult:
     def _result(self) -> MeetingResult:
         return MeetingResult(
@@ -330,25 +384,13 @@ class TestMeetingResult:
                 ContradictionRef(
                     contradiction_id="c-1",
                     kind="alibi_vs_sighting",
-                    event_a_id="claim:p-4:alibi:400-410",
-                    event_b_id="stmt:p-6:tick-405:saw_player:p-4",
+                    event_a_id="turn:m-1:turn-0:claim:0",
+                    event_b_id="turn:m-1:turn-2:obs:0",
                     subjects=("p-4",),
                     description="alibi-vs-sighting conflict",
                 ),
             ),
-            transcript=MeetingTranscript(
-                reports=(_report_document(),),
-                statements=(
-                    Statement(
-                        statement_id="stmt_1",
-                        speaker="p-3",
-                        tick=420,
-                        round_index=0,
-                        target=None,
-                        free_text="defensive opener",
-                    ),
-                ),
-            ),
+            transcript=MeetingTranscript(turns=(_opening_turn(),)),
         )
 
     def test_round_trip_preserves_every_subschema(self) -> None:
@@ -360,6 +402,7 @@ class TestMeetingResult:
         assert dumped["outcome"] == "EJECTED"
         assert dumped["ejected_player_id"] == "p-5"
         assert len(dumped["ballots"]) == 2
+        assert dumped["transcript"]["turns"][0]["turn_kind"] == "opening"
 
     def test_skip_outcome_has_no_ejected_player(self) -> None:
         result = MeetingResult(
@@ -374,8 +417,7 @@ class TestMeetingResult:
 
         assert result.ejected_player_id is None
         assert result.contradictions == ()
-        assert result.transcript.reports == ()
-        assert result.transcript.statements == ()
+        assert result.transcript.turns == ()
 
     def test_ejected_outcome_without_ejected_id_is_rejected(self) -> None:
         # Codex P1: enforce the outcome/ejection invariant at parse time.
@@ -403,11 +445,9 @@ class TestMeetingResult:
             )
 
     def test_unknown_outcome_string_is_rejected(self) -> None:
-        # ``MeetingOutcome`` is the closed set ``{EJECTED, SKIPPED}``;
-        # any other value (including the previously-accepted ``"TIE"``
-        # which DESIGN.md §5.1/§5.2 do not define) must fail Pydantic
-        # validation. Pinning this here is the canonical anti-drift
-        # guard for the protocol surface.
+        # ``MeetingOutcome`` is the closed set ``{EJECTED, SKIPPED}``; any
+        # other value (including the previously-rejected ``"TIE"``) must fail
+        # Pydantic validation.
         with pytest.raises(ValidationError):
             MeetingResult.model_validate(
                 {
@@ -418,35 +458,6 @@ class TestMeetingResult:
                     "ejected_player_id": None,
                     "ballots": [],
                     "contradictions": [],
-                    "transcript": {"reports": [], "statements": []},
+                    "transcript": {"turns": []},
                 }
             )
-
-
-class TestAgentOutputSchemasReExport:
-    """``agents/strategic/output_schemas.py`` must re-export -- not duplicate."""
-
-    def test_re_export_modules_are_object_identical(self) -> None:
-        # Re-export uses ``from meetings.schemas import ...``; the class
-        # objects in both modules must be the same Python objects.
-        assert agent_output_schemas.ReportDocument is ReportDocument
-        assert agent_output_schemas.Statement is Statement
-        assert agent_output_schemas.VoteBallot is VoteBallot
-        assert agent_output_schemas.MeetingResult is MeetingResult
-        assert agent_output_schemas.ContradictionRef is ContradictionRef
-        assert agent_output_schemas.MeetingTranscript is MeetingTranscript
-        assert agent_output_schemas.ObservationClaim is ObservationClaim
-        assert agent_output_schemas.Claim is Claim
-        assert agent_output_schemas.SawPlayerObservation is SawPlayerObservation
-        assert agent_output_schemas.CompletedTaskObservation is CompletedTaskObservation
-        assert agent_output_schemas.FoundBodyObservation is FoundBodyObservation
-        assert agent_output_schemas.AlibiClaim is AlibiClaim
-        assert agent_output_schemas.AccusationClaim is AccusationClaim
-        assert agent_output_schemas.CorroborationClaim is CorroborationClaim
-
-    def test_re_export_does_not_add_independent_definitions(self) -> None:
-        # If a second-source schema ever sneaks in, the union types break.
-        report = agent_output_schemas.ReportDocument.model_validate_json(
-            _report_document().model_dump_json()
-        )
-        assert isinstance(report, ReportDocument)

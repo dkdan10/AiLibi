@@ -1,11 +1,14 @@
-"""Shared meeting / output schemas (DESIGN.md §5.1, §5.3, §5.4, §5.5, Appendix A).
+"""Shared meeting / output schemas (DESIGN.md §5.2, §5.3, §5.4, §5.5, Appendix A).
 
 This module owns the canonical Pydantic shapes for every artifact a
-meeting produces:
+meeting produces under the reactive accusation-chain protocol (DESIGN.md
+§5.2):
 
-* :class:`ReportDocument` -- the structured-plus-free-text report each
-  living agent submits in Phase 1 of the meeting protocol (§5.3).
-* :class:`Statement` -- one accusation-round turn (§5.2).
+* :class:`MeetingTurn` -- one entry in the ordered ``transcript.turns``
+  list (§5.2, §5.3, Appendix A). A turn is ``opening`` (the reporter's
+  findings + accuse-or-unsure), ``reply`` (the accused responds), or
+  ``opt_in`` (a relevant non-speaker volunteers). It carries both the
+  structured ``observations`` / ``claims`` and the free-text argument.
 * :class:`VoteBallot` -- the structured vote each agent casts (§5.5).
 * :class:`ContradictionRef` -- a detected contradiction between two
   events (§5.4, §6.4); information, not a verdict.
@@ -17,6 +20,15 @@ structured LLM output (Pydantic v2 JSON-schema generation). Agent-side
 re-exports live in ``agents/strategic/output_schemas.py``; downstream
 code must import from one of these two locations and never duplicate a
 schema definition.
+
+Record-shape note (Task 8.7). The parallel-reports + fixed-round
+``Statement`` record was replaced by the single ordered ``turns`` list:
+``ReportDocument`` folds into the ``opening`` turn (its ``found_body`` /
+``saw_player`` observations now live on turn 0) and ``Statement`` becomes
+:class:`MeetingTurn`. Reshaping :class:`MeetingTranscript` from
+``(reports, statements)`` to ``turns`` changes ``MeetingReplayEntry``
+(``extra='forbid'``), so committed meeting rows recorded under the old
+shape stop validating and are re-recorded in Task 8.12.
 """
 
 from __future__ import annotations
@@ -29,7 +41,7 @@ PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
 TaskId: TypeAlias = str
 BodyId: TypeAlias = str
-StatementId: TypeAlias = str
+TurnId: TypeAlias = str
 ContradictionId: TypeAlias = str
 
 
@@ -38,7 +50,7 @@ class _FrozenModel(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Observation claims used inside ReportDocument (DESIGN.md §5.3)
+# Observation claims carried by a MeetingTurn (DESIGN.md §5.3)
 # ---------------------------------------------------------------------------
 
 
@@ -62,7 +74,7 @@ class CompletedTaskObservation(_FrozenModel):
 
 
 class FoundBodyObservation(_FrozenModel):
-    """Body-discovery report tied to the report's trigger event."""
+    """Body-discovery report tied to the meeting's trigger event."""
 
     type: Literal["found_body"]
     tick: int
@@ -110,7 +122,13 @@ class AlibiClaim(_FrozenModel):
 
 
 class AccusationClaim(_FrozenModel):
-    """Accusation against another player with explicit confidence."""
+    """Accusation against another player with explicit confidence.
+
+    The reactive chain (DESIGN.md §5.2) passes the turn to the accused:
+    the next speaker is a pure function of a turn's accusation target,
+    which is read off the turn's first :class:`AccusationClaim`
+    (:func:`meetings.transcript.accusation_target`).
+    """
 
     type: Literal["accusation"]
     against: PlayerId
@@ -134,36 +152,53 @@ Claim: TypeAlias = Annotated[
 
 
 # ---------------------------------------------------------------------------
-# Meeting artifacts (DESIGN.md §5.2, §5.3, §5.5)
+# Meeting turn record (DESIGN.md §5.2, §5.3, Appendix A)
 # ---------------------------------------------------------------------------
 
 
-class ReportDocument(_FrozenModel):
-    """Phase-1 report each living agent submits (DESIGN.md §5.3)."""
+TurnKind: TypeAlias = Literal["opening", "reply", "opt_in"]
+"""Discriminator for the three turn roles in the accusation chain.
 
-    agent_id: PlayerId
-    tick: int
+* ``opening`` -- turn 0: the body-reporter / emergency caller states
+  findings and accuses one player or declares "unsure".
+* ``reply`` -- a reactive-chain turn: the accused responds and may
+  counter-accuse. ``reply_to`` references the accusing turn.
+* ``opt_in`` -- a terminal info-share turn from a relevant non-speaker;
+  it may accuse but never extends the chain.
+"""
+
+
+class MeetingTurn(_FrozenModel):
+    """One entry in the ordered ``transcript.turns`` list (DESIGN.md §5.2).
+
+    A turn carries the speaker's structured ``observations`` (with tick
+    references) and ``claims`` (alibi / accusation / corroboration) plus
+    the free-text argument shown to spectators and to later speakers.
+
+    ``turn_id`` is ``"{meeting_id}:turn-{turn_index}"`` -- unique even
+    when a player speaks twice -- and is what
+    :attr:`VoteBallot.primary_reason_id` references. ``reply_to`` is the
+    ``turn_id`` this turn answers (set on a ``reply``; ``None`` on
+    ``opening`` and on a volunteering ``opt_in``).
+
+    The reporter's ``found_body`` / ``saw_player`` observations live on
+    the ``opening`` turn (turn 0); :mod:`eval.vote_correctness` reads
+    them from there.
+    """
+
+    turn_id: TurnId
+    turn_index: int
+    speaker: PlayerId
+    turn_kind: TurnKind
+    reply_to: TurnId | None
     observations: tuple[ObservationClaim, ...] = ()
     claims: tuple[Claim, ...] = ()
     free_text: str
 
 
-class Statement(_FrozenModel):
-    """One accusation-round turn (DESIGN.md §5.2).
-
-    A statement either targets another agent (accusation) or is purely
-    defensive. Structured ``claims`` are mechanically parseable; the
-    free-text version is shown to spectators and to other agents in
-    subsequent rounds.
-    """
-
-    statement_id: StatementId
-    speaker: PlayerId
-    tick: int
-    round_index: int
-    target: PlayerId | None
-    claims: tuple[Claim, ...] = ()
-    free_text: str
+# ---------------------------------------------------------------------------
+# Voting (DESIGN.md §5.5)
+# ---------------------------------------------------------------------------
 
 
 class VoteBallot(_FrozenModel):
@@ -171,13 +206,13 @@ class VoteBallot(_FrozenModel):
 
     The structured fields drive the tally; the rationale is logged
     post-hoc for transparency. ``primary_reason_id`` references a
-    :class:`Statement` id from the accusation rounds when applicable.
+    :class:`MeetingTurn` ``turn_id`` from the chain when applicable.
     """
 
     voter: PlayerId
     target: PlayerId | Literal["SKIP"]
     confidence: float = Field(ge=0.0, le=1.0)
-    primary_reason_id: StatementId | None
+    primary_reason_id: TurnId | None
     considered_alternatives: tuple[PlayerId, ...] = ()
     rationale_text: str
 
@@ -193,9 +228,8 @@ class ContradictionRef(_FrozenModel):
     Flags are information, not verdicts: detected contradictions feed
     back into the rendered memory view that subsequent agents see.
     ``event_a_id`` and ``event_b_id`` reference structured artifacts
-    (statement / report / observation ids); ``kind`` captures the
-    detector category so consumers can branch on it without parsing
-    free text.
+    (turn claim / observation ids); ``kind`` captures the detector
+    category so consumers can branch on it without parsing free text.
     """
 
     contradiction_id: ContradictionId
@@ -215,14 +249,18 @@ MeetingOutcome: TypeAlias = Literal["EJECTED", "SKIPPED"]
 
 
 class MeetingTranscript(_FrozenModel):
-    """Structured transcript of a meeting.
+    """Ordered transcript of a meeting (DESIGN.md §5.2).
 
-    Combines the Phase-1 reports and the Phase-2 statements; used both
-    for replay and for rendering the meeting view to the spectator UI.
+    A single ``turns`` tuple in chain order: the ``opening`` turn, then
+    the reactive ``reply`` chain, then any terminal ``opt_in`` turns.
+    Used both for replay and for rendering the meeting view to the
+    spectator UI. Replacing the old ``(reports, statements)`` pair with
+    ``turns`` is the meeting-side record-format change (Task 8.7): an old
+    committed transcript carrying ``reports`` / ``statements`` keys fails
+    this model's ``extra='forbid'`` and is re-recorded in Task 8.12.
     """
 
-    reports: tuple[ReportDocument, ...] = ()
-    statements: tuple[Statement, ...] = ()
+    turns: tuple[MeetingTurn, ...] = ()
 
 
 class MeetingResult(_FrozenModel):
@@ -240,11 +278,10 @@ class MeetingResult(_FrozenModel):
 
     DESIGN.md §5.1 and §5.2 define meeting resolution as
     ejection-or-skip; tied votes also collapse into ``SKIPPED`` per
-    "If tie or below threshold, skip" (§5.2 PHASE 4). The
+    "tie or below threshold -> skip" (§5.2 PHASE 5). The
     ``MeetingOutcome`` alias therefore exposes only ``EJECTED`` and
     ``SKIPPED`` -- any third outcome would leak protocol-incompatible
-    state that downstream consumers (Task 3.10 voting, Task 3.12
-    orchestrator integration) would have to special-case.
+    state that downstream consumers would have to special-case.
 
     Enforcing this at parse time prevents structured LLM output (or a
     buggy ``MeetingManager``) from producing a logically inconsistent
@@ -286,13 +323,13 @@ __all__ = [
     "MeetingOutcome",
     "MeetingResult",
     "MeetingTranscript",
+    "MeetingTurn",
     "ObservationClaim",
     "PlayerId",
-    "ReportDocument",
     "RoomId",
     "SawPlayerObservation",
-    "Statement",
-    "StatementId",
     "TaskId",
+    "TurnId",
+    "TurnKind",
     "VoteBallot",
 ]
