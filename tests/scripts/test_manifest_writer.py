@@ -552,6 +552,13 @@ def test_main_roster_writes_descriptor(
             "num_impostors": 1,
             "tasks_per_crewmate": 1,
         },  # baseline roster
+        {
+            "num_players": 9,
+            "num_impostors": 2,
+            "tasks_per_crewmate": 2,
+        },  # 9p/2i: 7*2=14 instances over 12 map tasks — the pre-instance cap
+        # rejected this; per-player overlap (DESIGN.md §3.2/§3.5) makes it seedable,
+        # so _validate_roster_is_seedable now accepts it before writing the sidecar.
     ],
 )
 def test_ensure_roster_subdir_always_writes_descriptor(
@@ -618,18 +625,21 @@ def test_ensure_roster_rejects_non_positive_requested(
             "tasks_per_crewmate": 1,
         },  # impostors==players
         {
-            "num_players": 10,
+            "num_players": 3,
             "num_impostors": 1,
-            "tasks_per_crewmate": 2,
-        },  # pool exhausted
+            "tasks_per_crewmate": 13,
+        },  # tasks_per_crewmate beyond the 12-task pool (per-player overlap removed
+        # the old num_crewmates*tasks_per_crewmate cap, but one crewmate's
+        # instances must still be distinct map tasks — DESIGN.md §3.2)
     ],
 )
 def test_ensure_roster_rejects_seeder_invalid_roster(
     tmp_path: Path, invalid: dict[str, int]
 ) -> None:
-    # Positive ints the SEEDER rejects (bad parity / exhausted task pool) must fail
-    # BEFORE writing, so a failed refresh leaves no poison sidecar that a later
-    # corrected refresh would refuse to overwrite (and the loader would fail on).
+    # Positive ints the SEEDER rejects (bad parity / tasks_per_crewmate beyond the
+    # map's task pool) must fail BEFORE writing, so a failed refresh leaves no
+    # poison sidecar that a later corrected refresh would refuse to overwrite (and
+    # the loader would fail on).
     with pytest.raises(ValueError):
         mw.ensure_roster_descriptor(tmp_path, **invalid)
     assert not (tmp_path / "roster.json").exists()

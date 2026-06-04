@@ -487,14 +487,18 @@ def _validate_roster_is_seedable(roster: dict[str, int]) -> None:
 
     ``_validated_roster`` guarantees positive ints, but the seeder also enforces
     cross-field invariants (``2 <= num_players``, ``1 <= num_impostors <
-    num_players``) and the map's task-pool capacity (``num_crewmates *
-    tasks_per_crewmate <= len(map.tasks)``). Run those EXACT checks by probing
-    :func:`orchestrator.seeder.seed_initial_state` against the canonical map
-    ``run_tournament.py`` uses, so an invalid-but-positive roster (e.g. ``1p/1i``,
-    or a task count that exhausts the map) fails loud here instead of being
-    written into a sidecar that ``run_tournament.py`` then rejects — which would
-    poison the directory with a descriptor a later corrected refresh refuses to
-    overwrite. Imported lazily so the per-seed ``update`` path stays cheap.
+    num_players``) and that ``tasks_per_crewmate <= len(map.tasks)`` (a single
+    crewmate's instances must be distinct map tasks). Per-player tasks (DESIGN.md
+    §3.2) removed the old ``num_crewmates * tasks_per_crewmate <= len(map.tasks)``
+    total cap — overlap across crewmates is allowed — so a 9p/2i descriptor
+    (``7 * 2 = 14`` instances over 12 map tasks) now validates. Run the seeder's
+    EXACT checks by probing :func:`orchestrator.seeder.seed_initial_state` against
+    the canonical map ``run_tournament.py`` uses, so an invalid-but-positive roster
+    (e.g. ``1p/1i``, or ``tasks_per_crewmate`` beyond the pool) fails loud here
+    instead of being written into a sidecar that ``run_tournament.py`` then rejects
+    — which would poison the directory with a descriptor a later corrected refresh
+    refuses to overwrite. Imported lazily so the per-seed ``update`` path stays
+    cheap.
     """
 
     from engine.world import load_canonical_map

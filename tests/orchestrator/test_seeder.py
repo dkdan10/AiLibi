@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import Counter
+
 import pytest
 
 from engine.world import load_canonical_map
@@ -86,12 +88,17 @@ def test_seed_initial_state_assigns_only_crewmates_to_tasks() -> None:
     crewmate_ids = {pid for pid, p in state.players.items() if p.role == "CREWMATE"}
 
     assert len(state.tasks) == len(crewmate_ids)
-    for task in state.tasks.values():
+    for instance_id, task in state.tasks.items():
+        # Per-player re-key (DESIGN.md §3.2): the dict key is the composite
+        # instance id and the instance ``id`` equals it.
+        assert instance_id == task.id == f"{task.owner}:{task.map_task_id}"
         assert task.owner in crewmate_ids
         assert task.completed is False
         assert task.progress == 0
-        assert task.required_ticks == game_map.tasks[task.id].duration_ticks
-        assert task.room == game_map.tasks[task.id].room
+        # Anchor room + duration come from the MAP task (``map_task_id``), never
+        # the composite key.
+        assert task.required_ticks == game_map.tasks[task.map_task_id].duration_ticks
+        assert task.room == game_map.tasks[task.map_task_id].room
 
 
 def test_seed_initial_state_changes_task_assignment_per_seed() -> None:
@@ -178,19 +185,21 @@ def test_seed_initial_state_defaults_to_one_task_per_crewmate() -> None:
     assert len(state.tasks) == len(crewmate_ids)
 
 
-def test_seed_initial_state_one_task_assignment_matches_historical_bytes() -> None:
-    """``tasks_per_crewmate=1`` reproduces the pre-task assignment byte-for-byte.
+def test_seed_initial_state_one_task_keeps_pairs_rekeys_to_instances() -> None:
+    """4p/1i mints the SAME ``(owner, map_task_id)`` deal — only the key shape changes.
 
-    Pins the historical one-task-per-crewmate assignment for fixed seeds so the
-    committed 4p/1i baseline path stays unchanged. These golden ``(owner,
-    task_id)`` pairs — in dict-insertion order — were captured from the seeder
-    BEFORE Task 7.1 widened it; any drift in the RNG draw order or the
-    assignment would change them and break committed-replay reconstruction.
+    Per-player re-key (DESIGN.md §3.2): ``WorldState.tasks`` is keyed by the
+    composite instance id ``"{owner}:{map_task_id}"``. The historical
+    one-task-per-crewmate ``(owner, map_task_id)`` assignment (captured for fixed
+    seeds before the re-key) is unchanged — the wrapping cursor never wraps for a
+    roster that fits the pool — so the committed 4p/1i baseline re-seeds the same
+    instances; only the dict key changes from the bare map id to the composite id.
+    These goldens are the Task 8.2 analogue of the pre-instance golden tuples.
     """
 
     game_map = load_canonical_map()
 
-    for seed, expected in (
+    for seed, expected_pairs in (
         (
             0,
             [
@@ -213,51 +222,70 @@ def test_seed_initial_state_one_task_assignment_matches_historical_bytes() -> No
             state = seed_initial_state(
                 seed=seed, game_map=game_map, num_players=4, num_impostors=1, **kwargs
             )
-            assert [(t.owner, tid) for tid, t in state.tasks.items()] == expected
+            # The (owner, map_task_id) deal is byte-identical to the pre-re-key
+            # golden — the assignment did not move, only the key shape.
+            assert [
+                (t.owner, t.map_task_id) for t in state.tasks.values()
+            ] == expected_pairs
+            # ...now re-keyed to the composite instance id, with id == key.
+            assert list(state.tasks) == [
+                f"{owner}:{map_task_id}" for owner, map_task_id in expected_pairs
+            ]
+            for instance_id, task in state.tasks.items():
+                assert task.id == instance_id
 
 
-def test_seed_initial_state_assigns_distinct_ids_per_crewmate() -> None:
-    """Each crewmate owns exactly ``tasks_per_crewmate`` distinct map task ids.
+def test_seed_initial_state_mints_per_player_instances_with_overlap() -> None:
+    """9p/2i mints 14 instances over 12 map tasks — the old 12-cap is gone.
 
-    Covers the structural invariant the engine enforces
-    (``engine/tick.py``): ``len(state.tasks) == num_crewmates *
-    tasks_per_crewmate``, every assigned id is unique, and every
-    ``TaskState.id`` equals its ``WorldState.tasks`` dict key — so no two
-    crewmates can share a map task id.
+    Each crewmate owns exactly ``tasks_per_crewmate`` instances keyed by the
+    composite ``"{owner}:{map_task_id}"`` with ``TaskState.id`` equal to its key.
+    Overlap ACROSS crewmates is allowed (DESIGN.md §3.2/§3.5): 7 crewmates × 2 =
+    14 > 12 map tasks, so the deal wraps and at least one map task is held by two
+    owners as independent instances. Within a single crewmate the map tasks are
+    distinct.
     """
 
     game_map = load_canonical_map()
     tasks_per_crewmate = 2
 
     state = seed_initial_state(
-        seed=7,
+        seed=0,
         game_map=game_map,
-        num_players=7,
+        num_players=9,
         num_impostors=2,
         tasks_per_crewmate=tasks_per_crewmate,
     )
     crewmate_ids = [pid for pid, p in state.players.items() if p.role == "CREWMATE"]
 
-    assert len(state.tasks) == len(crewmate_ids) * tasks_per_crewmate
-    # Every id unique and equal to its dict key (the engine invariant).
-    assert len(set(state.tasks)) == len(state.tasks)
-    for task_id, task in state.tasks.items():
-        assert task.id == task_id
+    assert len(crewmate_ids) == 7
+    assert len(state.tasks) == len(crewmate_ids) * tasks_per_crewmate == 14
+
+    # Composite-keyed; instance id == key; every owner is a crewmate; keys unique.
+    for instance_id, task in state.tasks.items():
+        assert instance_id == task.id == f"{task.owner}:{task.map_task_id}"
         assert task.owner in crewmate_ids
-    # Each crewmate owns exactly tasks_per_crewmate of them.
-    owners = [task.owner for task in state.tasks.values()]
+    assert len(set(state.tasks)) == len(state.tasks)
+
+    # Each crewmate owns exactly tasks_per_crewmate instances, all DISTINCT map
+    # tasks (overlap is allowed across crewmates, never within one).
     for crewmate_id in crewmate_ids:
-        assert owners.count(crewmate_id) == tasks_per_crewmate
+        owned = [t.map_task_id for t in state.tasks.values() if t.owner == crewmate_id]
+        assert len(owned) == tasks_per_crewmate
+        assert len(set(owned)) == tasks_per_crewmate
+
+    # Overlap exists: some map task is owned by >= 2 crewmates.
+    map_task_counts = Counter(t.map_task_id for t in state.tasks.values())
+    assert max(map_task_counts.values()) >= 2
 
 
-def test_seed_initial_state_multi_task_uses_flat_cursor_not_modulo() -> None:
-    """Multiple tasks per crewmate are dealt by a flat cursor over the pool.
+def test_seed_initial_state_9p2i_deal_is_a_pure_function_of_the_seed() -> None:
+    """Pin the exact seed-0 9p/2i instance deal (the wrapping cursor).
 
-    Pins the exact seed-0 two-task partition: crewmates [p-1, p-2, p-4] take the
-    shuffled pool's ids in consecutive pairs (NOT a modulo, which would repeat
-    ids). The shuffled seed-0 pool starts
-    ``[analyze_specimen, submit_scan, start_reactor, fuel_reserves, swipe_card,
-    calibrate_distributor, ...]``.
+    Replaces the pre-instance flat-cursor golden. The shuffled seed-0 pool is
+    dealt by a single cursor that wraps past the 12th id, so the 7th crewmate
+    (p-9) re-draws the pool's first two ids as its OWN instances — overlapping
+    p-1's map tasks but under distinct composite keys.
     """
 
     game_map = load_canonical_map()
@@ -265,19 +293,69 @@ def test_seed_initial_state_multi_task_uses_flat_cursor_not_modulo() -> None:
     state = seed_initial_state(
         seed=0,
         game_map=game_map,
-        num_players=4,
-        num_impostors=1,
+        num_players=9,
+        num_impostors=2,
         tasks_per_crewmate=2,
     )
 
-    assert [(t.owner, tid) for tid, t in state.tasks.items()] == [
+    expected_pairs = [
         ("p-1", "analyze_specimen"),
         ("p-1", "submit_scan"),
         ("p-2", "start_reactor"),
         ("p-2", "fuel_reserves"),
-        ("p-4", "swipe_card"),
-        ("p-4", "calibrate_distributor"),
+        ("p-3", "swipe_card"),
+        ("p-3", "calibrate_distributor"),
+        ("p-4", "empty_trash"),
+        ("p-4", "log_findings"),
+        ("p-5", "fix_wiring_cafeteria"),
+        ("p-5", "align_engine_output"),
+        ("p-7", "upload_logs"),
+        ("p-7", "inspect_samples"),
+        # cursor wraps here (index 12, 13 -> pool[0], pool[1]):
+        ("p-9", "analyze_specimen"),
+        ("p-9", "submit_scan"),
     ]
+    assert [(t.owner, t.map_task_id) for t in state.tasks.values()] == expected_pairs
+    assert list(state.tasks) == [
+        f"{owner}:{map_task_id}" for owner, map_task_id in expected_pairs
+    ]
+
+
+def test_seed_initial_state_two_owners_hold_same_map_task_as_instances() -> None:
+    """Two crewmates hold one map task as independent per-player instances.
+
+    The per-player model (DESIGN.md §3.2): the seed-0 9p/2i deal wraps so p-1 and
+    p-9 both own ``analyze_specimen`` — but as two distinct instances with
+    distinct composite keys and independent progress.
+    """
+
+    game_map = load_canonical_map()
+
+    state = seed_initial_state(
+        seed=0,
+        game_map=game_map,
+        num_players=9,
+        num_impostors=2,
+        tasks_per_crewmate=2,
+    )
+
+    owners_of_analyze = sorted(
+        task.owner
+        for task in state.tasks.values()
+        if task.map_task_id == "analyze_specimen"
+    )
+    assert owners_of_analyze == ["p-1", "p-9"]
+
+    # Distinct composite keys -> two independent instances of one map task.
+    assert "p-1:analyze_specimen" in state.tasks
+    assert "p-9:analyze_specimen" in state.tasks
+    first = state.tasks["p-1:analyze_specimen"]
+    second = state.tasks["p-9:analyze_specimen"]
+    assert first.map_task_id == second.map_task_id == "analyze_specimen"
+    # Same anchor room (one map task), but independent (separate) progress fields.
+    assert first.room == second.room == game_map.tasks["analyze_specimen"].room
+    assert first.progress == 0
+    assert second.progress == 0
 
 
 def test_seed_initial_state_rejects_tasks_per_crewmate_below_one() -> None:
@@ -293,24 +371,48 @@ def test_seed_initial_state_rejects_tasks_per_crewmate_below_one() -> None:
         )
 
 
-def test_seed_initial_state_rejects_exhausted_task_pool() -> None:
-    """A valid roster that needs more distinct ids than the map has fails loud.
+def test_seed_initial_state_allows_more_instances_than_map_tasks() -> None:
+    """The old ``num_crewmates * tasks_per_crewmate <= 12`` cap is gone.
 
-    The canonical map has 12 tasks; 10p/1i is 9 crewmates, and at
-    ``tasks_per_crewmate=2`` that needs 18 distinct ids > 12 — so the seeder
-    raises rather than silently reusing an id (which would violate the engine's
-    ``TaskState.id == <dict key>`` invariant). 0 impostors is rejected earlier,
-    so the pool can only be exhausted with a valid ``1 <= num_impostors <
-    num_players`` roster.
+    Inverts the pre-instance ``rejects_exhausted_task_pool`` test. 10p/1i is 9
+    crewmates; at ``tasks_per_crewmate=2`` that is 18 instances over the 12 map
+    tasks — which the pre-instance seeder rejected as an "exhausted task pool".
+    Per-player instances with overlap across crewmates (DESIGN.md §3.5) make this
+    seed successfully: 18 instances, every one a distinct composite key.
     """
 
     game_map = load_canonical_map()
 
-    with pytest.raises(ValueError, match="task pool exhausted"):
+    state = seed_initial_state(
+        seed=1,
+        game_map=game_map,
+        num_players=10,
+        num_impostors=1,
+        tasks_per_crewmate=2,
+    )
+    crewmate_ids = [pid for pid, p in state.players.items() if p.role == "CREWMATE"]
+
+    assert len(crewmate_ids) == 9
+    assert len(state.tasks) == len(crewmate_ids) * 2 == 18
+    assert len(set(state.tasks)) == 18  # all composite keys distinct
+
+
+def test_seed_initial_state_rejects_tasks_per_crewmate_beyond_pool() -> None:
+    """A single crewmate cannot hold more distinct map tasks than the map defines.
+
+    Overlap is allowed ACROSS crewmates, but one crewmate's instances must be
+    distinct map tasks, so ``tasks_per_crewmate > len(map.tasks)`` fails loud
+    rather than silently collapsing two same-map instances onto one composite key
+    (AGENTS.md "no silent fallbacks"). The canonical map has 12 map tasks.
+    """
+
+    game_map = load_canonical_map()
+
+    with pytest.raises(ValueError, match="tasks_per_crewmate"):
         seed_initial_state(
             seed=1,
             game_map=game_map,
-            num_players=10,
+            num_players=3,
             num_impostors=1,
-            tasks_per_crewmate=2,
+            tasks_per_crewmate=13,
         )

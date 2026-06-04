@@ -261,7 +261,7 @@ class ObservationService:
         self, *, world_state: WorldState, agent_id: PlayerId
     ) -> TaskId | None:
         owned_unfinished_tasks = [
-            task.id
+            task.map_task_id
             for task in world_state.tasks.values()
             if task.owner == agent_id and not task.completed
         ]
