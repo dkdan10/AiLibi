@@ -639,6 +639,61 @@ class TestCompletedTaskInference:
 
         assert "You completed" not in view
 
+    def test_pending_rollover_to_next_map_id_emits_completion(self) -> None:
+        # Multi-task 9p/2i loadout: completing the first task rolls
+        # ``pending_task_id`` from one map id to the NEXT (not to ``None``). The
+        # finished task's completion alibi must still render -- the pending id
+        # changes only when the previous pending task completed (PR #109 review).
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=100, room="ADMIN", pending_task_id="swipe_card")
+        )
+        memory.episodic.append(
+            _self_state_event(tick=130, room="MEDBAY", pending_task_id="submit_scan")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 130] You completed swipe_card (you were in ADMIN)." in view
+        # The NEW pending task is not yet completed, so it is not reported.
+        assert "You completed submit_scan" not in view
+
+    def test_consecutive_task_completions_each_emit(self) -> None:
+        # A full multi-task loadout (rollover then final clear) renders BOTH
+        # completion alibis: swipe_card -> submit_scan (rollover) then
+        # submit_scan -> None (final clear).
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=100, room="ADMIN", pending_task_id="swipe_card")
+        )
+        memory.episodic.append(
+            _self_state_event(tick=130, room="MEDBAY", pending_task_id="submit_scan")
+        )
+        memory.episodic.append(
+            _self_state_event(tick=160, room="MEDBAY", pending_task_id=None)
+        )
+
+        view = render_for_prompt(memory, token_budget=8000)
+
+        assert "[tick 130] You completed swipe_card (you were in ADMIN)." in view
+        assert "[tick 160] You completed submit_scan (you were in MEDBAY)." in view
+
+    def test_unchanged_pending_task_does_not_emit_completion(self) -> None:
+        # Continuing the SAME multi-tick task (pending id unchanged) must not
+        # spuriously report a completion -- the regression guard for inferring
+        # completion from a non-None rollover.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=100, room="ADMIN", pending_task_id="swipe_card")
+        )
+        memory.episodic.append(
+            _self_state_event(tick=130, room="ADMIN", pending_task_id="swipe_card")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You completed" not in view
+
 
 class TestSawBodyDeduplication:
     def test_repeated_saw_body_events_render_once(self) -> None:
