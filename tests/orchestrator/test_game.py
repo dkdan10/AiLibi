@@ -259,9 +259,12 @@ def test_headless_game_emits_crewmates_outcome_when_all_tasks_complete(
     _override_seeder(monkeypatch, state=pre_state)
 
     def factory(agent_id: PlayerId, role: Role) -> _ScriptedAgent:
+        # The do_task payload carries the agent-facing MAP id (DESIGN.md §3.2),
+        # which the engine resolves to this actor's own per-player instance — not
+        # the composite ``"{owner}:{map_task_id}"`` dict key.
         owned = [
-            task_id
-            for task_id, task in completable_tasks.items()
+            task.map_task_id
+            for task in completable_tasks.values()
             if task.owner == agent_id
         ]
         intents: list[ActionIntent] = []
