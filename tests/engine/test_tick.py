@@ -36,10 +36,15 @@ def _player(
     )
 
 
-def _task(task_id: str, owner: str, room: str, required_ticks: int = 1) -> TaskState:
+def _task(
+    map_task_id: str, owner: str, room: str, required_ticks: int = 1
+) -> TaskState:
+    # Per-player instance (DESIGN.md §3.2): the instance ``id`` is the composite
+    # ``"{owner}:{map_task_id}"`` and equals its ``WorldState.tasks`` dict key.
     return TaskState(
-        id=task_id,
+        id=f"{owner}:{map_task_id}",
         owner=owner,
+        map_task_id=map_task_id,
         room=room,
         progress=0,
         required_ticks=required_ticks,
@@ -59,7 +64,7 @@ def _state() -> WorldState:
             "p-3": _player("p-3", "IMPOSTOR", "CAFETERIA", (1.0, 0.0)),
         },
         bodies={},
-        tasks={"swipe_card": _task("swipe_card", "p-2", "ADMIN")},
+        tasks={"p-2:swipe_card": _task("swipe_card", "p-2", "ADMIN")},
         sabotage=None,
         cooldowns={"p-3": 0},
         emergency_uses={},
@@ -71,7 +76,7 @@ def _state() -> WorldState:
 def _long_task_state() -> WorldState:
     return replace(
         _state(),
-        tasks={"swipe_card": _task("swipe_card", "p-2", "ADMIN", 3)},
+        tasks={"p-2:swipe_card": _task("swipe_card", "p-2", "ADMIN", 3)},
     )
 
 
@@ -163,11 +168,11 @@ def test_continuing_task_progresses_without_repeated_action() -> None:
         game_map=game_map,
     )
 
-    assert started_state.tasks["swipe_card"].progress == 1
-    assert not started_state.tasks["swipe_card"].completed
+    assert started_state.tasks["p-2:swipe_card"].progress == 1
+    assert not started_state.tasks["p-2:swipe_card"].completed
     assert [event.type for event in start_events].count("TaskProgressed") == 1
-    assert continued_state.tasks["swipe_card"].progress == 2
-    assert not continued_state.tasks["swipe_card"].completed
+    assert continued_state.tasks["p-2:swipe_card"].progress == 2
+    assert not continued_state.tasks["p-2:swipe_card"].completed
     assert continue_events[0].type == "TaskProgressed"
     assert event_to_dict(continue_events[0])["details"] == {
         "task_id": "swipe_card",
@@ -195,8 +200,8 @@ def test_continuing_task_completes_and_can_trigger_crew_win() -> None:
 
     completed_state, events = advance_tick(state, [], game_map=game_map)
 
-    assert completed_state.tasks["swipe_card"].progress == 3
-    assert completed_state.tasks["swipe_card"].completed
+    assert completed_state.tasks["p-2:swipe_card"].progress == 3
+    assert completed_state.tasks["p-2:swipe_card"].completed
     assert completed_state.phase == "GAME_OVER"
     assert [event.type for event in events] == ["TaskCompleted", "GameOver"]
     assert event_to_dict(events[1])["winner"] == "CREWMATES"
@@ -225,7 +230,7 @@ def test_submitted_wait_suppresses_continuing_task_progress() -> None:
         game_map=game_map,
     )
 
-    assert waited_state.tasks["swipe_card"].progress == 1
+    assert waited_state.tasks["p-2:swipe_card"].progress == 1
     assert [event.type for event in events].count("TaskProgressed") == 0
     assert events[0].type == "Waited"
 
@@ -260,7 +265,7 @@ def test_submitted_move_suppresses_continuing_task_progress() -> None:
         game_map=game_map,
     )
 
-    assert moved_state.tasks["swipe_card"].progress == 1
+    assert moved_state.tasks["p-2:swipe_card"].progress == 1
     assert moved_state.players["p-2"].room == "UPPER_HALL"
     assert [event.type for event in events].count("TaskProgressed") == 0
     assert events[0].type == "Moved"
@@ -301,10 +306,10 @@ def test_rejected_action_suppresses_continuing_task_progress_for_that_tick() -> 
         game_map=game_map,
     )
 
-    assert rejected_state.tasks["swipe_card"].progress == 1
+    assert rejected_state.tasks["p-2:swipe_card"].progress == 1
     assert rejected_events[0].type == "ActionRejected"
     assert [event.type for event in rejected_events].count("TaskProgressed") == 0
-    assert continued_state.tasks["swipe_card"].progress == 2
+    assert continued_state.tasks["p-2:swipe_card"].progress == 2
     assert continued_events[0].type == "TaskProgressed"
 
 
@@ -338,7 +343,7 @@ def test_repeated_do_task_action_increments_once_per_tick() -> None:
         game_map=game_map,
     )
 
-    assert next_state.tasks["swipe_card"].progress == 2
+    assert next_state.tasks["p-2:swipe_card"].progress == 2
     assert [event.type for event in events].count("TaskProgressed") == 1
 
 
@@ -363,7 +368,7 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
             **dict(moved_state.players),
             "p-2": replace(moved_state.players["p-2"], room="ADMIN"),
         },
-        tasks={"swipe_card": _task("swipe_card", "p-2", "ADMIN")},
+        tasks={"p-2:swipe_card": _task("swipe_card", "p-2", "ADMIN")},
     )
 
     next_state, task_events = advance_tick(
@@ -382,9 +387,102 @@ def test_move_and_task_actions_apply_expected_mutations() -> None:
 
     assert moved_state.players["p-1"].room == "UPPER_HALL"
     assert any(event.type == "Moved" for event in move_events)
-    assert next_state.tasks["swipe_card"].completed
-    assert next_state.tasks["swipe_card"].progress == 1
+    assert next_state.tasks["p-2:swipe_card"].completed
+    assert next_state.tasks["p-2:swipe_card"].progress == 1
     assert any(event.type == "TaskCompleted" for event in task_events)
+
+
+def test_do_task_advances_only_the_actors_own_instance() -> None:
+    # Per-player re-key (DESIGN.md §3.2): p-2 and p-4 each hold an INSTANCE of the
+    # SAME map task ("swipe_card") in ADMIN with independent progress. p-2 doing the
+    # task advances ONLY p-2's instance; p-4's instance never moves. The agent-facing
+    # id stays the map id — the engine resolves (actor, map_task_id) to the actor's
+    # own instance, so two owners of one map task can never corrupt each other.
+    game_map = load_canonical_map()
+    base = _state()
+    players = dict(base.players)
+    players["p-4"] = replace(players["p-4"], room="ADMIN")
+    state = replace(
+        base,
+        players=players,
+        tasks={
+            "p-2:swipe_card": _task("swipe_card", "p-2", "ADMIN", required_ticks=3),
+            "p-4:swipe_card": _task("swipe_card", "p-4", "ADMIN", required_ticks=3),
+        },
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    # Only p-2's instance advanced; p-4's instance of the same map task is untouched.
+    assert next_state.tasks["p-2:swipe_card"].progress == 1
+    assert next_state.tasks["p-4:swipe_card"].progress == 0
+    # The progress event carries the MAP id; the owner is disambiguated by actor.
+    progressed = [event for event in events if event.type == "TaskProgressed"]
+    assert len(progressed) == 1
+    progressed_dump = event_to_dict(progressed[0])
+    assert progressed_dump["actor"] == "p-2"
+    assert progressed_dump["details"]["task_id"] == "swipe_card"
+
+
+def test_do_task_fails_loud_for_unowned_or_out_of_pool_map_id() -> None:
+    # DESIGN.md §3.2 ownership guarantee: an actor can only advance ITS OWN instance.
+    # p-1 owns no instance of "swipe_card" (p-2 does), and "no_such_task" is out of
+    # pool entirely — both resolve to nothing and fail loud (rejected), advancing
+    # no instance.
+    game_map = load_canonical_map()
+    base = _state()
+    # Co-locate p-1 in ADMIN so the rejection is about ownership, not the room.
+    players = dict(base.players)
+    players["p-1"] = replace(players["p-1"], room="ADMIN")
+    state = replace(base, players=players)
+
+    # (a) Foreign owner: p-1 submits p-2's map task; p-1 holds no such instance.
+    foreign_state, foreign_events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-1",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    assert foreign_events[0].type == "ActionRejected"
+    assert "swipe_card" in event_to_dict(foreign_events[0])["reason"]
+    # p-2's instance is untouched by p-1's rejected attempt.
+    assert foreign_state.tasks["p-2:swipe_card"].progress == 0
+
+    # (b) Out-of-pool map id: nobody owns "no_such_task".
+    _, out_of_pool_events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-2",
+                    "payload": {"task_id": "no_such_task"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    assert out_of_pool_events[0].type == "ActionRejected"
+    assert "no_such_task" in event_to_dict(out_of_pool_events[0])["reason"]
 
 
 def test_vent_sabotage_and_passive_effects_apply() -> None:
@@ -930,11 +1028,11 @@ def test_dead_crewmate_incomplete_task_is_dropped_and_crew_can_still_win() -> No
         state,
         players=players,
         tasks={
-            "swipe_card": _task("swipe_card", "p-2", "ADMIN"),
-            "victim_incomplete": _task(
+            "p-2:swipe_card": _task("swipe_card", "p-2", "ADMIN"),
+            "victim:victim_incomplete": _task(
                 "victim_incomplete", "victim", "CAFETERIA", required_ticks=1
             ),
-            "victim_done": replace(
+            "victim:victim_done": replace(
                 _task("victim_done", "victim", "CAFETERIA", required_ticks=1),
                 progress=1,
                 completed=True,
@@ -958,14 +1056,14 @@ def test_dead_crewmate_incomplete_task_is_dropped_and_crew_can_still_win() -> No
 
     assert not after_kill.players["victim"].alive
     assert any(event.type == "Killed" for event in kill_events)
-    # (a) Victim's incomplete task is gone.
-    assert "victim_incomplete" not in after_kill.tasks
-    # (b) Victim's already-completed task remains and still counts.
-    assert "victim_done" in after_kill.tasks
-    assert after_kill.tasks["victim_done"].completed
-    # The alive-owned task survives unchanged.
-    assert "swipe_card" in after_kill.tasks
-    assert not after_kill.tasks["swipe_card"].completed
+    # (a) Victim's incomplete task instance is gone.
+    assert "victim:victim_incomplete" not in after_kill.tasks
+    # (b) Victim's already-completed task instance remains and still counts.
+    assert "victim:victim_done" in after_kill.tasks
+    assert after_kill.tasks["victim:victim_done"].completed
+    # The alive-owned instance survives unchanged.
+    assert "p-2:swipe_card" in after_kill.tasks
+    assert not after_kill.tasks["p-2:swipe_card"].completed
 
     # (c) Completing the surviving alive-owned task reaches CREWMATE_TASKS.
     final_state, final_events = advance_tick(
@@ -1011,12 +1109,12 @@ def test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick() -> Non
         state,
         players=players,
         tasks={
-            "swipe_card_done": replace(
+            "p-2:swipe_card_done": replace(
                 _task("swipe_card_done", "p-2", "ADMIN", required_ticks=1),
                 progress=1,
                 completed=True,
             ),
-            "victim_incomplete": _task(
+            "victim:victim_incomplete": _task(
                 "victim_incomplete", "victim", "CAFETERIA", required_ticks=1
             ),
         },
@@ -1065,12 +1163,12 @@ def test_kill_reaching_parity_with_last_task_completion_yields_impostor_win() ->
         players=players,
         cooldowns={"p-3": 0},
         tasks={
-            "swipe_card_done": replace(
+            "p-1:swipe_card_done": replace(
                 _task("swipe_card_done", "p-1", "ADMIN", required_ticks=1),
                 progress=1,
                 completed=True,
             ),
-            "victim_incomplete": _task(
+            "victim:victim_incomplete": _task(
                 "victim_incomplete", "victim", "CAFETERIA", required_ticks=1
             ),
         },
