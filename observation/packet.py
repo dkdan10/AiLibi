@@ -18,6 +18,12 @@ class _FrozenModel(BaseModel):
 class SelfView(_FrozenModel):
     room: RoomId
     role: Role
+    # The agent's own next pending task, as the MAP task id (a ``game_map.tasks``
+    # key), never the per-player instance id ``"{owner}:{map_task_id}"`` (DESIGN.md
+    # §3.2). It is always the recipient's OWN task -- ``ObservationService`` scopes
+    # it by owner, so it carries no other player's task and no ownership (§1.3). The
+    # engine resolves ``(actor, pending_task_id)`` back to the agent's own instance,
+    # so the map id round-trips through ``do_task`` and ``task_locations`` unchanged.
     pending_task_id: TaskId | None
     # Identities of the recipient's fellow impostor(s), excluding its own id.
     # This rides the already-privileged self channel where ``role`` lives: an
@@ -58,6 +64,9 @@ class AudibleEvent(_FrozenModel):
 
 
 class GlobalView(_FrozenModel):
+    # ``tasks_completed`` / ``tasks_total`` count per-player task INSTANCES, not
+    # map tasks (DESIGN.md §3.2): the denominator scales with the roster (9p/2i is
+    # 14 instances over 12 map tasks) and equals the engine's win-condition total.
     tasks_completed: int
     tasks_total: int
     task_completion_percent: float

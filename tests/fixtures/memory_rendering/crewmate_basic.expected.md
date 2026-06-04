@@ -1,5 +1,5 @@
 ## Your role: CREWMATE
-## Tasks completed (global): 7 / 12
+## Tasks completed (global): 7 / 14
 
 ## Recent observations (most salient first):
 - [tick 410] You discovered p-2's body in MEDBAY.

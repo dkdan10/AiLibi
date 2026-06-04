@@ -29,6 +29,11 @@ class MoveIntent(_BaseIntent):
 
 
 class _DoTaskPayload(_FrozenModel):
+    # The agent-facing MAP task id (a ``game_map.tasks`` key / ``task_locations``
+    # key), NOT the per-player instance id (DESIGN.md §3.2). The engine resolves
+    # ``(actor, task_id)`` to the actor's own instance, so the policy submits the
+    # same map id it read from ``SelfView.pending_task_id`` -- the round-trip stays
+    # map-keyed and never targets another owner's instance.
     task_id: TaskId
 
 

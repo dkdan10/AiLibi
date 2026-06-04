@@ -30,6 +30,11 @@ class MoveAction(_BaseAction):
 class _DoTaskPayload(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    # The MAP task id (a ``game_map.tasks`` key), not the per-player instance id
+    # ``"{owner}:{map_task_id}"`` (DESIGN.md §3.2). ``engine/tick.py`` resolves
+    # ``(actor, task_id)`` to the actor's own instance, so the same map id the agent
+    # submits advances only that actor's instance -- the per-player keyspace stays
+    # engine-internal and never leaks into the action payload.
     task_id: TaskId
 
 
