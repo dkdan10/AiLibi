@@ -59,7 +59,7 @@ The product is therefore not a "game with AI players bolted on." It is a **multi
         │              │  - tactical policy │
         │              │  - strategic LLM   │
         │              └─────────┬──────────┘
-        │                        │ Action / Statement / Ballot
+        │                        │ Action / MeetingTurn / Ballot
         │                        ▼
         │                ┌───────────────┐
         │                │ ACTION QUEUE  │
@@ -163,7 +163,7 @@ ailibi/
 │   │   │   ├── impostor_report.j2
 │   │   │   ├── accusation_round.j2
 │   │   │   └── vote_ballot.j2
-│   │   └── output_schemas.py        # ReportDocument, VoteBallot, etc.
+│   │   └── output_schemas.py        # MeetingTurn, VoteBallot, etc.
 │   ├── memory/
 │   │   ├── episodic.py              # timestamped observation events
 │   │   ├── beliefs.py               # trust scores, suspicion graph
@@ -176,7 +176,7 @@ ailibi/
 │   ├── manager.py                   # MeetingManager state machine
 │   ├── transcript.py                # structured + free-text turns
 │   ├── voting.py                    # tally, ties, ejection
-│   └── schemas.py                   # ReportDocument, Statement, VoteBallot
+│   └── schemas.py                   # MeetingTurn, MeetingTranscript, VoteBallot
 │
 ├── orchestrator/
 │   ├── game.py                      # Game class: one full match
@@ -267,7 +267,7 @@ class WorldState:
     map: MapId                        # static; loaded once
     players: dict[PlayerId, PlayerState]
     bodies: dict[BodyId, BodyState]   # location, killed_by (hidden), discovered_by
-    tasks: dict[TaskId, TaskState]    # location, owner, progress, completed
+    tasks: dict[TaskInstanceId, TaskState]  # per-player instances; key "{owner}:{map_task_id}"
     sabotage: SabotageState | None
     cooldowns: dict[PlayerId, int]    # ticks remaining, impostor only
     emergency_uses: dict[PlayerId, int] # emergency calls used by player
@@ -290,11 +290,26 @@ For MVP, gameplay rules operate at room-graph granularity. `position` remains
 available for rendering and future pixel-level work, but movement, visibility,
 kill eligibility, and vent witnessing use `room`, not within-room coordinates.
 
+**Per-player tasks (re-key).** `WorldState.tasks` is keyed by a per-player task
+*instance*, not by the map task id: the key is the stable string
+`"{owner}:{map_task_id}"` (e.g. `"p-3:wires_upper"`), and `TaskState` carries
+`owner`, `map_task_id` (its anchor room is `game_map.tasks[map_task_id]`), an
+instance `id` equal to the dict key, and `progress` / `completed`. Multiple
+crewmates may therefore hold the same map task as independent instances with
+independent progress (the real Among-Us model), and the on-disk per-tick
+`state_hash` serializes the composite keys. The *agent-facing* id stays the **map
+task id**: agents submit `DoTask(task_id="wires_upper")` and the engine resolves
+`(action.actor, map_task_id)` to the actor's own instance, so the observation /
+policy / prompt layers never see another player's ownership (leak-safe) and
+`PublicMapView.task_locations` stays keyed by map id. The seeder no longer caps
+`num_crewmates × tasks_per_crewmate ≤ len(map.tasks)` — instances are minted
+deterministically with overlap allowed.
+
 ### 3.3 Entities
 
 - **Player**: room, render/layout position, role, alive flag. Role is hidden from observation.
 - **Body**: where someone died, who killed (hidden until game-over), and who discovered it.
-- **Task**: anchored to a room; "long" tasks take N ticks of standing in place. Tasks contribute to a global completion counter visible to all crewmates.
+- **Task**: a per-player *instance* of a map task, anchored to that map task's room; "long" tasks take N ticks of standing in place. Several crewmates can hold instances of the same map task, each progressing independently (see §3.2). Completed instances contribute to a global completion counter (over all live instances) visible to all crewmates; no instance reveals its owner to other agents.
 - **Sabotage**: a global timer that crewmates must resolve within N ticks or impostors win. Disables certain rooms (e.g., lights → reduces crew visibility radius).
 
 ### 3.4 Rules
@@ -314,11 +329,11 @@ Checked in order each tick:
 3. `crew_tasks_done == total_tasks` → crew win.
 4. Otherwise: continue.
 
-**Dead-crewmate task rule.** When a crewmate dies, their incomplete tasks are removed from `state.tasks`. Both `total_tasks` and `crew_tasks_done` are computed against the remaining (alive-owned) tasks; if every alive-owned task is complete, crew wins. Already-completed tasks owned by a dead crewmate stay in `state.tasks` and continue to count toward `crew_tasks_done`. Rationale: in Phase 2 there are no meetings, so crew has no path to victory other than completing tasks; if dead-owned incomplete tasks remained required, any early kill would make crew victory unreachable and the Phase 2 merge criterion would be unattainable. Ghost-completable mechanics (dead crewmates persist and continue completing tasks) are deferred to Phase 4+ when meetings give crew an alternative win path. `engine/win_conditions.py` is the win-check implementation anchor; the task-removal hook lives in `engine/tick.py`'s `KilledEvent` handler.
+**Dead-crewmate task rule.** When a crewmate dies, their incomplete task *instances* are removed from `state.tasks`. Both `total_tasks` and `crew_tasks_done` are computed against the remaining (alive-owned) instances; if every alive-owned instance is complete, crew wins. Already-completed instances owned by a dead crewmate stay in `state.tasks` and continue to count toward `crew_tasks_done`. Rationale: a dead crewmate cannot make progress, so if dead-owned incomplete instances stayed required, any early kill would make the crew task-win unreachable. Ghost-completable mechanics (dead crewmates persist and keep completing tasks) remain out of scope; deduction (ejecting impostors via meetings) is the crew's alternative to the task race. `engine/win_conditions.py` is the win-check anchor; the task-removal hook lives in `engine/tick.py`'s `KilledEvent` handler.
 
 One consequence of the `dropped` rule is that an impostor kill which removes the last incomplete task from `state.tasks` can satisfy the crew-tasks condition on the same tick, but the win-condition resolution order (impostor parity → sabotage timeout → crew tasks) attributes the outcome to the offense whenever the kill also reaches impostor parity. Concretely: a kill that simultaneously satisfies impostor parity (or sabotage timeout) AND removes the last incomplete task resolves as an impostor win on that tick; a kill that drops the last incomplete task **without** reaching parity still resolves as a crew win on the same tick. Impostor-win precedence reflects the design intent that an offensive action by the impostor should attribute the end-of-game outcome to the offense — the alternative ordering treats the same kill as a crew victory, which contradicts that intent. Implementation anchor: `engine/tick.py::_apply_kill` for the task drop, `engine/win_conditions.py::evaluate_win_conditions` for the ordering.
 
-**Phase 2 tournament balance — tuning levers and search order.** The canonical balance is calibrated against the 100-game tournament merge criterion (`tasks/phase-2.md` Merge Criteria). Three levers are in scope for Phase 2 balance work, iterated in a fixed mechanical order so the search is reviewable: (1) `kill_cooldown_ticks ∈ {6, 5, 4, 3}` (declared in `engine/maps/canonical_1.yaml`), all other parameters held at canonical defaults; (2) `tasks_per_crewmate ∈ {2, 3}` (would require parameterizing `orchestrator.seeder.seed_initial_state`; currently hardcoded to one task per crewmate by `_build_tasks`) paired with `kill_cooldown_ticks ∈ {6, 4}`; (3) `sabotages.lights.duration_ticks ∈ {60, 30}` paired with `kill_cooldown_ticks=4` and `tasks_per_crewmate=2`. The first config that produces both `CREWMATES%` and `IMPOSTORS%` above 20% of decisive games is the answer. Crewmate sabotage repair, impostor sabotage tactics, and ghost mechanics are deferred to Phase 4+ and are out of scope for this lever set. Current canonical defaults: `kill_cooldown_ticks=4`, `sabotages.lights.duration_ticks=90`.
+**Tournament balance — measured, not gated to a band.** The canonical eval roster is **9p/2i at `tasks_per_crewmate=2`** (7 crewmates × 2 = 14 per-player task instances drawn from the 12 map tasks with overlap; parity reaches at 5 crew deaths). Per-player tasks remove the old `num_crewmates × tasks_per_crewmate ≤ len(map.tasks)` seed cap, so roster and task count are free knobs. Balance levers remain `kill_cooldown_ticks` (in `engine/maps/canonical_1.yaml`), `tasks_per_crewmate`, and `sabotages.lights.duration_ticks`. The crew/impostor split is **reported and re-baselined on each re-record, not gated to a fixed band**: an impostor-favored-but-valid split is a legitimate baseline — closing the crew-skill gap is the agent-intelligence work, not a balance dial. `tasks_per_crewmate=2` is the starting point and is re-tuned after the first 9p/2i re-record. A small **flat 4p/1i set at `tasks_per_crewmate=1`** is retained as the descriptor-less determinism/leak reference (not the eval roster). Current canonical defaults: `kill_cooldown_ticks=4`, `sabotages.lights.duration_ticks=90`.
 
 ### 3.6 Hidden information
 
@@ -354,7 +369,7 @@ The engine is the single source of truth and *contains* hidden info (roles, kill
          │              │ - triggers     │
          ▼              └────────┬───────┘
        ActionIntent              │
-                              Statement / Ballot
+                              MeetingTurn / Ballot
 ```
 
 ### 4.2 Perception
@@ -403,8 +418,8 @@ Tactical decisions are deterministic given memory state, which means agent behav
 
 **Strategic policy** is LLM-driven and runs only at:
 
-1. The start of each meeting → produce `ReportDocument`.
-2. Each speech turn the agent has during meeting → produce `Statement`.
+1. The opening turn (reporter / emergency caller) → produce an opening `MeetingTurn`.
+2. Each chain or opt-in turn the agent takes → produce a `MeetingTurn`.
 3. End of meeting → produce `VoteBallot`.
 4. After meeting closes → optional belief-state update reflection.
 
@@ -443,54 +458,86 @@ A meeting starts when a `ReportBody` or `EmergencyMeeting` action validates. The
    `MeetingClosed`, records the meeting artifacts in replay, and resumes the
    engine.
 
-### 5.2 Protocol
+### 5.2 Protocol — reactive accusation chain
+
+A meeting is a single ordered list of **turns** (`transcript.turns`), each
+`{turn_index, speaker, turn_kind, reply_to, observations, claims, free_text}`,
+followed by a vote. There are no fixed "rounds."
 
 ```
-PHASE 1: REPORT INTAKE          (parallel, deadline T1)
-  Each living agent submits a ReportDocument.
+PHASE 1: OPENING                 (1 turn)
+  The body-reporter (or emergency caller) takes turn 0: states findings
+  (observations) and EITHER accuses one player OR declares "unsure".
+  turn_kind = "opening".
 
-PHASE 2: ACCUSATION ROUNDS       (sequential, R rounds)
-  Speaker order: round-robin starting from reporter.
-  Each turn: agent reads transcript-so-far, submits one Statement.
-  A Statement may target another agent ("I think X is impostor because...")
-  or be defensive ("I was in Storage with Y at tick 145.")
+PHASE 2: REACTIVE CHAIN          (<= living_player_count turns total)
+  The accused responds (turn_kind = "reply", reply_to = the accusing turn):
+  a counter-claim / defense, and OPTIONALLY a counter-accusation of someone.
+  The next speaker is deterministically the player just accused.
+  The chain TERMINATES (deterministic, replay-safe) when ANY holds:
+    (a) the current turn names no new accusation ("unsure"/defensive), OR
+    (b) the named target has already taken a turn this meeting (cycle), OR
+    (c) the turn count reaches the living-player count (hard cap).
 
-PHASE 3: VOTING                  (parallel, deadline T2)
-  Each agent submits a VoteBallot: target_id | SKIP, with rationale.
+PHASE 3: OPT-IN INFO-SHARE       (<= 1 turn per eligible non-speaker)
+  Eligible = living players who have NOT yet spoken AND hold a relevant
+  observation (deterministic co-presence gate with the body / accused).
+  In player-id order each may take one terminal turn_kind = "opt_in"
+  (share or pass). An opt-in turn may accuse but does NOT extend the chain.
 
-PHASE 4: RESOLUTION
-  Tally votes. If a player has plurality and meets threshold, eject.
-  If tie or below threshold, skip.
-  Emit MeetingResult with all ballots and final transcript.
+  Contradiction detection (§5.4) recomputes once over the full transcript
+  (opening + chain + opt-in) before voting.
+
+PHASE 4: VOTING                  (parallel, deadline T2)
+  Each living agent submits a VoteBallot: target_id | SKIP, with rationale.
+
+PHASE 5: RESOLUTION
+  Tally. Plurality meeting threshold -> eject; tie or below threshold -> skip.
+  Emit MeetingResult with all ballots and the final ordered transcript.
 ```
 
-Default values for MVP: T1 = 30 s, R = 2 rounds, T2 = 30 s. In headless mode the deadlines are turned off and the protocol runs as fast as the LLM can respond.
+Turn ids are `"{meeting_id}:turn-{turn_index}"` (unique even when a player speaks
+twice); `VoteBallot.primary_reason_id` references a turn id. Versus the old
+parallel-reports + fixed-rounds protocol this spends fewer LLM calls (it
+terminates on convergence rather than running N reports + N×R statements) and
+forces direct confrontation — an accused player must defend on the spot, which is
+where a fabricated alibi self-contradicts. The 7.12 teammate firewall (an
+impostor never accuses / incriminates / votes a fellow impostor) wraps **every**
+turn-kind. Default deadlines (live mode): `T_turn = 30 s` per turn under a total
+meeting cap; `T2 = 30 s` for the vote. Headless mode runs deadline-free.
 
 ### 5.3 Structured + natural-language layers
 
 Every artifact has both:
 
 - **Structured:** JSON schema, mechanically parseable. Used by belief tracking, contradiction detection, replay analytics.
-- **Free text:** the agent's natural-language argument. Shown to the human spectator and given to other agents in subsequent rounds.
+- **Free text:** the agent's natural-language argument. Shown to the human spectator and given to other agents in subsequent turns.
 
-Example `ReportDocument`:
+Example opening turn (`turn_kind = "opening"`):
 
 ```json
 {
-  "agent_id": "p3",
-  "tick": 412,
+  "turn_id": "m-7:turn-0",
+  "turn_index": 0,
+  "speaker": "p3",
+  "turn_kind": "opening",
+  "reply_to": null,
   "observations": [
-    {"tick": 380, "type": "saw_player", "subject": "p5", "room": "Electrical", "with": ["p7"]},
+    {"tick": 380, "type": "saw_player", "subject": "p5", "room": "Electrical", "co_present": ["p7"]},
     {"tick": 395, "type": "completed_task", "task_id": "wiring_admin"},
     {"tick": 410, "type": "found_body", "body_of": "p2", "room": "MedBay"}
   ],
   "claims": [
-    {"type": "alibi", "for": "p3", "from_tick": 380, "to_tick": 410, "evidence": ["wiring_admin", "saw_player:p5"]},
+    {"type": "alibi", "subject": "p3", "from_tick": 380, "to_tick": 410, "evidence": ["wiring_admin", "saw_player:p5"]},
     {"type": "accusation", "against": "p5", "confidence": 0.4, "reason": "near MedBay corridor minutes before kill"}
   ],
-  "free_text": "I was doing wiring in Admin from tick 380. I saw p5 head toward Electrical with p7. p2's body was in MedBay; p5 was in the right corridor."
+  "free_text": "I found p2 in MedBay. I was wiring in Admin from 380 and saw p5 head to Electrical with p7 — p5 was near that corridor."
 }
 ```
+
+A `reply` or `opt_in` turn has the same shape with `reply_to` set to the turn it
+answers; a defensive turn carries an `alibi`/`corroboration` claim and no
+`accusation`.
 
 ### 5.4 Contradiction detection
 
@@ -510,7 +557,7 @@ Voting is LLM-driven with a structured output:
 {
   "target": "p5" | "SKIP",
   "confidence": 0.65,
-  "primary_reason_id": "stmt_12",
+  "primary_reason_id": "m-7:turn-4",
   "considered_alternatives": ["p7"],
   "rationale_text": "p5's claim to be in Electrical is contradicted by p1's alibi..."
 }
@@ -658,12 +705,12 @@ Two stack questions deserve explicit calls:
 
 ### 8.1 In scope
 
-- 1 fixed map: ~10 rooms, 4 tasks per room slot, 6 vents, room graph hand-authored.
-- 5–7 agents per game; 1 impostor at start. Configurable.
+- 1 fixed map: 6 rooms, 12 map tasks (held as per-player instances, §3.2), room graph hand-authored.
+- 9 agents per game; 2 impostors (the canonical eval roster). Configurable; a flat 4p/1i set is the determinism/leak reference.
 - Movement on a room graph (no pixel-perfect collision; agents are "in" a room).
 - Tasks as visit-and-wait (configurable duration, no minigames).
 - Kill, vent, sabotage (lights only), report body, emergency meeting.
-- Meetings: structured reports + 2 accusation rounds + structured voting.
+- Meetings: a reactive accusation chain + opt-in info-share + structured voting (§5.2).
 - Memory: episodic + working + belief + meeting memo, structured (no embeddings).
 - LLM: Claude Sonnet for meetings; deterministic FSM for tactical.
 - Replay log persisted to JSONL on local disk; rerunnable from seed. (PostgreSQL deferred to scale.)
@@ -676,7 +723,6 @@ Two stack questions deserve explicit calls:
 - Multiple maps.
 - Pixel-level movement and line-of-sight ray casting.
 - Mini-game tasks (just visit-and-wait).
-- Multiple impostors.
 - Human player.
 - Voice acting / TTS.
 - Distributed multi-process simulation.
@@ -734,7 +780,7 @@ This is realistic for a solo developer over ~10–14 weeks if they ship steadily
 
 - LLM client + Claude provider + budget/cache.
 - Prompt templates (versioned).
-- Meeting protocol: report intake → accusation rounds → voting.
+- Meeting protocol: opening → reactive accusation chain → opt-in info-share → voting.
 - Memory rendering (`render_for_prompt`).
 - Contradiction detection.
 - Output schemas for reports, statements, ballots.
@@ -854,6 +900,14 @@ A more general version walks the schema and asserts no field whose value should 
   structured inputs needed by Phase 5 metrics. Engine determinism remains based
   on state hashes and recorded actions; LLM-layer determinism is achieved by
   replaying recorded LLM outputs.
+- **Versioning.** The per-game replay JSONL is intentionally unversioned: a
+  per-set `roster.json` sidecar records the roster, and the per-tick `state_hash`
+  byte-rejects any replay recorded under a different state model, so a stale
+  replay fails reconstruction rather than mis-parsing. The offline eval **report**
+  carries `CURRENT_FORMAT_VERSION` (fail-loud, no back-migration); it bumps when
+  the report/transcript shape changes (e.g. the §5.2 chain record), which forces
+  regenerating every committed `tournament-eval-report.json` and the
+  prompt-regression `baseline.json` in the same re-record.
 
 ---
 
@@ -900,9 +954,12 @@ class ObservationPacket(BaseModel):
     global_state: GlobalView
     cooldown: int | None  # impostor only
 
-class ReportDocument(BaseModel):
-    agent_id: PlayerId
-    tick: int
+class MeetingTurn(BaseModel):              # one entry in transcript.turns (§5.2)
+    turn_id: str                           # "{meeting_id}:turn-{turn_index}"
+    turn_index: int
+    speaker: PlayerId
+    turn_kind: Literal["opening", "reply", "opt_in"]
+    reply_to: str | None                   # the turn_id this responds to
     observations: list[ObservationClaim]   # each with tick reference
     claims: list[Claim]                    # alibi | accusation | corroboration
     free_text: str
@@ -911,7 +968,7 @@ class VoteBallot(BaseModel):
     voter: PlayerId
     target: PlayerId | Literal["SKIP"]
     confidence: float
-    primary_reason_id: str | None
+    primary_reason_id: str | None          # a MeetingTurn.turn_id
     rationale_text: str
 ```
 
