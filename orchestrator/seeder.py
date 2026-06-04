@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import random
 
-from engine.entities import PlayerId, PlayerState, Role, TaskState
+from engine.entities import PlayerId, PlayerState, Role, TaskInstanceId, TaskState
 from engine.rng import EngineRng
-from engine.world import Map, TaskId, WorldState
+from engine.world import Map, WorldState
 
 
 def seed_initial_state(
@@ -45,24 +45,26 @@ def seed_initial_state(
 
     Spawns: every player starts in ``game_map.spawn.room``.
 
-    Task assignment: each crewmate owns exactly ``tasks_per_crewmate``
-    *distinct* map task ids. The map's task ids are shuffled once with
-    ``random.Random(seed)`` and dealt out by a flat cursor — the first
-    crewmate takes the first ``tasks_per_crewmate`` ids, the next crewmate
-    the following ``tasks_per_crewmate``, and so on — so no two crewmates
-    ever share a task id (the engine keys ``WorldState.tasks`` by
-    :class:`~engine.world.TaskId` and enforces ``TaskState.id == <dict
-    key>``, so a shared id would corrupt the world). ``tasks_per_crewmate``
-    defaults to ``1`` — the historical value — so a caller that omits it
-    (e.g. the committed-replay loader) reproduces the original
-    one-task-per-crewmate assignment byte-for-byte. The harness/CLI layer
-    raises this to ``orchestrator.game.DEFAULT_TASKS_PER_CREWMATE`` for live
-    runs. Tasks not dealt out are simply omitted from ``WorldState.tasks``.
+    Task assignment: each crewmate owns ``tasks_per_crewmate`` per-player
+    task *instances* keyed by the composite instance id
+    ``"{owner}:{map_task_id}"`` (DESIGN.md §3.2). The map's task ids are
+    shuffled once with ``random.Random(seed)`` and dealt by a wrapping
+    cursor, so the assignment is a pure function of the seed and OVERLAP
+    ACROSS CREWMATES is allowed — two crewmates may hold the same map task
+    as independent instances with independent progress. There is no
+    ``num_crewmates * tasks_per_crewmate <= len(game_map.tasks)`` cap, which
+    is what lets a 9p/2i roster seed 14 instances over the 12 map tasks
+    (DESIGN.md §3.5). ``tasks_per_crewmate`` defaults to ``1`` — the
+    historical value — so a caller that omits it (e.g. the committed-replay
+    loader) reproduces the original one-task-per-crewmate
+    ``(owner, map_task_id)`` assignment, only re-keyed to the composite
+    instance id. The harness/CLI layer raises this to
+    ``orchestrator.game.DEFAULT_TASKS_PER_CREWMATE`` for live runs.
 
     Fail-loud (AGENTS.md "no silent fallbacks"): ``tasks_per_crewmate < 1``
-    raises, and a roster that would need more distinct ids than the map has
-    (``num_crewmates * tasks_per_crewmate > len(game_map.tasks)``) raises
-    rather than reusing an id.
+    raises, and ``tasks_per_crewmate > len(game_map.tasks)`` raises — a
+    single crewmate cannot hold the same map task twice, so its instances
+    must be distinct map tasks (overlap is allowed only ACROSS crewmates).
 
     Cooldowns: only impostors carry a kill cooldown, initialised to 0.
     """
@@ -178,44 +180,67 @@ def _build_tasks(
     game_map: Map,
     crewmate_ids: tuple[PlayerId, ...],
     tasks_per_crewmate: int,
-) -> dict[TaskId, TaskState]:
-    """Deal ``tasks_per_crewmate`` distinct map task ids to each crewmate.
+) -> dict[TaskInstanceId, TaskState]:
+    """Mint ``tasks_per_crewmate`` per-player task *instances* per crewmate.
 
-    Determinism contract: the shuffle prefix is unchanged from the original
-    one-task-per-crewmate implementation (``random.Random(seed)`` then
-    ``rng.shuffle(sorted(game_map.tasks))``), and the ids are dealt by a flat
-    cursor over the shuffled pool. For ``tasks_per_crewmate == 1`` this deals
-    ``shuffled[i]`` to crewmate ``i`` — identical to the historical
-    ``map_task_ids[index % len(map_task_ids)]`` for any roster that fits the
-    pool — so the committed 4p/1i baseline reconstructs byte-for-byte. A flat
-    cursor (never a modulo) guarantees every dealt id is unique, so the engine's
-    ``TaskState.id == <dict key>`` invariant (``engine/tick.py``) holds across
-    the whole roster.
+    Per-player re-key (DESIGN.md §3.2): ``WorldState.tasks`` is keyed by the
+    composite instance id ``"{owner}:{map_task_id}"`` (a
+    :data:`~engine.entities.TaskInstanceId`), so several crewmates can each hold
+    an instance of the SAME map task with independent progress. There is
+    therefore no ``num_crewmates * tasks_per_crewmate <= len(game_map.tasks)``
+    cap (the pre-instance fail-loud is gone): overlap across crewmates is allowed,
+    which is what lets 9p/2i seed 14 instances over the 12 map tasks
+    (DESIGN.md §3.5).
+
+    Determinism contract (a pure function of the seed; no RNG draw beyond the one
+    seeded shuffle): the map task ids are shuffled once with
+    ``random.Random(seed)`` over ``sorted(game_map.tasks)`` — the unchanged prefix
+    from the historical one-task-per-crewmate implementation — then dealt by a
+    single cursor that wraps (``map_task_ids[cursor % len(map_task_ids)]``) so it
+    never exhausts. For any roster that fits the pool (e.g. the flat 4p/1i at one
+    task) the cursor never wraps, so the dealt ``(owner, map_task_id)`` pairs are
+    byte-identical to the pre-instance assignment — ONLY the dict key changes
+    (bare map id -> ``"{owner}:{map_task_id}"``), so the committed 4p/1i baseline
+    re-seeds the same instances. Once the cursor passes the pool size the deal
+    wraps and later crewmates re-draw earlier map ids as their own fresh instances.
+
+    Within one crewmate's slice the ``tasks_per_crewmate`` consecutive cursor
+    values map to distinct pool indices iff
+    ``tasks_per_crewmate <= len(game_map.tasks)``; a larger value would deal one
+    crewmate the same map task twice, collapsing two instances onto one composite
+    key — a silent loss the seeder rejects fail-loud (AGENTS.md "no silent
+    fallbacks"). Overlap is allowed only ACROSS crewmates, never within one.
     """
 
-    required = len(crewmate_ids) * tasks_per_crewmate
-    if required > len(game_map.tasks):
+    if tasks_per_crewmate > len(game_map.tasks):
         raise ValueError(
-            "task pool exhausted: assigning tasks_per_crewmate="
-            f"{tasks_per_crewmate} distinct task(s) to each of "
-            f"{len(crewmate_ids)} crewmate(s) needs {required} distinct map task "
-            f"ids, but the map defines only {len(game_map.tasks)}. Lower "
-            "tasks_per_crewmate or num_players, or use a map with more tasks."
+            "tasks_per_crewmate exceeds the map's task pool: a single crewmate "
+            f"cannot hold {tasks_per_crewmate} distinct map tasks when the map "
+            f"defines only {len(game_map.tasks)}. Overlap is allowed ACROSS "
+            "crewmates, but one crewmate's instances must be distinct map tasks; "
+            "lower tasks_per_crewmate or use a map with more tasks."
         )
 
     rng = random.Random(seed)
     map_task_ids = sorted(game_map.tasks)
     rng.shuffle(map_task_ids)
-    tasks: dict[TaskId, TaskState] = {}
+    pool_size = len(map_task_ids)
+    tasks: dict[TaskInstanceId, TaskState] = {}
     cursor = 0
     for crewmate_id in crewmate_ids:
         for _ in range(tasks_per_crewmate):
-            task_id = map_task_ids[cursor]
+            map_task_id = map_task_ids[cursor % pool_size]
             cursor += 1
-            task_definition = game_map.tasks[task_id]
-            tasks[task_id] = TaskState(
-                id=task_id,
+            task_definition = game_map.tasks[map_task_id]
+            # Per-player instance (DESIGN.md §3.2): the dict key and ``id`` are the
+            # composite ``"{owner}:{map_task_id}"``; the agent-facing id stays the
+            # map id, which the engine resolves against ``owner``. Distinct owners
+            # of the same map task get distinct composite keys, so overlap is safe.
+            instance_id = f"{crewmate_id}:{map_task_id}"
+            tasks[instance_id] = TaskState(
+                id=instance_id,
                 owner=crewmate_id,
+                map_task_id=map_task_id,
                 room=task_definition.room,
                 progress=0,
                 required_ticks=task_definition.duration_ticks,

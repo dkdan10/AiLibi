@@ -37,10 +37,11 @@ def _body(body_id: str, player_id: str) -> BodyState:
     )
 
 
-def _task(task_id: str, owner: str) -> TaskState:
+def _task(task_id: str, owner: str, *, map_task_id: str = "swipe_card") -> TaskState:
     return TaskState(
         id=task_id,
         owner=owner,
+        map_task_id=map_task_id,
         room="CAFETERIA",
         progress=0,
         required_ticks=3,

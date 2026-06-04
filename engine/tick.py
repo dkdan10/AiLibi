@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
 from engine.actions import (
@@ -15,7 +15,14 @@ from engine.actions import (
     VentAction,
     WaitAction,
 )
-from engine.entities import PlayerId, PlayerState, SabotageState, TaskState
+from engine.entities import (
+    PlayerId,
+    PlayerState,
+    SabotageState,
+    TaskId,
+    TaskInstanceId,
+    TaskState,
+)
 from engine.events import (
     ActionRejectedEvent,
     EngineEvent,
@@ -67,12 +74,15 @@ def _advance_sabotage(sabotage: SabotageState | None) -> SabotageState | None:
 def _task_progress_event(
     *, tick: int, actor: PlayerId, task: TaskState
 ) -> TaskProgressedEvent | TaskCompletedEvent:
+    # The event carries the MAP task id (DESIGN.md §3.2; impact-map §5 decision 3),
+    # not the composite instance id: the owner is disambiguated by ``actor``, and
+    # downstream consumers resolve the room via ``game_map.tasks[task_id]``.
     if task.completed:
         return TaskCompletedEvent(
             type="TaskCompleted",
             tick=tick,
             actor=actor,
-            task_id=task.id,
+            task_id=task.map_task_id,
             progress=task.progress,
             required_ticks=task.required_ticks,
         )
@@ -80,10 +90,34 @@ def _task_progress_event(
         type="TaskProgressed",
         tick=tick,
         actor=actor,
-        task_id=task.id,
+        task_id=task.map_task_id,
         progress=task.progress,
         required_ticks=task.required_ticks,
     )
+
+
+def _resolve_owned_task_instance(
+    tasks: Mapping[TaskInstanceId, TaskState],
+    *,
+    actor: PlayerId,
+    map_task_id: TaskId,
+) -> TaskState | None:
+    """Resolve the actor's own instance of ``map_task_id`` (DESIGN.md §3.2).
+
+    Per-player tasks key ``WorldState.tasks`` by the composite instance id
+    ``"{owner}:{map_task_id}"`` while the agent-facing id stays the MAP id, so
+    the engine resolves ``(actor, map_task_id)`` to the single instance the actor
+    owns for that map task — never another owner's instance of the same map task
+    (the progress-isolation guarantee). Returns ``None`` when the actor holds no
+    such instance (a foreign / out-of-pool / unowned map id), which callers turn
+    into a loud rejection. Each ``(owner, map_task_id)`` pair is unique, so at
+    most one instance matches.
+    """
+
+    for task in tasks.values():
+        if task.owner == actor and task.map_task_id == map_task_id:
+            return task
+    return None
 
 
 def _advance_tasks(
@@ -104,14 +138,18 @@ def _advance_tasks(
         if not isinstance(last_action, DoTaskAction):
             continue
 
-        task_id = last_action.payload.task_id
-        task = tasks.get(task_id)
+        # The payload carries the MAP task id; resolve it to this actor's own
+        # per-player instance (DESIGN.md §3.2). A continuing task was accepted on
+        # an earlier tick, so the instance must still exist — a miss is a bug.
+        map_task_id = last_action.payload.task_id
+        task = _resolve_owned_task_instance(
+            tasks, actor=player_id, map_task_id=map_task_id
+        )
         if task is None:
-            raise ValueError(f"continuing task references unknown task id: {task_id}")
-        if task.id != task_id:
-            raise ValueError(f"task id mismatch for task mapping key: {task_id}")
-        if task.owner != player_id:
-            raise ValueError(f"continuing task is not owned by actor: {task_id}")
+            raise ValueError(
+                "continuing task references no owned instance: "
+                f"actor={player_id} map_task_id={map_task_id}"
+            )
         if task.required_ticks < 1:
             raise ValueError(f"task has invalid required_ticks: {task.id}")
 
@@ -212,11 +250,17 @@ def _apply_do_task(
     if actor.in_vent:
         raise ActionRejectedError("cannot do task while in vent")
 
-    task = state.tasks.get(action.payload.task_id)
+    # The agent submits the MAP task id; resolve it to this actor's own per-player
+    # instance (DESIGN.md §3.2). A foreign / out-of-pool / unowned map id resolves
+    # to nothing and fails loud — the actor can only advance its own instance.
+    map_task_id = action.payload.task_id
+    task = _resolve_owned_task_instance(
+        state.tasks, actor=action.actor, map_task_id=map_task_id
+    )
     if task is None:
-        raise ActionRejectedError(f"unknown task id: {action.payload.task_id}")
-    if task.owner != action.actor:
-        raise ActionRejectedError("task is not owned by actor")
+        raise ActionRejectedError(
+            f"actor owns no task instance for map task: {map_task_id}"
+        )
     if task.room != actor.room:
         raise ActionRejectedError("task requires actor in task room")
     if task.completed:
@@ -255,12 +299,13 @@ def _apply_kill(
     cooldowns = dict(state.cooldowns)
     cooldowns[action.actor] = game_map.kill_cooldown_ticks
     # Dead-crewmate task rule: DESIGN.md §3.5 (dropped). Remove the killed
-    # player's incomplete tasks so the crew win check counts only alive-
-    # owned tasks; completed tasks remain so they still count toward
-    # `crew_tasks_done`.
+    # player's incomplete task *instances* so the crew win check counts only
+    # alive-owned instances; completed instances remain (even the victim's) so
+    # they still count toward `crew_tasks_done`. The owner-filter is unchanged by
+    # the per-player re-key — it already keys on ``task.owner`` per instance.
     tasks = {
-        task_id: task
-        for task_id, task in state.tasks.items()
+        instance_id: task
+        for instance_id, task in state.tasks.items()
         if not (task.owner == action.payload.target and not task.completed)
     }
     return (

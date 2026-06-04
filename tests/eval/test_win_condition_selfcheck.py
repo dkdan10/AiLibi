@@ -35,6 +35,23 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples"
 _SAMPLES_7P2I = _SAMPLES_4P1I / "7p2i"
 
+# The committed replays/samples/ sets are invalidated by BOTH Phase-8
+# byte-breakers, so their reconstruction cases are skipped until Task 8.12
+# re-records both sets and re-enables them:
+#   * Task 8.1 per-player task re-key (DESIGN.md §3.2) changes
+#     _serialize_world_state, so every committed game's per-tick state_hash
+#     changes and the sets no longer reconstruct byte-identically; and
+#   * Task 8.7 reshaped MeetingTranscript to the ordered ``turns`` list under
+#     ``extra='forbid'``, so the committed meeting rows (old reports/statements
+#     shape) no longer validate during reconstruction.
+_COMMITTED_RECORD_SKIP = pytest.mark.skip(
+    reason=(
+        "Committed bytes invalidated by the Task 8.1 state_hash change "
+        "(DESIGN.md §3.2) and the Task 8.7 meeting-record reshape (§5.2); "
+        "re-recorded and re-enabled in Task 8.12."
+    )
+)
+
 
 # ---------------------------------------------------------------------------
 # Pure predicate
@@ -104,20 +121,7 @@ def _selfcheck_4p1i(seed: int) -> WinConditionSelfCheck:
     )
 
 
-# The committed replays/samples/ sets were recorded with the pre-8.7 meeting
-# record (``MeetingTranscript(reports, statements)``). Task 8.7 reshaped the
-# transcript to the ordered ``turns`` list under ``extra='forbid'``, so those
-# committed meeting rows no longer validate during reconstruction. The sets are
-# re-recorded in Task 8.12 (and the 7p2i dir renamed to 9p2i); these
-# reconstruction cases stay skipped until then -- idempotent with Task 8.1's
-# state_hash-driven skip of the same cases.
-_COMMITTED_MEETING_RESHAPE_SKIP = (
-    "committed replays/samples/ carry the pre-8.7 meeting record shape; "
-    "re-recorded + re-enabled in Task 8.12 (idempotent with Task 8.1's skip)"
-)
-
-
-@pytest.mark.skip(reason=_COMMITTED_MEETING_RESHAPE_SKIP)
+@_COMMITTED_RECORD_SKIP
 def test_committed_4p1i_set_holds_the_invariant() -> None:
     """Every committed 4p/1i game satisfies first_zero == game_over (A-A-3)."""
 
@@ -165,7 +169,7 @@ def _crewmate_eject_seeds(replay_dir: Path) -> list[int]:
     return seeds
 
 
-@pytest.mark.skip(reason=_COMMITTED_MEETING_RESHAPE_SKIP)
+@_COMMITTED_RECORD_SKIP
 def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
     """Multi-impostor 7p/2i eliminations satisfy the invariant (A-A-3).
 
@@ -203,8 +207,15 @@ def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
         )
 
 
+@_COMMITTED_RECORD_SKIP
 def test_wrong_roster_fails_loud_on_state_hash() -> None:
-    """A roster that does not match the recording diverges the per-tick hash."""
+    """A roster that does not match the recording diverges the per-tick hash.
+
+    Skipped by Task 8.1: the re-key changes how ``tasks_per_crewmate`` maps to
+    seeded ids AND invalidates the committed bytes, so the wrong-roster fail-loud
+    mechanism this pins is redefined (impact-map §4 coupling 8). Task 8.12
+    re-records the committed set and re-enables it.
+    """
 
     with pytest.raises(ValueError, match="reconstruction diverged"):
         check_replay_win_condition(

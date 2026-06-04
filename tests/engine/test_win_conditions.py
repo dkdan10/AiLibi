@@ -29,10 +29,13 @@ def _player(player_id: str, role: str, *, alive: bool = True) -> PlayerState:
     )
 
 
-def _task(task_id: str, owner: str, *, completed: bool) -> TaskState:
+def _task(map_task_id: str, owner: str, *, completed: bool) -> TaskState:
+    # Per-player instance (DESIGN.md §3.2): the instance ``id`` is the composite
+    # ``"{owner}:{map_task_id}"`` and equals its ``WorldState.tasks`` dict key.
     return TaskState(
-        id=task_id,
+        id=f"{owner}:{map_task_id}",
         owner=owner,
+        map_task_id=map_task_id,
         room="ADMIN",
         progress=1 if completed else 0,
         required_ticks=1,
@@ -75,7 +78,7 @@ def test_zero_alive_impostors_with_incomplete_tasks_returns_crew_eject_win() -> 
             "p-2": _player("p-2", "CREWMATE", alive=True),
             "p-3": _player("p-3", "IMPOSTOR", alive=False),
         },
-        tasks={"swipe_card": _task("swipe_card", "p-1", completed=False)},
+        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", completed=False)},
     )
 
     assert evaluate_win_conditions(state) == WinResult(
@@ -93,7 +96,7 @@ def test_zero_alive_impostors_with_all_tasks_done_returns_crew_eject_win() -> No
             "p-2": _player("p-2", "CREWMATE", alive=True),
             "p-3": _player("p-3", "IMPOSTOR", alive=False),
         },
-        tasks={"swipe_card": _task("swipe_card", "p-1", completed=True)},
+        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", completed=True)},
     )
 
     assert evaluate_win_conditions(state) == WinResult(
@@ -112,7 +115,7 @@ def test_sabotage_timeout_precedes_impostor_elimination() -> None:
             "p-2": _player("p-2", "CREWMATE", alive=True),
             "p-3": _player("p-3", "IMPOSTOR", alive=False),
         },
-        tasks={"swipe_card": _task("swipe_card", "p-1", completed=False)},
+        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", completed=False)},
         sabotage=SabotageState(
             kind="lights",
             remaining_ticks=0,
@@ -134,7 +137,7 @@ def test_impostor_parity_returns_impostor_win() -> None:
             "p-1": _player("p-1", "CREWMATE", alive=True),
             "p-2": _player("p-2", "IMPOSTOR", alive=True),
         },
-        tasks={"swipe_card": _task("swipe_card", "p-1", completed=False)},
+        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", completed=False)},
     )
 
     assert evaluate_win_conditions(state) == WinResult(
@@ -152,7 +155,7 @@ def test_active_sabotage_timeout_returns_impostor_win() -> None:
             "p-2": _player("p-2", "CREWMATE", alive=True),
             "p-3": _player("p-3", "IMPOSTOR", alive=True),
         },
-        tasks={"swipe_card": _task("swipe_card", "p-1", completed=False)},
+        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", completed=False)},
         sabotage=SabotageState(
             kind="lights",
             remaining_ticks=0,
@@ -175,9 +178,40 @@ def test_all_alive_owned_tasks_complete_returns_crew_win() -> None:
             "p-2": _player("p-2", "CREWMATE", alive=True),
             "p-3": _player("p-3", "IMPOSTOR", alive=True),
         },
-        tasks={"swipe_card": _task("swipe_card", "p-1", completed=True)},
+        tasks={"p-1:swipe_card": _task("swipe_card", "p-1", completed=True)},
     )
 
     assert evaluate_win_conditions(state) == WinResult(
+        winner="CREWMATES", reason="CREWMATE_TASKS"
+    )
+
+
+def test_win_count_is_over_per_player_instances() -> None:
+    # Per-player re-key (DESIGN.md §3.2/§3.5): two crewmates each hold an INSTANCE
+    # of the same map task ("swipe_card") with independent progress. The crew-task
+    # win counts over instances, so one owner's completed instance is not enough —
+    # the crew wins only once every alive-owned instance is complete.
+    players = {
+        "p-1": _player("p-1", "CREWMATE", alive=True),
+        "p-2": _player("p-2", "CREWMATE", alive=True),
+        "p-3": _player("p-3", "IMPOSTOR", alive=True),
+    }
+    partial = _world_state(
+        players=players,
+        tasks={
+            "p-1:swipe_card": _task("swipe_card", "p-1", completed=True),
+            "p-2:swipe_card": _task("swipe_card", "p-2", completed=False),
+        },
+    )
+    assert evaluate_win_conditions(partial) is None
+
+    both_done = _world_state(
+        players=players,
+        tasks={
+            "p-1:swipe_card": _task("swipe_card", "p-1", completed=True),
+            "p-2:swipe_card": _task("swipe_card", "p-2", completed=True),
+        },
+    )
+    assert evaluate_win_conditions(both_done) == WinResult(
         winner="CREWMATES", reason="CREWMATE_TASKS"
     )

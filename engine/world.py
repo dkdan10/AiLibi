@@ -16,6 +16,7 @@ from engine.entities import (
     PlayerId,
     PlayerState,
     SabotageState,
+    TaskInstanceId,
     TaskState,
 )
 
@@ -49,7 +50,12 @@ class WorldState:
     map: MapId
     players: Mapping[PlayerId, PlayerState]
     bodies: Mapping[BodyId, BodyState]
-    tasks: Mapping[TaskId, TaskState]
+    # Per-player task instances (DESIGN.md §3.2): keyed by the composite instance
+    # id ``"{owner}:{map_task_id}"`` (a ``TaskInstanceId``), NOT by the map task
+    # id, so several crewmates can each hold an instance of the same map task with
+    # independent progress. The agent-facing id stays the map id; the engine
+    # resolves ``(actor, map_task_id)`` to the actor's own instance.
+    tasks: Mapping[TaskInstanceId, TaskState]
     sabotage: SabotageState | None
     cooldowns: Mapping[PlayerId, int]
     emergency_uses: Mapping[PlayerId, int]
@@ -292,6 +298,12 @@ class Map(_FrozenModel):
         return matching_vents[0] if matching_vents else None
 
     def _validate_disjoint_namespaces(self) -> None:
+        # These are the MAP's room / vent / task ids (the agent-facing keyspace),
+        # NOT ``WorldState.tasks`` (which is re-keyed per-player to the composite
+        # ``"{owner}:{map_task_id}"`` instance id — DESIGN.md §3.2). The composite
+        # instance keyspace embeds a ``:`` separator, which no map id can contain
+        # (map task ids match ``^[a-z][a-z0-9_]*$``), so it stays disjoint from
+        # these namespaces by construction.
         room_ids = set(self.rooms)
         vent_ids = set(self.vents)
         task_ids = set(self.tasks)
