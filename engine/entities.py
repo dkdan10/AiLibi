@@ -12,6 +12,10 @@ PlayerId: TypeAlias = str
 BodyId: TypeAlias = str
 RoomId: TypeAlias = str
 TaskId: TypeAlias = str
+# A per-player task *instance* id: the stable string ``"{owner}:{map_task_id}"``
+# that keys ``WorldState.tasks`` (DESIGN.md §3.2). Distinct from ``TaskId``, which
+# is the MAP task id (``game_map.tasks`` key) the instance is anchored to.
+TaskInstanceId: TypeAlias = str
 Role: TypeAlias = Literal["CREWMATE", "IMPOSTOR"]
 
 
@@ -47,8 +51,20 @@ class BodyState:
 
 @dataclass(frozen=True)
 class TaskState:
-    id: TaskId
+    """A per-player task *instance* (DESIGN.md §3.2, §3.3).
+
+    ``id`` is the instance id — the stable composite string
+    ``"{owner}:{map_task_id}"`` that keys ``WorldState.tasks`` — so several
+    crewmates can each hold an instance of the same map task with independent
+    progress. ``map_task_id`` is the MAP task id this instance is anchored to
+    (its room is ``game_map.tasks[map_task_id].room``); it is the *agent-facing*
+    id the engine resolves against ``owner`` (the agent never sees the composite
+    instance id or another player's ownership).
+    """
+
+    id: TaskInstanceId
     owner: PlayerId
+    map_task_id: TaskId
     room: RoomId
     progress: int
     required_ticks: int

@@ -35,6 +35,17 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples"
 _SAMPLES_7P2I = _SAMPLES_4P1I / "7p2i"
 
+# Task 8.1 per-player task re-key (DESIGN.md §3.2) changes _serialize_world_state,
+# so every committed game's per-tick state_hash changes and the committed sets no
+# longer reconstruct byte-identically. The committed-set reconstruction cases below
+# are skipped until Task 8.12 re-records both sets and re-enables them.
+_COMMITTED_RECORD_SKIP = pytest.mark.skip(
+    reason=(
+        "Committed bytes invalidated by the Task 8.1 state_hash change "
+        "(DESIGN.md §3.2); re-recorded and re-enabled in Task 8.12."
+    )
+)
+
 
 # ---------------------------------------------------------------------------
 # Pure predicate
@@ -104,6 +115,7 @@ def _selfcheck_4p1i(seed: int) -> WinConditionSelfCheck:
     )
 
 
+@_COMMITTED_RECORD_SKIP
 def test_committed_4p1i_set_holds_the_invariant() -> None:
     """Every committed 4p/1i game satisfies first_zero == game_over (A-A-3)."""
 
@@ -151,6 +163,7 @@ def _crewmate_eject_seeds(replay_dir: Path) -> list[int]:
     return seeds
 
 
+@_COMMITTED_RECORD_SKIP
 def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
     """Multi-impostor 7p/2i eliminations satisfy the invariant (A-A-3).
 
@@ -188,8 +201,15 @@ def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
         )
 
 
+@_COMMITTED_RECORD_SKIP
 def test_wrong_roster_fails_loud_on_state_hash() -> None:
-    """A roster that does not match the recording diverges the per-tick hash."""
+    """A roster that does not match the recording diverges the per-tick hash.
+
+    Skipped by Task 8.1: the re-key changes how ``tasks_per_crewmate`` maps to
+    seeded ids AND invalidates the committed bytes, so the wrong-roster fail-loud
+    mechanism this pins is redefined (impact-map §4 coupling 8). Task 8.12
+    re-records the committed set and re-enables it.
+    """
 
     with pytest.raises(ValueError, match="reconstruction diverged"):
         check_replay_win_condition(

@@ -47,6 +47,8 @@ class TaskProgressedEvent:
     type: Literal["TaskProgressed"]
     tick: int
     actor: PlayerId
+    # The MAP task id (not the per-player instance id): the owner is given by
+    # ``actor`` and ``game_map.tasks[task_id]`` resolves the room (DESIGN.md §3.2).
     task_id: TaskId
     progress: int
     required_ticks: int
@@ -57,6 +59,8 @@ class TaskCompletedEvent:
     type: Literal["TaskCompleted"]
     tick: int
     actor: PlayerId
+    # The MAP task id (not the per-player instance id): the owner is given by
+    # ``actor`` and ``game_map.tasks[task_id]`` resolves the room (DESIGN.md §3.2).
     task_id: TaskId
     progress: int
     required_ticks: int
@@ -203,6 +207,9 @@ def event_to_dict(event: object) -> dict[str, Any]:
             "details": {"from_room": event.from_room, "to_room": event.to_room},
         }
     if isinstance(event, (TaskProgressedEvent, TaskCompletedEvent)):
+        # ``task_id`` is the MAP id (owner disambiguated by ``actor``), so a
+        # spectator/loader ``game_map.tasks[task_id]`` lookup stays valid under
+        # the per-player re-key (DESIGN.md §3.2).
         return {
             "type": event.type,
             "tick": event.tick,

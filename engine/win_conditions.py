@@ -50,6 +50,11 @@ def evaluate_win_conditions(state: WorldState) -> WinResult | None:
     # the comparison below already counts only alive-owned tasks. Impostor
     # parity is checked first per §3.5: a kill that simultaneously reaches
     # parity AND drops the last incomplete task resolves as an impostor win.
+    #
+    # Per-player re-key (DESIGN.md §3.2/§3.5): the count is over live task
+    # *instances*, so the denominator scales with the roster (e.g. 9p/2i is 14
+    # instances over the 12 map tasks). The rule is unchanged — only the
+    # magnitude — and an empty instance set is not a crew win (``> 0`` guard).
     total_tasks = len(state.tasks)
     completed_tasks = sum(1 for task in state.tasks.values() if task.completed)
     if completed_tasks == total_tasks and total_tasks > 0:

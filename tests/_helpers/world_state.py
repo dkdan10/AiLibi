@@ -64,26 +64,33 @@ def scripted_initial_world_state(*, seed: int) -> WorldState:
             ),
         },
         bodies={},
+        # Per-player task instances (DESIGN.md §3.2): keyed by the composite
+        # instance id ``"{owner}:{map_task_id}"``. The scripted ``do_task`` payloads
+        # keep their MAP ids (``swipe_card`` ...); the engine resolves each to the
+        # acting owner's own instance.
         tasks={
-            "swipe_card": TaskState(
-                id="swipe_card",
+            "p-1:swipe_card": TaskState(
+                id="p-1:swipe_card",
                 owner="p-1",
+                map_task_id="swipe_card",
                 room="ADMIN",
                 progress=0,
                 required_ticks=1,
                 completed=False,
             ),
-            "submit_scan": TaskState(
-                id="submit_scan",
+            "p-2:submit_scan": TaskState(
+                id="p-2:submit_scan",
                 owner="p-2",
+                map_task_id="submit_scan",
                 room="MEDBAY",
                 progress=0,
                 required_ticks=1,
                 completed=False,
             ),
-            "empty_trash": TaskState(
-                id="empty_trash",
+            "p-4:empty_trash": TaskState(
+                id="p-4:empty_trash",
                 owner="p-4",
+                map_task_id="empty_trash",
                 room="CAFETERIA",
                 progress=0,
                 required_ticks=1,

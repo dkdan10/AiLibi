@@ -213,9 +213,14 @@ def _build_tasks(
             task_id = map_task_ids[cursor]
             cursor += 1
             task_definition = game_map.tasks[task_id]
+            # Per-player re-key (DESIGN.md §3.2): ``TaskState`` carries the new
+            # required ``map_task_id`` anchor. Task 8.1 threads only that field —
+            # the distinct-deal + cap and the bare key shape are retained here and
+            # become composite per-player instances in Task 8.2.
             tasks[task_id] = TaskState(
                 id=task_id,
                 owner=crewmate_id,
+                map_task_id=task_id,
                 room=task_definition.room,
                 progress=0,
                 required_ticks=task_definition.duration_ticks,
