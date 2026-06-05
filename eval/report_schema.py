@@ -93,10 +93,20 @@ from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord, WinnerSide
 # Current on-disk format of :class:`TournamentReport`. Bumped only when the
 # schema changes shape in a way older readers cannot interpret. The version is
 # namespaced to this report and is independent of the per-tick / per-meeting
-# replay JSONL records in ``orchestrator.replay`` (see the PR's ``## Decisions``
-# block): the report is a fresh artifact, so versioning it does not require
-# touching the already-shipped replay entry models.
-CURRENT_FORMAT_VERSION: Final[int] = 1
+# replay JSONL records in ``orchestrator.replay`` (decision 10, DESIGN.md
+# §11.4): the report is a fresh artifact, so versioning it does not require
+# touching the already-shipped replay entry models -- those reject a stale or
+# foreign replay via the per-tick ``state_hash`` plus the per-set
+# ``roster.json`` sidecar, not a ``format_version`` field (see
+# :mod:`orchestrator.replay`).
+#
+# v1 -> v2 (Task 8.11): the meeting-chain reshape (Tasks 8.7 / 8.10) changed the
+# shape of :attr:`MeetingReport.transcript`, so a v1 report cannot be read under
+# this model. The bump makes :meth:`TournamentReport._validate_format_version`
+# reject every committed v1 ``tournament-eval-report.json`` fail-loud with no
+# back-migration, which is why Task 8.12 regenerates the committed reports + the
+# prompt-regression ``baseline.json`` in the same coordinated re-record.
+CURRENT_FORMAT_VERSION: Final[int] = 2
 
 
 class _FrozenModel(BaseModel):
@@ -251,14 +261,17 @@ class TournamentReport(_FrozenModel):
     ``format_version`` is validated fail-loud: an unknown future version (one
     greater than this build's :data:`CURRENT_FORMAT_VERSION`) raises rather
     than being coerced or warned past (AGENTS.md "no silent fallbacks"). A
-    version below current is rejected too while no migration path exists -- for
-    v1 there is no prior version, so only ``1`` is valid. ``format_version`` is
-    a required field with no default: a report whose marker is entirely absent
-    raises rather than silently defaulting to v1 (audit E-E-1), on every path
-    that builds the report -- ``model_validate_json``, ``model_validate`` of a
-    Python dict, in-process construction, and the same paths for a report
-    nested under :class:`eval.meeting_quality.TournamentEvalReport`. A report
-    that lost its marker is corrupt or foreign, not a v1 report; the writer
+    version below current is rejected too while no migration path exists -- the
+    v1 -> v2 bump (Task 8.11, for the §5.2 meeting-chain transcript reshape)
+    ships no back-migration, so a committed v1 report is rejected fail-loud and
+    only ``2`` is valid (Task 8.12 regenerates the committed reports to v2).
+    ``format_version`` is a required field with no default: a report whose
+    marker is entirely absent raises rather than silently defaulting (audit
+    E-E-1), on every path that builds the report -- ``model_validate_json``,
+    ``model_validate`` of a Python dict, in-process construction, and the same
+    paths for a report nested under
+    :class:`eval.meeting_quality.TournamentEvalReport`. A report that lost its
+    marker is corrupt or foreign, not a v1 report; the writer
     (:mod:`eval.balance_eval`) stamps the current version explicitly on
     construction.
     """

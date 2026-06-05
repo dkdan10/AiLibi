@@ -23,6 +23,21 @@ the engine layer. LLM-layer determinism is achieved by replaying the
 recorded LLM outputs rather than re-calling the provider; the records
 written here are the per-meeting payload that future record/replay
 clients consume.
+
+Versioning (decision 10; DESIGN.md §11.4). The replay JSONL is
+intentionally **unversioned**: none of the replay entry models
+(:class:`ReplayEntry`, :class:`MeetingReplayEntry`,
+:class:`GameEndReplayEntry`, :class:`FailedCallReplayEntry`) carries a
+``format_version`` field, and none is added when the engine state model or
+the meeting transcript shape changes. Two guards already reject any replay
+recorded under a different model, so a version field would be redundant:
+the per-tick ``state_hash`` byte-rejects a replay whose engine-state
+serialization differs (a stale replay fails reconstruction rather than
+mis-parsing), and the per-set ``roster.json`` sidecar pins the roster the
+set was recorded at. The fail-loud version gate lives only on the offline
+eval **report** (:data:`eval.report_schema.CURRENT_FORMAT_VERSION`), whose
+shape is a fresh artifact; the replay bytes rely on the hash + sidecar
+instead.
 """
 
 from __future__ import annotations
