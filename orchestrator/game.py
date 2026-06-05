@@ -130,26 +130,29 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 }
 
 # Static map of prompt-template id → version string. The versions are
-# embedded as comments in the .j2 files (see
-# ``agents/strategic/prompts/*.j2``); maintaining the mapping here keeps
-# the replay record's :attr:`MeetingReplayEntry.prompt_versions` in
-# sync without a runtime regex over the loaded templates. Bump the
+# embedded as comments + a visible "Prompt: <id>" marker line in the .j2
+# files (see ``agents/strategic/prompts/*.j2``); maintaining the mapping
+# here keeps the replay record's :attr:`MeetingReplayEntry.prompt_versions`
+# in sync without a runtime regex over the loaded templates. Bump the
 # string here whenever the matching template header is bumped.
 #
-# Task 7.12 bumped ``impostor_report``, ``accusation_round``, and
-# ``vote_ballot`` because the gated teammate-coordination block is a
-# behavior-shifting prompt change: this is the AUTHORITATIVE revision
-# recorded into replay/eval, so the upcoming 7p/2i re-record is attributed
-# to the new revision instead of being conflated with the old committed
-# runs. This map is metadata only (never rendered into a prompt), so the
-# bump does not alter any rendered prompt — the frozen 4p/1i and crewmate
-# prompts stay byte-identical and both committed sets reconstruct
-# unchanged. ``crewmate_report`` is unbumped (its template is untouched).
+# Task 8.8 bumped ALL FOUR templates in lockstep because the reactive
+# accusation-chain reshape (DESIGN.md §5.2) is a behavior-shifting change
+# to every meeting prompt: the four ``.j2`` templates now emit the
+# chain shapes (opening / reactive reply / opt-in / vote) against the
+# ``MeetingTurn`` schema. The four versions must move together — a partial
+# bump fails the manifest/replay provenance cross-check. The reshape is one
+# of the Phase-8 byte-breakers, so both committed sets are re-recorded in
+# Task 8.12 under these revisions (there is no byte-identity left to
+# preserve, which is why the old vote_ballot v1-body / v2-record split is
+# also retired here). This map is metadata only (never rendered into a
+# prompt); the recorded value is the AUTHORITATIVE revision read by
+# replay/eval and the sample MANIFESTs.
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
-    "crewmate_report": "crewmate_report.v1",
-    "impostor_report": "impostor_report_v2",
-    "accusation_round": "accusation_round.v3",
-    "vote_ballot": "vote_ballot/v2",
+    "crewmate_report": "crewmate_report.v2",
+    "impostor_report": "impostor_report_v3",
+    "accusation_round": "accusation_round.v4",
+    "vote_ballot": "vote_ballot/v3",
 }
 
 _T = TypeVar("_T")

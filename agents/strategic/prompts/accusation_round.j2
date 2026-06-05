@@ -1,54 +1,81 @@
-{# Accusation-round speech turn prompt (DESIGN.md §5.2, §5.3).
+{# Reactive accusation-chain turn prompt (DESIGN.md §5.2, §5.3).
 
    prompt_id: accusation_round
-   version: 3
-   (v3, Task 7.12: added the gated "Your fellow impostors" block, rendered
-    only when fellow_impostor_ids is non-empty — crewmate / sole-impostor
-    turns stay byte-identical.)
+   version: 4
+   (v4, Task 8.8: reshaped from the fixed-round `Statement` turn to a reactive
+    chain turn -- output is now meetings.schemas.MeetingTurn (turn_kind =
+    "reply" or "opt_in"). Gains two inputs over the old renderer: `prior_turn`
+    (the accusing turn this speaker answers; None for an opt-in) and
+    `turn_kind`. The gated "Your fellow impostors" 7.12 block is preserved,
+    rendered only when fellow_impostor_ids is non-empty.)
 
-   Targets the shared `Statement` schema (meetings/schemas.py). The orchestrator
-   substitutes the deterministic identity fields (`statement_id`, `speaker`,
-   `tick`, `round_index`) after parsing; the LLM produces `target`, `claims`,
-   and `free_text`.
+   Targets the shared `MeetingTurn` schema (meetings/schemas.py). The meeting
+   manager substitutes the deterministic identity fields (`turn_id`,
+   `turn_index`, `speaker`, `turn_kind`, `reply_to`) after parsing; the LLM
+   produces `observations`, `claims`, and `free_text`. There is no separate
+   `target` field -- an accusation is an `accusation` claim, and the chain
+   reads its next speaker off that claim.
 
-   Inputs (DESIGN.md §5.2 last paragraph + §5.3 + §5.4):
-     rendered_memory  -- string. Output of
-                         agents/memory/store.py::render_for_prompt: the agent's
-                         role, tasks-completed line, salience-ordered
-                         observations, beliefs, and pre-existing contradiction
-                         flags. The agent's role is in this view and nowhere
-                         else.
-     transcript       -- `meetings.schemas.MeetingTranscript`-shaped object
-                         with `.reports` (Phase-1 ReportDocuments) and
-                         `.statements` (earlier-round Statements). Together
-                         these are "the transcript so far" visible to every
-                         living agent.
-     contradictions   -- iterable of `meetings.schemas.ContradictionRef`-shaped
-                         flags raised by the transcript-update detector
-                         (DESIGN.md §5.4). Information, not verdicts.
+   Inputs (DESIGN.md §5.2 + §5.3 + §5.4):
+     agent_id        -- str. This speaker's PlayerId. Threaded into the
+                        self-alibi example so the model emits its own id.
+     rendered_memory -- str. render_for_prompt output (§6.6): the agent's
+                        role, tasks-completed line, salience-ordered
+                        observations, beliefs, and pre-existing contradiction
+                        flags. The agent's role is in this view and nowhere
+                        else.
+     transcript      -- `meetings.schemas.MeetingTranscript`-shaped object
+                        with `.turns` (the ordered opening -> reactive chain ->
+                        opt-in turns so far). This is "the transcript so far"
+                        visible to every living agent.
+     contradictions  -- iterable of `meetings.schemas.ContradictionRef`-shaped
+                        flags raised by the transcript-update detector
+                        (DESIGN.md §5.4). Information, not verdicts.
+     prior_turn      -- `meetings.schemas.MeetingTurn` | None. The accusing
+                        turn this speaker is answering (turn_kind == "reply");
+                        None for a terminal opt-in info-share turn.
+     turn_kind       -- "reply" | "opt_in". Frames the turn.
 
-   These three inputs are exhaustive: the template references nothing else,
-   so no hidden engine state can reach the LLM through this prompt.
+   These inputs are exhaustive: the template references nothing else, so no
+   hidden engine state can reach the LLM through this prompt.
 -#}
 You are an agent in a multi-agent social-deduction simulation, taking your
-turn in an accusation round (DESIGN.md §5.2 Phase 2). You will read the
-public meeting transcript so far together with your private memory, then
-submit exactly one Statement.
+turn in a reactive accusation chain (DESIGN.md §5.2). You will read the public
+meeting transcript so far together with your private memory, then submit
+exactly one turn.
 
-A Statement is either an accusation (you name a target you believe is the
-impostor) or a defensive turn (you give an alibi for yourself or
-corroborate another player's claim). Staying silent is not an option for
-this turn: a missing submission is treated as a default no-statement and
-wastes your round.
+Prompt: accusation_round.v4 (DESIGN.md §5.2)
+{% if turn_kind == "reply" %}
+
+## Your turn: a reply
+You were just accused{% if prior_turn %} by `{{ prior_turn.speaker }}`{% endif %},
+and the floor has passed to you. Defend yourself (give an alibi for yourself or
+corroborate another player's claim) and OPTIONALLY counter-accuse exactly one
+other player. The chain passes next to whoever you accuse, so accuse at most
+one player -- or stay purely defensive (no accusation) to let the chain end.
+{%- if prior_turn %}
+{%- for claim in prior_turn.claims %}
+{%- if claim.type == "accusation" %}
+The accusation against you: {{ claim.reason }} (confidence {{ "%.2f" | format(claim.confidence) }}). Address it directly.
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{% else %}
+
+## Your turn: an opt-in info-share
+You hold an observation relevant to the body or to an accused player, so you
+may share it now. This is a one-time, terminal turn -- it does NOT extend the
+chain. You may accuse, but the floor will not pass on; share what you know
+(or pass with a brief note in `free_text` and no claims).
+{% endif %}
 
 ## How to read this prompt
 - "Your private memory" is yours alone. Other agents do not see it.
-- "Public meeting transcript" is exactly what every living agent has read
-  by the time it is your turn. Reference it precisely; everyone can check
-  what you cite.
-- "Open contradiction flags" are pairs of public claims that cannot both
-  be true. They are evidence to weigh, not verdicts. The contradiction
-  detector flags them; the table decides what they mean.
+- "Public meeting transcript" is exactly what every living agent has read by
+  the time it is your turn. Reference it precisely; everyone can check what
+  you cite.
+- "Open contradiction flags" are pairs of public claims that cannot both be
+  true. They are evidence to weigh, not verdicts.
 
 ## Game-rule framing
 This is a game. If "Your role" in your private memory shows you as the
@@ -64,23 +91,21 @@ later turns.
 ## Your fellow impostors (your team)
 These players are your fellow impostors and are on YOUR team:
 {{ fellow_impostor_ids | join(", ") }}. Never target a teammate -- do not
-accuse or incriminate one and do not name one as your Statement `target`. If
-it helps your cover you may corroborate a teammate's alibi instead. Aim the
-round at a crewmate or stay defensive.
+accuse or incriminate one (do not name one in an `accusation` claim). If it
+helps your cover you may corroborate a teammate's alibi instead. Aim any
+accusation at a crewmate or stay defensive.
 {% endif %}
 
 ## Your private memory
 {{ rendered_memory }}
 
 ## Public meeting transcript so far
-{%- if transcript.reports %}
-
-### Reports submitted in Phase 1
-{%- for report in transcript.reports %}
-- **{{ report.agent_id }}** at tick {{ report.tick }}:
-  {%- if report.observations %}
+{%- if transcript.turns %}
+{%- for turn in transcript.turns %}
+- [`{{ turn.turn_id }}`] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) -- **{{ turn.speaker }}**
+  {%- if turn.observations %}
   - Observations:
-    {%- for obs in report.observations %}
+    {%- for obs in turn.observations %}
     {%- if obs.type == "saw_player" %}
     - tick {{ obs.tick }} -- saw {{ obs.subject }} in {{ obs.room }}
       {%- if obs.co_present %} with {{ obs.co_present | join(", ") }}{% endif %}.
@@ -91,9 +116,9 @@ round at a crewmate or stay defensive.
     {%- endif %}
     {%- endfor %}
   {%- endif %}
-  {%- if report.claims %}
+  {%- if turn.claims %}
   - Claims:
-    {%- for claim in report.claims %}
+    {%- for claim in turn.claims %}
     {%- if claim.type == "alibi" %}
     - alibi: {{ claim.subject }} in {{ claim.room }} from tick {{ claim.from_tick }} to {{ claim.to_tick }}
       {%- if claim.evidence %} (evidence: {{ claim.evidence | join("; ") }}){% endif %}.
@@ -104,39 +129,10 @@ round at a crewmate or stay defensive.
     {%- endif %}
     {%- endfor %}
   {%- endif %}
-  - Free text: "{{ report.free_text }}"
+  - Free text: "{{ turn.free_text }}"
 {%- endfor %}
 {%- else %}
-
-### Reports submitted in Phase 1
-(No reports were submitted.)
-{%- endif %}
-{%- if transcript.statements %}
-
-### Statements in earlier accusation rounds
-{%- for statement in transcript.statements %}
-- Round {{ statement.round_index }} -- **{{ statement.speaker }}** at tick {{ statement.tick }}
-  {%- if statement.target %} -- targeting **{{ statement.target }}**{% else %} -- defensive (no target){% endif %}:
-  {%- if statement.claims %}
-  - Claims:
-    {%- for claim in statement.claims %}
-    {%- if claim.type == "alibi" %}
-    - alibi: {{ claim.subject }} in {{ claim.room }} from tick {{ claim.from_tick }} to {{ claim.to_tick }}
-      {%- if claim.evidence %} (evidence: {{ claim.evidence | join("; ") }}){% endif %}.
-    {%- elif claim.type == "accusation" %}
-    - accusation: against {{ claim.against }} (confidence {{ "%.2f" | format(claim.confidence) }}) -- {{ claim.reason }}
-    {%- elif claim.type == "corroboration" %}
-    - corroboration: supports {{ claim.supports }} on tick {{ claim.on_tick }} -- {{ claim.reason }}
-    {%- endif %}
-    {%- endfor %}
-  {%- endif %}
-  - Free text: "{{ statement.free_text }}"
-{%- endfor %}
-{%- else %}
-
-### Statements in earlier accusation rounds
-(No accusation-round statements have been made yet -- you are the first
-speaker this round.)
+(No turns have been recorded yet -- you are the first speaker this meeting.)
 {%- endif %}
 
 ## Open contradiction flags
@@ -151,21 +147,25 @@ speaker this round.)
 
 ## Your task
 Produce exactly one JSON object that validates against the shared
-`Statement` schema (`meetings/schemas.py`). The orchestrator is
+`MeetingTurn` schema (`meetings/schemas.py`). The meeting manager is
 authoritative for the identity fields and overrides whatever you emit
 for them, but structured-output validation still requires every field to
 be present, so emit a placeholder for each identity field and put your
 real turn in the content fields.
 
-Identity fields (emit a placeholder; the orchestrator overrides each):
-- `statement_id`: any non-empty string (e.g. `"s"`).
+Identity fields (emit a placeholder; the manager overrides each):
+- `turn_id`: any non-empty string (e.g. `"t"`).
+- `turn_index`: any integer.
 - `speaker`: any non-empty string (your own player id is fine).
-- `tick`: any integer.
-- `round_index`: any integer.
+- `turn_kind`: `"{{ turn_kind }}"`.
+- `reply_to`: any string or `null`.
 
 Content fields (your actual turn):
-- `target`: the player id you are accusing, or `null` if this turn is
-  purely defensive (alibi or corroboration only).
+- `observations`: zero or more first-hand observations, each tagged with its
+  own `tick`. Each entry is one of:
+  - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
+  - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
+  - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
 - `claims`: zero or more of the structured claim types --
   - `alibi`         -- `{type: "alibi", subject, from_tick, to_tick, room,
                        evidence?}`. Places a player (usually yourself)
@@ -179,11 +179,13 @@ Content fields (your actual turn):
   - `accusation`    -- `{type: "accusation", against, confidence, reason}`.
                        `confidence` is in `[0.0, 1.0]`. Give a concrete
                        reason grounded in the transcript or your memory.
+                       Add at most one accusation; the chain passes the
+                       floor to the player it names.
   - `corroboration` -- `{type: "corroboration", supports, on_tick, reason}`.
                        Backs up another player's claim with what you saw.
 - `free_text`: one to three sentences in your own voice. It must be
   consistent with the structured `claims`; the contradiction detector
-  cross-references both layers in subsequent rounds.
+  cross-references both layers in later turns.
 
 ## Constraints
 - Only reference ticks, rooms, players, and tasks that appear in your
@@ -193,10 +195,9 @@ Content fields (your actual turn):
   alibi backed by evidence or by acknowledging the conflict. Ignoring
   a flag against you is read by other agents as a tell.
 - If your memory and the transcript give you no honest target, prefer a
-  defensive Statement (no target, alibi or corroboration claims) over a
+  defensive turn (no accusation, alibi or corroboration claims) over a
   guessed accusation. Voting (DESIGN.md §5.5) treats low-confidence
-  accusations as skip-leaning, so a weak guess here does not help your
-  side and may help the impostor.
+  accusations as skip-leaning, so a weak guess does not help your side.
 
 ## Output
 Your in-character voice belongs in the `free_text` field, not before the

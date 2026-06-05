@@ -1,13 +1,21 @@
-{# prompt_version: crewmate_report.v1
+{# prompt_version: crewmate_report.v2
 
-   Crewmate-side Phase-1 report-intake prompt for the meeting protocol
-   (DESIGN.md §5.1, §5.3, §6.6).
+   Crewmate-side OPENING-turn prompt for the reactive accusation chain
+   (DESIGN.md §5.1, §5.2 PHASE 1, §5.3, §6.6).
 
-   Inputs (passed in by agents.strategic.reasoner when this template is
-   rendered for a meeting report):
+   Task 8.8 reshaped this template from the old parallel-reports
+   ReportDocument intake to the chain's opening turn: the body-reporter /
+   emergency caller takes turn 0, states findings, and EITHER accuses one
+   player OR declares "unsure". The output schema is now
+   meetings.schemas.MeetingTurn (turn_kind = "opening"); the meeting manager /
+   strategic reasoner overrides the identity fields (turn_id, turn_index,
+   speaker, turn_kind, reply_to) after parsing.
+
+   Inputs (passed in by the meeting manager / strategic reasoner when this
+   template is rendered for the opening turn):
 
      agent_id            -- this agent's PlayerId (e.g. "p3")
-     current_tick        -- tick at which the report is being assembled
+     current_tick        -- tick at which the meeting opened
      meeting_trigger     -- short free-text description of what triggered
                             the meeting (e.g. "p3 reported p2's body in
                             MedBay at tick 410" or "p4 called an emergency
@@ -17,17 +25,16 @@
                             already carries the agent's role, tasks summary,
                             salient observations, beliefs, and open
                             contradictions per DESIGN.md §6.6.
-     public_transcript   -- Markdown string of any prior public statements
-                            in this meeting. Empty / falsy at Phase-1 report
-                            intake; non-empty only if the orchestrator chose
-                            to replay earlier turns (e.g. a late re-entry).
+     public_transcript   -- Markdown string of any prior public turns in this
+                            meeting. Empty / falsy at the opening (turn 0
+                            precedes every other turn).
 
    Output contract: the LLM must emit one JSON object conforming exactly to
-   meetings.schemas.ReportDocument (re-exported via
-   agents.strategic.output_schemas.ReportDocument). The strategic reasoner
-   passes that schema to LLMClient.complete and rejects any response that
-   fails Pydantic validation, so the template never needs to soften the
-   shape requirements.
+   meetings.schemas.MeetingTurn (re-exported via
+   agents.strategic.output_schemas.MeetingTurn). The strategic reasoner /
+   meeting manager passes that schema to LLMClient.complete and rejects any
+   response that fails Pydantic validation, so the template never needs to
+   soften the shape requirements.
 
    Inputs this prompt MUST NOT receive (firewall, DESIGN.md §1.3, §4.7):
    raw engine state, other players' roles, kill attribution, vent use that
@@ -35,16 +42,18 @@
    from the rendered memory view (derived from this agent's episodic store)
    and the public meeting transcript.
 #}You are an AI agent playing a social-deduction simulation. You are a
-**crewmate**. A meeting has been called and you are at the **report intake**
-phase: each living agent submits one structured report at the same time. No
-accusation-round statements have happened yet, so you must reason only from
-your own memory and from the meeting trigger.
+**crewmate**. A meeting has been called and you are the **opening speaker**
+(turn 0): you reported the body or called the emergency, so you speak first.
+State what you saw and EITHER accuse exactly one player you believe is the
+impostor OR say you are unsure -- do not force a guess.
 
-Your job in this report is twofold:
+Prompt: crewmate_report.v2 (DESIGN.md §5.2 PHASE 1)
+
+Your job in this opening turn is twofold:
 1. Surface every observation from your memory that could help the crew
    identify the impostor.
-2. State your honest beliefs and any alibi for yourself, calibrated to the
-   strength of the evidence.
+2. State your honest assessment: either one accusation (calibrated to the
+   strength of the evidence) or a defensive alibi if you have no real target.
 
 ## Meeting context
 - You are: `{{ agent_id }}`
@@ -58,11 +67,19 @@ Your job in this report is twofold:
 {{ public_transcript }}
 {% endif %}
 ## What to produce
-Emit exactly one JSON object that validates against the `ReportDocument`
-schema. The fields are:
+Emit exactly one JSON object that validates against the `MeetingTurn`
+schema. The meeting manager is authoritative for the identity fields and
+overrides whatever you emit for them, so emit a placeholder for each and put
+your real turn in the content fields.
 
-- `agent_id`: must equal `"{{ agent_id }}"`.
-- `tick`: must equal {{ current_tick }}.
+Identity fields (emit a placeholder; the manager overrides each):
+- `turn_id`: any non-empty string (e.g. `"t"`).
+- `turn_index`: any integer (e.g. `0`).
+- `speaker`: any non-empty string (your own player id is fine).
+- `turn_kind`: the string `"opening"`.
+- `reply_to`: `null` (the opening turn answers no prior turn).
+
+Content fields (your actual turn):
 - `observations`: an ordered list of first-hand observations *you* made. Each
   entry is one of the discriminated union variants below; use the `type`
   string exactly as shown.
@@ -70,19 +87,25 @@ schema. The fields are:
     - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
     - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
   Only include observations whose `tick` matches an event that appears in
-  the rendered memory above. Fabricated or unsupported ticks will be
-  rejected by validation.
+  the rendered memory above. If you discovered the body, lead with the
+  `found_body` observation. Fabricated or unsupported ticks will be rejected
+  by validation.
 - `claims`: an ordered list of higher-level claims. Each entry is one of:
-    - `{"type": "alibi", "subject": "<player_id>", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short evidence ref>", ...]}`
+    - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short evidence ref>", ...]}`
       (use chronological ticks: `from_tick <= to_tick`).
     - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0..1.0>, "reason": "<short reason>"}`
     - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`
-- `free_text`: one short paragraph (1–4 sentences) that you would say aloud
+  To accuse, add exactly one `accusation` claim naming your single best
+  suspect. To stay unsure, add no `accusation` claim (a self-alibi is fine).
+- `free_text`: one short paragraph (1-4 sentences) that you would say aloud
   to the table. This is the natural-language argument other agents will see
   in the transcript. Do not duplicate the entire `observations` list here;
   use it to highlight the strongest signal and explain why it matters.
 
 ## Reasoning guidelines
+- **Accuse at most one player.** The chain passes the floor to the player you
+  accuse, who answers you directly next. Name your single strongest suspect or
+  stay unsure; do not stack several accusations into one opening.
 - **Calibrate confidence.** Set accusation `confidence` near 0.5 when the
   evidence is circumstantial (proximity, timing). Push above 0.7 only for
   hard signals: a witnessed kill, a witnessed vent, or an alibi that
@@ -95,7 +118,7 @@ schema. The fields are:
 - **Lead with the strongest signal.** If you discovered a body, report it
   first. If you witnessed a kill or a vent, report that. If you have no
   strong signal, it is acceptable to file mostly your own alibi and skip
-  accusation rather than guess.
+  the accusation rather than guess.
 - **Reason only from what you know.** Use only the rendered memory and the
   public transcript. Do not assume facts about other players' roles, kill
   attribution, or hidden vent moves you did not personally witness.
