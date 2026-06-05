@@ -138,6 +138,10 @@ export interface TickView {
   agent_states: AgentTickStateView[];
   events: TickEventView[];
   sabotage_active: string[];
+  // Completed vs. total per-player task *instances* across all players
+  // (DESIGN.md §3.2): the denominator is the live instance count, NOT bounded
+  // by the map's task pool (14 instances at the canonical 9p/2i over the 12 map
+  // tasks). Stay `number` (mirrors the Pydantic `int`).
   tasks_completed_total: number;
   tasks_required_total: number;
 }
@@ -280,6 +284,9 @@ export interface AgentMemoryView {
   agent_id: string;
   tick: number;
   role: PlayerRole;
+  // This agent's OWN completed vs. owned task *instances* — its per-player deal,
+  // owner-scoped under the per-player keyspace (DESIGN.md §3.2), never another
+  // player's. Stay `number` (mirrors `int`).
   tasks_completed: number;
   tasks_assigned: number;
   observations: ObservationClaimView[];

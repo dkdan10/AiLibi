@@ -661,6 +661,11 @@ class ReplayLoader:
             agent_states=agent_states,
             events=self._tick_events(state, events, meeting_id),
             sabotage_active=sabotage_active,
+            # Spectator task counts are over per-player task *instances*
+            # (DESIGN.md §3.2): ``state.tasks`` is keyed ``"{owner}:{map_task_id}"``,
+            # so the total is the live instance count and is NOT bounded by the
+            # map's task pool (14 instances at the canonical 9p/2i,
+            # ``tasks_per_crewmate=2``, vs. the 12 map tasks).
             tasks_completed_total=sum(1 for t in state.tasks.values() if t.completed),
             tasks_required_total=len(state.tasks),
         )
@@ -679,6 +684,9 @@ class ReplayLoader:
     def _task_progress(self, state: WorldState, pid: str, role: str) -> float | None:
         if role == "IMPOSTOR":
             return None
+        # Owner-scoped under the per-player keyspace (DESIGN.md §3.2): progress
+        # aggregates only this agent's OWN task instances, so the denominator is
+        # the agent's instance deal, never the global pool.
         owned = [task for task in state.tasks.values() if task.owner == pid]
         if not owned:
             return 0.0
@@ -791,6 +799,10 @@ class ReplayLoader:
         meeting_entry: MeetingReplayEntry | None,
     ) -> AgentMemoryView:
         role = meeting_state.players[agent_id].role
+        # Per-agent task counts are this agent's OWN instances only (owner-scoped
+        # under the per-player keyspace, DESIGN.md §3.2); ``tasks_assigned`` is the
+        # agent's instance deal and ``tasks_completed`` the done subset — never
+        # another player's instances.
         owned = [
             task for task in meeting_state.tasks.values() if task.owner == agent_id
         ]
