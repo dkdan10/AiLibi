@@ -220,6 +220,12 @@ TickEventView: TypeAlias = Annotated[
 class TickView(_FrozenView):
     """One reconstructed tick of a replay.
 
+    ``tasks_completed_total`` / ``tasks_required_total`` count completed vs.
+    total per-player task *instances* across all players (DESIGN.md §3.2): the
+    denominator is the live instance count, NOT bounded by the map's task pool
+    (e.g. 14 instances at the canonical 9p/2i, ``tasks_per_crewmate=2``, over the
+    12 map tasks). Both stay ``int``.
+
     Excludes: state hashes, raw engine actions, and raw per-tick replay
     records — those are reconstruction inputs, not spectator data.
     """
@@ -423,6 +429,10 @@ class AgentMemoryView(_FrozenView):
     meeting prompt holds rendered memory); between-meeting memory is not
     exposed. ``observations`` is salience-ordered; ``rendered_memory_text`` is
     the raw prompt render, for the ThoughtStream panel.
+
+    ``tasks_completed`` / ``tasks_assigned`` count this agent's OWN task
+    *instances* — its per-player deal, owner-scoped under the per-player keyspace
+    (DESIGN.md §3.2), never another player's. Both stay ``int``.
 
     Excludes: raw memory-store internals and decay timestamps.
     """

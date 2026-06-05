@@ -179,8 +179,11 @@ def _tick_view() -> TickView:
             ),
         ),
         sabotage_active=("lights",),
-        tasks_completed_total=7,
-        tasks_required_total=12,
+        # Per-player task instances (DESIGN.md §3.2/§3.5): the canonical 9p/2i
+        # roster mints 7 crew × tasks_per_crewmate=2 = 14 instances over the 12
+        # map tasks, so the spectator total exceeds the old map-task pool.
+        tasks_completed_total=9,
+        tasks_required_total=14,
     )
 
 
@@ -392,3 +395,56 @@ def test_belief_entry_rejects_old_field_name() -> None:
             confidence=0.4,
             last_updated_tick=5,  # old name
         )
+
+
+# The canonical map has 12 tasks (engine/maps/canonical_1.yaml; pinned in
+# tests/engine/test_map_loader.py). Under per-player task instances (DESIGN.md
+# §3.2) the spectator/agent task counts are over instances minted WITH overlap,
+# so the denominator is no longer bounded by this pool: the canonical 9p/2i
+# roster (7 crew × tasks_per_crewmate=2) deals 14 instances over these 12 tasks.
+_CANONICAL_MAP_TASK_COUNT = 12
+
+
+def test_tick_view_task_total_is_uncapped_per_player_denominator() -> None:
+    """``TickView`` task counts are over per-player instances, not the map pool.
+
+    DESIGN.md §3.2/§3.5: per-player task instances are minted WITH overlap, so the
+    spectator denominator is the live instance count (14 at the canonical 9p/2i)
+    and is no longer bounded by the 12 map tasks (the old per-game cap). This pins
+    that the ``int`` field accepts and round-trips a denominator above the
+    map-task pool without truncation — the 1:1 frontend mirror keeps it ``number``.
+    """
+
+    tick = _tick_view()
+    assert tick.tasks_required_total > _CANONICAL_MAP_TASK_COUNT
+    assert 0 <= tick.tasks_completed_total <= tick.tasks_required_total
+    assert TickView.model_validate_json(tick.model_dump_json()) == tick
+
+    # A higher tasks_per_crewmate pushes the instance count well past 12; the
+    # field must carry it faithfully (no implicit cap on the denominator).
+    bigger = tick.model_copy(
+        update={"tasks_completed_total": 18, "tasks_required_total": 27}
+    )
+    assert bigger.tasks_required_total > _CANONICAL_MAP_TASK_COUNT
+    assert TickView.model_validate_json(bigger.model_dump_json()) == bigger
+
+
+def test_agent_memory_view_task_counts_are_own_instances() -> None:
+    """``AgentMemoryView`` task counts are this agent's OWN instances.
+
+    DESIGN.md §3.2: owner-scoped under the per-player keyspace — ``tasks_assigned``
+    is the agent's owned instance count (a per-player deal, e.g. 2 at the canonical
+    ``tasks_per_crewmate``, bounded by its distinct map tasks, NOT the global pool)
+    and ``tasks_completed`` ≤ it. Both round-trip faithfully as ``int`` (the 1:1
+    frontend mirror keeps them ``number``).
+    """
+
+    memory = _agent_memory_view()
+    assert 0 <= memory.tasks_completed <= memory.tasks_assigned
+    assert AgentMemoryView.model_validate_json(memory.model_dump_json()) == memory
+
+    # Counts move as a pair as the agent finishes its deal: completing every owned
+    # instance leaves completed == assigned. Round-trips without special-casing.
+    done = memory.model_copy(update={"tasks_completed": memory.tasks_assigned})
+    assert done.tasks_completed == done.tasks_assigned
+    assert AgentMemoryView.model_validate_json(done.model_dump_json()) == done
