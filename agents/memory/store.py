@@ -190,12 +190,21 @@ def _build_observations(episodic: MemoryStore) -> list[_Observation]:
 
     for event in episodic.recent(since_tick=0):
         if event.type == _EVENT_SELF_STATE:
-            pending = event.payload.get("pending_task_id")
+            pending_raw = event.payload.get("pending_task_id")
+            pending = pending_raw if isinstance(pending_raw, str) else None
             room = event.payload.get("room")
+            # ``pending_task_id`` is the agent's lexicographically-first owned,
+            # UNFINISHED map task (observation/service.py). Its owned set only ever
+            # shrinks -- a task completes; none is added mid-game -- so the pending
+            # id changes if and only if the previous pending task completed, whether
+            # it clears to ``None`` (the final task) OR rolls to the next map id (an
+            # intermediate task in a multi-task 9p/2i loadout). Infer completion on
+            # ANY change away from a non-None pending task so an intermediate
+            # completion is not dropped from rendered memory (PR #109 review).
             if (
                 not first_self_state
                 and isinstance(last_pending_task, str)
-                and pending is None
+                and pending != last_pending_task
             ):
                 completed_room = (
                     last_pending_task_room
@@ -213,7 +222,7 @@ def _build_observations(episodic: MemoryStore) -> list[_Observation]:
                         ),
                     )
                 )
-            last_pending_task = pending if isinstance(pending, str) else None
+            last_pending_task = pending
             last_pending_task_room = room if isinstance(room, str) else None
             first_self_state = False
             continue

@@ -9,7 +9,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from engine.actions import Action
-from engine.entities import BodyState, PlayerState
+from engine.entities import BodyState, PlayerState, TaskState
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
@@ -21,6 +21,33 @@ _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
 def _action(data: object) -> Action:
     return _ACTION_ADAPTER.validate_python(data)
+
+
+def _task_instance(
+    *,
+    owner: str,
+    map_task_id: str,
+    room: str,
+    progress: int = 0,
+    required_ticks: int = 1,
+    completed: bool = False,
+) -> TaskState:
+    # Per-player task instance (DESIGN.md §3.2): the instance ``id`` is the
+    # composite ``"{owner}:{map_task_id}"`` and equals its ``WorldState.tasks``
+    # key, while the agent-facing id is the bare ``map_task_id``.
+    return TaskState(
+        id=f"{owner}:{map_task_id}",
+        owner=owner,
+        map_task_id=map_task_id,
+        room=room,
+        progress=progress,
+        required_ticks=required_ticks,
+        completed=completed,
+    )
+
+
+def _tasks(*instances: TaskState) -> dict[str, TaskState]:
+    return {task.id: task for task in instances}
 
 
 def _player(
@@ -524,3 +551,216 @@ def test_audit_log_appends_across_two_instances(tmp_path: Path) -> None:
     second_entry = json.loads(lines[1])
     assert first_entry["agent_id"] == "p-1"
     assert second_entry["agent_id"] == "p-2"
+
+
+class TestPendingTaskIdIsOwnMapId:
+    """``SelfView.pending_task_id`` is the agent's OWN map task id (DESIGN.md §3.2,
+    §1.3). Under the per-player keyspace ``WorldState.tasks`` is keyed by the
+    composite instance id; the observation boundary must surface the bare map id,
+    owner-scoped, never the composite and never another player's task.
+    """
+
+    def test_pending_task_id_is_the_map_id_not_the_instance_id(
+        self, tmp_path: Path
+    ) -> None:
+        state = dataclasses.replace(
+            _base_world_state(),
+            tasks=_tasks(
+                _task_instance(owner="p-1", map_task_id="swipe_card", room="ADMIN"),
+            ),
+        )
+
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+
+        # The agent-facing MAP id, never the composite instance id "p-1:swipe_card".
+        assert packet.self_state.pending_task_id == "swipe_card"
+        assert ":" not in (packet.self_state.pending_task_id or "")
+
+    def test_two_owners_of_one_map_task_each_see_only_the_shared_map_id(
+        self, tmp_path: Path
+    ) -> None:
+        # p-1 and p-2 each hold an INSTANCE of the same map task. Each packet
+        # carries only the shared map id -- no instance id, no ownership -- so the
+        # engine can resolve (actor, map_id) to each owner's own instance.
+        state = dataclasses.replace(
+            _base_world_state(),
+            tasks=_tasks(
+                _task_instance(owner="p-1", map_task_id="swipe_card", room="ADMIN"),
+                _task_instance(owner="p-2", map_task_id="swipe_card", room="ADMIN"),
+            ),
+        )
+        service = _observation_service(tmp_path)
+
+        packet_one = service.build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+        packet_two = service.build_packet(
+            world_state=state, agent_id="p-2", engine_events=[]
+        )
+
+        assert packet_one.self_state.pending_task_id == "swipe_card"
+        assert packet_two.self_state.pending_task_id == "swipe_card"
+        assert ":" not in (packet_one.self_state.pending_task_id or "")
+        assert ":" not in (packet_two.self_state.pending_task_id or "")
+
+    def test_pending_task_id_selects_first_unfinished_map_id_deterministically(
+        self, tmp_path: Path
+    ) -> None:
+        # p-1 owns two unfinished instances and one completed one. The completed
+        # instance is skipped (its map id would sort first if it were not), and
+        # the lexicographically-first remaining map id is surfaced.
+        state = dataclasses.replace(
+            _base_world_state(),
+            tasks=_tasks(
+                _task_instance(owner="p-1", map_task_id="swipe_card", room="ADMIN"),
+                _task_instance(owner="p-1", map_task_id="submit_scan", room="MEDBAY"),
+                _task_instance(
+                    owner="p-1",
+                    map_task_id="align_engine_output",
+                    room="ENGINEERING",
+                    completed=True,
+                ),
+            ),
+        )
+
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+
+        # sorted unfinished map ids: ["submit_scan", "swipe_card"] -> first.
+        # "align_engine_output" is completed and excluded despite sorting first.
+        assert packet.self_state.pending_task_id == "submit_scan"
+
+    def test_pending_task_id_is_none_when_all_owned_instances_complete(
+        self, tmp_path: Path
+    ) -> None:
+        state = dataclasses.replace(
+            _base_world_state(),
+            tasks=_tasks(
+                _task_instance(
+                    owner="p-1",
+                    map_task_id="swipe_card",
+                    room="ADMIN",
+                    completed=True,
+                ),
+                # Another player's unfinished instance must NOT surface for p-1.
+                _task_instance(owner="p-2", map_task_id="submit_scan", room="MEDBAY"),
+            ),
+        )
+
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+
+        assert packet.self_state.pending_task_id is None
+
+
+class TestGlobalViewCountsInstances:
+    """``GlobalView.tasks_total`` / ``task_completion_percent`` count per-player
+    task INSTANCES, equal to the engine's win denominator (DESIGN.md §3.2/§3.5).
+    """
+
+    def test_tasks_total_counts_instances_not_map_tasks(self, tmp_path: Path) -> None:
+        # Two owners of the SAME map task = two INSTANCES. The denominator counts
+        # instances (2), not the single distinct map task -- so it can exceed the
+        # 12 map-task pool the moment overlap exists (the cap removal's premise).
+        tasks = _tasks(
+            _task_instance(
+                owner="p-1",
+                map_task_id="swipe_card",
+                room="ADMIN",
+                completed=True,
+            ),
+            _task_instance(owner="p-2", map_task_id="swipe_card", room="ADMIN"),
+            _task_instance(owner="p-3", map_task_id="submit_scan", room="MEDBAY"),
+        )
+        state = dataclasses.replace(_base_world_state(), tasks=tasks)
+
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+
+        # ``len(world_state.tasks)`` is the exact expression
+        # ``engine/win_conditions.py`` counts over, so the agent-visible total
+        # equals the engine's instance total.
+        assert packet.global_state.tasks_total == len(state.tasks) == 3
+        assert packet.global_state.tasks_completed == 1
+        assert packet.global_state.task_completion_percent == pytest.approx(1 / 3)
+
+    def test_empty_task_pool_reports_zero_completion(self, tmp_path: Path) -> None:
+        state = _base_world_state()  # tasks={}
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+
+        assert packet.global_state.tasks_total == 0
+        assert packet.global_state.tasks_completed == 0
+        assert packet.global_state.task_completion_percent == 0.0
+
+
+def test_multi_impostor_packets_carry_no_foreign_task_ownership(
+    tmp_path: Path,
+) -> None:
+    # Per-player tasks under the 2-impostor roster (DESIGN.md §1.3, §3.2): every
+    # crewmate-recipient packet must carry ONLY that crewmate's own map task and an
+    # empty fellow-impostor team. A misroute of another player's task (its map id,
+    # instance id, or ownership) into a crew packet would surface here, where the
+    # flat single-impostor scripted fixtures cannot reach. Each player owns a
+    # DISTINCT map task so an owner-scope leak is unambiguous.
+    own_map_id = {
+        "p-1": "swipe_card",
+        "p-2": "empty_trash",  # impostor pretend-task
+        "p-3": "submit_scan",
+        "p-4": "align_engine_output",  # impostor pretend-task
+        "p-5": "fuel_reserves",
+    }
+    task_room = {
+        "swipe_card": "ADMIN",
+        "empty_trash": "CAFETERIA",
+        "submit_scan": "MEDBAY",
+        "align_engine_output": "ENGINEERING",
+        "fuel_reserves": "STORAGE",
+    }
+    state = dataclasses.replace(
+        _multi_impostor_world_state(),
+        tasks=_tasks(
+            *(
+                _task_instance(owner=owner, map_task_id=map_id, room=task_room[map_id])
+                for owner, map_id in own_map_id.items()
+            )
+        ),
+    )
+    service = _observation_service(tmp_path)
+
+    packets = {
+        player_id: service.build_packet(
+            world_state=state, agent_id=player_id, engine_events=[]
+        )
+        for player_id in state.players
+    }
+
+    for crew_id in ("p-1", "p-3", "p-5"):
+        packet = packets[crew_id]
+        assert packet.self_state.role == "CREWMATE"
+        # Own task only -- the exact map id, never the composite instance id.
+        assert packet.self_state.pending_task_id == own_map_id[crew_id]
+        assert ":" not in (packet.self_state.pending_task_id or "")
+        # The crew-empty fellow-impostor invariant still holds with tasks present.
+        assert packet.self_state.fellow_impostor_ids == ()
+        # No OTHER player's map task id appears anywhere in the crew packet.
+        dumped = json.dumps(packet.model_dump(mode="json"))
+        for other_id, other_map_id in own_map_id.items():
+            if other_id == crew_id:
+                continue
+            assert other_map_id not in dumped, (
+                f"{crew_id} packet leaked {other_id}'s task {other_map_id!r}"
+            )
+
+    # Each impostor still round-trips on its OWN pretend-task map id (own-task
+    # only), and continues to see exactly its fellow impostor.
+    assert packets["p-2"].self_state.pending_task_id == "empty_trash"
+    assert packets["p-4"].self_state.pending_task_id == "align_engine_output"
+    assert packets["p-2"].self_state.fellow_impostor_ids == ("p-4",)
+    assert packets["p-4"].self_state.fellow_impostor_ids == ("p-2",)

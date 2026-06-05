@@ -237,6 +237,13 @@ class ObservationService:
         )
 
     def _global_view(self, *, world_state: WorldState) -> GlobalView:
+        # Per-player re-key (DESIGN.md §3.2/§3.5): ``WorldState.tasks`` is keyed by
+        # per-player INSTANCE, so the denominator counts task instances, not map
+        # tasks (e.g. 9p/2i is 14 instances over the 12 map tasks). This is the
+        # same set ``engine/win_conditions.py`` counts -- ``_apply_kill`` drops a
+        # dead player's incomplete instances, so both read the live-instance total
+        # -- which keeps the agent-visible progress equal to the engine's win
+        # denominator. The rule is unchanged; only the magnitude scales.
         tasks_total = len(world_state.tasks)
         tasks_completed = sum(
             1 for task in world_state.tasks.values() if task.completed
@@ -260,11 +267,30 @@ class ObservationService:
     def _pending_task_id_for_agent(
         self, *, world_state: WorldState, agent_id: PlayerId
     ) -> TaskId | None:
-        owned_unfinished_tasks = [
+        """Return the agent's own next pending MAP task id (DESIGN.md §3.2, §1.3).
+
+        Under the per-player keyspace (Task 8.1) ``WorldState.tasks`` is keyed by
+        the composite instance id ``"{owner}:{map_task_id}"`` and ``TaskState.id``
+        is that composite. The agent-facing id, however, stays the MAP id: the
+        engine resolves ``(actor, map_task_id)`` to the actor's own instance
+        (``engine/tick.py``) and ``PublicMapView.task_locations`` is map-keyed, so
+        the policy/prompt layers round-trip on the map id. We therefore surface
+        ``task.map_task_id`` -- never the composite instance id, which would both
+        miss the map-keyed ``task_locations`` lookup and leak the owner prefix.
+
+        The result is owner-scoped by construction: the ``task.owner == agent_id``
+        filter means a recipient only ever sees its OWN pending task, never another
+        player's task or any ownership (the §1.3 observation firewall). Selection is
+        deterministic -- the lexicographically-first owned, unfinished map task id.
+        The owner prefix is constant within one agent, so ordering by map id is
+        identical to the prior instance-id ordering.
+        """
+
+        owned_unfinished_map_ids = [
             task.map_task_id
             for task in world_state.tasks.values()
             if task.owner == agent_id and not task.completed
         ]
-        if not owned_unfinished_tasks:
+        if not owned_unfinished_map_ids:
             return None
-        return sorted(owned_unfinished_tasks)[0]
+        return sorted(owned_unfinished_map_ids)[0]

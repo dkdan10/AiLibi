@@ -193,8 +193,15 @@ def _recent_co_presence(
 
 
 def _self_state_payload(self_state: SelfView) -> Mapping[str, Any]:
-    # ``fellow_impostor_ids`` rides the same privileged self-state payload that
-    # already carries ``role`` (Task 7.2): the impostor policy/prompt layer
+    # ``pending_task_id`` is the agent's own next MAP task id (DESIGN.md §3.2) --
+    # never the per-player instance id and never another player's task. It rides
+    # through verbatim as an opaque string: the memory reader
+    # (``agents/memory/store.py``) infers completion from it clearing to ``None``,
+    # and the tactical policies resolve it against the map-keyed ``task_locations``
+    # and submit it back as the ``do_task`` payload. The render/field/reader legs
+    # all treat it as the same map id, so the engine advances the actor's own
+    # instance. ``fellow_impostor_ids`` rides the same privileged self-state payload
+    # that already carries ``role`` (Task 7.2): the impostor policy/prompt layer
     # reads its teammates from here in Wave 2 (J-5). It is ``()`` for crewmates
     # and serializes to a list in the prompt JSON, like other tuple fields.
     return {

@@ -12,7 +12,7 @@
     {
       "tick": 200,
       "type": "global_status",
-      "payload": {"tasks_completed": 2, "tasks_total": 12},
+      "payload": {"tasks_completed": 2, "tasks_total": 14},
       "provenance": "inferred"
     },
     {
@@ -36,7 +36,7 @@
     {
       "tick": 412,
       "type": "global_status",
-      "payload": {"tasks_completed": 7, "tasks_total": 12},
+      "payload": {"tasks_completed": 7, "tasks_total": 14},
       "provenance": "inferred"
     }
   ],
