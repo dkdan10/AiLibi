@@ -34,15 +34,15 @@ Decisions baked into this metric (recorded in the PR's ``## Decisions`` block):
      at tick T, and some :class:`~meetings.schemas.SawPlayerObservation` with
      ``subject == ejected`` places that player in the same room R at a tick
      within :data:`KILL_WITNESS_TICK_WINDOW` of T. The two observations may
-     come from different reports (one agent finds the body, another places the
-     suspect at the scene).
+     come from different turns (one agent finds the body on the opening turn,
+     another places the suspect at the scene on a later chain / opt-in turn).
 
   The accusation-at-scene variant is deliberately **excluded**: an
   :class:`~meetings.schemas.AccusationClaim` carries no location or tick, so
   "someone accused the ejected player" collapses back into the circular
   accusation/vote-driven signal this metric exists to avoid (DESIGN.md §11.3
   names only "a real contradiction or kill witness"). For the same reason the
-  ballot ``primary_reason_id`` -> :class:`~meetings.schemas.Statement` chain is
+  ballot ``primary_reason_id`` -> :class:`~meetings.schemas.MeetingTurn` chain is
   *not* a counted signal: it may corroborate a vote but, derived from the same
   accusation flow, cannot be the evidence that makes an ejection correct.
 
@@ -334,16 +334,17 @@ def _has_kill_witness_chain(meeting: MeetingReport, ejected: PlayerId) -> bool:
     """True iff a found-body and a co-located sighting of the ejected player meet.
 
     Collects every ``found_body`` observation and every ``saw_player``
-    observation naming the ejected player across the meeting's reports, then
-    looks for a pair sharing a room within :data:`KILL_WITNESS_TICK_WINDOW`
-    ticks. Empty transcripts and reports with no matching observations yield
-    ``False`` (never raise).
+    observation naming the ejected player across the meeting's turns (the
+    opening turn carries the body-finder's ``found_body``; any turn may carry a
+    ``saw_player`` placing the suspect), then looks for a pair sharing a room
+    within :data:`KILL_WITNESS_TICK_WINDOW` ticks. Empty transcripts and turns
+    with no matching observations yield ``False`` (never raise).
     """
 
     found_bodies: list[FoundBodyObservation] = []
     sightings: list[SawPlayerObservation] = []
-    for document in meeting.transcript.reports:
-        for observation in document.observations:
+    for turn in meeting.transcript.turns:
+        for observation in turn.observations:
             if isinstance(observation, FoundBodyObservation):
                 found_bodies.append(observation)
             elif (

@@ -30,10 +30,9 @@ from meetings.schemas import (
     ContradictionRef,
     MeetingOutcome,
     MeetingTranscript,
+    MeetingTurn,
     PlayerId,
-    ReportDocument,
     SawPlayerObservation,
-    Statement,
     VoteBallot,
 )
 from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord, WinnerSide
@@ -73,10 +72,13 @@ def _meeting_report(
     ejected: str | None,
 ) -> MeetingReport:
     transcript = MeetingTranscript(
-        reports=(
-            ReportDocument(
-                agent_id="p-0",
-                tick=tick,
+        turns=(
+            MeetingTurn(
+                turn_id=f"{meeting_id}:turn-0",
+                turn_index=0,
+                speaker="p-0",
+                turn_kind="opening",
+                reply_to=None,
                 observations=(
                     SawPlayerObservation(
                         type="saw_player",
@@ -98,14 +100,13 @@ def _meeting_report(
                 ),
                 free_text="I was scanning in MedBay the whole time.",
             ),
-        ),
-        statements=(
-            Statement(
-                statement_id="s-1",
+            MeetingTurn(
+                turn_id="s-1",
+                turn_index=1,
                 speaker="p-0",
-                tick=tick,
-                round_index=0,
-                target="p-3",
+                turn_kind="reply",
+                reply_to=f"{meeting_id}:turn-0",
+                observations=(),
                 claims=(
                     AccusationClaim(
                         type="accusation",

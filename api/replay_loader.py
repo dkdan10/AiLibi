@@ -67,15 +67,14 @@ from api.schemas import (
     ReplayMetadataView,
     ReplayView,
     ReportBodyEventView,
-    ReportView,
     RoomView,
     SabotageEventView,
     SawPlayerView,
     SizeView,
-    StatementView,
     TaskCompletedEventView,
     TickEventView,
     TickView,
+    TurnView,
     VentView,
 )
 from engine.actions import Action
@@ -98,10 +97,9 @@ from meetings.schemas import (
     CorroborationClaim,
     FoundBodyObservation,
     MeetingResult,
+    MeetingTurn,
     ObservationClaim,
-    ReportDocument,
     SawPlayerObservation,
-    Statement,
     VoteBallot,
 )
 from observation.service import ObservationService
@@ -778,8 +776,7 @@ class ReplayLoader:
             trigger_kind=trigger_kind_by_meeting_id[entry.meeting_id],
             outcome=entry.outcome,
             ejected_player_id=entry.ejected_player_id,
-            reports=tuple(_report_view(r) for r in entry.transcript.reports),
-            statements=tuple(_statement_view(s) for s in entry.transcript.statements),
+            turns=tuple(_turn_view(t) for t in entry.transcript.turns),
             ballots=tuple(_ballot_view(b) for b in entry.ballots),
             contradictions=tuple(_contradiction_view(c) for c in entry.contradictions),
             llm_calls=tuple(
@@ -1340,25 +1337,16 @@ def _statement_claim_view(
     raise TypeError(f"unsupported statement claim: {type(claim).__name__}")
 
 
-def _report_view(report: ReportDocument) -> ReportView:
-    return ReportView(
-        agent_id=report.agent_id,
-        tick=report.tick,
-        observations=tuple(_observation_claim_view(o) for o in report.observations),
-        claims=tuple(_statement_claim_view(c) for c in report.claims),
-        free_text=report.free_text,
-    )
-
-
-def _statement_view(statement: Statement) -> StatementView:
-    return StatementView(
-        statement_id=statement.statement_id,
-        speaker=statement.speaker,
-        tick=statement.tick,
-        round_index=statement.round_index,
-        target=statement.target,
-        claims=tuple(_statement_claim_view(c) for c in statement.claims),
-        free_text=statement.free_text,
+def _turn_view(turn: MeetingTurn) -> TurnView:
+    return TurnView(
+        turn_id=turn.turn_id,
+        turn_index=turn.turn_index,
+        speaker=turn.speaker,
+        turn_kind=turn.turn_kind,
+        reply_to=turn.reply_to,
+        observations=tuple(_observation_claim_view(o) for o in turn.observations),
+        claims=tuple(_statement_claim_view(c) for c in turn.claims),
+        free_text=turn.free_text,
     )
 
 
@@ -1420,20 +1408,25 @@ def _classify_template_id(
     the template is inferred from stable markers in the (frozen) rendered prompt
     bodies and mapped to the recorded ``prompt_versions``. Falls back to the
     ``call_kind`` tier when the marker set does not match.
+
+    Markers track the reactive-chain meeting templates (Task 8.7/8.8): the vote
+    prompt is the only one that says "casting a vote"; the impostor opening is
+    the only one framed "Your role for this match is IMPOSTOR"; the crewmate
+    opening addresses the "opening speaker"; and the reply / opt-in turns render
+    the "reactive accusation chain". Vote and impostor markers are checked first
+    so they cannot be shadowed by a transcript echo in a later template.
     """
 
     if call.call_kind == "trigger":
         return "trigger"
     prompt = call.prompt
-    if "ReportDocument" in prompt:
-        key = (
-            "impostor_report"
-            if "role for this match is IMPOSTOR" in prompt
-            else "crewmate_report"
-        )
-    elif "casting a vote" in prompt:
+    if "casting a vote" in prompt:
         key = "vote_ballot"
-    elif "accusation round" in prompt:
+    elif "Your role for this match is IMPOSTOR" in prompt:
+        key = "impostor_report"
+    elif "opening speaker" in prompt:
+        key = "crewmate_report"
+    elif "reactive accusation chain" in prompt:
         key = "accusation_round"
     else:
         return call.call_kind

@@ -10,8 +10,8 @@ Accusations carry an explicit ``confidence`` in two structurally distinct
 places, both reachable from the report without re-scraping raw replay JSONL:
 
 * :class:`meetings.schemas.AccusationClaim` (``type="accusation"``,
-  ``against``, ``confidence``) nested in ``ReportDocument.claims`` and
-  ``Statement.claims`` inside each ``MeetingReport.transcript``.
+  ``against``, ``confidence``) nested in ``MeetingTurn.claims`` across the
+  turns of each ``MeetingReport.transcript``.
 * :class:`meetings.schemas.VoteBallot` (``voter``, ``target``, ``confidence``)
   on each ``MeetingReport.ballots``; ``target`` may be the literal ``"SKIP"``
   (a non-accusation).
@@ -229,18 +229,15 @@ def _iter_accusation_claims(
 ) -> Iterator[AccusationClaim]:
     """Yield every :class:`AccusationClaim` in a meeting transcript.
 
-    Accusations live on both the Phase-1 ``reports`` and the Phase-2
-    ``statements`` (DESIGN.md §5.2, §5.3); each is a distinct act and is
-    counted. The ``Claim`` union is filtered by type via ``isinstance`` so the
-    yielded value narrows to ``AccusationClaim`` for the caller.
+    Accusations live on the turns of the reactive accusation chain (DESIGN.md
+    §5.2, §5.3) -- the opening turn, every reply, and every opt-in turn -- and
+    each is a distinct act that is counted. The ``Claim`` union is filtered by
+    type via ``isinstance`` so the yielded value narrows to ``AccusationClaim``
+    for the caller.
     """
 
-    for report_doc in transcript.reports:
-        for claim in report_doc.claims:
-            if isinstance(claim, AccusationClaim):
-                yield claim
-    for statement in transcript.statements:
-        for claim in statement.claims:
+    for turn in transcript.turns:
+        for claim in turn.claims:
             if isinstance(claim, AccusationClaim):
                 yield claim
 

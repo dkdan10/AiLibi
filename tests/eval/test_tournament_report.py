@@ -53,8 +53,8 @@ from llm.provider import LLMCallFailure, _attach_parse_failure
 from meetings.schemas import (
     FoundBodyObservation,
     MeetingTranscript,
+    MeetingTurn,
     ObservationClaim,
-    ReportDocument,
     SawPlayerObservation,
 )
 from observation.action_intent import ActionIntent
@@ -551,10 +551,15 @@ _SAW_PLAYER = SawPlayerObservation(
 def _report_doc(
     agent_id: PlayerId,
     observations: tuple[ObservationClaim, ...] = (),
-) -> ReportDocument:
-    return ReportDocument(
-        agent_id=agent_id,
-        tick=10,
+) -> MeetingTurn:
+    """An ``opening`` chain turn carrying ``agent_id``'s observations (§5.2)."""
+
+    return MeetingTurn(
+        turn_id=f"turn-{agent_id}",
+        turn_index=0,
+        speaker=agent_id,
+        turn_kind="opening",
+        reply_to=None,
         observations=observations,
         claims=(),
         free_text="",
@@ -566,7 +571,7 @@ def _meeting(
     triggered_by: PlayerId,
     *,
     trigger: Literal["report", "emergency"] = "report",
-    reports: tuple[ReportDocument, ...] = (),
+    reports: tuple[MeetingTurn, ...] = (),
 ) -> MeetingReport:
     return MeetingReport(
         meeting_id=meeting_id,
@@ -575,7 +580,7 @@ def _meeting(
         trigger=trigger,
         outcome="SKIPPED",
         ejected_player_id=None,
-        transcript=MeetingTranscript(reports=reports),
+        transcript=MeetingTranscript(turns=reports),
         ballots=(),
         contradictions=(),
         llm_calls=(),
@@ -720,7 +725,7 @@ def test_meeting_rate_outcome_split_counts_ejected_and_skipped() -> None:
         trigger="report",
         outcome="EJECTED",
         ejected_player_id="p-2",
-        transcript=MeetingTranscript(reports=(_report_doc("p-1", (_FOUND_BODY,)),)),
+        transcript=MeetingTranscript(turns=(_report_doc("p-1", (_FOUND_BODY,)),)),
         ballots=(),
         contradictions=(),
         llm_calls=(),

@@ -9,10 +9,10 @@
 
 import type {
   ContradictionView,
+  ObservationClaimView,
   PlayerView,
-  ReportView,
   StatementClaimView,
-  StatementView,
+  TurnView,
 } from "../types/api";
 
 const FALLBACK_COLOR = "#888888";
@@ -50,8 +50,41 @@ export function PlayerChip({ agentId, players }: PlayerChipProps) {
   );
 }
 
-// Discriminated render of one structured claim (shared by reports + statements;
-// both expose `StatementClaimView[]`). TypeScript narrows each `case` exhaustively.
+// Discriminated render of one structured observation (shared by the meeting
+// turn cards and any consumer surfacing a turn's observations). TypeScript
+// narrows each `case` exhaustively.
+export function ObservationLine({ obs }: { obs: ObservationClaimView }) {
+  switch (obs.type) {
+    case "saw_player":
+      return (
+        <span className="min-w-0 break-words">
+          <span className="font-semibold text-amber-300">saw</span> {obs.subject} in{" "}
+          {obs.room} at tick {obs.tick}
+          {obs.co_present.length > 0 && (
+            <span className="text-neutral-400"> (with {obs.co_present.join(", ")})</span>
+          )}
+        </span>
+      );
+    case "completed_task":
+      return (
+        <span className="min-w-0 break-words">
+          <span className="font-semibold text-amber-300">completed</span>{" "}
+          {obs.task_id} in {obs.room} at tick {obs.tick}
+        </span>
+      );
+    case "found_body":
+      return (
+        <span className="min-w-0 break-words">
+          <span className="font-semibold text-amber-300">found body</span> of{" "}
+          {obs.body_of} in {obs.room} at tick {obs.tick}
+        </span>
+      );
+  }
+}
+
+// Discriminated render of one structured claim (shared across the meeting turn
+// cards; every turn exposes `StatementClaimView[]`). TypeScript narrows each
+// `case` exhaustively.
 export function ClaimLine({ claim }: { claim: StatementClaimView }) {
   switch (claim.type) {
     case "alibi":
@@ -84,24 +117,16 @@ export function ClaimLine({ claim }: { claim: StatementClaimView }) {
   }
 }
 
-// Event-id construction mirrors `meetings/transcript.py` exactly: contradictions
-// reference the structured artifact that produced them, not the bare statement
-// id. (The task hint's `statement_id === event_a_id` shorthand never matches the
-// real `stmt:<id>:claim:<index>` / `report:<agent>@<tick>:<claim|obs>:<index>`
-// format, so we reconstruct those ids and match on them.)
-export function reportClaimEventId(report: ReportView, index: number): string {
-  return `report:${report.agent_id}@${report.tick}:claim:${index}`;
+// Event-id construction mirrors `meetings/transcript.py` exactly (the
+// `_turn_claim_id` / `_turn_observation_id` helpers): a contradiction references
+// the structured artifact that produced it as `turn:<turn_id>:claim:<index>` or
+// `turn:<turn_id>:obs:<index>`, so we reconstruct those ids and match on them.
+export function turnClaimEventId(turn: TurnView, index: number): string {
+  return `turn:${turn.turn_id}:claim:${index}`;
 }
 
-export function reportObsEventId(report: ReportView, index: number): string {
-  return `report:${report.agent_id}@${report.tick}:obs:${index}`;
-}
-
-export function statementClaimEventId(
-  statement: StatementView,
-  index: number,
-): string {
-  return `stmt:${statement.statement_id}:claim:${index}`;
+export function turnObsEventId(turn: TurnView, index: number): string {
+  return `turn:${turn.turn_id}:obs:${index}`;
 }
 
 export function findContradictions(

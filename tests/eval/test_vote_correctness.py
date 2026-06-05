@@ -38,10 +38,9 @@ from meetings.schemas import (
     FoundBodyObservation,
     MeetingOutcome,
     MeetingTranscript,
+    MeetingTurn,
     PlayerId,
-    ReportDocument,
     SawPlayerObservation,
-    Statement,
     VoteBallot,
 )
 
@@ -93,23 +92,31 @@ def _report(
     agent_id: PlayerId = "p-0",
     tick: int = 40,
     observations: tuple[FoundBodyObservation | SawPlayerObservation, ...] = (),
-) -> ReportDocument:
-    return ReportDocument(
-        agent_id=agent_id,
-        tick=tick,
+) -> MeetingTurn:
+    """An ``opening`` chain turn carrying the reporter's observations (§5.2)."""
+
+    return MeetingTurn(
+        turn_id=f"{agent_id}:turn-{tick}",
+        turn_index=0,
+        speaker=agent_id,
+        turn_kind="opening",
+        reply_to=None,
         observations=observations,
         claims=(),
         free_text="",
     )
 
 
-def _accusation_statement(*, against: PlayerId, sid: str = "s-1") -> Statement:
-    return Statement(
-        statement_id=sid,
+def _accusation_statement(*, against: PlayerId, sid: str = "s-1") -> MeetingTurn:
+    """A ``reply`` chain turn carrying one accusation claim (§5.2)."""
+
+    return MeetingTurn(
+        turn_id=sid,
+        turn_index=1,
         speaker="p-0",
-        tick=40,
-        round_index=0,
-        target=against,
+        turn_kind="reply",
+        reply_to=None,
+        observations=(),
         claims=(
             AccusationClaim(
                 type="accusation",
@@ -138,11 +145,13 @@ def _meeting(
     ejected: PlayerId | None,
     meeting_id: str = "m-0",
     tick: int = 40,
-    reports: tuple[ReportDocument, ...] = (),
-    statements: tuple[Statement, ...] = (),
+    reports: tuple[MeetingTurn, ...] = (),
+    statements: tuple[MeetingTurn, ...] = (),
     contradictions: tuple[ContradictionRef, ...] = (),
     ballots: tuple[VoteBallot, ...] = (),
 ) -> MeetingReport:
+    # The chain is one ordered ``turns`` list (DESIGN.md §5.2): the opening
+    # ``reports`` turn(s) followed by any ``statements`` (reply / opt-in) turns.
     return MeetingReport(
         meeting_id=meeting_id,
         tick=tick,
@@ -150,7 +159,7 @@ def _meeting(
         trigger="report",
         outcome=outcome,
         ejected_player_id=ejected,
-        transcript=MeetingTranscript(reports=reports, statements=statements),
+        transcript=MeetingTranscript(turns=tuple(reports) + tuple(statements)),
         ballots=ballots,
         contradictions=contradictions,
         llm_calls=(),

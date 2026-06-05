@@ -13,13 +13,11 @@ import type {
   ContradictionView,
   MeetingView as MeetingViewDTO,
   PlayerView,
-  ReportView,
-  StatementView,
+  TurnView,
 } from "../types/api";
 import { BallotCard } from "./BallotCard";
 import { ContradictionBadge, PlayerChip } from "./ContradictionBadge";
-import { ReportCard } from "./ReportCard";
-import { StatementCard } from "./StatementCard";
+import { TurnCard } from "./TurnCard";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -70,77 +68,32 @@ function OutcomeBanner({
   );
 }
 
-function ReportsSection({
-  reports,
+// The reactive accusation chain (DESIGN.md §5.2) is one ordered list of turns —
+// opening, then the reactive reply chain, then any terminal opt-in turns — with
+// NO "round" grouping. The backend already emits them in `turn_index` order, so
+// the section renders them as a single flat sequence.
+function TurnsSection({
+  turns,
   contradictions,
   players,
 }: {
-  reports: readonly ReportView[];
+  turns: readonly TurnView[];
   contradictions: readonly ContradictionView[];
   players: PlayerView[];
 }) {
   return (
-    <Section title={`Reports (${reports.length})`}>
-      {reports.length === 0 ? (
-        <Empty>No reports.</Empty>
+    <Section title={`Accusation chain (${turns.length})`}>
+      {turns.length === 0 ? (
+        <Empty>No turns.</Empty>
       ) : (
         <div className="space-y-3">
-          {reports.map((report, index) => (
-            <ReportCard
-              key={`${report.agent_id}@${report.tick}#${index}`}
-              report={report}
+          {turns.map((turn) => (
+            <TurnCard
+              key={turn.turn_id}
+              turn={turn}
               players={players}
               contradictions={contradictions}
             />
-          ))}
-        </div>
-      )}
-    </Section>
-  );
-}
-
-function StatementsSection({
-  statements,
-  contradictions,
-  players,
-}: {
-  statements: readonly StatementView[];
-  contradictions: readonly ContradictionView[];
-  players: PlayerView[];
-}) {
-  const byRound = new Map<number, StatementView[]>();
-  for (const statement of statements) {
-    const group = byRound.get(statement.round_index);
-    if (group !== undefined) {
-      group.push(statement);
-    } else {
-      byRound.set(statement.round_index, [statement]);
-    }
-  }
-  const rounds = [...byRound.keys()].sort((a, b) => a - b);
-
-  return (
-    <Section title="Statements">
-      {rounds.length === 0 ? (
-        <Empty>No statements.</Empty>
-      ) : (
-        <div className="space-y-5">
-          {rounds.map((round) => (
-            <div key={round}>
-              <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-400">
-                Round {round}
-              </h4>
-              <div className="space-y-3">
-                {(byRound.get(round) ?? []).map((statement) => (
-                  <StatementCard
-                    key={statement.statement_id}
-                    statement={statement}
-                    players={players}
-                    contradictions={contradictions}
-                  />
-                ))}
-              </div>
-            </div>
           ))}
         </div>
       )}
@@ -356,13 +309,8 @@ export function MeetingView() {
         </button>
 
         <OutcomeBanner meeting={meeting} players={replay.players} />
-        <ReportsSection
-          reports={meeting.reports}
-          contradictions={meeting.contradictions}
-          players={replay.players}
-        />
-        <StatementsSection
-          statements={meeting.statements}
+        <TurnsSection
+          turns={meeting.turns}
           contradictions={meeting.contradictions}
           players={replay.players}
         />

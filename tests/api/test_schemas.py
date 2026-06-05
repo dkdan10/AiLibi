@@ -37,17 +37,16 @@ from api.schemas import (
     ReplayMetadataView,
     ReplayView,
     ReportBodyEventView,
-    ReportView,
     RoomView,
     SabotageEventView,
     SawPlayerView,
     SizeView,
     StatementClaimView,
-    StatementView,
     SuspicionEntryView,
     SuspicionGraphView,
     TaskCompletedEventView,
     TickView,
+    TurnView,
     VentView,
 )
 
@@ -87,25 +86,31 @@ def _all_statement_claims() -> tuple[StatementClaimView, ...]:
     )
 
 
-def _report() -> ReportView:
-    return ReportView(
-        agent_id="p1",
-        tick=10,
-        observations=_all_observation_claims(),
-        claims=_all_statement_claims(),
-        free_text="I was doing wires.",
-    )
-
-
-def _statement() -> StatementView:
-    return StatementView(
-        statement_id="s1",
-        speaker="p1",
-        tick=10,
-        round_index=0,
-        target="p2",
-        claims=_all_statement_claims(),
-        free_text="p2 is sus.",
+def _turns() -> tuple[TurnView, ...]:
+    # The reactive accusation chain (DESIGN.md §5.2): an opening turn that
+    # carries the reporter's observations + claims, then a reply turn whose
+    # ``reply_to`` threads back to it. One ordered list — no "round" grouping.
+    return (
+        TurnView(
+            turn_id="m1:turn-0",
+            turn_index=0,
+            speaker="p1",
+            turn_kind="opening",
+            reply_to=None,
+            observations=_all_observation_claims(),
+            claims=_all_statement_claims(),
+            free_text="I was doing wires; I found p4 in storage. p2 is sus.",
+        ),
+        TurnView(
+            turn_id="m1:turn-1",
+            turn_index=1,
+            speaker="p2",
+            turn_kind="reply",
+            reply_to="m1:turn-0",
+            observations=(),
+            claims=_all_statement_claims(),
+            free_text="It wasn't me — I was in electrical.",
+        ),
     )
 
 
@@ -195,14 +200,13 @@ def _meeting_view() -> MeetingView:
         trigger_kind="body",
         outcome="EJECTED",
         ejected_player_id="p2",
-        reports=(_report(),),
-        statements=(_statement(),),
+        turns=_turns(),
         ballots=(
             BallotView(
                 voter="p1",
                 target="p2",
                 confidence=0.9,
-                primary_reason_id="s1",
+                primary_reason_id="m1:turn-1",
                 considered_alternatives=("SKIP",),
                 rationale_text="p2 vented",
             ),

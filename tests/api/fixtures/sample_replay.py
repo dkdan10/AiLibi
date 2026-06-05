@@ -27,7 +27,7 @@ from meetings.schemas import (
     FoundBodyObservation,
     MeetingResult,
     MeetingTranscript,
-    ReportDocument,
+    MeetingTurn,
     VoteBallot,
 )
 from orchestrator.game import apply_meeting_result
@@ -172,7 +172,7 @@ def write_meeting_replay(
 
     meeting_id = f"{game_id}:meeting-0"
     result = _build_meeting_result(
-        meeting_id=meeting_id, reporter=reporter, living=living
+        meeting_id=meeting_id, reporter=reporter, victim=victim, living=living
     )
     llm_calls = _build_llm_calls() if llm_calls is None else llm_calls
     prompt_versions = {"crewmate_report": "crewmate_report.v1"}
@@ -317,25 +317,24 @@ def strip_llm_call_agent_ids(path: Path) -> None:
 
 
 def _build_meeting_result(
-    *, meeting_id: str, reporter: str, living: tuple[str, ...]
+    *, meeting_id: str, reporter: str, victim: str, living: tuple[str, ...]
 ) -> MeetingResult:
-    reports = tuple(
-        ReportDocument(
-            agent_id=agent_id,
-            tick=1,
-            observations=(
-                (
-                    FoundBodyObservation(
-                        type="found_body", tick=1, body_of="p-1", room="CAFETERIA"
-                    ),
-                )
-                if agent_id == reporter
-                else ()
+    # The reactive chain's opening turn (DESIGN.md §5.2 PHASE 1): the reporter
+    # states findings (the body discovery) and is unsure (no accusation), so the
+    # chain terminates immediately and the meeting resolves SKIPPED.
+    opening = MeetingTurn(
+        turn_id=f"{meeting_id}:turn-0",
+        turn_index=0,
+        speaker=reporter,
+        turn_kind="opening",
+        reply_to=None,
+        observations=(
+            FoundBodyObservation(
+                type="found_body", tick=1, body_of=victim, room="CAFETERIA"
             ),
-            claims=(),
-            free_text=f"{agent_id} reporting.",
-        )
-        for agent_id in living
+        ),
+        claims=(),
+        free_text=f"{reporter} reporting: found {victim}'s body in CAFETERIA.",
     )
     ballots = tuple(
         VoteBallot(
@@ -366,18 +365,22 @@ def _build_meeting_result(
         ejected_player_id=None,
         ballots=ballots,
         contradictions=contradictions,
-        transcript=MeetingTranscript(reports=reports, statements=()),
+        transcript=MeetingTranscript(turns=(opening,)),
     )
 
 
 def _build_llm_calls() -> tuple[LLMCallRecord, ...]:
+    # Prompt bodies carry the stable markers ``_classify_template_id`` keys on
+    # after the Task 8.7/8.8 chain reshape: the crewmate opening addresses the
+    # "opening speaker"; the impostor opening is framed "Your role for this match
+    # is IMPOSTOR". Both now emit a ``MeetingTurn`` (turn_kind = "opening").
     crewmate_prompt = (
-        "You are a **crewmate**. report intake.\n"
-        "## Your role: CREWMATE\nEmit one ReportDocument."
+        "You are a **crewmate** and the **opening speaker** (turn 0).\n"
+        "## Your role: CREWMATE\nEmit one MeetingTurn."
     )
     impostor_prompt = (
         "Your role for this match is IMPOSTOR.\n"
-        "## Your role: IMPOSTOR\nEmit one ReportDocument."
+        "## Your role: IMPOSTOR\nEmit one MeetingTurn."
     )
     return (
         LLMCallRecord(
