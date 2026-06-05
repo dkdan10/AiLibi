@@ -108,7 +108,9 @@ from meetings.schemas import (
     ContradictionRef,
     MeetingTranscript,
     MeetingTurn,
+    ObservationClaim,
     PlayerId,
+    SawPlayerObservation,
     TurnKind,
     VoteBallot,
 )
@@ -329,6 +331,60 @@ def _assert_no_forbidden_field_substrings(
                 )
 
 
+def _exclude_teammate_incriminating_observations(
+    observations: tuple[ObservationClaim, ...],
+    *,
+    fellow_impostor_ids: tuple[PlayerId, ...],
+) -> tuple[ObservationClaim, ...]:
+    """Strip ``saw_player`` observations that publicly place a fellow impostor.
+
+    The Task 8.7 :class:`~meetings.schemas.MeetingTurn` schema adds an
+    ``observations`` channel to every turn-kind (the old ``Statement`` carried
+    none). A ``saw_player`` observation naming a teammate would let an impostor
+    publicly place a fellow impostor near the body / a crewmate -- incriminating
+    them through the observation channel and bypassing
+    :func:`~meetings.manager.exclude_teammate_accusation_claims`, which only
+    guards accusation *claims*. This deterministic backstop extends the Task
+    7.12 firewall (DESIGN.md §5.2: "an impostor never accuses / incriminates /
+    votes a fellow impostor") to the observation surface, mirroring the
+    belt-and-suspenders precedent of the claim/ballot guards.
+
+    A ``saw_player`` whose ``subject`` is a teammate is dropped entirely (it is
+    a public sighting of the teammate); a retained sighting of a non-teammate
+    has any teammate ids filtered out of its ``co_present`` list (so a teammate
+    is never publicly co-located with the body / accused). ``found_body`` and
+    ``completed_task`` name the victim / the speaker's own task -- not a living
+    teammate -- so they pass through unchanged.
+
+    A pure function of ``fellow_impostor_ids`` with no RNG and no LLM call, and
+    an exact no-op when ``fellow_impostor_ids`` is empty (every crewmate and a
+    sole impostor), so replay reconstruction of the committed sets is
+    unaffected.
+    """
+
+    if not fellow_impostor_ids:
+        return observations
+    teammates = frozenset(fellow_impostor_ids)
+    kept: list[ObservationClaim] = []
+    for observation in observations:
+        if isinstance(observation, SawPlayerObservation):
+            if observation.subject in teammates:
+                # Public sighting of a teammate: drop it entirely.
+                continue
+            if any(player_id in teammates for player_id in observation.co_present):
+                observation = observation.model_copy(
+                    update={
+                        "co_present": tuple(
+                            player_id
+                            for player_id in observation.co_present
+                            if player_id not in teammates
+                        )
+                    }
+                )
+        kept.append(observation)
+    return tuple(kept)
+
+
 class StrategicReasoner:
     """Composite memory + prompt + LLM pipeline (DESIGN.md §4.4, §5.2).
 
@@ -467,11 +523,16 @@ class StrategicReasoner:
             agent_id=agent_id,
         )
         parsed = MeetingTurn.model_validate_json(response.text)
-        # Teammate firewall guard (Task 7.12): drop accusation claims
-        # against a fellow impostor regardless of model output. No-op when
-        # ``fellow_impostor_ids`` is empty, so replay is unaffected.
+        # Teammate firewall guard (Task 7.12): drop accusation claims against a
+        # fellow impostor AND strip observations that publicly place a teammate
+        # (the MeetingTurn observation channel is a second incrimination
+        # surface). No-op when ``fellow_impostor_ids`` is empty, so replay is
+        # unaffected.
         guarded_claims = exclude_teammate_accusation_claims(
             parsed.claims, fellow_impostor_ids=fellow_impostor_ids
+        )
+        guarded_observations = _exclude_teammate_incriminating_observations(
+            parsed.observations, fellow_impostor_ids=fellow_impostor_ids
         )
         return parsed.model_copy(
             update={
@@ -480,6 +541,7 @@ class StrategicReasoner:
                 "speaker": agent_id,
                 "turn_kind": "opening",
                 "reply_to": None,
+                "observations": guarded_observations,
                 "claims": guarded_claims,
             }
         )
@@ -541,6 +603,26 @@ class StrategicReasoner:
             rendered_memory=rendered_memory,
             fellow_impostor_ids=fellow_impostor_ids,
         )
+        # Fail loud on a prior_turn / turn_kind mismatch -- after the leak scan
+        # (always run on LLM-bound inputs) but BEFORE spending the LLM call. A
+        # ``reply`` answers the accusing turn it follows, so it MUST carry that
+        # ``prior_turn``; without it the recorded turn would have
+        # ``reply_to=None`` and the transcript could not reconstruct the
+        # accusation edge (DESIGN.md §5.2: a reply references the turn it
+        # answers). An ``opt_in`` is a terminal info-share turn that answers no
+        # specific turn, so it must NOT carry a prior_turn. (AGENTS.md "no
+        # silent fallbacks".)
+        if turn_kind == "reply" and prior_turn is None:
+            raise ValueError(
+                "produce_statement(turn_kind='reply') requires a prior_turn (the "
+                "accusing turn being answered); a reply must reference the turn it "
+                "answers so the transcript can reconstruct the accusation edge"
+            )
+        if turn_kind == "opt_in" and prior_turn is not None:
+            raise ValueError(
+                "produce_statement(turn_kind='opt_in') must not take a prior_turn; an "
+                "opt-in info-share turn is terminal and answers no specific turn"
+            )
         prompt = self._statement_prompt(
             agent_id=speaker,
             rendered_memory=rendered_memory,
@@ -559,13 +641,17 @@ class StrategicReasoner:
             agent_id=speaker,
         )
         parsed = MeetingTurn.model_validate_json(response.text)
-        # Teammate firewall guard (Task 7.12): drop accusation claims
-        # against a fellow impostor. Because the chain passes the floor to
-        # the player a turn accuses, stripping the teammate accusation here
-        # is what keeps an impostor from incriminating / handing the chain
-        # to a teammate on any turn. No-op when empty.
+        # Teammate firewall guard (Task 7.12): drop accusation claims against a
+        # fellow impostor AND strip observations that publicly place a teammate.
+        # Because the chain passes the floor to the player a turn accuses,
+        # stripping the teammate accusation keeps an impostor from handing the
+        # chain to a teammate; stripping a teammate-naming ``saw_player`` closes
+        # the observation channel the MeetingTurn schema added. No-op when empty.
         guarded_claims = exclude_teammate_accusation_claims(
             parsed.claims, fellow_impostor_ids=fellow_impostor_ids
+        )
+        guarded_observations = _exclude_teammate_incriminating_observations(
+            parsed.observations, fellow_impostor_ids=fellow_impostor_ids
         )
         reply_to = prior_turn.turn_id if prior_turn is not None else None
         return parsed.model_copy(
@@ -575,6 +661,7 @@ class StrategicReasoner:
                 "speaker": speaker,
                 "turn_kind": turn_kind,
                 "reply_to": reply_to,
+                "observations": guarded_observations,
                 "claims": guarded_claims,
             }
         )

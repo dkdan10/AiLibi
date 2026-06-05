@@ -68,6 +68,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     PlayerId,
+    SawPlayerObservation,
     VoteBallot,
 )
 
@@ -442,6 +443,7 @@ class TestProduceStatement:
                 turn_index=1,
                 turn_kind="reply",
                 transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
             )
         )
 
@@ -542,6 +544,45 @@ class TestProduceStatement:
                     turn_index=1,
                     turn_kind="opening",
                     transcript=MeetingTranscript(),
+                )
+            )
+
+    def test_reply_without_prior_turn_rejected_fail_loud(self) -> None:
+        # A reply must reference the accusing turn it answers; without a
+        # prior_turn it would record reply_to=None and the transcript could
+        # not reconstruct the accusation edge. Fail loud before the LLM call.
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="prior_turn"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-3",
+                    turn_index=1,
+                    turn_kind="reply",
+                    transcript=MeetingTranscript(),
+                    prior_turn=None,
+                )
+            )
+
+    def test_opt_in_with_prior_turn_rejected_fail_loud(self) -> None:
+        # An opt-in info-share turn is terminal and answers no specific turn,
+        # so it must not carry a prior_turn.
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="opt_in"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-7",
+                    turn_index=3,
+                    turn_kind="opt_in",
+                    transcript=MeetingTranscript(),
+                    prior_turn=_opening_turn(),
                 )
             )
 
@@ -685,6 +726,7 @@ class TestTriggerCallAgentIdAttribution:
                 turn_index=1,
                 turn_kind="reply",
                 transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
             )
         )
 
@@ -1261,6 +1303,7 @@ class TestTriggerCallKindRouting:
                 turn_index=1,
                 turn_kind="reply",
                 transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
             )
         )
 
@@ -1313,6 +1356,7 @@ class TestForwardedInputs:
                 turn_kind="reply",
                 transcript=MeetingTranscript(),
                 contradictions=contradictions,
+                prior_turn=_opening_turn(),
             )
         )
 
@@ -1495,6 +1539,7 @@ class TestTeammateFirewallGuard:
                 turn_index=1,
                 turn_kind="reply",
                 transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
                 fellow_impostor_ids=("p-5",),
             )
         )
@@ -1504,6 +1549,105 @@ class TestTeammateFirewallGuard:
         # passing to a teammate.
         assert not any(
             isinstance(c, AccusationClaim) and c.against == "p-5" for c in turn.claims
+        )
+
+    def test_teammate_incriminating_observation_dropped_on_turn(self) -> None:
+        # The MeetingTurn schema added an `observations` channel; a saw_player
+        # observation naming a teammate publicly places that teammate near the
+        # body / accused and would bypass the accusation-claim guard. The
+        # deterministic guard drops a teammate-subject sighting and filters a
+        # teammate id out of a non-teammate sighting's co_present list.
+        teammate_sighting = SawPlayerObservation(
+            type="saw_player", tick=400, subject="p-5", room="MEDBAY", co_present=()
+        )
+        crew_sighting_with_teammate = SawPlayerObservation(
+            type="saw_player",
+            tick=405,
+            subject="p-1",
+            room="ELECTRICAL",
+            co_present=("p-5", "p-2"),
+        )
+
+        def responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if schema is MeetingTurn:
+                return MeetingTurn(
+                    turn_id="ignored",
+                    turn_index=99,
+                    speaker="lies",
+                    turn_kind="reply",
+                    reply_to="ignored",
+                    observations=(teammate_sighting, crew_sighting_with_teammate),
+                    claims=(),
+                    free_text="s",
+                ).model_dump_json()
+            return _default_responder(prompt, schema)
+
+        client = _RecordingClient(responder=responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        turn = _run(
+            reasoner.produce_statement(
+                memory=memory,
+                meeting_id="m-1",
+                speaker="p-3",
+                turn_index=1,
+                turn_kind="reply",
+                transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
+                fellow_impostor_ids=("p-5",),
+            )
+        )
+
+        # The teammate-subject sighting is gone entirely; the crewmate sighting
+        # survives with the teammate id stripped from co_present.
+        saw = [o for o in turn.observations if isinstance(o, SawPlayerObservation)]
+        assert all(o.subject != "p-5" for o in saw)
+        assert any(o.subject == "p-1" for o in saw)
+        surviving = next(o for o in saw if o.subject == "p-1")
+        assert "p-5" not in surviving.co_present
+        assert "p-2" in surviving.co_present
+
+    def test_observation_guard_is_noop_for_sole_impostor(self) -> None:
+        # A sole impostor (empty fellow list) keeps a teammate-shaped sighting
+        # untouched — there is no teammate to protect, so replay is unaffected.
+        sighting = SawPlayerObservation(
+            type="saw_player", tick=400, subject="p-5", room="MEDBAY", co_present=()
+        )
+
+        def responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if schema is MeetingTurn:
+                return MeetingTurn(
+                    turn_id="ignored",
+                    turn_index=99,
+                    speaker="lies",
+                    turn_kind="opening",
+                    reply_to=None,
+                    observations=(sighting,),
+                    claims=(),
+                    free_text="o",
+                ).model_dump_json()
+            return _default_responder(prompt, schema)
+
+        client = _RecordingClient(responder=responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        turn = _run(
+            reasoner.produce_report(
+                memory=memory,
+                meeting_id="m-1",
+                agent_id="p-3",
+                role="IMPOSTOR",
+                current_tick=412,
+                meeting_trigger="trigger",
+                fellow_impostor_ids=(),
+            )
+        )
+
+        assert any(
+            isinstance(o, SawPlayerObservation) and o.subject == "p-5"
+            for o in turn.observations
         )
 
     def test_guard_is_noop_for_sole_impostor(self) -> None:
