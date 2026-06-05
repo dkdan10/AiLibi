@@ -6,28 +6,28 @@
    that Pydantic schema; this template only produces the user-facing
    prompt body.
 
-   Prompt version: vote_ballot/v2
+   Prompt version: vote_ballot/v3
    Bump the version line below (and this header) whenever the prompt
    text changes in a way that could shift LLM behaviour, so eval runs
    and replay logs can attribute results to a known prompt revision.
 
-   Task 7.12 added the gated teammate-coordination block below (rendered
-   only when fellow_impostor_ids is non-empty), which is the v2 change.
-   The AUTHORITATIVE recorded revision is vote_ballot/v2 in
-   orchestrator.game.DEFAULT_PROMPT_VERSIONS (replay/eval read that, not
-   the body text). The rendered "Prompt: vote_ballot/v1" line in the body
-   is intentionally LEFT at v1 so a crewmate / sole-impostor ballot (empty
-   teammate list) renders byte-identically to the frozen committed sets
-   (Task 7.12 DoD: crewmate prompts byte-unchanged; 4p/1i every change a
-   no-op). Do not "fix" that line to v2 without re-recording both sets.
+   Task 8.8 reshaped the transcript rendering from the old parallel
+   `reports` + fixed-round `statements` to the single ordered `turns`
+   list (DESIGN.md §5.2), and the visible body marker is bumped to
+   vote_ballot/v3 in lockstep with the other three meeting templates
+   and orchestrator.game.DEFAULT_PROMPT_VERSIONS. (The old v1/v2 split
+   -- body at v1 to preserve byte-identity with the frozen committed
+   sets -- is retired: the §5.2 reshape re-records both sets in Task
+   8.12, so there is no byte-identity left to preserve.) The gated
+   teammate-coordination block (Task 7.12) is preserved.
 
    Required render kwargs:
      voter_id            : PlayerId of the agent casting this ballot.
      rendered_memory     : str — §6.6 rendered memory view for this
                            agent. Already token-budgeted; render as-is.
-     transcript          : MeetingTranscript — Phase-1 reports plus all
-                           Phase-2 statements up to (but not including)
-                           this vote.
+     transcript          : MeetingTranscript — the ordered `turns` list
+                           (opening -> reactive chain -> opt-in) up to
+                           (but not including) this vote.
      contradiction_flags : iterable[ContradictionRef] — §5.4 flags
                            accumulated during the meeting. Each entry
                            exposes contradiction_id, kind, event_a_id,
@@ -48,10 +48,13 @@
                                  If omitted, the LLM falls back to
                                  inferring targets from the transcript
                                  and suspicion graph.
+     fellow_impostor_ids       : iterable[PlayerId] — Task 7.12 teammate
+                                 list; the teammate block renders only
+                                 when it is non-empty.
 #}
 You are agent `{{ voter_id }}` casting a vote at an AiLibi meeting.
 
-Prompt: vote_ballot/v1 (DESIGN.md §5.5)
+Prompt: vote_ballot/v3 (DESIGN.md §5.5)
 
 Read your rendered memory, the meeting transcript so far, the
 contradiction flags, and your current suspicion graph, then return a
@@ -63,20 +66,11 @@ is logged post-hoc for transparency.
 
 {{ rendered_memory }}
 
-## Meeting transcript so far
-
-### Phase 1 — Reports
-{% for report in transcript.reports %}
-- `{{ report.agent_id }}` @ tick {{ report.tick }}: {{ report.free_text }}
+## Meeting transcript so far (the accusation chain)
+{% for turn in transcript.turns %}
+- [`{{ turn.turn_id }}`] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) — `{{ turn.speaker }}`{% for claim in turn.claims %}{% if claim.type == "accusation" %} → accuses `{{ claim.against }}`{% endif %}{% endfor %}: {{ turn.free_text }}
 {%- else %}
-(no reports submitted)
-{%- endfor %}
-
-### Phase 2 — Accusation statements
-{% for stmt in transcript.statements %}
-- [`{{ stmt.statement_id }}`] round {{ stmt.round_index }} — `{{ stmt.speaker }}`{% if stmt.target %} → `{{ stmt.target }}`{% else %} (defensive){% endif %}: {{ stmt.free_text }}
-{%- else %}
-(no statements yet)
+(no turns recorded)
 {%- endfor %}
 
 ## Contradiction flags (informational, not verdicts — §5.4)
@@ -116,15 +110,15 @@ set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
    pick the player whose evidence is strongest given the rendered
    memory, the transcript, and the contradiction flags. The suspicion
    graph is a prior — fresh transcript evidence may override it.
-3. **`primary_reason_id`** references the `Statement` id that most
-   drove your decision. Set it to `null` if the decision rests on your
-   own observations, the rendered memory, or a contradiction flag
-   rather than on something another agent said.
+3. **`primary_reason_id`** references the `MeetingTurn` id (e.g.
+   `"m-7:turn-4"`) that most drove your decision. Set it to `null` if
+   the decision rests on your own observations, the rendered memory, or
+   a contradiction flag rather than on something another agent said.
 4. **`considered_alternatives`** lists any other player you seriously
    weighed (empty if there were none). It is for post-hoc analysis and
    does not affect the tally.
 5. **`rationale_text`** is for spectators and post-hoc transparency.
-   Be concrete: cite ticks, rooms, and statement ids. Two or three
+   Be concrete: cite ticks, rooms, and turn ids. Two or three
    sentences is enough.
 6. **Honesty about your role is a game rule, not a moral question.**
    If you are an impostor, vote in character — your goal is to survive
@@ -139,7 +133,7 @@ Return a single JSON object matching the shared `VoteBallot` schema:
   "voter": "{{ voter_id }}",
   "target": "<PlayerId or \"SKIP\">",
   "confidence": <float in [0, 1]>,
-  "primary_reason_id": "<StatementId or null>",
+  "primary_reason_id": "<TurnId or null>",
   "considered_alternatives": ["<PlayerId>", ...],
   "rationale_text": "<one short paragraph>"
 }

@@ -1,20 +1,28 @@
-"""Tests for the strategic reasoner (Task 3.9, DESIGN.md §4.4, §6.6).
+"""Tests for the strategic reasoner (Task 3.9 / 8.8, DESIGN.md §4.4, §5.2, §6.6).
 
-The reasoner is the convergence point for sub-phase C: composite agent
-memory, the four ``.j2`` prompt templates, the structured-output
-schemas, and the budget-wrapped LLM client compose into one class.
-The tests pin every contract the downstream tasks (3.10 voting, 3.11
-contradictions, 3.12 orchestrator) will rely on:
+The reasoner composes agent memory, the four reshaped ``.j2`` prompt
+templates, the structured-output schemas, and the budget-wrapped LLM
+client into one class. Task 8.8 re-sequenced its producers against the
+reactive accusation-chain schema (DESIGN.md §5.2): ``produce_report``
+emits the **opening** :class:`~meetings.schemas.MeetingTurn`,
+``produce_statement`` emits a reactive **reply / opt-in**
+:class:`~meetings.schemas.MeetingTurn` (with ``reply_to`` derived from a
+``prior_turn`` input), and ``produce_vote`` emits the
+:class:`~meetings.schemas.VoteBallot`.
+
+The tests pin every contract downstream code relies on:
 
 * the pipeline runs end to end against the fake provider with no
   network traffic,
 * the right prompt template is chosen by role,
 * the LLM is never authoritative for identity bookkeeping (the
-  reasoner overrides agent_id, tick, voter, statement_id),
+  reasoner overrides the turn identity fields and ``voter``),
 * the rendered prompt inputs are scanned with the canonical packet
   leak scanners from ``eval/leak_test.py`` before they reach the
   LLM, and a planted role-bearing string trips the scanner (R-10
   acceptance gate + C-1 closure),
+* the Task 7.12 teammate firewall guard runs on every turn-kind and on
+  the vote,
 * the same inputs against the deterministic fake provider produce
   byte-identical parsed outputs (determinism check),
 * budget overruns from a wrapped :class:`BudgetedLLMClient`
@@ -54,12 +62,13 @@ from llm.fake_provider import FakeProvider
 from meetings.manager import SuspicionEntry
 from meetings.schemas import (
     AccusationClaim,
+    Claim,
     ContradictionRef,
     CorroborationClaim,
     MeetingTranscript,
+    MeetingTurn,
     PlayerId,
-    ReportDocument,
-    Statement,
+    SawPlayerObservation,
     VoteBallot,
 )
 
@@ -148,6 +157,25 @@ def _build_memory_with_leak(
     return memory
 
 
+def _opening_turn(*, meeting_id: str = "m-1", speaker: str = "p-1") -> MeetingTurn:
+    """An opening turn the reasoner's reply producer can answer."""
+
+    return MeetingTurn(
+        turn_id=f"{meeting_id}:turn-0",
+        turn_index=0,
+        speaker=speaker,
+        turn_kind="opening",
+        reply_to=None,
+        observations=(),
+        claims=(
+            AccusationClaim(
+                type="accusation", against="p-3", confidence=0.6, reason="near body"
+            ),
+        ),
+        free_text="opening turn",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Recording LLM client to capture prompts the reasoner emits
 # ---------------------------------------------------------------------------
@@ -194,25 +222,21 @@ class _RecordingClient:
         )
 
 
-def _stub_report_json(*, agent_id: str = "lies", tick: int = 0) -> str:
-    return ReportDocument(
-        agent_id=agent_id,
-        tick=tick,
-        observations=(),
-        claims=(),
-        free_text="stub-report",
-    ).model_dump_json()
-
-
-def _stub_statement_json(*, speaker: str = "lies", round_index: int = 99) -> str:
-    return Statement(
-        statement_id="ignored-by-reasoner",
+def _stub_turn_json(
+    *,
+    speaker: str = "lies",
+    turn_kind: str = "opening",
+    claims: tuple[Claim, ...] = (),
+) -> str:
+    return MeetingTurn(
+        turn_id="ignored-by-reasoner",
+        turn_index=99,
         speaker=speaker,
-        tick=0,
-        round_index=round_index,
-        target=None,
-        claims=(),
-        free_text="stub-statement",
+        turn_kind=turn_kind,  # type: ignore[arg-type]
+        reply_to="ignored",
+        observations=(),
+        claims=claims,
+        free_text="stub-turn",
     ).model_dump_json()
 
 
@@ -228,10 +252,8 @@ def _stub_vote_json(*, voter: str = "lies", target: str = "SKIP") -> str:
 
 
 def _default_responder(prompt: str, schema: type[BaseModel] | None) -> str:
-    if schema is ReportDocument:
-        return _stub_report_json()
-    if schema is Statement:
-        return _stub_statement_json()
+    if schema is MeetingTurn:
+        return _stub_turn_json()
     if schema is VoteBallot:
         return _stub_vote_json()
     raise AssertionError(f"unexpected schema {schema!r}; prompt={prompt!r}")
@@ -255,9 +277,13 @@ class TestConstruction:
         with pytest.raises(ValueError, match="token_budget"):
             StrategicReasoner(llm_client=FakeProvider(), token_budget=0)
 
-    def test_negative_max_tokens_is_rejected(self) -> None:
-        with pytest.raises(ValueError, match="report_max_tokens"):
-            StrategicReasoner(llm_client=FakeProvider(), report_max_tokens=0)
+    def test_negative_turn_max_tokens_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="turn_max_tokens"):
+            StrategicReasoner(llm_client=FakeProvider(), turn_max_tokens=0)
+
+    def test_negative_vote_max_tokens_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="vote_max_tokens"):
+            StrategicReasoner(llm_client=FakeProvider(), vote_max_tokens=0)
 
     def test_out_of_range_skip_threshold_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="skip_confidence_threshold"):
@@ -271,19 +297,20 @@ class TestConstruction:
 
 
 # ---------------------------------------------------------------------------
-# Pipeline -- report intake
+# Pipeline -- opening turn
 # ---------------------------------------------------------------------------
 
 
 class TestProduceReport:
-    def test_pipeline_calls_llm_and_returns_parsed_report(self) -> None:
+    def test_pipeline_calls_llm_and_returns_opening_turn(self) -> None:
         client = _RecordingClient(responder=_default_responder)
         reasoner = StrategicReasoner(llm_client=client)
         memory = _build_memory(role="CREWMATE")
 
-        report = _run(
+        turn = _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -291,10 +318,10 @@ class TestProduceReport:
             )
         )
 
-        assert isinstance(report, ReportDocument)
+        assert isinstance(turn, MeetingTurn)
         assert len(client.calls) == 1
         call = client.calls[0]
-        assert call["schema"] is ReportDocument
+        assert call["schema"] is MeetingTurn
         assert call["call_kind"] == "meeting"
 
     def test_role_routes_to_crewmate_template(self) -> None:
@@ -305,6 +332,7 @@ class TestProduceReport:
         _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -324,6 +352,7 @@ class TestProduceReport:
         _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="IMPOSTOR",
                 current_tick=412,
@@ -335,18 +364,20 @@ class TestProduceReport:
         assert "Your role for this match is IMPOSTOR" in prompt
         assert "**crewmate**" not in prompt
 
-    def test_report_agent_id_and_tick_are_overridden_to_canonical_values(
+    def test_opening_identity_fields_are_overridden_to_canonical_values(
         self,
     ) -> None:
-        # The fake provider's _stub_report_json emits ``agent_id="lies"``
-        # and ``tick=0``; the reasoner must overwrite them.
+        # The fake stub emits speaker="lies", turn_kind="opening",
+        # turn_index=99, reply_to="ignored"; the reasoner must overwrite
+        # them with the canonical opening-turn identity.
         client = _RecordingClient(responder=_default_responder)
         reasoner = StrategicReasoner(llm_client=client)
         memory = _build_memory(role="CREWMATE")
 
-        report = _run(
+        turn = _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -354,8 +385,11 @@ class TestProduceReport:
             )
         )
 
-        assert report.agent_id == "p-3"
-        assert report.tick == 412
+        assert turn.turn_id == "m-1:turn-0"
+        assert turn.turn_index == 0
+        assert turn.speaker == "p-3"
+        assert turn.turn_kind == "opening"
+        assert turn.reply_to is None
 
     def test_invalid_role_rejected_fail_loud(self) -> None:
         reasoner = StrategicReasoner(llm_client=FakeProvider())
@@ -365,6 +399,7 @@ class TestProduceReport:
             _run(
                 reasoner.produce_report(
                     memory=memory,
+                    meeting_id="m-1",
                     agent_id="p-3",
                     role="UNKNOWN",  # type: ignore[arg-type]
                     current_tick=412,
@@ -372,53 +407,95 @@ class TestProduceReport:
                 )
             )
 
+    def test_empty_meeting_id_rejected(self) -> None:
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="meeting_id"):
+            _run(
+                reasoner.produce_report(
+                    memory=memory,
+                    meeting_id="",
+                    agent_id="p-3",
+                    role="CREWMATE",
+                    current_tick=412,
+                    meeting_trigger="trigger",
+                )
+            )
+
 
 # ---------------------------------------------------------------------------
-# Pipeline -- statement
+# Pipeline -- reactive reply / opt-in turn
 # ---------------------------------------------------------------------------
 
 
 class TestProduceStatement:
-    def test_pipeline_calls_llm_and_returns_parsed_statement(self) -> None:
+    def test_pipeline_calls_llm_and_returns_turn(self) -> None:
         client = _RecordingClient(responder=_default_responder)
         reasoner = StrategicReasoner(llm_client=client)
         memory = _build_memory()
 
-        statement = _run(
+        turn = _run(
             reasoner.produce_statement(
                 memory=memory,
                 meeting_id="m-1",
                 speaker="p-3",
-                tick=420,
-                round_index=1,
+                turn_index=1,
+                turn_kind="reply",
                 transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
             )
         )
 
-        assert isinstance(statement, Statement)
+        assert isinstance(turn, MeetingTurn)
         assert len(client.calls) == 1
-        assert client.calls[0]["schema"] is Statement
+        assert client.calls[0]["schema"] is MeetingTurn
 
-    def test_identity_fields_are_overridden(self) -> None:
+    def test_identity_fields_are_overridden_with_reply_to_from_prior_turn(
+        self,
+    ) -> None:
         client = _RecordingClient(responder=_default_responder)
         reasoner = StrategicReasoner(llm_client=client)
         memory = _build_memory()
+        prior = _opening_turn(meeting_id="m-meeting-id", speaker="p-1")
 
-        statement = _run(
+        turn = _run(
             reasoner.produce_statement(
                 memory=memory,
                 meeting_id="m-meeting-id",
                 speaker="p-3",
-                tick=420,
-                round_index=1,
-                transcript=MeetingTranscript(),
+                turn_index=1,
+                turn_kind="reply",
+                transcript=MeetingTranscript(turns=(prior,)),
+                prior_turn=prior,
             )
         )
 
-        assert statement.statement_id == "m-meeting-id:r1:p-3"
-        assert statement.speaker == "p-3"
-        assert statement.tick == 420
-        assert statement.round_index == 1
+        assert turn.turn_id == "m-meeting-id:turn-1"
+        assert turn.speaker == "p-3"
+        assert turn.turn_index == 1
+        assert turn.turn_kind == "reply"
+        assert turn.reply_to == "m-meeting-id:turn-0"
+
+    def test_opt_in_turn_has_no_reply_to(self) -> None:
+        client = _RecordingClient(responder=_default_responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory()
+
+        turn = _run(
+            reasoner.produce_statement(
+                memory=memory,
+                meeting_id="m-1",
+                speaker="p-7",
+                turn_index=3,
+                turn_kind="opt_in",
+                transcript=MeetingTranscript(),
+                prior_turn=None,
+            )
+        )
+
+        assert turn.turn_kind == "opt_in"
+        assert turn.reply_to is None
 
     def test_empty_meeting_id_rejected(self) -> None:
         reasoner = StrategicReasoner(llm_client=FakeProvider())
@@ -430,25 +507,82 @@ class TestProduceStatement:
                     memory=memory,
                     meeting_id="",
                     speaker="p-3",
-                    tick=420,
-                    round_index=0,
+                    turn_index=1,
+                    turn_kind="reply",
                     transcript=MeetingTranscript(),
                 )
             )
 
-    def test_negative_round_index_rejected(self) -> None:
+    def test_negative_turn_index_rejected(self) -> None:
         reasoner = StrategicReasoner(llm_client=FakeProvider())
         memory = _build_memory()
 
-        with pytest.raises(ValueError, match="round_index"):
+        with pytest.raises(ValueError, match="turn_index"):
             _run(
                 reasoner.produce_statement(
                     memory=memory,
                     meeting_id="m-1",
                     speaker="p-3",
-                    tick=420,
-                    round_index=-1,
+                    turn_index=-1,
+                    turn_kind="reply",
                     transcript=MeetingTranscript(),
+                )
+            )
+
+    def test_opening_turn_kind_rejected_fail_loud(self) -> None:
+        # The opening turn is produce_report's job; passing "opening" to
+        # produce_statement is a wiring bug and must fail loud.
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="turn_kind"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-3",
+                    turn_index=1,
+                    turn_kind="opening",
+                    transcript=MeetingTranscript(),
+                )
+            )
+
+    def test_reply_without_prior_turn_rejected_fail_loud(self) -> None:
+        # A reply must reference the accusing turn it answers; without a
+        # prior_turn it would record reply_to=None and the transcript could
+        # not reconstruct the accusation edge. Fail loud before the LLM call.
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="prior_turn"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-3",
+                    turn_index=1,
+                    turn_kind="reply",
+                    transcript=MeetingTranscript(),
+                    prior_turn=None,
+                )
+            )
+
+    def test_opt_in_with_prior_turn_rejected_fail_loud(self) -> None:
+        # An opt-in info-share turn is terminal and answers no specific turn,
+        # so it must not carry a prior_turn.
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory()
+
+        with pytest.raises(ValueError, match="opt_in"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-7",
+                    turn_index=3,
+                    turn_kind="opt_in",
+                    transcript=MeetingTranscript(),
+                    prior_turn=_opening_turn(),
                 )
             )
 
@@ -570,6 +704,7 @@ class TestTriggerCallAgentIdAttribution:
         _run(
             reasoner.produce_report(
                 memory=_build_memory(role="CREWMATE"),
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -588,9 +723,10 @@ class TestTriggerCallAgentIdAttribution:
                 memory=_build_memory(),
                 meeting_id="m-1",
                 speaker="p-2",
-                tick=420,
-                round_index=1,
+                turn_index=1,
+                turn_kind="reply",
                 transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
             )
         )
 
@@ -618,7 +754,7 @@ class TestTriggerCallAgentIdAttribution:
 
 
 class TestDeterminism:
-    def test_same_memory_same_provider_yields_byte_identical_report(self) -> None:
+    def test_same_memory_same_provider_yields_byte_identical_turn(self) -> None:
         # Run the same reasoning twice and assert byte-identical
         # outputs. FakeProvider derives all values from prompt content,
         # so this exercises the full pipeline's determinism contract.
@@ -628,6 +764,7 @@ class TestDeterminism:
         first = _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -637,6 +774,7 @@ class TestDeterminism:
         second = _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -682,7 +820,7 @@ class TestR10LeakScannerAcceptanceGate:
     Closes C-1 from audits/audit-2026-05-16-2239-claude.md by reusing
     the canonical scanners from eval/leak_test.py directly. A regression
     that silently suppresses the scanner (or re-implements it) must
-    fail these tests.
+    fail these tests. The scan runs on every turn-kind and the vote.
     """
 
     def test_clean_memory_passes_through_pipeline(self) -> None:
@@ -690,16 +828,17 @@ class TestR10LeakScannerAcceptanceGate:
         memory = _build_memory(role="CREWMATE")
 
         # Should not raise.
-        report = _run(
+        turn = _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
                 meeting_trigger="trigger",
             )
         )
-        assert report.agent_id == "p-3"
+        assert turn.speaker == "p-3"
 
     def test_planted_role_bearing_player_id_trips_scanner(self) -> None:
         # The canonical value scanner allow-lists `self_state.role`
@@ -714,6 +853,7 @@ class TestR10LeakScannerAcceptanceGate:
             _run(
                 reasoner.produce_report(
                     memory=memory,
+                    meeting_id="m-1",
                     agent_id="p-3",
                     role="CREWMATE",
                     current_tick=412,
@@ -725,7 +865,7 @@ class TestR10LeakScannerAcceptanceGate:
         # A second planted negative test: inject a forbidden substring
         # into a contradiction summary. The contradictions section is
         # part of the rendered memory the reasoner scans before sending
-        # to the LLM.
+        # to the LLM. Exercised on the reactive-turn (reply) path.
         reasoner = StrategicReasoner(llm_client=FakeProvider())
         memory = _build_memory(role="CREWMATE")
         memory.beliefs.record_contradiction(
@@ -743,8 +883,8 @@ class TestR10LeakScannerAcceptanceGate:
                     memory=memory,
                     meeting_id="m-1",
                     speaker="p-3",
-                    tick=420,
-                    round_index=0,
+                    turn_index=1,
+                    turn_kind="reply",
                     transcript=MeetingTranscript(),
                 )
             )
@@ -760,6 +900,7 @@ class TestR10LeakScannerAcceptanceGate:
             _run(
                 reasoner.produce_report(
                     memory=memory,
+                    meeting_id="m-1",
                     agent_id="p-3",
                     role="CREWMATE",
                     current_tick=412,
@@ -795,8 +936,8 @@ class TestR10LeakScannerAcceptanceGate:
                     memory=memory,
                     meeting_id="m-1",
                     speaker="p-3",
-                    tick=420,
-                    round_index=0,
+                    turn_index=1,
+                    turn_kind="reply",
                     transcript=MeetingTranscript(),
                 )
             )
@@ -816,6 +957,7 @@ class TestR10LeakScannerAcceptanceGate:
             _run(
                 reasoner.produce_report(
                     memory=memory,
+                    meeting_id="m-1",
                     agent_id="p-3",
                     role="CREWMATE",
                     current_tick=412,
@@ -857,8 +999,8 @@ class TestR10LeakScannerAcceptanceGate:
                     memory=memory,
                     meeting_id="m-1",
                     speaker="p-3",
-                    tick=420,
-                    round_index=0,
+                    turn_index=1,
+                    turn_kind="reply",
                     transcript=MeetingTranscript(),
                 )
             )
@@ -867,11 +1009,8 @@ class TestR10LeakScannerAcceptanceGate:
         # Companion to the value scanner: planted into the rendered
         # memory via a contradiction whose summary contains a substring
         # the recursive field scanner blocks at any non-allowed value
-        # path. This pins that the reasoner runs both scanners, not
-        # just one. The recursive-field scanner trips on field NAMES,
-        # so we need to plant a structure with a forbidden field name;
-        # the simplest reachable trigger is to assert via the value
-        # scanner (which is symmetric in failure mode).
+        # path. This pins that the reasoner runs both scanners on the
+        # vote path too.
         reasoner = StrategicReasoner(llm_client=FakeProvider())
         memory = _build_memory(role="CREWMATE")
         memory.beliefs.record_contradiction(
@@ -918,6 +1057,7 @@ class TestBudgetPropagation:
             _run(
                 reasoner.produce_report(
                     memory=memory,
+                    meeting_id="m-1",
                     agent_id="p-3",
                     role="CREWMATE",
                     current_tick=412,
@@ -934,9 +1074,10 @@ class TestBudgetPropagation:
         reasoner = StrategicReasoner(llm_client=budgeted)
         memory = _build_memory(role="CREWMATE")
 
-        report = _run(
+        turn = _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -944,7 +1085,7 @@ class TestBudgetPropagation:
             )
         )
 
-        assert report.agent_id == "p-3"
+        assert turn.speaker == "p-3"
 
 
 # ---------------------------------------------------------------------------
@@ -961,6 +1102,7 @@ class TestTriggerValidation:
             _run(
                 reasoner.produce_report(
                     memory=memory,
+                    meeting_id="m-1",
                     agent_id="p-3",
                     role="CREWMATE",
                     current_tick=412,
@@ -984,8 +1126,8 @@ class TestTriggerValidation:
                     memory=memory,
                     meeting_id="m-1",
                     speaker="p-3",
-                    tick=420,
-                    round_index=0,
+                    turn_index=1,
+                    turn_kind="reply",
                     transcript=MeetingTranscript(),
                     trigger="kill_witnessed",
                 )
@@ -1001,8 +1143,8 @@ class TestTriggerValidation:
                     memory=memory,
                     meeting_id="m-1",
                     speaker="p-3",
-                    tick=420,
-                    round_index=0,
+                    turn_index=1,
+                    turn_kind="reply",
                     transcript=MeetingTranscript(),
                     trigger="meeting_vote",
                 )
@@ -1046,6 +1188,7 @@ class TestTriggerValidation:
             _run(
                 reasoner.produce_report(
                     memory=memory,
+                    meeting_id="m-1",
                     agent_id="p-3",
                     role="CREWMATE",
                     current_tick=412,
@@ -1064,6 +1207,7 @@ class TestTriggerValidation:
         _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -1097,6 +1241,7 @@ class TestTriggerCallKindRouting:
         _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -1115,6 +1260,7 @@ class TestTriggerCallKindRouting:
         _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -1133,6 +1279,7 @@ class TestTriggerCallKindRouting:
         _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="CREWMATE",
                 current_tick=412,
@@ -1153,9 +1300,10 @@ class TestTriggerCallKindRouting:
                 memory=memory,
                 meeting_id="m-1",
                 speaker="p-3",
-                tick=420,
-                round_index=0,
+                turn_index=1,
+                turn_kind="reply",
                 transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
             )
         )
 
@@ -1192,8 +1340,8 @@ class TestForwardedInputs:
             ContradictionRef(
                 contradiction_id="c-1",
                 kind="alibi_conflict",
-                event_a_id="stmt-1",
-                event_b_id="stmt-2",
+                event_a_id="m-1:turn-0:claim-0",
+                event_b_id="m-1:turn-1:claim-0",
                 subjects=("p-5",),
                 description="alibi conflict for p-5 around tick 405",
             ),
@@ -1204,16 +1352,39 @@ class TestForwardedInputs:
                 memory=memory,
                 meeting_id="m-1",
                 speaker="p-3",
-                tick=420,
-                round_index=0,
+                turn_index=1,
+                turn_kind="reply",
                 transcript=MeetingTranscript(),
                 contradictions=contradictions,
+                prior_turn=_opening_turn(),
             )
         )
 
         prompt = str(client.calls[0]["prompt"])
         assert "alibi_conflict" in prompt
         assert "alibi conflict for p-5 around tick 405" in prompt
+
+    def test_prior_turn_forwarded_to_statement_prompt(self) -> None:
+        client = _RecordingClient(responder=_default_responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory()
+        prior = _opening_turn(meeting_id="m-1", speaker="p-1")
+
+        _run(
+            reasoner.produce_statement(
+                memory=memory,
+                meeting_id="m-1",
+                speaker="p-3",
+                turn_index=1,
+                turn_kind="reply",
+                transcript=MeetingTranscript(turns=(prior,)),
+                prior_turn=prior,
+            )
+        )
+
+        prompt = str(client.calls[0]["prompt"])
+        # The reply prompt names the accuser (the prior turn's speaker).
+        assert "`p-1`" in prompt
 
     def test_candidate_targets_forwarded_to_vote_prompt(self) -> None:
         client = _RecordingClient(responder=_default_responder)
@@ -1249,7 +1420,9 @@ class TestTeammateFirewallGuard:
     model emits. The guard is a pure function of ``fellow_impostor_ids``
     (no RNG, no new LLM call) and an exact no-op for a crewmate / sole
     impostor, so replay reconstruction of the committed sets is
-    unaffected.
+    unaffected. In the reactive chain the accusation lives in a turn's
+    ``claims`` (there is no separate ``target`` field), so the operative
+    guard is dropping a teammate accusation claim from every turn.
     """
 
     @staticmethod
@@ -1301,7 +1474,7 @@ class TestTeammateFirewallGuard:
         assert ballot.target == "p-1"
         assert "teammate target" not in ballot.rationale_text
 
-    def test_report_accusation_against_teammate_dropped_corroboration_kept(
+    def test_opening_accusation_against_teammate_dropped_corroboration_kept(
         self,
     ) -> None:
         accusation = AccusationClaim(
@@ -1312,22 +1485,20 @@ class TestTeammateFirewallGuard:
         )
 
         def responder(prompt: str, schema: type[BaseModel] | None) -> str:
-            if schema is ReportDocument:
-                return ReportDocument(
-                    agent_id="lies",
-                    tick=0,
-                    claims=(accusation, corroboration),
-                    free_text="r",
-                ).model_dump_json()
+            if schema is MeetingTurn:
+                return _stub_turn_json(
+                    turn_kind="opening", claims=(accusation, corroboration)
+                )
             return _default_responder(prompt, schema)
 
         client = _RecordingClient(responder=responder)
         reasoner = StrategicReasoner(llm_client=client)
         memory = _build_memory(role="IMPOSTOR")
 
-        report = _run(
+        turn = _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="IMPOSTOR",
                 current_tick=412,
@@ -1339,27 +1510,74 @@ class TestTeammateFirewallGuard:
         # The accusation against the teammate is gone; corroboration (which
         # HELPS the teammate) is retained.
         assert not any(
-            isinstance(c, AccusationClaim) and c.against == "p-5" for c in report.claims
+            isinstance(c, AccusationClaim) and c.against == "p-5" for c in turn.claims
         )
         assert any(
             isinstance(c, CorroborationClaim) and c.supports == "p-5"
-            for c in report.claims
+            for c in turn.claims
         )
 
-    def test_statement_target_and_accusation_against_teammate_dropped(self) -> None:
+    def test_reply_accusation_against_teammate_dropped(self) -> None:
         accusation = AccusationClaim(
             type="accusation", against="p-5", confidence=0.8, reason="x"
         )
 
         def responder(prompt: str, schema: type[BaseModel] | None) -> str:
-            if schema is Statement:
-                return Statement(
-                    statement_id="ignored",
+            if schema is MeetingTurn:
+                return _stub_turn_json(turn_kind="reply", claims=(accusation,))
+            return _default_responder(prompt, schema)
+
+        client = _RecordingClient(responder=responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        turn = _run(
+            reasoner.produce_statement(
+                memory=memory,
+                meeting_id="m-1",
+                speaker="p-3",
+                turn_index=1,
+                turn_kind="reply",
+                transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
+                fellow_impostor_ids=("p-5",),
+            )
+        )
+
+        # The chain reads its next speaker off the recorded accusation
+        # claims, so dropping the teammate accusation keeps the floor from
+        # passing to a teammate.
+        assert not any(
+            isinstance(c, AccusationClaim) and c.against == "p-5" for c in turn.claims
+        )
+
+    def test_teammate_incriminating_observation_dropped_on_turn(self) -> None:
+        # The MeetingTurn schema added an `observations` channel; a saw_player
+        # observation naming a teammate publicly places that teammate near the
+        # body / accused and would bypass the accusation-claim guard. The
+        # deterministic guard drops a teammate-subject sighting and filters a
+        # teammate id out of a non-teammate sighting's co_present list.
+        teammate_sighting = SawPlayerObservation(
+            type="saw_player", tick=400, subject="p-5", room="MEDBAY", co_present=()
+        )
+        crew_sighting_with_teammate = SawPlayerObservation(
+            type="saw_player",
+            tick=405,
+            subject="p-1",
+            room="ELECTRICAL",
+            co_present=("p-5", "p-2"),
+        )
+
+        def responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if schema is MeetingTurn:
+                return MeetingTurn(
+                    turn_id="ignored",
+                    turn_index=99,
                     speaker="lies",
-                    tick=0,
-                    round_index=0,
-                    target="p-5",
-                    claims=(accusation,),
+                    turn_kind="reply",
+                    reply_to="ignored",
+                    observations=(teammate_sighting, crew_sighting_with_teammate),
+                    claims=(),
                     free_text="s",
                 ).model_dump_json()
             return _default_responder(prompt, schema)
@@ -1368,22 +1586,68 @@ class TestTeammateFirewallGuard:
         reasoner = StrategicReasoner(llm_client=client)
         memory = _build_memory(role="IMPOSTOR")
 
-        statement = _run(
+        turn = _run(
             reasoner.produce_statement(
                 memory=memory,
                 meeting_id="m-1",
                 speaker="p-3",
-                tick=420,
-                round_index=0,
+                turn_index=1,
+                turn_kind="reply",
                 transcript=MeetingTranscript(),
+                prior_turn=_opening_turn(),
                 fellow_impostor_ids=("p-5",),
             )
         )
 
-        assert statement.target is None
-        assert not any(
-            isinstance(c, AccusationClaim) and c.against == "p-5"
-            for c in statement.claims
+        # The teammate-subject sighting is gone entirely; the crewmate sighting
+        # survives with the teammate id stripped from co_present.
+        saw = [o for o in turn.observations if isinstance(o, SawPlayerObservation)]
+        assert all(o.subject != "p-5" for o in saw)
+        assert any(o.subject == "p-1" for o in saw)
+        surviving = next(o for o in saw if o.subject == "p-1")
+        assert "p-5" not in surviving.co_present
+        assert "p-2" in surviving.co_present
+
+    def test_observation_guard_is_noop_for_sole_impostor(self) -> None:
+        # A sole impostor (empty fellow list) keeps a teammate-shaped sighting
+        # untouched — there is no teammate to protect, so replay is unaffected.
+        sighting = SawPlayerObservation(
+            type="saw_player", tick=400, subject="p-5", room="MEDBAY", co_present=()
+        )
+
+        def responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if schema is MeetingTurn:
+                return MeetingTurn(
+                    turn_id="ignored",
+                    turn_index=99,
+                    speaker="lies",
+                    turn_kind="opening",
+                    reply_to=None,
+                    observations=(sighting,),
+                    claims=(),
+                    free_text="o",
+                ).model_dump_json()
+            return _default_responder(prompt, schema)
+
+        client = _RecordingClient(responder=responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+
+        turn = _run(
+            reasoner.produce_report(
+                memory=memory,
+                meeting_id="m-1",
+                agent_id="p-3",
+                role="IMPOSTOR",
+                current_tick=412,
+                meeting_trigger="trigger",
+                fellow_impostor_ids=(),
+            )
+        )
+
+        assert any(
+            isinstance(o, SawPlayerObservation) and o.subject == "p-5"
+            for o in turn.observations
         )
 
     def test_guard_is_noop_for_sole_impostor(self) -> None:
@@ -1417,6 +1681,7 @@ class TestTeammateFirewallGuard:
         _run(
             reasoner.produce_report(
                 memory=memory,
+                meeting_id="m-1",
                 agent_id="p-3",
                 role="IMPOSTOR",
                 current_tick=412,
@@ -1462,8 +1727,8 @@ class TestTeammateFirewallGuard:
                     memory=memory,
                     meeting_id="m-1",
                     speaker="p-3",
-                    tick=420,
-                    round_index=0,
+                    turn_index=1,
+                    turn_kind="reply",
                     transcript=MeetingTranscript(),
                     fellow_impostor_ids=("p-5",),
                 )

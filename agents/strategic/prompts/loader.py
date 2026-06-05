@@ -49,7 +49,9 @@ from meetings.manager import SuspicionEntry
 from meetings.schemas import (
     ContradictionRef,
     MeetingTranscript,
+    MeetingTurn,
     PlayerId,
+    TurnKind,
 )
 
 _TEMPLATE_DIR: Final[Path] = Path(__file__).resolve().parent
@@ -136,16 +138,32 @@ def accusation_round_prompt(
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
+    prior_turn: MeetingTurn | None,
+    turn_kind: TurnKind,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
-    """Render an accusation-round speech-turn prompt (DESIGN.md §5.2).
+    """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
-    ``agent_id`` is threaded into the template so the self-alibi
+    Conforms to the :class:`~meetings.manager.StatementPromptRenderer`
+    Protocol so the meeting manager and strategic reasoner can invoke it
+    for every reactive-chain and opt-in turn without an adapter.
+
+    Task 8.8 grew two inputs over the old fixed-round statement renderer:
+
+    * ``prior_turn`` is the accusing turn this speaker answers -- the
+      "who accused me" context. It is the prior chain turn on a
+      ``reply`` and ``None`` on an opt-in info-share turn.
+    * ``turn_kind`` is ``"reply"`` or ``"opt_in"`` so the template frames
+      the turn correctly (the opt-in turn is terminal and never extends
+      the chain).
+
+    ``transcript`` is the transcript-so-far in chain order (its ``turns``
+    tuple); ``contradictions`` are the §5.4 flags warranted up to this
+    turn. ``agent_id`` is threaded into the template so the self-alibi
     example renders the speaker's own canonical player id (e.g.
-    ``"subject": "p-3"``) rather than a generic placeholder the model
-    might mis-substitute. This mirrors :func:`impostor_report_prompt`
-    (Task 3.18) and keeps DESIGN.md §5.4 contradiction detection able
-    to match self-alibis across speakers.
+    ``"subject": "p-3"``) rather than a placeholder the model might
+    mis-substitute, keeping DESIGN.md §5.4 contradiction detection able to
+    match self-alibis across speakers.
 
     ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate
     list; the template renders the "never target a teammate" block only
@@ -158,6 +176,8 @@ def accusation_round_prompt(
         rendered_memory=rendered_memory,
         transcript=transcript,
         contradictions=contradictions,
+        prior_turn=prior_turn,
+        turn_kind=turn_kind,
         fellow_impostor_ids=fellow_impostor_ids,
     )
 

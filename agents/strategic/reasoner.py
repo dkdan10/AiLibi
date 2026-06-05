@@ -1,14 +1,29 @@
-"""Strategic reasoner (Task 3.9, DESIGN.md §4.4, §6.6).
+"""Strategic reasoner (Task 3.9 / 8.8, DESIGN.md §4.4, §5.2, §6.6).
 
-The reasoner is the convergence point for sub-phase C: composite agent
-memory (Task 3.3), the four ``.j2`` prompt templates (Tasks 3.4-3.7),
-the structured-output schemas (Task 3.2), and the budget-wrapped LLM
-client (Task 3.9 C-5) compose into a single class that produces
-:class:`~meetings.schemas.ReportDocument`,
-:class:`~meetings.schemas.Statement`, or
-:class:`~meetings.schemas.VoteBallot` instances at meetings or specified
+The reasoner is the convergence point for the strategic policy: composite
+agent memory (Task 3.3), the four ``.j2`` prompt templates (reshaped in
+Task 8.8 to the reactive accusation chain), the structured-output schemas
+(Task 8.7), and the budget-wrapped LLM client (Task 3.9 C-5) compose into a
+single class that produces meeting artifacts at meetings or specified
 trigger points (kill-witnessed, body-found) — never inside
 ``agents/tactical/``.
+
+Reactive accusation chain producers (DESIGN.md §4.4, §5.2)
+=========================================================
+
+The chain (DESIGN.md §5.2) records one ordered ``transcript.turns`` list,
+so the reasoner produces :class:`~meetings.schemas.MeetingTurn` instances
+rather than the old parallel ``ReportDocument`` / ``Statement`` pair:
+
+* :meth:`StrategicReasoner.produce_report` -- the **opening** turn
+  (``turn_kind = "opening"``, turn 0): the reporter / emergency caller
+  states findings and accuses one player or stays unsure. Role selects the
+  crewmate vs impostor template.
+* :meth:`StrategicReasoner.produce_statement` -- a **reactive chain or
+  opt-in** turn (``turn_kind ∈ {"reply", "opt_in"}``). It gains a
+  ``prior_turn`` input (the accusing turn this speaker answers -- the "who
+  accused me" context) and sets ``reply_to`` from it.
+* :meth:`StrategicReasoner.produce_vote` -- the :class:`VoteBallot`.
 
 Pipeline
 ========
@@ -31,12 +46,17 @@ For every strategic call the pipeline is:
    appropriate Pydantic schema. The budget-wrapped client enforces
    :meth:`~llm.budget.GameBudget.preflight` /
    :meth:`~llm.budget.GameBudget.charge` around the call.
-5. The response text is parsed as the schema; identity fields owned
-   by the reasoner (``agent_id``, ``tick``, ``statement_id``,
-   ``round_index``, ``voter``) are overwritten with the canonical
-   values supplied by the caller. The LLM is never authoritative for
-   identity bookkeeping (matches the meeting-manager precedent in
-   :mod:`meetings.manager`).
+5. The response text is parsed as the schema; the identity fields owned
+   by the reasoner (``turn_id``, ``turn_index``, ``speaker``,
+   ``turn_kind``, ``reply_to`` for a turn; ``voter`` for a ballot) are
+   overwritten with the canonical values supplied by the caller. The LLM
+   is never authoritative for identity bookkeeping (matches the
+   meeting-manager precedent in :mod:`meetings.manager`).
+
+The Task 7.12 teammate firewall guard and the leak scan run on **every**
+turn-kind (opening, reply, opt-in) and on the vote, so an impostor never
+produces an accusation / ballot that incriminates a fellow impostor and
+no hidden field reaches the LLM, regardless of what the model emits.
 
 Non-elastic token-budget carve-out (DESIGN.md §6.6)
 ====================================================
@@ -72,11 +92,9 @@ from agents.strategic.prompts import (
 )
 from llm.client import CallKind, LLMClient
 from meetings.manager import (
-    DEFAULT_REPORT_MAX_TOKENS,
-    DEFAULT_REPORT_TEMPERATURE,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
-    DEFAULT_STATEMENT_MAX_TOKENS,
-    DEFAULT_STATEMENT_TEMPERATURE,
+    DEFAULT_TURN_MAX_TOKENS,
+    DEFAULT_TURN_TEMPERATURE,
     DEFAULT_VOTE_MAX_TOKENS,
     DEFAULT_VOTE_TEMPERATURE,
     ReportPromptRenderer,
@@ -84,19 +102,26 @@ from meetings.manager import (
     SuspicionEntry,
     VotePromptRenderer,
     coerce_teammate_ballot_to_skip,
-    drop_teammate_statement_target,
     exclude_teammate_accusation_claims,
 )
 from meetings.schemas import (
     ContradictionRef,
     MeetingTranscript,
+    MeetingTurn,
+    ObservationClaim,
     PlayerId,
-    ReportDocument,
-    Statement,
+    SawPlayerObservation,
+    TurnKind,
     VoteBallot,
 )
 
 Role = Literal["CREWMATE", "IMPOSTOR"]
+
+# Turn kinds the reactive chain / opt-in producer may emit. The opening
+# turn (turn 0) is produced by :meth:`StrategicReasoner.produce_report`;
+# ``produce_statement`` owns the reactive ``reply`` and terminal ``opt_in``
+# turns, so it rejects ``"opening"`` fail-loud.
+_STATEMENT_TURN_KINDS: Final[frozenset[TurnKind]] = frozenset({"reply", "opt_in"})
 
 # Trigger points at which the reasoner may be invoked (DESIGN.md §4.4).
 # The tag is recorded on each invocation for downstream replay / cost
@@ -132,8 +157,8 @@ _TRIGGER_CALL_KIND: Final[dict[StrategicTrigger, CallKind]] = {
 # fail-loud instead of silently mis-routing the call to the trigger
 # tier. ``produce_report`` admits the kill/body reactive labels
 # because DESIGN.md §4.4 names them as out-of-meeting strategic
-# trigger points that produce a report-shaped LLM output; the
-# accusation-round and vote phases only happen inside a meeting and
+# trigger points that produce an opening-shaped LLM output; the
+# reactive-turn and vote phases only happen inside a meeting and
 # therefore admit only their corresponding meeting label.
 _REPORT_ALLOWED_TRIGGERS: Final[frozenset[StrategicTrigger]] = frozenset(
     {"meeting_report", "kill_witnessed", "body_found"}
@@ -306,8 +331,62 @@ def _assert_no_forbidden_field_substrings(
                 )
 
 
+def _exclude_teammate_incriminating_observations(
+    observations: tuple[ObservationClaim, ...],
+    *,
+    fellow_impostor_ids: tuple[PlayerId, ...],
+) -> tuple[ObservationClaim, ...]:
+    """Strip ``saw_player`` observations that publicly place a fellow impostor.
+
+    The Task 8.7 :class:`~meetings.schemas.MeetingTurn` schema adds an
+    ``observations`` channel to every turn-kind (the old ``Statement`` carried
+    none). A ``saw_player`` observation naming a teammate would let an impostor
+    publicly place a fellow impostor near the body / a crewmate -- incriminating
+    them through the observation channel and bypassing
+    :func:`~meetings.manager.exclude_teammate_accusation_claims`, which only
+    guards accusation *claims*. This deterministic backstop extends the Task
+    7.12 firewall (DESIGN.md §5.2: "an impostor never accuses / incriminates /
+    votes a fellow impostor") to the observation surface, mirroring the
+    belt-and-suspenders precedent of the claim/ballot guards.
+
+    A ``saw_player`` whose ``subject`` is a teammate is dropped entirely (it is
+    a public sighting of the teammate); a retained sighting of a non-teammate
+    has any teammate ids filtered out of its ``co_present`` list (so a teammate
+    is never publicly co-located with the body / accused). ``found_body`` and
+    ``completed_task`` name the victim / the speaker's own task -- not a living
+    teammate -- so they pass through unchanged.
+
+    A pure function of ``fellow_impostor_ids`` with no RNG and no LLM call, and
+    an exact no-op when ``fellow_impostor_ids`` is empty (every crewmate and a
+    sole impostor), so replay reconstruction of the committed sets is
+    unaffected.
+    """
+
+    if not fellow_impostor_ids:
+        return observations
+    teammates = frozenset(fellow_impostor_ids)
+    kept: list[ObservationClaim] = []
+    for observation in observations:
+        if isinstance(observation, SawPlayerObservation):
+            if observation.subject in teammates:
+                # Public sighting of a teammate: drop it entirely.
+                continue
+            if any(player_id in teammates for player_id in observation.co_present):
+                observation = observation.model_copy(
+                    update={
+                        "co_present": tuple(
+                            player_id
+                            for player_id in observation.co_present
+                            if player_id not in teammates
+                        )
+                    }
+                )
+        kept.append(observation)
+    return tuple(kept)
+
+
 class StrategicReasoner:
-    """Composite memory + prompt + LLM pipeline (DESIGN.md §4.4).
+    """Composite memory + prompt + LLM pipeline (DESIGN.md §4.4, §5.2).
 
     Construction is cheap and side-effect free: it stores references
     to the LLM client, the four prompt callables, and per-call default
@@ -319,9 +398,11 @@ class StrategicReasoner:
     :mod:`agents.strategic.prompts`; tests and the orchestrator may
     inject scripted stubs by passing alternates to the constructor.
 
-    The reasoner is the public surface downstream tasks (3.10 voting,
-    3.11 contradictions, 3.12 orchestrator) consume; its public type
-    signature is therefore stable.
+    The reasoner is the public surface downstream tasks consume; its
+    public type signature is therefore stable. Mirroring the meeting
+    manager (DESIGN.md §5.2), every turn — opening, reply, opt-in — and
+    the vote pass through the leak scan and the Task 7.12 teammate
+    firewall guard.
     """
 
     def __init__(
@@ -337,24 +418,16 @@ class StrategicReasoner:
         statement_prompt: StatementPromptRenderer = (_default_accusation_round_prompt),
         vote_prompt: VotePromptRenderer = _default_vote_ballot_prompt,
         token_budget: int = DEFAULT_TOKEN_BUDGET,
-        report_max_tokens: int = DEFAULT_REPORT_MAX_TOKENS,
-        report_temperature: float = DEFAULT_REPORT_TEMPERATURE,
-        statement_max_tokens: int = DEFAULT_STATEMENT_MAX_TOKENS,
-        statement_temperature: float = DEFAULT_STATEMENT_TEMPERATURE,
+        turn_max_tokens: int = DEFAULT_TURN_MAX_TOKENS,
+        turn_temperature: float = DEFAULT_TURN_TEMPERATURE,
         vote_max_tokens: int = DEFAULT_VOTE_MAX_TOKENS,
         vote_temperature: float = DEFAULT_VOTE_TEMPERATURE,
         skip_confidence_threshold: float = DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
     ) -> None:
         if token_budget <= 0:
             raise ValueError(f"token_budget must be positive, got {token_budget}")
-        if report_max_tokens <= 0:
-            raise ValueError(
-                f"report_max_tokens must be positive, got {report_max_tokens}"
-            )
-        if statement_max_tokens <= 0:
-            raise ValueError(
-                f"statement_max_tokens must be positive, got {statement_max_tokens}"
-            )
+        if turn_max_tokens <= 0:
+            raise ValueError(f"turn_max_tokens must be positive, got {turn_max_tokens}")
         if vote_max_tokens <= 0:
             raise ValueError(f"vote_max_tokens must be positive, got {vote_max_tokens}")
         if not 0.0 <= skip_confidence_threshold <= 1.0:
@@ -368,10 +441,8 @@ class StrategicReasoner:
         self._statement_prompt = statement_prompt
         self._vote_prompt = vote_prompt
         self._token_budget = token_budget
-        self._report_max_tokens = report_max_tokens
-        self._report_temperature = report_temperature
-        self._statement_max_tokens = statement_max_tokens
-        self._statement_temperature = statement_temperature
+        self._turn_max_tokens = turn_max_tokens
+        self._turn_temperature = turn_temperature
         self._vote_max_tokens = vote_max_tokens
         self._vote_temperature = vote_temperature
         self._skip_confidence_threshold = skip_confidence_threshold
@@ -386,6 +457,7 @@ class StrategicReasoner:
         self,
         *,
         memory: AgentMemory,
+        meeting_id: str,
         agent_id: PlayerId,
         role: Role,
         current_tick: int,
@@ -393,26 +465,31 @@ class StrategicReasoner:
         public_transcript: str = "",
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
         trigger: StrategicTrigger = "meeting_report",
-    ) -> ReportDocument:
-        """Phase-1 :class:`ReportDocument` from rendered memory.
+    ) -> MeetingTurn:
+        """Opening :class:`MeetingTurn` (turn 0) from rendered memory.
 
-        Routes to the crewmate or impostor template based on ``role``.
-        The LLM-provided ``agent_id`` and ``tick`` are discarded; the
-        reasoner is authoritative for identity bookkeeping (matches the
-        meeting-manager precedent in :mod:`meetings.manager` -- the
-        prompt templates explicitly say the reasoner will override
-        those fields).
+        The opening turn (DESIGN.md §5.2 PHASE 1) IS the body report: the
+        reporter / emergency caller states findings and accuses one player
+        or stays unsure. Routes to the crewmate or impostor template based
+        on ``role``. The reasoner is authoritative for the identity fields
+        (``turn_id`` = ``"{meeting_id}:turn-0"``, ``turn_index`` = 0,
+        ``speaker`` = ``agent_id``, ``turn_kind`` = ``"opening"``,
+        ``reply_to`` = ``None``); the LLM-supplied values are discarded
+        (the prompt templates explicitly say the manager/reasoner will
+        override them).
 
         ``fellow_impostor_ids`` (Task 7.12) is the impostor's teammate
-        list. It is surfaced into the impostor report prompt and used by
+        list. It is surfaced into the impostor opening prompt and used by
         the deterministic guard below to drop any accusation claim the
         model makes against a teammate. It is ``()`` for a crewmate and a
         sole impostor, where both the prompt block and the guard are
-        no-ops, so those reports are byte-unchanged.
+        no-ops, so those turns are byte-unchanged.
         """
 
         if role not in ("CREWMATE", "IMPOSTOR"):
             raise ValueError(f"role must be 'CREWMATE' or 'IMPOSTOR', got {role!r}")
+        if not meeting_id:
+            raise ValueError("meeting_id must be a non-empty string")
         _validate_trigger_for_method(
             trigger,
             method="produce_report",
@@ -439,23 +516,32 @@ class StrategicReasoner:
         )
         response = await self._llm_client.complete(
             prompt=prompt,
-            schema=ReportDocument,
-            max_tokens=self._report_max_tokens,
-            temperature=self._report_temperature,
+            schema=MeetingTurn,
+            max_tokens=self._turn_max_tokens,
+            temperature=self._turn_temperature,
             call_kind=_TRIGGER_CALL_KIND[trigger],
             agent_id=agent_id,
         )
-        parsed = ReportDocument.model_validate_json(response.text)
-        # Teammate firewall guard (Task 7.12): drop accusation claims
-        # against a fellow impostor regardless of model output. No-op when
-        # ``fellow_impostor_ids`` is empty, so replay is unaffected.
+        parsed = MeetingTurn.model_validate_json(response.text)
+        # Teammate firewall guard (Task 7.12): drop accusation claims against a
+        # fellow impostor AND strip observations that publicly place a teammate
+        # (the MeetingTurn observation channel is a second incrimination
+        # surface). No-op when ``fellow_impostor_ids`` is empty, so replay is
+        # unaffected.
         guarded_claims = exclude_teammate_accusation_claims(
             parsed.claims, fellow_impostor_ids=fellow_impostor_ids
         )
+        guarded_observations = _exclude_teammate_incriminating_observations(
+            parsed.observations, fellow_impostor_ids=fellow_impostor_ids
+        )
         return parsed.model_copy(
             update={
-                "agent_id": agent_id,
-                "tick": current_tick,
+                "turn_id": _turn_id(meeting_id=meeting_id, turn_index=0),
+                "turn_index": 0,
+                "speaker": agent_id,
+                "turn_kind": "opening",
+                "reply_to": None,
+                "observations": guarded_observations,
                 "claims": guarded_claims,
             }
         )
@@ -466,31 +552,47 @@ class StrategicReasoner:
         memory: AgentMemory,
         meeting_id: str,
         speaker: PlayerId,
-        tick: int,
-        round_index: int,
+        turn_index: int,
+        turn_kind: TurnKind,
         transcript: MeetingTranscript,
+        prior_turn: MeetingTurn | None = None,
         contradictions: tuple[ContradictionRef, ...] = (),
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
         trigger: StrategicTrigger = "meeting_statement",
-    ) -> Statement:
-        """Phase-2 :class:`Statement` from rendered memory + transcript.
+    ) -> MeetingTurn:
+        """A reactive ``reply`` / ``opt_in`` :class:`MeetingTurn` (DESIGN.md §5.2).
 
-        ``statement_id`` is composed deterministically from
-        ``(meeting_id, round_index, speaker)`` so replay logs can map a
-        statement back to its slot without trusting the LLM with the
-        identity.
+        ``turn_id`` is composed deterministically as
+        ``"{meeting_id}:turn-{turn_index}"`` so replay logs can map a turn
+        back to its slot without trusting the LLM with the identity. The
+        reasoner is authoritative for ``turn_id``, ``turn_index``,
+        ``speaker``, ``turn_kind`` and ``reply_to`` (derived from
+        ``prior_turn``).
+
+        ``prior_turn`` is the accusing turn this speaker answers — the
+        "who accused me" context surfaced into the reactive-turn template.
+        It is the prior chain turn on a ``reply`` and ``None`` on a
+        terminal ``opt_in`` info-share turn; ``reply_to`` is its
+        ``turn_id`` (``None`` when ``prior_turn`` is ``None``).
 
         ``fellow_impostor_ids`` (Task 7.12) surfaces the teammate block
-        into the shared accusation prompt and drives the deterministic
-        guard: an accusation claim against a teammate is dropped and a
-        ``target`` naming a teammate degrades to ``None``. No-op for a
+        into the shared reactive-turn prompt and drives the deterministic
+        guard: an accusation claim against a teammate is dropped from the
+        recorded claims (which is what the chain reads its next speaker
+        off, so the floor never passes to a teammate). No-op for a
         crewmate / sole impostor (empty list).
         """
 
         if not meeting_id:
             raise ValueError("meeting_id must be a non-empty string")
-        if round_index < 0:
-            raise ValueError(f"round_index must be non-negative, got {round_index}")
+        if turn_index < 0:
+            raise ValueError(f"turn_index must be non-negative, got {turn_index}")
+        if turn_kind not in _STATEMENT_TURN_KINDS:
+            raise ValueError(
+                "produce_statement turn_kind must be one of "
+                f"{sorted(_STATEMENT_TURN_KINDS)} (the opening turn is "
+                f"produce_report's job); got {turn_kind!r}"
+            )
         _validate_trigger_for_method(
             trigger,
             method="produce_statement",
@@ -501,38 +603,65 @@ class StrategicReasoner:
             rendered_memory=rendered_memory,
             fellow_impostor_ids=fellow_impostor_ids,
         )
+        # Fail loud on a prior_turn / turn_kind mismatch -- after the leak scan
+        # (always run on LLM-bound inputs) but BEFORE spending the LLM call. A
+        # ``reply`` answers the accusing turn it follows, so it MUST carry that
+        # ``prior_turn``; without it the recorded turn would have
+        # ``reply_to=None`` and the transcript could not reconstruct the
+        # accusation edge (DESIGN.md §5.2: a reply references the turn it
+        # answers). An ``opt_in`` is a terminal info-share turn that answers no
+        # specific turn, so it must NOT carry a prior_turn. (AGENTS.md "no
+        # silent fallbacks".)
+        if turn_kind == "reply" and prior_turn is None:
+            raise ValueError(
+                "produce_statement(turn_kind='reply') requires a prior_turn (the "
+                "accusing turn being answered); a reply must reference the turn it "
+                "answers so the transcript can reconstruct the accusation edge"
+            )
+        if turn_kind == "opt_in" and prior_turn is not None:
+            raise ValueError(
+                "produce_statement(turn_kind='opt_in') must not take a prior_turn; an "
+                "opt-in info-share turn is terminal and answers no specific turn"
+            )
         prompt = self._statement_prompt(
             agent_id=speaker,
             rendered_memory=rendered_memory,
             transcript=transcript,
             contradictions=contradictions,
+            prior_turn=prior_turn,
+            turn_kind=turn_kind,
             fellow_impostor_ids=fellow_impostor_ids,
         )
         response = await self._llm_client.complete(
             prompt=prompt,
-            schema=Statement,
-            max_tokens=self._statement_max_tokens,
-            temperature=self._statement_temperature,
+            schema=MeetingTurn,
+            max_tokens=self._turn_max_tokens,
+            temperature=self._turn_temperature,
             call_kind=_TRIGGER_CALL_KIND[trigger],
             agent_id=speaker,
         )
-        parsed = Statement.model_validate_json(response.text)
-        statement_id = f"{meeting_id}:r{round_index}:{speaker}"
-        # Teammate firewall guard (Task 7.12): drop teammate accusation
-        # claims and null a teammate-naming target. No-op when empty.
+        parsed = MeetingTurn.model_validate_json(response.text)
+        # Teammate firewall guard (Task 7.12): drop accusation claims against a
+        # fellow impostor AND strip observations that publicly place a teammate.
+        # Because the chain passes the floor to the player a turn accuses,
+        # stripping the teammate accusation keeps an impostor from handing the
+        # chain to a teammate; stripping a teammate-naming ``saw_player`` closes
+        # the observation channel the MeetingTurn schema added. No-op when empty.
         guarded_claims = exclude_teammate_accusation_claims(
             parsed.claims, fellow_impostor_ids=fellow_impostor_ids
         )
-        guarded_target = drop_teammate_statement_target(
-            parsed.target, fellow_impostor_ids=fellow_impostor_ids
+        guarded_observations = _exclude_teammate_incriminating_observations(
+            parsed.observations, fellow_impostor_ids=fellow_impostor_ids
         )
+        reply_to = prior_turn.turn_id if prior_turn is not None else None
         return parsed.model_copy(
             update={
-                "statement_id": statement_id,
+                "turn_id": _turn_id(meeting_id=meeting_id, turn_index=turn_index),
+                "turn_index": turn_index,
                 "speaker": speaker,
-                "tick": tick,
-                "round_index": round_index,
-                "target": guarded_target,
+                "turn_kind": turn_kind,
+                "reply_to": reply_to,
+                "observations": guarded_observations,
                 "claims": guarded_claims,
             }
         )
@@ -550,7 +679,7 @@ class StrategicReasoner:
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
         trigger: StrategicTrigger = "meeting_vote",
     ) -> VoteBallot:
-        """Phase-3 :class:`VoteBallot` from rendered memory + transcript.
+        """Phase-4 :class:`VoteBallot` from rendered memory + transcript.
 
         The reasoner is authoritative for the ``voter`` field; the LLM
         is told to emit it but any value it returns is overwritten with
@@ -611,6 +740,17 @@ class StrategicReasoner:
             fellow_impostor_ids=fellow_impostor_ids,
         )
         return guarded
+
+
+def _turn_id(*, meeting_id: str, turn_index: int) -> str:
+    """The canonical turn id ``"{meeting_id}:turn-{turn_index}"`` (DESIGN.md §5.2).
+
+    Mirrors :func:`meetings.manager._turn_id`: keyed on the turn ordinal,
+    not the speaker, so it is unique even when a player speaks twice and a
+    :attr:`VoteBallot.primary_reason_id` can reference it.
+    """
+
+    return f"{meeting_id}:turn-{turn_index}"
 
 
 def _validate_trigger_for_method(
