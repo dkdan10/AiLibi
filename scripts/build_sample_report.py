@@ -84,7 +84,7 @@ def _roster_knobs(sample_dir: Path) -> tuple[int, int, int]:
 def _seeds_on_disk(sample_dir: Path) -> list[int]:
     """Seeds with a committed ``replay-seed-{n}.jsonl`` in ``sample_dir``.
 
-    Mirrors the loader's dedup (and the ``_committed_7p2i_seeds`` test helper):
+    Mirrors the loader's dedup (and the ``_committed_9p2i_seeds`` test helper):
     parse the trailing integer of each glob match and return them sorted and
     de-duplicated, so a zero-padded alias cannot double-count a seed.
     """

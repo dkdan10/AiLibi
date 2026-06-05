@@ -8,7 +8,7 @@ Three layers:
   catch.
 * **Committed-replay reconstruction** — the check run over the frozen committed
   4p/1i set (every game consistent; the impostor-ejection games have
-  ``first_zero_impostor_tick == game_over_tick``) and the frozen 7p/2i
+  ``first_zero_impostor_tick == game_over_tick``) and the frozen 9p/2i
   impostor-elimination games (multi-impostor + friendly-fire deaths exercise the
   alive-impostor count crossing zero by a path other than the lone ejection).
 * **Fail-loud reconstruction** — a wrong roster diverges the per-tick
@@ -33,7 +33,7 @@ from eval.win_condition_selfcheck import (
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples"
-_SAMPLES_7P2I = _SAMPLES_4P1I / "7p2i"
+_SAMPLES_9P2I = _SAMPLES_4P1I / "9p2i"
 
 # The committed replays/samples/ sets are invalidated by BOTH Phase-8
 # byte-breakers, so their reconstruction cases are skipped until Task 8.12
@@ -170,8 +170,8 @@ def _crewmate_eject_seeds(replay_dir: Path) -> list[int]:
 
 
 @_COMMITTED_RECORD_SKIP
-def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
-    """Multi-impostor 7p/2i eliminations satisfy the invariant (A-A-3).
+def test_committed_9p2i_elimination_games_hold_the_invariant() -> None:
+    """Multi-impostor 9p/2i eliminations satisfy the invariant (A-A-3).
 
     Exercises the two-impostor elimination path the single-impostor 4p/1i set
     cannot: when the committed set contains a CREWMATE_EJECT game, the
@@ -181,11 +181,11 @@ def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
     crew wins via CREWMATE_TASKS), so there is no elimination path to exercise.
     """
 
-    num_players, num_impostors, tasks_per_crewmate = _roster(_SAMPLES_7P2I)
-    elimination_seeds = _crewmate_eject_seeds(_SAMPLES_7P2I)
+    num_players, num_impostors, tasks_per_crewmate = _roster(_SAMPLES_9P2I)
+    elimination_seeds = _crewmate_eject_seeds(_SAMPLES_9P2I)
     if not elimination_seeds:
         pytest.skip(
-            "no CREWMATE_EJECT game in the committed 7p/2i set: post-7.12 impostor "
+            "no CREWMATE_EJECT game in the committed 9p/2i set: post-7.12 impostor "
             "coordination removed teammate-betrayal, so crew never ejects both "
             "impostors (all crew wins are CREWMATE_TASKS). The §6.3 multi-impostor "
             "elimination path is exercised only when an elimination-bearing set is "
@@ -194,7 +194,7 @@ def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
 
     for seed in elimination_seeds:
         check = check_replay_win_condition(
-            _SAMPLES_7P2I / f"replay-seed-{seed}.jsonl",
+            _SAMPLES_9P2I / f"replay-seed-{seed}.jsonl",
             seed=seed,
             num_players=num_players,
             num_impostors=num_impostors,

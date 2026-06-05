@@ -405,7 +405,7 @@ def test_missing_key_creates_no_per_set_directory(tmp_path: Path) -> None:
     # The per-set mkdir is gated behind the API-key preflight: a real (non-dry-run)
     # refresh into a not-yet-existing set dir with no key must fail at preflight
     # WITHOUT creating the directory or spending (no side effect before the check).
-    set_dir = tmp_path / "7p2i"
+    set_dir = tmp_path / "9p2i"
     env = _clean_env()
     env.pop("ANTHROPIC_API_KEY", None)
     env.update(
@@ -554,7 +554,7 @@ def test_ollama_preflight_fails_loud_when_server_down() -> None:
 def test_ollama_preflight_fails_loud_when_model_missing(tmp_path: Path) -> None:
     # Server reachable but the configured model not pulled -> fail loud with an
     # "ollama pull" remediation, before any spend.
-    set_dir = tmp_path / "7p2i"
+    set_dir = tmp_path / "9p2i"
     with _stub_ollama_server(model_names=["llama3.1:8b"]) as host:
         env = _clean_env()
         env.update(
@@ -578,7 +578,7 @@ def test_ollama_preflight_proceeds_when_reachable_and_model_present(
     # The stub does not serve /api/generate, so any later tournament step just
     # fails fast against it -- this test asserts only that the GATE proceeded, and
     # that it did NOT report a preflight failure. No real provider, no spend.
-    set_dir = tmp_path / "7p2i"
+    set_dir = tmp_path / "9p2i"
     with _stub_ollama_server(model_names=[_OLLAMA_MODEL, "llama3.1:8b"]) as host:
         env = _clean_env()
         env.update(

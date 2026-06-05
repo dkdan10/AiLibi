@@ -46,22 +46,26 @@ Regression-signal policy
 
 Regenerating fixtures from a real provider (manual, out of CI)
 -------------------------------------------------------------
-The committed fixtures are frozen, owned copies (NOT the live
-``replays/samples/``, which ``scripts/refresh_samples.sh`` rewrites). To refresh
-them after a genuine prompt-template change:
+The committed fixtures are frozen, owned copies of canonical-set replays (NOT
+the live ``replays/samples/9p2i/``, which ``scripts/refresh_samples.sh``
+rewrites). They are recorded at the canonical 9p/2i roster (DESIGN.md §3.5:
+9 players / 2 impostors / 2 tasks per crewmate), so the role derivation must be
+run at that roster. To refresh them after a genuine prompt-template change:
 
 1. change the prompt template and bump its version marker;
-2. ``bash scripts/refresh_samples.sh --meetings`` to re-record the
+2. ``bash scripts/refresh_samples.sh --meetings`` at the 9p/2i env
+   (``AILIBI_NUM_PLAYERS=9 AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2``
+   ``AILIBI_SAMPLE_DIR=replays/samples/9p2i`` + its manifest) to re-record the
    meeting-bearing seeds with a live provider;
-3. copy the new ``replays/samples/replay-seed-{seed}.jsonl`` for the fixture
-   seeds into ``tests/fixtures/prompt_regression/<version>/``;
+3. copy the new ``replays/samples/9p2i/replay-seed-{seed}.jsonl`` for the
+   fixture seeds into ``tests/fixtures/prompt_regression/<version>/``;
 4. regenerate ``baseline.json`` (run each fixture through
-   :func:`run_prompt_regression` and dump the summaries) and review the metric
-   deltas against the ``> X%`` policy before committing.
+   :func:`run_prompt_regression` at the 9p/2i roster and dump the summaries)
+   and review the metric deltas against the ``> X%`` policy before committing.
 
 The committed ``v_b`` fixture is a *hand-authored* minimal variant of ``v_a``
 (same seeds) used to demonstrate the loop deterministically: its
-``impostor_report`` template version is bumped ``v1 -> v2`` and one recorded
+``impostor_report`` template version is bumped one step and one recorded
 meeting gains an ``alibi_conflict`` contradiction naming the impostor, which
 flips that impostor's fabricated alibi from *survived* to *caught* — moving the
 alibi-fabrication survival rate while leaving the other metrics fixed. That is
@@ -173,6 +177,7 @@ def run_prompt_regression(
     *,
     num_players: int = DEFAULT_NUM_PLAYERS,
     num_impostors: int = DEFAULT_NUM_IMPOSTORS,
+    tasks_per_crewmate: int = 1,
     game_map: Map | None = None,
 ) -> PromptRegressionSummary:
     """Run the §11.3 metrics over a frozen fixture directory of replay JSONL.
@@ -186,10 +191,12 @@ def run_prompt_regression(
     metric scalars plus per-version provenance into a
     :class:`PromptRegressionSummary`.
 
-    ``num_players`` / ``num_impostors`` / ``game_map`` MUST match the setup the
-    fixtures were recorded under (they default to the headless-game defaults and
-    the canonical map — the configuration ``scripts/refresh_samples.sh`` records
-    with — which is what the committed fixtures use). They feed only the
+    ``num_players`` / ``num_impostors`` / ``tasks_per_crewmate`` / ``game_map``
+    MUST match the setup the fixtures were recorded under. They default to the
+    descriptor-less flat-baseline configuration (4p/1i at one task per
+    crewmate — what a default ``scripts/refresh_samples.sh`` records), so a
+    caller reading fixtures from another roster — e.g. the committed 9p/2i
+    canonical-set fixtures — passes the roster explicitly. They feed only the
     deterministic role derivation; no game is run.
 
     No network, no live or fake model call: the metric signal comes entirely
@@ -206,6 +213,7 @@ def run_prompt_regression(
             game_map=resolved_map,
             num_players=num_players,
             num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
         )
         for seed in seeds
     }
@@ -273,13 +281,16 @@ def _seeded_roles(
     game_map: Map,
     num_players: int,
     num_impostors: int,
+    tasks_per_crewmate: int,
 ) -> dict[PlayerId, Role]:
     """Derive a fixture seed's role ground truth from the deterministic seeding.
 
     ``roles`` is the one input not in the replay JSONL (the leak firewall keeps
     it out), so it is recomputed from the seeded game setup rather than stored in
     the fixture — the same deterministic source the live loader's role recovery
-    uses. No LLM, no network, fully reproducible.
+    uses. The full roster (including ``tasks_per_crewmate``) is threaded so the
+    derivation runs under exactly the recorded setup. No LLM, no network, fully
+    reproducible.
     """
 
     state = seed_initial_state(
@@ -287,6 +298,7 @@ def _seeded_roles(
         game_map=game_map,
         num_players=num_players,
         num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
     )
     return {player_id: player.role for player_id, player in state.players.items()}
 
