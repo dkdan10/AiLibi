@@ -2,8 +2,12 @@
 """Compute the dispatchable task frontier from the phase task graph.
 
 A task is **dispatchable** when it is not yet merged and every task it
-``Depends on`` is merged. "Merged" is read from the head branches of merged PRs
-(``gh pr list --state merged``) matched against each task's ``**Branch:**``.
+``Depends on`` is merged. "Merged" is read from merged PRs via ``gh``: a task
+``N.M`` counts as merged when a merged PR's **title** starts with ``task N.M``
+(the project's PR convention, e.g. ``task 8.1: per-player task re-key``) or, as a
+fallback, when its ``**Branch:**`` matches a merged PR's head branch. The title is
+the robust signal — Claude Code web sessions often merge from an auto-generated
+branch (``claude/…``) rather than the contract's branch name.
 
 This reuses ``scripts/_task_parser.py`` — the exact parser
 ``scripts/validate_task_docs.py`` and ``scripts/generate_prompts.py`` use — so the
@@ -15,7 +19,7 @@ Usage::
     python scripts/compute_next_task.py [--phase N] [--json]
 
 ``--phase N`` restricts the reported frontier to one phase (recommended — older
-phases' branches age out of the merged-PR query window). ``--json`` emits
+phases' PRs age out of the query window). ``--json`` emits
 ``{"dispatchable": [...], "blocked": [...], "merged": [...]}`` for an orchestrator
 (each dispatchable entry carries ``task_id`` / ``branch`` / ``prompt`` /
 ``complexity`` so a dispatcher can paste the prompt and apply a risk-tiered
@@ -31,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 
@@ -39,8 +44,8 @@ from _task_parser import TaskDoc, parse_all_tasks, relative
 _MERGED_PR_LIMIT = 500
 
 
-def merged_branches() -> set[str]:
-    """Head branches of merged PRs via the ``gh`` CLI (empty + warn on failure)."""
+def merged_pr_index() -> tuple[set[str], list[str]]:
+    """``(head branches, titles)`` of merged PRs via ``gh`` (empty + warn on failure)."""
 
     try:
         result = subprocess.run(
@@ -53,7 +58,7 @@ def merged_branches() -> set[str]:
                 "--limit",
                 str(_MERGED_PR_LIMIT),
                 "--json",
-                "headRefName",
+                "headRefName,title",
             ],
             capture_output=True,
             text=True,
@@ -66,24 +71,36 @@ def merged_branches() -> set[str]:
             "merged set as empty (offline preview — roots will show dispatchable).",
             file=sys.stderr,
         )
-        return set()
-    return {row["headRefName"] for row in json.loads(result.stdout or "[]")}
+        return set(), []
+    rows = json.loads(result.stdout or "[]")
+    return {row["headRefName"] for row in rows}, [row["title"] for row in rows]
+
+
+def is_task_merged(task: TaskDoc, branches: set[str], titles: list[str]) -> bool:
+    """A task is merged if a merged PR title starts ``task N.M`` or its branch matches."""
+
+    if task.branch in branches:
+        return True
+    pattern = re.compile(rf"^\s*task\s+{re.escape(task.task_id)}\b", re.IGNORECASE)
+    return any(pattern.search(title) for title in titles)
 
 
 def compute_frontier(
     tasks: list[TaskDoc],
-    merged: set[str],
+    branches: set[str],
+    titles: list[str],
     phase: int | None,
 ) -> tuple[list[TaskDoc], list[tuple[TaskDoc, list[str]]], set[str]]:
     """Split the candidate tasks into (dispatchable, blocked, merged_ids).
 
-    ``by_id`` / ``merged_ids`` are computed over ALL tasks so a cross-phase
-    dependency resolves correctly; only the reported candidates are restricted to
-    ``phase`` when given.
+    ``merged_ids`` is computed over ALL tasks so a cross-phase dependency resolves
+    correctly; only the reported candidates are restricted to ``phase`` when given.
     """
 
     by_id = {task.task_id: task for task in tasks}
-    merged_ids = {task.task_id for task in tasks if task.branch in merged}
+    merged_ids = {
+        task.task_id for task in tasks if is_task_merged(task, branches, titles)
+    }
 
     candidates = tasks
     if phase is not None:
@@ -124,8 +141,9 @@ def main() -> int:
             print(f"- {error}", file=sys.stderr)
         return 1
 
+    branches, titles = merged_pr_index()
     dispatchable, blocked, merged_ids = compute_frontier(
-        tasks, merged_branches(), args.phase
+        tasks, branches, titles, args.phase
     )
 
     if args.json:
