@@ -1,59 +1,81 @@
 """Meeting transcript helpers (DESIGN.md §5.2, §5.4).
 
-This module hosts the statement-ordering helpers that
-:class:`meetings.manager.MeetingManager` produces under the
-producer-guaranteed canonical order contract (Task 3.8 C-3 resolution,
-audit ``audits/audit-2026-05-16-0611-claude.md``), plus the
-:func:`detect_contradictions` flag detector that indexes alibi /
-saw-player claims across reports and statements (Task 3.11; DESIGN.md
-§5.4 + §6.4).
+This module hosts the pure, deterministic chain logic that backs the
+reactive accusation chain (DESIGN.md §5.2) plus the
+:func:`detect_contradictions` flag detector (DESIGN.md §5.4 + §6.4).
 
-Canonical statement order
-=========================
+Pure chain logic (replay-safe)
+==============================
 
-A meeting transcript stores ``statements`` as a tuple. The canonical
-order is:
+The chain's next speaker and its termination are **pure functions of
+the recorded turns** -- never of the LLM, the clock, or any hidden
+state -- so a replay can walk the recorded ``transcript.turns`` and
+reconstruct the discussion byte-for-byte without re-calling the model
+(DESIGN.md §0 rule 1; Task 8.7 replay-walk):
 
-* ascending :attr:`meetings.schemas.Statement.round_index`, then
-* ascending insertion order within a round (i.e. the order in which
-  participants submitted their statements, or were recorded with a
-  default no-statement entry on deadline).
+* :func:`accusation_target` -- the player a turn accuses (its first
+  :class:`~meetings.schemas.AccusationClaim`), or ``None``.
+* :func:`next_chain_step` -- given the prior turn, who has spoken, the
+  living-player count, and the turn count, returns the next speaker or a
+  deterministic termination reason (the DESIGN.md §5.2 three-condition
+  rule: no new accusation / re-accusation cycle / turn-count cap).
+* :func:`walk_chain` -- replays a recorded transcript through
+  :func:`next_chain_step`, validating that every recorded ``reply`` is
+  exactly the turn the rule predicts and that the tail is ``opt_in``.
 
-:class:`meetings.manager.MeetingManager` emits statements directly in
-this order, so consumers may read ``transcript.statements`` in tuple
-order without re-sorting. :func:`sort_statements_canonically` is
-exposed for external producers (e.g. a future replay reconstructor)
-that need to normalise a transcript they assembled out of order; it
-uses a stable sort so insertion order within a round is preserved.
+:class:`meetings.manager.MeetingManager` records turns in turn-index
+order, so consumers may read ``transcript.turns`` in tuple order;
+:func:`is_canonically_ordered` is the cheap pre-condition predicate.
 
 Contradiction detection
-=======================
+========================
 
 :func:`detect_contradictions` is data, not a verdict (DESIGN.md §5.4
 "Flags are *information*, not a verdict"). It cross-references alibi
-claims with publicly stated ``saw_player`` observations and returns a
-sorted tuple of :class:`meetings.schemas.ContradictionRef` flags.
-Downstream consumers -- the statement / vote prompt renderers, the
-agent-side rendered memory view in §6.6 -- decide how to surface and
-weigh these flags.
+claims with publicly stated ``saw_player`` observations across every
+turn and returns a sorted tuple of
+:class:`meetings.schemas.ContradictionRef` flags. Downstream consumers
+-- the turn / vote prompt renderers, the agent-side rendered memory view
+in §6.6 -- decide how to surface and weigh these flags.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from typing import Literal
 
 from meetings.schemas import (
+    AccusationClaim,
     AlibiClaim,
     ContradictionRef,
     MeetingTranscript,
+    MeetingTurn,
     PlayerId,
-    ReportDocument,
     SawPlayerObservation,
-    Statement,
 )
 
 _ContradictionKind = Literal["alibi_conflict", "alibi_vs_sighting"]
+
+# Deterministic termination reasons for the reactive chain (DESIGN.md §5.2
+# PHASE 2). Surfaced by :func:`next_chain_step` / :func:`walk_chain` so the
+# replay-walk can assert *why* a recorded chain stopped, not just that it did.
+# ``target_not_living`` is the practical fourth guard alongside DESIGN.md's
+# three: the chain passes the floor to "the accused", so the accused must be a
+# living participant -- an accusation of a dead / hallucinated id cannot be
+# answered and terminates the chain (it would otherwise have no recorded reply
+# to walk).
+TERMINATION_NO_NEW_ACCUSATION: Literal["no_new_accusation"] = "no_new_accusation"
+TERMINATION_TARGET_NOT_LIVING: Literal["target_not_living"] = "target_not_living"
+TERMINATION_RE_ACCUSATION_CYCLE: Literal["re_accusation_cycle"] = "re_accusation_cycle"
+TERMINATION_TURN_COUNT_CAP: Literal["turn_count_cap"] = "turn_count_cap"
+
+ChainTermination = Literal[
+    "no_new_accusation",
+    "target_not_living",
+    "re_accusation_cycle",
+    "turn_count_cap",
+]
 
 # Sentinel distinguishing "no roster supplied" (legacy callers / unit tests
 # that exercise the detector in isolation: index every subject) from an
@@ -63,36 +85,228 @@ _ContradictionKind = Literal["alibi_conflict", "alibi_vs_sighting"]
 _NO_ROSTER: frozenset[PlayerId] = frozenset({"\x00__no_roster_sentinel__\x00"})
 
 
-def sort_statements_canonically(
-    statements: Iterable[Statement],
-) -> tuple[Statement, ...]:
-    """Return ``statements`` sorted by canonical ``(round_index, insertion_order)``.
+# ---------------------------------------------------------------------------
+# Pure chain logic (DESIGN.md §5.2) -- shared by the manager and the replay-walk
+# ---------------------------------------------------------------------------
 
-    The sort is stable: within a round the input order is preserved.
-    Manager-produced transcripts are already canonically ordered; this
-    helper exists for external producers that need to normalise a
-    transcript assembled out of order.
+
+def accusation_target(turn: MeetingTurn) -> PlayerId | None:
+    """Return the player ``turn`` accuses, or ``None`` (DESIGN.md §5.2).
+
+    A turn accuses at most one player for chain-passing: the ``against``
+    of its first :class:`~meetings.schemas.AccusationClaim` in claim
+    order. A turn with no accusation claim (a defensive / "unsure" turn)
+    returns ``None``, which terminates the chain.
+
+    The manager records the *teammate-guarded* claims (Task 7.12 drops an
+    impostor's accusation of a fellow impostor before the turn is
+    stored), so this reads the same target the manager used to pass the
+    chain -- the property that lets a replay reconstruct the chain from
+    the recorded turns alone.
     """
 
-    return tuple(sorted(statements, key=lambda statement: statement.round_index))
+    for claim in turn.claims:
+        if isinstance(claim, AccusationClaim):
+            return claim.against
+    return None
 
 
-def is_canonically_ordered(statements: Iterable[Statement]) -> bool:
-    """Return ``True`` if ``statements`` is sorted by ``round_index``.
+@dataclass(frozen=True)
+class ChainStep:
+    """The deterministic decision after a chain turn (DESIGN.md §5.2 PHASE 2).
 
-    "Insertion order within a round" is, by definition, the tuple's
-    own order, so this predicate cannot check it -- it only verifies
-    the cross-round invariant. ``MeetingManager`` is the contract
-    holder for the insertion-order half; downstream consumers may use
-    this predicate as a cheap pre-condition check before processing
-    a transcript.
+    Exactly one of the two fields is set: ``next_speaker`` names the
+    player who speaks next (the accused), or ``termination`` gives the
+    reason the chain stops. Pure data, no LLM.
     """
 
-    last_round = -1
-    for statement in statements:
-        if statement.round_index < last_round:
+    next_speaker: PlayerId | None
+    termination: ChainTermination | None
+
+
+def next_chain_step(
+    *,
+    prev_turn: MeetingTurn,
+    spoken: frozenset[PlayerId],
+    living_ids: frozenset[PlayerId],
+    turns_recorded: int,
+) -> ChainStep:
+    """Decide the next reactive-chain speaker or terminate (DESIGN.md §5.2).
+
+    The chain passes the floor to the player ``prev_turn`` accused. It
+    terminates (deterministically, replay-safe) when ANY of these holds,
+    checked in order:
+
+    (a) ``prev_turn`` names no new accusation ("unsure" / defensive),
+    (-) the accused is not a living participant (dead / hallucinated id;
+        the floor cannot pass to someone who is not at the table),
+    (b) the accused has already taken a turn this meeting (cycle), or
+    (c) ``turns_recorded`` has reached the living-player count (hard cap).
+
+    Because every reply is spoken by a not-yet-spoken living accused, the
+    cap (c) coincides with the cycle check (b) at the boundary; it is kept
+    as an explicit, defensive bound so the chain can never run longer than
+    the table.
+
+    Args:
+        prev_turn: the most recent chain turn (opening or reply).
+        spoken: ids of every player who has already taken a turn.
+        living_ids: ids of every living participant (the §5.2 cap is
+            ``len(living_ids)``; the accused must be a member).
+        turns_recorded: number of turns recorded so far (opening + chain).
+    """
+
+    target = accusation_target(prev_turn)
+    if target is None:
+        return ChainStep(None, TERMINATION_NO_NEW_ACCUSATION)
+    if target not in living_ids:
+        return ChainStep(None, TERMINATION_TARGET_NOT_LIVING)
+    if target in spoken:
+        return ChainStep(None, TERMINATION_RE_ACCUSATION_CYCLE)
+    if turns_recorded >= len(living_ids):
+        return ChainStep(None, TERMINATION_TURN_COUNT_CAP)
+    return ChainStep(target, None)
+
+
+@dataclass(frozen=True)
+class ChainWalk:
+    """The reconstruction of a recorded meeting's structure (Task 8.7).
+
+    Produced by :func:`walk_chain` from a recorded transcript alone (no
+    LLM). ``chain_speakers`` is the opening speaker followed by every
+    reactive ``reply`` speaker in order; ``termination`` is why the chain
+    stopped; ``opt_in_speakers`` are the terminal info-share speakers.
+    """
+
+    chain_speakers: tuple[PlayerId, ...]
+    termination: ChainTermination | None
+    opt_in_speakers: tuple[PlayerId, ...]
+
+
+def walk_chain(
+    transcript: MeetingTranscript, *, living_ids: frozenset[PlayerId]
+) -> ChainWalk:
+    """Replay-walk a recorded transcript without the LLM (DESIGN.md §5.2).
+
+    Re-derives the chain by feeding the recorded turns back through
+    :func:`next_chain_step` and asserting that every recorded ``reply``
+    is exactly the turn the rule predicts (right speaker, ``reply_to``
+    linked to the prior turn) and that the tail turns are ``opt_in``.
+    This is the load-bearing replay invariant: the recorded
+    ``transcript.turns`` reconstruct the discussion deterministically, so
+    replay never re-calls the model. ``living_ids`` is the living-player
+    set the meeting ran with (at replay time, the set of ballot voters).
+
+    Raises:
+        ValueError: if the transcript is not a well-formed chain (a
+            reply whose speaker is not the predicted accused, a missing
+            ``opening`` head, a broken ``reply_to`` link, or a non-
+            ``opt_in`` turn after the chain). Failing loud here surfaces a
+            non-deterministic / corrupted record rather than silently
+            accepting an un-replayable meeting (AGENTS.md "no silent
+            fallbacks").
+    """
+
+    turns = transcript.turns
+    if not turns:
+        return ChainWalk((), None, ())
+
+    opening = turns[0]
+    if opening.turn_kind != "opening" or opening.reply_to is not None:
+        raise ValueError(
+            "walk_chain: turn 0 must be an opening turn with reply_to=None; "
+            f"got turn_kind={opening.turn_kind!r}, reply_to={opening.reply_to!r}"
+        )
+
+    chain: list[MeetingTurn] = [opening]
+    spoken: set[PlayerId] = {opening.speaker}
+    prev = opening
+    index = 1
+    termination: ChainTermination | None
+    while True:
+        step = next_chain_step(
+            prev_turn=prev,
+            spoken=frozenset(spoken),
+            living_ids=living_ids,
+            turns_recorded=len(chain),
+        )
+        if step.next_speaker is None:
+            termination = step.termination
+            break
+        if index >= len(turns):
+            raise ValueError(
+                "walk_chain: chain predicts a reply by "
+                f"{step.next_speaker!r} but the transcript has no turn at "
+                f"index {index}; the recorded chain is truncated"
+            )
+        turn = turns[index]
+        if turn.turn_kind != "reply":
+            raise ValueError(
+                f"walk_chain: expected a reply turn at index {index}, "
+                f"got turn_kind={turn.turn_kind!r}"
+            )
+        if turn.speaker != step.next_speaker:
+            raise ValueError(
+                f"walk_chain: reply at index {index} is by {turn.speaker!r} "
+                f"but the accusation chain predicts {step.next_speaker!r}"
+            )
+        if turn.reply_to != prev.turn_id:
+            raise ValueError(
+                f"walk_chain: reply at index {index} links to "
+                f"{turn.reply_to!r}, expected the prior turn {prev.turn_id!r}"
+            )
+        chain.append(turn)
+        spoken.add(turn.speaker)
+        prev = turn
+        index += 1
+
+    opt_in_turns = turns[index:]
+    for turn in opt_in_turns:
+        if turn.turn_kind != "opt_in":
+            raise ValueError(
+                f"walk_chain: turn {turn.turn_index} after the chain must be "
+                f"opt_in, got turn_kind={turn.turn_kind!r}"
+            )
+
+    return ChainWalk(
+        chain_speakers=tuple(turn.speaker for turn in chain),
+        termination=termination,
+        opt_in_speakers=tuple(turn.speaker for turn in opt_in_turns),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Turn ordering (DESIGN.md §5.2)
+# ---------------------------------------------------------------------------
+
+
+def sort_turns_canonically(turns: Iterable[MeetingTurn]) -> tuple[MeetingTurn, ...]:
+    """Return ``turns`` sorted by ascending ``turn_index``.
+
+    The sort is stable: turns sharing a ``turn_index`` keep input order
+    (a manager-produced transcript never does, since ``turn_index`` is a
+    unique ordinal). This helper exists for an external producer that
+    assembled a transcript out of order; the manager already emits turns
+    in ``turn_index`` order.
+    """
+
+    return tuple(sorted(turns, key=lambda turn: turn.turn_index))
+
+
+def is_canonically_ordered(turns: Iterable[MeetingTurn]) -> bool:
+    """Return ``True`` if ``turns`` is in canonical chain-turn order.
+
+    Canonical order is the contiguous ordinal sequence the chain emits:
+    each turn's ``turn_index`` equals its position (0, 1, 2, ...). This
+    replaces the old ``round_index``-keyed predicate -- a chain has no
+    rounds, only the single ordered turn list (DESIGN.md §5.2).
+    Consumers may use this as a cheap pre-condition check before
+    processing a transcript.
+    """
+
+    for position, turn in enumerate(turns):
+        if turn.turn_index != position:
             return False
-        last_round = statement.round_index
     return True
 
 
@@ -109,44 +323,37 @@ def detect_contradictions(
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
     Indexes every :class:`AlibiClaim` and :class:`SawPlayerObservation`
-    that appears in the transcript (across both Phase-1 reports and
-    Phase-2 statement claims) and emits a
+    that appears on any turn in the transcript and emits a
     :class:`ContradictionRef` per pair that cannot both be true:
 
     * ``alibi_conflict`` -- two alibis name the same ``subject`` in
       different rooms over overlapping tick ranges. Includes the case
-      where a single reporter contradicts themselves and the case
-      where two reporters disagree about a third party's location.
+      where a single speaker contradicts themselves and the case where
+      two speakers disagree about a third party's location.
     * ``alibi_vs_sighting`` -- an alibi places ``subject`` in room R
       over a tick range, but another agent's ``saw_player(subject)``
-      observation places them in a different room at a tick that
-      falls inside the alibi range.
+      observation places them in a different room at a tick that falls
+      inside the alibi range.
 
-    Flags are *information*, not verdicts. The returned tuple is
-    sorted by ``contradiction_id`` so the detector is deterministic
-    across calls with the same transcript -- a precondition for the
-    flags landing in a replay-stable rendered memory view (§6.6) and
-    for the byte-identical replay invariant in DESIGN.md §0 rule 1.
-    Sightings that match an alibi (same room, in-range tick) are
-    silently ignored; the detector reports only what *cannot* both
-    be true, not absence of evidence.
+    Flags are *information*, not verdicts. The returned tuple is sorted
+    by ``contradiction_id`` so the detector is deterministic across calls
+    with the same transcript -- a precondition for the flags landing in a
+    replay-stable rendered memory view (§6.6) and for the byte-identical
+    replay invariant in DESIGN.md §0 rule 1. Sightings that match an
+    alibi (same room, in-range tick) are silently ignored; the detector
+    reports only what *cannot* both be true, not absence of evidence.
 
     Roster-aware subject filtering (audit J-J-9). When ``roster`` is
-    supplied (the live-meeting path passes the set of living
-    participant ids), only alibis and sightings whose ``subject`` is in
-    the roster are indexed. A subject outside the roster -- a
-    hallucinated ``"p-99"`` or a self-placeholder the manager failed to
-    normalise -- is dropped *deterministically and explicitly here*
-    rather than silently surviving into a half-matched flag. Manager
-    self-alibi normalisation runs first (it rewrites ``"self"`` /
-    ``"p-self"`` to the speaker id), so a normalised self-alibi is in
-    the roster and still matched; this filter is the backstop for
-    everything normalisation cannot rescue. ``roster=None`` (the
-    default) indexes every subject, preserving the original behaviour
-    for callers/tests that exercise the detector without a roster.
+    supplied (the live-meeting path passes the set of living participant
+    ids), only alibis and sightings whose ``subject`` is in the roster
+    are indexed; a hallucinated ``"p-99"`` or an un-normalised
+    self-placeholder is dropped *deterministically and explicitly here*
+    rather than surviving into a half-matched flag. ``roster=None`` (the
+    default) indexes every subject, preserving behaviour for
+    callers/tests that exercise the detector without a roster.
 
-    The function is pure: it does not mutate the transcript and has
-    no side effects. The same input always produces the same output.
+    The function is pure: it does not mutate the transcript and has no
+    side effects.
     """
 
     effective_roster = _NO_ROSTER if roster is None else roster
@@ -183,53 +390,38 @@ def _subject_in_roster(subject: PlayerId, roster: frozenset[PlayerId]) -> bool:
 # -- Internal: indexing -----------------------------------------------------
 
 
+@dataclass(frozen=True)
 class _IndexedAlibi:
     """An :class:`AlibiClaim` paired with its synthetic event id."""
 
-    __slots__ = ("event_id", "claim")
-
-    def __init__(self, *, event_id: str, claim: AlibiClaim) -> None:
-        self.event_id = event_id
-        self.claim = claim
+    event_id: str
+    claim: AlibiClaim
 
 
+@dataclass(frozen=True)
 class _IndexedSighting:
     """A :class:`SawPlayerObservation` paired with its synthetic event id."""
 
-    __slots__ = ("event_id", "observation")
-
-    def __init__(self, *, event_id: str, observation: SawPlayerObservation) -> None:
-        self.event_id = event_id
-        self.observation = observation
+    event_id: str
+    observation: SawPlayerObservation
 
 
 def _iter_alibis(transcript: MeetingTranscript) -> Iterator[_IndexedAlibi]:
-    for report in transcript.reports:
-        for index, claim in enumerate(report.claims):
+    for turn in transcript.turns:
+        for index, claim in enumerate(turn.claims):
             if isinstance(claim, AlibiClaim):
                 yield _IndexedAlibi(
-                    event_id=_report_claim_id(report=report, index=index),
-                    claim=claim,
-                )
-    for statement in transcript.statements:
-        for index, claim in enumerate(statement.claims):
-            if isinstance(claim, AlibiClaim):
-                yield _IndexedAlibi(
-                    event_id=_statement_claim_id(statement=statement, index=index),
+                    event_id=_turn_claim_id(turn=turn, index=index),
                     claim=claim,
                 )
 
 
 def _iter_sightings(transcript: MeetingTranscript) -> Iterator[_IndexedSighting]:
-    # Phase-1 reports are the only schema-defined source of
-    # ``saw_player`` observations (DESIGN.md §5.3). Phase-2 statements
-    # carry alibis / accusations / corroborations but not raw
-    # observations, so this loop deliberately covers only reports.
-    for report in transcript.reports:
-        for index, observation in enumerate(report.observations):
+    for turn in transcript.turns:
+        for index, observation in enumerate(turn.observations):
             if isinstance(observation, SawPlayerObservation):
                 yield _IndexedSighting(
-                    event_id=_report_observation_id(report=report, index=index),
+                    event_id=_turn_observation_id(turn=turn, index=index),
                     observation=observation,
                 )
 
@@ -344,16 +536,12 @@ def _describe_alibi_vs_sighting(
 # -- Internal: event ids and predicates -------------------------------------
 
 
-def _report_claim_id(*, report: ReportDocument, index: int) -> str:
-    return f"report:{report.agent_id}@{report.tick}:claim:{index}"
+def _turn_claim_id(*, turn: MeetingTurn, index: int) -> str:
+    return f"turn:{turn.turn_id}:claim:{index}"
 
 
-def _report_observation_id(*, report: ReportDocument, index: int) -> str:
-    return f"report:{report.agent_id}@{report.tick}:obs:{index}"
-
-
-def _statement_claim_id(*, statement: Statement, index: int) -> str:
-    return f"stmt:{statement.statement_id}:claim:{index}"
+def _turn_observation_id(*, turn: MeetingTurn, index: int) -> str:
+    return f"turn:{turn.turn_id}:obs:{index}"
 
 
 def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
@@ -363,7 +551,13 @@ def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
 
 
 __all__ = [
+    "ChainStep",
+    "ChainTermination",
+    "ChainWalk",
+    "accusation_target",
     "detect_contradictions",
     "is_canonically_ordered",
-    "sort_statements_canonically",
+    "next_chain_step",
+    "sort_turns_canonically",
+    "walk_chain",
 ]

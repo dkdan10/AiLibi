@@ -1,39 +1,52 @@
 """Meeting state machine (DESIGN.md §5.1, §5.2).
 
-:class:`MeetingManager` runs one meeting end-to-end. It is constructed
-with the LLM client, the four prompt callables (Tasks 3.4-3.7 jinja
-templates wrapped as Python callables), and a deadline configuration.
-:meth:`MeetingManager.run` is a no-op until the orchestrator (Task
-3.12) invokes it with a :class:`MeetingTrigger`; from there the manager
-sequences report intake -> accusation rounds -> voting -> resolution
-per DESIGN.md §5.2 and returns a :class:`MeetingResult`.
+:class:`MeetingManager` runs one meeting end-to-end as the reactive
+accusation chain (DESIGN.md §5.2). It is constructed with the LLM
+client, the prompt callables (Task 8.8 jinja templates wrapped as Python
+callables), and a deadline configuration. :meth:`MeetingManager.run` is a
+no-op until the orchestrator invokes it with a :class:`MeetingTrigger`;
+from there the manager sequences a single ordered list of **turns** ->
+voting -> resolution and returns a :class:`MeetingResult`.
 
-The manager NEVER mutates engine state. It only reads agent-side
-inputs (rendered memory, role, suspicion graph) supplied by the
-orchestrator and emits a :class:`MeetingResult` DTO. The orchestrator
-applies the outcome to engine-owned state per DESIGN.md §5.1.
+The manager NEVER mutates engine state. It only reads agent-side inputs
+(rendered memory, role, suspicion graph) supplied by the orchestrator
+and emits a :class:`MeetingResult` DTO. The orchestrator applies the
+outcome to engine-owned state per DESIGN.md §5.1.
 
-Statement-ordering contract (C-3, audit
-``audits/audit-2026-05-16-0611-claude.md``)
-============================================================
+Reactive accusation chain (DESIGN.md §5.2)
+==========================================
 
-This module implements **option (a)** of the C-3 directive:
-producer-guaranteed canonical order. The
-``MeetingResult.transcript.statements`` tuple is sorted by
-``(round_index, insertion_order)``. Insertion order within a round
-is the speaker order returned by :func:`_speaker_order`: a true
-round-robin cyclic rotation of the canonical sorted ``agent_id``
-sequence so that ``trigger.triggered_by`` is at index 0. With
-sorted ids ``[p-1, p-2, p-3, p-4]`` and reporter ``p-2`` the order
-is ``[p-2, p-3, p-4, p-1]`` (DESIGN.md §5.2 "round-robin starting
-from reporter"). Default no-statement entries from deadline
-timeouts share their speaker's insertion slot.
+A meeting is one ordered ``transcript.turns`` list followed by a vote:
 
-Consumers may read ``transcript.statements`` in tuple order and trust
-that statements are sorted by ``(round_index, insertion_order)``
-without re-sorting. The pin test
-``tests/meetings/test_manager.py::TestStatementOrderingContract``
-fails against any implementation that violates this contract.
+1. **Opening** (turn 0) -- the body-reporter / emergency caller states
+   findings and accuses one player or declares "unsure".
+2. **Reactive chain** -- the accused responds; the next speaker is
+   deterministically the player just accused. The chain terminates when
+   the current turn names no new accusation, re-accuses someone who has
+   already spoken (cycle), or the turn count reaches the living-player
+   count (hard cap). The chain's next speaker and its termination are
+   pure functions of the recorded turns (:mod:`meetings.transcript`), so
+   a replay reconstructs the chain from ``transcript.turns`` without
+   re-calling the model.
+3. **Opt-in info-share** -- living non-speakers with a relevant
+   observation (a deterministic co-presence gate with the body / the
+   accused) each take one terminal turn; an opt-in turn may accuse but
+   never extends the chain.
+4. **Voting** -- contradictions (§5.4) recompute once over the full
+   transcript, then every living agent submits a :class:`VoteBallot`.
+5. **Resolution** -- plurality tally with the confidence threshold.
+
+Single per-turn chokepoint
+===========================
+
+Every turn -- opening, reply, or opt-in -- is collected through
+:meth:`MeetingManager._collect_turn`, so every turn-kind inherits the
+same guards: self-alibi subject normalization, the Task 7.12 teammate
+firewall (an impostor never accuses / incriminates a fellow impostor),
+the strict :class:`~meetings.schemas.AlibiClaim` chronology, and the
+Task 7.10 fail-soft (a malformed turn degrades to a default turn rather
+than aborting the meeting). The vote inherits the third 7.12 guard,
+:func:`coerce_teammate_ballot_to_skip`.
 """
 
 from __future__ import annotations
@@ -52,62 +65,51 @@ from meetings.schemas import (
     AlibiClaim,
     Claim,
     ContradictionRef,
+    FoundBodyObservation,
     MeetingOutcome,
     MeetingResult,
     MeetingTranscript,
+    MeetingTurn,
     PlayerId,
-    ReportDocument,
-    Statement,
+    SawPlayerObservation,
+    TurnKind,
     VoteBallot,
 )
-from meetings.transcript import detect_contradictions
+from meetings.transcript import (
+    accusation_target,
+    detect_contradictions,
+    next_chain_step,
+)
 
 Role = Literal["CREWMATE", "IMPOSTOR"]
 
-# Protocol-default deadline values (DESIGN.md §5.2 default: T1 = 30 s,
-# T2 = 30 s; statement deadline matches the report deadline since both
-# gate one LLM call per agent).
-#
-# Accusation-round count. DESIGN.md §5.2 specifies R = 2 rounds for the
-# MVP, but Task 7.10 (Wave 0.5, audit
-# ``audits/audit-2026-06-01-1425-gameplay-data.md`` §6 R=2 statement-sink)
-# reduces the implementation default to 1: the sequential statement phase
-# is the dominant meeting token sink (~1/3 of meeting LLM calls) and the
-# audit raised round 2's value as an OPEN QUESTION without measuring a
-# round-2 vote delta. This is a speed call, readjustable to 2 if a Wave-1
-# measurement later shows the second round changes outcomes. Replay
-# reconstruction is unaffected (meetings reconstruct from the recorded
-# outcome, not by re-running rounds), so the committed sets are untouched.
-DEFAULT_ROUND_COUNT: Final[int] = 1
-DEFAULT_REPORT_DEADLINE_SECONDS: Final[float] = 30.0
-DEFAULT_STATEMENT_DEADLINE_SECONDS: Final[float] = 30.0
+# Protocol-default deadline values (DESIGN.md §5.2: T_turn = 30 s per turn,
+# T2 = 30 s for the vote). The reactive chain replaces the old fixed
+# ``round_count`` loop: the meeting's *total* turn cap is the living-player
+# count (DESIGN.md §5.2 PHASE 2 condition (c), enforced by
+# :func:`meetings.transcript.next_chain_step`), so the deterministic
+# "total meeting cap" is structural -- the per-turn deadline below bounds
+# each turn's wall-clock, the chain bounds their number.
+DEFAULT_TURN_DEADLINE_SECONDS: Final[float] = 30.0
 DEFAULT_VOTE_DEADLINE_SECONDS: Final[float] = 30.0
 DEFAULT_SKIP_CONFIDENCE_THRESHOLD: Final[float] = 0.6
 
-# LLM-call settings. Kept conservative for the meeting protocol; Task
-# 3.9 (strategic reasoner) may want to expose these through the
-# orchestrator. Public defaults so the orchestrator can override per
-# call without monkey-patching constants.
-#
-# The report and statement budgets are the largest: a ReportDocument
-# and a multi-claim Statement are the most verbose meeting artifacts
-# (observations, claims, and free-text prose in one object), and too
-# tight a cap truncates the model mid-JSON into an unterminated string
-# that fails to parse. Vote ballots are smaller but get the same
-# defense-in-depth headroom.
-DEFAULT_REPORT_MAX_TOKENS: Final[int] = 2048
-DEFAULT_REPORT_TEMPERATURE: Final[float] = 0.4
-DEFAULT_STATEMENT_MAX_TOKENS: Final[int] = 2048
-DEFAULT_STATEMENT_TEMPERATURE: Final[float] = 0.4
+# LLM-call settings. A :class:`MeetingTurn` (observations + claims +
+# free-text prose in one object) is the most verbose meeting artifact, so
+# the per-turn budget is the largest; too tight a cap truncates the model
+# mid-JSON into an unterminated string that fails to parse. Vote ballots
+# are smaller but get the same defense-in-depth headroom. Public defaults
+# so the orchestrator can override per call without monkey-patching.
+DEFAULT_TURN_MAX_TOKENS: Final[int] = 2048
+DEFAULT_TURN_TEMPERATURE: Final[float] = 0.4
 DEFAULT_VOTE_MAX_TOKENS: Final[int] = 1024
 DEFAULT_VOTE_TEMPERATURE: Final[float] = 0.2
 
-# Free-text recorded on the transcript when a participant misses a
-# deadline. The audit-trail requirement in DESIGN.md §5.2 means we
-# always record *something* on timeout; these strings are the canonical
-# audit markers downstream code (replay, eval) can pattern-match on.
-DEFAULT_REPORT_FREE_TEXT: Final[str] = "(missed deadline; no report submitted)"
-DEFAULT_STATEMENT_FREE_TEXT: Final[str] = "(missed deadline; no statement)"
+# Free-text recorded on a turn / ballot when a participant misses a
+# deadline or emits an unparseable payload. The audit-trail requirement in
+# DESIGN.md §5.2 means we always record *something*; these strings are the
+# canonical audit markers downstream code (replay, eval) can match on.
+DEFAULT_TURN_FREE_TEXT: Final[str] = "(missed deadline; no turn submitted)"
 DEFAULT_VOTE_RATIONALE: Final[str] = "(missed deadline; default skip)"
 
 # Audit-trail marker prefix prepended to ``rationale_text`` when the LLM
@@ -140,11 +142,10 @@ _VALID_ROLES: Final[frozenset[str]] = frozenset({"CREWMATE", "IMPOSTOR"})
 # speaker's id so DESIGN.md §5.4 contradiction detection can match the
 # claim across speakers (Task 3.20):
 #
-# * ``"self"``         -- Task 3.18 reference token (prompt-fix covered;
-#                          kept here for defense-in-depth).
+# * ``"self"``         -- reference token (prompt-fix covered; kept here
+#                          for defense-in-depth).
 # * ``"p-self"``       -- the ``p-`` sibling-example prefix concatenated
-#                          with the ``self`` token; the post-3.18
-#                          prompt-only fix did not catch this variant.
+#                          with the ``self`` token.
 # * ``"{{ agent_id }}"`` -- an unrendered Jinja placeholder; only
 #                          reachable via a template rendering bug, but
 #                          rewriting it costs nothing and fails safe.
@@ -163,15 +164,14 @@ _T = TypeVar("_T")
 class LLMProviderError(RuntimeError):
     """LLM provider / transport failure (e.g. SDK or network timeout).
 
-    Distinct from :class:`asyncio.TimeoutError` raised by the
-    manager's per-phase deadlines (:class:`MeetingDeadlines`). In
-    Python 3.11+ :class:`asyncio.TimeoutError` is an alias of
-    built-in :class:`TimeoutError`, so without an explicit conversion
-    the manager's deadline handler would silently coerce provider
-    timeouts into default no-report / no-statement / default-skip
-    entries. This class is the canonical infrastructure-failure
-    signal; meeting callers can catch it explicitly (e.g. for retry
-    or for a kill-meeting decision in the orchestrator).
+    Distinct from :class:`asyncio.TimeoutError` raised by the manager's
+    per-turn deadlines (:class:`MeetingDeadlines`). In Python 3.11+
+    :class:`asyncio.TimeoutError` is an alias of built-in
+    :class:`TimeoutError`, so without an explicit conversion the manager's
+    deadline handler would silently coerce provider timeouts into default
+    turns / default-skip ballots. This class is the canonical
+    infrastructure-failure signal; meeting callers can catch it explicitly
+    (e.g. for retry or for a kill-meeting decision in the orchestrator).
     """
 
 
@@ -183,10 +183,10 @@ async def _isolate_provider_timeout(
     Used to wrap LLM client calls before they are passed to
     :func:`asyncio.wait_for`. Without this, the manager's
     ``except asyncio.TimeoutError`` handler cannot distinguish a
-    deadline-driven cancellation from an infrastructure timeout
-    surfaced by the provider's own transport / SDK, and would default
-    the participant's response when it should fail loud (AGENTS.md
-    "no silent fallbacks").
+    deadline-driven cancellation from an infrastructure timeout surfaced
+    by the provider's own transport / SDK, and would default the
+    participant's response when it should fail loud (AGENTS.md "no silent
+    fallbacks").
     """
 
     try:
@@ -200,9 +200,9 @@ class SuspicionEntry:
     """One row of the agent's suspicion graph (DESIGN.md §5.5).
 
     Surfaced verbatim into the vote-ballot prompt. The fields mirror
-    :class:`agents.memory.beliefs.PlayerBelief` so the strategic
-    reasoner (Task 3.9) can map a belief snapshot into this DTO
-    without re-shaping it.
+    :class:`agents.memory.beliefs.PlayerBelief` so the strategic reasoner
+    (Task 8.8) can map a belief snapshot into this DTO without re-shaping
+    it.
     """
 
     player_id: PlayerId
@@ -214,23 +214,18 @@ class SuspicionEntry:
 class MeetingParticipant:
     """One living agent's contribution to the meeting (DESIGN.md §5.1).
 
-    The manager treats this as a static snapshot for the duration of
-    the meeting: ``rendered_memory`` is what the §6.6 renderer
-    produced when the meeting opened, ``role`` selects which report
-    prompt is used, and ``suspicion_graph`` populates the vote-ballot
-    prompt input.
+    The manager treats this as a static snapshot for the duration of the
+    meeting: ``rendered_memory`` is what the §6.6 renderer produced when
+    the meeting opened, ``role`` selects which opening prompt is used, and
+    ``suspicion_graph`` populates the vote-ballot prompt input.
 
     ``fellow_impostor_ids`` carries the impostor-only teammate list
-    (Task 7.12, audit ``audits/audit-2026-06-02-2112-gameplay-data.md``
-    gp-imp-1 / D-D-1..D-D-4) onto the meeting layer: the same firewall-safe
-    self-channel data ``SelfView.fellow_impostor_ids`` delivers (Task 7.2)
-    and the kill policy already consumes (Task 7.9). It is the sorted ids
-    of the OTHER impostors when ``role == "IMPOSTOR"`` and ``()`` for every
-    crewmate and for a sole impostor, never the participant's own id. The
-    orchestrator populates it from world-state roles (``orchestrator.game
-    ._build_participants``); the default of ``()`` keeps every existing
-    construction site valid and is the firewall-correct value for a
-    crewmate.
+    (Task 7.12) onto the meeting layer: the sorted ids of the OTHER
+    impostors when ``role == "IMPOSTOR"`` and ``()`` for every crewmate
+    and for a sole impostor, never the participant's own id. The
+    orchestrator populates it from world-state roles; the default of
+    ``()`` keeps every existing construction site valid and is the
+    firewall-correct value for a crewmate.
     """
 
     agent_id: PlayerId
@@ -245,10 +240,10 @@ class MeetingTrigger:
     """Why the meeting was opened (DESIGN.md §5.1).
 
     The orchestrator constructs this from the engine event that
-    transitioned the world into ``MEETING`` phase. ``description`` is
-    a short free-text summary (e.g. ``"p3 reported p2's body in
-    MedBay at tick 410"``) that the report prompt surfaces to the
-    LLM.
+    transitioned the world into ``MEETING`` phase. ``triggered_by`` is the
+    opener (turn 0); ``description`` is a short free-text summary (e.g.
+    ``"p3 reported p2's body in MedBay at tick 410"``) that the opening
+    prompt surfaces to the LLM.
     """
 
     triggered_by: PlayerId
@@ -258,14 +253,18 @@ class MeetingTrigger:
 
 @dataclass(frozen=True)
 class MeetingDeadlines:
-    """Per-phase deadlines (DESIGN.md §1.4, §5.2).
+    """Per-turn + vote deadlines (DESIGN.md §1.4, §5.2).
 
-    ``None`` disables the deadline for that phase (headless mode).
-    The manager passes the value straight to :func:`asyncio.wait_for`.
+    ``None`` disables the deadline for that phase (headless mode); the
+    value is passed straight to :func:`asyncio.wait_for`. ``turn_seconds``
+    bounds each opening / reply / opt-in turn; ``vote_seconds`` bounds each
+    ballot. The meeting's *total* turn count is hard-capped at the
+    living-player count by the chain protocol itself (DESIGN.md §5.2
+    PHASE 2), so the deterministic total-meeting bound is structural, not a
+    wall-clock budget.
     """
 
-    report_seconds: float | None = DEFAULT_REPORT_DEADLINE_SECONDS
-    statement_seconds: float | None = DEFAULT_STATEMENT_DEADLINE_SECONDS
+    turn_seconds: float | None = DEFAULT_TURN_DEADLINE_SECONDS
     vote_seconds: float | None = DEFAULT_VOTE_DEADLINE_SECONDS
 
 
@@ -273,32 +272,28 @@ class MeetingDeadlines:
 class MeetingConfig:
     """Meeting protocol configuration (DESIGN.md §5.2)."""
 
-    round_count: int = DEFAULT_ROUND_COUNT
     deadlines: MeetingDeadlines = field(default_factory=MeetingDeadlines)
     skip_confidence_threshold: float = DEFAULT_SKIP_CONFIDENCE_THRESHOLD
-    report_max_tokens: int = DEFAULT_REPORT_MAX_TOKENS
-    report_temperature: float = DEFAULT_REPORT_TEMPERATURE
-    statement_max_tokens: int = DEFAULT_STATEMENT_MAX_TOKENS
-    statement_temperature: float = DEFAULT_STATEMENT_TEMPERATURE
+    turn_max_tokens: int = DEFAULT_TURN_MAX_TOKENS
+    turn_temperature: float = DEFAULT_TURN_TEMPERATURE
     vote_max_tokens: int = DEFAULT_VOTE_MAX_TOKENS
     vote_temperature: float = DEFAULT_VOTE_TEMPERATURE
 
 
 @runtime_checkable
 class ReportPromptRenderer(Protocol):
-    """Render a Phase-1 report prompt (DESIGN.md §5.2, §5.3).
+    """Render the opening-turn prompt (DESIGN.md §5.2 PHASE 1, §5.3).
 
-    The manager dispatches to the crewmate or impostor renderer based
-    on :attr:`MeetingParticipant.role`. Template inputs match the
-    Jinja2 surface in ``agents/strategic/prompts/{crewmate,impostor}_report.j2``
-    (Tasks 3.4 + 3.5). ``public_transcript`` is the empty string at
-    Phase-1 since no statements have been made yet.
+    The manager dispatches to the crewmate or impostor renderer based on
+    the opener's :attr:`MeetingParticipant.role`. The opening turn IS the
+    body report: the reporter states findings (observations) and accuses
+    one player or declares "unsure". ``public_transcript`` is the empty
+    string at the opening since no turn precedes it.
 
-    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate
-    list surfaced into the impostor report prompt so the model never
-    accuses or incriminates a teammate. It is ``()`` for a crewmate and
-    a sole impostor; the crewmate template ignores it, so a crewmate
-    prompt is byte-unchanged.
+    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate list
+    surfaced into the impostor opening prompt so the model never accuses /
+    incriminates a teammate. It is ``()`` for a crewmate and a sole
+    impostor; the crewmate template ignores it.
     """
 
     def __call__(
@@ -315,23 +310,19 @@ class ReportPromptRenderer(Protocol):
 
 @runtime_checkable
 class StatementPromptRenderer(Protocol):
-    """Render an accusation-round prompt (DESIGN.md §5.2, §5.3).
+    """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
-    Template inputs match
-    ``agents/strategic/prompts/accusation_round.j2`` (Task 3.6).
-    ``agent_id`` is the speaker's own player id; it anchors the
-    self-alibi example in the template to a concrete id so the model
-    does not mis-substitute a placeholder (Task 3.20, matching the
-    ``ReportPromptRenderer`` ``agent_id`` thread from Task 3.18).
-    ``transcript`` is the transcript-so-far including all prior
-    rounds' statements in canonical order; ``contradictions`` is the
-    :class:`ContradictionRef` flags that Task 3.11 will populate
-    (empty for now).
+    Grows two inputs over the old fixed-round statement renderer (Task
+    8.7): ``prior_turn`` is the accusing turn this speaker answers (the
+    "who accused me" context; ``None`` for an opt-in info-share turn), and
+    ``turn_kind`` is ``"reply"`` or ``"opt_in"`` so the template can frame
+    the turn correctly. ``transcript`` is the transcript-so-far in chain
+    order; ``contradictions`` are the §5.4 flags warranted by the claims
+    made up to this turn.
 
-    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate
-    list; the shared statement template renders a teammate block only
-    when it is non-empty, so a crewmate / sole-impostor prompt (empty
-    list) is byte-unchanged.
+    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate list;
+    the shared template renders a teammate block only when it is non-empty,
+    so a crewmate / sole-impostor prompt is byte-unchanged.
     """
 
     def __call__(
@@ -341,6 +332,8 @@ class StatementPromptRenderer(Protocol):
         rendered_memory: str,
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
+        prior_turn: MeetingTurn | None,
+        turn_kind: TurnKind,
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
     ) -> str: ...
 
@@ -349,15 +342,14 @@ class StatementPromptRenderer(Protocol):
 class VotePromptRenderer(Protocol):
     """Render a vote-ballot prompt (DESIGN.md §5.5).
 
-    Template inputs match ``agents/strategic/prompts/vote_ballot.j2``
-    (Task 3.7). ``candidate_targets`` is the explicit set of living
-    eject targets (every living participant except the voter);
-    ``skip_confidence_threshold`` matches
-    :attr:`MeetingConfig.skip_confidence_threshold`.
+    ``candidate_targets`` is the explicit set of living eject targets
+    (every living participant except the voter); ``skip_confidence_threshold``
+    matches :attr:`MeetingConfig.skip_confidence_threshold`. ``transcript``
+    is the full chain transcript.
 
-    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate
-    list; the shared ballot template renders a teammate block only when
-    it is non-empty (instructing the impostor to SKIP rather than vote a
+    ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate list;
+    the shared ballot template renders a teammate block only when it is
+    non-empty (instructing the impostor to SKIP rather than vote a
     teammate), so a crewmate / sole-impostor prompt is byte-unchanged.
     """
 
@@ -378,35 +370,15 @@ class VotePromptRenderer(Protocol):
 class MeetingManager:
     """State machine that runs one meeting end-to-end (DESIGN.md §5.1, §5.2).
 
-    Construction is cheap and side-effect free: it stores references
-    to the LLM client, the four prompt callables, and the config.
-    Nothing runs until :meth:`run` is invoked, which is the trigger
-    lifecycle in DESIGN.md §5.1.
+    Construction is cheap and side-effect free: it stores references to
+    the LLM client, the prompt callables, and the config. Nothing runs
+    until :meth:`run` is invoked, which is the trigger lifecycle in
+    DESIGN.md §5.1.
 
-    :meth:`run` sequences the four phases:
-
-    1. **Report intake** -- parallel ``ReportDocument`` collection from
-       every living participant. Crewmates use the crewmate prompt;
-       impostors use the impostor prompt.
-    2. **Accusation rounds** -- ``config.round_count`` sequential
-       rounds (default 1; see :data:`DEFAULT_ROUND_COUNT`). Within
-       each round, participants speak in true round-robin order: the
-       canonical sorted ``agent_id`` sequence rotated so
-       ``trigger.triggered_by`` is at index 0 (see
-       :func:`_speaker_order`).
-    3. **Voting** -- parallel ``VoteBallot`` collection from every
-       living participant.
-    4. **Resolution** -- plurality tally produces the
-       :class:`MeetingOutcome` and the :class:`MeetingResult`.
-
-    The manager returns the result without mutating engine state. The
-    orchestrator (Task 3.12) applies the outcome to engine-owned
-    state.
-
-    Statement-ordering contract: see module docstring. Statements are
-    emitted into the transcript in canonical
-    ``(round_index, insertion_order)`` order; consumers may rely on
-    that order without re-sorting.
+    :meth:`run` sequences the reactive accusation chain (opening ->
+    reactive chain -> opt-in) then voting and resolution. The manager
+    returns the result without mutating engine state; the orchestrator
+    applies the outcome to engine-owned state.
     """
 
     def __init__(
@@ -421,10 +393,6 @@ class MeetingManager:
     ) -> None:
         if config is None:
             config = MeetingConfig()
-        if config.round_count < 1:
-            raise ValueError(
-                f"MeetingConfig.round_count must be >= 1, got {config.round_count}"
-            )
         if not 0.0 <= config.skip_confidence_threshold <= 1.0:
             raise ValueError(
                 "MeetingConfig.skip_confidence_threshold must be in [0, 1], "
@@ -432,14 +400,13 @@ class MeetingManager:
             )
         # Reject misconfigured deadlines fail-loud. A negative or zero
         # deadline reaches ``asyncio.wait_for`` and trips ``TimeoutError``
-        # before the LLM call can complete, silently routing every
-        # participant into the default no-report/no-statement/skip path.
-        # That would change meeting outcomes without any explicit
-        # configuration error (AGENTS.md "no silent fallbacks").
-        # ``None`` is the explicit opt-out (headless mode, §1.4).
+        # before the LLM call can complete, silently routing every turn
+        # into the default-turn / default-skip path. That would change
+        # meeting outcomes without any explicit configuration error
+        # (AGENTS.md "no silent fallbacks"). ``None`` is the explicit
+        # opt-out (headless mode, §1.4).
         for name, value in (
-            ("report_seconds", config.deadlines.report_seconds),
-            ("statement_seconds", config.deadlines.statement_seconds),
+            ("turn_seconds", config.deadlines.turn_seconds),
             ("vote_seconds", config.deadlines.vote_seconds),
         ):
             if value is None:
@@ -462,22 +429,16 @@ class MeetingManager:
         trigger: MeetingTrigger,
         participants: Sequence[MeetingParticipant],
     ) -> MeetingResult:
-        """Run report intake -> accusation rounds -> voting -> resolution.
+        """Run opening -> reactive chain -> opt-in -> voting -> resolution.
 
-        Statement-ordering contract: the returned
-        ``MeetingResult.transcript.statements`` is sorted by
-        ``(round_index, insertion_order)`` per option (a) of the C-3
-        directive (see module docstring). Insertion order within a
-        round is the true round-robin speaker order returned by
-        :func:`_speaker_order`: the canonical sorted ``agent_id``
-        sequence cyclically rotated so ``trigger.triggered_by`` is at
-        index 0. ``trigger.triggered_by`` MUST be present in
-        ``participants`` -- a non-participant reporter is rejected at
-        entry rather than silently demoted to sorted-only order.
-        Default no-statement entries from missed deadlines share their
-        speaker's insertion slot. Consumers may read
-        ``transcript.statements`` in tuple order and trust the order
-        without re-sorting.
+        The returned ``MeetingResult.transcript.turns`` is the single
+        ordered turn list (DESIGN.md §5.2): turn 0 is the opening (the
+        opener is ``trigger.triggered_by``, which MUST be a living
+        participant), followed by the reactive ``reply`` chain and any
+        terminal ``opt_in`` turns. Turn ids are ``"{meeting_id}:turn-{N}"``.
+        The chain's next speaker and its termination are pure functions of
+        the recorded turns, so a replay reconstructs the discussion from
+        ``transcript.turns`` without re-calling the LLM.
         """
 
         if not meeting_id:
@@ -488,59 +449,106 @@ class MeetingManager:
             )
         self._validate_participants(participants, trigger=trigger)
 
-        # Canonicalise participant order at entry. Real callers may
-        # iterate over a set/dict whose order is hash-seeded and not
-        # determinism-preserving; without this normalisation, the
-        # transcript ordering, the report order embedded into every
-        # statement prompt, and the gather()'d ballot order would all
-        # drift between runs with the same seed. Sorting by ``agent_id``
-        # is deterministic and matches the lexical ``p-N`` convention
-        # used everywhere else in the project.
+        # Canonicalise participant order at entry. Real callers may iterate
+        # over a set/dict whose order is hash-seeded and not
+        # determinism-preserving; sorting by ``agent_id`` is deterministic
+        # and matches the lexical ``p-N`` convention used everywhere else.
         ordered_participants = tuple(sorted(participants, key=lambda p: p.agent_id))
+        by_id = {p.agent_id: p for p in ordered_participants}
+        roster = frozenset(by_id)
 
-        # Phase 1: report intake (parallel).
-        reports = await self._collect_reports(
-            trigger=trigger, participants=ordered_participants
+        # Phase 1: opening turn (turn 0, role-dispatched).
+        opener = by_id[trigger.triggered_by]
+        opening_turn = await self._collect_turn(
+            meeting_id=meeting_id,
+            trigger=trigger,
+            participant=opener,
+            turn_index=0,
+            turn_kind="opening",
+            reply_to=None,
+            prior_turn=None,
+            transcript_so_far=MeetingTranscript(),
+            contradictions=(),
         )
+        turns: list[MeetingTurn] = [opening_turn]
+        spoken: set[PlayerId] = {opener.agent_id}
 
-        # Phase 2: accusation rounds (sequential rounds, ordered speakers).
-        # Contradictions are recomputed from the transcript-so-far before each
-        # accusation round (and again before voting, below) so every speaker
-        # sees the flags warranted by the claims made up to their turn
-        # (DESIGN.md §5.4 "the detector runs on every meeting transcript
-        # update"; audit J-J-1). The roster of living participants anchors the
-        # subject-normalization that keeps detection from silently dropping a
-        # non-roster claim (J-J-9).
-        roster = frozenset(p.agent_id for p in ordered_participants)
-        speaker_order = _speaker_order(
-            participants=ordered_participants, trigger=trigger
-        )
-        statements: list[Statement] = []
-        contradictions: tuple[ContradictionRef, ...] = ()
-        for round_index in range(self._config.round_count):
-            transcript_so_far = MeetingTranscript(
-                reports=reports, statements=tuple(statements)
+        # Phase 2: reactive chain (next speaker = the accused; deterministic
+        # 3-condition termination -- DESIGN.md §5.2 PHASE 2).
+        while True:
+            prev = turns[-1]
+            step = next_chain_step(
+                prev_turn=prev,
+                spoken=frozenset(spoken),
+                living_ids=roster,
+                turns_recorded=len(turns),
             )
-            contradictions = detect_contradictions(transcript_so_far, roster=roster)
-            for participant in speaker_order:
-                statement = await self._collect_statement(
-                    meeting_id=meeting_id,
-                    trigger=trigger,
-                    participant=participant,
-                    round_index=round_index,
-                    transcript_so_far=MeetingTranscript(
-                        reports=reports, statements=tuple(statements)
-                    ),
-                    contradictions=contradictions,
-                )
-                statements.append(statement)
-        transcript = MeetingTranscript(reports=reports, statements=tuple(statements))
+            if step.next_speaker is None:
+                break
+            # 7.12 defense-in-depth at the chain-passing chokepoint: never
+            # pass the floor to a fellow impostor of the accuser. The per-turn
+            # claim guard already strips a teammate accusation before the turn
+            # is recorded, so ``accusation_target`` (and therefore
+            # ``next_chain_step``) never names a teammate here -- this is a
+            # provable no-op that keeps the guard on the chain path and never
+            # diverges the replay-walk (which re-derives via ``next_chain_step``).
+            guarded_next = drop_teammate_statement_target(
+                step.next_speaker,
+                fellow_impostor_ids=by_id[prev.speaker].fellow_impostor_ids,
+            )
+            if guarded_next is None:
+                break
+            transcript_so_far = MeetingTranscript(turns=tuple(turns))
+            contradictions_so_far = detect_contradictions(
+                transcript_so_far, roster=roster
+            )
+            reply_turn = await self._collect_turn(
+                meeting_id=meeting_id,
+                trigger=trigger,
+                participant=by_id[guarded_next],
+                turn_index=len(turns),
+                turn_kind="reply",
+                reply_to=prev.turn_id,
+                prior_turn=prev,
+                transcript_so_far=transcript_so_far,
+                contradictions=contradictions_so_far,
+            )
+            turns.append(reply_turn)
+            spoken.add(guarded_next)
 
-        # Recompute over the full transcript so the ballot prompts and the
-        # persisted result reflect every claim made through the final round.
+        # Phase 3: opt-in info-share. Eligibility is computed ONCE from the
+        # post-chain transcript (a co-presence gate with the body / accused),
+        # so an opt-in turn's own accusation never makes a new player eligible
+        # and never extends the chain (DESIGN.md §5.2 PHASE 3).
+        transcript_after_chain = MeetingTranscript(turns=tuple(turns))
+        for opt_in_id in _opt_in_eligible_ids(
+            transcript=transcript_after_chain,
+            spoken=frozenset(spoken),
+            living_ids=roster,
+        ):
+            transcript_so_far = MeetingTranscript(turns=tuple(turns))
+            contradictions_so_far = detect_contradictions(
+                transcript_so_far, roster=roster
+            )
+            opt_in_turn = await self._collect_turn(
+                meeting_id=meeting_id,
+                trigger=trigger,
+                participant=by_id[opt_in_id],
+                turn_index=len(turns),
+                turn_kind="opt_in",
+                reply_to=None,
+                prior_turn=None,
+                transcript_so_far=transcript_so_far,
+                contradictions=contradictions_so_far,
+            )
+            turns.append(opt_in_turn)
+            spoken.add(opt_in_id)
+
+        transcript = MeetingTranscript(turns=tuple(turns))
+
+        # Phase 4: contradictions recompute ONCE over the full transcript
+        # before voting (DESIGN.md §5.4), then collect ballots.
         contradictions = detect_contradictions(transcript, roster=roster)
-
-        # Phase 3: voting (parallel).
         ballots = await self._collect_ballots(
             trigger=trigger,
             participants=ordered_participants,
@@ -548,7 +556,7 @@ class MeetingManager:
             contradictions=contradictions,
         )
 
-        # Phase 4: resolution.
+        # Phase 5: resolution.
         outcome, ejected = self._tally(ballots)
         return MeetingResult(
             meeting_id=meeting_id,
@@ -561,214 +569,138 @@ class MeetingManager:
             transcript=transcript,
         )
 
-    # -- Phase 1: report intake -------------------------------------------
+    # -- Turn collection (the single per-turn chokepoint) -----------------
 
-    async def _collect_reports(
-        self,
-        *,
-        trigger: MeetingTrigger,
-        participants: Sequence[MeetingParticipant],
-    ) -> tuple[ReportDocument, ...]:
-        # Sequential collection (mirrors the Phase-2 statement loop). A local
-        # single-GPU Ollama gives NO concurrency speedup -- measured at 0.71x,
-        # i.e. running the N report calls together is *slower* than one-by-one
-        # and inflates each call's wall-clock past its own report_seconds
-        # deadline, so every report times out into a default "(missed deadline)"
-        # entry. Run one at a time and each call gets its full ~5s of GPU time
-        # well inside the deadline (the statement phase, already sequential,
-        # never times out). Each _collect_one_report keeps its own deadline +
-        # default fallback, so a slow call defaults only itself; a genuine parse
-        # error still propagates and fails the meeting (recorded as a FailedCall),
-        # exactly as the old all-or-nothing batch did. Cancelling siblings to
-        # save token spend is moot on a free local provider. Input order is
-        # preserved for the transcript-ordering contract.
-        reports: list[ReportDocument] = []
-        for participant in participants:
-            reports.append(
-                await self._collect_one_report(trigger=trigger, participant=participant)
-            )
-        return tuple(reports)
-
-    async def _collect_one_report(
-        self,
-        *,
-        trigger: MeetingTrigger,
-        participant: MeetingParticipant,
-    ) -> ReportDocument:
-        renderer = (
-            self._impostor_report_prompt
-            if participant.role == "IMPOSTOR"
-            else self._crewmate_report_prompt
-        )
-        prompt = renderer(
-            agent_id=participant.agent_id,
-            current_tick=trigger.trigger_tick,
-            meeting_trigger=trigger.description,
-            rendered_memory=participant.rendered_memory,
-            public_transcript="",
-            fellow_impostor_ids=participant.fellow_impostor_ids,
-        )
-        try:
-            response = await asyncio.wait_for(
-                _isolate_provider_timeout(
-                    self._llm_client.complete(
-                        prompt=prompt,
-                        schema=ReportDocument,
-                        max_tokens=self._config.report_max_tokens,
-                        temperature=self._config.report_temperature,
-                        call_kind="meeting",
-                        agent_id=participant.agent_id,
-                    )
-                ),
-                timeout=self._config.deadlines.report_seconds,
-            )
-        except asyncio.TimeoutError:
-            return _default_report(
-                agent_id=participant.agent_id, tick=trigger.trigger_tick
-            )
-        parsed = ReportDocument.model_validate_json(response.text)
-        # Defense-in-depth: rewrite self-alibi placeholder subjects
-        # (e.g. "p-self") to the speaker's canonical id before the
-        # identity override, so DESIGN.md §5.4 contradiction detection
-        # can match this report's self-alibi against other speakers
-        # (Task 3.20).
-        normalized_claims = _normalize_self_alibi_subjects(
-            parsed.claims, speaker_id=participant.agent_id
-        )
-        # Teammate firewall guard (Task 7.12, audit gp-imp-1 / D-D-3):
-        # drop any accusation claim an impostor makes against a fellow
-        # impostor regardless of what the model emitted. Deterministic,
-        # no RNG, and a no-op for a crewmate / sole impostor (empty
-        # ``fellow_impostor_ids``), so replay reconstruction is
-        # unaffected.
-        normalized_claims = exclude_teammate_accusation_claims(
-            normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
-        )
-        # Override identity fields with the canonical values; the LLM
-        # is told to emit any non-empty string and the manager is
-        # authoritative for who said what (see crewmate_report.j2 line
-        # 64 and impostor_report.j2 "the reasoner will override").
-        return parsed.model_copy(
-            update={
-                "agent_id": participant.agent_id,
-                "tick": trigger.trigger_tick,
-                "claims": normalized_claims,
-            }
-        )
-
-    # -- Phase 2: accusation rounds ---------------------------------------
-
-    async def _collect_statement(
+    async def _collect_turn(
         self,
         *,
         meeting_id: str,
         trigger: MeetingTrigger,
         participant: MeetingParticipant,
-        round_index: int,
+        turn_index: int,
+        turn_kind: TurnKind,
+        reply_to: str | None,
+        prior_turn: MeetingTurn | None,
         transcript_so_far: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
-    ) -> Statement:
-        prompt = self._statement_prompt(
-            agent_id=participant.agent_id,
-            rendered_memory=participant.rendered_memory,
-            transcript=transcript_so_far,
+    ) -> MeetingTurn:
+        """Collect one turn through the shared guard chokepoint.
+
+        Every turn-kind (opening / reply / opt-in) flows through here, so
+        every turn inherits the same guards: self-alibi normalization, the
+        Task 7.12 teammate firewall, and the Task 7.10 fail-soft. The
+        manager is authoritative for the identity fields (``turn_id``,
+        ``turn_index``, ``speaker``, ``turn_kind``, ``reply_to``); the LLM
+        supplies only ``observations`` / ``claims`` / ``free_text``.
+        """
+
+        prompt = self._render_turn_prompt(
+            participant=participant,
+            turn_kind=turn_kind,
+            trigger=trigger,
+            transcript_so_far=transcript_so_far,
             contradictions=contradictions,
-            fellow_impostor_ids=participant.fellow_impostor_ids,
+            prior_turn=prior_turn,
         )
-        statement_id = _statement_id(
-            meeting_id=meeting_id,
-            round_index=round_index,
-            speaker=participant.agent_id,
-        )
+        turn_id = _turn_id(meeting_id=meeting_id, turn_index=turn_index)
         try:
             response = await asyncio.wait_for(
                 _isolate_provider_timeout(
                     self._llm_client.complete(
                         prompt=prompt,
-                        schema=Statement,
-                        max_tokens=self._config.statement_max_tokens,
-                        temperature=self._config.statement_temperature,
+                        schema=MeetingTurn,
+                        max_tokens=self._config.turn_max_tokens,
+                        temperature=self._config.turn_temperature,
                         call_kind="meeting",
                         agent_id=participant.agent_id,
                     )
                 ),
-                timeout=self._config.deadlines.statement_seconds,
+                timeout=self._config.deadlines.turn_seconds,
             )
-            parsed = Statement.model_validate_json(response.text)
+            parsed = MeetingTurn.model_validate_json(response.text)
         except (asyncio.TimeoutError, ValidationError):
-            # Fail-soft on a single statement (Task 7.10, audit
-            # ``audits/audit-2026-06-01-1425-gameplay-data.md`` gp-2 /
-            # E-E-1 / A-A-2). A missed deadline (``TimeoutError``) and a
-            # malformed Statement that still fails schema validation after
-            # the provider's parse-tolerance normalization
-            # (``ValidationError`` — e.g. an ``AlibiClaim`` so broken the
-            # chronological-range swap cannot salvage it) BOTH degrade to
-            # the same missed-deadline placeholder. The meeting continues
-            # to its vote and the game reaches ``game_over``; a single bad
-            # statement never aborts the run (before this, the
-            # ``ValidationError`` propagated to the orchestrator, which
-            # recorded a ``failed_call`` and terminated the game with no
-            # ``game_over`` — corrupting seeds 25/36/40). Only the
-            # statement phase fails soft: a provider/transport timeout is
-            # still re-tagged ``LLMProviderError`` and propagates, and
-            # report/vote validation failures are unchanged (out of
-            # scope). ``model_validate_json`` is inside the ``try`` so a
-            # re-validation failure here is caught alongside the provider's
-            # own (the fake provider does not pre-validate).
-            #
-            # Cost-telemetry trade-off (matches the timeout path this
-            # mirrors): a swallowed call is not separately accounted --
-            # ``_RecordingLLMClient`` logs only a returned response and
-            # ``BudgetedLLMClient`` releases its in-flight reservation on
-            # the exception -- so this one malformed statement's tokens are
-            # neither charged nor written as a ``failed_call``. Report/vote
-            # parse-failures still record one (they propagate). Capturing
-            # that single call's cost (its ``LLMCallFailure`` is available
-            # via ``llm.provider.extract_parse_failure``) is a
-            # recording-layer / budget concern outside this task's scope;
-            # net accounting still improves sharply because the game now
-            # completes and records every other call instead of aborting
-            # and losing all of them.
-            return _default_statement(
-                statement_id=statement_id,
+            # Fail-soft on a single turn (Task 7.10): a missed deadline
+            # (``TimeoutError``) and a malformed turn that still fails schema
+            # validation after the provider's parse-tolerance normalization
+            # (``ValidationError`` -- e.g. an ``AlibiClaim`` so broken the
+            # chronological-range swap cannot salvage it) BOTH degrade to the
+            # same missed-deadline placeholder so the meeting continues to its
+            # vote and the game reaches ``game_over``. A provider/transport
+            # timeout is still re-tagged ``LLMProviderError`` (by
+            # ``_isolate_provider_timeout``) and propagates -- only the
+            # deadline + parse failures fail soft.
+            return _default_turn(
+                turn_id=turn_id,
+                turn_index=turn_index,
                 speaker=participant.agent_id,
-                tick=trigger.trigger_tick,
-                round_index=round_index,
+                turn_kind=turn_kind,
+                reply_to=reply_to,
             )
-        # Defense-in-depth: rewrite self-alibi placeholder subjects
-        # (e.g. "p-self") to the speaker's canonical id before the
-        # identity override, so DESIGN.md §5.4 contradiction detection
-        # can match this turn's self-alibi against other speakers
-        # (Task 3.20).
+        # Defense-in-depth: rewrite self-alibi placeholder subjects (e.g.
+        # "p-self") to the speaker's canonical id before the identity
+        # override, so DESIGN.md §5.4 contradiction detection can match this
+        # turn's self-alibi against other speakers (Task 3.20).
         normalized_claims = _normalize_self_alibi_subjects(
             parsed.claims, speaker_id=participant.agent_id
         )
-        # Teammate firewall guard (Task 7.12, audit gp-imp-1 / D-D-3):
-        # drop accusation claims against a fellow impostor and null an
-        # accusation ``target`` that names a teammate, regardless of the
-        # model output. Deterministic and a no-op for a crewmate / sole
-        # impostor, so replay reconstruction is unaffected.
-        normalized_claims = exclude_teammate_accusation_claims(
+        # Teammate firewall guard (Task 7.12) on EVERY turn-kind: drop any
+        # accusation an impostor makes against a fellow impostor. Because the
+        # chain reads its next speaker off these recorded claims, guarding
+        # here is what keeps an impostor from passing the chain to (or
+        # publicly incriminating) a teammate on any turn. Deterministic and a
+        # no-op for a crewmate / sole impostor, so replay is unaffected.
+        guarded_claims = _guard_teammate_turn_claims(
             normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
         )
-        guarded_target = drop_teammate_statement_target(
-            parsed.target, fellow_impostor_ids=participant.fellow_impostor_ids
-        )
-        # Override identity fields. The accusation_round.j2 contract
-        # is "the orchestrator fills the deterministic identity
-        # fields (statement_id, speaker, tick, round_index)".
+        # Override the identity fields with the canonical values; the LLM is
+        # told to emit any non-empty string and the manager is authoritative
+        # for who said what and where it sits in the chain.
         return parsed.model_copy(
             update={
-                "statement_id": statement_id,
+                "turn_id": turn_id,
+                "turn_index": turn_index,
                 "speaker": participant.agent_id,
-                "tick": trigger.trigger_tick,
-                "round_index": round_index,
-                "target": guarded_target,
-                "claims": normalized_claims,
+                "turn_kind": turn_kind,
+                "reply_to": reply_to,
+                "claims": guarded_claims,
             }
         )
 
-    # -- Phase 3: voting --------------------------------------------------
+    def _render_turn_prompt(
+        self,
+        *,
+        participant: MeetingParticipant,
+        turn_kind: TurnKind,
+        trigger: MeetingTrigger,
+        transcript_so_far: MeetingTranscript,
+        contradictions: tuple[ContradictionRef, ...],
+        prior_turn: MeetingTurn | None,
+    ) -> str:
+        if turn_kind == "opening":
+            renderer = (
+                self._impostor_report_prompt
+                if participant.role == "IMPOSTOR"
+                else self._crewmate_report_prompt
+            )
+            return renderer(
+                agent_id=participant.agent_id,
+                current_tick=trigger.trigger_tick,
+                meeting_trigger=trigger.description,
+                rendered_memory=participant.rendered_memory,
+                public_transcript="",
+                fellow_impostor_ids=participant.fellow_impostor_ids,
+            )
+        return self._statement_prompt(
+            agent_id=participant.agent_id,
+            rendered_memory=participant.rendered_memory,
+            transcript=transcript_so_far,
+            contradictions=contradictions,
+            prior_turn=prior_turn,
+            turn_kind=turn_kind,
+            fellow_impostor_ids=participant.fellow_impostor_ids,
+        )
+
+    # -- Voting -----------------------------------------------------------
 
     async def _collect_ballots(
         self,
@@ -778,12 +710,12 @@ class MeetingManager:
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
     ) -> tuple[VoteBallot, ...]:
-        # Sequential collection: see _collect_reports. Concurrent ballots on a
-        # single local GPU inflate each call's wall-clock past vote_seconds
-        # (measured 0.71x concurrency), so votes time out into default SKIP and
-        # nothing is ever ejected. One-by-one keeps each call inside its
-        # deadline. Each _collect_one_ballot retains its own deadline + default;
-        # a genuine parse error still propagates and fails the meeting.
+        # Sequential collection: concurrent ballots on a single local GPU
+        # inflate each call's wall-clock past vote_seconds (measured 0.71x
+        # concurrency), so votes time out into default SKIP and nothing is
+        # ever ejected. One-by-one keeps each call inside its deadline. Each
+        # _collect_one_ballot retains its own deadline + default; a genuine
+        # parse error still propagates and fails the meeting.
         ballots: list[VoteBallot] = []
         for participant in participants:
             ballots.append(
@@ -806,6 +738,8 @@ class MeetingManager:
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
     ) -> VoteBallot:
+        # Confirm the candidate set over the FINAL transcript: every living
+        # participant except the voter is an eligible eject target.
         candidate_targets = tuple(
             sorted(
                 other.agent_id
@@ -813,13 +747,11 @@ class MeetingManager:
                 if other.agent_id != participant.agent_id
             )
         )
-        # Belief Rule 2 (DESIGN.md §6.3; audit J-J-4): a detected
-        # contradiction lifts the contradicted subject's suspicion in this
-        # voter's graph before the ballot prompt renders, so the vote sees the
-        # detected lie reflected in its suspicion prior -- not just in the raw
-        # flag list. The adjustment runs through the agents-side belief
-        # write-path (``record_contradiction`` + ``adjust_suspicion`` inside
-        # :func:`apply_contradiction_rule`); engine state is never touched.
+        # Belief Rule 2 (DESIGN.md §6.3): a detected contradiction lifts the
+        # contradicted subject's suspicion in this voter's graph before the
+        # ballot prompt renders, so the vote sees the detected lie reflected
+        # in its suspicion prior -- not just in the raw flag list. Engine
+        # state is never touched.
         suspicion_graph = _suspicion_graph_with_contradictions(
             voter_id=participant.agent_id,
             suspicion_graph=participant.suspicion_graph,
@@ -852,29 +784,26 @@ class MeetingManager:
         except asyncio.TimeoutError:
             return _default_vote(voter=participant.agent_id)
         parsed = VoteBallot.model_validate_json(response.text)
-        # Defensive normalization: if the LLM hallucinates a target id
-        # that is not in ``candidate_targets`` (and not ``"SKIP"``),
-        # ``_tally`` would otherwise count it as a real eject and could
-        # resolve to ``EJECTED`` with a non-participant id, corrupting
-        # outcome application and replay integrity. Replace the target
-        # with ``"SKIP"`` and mark the rationale so the original (bad)
-        # target is preserved for audit / replay.
+        # Defensive normalization: if the LLM hallucinates a target id that
+        # is not in ``candidate_targets`` (and not ``"SKIP"``), ``_tally``
+        # would otherwise count it as a real eject and could resolve to
+        # ``EJECTED`` with a non-participant id. Replace the target with
+        # ``"SKIP"`` and mark the rationale so the original (bad) target is
+        # preserved for audit / replay.
         normalized = _normalize_ballot_target(
             ballot=parsed, candidate_targets=candidate_targets
         )
-        # Teammate firewall guard (Task 7.12, audit gp-imp-1 / D-D-1,
-        # D-D-2, D-D-4): a teammate is a *valid* living candidate, so the
-        # invalid-target normalization above never catches it. Coerce a
-        # ballot that targets a fellow impostor to SKIP so an impostor
-        # can never supply the betrayal vote that ejects a teammate
-        # (seed-6 meeting-0 repro). Deterministic, no RNG, and a no-op
-        # for a crewmate / sole impostor, so replay is unaffected.
+        # Teammate firewall guard (Task 7.12): a teammate is a *valid* living
+        # candidate, so the invalid-target normalization above never catches
+        # it. Coerce a ballot that targets a fellow impostor to SKIP so an
+        # impostor can never supply the betrayal vote that ejects a teammate.
+        # Deterministic, no RNG, and a no-op for a crewmate / sole impostor.
         normalized = coerce_teammate_ballot_to_skip(
             ballot=normalized, fellow_impostor_ids=participant.fellow_impostor_ids
         )
         return normalized.model_copy(update={"voter": participant.agent_id})
 
-    # -- Phase 4: resolution ----------------------------------------------
+    # -- Resolution -------------------------------------------------------
 
     def _tally(
         self,
@@ -882,45 +811,26 @@ class MeetingManager:
     ) -> tuple[MeetingOutcome, PlayerId | None]:
         """Plurality tally with confidence threshold (DESIGN.md §5.2 + §4.6 + §5.5).
 
-        ``SKIP`` is a real tally target -- a vote of ``SKIP`` competes
-        with non-``SKIP`` votes for plurality. Two reads from the
-        protocol motivate this:
-
-        * DESIGN.md §5.5 schemas ``VoteBallot.target`` as
-          ``PlayerId | Literal["SKIP"]`` -- ``SKIP`` is a first-class
-          target, not an abstention.
-        * DESIGN.md §5.2 PHASE 4 says "If tie or below threshold,
-          skip" -- if ``SKIP`` were dropped, a single non-``SKIP``
-          vote among many ``SKIP`` s would still eject, which
-          contradicts the "below threshold, skip" intent.
+        ``SKIP`` is a real tally target -- a vote of ``SKIP`` competes with
+        non-``SKIP`` votes for plurality (DESIGN.md §5.5 schemas
+        ``VoteBallot.target`` as ``PlayerId | Literal["SKIP"]``; §5.2:
+        "tie or below threshold -> skip").
 
         Resolution rules:
 
         * Empty ballots -> ``SKIPPED`` (no votes to tally).
-        * ``SKIP`` has plurality (alone or tied at the top) ->
-          ``SKIPPED``. Tied with one or more players is treated as
-          skip because the table did not converge on an eject.
-        * Two or more non-``SKIP`` targets tied at the top ->
-          ``SKIPPED`` (DESIGN.md §5.2: "if tie ... skip"). The
-          schema-level ``TIE`` outcome was deliberately removed in
-          this task because DESIGN.md only defines ejection-or-skip.
-        * Single non-``SKIP`` target with strict plurality AND at
-          least one ballot for that target has ``confidence >=
+        * ``SKIP`` has plurality (alone or tied at the top) -> ``SKIPPED``.
+        * Two or more non-``SKIP`` targets tied at the top -> ``SKIPPED``.
+        * Single non-``SKIP`` target with strict plurality AND at least one
+          ballot for that target with ``confidence >=
           skip_confidence_threshold`` -> ``EJECTED``.
         * Otherwise (strict plurality but no confident ballot) ->
-          ``SKIPPED``. This is the mechanical "meets threshold"
-          check from DESIGN.md §5.2 PHASE 4: the tally enforces it
-          independent of LLM compliance with the vote prompt's
-          ``skip_confidence_threshold`` instruction. The "max
-          confidence across the target's ballots" reading matches
-          DESIGN.md §4.6 "max suspicion confidence < 0.6 ... skip" --
-          the eject requires at least one voter to be confident, not
-          all of them.
+          ``SKIPPED`` (the mechanical "meets threshold" check; the "max
+          confidence across the target's ballots" reading matches DESIGN.md
+          §4.6 -- the eject requires at least one confident voter).
 
-        Task 3.10 (``meetings/voting.py``) may refactor this body
-        into a dedicated module; the threshold semantics above are
-        the protocol contract and should be preserved across the
-        refactor.
+        The threshold check is inclusive at the cutoff: a confidence of
+        exactly ``skip_confidence_threshold`` ejects.
         """
 
         tallies: dict[str, int] = {}
@@ -959,13 +869,12 @@ class MeetingManager:
                     f"duplicate: {participant.agent_id!r}"
                 )
             seen.add(participant.agent_id)
-            # ``MeetingParticipant`` is a runtime dataclass; the
-            # ``Role`` ``Literal`` is enforced by mypy --strict at the
-            # call site but not at runtime. A typo like ``"impostor"``
-            # or ``"UNKNOWN"`` would otherwise fall through the
-            # ``role == "IMPOSTOR"`` check in ``_collect_one_report``
-            # and silently route the agent to the crewmate prompt,
-            # which would be hard to diagnose. Fail-loud at entry.
+            # ``MeetingParticipant`` is a runtime dataclass; the ``Role``
+            # ``Literal`` is enforced by mypy --strict at the call site but
+            # not at runtime. A typo like ``"impostor"`` would otherwise fall
+            # through the ``role == "IMPOSTOR"`` check in
+            # ``_render_turn_prompt`` and silently route the agent to the
+            # crewmate prompt. Fail-loud at entry.
             if participant.role not in _VALID_ROLES:
                 raise ValueError(
                     "MeetingParticipant.role must be one of "
@@ -975,12 +884,11 @@ class MeetingManager:
             # Task 7.12 firewall (mirrors the 7.2 crew-empty invariant):
             # ``fellow_impostor_ids`` is impostor-only self-channel data, and
             # the manager runs no leak scanner of its own before threading it
-            # into the shared statement/vote prompts. A non-impostor carrying a
+            # into the shared turn / vote prompts. A non-impostor carrying a
             # non-empty teammate list would render the teammate block into a
             # crewmate's prompt, leaking impostor identities outside the self
-            # channel. The orchestrator always populates ``()`` for crew, so
-            # this only fires on a direct-caller / future construction bug --
-            # fail loud rather than leak (AGENTS.md "no silent fallbacks").
+            # channel. Fail loud rather than leak (AGENTS.md "no silent
+            # fallbacks").
             if participant.role != "IMPOSTOR" and participant.fellow_impostor_ids:
                 raise ValueError(
                     "MeetingParticipant.fellow_impostor_ids must be empty for a "
@@ -988,55 +896,69 @@ class MeetingManager:
                     f"{participant.role!r} agent {participant.agent_id!r} "
                     "(teammate identity is impostor-only self-channel data)"
                 )
-        # The protocol requires round-robin starting from the reporter
-        # (DESIGN.md §5.2). A trigger whose ``triggered_by`` is not in
-        # the participant set is an upstream orchestrator bug -- not
-        # something to silently demote to sorted-only order. Failing
-        # loud here surfaces the wiring error at meeting entry, before
-        # any LLM traffic is spent on a transcript whose speaker order
-        # is no longer tied to the reporter (AGENTS.md "no silent
-        # fallbacks").
+        # The protocol opens with the reporter (DESIGN.md §5.2 PHASE 1). A
+        # trigger whose ``triggered_by`` is not in the participant set is an
+        # upstream orchestrator bug -- not something to silently demote.
+        # Failing loud here surfaces the wiring error at meeting entry,
+        # before any LLM traffic is spent (AGENTS.md "no silent fallbacks").
         if trigger.triggered_by not in seen:
             raise ValueError(
                 f"MeetingTrigger.triggered_by={trigger.triggered_by!r} is not in "
                 f"the participant set ({sorted(seen)}); the protocol requires "
-                "the reporter to be a living participant"
+                "the opener to be a living participant"
             )
 
 
-def _speaker_order(
+def _opt_in_eligible_ids(
     *,
-    participants: Sequence[MeetingParticipant],
-    trigger: MeetingTrigger,
-) -> tuple[MeetingParticipant, ...]:
-    """True round-robin order starting from the reporter (DESIGN.md §5.2).
+    transcript: MeetingTranscript,
+    spoken: frozenset[PlayerId],
+    living_ids: frozenset[PlayerId],
+) -> tuple[PlayerId, ...]:
+    """Living non-speakers with a relevant observation (DESIGN.md §5.2 PHASE 3).
 
-    The canonical sequence is sorted by ``agent_id`` ascending; the
-    returned tuple is that sequence rotated so the reporter
-    (``trigger.triggered_by``) is at index 0. With sorted ids
-    ``[p-1, p-2, p-3, p-4]`` and reporter ``p-2`` the result is
-    ``[p-2, p-3, p-4, p-1]`` -- a cyclic rotation, not "reporter then
-    ascending others". This preserves the round-robin semantics from
-    DESIGN.md §5.2 where each speaker sees the prior speaker's
-    statement in the transcript-so-far and can react to it.
-
-    ``trigger.triggered_by`` MUST be present in ``participants``;
-    :meth:`MeetingManager._validate_participants` rejects the meeting
-    at entry otherwise. This helper assumes the invariant and raises
-    ``ValueError`` if it is violated (defense-in-depth).
+    The "relevant observation" gate is a deterministic co-presence check
+    against the body and the accused, computed purely from the recorded
+    turns (so it is replay-stable and needs no extra LLM call): a living
+    non-speaker is eligible iff the public ``saw_player`` observations
+    place them co-present with the body's room or with a player who was
+    accused during the meeting. Co-presence is symmetric -- "p was seen
+    near the body / with the accused" means p holds a relevant
+    first-hand observation -- so the transcript is a sufficient, leak-safe
+    source for the gate. Returned in ascending player-id order (DESIGN.md
+    §5.2 PHASE 3 "in player-id order").
     """
 
-    by_id = {p.agent_id: p for p in participants}
-    if trigger.triggered_by not in by_id:
-        raise ValueError(
-            f"_speaker_order: reporter {trigger.triggered_by!r} is not in "
-            f"the participant set ({sorted(by_id)}); this is a wiring bug, "
-            "MeetingManager._validate_participants should have rejected it"
-        )
-    sorted_ids = sorted(by_id)
-    reporter_index = sorted_ids.index(trigger.triggered_by)
-    rotated = sorted_ids[reporter_index:] + sorted_ids[:reporter_index]
-    return tuple(by_id[agent_id] for agent_id in rotated)
+    body_rooms = {
+        observation.room
+        for turn in transcript.turns
+        for observation in turn.observations
+        if isinstance(observation, FoundBodyObservation)
+    }
+    accused: set[PlayerId] = set()
+    for turn in transcript.turns:
+        target = accusation_target(turn)
+        if target is not None:
+            accused.add(target)
+
+    relevant: set[PlayerId] = set()
+    for turn in transcript.turns:
+        for observation in turn.observations:
+            if not isinstance(observation, SawPlayerObservation):
+                continue
+            group = {observation.subject, *observation.co_present}
+            if (
+                observation.room in body_rooms
+                or observation.subject in accused
+                or (group & accused)
+            ):
+                relevant |= group
+
+    return tuple(
+        player_id
+        for player_id in sorted(living_ids)
+        if player_id not in spoken and player_id in relevant
+    )
 
 
 def _suspicion_graph_with_contradictions(
@@ -1055,12 +977,9 @@ def _suspicion_graph_with_contradictions(
 
     A contradicted subject the voter had no prior row for is added (the
     belief store materialises a default 0.5 prior before the +0.3 bump).
-    The voter never accrues suspicion about themselves: a flag naming the
-    voter as a subject still renders in the flag list but does not seed a
-    self-row in their own graph. With no contradictions the graph is
-    returned unchanged so the no-flag path is byte-identical to before
-    this wiring (a precondition for replay stability on no-contradiction
-    transcripts).
+    The voter never accrues suspicion about themselves. With no
+    contradictions the graph is returned unchanged so the no-flag path is
+    byte-identical (a precondition for replay stability).
     """
 
     if not contradictions:
@@ -1088,35 +1007,34 @@ def _suspicion_graph_with_contradictions(
     return tuple(entries)
 
 
-def _statement_id(*, meeting_id: str, round_index: int, speaker: PlayerId) -> str:
-    return f"{meeting_id}:r{round_index}:{speaker}"
+def _turn_id(*, meeting_id: str, turn_index: int) -> str:
+    """The canonical turn id ``"{meeting_id}:turn-{turn_index}"`` (DESIGN.md §5.2).
+
+    Keyed on the turn ordinal, not the speaker, so it is unique even when
+    a player speaks twice; :attr:`VoteBallot.primary_reason_id` references
+    it.
+    """
+
+    return f"{meeting_id}:turn-{turn_index}"
 
 
-def _default_report(*, agent_id: PlayerId, tick: int) -> ReportDocument:
-    return ReportDocument(
-        agent_id=agent_id,
-        tick=tick,
+def _default_turn(
+    *,
+    turn_id: str,
+    turn_index: int,
+    speaker: PlayerId,
+    turn_kind: TurnKind,
+    reply_to: str | None,
+) -> MeetingTurn:
+    return MeetingTurn(
+        turn_id=turn_id,
+        turn_index=turn_index,
+        speaker=speaker,
+        turn_kind=turn_kind,
+        reply_to=reply_to,
         observations=(),
         claims=(),
-        free_text=DEFAULT_REPORT_FREE_TEXT,
-    )
-
-
-def _default_statement(
-    *,
-    statement_id: str,
-    speaker: PlayerId,
-    tick: int,
-    round_index: int,
-) -> Statement:
-    return Statement(
-        statement_id=statement_id,
-        speaker=speaker,
-        tick=tick,
-        round_index=round_index,
-        target=None,
-        claims=(),
-        free_text=DEFAULT_STATEMENT_FREE_TEXT,
+        free_text=DEFAULT_TURN_FREE_TEXT,
     )
 
 
@@ -1138,32 +1056,22 @@ def _normalize_self_alibi_subjects(
 ) -> tuple[Claim, ...]:
     """Rewrite known self-alibi placeholder subjects to ``speaker_id``.
 
-    The model occasionally emits ``subject: "self"`` or
-    ``subject: "p-self"`` in an :class:`~meetings.schemas.AlibiClaim`,
-    leaking a prompt-template / few-shot placeholder into the
-    structured ``subject`` field (Task 3.20 Findings 1 & 2). Those
-    claims are unambiguously the speaker's own self-alibi; this helper
+    The model occasionally emits ``subject: "self"`` or ``"p-self"`` in an
+    :class:`~meetings.schemas.AlibiClaim`, leaking a prompt-template /
+    few-shot placeholder into the structured ``subject`` field (Task 3.20).
+    Those claims are unambiguously the speaker's own self-alibi; this
     rewrites their ``subject`` to the speaker's canonical player id so
     DESIGN.md §5.4 contradiction detection -- which indexes alibis by
-    ``(subject, tick_range, location)`` -- can match them against
-    other speakers' claims. The full placeholder set is
+    ``(subject, tick_range, location)`` -- can match them against other
+    speakers' claims. The full placeholder set is
     :data:`_SELF_ALIBI_PLACEHOLDERS`.
 
-    Out-of-roster pass-through: a ``subject`` that is NOT in the
-    self-alibi placeholder set is passed through unchanged. This helper
-    deliberately does NOT validate ``subject`` against the meeting's
-    player roster; that broader ``PlayerId``-validation refactor is
-    explicitly deferred. Rationale: an unknown subject (e.g. a
-    hallucinated ``"p-99"`` or an other-player id the speaker invented)
-    simply fails to match in contradiction detection, which is no worse
-    than today -- the goal of THIS normalizer is to fix only the
-    deterministic self-alibi placeholder leaks, not to mechanically
-    validate every subject. The contract is "fix the speaker's
-    self-alibi only"; non-self alibis MUST pass through untouched.
-
-    Only :class:`~meetings.schemas.AlibiClaim`s are inspected;
-    accusation / corroboration claims are returned as-is. The rewrite
-    is via ``model_copy`` so frozen-model immutability is preserved.
+    A ``subject`` that is NOT in the placeholder set is passed through
+    unchanged; this helper deliberately does not validate ``subject``
+    against the meeting's roster (an unknown subject simply fails to match
+    in contradiction detection, no worse than today). Only
+    :class:`~meetings.schemas.AlibiClaim`s are inspected; accusation /
+    corroboration claims are returned as-is.
     """
 
     normalized: list[Claim] = []
@@ -1185,9 +1093,9 @@ def _normalize_ballot_target(
     Returns the ballot unchanged when ``target`` is ``"SKIP"`` or in
     ``candidate_targets``. When the LLM hallucinates an unknown id, the
     ballot is rewritten to ``"SKIP"`` with a marker prefix on
-    ``rationale_text`` preserving the original (invalid) target. The
-    tally cannot then resolve to ``EJECTED`` against a non-participant
-    id; the audit trail records what the LLM actually emitted.
+    ``rationale_text`` preserving the original (invalid) target. The tally
+    cannot then resolve to ``EJECTED`` against a non-participant id; the
+    audit trail records what the LLM actually emitted.
     """
 
     if ballot.target == _SKIP_TARGET or ballot.target in candidate_targets:
@@ -1202,20 +1110,21 @@ def _normalize_ballot_target(
 
 
 # ---------------------------------------------------------------------------
-# Teammate firewall guard (Task 7.12, audit
-# ``audits/audit-2026-06-02-2112-gameplay-data.md`` gp-imp-1 / D-D-1..D-D-4).
+# Teammate firewall guard (Task 7.12).
 #
 # Meeting output is LLM-driven, so the fix is two layers: a prompt layer that
 # tells an impostor who its teammates are (the ``.j2`` templates) and these
 # deterministic guards that hard-exclude a teammate from the produced
-# accusation / ballot regardless of what the model emits — the same
-# belt-and-suspenders the kill policy (``agents/tactical/impostor_policy.py``)
-# plus the engine kill guard use. Each helper is a pure function of
-# ``fellow_impostor_ids`` with no RNG and no new LLM call, and is an exact
-# no-op when ``fellow_impostor_ids`` is empty (every crewmate and a sole
-# impostor), so replay reconstruction of the committed sets is unaffected.
-# Shared by :class:`MeetingManager` (the production meeting path that records
-# the eval sets) and :class:`agents.strategic.reasoner.StrategicReasoner`.
+# accusation / ballot regardless of what the model emits. Each helper is a
+# pure function of ``fellow_impostor_ids`` with no RNG and no new LLM call,
+# and is an exact no-op when ``fellow_impostor_ids`` is empty (every crewmate
+# and a sole impostor), so replay reconstruction of the committed sets is
+# unaffected. Shared by :class:`MeetingManager` (the production meeting path)
+# and the strategic reasoner. In the reactive chain the accusation lives in a
+# turn's ``claims`` (there is no separate ``Statement.target`` field), so
+# :func:`exclude_teammate_accusation_claims` is the operative chain-safety
+# guard and :func:`drop_teammate_statement_target` backstops the derived
+# next-speaker target (:func:`_guard_teammate_turn_claims`).
 # ---------------------------------------------------------------------------
 
 
@@ -1229,9 +1138,8 @@ def exclude_teammate_accusation_claims(
     Returns ``claims`` unchanged when ``fellow_impostor_ids`` is empty
     (crewmate / sole impostor) so the no-coordination path is
     byte-identical. Only :class:`AccusationClaim`s are filtered: an
-    :class:`AlibiClaim` for a teammate or a
-    :class:`CorroborationClaim` supporting a teammate *helps* the team
-    and is retained (the prompt may optionally encourage corroboration).
+    :class:`AlibiClaim` for a teammate or a :class:`CorroborationClaim`
+    supporting a teammate *helps* the team and is retained.
     """
 
     if not fellow_impostor_ids:
@@ -1249,12 +1157,14 @@ def drop_teammate_statement_target(
     *,
     fellow_impostor_ids: tuple[PlayerId, ...],
 ) -> PlayerId | None:
-    """Null a :class:`Statement` ``target`` that names a fellow impostor.
+    """Null an accusation target that names a fellow impostor.
 
     Returns ``target`` unchanged when ``fellow_impostor_ids`` is empty or
-    when ``target`` is not a teammate; a teammate-naming target degrades
-    to ``None`` (a defensive, no-target statement), so an impostor never
-    publicly incriminates its own team in the accusation round.
+    when ``target`` is not a teammate; a teammate-naming target degrades to
+    ``None``. In the reactive chain this guards the derived next-speaker
+    target (the floor never passes to a fellow impostor) -- a defensive
+    backstop to :func:`exclude_teammate_accusation_claims`, which has
+    already stripped the teammate accusation from the recorded claims.
     """
 
     if not fellow_impostor_ids or target is None:
@@ -1272,14 +1182,13 @@ def coerce_teammate_ballot_to_skip(
     """Coerce a ballot that targets a fellow impostor to ``SKIP``.
 
     A teammate is a *valid* living candidate, so the hallucinated-target
-    normalization (:func:`_normalize_ballot_target`) never catches it.
-    This guard is what stops an impostor from supplying the betrayal vote
-    that ejects a teammate (audit D-D-1, D-D-4; seed-6 meeting-0 repro).
-    Returns ``ballot`` unchanged when ``fellow_impostor_ids`` is empty or
-    the target is not a teammate; otherwise rewrites ``target`` to
-    ``SKIP`` and prepends :data:`TEAMMATE_VOTE_TARGET_MARKER` to
-    ``rationale_text`` so the original (teammate) target stays auditable
-    in the replay record.
+    normalization (:func:`_normalize_ballot_target`) never catches it. This
+    guard is what stops an impostor from supplying the betrayal vote that
+    ejects a teammate. Returns ``ballot`` unchanged when
+    ``fellow_impostor_ids`` is empty or the target is not a teammate;
+    otherwise rewrites ``target`` to ``SKIP`` and prepends
+    :data:`TEAMMATE_VOTE_TARGET_MARKER` to ``rationale_text`` so the
+    original (teammate) target stays auditable in the replay record.
     """
 
     if not fellow_impostor_ids or ballot.target not in fellow_impostor_ids:
@@ -1293,17 +1202,52 @@ def coerce_teammate_ballot_to_skip(
     )
 
 
+def _guard_teammate_turn_claims(
+    claims: tuple[Claim, ...],
+    *,
+    fellow_impostor_ids: tuple[PlayerId, ...],
+) -> tuple[Claim, ...]:
+    """Apply the Task 7.12 claim-level teammate guards to one turn's claims.
+
+    Runs the primary guard (:func:`exclude_teammate_accusation_claims`,
+    which drops accusation claims naming a teammate) and then a
+    :func:`drop_teammate_statement_target` backstop on the derived
+    accusation target: the reactive chain passes the floor to the player a
+    turn accuses, so the recorded claims must never leave a teammate as
+    that target. The backstop is a no-op once the primary guard has run
+    (the teammate accusation is already gone); it is retained so all three
+    7.12 guards wrap every turn-kind. A no-op for a crewmate / sole
+    impostor (empty ``fellow_impostor_ids``).
+    """
+
+    guarded = exclude_teammate_accusation_claims(
+        claims, fellow_impostor_ids=fellow_impostor_ids
+    )
+    target = next(
+        (claim.against for claim in guarded if isinstance(claim, AccusationClaim)),
+        None,
+    )
+    if (
+        target is not None
+        and drop_teammate_statement_target(
+            target, fellow_impostor_ids=fellow_impostor_ids
+        )
+        is None
+    ):
+        guarded = tuple(
+            claim
+            for claim in guarded
+            if not (isinstance(claim, AccusationClaim) and claim.against == target)
+        )
+    return guarded
+
+
 __all__ = [
-    "DEFAULT_REPORT_DEADLINE_SECONDS",
-    "DEFAULT_REPORT_FREE_TEXT",
-    "DEFAULT_REPORT_MAX_TOKENS",
-    "DEFAULT_REPORT_TEMPERATURE",
-    "DEFAULT_ROUND_COUNT",
     "DEFAULT_SKIP_CONFIDENCE_THRESHOLD",
-    "DEFAULT_STATEMENT_DEADLINE_SECONDS",
-    "DEFAULT_STATEMENT_FREE_TEXT",
-    "DEFAULT_STATEMENT_MAX_TOKENS",
-    "DEFAULT_STATEMENT_TEMPERATURE",
+    "DEFAULT_TURN_DEADLINE_SECONDS",
+    "DEFAULT_TURN_FREE_TEXT",
+    "DEFAULT_TURN_MAX_TOKENS",
+    "DEFAULT_TURN_TEMPERATURE",
     "DEFAULT_VOTE_DEADLINE_SECONDS",
     "DEFAULT_VOTE_MAX_TOKENS",
     "DEFAULT_VOTE_RATIONALE",

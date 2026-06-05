@@ -35,14 +35,20 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples"
 _SAMPLES_7P2I = _SAMPLES_4P1I / "7p2i"
 
-# Task 8.1 per-player task re-key (DESIGN.md §3.2) changes _serialize_world_state,
-# so every committed game's per-tick state_hash changes and the committed sets no
-# longer reconstruct byte-identically. The committed-set reconstruction cases below
-# are skipped until Task 8.12 re-records both sets and re-enables them.
+# The committed replays/samples/ sets are invalidated by BOTH Phase-8
+# byte-breakers, so their reconstruction cases are skipped until Task 8.12
+# re-records both sets and re-enables them:
+#   * Task 8.1 per-player task re-key (DESIGN.md §3.2) changes
+#     _serialize_world_state, so every committed game's per-tick state_hash
+#     changes and the sets no longer reconstruct byte-identically; and
+#   * Task 8.7 reshaped MeetingTranscript to the ordered ``turns`` list under
+#     ``extra='forbid'``, so the committed meeting rows (old reports/statements
+#     shape) no longer validate during reconstruction.
 _COMMITTED_RECORD_SKIP = pytest.mark.skip(
     reason=(
         "Committed bytes invalidated by the Task 8.1 state_hash change "
-        "(DESIGN.md §3.2); re-recorded and re-enabled in Task 8.12."
+        "(DESIGN.md §3.2) and the Task 8.7 meeting-record reshape (§5.2); "
+        "re-recorded and re-enabled in Task 8.12."
     )
 )
 
