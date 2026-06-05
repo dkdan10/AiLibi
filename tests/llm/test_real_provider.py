@@ -49,8 +49,7 @@ from meetings.manager import SuspicionEntry
 from meetings.schemas import (
     AlibiClaim,
     MeetingTranscript,
-    ReportDocument,
-    Statement,
+    MeetingTurn,
     VoteBallot,
 )
 from tests.llm.test_client import real_provider
@@ -81,9 +80,9 @@ class TestAnthropicRoundTrip:
         assert response.model, "expected a non-empty model id from the live provider"
 
 
-# A minimal, schema-shaped JSON body reused across the strip cases. The
-# helper is a pure string transform, so the body need only be
-# representative; it happens to be a valid ``ReportDocument`` payload.
+# A minimal JSON body reused across the strip cases. The fence-strip /
+# block-extraction helpers are pure string transforms (no schema), so the
+# body need only be a representative JSON object literal.
 _INNER = '{"agent_id": "p-1", "tick": 5, "free_text": "ok"}'
 
 
@@ -235,10 +234,11 @@ class TestFailedCallRecording:
 
     def test_validation_error_carries_failed_call_metadata(self) -> None:
         async def _send_invalid_body(**_kwargs: object) -> AnthropicRawResponse:
-            # Valid JSON, but missing ReportDocument's required ``tick`` and
-            # ``free_text`` fields -> model_validate_json raises.
+            # Valid JSON, but missing MeetingTurn's required ``turn_id`` /
+            # ``turn_index`` / ``turn_kind`` / ``reply_to`` / ``free_text``
+            # fields -> model_validate_json raises.
             return AnthropicRawResponse(
-                text='{"agent_id": "p-1"}',
+                text='{"speaker": "p-1"}',
                 model="claude-sonnet-4-6",
                 input_tokens=123,
                 output_tokens=45,
@@ -251,7 +251,7 @@ class TestFailedCallRecording:
             asyncio.run(
                 client.complete(
                     prompt=prompt,
-                    schema=ReportDocument,
+                    schema=MeetingTurn,
                     max_tokens=512,
                     temperature=0.0,
                 )
@@ -266,7 +266,7 @@ class TestFailedCallRecording:
         # Sonnet list pricing makes a non-zero cost for 123 in + 45 out.
         assert failure.cost_usd > 0.0
         assert failure.error_type == "ValidationError"
-        assert failure.raw_response == '{"agent_id": "p-1"}'
+        assert failure.raw_response == '{"speaker": "p-1"}'
 
     def test_extract_parse_failure_returns_none_for_plain_exception(self) -> None:
         # An exception that never went through the provider carries no
@@ -276,7 +276,7 @@ class TestFailedCallRecording:
 
 class TestAnthropicSchemaRoundTrip:
     @real_provider
-    def test_report_document_schema_validates_against_live_provider(self) -> None:
+    def test_meeting_turn_schema_validates_against_live_provider(self) -> None:
         """A live structured-output call must parse as the requested schema.
 
         Reproduces the meeting-report path that crashed the
@@ -291,18 +291,19 @@ class TestAnthropicSchemaRoundTrip:
         api_key = os.environ["ANTHROPIC_API_KEY"]
         client = AnthropicClient(api_key=api_key)
         prompt = (
-            "You are agent p-1 in a social-deduction game. Output ONLY a "
-            "single JSON object (no prose) with EXACTLY these fields: "
-            '"agent_id" (the string "p-1"), "tick" (the integer 5), '
-            '"observations" (an empty array), "claims" (an empty array), '
-            'and "free_text" (a one-sentence status string). Include no '
-            "other fields."
+            "You are agent p-1 in a social-deduction game meeting. Output "
+            "ONLY a single JSON object (no prose) with EXACTLY these fields: "
+            '"turn_id" (the string "m-1:turn-0"), "turn_index" (the integer '
+            '0), "speaker" (the string "p-1"), "turn_kind" (the string '
+            '"opening"), "reply_to" (null), "observations" (an empty array), '
+            '"claims" (an empty array), and "free_text" (a one-sentence '
+            "status string). Include no other fields."
         )
 
         response = asyncio.run(
             client.complete(
                 prompt=prompt,
-                schema=ReportDocument,
+                schema=MeetingTurn,
                 max_tokens=512,
                 temperature=0.0,
             )
@@ -313,8 +314,8 @@ class TestAnthropicSchemaRoundTrip:
         # recorded text is the post-strip, schema-valid JSON.
         assert isinstance(response, LLMResponse)
         assert response.cost_usd > 0.0
-        doc = ReportDocument.model_validate_json(response.text)
-        assert doc.agent_id == "p-1"
+        turn = MeetingTurn.model_validate_json(response.text)
+        assert turn.turn_kind == "opening"
 
 
 # A minimal-but-realistic rendered-memory view, shaped like
@@ -344,27 +345,35 @@ _REAL_IMPOSTOR_MEMORY = (
 )
 
 
+def _opening_turn() -> MeetingTurn:
+    """The opening turn (turn 0): the reporter's findings + accuse-or-unsure."""
+
+    return MeetingTurn(
+        turn_id="m-1:turn-0",
+        turn_index=0,
+        speaker="p-1",
+        turn_kind="opening",
+        reply_to=None,
+        observations=(),
+        claims=(),
+        free_text="I was in MEDBAY when the body was found at tick 410.",
+    )
+
+
 def _real_transcript() -> MeetingTranscript:
-    """One Phase-1 report + one Phase-2 statement, enough to exercise the
-    accusation-round and vote-ballot templates' transcript-rendering loops."""
+    """An opening turn + one reactive reply turn, enough to exercise the
+    reactive-turn and vote-ballot templates' transcript-rendering loops."""
 
     return MeetingTranscript(
-        reports=(
-            ReportDocument(
-                agent_id="p-1",
-                tick=410,
-                observations=(),
-                claims=(),
-                free_text="I was in MEDBAY when the body was found at tick 410.",
-            ),
-        ),
-        statements=(
-            Statement(
-                statement_id="m-1:r0:p-1",
+        turns=(
+            _opening_turn(),
+            MeetingTurn(
+                turn_id="m-1:turn-1",
+                turn_index=1,
                 speaker="p-1",
-                tick=412,
-                round_index=0,
-                target=None,
+                turn_kind="reply",
+                reply_to="m-1:turn-0",
+                observations=(),
                 claims=(),
                 free_text="I have an alibi for the whole window; ask p-5.",
             ),
@@ -387,7 +396,7 @@ class TestProductionTemplateSchemaRoundTrips:
     """
 
     @real_provider
-    def test_crewmate_report_template_produces_valid_report_document(self) -> None:
+    def test_crewmate_report_template_produces_valid_opening_turn(self) -> None:
         client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
         prompt = crewmate_report_prompt(
             agent_id="p-1",
@@ -400,7 +409,7 @@ class TestProductionTemplateSchemaRoundTrips:
         response = asyncio.run(
             client.complete(
                 prompt=prompt,
-                schema=ReportDocument,
+                schema=MeetingTurn,
                 max_tokens=1024,
                 temperature=0.0,
             )
@@ -408,12 +417,14 @@ class TestProductionTemplateSchemaRoundTrips:
 
         assert isinstance(response, LLMResponse)
         assert response.cost_usd > 0.0
-        doc = ReportDocument.model_validate_json(response.text)
-        # The crewmate template instructs agent_id == the passed id.
-        assert doc.agent_id == "p-1"
+        turn = MeetingTurn.model_validate_json(response.text)
+        # The crewmate opening template instructs turn_kind == "opening"
+        # (speaker is "any non-empty string"; the manager overrides the
+        # identity fields after parsing), so assert the turn_kind contract.
+        assert turn.turn_kind == "opening"
 
     @real_provider
-    def test_impostor_report_template_produces_valid_report_document(self) -> None:
+    def test_impostor_report_template_produces_valid_opening_turn(self) -> None:
         client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
         prompt = impostor_report_prompt(
             agent_id="p-3",
@@ -426,7 +437,7 @@ class TestProductionTemplateSchemaRoundTrips:
         response = asyncio.run(
             client.complete(
                 prompt=prompt,
-                schema=ReportDocument,
+                schema=MeetingTurn,
                 max_tokens=1024,
                 temperature=0.0,
             )
@@ -435,25 +446,28 @@ class TestProductionTemplateSchemaRoundTrips:
         assert isinstance(response, LLMResponse)
         assert response.cost_usd > 0.0
         # The impostor template tells the model to emit any non-empty
-        # agent_id (the manager overrides it), so assert parse + non-empty
-        # rather than an exact id.
-        doc = ReportDocument.model_validate_json(response.text)
-        assert doc.agent_id
+        # speaker (the manager overrides it), so assert parse + the
+        # opening turn_kind rather than an exact id.
+        turn = MeetingTurn.model_validate_json(response.text)
+        assert turn.turn_kind == "opening"
+        assert turn.speaker
 
     @real_provider
-    def test_accusation_round_template_produces_valid_statement(self) -> None:
+    def test_accusation_round_template_produces_valid_reply_turn(self) -> None:
         client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
         prompt = accusation_round_prompt(
             agent_id="p-3",
             rendered_memory=_REAL_CREWMATE_MEMORY,
             transcript=_real_transcript(),
             contradictions=(),
+            prior_turn=_opening_turn(),
+            turn_kind="reply",
         )
 
         response = asyncio.run(
             client.complete(
                 prompt=prompt,
-                schema=Statement,
+                schema=MeetingTurn,
                 max_tokens=1024,
                 temperature=0.0,
             )
@@ -461,11 +475,11 @@ class TestProductionTemplateSchemaRoundTrips:
 
         assert isinstance(response, LLMResponse)
         assert response.cost_usd > 0.0
-        stmt = Statement.model_validate_json(response.text)
-        assert stmt.free_text
+        turn = MeetingTurn.model_validate_json(response.text)
+        assert turn.free_text
 
     @real_provider
-    def test_accusation_round_statement_has_no_placeholder_self_subject(self) -> None:
+    def test_accusation_round_reply_has_no_placeholder_self_subject(self) -> None:
         # Task 3.20 regression: with agent_id threaded into the template,
         # the live model must emit a concrete player id (its own id) as
         # an alibi `subject`, never the placeholder tokens "self" or
@@ -478,20 +492,22 @@ class TestProductionTemplateSchemaRoundTrips:
             rendered_memory=_REAL_CREWMATE_MEMORY,
             transcript=_real_transcript(),
             contradictions=(),
+            prior_turn=_opening_turn(),
+            turn_kind="reply",
         )
 
         response = asyncio.run(
             client.complete(
                 prompt=prompt,
-                schema=Statement,
+                schema=MeetingTurn,
                 max_tokens=1024,
                 temperature=0.0,
             )
         )
 
-        stmt = Statement.model_validate_json(response.text)
+        turn = MeetingTurn.model_validate_json(response.text)
         alibi_subjects = [
-            claim.subject for claim in stmt.claims if isinstance(claim, AlibiClaim)
+            claim.subject for claim in turn.claims if isinstance(claim, AlibiClaim)
         ]
         assert all(subject not in {"self", "p-self"} for subject in alibi_subjects), (
             f"leaked self-alibi placeholder subject: {alibi_subjects}"
@@ -530,13 +546,13 @@ class TestProductionTemplateSchemaRoundTrips:
 
 
 class TestAnthropicTruncationFailureMode:
-    """A meeting-protocol response (report, statement, or vote) truncated by
-    ``max_tokens`` must fail with a Pydantic ``ValidationError`` on the
-    incomplete JSON, NOT with an ``Invalid JSON … line 1 column 1`` error
+    """A meeting-protocol response (opening turn, reactive turn, or vote)
+    truncated by ``max_tokens`` must fail with a Pydantic ``ValidationError`` on
+    the incomplete JSON, NOT with an ``Invalid JSON … line 1 column 1`` error
     caused by a leading backtick from an unclosed markdown fence (pre-Phase-4
     eval crash 2026-05-25-2138,
     ``audits/audit-2026-05-25-2138-pre-phase-4-real-provider-eval.md``). The
-    statement case is the seed-22 production crash characterized in
+    reactive-turn case is the seed-22 production crash characterized in
     ``audits/audit-2026-05-25-2320-seed-23-deep-debug.md``.
 
     Driven with ``asyncio.run`` rather than ``pytest-asyncio`` to match the
@@ -546,21 +562,21 @@ class TestAnthropicTruncationFailureMode:
     """
 
     @real_provider
-    def test_truncated_report_fails_with_validation_error_not_backtick(
+    def test_truncated_opening_turn_fails_with_validation_error_not_backtick(
         self,
     ) -> None:
         client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
         prompt = (
-            "You are agent p-1 in a social-deduction game. Output a "
-            "ReportDocument as a single JSON object with realistic, detailed "
-            "observations, claims, and free-text prose."
+            "You are agent p-1 in a social-deduction game meeting. Output an "
+            "opening MeetingTurn as a single JSON object with realistic, "
+            "detailed observations, claims, and free-text prose."
         )
 
         with pytest.raises(ValidationError) as exc:
             asyncio.run(
                 client.complete(
                     prompt=prompt,
-                    schema=ReportDocument,
+                    schema=MeetingTurn,
                     max_tokens=50,  # tight cap forces truncation mid-output
                     temperature=0.0,
                 )
@@ -571,21 +587,21 @@ class TestAnthropicTruncationFailureMode:
         assert "line 1 column 1" not in str(exc.value)
 
     @real_provider
-    def test_truncated_statement_fails_with_validation_error_not_backtick(
+    def test_truncated_reply_turn_fails_with_validation_error_not_backtick(
         self,
     ) -> None:
         client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
         prompt = (
             "You are agent p-1 in a social-deduction game meeting. Output a "
-            "Statement as a single JSON object with a detailed accusation, "
-            "structured claims, and free-text prose."
+            "reactive reply MeetingTurn as a single JSON object with a detailed "
+            "accusation, structured claims, and free-text prose."
         )
 
         with pytest.raises(ValidationError) as exc:
             asyncio.run(
                 client.complete(
                     prompt=prompt,
-                    schema=Statement,
+                    schema=MeetingTurn,
                     max_tokens=50,  # tight cap forces truncation mid-output
                     temperature=0.0,
                 )
@@ -639,15 +655,17 @@ class TestAnthropicProsePreamble:
     """
 
     @real_provider
-    def test_prose_preamble_report_parses_without_raising(self) -> None:
+    def test_prose_preamble_turn_parses_without_raising(self) -> None:
         client = AnthropicClient(api_key=os.environ["ANTHROPIC_API_KEY"])
         prompt = (
             "Think step by step about your role in this meeting, narrating "
             "your reasoning in a sentence or two of prose FIRST. THEN, after "
-            "that prose, emit a single ReportDocument JSON object with "
-            'EXACTLY these fields: "agent_id" (the string "p-1"), "tick" '
-            '(the integer 5), "observations" (an empty array), "claims" (an '
-            'empty array), and "free_text" (a one-sentence status string).'
+            "that prose, emit a single opening MeetingTurn JSON object with "
+            'EXACTLY these fields: "turn_id" (the string "m-1:turn-0"), '
+            '"turn_index" (the integer 0), "speaker" (the string "p-1"), '
+            '"turn_kind" (the string "opening"), "reply_to" (null), '
+            '"observations" (an empty array), "claims" (an empty array), and '
+            '"free_text" (a one-sentence status string).'
         )
 
         # The contract under test is simply that complete() returns without
@@ -656,7 +674,7 @@ class TestAnthropicProsePreamble:
         response = asyncio.run(
             client.complete(
                 prompt=prompt,
-                schema=ReportDocument,
+                schema=MeetingTurn,
                 max_tokens=2048,
                 temperature=0.0,
             )
@@ -666,5 +684,5 @@ class TestAnthropicProsePreamble:
         assert response.cost_usd > 0.0
         # The recorded text is the post-extraction JSON object, so it
         # re-parses cleanly as the requested schema.
-        doc = ReportDocument.model_validate_json(response.text)
-        assert doc.agent_id
+        turn = MeetingTurn.model_validate_json(response.text)
+        assert turn.turn_kind == "opening"

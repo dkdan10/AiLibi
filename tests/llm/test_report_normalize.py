@@ -6,6 +6,16 @@ independent of any provider/transport: the diagnosed ``co_present``-on-
 ``found_body`` case, an already-valid no-op, a missing-required payload that
 still fails loud, a non-union schema left untouched, and the residual-risk
 wrong-discriminator case that is deliberately NOT repaired.
+
+Task 8.9 moved the structured meeting schema from the pre-8.7 ``ReportDocument``
+/ ``Statement`` pair to the single :class:`~meetings.schemas.MeetingTurn` record
+(the ordered-``turns`` reshape, Task 8.7). ``MeetingTurn`` carries BOTH the
+``observations`` (the ``ObservationClaim`` union, where the
+``co_present``-on-``found_body`` near-miss lives) and the ``claims`` (the
+``Claim`` union, where the reversed-``AlibiClaim`` near-miss lives), so a single
+turn exercises every discriminated-union repair the old two-schema split did.
+The normalizer itself reads the ``type`` discriminator off the schema, so it is
+unchanged by the reshape — these fixtures simply move to the turn shape.
 """
 
 from __future__ import annotations
@@ -17,15 +27,45 @@ import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from llm.report_normalize import normalize_report_payload
-from meetings.schemas import ReportDocument, Statement, VoteBallot
+from meetings.schemas import MeetingTurn, VoteBallot
 
 
-def _valid_report() -> dict[str, Any]:
-    """A fully-valid ReportDocument payload (every variant exercised)."""
+def _turn(
+    *,
+    observations: list[dict[str, Any]] | None = None,
+    claims: list[dict[str, Any]] | None = None,
+    turn_kind: str = "opening",
+    reply_to: str | None = None,
+) -> dict[str, Any]:
+    """A minimal valid ``MeetingTurn`` scaffold wrapping the given leaves.
+
+    The six scalar turn fields (``turn_id`` … ``free_text``) are agent-essential
+    but irrelevant to the discriminated-union repairs under test, so this
+    scaffold keeps each case focused on its ``observations`` / ``claims`` leaf. A
+    fresh dict is returned on every call (no shared mutable state).
+    """
 
     return {
-        "agent_id": "p-3",
-        "tick": 412,
+        "turn_id": "m-1:turn-0",
+        "turn_index": 0,
+        "speaker": "p-3",
+        "turn_kind": turn_kind,
+        "reply_to": reply_to,
+        "observations": list(observations) if observations is not None else [],
+        "claims": list(claims) if claims is not None else [],
+        "free_text": "f",
+    }
+
+
+def _valid_turn() -> dict[str, Any]:
+    """A fully-valid ``MeetingTurn`` payload (every observation + claim variant)."""
+
+    return {
+        "turn_id": "m-7:turn-0",
+        "turn_index": 0,
+        "speaker": "p-3",
+        "turn_kind": "opening",
+        "reply_to": None,
         "observations": [
             {
                 "type": "saw_player",
@@ -72,10 +112,8 @@ class TestDiagnosedFailure:
     """The exact failure Task 7.6 exists to fix."""
 
     def test_co_present_on_found_body_is_stripped_and_validates(self) -> None:
-        payload: dict[str, Any] = {
-            "agent_id": "p-3",
-            "tick": 412,
-            "observations": [
+        payload = _turn(
+            observations=[
                 {
                     "type": "found_body",
                     "tick": 410,
@@ -84,27 +122,23 @@ class TestDiagnosedFailure:
                     # `co_present` is valid on `saw_player`, NOT on `found_body`.
                     "co_present": ["p-5"],
                 }
-            ],
-            "claims": [],
-            "free_text": "found a body",
-        }
+            ]
+        )
         # Raw payload is a hard validation error under extra="forbid".
         with pytest.raises(ValidationError):
-            ReportDocument.model_validate(payload)
+            MeetingTurn.model_validate(payload)
 
-        normalized = normalize_report_payload(payload, ReportDocument)
+        normalized = normalize_report_payload(payload, MeetingTurn)
 
         # The stray key is gone, the real fields survive, and it now validates.
         assert "co_present" not in normalized["observations"][0]
         assert normalized["observations"][0]["body_of"] == "p-2"
         assert normalized["observations"][0]["room"] == "MedBay"
-        ReportDocument.model_validate(normalized)
+        MeetingTurn.model_validate(normalized)
 
     def test_input_payload_is_not_mutated(self) -> None:
-        payload: dict[str, Any] = {
-            "agent_id": "p-3",
-            "tick": 1,
-            "observations": [
+        payload = _turn(
+            observations=[
                 {
                     "type": "found_body",
                     "tick": 1,
@@ -112,20 +146,15 @@ class TestDiagnosedFailure:
                     "room": "R",
                     "co_present": ["p-5"],
                 }
-            ],
-            "claims": [],
-            "free_text": "x",
-        }
+            ]
+        )
         before = copy.deepcopy(payload)
-        normalize_report_payload(payload, ReportDocument)
+        normalize_report_payload(payload, MeetingTurn)
         assert payload == before  # pure function: no in-place mutation
 
     def test_stray_key_on_claim_variant_is_stripped(self) -> None:
-        payload: dict[str, Any] = {
-            "agent_id": "p-1",
-            "tick": 5,
-            "observations": [],
-            "claims": [
+        payload = _turn(
+            claims=[
                 {
                     "type": "accusation",
                     "against": "p-2",
@@ -134,21 +163,20 @@ class TestDiagnosedFailure:
                     # not declared on AccusationClaim
                     "bogus": 1,
                 }
-            ],
-            "free_text": "f",
-        }
-        normalized = normalize_report_payload(payload, ReportDocument)
+            ]
+        )
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert "bogus" not in normalized["claims"][0]
-        ReportDocument.model_validate(normalized)
+        MeetingTurn.model_validate(normalized)
 
-    def test_statement_nested_claim_extra_is_stripped(self) -> None:
-        payload: dict[str, Any] = {
-            "statement_id": "s1",
-            "speaker": "p-1",
-            "tick": 5,
-            "round_index": 0,
-            "target": "p-2",
-            "claims": [
+    def test_reply_turn_nested_claim_extra_is_stripped(self) -> None:
+        # The repair fires on the claim union regardless of the turn_kind that
+        # carries it: a reactive `reply` turn's accusation claim is pruned the
+        # same way an `opening` turn's is.
+        payload = _turn(
+            turn_kind="reply",
+            reply_to="m-1:turn-0",
+            claims=[
                 {
                     "type": "accusation",
                     "against": "p-2",
@@ -157,24 +185,23 @@ class TestDiagnosedFailure:
                     "extra": 9,
                 }
             ],
-            "free_text": "f",
-        }
-        normalized = normalize_report_payload(payload, Statement)
+        )
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert "extra" not in normalized["claims"][0]
-        Statement.model_validate(normalized)
+        MeetingTurn.model_validate(normalized)
 
 
 class TestNoOpOnValid:
     """An already-valid payload is returned deep-equal (a byte-identical no-op)."""
 
-    def test_valid_report_is_deep_equal_no_op(self) -> None:
-        payload = _valid_report()
-        normalized = normalize_report_payload(payload, ReportDocument)
+    def test_valid_turn_is_deep_equal_no_op(self) -> None:
+        payload = _valid_turn()
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized == payload
 
-    def test_valid_report_keeps_legitimate_co_present(self) -> None:
-        payload = _valid_report()
-        normalized = normalize_report_payload(payload, ReportDocument)
+    def test_valid_turn_keeps_legitimate_co_present(self) -> None:
+        payload = _valid_turn()
+        normalized = normalize_report_payload(payload, MeetingTurn)
         # saw_player legitimately declares co_present — it must NOT be stripped.
         assert normalized["observations"][0]["co_present"] == ["p-7"]
 
@@ -191,65 +218,43 @@ class TestNoOpOnValid:
         assert normalize_report_payload(payload, VoteBallot) == payload
 
     def test_empty_collections_no_op(self) -> None:
-        payload: dict[str, Any] = {
-            "agent_id": "p-1",
-            "tick": 0,
-            "observations": [],
-            "claims": [],
-            "free_text": "",
-        }
-        assert normalize_report_payload(payload, ReportDocument) == payload
+        payload = _turn(observations=[], claims=[])
+        assert normalize_report_payload(payload, MeetingTurn) == payload
 
 
 class TestDoesNotMaskGenuineErrors:
     """Normalization salvages misplaced keys; it never fabricates fields."""
 
     def test_missing_required_field_still_fails_loud(self) -> None:
-        payload: dict[str, Any] = {
-            "agent_id": "p-3",
-            "tick": 412,
-            "observations": [
+        payload = _turn(
+            observations=[
                 # `body_of` is required on found_body and is absent.
                 {"type": "found_body", "tick": 410, "room": "MedBay"}
-            ],
-            "claims": [],
-            "free_text": "x",
-        }
-        normalized = normalize_report_payload(payload, ReportDocument)
+            ]
+        )
+        normalized = normalize_report_payload(payload, MeetingTurn)
         with pytest.raises(ValidationError) as exc:
-            ReportDocument.model_validate(normalized)
+            MeetingTurn.model_validate(normalized)
         assert any(err["type"] == "missing" for err in exc.value.errors())
 
     def test_top_level_extra_key_is_not_stripped(self) -> None:
         # Conservative: only discriminated-union *variant* extras are pruned.
         # A stray top-level key on a plain model is left in place so validation
         # still fails loud (the diagnosed failure is a variant key, not this).
-        payload: dict[str, Any] = {
-            "agent_id": "p-1",
-            "tick": 0,
-            "observations": [],
-            "claims": [],
-            "free_text": "",
-            "made_up_top_level": 123,
-        }
-        normalized = normalize_report_payload(payload, ReportDocument)
+        payload = _turn(observations=[], claims=[])
+        payload["made_up_top_level"] = 123
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized["made_up_top_level"] == 123
         with pytest.raises(ValidationError):
-            ReportDocument.model_validate(normalized)
+            MeetingTurn.model_validate(normalized)
 
 
 class TestResidualRisk:
     """A wrong/unknown discriminator is trusted, not repaired (documented risk)."""
 
     def test_unknown_discriminator_value_left_untouched(self) -> None:
-        payload: dict[str, Any] = {
-            "agent_id": "p-1",
-            "tick": 0,
-            "observations": [{"type": "teleported", "tick": 1, "whatever": 2}],
-            "claims": [],
-            "free_text": "",
-        }
-        normalized = normalize_report_payload(payload, ReportDocument)
+        payload = _turn(observations=[{"type": "teleported", "tick": 1, "whatever": 2}])
+        normalized = normalize_report_payload(payload, MeetingTurn)
         # Unknown variant: the observation is left exactly as-is (we do not infer
         # a variant from body shape), so it still fails loud downstream.
         assert normalized["observations"][0] == {
@@ -258,16 +263,14 @@ class TestResidualRisk:
             "whatever": 2,
         }
         with pytest.raises(ValidationError):
-            ReportDocument.model_validate(normalized)
+            MeetingTurn.model_validate(normalized)
 
     def test_mismatched_discriminator_strips_to_named_variant_only(self) -> None:
         # `type: saw_player` but carrying a `found_body` body field. We strip to
         # the NAMED variant (saw_player), dropping body_of — we never re-label it
         # found_body. It does not get coerced into a valid found_body.
-        payload: dict[str, Any] = {
-            "agent_id": "p-1",
-            "tick": 0,
-            "observations": [
+        payload = _turn(
+            observations=[
                 {
                     "type": "saw_player",
                     "tick": 1,
@@ -275,51 +278,41 @@ class TestResidualRisk:
                     "room": "R",
                     "body_of": "p-9",
                 }
-            ],
-            "claims": [],
-            "free_text": "",
-        }
-        normalized = normalize_report_payload(payload, ReportDocument)
+            ]
+        )
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert "body_of" not in normalized["observations"][0]
         assert normalized["observations"][0]["type"] == "saw_player"
 
-    def test_genuinely_mislabeled_report_stays_a_failed_call(self) -> None:
+    def test_genuinely_mislabeled_turn_stays_a_failed_call(self) -> None:
         # The contract's residual-risk example proper: `type: saw_player` on a
         # `found_body`-SHAPED body (no `subject`). Stripping to the named variant
         # cannot supply the missing required `subject`, so it remains a
         # ValidationError (FailedCall) — the normalizer never re-infers the
         # variant from body shape. This pins that the residual risk is preserved.
-        payload: dict[str, Any] = {
-            "agent_id": "p-1",
-            "tick": 0,
-            "observations": [
+        payload = _turn(
+            observations=[
                 {"type": "saw_player", "tick": 1, "body_of": "p-9", "room": "R"}
-            ],
-            "claims": [],
-            "free_text": "",
-        }
-        normalized = normalize_report_payload(payload, ReportDocument)
+            ]
+        )
+        normalized = normalize_report_payload(payload, MeetingTurn)
         with pytest.raises(ValidationError) as exc:
-            ReportDocument.model_validate(normalized)
+            MeetingTurn.model_validate(normalized)
         assert any(err["type"] == "missing" for err in exc.value.errors())
 
     def test_unhashable_discriminator_left_untouched_not_typeerror(self) -> None:
         # A malformed discriminator (`{"type": ["found_body"]}`) is unhashable;
         # the variant-map lookup must not leak a TypeError. The normalizer leaves
         # the payload untouched so normal validation raises ValidationError.
-        payload: dict[str, Any] = {
-            "agent_id": "p-1",
-            "tick": 0,
-            "observations": [
+        payload = _turn(
+            observations=[
                 {"type": ["found_body"], "tick": 1, "body_of": "p-2", "room": "R"}
-            ],
-            "claims": [],
-            "free_text": "",
-        }
-        normalized = normalize_report_payload(payload, ReportDocument)
+            ]
+        )
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized["observations"][0]["type"] == ["found_body"]
         with pytest.raises(ValidationError):
-            ReportDocument.model_validate(normalized)
+            MeetingTurn.model_validate(normalized)
 
 
 class TestNonUnionSchemaUntouched:
@@ -348,10 +341,8 @@ class TestNonUnionSchemaUntouched:
             Plain.model_validate(payload)
 
     def test_non_dict_payload_returned_unchanged(self) -> None:
-        assert normalize_report_payload([1, 2, 3], ReportDocument) == [1, 2, 3]
-        assert (
-            normalize_report_payload("not-an-object", ReportDocument) == "not-an-object"
-        )
+        assert normalize_report_payload([1, 2, 3], MeetingTurn) == [1, 2, 3]
+        assert normalize_report_payload("not-an-object", MeetingTurn) == "not-an-object"
 
 
 class TestNonChronologicalAlibi:
@@ -364,15 +355,12 @@ class TestNonChronologicalAlibi:
     strict schema accepts the claim — the schema itself is NOT relaxed.
     """
 
-    def _reversed_alibi_statement(self) -> dict[str, Any]:
-        # The seed-36 repro shape: from_tick=8 > to_tick=1 inside a Statement.
-        return {
-            "statement_id": "s1",
-            "speaker": "p-3",
-            "tick": 11,
-            "round_index": 0,
-            "target": None,
-            "claims": [
+    def _reversed_alibi_turn(self) -> dict[str, Any]:
+        # The seed-36 repro shape: from_tick=8 > to_tick=1 inside a reply turn.
+        return _turn(
+            turn_kind="reply",
+            reply_to="m-1:turn-0",
+            claims=[
                 {
                     "type": "alibi",
                     "subject": "p-3",
@@ -381,16 +369,15 @@ class TestNonChronologicalAlibi:
                     "room": "CAFETERIA",
                 }
             ],
-            "free_text": "I was around.",
-        }
+        )
 
-    def test_reversed_alibi_in_statement_is_swapped_and_validates(self) -> None:
-        payload = self._reversed_alibi_statement()
+    def test_reversed_alibi_in_reply_turn_is_swapped_and_validates(self) -> None:
+        payload = self._reversed_alibi_turn()
         # Raw payload is a hard chronological-validator error.
         with pytest.raises(ValidationError):
-            Statement.model_validate(payload)
+            MeetingTurn.model_validate(payload)
 
-        normalized = normalize_report_payload(payload, Statement)
+        normalized = normalize_report_payload(payload, MeetingTurn)
 
         claim = normalized["claims"][0]
         # Bounds swapped (both tick values preserved), not coerced away.
@@ -399,16 +386,13 @@ class TestNonChronologicalAlibi:
         # Other fields untouched, and it now validates on the strict schema.
         assert claim["subject"] == "p-3"
         assert claim["room"] == "CAFETERIA"
-        Statement.model_validate(normalized)
+        MeetingTurn.model_validate(normalized)
 
-    def test_reversed_alibi_in_report_is_swapped_and_validates(self) -> None:
+    def test_reversed_alibi_in_opening_turn_is_swapped_and_validates(self) -> None:
         # The repair fires wherever AlibiClaim is reached via the Claim union —
-        # ReportDocument.claims as well as Statement.claims.
-        payload: dict[str, Any] = {
-            "agent_id": "p-3",
-            "tick": 14,
-            "observations": [],
-            "claims": [
+        # an opening turn's claims as well as a reply turn's.
+        payload = _turn(
+            claims=[
                 {
                     "type": "alibi",
                     "subject": "p-3",
@@ -416,25 +400,21 @@ class TestNonChronologicalAlibi:
                     "to_tick": 1,
                     "room": "MEDBAY",
                 }
-            ],
-            "free_text": "alibi",
-        }
-        normalized = normalize_report_payload(payload, ReportDocument)
+            ]
+        )
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized["claims"][0]["from_tick"] == 1
         assert normalized["claims"][0]["to_tick"] == 9
-        ReportDocument.model_validate(normalized)
+        MeetingTurn.model_validate(normalized)
 
     def test_chronological_alibi_is_deep_equal_no_op(self) -> None:
-        payload = _valid_report()  # its alibi is already chronological (380..410)
-        assert normalize_report_payload(payload, ReportDocument) == payload
+        payload = _valid_turn()  # its alibi is already chronological (380..410)
+        assert normalize_report_payload(payload, MeetingTurn) == payload
 
     def test_equal_bounds_alibi_is_no_op(self) -> None:
         # from_tick == to_tick is a valid one-tick window: no swap, no change.
-        payload: dict[str, Any] = {
-            "agent_id": "p-1",
-            "tick": 5,
-            "observations": [],
-            "claims": [
+        payload = _turn(
+            claims=[
                 {
                     "type": "alibi",
                     "subject": "p-1",
@@ -442,16 +422,15 @@ class TestNonChronologicalAlibi:
                     "to_tick": 5,
                     "room": "R",
                 }
-            ],
-            "free_text": "f",
-        }
-        assert normalize_report_payload(payload, ReportDocument) == payload
-        ReportDocument.model_validate(payload)
+            ]
+        )
+        assert normalize_report_payload(payload, MeetingTurn) == payload
+        MeetingTurn.model_validate(payload)
 
     def test_reversed_alibi_repair_does_not_mutate_input(self) -> None:
-        payload = self._reversed_alibi_statement()
+        payload = self._reversed_alibi_turn()
         before = copy.deepcopy(payload)
-        normalize_report_payload(payload, Statement)
+        normalize_report_payload(payload, MeetingTurn)
         assert payload == before  # pure function: input untouched
 
     def test_reversed_alibi_missing_other_field_still_fails_loud(self) -> None:
@@ -459,11 +438,8 @@ class TestNonChronologicalAlibi:
         # field: a reversed alibi that ALSO omits ``room`` is salvaged on the
         # range but still fails validation — the "claim still malformed after
         # normalization fails" half of the DoD.
-        payload: dict[str, Any] = {
-            "agent_id": "p-1",
-            "tick": 5,
-            "observations": [],
-            "claims": [
+        payload = _turn(
+            claims=[
                 {
                     "type": "alibi",
                     "subject": "p-1",
@@ -471,24 +447,20 @@ class TestNonChronologicalAlibi:
                     "to_tick": 1,
                     # ``room`` (required) is absent.
                 }
-            ],
-            "free_text": "f",
-        }
-        normalized = normalize_report_payload(payload, ReportDocument)
+            ]
+        )
+        normalized = normalize_report_payload(payload, MeetingTurn)
         # Range was repaired...
         assert normalized["claims"][0]["from_tick"] == 1
         assert normalized["claims"][0]["to_tick"] == 8
         # ...but the missing required field still fails loud.
         with pytest.raises(ValidationError) as exc:
-            ReportDocument.model_validate(normalized)
+            MeetingTurn.model_validate(normalized)
         assert any(err["type"] == "missing" for err in exc.value.errors())
 
-    def _report_with_bounds(self, from_tick: Any, to_tick: Any) -> dict[str, Any]:
-        return {
-            "agent_id": "p-1",
-            "tick": 5,
-            "observations": [],
-            "claims": [
+    def _turn_with_bounds(self, from_tick: Any, to_tick: Any) -> dict[str, Any]:
+        return _turn(
+            claims=[
                 {
                     "type": "alibi",
                     "subject": "p-1",
@@ -496,64 +468,63 @@ class TestNonChronologicalAlibi:
                     "to_tick": to_tick,
                     "room": "R",
                 }
-            ],
-            "free_text": "f",
-        }
+            ]
+        )
 
     def test_reversed_string_bounds_are_swapped_and_validate(self) -> None:
         # A model can emit tick bounds as JSON strings; Pydantic's int field
         # coerces "8"->8, so a reversed STRING range must be swapped too (the
         # exact-int guard would have missed it and degraded a salvageable claim).
         # The ORIGINAL string values are reordered; Pydantic coerces downstream.
-        payload = self._report_with_bounds("8", "1")
-        normalized = normalize_report_payload(payload, ReportDocument)
+        payload = self._turn_with_bounds("8", "1")
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized["claims"][0]["from_tick"] == "1"
         assert normalized["claims"][0]["to_tick"] == "8"
-        ReportDocument.model_validate(normalized)
+        MeetingTurn.model_validate(normalized)
 
     def test_reversed_whole_float_bounds_are_swapped_and_validate(self) -> None:
         # Whole floats (8.0) coerce to int 8 in Pydantic, so a reversed
         # whole-float range is salvageable and must be swapped.
-        payload = self._report_with_bounds(8.0, 1.0)
-        normalized = normalize_report_payload(payload, ReportDocument)
+        payload = self._turn_with_bounds(8.0, 1.0)
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized["claims"][0]["from_tick"] == 1.0
         assert normalized["claims"][0]["to_tick"] == 8.0
-        ReportDocument.model_validate(normalized)
+        MeetingTurn.model_validate(normalized)
 
     def test_reversed_mixed_str_int_bounds_are_swapped(self) -> None:
-        payload = self._report_with_bounds("8", 1)
-        normalized = normalize_report_payload(payload, ReportDocument)
+        payload = self._turn_with_bounds("8", 1)
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized["claims"][0]["from_tick"] == 1
         assert normalized["claims"][0]["to_tick"] == "8"
-        ReportDocument.model_validate(normalized)
+        MeetingTurn.model_validate(normalized)
 
     def test_chronological_string_bounds_are_no_op(self) -> None:
         # Already chronological after coercion ("1" <= "8"): no swap, deep-equal.
-        payload = self._report_with_bounds("1", "8")
-        assert normalize_report_payload(payload, ReportDocument) == payload
-        ReportDocument.model_validate(payload)
+        payload = self._turn_with_bounds("1", "8")
+        assert normalize_report_payload(payload, MeetingTurn) == payload
+        MeetingTurn.model_validate(payload)
 
     def test_non_coercible_string_bound_not_swapped_and_fails_loud(self) -> None:
         # A non-numeric bound is not an int Pydantic accepts -> left untouched so
         # it still fails loud at validation (the normalizer never masks it).
-        payload = self._report_with_bounds("abc", "1")
-        normalized = normalize_report_payload(payload, ReportDocument)
+        payload = self._turn_with_bounds("abc", "1")
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized == payload
         with pytest.raises(ValidationError):
-            ReportDocument.model_validate(normalized)
+            MeetingTurn.model_validate(normalized)
 
     def test_non_integer_float_bound_not_swapped(self) -> None:
         # Pydantic rejects a non-integer float for an int field, so 8.5 is not a
         # salvageable bound: leave it untouched (it fails validation regardless).
-        payload = self._report_with_bounds(8.5, 1.0)
-        normalized = normalize_report_payload(payload, ReportDocument)
+        payload = self._turn_with_bounds(8.5, 1.0)
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized["claims"][0]["from_tick"] == 8.5
         assert normalized["claims"][0]["to_tick"] == 1.0
 
     def test_bool_bounds_not_swapped(self) -> None:
         # A boolean is not a meaningful tick; it is excluded even though lax mode
         # would coerce True->1 / False->0. Left untouched (no swap).
-        payload = self._report_with_bounds(True, False)
-        normalized = normalize_report_payload(payload, ReportDocument)
+        payload = self._turn_with_bounds(True, False)
+        normalized = normalize_report_payload(payload, MeetingTurn)
         assert normalized["claims"][0]["from_tick"] is True
         assert normalized["claims"][0]["to_tick"] is False

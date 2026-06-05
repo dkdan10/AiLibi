@@ -23,7 +23,7 @@ two complementary repairs at every discriminated-union point:
    (``from_tick > to_tick``), swap them so the strict chronological
    ``model_validator`` accepts the claim. ``qwen2.5:7b-instruct`` emits this
    reversed range in ~6% of the committed 7p/2i set; left unrepaired the
-   ``Statement`` validator raises and the whole game aborts with no
+   ``MeetingTurn`` validator raises and the whole game aborts with no
    ``game_over``. The schema's validator stays strict — the *input* is fixed
    here, never the schema (the ``AlibiClaim`` validator is unchanged).
 
