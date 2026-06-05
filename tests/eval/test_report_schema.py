@@ -307,8 +307,10 @@ def test_round_trip_preserves_nested_meeting_artifacts() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_current_format_version_is_one() -> None:
-    assert CURRENT_FORMAT_VERSION == 1
+def test_current_format_version_is_two() -> None:
+    # Bumped 1 -> 2 in Task 8.11: the meeting-chain reshape (8.7 / 8.10) changed
+    # MeetingReport.transcript, so v1 reports are no longer readable.
+    assert CURRENT_FORMAT_VERSION == 2
 
 
 def test_format_version_missing_on_construction_is_rejected() -> None:
@@ -325,24 +327,32 @@ def test_format_version_missing_on_construction_is_rejected() -> None:
 
 
 def test_format_version_accepts_current_explicitly() -> None:
-    report = TournamentReport(format_version=1, games=(), seeds_used=())
-    assert report.format_version == 1
+    report = TournamentReport(format_version=2, games=(), seeds_used=())
+    assert report.format_version == 2 == CURRENT_FORMAT_VERSION
 
 
 def test_format_version_rejects_future_version() -> None:
-    with pytest.raises(ValidationError, match="unknown report format_version 2"):
-        TournamentReport(format_version=2, games=(), seeds_used=())
+    with pytest.raises(ValidationError, match="unknown report format_version 3"):
+        TournamentReport(format_version=3, games=(), seeds_used=())
 
 
 def test_format_version_rejects_future_version_on_deserialize() -> None:
-    payload = {"format_version": 2, "games": [], "seeds_used": []}
-    with pytest.raises(ValidationError, match="unknown report format_version 2"):
+    payload = {"format_version": 3, "games": [], "seeds_used": []}
+    with pytest.raises(ValidationError, match="unknown report format_version 3"):
         TournamentReport.model_validate(payload)
 
 
-def test_format_version_rejects_below_current_version() -> None:
+def test_format_version_rejects_v1_no_migration() -> None:
+    """A v1 report is rejected fail-loud with the no-migration message (8.11).
+
+    The 1 -> 2 bump ships no back-migration, so the committed v1 reports become
+    invalid the moment 8.11 lands; Task 8.12 regenerates them to v2. v1 hits the
+    ``value < CURRENT_FORMAT_VERSION`` branch (1 < 2) and raises rather than
+    being coerced (AGENTS.md "no silent fallbacks").
+    """
+
     with pytest.raises(ValidationError, match="no migration path"):
-        TournamentReport(format_version=0, games=(), seeds_used=())
+        TournamentReport(format_version=1, games=(), seeds_used=())
 
 
 def test_format_version_missing_on_deserialize_is_rejected() -> None:
@@ -410,7 +420,12 @@ def test_format_version_missing_on_nested_dict_validate_is_rejected() -> None:
 
 
 def test_unknown_top_level_field_is_rejected() -> None:
-    payload = {"format_version": 1, "games": [], "seeds_used": [], "extra": 1}
+    payload = {
+        "format_version": CURRENT_FORMAT_VERSION,
+        "games": [],
+        "seeds_used": [],
+        "extra": 1,
+    }
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         TournamentReport.model_validate(payload)
 
@@ -431,7 +446,7 @@ def test_unknown_nested_field_is_rejected() -> None:
 def test_report_models_are_frozen() -> None:
     report = _realistic_tournament()
     with pytest.raises(ValidationError):
-        report.format_version = 1
+        report.format_version = CURRENT_FORMAT_VERSION
     with pytest.raises(ValidationError):
         report.games[0].seed = 99
 

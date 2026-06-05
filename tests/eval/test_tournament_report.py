@@ -43,6 +43,7 @@ from eval.meeting_quality import (
     compute_meeting_rate,
 )
 from eval.report_schema import (
+    CURRENT_FORMAT_VERSION,
     GameCostSummary,
     GameReport,
     MeetingReport,
@@ -709,7 +710,9 @@ def test_compute_meeting_rate_accepts_report_and_bare_sequence() -> None:
     games = (_game(0, meetings=(meeting,)), _game(1))
     via_sequence = compute_meeting_rate(games)
     via_report = compute_meeting_rate(
-        TournamentReport(format_version=1, games=games, seeds_used=(0, 1))
+        TournamentReport(
+            format_version=CURRENT_FORMAT_VERSION, games=games, seeds_used=(0, 1)
+        )
     )
     assert via_sequence == via_report
     assert via_report.meeting_rate == pytest.approx(0.5)
