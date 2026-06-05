@@ -22,6 +22,7 @@ from orchestrator.game import (  # noqa: E402
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
     DEFAULT_NUM_PLAYERS,
+    DEFAULT_TASKS_PER_CREWMATE,
     HeadlessGame,
     build_default_agent_factory,
     build_default_meeting_runner,
@@ -60,6 +61,16 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help=f"number of impostors (default: {DEFAULT_NUM_IMPOSTORS})",
     )
     parser.add_argument(
+        "--tasks-per-crewmate",
+        type=int,
+        default=DEFAULT_TASKS_PER_CREWMATE,
+        help=(
+            "map tasks assigned to each crewmate as per-player instances "
+            f"(default: {DEFAULT_TASKS_PER_CREWMATE}). The canonical 9p/2i eval "
+            "roster runs at 2 (DESIGN.md §3.5)."
+        ),
+    )
+    parser.add_argument(
         "--max-ticks",
         type=int,
         default=DEFAULT_MAX_TICKS,
@@ -86,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         audit_log_path=args.audit_log_path,
         num_players=args.num_players,
         num_impostors=args.num_impostors,
+        tasks_per_crewmate=args.tasks_per_crewmate,
         scheduler=TickScheduler(max_ticks=args.max_ticks),
         meeting_runner=runner,
     )

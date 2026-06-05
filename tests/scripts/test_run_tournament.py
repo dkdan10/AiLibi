@@ -74,7 +74,7 @@ def test_main_defaults_to_four_one_two(
 def test_main_roster_preset_supplies_all_three_values(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``--roster-preset 7p2i`` threads 7 players / 2 impostors / 2 tasks."""
+    """``--roster-preset 9p2i`` threads 9 players / 2 impostors / 2 tasks."""
 
     captured: dict[str, int] = {}
     _install_capturing_spy(monkeypatch, captured)
@@ -86,14 +86,14 @@ def test_main_roster_preset_supplies_all_three_values(
             "--output-dir",
             str(tmp_path),
             "--roster-preset",
-            "7p2i",
+            "9p2i",
             "--max-ticks",
             "2",
         ]
     )
 
     assert rc == 0
-    assert captured == {"num_players": 7, "num_impostors": 2, "tasks_per_crewmate": 2}
+    assert captured == {"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2}
 
 
 def test_main_roster_preset_4p1i_pins_committed_baseline(
@@ -163,7 +163,7 @@ def test_main_rejects_preset_combined_with_explicit_roster_flag(
                 "--output-dir",
                 str(tmp_path),
                 "--roster-preset",
-                "7p2i",
+                "9p2i",
                 "--num-players",
                 "5",
             ]

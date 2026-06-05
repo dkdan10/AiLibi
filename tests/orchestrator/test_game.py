@@ -742,21 +742,22 @@ def test_default_tasks_per_crewmate_constant_is_two() -> None:
     assert DEFAULT_TASKS_PER_CREWMATE == 2
 
 
-def test_roster_presets_pin_baseline_and_meeting_heavy_configs() -> None:
-    """``4p1i`` reproduces the committed baseline; ``7p2i`` is meeting-heavy.
+def test_roster_presets_pin_baseline_and_eval_roster_configs() -> None:
+    """``4p1i`` reproduces the committed baseline; ``9p2i`` is the eval roster.
 
     ``4p1i`` is pinned at ``tasks_per_crewmate=1`` (NOT the new default of 2) so
-    it reproduces the byte-identical committed 4p/1i baseline; ``7p2i`` carries
-    the new default of 2. ``RosterPreset`` is frozen and data-only.
+    it reproduces the byte-identical committed 4p/1i baseline; ``9p2i`` is the
+    canonical eval roster (DESIGN.md §3.5) and carries the new default of 2.
+    ``RosterPreset`` is frozen and data-only.
     """
 
-    assert set(ROSTER_PRESETS) == {"4p1i", "7p2i"}
+    assert set(ROSTER_PRESETS) == {"4p1i", "9p2i"}
     assert ROSTER_PRESETS["4p1i"] == RosterPreset(
         num_players=4, num_impostors=1, tasks_per_crewmate=1
     )
-    assert ROSTER_PRESETS["7p2i"] == RosterPreset(
-        num_players=7, num_impostors=2, tasks_per_crewmate=2
+    assert ROSTER_PRESETS["9p2i"] == RosterPreset(
+        num_players=9, num_impostors=2, tasks_per_crewmate=2
     )
 
     with pytest.raises(FrozenInstanceError):
-        ROSTER_PRESETS["7p2i"].num_players = 9  # type: ignore[misc]
+        ROSTER_PRESETS["9p2i"].num_players = 7  # type: ignore[misc]

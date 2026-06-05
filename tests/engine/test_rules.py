@@ -155,7 +155,7 @@ def test_no_resolved_kill_targets_an_impostor_across_seeds(tmp_path: Path) -> No
             game_map=game_map,
             agent_factory=build_default_agent_factory(),
             replay_path=replay_path,
-            num_players=7,
+            num_players=9,
             num_impostors=2,
             tasks_per_crewmate=2,
             meeting_runner=build_default_meeting_runner(),

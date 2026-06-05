@@ -119,14 +119,17 @@ class RosterPreset:
     tasks_per_crewmate: int
 
 
-# The two Phase 7 Wave 0 roster presets (diagnosis audit 2026-05-30-1952 §3:
-# 4p/1i ~= 10% vs 7p/2i = 63% meeting rate). ``4p1i`` is pinned at
-# ``tasks_per_crewmate=1`` — NOT the new default of 2 — so it reproduces the
-# byte-identical committed 4p/1i baseline; ``7p2i`` is the new meeting-heavy
-# config at 2 tasks per crewmate.
+# The two canonical roster presets (DESIGN.md §3.5, §8.1). ``4p1i`` is the flat
+# descriptor-less determinism/leak reference, pinned at ``tasks_per_crewmate=1``
+# — NOT the new default of 2 — so it reproduces the byte-identical committed
+# 4p/1i baseline. ``9p2i`` is the canonical eval roster: parity reaches at 5 crew
+# deaths (7 crew), so games run longer and surface more meetings, at 2 tasks per
+# crewmate. Per-player task instances (DESIGN.md §3.2; the Phase 8 seed-cap
+# removal) let its 7×2=14 task instances overlap the 12 map tasks, which the old
+# ``num_crewmates × tasks_per_crewmate ≤ len(map.tasks)`` cap forbade.
 ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
     "4p1i": RosterPreset(num_players=4, num_impostors=1, tasks_per_crewmate=1),
-    "7p2i": RosterPreset(num_players=7, num_impostors=2, tasks_per_crewmate=2),
+    "9p2i": RosterPreset(num_players=9, num_impostors=2, tasks_per_crewmate=2),
 }
 
 # Static map of prompt-template id → version string. The versions are

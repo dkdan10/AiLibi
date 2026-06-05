@@ -33,10 +33,11 @@ MANIFEST="${AILIBI_MANIFEST:-$SAMPLE_DIR/MANIFEST.md}"
 # records each set at its own roster. The defaults reproduce the committed FLAT
 # 4p/1i baseline at ONE task per crewmate — NOT run_tournament.py's harness
 # default of 2 — so a default refresh re-records replays/samples/ byte-identically
-# (the committed loader re-seeds the flat set at 1 task/crewmate). Task 7.5 sets
-# these alongside AILIBI_SAMPLE_DIR/AILIBI_MANIFEST to generate the 7p/2i set:
-#   AILIBI_NUM_PLAYERS=7 AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2 \
-#   AILIBI_SAMPLE_DIR=replays/samples/7p2i AILIBI_MANIFEST=replays/samples/7p2i/MANIFEST.md
+# (the committed loader re-seeds the flat set at 1 task/crewmate). To record the
+# canonical 9p/2i eval set (DESIGN.md §3.5), set these alongside
+# AILIBI_SAMPLE_DIR/AILIBI_MANIFEST:
+#   AILIBI_NUM_PLAYERS=9 AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2 \
+#   AILIBI_SAMPLE_DIR=replays/samples/9p2i AILIBI_MANIFEST=replays/samples/9p2i/MANIFEST.md
 NUM_PLAYERS="${AILIBI_NUM_PLAYERS:-4}"
 NUM_IMPOSTORS="${AILIBI_NUM_IMPOSTORS:-1}"
 TASKS_PER_CREWMATE="${AILIBI_TASKS_PER_CREWMATE:-1}"
@@ -241,7 +242,7 @@ done
 # 4p/1i baseline at $REPO_ROOT/replays/samples. Detect whether this refresh
 # targets it (canonicalized so a trailing slash / relative AILIBI_SAMPLE_DIR
 # still matches), and fail loud BEFORE any spend if a non-4p/1i roster is pointed
-# at it — e.g. a 7p/2i refresh that forgot AILIBI_SAMPLE_DIR would otherwise write
+# at it — e.g. a 9p/2i refresh that forgot AILIBI_SAMPLE_DIR would otherwise write
 # replays/samples/roster.json and break the committed baseline's reconstruction.
 #
 # Portable canonicalization: BSD/macOS `realpath` lacks GNU's `-m` (which resolves
@@ -257,7 +258,7 @@ if [[ "$is_flat_baseline" -eq 1 ]] &&
   [[ "$NUM_PLAYERS" -ne 4 || "$NUM_IMPOSTORS" -ne 1 || "$TASKS_PER_CREWMATE" -ne 1 ]]; then
   echo "Error: refusing to refresh the flat 4p/1i baseline ($SAMPLE_DIR) with a" \
     "non-4p/1i roster (${NUM_PLAYERS}p/${NUM_IMPOSTORS}i/${TASKS_PER_CREWMATE}t)." \
-    "Point AILIBI_SAMPLE_DIR at a per-set subdir (e.g. replays/samples/7p2i) --" \
+    "Point AILIBI_SAMPLE_DIR at a per-set subdir (e.g. replays/samples/9p2i) --" \
     "did you forget it?" >&2
   exit 1
 fi
@@ -350,7 +351,7 @@ else
 fi
 
 # Create the target set directory before any spend (Task 7.4). A per-set refresh
-# (e.g. AILIBI_SAMPLE_DIR=replays/samples/7p2i) may point at a brand-new subdir;
+# (e.g. AILIBI_SAMPLE_DIR=replays/samples/9p2i) may point at a brand-new subdir;
 # without this the per-seed `mv` into $SAMPLE_DIR below would fail AFTER a
 # real-provider run had already spent. Done after the API-key preflight so a
 # dry-run still touches nothing and a missing-key run still fails first; it also
