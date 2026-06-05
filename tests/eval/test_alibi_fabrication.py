@@ -34,9 +34,8 @@ from meetings.schemas import (
     Claim,
     ContradictionRef,
     MeetingTranscript,
+    MeetingTurn,
     PlayerId,
-    ReportDocument,
-    Statement,
 )
 
 # A roster with one impostor and three crewmates; the default for fixtures where
@@ -87,9 +86,18 @@ def _accusation(*, against: PlayerId) -> AccusationClaim:
 
 def _report(
     *, author: PlayerId, claims: tuple[Claim, ...] = (), tick: int = 30
-) -> ReportDocument:
-    return ReportDocument(
-        agent_id=author, tick=tick, observations=(), claims=claims, free_text=""
+) -> MeetingTurn:
+    """An ``opening`` chain turn authored by ``author`` (§5.2)."""
+
+    return MeetingTurn(
+        turn_id=f"{author}:turn-{tick}",
+        turn_index=0,
+        speaker=author,
+        turn_kind="opening",
+        reply_to=None,
+        observations=(),
+        claims=claims,
+        free_text="",
     )
 
 
@@ -99,13 +107,16 @@ def _statement(
     claims: tuple[Claim, ...] = (),
     statement_id: str = "s-1",
     tick: int = 30,
-) -> Statement:
-    return Statement(
-        statement_id=statement_id,
+) -> MeetingTurn:
+    """A ``reply`` chain turn spoken by ``speaker`` (§5.2)."""
+
+    return MeetingTurn(
+        turn_id=statement_id,
+        turn_index=1,
         speaker=speaker,
-        tick=tick,
-        round_index=0,
-        target=None,
+        turn_kind="reply",
+        reply_to=None,
+        observations=(),
         claims=claims,
         free_text="",
     )
@@ -131,12 +142,16 @@ def _contradiction(
 
 def _meeting(
     *,
-    reports: tuple[ReportDocument, ...] = (),
-    statements: tuple[Statement, ...] = (),
+    reports: tuple[MeetingTurn, ...] = (),
+    statements: tuple[MeetingTurn, ...] = (),
     contradictions: tuple[ContradictionRef, ...] = (),
     meeting_id: str = "m-0",
     tick: int = 30,
 ) -> MeetingReport:
+    # One ordered chain (DESIGN.md §5.2): opening ``reports`` turn(s) then any
+    # ``statements`` (reply / opt-in) turns. The alibi metric reads each turn's
+    # ``speaker`` (author) + alibi claims, so the concatenation is equivalent to
+    # the old (reports, statements) split.
     return MeetingReport(
         meeting_id=meeting_id,
         tick=tick,
@@ -144,7 +159,7 @@ def _meeting(
         trigger="report",
         outcome="SKIPPED",
         ejected_player_id=None,
-        transcript=MeetingTranscript(reports=reports, statements=statements),
+        transcript=MeetingTranscript(turns=tuple(reports) + tuple(statements)),
         ballots=(),
         contradictions=contradictions,
         llm_calls=(),

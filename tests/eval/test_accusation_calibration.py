@@ -37,9 +37,8 @@ from meetings.schemas import (
     Claim,
     CorroborationClaim,
     MeetingTranscript,
+    MeetingTurn,
     PlayerId,
-    ReportDocument,
-    Statement,
     VoteBallot,
 )
 
@@ -81,19 +80,32 @@ def _meeting(
     ballots: tuple[VoteBallot, ...] = (),
     meeting_id: str = "m-0",
 ) -> MeetingReport:
-    """A meeting carrying one report + one statement (claims may be empty)."""
+    """A meeting whose chain has an opening turn + a reply turn (§5.2).
+
+    ``report_claims`` ride the opening turn and ``statement_claims`` the reply
+    turn; either may be empty. The calibration metric walks every turn's claims,
+    so the two are summed exactly as the old (reports, statements) pair was.
+    """
 
     transcript = MeetingTranscript(
-        reports=(
-            ReportDocument(agent_id="p-0", tick=10, claims=report_claims, free_text=""),
-        ),
-        statements=(
-            Statement(
-                statement_id="s-0",
+        turns=(
+            MeetingTurn(
+                turn_id=f"{meeting_id}:turn-0",
+                turn_index=0,
                 speaker="p-0",
-                tick=10,
-                round_index=0,
-                target=None,
+                turn_kind="opening",
+                reply_to=None,
+                observations=(),
+                claims=report_claims,
+                free_text="",
+            ),
+            MeetingTurn(
+                turn_id=f"{meeting_id}:turn-1",
+                turn_index=1,
+                speaker="p-0",
+                turn_kind="reply",
+                reply_to=None,
+                observations=(),
                 claims=statement_claims,
                 free_text="",
             ),

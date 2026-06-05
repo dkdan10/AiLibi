@@ -27,6 +27,10 @@ export type MeetingOutcome = "EJECTED" | "SKIPPED";
 
 export type ContradictionKind = "alibi_conflict" | "alibi_vs_sighting";
 
+// The three turn roles in the reactive accusation chain (DESIGN.md §5.2),
+// mirroring `meetings.schemas.TurnKind`.
+export type TurnKind = "opening" | "reply" | "opt_in";
+
 // ---------------------------------------------------------------------------
 // Map + roster DTOs
 // ---------------------------------------------------------------------------
@@ -205,20 +209,17 @@ export type StatementClaimView =
   | AccusationClaimView
   | CorroborationClaimView;
 
-export interface ReportView {
-  agent_id: string;
-  tick: number;
-  observations: ObservationClaimView[];
-  claims: StatementClaimView[];
-  free_text: string;
-}
-
-export interface StatementView {
-  statement_id: string;
+// Mirrors `api.schemas.TurnView` (which shadows `meetings.schemas.MeetingTurn`).
+// One turn of the reactive accusation chain: the opening turn carries the
+// reporter's observations, every turn carries its claims. `reply_to` is the
+// `turn_id` this turn answers (set on a `reply`; null on `opening` / `opt_in`).
+export interface TurnView {
+  turn_id: string;
+  turn_index: number;
   speaker: string;
-  tick: number;
-  round_index: number;
-  target: string | null;
+  turn_kind: TurnKind;
+  reply_to: string | null;
+  observations: ObservationClaimView[];
   claims: StatementClaimView[];
   free_text: string;
 }
@@ -260,8 +261,9 @@ export interface MeetingView {
   trigger_kind: TriggerKind;
   outcome: MeetingOutcome;
   ejected_player_id: string | null;
-  reports: ReportView[];
-  statements: StatementView[];
+  // The single ordered transcript of the accusation chain (DESIGN.md §5.2),
+  // in `turn_index` order — replaces the old `reports` / `statements` pair.
+  turns: TurnView[];
   ballots: BallotView[];
   contradictions: ContradictionView[];
   llm_calls: LLMCallView[];

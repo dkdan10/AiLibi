@@ -17,9 +17,9 @@ An *impostor alibi* is one whose **enclosing author** is an impostor, NOT one
 whose :attr:`~meetings.schemas.AlibiClaim.subject` is an impostor (DESIGN.md
 §11.3): an impostor may file an alibi *about another player*, so the subject
 role is irrelevant to whether the alibi was fabricated by an impostor. The
-author is the enclosing :attr:`~meetings.schemas.ReportDocument.agent_id` for a
-report claim and the enclosing :attr:`~meetings.schemas.Statement.speaker` for a
-statement claim. The author's role is looked up by **subscript**
+author is the enclosing turn's :attr:`~meetings.schemas.MeetingTurn.speaker`
+(every claim -- opening, reply, or opt-in -- is spoken by its turn's speaker).
+The author's role is looked up by **subscript**
 ``roles[author]`` against the per-game ground-truth map. ``roles`` covers every
 player by construction (:class:`eval.report_schema.GameReport`), so an author
 absent from it signals a malformed report and is allowed to raise ``KeyError``
@@ -199,23 +199,16 @@ def _iter_impostor_alibis(
 ) -> Iterator[tuple[PlayerId, AlibiClaim]]:
     """Yield ``(author, alibi)`` for every impostor-authored alibi in a meeting.
 
-    The author is the enclosing report ``agent_id`` / statement ``speaker``; its
-    role is resolved by subscript so a player absent from ``roles`` fails loud.
+    The author is the enclosing turn's ``speaker``; its role is resolved by
+    subscript so a player absent from ``roles`` fails loud.
     """
 
     transcript = meeting.transcript
-    for document in transcript.reports:
-        author = document.agent_id
+    for turn in transcript.turns:
+        author = turn.speaker
         if roles[author] != "IMPOSTOR":
             continue
-        for claim in document.claims:
-            if isinstance(claim, AlibiClaim):
-                yield author, claim
-    for statement in transcript.statements:
-        author = statement.speaker
-        if roles[author] != "IMPOSTOR":
-            continue
-        for claim in statement.claims:
+        for claim in turn.claims:
             if isinstance(claim, AlibiClaim):
                 yield author, claim
 

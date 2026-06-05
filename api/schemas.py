@@ -312,24 +312,30 @@ StatementClaimView: TypeAlias = Annotated[
 ]
 
 
-class ReportView(_FrozenView):
-    """Shadows ``meetings.schemas.ReportDocument`` (the Phase-1 report)."""
+class TurnView(_FrozenView):
+    """Shadows ``meetings.schemas.MeetingTurn`` (one turn in the §5.2 chain).
 
-    agent_id: str
-    tick: int
-    observations: tuple[ObservationClaimView, ...]
-    claims: tuple[StatementClaimView, ...]
-    free_text: str
+    A turn carries the speaker's structured ``observations`` (with tick
+    references) and ``claims`` (alibi / accusation / corroboration) plus the
+    free-text argument. ``turn_kind`` is ``opening`` (turn 0 — the
+    body-reporter / emergency caller states findings and accuses or declares
+    unsure), ``reply`` (the accused responds, ``reply_to`` set to the accusing
+    turn's ``turn_id``), or ``opt_in`` (a terminal info-share turn from a
+    relevant non-speaker). ``turn_id`` is ``"{meeting_id}:turn-{turn_index}"``
+    and is what ``BallotView.primary_reason_id`` references.
 
+    The old parallel ``ReportView`` / ``StatementView`` split folds into this
+    single turn shape (Task 8.7/8.10): the opening turn carries the former
+    report's ``found_body`` / ``saw_player`` observations, and every turn
+    carries its claims — there is no separate report list and no "round".
+    """
 
-class StatementView(_FrozenView):
-    """Shadows ``meetings.schemas.Statement`` (one accusation-round turn)."""
-
-    statement_id: str
+    turn_id: str
+    turn_index: int
     speaker: str
-    tick: int
-    round_index: int
-    target: str | None
+    turn_kind: Literal["opening", "reply", "opt_in"]
+    reply_to: str | None
+    observations: tuple[ObservationClaimView, ...]
     claims: tuple[StatementClaimView, ...]
     free_text: str
 
@@ -387,6 +393,11 @@ class MeetingView(_FrozenView):
     and ``ejected_player_id`` are coupled (EJECTED <=> non-null id).
     ``total_cost_usd`` is the sum of ``llm_calls[*].cost_usd``.
 
+    ``turns`` is the single ordered transcript of the reactive accusation
+    chain (DESIGN.md §5.2): opening turn, then the reactive ``reply`` chain,
+    then any terminal ``opt_in`` turns — in chain (``turn_index``) order, with
+    no "round" grouping. It replaces the old ``reports`` / ``statements`` pair.
+
     Excludes: ``state_hash_before`` / ``state_hash_after`` (engine-internal).
     """
 
@@ -396,8 +407,7 @@ class MeetingView(_FrozenView):
     trigger_kind: Literal["body", "emergency"]
     outcome: Literal["EJECTED", "SKIPPED"]
     ejected_player_id: str | None
-    reports: tuple[ReportView, ...]
-    statements: tuple[StatementView, ...]
+    turns: tuple[TurnView, ...]
     ballots: tuple[BallotView, ...]
     contradictions: tuple[ContradictionView, ...]
     llm_calls: tuple[LLMCallView, ...]
@@ -597,15 +607,14 @@ __all__ = [
     "ReplayMetadataView",
     "ReplayView",
     "ReportBodyEventView",
-    "ReportView",
     "RoomView",
     "SabotageEventView",
     "SawPlayerView",
     "SizeView",
-    "StatementView",
     "SuspicionEntryView",
     "SuspicionGraphView",
     "TaskCompletedEventView",
     "TickView",
+    "TurnView",
     "VentView",
 ]

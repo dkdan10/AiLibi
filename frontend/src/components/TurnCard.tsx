@@ -1,87 +1,86 @@
-// One Phase-1 report (DESIGN.md §5.3): reporter + tick header, foregrounded
-// free text, and collapsed-by-default structured observations + claims. Any
+// One turn of the reactive accusation chain (DESIGN.md §5.2, §5.3): a turn-kind
+// badge + speaker + optional accusation target / reply cue, foregrounded free
+// text, and collapsed-by-default structured observations + claims. Any
 // observation/claim implicated in a contradiction shows a badge inline; the
-// union of those badges is also surfaced in the header so it stays visible
-// while the detail is collapsed.
+// union is also surfaced in the header so it stays visible while the detail is
+// collapsed. This single card replaces the old ReportCard (opening report) +
+// StatementCard split — the chain has exactly one turn type, carrying both
+// observations and claims (Task 8.7/8.10).
 
-import type {
-  ContradictionView,
-  ObservationClaimView,
-  PlayerView,
-  ReportView,
-} from "../types/api";
+import type { ContradictionView, PlayerView, TurnView } from "../types/api";
 import {
   ClaimLine,
   ContradictionBadge,
   dedupeContradictions,
   findContradictions,
+  ObservationLine,
   PlayerChip,
-  reportClaimEventId,
-  reportObsEventId,
+  turnClaimEventId,
+  turnObsEventId,
 } from "./ContradictionBadge";
 
-interface ReportCardProps {
-  report: ReportView;
+interface TurnCardProps {
+  turn: TurnView;
   players: PlayerView[];
   contradictions: readonly ContradictionView[];
 }
 
-function ObservationLine({ obs }: { obs: ObservationClaimView }) {
-  switch (obs.type) {
-    case "saw_player":
-      return (
-        <span className="min-w-0 break-words">
-          <span className="font-semibold text-amber-300">saw</span> {obs.subject} in{" "}
-          {obs.room} at tick {obs.tick}
-          {obs.co_present.length > 0 && (
-            <span className="text-neutral-400"> (with {obs.co_present.join(", ")})</span>
-          )}
-        </span>
-      );
-    case "completed_task":
-      return (
-        <span className="min-w-0 break-words">
-          <span className="font-semibold text-amber-300">completed</span>{" "}
-          {obs.task_id} in {obs.room} at tick {obs.tick}
-        </span>
-      );
-    case "found_body":
-      return (
-        <span className="min-w-0 break-words">
-          <span className="font-semibold text-amber-300">found body</span> of{" "}
-          {obs.body_of} in {obs.room} at tick {obs.tick}
-        </span>
-      );
-  }
-}
+const TURN_KIND_LABELS: Record<TurnView["turn_kind"], string> = {
+  opening: "opening",
+  reply: "reply",
+  opt_in: "opt-in",
+};
 
-export function ReportCard({ report, players, contradictions }: ReportCardProps) {
-  const observations = report.observations.map((obs, index) => ({
+export function TurnCard({ turn, players, contradictions }: TurnCardProps) {
+  const observations = turn.observations.map((obs, index) => ({
     obs,
-    contras: findContradictions(reportObsEventId(report, index), contradictions),
+    contras: findContradictions(turnObsEventId(turn, index), contradictions),
   }));
-  const claims = report.claims.map((claim, index) => ({
+  const claims = turn.claims.map((claim, index) => ({
     claim,
-    contras: findContradictions(reportClaimEventId(report, index), contradictions),
+    contras: findContradictions(turnClaimEventId(turn, index), contradictions),
   }));
   const flagged = dedupeContradictions([
     ...observations.flatMap((o) => o.contras),
     ...claims.flatMap((c) => c.contras),
   ]);
   const detailCount = observations.length + claims.length;
+  // The chain's "target" is the turn's first accusation claim (mirrors
+  // meetings.transcript.accusation_target); shown as a chip when present.
+  const accusation = turn.claims.find((claim) => claim.type === "accusation");
+  const target = accusation?.against ?? null;
 
   return (
-    <article className="rounded-lg border border-neutral-700 bg-neutral-800/60 p-4">
+    <article className="rounded-lg border border-neutral-700 bg-neutral-800/50 p-4">
       <header className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <PlayerChip agentId={report.agent_id} players={players} />
-        <span className="font-mono text-xs text-neutral-400">tick {report.tick}</span>
+        <span className="rounded bg-neutral-700/70 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wide text-neutral-300">
+          {TURN_KIND_LABELS[turn.turn_kind]}
+        </span>
+        <PlayerChip agentId={turn.speaker} players={players} />
+        {target !== null ? (
+          <>
+            <span className="text-neutral-500">→</span>
+            <span className="inline-flex min-w-0 max-w-full items-center rounded bg-neutral-700/70 px-2 py-0.5">
+              <PlayerChip agentId={target} players={players} />
+            </span>
+          </>
+        ) : (
+          <span className="rounded bg-neutral-700/40 px-2 py-0.5 text-sm text-neutral-400">
+            no accusation
+          </span>
+        )}
+        {turn.reply_to !== null && (
+          <span className="min-w-0 break-all font-mono text-xs text-neutral-500">
+            ↳ {turn.reply_to}
+          </span>
+        )}
         {flagged.map((c) => (
           <ContradictionBadge key={c.contradiction_id} contradiction={c} />
         ))}
       </header>
 
       <p className="whitespace-pre-wrap break-words text-base leading-relaxed text-neutral-100">
-        {report.free_text}
+        {turn.free_text}
       </p>
 
       {detailCount > 0 && (

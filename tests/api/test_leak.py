@@ -11,9 +11,10 @@ the frontend to engine shape and re-introduce leakage paths via copy-paste.
 Implementation note — why AST, not a raw source grep. The DoD sketch suggests
 ``inspect.getsource(api.schemas) | grep`` for forbidden type names. A literal
 whole-source substring grep is unworkable with this DTO inventory: several
-required DTO *names* contain a forbidden name as a prefix (``StatementView``
-contains ``Statement``; ``MeetingTriggeredEventView`` contains
-``MeetingTrigger``; ``AlibiClaimView`` contains ``AlibiClaim``), and the DoD
+required DTO *names* contain a forbidden name as a prefix
+(``MeetingTriggeredEventView`` contains ``MeetingTrigger``; ``AlibiClaimView``
+contains ``AlibiClaim``; ``AccusationClaimView`` contains ``AccusationClaim``),
+and the DoD
 also requires each DTO docstring to *name* the source type it shadows. So we
 parse the module with ``ast`` and inspect only field/alias *annotations*
 (never docstrings or class names), tokenized on identifier boundaries. This is
@@ -63,8 +64,7 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "AlibiClaimView",
         "AccusationClaimView",
         "CorroborationClaimView",
-        "ReportView",
-        "StatementView",
+        "TurnView",
         "ContradictionView",
         "BallotView",
         "LLMCallView",
@@ -273,6 +273,16 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # (The ``first_zero_impostor_tick == game_over_tick`` self-check lives in
 # ``eval.win_condition_selfcheck`` and is NOT a served report field, so it does
 # not appear in this snapshot.)
+#
+# The Phase 8 (Task 8.7/8.10) meeting accusation-chain reshape replaced the
+# ``MeetingTranscript`` ``(reports, statements)`` pair with one ordered ``turns``
+# list of ``meetings.schemas.MeetingTurn``. That dropped ``reports`` /
+# ``statements`` / ``statement_id`` / ``round_index`` from the recursive set and
+# added ``turns`` / ``turn_id`` / ``turn_index`` / ``turn_kind`` / ``reply_to``.
+# All five are pure transcript-structure fields (no roles or engine state), so
+# they stay out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``. ``speaker`` / ``observations``
+# / ``claims`` / ``target`` / ``agent_id`` survive (now reached via ``MeetingTurn``
+# / ``VoteBallot`` / ``LLMCallRecord`` rather than the old report-statement split).
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
@@ -353,18 +363,15 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "raw_response",
         "reason",
         "replay_ref",
+        "reply_to",
         "report",
-        "reports",
         "response_text",
         "roles",
         "room",
-        "round_index",
         "seed",
         "seeds_used",
         "skipped_meetings",
         "speaker",
-        "statement_id",
-        "statements",
         "subject",
         "subjects",
         "supports",
@@ -383,6 +390,10 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "transcript",
         "trigger",
         "triggered_by",
+        "turn_id",
+        "turn_index",
+        "turn_kind",
+        "turns",
         "type",
         "version",
         "vote_ballot_bins",
