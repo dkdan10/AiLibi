@@ -455,7 +455,7 @@ def load_tournament_report(
     replay_dir: Path,
     *,
     roles_by_seed: Mapping[int, Mapping[PlayerId, Role]],
-    tasks_per_crewmate: int = DEFAULT_TASKS_PER_CREWMATE,
+    tasks_per_crewmate: int = 1,
     game_map: Map | None = None,
 ) -> TournamentReport:
     """Assemble a :class:`TournamentReport` from recorded replay JSONL on disk.
@@ -473,9 +473,13 @@ def load_tournament_report(
     ``roles_by_seed`` already encodes the player and impostor counts, but not the
     task count or the map. They MUST match the setup the replays were recorded
     under: the walk verifies every reconstructed ``state_hash`` and raises on a
-    mismatch (the descriptor-less flat 4p/1i baseline is one task per crewmate;
-    the 9p/2i canonical set passes ``tasks_per_crewmate=2``). They feed only the
-    deterministic re-seed; no live game is run.
+    mismatch. ``tasks_per_crewmate`` defaults to ``1`` -- the descriptor-less flat
+    4p/1i baseline, and :func:`~orchestrator.seeder.seed_initial_state`'s own
+    default -- so the historical ``load_tournament_report(replay_dir,
+    roles_by_seed=...)`` call shape keeps reconstructing the flat ``replays/samples``
+    set unchanged; a rostered set passes its value explicitly (the 9p/2i canonical
+    set is ``tasks_per_crewmate=2``). ``game_map`` defaults to the canonical map.
+    They feed only the deterministic re-seed; no live game is run.
 
     This is the report-build path that has no live model and no engine re-run:
     given frozen recorded replays plus a deterministically-derived ``roles`` map,
