@@ -66,7 +66,13 @@ def seed_initial_state(
     single crewmate cannot hold the same map task twice, so its instances
     must be distinct map tasks (overlap is allowed only ACROSS crewmates).
 
-    Cooldowns: only impostors carry a kill cooldown, initialised to 0.
+    Cooldowns: only impostors carry a kill cooldown, seeded to
+    ``game_map.kill_cooldown_ticks`` at round start (DESIGN.md §3.4) — NOT 0.
+    A tick-1 spawn kill is therefore impossible: the opening kill obeys the
+    same cooldown cadence as every later one (the engine resets the cooldown
+    to ``kill_cooldown_ticks`` after each kill and decrements it per tick in
+    ``engine/tick.py``). Seeding to 0 granted a free, unwitnessed first kill in
+    half the games (audits/audit-2026-06-06-0632-gameplay-data.md gp-1).
     """
 
     if num_players < 2:
@@ -97,7 +103,14 @@ def seed_initial_state(
         role_by_id=role_by_id,
         spawn_room=game_map.spawn.room,
     )
-    cooldowns: dict[PlayerId, int] = {pid: 0 for pid in impostor_ids}
+    # Round-start kill cooldown (DESIGN.md §3.4; audit gp-1): seed every
+    # impostor to the map's ``kill_cooldown_ticks`` — read off ``game_map``,
+    # never a literal — so the first kill obeys the same cadence as every later
+    # one and a tick-1 spawn kill is impossible. The engine already resets to
+    # this value after each kill and decrements per tick (``engine/tick.py``).
+    cooldowns: dict[PlayerId, int] = {
+        pid: game_map.kill_cooldown_ticks for pid in impostor_ids
+    }
     tasks = _build_tasks(
         seed=seed,
         game_map=game_map,

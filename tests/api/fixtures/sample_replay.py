@@ -154,25 +154,42 @@ def write_meeting_replay(
     reporter = crewmates[1]
     living = tuple(sorted(p for p in state.players if p != victim))
 
-    # Tick 0 — every player acts (so the loader can recover num_players); the
-    # impostor's action is a kill on a co-located crewmate.
-    tick0 = _opening_kill_tick(list(state.players), impostor=impostor, victim=victim)
-    input_tick = state.tick
-    state, _events = advance_tick(state, tick0, game_map=game_map)
-    log.record_tick(input_tick, tick0, state)
-    body_id = f"body-{victim}-0"
+    # Round-start kill cooldown (DESIGN.md §3.4): the impostor spawns on
+    # cooldown, so every player no-ops until it clears (naming every player each
+    # tick keeps num_players recoverable from the stream). Only then is the
+    # opening kill legal — a tick-0 spawn kill is impossible by design (gp-1).
+    for _ in range(game_map.kill_cooldown_ticks):
+        input_tick = state.tick
+        waits: list[Action] = [_wait(pid) for pid in sorted(state.players)]
+        state, _events = advance_tick(state, waits, game_map=game_map)
+        log.record_tick(input_tick, waits, state)
 
-    # Tick 1 — a living crewmate reports the body, opening the meeting.
+    # Kill tick — the cooldown has cleared; the impostor kills a co-located crewmate.
+    kill_tick = state.tick  # == game_map.kill_cooldown_ticks
+    tick_kill = _opening_kill_tick(
+        list(state.players), impostor=impostor, victim=victim
+    )
+    input_tick = state.tick
+    state, _events = advance_tick(state, tick_kill, game_map=game_map)
+    log.record_tick(input_tick, tick_kill, state)
+    body_id = f"body-{victim}-{kill_tick}"
+
+    # Report tick — a living crewmate reports the body, opening the meeting.
     report = ReportBodyAction.model_validate(
         {"actor": reporter, "type": "report", "payload": {"body_id": body_id}}
     )
+    meeting_tick = state.tick
     input_tick = state.tick
     state, _events = advance_tick(state, [report], game_map=game_map)
     log.record_tick(input_tick, [report], state)
 
     meeting_id = f"{game_id}:meeting-0"
     result = _build_meeting_result(
-        meeting_id=meeting_id, reporter=reporter, victim=victim, living=living
+        meeting_id=meeting_id,
+        reporter=reporter,
+        victim=victim,
+        living=living,
+        trigger_tick=meeting_tick,
     )
     llm_calls = _build_llm_calls() if llm_calls is None else llm_calls
     prompt_versions = {"crewmate_report": "crewmate_report.v1"}
@@ -191,22 +208,27 @@ def write_meeting_replay(
         state_hash_after=state_hash_after,
     )
 
-    # Tick 2 — quiet tick after the meeting resumes play.
+    # Quiet tick after the meeting resumes play.
+    quiet_tick = state.tick
     input_tick = state.tick
     state, _events = advance_tick(state, [], game_map=game_map)
     log.record_tick(input_tick, [], state)
-    log.record_game_end(winner="CREWMATES", reason="all_tasks_complete", tick=2)
+    log.record_game_end(
+        winner="CREWMATES", reason="all_tasks_complete", tick=quiet_tick
+    )
 
     return MeetingReplayExpectations(
         game_id=game_id,
         meeting_id=meeting_id,
-        meeting_tick=1,
+        meeting_tick=meeting_tick,
         reporter=reporter,
         victim=victim,
         impostor=impostor,
         living_agents=living,
         total_cost_usd=sum(call.cost_usd for call in llm_calls),
-        total_ticks=3,
+        # Recorded ticks are 0..quiet_tick inclusive: the cooldown waits, the
+        # kill, the meeting/report tick, then this quiet tick.
+        total_ticks=quiet_tick + 1,
         winner="CREWMATES",
     )
 
@@ -261,16 +283,27 @@ def write_unresolved_meeting_replay(path: Path, *, seed: int = 0) -> str:
     victim = crewmates[0]
     reporter = crewmates[1]
 
-    tick0 = _opening_kill_tick(list(state.players), impostor=impostor, victim=victim)
+    # Round-start kill cooldown (DESIGN.md §3.4): no-op until the cooldown clears
+    # before the opening kill (a tick-0 spawn kill is impossible by design).
+    for _ in range(game_map.kill_cooldown_ticks):
+        input_tick = state.tick
+        waits: list[Action] = [_wait(pid) for pid in sorted(state.players)]
+        state, _events = advance_tick(state, waits, game_map=game_map)
+        log.record_tick(input_tick, waits, state)
+
+    kill_tick = state.tick  # == game_map.kill_cooldown_ticks
+    tick_kill = _opening_kill_tick(
+        list(state.players), impostor=impostor, victim=victim
+    )
     input_tick = state.tick
-    state, _events = advance_tick(state, tick0, game_map=game_map)
-    log.record_tick(input_tick, tick0, state)
+    state, _events = advance_tick(state, tick_kill, game_map=game_map)
+    log.record_tick(input_tick, tick_kill, state)
 
     report = ReportBodyAction.model_validate(
         {
             "actor": reporter,
             "type": "report",
-            "payload": {"body_id": f"body-{victim}-0"},
+            "payload": {"body_id": f"body-{victim}-{kill_tick}"},
         }
     )
     input_tick = state.tick
@@ -317,7 +350,12 @@ def strip_llm_call_agent_ids(path: Path) -> None:
 
 
 def _build_meeting_result(
-    *, meeting_id: str, reporter: str, victim: str, living: tuple[str, ...]
+    *,
+    meeting_id: str,
+    reporter: str,
+    victim: str,
+    living: tuple[str, ...],
+    trigger_tick: int,
 ) -> MeetingResult:
     # The reactive chain's opening turn (DESIGN.md §5.2 PHASE 1): the reporter
     # states findings (the body discovery) and is unsure (no accusation), so the
@@ -330,7 +368,10 @@ def _build_meeting_result(
         reply_to=None,
         observations=(
             FoundBodyObservation(
-                type="found_body", tick=1, body_of=victim, room="CAFETERIA"
+                type="found_body",
+                tick=trigger_tick,
+                body_of=victim,
+                room="CAFETERIA",
             ),
         ),
         claims=(),
@@ -354,13 +395,13 @@ def _build_meeting_result(
             event_a_id="a",
             event_b_id="b",
             subjects=(reporter,),
-            description=f"{reporter} alibi conflict at tick 1.",
+            description=f"{reporter} alibi conflict at tick {trigger_tick}.",
         ),
     )
     return MeetingResult(
         meeting_id=meeting_id,
         triggered_by=reporter,
-        trigger_tick=1,
+        trigger_tick=trigger_tick,
         outcome="SKIPPED",
         ejected_player_id=None,
         ballots=ballots,
