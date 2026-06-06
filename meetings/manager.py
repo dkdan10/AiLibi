@@ -280,6 +280,47 @@ class MeetingConfig:
     vote_temperature: float = DEFAULT_VOTE_TEMPERATURE
 
 
+# Phase the default fell back on; a turn kind (:data:`TurnKind`) or the vote.
+DefaultedPhase = Literal["opening", "reply", "opt_in", "vote"]
+# Why a default fired. ``deadline`` is a wall-clock miss (only reachable with a
+# configured deadline -- interactive mode); ``validation`` is a payload that
+# failed schema validation even after the provider's parse-tolerance (reachable
+# even in deadline-free headless recording).
+DefaultTrigger = Literal["deadline", "validation"]
+
+
+@dataclass(frozen=True)
+class DefaultedCall:
+    """A meeting turn / ballot that fell back to its default (audit gp-2).
+
+    Surfaced by :meth:`MeetingManager.run` through
+    :attr:`MeetingManager.defaulted_calls` so the orchestrator can write a
+    visible ``deadline_default`` record into the replay. Audit gp-2: a turn
+    that defaults must never vanish from the replay -- the headless recorder
+    previously lost 11 turns (9 of 91 openings) to the interactive 30 s
+    deadline with no record of any kind, so the report's ``failed_calls=0`` was
+    true of the records and false of the run.
+
+    The manager only carries the facts the orchestrator needs to name the
+    default in its replay record; the orchestrator owns the
+    :class:`~orchestrator.replay.FailedCallReplayEntry` write itself
+    (``error_type="deadline_default"``).
+
+    * ``phase`` -- the defaulted slot: a turn kind (``opening`` / ``reply`` /
+      ``opt_in``) or ``vote``.
+    * ``agent_id`` -- the participant who submitted nothing.
+    * ``trigger`` -- ``deadline`` (wall-clock miss, interactive only) or
+      ``validation`` (a schema-invalid payload, reachable in headless mode).
+    * ``turn_index`` -- the turn ordinal for a defaulted turn; ``None`` for a
+      defaulted vote.
+    """
+
+    phase: DefaultedPhase
+    agent_id: PlayerId
+    trigger: DefaultTrigger
+    turn_index: int | None = None
+
+
 @runtime_checkable
 class ReportPromptRenderer(Protocol):
     """Render the opening-turn prompt (DESIGN.md §5.2 PHASE 1, §5.3).
@@ -421,6 +462,27 @@ class MeetingManager:
         self._statement_prompt = statement_prompt
         self._vote_prompt = vote_prompt
         self._config = config
+        # Per-run scratch: the defaults that fired during the most recent
+        # :meth:`run`. Reset at the top of every ``run`` (the manager is reused
+        # across a game's meetings) and read by the orchestrator immediately
+        # after ``run`` returns (audit gp-2). Not engine state and not a DTO --
+        # a turn/ballot that defaulted is recorded into the replay through the
+        # existing failed-call channel, never lost silently.
+        self._defaulted_calls: list[DefaultedCall] = []
+
+    @property
+    def defaulted_calls(self) -> tuple[DefaultedCall, ...]:
+        """Defaults that fired during the most recent :meth:`run` (audit gp-2).
+
+        Reset at the start of every :meth:`run`. The orchestrator reads this
+        right after ``run`` returns and writes one visible ``deadline_default``
+        replay record per entry, so a turn / ballot that fell back to its
+        placeholder is never lost from the replay (the headless recorder
+        previously dropped 11 such turns with no record of any kind). Empty for
+        a meeting in which every turn and ballot was produced normally.
+        """
+
+        return tuple(self._defaulted_calls)
 
     async def run(
         self,
@@ -449,6 +511,11 @@ class MeetingManager:
             )
         self._validate_participants(participants, trigger=trigger)
 
+        # Fresh per-run default ledger (the manager is reused across a game's
+        # meetings); the orchestrator reads :attr:`defaulted_calls` after this
+        # ``run`` returns (audit gp-2).
+        self._defaulted_calls = []
+
         # Canonicalise participant order at entry. Real callers may iterate
         # over a set/dict whose order is hash-seeded and not
         # determinism-preserving; sorting by ``agent_id`` is deterministic
@@ -457,7 +524,10 @@ class MeetingManager:
         by_id = {p.agent_id: p for p in ordered_participants}
         roster = frozenset(by_id)
 
-        # Phase 1: opening turn (turn 0, role-dispatched).
+        # Phase 1: opening turn (turn 0, role-dispatched). The opening is a
+        # single point of failure for the whole meeting -- an empty opening
+        # names no accusation, so the chain is dead and every ballot votes on a
+        # husk -- so it is retried once before defaulting (audit gp-2).
         opener = by_id[trigger.triggered_by]
         opening_turn = await self._collect_turn(
             meeting_id=meeting_id,
@@ -469,6 +539,7 @@ class MeetingManager:
             prior_turn=None,
             transcript_so_far=MeetingTranscript(),
             contradictions=(),
+            retries=1,
         )
         turns: list[MeetingTurn] = [opening_turn]
         spoken: set[PlayerId] = {opener.agent_id}
@@ -583,6 +654,7 @@ class MeetingManager:
         prior_turn: MeetingTurn | None,
         transcript_so_far: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
+        retries: int = 0,
     ) -> MeetingTurn:
         """Collect one turn through the shared guard chokepoint.
 
@@ -592,6 +664,12 @@ class MeetingManager:
         manager is authoritative for the identity fields (``turn_id``,
         ``turn_index``, ``speaker``, ``turn_kind``, ``reply_to``); the LLM
         supplies only ``observations`` / ``claims`` / ``free_text``.
+
+        ``retries`` is the number of EXTRA attempts on top of the first before
+        the turn defaults (the opening passes ``retries=1`` -- audit gp-2). A
+        fired default is appended to :attr:`defaulted_calls` so the orchestrator
+        can record it in the replay; the prompt is rendered once and reused
+        across attempts (its inputs do not change between retries).
         """
 
         prompt = self._render_turn_prompt(
@@ -603,67 +681,92 @@ class MeetingManager:
             prior_turn=prior_turn,
         )
         turn_id = _turn_id(meeting_id=meeting_id, turn_index=turn_index)
-        try:
-            response = await asyncio.wait_for(
-                _isolate_provider_timeout(
-                    self._llm_client.complete(
-                        prompt=prompt,
-                        schema=MeetingTurn,
-                        max_tokens=self._config.turn_max_tokens,
-                        temperature=self._config.turn_temperature,
-                        call_kind="meeting",
-                        agent_id=participant.agent_id,
-                    )
-                ),
-                timeout=self._config.deadlines.turn_seconds,
+        # The trigger kind of the LAST failed attempt, recorded with the
+        # default so the orchestrator can name it (deadline vs validation).
+        trigger_kind: DefaultTrigger = "deadline"
+        for _attempt in range(retries + 1):
+            try:
+                response = await asyncio.wait_for(
+                    _isolate_provider_timeout(
+                        self._llm_client.complete(
+                            prompt=prompt,
+                            schema=MeetingTurn,
+                            max_tokens=self._config.turn_max_tokens,
+                            temperature=self._config.turn_temperature,
+                            call_kind="meeting",
+                            agent_id=participant.agent_id,
+                        )
+                    ),
+                    timeout=self._config.deadlines.turn_seconds,
+                )
+                parsed = MeetingTurn.model_validate_json(response.text)
+            except (asyncio.TimeoutError, ValidationError) as exc:
+                # Fail-soft on a single turn (Task 7.10): a missed deadline
+                # (``TimeoutError``) and a malformed turn that still fails
+                # schema validation after the provider's parse-tolerance
+                # normalization (``ValidationError`` -- e.g. an ``AlibiClaim``
+                # so broken the chronological-range swap cannot salvage it)
+                # BOTH degrade to the same placeholder so the meeting continues
+                # to its vote and the game reaches ``game_over``. A
+                # provider/transport timeout is still re-tagged
+                # ``LLMProviderError`` (by ``_isolate_provider_timeout``) and
+                # propagates -- only the deadline + parse failures fail soft.
+                # Note which fired so the surfaced ``deadline_default`` record
+                # names it (audit gp-2); ``asyncio.TimeoutError`` is built-in
+                # ``TimeoutError`` in 3.11+, distinct from ``ValidationError``.
+                trigger_kind = (
+                    "deadline"
+                    if isinstance(exc, asyncio.TimeoutError)
+                    else "validation"
+                )
+                continue
+            # Defense-in-depth: rewrite self-alibi placeholder subjects (e.g.
+            # "p-self") to the speaker's canonical id before the identity
+            # override, so DESIGN.md §5.4 contradiction detection can match
+            # this turn's self-alibi against other speakers (Task 3.20).
+            normalized_claims = _normalize_self_alibi_subjects(
+                parsed.claims, speaker_id=participant.agent_id
             )
-            parsed = MeetingTurn.model_validate_json(response.text)
-        except (asyncio.TimeoutError, ValidationError):
-            # Fail-soft on a single turn (Task 7.10): a missed deadline
-            # (``TimeoutError``) and a malformed turn that still fails schema
-            # validation after the provider's parse-tolerance normalization
-            # (``ValidationError`` -- e.g. an ``AlibiClaim`` so broken the
-            # chronological-range swap cannot salvage it) BOTH degrade to the
-            # same missed-deadline placeholder so the meeting continues to its
-            # vote and the game reaches ``game_over``. A provider/transport
-            # timeout is still re-tagged ``LLMProviderError`` (by
-            # ``_isolate_provider_timeout``) and propagates -- only the
-            # deadline + parse failures fail soft.
-            return _default_turn(
-                turn_id=turn_id,
+            # Teammate firewall guard (Task 7.12) on EVERY turn-kind: drop any
+            # accusation an impostor makes against a fellow impostor. Because
+            # the chain reads its next speaker off these recorded claims,
+            # guarding here is what keeps an impostor from passing the chain to
+            # (or publicly incriminating) a teammate on any turn. Deterministic
+            # and a no-op for a crewmate / sole impostor, so replay is
+            # unaffected.
+            guarded_claims = _guard_teammate_turn_claims(
+                normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
+            )
+            # Override the identity fields with the canonical values; the LLM
+            # is told to emit any non-empty string and the manager is
+            # authoritative for who said what and where it sits in the chain.
+            return parsed.model_copy(
+                update={
+                    "turn_id": turn_id,
+                    "turn_index": turn_index,
+                    "speaker": participant.agent_id,
+                    "turn_kind": turn_kind,
+                    "reply_to": reply_to,
+                    "claims": guarded_claims,
+                }
+            )
+        # Every attempt (1 + ``retries``) failed: surface the fired default so
+        # the orchestrator records it in the replay (audit gp-2 -- a defaulted
+        # turn must never be invisible), then return the placeholder.
+        self._defaulted_calls.append(
+            DefaultedCall(
+                phase=turn_kind,
+                agent_id=participant.agent_id,
+                trigger=trigger_kind,
                 turn_index=turn_index,
-                speaker=participant.agent_id,
-                turn_kind=turn_kind,
-                reply_to=reply_to,
             )
-        # Defense-in-depth: rewrite self-alibi placeholder subjects (e.g.
-        # "p-self") to the speaker's canonical id before the identity
-        # override, so DESIGN.md §5.4 contradiction detection can match this
-        # turn's self-alibi against other speakers (Task 3.20).
-        normalized_claims = _normalize_self_alibi_subjects(
-            parsed.claims, speaker_id=participant.agent_id
         )
-        # Teammate firewall guard (Task 7.12) on EVERY turn-kind: drop any
-        # accusation an impostor makes against a fellow impostor. Because the
-        # chain reads its next speaker off these recorded claims, guarding
-        # here is what keeps an impostor from passing the chain to (or
-        # publicly incriminating) a teammate on any turn. Deterministic and a
-        # no-op for a crewmate / sole impostor, so replay is unaffected.
-        guarded_claims = _guard_teammate_turn_claims(
-            normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
-        )
-        # Override the identity fields with the canonical values; the LLM is
-        # told to emit any non-empty string and the manager is authoritative
-        # for who said what and where it sits in the chain.
-        return parsed.model_copy(
-            update={
-                "turn_id": turn_id,
-                "turn_index": turn_index,
-                "speaker": participant.agent_id,
-                "turn_kind": turn_kind,
-                "reply_to": reply_to,
-                "claims": guarded_claims,
-            }
+        return _default_turn(
+            turn_id=turn_id,
+            turn_index=turn_index,
+            speaker=participant.agent_id,
+            turn_kind=turn_kind,
+            reply_to=reply_to,
         )
 
     def _render_turn_prompt(
@@ -782,6 +885,18 @@ class MeetingManager:
                 timeout=self._config.deadlines.vote_seconds,
             )
         except asyncio.TimeoutError:
+            # The vote catches only the deadline (a malformed ballot still
+            # propagates and aborts the meeting, unchanged); surface the fired
+            # default so the orchestrator records it (audit gp-2). Deadline-free
+            # headless recording never reaches here -- a vote default is an
+            # interactive-mode wall-clock miss.
+            self._defaulted_calls.append(
+                DefaultedCall(
+                    phase="vote",
+                    agent_id=participant.agent_id,
+                    trigger="deadline",
+                )
+            )
             return _default_vote(voter=participant.agent_id)
         parsed = VoteBallot.model_validate_json(response.text)
         # Defensive normalization: if the LLM hallucinates a target id that
@@ -1254,6 +1369,9 @@ __all__ = [
     "DEFAULT_VOTE_TEMPERATURE",
     "INVALID_VOTE_TARGET_MARKER",
     "TEAMMATE_VOTE_TARGET_MARKER",
+    "DefaultTrigger",
+    "DefaultedCall",
+    "DefaultedPhase",
     "LLMProviderError",
     "MeetingConfig",
     "MeetingDeadlines",

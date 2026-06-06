@@ -56,7 +56,9 @@ from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
 from llm.provider import build_default_client, extract_parse_failure
 from meetings.manager import (
+    DefaultedCall,
     MeetingConfig,
+    MeetingDeadlines,
     MeetingManager,
     MeetingParticipant,
     MeetingTrigger,
@@ -158,6 +160,27 @@ DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "vote_ballot": "vote_ballot/v3",
 }
 
+# Headless recording runs meetings deadline-free (DESIGN.md §1.4, §5.2, §8.3:
+# "Meeting deadlines off in headless mode; on with generous defaults in live
+# mode"). The choice is made explicit HERE, at the production headless
+# construction site (:func:`build_default_meeting_runner`), rather than left to
+# the interactive ``MeetingDeadlines`` 30 s default: audit gp-2 found the
+# headless recorder silently ran the interactive 30 s per-turn/per-vote
+# deadlines, so slow local-Ollama calls lost 11 turns (9 of 91 openings) to a
+# wall-clock race with no record of any kind. ``None`` disables the deadline
+# (passed straight to ``asyncio.wait_for``); a provider-level transport timeout
+# remains the fail-loud guard via ``meetings.manager._isolate_provider_timeout``.
+HEADLESS_MEETING_DEADLINES: Final[MeetingDeadlines] = MeetingDeadlines(
+    turn_seconds=None, vote_seconds=None
+)
+
+# Sentinel ``model`` for a ``deadline_default`` failed-call marker. Such a
+# marker carries ZERO spend (a wall-clock miss completed nothing; a validation
+# default's real spend is already captured in the meeting's ``llm_calls``), so
+# it must never be mistaken for a model call -- this clearly-labelled phantom
+# keeps it a distinct, non-spend bucket in any per-model cost roll-up.
+_DEADLINE_DEFAULT_MODEL: Final[str] = "(deadline_default)"
+
 _T = TypeVar("_T")
 
 
@@ -173,11 +196,19 @@ class MeetingArtifacts:
     Carries the :class:`MeetingResult` plus the per-call LLM telemetry
     and the prompt-version metadata the replay log needs to persist a
     full audit trail per the R-9 acceptance gate.
+
+    ``defaulted_calls`` carries any turn / ballot that fell back to its
+    placeholder during the meeting (audit gp-2). The orchestrator writes one
+    visible ``deadline_default`` :class:`~orchestrator.replay.FailedCallReplayEntry`
+    per entry so a defaulted turn is never lost from the replay. It defaults to
+    ``()`` so a runner that produces no defaults -- the common case -- need not
+    set it.
     """
 
     result: MeetingResult
     llm_calls: tuple[LLMCallRecord, ...]
     prompt_versions: Mapping[str, str]
+    defaulted_calls: tuple[DefaultedCall, ...] = ()
 
 
 @runtime_checkable
@@ -357,6 +388,10 @@ class DefaultMeetingRunner:
             result=result,
             llm_calls=self._recording_client.drain(),
             prompt_versions=dict(self._prompt_versions),
+            # Surface any fired turn / ballot defaults so the orchestrator
+            # records them visibly in the replay (audit gp-2). Read straight
+            # off the manager, which reset its ledger at the start of this run.
+            defaulted_calls=self._manager.defaulted_calls,
         )
 
 
@@ -390,6 +425,13 @@ def build_default_meeting_runner(
     enforced at call time (pre-flight) rather than measured post-hoc
     from the replay log.
 
+    When ``config`` is omitted the runner is wired deadline-free
+    (:data:`HEADLESS_MEETING_DEADLINES`, i.e. ``turn_seconds=None`` /
+    ``vote_seconds=None``): this is the production HEADLESS recording surface
+    and recording must never lose a turn to a wall-clock race (audit gp-2;
+    DESIGN.md §1.4, §8.3). An interactive/live caller passes an explicit
+    ``MeetingConfig`` to opt back into the 30 s ``MeetingDeadlines`` default.
+
     Production callers construct a fresh runner + a fresh
     :class:`llm.budget.GameBudget` per game: the budget must reset
     between games and the recording client carries per-game state. Do
@@ -400,13 +442,23 @@ def build_default_meeting_runner(
     client: LLMClient = (
         BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner
     )
+    # This is the production HEADLESS recording surface, so an unspecified
+    # config runs deadline-free (audit gp-2): recording must never lose a turn
+    # to a wall-clock race. An explicit ``config`` is honoured unchanged, so an
+    # interactive/live caller opts back into the 30 s ``MeetingDeadlines``
+    # default by passing its own ``MeetingConfig``.
+    resolved_config = (
+        config
+        if config is not None
+        else MeetingConfig(deadlines=HEADLESS_MEETING_DEADLINES)
+    )
     return DefaultMeetingRunner(
         llm_client=client,
         crewmate_report_prompt=crewmate_report_prompt,
         impostor_report_prompt=impostor_report_prompt,
         statement_prompt=accusation_round_prompt,
         vote_prompt=vote_ballot_prompt,
-        config=config,
+        config=resolved_config,
         prompt_versions=prompt_versions,
         token_budget=token_budget,
     )
@@ -951,6 +1003,15 @@ class HeadlessGame:
             state_hash_before=state_hash_before,
             state_hash_after=state_hash_after,
         )
+        # Make any fired turn / ballot default visible in the replay (audit
+        # gp-2): one ``deadline_default`` failed-call marker per default, so a
+        # husk turn is never silently dropped from the record.
+        _record_deadline_defaults(
+            replay=replay,
+            meeting_id=meeting_id,
+            tick=trigger.trigger_tick,
+            defaulted_calls=artifacts.defaulted_calls,
+        )
         return next_state, post_events
 
     def _build_agents(
@@ -999,6 +1060,65 @@ class HeadlessGame:
 
     def _game_id(self) -> str:
         return f"headless-seed-{self._seed}"
+
+
+def _record_deadline_defaults(
+    *,
+    replay: ReplayLog,
+    meeting_id: str,
+    tick: int,
+    defaulted_calls: Sequence[DefaultedCall],
+) -> None:
+    """Record each fired meeting default as a visible replay entry (audit gp-2).
+
+    A turn / ballot that fell back to its placeholder is written into the
+    EXISTING failed-call channel as a
+    :class:`~orchestrator.replay.FailedCallReplayEntry` with
+    ``error_type="deadline_default"`` -- no new replay record kind, since
+    ``FailedCallReplayEntry.error_type`` is a free string. The marker carries
+    ZERO spend: a deadline miss completed nothing, and a validation default's
+    real spend is already captured in the meeting's ``llm_calls`` (the recording
+    client logged the returned-but-invalid call), so charging it here too would
+    double-count. The defaulted phase and the trigger kind (deadline vs
+    validation) are named in ``error_message`` so the husk is auditable -- the
+    headless recorder previously lost such turns with no record of any kind
+    while telemetry reported ``failed_calls=0`` (true of the records, false of
+    the run).
+    """
+
+    for default in defaulted_calls:
+        replay.record_failed_call(
+            meeting_id=meeting_id,
+            tick=tick,
+            model=_DEADLINE_DEFAULT_MODEL,
+            prompt_length=0,
+            raw_response="",
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            error_type="deadline_default",
+            error_message=_deadline_default_message(default),
+        )
+
+
+def _deadline_default_message(default: DefaultedCall) -> str:
+    """Human-readable ``error_message`` for a ``deadline_default`` record.
+
+    Names the defaulted phase and the trigger kind (``deadline`` vs
+    ``validation``) plus the participant who submitted nothing; the meeting id
+    and tick ride the entry's own fields.
+    """
+
+    if default.phase == "vote":
+        return (
+            f"vote defaulted ({default.trigger}); "
+            f"{default.agent_id} submitted no ballot"
+        )
+    index = "" if default.turn_index is None else f" (turn {default.turn_index})"
+    return (
+        f"{default.phase} turn{index} defaulted ({default.trigger}); "
+        f"{default.agent_id} submitted no turn"
+    )
 
 
 def _build_meeting_trigger(
@@ -1220,6 +1340,7 @@ __all__ = [
     "DEFAULT_PROMPT_VERSIONS",
     "DEFAULT_TASKS_PER_CREWMATE",
     "DefaultMeetingRunner",
+    "HEADLESS_MEETING_DEADLINES",
     "HeadlessGame",
     "HeadlessGameResult",
     "MeetingArtifacts",
