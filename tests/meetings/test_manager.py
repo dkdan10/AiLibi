@@ -32,9 +32,10 @@ from pathlib import Path
 from typing import TypeVar
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
+from llm.provider import LLMCallFailure, _attach_parse_failure  # noqa: PLC2701
 from llm.fake_provider import FakeProvider
 from meetings.manager import (
     DEFAULT_TURN_FREE_TEXT,
@@ -1493,6 +1494,419 @@ class TestDeadlineValidation:
             deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
         )
         assert isinstance(result, MeetingResult)
+
+
+# --- Defaults surfaced + opening retry (audit gp-2) ------------------------
+
+
+@dataclass
+class _OpeningValidationClient:
+    """Returns invalid turn JSON for the first ``invalid_opening_attempts``
+    opening calls, then a valid turn; replies/opt-ins and votes are valid.
+
+    Unlike :class:`_ScriptedLLMClient` it does NOT self-validate, so the
+    manager's own ``MeetingTurn.model_validate_json`` raises the
+    ``ValidationError`` -> default (the real-provider parse-failure path that
+    deadline-free headless recording can still hit -- audit gp-2).
+    """
+
+    invalid_opening_attempts: int
+    opening_calls: int = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if "PHASE=OPENING" in prompt:
+            self.opening_calls += 1
+            text = (
+                "{}"  # missing required fields -> MeetingTurn validation fails
+                if self.opening_calls <= self.invalid_opening_attempts
+                else _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+            )
+        elif "PHASE=TURN" in prompt:
+            text = _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+        else:  # PHASE=VOTE
+            text = _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "opening-validation",
+        )
+
+
+@dataclass
+class _ProviderRaisesOnOpeningClient:
+    """Mimics a REAL provider: ``complete()`` validates internally and RAISES a
+    ``ValidationError`` carrying ``LLMCallFailure`` metadata on the first
+    ``raise_attempts`` openings (the Anthropic/Ollama ``_attach_parse_failure``
+    pattern), so the recording client never logs the burned call and its spend
+    would be lost unless surfaced. Later openings, replies/opt-ins and votes are
+    valid. ``raise_attempts`` defaults large enough to fail every opening
+    attempt (so the opening defaults); set it to 1 to recover on the retry.
+    """
+
+    input_tokens: int = 123
+    raise_attempts: int = 999
+    raised: int = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if "PHASE=OPENING" in prompt and self.raised < self.raise_attempts:
+            self.raised += 1
+            try:
+                MeetingTurn.model_validate_json("{}")
+            except ValidationError as exc:
+                _attach_parse_failure(
+                    exc,
+                    LLMCallFailure(
+                        model="qwen2.5:7b-instruct",
+                        prompt_length=len(prompt),
+                        raw_response="not valid turn json",
+                        input_tokens=self.input_tokens,
+                        output_tokens=7,
+                        cost_usd=0.0,
+                        error_type="ValidationError",
+                        error_message="bad turn",
+                    ),
+                )
+                raise
+            raise AssertionError(
+                "model_validate_json('{}') must raise"
+            )  # pragma: no cover
+        if "PHASE=VOTE" in prompt:
+            text = _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+        else:
+            text = _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "provider-raises",
+        )
+
+
+@dataclass
+class _ReplyValidationClient:
+    """Valid opening that accuses p-3, then invalid JSON for the reply turn.
+
+    Exercises a NON-opening default: only the opening retries (audit gp-2), so
+    the reply defaults after a single attempt.
+    """
+
+    reply_calls: int = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if "PHASE=OPENING" in prompt:
+            text = _turn_json(
+                speaker=_extract_marker(prompt, "agent_id="), accuses="p-3"
+            )
+        elif "PHASE=TURN" in prompt:
+            self.reply_calls += 1
+            text = "{}"  # invalid -> the reply defaults (not retried)
+        else:  # PHASE=VOTE
+            text = _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "reply-validation",
+        )
+
+
+@dataclass
+class _SleepOnPhaseClient:
+    """Sleeps (forcing a deadline miss) on whichever phase marker is set."""
+
+    sleep_phase: str
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if self.sleep_phase in prompt:
+            await asyncio.sleep(1.0)
+        text = _make_responder()(prompt, schema)
+        if schema is not None:
+            schema.model_validate_json(text)
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "sleep",
+        )
+
+
+class TestDefaultsSurfacedAndOpeningRetry:
+    def test_opening_retries_once_and_recovers_before_defaulting(self) -> None:
+        # First opening attempt is invalid; the single retry succeeds, so the
+        # opening is the real turn and NO default fires.
+        client = _OpeningValidationClient(invalid_opening_attempts=1)
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        opening = result.transcript.turns[0]
+        assert opening.turn_kind == "opening"
+        assert opening.free_text != DEFAULT_TURN_FREE_TEXT
+        # Attempted twice: the first (invalid) + the recovering retry.
+        assert client.opening_calls == 2
+        assert manager.defaulted_calls == ()
+
+    def test_opening_defaults_after_retry_and_surfaces_validation(self) -> None:
+        # Both opening attempts are invalid -> the opening defaults after the
+        # single retry, and the fired default is surfaced for the orchestrator.
+        client = _OpeningValidationClient(invalid_opening_attempts=2)
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        # Retried once before defaulting: exactly two attempts.
+        assert client.opening_calls == 2
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "opening"
+        assert default.agent_id == "p-1"
+        assert default.trigger == "validation"
+        assert default.turn_index == 0
+
+    def test_provider_validation_default_carries_parse_failure_spend(self) -> None:
+        # A real provider raises (with metadata) before the recording client can
+        # log the call, so the surfaced default must carry that spend -- one
+        # entry per burned attempt (the opening is tried twice).
+        client = _ProviderRaisesOnOpeningClient()
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert client.raised == 2  # opening attempted twice (retry)
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "opening"
+        assert default.trigger == "validation"
+        # Both burned provider calls' real spend is preserved, not zeroed.
+        assert len(default.parse_failures) == 2
+        assert all(f.model == "qwen2.5:7b-instruct" for f in default.parse_failures)
+        assert all(f.input_tokens == 123 for f in default.parse_failures)
+
+    def test_recovered_failure_surfaced_when_retry_succeeds(self) -> None:
+        # First opening attempt raises (provider-side); the retry parses, so the
+        # turn is NOT a default -- but the burned first attempt's spend would be
+        # lost unless surfaced via recovered_call_failures.
+        client = _ProviderRaisesOnOpeningClient(raise_attempts=1)
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        # Recovered on the retry: a real opening turn, no default fired.
+        assert result.transcript.turns[0].free_text != DEFAULT_TURN_FREE_TEXT
+        assert client.raised == 1
+        assert manager.defaulted_calls == ()
+        # The burned first attempt's spend is surfaced for the orchestrator.
+        assert len(manager.recovered_call_failures) == 1
+        assert manager.recovered_call_failures[0].model == "qwen2.5:7b-instruct"
+        assert manager.recovered_call_failures[0].input_tokens == 123
+
+    def test_clean_run_surfaces_no_recovered_failures(self) -> None:
+        # The happy path (no retries needed) surfaces nothing.
+        manager = _make_manager(
+            llm_client=_ScriptedLLMClient(_make_responder()),
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+        assert manager.recovered_call_failures == ()
+
+    def test_manager_side_validation_default_carries_no_parse_failure(self) -> None:
+        # When the provider RETURNS invalid text (not raises), the recording
+        # client already logged the spend, so the default carries no
+        # parse_failure (the orchestrator writes a zero-spend marker -> no
+        # double-count).
+        manager = _make_manager(
+            llm_client=_OpeningValidationClient(invalid_opening_attempts=2),
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert len(manager.defaulted_calls) == 1
+        assert manager.defaulted_calls[0].parse_failures == ()
+
+    def test_reply_default_is_surfaced_and_not_retried(self) -> None:
+        client = _ReplyValidationClient()
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        # opening (p-1 -> p-3) then a defaulted reply by p-3.
+        assert [t.turn_kind for t in result.transcript.turns] == ["opening", "reply"]
+        assert result.transcript.turns[1].free_text == DEFAULT_TURN_FREE_TEXT
+        # Only the opening retries; the reply is attempted exactly once.
+        assert client.reply_calls == 1
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "reply"
+        assert default.agent_id == "p-3"
+        assert default.trigger == "validation"
+        assert default.turn_index == 1
+
+    def test_missed_turn_deadline_surfaces_deadline_trigger(self) -> None:
+        manager = _make_manager(
+            llm_client=_SleepOnPhaseClient(sleep_phase="PHASE=OPENING"),
+            deadlines=MeetingDeadlines(turn_seconds=0.01, vote_seconds=None),
+        )
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "opening"
+        assert default.trigger == "deadline"
+        assert default.turn_index == 0
+
+    def test_missed_vote_deadline_surfaces_each_default(self) -> None:
+        manager = _make_manager(
+            llm_client=_SleepOnPhaseClient(sleep_phase="PHASE=VOTE"),
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=0.01),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert result.outcome == "SKIPPED"
+        votes = manager.defaulted_calls
+        # One per living participant (the opening is accusation-free, so the
+        # chain is just the opening turn -> 4 ballots).
+        assert len(votes) == 4
+        assert all(v.phase == "vote" for v in votes)
+        assert all(v.trigger == "deadline" for v in votes)
+        assert all(v.turn_index is None for v in votes)
+        assert sorted(v.agent_id for v in votes) == ["p-1", "p-2", "p-3", "p-4"]
+
+    def test_defaulted_calls_reset_between_runs(self) -> None:
+        # The manager is reused across a game's meetings, so its default ledger
+        # must reset each run. ``invalid_opening_attempts=2`` makes run 1's
+        # opening (calls 1-2) default; run 2's opening (call 3) is valid, so a
+        # stale entry would only survive if the ledger were not reset.
+        client = _OpeningValidationClient(invalid_opening_attempts=2)
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+        after_first_run = manager.defaulted_calls
+        assert len(after_first_run) == 1  # run 1 defaulted
+        assert after_first_run[0].phase == "opening"
+
+        _run(
+            manager.run(
+                meeting_id="m-2",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+        assert manager.defaulted_calls == ()  # run 2 clean -> ledger reset
 
 
 # --- Unknown role rejected -------------------------------------------------
