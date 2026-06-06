@@ -4,6 +4,8 @@ from collections import Counter
 
 import pytest
 
+from engine.actions import KillAction
+from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from orchestrator.seeder import seed_initial_state
 
@@ -58,7 +60,9 @@ def test_seed_initial_state_uses_role_neutral_ids() -> None:
     # ['p-5', 'p-1', 'p-4', 'p-2', 'p-3']; the first two become impostors.
     assert impostors == {"p-1", "p-5"}
     assert crewmates == {"p-2", "p-3", "p-4"}
-    assert state.cooldowns == {pid: 0 for pid in impostors}
+    # Round-start kill cooldown (DESIGN.md §3.4): impostors seed to the map's
+    # ``kill_cooldown_ticks`` (4 on the canonical map), NOT 0; crewmates carry none.
+    assert state.cooldowns == {pid: game_map.kill_cooldown_ticks for pid in impostors}
 
 
 def test_seed_initial_state_id_substring_does_not_encode_role() -> None:
@@ -416,3 +420,75 @@ def test_seed_initial_state_rejects_tasks_per_crewmate_beyond_pool() -> None:
             num_impostors=1,
             tasks_per_crewmate=13,
         )
+
+
+def test_seed_initial_state_seeds_round_start_kill_cooldown() -> None:
+    """Every impostor's cooldown seeds to ``kill_cooldown_ticks``, not 0.
+
+    Round-start kill cooldown (DESIGN.md §3.4; audit gp-1): the seeder used to
+    initialise impostor cooldowns to 0, granting a free unwitnessed tick-1 spawn
+    kill in 26/50 committed games. Seeding to the map's ``kill_cooldown_ticks``
+    (4 on the canonical map) makes the first kill obey the same cadence as every
+    later one. The value is read off ``game_map``, never a literal.
+    """
+
+    game_map = load_canonical_map()
+    assert game_map.kill_cooldown_ticks == 4  # canonical map value
+
+    state = seed_initial_state(
+        seed=0,
+        game_map=game_map,
+        num_players=9,
+        num_impostors=2,
+        tasks_per_crewmate=2,
+    )
+    impostor_ids = {pid for pid, p in state.players.items() if p.role == "IMPOSTOR"}
+
+    assert impostor_ids  # the roster has impostors
+    assert state.cooldowns == {
+        pid: game_map.kill_cooldown_ticks for pid in impostor_ids
+    }
+    # Only impostors carry a cooldown — crewmates never appear in the map.
+    assert set(state.cooldowns) == impostor_ids
+
+
+def test_seed_initial_state_blocks_tick_one_spawn_kill() -> None:
+    """A kill queued at tick 1 from the seeded state is engine-rejected (gp-1).
+
+    Every player spawns in the same room, so the ONLY precondition the kill
+    fails is the seeded round-start cooldown. Pins the engine's literal
+    rejection reason ``"kill is on cooldown"`` (engine/rules.py) EXACTLY — the
+    audit's mechanical passes grep this string, so it must not be matched
+    loosely.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0,
+        game_map=game_map,
+        num_players=9,
+        num_impostors=2,
+        tasks_per_crewmate=2,
+    )
+    impostor_id = next(pid for pid, p in state.players.items() if p.role == "IMPOSTOR")
+    crewmate_id = next(pid for pid, p in state.players.items() if p.role == "CREWMATE")
+    # The kill's only failing precondition is the cooldown: same room, both
+    # alive, impostor actor, crewmate target.
+    assert state.players[impostor_id].room == state.players[crewmate_id].room
+    assert state.cooldowns[impostor_id] == game_map.kill_cooldown_ticks > 0
+
+    kill = KillAction.model_validate(
+        {"type": "kill", "actor": impostor_id, "payload": {"target": crewmate_id}}
+    )
+    next_state, events = advance_tick(state, [kill], game_map=game_map)
+
+    # The engine rejects the queued kill as an ``ActionRejectedEvent`` (it never
+    # raises out of ``advance_tick``); the reason is the exact cooldown literal.
+    rejections = [e for e in events if e.type == "ActionRejected"]
+    assert len(rejections) == 1
+    assert rejections[0].actor == impostor_id
+    assert rejections[0].reason == "kill is on cooldown"
+
+    # No kill resolved: no Killed event and no body spawned this tick.
+    assert not any(e.type == "Killed" for e in events)
+    assert next_state.bodies == {}

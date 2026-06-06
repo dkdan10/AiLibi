@@ -65,13 +65,16 @@ def test_load_replay_reconstructs_ticks_meetings_and_winner(
 
     replay = loader.load_replay("headless-seed-0")
 
-    # ticks[0] is the synthesized tick=-1 "Start" frame (Finding 1); the
-    # recorded ticks (0, 1, 2) follow it.
-    assert [tick.tick for tick in replay.ticks] == [-1, 0, 1, 2]
+    # ticks[0] is the synthesized tick=-1 "Start" frame (Finding 1); the recorded
+    # ticks (0 .. total_ticks-1) follow it. The round-start cooldown (DESIGN.md
+    # §3.4) delays the opening kill, so the fixture is longer than the pre-gp-1
+    # 3-tick game — assert against the values the fixture reports rather than
+    # magic numbers.
+    assert [tick.tick for tick in replay.ticks] == [-1, *range(expected.total_ticks)]
     assert len(replay.meetings) == 1
     meeting = replay.meetings[0]
     assert meeting.meeting_id == expected.meeting_id
-    assert meeting.tick == 1
+    assert meeting.tick == expected.meeting_tick
     assert meeting.trigger_kind == "body"
     assert meeting.outcome == "SKIPPED"
     assert meeting.total_cost_usd == pytest.approx(expected.total_cost_usd)
@@ -84,7 +87,7 @@ def test_load_replay_reconstructs_ticks_meetings_and_winner(
     assert replay.metadata.winner == "CREWMATES"
     # total_ticks counts only recorded ReplayEntrys; the synthesized initial
     # entry is extra, so ticks has exactly one more element than total_ticks.
-    assert replay.metadata.total_ticks == 3
+    assert replay.metadata.total_ticks == expected.total_ticks
     assert len(replay.ticks) == replay.metadata.total_ticks + 1
     assert replay.metadata.meeting_count == 1
     assert {player.agent_id for player in replay.players} == {
@@ -124,21 +127,22 @@ def test_initial_state_tick_is_synthesized_at_spawn(
 
 
 def test_tick_event_projection(tmp_path: Path, loader: ReplayLoader) -> None:
-    write_meeting_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
+    expected = write_meeting_replay(tmp_path / "replay-seed-0.jsonl", seed=0)
     replay = loader.load_replay("headless-seed-0")
 
-    # Select by tick number, not array index: ticks[0] is the synthesized
-    # tick=-1 "Start" frame, so the recorded ticks are offset by one.
-    tick0 = next(t for t in replay.ticks if t.tick == 0)
-    tick1 = next(t for t in replay.ticks if t.tick == 1)
+    # The round-start cooldown (DESIGN.md §3.4) delays the opening kill: it lands
+    # on the tick before the report/meeting. Select by tick number, not array
+    # index (ticks[0] is the synthesized tick=-1 "Start" frame).
+    kill_tick = next(t for t in replay.ticks if t.tick == expected.meeting_tick - 1)
+    meeting_tick = next(t for t in replay.ticks if t.tick == expected.meeting_tick)
 
-    kill_events = [e for e in tick0.events if isinstance(e, KillEventView)]
+    kill_events = [e for e in kill_tick.events if isinstance(e, KillEventView)]
     assert len(kill_events) == 1
-    assert kill_events[0].victim_id == "p-1"
+    assert kill_events[0].victim_id == expected.victim
 
-    tick1_types = {type(e) for e in tick1.events}
-    assert MeetingTriggeredEventView in tick1_types
-    assert ReportBodyEventView in tick1_types
+    meeting_tick_types = {type(e) for e in meeting_tick.events}
+    assert MeetingTriggeredEventView in meeting_tick_types
+    assert ReportBodyEventView in meeting_tick_types
 
 
 def test_dead_player_and_impostor_tick_state(
@@ -212,13 +216,17 @@ def test_unresolved_meeting_is_not_exposed_via_memory(tmp_path: Path) -> None:
     replay = loader.load_replay("headless-seed-0")
     assert replay.meetings == ()
     assert replay.metadata.winner is None
-    # Synthesized "Start" (tick=-1) precedes the two recorded ticks.
-    assert [tick.tick for tick in replay.ticks] == [-1, 0, 1]
-    # The tick timeline still surfaces the meeting_triggered event (tick 1)...
-    tick1 = next(t for t in replay.ticks if t.tick == 1)
+    # The round-start cooldown (DESIGN.md §3.4) delays the opening kill, so the
+    # meeting opens at ``kill_cooldown_ticks + 1`` (the fixture no-ops out the
+    # cooldown, kills, then reports). Synthesized "Start" (tick=-1) precedes the
+    # recorded ticks.
+    meeting_tick = load_canonical_map().kill_cooldown_ticks + 1
+    assert [tick.tick for tick in replay.ticks] == [-1, *range(meeting_tick + 1)]
+    # The tick timeline still surfaces the meeting_triggered event...
+    tick_meeting = next(t for t in replay.ticks if t.tick == meeting_tick)
     assert any(
         isinstance(event, MeetingTriggeredEventView) and event.meeting_id == meeting_id
-        for event in tick1.events
+        for event in tick_meeting.events
     )
     # ...but memory for the unresolved meeting is not exposed.
     with pytest.raises(KeyError):
@@ -252,7 +260,7 @@ def test_get_meeting_memory_fields(tmp_path: Path) -> None:
     memory = loader.get_meeting_memory("headless-seed-0", expected.meeting_id, reporter)
 
     assert memory.agent_id == reporter
-    assert memory.tick == 1
+    assert memory.tick == expected.meeting_tick
     assert memory.role == "CREWMATE"
     assert memory.tasks_assigned == 1
     assert memory.rendered_memory_text.startswith("## Your role: CREWMATE")
@@ -620,24 +628,33 @@ def test_multi_impostor_replay_reconstructs_with_matching_roster(
     assert sum(1 for p in replay.players if p.role == "IMPOSTOR") == 2
 
 
-def test_multi_impostor_memory_walk_holds_firewall(
-    tmp_path: Path, multi_impostor_replay_bytes: bytes
-) -> None:
-    # The first multi-impostor reconstruction also drives the collect_memory walk:
+# A hermetic 7p/2i seed that still resolves a meeting under the round-start
+# cooldown (DESIGN.md §3.4). Seed 0 (used by ``multi_impostor_replay_bytes``
+# above, which only needs roster reconstruction) now ends as a crew task-win with
+# no meeting once the opening kill is cooldown-delayed, so the memory-walk test
+# uses its own meeting-bearing seed instead of the shared fixture.
+_MI_MEETING_SEED = 1
+
+
+def test_multi_impostor_memory_walk_holds_firewall(tmp_path: Path) -> None:
+    # The multi-impostor reconstruction also drives the collect_memory walk:
     # get_meeting_memory rebuilds every per-tick packet through ObservationService,
     # which is where 7.2's impostor-only fellow_impostor_ids is populated. Confirm
     # that rebuild path is reachable on multi-impostor data and an impostor's
     # memory resolves (the crew-empty invariant itself is guarded by 7.2's leak
     # property sweep over the same service).
-    (tmp_path / "replay-seed-0.jsonl").write_bytes(multi_impostor_replay_bytes)
+    game_id = f"headless-seed-{_MI_MEETING_SEED}"
+    _run_multi_impostor_game(
+        tmp_path / f"replay-seed-{_MI_MEETING_SEED}.jsonl", seed=_MI_MEETING_SEED
+    )
     _write_roster(tmp_path, num_players=7, num_impostors=2, tasks_per_crewmate=2)
     loader = ReplayLoader(replay_dir=tmp_path)
 
-    replay = loader.load_replay("headless-seed-0")
-    assert replay.meetings  # the hermetic 7p/2i seed-0 game resolves a meeting
+    replay = loader.load_replay(game_id)
+    assert replay.meetings  # the hermetic 7p/2i game resolves a meeting
     meeting_id = replay.meetings[0].meeting_id
     impostor = next(p.agent_id for p in replay.players if p.role == "IMPOSTOR")
-    memory = loader.get_meeting_memory("headless-seed-0", meeting_id, impostor)
+    memory = loader.get_meeting_memory(game_id, meeting_id, impostor)
     assert memory.agent_id == impostor
     assert memory.role == "IMPOSTOR"
 
@@ -810,6 +827,15 @@ def _committed_9p2i_seeds() -> list[int]:
     )
 
 
+@pytest.mark.skip(
+    reason=(
+        "Task 8.14 round-start kill cooldown (DESIGN.md §3.4; audit gp-1) seeds "
+        "every impostor's cooldown to game_map.kill_cooldown_ticks instead of 0, "
+        "changing every committed game's initial WorldState and so its per-tick "
+        "state_hash; the committed 9p/2i bytes no longer reconstruct. Re-recorded "
+        "and re-enabled in Task 8.18 (wave re-record)."
+    )
+)
 def test_committed_9p2i_set_reconstructs_byte_identically() -> None:
     # Every committed 9p/2i replay reconstructs byte-identically under the current
     # engine: load_replay re-seeds from the committed roster.json (9p/2i + 2

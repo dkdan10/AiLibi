@@ -76,9 +76,10 @@ def test_get_replay_returns_full_view(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["metadata"]["game_id"] == "headless-seed-1"
-    # 3 recorded ticks + 1 synthesized tick=-1 "Start" frame (Finding 1).
-    assert len(body["ticks"]) == 4
-    assert body["metadata"]["total_ticks"] == 3
+    # The round-start cooldown (DESIGN.md §3.4) delays the opening kill, so the
+    # meeting fixture records 7 ticks; +1 synthesized tick=-1 "Start" frame.
+    assert len(body["ticks"]) == 8
+    assert body["metadata"]["total_ticks"] == 7
     assert len(body["meetings"]) == 1
 
 
@@ -110,10 +111,12 @@ def test_get_replay_state_mismatch_returns_500(tmp_path: Path) -> None:
 
 
 def test_get_tick_returns_tick_view(client: TestClient) -> None:
-    response = client.get("/replays/headless-seed-1/ticks/1")
+    # The meeting opens at tick 5 (kill_cooldown_ticks=4 delays the opening kill;
+    # DESIGN.md §3.4), so that tick carries the meeting_triggered event.
+    response = client.get("/replays/headless-seed-1/ticks/5")
     assert response.status_code == 200
     body = response.json()
-    assert body["tick"] == 1
+    assert body["tick"] == 5
     assert any(event["type"] == "meeting_triggered" for event in body["events"])
 
 
@@ -131,7 +134,7 @@ def test_get_tick_initial_state_returns_spawn(client: TestClient) -> None:
 
 
 def test_get_tick_out_of_range_returns_404(client: TestClient) -> None:
-    # Above the recorded range (total_ticks == 3) and below the -1 sentinel
+    # Above the recorded range (total_ticks == 7) and below the -1 sentinel
     # both 404; only -1 and 0..total_ticks-1 resolve.
     assert client.get("/replays/headless-seed-1/ticks/99").status_code == 404
     assert client.get("/replays/headless-seed-1/ticks/-2").status_code == 404
@@ -168,7 +171,8 @@ def test_get_meeting_memory_returns_view(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["agent_id"] == "p-2"
-    assert body["tick"] == 1
+    # meeting opens at tick 5 (round-start cooldown delays the opening kill; §3.4)
+    assert body["tick"] == 5
     assert body["rendered_memory_text"].startswith("## Your role:")
 
 
