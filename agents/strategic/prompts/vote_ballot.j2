@@ -6,19 +6,20 @@
    that Pydantic schema; this template only produces the user-facing
    prompt body.
 
-   Prompt version: vote_ballot/v3
+   Prompt version: vote_ballot/v4
    Bump the version line below (and this header) whenever the prompt
    text changes in a way that could shift LLM behaviour, so eval runs
    and replay logs can attribute results to a known prompt revision.
 
    Task 8.8 reshaped the transcript rendering from the old parallel
    `reports` + fixed-round `statements` to the single ordered `turns`
-   list (DESIGN.md §5.2), and the visible body marker is bumped to
-   vote_ballot/v3 in lockstep with the other three meeting templates
-   and orchestrator.game.DEFAULT_PROMPT_VERSIONS. (The old v1/v2 split
-   -- body at v1 to preserve byte-identity with the frozen committed
-   sets -- is retired: the §5.2 reshape re-records both sets in Task
-   8.12, so there is no byte-identity left to preserve.) The gated
+   list (DESIGN.md §5.2). Task 8.16 (DESIGN.md §5.5; audit gp-3) bumps
+   the body marker to vote_ballot/v4 in lockstep with
+   orchestrator.game.DEFAULT_PROMPT_VERSIONS: the `primary_reason_id`
+   decision-rule example now cites a REAL turn id drawn from the
+   rendered transcript (the first turn's `turn_id`) instead of a
+   hardcoded `m-7:turn-4` that the 7B model copied verbatim into other
+   meetings' ballots, so the example can never dangle. The gated
    teammate-coordination block (Task 7.12) is preserved.
 
    Required render kwargs:
@@ -54,7 +55,7 @@
 #}
 You are agent `{{ voter_id }}` casting a vote at an AiLibi meeting.
 
-Prompt: vote_ballot/v3 (DESIGN.md §5.5)
+Prompt: vote_ballot/v4 (DESIGN.md §5.5)
 
 Read your rendered memory, the meeting transcript so far, the
 contradiction flags, and your current suspicion graph, then return a
@@ -110,10 +111,12 @@ set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
    pick the player whose evidence is strongest given the rendered
    memory, the transcript, and the contradiction flags. The suspicion
    graph is a prior — fresh transcript evidence may override it.
-3. **`primary_reason_id`** references the `MeetingTurn` id (e.g.
-   `"m-7:turn-4"`) that most drove your decision. Set it to `null` if
-   the decision rests on your own observations, the rendered memory, or
-   a contradiction flag rather than on something another agent said.
+3. **`primary_reason_id`** references the `MeetingTurn` id{% if transcript.turns %} (e.g.
+   `"{{ transcript.turns[0].turn_id }}"` — one of the turn ids listed in the
+   transcript above){% endif %} that most drove your decision. It MUST be a turn id
+   copied exactly from the transcript above. Set it to `null` if the decision
+   rests on your own observations, the rendered memory, or a contradiction flag
+   rather than on something another agent said.
 4. **`considered_alternatives`** lists any other player you seriously
    weighed (empty if there were none). It is for post-hoc analysis and
    does not affect the tally.

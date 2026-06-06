@@ -40,6 +40,7 @@ from llm.fake_provider import FakeProvider
 from meetings.manager import (
     DEFAULT_TURN_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
+    INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     LLMProviderError,
@@ -261,12 +262,18 @@ def _turn_json(
     ).model_dump_json()
 
 
-def _vote_json(*, voter: str, target: str, confidence: float = 0.8) -> str:
+def _vote_json(
+    *,
+    voter: str,
+    target: str,
+    confidence: float = 0.8,
+    primary_reason_id: str | None = None,
+) -> str:
     return VoteBallot(
         voter=voter,
         target=target,
         confidence=confidence,
-        primary_reason_id=None,
+        primary_reason_id=primary_reason_id,
         considered_alternatives=(),
         rationale_text=f"stub-vote-{voter}-{target}",
     ).model_dump_json()
@@ -288,19 +295,23 @@ def _make_responder(
     observations: dict[str, tuple[ObservationClaim, ...]] | None = None,
     claims_by: dict[str, tuple[Claim, ...]] | None = None,
     vote_targets: dict[str, str] | None = None,
+    vote_reason_ids: dict[str, str] | None = None,
 ) -> Callable[[str, type[BaseModel] | None], str]:
     """Build a responder that dispatches by phase markers in the prompt.
 
     Turns (opening + reactive/opt-in) are driven by the per-speaker
     ``accusations`` (the chain target), optional ``observations`` (drive
     the opt-in co-presence gate), and optional ``claims_by`` (e.g. alibis
-    for contradiction tests). Votes default to "SKIP" unless overridden.
+    for contradiction tests). Votes default to "SKIP" unless overridden;
+    ``vote_reason_ids`` drives the per-voter ``primary_reason_id`` (used by
+    the reason-id-integrity tests, DESIGN.md §5.5).
     """
 
     accusations = accusations or {}
     observations = observations or {}
     claims_by = claims_by or {}
     vote_targets = vote_targets or {}
+    vote_reason_ids = vote_reason_ids or {}
 
     def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
         if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
@@ -313,7 +324,11 @@ def _make_responder(
             )
         if "PHASE=VOTE" in prompt:
             voter = _extract_marker(prompt, "voter=")
-            return _vote_json(voter=voter, target=vote_targets.get(voter, "SKIP"))
+            return _vote_json(
+                voter=voter,
+                target=vote_targets.get(voter, "SKIP"),
+                primary_reason_id=vote_reason_ids.get(voter),
+            )
         raise AssertionError(f"unrecognised prompt: {prompt!r}")
 
     return _responder
@@ -1051,11 +1066,14 @@ class TestTeammateGuardHelpers:
         )
 
     def test_coerce_teammate_ballot_to_skip(self) -> None:
+        # The coerced ballot is also stripped of its now-stale reason id
+        # (DESIGN.md §5.5; audit gp-3): once the vote collapses to SKIP the
+        # reason id that justified the betrayal target is meaningless.
         ballot = VoteBallot(
             voter="p-4",
             target="p-5",
             confidence=0.9,
-            primary_reason_id=None,
+            primary_reason_id="m-1:turn-0",
             rationale_text="betrayal",
         )
         coerced = coerce_teammate_ballot_to_skip(
@@ -1063,6 +1081,7 @@ class TestTeammateGuardHelpers:
         )
 
         assert coerced.target == "SKIP"
+        assert coerced.primary_reason_id is None
         assert coerced.rationale_text.startswith(
             TEAMMATE_VOTE_TARGET_MARKER.format(target="p-5")
         )
@@ -1425,6 +1444,89 @@ class TestInvalidBallotTargetNormalised:
 
         p1 = next(b for b in result.ballots if b.voter == "p-1")
         assert p1.target == "p-3"
+
+
+# --- primary_reason_id integrity (DESIGN.md §5.5; audit gp-3) ----------------
+
+
+class TestBallotReasonIdIntegrity:
+    """``_collect_one_ballot`` validates ``primary_reason_id`` against the
+    transcript's turn-id set: a canonical id passes, a recoverable
+    ``:turn-{k}`` suffix form normalizes to the canonical id, and an
+    unresolvable id is nulled with :data:`INVALID_REASON_ID_MARKER`.
+
+    The default meeting (no opening accusation) records exactly one turn,
+    the opening at ``m-1:turn-0``, so that is the only valid reason id.
+    """
+
+    def test_canonical_reason_id_passes_through(self) -> None:
+        result, _ = _run_meeting(_make_responder(vote_reason_ids={"p-2": "m-1:turn-0"}))
+
+        p2 = next(b for b in result.ballots if b.voter == "p-2")
+        assert p2.primary_reason_id == "m-1:turn-0"
+        assert not p2.rationale_text.startswith("[invalid primary_reason_id")
+
+    def test_suffix_form_normalizes_to_canonical(self) -> None:
+        # A wrong meeting prefix with a real ``:turn-0`` ordinal (the 7B
+        # model echoing a short / wrong-prefix id) re-anchors to the
+        # canonical turn id rather than being nulled.
+        result, _ = _run_meeting(
+            _make_responder(vote_reason_ids={"p-2": "meeting-1:turn-0"})
+        )
+
+        p2 = next(b for b in result.ballots if b.voter == "p-2")
+        assert p2.primary_reason_id == "m-1:turn-0"
+        assert not p2.rationale_text.startswith("[invalid primary_reason_id")
+
+    def test_dangling_reason_id_is_nulled_with_marker(self) -> None:
+        # A hallucinated ordinal (no turn-14 in a one-turn meeting) is
+        # nulled, never guessed, with the audit marker prefixed.
+        result, _ = _run_meeting(
+            _make_responder(vote_reason_ids={"p-2": "m-3:turn-14"})
+        )
+
+        p2 = next(b for b in result.ballots if b.voter == "p-2")
+        assert p2.primary_reason_id is None
+        assert p2.rationale_text.startswith(
+            INVALID_REASON_ID_MARKER.format(reason_id="m-3:turn-14")
+        )
+
+    def test_hardcoded_prompt_example_is_nulled(self) -> None:
+        # The old hardcoded example `m-7:turn-4` (copied verbatim by the
+        # model across meetings) has no matching ordinal here and is nulled.
+        result, _ = _run_meeting(_make_responder(vote_reason_ids={"p-2": "m-7:turn-4"}))
+
+        p2 = next(b for b in result.ballots if b.voter == "p-2")
+        assert p2.primary_reason_id is None
+        assert p2.rationale_text.startswith(
+            INVALID_REASON_ID_MARKER.format(reason_id="m-7:turn-4")
+        )
+
+    def test_coercion_nulls_stale_reason_id_on_production_path(self) -> None:
+        # An impostor voting a teammate WITH a reason id: the 7.12 coercion
+        # collapses the ballot to SKIP and nulls the now-stale reason id end
+        # to end (DESIGN.md §5.5; audit gp-3 seed-3 repro).
+        participants = (
+            _participant("p-1"),
+            _participant("p-2"),
+            _participant("p-3"),
+            _participant("p-4", role="IMPOSTOR", fellow_impostor_ids=("p-5",)),
+            _participant("p-5", role="IMPOSTOR", fellow_impostor_ids=("p-4",)),
+        )
+        result, _ = _run_meeting(
+            _make_responder(
+                vote_targets={"p-4": "p-5"},
+                vote_reason_ids={"p-4": "m-1:turn-0"},
+            ),
+            participants=participants,
+        )
+
+        p4 = next(b for b in result.ballots if b.voter == "p-4")
+        assert p4.target == "SKIP"
+        assert p4.primary_reason_id is None
+        assert p4.rationale_text.startswith(
+            TEAMMATE_VOTE_TARGET_MARKER.format(target="p-5")
+        )
 
 
 # --- Confidence threshold enforcement --------------------------------------
