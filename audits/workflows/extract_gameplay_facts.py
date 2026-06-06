@@ -51,7 +51,7 @@ from engine.events import (
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from meetings.manager import _opt_in_eligible_ids
-from meetings.schemas import AccusationClaim, MeetingResult, MeetingTranscript
+from meetings.schemas import AccusationClaim, MeetingResult, MeetingTranscript, TurnKind
 from meetings.transcript import is_canonically_ordered, next_chain_step
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
@@ -670,6 +670,7 @@ def _analyze_meeting(
         )
 
     kind_counts = Counter(t.turn_kind for t in turns)
+    turn_kinds: tuple[TurnKind, ...] = ("opening", "reply", "opt_in")
     return {
         "meeting_id": mid,
         "meeting_index": meeting_index,
@@ -682,9 +683,7 @@ def _analyze_meeting(
         "ejected_role": ejected_role,
         "living_player_count": len(living_ids),
         "n_turns": len(turns),
-        "turn_kind_counts": {
-            k: kind_counts.get(k, 0) for k in ("opening", "reply", "opt_in")
-        },
+        "turn_kind_counts": {k: kind_counts.get(k, 0) for k in turn_kinds},
         "chain_length": chain_len,
         "termination_condition": termination,
         "is_canonically_ordered": canonical,
