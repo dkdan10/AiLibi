@@ -810,14 +810,6 @@ def _committed_9p2i_seeds() -> list[int]:
     )
 
 
-@pytest.mark.skip(
-    reason=(
-        "Task 8.1 per-player task re-key (DESIGN.md §3.2) changes "
-        "_serialize_world_state, so every committed game's per-tick state_hash "
-        "changes and the committed 9p/2i bytes no longer reconstruct. Re-recorded "
-        "and re-enabled in Task 8.12 (combined re-record)."
-    )
-)
 def test_committed_9p2i_set_reconstructs_byte_identically() -> None:
     # Every committed 9p/2i replay reconstructs byte-identically under the current
     # engine: load_replay re-seeds from the committed roster.json (9p/2i + 2

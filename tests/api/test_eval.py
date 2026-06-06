@@ -172,27 +172,16 @@ def test_tournament_report_absent_returns_404(tmp_path: Path) -> None:
 
 _COMMITTED_SAMPLES_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples"
 
-# The committed flat 4p/1i report + replays were invalidated by the Phase-8
-# byte-breakers (Task 8.1 state_hash re-key + Task 8.7 meeting reshape) and
-# the Task 8.11 report-format bump to v2, so the two committed-report readers
-# below are skipped until Task 8.12 re-records the set and regenerates its
-# report (mirrors the 8.1/8.7 skips in tests/scripts/test_verify_samples.py).
-_COMMITTED_RECORD_SKIP = pytest.mark.skip(
-    reason=(
-        "Committed sample bytes/report invalidated by the Task 8.1 state_hash "
-        "change (DESIGN.md §3.2), the Task 8.7 meeting-record reshape (§5.2), "
-        "and the Task 8.11 report v2 bump; re-recorded/regenerated and "
-        "re-enabled in Task 8.12."
-    )
-)
 
-
-@_COMMITTED_RECORD_SKIP
 def test_committed_4p1i_report_validates_against_current_model() -> None:
     report = ReplayLoader(replay_dir=_COMMITTED_SAMPLES_DIR).tournament_report()
     assert isinstance(report, TournamentEvalReport)
     # The regenerated committed report carries every Task 7.11 field.
-    assert report.vote_correctness.ejection_accuracy is not None
+    # ejection_accuracy is None iff the set has no ejections (the field's own
+    # validator); the Task 8.12 chain-protocol re-record resolves every flat
+    # 4p/1i meeting SKIPPED, so the committed ground truth is None here.
+    assert report.vote_correctness.ejection_accuracy is None
+    assert report.vote_correctness.impostor_ejections == 0
     assert isinstance(report.vote_correctness.vote_correctness_small_n, bool)
     assert report.vote_correctness.contradictions_flagged_but_ignored >= 0
     assert isinstance(report.accusation_calibration.vote_ballot_low_power, bool)
@@ -202,7 +191,6 @@ def test_committed_4p1i_report_validates_against_current_model() -> None:
     )
 
 
-@_COMMITTED_RECORD_SKIP
 def test_committed_4p1i_report_serves_via_route() -> None:
     with _client(_COMMITTED_SAMPLES_DIR) as client:
         response = client.get("/eval/tournament-report")
