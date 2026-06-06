@@ -14,6 +14,17 @@ action in the recorded stream becomes a rejection — and the rejection's reason
 the code-certain classifier. We additionally re-derive each Killed event's
 victim role from the re-seeded roster to catch impostor-on-impostor kills.
 
+v2 (Phase-8 / 9p2i set): meetings are the turns-based accusation chain
+(DESIGN.md §5.2; Task 8.7 ``MeetingTranscript.turns``). For every meeting this
+script re-walks the recorded chain against the deterministic 3-condition
+termination rule (``meetings.transcript.next_chain_step``), re-derives the
+opt-in eligibility gate (``meetings.manager._opt_in_eligible_ids``), and
+emits per-meeting chain facts (turn-kind counts, chain length, termination
+condition, accusations with re-seeded roles, opt-in substance, ballots with
+``primary_reason_id`` linkage) plus chain-protocol mechanical checks
+(termination / turn-id-order / reply_to / opt-in containment / 7.12 firewall /
+dangling primary_reason_id / dead speakers-voters).
+
 Usage:
     PYTHONPATH=<repo root> uv run python audits/workflows/extract_gameplay_facts.py
 """
@@ -24,6 +35,8 @@ import json
 import os
 import subprocess
 import sys
+from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +50,9 @@ from engine.events import (
 )
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
+from meetings.manager import _opt_in_eligible_ids
+from meetings.schemas import AccusationClaim, MeetingResult, MeetingTranscript
+from meetings.transcript import is_canonically_ordered, next_chain_step
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
     FailedCallReplayEntry,
@@ -49,8 +65,8 @@ from orchestrator.replay import (
 from orchestrator.seeder import seed_initial_state
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SAMPLE_DIR = REPO_ROOT / "replays" / "samples" / "7p2i"
-SEEDSET = "7p2i"
+SAMPLE_DIR = REPO_ROOT / "replays" / "samples" / "9p2i"
+SEEDSET = "9p2i"
 
 # Action adapter for deserializing recorded raw actions.
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
@@ -100,6 +116,592 @@ def _classify_rejection(reason: str) -> str | None:
     return None
 
 
+def _analyze_meeting(
+    *,
+    seed: int,
+    meeting_index: int,
+    meeting_entry: MeetingReplayEntry,
+    trigger_kind: str | None,
+    roles: Mapping[str, str],
+    living_ids: frozenset[str],
+    findings: list[dict[str, Any]],
+    invariant_failures: list[str],
+) -> dict[str, Any]:
+    """Per-meeting chain facts + chain-protocol mechanical checks (v2).
+
+    Re-walks the recorded ``transcript.turns`` against the deterministic
+    DESIGN.md §5.2 PHASE-2 rule (via ``meetings.transcript.next_chain_step``)
+    to re-derive the termination condition, re-derives the PHASE-3 opt-in
+    eligibility gate, and emits one mechanical finding per code-certain
+    protocol violation. ``living_ids`` is the alive-player set of the
+    reconstructed state at the meeting tick (== the participant roster the
+    manager ran with: ``orchestrator.game._build_participants`` builds one
+    participant per living player).
+    """
+
+    mid = meeting_entry.meeting_id
+    where = f"seed {seed} meeting {meeting_index} ({mid})"
+    turns = meeting_entry.transcript.turns
+    turn_id_set = {t.turn_id for t in turns}
+    turn_by_id = {t.turn_id: t for t in turns}
+
+    # ---- ADDED invariant: non-empty transcript, exactly one opening at 0 ----
+    opening_positions = [i for i, t in enumerate(turns) if t.turn_kind == "opening"]
+    if not turns:
+        invariant_failures.append(f"{where}: transcript.turns is empty")
+    elif opening_positions != [0]:
+        invariant_failures.append(
+            f"{where}: opening turns at positions {opening_positions}, "
+            "expected exactly one opening at position 0"
+        )
+
+    # ---- TURN-ID / ORDER mechanical checks ----
+    canonical = bool(is_canonically_ordered(turns))
+    for i, t in enumerate(turns):
+        problems: list[str] = []
+        if t.turn_index != i:
+            problems.append(f"turn_index {t.turn_index} at tuple position {i}")
+        expected_id = f"{mid}:turn-{t.turn_index}"
+        if t.turn_id != expected_id:
+            problems.append(f"turn_id {t.turn_id!r} != expected {expected_id!r}")
+        if i == 0 and t.turn_kind != "opening":
+            problems.append(f"turn 0 has turn_kind {t.turn_kind!r}, not 'opening'")
+        if i > 0 and t.turn_kind == "opening":
+            problems.append(f"extra 'opening' turn at position {i}")
+        if problems:
+            findings.append(
+                {
+                    "id": f"TURNORD-{seed}-{meeting_index}-{i}",
+                    "severity": "high",
+                    "title": "Turn-id/order violation in meeting transcript",
+                    "claim": (
+                        "A recorded turn breaks the contiguous turn_index / "
+                        "'{meeting_id}:turn-{index}' turn_id / opening-at-0 "
+                        "contract: " + "; ".join(problems) + "."
+                    ),
+                    "evidence": (
+                        f"{where} turn {i}: speaker {t.speaker} "
+                        f"({roles.get(t.speaker, 'UNKNOWN')}); " + "; ".join(problems)
+                    ),
+                    "repair_hint": (
+                        "meetings/manager.py assigns turn_index=len(turns) and "
+                        "turn_id='{meeting_id}:turn-{N}' at the single "
+                        "_collect_turn chokepoint; trace how this record "
+                        "bypassed it (or how the replay row was mutated)."
+                    ),
+                }
+            )
+
+    # ---- REPLY_TO integrity mechanical checks ----
+    for i, t in enumerate(turns):
+        if t.turn_kind == "reply":
+            earlier_ids = {u.turn_id for u in turns[:i]}
+            if t.reply_to is None or t.reply_to not in earlier_ids:
+                findings.append(
+                    {
+                        "id": f"REPLYTO-{seed}-{meeting_index}-{i}",
+                        "severity": "high",
+                        "title": "Reply turn's reply_to is not an earlier turn",
+                        "claim": (
+                            "A reply turn must reference an EARLIER turn_id of "
+                            f"this meeting; got reply_to={t.reply_to!r}."
+                        ),
+                        "evidence": (
+                            f"{where} turn {i}: reply by {t.speaker} "
+                            f"({roles.get(t.speaker, 'UNKNOWN')}) has "
+                            f"reply_to={t.reply_to!r}; earlier turn ids: "
+                            f"{sorted(earlier_ids)}"
+                        ),
+                        "repair_hint": (
+                            "The manager sets reply_to=prev.turn_id when "
+                            "passing the chain; a dangling/forward reference "
+                            "means the transcript was assembled out of band."
+                        ),
+                    }
+                )
+        elif t.reply_to is not None:
+            findings.append(
+                {
+                    "id": f"REPLYTO-{seed}-{meeting_index}-{i}",
+                    "severity": "high",
+                    "title": f"Non-reply turn carries a reply_to ({t.turn_kind})",
+                    "claim": (
+                        "opening and opt_in turns must have reply_to=None "
+                        f"(got {t.reply_to!r})."
+                    ),
+                    "evidence": (
+                        f"{where} turn {i}: turn_kind={t.turn_kind!r} by "
+                        f"{t.speaker} ({roles.get(t.speaker, 'UNKNOWN')}) has "
+                        f"reply_to={t.reply_to!r}"
+                    ),
+                    "repair_hint": (
+                        "meetings/manager.py passes reply_to=None for opening "
+                        "and opt_in turns; check the turn-construction path."
+                    ),
+                }
+            )
+
+    # ---- TERMINATION re-walk (DESIGN.md §5.2 PHASE 2, deterministic) ----
+    chain_len = 0
+    termination: str | None = None
+    walk_idx = len(turns)
+    if turns:
+        chain = [turns[0]]
+        spoken: set[str] = {turns[0].speaker}
+        prev = turns[0]
+        idx = 1
+        while True:
+            step = next_chain_step(
+                prev_turn=prev,
+                spoken=frozenset(spoken),
+                living_ids=living_ids,
+                turns_recorded=len(chain),
+            )
+            if step.next_speaker is None:
+                termination = step.termination
+                break
+            if idx >= len(turns) or turns[idx].turn_kind != "reply":
+                recorded = (
+                    f"turn_kind={turns[idx].turn_kind!r} by {turns[idx].speaker}"
+                    if idx < len(turns)
+                    else "absent (transcript ends)"
+                )
+                findings.append(
+                    {
+                        "id": f"TERM-{seed}-{meeting_index}-{idx}",
+                        "severity": "high",
+                        "title": (
+                            "Chain stopped while no termination condition had fired"
+                        ),
+                        "claim": (
+                            "The §5.2 three-condition rule predicts a reply by "
+                            f"{step.next_speaker!r} at turn {idx}, but the "
+                            "recorded chain stops there with no condition "
+                            "(a)/(b)/(c) fired."
+                        ),
+                        "evidence": (
+                            f"{where} turn {idx}: predicted next speaker "
+                            f"{step.next_speaker} "
+                            f"({roles.get(step.next_speaker, 'UNKNOWN')}); "
+                            f"recorded turn is {recorded}"
+                        ),
+                        "repair_hint": (
+                            "meetings/manager.py PHASE-2 loop and "
+                            "meetings/transcript.py::next_chain_step must agree; "
+                            "a chain that stops early without a recorded reason "
+                            "means the manager broke out of the loop on a "
+                            "non-rule condition (e.g. the 7.12 guarded_next "
+                            "no-op firing for real)."
+                        ),
+                    }
+                )
+                break
+            t = turns[idx]
+            if t.speaker != step.next_speaker:
+                findings.append(
+                    {
+                        "id": f"TERM-{seed}-{meeting_index}-{idx}-speaker",
+                        "severity": "high",
+                        "title": (
+                            "Reply speaker diverges from the deterministic chain"
+                        ),
+                        "claim": (
+                            "The accusation chain passes the floor to the "
+                            f"accused ({step.next_speaker!r}), but the recorded "
+                            f"reply is by {t.speaker!r}."
+                        ),
+                        "evidence": (
+                            f"{where} turn {idx}: recorded speaker {t.speaker} "
+                            f"({roles.get(t.speaker, 'UNKNOWN')}), predicted "
+                            f"{step.next_speaker} "
+                            f"({roles.get(step.next_speaker, 'UNKNOWN')})"
+                        ),
+                        "repair_hint": (
+                            "next-speaker is a pure function of the prior "
+                            "turn's first AccusationClaim; divergence means a "
+                            "non-deterministic / corrupted record."
+                        ),
+                    }
+                )
+            if t.reply_to != prev.turn_id:
+                findings.append(
+                    {
+                        "id": f"TERM-{seed}-{meeting_index}-{idx}-link",
+                        "severity": "high",
+                        "title": (
+                            "Chain reply links to a turn other than the prior "
+                            "chain turn"
+                        ),
+                        "claim": (
+                            "Each chain reply must answer the immediately "
+                            f"prior chain turn ({prev.turn_id!r}); got "
+                            f"{t.reply_to!r}."
+                        ),
+                        "evidence": (
+                            f"{where} turn {idx}: reply by {t.speaker} "
+                            f"({roles.get(t.speaker, 'UNKNOWN')}) reply_to="
+                            f"{t.reply_to!r}, expected {prev.turn_id!r}"
+                        ),
+                        "repair_hint": (
+                            "meetings/transcript.py::walk_chain enforces "
+                            "reply_to == prev.turn_id; check the manager's "
+                            "reply_to wiring."
+                        ),
+                    }
+                )
+            chain.append(t)
+            spoken.add(t.speaker)
+            prev = t
+            idx += 1
+        chain_len = len(chain)
+        walk_idx = idx
+
+        # Turns after the walked chain: replies are violations (continued past
+        # termination, or after a terminal opt_in); opt_ins must be by
+        # first-time speakers.
+        seen_opt_in = False
+        earlier_speakers = {t.speaker for t in chain}
+        for j in range(walk_idx, len(turns)):
+            t = turns[j]
+            if t.turn_kind == "reply":
+                if seen_opt_in:
+                    findings.append(
+                        {
+                            "id": f"OPTIN-{seed}-{meeting_index}-{j}",
+                            "severity": "high",
+                            "title": "Reply turn after a terminal opt_in turn",
+                            "claim": (
+                                "opt_in turns are terminal and cannot extend "
+                                "the chain, but a reply was recorded after an "
+                                "opt_in."
+                            ),
+                            "evidence": (
+                                f"{where} turn {j}: reply by {t.speaker} "
+                                f"({roles.get(t.speaker, 'UNKNOWN')}) after the "
+                                "first opt_in turn"
+                            ),
+                            "repair_hint": (
+                                "PHASE 3 opt-ins never re-enter PHASE 2; check "
+                                "the manager's phase ordering."
+                            ),
+                        }
+                    )
+                elif termination is not None:
+                    findings.append(
+                        {
+                            "id": f"TERM-{seed}-{meeting_index}-{j}-past",
+                            "severity": "high",
+                            "title": ("Chain continued past its termination condition"),
+                            "claim": (
+                                f"Termination condition {termination!r} fired "
+                                f"after turn {walk_idx - 1}, but a reply was "
+                                f"recorded at turn {j}."
+                            ),
+                            "evidence": (
+                                f"{where} turn {j}: reply by {t.speaker} "
+                                f"({roles.get(t.speaker, 'UNKNOWN')}) after "
+                                f"termination {termination!r}"
+                            ),
+                            "repair_hint": (
+                                "The §5.2 rule is deterministic; a reply past "
+                                "the fired condition means the manager and "
+                                "next_chain_step disagree."
+                            ),
+                        }
+                    )
+            elif t.turn_kind == "opt_in":
+                seen_opt_in = True
+                if t.speaker in earlier_speakers:
+                    findings.append(
+                        {
+                            "id": f"OPTIN-{seed}-{meeting_index}-{j}-respoke",
+                            "severity": "high",
+                            "title": ("opt_in by a player who already took a turn"),
+                            "claim": (
+                                "Opt-in eligibility requires NOT having spoken "
+                                f"this meeting, but {t.speaker!r} already took "
+                                "a turn."
+                            ),
+                            "evidence": (
+                                f"{where} turn {j}: opt_in by {t.speaker} "
+                                f"({roles.get(t.speaker, 'UNKNOWN')}) who "
+                                "already spoke"
+                            ),
+                            "repair_hint": (
+                                "meetings/manager.py::_opt_in_eligible_ids "
+                                "filters spoken players; check the spoken-set "
+                                "bookkeeping."
+                            ),
+                        }
+                    )
+            earlier_speakers.add(t.speaker)
+
+    # ---- Opt-in eligibility re-derivation (deterministic PHASE-3 gate) ----
+    structural_chain_end = next(
+        (i for i, t in enumerate(turns) if t.turn_kind == "opt_in"), len(turns)
+    )
+    post_chain = MeetingTranscript(turns=tuple(turns[:structural_chain_end]))
+    derived_eligible = _opt_in_eligible_ids(
+        transcript=post_chain,
+        spoken=frozenset(t.speaker for t in turns[:structural_chain_end]),
+        living_ids=living_ids,
+    )
+    recorded_opt_in_speakers = tuple(
+        t.speaker for t in turns[structural_chain_end:] if t.turn_kind == "opt_in"
+    )
+    if recorded_opt_in_speakers != derived_eligible:
+        findings.append(
+            {
+                "id": f"OPTIN-{seed}-{meeting_index}-eligibility",
+                "severity": "high",
+                "title": (
+                    "Recorded opt_in speakers diverge from the deterministic "
+                    "eligibility gate"
+                ),
+                "claim": (
+                    "PHASE-3 eligibility is a pure function of the post-chain "
+                    "transcript (co-presence with body room / accused), and "
+                    "every eligible player takes exactly one terminal turn; "
+                    "the recorded opt_in speakers do not match."
+                ),
+                "evidence": (
+                    f"{where}: recorded opt_in speakers "
+                    f"{list(recorded_opt_in_speakers)} vs derived eligible "
+                    f"{list(derived_eligible)}"
+                ),
+                "repair_hint": (
+                    "Re-run meetings/manager.py::_opt_in_eligible_ids on the "
+                    "post-chain transcript; divergence means the recorded "
+                    "transcript was not produced by the committed gate."
+                ),
+            }
+        )
+
+    # ---- Accusations (all turn kinds), 7.12 firewall, dead speakers ----
+    accusations: list[dict[str, Any]] = []
+    for t in turns:
+        speaker_role = roles.get(t.speaker, "UNKNOWN")
+        if t.speaker not in living_ids:
+            findings.append(
+                {
+                    "id": f"DEADSPK-{seed}-{meeting_index}-{t.turn_index}",
+                    "severity": "blocking",
+                    "title": "Turn spoken by a player dead at the meeting tick",
+                    "claim": (
+                        "Meeting participants are the living players at the "
+                        "meeting tick; a dead player took a turn."
+                    ),
+                    "evidence": (
+                        f"{where} turn {t.turn_index}: speaker {t.speaker} "
+                        f"({speaker_role}) is not alive at tick "
+                        f"{meeting_entry.tick} "
+                        f"(turn_kind={t.turn_kind!r})"
+                    ),
+                    "repair_hint": (
+                        "orchestrator.game._build_participants gates on "
+                        "p.alive; a dead speaker means participants were built "
+                        "from a stale state."
+                    ),
+                }
+            )
+        for c in t.claims:
+            if not isinstance(c, AccusationClaim):
+                continue
+            accused_role = roles.get(c.against, "UNKNOWN")
+            accusations.append(
+                {
+                    "turn_index": t.turn_index,
+                    "speaker": t.speaker,
+                    "speaker_role": speaker_role,
+                    "accused": c.against,
+                    "accused_role": accused_role,
+                }
+            )
+            if (
+                speaker_role == "IMPOSTOR"
+                and accused_role == "IMPOSTOR"
+                and c.against != t.speaker
+            ):
+                findings.append(
+                    {
+                        "id": f"FIREWALL-{seed}-{meeting_index}-{t.turn_index}",
+                        "severity": "blocking",
+                        "title": (
+                            "Impostor accusation names a fellow impostor "
+                            "(7.12 firewall breach)"
+                        ),
+                        "claim": (
+                            "The Task-7.12 teammate guard must drop an "
+                            "impostor's accusation of a fellow impostor before "
+                            "the turn is recorded; one survived."
+                        ),
+                        "evidence": (
+                            f"{where} turn {t.turn_index} "
+                            f"({t.turn_kind}): {t.speaker} (IMPOSTOR) accused "
+                            f"{c.against} (IMPOSTOR)"
+                        ),
+                        "repair_hint": (
+                            "Check agents/strategic guard "
+                            "drop_teammate_statement_target wiring at the "
+                            "manager's per-turn claim chokepoint."
+                        ),
+                    }
+                )
+
+    opt_ins = [
+        {
+            "turn_index": t.turn_index,
+            "speaker": t.speaker,
+            "speaker_role": roles.get(t.speaker, "UNKNOWN"),
+            "substantive": bool(t.observations or t.claims),
+        }
+        for t in turns
+        if t.turn_kind == "opt_in"
+    ]
+
+    # ---- Ballots: roles, skip, follows-chain, dangling reason, firewall ----
+    ejected_id = meeting_entry.ejected_player_id
+    ejected_role = roles.get(ejected_id) if ejected_id is not None else None
+    ballots_out: list[dict[str, Any]] = []
+    skip_count = 0
+    for b in meeting_entry.ballots:
+        voter_role = roles.get(b.voter, "UNKNOWN")
+        is_skip = b.target == "SKIP"
+        target_role = None if is_skip else roles.get(b.target, "UNKNOWN")
+        follows_chain: bool | None = None
+        if is_skip:
+            skip_count += 1
+        else:
+            follows_chain = False
+            if b.primary_reason_id is not None and b.primary_reason_id in turn_by_id:
+                cited = turn_by_id[b.primary_reason_id]
+                follows_chain = any(
+                    isinstance(c, AccusationClaim) and c.against == b.target
+                    for c in cited.claims
+                )
+        if b.primary_reason_id is not None and b.primary_reason_id not in turn_id_set:
+            findings.append(
+                {
+                    "id": f"DANGLEREASON-{seed}-{meeting_index}-{b.voter}",
+                    "severity": "high",
+                    "title": (
+                        "Ballot primary_reason_id references a turn that does not exist"
+                    ),
+                    "claim": (
+                        "primary_reason_id must reference a MeetingTurn "
+                        "turn_id from this meeting's transcript; the recorded "
+                        "id is dangling."
+                    ),
+                    "evidence": (
+                        f"{where}: ballot by {b.voter} ({voter_role}) cites "
+                        f"{b.primary_reason_id!r}; transcript turn ids are "
+                        f"{sorted(turn_id_set)}"
+                    ),
+                    "repair_hint": (
+                        "The vote-ballot prompt enumerates turn ids; a "
+                        "hallucinated id should be normalised or rejected at "
+                        "parse time."
+                    ),
+                }
+            )
+        if b.voter not in living_ids:
+            invariant_failures.append(
+                f"{where}: ballot voter {b.voter} is not alive at the "
+                f"meeting tick {meeting_entry.tick}"
+            )
+            findings.append(
+                {
+                    "id": f"DEADVOTE-{seed}-{meeting_index}-{b.voter}",
+                    "severity": "blocking",
+                    "title": "Ballot cast by a player dead at the meeting tick",
+                    "claim": (
+                        "Only living participants vote; a dead player's ballot "
+                        "was recorded."
+                    ),
+                    "evidence": (
+                        f"{where}: voter {b.voter} ({voter_role}) is not alive "
+                        f"at tick {meeting_entry.tick}"
+                    ),
+                    "repair_hint": (
+                        "orchestrator.game._build_participants gates on "
+                        "p.alive; a dead voter means ballots were collected "
+                        "from a stale roster."
+                    ),
+                }
+            )
+        if (
+            voter_role == "IMPOSTOR"
+            and not is_skip
+            and roles.get(b.target) == "IMPOSTOR"
+            and b.target != b.voter
+        ):
+            findings.append(
+                {
+                    "id": f"FIREWALL-BALLOT-{seed}-{meeting_index}-{b.voter}",
+                    "severity": "blocking",
+                    "title": (
+                        "Impostor ballot targets a fellow impostor "
+                        "(7.12 firewall breach)"
+                    ),
+                    "claim": (
+                        "The teammate firewall must keep an impostor from "
+                        "voting out a fellow impostor; one ballot breached it."
+                    ),
+                    "evidence": (
+                        f"{where}: ballot by {b.voter} (IMPOSTOR) targets "
+                        f"{b.target} (IMPOSTOR)"
+                    ),
+                    "repair_hint": (
+                        "Check the vote-path teammate guard "
+                        "(drop_teammate_ballot_target / equivalent) on the "
+                        "ballot chokepoint."
+                    ),
+                }
+            )
+        ballots_out.append(
+            {
+                "voter": b.voter,
+                "voter_role": voter_role,
+                "target": b.target,
+                "target_role": target_role,
+                "primary_reason_id": b.primary_reason_id,
+                "follows_chain": follows_chain,
+            }
+        )
+
+    kind_counts = Counter(t.turn_kind for t in turns)
+    return {
+        "meeting_id": mid,
+        "meeting_index": meeting_index,
+        "tick": meeting_entry.tick,
+        "trigger_kind": trigger_kind,
+        "triggered_by": meeting_entry.triggered_by,
+        "triggered_by_role": roles.get(meeting_entry.triggered_by, "UNKNOWN"),
+        "outcome": meeting_entry.outcome,
+        "ejected_player_id": ejected_id,
+        "ejected_role": ejected_role,
+        "living_player_count": len(living_ids),
+        "n_turns": len(turns),
+        "turn_kind_counts": {
+            k: kind_counts.get(k, 0) for k in ("opening", "reply", "opt_in")
+        },
+        "chain_length": chain_len,
+        "termination_condition": termination,
+        "is_canonically_ordered": canonical,
+        "opening_has_accusation": (
+            any(isinstance(c, AccusationClaim) for c in turns[0].claims)
+            if turns
+            else False
+        ),
+        "accusations": accusations,
+        "opt_ins": opt_ins,
+        "opt_in_eligible_derived": list(derived_eligible),
+        "ballots": ballots_out,
+        "skip_count": skip_count,
+        "n_contradictions": len(meeting_entry.contradictions),
+    }
+
+
 def main() -> int:
     game_map = load_canonical_map()
     roster = json.loads((SAMPLE_DIR / "roster.json").read_text(encoding="utf-8"))
@@ -133,6 +735,25 @@ def main() -> int:
     agg_output_tokens = 0
     agg_cost = 0.0
     no_game_over = 0
+    # v2 chain/ballot aggregates.
+    trigger_kind_counts: dict[str, int] = {}
+    total_ballots = 0
+    total_skip_ballots = 0
+    chain_length_hist: dict[str, int] = {}
+    termination_counts: dict[str, int] = {}
+    opening_accusation_count = 0
+    accusations_total = 0
+    accusations_at_impostors = 0
+    accusations_at_innocents = 0
+    self_accusations = 0
+    accusations_at_unknown = 0
+    opt_in_turns_total = 0
+    opt_in_substantive = 0
+    opt_in_eligible_total = 0
+    ballots_non_skip = 0
+    ballots_follow_chain = 0
+    ballots_non_skip_null_reason = 0
+    total_contradictions = 0
 
     for path in replay_paths:
         seed = int(path.stem.rsplit("-", 1)[1])
@@ -291,14 +912,19 @@ def main() -> int:
                 # Partial replay (meeting opened, never resolved). Stop the walk.
                 break
 
-            # Trigger body id for corpse consumption.
+            # Trigger body id (for corpse consumption) + trigger kind.
             body_id: str | None = None
+            trigger_kind: str | None = None
             for ev in events:
                 if isinstance(ev, MeetingTriggeredEvent):
                     body_id = ev.body_id
+                    trigger_kind = ev.trigger
 
-            from meetings.schemas import MeetingResult
-
+            # Schema-verified against meetings/schemas.py::MeetingResult
+            # (Task 8.7 shape): meeting_id, triggered_by,
+            # trigger_tick<-entry.tick, outcome, ejected_player_id, ballots,
+            # contradictions, transcript (turns-based MeetingTranscript).
+            # Mirrors api.replay_loader._meeting_result_from_entry.
             result = MeetingResult(
                 meeting_id=meeting_entry.meeting_id,
                 triggered_by=meeting_entry.triggered_by,
@@ -310,25 +936,70 @@ def main() -> int:
                 transcript=meeting_entry.transcript,
             )
 
+            # Cheap cross-check: the recorded pre-meeting hash must equal this
+            # tick's recorded post-tick hash (the state the meeting ran on).
+            if meeting_entry.state_hash_before != entry.state_hash:
+                invariant_failures.append(
+                    f"seed {seed} meeting {meeting_entry.meeting_id}: "
+                    "state_hash_before does not match the trigger tick's "
+                    "state_hash"
+                )
+
+            # Living players at the meeting tick == the participant roster
+            # (one MeetingParticipant per living player).
+            living_ids = frozenset(pid for pid, p in state.players.items() if p.alive)
+
+            m_facts = _analyze_meeting(
+                seed=seed,
+                meeting_index=meeting_index,
+                meeting_entry=meeting_entry,
+                trigger_kind=trigger_kind,
+                roles=roles,
+                living_ids=living_ids,
+                findings=findings,
+                invariant_failures=invariant_failures,
+            )
+            meetings_out.append(m_facts)
+            total_meetings += 1
+
+            # v2 aggregates from the per-meeting facts.
+            if trigger_kind is not None:
+                trigger_kind_counts[trigger_kind] = (
+                    trigger_kind_counts.get(trigger_kind, 0) + 1
+                )
+            total_ballots += len(m_facts["ballots"])
+            total_skip_ballots += m_facts["skip_count"]
+            chain_key = str(m_facts["chain_length"])
+            chain_length_hist[chain_key] = chain_length_hist.get(chain_key, 0) + 1
+            term_key = m_facts["termination_condition"] or "VIOLATION_UNDETERMINED"
+            termination_counts[term_key] = termination_counts.get(term_key, 0) + 1
+            if m_facts["opening_has_accusation"]:
+                opening_accusation_count += 1
+            for acc in m_facts["accusations"]:
+                accusations_total += 1
+                if acc["accused"] == acc["speaker"]:
+                    self_accusations += 1
+                elif acc["accused_role"] == "IMPOSTOR":
+                    accusations_at_impostors += 1
+                elif acc["accused_role"] == "CREWMATE":
+                    accusations_at_innocents += 1
+                else:
+                    accusations_at_unknown += 1
+            opt_in_turns_total += len(m_facts["opt_ins"])
+            opt_in_substantive += sum(1 for o in m_facts["opt_ins"] if o["substantive"])
+            opt_in_eligible_total += len(m_facts["opt_in_eligible_derived"])
+            for b in m_facts["ballots"]:
+                if b["target"] == "SKIP":
+                    continue
+                ballots_non_skip += 1
+                if b["follows_chain"] is True:
+                    ballots_follow_chain += 1
+                if b["primary_reason_id"] is None:
+                    ballots_non_skip_null_reason += 1
+            total_contradictions += m_facts["n_contradictions"]
+
             ejected_id = meeting_entry.ejected_player_id
             ejected_role = roles.get(ejected_id) if ejected_id is not None else None
-
-            ballots_out = [
-                {"voter": b.voter, "target": b.target} for b in meeting_entry.ballots
-            ]
-            meetings_out.append(
-                {
-                    "meeting_id": meeting_entry.meeting_id,
-                    "tick": meeting_entry.tick,
-                    "triggered_by": meeting_entry.triggered_by,
-                    "outcome": meeting_entry.outcome,
-                    "ejected_player_id": ejected_id,
-                    "ejected_role": ejected_role,
-                    "ballots": ballots_out,
-                    "n_contradictions": len(meeting_entry.contradictions),
-                }
-            )
-            total_meetings += 1
             if ejected_id is not None and ejected_role is not None:
                 ejections_by_role[ejected_role] = (
                     ejections_by_role.get(ejected_role, 0) + 1
@@ -435,6 +1106,9 @@ def main() -> int:
             )
 
         # --- Recorded winner vs final reconstructed state cross-check ---
+        # engine/win_conditions.py orders CREWMATE_EJECT (alive impostors == 0)
+        # BEFORE the task check, and state.tasks already excludes dead owners'
+        # incomplete instances, so done==total remains the valid task test.
         if game_end is not None:
             alive_players = [
                 p for p in last_state_for_final.players.values() if p.alive
@@ -553,6 +1227,36 @@ def main() -> int:
         f"{'OK' if impostor_check_ok else 'FAIL'}"
     )
 
+    # v2 ADDED invariants (recorded inside _analyze_meeting; summarized here).
+    transcript_failures = [
+        f
+        for f in invariant_failures
+        if "transcript.turns is empty" in f or "opening turns at positions" in f
+    ]
+    self_checks.append(
+        "every meeting transcript is non-empty with exactly one opening at "
+        f"index 0: {'OK' if not transcript_failures else 'FAIL'}"
+    )
+    dead_voter_failures = [f for f in invariant_failures if "ballot voter" in f]
+    self_checks.append(
+        "every ballot voter is alive at its meeting tick: "
+        f"{'OK' if not dead_voter_failures else 'FAIL'}"
+    )
+    hash_before_failures = [f for f in invariant_failures if "state_hash_before" in f]
+    self_checks.append(
+        "every meeting state_hash_before matches its trigger tick's "
+        f"state_hash: {'OK' if not hash_before_failures else 'FAIL'}"
+    )
+    walk_hash_failures = [
+        f
+        for f in invariant_failures
+        if "state-hash mismatch" in f or "post-meeting state-hash" in f
+    ]
+    self_checks.append(
+        "per-tick + post-meeting state hashes match the recorded log: "
+        f"{'OK' if not walk_hash_failures else 'FAIL'}"
+    )
+
     for line in self_checks:
         print(line, file=sys.stderr)
 
@@ -571,7 +1275,37 @@ def main() -> int:
         "total_kills": total_kills,
         "impostor_victim_kills": impostor_victim_kills,
         "total_meetings": total_meetings,
+        "trigger_kind_counts": trigger_kind_counts,
         "ejections_by_role": ejections_by_role,
+        "total_ballots": total_ballots,
+        "skip_ballots": total_skip_ballots,
+        "skip_ballot_share": (
+            round(total_skip_ballots / total_ballots, 4) if total_ballots else None
+        ),
+        "chain_length_histogram": dict(
+            sorted(chain_length_hist.items(), key=lambda kv: int(kv[0]))
+        ),
+        "termination_condition_counts": termination_counts,
+        "opening_turns_with_accusation": opening_accusation_count,
+        "accusations": {
+            "total": accusations_total,
+            "at_impostors": accusations_at_impostors,
+            "at_innocents": accusations_at_innocents,
+            "self_accusations": self_accusations,
+            "at_unknown_ids": accusations_at_unknown,
+        },
+        "opt_ins": {
+            "eligible_derived_total": opt_in_eligible_total,
+            "turns_total": opt_in_turns_total,
+            "substantive": opt_in_substantive,
+            "empty_pass": opt_in_turns_total - opt_in_substantive,
+        },
+        "ballot_follows_chain": {
+            "non_skip_ballots": ballots_non_skip,
+            "follows_chain": ballots_follow_chain,
+            "non_skip_with_null_reason": ballots_non_skip_null_reason,
+        },
+        "total_contradictions": total_contradictions,
         "total_calls": total_calls,
         "total_failed_calls": total_failed_calls,
         "tokens": {
