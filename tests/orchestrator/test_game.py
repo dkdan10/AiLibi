@@ -5,12 +5,13 @@ from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from engine.entities import BodyState, PlayerId, PlayerState, Role
 from engine.world import Map, WorldState, load_canonical_map
 from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
+from llm.provider import LLMCallFailure, _attach_parse_failure  # noqa: PLC2701
 from meetings.manager import DefaultedCall, MeetingTrigger, SuspicionEntry
 from meetings.schemas import (
     MeetingResult,
@@ -1078,3 +1079,181 @@ def test_validation_default_recorded_end_to_end(
     assert entry.input_tokens == 0 and entry.output_tokens == 0
     invalid_opening_calls = [c for c in meeting.llm_calls if c.response_text == "{}"]
     assert len(invalid_opening_calls) == 2  # opening attempted twice (one retry)
+
+
+# --- Validation-default spend preservation + abort-path visibility (gp-2) ----
+# Both close review feedback on PR #123: a REAL provider validates internally
+# and RAISES (carrying LLMCallFailure metadata) before _RecordingLLMClient can
+# log the call, so (1) the burned spend must be recovered onto the default's
+# replay row rather than zeroed, and (2) a default that fired before a LATER
+# call aborts the meeting must still be recorded.
+
+
+class _ProviderRaisesTurnClient:
+    """Real-provider stand-in: ``complete()`` RAISES a ``ValidationError``
+    carrying ``LLMCallFailure`` metadata on every ``MeetingTurn`` (the
+    Anthropic/Ollama ``_attach_parse_failure`` pattern); votes return SKIP. The
+    burned turn calls never reach ``_RecordingLLMClient``'s append.
+    """
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if schema is MeetingTurn:
+            try:
+                MeetingTurn.model_validate_json("{}")
+            except ValidationError as exc:
+                _attach_parse_failure(
+                    exc,
+                    LLMCallFailure(
+                        model="qwen2.5:7b-instruct",
+                        prompt_length=len(prompt),
+                        raw_response="garbage not json",
+                        input_tokens=200,
+                        output_tokens=9,
+                        cost_usd=0.0,
+                        error_type="ValidationError",
+                        error_message="bad turn",
+                    ),
+                )
+                raise
+            raise AssertionError("unreachable")  # pragma: no cover
+        if schema is VoteBallot:
+            return LLMResponse(
+                text=VoteBallot(
+                    voter="x",
+                    target="SKIP",
+                    confidence=0.0,
+                    primary_reason_id=None,
+                    considered_alternatives=(),
+                    rationale_text="skip",
+                ).model_dump_json(),
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+                cost_usd=0.0,
+                model=model or "provider-raises",
+            )
+        raise AssertionError(f"unexpected schema: {schema!r}")  # pragma: no cover
+
+
+def test_provider_validation_default_preserves_spend_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real-provider validation default records its REAL spend, not zeros."""
+
+    game_map = load_canonical_map()
+    body_id = _seed_meeting_with_body(monkeypatch, game_map=game_map)
+
+    def factory(agent_id: PlayerId, role: Role) -> _MeetingAwareReporter:
+        return _MeetingAwareReporter(
+            agent_id=agent_id,
+            role=role,
+            report_body_id=body_id if agent_id == "p-1" else None,
+        )
+
+    runner = build_default_meeting_runner(llm_client=_ProviderRaisesTurnClient())
+    replay_path = tmp_path / "provider-default.jsonl"
+    game = HeadlessGame(
+        seed=2026,
+        game_map=game_map,
+        agent_factory=factory,
+        replay_path=replay_path,
+        scheduler=TickScheduler(max_ticks=6),
+        meeting_runner=runner,
+    )
+    game.run()
+
+    entries = read_all_entries(replay_path)
+    meeting = next(e for e in entries if isinstance(e, MeetingReplayEntry))
+    failed = [e for e in entries if isinstance(e, FailedCallReplayEntry)]
+
+    assert meeting.outcome == "SKIPPED"
+    # The 2 burned opening attempts raised before the recording client logged
+    # them, so llm_calls holds only the 3 SKIP votes (no double-count)...
+    assert len(meeting.llm_calls) == 3
+    # ...and the 2 burned calls are preserved as deadline_default rows with REAL
+    # spend (not zeroed), so the audit trail stays accurate.
+    assert len(failed) == 2
+    assert all(f.error_type == "deadline_default" for f in failed)
+    assert all(f.model == "qwen2.5:7b-instruct" for f in failed)
+    assert all(f.input_tokens == 200 and f.output_tokens == 9 for f in failed)
+    assert all(f.raw_response == "garbage not json" for f in failed)
+    assert all("opening" in f.error_message for f in failed)
+
+
+class _OpeningDefaultsThenBallotAbortsClient:
+    """Opening returns invalid text (manager-side default after retry); the
+    first ballot returns invalid text so ``VoteBallot.model_validate_json``
+    raises and ABORTS the meeting. The opening default must survive the abort.
+    """
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        # "{}" is invalid for both MeetingTurn and VoteBallot. The turn path
+        # fail-softs into a default; the vote path re-raises (votes do not
+        # fail-soft) and aborts the meeting.
+        return LLMResponse(
+            text="{}",
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "aborts",
+        )
+
+
+def test_default_recorded_when_a_later_ballot_aborts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A default that fired before a meeting-aborting ballot is still recorded."""
+
+    game_map = load_canonical_map()
+    body_id = _seed_meeting_with_body(monkeypatch, game_map=game_map)
+
+    def factory(agent_id: PlayerId, role: Role) -> _MeetingAwareReporter:
+        return _MeetingAwareReporter(
+            agent_id=agent_id,
+            role=role,
+            report_body_id=body_id if agent_id == "p-1" else None,
+        )
+
+    runner = build_default_meeting_runner(
+        llm_client=_OpeningDefaultsThenBallotAbortsClient()
+    )
+    replay_path = tmp_path / "abort-after-default.jsonl"
+    game = HeadlessGame(
+        seed=2026,
+        game_map=game_map,
+        agent_factory=factory,
+        replay_path=replay_path,
+        scheduler=TickScheduler(max_ticks=6),
+        meeting_runner=runner,
+    )
+    with pytest.raises(ValidationError):
+        game.run()
+
+    entries = read_all_entries(replay_path)
+    # The meeting aborted on the ballot, so no meeting row was recorded...
+    assert not any(isinstance(e, MeetingReplayEntry) for e in entries)
+    # ...but the opening default that fired BEFORE the abort is still visible.
+    deadline_defaults = [
+        e
+        for e in entries
+        if isinstance(e, FailedCallReplayEntry) and e.error_type == "deadline_default"
+    ]
+    assert len(deadline_defaults) == 1
+    assert "opening" in deadline_defaults[0].error_message

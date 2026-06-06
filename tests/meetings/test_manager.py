@@ -32,9 +32,10 @@ from pathlib import Path
 from typing import TypeVar
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
+from llm.provider import LLMCallFailure, _attach_parse_failure  # noqa: PLC2701
 from llm.fake_provider import FakeProvider
 from meetings.manager import (
     DEFAULT_TURN_FREE_TEXT,
@@ -1543,6 +1544,63 @@ class _OpeningValidationClient:
 
 
 @dataclass
+class _ProviderRaisesOnOpeningClient:
+    """Mimics a REAL provider: ``complete()`` validates internally and RAISES a
+    ``ValidationError`` carrying ``LLMCallFailure`` metadata on every opening
+    (the Anthropic/Ollama ``_attach_parse_failure`` pattern), so the recording
+    client never logs the burned call and its spend would be lost unless carried
+    on the surfaced default. Replies/opt-ins and votes are valid.
+    """
+
+    input_tokens: int = 123
+    raised: int = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if "PHASE=OPENING" in prompt:
+            self.raised += 1
+            try:
+                MeetingTurn.model_validate_json("{}")
+            except ValidationError as exc:
+                _attach_parse_failure(
+                    exc,
+                    LLMCallFailure(
+                        model="qwen2.5:7b-instruct",
+                        prompt_length=len(prompt),
+                        raw_response="not valid turn json",
+                        input_tokens=self.input_tokens,
+                        output_tokens=7,
+                        cost_usd=0.0,
+                        error_type="ValidationError",
+                        error_message="bad turn",
+                    ),
+                )
+                raise
+            raise AssertionError(
+                "model_validate_json('{}') must raise"
+            )  # pragma: no cover
+        if "PHASE=VOTE" in prompt:
+            text = _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+        else:
+            text = _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "provider-raises",
+        )
+
+
+@dataclass
 class _ReplyValidationClient:
     """Valid opening that accuses p-3, then invalid JSON for the reply turn.
 
@@ -1659,6 +1717,54 @@ class TestDefaultsSurfacedAndOpeningRetry:
         assert default.agent_id == "p-1"
         assert default.trigger == "validation"
         assert default.turn_index == 0
+
+    def test_provider_validation_default_carries_parse_failure_spend(self) -> None:
+        # A real provider raises (with metadata) before the recording client can
+        # log the call, so the surfaced default must carry that spend -- one
+        # entry per burned attempt (the opening is tried twice).
+        client = _ProviderRaisesOnOpeningClient()
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert client.raised == 2  # opening attempted twice (retry)
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "opening"
+        assert default.trigger == "validation"
+        # Both burned provider calls' real spend is preserved, not zeroed.
+        assert len(default.parse_failures) == 2
+        assert all(f.model == "qwen2.5:7b-instruct" for f in default.parse_failures)
+        assert all(f.input_tokens == 123 for f in default.parse_failures)
+
+    def test_manager_side_validation_default_carries_no_parse_failure(self) -> None:
+        # When the provider RETURNS invalid text (not raises), the recording
+        # client already logged the spend, so the default carries no
+        # parse_failure (the orchestrator writes a zero-spend marker -> no
+        # double-count).
+        manager = _make_manager(
+            llm_client=_OpeningValidationClient(invalid_opening_attempts=2),
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert len(manager.defaulted_calls) == 1
+        assert manager.defaulted_calls[0].parse_failures == ()
 
     def test_reply_default_is_surfaced_and_not_retried(self) -> None:
         client = _ReplyValidationClient()

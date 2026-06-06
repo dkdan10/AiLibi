@@ -60,6 +60,7 @@ from pydantic import ValidationError
 
 from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 from llm.client import LLMClient
+from llm.provider import LLMCallFailure, extract_parse_failure
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -301,8 +302,9 @@ class DefaultedCall:
     deadline with no record of any kind, so the report's ``failed_calls=0`` was
     true of the records and false of the run.
 
-    The manager only carries the facts the orchestrator needs to name the
-    default in its replay record; the orchestrator owns the
+    The manager carries the facts the orchestrator needs to name the default
+    in its replay record (and the real spend to preserve, see
+    ``parse_failures``); the orchestrator owns the
     :class:`~orchestrator.replay.FailedCallReplayEntry` write itself
     (``error_type="deadline_default"``).
 
@@ -313,12 +315,23 @@ class DefaultedCall:
       ``validation`` (a schema-invalid payload, reachable in headless mode).
     * ``turn_index`` -- the turn ordinal for a defaulted turn; ``None`` for a
       defaulted vote.
+    * ``parse_failures`` -- the per-attempt provider parse-failure metadata for
+      this default, one entry per attempt whose ``complete()`` raised a
+      schema :class:`~pydantic.ValidationError` (a REAL provider validates
+      internally and raises *before* the recording client can log the call, so
+      that spend is otherwise lost). Empty for a deadline miss (nothing
+      completed) and for a manager-side validation of a returned-but-invalid
+      payload (whose spend the recording client already captured in the
+      meeting's ``llm_calls``) -- in both cases the orchestrator writes a
+      zero-spend visibility marker instead. :func:`llm.provider.extract_parse_failure`
+      is the seam that distinguishes the two, so there is no double-count.
     """
 
     phase: DefaultedPhase
     agent_id: PlayerId
     trigger: DefaultTrigger
     turn_index: int | None = None
+    parse_failures: tuple[LLMCallFailure, ...] = ()
 
 
 @runtime_checkable
@@ -684,6 +697,9 @@ class MeetingManager:
         # The trigger kind of the LAST failed attempt, recorded with the
         # default so the orchestrator can name it (deadline vs validation).
         trigger_kind: DefaultTrigger = "deadline"
+        # Per-attempt provider parse-failure metadata (real spend the recording
+        # client never logged because ``complete()`` raised before it could).
+        attempt_failures: list[LLMCallFailure] = []
         for _attempt in range(retries + 1):
             try:
                 response = await asyncio.wait_for(
@@ -719,6 +735,17 @@ class MeetingManager:
                     if isinstance(exc, asyncio.TimeoutError)
                     else "validation"
                 )
+                # A REAL provider validates internally and raises *before* the
+                # recording client logs the call, so its spend is lost from
+                # ``llm_calls`` unless we carry it on the surfaced default. The
+                # metadata rides the ``ValidationError`` (Anthropic/Ollama
+                # ``_attach_parse_failure``); ``extract_parse_failure`` returns
+                # ``None`` for a deadline miss and for a manager-side validation
+                # of a returned-but-invalid payload (already in ``llm_calls``),
+                # so collecting it here never double-counts.
+                failure = extract_parse_failure(exc)
+                if failure is not None:
+                    attempt_failures.append(failure)
                 continue
             # Defense-in-depth: rewrite self-alibi placeholder subjects (e.g.
             # "p-self") to the speaker's canonical id before the identity
@@ -752,13 +779,15 @@ class MeetingManager:
             )
         # Every attempt (1 + ``retries``) failed: surface the fired default so
         # the orchestrator records it in the replay (audit gp-2 -- a defaulted
-        # turn must never be invisible), then return the placeholder.
+        # turn must never be invisible), carrying any provider parse-failure
+        # spend so the audit trail stays accurate, then return the placeholder.
         self._defaulted_calls.append(
             DefaultedCall(
                 phase=turn_kind,
                 agent_id=participant.agent_id,
                 trigger=trigger_kind,
                 turn_index=turn_index,
+                parse_failures=tuple(attempt_failures),
             )
         )
         return _default_turn(

@@ -54,7 +54,7 @@ from llm.budget import GameBudget
 from llm.budgeted_client import BudgetedLLMClient
 from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
-from llm.provider import build_default_client, extract_parse_failure
+from llm.provider import LLMCallFailure, build_default_client, extract_parse_failure
 from meetings.manager import (
     DefaultedCall,
     MeetingConfig,
@@ -379,10 +379,15 @@ class DefaultMeetingRunner:
                 trigger=trigger,
                 participants=participants,
             )
-        except BaseException:
+        except BaseException as exc:
             # On failure, drop the partial captures so a retry against
             # the same runner does not double-count completed prefixes.
             self._recording_client.drain()
+            # Carry any defaults that fired BEFORE the abort onto the exception
+            # so the orchestrator can still record them (audit gp-2: a default
+            # must be visible even when a LATER call aborts the meeting, where
+            # record_meeting -- and this success-path return -- never runs).
+            _attach_defaulted_calls(exc, self._manager.defaulted_calls)
             raise
         return MeetingArtifacts(
             result=result,
@@ -981,6 +986,16 @@ class HeadlessGame:
                     error_type=failure.error_type,
                     error_message=failure.error_message,
                 )
+            # Record any turn / ballot defaults that fired BEFORE this abort
+            # (audit gp-2). record_meeting never runs for an aborted meeting, so
+            # without this the earlier default would vanish from the replay; the
+            # DefaultMeetingRunner attaches them to the propagating exception.
+            _record_deadline_defaults(
+                replay=replay,
+                meeting_id=meeting_id,
+                tick=trigger.trigger_tick,
+                defaulted_calls=_extract_defaulted_calls(exc),
+            )
             raise
         _validate_runner_result(
             result=artifacts.result,
@@ -1062,6 +1077,30 @@ class HeadlessGame:
         return f"headless-seed-{self._seed}"
 
 
+# Private attribute carrying the partial :class:`DefaultedCall`s on a meeting's
+# propagating exception, so a default that fired before a LATER call aborted the
+# meeting is still recordable (audit gp-2). Mirrors ``llm.provider``'s
+# parse-failure-on-exception pattern: riding the exception keeps the
+# ``MeetingRunner`` Protocol unchanged (a custom runner that does not attach
+# simply yields no abort-path defaults) and avoids module-level mutable state.
+_DEFAULTED_CALLS_ATTR: Final[str] = "_ailibi_meeting_defaulted_calls"
+
+
+def _attach_defaulted_calls(
+    exc: BaseException, defaulted_calls: tuple[DefaultedCall, ...]
+) -> None:
+    setattr(exc, _DEFAULTED_CALLS_ATTR, defaulted_calls)
+
+
+def _extract_defaulted_calls(exc: BaseException) -> tuple[DefaultedCall, ...]:
+    """Return the partial :class:`DefaultedCall`s carried by ``exc``, if any."""
+
+    value = getattr(exc, _DEFAULTED_CALLS_ATTR, ())
+    if not isinstance(value, tuple):
+        return ()
+    return tuple(item for item in value if isinstance(item, DefaultedCall))
+
+
 def _record_deadline_defaults(
     *,
     replay: ReplayLog,
@@ -1075,18 +1114,38 @@ def _record_deadline_defaults(
     EXISTING failed-call channel as a
     :class:`~orchestrator.replay.FailedCallReplayEntry` with
     ``error_type="deadline_default"`` -- no new replay record kind, since
-    ``FailedCallReplayEntry.error_type`` is a free string. The marker carries
-    ZERO spend: a deadline miss completed nothing, and a validation default's
-    real spend is already captured in the meeting's ``llm_calls`` (the recording
-    client logged the returned-but-invalid call), so charging it here too would
-    double-count. The defaulted phase and the trigger kind (deadline vs
-    validation) are named in ``error_message`` so the husk is auditable -- the
-    headless recorder previously lost such turns with no record of any kind
-    while telemetry reported ``failed_calls=0`` (true of the records, false of
-    the run).
+    ``FailedCallReplayEntry.error_type`` is a free string. The defaulted phase
+    and the trigger kind (deadline vs validation) are named in ``error_message``
+    so the husk is auditable -- the headless recorder previously lost such turns
+    with no record of any kind while telemetry reported ``failed_calls=0`` (true
+    of the records, false of the run).
+
+    Spend is preserved accurately. When a default carries ``parse_failures`` --
+    a REAL provider validated internally and raised *before* the recording
+    client could log the call, so that spend is absent from ``llm_calls`` -- one
+    row is written per burned call with its real model / response / tokens /
+    cost (the same per-call granularity ``llm_calls`` uses). Otherwise the row
+    is a ZERO-spend visibility marker: a deadline miss completed nothing, and a
+    manager-side validation of a returned-but-invalid payload already has its
+    spend in ``llm_calls``, so charging it here too would double-count.
     """
 
     for default in defaulted_calls:
+        if default.parse_failures:
+            for failure in default.parse_failures:
+                replay.record_failed_call(
+                    meeting_id=meeting_id,
+                    tick=tick,
+                    model=failure.model,
+                    prompt_length=failure.prompt_length,
+                    raw_response=failure.raw_response,
+                    input_tokens=failure.input_tokens,
+                    output_tokens=failure.output_tokens,
+                    cost_usd=failure.cost_usd,
+                    error_type="deadline_default",
+                    error_message=_deadline_default_message(default, failure),
+                )
+            continue
         replay.record_failed_call(
             meeting_id=meeting_id,
             tick=tick,
@@ -1101,24 +1160,32 @@ def _record_deadline_defaults(
         )
 
 
-def _deadline_default_message(default: DefaultedCall) -> str:
+def _deadline_default_message(
+    default: DefaultedCall, failure: LLMCallFailure | None = None
+) -> str:
     """Human-readable ``error_message`` for a ``deadline_default`` record.
 
     Names the defaulted phase and the trigger kind (``deadline`` vs
     ``validation``) plus the participant who submitted nothing; the meeting id
-    and tick ride the entry's own fields.
+    and tick ride the entry's own fields. When a provider ``failure`` is
+    supplied its underlying error is appended so the husk's original cause is
+    auditable alongside the preserved spend.
     """
 
     if default.phase == "vote":
-        return (
+        base = (
             f"vote defaulted ({default.trigger}); "
             f"{default.agent_id} submitted no ballot"
         )
-    index = "" if default.turn_index is None else f" (turn {default.turn_index})"
-    return (
-        f"{default.phase} turn{index} defaulted ({default.trigger}); "
-        f"{default.agent_id} submitted no turn"
-    )
+    else:
+        index = "" if default.turn_index is None else f" (turn {default.turn_index})"
+        base = (
+            f"{default.phase} turn{index} defaulted ({default.trigger}); "
+            f"{default.agent_id} submitted no turn"
+        )
+    if failure is None:
+        return base
+    return f"{base} [{failure.error_type}: {failure.error_message}]"
 
 
 def _build_meeting_trigger(
