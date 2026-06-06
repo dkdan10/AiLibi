@@ -218,7 +218,12 @@ def run_prompt_regression(
         for seed in seeds
     }
 
-    report = load_tournament_report(fixture_dir, roles_by_seed=roles_by_seed)
+    report = load_tournament_report(
+        fixture_dir,
+        roles_by_seed=roles_by_seed,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=resolved_map,
+    )
     evaluated = build_tournament_eval_report(report)
 
     metrics = PromptRegressionMetrics(

@@ -283,6 +283,15 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # they stay out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``. ``speaker`` / ``observations``
 # / ``claims`` / ``target`` / ``agent_id`` survive (now reached via ``MeetingTurn``
 # / ``VoteBallot`` / ``LLMCallRecord`` rather than the old report-statement split).
+#
+# The Task 8.17 kill-gifted accounting (DESIGN.md §3.5; audit gp-4) adds three
+# per-game ``GameReport`` facts (``kill_gifted`` / ``instances_dropped`` /
+# ``instances_complete_at_win``) and three ``TournamentReport`` roll-ups
+# (``kill_gifted_wins`` / ``instances_dropped_total`` /
+# ``mean_instances_complete_at_win``). All six are pure derived counts / flags /
+# a rate with no engine, role, or determinism state, so they stay out of
+# ``FORBIDDEN_EVAL_ENGINE_FIELDS`` (the §3.5 drop magnitude is gameplay
+# accounting, not engine internals the firewall guards).
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
@@ -338,11 +347,17 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "impostor_ejections",
         "impostor_hits",
         "input_tokens",
+        "instances_complete_at_win",
+        "instances_dropped",
+        "instances_dropped_total",
+        "kill_gifted",
+        "kill_gifted_wins",
         "kind",
         "llm_calls",
         "lo",
         "mean_confidence",
         "mean_cost_per_game",
+        "mean_instances_complete_at_win",
         "meeting_id",
         "meeting_rate",
         "meetings",

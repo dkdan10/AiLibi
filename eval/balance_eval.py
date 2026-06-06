@@ -55,7 +55,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
 
+from pydantic import TypeAdapter
+
+from engine.actions import Action
 from engine.entities import PlayerId, Role
+from engine.events import (
+    EngineEvent,
+    KilledEvent,
+    MeetingTriggeredEvent,
+    TaskCompletedEvent,
+)
+from engine.tick import advance_tick
 from engine.world import Map, load_canonical_map
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
@@ -66,6 +76,7 @@ from eval.report_schema import (
 )
 from llm.budget import GameBudget
 from llm.provider import extract_parse_failure
+from meetings.schemas import MeetingResult
 from orchestrator.game import (
     DEFAULT_MAX_TICKS,
     DEFAULT_NUM_IMPOSTORS,
@@ -73,6 +84,7 @@ from orchestrator.game import (
     DEFAULT_TASKS_PER_CREWMATE,
     AgentFactory,
     HeadlessGame,
+    apply_meeting_result,
     build_default_agent_factory,
     build_default_meeting_runner,
 )
@@ -82,11 +94,17 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLogEntry,
+    _state_hash,
     compute_cost_usd,
     read_all_entries,
 )
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
+
+# Validates a recorded action row back into a typed :class:`engine.actions.Action`
+# for the kill-gifted engine walk (Task 8.17), mirroring
+# :data:`eval.win_condition_selfcheck._ACTION_ADAPTER`.
+_ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
 
 
 # --- Per-game budget configuration (Task 7.7; DESIGN.md §9, §11.4) -----------
@@ -357,19 +375,37 @@ def run_tournament_eval(
             player_id: player.role
             for player_id, player in result.final_state.players.items()
         }
+        # Kill-gifted accounting (Task 8.17): derived from a deterministic engine
+        # walk of the just-recorded replay, with the roster this run used.
+        kill_gift = _kill_gift_accounting(
+            result.replay_path,
+            seed=seed,
+            roles=roles,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=resolved_map,
+        )
         games.append(
             _game_report_from_replay(
                 seed=seed,
                 roles=roles,
                 fallback_reason=result.outcome,
                 replay_path=result.replay_path,
+                kill_gifted=kill_gift.kill_gifted,
+                instances_dropped=kill_gift.instances_dropped,
+                instances_complete_at_win=kill_gift.instances_complete_at_win,
             )
         )
 
+    kill_gifted_wins, instances_dropped_total, mean_complete = _tournament_aggregates(
+        games
+    )
     return TournamentReport(
         format_version=CURRENT_FORMAT_VERSION,
         games=tuple(games),
         seeds_used=seeds_tuple,
+        kill_gifted_wins=kill_gifted_wins,
+        instances_dropped_total=instances_dropped_total,
+        mean_instances_complete_at_win=mean_complete,
     )
 
 
@@ -419,6 +455,8 @@ def load_tournament_report(
     replay_dir: Path,
     *,
     roles_by_seed: Mapping[int, Mapping[PlayerId, Role]],
+    tasks_per_crewmate: int = DEFAULT_TASKS_PER_CREWMATE,
+    game_map: Map | None = None,
 ) -> TournamentReport:
     """Assemble a :class:`TournamentReport` from recorded replay JSONL on disk.
 
@@ -429,6 +467,15 @@ def load_tournament_report(
     (:func:`_game_report_from_replay`, which in turn calls
     :func:`_game_cost_summary`) -- it does not duplicate the record->report
     mapping, so the two entry points cannot drift.
+
+    ``tasks_per_crewmate`` and ``game_map`` are the roster knobs the Task 8.17
+    kill-gift accounting walk (:func:`_kill_gift_accounting`) re-seeds from --
+    ``roles_by_seed`` already encodes the player and impostor counts, but not the
+    task count or the map. They MUST match the setup the replays were recorded
+    under: the walk verifies every reconstructed ``state_hash`` and raises on a
+    mismatch (the descriptor-less flat 4p/1i baseline is one task per crewmate;
+    the 9p/2i canonical set passes ``tasks_per_crewmate=2``). They feed only the
+    deterministic re-seed; no live game is run.
 
     This is the report-build path that has no live model and no engine re-run:
     given frozen recorded replays plus a deterministically-derived ``roles`` map,
@@ -458,6 +505,7 @@ def load_tournament_report(
     if not roles_by_seed:
         raise ValueError("roles_by_seed must be non-empty")
 
+    resolved_map = game_map if game_map is not None else load_canonical_map()
     seeds = tuple(sorted(roles_by_seed))
     games: list[GameReport] = []
     for seed in seeds:
@@ -469,19 +517,35 @@ def load_tournament_report(
                 "with roles supplied but no replay file on disk is an "
                 "inconsistency, not a game to skip."
             )
+        kill_gift = _kill_gift_accounting(
+            replay_path,
+            seed=seed,
+            roles=roles_by_seed[seed],
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=resolved_map,
+        )
         games.append(
             _game_report_from_replay(
                 seed=seed,
                 roles=roles_by_seed[seed],
                 fallback_reason=_LOADED_REPLAY_FALLBACK_REASON,
                 replay_path=replay_path,
+                kill_gifted=kill_gift.kill_gifted,
+                instances_dropped=kill_gift.instances_dropped,
+                instances_complete_at_win=kill_gift.instances_complete_at_win,
             )
         )
 
+    kill_gifted_wins, instances_dropped_total, mean_complete = _tournament_aggregates(
+        games
+    )
     return TournamentReport(
         format_version=CURRENT_FORMAT_VERSION,
         games=tuple(games),
         seeds_used=seeds,
+        kill_gifted_wins=kill_gifted_wins,
+        instances_dropped_total=instances_dropped_total,
+        mean_instances_complete_at_win=mean_complete,
     )
 
 
@@ -519,6 +583,215 @@ def _seeded_roles(
     return {player_id: player.role for player_id, player in state.players.items()}
 
 
+@dataclass(frozen=True)
+class _KillGiftFacts:
+    """One game's kill-gifted accounting (Task 8.17; DESIGN.md §3.5; audit gp-4).
+
+    The three additive :class:`~eval.report_schema.GameReport` facts, derived
+    deterministically by :func:`_kill_gift_accounting`'s engine walk. See that
+    function and :class:`~eval.report_schema.GameReport` for the field meanings.
+    """
+
+    kill_gifted: bool
+    instances_dropped: int
+    instances_complete_at_win: int
+
+
+_NO_KILL_GIFT: Final[_KillGiftFacts] = _KillGiftFacts(
+    kill_gifted=False, instances_dropped=0, instances_complete_at_win=0
+)
+
+
+def _kill_gift_accounting(
+    replay_path: Path,
+    *,
+    seed: int,
+    roles: Mapping[PlayerId, Role],
+    tasks_per_crewmate: int,
+    game_map: Map,
+) -> _KillGiftFacts:
+    """Derive a game's kill-gifted facts from a deterministic engine replay walk.
+
+    Task 8.17 (DESIGN.md §3.5; audit gp-4 / A-A-1 / B-B-7). The §3.5 dead-owner
+    drop means a recorded *action* row is not enough: a kill can be
+    engine-rejected, and the task pool completes only via RESOLVED events, so the
+    facts must come from re-running the engine, not from the raw rows. This
+    re-seeds the game and re-applies the recorded action stream (and meeting
+    outcomes) through :func:`engine.tick.advance_tick` /
+    :func:`orchestrator.game.apply_meeting_result` -- the same read-only playback
+    :func:`eval.win_condition_selfcheck.check_replay_win_condition` performs --
+    verifying every reconstructed ``state_hash`` against the recording so a wrong
+    roster (or a determinism break) fails loud rather than yielding misleading
+    counts.
+
+    Returns (all derived from the walk, never the raw rows):
+
+    * ``kill_gifted`` -- ``True`` iff the recorded winner is ``CREWMATES`` by
+      ``CREWMATE_TASKS`` AND the game ended on a *tick* (not a meeting
+      resolution) whose events include a ``Killed`` AND no ``TaskCompleted``. A
+      tick where a kill and a task completion both resolve is NOT kill-gifted
+      (the task completion is decisive); a ``CREWMATE_TASKS`` win declared by an
+      ejection's task drop is not kill-gifted either (no kill resolved on the
+      deciding step). ``False`` for every other outcome and for a partial game.
+    * ``instances_dropped`` -- the seeded instance count minus ``len(state.tasks)``
+      at game end (how many instances the §3.5 drop removed over the game).
+    * ``instances_complete_at_win`` -- the completed instances still in
+      ``state.tasks`` at game end.
+
+    ``num_players`` / ``num_impostors`` are read off ``roles`` (the in-memory
+    ground truth the fold already carries); only ``tasks_per_crewmate`` and
+    ``game_map`` -- which ``roles`` cannot supply -- are passed explicitly so the
+    re-seed matches the recording. A missing replay file (the pathological
+    zero-tick game) yields the no-kill-gift defaults rather than raising, exactly
+    as :func:`_game_report_from_replay` treats it as an empty log.
+    """
+
+    if not replay_path.exists():
+        return _NO_KILL_GIFT
+
+    num_players = len(roles)
+    num_impostors = sum(1 for role in roles.values() if role == "IMPOSTOR")
+    game_id = f"headless-seed-{seed}"
+
+    entries = read_all_entries(replay_path)
+    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
+    meeting_by_tick: Mapping[int, MeetingReplayEntry] = {
+        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+    }
+    game_end = next(
+        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
+    )
+
+    state = seed_initial_state(
+        seed=seed,
+        game_map=game_map,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+    seeded_instance_count = len(state.tasks)
+
+    # The events of the advance_tick that ended the game; only set when the game
+    # ends ON A TICK (an ejection-driven game-over resolves in a meeting, which
+    # cannot carry a kill, so it stays empty -> not kill-gifted).
+    final_tick_events: tuple[EngineEvent, ...] = ()
+    game_over_on_tick = False
+
+    for entry in tick_entries:
+        actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
+        state, events = advance_tick(state, actions, game_map=game_map)
+        _verify_walk_hash(game_id, entry.tick, entry.state_hash, _state_hash(state))
+
+        if state.phase == "GAME_OVER":
+            final_tick_events = tuple(events)
+            game_over_on_tick = True
+            break
+        if state.phase != "MEETING":
+            continue
+
+        meeting_entry = meeting_by_tick.get(entry.tick)
+        if meeting_entry is None:
+            # Partial replay: a meeting opened but never resolved (the run
+            # crashed mid-meeting). Stop the walk here, mirroring the loader's
+            # partial-replay handling.
+            break
+
+        body_id = next(
+            (
+                event.body_id
+                for event in events
+                if isinstance(event, MeetingTriggeredEvent)
+            ),
+            None,
+        )
+        result = MeetingResult(
+            meeting_id=meeting_entry.meeting_id,
+            triggered_by=meeting_entry.triggered_by,
+            trigger_tick=meeting_entry.tick,
+            outcome=meeting_entry.outcome,
+            ejected_player_id=meeting_entry.ejected_player_id,
+            ballots=meeting_entry.ballots,
+            contradictions=meeting_entry.contradictions,
+            transcript=meeting_entry.transcript,
+        )
+        state, _ = apply_meeting_result(
+            state, result, game_map=game_map, triggering_body_id=body_id
+        )
+        _verify_walk_hash(
+            game_id, entry.tick, meeting_entry.state_hash_after, _state_hash(state)
+        )
+        if state.phase == "GAME_OVER":
+            break
+
+    instances_dropped = seeded_instance_count - len(state.tasks)
+    instances_complete_at_win = sum(
+        1 for task in state.tasks.values() if task.completed
+    )
+
+    winner = game_end.winner if game_end is not None else None
+    reason = game_end.reason if game_end is not None else None
+    kill_gifted = (
+        winner == "CREWMATES"
+        and reason == "CREWMATE_TASKS"
+        and game_over_on_tick
+        and any(isinstance(event, KilledEvent) for event in final_tick_events)
+        and not any(
+            isinstance(event, TaskCompletedEvent) for event in final_tick_events
+        )
+    )
+    return _KillGiftFacts(
+        kill_gifted=kill_gifted,
+        instances_dropped=instances_dropped,
+        instances_complete_at_win=instances_complete_at_win,
+    )
+
+
+def _verify_walk_hash(game_id: str, tick: int, expected: str, actual: str) -> None:
+    """Fail loud if the kill-gift walk's reconstructed ``state_hash`` diverges.
+
+    Mirrors :func:`eval.win_condition_selfcheck._verify_hash`: a divergence means
+    the roster passed to :func:`_kill_gift_accounting` does not match the
+    recording (or engine playback is non-deterministic), so the derived counts
+    would be wrong -- raise rather than report a misleading number.
+    """
+
+    if actual != expected:
+        raise ValueError(
+            f"kill-gift accounting reconstruction diverged for {game_id!r} at "
+            f"tick {tick}: recorded {expected!r}, reconstructed {actual!r}. The "
+            "roster passed to _kill_gift_accounting does not match the recording, "
+            "or engine playback is non-deterministic."
+        )
+
+
+def _tournament_aggregates(
+    games: Sequence[GameReport],
+) -> tuple[int, int, float | None]:
+    """Roll up the per-game kill-gift facts for a :class:`TournamentReport`.
+
+    Returns ``(kill_gifted_wins, instances_dropped_total,
+    mean_instances_complete_at_win)``. The mean is taken over the
+    ``CREWMATE_TASKS`` *wins* -- the games the "completed-at-win" metric is about
+    (audit gp-4) -- and is ``None`` when the tournament had no such win, the same
+    undefined-not-zero sentinel the other eval rates use for an empty
+    denominator. See :class:`~eval.report_schema.TournamentReport`.
+    """
+
+    kill_gifted_wins = sum(1 for game in games if game.kill_gifted)
+    instances_dropped_total = sum(game.instances_dropped for game in games)
+    task_win_completes = [
+        game.instances_complete_at_win
+        for game in games
+        if game.winner == "CREWMATES" and game.reason == "CREWMATE_TASKS"
+    ]
+    mean_complete = (
+        sum(task_win_completes) / len(task_win_completes)
+        if task_win_completes
+        else None
+    )
+    return kill_gifted_wins, instances_dropped_total, mean_complete
+
+
 def _balance_report_from_tournament(report: TournamentReport) -> BalanceReport:
     """Collapse a :class:`TournamentReport` into the legacy balance buckets.
 
@@ -547,6 +820,9 @@ def _game_report_from_replay(
     roles: Mapping[PlayerId, Role],
     fallback_reason: str,
     replay_path: Path,
+    kill_gifted: bool = False,
+    instances_dropped: int = 0,
+    instances_complete_at_win: int = 0,
 ) -> GameReport:
     """Fold one seed's replay JSONL + in-memory roles into a :class:`GameReport`.
 
@@ -568,6 +844,15 @@ def _game_report_from_replay(
     for ``reason``. A doubled/corrupted file still raises
     :class:`orchestrator.replay.ReplayLog.CorruptedFileError` via
     ``read_all_entries``.
+
+    ``kill_gifted`` / ``instances_dropped`` / ``instances_complete_at_win`` are
+    the Task 8.17 kill-gift facts (DESIGN.md §3.5; audit gp-4). They are
+    supplied by the caller -- which derives them from a deterministic engine
+    walk via :func:`_kill_gift_accounting` (the walk needs the roster +
+    ``game_map`` this fold does not carry) -- and default to the no-kill-gift
+    values so the hand-written-replay loader unit tests (and the meeting-abort
+    partial-game path, whose replay is not engine-reconstructable) construct a
+    valid report without running the walk.
     """
 
     if not roles:
@@ -618,6 +903,9 @@ def _game_report_from_replay(
         failed_calls=failed_calls,
         prompt_versions=prompt_versions,
         cost=_game_cost_summary(total_cost_usd=total_cost_usd, entries=entries),
+        kill_gifted=kill_gifted,
+        instances_dropped=instances_dropped,
+        instances_complete_at_win=instances_complete_at_win,
     )
 
 

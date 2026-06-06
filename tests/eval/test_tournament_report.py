@@ -21,18 +21,24 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Literal
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from agents.base import AgentInterface
+from engine.actions import Action
 from engine.entities import PlayerId, Role
-from engine.world import load_canonical_map
+from engine.events import GameOverEvent
+from engine.tick import advance_tick
+from engine.world import Map, load_canonical_map
 from eval.accusation_calibration import AccusationCalibrationReport
 from eval.alibi_fabrication import AlibiFabricationReport
 from eval.balance_eval import (
     _game_report_from_replay,
+    _kill_gift_accounting,
+    load_tournament_report,
     run_tournament_eval,
 )
 from eval.cost_dashboard import CostDashboard
@@ -840,3 +846,404 @@ def test_meeting_rate_validator_rejects_negative_counts() -> None:
             skipped_meetings=0,
             ejected_meetings=0,
         )
+
+
+# ---------------------------------------------------------------------------
+# Kill-gifted win accounting derivation (Task 8.17; DESIGN.md §3.5; audit gp-4)
+#
+# The flag is deterministic from the replay: the loader re-seeds and re-applies
+# the recorded action stream through the engine (the win-condition-selfcheck
+# pattern). These tests build SYNTHETIC replays on a custom map whose tasks all
+# sit in the spawn room and complete in one tick, so a tiny scripted game can
+# force each ending precisely -- a kill-gifted task win, an organic task win, a
+# same-tick kill+completion (NOT gifted), and a kill-driven impostor win -- and
+# the engine walk reconstructs them byte-faithfully (state_hash verified).
+# ---------------------------------------------------------------------------
+
+# All map tasks moved into the spawn room with duration 1: every crewmate spawns
+# on its task and completes it in a single do_task tick, so the scripted games
+# below need no movement. The map id is unchanged, so the engine's state-map
+# guard and the seeder accept it; the walk is handed this SAME map so its
+# reconstructed state_hash matches the recording.
+_KILL_GIFT_MAP: Map = load_canonical_map().model_copy(
+    update={
+        "tasks": {
+            task_id: task.model_copy(
+                update={"room": load_canonical_map().spawn.room, "duration_ticks": 1}
+            )
+            for task_id, task in load_canonical_map().tasks.items()
+        }
+    }
+)
+
+_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+
+
+def _wait(actor: PlayerId) -> Action:
+    return _ACTION_ADAPTER.validate_python(
+        {"type": "wait", "actor": actor, "payload": {}}
+    )
+
+
+def _do_task(actor: PlayerId, map_task_id: str) -> Action:
+    return _ACTION_ADAPTER.validate_python(
+        {"type": "do_task", "actor": actor, "payload": {"task_id": map_task_id}}
+    )
+
+
+def _kill(actor: PlayerId, target: PlayerId) -> Action:
+    return _ACTION_ADAPTER.validate_python(
+        {"type": "kill", "actor": actor, "payload": {"target": target}}
+    )
+
+
+def _kill_gift_layout(
+    seed: int, *, num_players: int, num_impostors: int
+) -> tuple[list[PlayerId], PlayerId, dict[PlayerId, str]]:
+    """Return (sorted crewmates, the impostor, owner -> own map task id) for a seed.
+
+    Reads the deterministic seeding on ``_KILL_GIFT_MAP`` so a scripted game can
+    target the actual seeded roles + each crewmate's own (map) task id.
+    """
+
+    state = seed_initial_state(
+        seed=seed,
+        game_map=_KILL_GIFT_MAP,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=1,
+    )
+    crew = [
+        pid for pid in sorted(state.players) if state.players[pid].role == "CREWMATE"
+    ]
+    impostor = next(
+        pid for pid in sorted(state.players) if state.players[pid].role == "IMPOSTOR"
+    )
+    own = {task.owner: task.map_task_id for task in state.tasks.values()}
+    return crew, impostor, own
+
+
+def _seeded_roles_for(
+    seed: int, *, num_players: int, num_impostors: int
+) -> dict[PlayerId, Role]:
+    """Role ground truth for a seed on ``_KILL_GIFT_MAP`` (the loader's input)."""
+
+    state = seed_initial_state(
+        seed=seed,
+        game_map=_KILL_GIFT_MAP,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=1,
+    )
+    return {pid: player.role for pid, player in state.players.items()}
+
+
+def _record_scripted_game(
+    replay_path: Path,
+    *,
+    seed: int,
+    num_players: int,
+    num_impostors: int,
+    scripted: list[list[Action]],
+) -> None:
+    """Drive a seeded game through ``advance_tick`` and record the replay JSONL.
+
+    Mirrors the orchestrator's recording convention exactly
+    (``record_tick(state.tick_before, actions, state_after)`` +
+    ``record_game_end`` from the ``GameOverEvent``), so the loader's engine walk
+    reconstructs it byte-faithfully. Asserts the script actually reaches
+    ``GAME_OVER`` so a mis-scripted fixture fails loud here, not as a silent
+    no-gift default.
+    """
+
+    state = seed_initial_state(
+        seed=seed,
+        game_map=_KILL_GIFT_MAP,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=1,
+    )
+    game_over: GameOverEvent | None = None
+    final_tick: int | None = None
+    with ReplayLog(replay_path, game_id=f"headless-seed-{seed}", force=True) as log:
+        for actions in scripted:
+            input_tick = state.tick
+            state, events = advance_tick(state, actions, game_map=_KILL_GIFT_MAP)
+            log.record_tick(input_tick, actions, state)
+            final_tick = input_tick
+            if state.phase == "GAME_OVER":
+                game_over = next(e for e in events if isinstance(e, GameOverEvent))
+                break
+        assert game_over is not None, "scripted kill-gift fixture never ended"
+        log.record_game_end(
+            winner=game_over.winner, reason=game_over.reason, tick=final_tick
+        )
+
+
+def test_kill_gifted_win_is_flagged() -> None:
+    """A CREWMATE_TASKS win whose final tick is a kill (no completion) is gifted.
+
+    4p/1i: two crewmates finish their tasks, then the impostor kills the third
+    (its incomplete instance drops via §3.5), completing the pool on the kill
+    tick without reaching parity -- the gp-4 / A-A-1 kill-gift signature.
+    """
+
+    seed = 1
+    crew, impostor, own = _kill_gift_layout(seed, num_players=4, num_impostors=1)
+    finisher_a, finisher_b, victim = crew
+    with TemporaryDirectory() as tmp:
+        replay = Path(tmp) / f"replay-seed-{seed}.jsonl"
+        _record_scripted_game(
+            replay,
+            seed=seed,
+            num_players=4,
+            num_impostors=1,
+            scripted=[
+                [
+                    _do_task(finisher_a, own[finisher_a]),
+                    _do_task(finisher_b, own[finisher_b]),
+                    _wait(victim),
+                    _wait(impostor),
+                ],
+                [
+                    _kill(impostor, victim),
+                    _wait(finisher_a),
+                    _wait(finisher_b),
+                ],
+            ],
+        )
+        facts = _kill_gift_accounting(
+            replay,
+            seed=seed,
+            roles=_seeded_roles_for(seed, num_players=4, num_impostors=1),
+            tasks_per_crewmate=1,
+            game_map=_KILL_GIFT_MAP,
+        )
+
+    assert facts.kill_gifted is True
+    assert facts.instances_dropped == 1  # the victim's incomplete instance
+    assert facts.instances_complete_at_win == 2  # the two finishers
+
+
+def test_organic_task_win_is_not_kill_gifted() -> None:
+    """A CREWMATE_TASKS win completed by a do_task (no final-tick kill) is organic."""
+
+    seed = 2
+    crew, impostor, own = _kill_gift_layout(seed, num_players=4, num_impostors=1)
+    finisher_a, finisher_b, finisher_c = crew
+    with TemporaryDirectory() as tmp:
+        replay = Path(tmp) / f"replay-seed-{seed}.jsonl"
+        _record_scripted_game(
+            replay,
+            seed=seed,
+            num_players=4,
+            num_impostors=1,
+            scripted=[
+                [
+                    _do_task(finisher_a, own[finisher_a]),
+                    _do_task(finisher_b, own[finisher_b]),
+                    _wait(finisher_c),
+                    _wait(impostor),
+                ],
+                [
+                    _do_task(finisher_c, own[finisher_c]),
+                    _wait(finisher_a),
+                    _wait(finisher_b),
+                    _wait(impostor),
+                ],
+            ],
+        )
+        facts = _kill_gift_accounting(
+            replay,
+            seed=seed,
+            roles=_seeded_roles_for(seed, num_players=4, num_impostors=1),
+            tasks_per_crewmate=1,
+            game_map=_KILL_GIFT_MAP,
+        )
+
+    assert facts.kill_gifted is False
+    assert facts.instances_dropped == 0  # no kill, nothing dropped
+    assert facts.instances_complete_at_win == 3  # all three completed
+
+
+def test_same_tick_kill_and_completion_is_not_kill_gifted() -> None:
+    """A final tick resolving BOTH a kill and a completion is NOT gifted (DoD).
+
+    5p/1i: two crewmates finish early; on the final tick a third completes its
+    task AND the impostor kills the fourth. The pool completes with a kill AND a
+    completion on the same tick -- the task completion is treated as decisive, so
+    the game is the audit's "kill-necessary alongside a same-tick completion"
+    bucket (seeds 4/14/15), explicitly NOT kill-gifted.
+    """
+
+    seed = 3
+    crew, impostor, own = _kill_gift_layout(seed, num_players=5, num_impostors=1)
+    finisher_a, finisher_b, finisher_c, victim = crew
+    with TemporaryDirectory() as tmp:
+        replay = Path(tmp) / f"replay-seed-{seed}.jsonl"
+        _record_scripted_game(
+            replay,
+            seed=seed,
+            num_players=5,
+            num_impostors=1,
+            scripted=[
+                [
+                    _do_task(finisher_a, own[finisher_a]),
+                    _do_task(finisher_b, own[finisher_b]),
+                    _wait(finisher_c),
+                    _wait(victim),
+                    _wait(impostor),
+                ],
+                [
+                    _do_task(finisher_c, own[finisher_c]),
+                    _kill(impostor, victim),
+                    _wait(finisher_a),
+                    _wait(finisher_b),
+                ],
+            ],
+        )
+        facts = _kill_gift_accounting(
+            replay,
+            seed=seed,
+            roles=_seeded_roles_for(seed, num_players=5, num_impostors=1),
+            tasks_per_crewmate=1,
+            game_map=_KILL_GIFT_MAP,
+        )
+
+    assert facts.kill_gifted is False  # a completion also resolved this tick
+    assert facts.instances_dropped == 1  # the victim's instance still dropped
+    assert facts.instances_complete_at_win == 3
+
+
+def test_kill_driven_impostor_win_is_not_kill_gifted() -> None:
+    """A kill that ends the game as an IMPOSTOR parity win is not kill-gifted.
+
+    The flag is gated on a CREWMATE_TASKS win; a final-tick kill that reaches
+    parity (3p/1i -> 1 impostor vs 1 crewmate) is an impostor win, so even though
+    the deciding event is a kill it is not gifted, and ``instances_dropped`` still
+    reflects the victim's dropped instance.
+    """
+
+    seed = 4
+    crew, impostor, _own = _kill_gift_layout(seed, num_players=3, num_impostors=1)
+    victim = crew[0]
+    with TemporaryDirectory() as tmp:
+        replay = Path(tmp) / f"replay-seed-{seed}.jsonl"
+        _record_scripted_game(
+            replay,
+            seed=seed,
+            num_players=3,
+            num_impostors=1,
+            scripted=[[_kill(impostor, victim), _wait(crew[1])]],
+        )
+        facts = _kill_gift_accounting(
+            replay,
+            seed=seed,
+            roles=_seeded_roles_for(seed, num_players=3, num_impostors=1),
+            tasks_per_crewmate=1,
+            game_map=_KILL_GIFT_MAP,
+        )
+
+    assert facts.kill_gifted is False
+    assert facts.instances_dropped == 1
+
+
+def test_load_tournament_report_rolls_up_kill_gift_aggregates(tmp_path: Path) -> None:
+    """load_tournament_report folds the per-game facts and the tournament roll-ups.
+
+    Records a gifted game and an organic game in one dir and loads them through
+    the public report path, asserting both the per-game flag/counts and the
+    aggregate roll-ups (kill-gifted win count, total dropped, mean complete-at-win
+    over the CREWMATE_TASKS wins).
+    """
+
+    roles_by_seed: dict[int, dict[PlayerId, Role]] = {}
+    # Gifted (seed 1): two finishers + a final-tick kill.
+    crew, impostor, own = _kill_gift_layout(1, num_players=4, num_impostors=1)
+    _record_scripted_game(
+        tmp_path / "replay-seed-1.jsonl",
+        seed=1,
+        num_players=4,
+        num_impostors=1,
+        scripted=[
+            [
+                _do_task(crew[0], own[crew[0]]),
+                _do_task(crew[1], own[crew[1]]),
+                _wait(crew[2]),
+                _wait(impostor),
+            ],
+            [_kill(impostor, crew[2]), _wait(crew[0]), _wait(crew[1])],
+        ],
+    )
+    roles_by_seed[1] = _seeded_roles_for(1, num_players=4, num_impostors=1)
+    # Organic (seed 2): the pool finishes by a do_task.
+    crew2, impostor2, own2 = _kill_gift_layout(2, num_players=4, num_impostors=1)
+    _record_scripted_game(
+        tmp_path / "replay-seed-2.jsonl",
+        seed=2,
+        num_players=4,
+        num_impostors=1,
+        scripted=[
+            [
+                _do_task(crew2[0], own2[crew2[0]]),
+                _do_task(crew2[1], own2[crew2[1]]),
+                _wait(crew2[2]),
+                _wait(impostor2),
+            ],
+            [
+                _do_task(crew2[2], own2[crew2[2]]),
+                _wait(crew2[0]),
+                _wait(crew2[1]),
+                _wait(impostor2),
+            ],
+        ],
+    )
+    roles_by_seed[2] = _seeded_roles_for(2, num_players=4, num_impostors=1)
+
+    report = load_tournament_report(
+        tmp_path,
+        roles_by_seed=roles_by_seed,
+        tasks_per_crewmate=1,
+        game_map=_KILL_GIFT_MAP,
+    )
+
+    by_seed = {game.seed: game for game in report.games}
+    assert by_seed[1].kill_gifted is True
+    assert by_seed[1].instances_dropped == 1
+    assert by_seed[1].instances_complete_at_win == 2
+    assert by_seed[2].kill_gifted is False
+    assert by_seed[2].instances_dropped == 0
+    assert by_seed[2].instances_complete_at_win == 3
+
+    # Roll-ups: one gifted win; total dropped = 1 + 0; mean complete-at-win over
+    # the two CREWMATE_TASKS wins = (2 + 3) / 2 = 2.5.
+    assert report.kill_gifted_wins == 1
+    assert report.instances_dropped_total == 1
+    assert report.mean_instances_complete_at_win == pytest.approx(2.5)
+
+
+def test_mean_complete_at_win_is_none_without_a_task_win(tmp_path: Path) -> None:
+    """The mean is None (undefined) when no game is a CREWMATE_TASKS win.
+
+    A lone impostor-parity game has no task win to average, so the roll-up uses
+    the same undefined-not-zero sentinel the other eval rates use.
+    """
+
+    crew, impostor, _own = _kill_gift_layout(4, num_players=3, num_impostors=1)
+    _record_scripted_game(
+        tmp_path / "replay-seed-4.jsonl",
+        seed=4,
+        num_players=3,
+        num_impostors=1,
+        scripted=[[_kill(impostor, crew[0]), _wait(crew[1])]],
+    )
+    report = load_tournament_report(
+        tmp_path,
+        roles_by_seed={4: _seeded_roles_for(4, num_players=3, num_impostors=1)},
+        tasks_per_crewmate=1,
+        game_map=_KILL_GIFT_MAP,
+    )
+
+    assert report.games[0].winner == "IMPOSTORS"
+    assert report.kill_gifted_wins == 0
+    assert report.mean_instances_complete_at_win is None

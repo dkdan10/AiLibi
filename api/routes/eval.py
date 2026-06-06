@@ -95,6 +95,12 @@ class _GameReportEvalView(BaseModel):
     failed_calls: tuple[FailedCallEvalView, ...]
     prompt_versions: Mapping[str, str]
     cost: GameCostSummary
+    # Task 8.17 kill-gift facts (DESIGN.md §3.5; audit gp-4). Pure derived
+    # counts/flags, mirrored one-for-one from ``GameReport`` so the redaction
+    # re-validation accepts them (and the leak snapshot stays the firewall).
+    kill_gifted: bool = False
+    instances_dropped: int = 0
+    instances_complete_at_win: int = 0
 
 
 class _TournamentReportEvalView(BaseModel):
@@ -105,6 +111,11 @@ class _TournamentReportEvalView(BaseModel):
     format_version: int
     games: tuple[_GameReportEvalView, ...]
     seeds_used: tuple[int, ...]
+    # Task 8.17 kill-gift aggregates (DESIGN.md §3.5; audit gp-4), mirrored from
+    # ``TournamentReport``.
+    kill_gifted_wins: int = 0
+    instances_dropped_total: int = 0
+    mean_instances_complete_at_win: float | None = None
 
 
 class _TournamentEvalReportView(BaseModel):
