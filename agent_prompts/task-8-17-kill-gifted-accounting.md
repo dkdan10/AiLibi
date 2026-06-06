@@ -34,7 +34,7 @@ artifact measurable so balance reads use the kill-gifted split, never the raw cr
 
 **Definition of done:**
 - [ ] `GameReport` carries `kill_gifted` / `instances_dropped` / `instances_complete_at_win` (additive, defaulted); `TournamentReport` aggregates them; the format version stays 2; a committed pre-fields report still validates.
-- [ ] The flag is deterministic from the replay: winner CREWMATE_TASKS AND the final tick resolves a kill AND no task instance completes on that tick.
+- [ ] The flag is deterministic from the replay: winner CREWMATE_TASKS AND the final tick resolves a kill AND no task instance completes on that tick. A final tick where a kill and a task completion both resolve is NOT kill-gifted — the task completion is treated as decisive (the alternative attribution is a Wave-1 priced question, not this task's).
 - [ ] `EXPECTED_EVAL_REPORT_FIELDS` matches; the synthetic fixtures cover both endings.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

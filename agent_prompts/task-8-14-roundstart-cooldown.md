@@ -33,7 +33,7 @@ after each kill and decrements per tick) — only the seeder's initial value cha
 - meetings/, agents/, observation/
 
 **Definition of done:**
-- [ ] `seed_initial_state` seeds every impostor cooldown to `game_map.kill_cooldown_ticks`; the docstring matches; a regression test asserts the round-start value and the tick-1 kill rejection.
+- [ ] `seed_initial_state` seeds every impostor cooldown to `game_map.kill_cooldown_ticks`; the docstring matches; a regression test asserts the round-start value and the tick-1 kill rejection, pinning the engine's literal rejection reason `"kill is on cooldown"` (engine/rules.py) exactly — audits' mechanical passes grep this string; do not match loosely.
 - [ ] The committed-set reconstruction tests are skip-marked pending 8.18 (the 8.1 pattern), and `eval/determinism_test.py` (fresh-vs-fresh, no committed bytes) stays green.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

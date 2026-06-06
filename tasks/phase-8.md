@@ -615,7 +615,7 @@ after each kill and decrements per tick) — only the seeder's initial value cha
 - meetings/, agents/, observation/
 
 **Definition of done:**
-- [ ] `seed_initial_state` seeds every impostor cooldown to `game_map.kill_cooldown_ticks`; the docstring matches; a regression test asserts the round-start value and the tick-1 kill rejection.
+- [ ] `seed_initial_state` seeds every impostor cooldown to `game_map.kill_cooldown_ticks`; the docstring matches; a regression test asserts the round-start value and the tick-1 kill rejection, pinning the engine's literal rejection reason `"kill is on cooldown"` (engine/rules.py) exactly — audits' mechanical passes grep this string; do not match loosely.
 - [ ] The committed-set reconstruction tests are skip-marked pending 8.18 (the 8.1 pattern), and `eval/determinism_test.py` (fresh-vs-fresh, no committed bytes) stays green.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -681,8 +681,12 @@ any default that does fire must be visible in the replay.
 path and pass explicit None deadlines there. For visibility, mirror how failed LLM calls already
 reach the replay log from the meeting path (the recording site in orchestrator/game.py) rather than
 inventing a new channel; the manager only needs to expose enough for the orchestrator to write the
-entry. Keep the `DEFAULT_TURN_FREE_TEXT` / `DEFAULT_VOTE_RATIONALE` marker strings unchanged — the
-8.18 gate asserts zero of them in the new bytes.
+entry. The retry is not deadline-specific: `_default_turn` fires on `asyncio.TimeoutError` OR a
+schema `ValidationError` (one except clause in manager.py), so even deadline-free recording can
+default on a malformed turn — the retry covers those parse/provider failures, and wall-clock misses
+only in interactive mode. Name the trigger kind (deadline vs validation) in the recorded
+`error_message`. Keep the `DEFAULT_TURN_FREE_TEXT` / `DEFAULT_VOTE_RATIONALE` marker strings
+unchanged — the 8.18 gate asserts zero of them in the new bytes.
 
 **Integration risk:**
 
@@ -716,9 +720,9 @@ and make the prompt example real.
 - replays/samples/**
 
 **Definition of done:**
-- [ ] `_collect_one_ballot` accepts canonical turn ids, normalizes recoverable suffix forms, and nulls unresolvable ids with an audit marker (mirroring the invalid-target precedent); `coerce_teammate_ballot_to_skip` nulls `primary_reason_id` on coercion.
+- [ ] `_collect_one_ballot` accepts canonical turn ids, normalizes recoverable suffix forms, and nulls unresolvable ids with the pinned module-level marker `INVALID_REASON_ID_MARKER: Final[str] = "[invalid primary_reason_id {reason_id!r} nulled] "` prefixed to `rationale_text` (the `INVALID_VOTE_TARGET_MARKER` prefix shape — pin the literal exactly; the 8.18 gate and future audits grep it); `coerce_teammate_ballot_to_skip` nulls `primary_reason_id` on coercion.
 - [ ] `vote_ballot.j2` shows a real turn id from the live transcript as its example; the template and `DEFAULT_PROMPT_VERSIONS` read `vote_ballot/v4` in lockstep.
-- [ ] Any test pinning `vote_ballot/v3` updates; the prompt-regression fixture regeneration is explicitly deferred to 8.18 (skip-mark a fixture test only if it hard-pins the version against committed bytes).
+- [ ] The version-pin updates are exhaustive and NO skip-marks are needed: the `assert "vote_ballot/v3" in prompt` case in tests/agents/test_strategic_prompts.py is the only current-code pin (update it to v4); tests/scripts/test_manifest_writer.py's `vote_ballot/v3` assertion and tests/eval/test_prompt_regression.py pin COMMITTED manifest/fixture bytes (still recorded at v3) — leave both untouched; they update/regenerate in 8.18.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -731,10 +735,11 @@ and make the prompt example real.
 
 The transcript is in scope at ballot collection — build the valid-id set once per vote phase from
 `transcript.turns`. A recoverable suffix form is one whose `:turn-{k}` ordinal exists in THIS
-meeting (normalize to `{meeting_id}:turn-{k}`); anything else is nulled, never guessed. Match
-`_normalize_ballot_target`'s marker style so downstream eval can count normalizations per game. The
-j2 example should reference an id from the transcript the template already iterates, so it can never
-dangle.
+meeting (normalize to `{meeting_id}:turn-{k}`); anything else is nulled, never guessed. Use the
+pinned `INVALID_REASON_ID_MARKER` literal from the DoD (the `INVALID_VOTE_TARGET_MARKER` prefix
+shape, exported alongside it) so downstream eval can count normalizations per game by grepping one
+string. The j2 example should reference an id from the transcript the template already iterates, so
+it can never dangle.
 
 **Integration risk:**
 
@@ -768,7 +773,7 @@ artifact measurable so balance reads use the kill-gifted split, never the raw cr
 
 **Definition of done:**
 - [ ] `GameReport` carries `kill_gifted` / `instances_dropped` / `instances_complete_at_win` (additive, defaulted); `TournamentReport` aggregates them; the format version stays 2; a committed pre-fields report still validates.
-- [ ] The flag is deterministic from the replay: winner CREWMATE_TASKS AND the final tick resolves a kill AND no task instance completes on that tick.
+- [ ] The flag is deterministic from the replay: winner CREWMATE_TASKS AND the final tick resolves a kill AND no task instance completes on that tick. A final tick where a kill and a task completion both resolve is NOT kill-gifted — the task completion is treated as decisive (the alternative attribution is a Wave-1 priced question, not this task's).
 - [ ] `EXPECTED_EVAL_REPORT_FIELDS` matches; the synthetic fixtures cover both endings.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -822,7 +827,7 @@ Re-enable the 8.14-skipped recon tests last. The re-record itself is an operator
 - [ ] Both committed sets are re-recorded in ONE PR; both reports regenerate at format v2 with kill_gifted/instances fields populated; both MANIFESTs carry the new git_sha + vote_ballot/v4; prompt-regression fixtures + baseline.json regenerated.
 - [ ] The 8.14 recon skips are re-enabled and green (byte-identical via the per-set loader); `_verify_samples` + `build_sample_report --check` are consistent on both sets.
 - [ ] **Validity gate v3 (HARD):** friendly-fire kills == 0; every game reaches `game_over`; impostor betrayal ballots/accusations == 0; the leak suite passes at 4p/1i and 2-of-9; the Stage-A floor holds at 9p/2i (`meeting_rate ≥ 0.60`, ≥ 30 resolved meetings); AND the repair assertions: zero tick-1 kills, zero "(missed deadline" markers in any transcript, zero dangling `primary_reason_id`s across both sets.
-- [ ] Funnel report ($0): run `audits/workflows/extract_gameplay_facts.py` over the new 9p/2i set and report in the PR body: win split + kill-gifted split, ejection count, accusation precision, accuser follow-through, persuasion rate. Reported, not gated — these are the Wave-1 control-arm anchors.
+- [ ] Funnel report ($0): run `audits/workflows/extract_gameplay_facts.py` over the new 9p/2i set and report in the PR body: win split + kill-gifted split, ejection count, accusation precision, accuser follow-through, persuasion rate. The extractor emits the RAW counts (win split, ejections, accusations by target role, ballot_follows_chain); the derived rates — precision, follow-through, persuasion — are operator-computed from the facts JSON aggregates (a few lines of python over the facts file, not a single command). Reported, not gated — these are the Wave-1 control-arm anchors.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -867,3 +872,4 @@ Merge criteria for Wave 8.75 (8.14–8.18, audit-driven repairs):
 - **Kill-gift visibility (8.17):** the report carries `kill_gifted` / `instances_dropped` / `instances_complete_at_win` (additive, v2 retained); the §3.5 drop semantics themselves are unchanged.
 - **Wave re-record validity gate v3 (8.18) — HARD, numeric:** both sets re-recorded in ONE PR; all 8.12 gates hold (friendly-fire 0, all `game_over`, betrayal 0, leak green, `meeting_rate ≥ 0.60` / ≥ 30 resolved, byte-identical recon); PLUS zero tick-1 kills, zero missed-deadline markers, zero dangling reason ids. The PR body reports the extractor funnel numbers (win + kill-gifted split, ejections, accusation precision, follow-through, persuasion rate) — the Wave-1 control-arm anchor. The win split is reported, NOT gated.
 - **Impostor build frozen:** no impostor behavior change lands in Wave 8.75 (gp-4c kill-suppression and the gp-9 activation wave wait for post-Wave-1).
+- **Close (Wave 8.75):** re-run the `gameplay-data-audit-v2` workflow on the re-recorded 9p/2i baseline — the FINAL gate before Wave 1 dispatches. Its verdict decides whether the substrate is closed or a further repair wave is needed; the 8.18 extractor numbers are provisional until that verdict.

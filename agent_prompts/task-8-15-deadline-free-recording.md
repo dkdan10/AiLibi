@@ -51,8 +51,12 @@ any default that does fire must be visible in the replay.
 path and pass explicit None deadlines there. For visibility, mirror how failed LLM calls already
 reach the replay log from the meeting path (the recording site in orchestrator/game.py) rather than
 inventing a new channel; the manager only needs to expose enough for the orchestrator to write the
-entry. Keep the `DEFAULT_TURN_FREE_TEXT` / `DEFAULT_VOTE_RATIONALE` marker strings unchanged — the
-8.18 gate asserts zero of them in the new bytes.
+entry. The retry is not deadline-specific: `_default_turn` fires on `asyncio.TimeoutError` OR a
+schema `ValidationError` (one except clause in manager.py), so even deadline-free recording can
+default on a malformed turn — the retry covers those parse/provider failures, and wall-clock misses
+only in interactive mode. Name the trigger kind (deadline vs validation) in the recorded
+`error_message`. Keep the `DEFAULT_TURN_FREE_TEXT` / `DEFAULT_VOTE_RATIONALE` marker strings
+unchanged — the 8.18 gate asserts zero of them in the new bytes.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

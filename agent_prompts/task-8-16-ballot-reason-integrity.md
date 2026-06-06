@@ -34,9 +34,9 @@ and make the prompt example real.
 - replays/samples/**
 
 **Definition of done:**
-- [ ] `_collect_one_ballot` accepts canonical turn ids, normalizes recoverable suffix forms, and nulls unresolvable ids with an audit marker (mirroring the invalid-target precedent); `coerce_teammate_ballot_to_skip` nulls `primary_reason_id` on coercion.
+- [ ] `_collect_one_ballot` accepts canonical turn ids, normalizes recoverable suffix forms, and nulls unresolvable ids with the pinned module-level marker `INVALID_REASON_ID_MARKER: Final[str] = "[invalid primary_reason_id {reason_id!r} nulled] "` prefixed to `rationale_text` (the `INVALID_VOTE_TARGET_MARKER` prefix shape — pin the literal exactly; the 8.18 gate and future audits grep it); `coerce_teammate_ballot_to_skip` nulls `primary_reason_id` on coercion.
 - [ ] `vote_ballot.j2` shows a real turn id from the live transcript as its example; the template and `DEFAULT_PROMPT_VERSIONS` read `vote_ballot/v4` in lockstep.
-- [ ] Any test pinning `vote_ballot/v3` updates; the prompt-regression fixture regeneration is explicitly deferred to 8.18 (skip-mark a fixture test only if it hard-pins the version against committed bytes).
+- [ ] The version-pin updates are exhaustive and NO skip-marks are needed: the `assert "vote_ballot/v3" in prompt` case in tests/agents/test_strategic_prompts.py is the only current-code pin (update it to v4); tests/scripts/test_manifest_writer.py's `vote_ballot/v3` assertion and tests/eval/test_prompt_regression.py pin COMMITTED manifest/fixture bytes (still recorded at v3) — leave both untouched; they update/regenerate in 8.18.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -49,10 +49,11 @@ and make the prompt example real.
 
 The transcript is in scope at ballot collection — build the valid-id set once per vote phase from
 `transcript.turns`. A recoverable suffix form is one whose `:turn-{k}` ordinal exists in THIS
-meeting (normalize to `{meeting_id}:turn-{k}`); anything else is nulled, never guessed. Match
-`_normalize_ballot_target`'s marker style so downstream eval can count normalizations per game. The
-j2 example should reference an id from the transcript the template already iterates, so it can never
-dangle.
+meeting (normalize to `{meeting_id}:turn-{k}`); anything else is nulled, never guessed. Use the
+pinned `INVALID_REASON_ID_MARKER` literal from the DoD (the `INVALID_VOTE_TARGET_MARKER` prefix
+shape, exported alongside it) so downstream eval can count normalizations per game by grepping one
+string. The j2 example should reference an id from the transcript the template already iterates, so
+it can never dangle.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
