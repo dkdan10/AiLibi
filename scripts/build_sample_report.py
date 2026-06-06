@@ -130,7 +130,15 @@ def build_report(sample_dir: Path) -> TournamentEvalReport:
     )
     if not roles_by_seed:
         raise SystemExit(f"no replay-seed-*.jsonl found under {sample_dir}")
-    report = load_tournament_report(sample_dir, roles_by_seed=roles_by_seed)
+    # Task 8.17: the kill-gift accounting walk re-seeds from the same roster, so
+    # pass tasks_per_crewmate (roles_by_seed encodes only player/impostor counts).
+    # game_map defaults to load_canonical_map() inside load_tournament_report,
+    # matching the map _roles_by_seed seeded with.
+    report = load_tournament_report(
+        sample_dir,
+        roles_by_seed=roles_by_seed,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
     return build_tournament_eval_report(report)
 
 

@@ -218,7 +218,19 @@ def run_prompt_regression(
         for seed in seeds
     }
 
-    report = load_tournament_report(fixture_dir, roles_by_seed=roles_by_seed)
+    # The regression metrics read only the meeting analyzers (vote correctness,
+    # alibi, calibration, cost, meeting rate), never the Task 8.17 kill-gift
+    # fields, so skip the kill-gift reconstruction walk: it would re-seed the
+    # frozen fixtures under the current seeder, which the Task 8.14 round-start
+    # cooldown changed (the fixtures are re-recorded in Task 8.18). This keeps
+    # run_prompt_regression a pure no-engine-re-run analyzer over the fixtures.
+    report = load_tournament_report(
+        fixture_dir,
+        roles_by_seed=roles_by_seed,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=resolved_map,
+        derive_kill_gift=False,
+    )
     evaluated = build_tournament_eval_report(report)
 
     metrics = PromptRegressionMetrics(

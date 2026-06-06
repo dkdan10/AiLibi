@@ -221,6 +221,38 @@ class GameReport(_FrozenModel):
     records carry them per meeting, but templates are loaded once per run and
     do not change mid-game, so they collapse losslessly to game granularity --
     the level the cost dashboard (Task 5.5) and prompt-version provenance need.
+
+    Kill-gifted win accounting (Task 8.17; DESIGN.md §3.5; audit gp-4 / A-A-1 /
+    B-B-7). The §3.5 dead-owner drop rule means each impostor kill removes the
+    victim's incomplete task instances, so a kill can itself complete the crew
+    task pool and win the game *for* the crew on the kill tick -- a
+    friendly-fire-class self-sabotage the impostor build is (by owner decision)
+    not yet made task-aware about. The drop rule is KEPT; the report instead
+    makes the artifact measurable so a balance read uses the kill-gifted split,
+    never the raw crew win rate alone. Three additive, defaulted facts derived
+    deterministically from an engine walk of this game's replay
+    (:func:`eval.balance_eval._kill_gift_accounting`):
+
+    * ``kill_gifted`` -- ``True`` iff the winner is ``CREWMATES`` by
+      ``CREWMATE_TASKS`` AND the game-over tick resolved a kill AND no task
+      instance completed on that tick. A tick where a kill and a task
+      completion *both* resolve is NOT kill-gifted -- the task completion is
+      treated as decisive (the alternative attribution is a Wave-1 priced
+      question, not this field's). ``False`` for organic task wins, every
+      non-``CREWMATE_TASKS`` outcome, and partial / non-decisive games.
+    * ``instances_dropped`` -- the seeded instance count minus the live
+      instance count at game end (``len(state.tasks)``): how many of the
+      crew's task instances the opponent's kills removed from the denominator
+      over the whole game (set-wide this was 222/700 = 31.7% in the gp-4 set).
+    * ``instances_complete_at_win`` -- the number of completed instances still
+      in ``state.tasks`` at game end (the audit's "completed-at-win",
+      mean 10.1/14 over task wins).
+
+    All three default (``False`` / ``0`` / ``0``) so a report serialized before
+    this task -- a committed pre-fields v2 report -- still validates under
+    ``extra="forbid"`` (a missing field with a default is permitted; only an
+    *unknown* field is rejected). Task 8.18 regenerates the committed reports so
+    the fields are populated from the re-recorded replays.
     """
 
     game_id: str
@@ -234,6 +266,9 @@ class GameReport(_FrozenModel):
     failed_calls: tuple[FailedCallReplayEntry, ...]
     prompt_versions: Mapping[str, str]
     cost: GameCostSummary
+    kill_gifted: bool = False
+    instances_dropped: int = 0
+    instances_complete_at_win: int = 0
 
 
 class TournamentReport(_FrozenModel):
@@ -274,11 +309,39 @@ class TournamentReport(_FrozenModel):
     marker is corrupt or foreign, not a v1 report; the writer
     (:mod:`eval.balance_eval`) stamps the current version explicitly on
     construction.
+
+    Kill-gifted win accounting -- aggregates (Task 8.17; DESIGN.md §3.5; audit
+    gp-4). Three additive, defaulted roll-ups of the per-game
+    :class:`GameReport` kill-gift facts, so a balance read sees the kill-gifted
+    split at tournament granularity without re-walking every game:
+
+    * ``kill_gifted_wins`` -- how many games are ``kill_gifted`` (the count to
+      subtract from the raw crew-win rate to read organic crew wins; 12/37 in
+      the gp-4 set).
+    * ``instances_dropped_total`` -- the sum of per-game ``instances_dropped``
+      across the tournament (222 over the gp-4 set's 700 seeded instances).
+    * ``mean_instances_complete_at_win`` -- the mean of
+      ``instances_complete_at_win`` over the ``CREWMATE_TASKS`` *wins* (the
+      games the metric is about), or ``None`` when the tournament had no such
+      win -- the same "undefined, not 0.0" sentinel
+      :class:`~eval.meeting_quality.MeetingRateReport` uses for an empty
+      denominator.
+
+    The roll-ups are computed by the writer (:mod:`eval.balance_eval`) from
+    ``games`` at construction; they are NOT cross-validated against ``games``
+    here. A committed pre-fields report's per-game facts all default, so its
+    roll-ups also default (``0`` / ``0`` / ``None``) and stay self-consistent;
+    enforcing a recompute would reject such a report (a defaulted ``None`` mean
+    can never equal a recomputed ``0.0`` over the present-but-defaulted task
+    wins), which is exactly the backward-compat load Task 8.17 must preserve.
     """
 
     format_version: int
     games: tuple[GameReport, ...]
     seeds_used: tuple[int, ...]
+    kill_gifted_wins: int = 0
+    instances_dropped_total: int = 0
+    mean_instances_complete_at_win: float | None = None
 
     @model_validator(mode="before")
     @classmethod

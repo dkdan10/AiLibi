@@ -188,6 +188,9 @@ def _game_report(
     final_tick: int | None = 60,
     roles: Mapping[PlayerId, Role] = _ROLES_P3_IMPOSTOR,
     failed_calls: tuple[FailedCallReplayEntry, ...] = (),
+    kill_gifted: bool = False,
+    instances_dropped: int = 0,
+    instances_complete_at_win: int = 0,
 ) -> GameReport:
     return GameReport(
         game_id=game_id,
@@ -206,6 +209,9 @@ def _game_report(
             total_output_tokens=360,
             by_model={"claude-sonnet": 0.024, "claude-haiku": 0.002},
         ),
+        kill_gifted=kill_gifted,
+        instances_dropped=instances_dropped,
+        instances_complete_at_win=instances_complete_at_win,
     )
 
 
@@ -605,3 +611,134 @@ def test_partial_tournament_allows_fewer_games_than_seeds() -> None:
 
     assert len(report.games) == 1
     assert report.seeds_used == (11, 12, 13)
+
+
+# ---------------------------------------------------------------------------
+# Kill-gifted win accounting (Task 8.17; DESIGN.md §3.5; audit gp-4)
+# ---------------------------------------------------------------------------
+
+
+def test_kill_gift_fields_default_to_no_gift() -> None:
+    """A report built without the kill-gift fields carries the no-gift defaults.
+
+    The fields are additive with defaults, so a caller (and a pre-8.17 report)
+    that never sets them reads ``kill_gifted=False`` / ``0`` / ``0`` per game and
+    ``0`` / ``0`` / ``None`` in the roll-ups.
+    """
+
+    report = TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
+        games=(
+            _game_report(
+                game_id="g",
+                seed=1,
+                winner="CREWMATES",
+                reason="CREWMATE_TASKS",
+                meetings=(),
+            ),
+        ),
+        seeds_used=(1,),
+    )
+
+    game = report.games[0]
+    assert game.kill_gifted is False
+    assert game.instances_dropped == 0
+    assert game.instances_complete_at_win == 0
+    assert report.kill_gifted_wins == 0
+    assert report.instances_dropped_total == 0
+    assert report.mean_instances_complete_at_win is None
+
+
+def test_kill_gift_fields_round_trip_through_json() -> None:
+    """A populated kill-gift report (per-game facts + roll-ups) round-trips."""
+
+    report = TournamentReport(
+        format_version=CURRENT_FORMAT_VERSION,
+        games=(
+            _game_report(
+                game_id="gift",
+                seed=22,
+                winner="CREWMATES",
+                reason="CREWMATE_TASKS",
+                meetings=(),
+                kill_gifted=True,
+                instances_dropped=3,
+                instances_complete_at_win=11,
+            ),
+            _game_report(
+                game_id="organic",
+                seed=1,
+                winner="CREWMATES",
+                reason="CREWMATE_TASKS",
+                meetings=(),
+                kill_gifted=False,
+                instances_dropped=2,
+                instances_complete_at_win=14,
+            ),
+        ),
+        seeds_used=(1, 22),
+        kill_gifted_wins=1,
+        instances_dropped_total=5,
+        mean_instances_complete_at_win=12.5,
+    )
+
+    restored = TournamentReport.model_validate(report.model_dump(mode="json"))
+    assert restored == report
+    gift = restored.games[0]
+    assert gift.kill_gifted is True
+    assert (gift.instances_dropped, gift.instances_complete_at_win) == (3, 11)
+    assert restored.games[1].kill_gifted is False
+    assert restored.kill_gifted_wins == 1
+    assert restored.instances_dropped_total == 5
+    assert restored.mean_instances_complete_at_win == 12.5
+
+
+def test_pre_fields_v2_report_loads_via_defaults() -> None:
+    """A committed pre-8.17 v2 report (no kill-gift fields) still validates.
+
+    The fields are additive with defaults under ``extra="forbid"``: a *missing*
+    field is permitted (only an unknown field is rejected), so a v2 report
+    serialized before this task loads cleanly and reads the no-gift defaults.
+    This is the backward-compat contract Task 8.18 relies on until it regenerates
+    the committed reports.
+    """
+
+    payload = _realistic_tournament().model_dump(mode="json")
+    assert payload["format_version"] == 2
+    # Strip every additive kill-gift field, reproducing a pre-8.17 v2 report.
+    for key in (
+        "kill_gifted_wins",
+        "instances_dropped_total",
+        "mean_instances_complete_at_win",
+    ):
+        del payload[key]
+    for game in payload["games"]:
+        for key in ("kill_gifted", "instances_dropped", "instances_complete_at_win"):
+            del game[key]
+
+    restored = TournamentReport.model_validate(payload)
+
+    assert restored.format_version == CURRENT_FORMAT_VERSION  # still v2, not migrated
+    assert restored.kill_gifted_wins == 0
+    assert restored.instances_dropped_total == 0
+    assert restored.mean_instances_complete_at_win is None
+    assert all(game.kill_gifted is False for game in restored.games)
+    assert all(game.instances_dropped == 0 for game in restored.games)
+    assert all(game.instances_complete_at_win == 0 for game in restored.games)
+
+
+def test_pre_fields_v2_report_loads_via_json_read_path() -> None:
+    """The same pre-fields v2 report loads through ``model_validate_json`` too."""
+
+    payload = _realistic_tournament().model_dump(mode="json")
+    del payload["kill_gifted_wins"]
+    del payload["instances_dropped_total"]
+    del payload["mean_instances_complete_at_win"]
+    for game in payload["games"]:
+        del game["kill_gifted"]
+        del game["instances_dropped"]
+        del game["instances_complete_at_win"]
+
+    restored = TournamentReport.model_validate_json(json.dumps(payload))
+    assert restored.format_version == 2
+    assert restored.mean_instances_complete_at_win is None
