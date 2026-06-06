@@ -17,12 +17,29 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import build_sample_report as bsr
 from eval.meeting_quality import TournamentEvalReport
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FLAT_4P1I = _REPO_ROOT / "replays" / "samples"
 _COMMITTED_REPORT = _FLAT_4P1I / "tournament-eval-report.json"
+
+# Every test in this module reads the committed flat 4p/1i bytes (directly or
+# via _copy_flat_replays), which were invalidated by the Phase-8 byte-breakers:
+# the Task 8.1 per-player task re-key changed every per-tick state_hash and the
+# Task 8.7 meeting reshape changed the recorded transcript shape, so the
+# committed replays no longer parse/reconstruct. Task 8.12 re-records both
+# committed sets and re-enables this module (mirrors the 8.1/8.7 skips in
+# tests/scripts/test_verify_samples.py).
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Committed sample bytes invalidated by the Task 8.1 state_hash change "
+        "(DESIGN.md §3.2) and the Task 8.7 meeting-record reshape (§5.2); "
+        "re-recorded and re-enabled in Task 8.12."
+    )
+)
 
 
 def _copy_flat_replays(dst: Path) -> None:

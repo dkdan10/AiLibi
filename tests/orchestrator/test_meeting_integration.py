@@ -49,8 +49,8 @@ from meetings.schemas import (
     ContradictionRef,
     MeetingResult,
     MeetingTranscript,
-    ReportDocument,
-    Statement,
+    MeetingTurn,
+    TurnKind,
     VoteBallot,
 )
 from observation.action_intent import ActionIntent
@@ -172,7 +172,7 @@ def _skip_result(meeting_id: str, trigger: MeetingTrigger) -> MeetingResult:
         ejected_player_id=None,
         ballots=(),
         contradictions=(),
-        transcript=MeetingTranscript(reports=(), statements=()),
+        transcript=MeetingTranscript(),
     )
 
 
@@ -194,7 +194,7 @@ def _eject_result(target: PlayerId) -> Callable[[str, MeetingTrigger], MeetingRe
             ejected_player_id=target,
             ballots=(ballot,),
             contradictions=(),
-            transcript=MeetingTranscript(reports=(), statements=()),
+            transcript=MeetingTranscript(),
         )
 
     return _build
@@ -572,7 +572,7 @@ class TestHeadlessGameMeetingDispatch:
                 ejected_player_id=None,
                 ballots=(),
                 contradictions=(),
-                transcript=MeetingTranscript(reports=(), statements=()),
+                transcript=MeetingTranscript(),
             )
 
         runner = _CannedMeetingRunner(result_builder=_bad_builder)
@@ -606,7 +606,7 @@ class TestHeadlessGameMeetingDispatch:
                 ejected_player_id=None,
                 ballots=(),
                 contradictions=(),
-                transcript=MeetingTranscript(reports=(), statements=()),
+                transcript=MeetingTranscript(),
             )
 
         runner = _CannedMeetingRunner(result_builder=_bad_builder)
@@ -861,23 +861,20 @@ class _ScriptedLLMClient:
         agent_id: str | None = None,
     ) -> LLMResponse:
         self.calls.append((schema, call_kind))
-        if schema is ReportDocument:
-            text = ReportDocument(
-                agent_id="placeholder",
-                tick=0,
+        if schema is MeetingTurn:
+            # Identity fields are placeholders: the manager overrides
+            # turn_id / turn_index / speaker / turn_kind / reply_to. A
+            # claim-free turn never extends the accusation chain, so the
+            # meeting is exactly: opening turn -> ballots.
+            text = MeetingTurn(
+                turn_id="placeholder",
+                turn_index=0,
+                speaker="placeholder",
+                turn_kind="opening",
+                reply_to=None,
                 observations=(),
                 claims=(),
-                free_text="stub-report",
-            ).model_dump_json()
-        elif schema is Statement:
-            text = Statement(
-                statement_id="placeholder",
-                speaker="placeholder",
-                tick=0,
-                round_index=0,
-                target=None,
-                claims=(),
-                free_text="stub-statement",
+                free_text="stub-turn",
             ).model_dump_json()
         elif schema is VoteBallot:
             text = VoteBallot(
@@ -929,9 +926,11 @@ def _stub_statement_prompt(
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
+    prior_turn: MeetingTurn | None,
+    turn_kind: TurnKind,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
-    return f"STATEMENT_PROMPT agent_id={agent_id}"
+    return f"STATEMENT_PROMPT agent_id={agent_id} kind={turn_kind}"
 
 
 def _stub_vote_prompt(
@@ -955,10 +954,7 @@ def _build_default_runner(
     from meetings.manager import MeetingConfig
 
     config = MeetingConfig(
-        round_count=1,
-        deadlines=MeetingDeadlines(
-            report_seconds=None, statement_seconds=None, vote_seconds=None
-        ),
+        deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
     )
     return DefaultMeetingRunner(
         llm_client=llm_client,
@@ -1069,13 +1065,16 @@ class TestDefaultMeetingRunner:
         assert len(meeting_entries) == 1
         meeting = meeting_entries[0]
         assert meeting.outcome == "SKIPPED"
-        # 3 living crewmates × (1 report + 1 statement + 1 vote) = 9 LLM calls.
-        assert len(meeting.llm_calls) == 9
+        # The chain protocol with a claim-free stub: 1 opening turn + 3
+        # ballots from the 3 living players = 4 LLM calls (no accusation, so
+        # no reply chain; no observations, so no opt-in turn).
+        assert len(meeting.llm_calls) == 4
         # Each call carries cost metadata.
         assert all(call.cost_usd == 0.01 for call in meeting.llm_calls)
-        # Transcript fields are populated.
-        assert len(meeting.transcript.reports) == 3
-        assert len(meeting.transcript.statements) == 3
+        # Transcript is the ordered turn chain: the reporter's opening only.
+        assert len(meeting.transcript.turns) == 1
+        assert meeting.transcript.turns[0].turn_kind == "opening"
+        assert meeting.transcript.turns[0].speaker == "p-1"
         # Prompt versions metadata persisted.
         assert "crewmate_report" in meeting.prompt_versions
         assert "vote_ballot" in meeting.prompt_versions
@@ -1112,11 +1111,14 @@ class TestDefaultMeetingRunner:
                 agent_id: str | None = None,
             ) -> LLMResponse:
                 self._count += 1
-                if schema is ReportDocument and self._count == 1:
+                if schema is MeetingTurn and self._count == 1:
                     return LLMResponse(
-                        text=ReportDocument(
-                            agent_id="x",
-                            tick=0,
+                        text=MeetingTurn(
+                            turn_id="placeholder",
+                            turn_index=0,
+                            speaker="x",
+                            turn_kind="opening",
+                            reply_to=None,
                             observations=(),
                             claims=(),
                             free_text="r",
@@ -1128,10 +1130,7 @@ class TestDefaultMeetingRunner:
                 raise RuntimeError("boom")
 
         config = MeetingConfig(
-            round_count=1,
-            deadlines=MeetingDeadlines(
-                report_seconds=None, statement_seconds=None, vote_seconds=None
-            ),
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
         )
         runner = DefaultMeetingRunner(
             llm_client=_RaiseAfterFirstCallClient(),
@@ -1234,9 +1233,10 @@ class TestDefaultMeetingRunner:
 
         # The second meeting's artifacts must NOT include records
         # from the first (failed) meeting. The second meeting issues
-        # 3 reports + 3 statements + 3 votes = 9 calls; if leakage
-        # occurred, we'd see > 9 here.
-        assert len(artifacts.llm_calls) == 9
+        # 1 opening turn + 3 votes = 4 calls; if leakage occurred,
+        # we'd see > 4 here (the failed meeting recorded its one
+        # successful opening-turn call before raising on the vote).
+        assert len(artifacts.llm_calls) == 4
 
 
 class TestMeetingFirewallContract:
@@ -1552,6 +1552,12 @@ class _Seed6BetrayalClient:
     :class:`DefaultMeetingRunner` (orchestrator population + meeting guard):
     the deterministic guard must strip every betrayal regardless of the
     model output, so no impostor ballot or accusation targets a teammate.
+
+    Under the chain protocol the guard only matters on a turn an impostor
+    actually takes, so a crewmate turn accuses impostor ``p-3`` — handing
+    the chain to an impostor — and the impostor's reply then attempts the
+    teammate accusation the guard must strip (which also terminates the
+    chain, since the stripped turn carries no accusation).
     """
 
     def __init__(self, teammate_of: Mapping[PlayerId, PlayerId]) -> None:
@@ -1569,31 +1575,26 @@ class _Seed6BetrayalClient:
         agent_id: str | None = None,
     ) -> LLMResponse:
         mate = self._teammate_of.get(agent_id or "")
-        if schema is ReportDocument:
-            claims = (
-                (
+        if schema is MeetingTurn:
+            # An impostor always tries to frame its teammate; a crewmate
+            # accuses impostor p-3, passing the chain floor to an impostor.
+            accused = mate if mate is not None else "p-3"
+            text = MeetingTurn(
+                turn_id="placeholder",
+                turn_index=0,
+                speaker=agent_id or "x",
+                turn_kind="opening",
+                reply_to=None,
+                observations=(),
+                claims=(
                     AccusationClaim(
                         type="accusation",
-                        against=mate,
+                        against=accused,
                         confidence=0.9,
-                        reason="frame teammate",
+                        reason="frame teammate" if mate is not None else "suspect",
                     ),
-                )
-                if mate is not None
-                else ()
-            )
-            text = ReportDocument(
-                agent_id=agent_id or "x", tick=0, claims=claims, free_text="r"
-            ).model_dump_json()
-        elif schema is Statement:
-            text = Statement(
-                statement_id="ignored",
-                speaker=agent_id or "x",
-                tick=0,
-                round_index=0,
-                target=mate,
-                claims=(),
-                free_text="s",
+                ),
+                free_text="t",
             ).model_dump_json()
         elif schema is VoteBallot:
             text = VoteBallot(
@@ -1642,10 +1643,7 @@ class TestSeed6ImpostorMeetingCoordination:
             statement_prompt=_stub_statement_prompt,
             vote_prompt=_stub_vote_prompt,
             config=MeetingConfig(
-                round_count=1,
-                deadlines=MeetingDeadlines(
-                    report_seconds=None, statement_seconds=None, vote_seconds=None
-                ),
+                deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
             ),
         )
         trigger = MeetingTrigger(
@@ -1667,18 +1665,23 @@ class TestSeed6ImpostorMeetingCoordination:
             # The scripted betrayal ballot is coerced away from the teammate.
             assert ballots[impostor_id].target != mate
             assert ballots[impostor_id].target == "SKIP"
-        # No report or statement authored by an impostor names a teammate.
-        for report in result.transcript.reports:
-            report_mate = teammate_of.get(report.agent_id)
-            if report_mate is not None:
+        # The chain handed the floor to an impostor: the crewmate opening
+        # accused p-3, whose reply is the guard's real test surface.
+        turns = result.transcript.turns
+        assert len(turns) == 2
+        assert turns[0].speaker == "p-1"
+        assert turns[1].turn_kind == "reply"
+        assert turns[1].speaker == "p-3"
+        # No turn authored by an impostor names a teammate: the scripted
+        # teammate accusation was stripped by the guard (which is also what
+        # terminated the chain — the stripped turn carries no accusation).
+        for turn in turns:
+            turn_mate = teammate_of.get(turn.speaker)
+            if turn_mate is not None:
                 assert not any(
-                    isinstance(c, AccusationClaim) and c.against == report_mate
-                    for c in report.claims
+                    isinstance(c, AccusationClaim) and c.against == turn_mate
+                    for c in turn.claims
                 )
-        for statement in result.transcript.statements:
-            statement_mate = teammate_of.get(statement.speaker)
-            if statement_mate is not None:
-                assert statement.target != statement_mate
         # The teammate-betrayal votes removed, the table does not eject an
         # impostor (the audit's seed-6 outcome flip).
         assert result.outcome == "SKIPPED"
