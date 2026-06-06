@@ -200,15 +200,23 @@ class MeetingArtifacts:
     ``defaulted_calls`` carries any turn / ballot that fell back to its
     placeholder during the meeting (audit gp-2). The orchestrator writes one
     visible ``deadline_default`` :class:`~orchestrator.replay.FailedCallReplayEntry`
-    per entry so a defaulted turn is never lost from the replay. It defaults to
-    ``()`` so a runner that produces no defaults -- the common case -- need not
-    set it.
+    per entry so a defaulted turn is never lost from the replay.
+
+    ``recovered_call_failures`` carries provider parse-failures the manager
+    recovered on a SUCCEEDING turn (an earlier retry attempt raised before the
+    recording client could log the call, then a later attempt parsed). The
+    orchestrator records each so the burned spend stays visible even though the
+    turn ultimately succeeded and carries no ``DefaultedCall``.
+
+    Both default to ``()`` so a runner that produces neither -- the common
+    case -- need not set them.
     """
 
     result: MeetingResult
     llm_calls: tuple[LLMCallRecord, ...]
     prompt_versions: Mapping[str, str]
     defaulted_calls: tuple[DefaultedCall, ...] = ()
+    recovered_call_failures: tuple[LLMCallFailure, ...] = ()
 
 
 @runtime_checkable
@@ -383,20 +391,29 @@ class DefaultMeetingRunner:
             # On failure, drop the partial captures so a retry against
             # the same runner does not double-count completed prefixes.
             self._recording_client.drain()
-            # Carry any defaults that fired BEFORE the abort onto the exception
-            # so the orchestrator can still record them (audit gp-2: a default
-            # must be visible even when a LATER call aborts the meeting, where
-            # record_meeting -- and this success-path return -- never runs).
-            _attach_defaulted_calls(exc, self._manager.defaulted_calls)
+            # Carry the side-records that fired BEFORE the abort onto the
+            # exception so the orchestrator can still persist them (audit gp-2:
+            # a default must be visible -- and a recovered provider parse-failure
+            # accounted -- even when a LATER call aborts the meeting, where
+            # record_meeting and this success-path return never run).
+            _attach_meeting_side_records(
+                exc,
+                _MeetingSideRecords(
+                    defaulted_calls=self._manager.defaulted_calls,
+                    recovered_call_failures=self._manager.recovered_call_failures,
+                ),
+            )
             raise
         return MeetingArtifacts(
             result=result,
             llm_calls=self._recording_client.drain(),
             prompt_versions=dict(self._prompt_versions),
-            # Surface any fired turn / ballot defaults so the orchestrator
-            # records them visibly in the replay (audit gp-2). Read straight
-            # off the manager, which reset its ledger at the start of this run.
+            # Surface the manager's side-records (reset at the start of this
+            # run): fired turn / ballot defaults (audit gp-2) and provider
+            # parse-failures recovered on a succeeding turn, so both reach the
+            # replay accurately.
             defaulted_calls=self._manager.defaulted_calls,
+            recovered_call_failures=self._manager.recovered_call_failures,
         )
 
 
@@ -986,15 +1003,22 @@ class HeadlessGame:
                     error_type=failure.error_type,
                     error_message=failure.error_message,
                 )
-            # Record any turn / ballot defaults that fired BEFORE this abort
-            # (audit gp-2). record_meeting never runs for an aborted meeting, so
-            # without this the earlier default would vanish from the replay; the
-            # DefaultMeetingRunner attaches them to the propagating exception.
+            # Persist the side-records that fired BEFORE this abort (audit
+            # gp-2): record_meeting never runs for an aborted meeting, so
+            # without this the earlier default / recovered failure would vanish.
+            # The DefaultMeetingRunner attached them to the propagating exception.
+            side_records = _extract_meeting_side_records(exc)
             _record_deadline_defaults(
                 replay=replay,
                 meeting_id=meeting_id,
                 tick=trigger.trigger_tick,
-                defaulted_calls=_extract_defaulted_calls(exc),
+                defaulted_calls=side_records.defaulted_calls,
+            )
+            _record_recovered_failures(
+                replay=replay,
+                meeting_id=meeting_id,
+                tick=trigger.trigger_tick,
+                failures=side_records.recovered_call_failures,
             )
             raise
         _validate_runner_result(
@@ -1018,14 +1042,20 @@ class HeadlessGame:
             state_hash_before=state_hash_before,
             state_hash_after=state_hash_after,
         )
-        # Make any fired turn / ballot default visible in the replay (audit
-        # gp-2): one ``deadline_default`` failed-call marker per default, so a
-        # husk turn is never silently dropped from the record.
+        # Persist the meeting's side-records: a visible ``deadline_default``
+        # marker per fired default (audit gp-2), and the recovered provider
+        # parse-failures whose burned spend is absent from llm_calls.
         _record_deadline_defaults(
             replay=replay,
             meeting_id=meeting_id,
             tick=trigger.trigger_tick,
             defaulted_calls=artifacts.defaulted_calls,
+        )
+        _record_recovered_failures(
+            replay=replay,
+            meeting_id=meeting_id,
+            tick=trigger.trigger_tick,
+            failures=artifacts.recovered_call_failures,
         )
         return next_state, post_events
 
@@ -1077,28 +1107,70 @@ class HeadlessGame:
         return f"headless-seed-{self._seed}"
 
 
-# Private attribute carrying the partial :class:`DefaultedCall`s on a meeting's
-# propagating exception, so a default that fired before a LATER call aborted the
-# meeting is still recordable (audit gp-2). Mirrors ``llm.provider``'s
-# parse-failure-on-exception pattern: riding the exception keeps the
-# ``MeetingRunner`` Protocol unchanged (a custom runner that does not attach
-# simply yields no abort-path defaults) and avoids module-level mutable state.
-_DEFAULTED_CALLS_ATTR: Final[str] = "_ailibi_meeting_defaulted_calls"
+@dataclass(frozen=True)
+class _MeetingSideRecords:
+    """Meeting side-records that must survive a meeting abort (audit gp-2).
+
+    Bundles the two non-result outputs the orchestrator persists -- fired
+    ``deadline_default`` markers and recovered provider parse-failures -- so a
+    LATER aborting call (after which ``record_meeting`` never runs) does not
+    lose them. Rides the propagating exception like ``llm.provider``'s
+    parse-failure-on-exception pattern, which keeps the ``MeetingRunner``
+    Protocol unchanged (a custom runner that does not attach simply yields an
+    empty bundle here) and avoids module-level mutable state.
+    """
+
+    defaulted_calls: tuple[DefaultedCall, ...] = ()
+    recovered_call_failures: tuple[LLMCallFailure, ...] = ()
 
 
-def _attach_defaulted_calls(
-    exc: BaseException, defaulted_calls: tuple[DefaultedCall, ...]
+_MEETING_SIDE_RECORDS_ATTR: Final[str] = "_ailibi_meeting_side_records"
+
+
+def _attach_meeting_side_records(
+    exc: BaseException, records: _MeetingSideRecords
 ) -> None:
-    setattr(exc, _DEFAULTED_CALLS_ATTR, defaulted_calls)
+    setattr(exc, _MEETING_SIDE_RECORDS_ATTR, records)
 
 
-def _extract_defaulted_calls(exc: BaseException) -> tuple[DefaultedCall, ...]:
-    """Return the partial :class:`DefaultedCall`s carried by ``exc``, if any."""
+def _extract_meeting_side_records(exc: BaseException) -> _MeetingSideRecords:
+    """Return the :class:`_MeetingSideRecords` carried by ``exc`` (empty if none)."""
 
-    value = getattr(exc, _DEFAULTED_CALLS_ATTR, ())
-    if not isinstance(value, tuple):
-        return ()
-    return tuple(item for item in value if isinstance(item, DefaultedCall))
+    value = getattr(exc, _MEETING_SIDE_RECORDS_ATTR, None)
+    return value if isinstance(value, _MeetingSideRecords) else _MeetingSideRecords()
+
+
+def _record_recovered_failures(
+    *,
+    replay: ReplayLog,
+    meeting_id: str,
+    tick: int,
+    failures: Sequence[LLMCallFailure],
+) -> None:
+    """Record provider parse-failures recovered on a succeeding turn (gp-2).
+
+    A real provider validates internally and raises before the recording client
+    can log the call, so a retry that fails once then parses would otherwise
+    lose the failed attempt's spend (absent from ``llm_calls``, and a success
+    carries no ``DefaultedCall``). Each is written into the existing failed-call
+    channel with its REAL model / response / tokens / cost -- the same fields
+    the meeting-abort path records for the aborting call, since both are genuine
+    provider parse-failures -- so call count and cost stay accurate.
+    """
+
+    for failure in failures:
+        replay.record_failed_call(
+            meeting_id=meeting_id,
+            tick=tick,
+            model=failure.model,
+            prompt_length=failure.prompt_length,
+            raw_response=failure.raw_response,
+            input_tokens=failure.input_tokens,
+            output_tokens=failure.output_tokens,
+            cost_usd=failure.cost_usd,
+            error_type=failure.error_type,
+            error_message=failure.error_message,
+        )
 
 
 def _record_deadline_defaults(

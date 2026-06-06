@@ -1257,3 +1257,129 @@ def test_default_recorded_when_a_later_ballot_aborts(
     ]
     assert len(deadline_defaults) == 1
     assert "opening" in deadline_defaults[0].error_message
+
+
+class _RaiseFirstTurnThenSucceedClient:
+    """First ``MeetingTurn`` raises a provider-side ``ValidationError`` (with
+    ``LLMCallFailure``); later turns parse (accusation-free); votes SKIP. Models
+    a retry that recovers after one provider parse-failure -- the failed attempt
+    must still be accounted even though the turn ultimately succeeded.
+    """
+
+    def __init__(self) -> None:
+        self._turn_calls = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if schema is MeetingTurn:
+            self._turn_calls += 1
+            if self._turn_calls == 1:
+                try:
+                    MeetingTurn.model_validate_json("{}")
+                except ValidationError as exc:
+                    _attach_parse_failure(
+                        exc,
+                        LLMCallFailure(
+                            model="qwen2.5:7b-instruct",
+                            prompt_length=len(prompt),
+                            raw_response="garbage not json",
+                            input_tokens=150,
+                            output_tokens=8,
+                            cost_usd=0.0,
+                            error_type="ValidationError",
+                            error_message="bad turn",
+                        ),
+                    )
+                    raise
+                raise AssertionError("unreachable")  # pragma: no cover
+            return LLMResponse(
+                text=MeetingTurn(
+                    turn_id="x",
+                    turn_index=0,
+                    speaker="x",
+                    turn_kind="opening",
+                    reply_to=None,
+                    observations=(),
+                    claims=(),
+                    free_text="recovered opening",
+                ).model_dump_json(),
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+                cost_usd=0.0,
+                model=model or "recovered",
+            )
+        if schema is VoteBallot:
+            return LLMResponse(
+                text=VoteBallot(
+                    voter="x",
+                    target="SKIP",
+                    confidence=0.0,
+                    primary_reason_id=None,
+                    considered_alternatives=(),
+                    rationale_text="skip",
+                ).model_dump_json(),
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+                cost_usd=0.0,
+                model=model or "recovered",
+            )
+        raise AssertionError(f"unexpected schema: {schema!r}")  # pragma: no cover
+
+
+def test_recovered_failure_recorded_when_retry_succeeds_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A provider parse-failure recovered on retry is still accounted (gp-2).
+
+    The failed first attempt never reached the recording client (it raised), and
+    the succeeding turn carries no default — so without surfacing it the burned
+    spend would vanish. It is recorded once as a failed-call with real spend,
+    and is NOT in llm_calls (no double-count) and NOT a deadline_default (no
+    default fired).
+    """
+
+    game_map = load_canonical_map()
+    body_id = _seed_meeting_with_body(monkeypatch, game_map=game_map)
+
+    def factory(agent_id: PlayerId, role: Role) -> _MeetingAwareReporter:
+        return _MeetingAwareReporter(
+            agent_id=agent_id,
+            role=role,
+            report_body_id=body_id if agent_id == "p-1" else None,
+        )
+
+    runner = build_default_meeting_runner(llm_client=_RaiseFirstTurnThenSucceedClient())
+    replay_path = tmp_path / "recovered.jsonl"
+    game = HeadlessGame(
+        seed=2026,
+        game_map=game_map,
+        agent_factory=factory,
+        replay_path=replay_path,
+        scheduler=TickScheduler(max_ticks=6),
+        meeting_runner=runner,
+    )
+    game.run()
+
+    entries = read_all_entries(replay_path)
+    meeting = next(e for e in entries if isinstance(e, MeetingReplayEntry))
+    failed = [e for e in entries if isinstance(e, FailedCallReplayEntry)]
+
+    # The opening recovered on retry -> meeting completed (not aborted/default).
+    assert meeting.outcome == "SKIPPED"
+    assert len(meeting.transcript.turns) == 1
+    # llm_calls: the recovered opening (1) + 3 SKIP votes = 4; the raised first
+    # attempt is NOT among them (no double-count).
+    assert len(meeting.llm_calls) == 4
+    # The burned first attempt is recorded once with its real spend...
+    assert len(failed) == 1
+    assert failed[0].input_tokens == 150 and failed[0].output_tokens == 8
+    assert failed[0].model == "qwen2.5:7b-instruct"
+    # ...and it is NOT a deadline_default (the turn succeeded; no default fired).
+    assert failed[0].error_type == "ValidationError"

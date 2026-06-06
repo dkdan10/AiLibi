@@ -482,6 +482,13 @@ class MeetingManager:
         # a turn/ballot that defaulted is recorded into the replay through the
         # existing failed-call channel, never lost silently.
         self._defaulted_calls: list[DefaultedCall] = []
+        # Per-run scratch: provider parse-failures recovered on a SUCCEEDING
+        # turn (an earlier retry attempt raised before the recording client
+        # could log it, then a later attempt succeeded). The default path keeps
+        # its failures on the ``DefaultedCall``; these are the ones a success
+        # would otherwise swallow, so the orchestrator records them too -- the
+        # burned spend stays visible even when the turn ultimately parses.
+        self._recovered_call_failures: list[LLMCallFailure] = []
 
     @property
     def defaulted_calls(self) -> tuple[DefaultedCall, ...]:
@@ -496,6 +503,20 @@ class MeetingManager:
         """
 
         return tuple(self._defaulted_calls)
+
+    @property
+    def recovered_call_failures(self) -> tuple[LLMCallFailure, ...]:
+        """Provider parse-failures recovered on a succeeding turn (this run).
+
+        A real provider validates internally and raises before the recording
+        client logs the call, so a retry that fails once and then succeeds would
+        otherwise lose the failed attempt's spend (it is absent from
+        ``llm_calls`` and the success path carries no ``DefaultedCall``). The
+        orchestrator records each as a failed-call row so call count and cost
+        stay accurate. Reset at the start of every :meth:`run`.
+        """
+
+        return tuple(self._recovered_call_failures)
 
     async def run(
         self,
@@ -524,10 +545,12 @@ class MeetingManager:
             )
         self._validate_participants(participants, trigger=trigger)
 
-        # Fresh per-run default ledger (the manager is reused across a game's
-        # meetings); the orchestrator reads :attr:`defaulted_calls` after this
-        # ``run`` returns (audit gp-2).
+        # Fresh per-run ledgers (the manager is reused across a game's
+        # meetings); the orchestrator reads :attr:`defaulted_calls` and
+        # :attr:`recovered_call_failures` after this ``run`` returns (audit
+        # gp-2).
         self._defaulted_calls = []
+        self._recovered_call_failures = []
 
         # Canonicalise participant order at entry. Real callers may iterate
         # over a set/dict whose order is hash-seeded and not
@@ -764,6 +787,13 @@ class MeetingManager:
             guarded_claims = _guard_teammate_turn_claims(
                 normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
             )
+            # This turn parsed, but an earlier retry attempt may have raised a
+            # provider parse-failure the recording client never logged. Surface
+            # that burned spend so it is recorded even though no default fired
+            # (the default path instead carries its failures on the
+            # ``DefaultedCall``). Empty -- the common no-retry case -- is a
+            # no-op.
+            self._recovered_call_failures.extend(attempt_failures)
             # Override the identity fields with the canonical values; the LLM
             # is told to emit any non-empty string and the manager is
             # authoritative for who said what and where it sits in the chain.

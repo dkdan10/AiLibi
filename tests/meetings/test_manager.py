@@ -1546,13 +1546,16 @@ class _OpeningValidationClient:
 @dataclass
 class _ProviderRaisesOnOpeningClient:
     """Mimics a REAL provider: ``complete()`` validates internally and RAISES a
-    ``ValidationError`` carrying ``LLMCallFailure`` metadata on every opening
-    (the Anthropic/Ollama ``_attach_parse_failure`` pattern), so the recording
-    client never logs the burned call and its spend would be lost unless carried
-    on the surfaced default. Replies/opt-ins and votes are valid.
+    ``ValidationError`` carrying ``LLMCallFailure`` metadata on the first
+    ``raise_attempts`` openings (the Anthropic/Ollama ``_attach_parse_failure``
+    pattern), so the recording client never logs the burned call and its spend
+    would be lost unless surfaced. Later openings, replies/opt-ins and votes are
+    valid. ``raise_attempts`` defaults large enough to fail every opening
+    attempt (so the opening defaults); set it to 1 to recover on the retry.
     """
 
     input_tokens: int = 123
+    raise_attempts: int = 999
     raised: int = 0
 
     async def complete(
@@ -1566,7 +1569,7 @@ class _ProviderRaisesOnOpeningClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if "PHASE=OPENING" in prompt:
+        if "PHASE=OPENING" in prompt and self.raised < self.raise_attempts:
             self.raised += 1
             try:
                 MeetingTurn.model_validate_json("{}")
@@ -1745,6 +1748,47 @@ class TestDefaultsSurfacedAndOpeningRetry:
         assert len(default.parse_failures) == 2
         assert all(f.model == "qwen2.5:7b-instruct" for f in default.parse_failures)
         assert all(f.input_tokens == 123 for f in default.parse_failures)
+
+    def test_recovered_failure_surfaced_when_retry_succeeds(self) -> None:
+        # First opening attempt raises (provider-side); the retry parses, so the
+        # turn is NOT a default -- but the burned first attempt's spend would be
+        # lost unless surfaced via recovered_call_failures.
+        client = _ProviderRaisesOnOpeningClient(raise_attempts=1)
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        # Recovered on the retry: a real opening turn, no default fired.
+        assert result.transcript.turns[0].free_text != DEFAULT_TURN_FREE_TEXT
+        assert client.raised == 1
+        assert manager.defaulted_calls == ()
+        # The burned first attempt's spend is surfaced for the orchestrator.
+        assert len(manager.recovered_call_failures) == 1
+        assert manager.recovered_call_failures[0].model == "qwen2.5:7b-instruct"
+        assert manager.recovered_call_failures[0].input_tokens == 123
+
+    def test_clean_run_surfaces_no_recovered_failures(self) -> None:
+        # The happy path (no retries needed) surfaces nothing.
+        manager = _make_manager(
+            llm_client=_ScriptedLLMClient(_make_responder()),
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+        assert manager.recovered_call_failures == ()
 
     def test_manager_side_validation_default_carries_no_parse_failure(self) -> None:
         # When the provider RETURNS invalid text (not raises), the recording
