@@ -21,26 +21,11 @@ _REAL_SAMPLES = _REPO_ROOT / "replays" / "samples"
 _MEETING_SEED = 22
 _NO_MEETING_SEED = 0
 
-# The committed flat 4p/1i bytes were invalidated by the Phase-8 byte-breakers
-# (Task 8.1 state_hash re-key + Task 8.7 meeting-record reshape), so every test
-# that parses them — the ``small_samples`` fixture users plus the direct
-# committed-set reader below — is skipped until Task 8.12 re-records both
-# committed sets and re-enables them (mirrors tests/scripts/test_verify_samples.py).
-# The hermetic cases (seed-csv parsing, manifest render/parse, canonicalize,
-# roster sidecar) stay active.
-_COMMITTED_RECORD_SKIP_REASON = (
-    "Committed sample bytes invalidated by the Task 8.1 state_hash change "
-    "(DESIGN.md §3.2) and the Task 8.7 meeting-record reshape (§5.2); "
-    "re-recorded and re-enabled in Task 8.12."
-)
-_COMMITTED_RECORD_SKIP = pytest.mark.skip(reason=_COMMITTED_RECORD_SKIP_REASON)
-
 
 @pytest.fixture
 def small_samples(tmp_path: Path) -> Path:
     """A tmp sample dir holding one meeting-bearing and one meeting-free replay."""
 
-    pytest.skip(_COMMITTED_RECORD_SKIP_REASON)
     dst = tmp_path / "samples"
     dst.mkdir()
     for seed in (_NO_MEETING_SEED, _MEETING_SEED):
@@ -74,14 +59,16 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     model, prompt_versions, cost, winner = mw.sample_provenance(
         small_samples, _MEETING_SEED, fallback
     )
-    assert model == "claude-sonnet-4-6"
+    assert model == "qwen2.5:7b-instruct"
     # The union of the recorded prompt-version *values*, sorted — using the
-    # actual recorded values (e.g. "vote_ballot/v1"), not the idealized hint.
-    assert "accusation_round.v2" in prompt_versions
-    assert "vote_ballot/v1" in prompt_versions
+    # actual recorded values (e.g. "vote_ballot/v3"), not the idealized hint.
+    assert "accusation_round.v4" in prompt_versions
+    assert "vote_ballot/v3" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
-    assert float(cost) > 0.0
+    # The Task 8.12 re-record runs on the local Ollama provider: real LLM
+    # calls, zero spend, so the recorded per-seed cost is exactly 0.
+    assert float(cost) == 0.0
     # This test pins provenance *extraction*, not the game outcome: the meeting
     # seed's winner is a live-recorded result that can land either way (after the
     # Task 6.3 CREWMATE_EJECT change, seed 22's re-record resolves IMPOSTORS), so
@@ -97,7 +84,7 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     assert prompt_versions == mw._NO_MEETINGS
     assert cost == "0.0000"
     # No LLM call recorded -> attributed to the directory's meeting model.
-    assert model == fallback == "claude-sonnet-4-6"
+    assert model == fallback == "qwen2.5:7b-instruct"
     assert winner in {"CREWMATES", "IMPOSTORS", "null"}
 
 
@@ -110,11 +97,10 @@ def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None
     assert mw._SEPARATOR in text
     rows = mw.parse_manifest(text)
     assert list(rows) == [0, 22]  # parsed in file order -> ascending
-    assert rows[22].prompt_versions.startswith("accusation_round.v2")
+    assert rows[22].prompt_versions.startswith("accusation_round.v4")
     assert rows[0].prompt_versions == mw._NO_MEETINGS
 
 
-@_COMMITTED_RECORD_SKIP
 def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     manifest = tmp_path / "MANIFEST.md"
     written = mw.rebuild_manifest(manifest, _REAL_SAMPLES)
@@ -122,7 +108,7 @@ def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     rows = mw.parse_manifest(manifest.read_text())
     assert set(rows) == set(range(50))
     for seed in (22, 24, 26, 49):
-        assert "accusation_round.v2" in rows[seed].prompt_versions
+        assert "accusation_round.v4" in rows[seed].prompt_versions
         assert rows[seed].git_sha  # non-empty provenance
     assert rows[0].prompt_versions == mw._NO_MEETINGS
 
@@ -262,8 +248,11 @@ def test_update_does_not_truncate_manifest_on_crash(
 
 
 def test_sum_cost(small_samples: Path) -> None:
+    # The Task 8.12 re-record runs on the local Ollama provider ($0/call), so
+    # the meeting-bearing seed's recorded spend is exactly 0 too — the sum is
+    # still exercised over a seed WITH recorded calls (22) and one without (0).
     assert mw.sum_cost(small_samples, [_NO_MEETING_SEED]) == 0.0
-    assert mw.sum_cost(small_samples, [_NO_MEETING_SEED, _MEETING_SEED]) > 0.0
+    assert mw.sum_cost(small_samples, [_NO_MEETING_SEED, _MEETING_SEED]) == 0.0
 
 
 def test_main_rebuild(
@@ -284,7 +273,8 @@ def test_main_sum_cost_prints_single_float(
     rc = mw.main(["sum-cost", "--seeds", "0,22", "--sample-dir", str(small_samples)])
     assert rc == 0
     out = capsys.readouterr().out.strip()
-    assert float(out) > 0.0  # the only thing on stdout is a parseable float
+    # The only thing on stdout is a parseable float ($0 on the Ollama record).
+    assert float(out) == 0.0
 
 
 def test_main_update_stamps_sha(
@@ -350,7 +340,7 @@ def test_update_model_override_attributes_no_call_seed(
     # No meetings -> attributed to the active (override) model...
     assert rows[0].model == "claude-opus-4-8"
     # ...but a seed that recorded calls keeps its own recorded model.
-    assert rows[22].model == "claude-sonnet-4-6"
+    assert rows[22].model == "qwen2.5:7b-instruct"
 
 
 def test_prune_drops_rows_without_files(small_samples: Path, tmp_path: Path) -> None:

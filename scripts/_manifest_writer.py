@@ -578,7 +578,7 @@ def ensure_roster_descriptor(
             f"({num_players}p/{num_impostors}i/{tasks_per_crewmate}t) into the flat "
             f"baseline {sample_dir}: that directory is reserved for the "
             "descriptor-less 4p/1i set. Point AILIBI_SAMPLE_DIR at a per-set subdir "
-            "(e.g. replays/samples/7p2i) — did you forget it?"
+            "(e.g. replays/samples/9p2i) — did you forget it?"
         )
 
     path = sample_dir / _ROSTER_FILENAME

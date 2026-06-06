@@ -411,7 +411,11 @@ class TestNoOpOnCommittedBaseline:
         # The committed 4p/1i meeting replays carry chain turns + ballots.
         assert {"MeetingTurn", "VoteBallot"} <= kinds
         # Guard against a vacuous test if the corpus ever shrinks unexpectedly.
-        assert len(rows) >= 20
+        # Floor sized to the Task 8.12 re-record: 4 meeting-bearing flat seeds
+        # under the chain protocol yield 19 structured outputs (turns +
+        # ballots); 15 keeps headroom for re-record variance while staying a
+        # real non-vacuousness guard.
+        assert len(rows) >= 15
 
     def test_normalizer_is_byte_identical_on_every_recorded_output(self) -> None:
         for seed_file, text, schema in _RECORDED_OUTPUTS:

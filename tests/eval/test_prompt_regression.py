@@ -10,11 +10,16 @@ This task IS the Phase 5 close gate, so these tests do two things:
   :func:`test_delta_exceeds_manual_real_provider_tolerance`, not CI's gate.)
 
 * **Demonstrate the prompt-change -> metric-diff loop.** Two fixture sets —
-  ``v_a`` and a variant ``v_b`` whose ``impostor_report`` template is bumped
-  ``v1 -> v2`` and whose recorded meeting gains an ``alibi_conflict`` naming the
-  impostor — produce a measurable, attributable delta in the alibi-fabrication
-  survival rate. The suite detects the delta and attributes it to the one
-  changed template via the per-version provenance.
+  ``v_a`` (recorded 9p/2i canonical-set replays, seeds 0/6/26) and a variant
+  ``v_b`` whose ``impostor_report`` template is bumped one step (``v3 -> v4``)
+  and whose recorded meeting gains an ``alibi_conflict`` naming the impostor —
+  produce a measurable, attributable delta in the alibi-fabrication survival
+  rate. The suite detects the delta and attributes it to the one changed
+  template via the per-version provenance.
+
+The fixtures are 9p/2i games (DESIGN.md §3.5), so every role derivation runs
+at the canonical roster via :func:`_run_fixture` — the Task 8.12 roster thread
+through :func:`run_prompt_regression`.
 
 No network, no live or fake model: every number comes from the recorded
 fixtures, so ``AILIBI_LLM_PROVIDER`` is irrelevant
@@ -38,20 +43,19 @@ from llm.provider import ENV_PROVIDER
 _FIXTURE_ROOT = Path("tests/fixtures/prompt_regression")
 _BASELINE_PATH = _FIXTURE_ROOT / "baseline.json"
 
-# The committed v_a/v_b fixtures are recorded replay bytes, invalidated by the
-# Phase-8 byte-breakers (Task 8.1 state_hash re-key + Task 8.7 meeting-record
-# reshape): the old reports/statements transcript shape no longer validates, so
-# every fixture-reading case is skipped until Task 8.12 regenerates the
-# fixtures + baseline from the re-recorded canonical set and re-enables them
-# (mirrors the 8.1/8.7 skips in tests/scripts/test_verify_samples.py). The
-# fail-loud empty-dir case stays active (no committed fixture involved).
-_COMMITTED_FIXTURE_SKIP = pytest.mark.skip(
-    reason=(
-        "Committed prompt-regression fixtures invalidated by the Task 8.1 "
-        "state_hash change (DESIGN.md §3.2) and the Task 8.7 meeting-record "
-        "reshape (§5.2); regenerated and re-enabled in Task 8.12."
+# The committed fixtures are copies of canonical-set replays recorded at the
+# 9p/2i roster (Task 8.12), so role derivation must run at that roster.
+
+
+def _run_fixture(fixture: str) -> PromptRegressionSummary:
+    """Run the suite over one committed fixture at the canonical 9p/2i roster."""
+
+    return run_prompt_regression(
+        _FIXTURE_ROOT / fixture,
+        num_players=9,
+        num_impostors=2,
+        tasks_per_crewmate=2,
     )
-)
 
 
 def _load_baseline() -> dict[str, PromptRegressionSummary]:
@@ -64,7 +68,6 @@ def _load_baseline() -> dict[str, PromptRegressionSummary]:
     }
 
 
-@_COMMITTED_FIXTURE_SKIP
 @pytest.mark.parametrize("fixture", ["v_a", "v_b"])
 def test_summary_matches_committed_baseline_exactly(fixture: str) -> None:
     """The computed summary equals the frozen baseline EXACTLY (CI gate).
@@ -75,33 +78,35 @@ def test_summary_matches_committed_baseline_exactly(fixture: str) -> None:
     """
 
     expected = _load_baseline()[fixture]
-    actual = run_prompt_regression(_FIXTURE_ROOT / fixture)
+    actual = _run_fixture(fixture)
     assert actual == expected
 
 
-@_COMMITTED_FIXTURE_SKIP
 def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> None:
     """A prompt-template change produces a measurable, attributable metric delta.
 
     The Phase 5 acceptance loop, run deterministically without a model:
 
-    * the alibi-fabrication survival rate genuinely MOVES (``v_a`` 1.0 ->
-      ``v_b`` 0.8) over a real, non-vacuous denominator of impostor alibis;
+    * the alibi-fabrication survival rate genuinely MOVES (``v_a`` 3/7 ->
+      ``v_b`` 2/7) over a real, non-vacuous denominator of impostor alibis;
     * the delta is ISOLATED to that metric — vote-correctness, calibration ECE,
       and total cost are unchanged — so it is not an artifact of comparing
       unrelated fields;
     * it is ATTRIBUTABLE to exactly one changed prompt template
-      (``impostor_report`` v1 -> v2) via the per-version provenance.
+      (``impostor_report`` v3 -> v4) via the per-version provenance.
     """
 
-    summary_a = run_prompt_regression(_FIXTURE_ROOT / "v_a")
-    summary_b = run_prompt_regression(_FIXTURE_ROOT / "v_b")
+    summary_a = _run_fixture("v_a")
+    summary_b = _run_fixture("v_b")
 
-    # The metric moved, over a real (non-vacuous) impostor-alibi denominator.
-    assert summary_a.metrics.total_impostor_alibis == 5
-    assert summary_b.metrics.total_impostor_alibis == 5
-    assert summary_a.metrics.alibi_survival_rate == 1.0
-    assert summary_b.metrics.alibi_survival_rate == 0.8
+    # The metric moved, over a real (non-vacuous) impostor-alibi denominator:
+    # 7 impostor alibis across the three fixture games; 4 are already caught
+    # by the live detector in v_a, and v_b's hand-authored contradiction
+    # catches one more (3/7 surviving -> 2/7).
+    assert summary_a.metrics.total_impostor_alibis == 7
+    assert summary_b.metrics.total_impostor_alibis == 7
+    assert summary_a.metrics.alibi_survival_rate == 3 / 7
+    assert summary_b.metrics.alibi_survival_rate == 2 / 7
     assert (
         summary_a.metrics.alibi_survival_rate != summary_b.metrics.alibi_survival_rate
     )
@@ -120,15 +125,15 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
     # The W0.3 meeting-rate scalars are orthogonal to the prompt-version change
     # (v_b only flips one alibi contradiction; it touches neither the meeting
     # count nor the trigger classification), so they are identical across both
-    # fixtures. All three fixture games (seeds 22/24/26) reach a body-report
-    # meeting, so the rate is 1.0 and emergency is 0 — matching the diagnosis
-    # ground truth (no emergency meetings observed).
+    # fixtures. All three fixture games (seeds 0/6/26) reach at least one
+    # body-report meeting — 7 resolved meetings in total — so the rate is 1.0
+    # and emergency is 0 (no emergency meetings observed in the canonical set).
     assert summary_a.metrics.meeting_rate == summary_b.metrics.meeting_rate == 1.0
-    assert summary_a.metrics.meetings_total == summary_b.metrics.meetings_total == 3
+    assert summary_a.metrics.meetings_total == summary_b.metrics.meetings_total == 7
     assert (
         summary_a.metrics.body_report_meetings
         == summary_b.metrics.body_report_meetings
-        == 3
+        == 7
     )
     assert (
         summary_a.metrics.emergency_meetings
@@ -137,7 +142,7 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
     )
 
     # Attribution: the ONLY (template, version) pair that changed is
-    # impostor_report v1 -> v2 — the template responsible for impostor alibis.
+    # impostor_report v3 -> v4 — the template responsible for impostor alibis.
     versions_a = {pv.template_name: pv.version for pv in summary_a.prompt_versions}
     versions_b = {pv.template_name: pv.version for pv in summary_b.prompt_versions}
     assert versions_a.keys() == versions_b.keys()
@@ -147,31 +152,30 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
         if versions_a[template] != versions_b[template]
     }
     assert changed == {"impostor_report"}
-    assert versions_a["impostor_report"] == "impostor_report_v1"
-    assert versions_b["impostor_report"] == "impostor_report_v2"
+    assert versions_a["impostor_report"] == "impostor_report_v3"
+    assert versions_b["impostor_report"] == "impostor_report_v4"
 
 
-@_COMMITTED_FIXTURE_SKIP
 def test_delta_exceeds_manual_real_provider_tolerance() -> None:
     """The demonstrated alibi-rate delta would trip the manual ``> X%`` policy.
 
     CI matches the baseline exactly; the ``> X%`` tolerance governs the manual
-    real-provider re-record comparison. The demonstrated drop (1.0 -> 0.8 = 0.20)
-    exceeds the documented ``REAL_PROVIDER_REGRESSION_TOLERANCE``, i.e. a
-    re-record showing this much movement would be flagged as a regression.
+    real-provider re-record comparison. The demonstrated drop (3/7 -> 2/7 =
+    1/7 ≈ 0.143) exceeds the documented ``REAL_PROVIDER_REGRESSION_TOLERANCE``,
+    i.e. a re-record showing this much movement would be flagged as a
+    regression.
     """
 
-    summary_a = run_prompt_regression(_FIXTURE_ROOT / "v_a")
-    summary_b = run_prompt_regression(_FIXTURE_ROOT / "v_b")
+    summary_a = _run_fixture("v_a")
+    summary_b = _run_fixture("v_b")
 
     delta = abs(
         summary_a.metrics.alibi_survival_rate - summary_b.metrics.alibi_survival_rate
     )
-    assert delta == pytest.approx(0.20)
+    assert delta == pytest.approx(1 / 7)
     assert delta > REAL_PROVIDER_REGRESSION_TOLERANCE
 
 
-@_COMMITTED_FIXTURE_SKIP
 def test_no_provider_invoked_regardless_of_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -183,7 +187,7 @@ def test_no_provider_invoked_regardless_of_env(
     """
 
     monkeypatch.setenv(ENV_PROVIDER, "nonexistent-provider-xyz")
-    actual = run_prompt_regression(_FIXTURE_ROOT / "v_a")
+    actual = _run_fixture("v_a")
     assert actual == _load_baseline()["v_a"]
 
 
@@ -201,7 +205,6 @@ def test_run_prompt_regression_fails_loud_on_empty_fixture_dir(
         run_prompt_regression(tmp_path)
 
 
-@_COMMITTED_FIXTURE_SKIP
 def test_summary_round_trips_through_json() -> None:
     """The summary round-trips ``model_dump(mode="json")`` -> ``model_validate``.
 
@@ -209,7 +212,7 @@ def test_summary_round_trips_through_json() -> None:
     and reloading it reproduces an equal summary (exact float round-trip).
     """
 
-    summary = run_prompt_regression(_FIXTURE_ROOT / "v_b")
+    summary = _run_fixture("v_b")
     reloaded = PromptRegressionSummary.model_validate(
         json.loads(json.dumps(summary.model_dump(mode="json")))
     )

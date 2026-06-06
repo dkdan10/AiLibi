@@ -8,7 +8,7 @@ Three layers:
   catch.
 * **Committed-replay reconstruction** — the check run over the frozen committed
   4p/1i set (every game consistent; the impostor-ejection games have
-  ``first_zero_impostor_tick == game_over_tick``) and the frozen 7p/2i
+  ``first_zero_impostor_tick == game_over_tick``) and the frozen 9p/2i
   impostor-elimination games (multi-impostor + friendly-fire deaths exercise the
   alive-impostor count crossing zero by a path other than the lone ejection).
 * **Fail-loud reconstruction** — a wrong roster diverges the per-tick
@@ -33,24 +33,7 @@ from eval.win_condition_selfcheck import (
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples"
-_SAMPLES_7P2I = _SAMPLES_4P1I / "7p2i"
-
-# The committed replays/samples/ sets are invalidated by BOTH Phase-8
-# byte-breakers, so their reconstruction cases are skipped until Task 8.12
-# re-records both sets and re-enables them:
-#   * Task 8.1 per-player task re-key (DESIGN.md §3.2) changes
-#     _serialize_world_state, so every committed game's per-tick state_hash
-#     changes and the sets no longer reconstruct byte-identically; and
-#   * Task 8.7 reshaped MeetingTranscript to the ordered ``turns`` list under
-#     ``extra='forbid'``, so the committed meeting rows (old reports/statements
-#     shape) no longer validate during reconstruction.
-_COMMITTED_RECORD_SKIP = pytest.mark.skip(
-    reason=(
-        "Committed bytes invalidated by the Task 8.1 state_hash change "
-        "(DESIGN.md §3.2) and the Task 8.7 meeting-record reshape (§5.2); "
-        "re-recorded and re-enabled in Task 8.12."
-    )
-)
+_SAMPLES_9P2I = _SAMPLES_4P1I / "9p2i"
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +104,6 @@ def _selfcheck_4p1i(seed: int) -> WinConditionSelfCheck:
     )
 
 
-@_COMMITTED_RECORD_SKIP
 def test_committed_4p1i_set_holds_the_invariant() -> None:
     """Every committed 4p/1i game satisfies first_zero == game_over (A-A-3)."""
 
@@ -135,9 +117,13 @@ def test_committed_4p1i_set_holds_the_invariant() -> None:
         if check.first_zero_impostor_tick is not None:
             eliminations += 1
             assert check.game_over_tick == check.first_zero_impostor_tick
-    # The committed 4p/1i set ejects the impostor in exactly 4 games (the
-    # vote_correctness impostor_ejections), so the invariant is non-vacuous.
-    assert eliminations == 4
+    # Ground truth of the Task 8.12 re-record: the chain-protocol flat set
+    # resolves every meeting SKIPPED (no ejection), so no game eliminates the
+    # impostor — every win is CREWMATE_TASKS or IMPOSTOR_PARITY. The per-game
+    # consistency assertions above still cover all 50 reconstructions; the
+    # elimination path is exercised hermetically (apply_meeting_result eject
+    # tests) and re-joins this gate whenever a re-record produces one.
+    assert eliminations == 0
 
 
 def _roster(replay_dir: Path) -> tuple[int, int, int]:
@@ -169,9 +155,8 @@ def _crewmate_eject_seeds(replay_dir: Path) -> list[int]:
     return seeds
 
 
-@_COMMITTED_RECORD_SKIP
-def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
-    """Multi-impostor 7p/2i eliminations satisfy the invariant (A-A-3).
+def test_committed_9p2i_elimination_games_hold_the_invariant() -> None:
+    """Multi-impostor 9p/2i eliminations satisfy the invariant (A-A-3).
 
     Exercises the two-impostor elimination path the single-impostor 4p/1i set
     cannot: when the committed set contains a CREWMATE_EJECT game, the
@@ -181,11 +166,11 @@ def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
     crew wins via CREWMATE_TASKS), so there is no elimination path to exercise.
     """
 
-    num_players, num_impostors, tasks_per_crewmate = _roster(_SAMPLES_7P2I)
-    elimination_seeds = _crewmate_eject_seeds(_SAMPLES_7P2I)
+    num_players, num_impostors, tasks_per_crewmate = _roster(_SAMPLES_9P2I)
+    elimination_seeds = _crewmate_eject_seeds(_SAMPLES_9P2I)
     if not elimination_seeds:
         pytest.skip(
-            "no CREWMATE_EJECT game in the committed 7p/2i set: post-7.12 impostor "
+            "no CREWMATE_EJECT game in the committed 9p/2i set: post-7.12 impostor "
             "coordination removed teammate-betrayal, so crew never ejects both "
             "impostors (all crew wins are CREWMATE_TASKS). The §6.3 multi-impostor "
             "elimination path is exercised only when an elimination-bearing set is "
@@ -194,7 +179,7 @@ def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
 
     for seed in elimination_seeds:
         check = check_replay_win_condition(
-            _SAMPLES_7P2I / f"replay-seed-{seed}.jsonl",
+            _SAMPLES_9P2I / f"replay-seed-{seed}.jsonl",
             seed=seed,
             num_players=num_players,
             num_impostors=num_impostors,
@@ -207,7 +192,6 @@ def test_committed_7p2i_elimination_games_hold_the_invariant() -> None:
         )
 
 
-@_COMMITTED_RECORD_SKIP
 def test_wrong_roster_fails_loud_on_state_hash() -> None:
     """A roster that does not match the recording diverges the per-tick hash.
 
