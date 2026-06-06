@@ -21,11 +21,26 @@ _REAL_SAMPLES = _REPO_ROOT / "replays" / "samples"
 _MEETING_SEED = 22
 _NO_MEETING_SEED = 0
 
+# The committed flat 4p/1i bytes were invalidated by the Phase-8 byte-breakers
+# (Task 8.1 state_hash re-key + Task 8.7 meeting-record reshape), so every test
+# that parses them — the ``small_samples`` fixture users plus the direct
+# committed-set reader below — is skipped until Task 8.12 re-records both
+# committed sets and re-enables them (mirrors tests/scripts/test_verify_samples.py).
+# The hermetic cases (seed-csv parsing, manifest render/parse, canonicalize,
+# roster sidecar) stay active.
+_COMMITTED_RECORD_SKIP_REASON = (
+    "Committed sample bytes invalidated by the Task 8.1 state_hash change "
+    "(DESIGN.md §3.2) and the Task 8.7 meeting-record reshape (§5.2); "
+    "re-recorded and re-enabled in Task 8.12."
+)
+_COMMITTED_RECORD_SKIP = pytest.mark.skip(reason=_COMMITTED_RECORD_SKIP_REASON)
+
 
 @pytest.fixture
 def small_samples(tmp_path: Path) -> Path:
     """A tmp sample dir holding one meeting-bearing and one meeting-free replay."""
 
+    pytest.skip(_COMMITTED_RECORD_SKIP_REASON)
     dst = tmp_path / "samples"
     dst.mkdir()
     for seed in (_NO_MEETING_SEED, _MEETING_SEED):
@@ -99,6 +114,7 @@ def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None
     assert rows[0].prompt_versions == mw._NO_MEETINGS
 
 
+@_COMMITTED_RECORD_SKIP
 def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     manifest = tmp_path / "MANIFEST.md"
     written = mw.rebuild_manifest(manifest, _REAL_SAMPLES)
