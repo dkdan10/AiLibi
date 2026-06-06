@@ -153,11 +153,18 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # also retired here). This map is metadata only (never rendered into a
 # prompt); the recorded value is the AUTHORITATIVE revision read by
 # replay/eval and the sample MANIFESTs.
+#
+# Task 8.16 (DESIGN.md §5.5; audit gp-3) bumps ``vote_ballot`` alone to
+# vote_ballot/v4: only the vote prompt's `primary_reason_id` example text
+# changed (a real transcript turn id, never a hardcoded one), so this is a
+# single-template prompt-text revision, not the four-template lockstep of
+# 8.8. The committed sample / prompt-regression bytes still record v3 and
+# are regenerated in Task 8.18, not here.
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "crewmate_report": "crewmate_report.v2",
     "impostor_report": "impostor_report_v3",
     "accusation_round": "accusation_round.v4",
-    "vote_ballot": "vote_ballot/v3",
+    "vote_ballot": "vote_ballot/v4",
 }
 
 # Headless recording runs meetings deadline-free (DESIGN.md §1.4, §5.2, §8.3:

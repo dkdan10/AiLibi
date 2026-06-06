@@ -52,7 +52,8 @@ than aborting the meeting). The vote inherits the third 7.12 guard,
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine, Sequence
+import re
+from collections.abc import Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 
@@ -73,6 +74,7 @@ from meetings.schemas import (
     MeetingTurn,
     PlayerId,
     SawPlayerObservation,
+    TurnId,
     TurnKind,
     VoteBallot,
 )
@@ -132,6 +134,28 @@ INVALID_VOTE_TARGET_MARKER: Final[str] = (
 TEAMMATE_VOTE_TARGET_MARKER: Final[str] = (
     "[teammate target {target!r} coerced to SKIP] "
 )
+
+# Audit-trail marker prepended to ``rationale_text`` when a ballot's
+# ``primary_reason_id`` references a turn that does not exist in THIS
+# meeting's transcript and cannot be recovered as a suffix form. The id is
+# nulled (DESIGN.md §5.5) so the ballot-follows-chain instrument is not
+# corrupted by a hallucinated id or the vote prompt's old hardcoded example
+# (audit gp-3: 24/78 non-null reason ids dangled). The marker preserves the
+# original (invalid) id for replay analysis and lets downstream eval count
+# normalizations per game by grepping one string (mirrors the
+# ``INVALID_VOTE_TARGET_MARKER`` prefix shape). Pin the literal exactly.
+INVALID_REASON_ID_MARKER: Final[str] = (
+    "[invalid primary_reason_id {reason_id!r} nulled] "
+)
+
+# Matches the trailing ``:turn-{k}`` ordinal of a turn id. A
+# ``primary_reason_id`` whose ordinal exists in THIS meeting but whose
+# meeting prefix is wrong is a recoverable suffix form (the 7B model echoes
+# the bare ``m-1:turn-0`` instead of the long canonical
+# ``{meeting_id}:turn-0``); :func:`_normalize_ballot_reason_id` re-anchors it
+# to the canonical id. An ordinal that does not exist in the meeting is
+# nulled, never guessed.
+_REASON_ID_TURN_SUFFIX: Final[re.Pattern[str]] = re.compile(r":turn-(\d+)$")
 
 _SKIP_TARGET: Final[str] = "SKIP"
 _VALID_ROLES: Final[frozenset[str]] = frozenset({"CREWMATE", "IMPOSTOR"})
@@ -967,6 +991,22 @@ class MeetingManager:
         normalized = _normalize_ballot_target(
             ballot=parsed, candidate_targets=candidate_targets
         )
+        # primary_reason_id integrity (DESIGN.md §5.5; audit gp-3): the id is
+        # the only mechanical deliberation->vote link, so a dangling id
+        # silently zeroes the ballot-follows-chain instrument. Validate it
+        # against THIS meeting's turn-id set -- a recoverable ``:turn-{k}``
+        # suffix form normalizes to the canonical id, anything else is nulled
+        # with an audit marker. The valid-id set is built once from the final
+        # transcript (cheap; the chain is a handful of turns).
+        valid_reason_ids = frozenset(turn.turn_id for turn in transcript.turns)
+        reason_id_by_ordinal = {
+            turn.turn_index: turn.turn_id for turn in transcript.turns
+        }
+        normalized = _normalize_ballot_reason_id(
+            ballot=normalized,
+            valid_reason_ids=valid_reason_ids,
+            reason_id_by_ordinal=reason_id_by_ordinal,
+        )
         # Teammate firewall guard (Task 7.12): a teammate is a *valid* living
         # candidate, so the invalid-target normalization above never catches
         # it. Coerce a ballot that targets a fellow impostor to SKIP so an
@@ -1283,6 +1323,48 @@ def _normalize_ballot_target(
     )
 
 
+def _normalize_ballot_reason_id(
+    *,
+    ballot: VoteBallot,
+    valid_reason_ids: frozenset[TurnId],
+    reason_id_by_ordinal: Mapping[int, TurnId],
+) -> VoteBallot:
+    """Validate / normalize a ballot's ``primary_reason_id`` (DESIGN.md §5.5).
+
+    ``primary_reason_id`` must reference a real ``turn_id`` from THIS
+    meeting's transcript -- it is the only mechanical link from the
+    deliberation chain to the vote, so a dangling id silently zeroes the
+    ballot-follows-chain instrument (audit gp-3). Mirrors
+    :func:`_normalize_ballot_target`:
+
+    * ``None`` or an already-canonical id passes through unchanged.
+    * A recoverable suffix form -- one whose trailing ``:turn-{k}`` ordinal
+      exists in this meeting but whose meeting prefix is wrong (the 7B model
+      echoes the bare ``m-1:turn-0`` instead of the long canonical
+      ``{meeting_id}:turn-0``) -- normalizes to the canonical ``turn_id``
+      for that ordinal.
+    * Anything else (a hallucinated ordinal, the prompt's old hardcoded
+      example, a malformed string) is nulled, never guessed, with
+      :data:`INVALID_REASON_ID_MARKER` prefixed to ``rationale_text``.
+    """
+
+    reason_id = ballot.primary_reason_id
+    if reason_id is None or reason_id in valid_reason_ids:
+        return ballot
+    match = _REASON_ID_TURN_SUFFIX.search(reason_id)
+    if match is not None:
+        canonical = reason_id_by_ordinal.get(int(match.group(1)))
+        if canonical is not None:
+            return ballot.model_copy(update={"primary_reason_id": canonical})
+    marker = INVALID_REASON_ID_MARKER.format(reason_id=reason_id)
+    return ballot.model_copy(
+        update={
+            "primary_reason_id": None,
+            "rationale_text": marker + ballot.rationale_text,
+        }
+    )
+
+
 # ---------------------------------------------------------------------------
 # Teammate firewall guard (Task 7.12).
 #
@@ -1363,6 +1445,12 @@ def coerce_teammate_ballot_to_skip(
     otherwise rewrites ``target`` to ``SKIP`` and prepends
     :data:`TEAMMATE_VOTE_TARGET_MARKER` to ``rationale_text`` so the
     original (teammate) target stays auditable in the replay record.
+
+    The coercion also nulls ``primary_reason_id`` (DESIGN.md §5.5; audit
+    gp-3): once the vote collapses to SKIP the reason id is stale (it was
+    chosen to justify the betrayal target), so a coerced ballot that kept
+    its now-meaningless reason id would corrupt the ballot-follows-chain
+    instrument exactly as a hallucinated id does.
     """
 
     if not fellow_impostor_ids or ballot.target not in fellow_impostor_ids:
@@ -1371,6 +1459,7 @@ def coerce_teammate_ballot_to_skip(
     return ballot.model_copy(
         update={
             "target": _SKIP_TARGET,
+            "primary_reason_id": None,
             "rationale_text": marker + ballot.rationale_text,
         }
     )
@@ -1426,6 +1515,7 @@ __all__ = [
     "DEFAULT_VOTE_MAX_TOKENS",
     "DEFAULT_VOTE_RATIONALE",
     "DEFAULT_VOTE_TEMPERATURE",
+    "INVALID_REASON_ID_MARKER",
     "INVALID_VOTE_TARGET_MARKER",
     "TEAMMATE_VOTE_TARGET_MARKER",
     "DefaultTrigger",

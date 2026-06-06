@@ -491,10 +491,10 @@ class TestVoteBallotTemplate:
         )
 
         # vote_ballot.j2 carries an explicit visible version marker in its
-        # body, bumped to v3 in Task 8.8's lockstep bump. A regression that
-        # bumps the version without updating the test is the desired
-        # failure mode.
-        assert "vote_ballot/v3" in prompt
+        # body, bumped to v4 in Task 8.16 (the `primary_reason_id` example
+        # is now sourced from the live transcript). A regression that bumps
+        # the version without updating the test is the desired failure mode.
+        assert "vote_ballot/v4" in prompt
 
     def test_renders_voter_and_candidates(self) -> None:
         prompt = vote_ballot_prompt(
@@ -526,6 +526,43 @@ class TestVoteBallotTemplate:
         assert "stub-reply-from-p-5" in prompt
         # The opening turn's accusation is surfaced for the voter.
         assert "accuses `p-5`" in prompt
+
+    def test_primary_reason_id_example_is_sourced_from_transcript(self) -> None:
+        # Task 8.16 (DESIGN.md §5.5; audit gp-3): the decision-rule example
+        # for `primary_reason_id` must cite a REAL turn id from the rendered
+        # transcript, never the old hardcoded `m-7:turn-4` (which the 7B
+        # model copied verbatim into other meetings' ballots).
+        transcript = _stub_transcript()
+        prompt = vote_ballot_prompt(
+            voter_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=transcript,
+            contradiction_flags=(),
+            suspicion_graph=(),
+            candidate_targets=("p-1", "p-2"),
+            skip_confidence_threshold=0.6,
+        )
+
+        # The example is the first turn's real id; the hardcoded one is gone.
+        assert transcript.turns[0].turn_id == "m-1:turn-0"
+        assert '`"m-1:turn-0"`' in prompt
+        assert "m-7:turn-4" not in prompt
+
+    def test_primary_reason_id_example_omitted_for_empty_transcript(self) -> None:
+        # With no turns there is no real id to cite, so the example clause is
+        # dropped rather than falling back to a hardcoded (dangling) id.
+        prompt = vote_ballot_prompt(
+            voter_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=MeetingTranscript(turns=()),
+            contradiction_flags=(),
+            suspicion_graph=(),
+            candidate_targets=("p-1", "p-2"),
+            skip_confidence_threshold=0.6,
+        )
+
+        assert "m-7:turn-4" not in prompt
+        assert "primary_reason_id" in prompt
 
     def test_renders_suspicion_graph_entries(self) -> None:
         prompt = vote_ballot_prompt(
