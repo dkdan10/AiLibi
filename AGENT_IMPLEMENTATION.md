@@ -363,25 +363,25 @@ since they don't touch engine internals — they consume them.
 
 ### Phase 3 — Strategic agents and meetings (1 foreground agent, prompt work in parallel)
 
-**Goal:** LLM-driven meetings work end-to-end. Reports, accusations, votes. Cost stays under budget.
+**Goal:** LLM-driven meetings work end-to-end. Openings, a reactive accusation chain, votes. Cost stays under budget.
 
 **Parallelism:** LLM client, shared schemas, memory rendering, meeting state, reasoner, voting, contradiction detection, and meeting/orchestrator integration are serial. Prompt templates can run in parallel after memory rendering lands, because they depend on both schemas and rendered-memory inputs.
 
 **Tasks (sequential foreground, on `phase-3-meetings`):**
 
 - **3.1 LLM client.** `llm/client.py`, `llm/provider.py`, `llm/fake_provider.py`, cache, and budget. CI uses the fake provider only.
-- **3.2 Shared meeting/output schemas.** `meetings/schemas.py` owns `ReportDocument`, `Statement`, `VoteBallot`, `MeetingResult`, and contradiction DTOs. `agents/strategic/output_schemas.py` may re-export/wrap them but must not duplicate definitions.
+- **3.2 Shared meeting/output schemas.** `meetings/schemas.py` owns `MeetingTurn`, `MeetingTranscript`, `VoteBallot`, `MeetingResult`, and contradiction DTOs. `agents/strategic/output_schemas.py` may re-export/wrap them but must not duplicate definitions.
 - **3.3 Memory rendering.** `agents/memory/store.py::render_for_prompt` per §6.6. This is the hard, important one.
-- **3.8 Meeting state machine.** `meetings/manager.py` and `meetings/transcript.py` per §5.1 + §5.2. Returns `MeetingResult`; does not mutate engine state.
+- **3.8 Meeting state machine.** `meetings/manager.py` and `meetings/transcript.py` per §5.1 + §5.2 — the reactive accusation chain (opening → chain → opt-in info-share → vote). Returns `MeetingResult`; does not mutate engine state.
 - **3.9 Strategic reasoner.** `agents/strategic/reasoner.py` — wires render_for_prompt → LLM → parsed output.
 - **3.10 Voting.** `meetings/voting.py` per §5.5.
 - **3.11 Contradiction detection.** `meetings/transcript.py::detect_contradictions` per §5.4 + §6.4.
 - **3.12 Meeting/orchestrator integration.** Orchestrator applies `MeetingResult`, resumes gameplay, and records meeting artifacts, prompt versions, and LLM cost metadata in replay/eval records.
 
 **Parallel tasks (cloud runner, after 3.3 merges):**
-- **3.4 Crewmate report prompt.** `agents/strategic/prompts/crewmate_report.j2`.
-- **3.5 Impostor report prompt.** `agents/strategic/prompts/impostor_report.j2`.
-- **3.6 Accusation round prompt.** `agents/strategic/prompts/accusation_round.j2`.
+- **3.4 Crewmate opening prompt.** `agents/strategic/prompts/crewmate_report.j2`.
+- **3.5 Impostor opening prompt.** `agents/strategic/prompts/impostor_report.j2`.
+- **3.6 Accusation-chain turn prompt.** `agents/strategic/prompts/accusation_round.j2`.
 - **3.7 Vote ballot prompt.** `agents/strategic/prompts/vote_ballot.j2`.
 
 These are four files, four agents, fully parallel.

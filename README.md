@@ -8,7 +8,7 @@
 
 AiLibi is two things at once.
 
-**A deterministic multi-agent reasoning testbed.** Players (agents) roam a room graph, complete tasks, witness events, and meet to deliberate. One impostor is hidden among them. The product is a research environment for studying agent reasoning under hidden information — not a game with AI players bolted on. See [DESIGN.md](DESIGN.md) for the full system architecture.
+**A deterministic multi-agent reasoning testbed.** Players (agents) roam a room graph, complete their own tasks, witness events, and meet to deliberate over a reactive accusation chain. Two impostors are hidden among them. The product is a research environment for studying agent reasoning under hidden information — not a game with AI players bolted on. See [DESIGN.md](DESIGN.md) for the full system architecture.
 
 **An experiment in agentic software workflow.** Every coding PR was opened by an AI coding agent against a task contract authored by a human. Architecture is enforced by tooling — import-linter, `mypy --strict`, a recursive observation leak test, byte-identical replay determinism. The contracts in `tasks/phase-N.md` are the only spec each agent sees. So far: 82 merged PRs across phases 0–5 (MVP complete), 980 passing tests, 29 read-only audits in `audits/` (including a 50-game real-provider tournament eval), zero observation-firewall violations.
 
@@ -196,7 +196,7 @@ Python 3.11 only. The [`uv`](https://docs.astral.sh/uv/) package manager is requ
 - `engine/` — pure simulation. No LLM, no I/O, no globals. Owns hidden state.
 - `observation/` — the firewall. Builds `ObservationPacket` and `PublicMapView` from engine state, strips every hidden field, audits every packet to disk.
 - `agents/` — tactical (deterministic FSMs) and strategic (LLM-driven meeting reasoning) policies. No engine imports.
-- `meetings/` — the Phase 3 meeting protocol: structured report intake → accusation rounds → voting, with contradiction detection. No engine imports.
+- `meetings/` — the meeting protocol: an opening turn → a reactive accusation chain → opt-in info-share → voting, with contradiction detection. No engine imports.
 - `llm/` — provider-neutral `LLMClient` Protocol, Anthropic adapter, budget enforcement, fake deterministic provider for CI.
 - `orchestrator/` — wires everything: seeds initial state, dispatches agents, translates `ActionIntent` → engine `Action`, runs meetings, records replay JSONL.
 - `eval/` — the eval harness: the typed tournament report schema, four pure metric analyzers (vote correctness, accusation calibration, alibi fabrication, cost dashboard), the JSONL→`TournamentReport` loader (roles taken from authoritative final engine state, never the replay), the tournament runner, the determinism + leak tests, and the prompt-regression close gate.
