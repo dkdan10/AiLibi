@@ -5,6 +5,7 @@
 .import_linter_cache/
 __pycache__/
 *.py[cod]
+.claude/
 
 # Local environment files
 .env
