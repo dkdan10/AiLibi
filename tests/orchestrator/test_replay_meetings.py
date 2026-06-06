@@ -4,36 +4,45 @@ Pins the R-9 acceptance gate: the replay log records meeting
 transcripts, ballots, contradiction flags, prompt versions, and per-call
 LLM cost metadata for every meeting. The long-horizon byte-identity
 test exercises a ≥200-tick game that includes one full meeting cycle
-(report intake → accusation rounds → voting → resolution → engine
-resume) and asserts byte-for-byte identity of the replay log across
-two independent runs against the deterministic fake-provider stub.
+(opening turn → reactive accusation chain → voting → resolution →
+engine resume) and asserts byte-for-byte identity of the replay log
+across two independent runs against the deterministic stub LLM.
+
+Re-pointed to the Task 8.7 accusation-chain protocol (DESIGN.md §5.2):
+the transcript is the single ordered ``turns`` list (opening → reply →
+opt_in), the manager requests one ``MeetingTurn`` per turn, and
+``MeetingConfig`` no longer carries a fixed ``round_count`` — the chain
+terminates deterministically off the recorded turns. The deterministic
+stub drives a real two-turn chain (the opening accuses a living player,
+who replies without re-accusing) so the reply path and its ``reply_to``
+wiring are recorded and round-tripped.
 
 The short-horizon byte-identity test from Task 2.8
-(``tests/orchestrator/test_game.py:139-155``) is preserved as a fast
-smoke check; this file adds the meeting-cycle gate without replacing
-the existing pin.
+(``tests/orchestrator/test_game.py``) is preserved as a fast smoke
+check; this file adds the meeting-cycle gate without replacing the
+existing pin.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, TypeAdapter
 
+from agents.base import AgentInterface
 from engine.entities import BodyState, PlayerId, Role
 from engine.world import Map, WorldState, load_canonical_map
 from llm.client import CallKind, LLMResponse, TokenUsage
-from collections.abc import Callable
-
-from agents.base import AgentInterface
 from meetings.manager import MeetingConfig, MeetingDeadlines, SuspicionEntry
 from meetings.schemas import (
+    AccusationClaim,
     ContradictionRef,
     MeetingTranscript,
-    ReportDocument,
-    Statement,
+    MeetingTurn,
+    TurnKind,
     VoteBallot,
 )
 from observation.action_intent import ActionIntent
@@ -65,16 +74,30 @@ def _intent(data: object) -> ActionIntent:
 # Deterministic stub LLM + prompt callables.
 # ---------------------------------------------------------------------------
 
+# The living player the stub's OPENING turn accuses. Passing the chain to a
+# fixed accused keeps the meeting's turn sequence a pure function of the
+# wiring: opening (the reporter) → reply (the accused, who does not
+# re-accuse) → chain termination → ballots. p-2 is the corpse in the seeded
+# setup below, so p-3 is always living when the meeting opens.
+_ACCUSED: str = "p-3"
+
 
 class _DeterministicLLMClient:
     """Stub :class:`~llm.client.LLMClient` whose output depends only on inputs.
 
-    Same prompt + same schema + same call_kind → byte-identical
-    response. This is the contract the determinism gate relies on; the
-    fake provider in :mod:`llm.fake_provider` provides similar
-    guarantees but builds responses from Pydantic introspection. The
-    stub here is simpler and easier to reason about for the
-    long-horizon replay test.
+    Same prompt + same schema + same call_kind → byte-identical response.
+    This is the contract the determinism gate relies on; the fake provider
+    in :mod:`llm.fake_provider` provides similar guarantees but builds
+    responses from Pydantic introspection. The stub here is simpler and
+    easier to reason about for the long-horizon replay test.
+
+    Turn calls (``schema is MeetingTurn``) are dispatched off the prompt
+    prefix rendered by the stub prompt callables below: an opening prompt
+    (``CR:`` / ``IM:``) yields a turn accusing :data:`_ACCUSED`, which
+    hands the chain to that player; a reply / opt-in prompt (``ST:``)
+    yields a claim-free turn, which terminates the chain. The manager is
+    authoritative for the identity fields (turn_id / turn_index / speaker /
+    turn_kind / reply_to), so the placeholders here never reach the record.
     """
 
     def __init__(self, *, vote_target: str = "SKIP", cost_usd: float = 0.0) -> None:
@@ -92,23 +115,28 @@ class _DeterministicLLMClient:
         model: str | None = None,
         agent_id: str | None = None,
     ) -> LLMResponse:
-        if schema is ReportDocument:
-            text = ReportDocument(
-                agent_id="placeholder",
-                tick=0,
-                observations=(),
-                claims=(),
-                free_text="report",
-            ).model_dump_json()
-        elif schema is Statement:
-            text = Statement(
-                statement_id="placeholder",
+        if schema is MeetingTurn:
+            claims = (
+                (
+                    AccusationClaim(
+                        type="accusation",
+                        against=_ACCUSED,
+                        confidence=0.6,
+                        reason="deterministic stub accusation",
+                    ),
+                )
+                if prompt.startswith(("CR:", "IM:"))
+                else ()
+            )
+            text = MeetingTurn(
+                turn_id="placeholder",
+                turn_index=0,
                 speaker="placeholder",
-                tick=0,
-                round_index=0,
-                target=None,
-                claims=(),
-                free_text="statement",
+                turn_kind="opening",
+                reply_to=None,
+                observations=(),
+                claims=claims,
+                free_text="turn",
             ).model_dump_json()
         elif schema is VoteBallot:
             text = VoteBallot(
@@ -159,9 +187,11 @@ def _statement_prompt(
     rendered_memory: str,
     transcript: MeetingTranscript,
     contradictions: tuple[ContradictionRef, ...],
+    prior_turn: MeetingTurn | None,
+    turn_kind: TurnKind,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> str:
-    return f"ST:{agent_id}:{len(transcript.reports)}:{len(transcript.statements)}"
+    return f"ST:{agent_id}:{turn_kind}:{len(transcript.turns)}"
 
 
 def _vote_prompt(
@@ -185,10 +215,7 @@ def _build_runner(
 ) -> DefaultMeetingRunner:
     llm = _DeterministicLLMClient(vote_target=vote_target, cost_usd=cost_usd)
     config = MeetingConfig(
-        round_count=2,
-        deadlines=MeetingDeadlines(
-            report_seconds=None, statement_seconds=None, vote_seconds=None
-        ),
+        deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
     )
     return DefaultMeetingRunner(
         llm_client=llm,
@@ -336,11 +363,17 @@ class TestReplayRecordsMeetingArtifacts:
         ]
         assert len(meeting_entries) == 1
         meeting = meeting_entries[0]
-        # Transcript holds both reports and statements.
-        # 4 living players × 1 report = 4 reports.
-        assert len(meeting.transcript.reports) == 4
-        # 4 living players × 2 rounds = 8 statements.
-        assert len(meeting.transcript.statements) == 8
+        # Transcript is the ordered chain (DESIGN.md §5.2): the reporter's
+        # opening turn accuses _ACCUSED, who replies without re-accusing,
+        # terminating the chain. The stub provides no observations, so no
+        # opt-in turn is eligible.
+        assert len(meeting.transcript.turns) == 2
+        opening, reply = meeting.transcript.turns
+        assert opening.turn_kind == "opening"
+        assert opening.speaker == "p-1"  # the reporter opens
+        assert reply.turn_kind == "reply"
+        assert reply.speaker == _ACCUSED  # the chain passes to the accused
+        assert reply.reply_to == opening.turn_id
         # 4 ballots from 4 living voters.
         assert len(meeting.ballots) == 4
         # Contradictions field exists (empty in this stub).
@@ -352,16 +385,15 @@ class TestReplayRecordsMeetingArtifacts:
             "accusation_round",
             "vote_ballot",
         }
-        # Task 3.20 bumped the accusation_round template to v2; Task 7.12
-        # bumped it to v3 (gated teammate-coordination block). A fresh
-        # replay entry must carry the new version string end-to-end.
-        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v3"
-        # LLM cost metadata recorded per call. With round_count=2:
-        #   reports: 4 calls
-        #   statements: 4 voters × 2 rounds = 8 calls
-        #   ballots: 4 calls
-        # Total: 16 calls.
-        assert len(meeting.llm_calls) == 16
+        # Task 8.8 bumped the accusation_round template to v4 (the reactive
+        # chain turn prompt). A fresh replay entry must carry the new
+        # version string end-to-end.
+        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v4"
+        # LLM cost metadata recorded per call. The chain protocol:
+        #   turns: 1 opening + 1 reply = 2 calls
+        #   ballots: 4 living voters = 4 calls
+        # Total: 6 calls.
+        assert len(meeting.llm_calls) == 6
         assert all(call.cost_usd == 0.002 for call in meeting.llm_calls)
         assert all(call.model == "deterministic-stub" for call in meeting.llm_calls)
         # State hashes pin the engine-side mutation envelope.
@@ -411,8 +443,8 @@ class TestReplayRecordsMeetingArtifacts:
         produce byte-identical replay JSONL files. This exercises:
 
         * the engine tick loop (≥ 200 ticks),
-        * one full meeting cycle (report → statement → vote → eject
-          or skip → resume),
+        * one full meeting cycle (opening → reply chain → vote →
+          eject or skip → resume),
         * the LLM-call recording path,
         * the meeting replay-record serialization path,
         * the post-meeting engine-state application + rng-state
@@ -449,12 +481,12 @@ class TestReplayRecordsMeetingArtifacts:
             entry for entry in entries if isinstance(entry, MeetingReplayEntry)
         ]
         # R-9 long-horizon gate: at least one full meeting cycle
-        # (report intake → accusation rounds → voting → resolution →
+        # (opening turn → reactive chain → voting → resolution →
         # engine resume). DESIGN.md §5.2 + §11.4.
         assert len(meeting_entries) >= 1
-        # And the meeting was a full cycle: 4 reports + 8 statements
-        # (round_count=2) + 4 ballots = 16 LLM calls.
-        assert len(meeting_entries[0].llm_calls) == 16
+        # And the meeting was a full chain cycle: 2 turns (opening +
+        # reply) + 4 ballots = 6 LLM calls.
+        assert len(meeting_entries[0].llm_calls) == 6
         # The replay log carries at least one tick entry per game
         # tick the loop processed.
         assert len(tick_entries) >= 1
