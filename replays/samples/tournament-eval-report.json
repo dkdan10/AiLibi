@@ -23,10 +23,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-1",
@@ -49,10 +46,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-2",
@@ -75,10 +69,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-3",
@@ -101,10 +92,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-4",
@@ -127,10 +115,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-5",
@@ -153,10 +138,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-6",
@@ -179,10 +161,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-7",
@@ -205,10 +184,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-8",
@@ -231,10 +207,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-9",
@@ -257,10 +230,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-10",
@@ -283,10 +253,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-11",
@@ -309,10 +276,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-12",
@@ -335,10 +299,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-13",
@@ -361,10 +322,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-14",
@@ -387,10 +345,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-15",
@@ -413,10 +368,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-16",
@@ -439,10 +391,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-17",
@@ -465,10 +414,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-18",
@@ -491,10 +437,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 2,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-19",
@@ -517,10 +460,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-20",
@@ -543,10 +483,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-21",
@@ -569,10 +506,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 2,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-22",
@@ -712,10 +646,7 @@
           "by_model": {
             "qwen2.5:7b-instruct": 0.0
           }
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-23",
@@ -738,10 +669,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-24",
@@ -1005,10 +933,7 @@
           "by_model": {
             "qwen2.5:7b-instruct": 0.0
           }
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-25",
@@ -1031,10 +956,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-26",
@@ -1174,10 +1096,7 @@
           "by_model": {
             "qwen2.5:7b-instruct": 0.0
           }
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-27",
@@ -1200,10 +1119,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-28",
@@ -1226,10 +1142,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-29",
@@ -1252,10 +1165,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-30",
@@ -1278,10 +1188,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-31",
@@ -1304,10 +1211,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-32",
@@ -1330,10 +1234,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-33",
@@ -1356,10 +1257,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-34",
@@ -1382,10 +1280,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-35",
@@ -1408,10 +1303,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-36",
@@ -1434,10 +1326,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-37",
@@ -1460,10 +1349,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 2,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-38",
@@ -1486,10 +1372,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-39",
@@ -1512,10 +1395,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-40",
@@ -1538,10 +1418,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-41",
@@ -1564,10 +1441,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-42",
@@ -1590,10 +1464,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-43",
@@ -1616,10 +1487,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-44",
@@ -1642,10 +1510,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 2,
-        "instances_complete_at_win": 0
+        }
       },
       {
         "game_id": "headless-seed-45",
@@ -1668,10 +1533,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-46",
@@ -1694,10 +1556,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 1
+        }
       },
       {
         "game_id": "headless-seed-47",
@@ -1720,10 +1579,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-48",
@@ -1746,10 +1602,7 @@
           "total_input_tokens": 0,
           "total_output_tokens": 0,
           "by_model": {}
-        },
-        "kill_gifted": false,
-        "instances_dropped": 1,
-        "instances_complete_at_win": 2
+        }
       },
       {
         "game_id": "headless-seed-49",
@@ -1930,10 +1783,7 @@
           "by_model": {
             "qwen2.5:7b-instruct": 0.0
           }
-        },
-        "kill_gifted": false,
-        "instances_dropped": 2,
-        "instances_complete_at_win": 1
+        }
       }
     ],
     "seeds_used": [
@@ -1987,10 +1837,7 @@
       47,
       48,
       49
-    ],
-    "kill_gifted_wins": 0,
-    "instances_dropped_total": 55,
-    "mean_instances_complete_at_win": 2.0
+    ]
   },
   "vote_correctness": {
     "total_ejections": 0,

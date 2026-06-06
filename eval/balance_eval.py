@@ -457,6 +457,7 @@ def load_tournament_report(
     roles_by_seed: Mapping[int, Mapping[PlayerId, Role]],
     tasks_per_crewmate: int = 1,
     game_map: Map | None = None,
+    derive_kill_gift: bool = True,
 ) -> TournamentReport:
     """Assemble a :class:`TournamentReport` from recorded replay JSONL on disk.
 
@@ -481,13 +482,27 @@ def load_tournament_report(
     set is ``tasks_per_crewmate=2``). ``game_map`` defaults to the canonical map.
     They feed only the deterministic re-seed; no live game is run.
 
-    This is the report-build path that has no live model and no engine re-run:
-    given frozen recorded replays plus a deterministically-derived ``roles`` map,
-    it reconstructs the typed tournament artifact the Phase 5 metrics analyze.
-    ``run_tournament_eval`` (which runs games and captures roles from the
-    in-memory result) is unchanged -- this is a behavior-preserving promotion of
-    the existing private assembly to a public, directory-driven entry point
-    (the prompt-regression suite, Task 5.8, is the first consumer).
+    ``derive_kill_gift`` (default ``True``) controls the Task 8.17 accounting
+    walk. The walk is the one place this loader re-runs the engine (to read
+    RESOLVED kill/completion events + the live task set). A caller that does NOT
+    consume the kill-gift fields and wants the original *no-engine-re-run*
+    behavior over frozen fixtures passes ``derive_kill_gift=False``: the per-game
+    ``kill_gifted`` / ``instances_dropped`` / ``instances_complete_at_win`` then
+    stay at their no-gift defaults and no reconstruction is attempted. The
+    prompt-regression suite (Task 5.8) uses this -- it reads only the meeting
+    metrics, and its frozen fixtures need not be re-seedable under the current
+    seeder (e.g. after the Task 8.14 cooldown re-seed, until Task 8.18 re-records
+    them). The report-building path (``scripts/build_sample_report.py``) keeps the
+    default so the committed reports carry the real facts.
+
+    This is the report-build path that has no live model: with
+    ``derive_kill_gift=False`` it does no engine re-run at all (folding frozen
+    recorded outcomes); with the default it adds only the deterministic kill-gift
+    reconstruction walk above. ``run_tournament_eval`` (which runs games and
+    captures roles from the in-memory result) is unchanged -- this is a
+    behavior-preserving promotion of the existing private assembly to a public,
+    directory-driven entry point (the prompt-regression suite, Task 5.8, is the
+    first consumer).
 
     ``roles_by_seed`` supplies the per-game role ground truth (which players are
     impostors) keyed by seed. It is NOT read from the replay JSONL -- the leak
@@ -521,12 +536,16 @@ def load_tournament_report(
                 "with roles supplied but no replay file on disk is an "
                 "inconsistency, not a game to skip."
             )
-        kill_gift = _kill_gift_accounting(
-            replay_path,
-            seed=seed,
-            roles=roles_by_seed[seed],
-            tasks_per_crewmate=tasks_per_crewmate,
-            game_map=resolved_map,
+        kill_gift = (
+            _kill_gift_accounting(
+                replay_path,
+                seed=seed,
+                roles=roles_by_seed[seed],
+                tasks_per_crewmate=tasks_per_crewmate,
+                game_map=resolved_map,
+            )
+            if derive_kill_gift
+            else _NO_KILL_GIFT
         )
         games.append(
             _game_report_from_replay(

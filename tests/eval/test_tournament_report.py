@@ -862,17 +862,22 @@ def test_meeting_rate_validator_rejects_negative_counts() -> None:
 
 # All map tasks moved into the spawn room with duration 1: every crewmate spawns
 # on its task and completes it in a single do_task tick, so the scripted games
-# below need no movement. The map id is unchanged, so the engine's state-map
-# guard and the seeder accept it; the walk is handed this SAME map so its
-# reconstructed state_hash matches the recording.
+# below need no movement. ``kill_cooldown_ticks`` is set to 1 (the map minimum)
+# so the Task 8.14 round-start cooldown re-seed (impostors start at
+# ``kill_cooldown_ticks``) decrements to 0 after a single tick-0 wait -- every
+# scripted kill below fires on tick 1+, so it is accepted under both the
+# round-start cooldown and the historical zero-cooldown seeder. The map id is
+# unchanged, so the engine's state-map guard and the seeder accept it; the walk is
+# handed this SAME map so its reconstructed state_hash matches the recording.
 _KILL_GIFT_MAP: Map = load_canonical_map().model_copy(
     update={
+        "kill_cooldown_ticks": 1,
         "tasks": {
             task_id: task.model_copy(
                 update={"room": load_canonical_map().spawn.room, "duration_ticks": 1}
             )
             for task_id, task in load_canonical_map().tasks.items()
-        }
+        },
     }
 )
 
@@ -1134,7 +1139,12 @@ def test_kill_driven_impostor_win_is_not_kill_gifted() -> None:
             seed=seed,
             num_players=3,
             num_impostors=1,
-            scripted=[[_kill(impostor, victim), _wait(crew[1])]],
+            # Tick 0 waits so the round-start kill cooldown decrements to 0; the
+            # parity kill fires on tick 1.
+            scripted=[
+                [_wait(impostor), _wait(crew[0]), _wait(crew[1])],
+                [_kill(impostor, victim), _wait(crew[1])],
+            ],
         )
         facts = _kill_gift_accounting(
             replay,
@@ -1235,7 +1245,11 @@ def test_mean_complete_at_win_is_none_without_a_task_win(tmp_path: Path) -> None
         seed=4,
         num_players=3,
         num_impostors=1,
-        scripted=[[_kill(impostor, crew[0]), _wait(crew[1])]],
+        # Tick 0 waits out the round-start cooldown; the parity kill is on tick 1.
+        scripted=[
+            [_wait(impostor), _wait(crew[0]), _wait(crew[1])],
+            [_kill(impostor, crew[0]), _wait(crew[1])],
+        ],
     )
     report = load_tournament_report(
         tmp_path,
