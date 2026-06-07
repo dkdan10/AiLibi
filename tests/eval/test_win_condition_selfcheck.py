@@ -35,21 +35,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples"
 _SAMPLES_9P2I = _SAMPLES_4P1I / "9p2i"
 
-# Task 8.14 round-start kill cooldown (DESIGN.md §3.4; audit gp-1) seeds every
-# impostor's cooldown to ``kill_cooldown_ticks`` instead of 0, changing every
-# committed game's initial WorldState and so its per-tick state_hash; the
-# committed bytes no longer reconstruct byte-identically. The committed-set
-# reconstruction cases below are skipped until Task 8.18 re-records both sets and
-# re-enables them (mirroring the Task 8.1 skip pattern).
-_COMMITTED_RECORD_SKIP = pytest.mark.skip(
-    reason=(
-        "Committed bytes invalidated by the Task 8.14 round-start cooldown "
-        "re-seed (DESIGN.md §3.4; audit gp-1); re-recorded and re-enabled in "
-        "Task 8.18."
-    )
-)
-
-
 # ---------------------------------------------------------------------------
 # Pure predicate
 # ---------------------------------------------------------------------------
@@ -118,7 +103,6 @@ def _selfcheck_4p1i(seed: int) -> WinConditionSelfCheck:
     )
 
 
-@_COMMITTED_RECORD_SKIP
 def test_committed_4p1i_set_holds_the_invariant() -> None:
     """Every committed 4p/1i game satisfies first_zero == game_over (A-A-3)."""
 
@@ -132,7 +116,7 @@ def test_committed_4p1i_set_holds_the_invariant() -> None:
         if check.first_zero_impostor_tick is not None:
             eliminations += 1
             assert check.game_over_tick == check.first_zero_impostor_tick
-    # Ground truth of the Task 8.12 re-record: the chain-protocol flat set
+    # Ground truth of the Task 8.18 re-record: the chain-protocol flat set
     # resolves every meeting SKIPPED (no ejection), so no game eliminates the
     # impostor — every win is CREWMATE_TASKS or IMPOSTOR_PARITY. The per-game
     # consistency assertions above still cover all 50 reconstructions; the
@@ -170,7 +154,6 @@ def _crewmate_eject_seeds(replay_dir: Path) -> list[int]:
     return seeds
 
 
-@_COMMITTED_RECORD_SKIP
 def test_committed_9p2i_elimination_games_hold_the_invariant() -> None:
     """Multi-impostor 9p/2i eliminations satisfy the invariant (A-A-3).
 
@@ -208,15 +191,8 @@ def test_committed_9p2i_elimination_games_hold_the_invariant() -> None:
         )
 
 
-@_COMMITTED_RECORD_SKIP
 def test_wrong_roster_fails_loud_on_state_hash() -> None:
-    """A roster that does not match the recording diverges the per-tick hash.
-
-    Skipped by Task 8.14: the round-start cooldown re-seed (DESIGN.md §3.4; audit
-    gp-1) also diverges the committed bytes at tick 0, so this test can no longer
-    isolate the wrong-roster fail-loud mechanism it pins (the right roster would
-    diverge too). Task 8.18 re-records the committed set and re-enables it.
-    """
+    """A roster that does not match the recording diverges the per-tick hash."""
 
     with pytest.raises(ValueError, match="reconstruction diverged"):
         check_replay_win_condition(

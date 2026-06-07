@@ -17,27 +17,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 import build_sample_report as bsr
 from eval.meeting_quality import TournamentEvalReport
-
-# Task 8.17 added a kill-gift accounting engine walk to
-# ``eval.balance_eval.load_tournament_report`` (which ``build_sample_report`` uses),
-# and Task 8.14's round-start kill-cooldown re-seed (DESIGN.md §3.4) changed every
-# committed game's ``state_hash``. Rebuilding the FROZEN flat 4p/1i report now
-# re-seeds + reconstructs those committed replays, which the new cooldown
-# invalidates, so the walk fails reconstruction until Task 8.18 re-records both
-# sets (and regenerates the report carrying the new fields) and re-enables this
-# gate -- mirroring the Task 8.14 / 8.1 committed-recon skip pattern.
-pytestmark = pytest.mark.skip(
-    reason=(
-        "Committed bytes invalidated by the Task 8.14 round-start cooldown re-seed: "
-        "the Task 8.17 kill-gift walk in load_tournament_report reconstructs the "
-        "committed flat replays, which the new cooldown changes. Re-recorded and "
-        "re-enabled in Task 8.18."
-    )
-)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FLAT_4P1I = _REPO_ROOT / "replays" / "samples"

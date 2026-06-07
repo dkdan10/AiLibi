@@ -83,7 +83,7 @@ def test_full_dry_run_lists_all_seeds() -> None:
 def test_meetings_dry_run_uses_real_manifest() -> None:
     proc = _run("--meetings", "--dry-run")
     assert proc.returncode == 0
-    assert "[dry-run] seeds: 22,24,26,49" in proc.stdout
+    assert "[dry-run] seeds: 3,10,13,17,22,24,26,49" in proc.stdout
 
 
 def test_meetings_dry_run_derives_from_manifest(tmp_path: Path) -> None:

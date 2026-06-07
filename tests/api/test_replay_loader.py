@@ -827,15 +827,6 @@ def _committed_9p2i_seeds() -> list[int]:
     )
 
 
-@pytest.mark.skip(
-    reason=(
-        "Task 8.14 round-start kill cooldown (DESIGN.md §3.4; audit gp-1) seeds "
-        "every impostor's cooldown to game_map.kill_cooldown_ticks instead of 0, "
-        "changing every committed game's initial WorldState and so its per-tick "
-        "state_hash; the committed 9p/2i bytes no longer reconstruct. Re-recorded "
-        "and re-enabled in Task 8.18 (wave re-record)."
-    )
-)
 def test_committed_9p2i_set_reconstructs_byte_identically() -> None:
     # Every committed 9p/2i replay reconstructs byte-identically under the current
     # engine: load_replay re-seeds from the committed roster.json (9p/2i + 2
