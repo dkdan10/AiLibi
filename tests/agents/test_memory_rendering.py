@@ -62,15 +62,25 @@ def _self_state_event(
     role: str = "CREWMATE",
     room: str = "CAFETERIA",
     pending_task_id: str | None = None,
+    agent_id: str | None = None,
+    fellow_impostor_ids: tuple[str, ...] | None = None,
 ) -> EpisodicEvent:
+    payload: dict[str, Any] = {
+        "room": room,
+        "role": role,
+        "pending_task_id": pending_task_id,
+    }
+    # ``agent_id`` / ``fellow_impostor_ids`` drive the Task 9.3 render guards
+    # (DESIGN.md §4.7). They are only added to the payload when supplied, so
+    # existing fixtures/tests that omit them render byte-identically.
+    if agent_id is not None:
+        payload["agent_id"] = agent_id
+    if fellow_impostor_ids is not None:
+        payload["fellow_impostor_ids"] = fellow_impostor_ids
     return EpisodicEvent(
         tick=tick,
         type="self_state",
-        payload={
-            "room": room,
-            "role": role,
-            "pending_task_id": pending_task_id,
-        },
+        payload=payload,
         provenance="observed",
     )
 
@@ -428,6 +438,165 @@ class TestBeliefsAndContradictions:
         view = render_for_prompt(memory)
 
         assert view.count("conflict between p-3 and p-4") == 1
+
+
+class TestTeammatePerceptionFirewallRender:
+    """Task 9.3 team-internal firewall, render side (DESIGN.md §4.7).
+
+    Two render-time suppressions keyed off the latest ``self_state`` event:
+
+    * a self-subject ``saw_player`` row (the recipient's own id) never renders
+      into ANY player's prompt -- it would be third-person garble;
+    * for an IMPOSTOR, a ``saw_player`` row that places a fellow impostor at a
+      kill room/tick is dropped from the rendered meeting input (audit gp-7
+      seed 47) -- benign teammate sightings are kept (kill-window only).
+
+    Crewmate renders are byte-identical: ``fellow_impostor_ids`` is empty and
+    the teammate guard is role-gated, while fixtures without ``agent_id`` never
+    trip the self-subject guard.
+    """
+
+    def test_self_subject_saw_player_row_is_suppressed(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=0, role="CREWMATE", agent_id="p-1")
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=10, player_id="p-1", room="ADMIN", action=None)
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=10, player_id="p-2", room="ADMIN", action=None)
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You saw p-1 in ADMIN" not in view
+        assert "You saw p-2 in ADMIN" in view
+
+    def test_self_subject_guard_is_role_independent(self) -> None:
+        # The self-subject guard fires for an impostor too (it is not the
+        # teammate guard): an impostor never sees itself in third person.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=0, role="IMPOSTOR", agent_id="p-9", fellow_impostor_ids=()
+            )
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=10, player_id="p-9", room="STORAGE", action="kill")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You witnessed p-9 kill in STORAGE" not in view
+
+    def test_impostor_teammate_kill_witness_row_is_suppressed(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=0, role="IMPOSTOR", agent_id="p-9", fellow_impostor_ids=("p-1",)
+            )
+        )
+        # Directly witnessed teammate p-1 killing (action == "kill").
+        memory.episodic.append(
+            _saw_player_event(tick=7, player_id="p-1", room="ADMIN", action="kill")
+        )
+        # A non-teammate p-3 witnessed killing elsewhere -- retained.
+        memory.episodic.append(
+            _saw_player_event(tick=7, player_id="p-3", room="STORAGE", action="kill")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You witnessed p-1 kill in ADMIN" not in view
+        assert "You witnessed p-3 kill in STORAGE" in view
+
+    def test_impostor_teammate_at_body_scene_row_is_suppressed(self) -> None:
+        # Body-proximity kill-window: teammate p-1 seen in a room where the
+        # impostor then discovers a body within the proximity window.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=0, role="IMPOSTOR", agent_id="p-9", fellow_impostor_ids=("p-1",)
+            )
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=7, player_id="p-1", room="ADMIN", action=None)
+        )
+        memory.episodic.append(
+            _saw_body_event(tick=8, body_id="b", victim_id="p-3", room="ADMIN")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You saw p-1 in ADMIN" not in view
+        # The body discovery itself still renders.
+        assert "You discovered p-3's body in ADMIN" in view
+
+    def test_impostor_benign_teammate_sighting_is_retained(self) -> None:
+        # Kill-window only: a teammate sighting with no kill action and no nearby
+        # body is benign coordination context and is NOT dropped.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=0, role="IMPOSTOR", agent_id="p-9", fellow_impostor_ids=("p-1",)
+            )
+        )
+        memory.episodic.append(
+            _saw_player_event(tick=2, player_id="p-1", room="CAFETERIA", action=None)
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You saw p-1 in CAFETERIA" in view
+
+    def test_role_flip_render_identical_except_teammate_suppressions(self) -> None:
+        # DoD bullet 3: one 9p/2i-shaped fixture rendered as CREWMATE and as
+        # IMPOSTOR-with-fellow-ids; the two renders are identical except the
+        # role header and the teammate kill-window suppression.
+        def _memory(*, role: str, fellow: tuple[str, ...] | None) -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(
+                _self_state_event(
+                    tick=0, role=role, agent_id="p-9", fellow_impostor_ids=fellow
+                )
+            )
+            memory.episodic.append(_global_status_event(tick=0, completed=2, total=14))
+            # A benign sighting of a non-teammate, identical under both roles.
+            memory.episodic.append(
+                _saw_player_event(tick=5, player_id="p-2", room="STORAGE", action=None)
+            )
+            # p-1 is the (would-be) teammate, witnessed killing in ADMIN.
+            memory.episodic.append(
+                _saw_player_event(tick=7, player_id="p-1", room="ADMIN", action="kill")
+            )
+            memory.episodic.append(
+                _saw_body_event(tick=8, body_id="b", victim_id="p-3", room="ADMIN")
+            )
+            return memory
+
+        crew_view = render_for_prompt(_memory(role="CREWMATE", fellow=None))
+        impostor_view = render_for_prompt(_memory(role="IMPOSTOR", fellow=("p-1",)))
+
+        suppressed = "- [tick 7] You witnessed p-1 kill in ADMIN."
+        assert suppressed in crew_view
+        assert suppressed not in impostor_view
+
+        crew_lines = crew_view.splitlines()
+        impostor_lines = impostor_view.splitlines()
+        assert crew_lines[0] == "## Your role: CREWMATE"
+        assert impostor_lines[0] == "## Your role: IMPOSTOR"
+        # Apart from the role header (index 0) and the single suppressed teammate
+        # row, the two renders are byte-identical.
+        crew_rest = [
+            line
+            for index, line in enumerate(crew_lines)
+            if index != 0 and line != suppressed
+        ]
+        impostor_rest = [
+            line for index, line in enumerate(impostor_lines) if index != 0
+        ]
+        assert crew_rest == impostor_rest
 
 
 class TestR6CompositeMemoryReadsAllThreeStores:

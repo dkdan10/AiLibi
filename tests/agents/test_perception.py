@@ -122,6 +122,7 @@ class TestIngestPacketSelfAndGlobal:
         assert self_event.type == EVENT_SELF_STATE
         assert self_event.provenance == PROVENANCE_OBSERVED
         assert self_event.payload == {
+            "agent_id": "p1",
             "room": "ADMIN",
             "role": "IMPOSTOR",
             "pending_task_id": None,
@@ -561,6 +562,91 @@ class TestIngestPacketBeliefRules:
         )
 
         assert len(store) > 0
+
+
+class TestTeammatePerceptionFirewall:
+    """Task 9.3 team-internal firewall, belief side (DESIGN.md §4.7).
+
+    An impostor witnessing a teammate's kill must not manufacture
+    body-proximity suspicion (DESIGN.md §6.3 Rule 1) against the teammate in
+    its own belief graph. The guard keys off ``fellow_impostor_ids`` on the
+    privileged self channel (perception drops teammates from co-presence) and
+    is an exact no-op for every crewmate.
+    """
+
+    _DEFAULT_SUSPICION = 0.5
+
+    def test_impostor_teammate_near_body_gains_no_proximity_suspicion(self) -> None:
+        store = MemoryStore()
+        beliefs = BeliefState()
+        # tick 6 — impostor p-1 sees teammate p-2 AND crew p-3 in ELECTRICAL.
+        ingest_packet(
+            packet=_packet(
+                tick=6,
+                agent_id="p-1",
+                role="IMPOSTOR",
+                fellow_impostor_ids=("p-2",),
+                room="ELECTRICAL",
+                visible_players=(
+                    PlayerView(id="p-2", room="ELECTRICAL", action=None),
+                    PlayerView(id="p-3", room="ELECTRICAL", action=None),
+                ),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+        # tick 8 — discovers a body in ELECTRICAL for the first time.
+        ingest_packet(
+            packet=_packet(
+                tick=8,
+                agent_id="p-1",
+                role="IMPOSTOR",
+                fellow_impostor_ids=("p-2",),
+                room="ELECTRICAL",
+                visible_bodies=(BodyView(id="b", room="ELECTRICAL", victim_id="p-9"),),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+
+        # Teammate p-2 is shielded by the firewall; crew p-3 is elevated normally.
+        assert beliefs.view("p-2").suspicion == self._DEFAULT_SUSPICION
+        assert beliefs.view("p-3").suspicion == pytest.approx(
+            self._DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
+        )
+
+    def test_crewmate_observer_elevates_the_same_co_present_player(self) -> None:
+        # Control: an ordinary crewmate (empty fellow_impostor_ids) elevates the
+        # same co-present player under Rule 1 -- the suppression is team-only,
+        # so the crew belief path is unchanged.
+        store = MemoryStore()
+        beliefs = BeliefState()
+        ingest_packet(
+            packet=_packet(
+                tick=6,
+                agent_id="p-1",
+                role="CREWMATE",
+                room="ELECTRICAL",
+                visible_players=(PlayerView(id="p-2", room="ELECTRICAL", action=None),),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+        ingest_packet(
+            packet=_packet(
+                tick=8,
+                agent_id="p-1",
+                role="CREWMATE",
+                room="ELECTRICAL",
+                visible_bodies=(BodyView(id="b", room="ELECTRICAL", victim_id="p-9"),),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+
+        assert beliefs.view("p-2").suspicion == pytest.approx(
+            self._DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
+        )
 
 
 class TestAudibleEventEnumCoupling:

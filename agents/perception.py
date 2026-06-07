@@ -86,7 +86,7 @@ def ingest_packet(
         EpisodicEvent(
             tick=tick,
             type=EVENT_SELF_STATE,
-            payload=_self_state_payload(packet.self_state),
+            payload=_self_state_payload(packet.self_state, agent_id=packet.agent_id),
             provenance=PROVENANCE_OBSERVED,
         )
     )
@@ -148,7 +148,11 @@ def ingest_packet(
                 previous_visible_bodies=_previously_seen_body_ids(
                     memory, before_tick=tick
                 ),
-                recent_co_presence=_recent_co_presence(memory, current_tick=tick),
+                recent_co_presence=_recent_co_presence(
+                    memory,
+                    current_tick=tick,
+                    fellow_impostor_ids=packet.self_state.fellow_impostor_ids,
+                ),
             )
         )
 
@@ -170,7 +174,10 @@ def _previously_seen_body_ids(memory: MemoryStore, *, before_tick: int) -> set[B
 
 
 def _recent_co_presence(
-    memory: MemoryStore, *, current_tick: int
+    memory: MemoryStore,
+    *,
+    current_tick: int,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> dict[RoomId, list[tuple[int, PlayerId]]]:
     """Map each room to the ``(tick, player_id)`` sightings in the proximity
     window ``[current_tick - BODY_PROXIMITY_WINDOW_TICKS, current_tick - 1]``.
@@ -179,20 +186,42 @@ def _recent_co_presence(
     carries no information the agent did not directly observe -- the firewall
     is preserved. The current tick is excluded (the window is "shortly before"
     a discovery), so this is safe to call after the tick's rows are appended.
+
+    Team-internal firewall (Task 9.3 input side, DESIGN.md §4.7). A fellow
+    impostor's id in ``fellow_impostor_ids`` (the privileged self channel) is
+    excluded from co-presence so DESIGN.md §6.3 Rule 1 never lifts suspicion of
+    a teammate the impostor saw near a body it discovered: a witnessed teammate
+    kill must not manufacture evidence against the team in the witness's own
+    belief graph. The list is ``()`` for every crewmate and a sole impostor, so
+    the crew belief path is byte-identical (no row is filtered).
     """
 
+    teammates = frozenset(fellow_impostor_ids)
     earliest_tick = current_tick - BODY_PROXIMITY_WINDOW_TICKS
     co_presence: dict[RoomId, list[tuple[int, PlayerId]]] = {}
     for event in memory.recent(since_tick=earliest_tick):
         if event.type != EVENT_SAW_PLAYER or event.tick >= current_tick:
             continue
-        room = event.payload["room"]
         player_id = event.payload["player_id"]
+        if player_id in teammates:
+            continue
+        room = event.payload["room"]
         co_presence.setdefault(room, []).append((event.tick, player_id))
     return co_presence
 
 
-def _self_state_payload(self_state: SelfView) -> Mapping[str, Any]:
+def _self_state_payload(
+    self_state: SelfView, *, agent_id: PlayerId
+) -> Mapping[str, Any]:
+    # ``agent_id`` is the recipient's OWN player id, recorded so the §6.6
+    # renderer can identify and suppress self-subject ``saw_player`` rows
+    # (Task 9.3, DESIGN.md §4.7: a self-subject sighting never renders into a
+    # player's own prompt as third-person garble). It is the same id the
+    # observation packet is addressed to; ObservationService never lists the
+    # recipient in its own ``visible_players``, so a self-subject row does not
+    # arise from first-hand perception today -- the renderer guard is a
+    # defensive backstop that fails safe if such a row ever appears.
+    #
     # ``pending_task_id`` is the agent's own next MAP task id (DESIGN.md §3.2) --
     # never the per-player instance id and never another player's task. It rides
     # through verbatim as an opaque string: the memory reader
@@ -205,6 +234,7 @@ def _self_state_payload(self_state: SelfView) -> Mapping[str, Any]:
     # reads its teammates from here in Wave 2 (J-5). It is ``()`` for crewmates
     # and serializes to a list in the prompt JSON, like other tuple fields.
     return {
+        "agent_id": agent_id,
         "room": self_state.room,
         "role": self_state.role,
         "pending_task_id": self_state.pending_task_id,

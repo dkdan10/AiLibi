@@ -144,3 +144,40 @@ class TestApplyObservationRulesPurity:
 
         assert result.known_players() == ()
         assert result.view("bystander").suspicion == _DEFAULT_SUSPICION
+
+
+class TestTeamInternalFirewallContract:
+    """Task 9.3 layering pin (DESIGN.md §4.7).
+
+    The team-internal firewall on the belief side lives in perception, which
+    omits fellow impostors from ``recent_co_presence`` before calling
+    :func:`apply_observation_rules`. The rule function itself has no team
+    concept -- a player simply absent from ``recent_co_presence`` accrues no
+    body-proximity suspicion. This pins the exact mechanism the perception
+    guard relies on, so beliefs.py stays role-agnostic.
+    """
+
+    def test_player_absent_from_co_presence_gets_no_proximity_suspicion(self) -> None:
+        base = BeliefState()
+        packet = _packet(
+            tick=10,
+            visible_bodies=(BodyView(id="b1", room="R", victim_id="victim"),),
+        )
+        # "present" is in the room; "filtered" was dropped upstream (exactly as
+        # perception drops a fellow impostor from co-presence), so it never
+        # reaches the rule and must not be elevated.
+        co_presence: Mapping[str, Sequence[tuple[int, str]]] = {
+            "R": ((9, "present"),),
+        }
+
+        result = apply_observation_rules(
+            base,
+            observation=packet,
+            previous_visible_bodies=set(),
+            recent_co_presence=co_presence,
+        )
+
+        assert result.view("present").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
+        )
+        assert result.view("filtered").suspicion == _DEFAULT_SUSPICION

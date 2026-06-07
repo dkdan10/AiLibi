@@ -942,6 +942,7 @@ class MeetingManager:
             voter_id=participant.agent_id,
             suspicion_graph=participant.suspicion_graph,
             contradictions=contradictions,
+            fellow_impostor_ids=participant.fellow_impostor_ids,
         )
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
@@ -1180,6 +1181,7 @@ def _suspicion_graph_with_contradictions(
     voter_id: PlayerId,
     suspicion_graph: tuple[SuspicionEntry, ...],
     contradictions: tuple[ContradictionRef, ...],
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
 ) -> tuple[SuspicionEntry, ...]:
     """Apply belief Rule 2 to a voter's suspicion graph (DESIGN.md §6.3).
 
@@ -1191,13 +1193,29 @@ def _suspicion_graph_with_contradictions(
 
     A contradicted subject the voter had no prior row for is added (the
     belief store materialises a default 0.5 prior before the +0.3 bump).
-    The voter never accrues suspicion about themselves. With no
-    contradictions the graph is returned unchanged so the no-flag path is
+    The voter never accrues suspicion about themselves.
+
+    Team-internal firewall (Task 9.3, DESIGN.md §4.7), the deterministic
+    voter-side backstop that mirrors the 7.12 ballot coercion on the input
+    side: an impostor voter's graph carries NO edge against a fellow
+    impostor. A teammate id in ``fellow_impostor_ids`` is dropped from the
+    projected graph in BOTH paths -- so even if a teammate-incriminating
+    sighting slipped through perception/render and a contradiction lifted
+    the teammate, the impostor's ballot prompt still shows no team
+    suspicion. The list is ``()`` for every crewmate and a sole impostor,
+    where this is a no-op: with no contradictions and no teammates the
+    incoming graph is returned unchanged, so the crew / no-flag path is
     byte-identical (a precondition for replay stability).
     """
 
+    teammates = frozenset(fellow_impostor_ids)
+
     if not contradictions:
-        return suspicion_graph
+        if not teammates:
+            return suspicion_graph
+        return tuple(
+            entry for entry in suspicion_graph if entry.player_id not in teammates
+        )
 
     beliefs = BeliefState()
     for entry in suspicion_graph:
@@ -1208,7 +1226,7 @@ def _suspicion_graph_with_contradictions(
 
     entries: list[SuspicionEntry] = []
     for player_id in sorted(updated.known_players()):
-        if player_id == voter_id:
+        if player_id == voter_id or player_id in teammates:
             continue
         belief = updated.view(player_id)
         entries.append(

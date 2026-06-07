@@ -34,6 +34,8 @@ from typing import TypeVar
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from agents.memory.episodic import EpisodicEvent
+from agents.memory.store import AgentMemory, render_for_prompt
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.provider import LLMCallFailure, _attach_parse_failure  # noqa: PLC2701
 from llm.fake_provider import FakeProvider
@@ -51,6 +53,7 @@ from meetings.manager import (
     MeetingTrigger,
     SuspicionEntry,
     _normalize_self_alibi_subjects,  # noqa: PLC2701
+    _suspicion_graph_with_contradictions,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
     drop_teammate_statement_target,
     exclude_teammate_accusation_claims,
@@ -1182,6 +1185,286 @@ class TestTeammateGuardOnProductionPath:
 
         assert result.outcome == "EJECTED"
         assert result.ejected_player_id == "p-3"
+
+
+# --- Teammate-perception firewall, input side (Task 9.3) -------------------
+
+
+def _vote_suspicion_line(client: _ScriptedLLMClient, voter: str) -> str:
+    call = next(
+        c
+        for c in client.calls
+        if "PHASE=VOTE" in c.prompt and f"voter={voter}\n" in c.prompt
+    )
+    return next(
+        line for line in call.prompt.splitlines() if line.startswith("suspicion=")
+    )
+
+
+class TestSuspicionGraphTeammateMask:
+    """Task 9.3 voter-side backstop (DESIGN.md §4.7).
+
+    ``_suspicion_graph_with_contradictions`` masks fellow-impostor edges for an
+    impostor voter, mirroring the 7.12 ballot coercion on the input side: even
+    if a teammate-incriminating sighting slips through perception/render, the
+    impostor's ballot prompt carries no team suspicion. A no-op for crew (empty
+    ``fellow_impostor_ids``) so the no-flag path stays byte-identical.
+    """
+
+    def test_crew_no_flag_path_returns_graph_unchanged(self) -> None:
+        graph = (SuspicionEntry(player_id="p-2", suspicion=0.7, trust=0.3),)
+        result = _suspicion_graph_with_contradictions(
+            voter_id="p-1", suspicion_graph=graph, contradictions=()
+        )
+        assert result is graph
+
+    def test_impostor_incoming_teammate_edge_masked_without_contradiction(
+        self,
+    ) -> None:
+        graph = (
+            SuspicionEntry(player_id="p-5", suspicion=0.9, trust=0.1),
+            SuspicionEntry(player_id="p-3", suspicion=0.6, trust=0.4),
+        )
+        result = _suspicion_graph_with_contradictions(
+            voter_id="p-4",
+            suspicion_graph=graph,
+            contradictions=(),
+            fellow_impostor_ids=("p-5",),
+        )
+        # Teammate p-5 dropped; the non-teammate edge survives.
+        assert [entry.player_id for entry in result] == ["p-3"]
+
+    def test_contradiction_against_teammate_masked_for_impostor_voter(self) -> None:
+        contradictions = (
+            ContradictionRef(
+                contradiction_id="c-team",
+                kind="alibi_vs_sighting",
+                event_a_id="a",
+                event_b_id="b",
+                subjects=("p-5",),
+                description="teammate flagged",
+            ),
+            ContradictionRef(
+                contradiction_id="c-other",
+                kind="alibi_vs_sighting",
+                event_a_id="c",
+                event_b_id="d",
+                subjects=("p-3",),
+                description="other flagged",
+            ),
+        )
+        impostor_graph = _suspicion_graph_with_contradictions(
+            voter_id="p-4",
+            suspicion_graph=(),
+            contradictions=contradictions,
+            fellow_impostor_ids=("p-5",),
+        )
+        # Teammate p-5 masked even though it was contradicted; p-3 lifted.
+        assert all(entry.player_id != "p-5" for entry in impostor_graph)
+        assert any(entry.player_id == "p-3" for entry in impostor_graph)
+
+        # A crew voter (no teammates) sees the contradicted p-5 lifted normally.
+        crew_graph = _suspicion_graph_with_contradictions(
+            voter_id="p-1",
+            suspicion_graph=(),
+            contradictions=contradictions,
+            fellow_impostor_ids=(),
+        )
+        assert any(entry.player_id == "p-5" for entry in crew_graph)
+
+
+class TestTeammateFirewallInputSide:
+    """Task 9.3 input-side firewall on the production meeting path (§4.7)."""
+
+    def _impostor_team(self) -> tuple[MeetingParticipant, ...]:
+        return (
+            _participant("p-1"),
+            _participant("p-2"),
+            _participant("p-3"),
+            _participant("p-4", role="IMPOSTOR", fellow_impostor_ids=("p-5",)),
+            _participant("p-5", role="IMPOSTOR", fellow_impostor_ids=("p-4",)),
+        )
+
+    def test_impostor_voter_graph_masks_contradicted_teammate(self) -> None:
+        # p-1 (crew) opens with an alibi for p-5 AND a sighting placing p-5
+        # elsewhere -> alibi_vs_sighting names p-5. The impostor voter p-4's
+        # ballot-prompt suspicion graph carries no p-5 edge; crew p-1's does.
+        responder = _make_responder(
+            accusations={"p-1": None},
+            claims_by={
+                "p-1": (
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-5",
+                        from_tick=100,
+                        to_tick=200,
+                        room="STORAGE",
+                    ),
+                ),
+            },
+            observations={
+                "p-1": (
+                    SawPlayerObservation(
+                        type="saw_player",
+                        subject="p-5",
+                        room="CAFETERIA",
+                        tick=150,
+                    ),
+                ),
+            },
+        )
+        result, client = _run_meeting(responder, participants=self._impostor_team())
+
+        assert any(
+            c.kind == "alibi_vs_sighting" and "p-5" in c.subjects
+            for c in result.contradictions
+        )
+        assert "p-5:" not in _vote_suspicion_line(client, "p-4")
+        assert "p-5:" in _vote_suspicion_line(client, "p-1")
+
+    def test_recorded_contradictions_exclude_impostor_teammate_self_sighting(
+        self,
+    ) -> None:
+        # Pinned invariant (Task 9.3 DoD, DESIGN.md §4.7): no recorded
+        # alibi_vs_sighting has a supporting sighting that is an impostor's own
+        # observation of a fellow impostor (the seed-47 class). Driven by the
+        # render guard: the impostor reasons from its rendered memory, and a
+        # responder that can only surface what that memory shows therefore
+        # cannot place the teammate at the scene.
+        def _witness_memory(*, role: str, fellow: tuple[str, ...]) -> AgentMemory:
+            memory = AgentMemory()
+            memory.episodic.append(
+                EpisodicEvent(
+                    tick=0,
+                    type="self_state",
+                    payload={
+                        "agent_id": "p-4",
+                        "room": "ADMIN",
+                        "role": role,
+                        "pending_task_id": None,
+                        "fellow_impostor_ids": fellow,
+                    },
+                    provenance="observed",
+                )
+            )
+            # Witnessed teammate p-5 killing in ADMIN at tick 7.
+            memory.episodic.append(
+                EpisodicEvent(
+                    tick=7,
+                    type="saw_player",
+                    payload={"player_id": "p-5", "room": "ADMIN", "action": "kill"},
+                    provenance="observed",
+                )
+            )
+            memory.episodic.append(
+                EpisodicEvent(
+                    tick=8,
+                    type="saw_body",
+                    payload={"body_id": "b", "victim_id": "p-3", "room": "ADMIN"},
+                    provenance="observed",
+                )
+            )
+            return memory
+
+        impostor_render = render_for_prompt(
+            _witness_memory(role="IMPOSTOR", fellow=("p-5",))
+        )
+        crew_render = render_for_prompt(_witness_memory(role="CREWMATE", fellow=()))
+        # The render guard masks the teammate kill-witness row for the impostor;
+        # a crewmate witness keeps it (the control below leans on that).
+        assert "You witnessed p-5 kill in ADMIN" in crew_render
+        assert "You witnessed p-5 kill in ADMIN" not in impostor_render
+
+        def _responder_for(
+            render: str,
+        ) -> Callable[[str, type[BaseModel] | None], str]:
+            def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+                if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
+                    speaker = _extract_marker(prompt, "agent_id=")
+                    if speaker == "p-4":
+                        # A real impostor can only surface what its rendered
+                        # memory shows; echo the teammate sighting iff present.
+                        observations: tuple[ObservationClaim, ...] = ()
+                        if "You witnessed p-5 kill in ADMIN" in prompt:
+                            observations = (
+                                SawPlayerObservation(
+                                    type="saw_player",
+                                    subject="p-5",
+                                    room="ADMIN",
+                                    tick=7,
+                                ),
+                            )
+                        return _turn_json(
+                            speaker="p-4", accuses="p-1", observations=observations
+                        )
+                    if speaker == "p-1":
+                        return _turn_json(speaker="p-1", accuses="p-5")
+                    if speaker == "p-5":
+                        return _turn_json(
+                            speaker="p-5",
+                            accuses=None,
+                            claims=(
+                                AlibiClaim(
+                                    type="alibi",
+                                    subject="p-5",
+                                    from_tick=5,
+                                    to_tick=9,
+                                    room="CAFETERIA",
+                                ),
+                            ),
+                        )
+                    return _turn_json(speaker=speaker, accuses=None)
+                if "PHASE=VOTE" in prompt:
+                    return _vote_json(
+                        voter=_extract_marker(prompt, "voter="), target="SKIP"
+                    )
+                raise AssertionError(f"unrecognised prompt: {prompt!r}")
+
+            return _responder
+
+        def _participants(render: str) -> tuple[MeetingParticipant, ...]:
+            return (
+                _participant("p-1"),
+                _participant("p-2"),
+                _participant("p-3"),
+                MeetingParticipant(
+                    agent_id="p-4",
+                    role="IMPOSTOR",
+                    rendered_memory=render,
+                    suspicion_graph=(),
+                    fellow_impostor_ids=("p-5",),
+                ),
+                _participant("p-5", role="IMPOSTOR", fellow_impostor_ids=("p-4",)),
+            )
+
+        trigger = MeetingTrigger(
+            triggered_by="p-4", trigger_tick=8, description="p-4 reports"
+        )
+
+        # Guarded render -> p-4 cannot surface the teammate sighting -> no
+        # alibi_vs_sighting names the teammate.
+        guarded_result, _ = _run_meeting(
+            _responder_for(impostor_render),
+            participants=_participants(impostor_render),
+            trigger=trigger,
+        )
+        assert not any(
+            c.kind == "alibi_vs_sighting" and "p-5" in c.subjects
+            for c in guarded_result.contradictions
+        )
+
+        # Control: the same meeting flow with the UNMASKED render DOES record
+        # the team flag -- proving the absence above is the render guard, not a
+        # vacuous test (the manager does not strip turn observations).
+        control_result, _ = _run_meeting(
+            _responder_for(crew_render),
+            participants=_participants(crew_render),
+            trigger=trigger,
+        )
+        assert any(
+            c.kind == "alibi_vs_sighting" and "p-5" in c.subjects
+            for c in control_result.contradictions
+        )
 
 
 # --- Fail-soft on a malformed turn (Task 7.10) -----------------------------
