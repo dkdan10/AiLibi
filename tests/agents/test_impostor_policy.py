@@ -230,6 +230,113 @@ class TestImpostorKill:
         assert isinstance(intent, WaitIntent)
 
 
+class TestImpostorKillRoomRevalidation:
+    """Task 9.2 (audit-2026-06-07-0717 gp-5, findings MECH-B-1 / A-A-3).
+
+    The kill emission re-validates the chosen target against the *freshest*
+    observation (a current-tick ``saw_player`` in the actor's own room) instead
+    of trusting the ``_scored_targets`` snapshot, which ranks sightings from any
+    tick in the staleness window. Stale sightings still drive STALK/navigation;
+    only the kill emission tightens. The engine same-room guard stays the
+    backstop for the canonical id-order dodge (DESIGN.md §3.4).
+    """
+
+    def test_stale_sighting_in_other_room_does_not_emit_kill(self) -> None:
+        # Target last seen in MEDBAY at tick 5 (another room, earlier); by tick
+        # 10 the impostor is in CAFETERIA with no current sighting. The freshest
+        # knowledge places the target elsewhere, so the policy stalks toward
+        # MEDBAY and never queues a kill.
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="victim", room="MEDBAY"),
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, KillIntent)
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "MEDBAY"
+
+    def test_target_seen_leaving_room_does_not_emit_kill(self) -> None:
+        # The target was co-located in CAFETERIA at tick 8, but the freshest
+        # sighting (tick 9) places it in MEDBAY: the stale tick-8 co-location
+        # must not drive a kill. The current tick (10) carries no sighting, so
+        # the re-validation fails and the policy stalks the freshest lead. This
+        # is the case that distinguishes re-validating against the freshest
+        # observation from trusting the scoring snapshot.
+        store = _store_with(
+            _self_state_event(tick=8, room="CAFETERIA"),
+            _cooldown_event(tick=8, cooldown=0),
+            _saw_player_event(tick=8, player_id="victim", room="CAFETERIA"),
+            _self_state_event(tick=9, room="CAFETERIA"),
+            _cooldown_event(tick=9, cooldown=0),
+            _saw_player_event(tick=9, player_id="victim", room="MEDBAY"),
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, KillIntent)
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "MEDBAY"
+
+    def test_current_tick_co_location_still_emits_kill(self) -> None:
+        # The co-located case still kills: the target's freshest observation
+        # (tick 10) places it in the impostor's own room, so the re-validation
+        # passes and the kill is queued despite an earlier sighting elsewhere.
+        store = _store_with(
+            _self_state_event(tick=5, room="CAFETERIA"),
+            _cooldown_event(tick=5, cooldown=0),
+            _saw_player_event(tick=5, player_id="victim", room="MEDBAY"),
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="CAFETERIA"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, KillIntent)
+        assert intent.payload.target == "victim"
+
+    def test_target_colocated_now_raises_on_missing_player_id(self) -> None:
+        # Boundary contract (no silent guess): a current-tick saw_player event
+        # missing its player_id is rejected, mirroring the other saw_player
+        # scanners. ``_saw_player_event`` always supplies the field, so the
+        # malformed event is constructed directly.
+        malformed = EpisodicEvent(
+            tick=10,
+            type=EVENT_SAW_PLAYER,
+            payload={"room": "CAFETERIA", "action": None},
+            provenance=PROVENANCE_OBSERVED,
+        )
+
+        with pytest.raises(ValueError, match="player_id"):
+            ImpostorPolicy._target_colocated_now(
+                (malformed,), target_id="victim", own_room="CAFETERIA"
+            )
+
+    def test_target_colocated_now_raises_on_missing_room(self) -> None:
+        # A matching player_id with a missing room is also a contract violation.
+        malformed = EpisodicEvent(
+            tick=10,
+            type=EVENT_SAW_PLAYER,
+            payload={"player_id": "victim", "action": None},
+            provenance=PROVENANCE_OBSERVED,
+        )
+
+        with pytest.raises(ValueError, match="room"):
+            ImpostorPolicy._target_colocated_now(
+                (malformed,), target_id="victim", own_room="CAFETERIA"
+            )
+
+
 class TestImpostorKillOpportunity:
     def test_two_players_in_own_room_waits_due_to_witness(self) -> None:
         store = _store_with(

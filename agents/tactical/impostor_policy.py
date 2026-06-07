@@ -46,9 +46,18 @@ Teammate-awareness (Phase 7 Task 7.9, audit gp-1/gp-3, DESIGN.md §3.4):
   witness count, since a teammate is no witness risk. An impostor
   therefore never selects a fellow impostor as a target, which closes
   the friendly-fire trend the gameplay-data audit found.
-* Co-location: a kill is only ever emitted against a target seen in the
-  impostor's own room at the latest tick, so the policy never queues a
-  kill against an out-of-room target (audit gp-3).
+* Co-location: a kill is only ever emitted against a target whose
+  *freshest* observation (a ``saw_player`` at the latest tick) still
+  places it in the impostor's own room. This is re-validated at the
+  emission seam by ``_target_colocated_now`` against the current-tick
+  events the policy already holds — not trusted from the scoring
+  snapshot — so a stale lead never queues a kill (audit gp-3; tightened
+  per the 2026-06-07 audit gp-5 / MECH-B-1). Stale sightings stay valid
+  for stalking and navigation below; only the kill emission tightens.
+  Intra-tick simultaneity is canonically id-ordered (DESIGN.md §3.4): a
+  co-located lower-id target's same-tick move legitimately escapes a
+  queued kill, so the engine same-room guard stays the backstop — this
+  is producer-side waste removal, not the enforcement.
 * Coordination: when a fellow impostor is co-located in the same room on
   the same tick and would also reach a kill, only the lower-id impostor
   emits the kill and the higher-id defers (a pure ``min(actor_id,
@@ -109,11 +118,18 @@ _STALENESS_THRESHOLD: Final[int] = 30
 
 @dataclass(frozen=True)
 class _ScoredTarget:
-    """Per-player scoring snapshot used by the FSM."""
+    """Per-player scoring snapshot used by the FSM.
+
+    Holds only what the STALK/navigation and witness-gate branches read:
+    the candidate's id, its most-recent-sighting ``room`` (which may be
+    stale — that is fine for navigation), the co-present witness count, and
+    the score. Current-tick co-location for the *kill* gate is re-validated
+    separately against the freshest observation (``_target_colocated_now``),
+    so the snapshot intentionally does not carry the sighting tick.
+    """
 
     player_id: PlayerId
     room: RoomId
-    last_tick: int
     co_present: int
     score: float
 
@@ -175,7 +191,25 @@ class ImpostorPolicy:
 
         if cooldown == 0 and targets:
             best = targets[0]
-            in_own_room_now = best.room == own_room and best.last_tick == latest_tick
+            # Kill-emission seam — re-validate the chosen target against THIS
+            # tick's visibility before queuing (audit-2026-06-07-0717 gp-5,
+            # findings MECH-B-1 / A-A-3). ``_scored_targets`` ranks
+            # ``saw_player`` sightings from any tick in the staleness window,
+            # which is correct for the STALK/navigation branch below, but a
+            # kill must only fire when the freshest observation still places
+            # the target in our room this tick — otherwise the engine rejects
+            # it ("kill requires same room") and the impostor wastes the tick.
+            #
+            # This is producer-side waste removal, NOT the enforcement: per
+            # DESIGN.md §3.4 intra-tick simultaneity is canonically id-ordered,
+            # so a co-located lower-id target's same-tick move legitimately
+            # escapes a queued kill. That residual dodge is documented canon
+            # and the engine same-room guard stays the backstop; the producer
+            # only guarantees it never *emits* against a stale/out-of-room
+            # target.
+            in_own_room_now = self._target_colocated_now(
+                latest_events, target_id=best.player_id, own_room=own_room
+            )
             if in_own_room_now and best.co_present == 0:
                 if self._defers_to_colocated_fellow(
                     latest_events,
@@ -292,6 +326,49 @@ class ImpostorPolicy:
             if not isinstance(room, str):
                 raise ValueError(
                     f"saw_body event missing string 'room' field: {event.payload!r}"
+                )
+            if room == own_room:
+                return True
+        return False
+
+    @staticmethod
+    def _target_colocated_now(
+        latest_events: tuple[EpisodicEvent, ...],
+        *,
+        target_id: PlayerId,
+        own_room: RoomId,
+    ) -> bool:
+        """Return ``True`` iff ``target_id`` is seen in ``own_room`` THIS tick.
+
+        Kill-emission re-validation (audit-2026-06-07-0717 gp-5, finding
+        MECH-B-1; DESIGN.md §3.4). ``latest_events`` are the freshest
+        observation the policy holds — all stamped with the current tick — so
+        a ``saw_player`` match for ``target_id`` in ``own_room`` is current-tick
+        co-location. Deriving the kill gate here (rather than from the
+        ``_scored_targets`` snapshot, which ranks sightings from any tick in
+        the staleness window) keeps the kill-safety invariant local to the
+        emission seam and independent of the scoring model: a stale or
+        adjacent-room sighting can still drive stalking but never a kill.
+
+        A missing or non-string ``player_id`` / ``room`` on a ``saw_player``
+        event is a boundary-contract violation and raises (no silent guess),
+        mirroring the other ``saw_player`` scanners in this policy.
+        """
+
+        for event in latest_events:
+            if event.type != EVENT_SAW_PLAYER:
+                continue
+            player_id = event.payload.get("player_id")
+            if not isinstance(player_id, str):
+                raise ValueError(
+                    f"saw_player event missing string 'player_id': {event.payload!r}"
+                )
+            if player_id != target_id:
+                continue
+            room = event.payload.get("room")
+            if not isinstance(room, str):
+                raise ValueError(
+                    f"saw_player event missing string 'room': {event.payload!r}"
                 )
             if room == own_room:
                 return True
@@ -435,7 +512,6 @@ class ImpostorPolicy:
                 _ScoredTarget(
                     player_id=player_id,
                     room=sighting_room,
-                    last_tick=sighting_tick,
                     co_present=co_present,
                     score=score,
                 )
