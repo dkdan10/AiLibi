@@ -63,10 +63,9 @@ from engine.events import (
     EngineEvent,
     KilledEvent,
     MeetingTriggeredEvent,
-    TaskCompletedEvent,
 )
 from engine.tick import advance_tick
-from engine.world import Map, load_canonical_map
+from engine.world import Map, WorldState, load_canonical_map
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -651,11 +650,19 @@ def _kill_gift_accounting(
 
     * ``kill_gifted`` -- ``True`` iff the recorded winner is ``CREWMATES`` by
       ``CREWMATE_TASKS`` AND the game ended on a *tick* (not a meeting
-      resolution) whose events include a ``Killed`` AND no ``TaskCompleted``. A
-      tick where a kill and a task completion both resolve is NOT kill-gifted
-      (the task completion is decisive); a ``CREWMATE_TASKS`` win declared by an
-      ejection's task drop is not kill-gifted either (no kill resolved on the
-      deciding step). ``False`` for every other outcome and for a partial game.
+      resolution) whose events resolve a ``Killed`` whose victim held >= 1
+      INCOMPLETE task instance at kill resolution (the §3.5 dead-owner drop then
+      removed it, tipping the crew pool to complete). The predicate is anchored
+      to the VICTIM, not the tick's completion set: a same-tick task completion
+      by ANOTHER player does NOT mask the gift (audit gp-4 / A-A-2 corrected the
+      old completion-based definition, which undercounted 8/46 vs the true
+      11/46 -- e.g. seed 11), while a victim that self-completed its OWN last
+      instance the same tick before the kill is correctly excluded (the
+      completed instance survives the drop, so nothing was gifted -- seed 40).
+      See :func:`_final_kill_dropped_victim_instance`. A ``CREWMATE_TASKS`` win
+      declared by an ejection's task drop is not kill-gifted either (no kill
+      resolved on the deciding step). ``False`` for every other outcome and for a
+      partial game.
     * ``instances_dropped`` -- the seeded instance count minus ``len(state.tasks)``
       at game end (how many instances the §3.5 drop removed over the game).
     * ``instances_complete_at_win`` -- the completed instances still in
@@ -694,19 +701,25 @@ def _kill_gift_accounting(
     )
     seeded_instance_count = len(state.tasks)
 
-    # The events of the advance_tick that ended the game; only set when the game
+    # The events of the advance_tick that ended the game, plus the PRE-tick (=
+    # pre-§3.5-drop) state that tick started from; both are only set when the game
     # ends ON A TICK (an ejection-driven game-over resolves in a meeting, which
-    # cannot carry a kill, so it stays empty -> not kill-gifted).
+    # cannot carry a kill, so they stay empty/None -> not kill-gifted). The
+    # pre-drop state lets the predicate read the victim's instance set at kill
+    # resolution (audit gp-4 / A-A-2).
     final_tick_events: tuple[EngineEvent, ...] = ()
+    pre_final_tick_state: WorldState | None = None
     game_over_on_tick = False
 
     for entry in tick_entries:
         actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
+        pre_tick_state = state
         state, events = advance_tick(state, actions, game_map=game_map)
         _verify_walk_hash(game_id, entry.tick, entry.state_hash, _state_hash(state))
 
         if state.phase == "GAME_OVER":
             final_tick_events = tuple(events)
+            pre_final_tick_state = pre_tick_state
             game_over_on_tick = True
             break
         if state.phase != "MEETING":
@@ -757,9 +770,10 @@ def _kill_gift_accounting(
         winner == "CREWMATES"
         and reason == "CREWMATE_TASKS"
         and game_over_on_tick
-        and any(isinstance(event, KilledEvent) for event in final_tick_events)
-        and not any(
-            isinstance(event, TaskCompletedEvent) for event in final_tick_events
+        and _final_kill_dropped_victim_instance(
+            final_tick_events=final_tick_events,
+            pre_drop_state=pre_final_tick_state,
+            post_drop_state=state,
         )
     )
     return _KillGiftFacts(
@@ -767,6 +781,57 @@ def _kill_gift_accounting(
         instances_dropped=instances_dropped,
         instances_complete_at_win=instances_complete_at_win,
     )
+
+
+def _final_kill_dropped_victim_instance(
+    *,
+    final_tick_events: tuple[EngineEvent, ...],
+    pre_drop_state: WorldState | None,
+    post_drop_state: WorldState,
+) -> bool:
+    """True iff the game-ending tick's kill removed >= 1 of its victim's instances.
+
+    The victim-anchored kill-gift predicate (DESIGN.md §3.5; audit gp-4 / A-A-2).
+    The §3.5 dead-owner drop removes exactly the victim's INCOMPLETE task
+    instances at kill resolution and leaves the completed ones, so a victim whose
+    instance count fell from the pre-drop (pre-tick) state to the post-drop
+    (game-over) state held >= 1 incomplete instance when the kill resolved -- the
+    drop is what tipped the crew pool to complete, i.e. the win was gifted.
+
+    Reading the count DIFFERENCE rather than the pre-drop incomplete count is what
+    makes the predicate victim-anchored rather than tick-anchored:
+
+    * a same-tick task completion by ANOTHER player does not touch this victim's
+      count, so it cannot mask a genuine gift -- the bug the old completion-based
+      definition had (undercounting 8/46 vs the true 11/46; seed 11 tick 20:
+      victim p-6 killed holding ``upload_logs`` 4/6 while p-5 completes a
+      different instance the same tick);
+    * a victim that self-completed its OWN last instance the same tick before the
+      kill leaves an unchanged count (the completed instance survives the drop),
+      so it is correctly excluded (seed 40 tick 22).
+
+    ``pre_drop_state`` is ``None`` only when the game did not end on a tick (an
+    ejection-driven game-over carries no kill), which is never kill-gifted, so
+    that yields ``False``. Counting is conserved through a tick except for the
+    §3.5 drop -- ``do_task`` mutates progress, never the instance set -- so the
+    per-victim count difference is exactly the instances that kill dropped.
+    """
+
+    if pre_drop_state is None:
+        return False
+    for event in final_tick_events:
+        if not isinstance(event, KilledEvent):
+            continue
+        victim = event.target
+        pre_count = sum(
+            1 for task in pre_drop_state.tasks.values() if task.owner == victim
+        )
+        post_count = sum(
+            1 for task in post_drop_state.tasks.values() if task.owner == victim
+        )
+        if pre_count > post_count:
+            return True
+    return False
 
 
 def _verify_walk_hash(game_id: str, tick: int, expected: str, actual: str) -> None:

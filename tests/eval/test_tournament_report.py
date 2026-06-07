@@ -849,15 +849,21 @@ def test_meeting_rate_validator_rejects_negative_counts() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Kill-gifted win accounting derivation (Task 8.17; DESIGN.md §3.5; audit gp-4)
+# Kill-gifted win accounting derivation (Task 8.17; DESIGN.md §3.5; audit gp-4).
+# The flag is now VICTIM-anchored: kill-gifted iff a CREWMATE_TASKS win's final
+# tick resolves a kill whose victim held >= 1 incomplete instance at kill
+# resolution (Task 9.1, audit A-A-2 -- the old "no TaskCompleted on the final
+# tick" definition undercounted 8/46 vs the true 11/46 because a same-tick
+# completion by another player masked a genuine gift).
 #
 # The flag is deterministic from the replay: the loader re-seeds and re-applies
 # the recorded action stream through the engine (the win-condition-selfcheck
 # pattern). These tests build SYNTHETIC replays on a custom map whose tasks all
 # sit in the spawn room and complete in one tick, so a tiny scripted game can
 # force each ending precisely -- a kill-gifted task win, an organic task win, a
-# same-tick kill+completion (NOT gifted), and a kill-driven impostor win -- and
-# the engine walk reconstructs them byte-faithfully (state_hash verified).
+# MASKED gift (a same-tick completion by ANOTHER player still flags), a victim
+# self-completion the same tick (NOT gifted), and a kill-driven impostor win --
+# and the engine walk reconstructs them byte-faithfully (state_hash verified).
 # ---------------------------------------------------------------------------
 
 # All map tasks moved into the spawn room with duration 1: every crewmate spawns
@@ -1071,14 +1077,17 @@ def test_organic_task_win_is_not_kill_gifted() -> None:
     assert facts.instances_complete_at_win == 3  # all three completed
 
 
-def test_same_tick_kill_and_completion_is_not_kill_gifted() -> None:
-    """A final tick resolving BOTH a kill and a completion is NOT gifted (DoD).
+def test_masked_gift_same_tick_completion_by_another_player_still_flags() -> None:
+    """A same-tick completion by ANOTHER player does NOT mask a genuine gift (DoD).
 
     5p/1i: two crewmates finish early; on the final tick a third completes its
-    task AND the impostor kills the fourth. The pool completes with a kill AND a
-    completion on the same tick -- the task completion is treated as decisive, so
-    the game is the audit's "kill-necessary alongside a same-tick completion"
-    bucket (seeds 4/14/15), explicitly NOT kill-gifted.
+    OWN task AND the impostor kills the fourth, who still held an incomplete
+    instance. The kill's §3.5 drop of that incomplete instance is what tips the
+    pool to complete -- the win could not have fired without it -- so it IS
+    kill-gifted even though an unrelated completion also resolved this tick. This
+    is the audit A-A-2 masked-gift class (seed 11 tick 20) the old completion-based
+    definition wrongly excluded; the corrected predicate is victim-anchored, not
+    tick-completion-anchored.
     """
 
     seed = 3
@@ -1115,9 +1124,66 @@ def test_same_tick_kill_and_completion_is_not_kill_gifted() -> None:
             game_map=_KILL_GIFT_MAP,
         )
 
-    assert facts.kill_gifted is False  # a completion also resolved this tick
-    assert facts.instances_dropped == 1  # the victim's instance still dropped
+    # The victim held an incomplete instance at kill resolution; finisher_c's
+    # same-tick completion is on a DIFFERENT player, so it cannot mask the gift.
+    assert facts.kill_gifted is True
+    assert facts.instances_dropped == 1  # the victim's incomplete instance
     assert facts.instances_complete_at_win == 3
+
+
+def test_victim_self_completed_same_tick_is_not_kill_gifted() -> None:
+    """A victim that self-completed its last instance before the kill is NOT gifted.
+
+    5p/1i: three crewmates finish early; on the final tick the fourth completes
+    its OWN last instance FIRST and is THEN killed (the action order puts the
+    victim's do_task before the impostor's kill, as the orchestrator's id-ordered
+    resolution does when the victim's id precedes the killer's). The victim holds
+    NO incomplete instance at kill resolution, so the §3.5 drop removes nothing
+    and the win rode the victim's own completion, not the kill -- correctly
+    excluded. This is the audit A-A-2 counter-example (seed 40 tick 22) that the
+    victim-anchored predicate keeps excluded where reading the pre-tick incomplete
+    count alone would wrongly flag it.
+    """
+
+    seed = 5
+    crew, impostor, own = _kill_gift_layout(seed, num_players=5, num_impostors=1)
+    finisher_a, finisher_b, finisher_c, victim = crew
+    with TemporaryDirectory() as tmp:
+        replay = Path(tmp) / f"replay-seed-{seed}.jsonl"
+        _record_scripted_game(
+            replay,
+            seed=seed,
+            num_players=5,
+            num_impostors=1,
+            scripted=[
+                [
+                    _do_task(finisher_a, own[finisher_a]),
+                    _do_task(finisher_b, own[finisher_b]),
+                    _do_task(finisher_c, own[finisher_c]),
+                    _wait(victim),
+                    _wait(impostor),
+                ],
+                [
+                    # Victim self-completes BEFORE the kill resolves this tick, so
+                    # its now-complete instance survives the §3.5 drop.
+                    _do_task(victim, own[victim]),
+                    _kill(impostor, victim),
+                    _wait(finisher_a),
+                    _wait(finisher_b),
+                ],
+            ],
+        )
+        facts = _kill_gift_accounting(
+            replay,
+            seed=seed,
+            roles=_seeded_roles_for(seed, num_players=5, num_impostors=1),
+            tasks_per_crewmate=1,
+            game_map=_KILL_GIFT_MAP,
+        )
+
+    assert facts.kill_gifted is False  # victim held no incomplete instance
+    assert facts.instances_dropped == 0  # the completed instance survives the drop
+    assert facts.instances_complete_at_win == 4
 
 
 def test_kill_driven_impostor_win_is_not_kill_gifted() -> None:
