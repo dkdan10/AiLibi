@@ -96,6 +96,7 @@ class _RecordingSend:
         prompt: str,
         format_schema: dict[str, object] | None,
         options: dict[str, object],
+        think: bool,
     ) -> OllamaRawResponse:
         self.calls.append(
             {
@@ -104,6 +105,7 @@ class _RecordingSend:
                 "prompt": prompt,
                 "format_schema": format_schema,
                 "options": options,
+                "think": think,
             }
         )
         return self.raw
@@ -115,6 +117,7 @@ def _send_returning(
     model: str = DEFAULT_OLLAMA_MODEL,
     prompt_eval_count: int = 11,
     eval_count: int = 7,
+    thinking: str = "",
 ) -> _RecordingSend:
     return _RecordingSend(
         raw=OllamaRawResponse(
@@ -122,6 +125,7 @@ def _send_returning(
             model=model,
             prompt_eval_count=prompt_eval_count,
             eval_count=eval_count,
+            thinking=thinking,
         )
     )
 
@@ -130,6 +134,17 @@ class TestProtocolConformance:
     def test_ollama_client_is_an_llm_client(self) -> None:
         client = OllamaClient(host="localhost:11434", seed=7)
         assert isinstance(client, LLMClient)
+
+
+class TestModelConstantPin:
+    """The canonical local model is pinned to ``qwen3.5:9b`` (owner decision
+    2026-06-07, canonical-model migration). A change to the default must be a
+    deliberate edit that trips this pin, mirroring refresh_samples.sh's
+    ``DEFAULT_OLLAMA_MODEL`` literal and tests/scripts/test_refresh_samples.py's
+    ``_OLLAMA_MODEL`` mirror."""
+
+    def test_default_model_is_qwen35_9b(self) -> None:
+        assert DEFAULT_OLLAMA_MODEL == "qwen3.5:9b"
 
 
 class TestRequestShape:
@@ -174,6 +189,45 @@ class TestRequestShape:
             "num_predict": 128,
             "num_ctx": DEFAULT_OLLAMA_NUM_CTX,
         }
+
+    def test_request_carries_think_false_top_level_not_in_options(self) -> None:
+        # The canonical model (qwen3.5:9b) thinks by default; every sim call
+        # must disable it. ``think`` is a TOP-LEVEL request field, NOT an
+        # options entry — pin both that it is sent False and that it did not
+        # leak into ``options`` (owner decision 2026-06-07).
+        send = _send_returning()
+        client = OllamaClient(host="localhost:11434", seed=42, send=send)
+
+        asyncio.run(
+            client.complete(
+                prompt="report please",
+                schema=_SampleReport,
+                max_tokens=128,
+                temperature=0.3,
+            )
+        )
+
+        call = send.calls[0]
+        assert call["think"] is False
+        assert "think" not in call["options"]  # type: ignore[operator]
+
+    def test_think_false_is_sent_on_free_text_calls_too(self) -> None:
+        # Thinking is disabled regardless of call kind / schema: a free-text
+        # (schema=None) trigger call carries think=False just like a meeting.
+        send = _send_returning(text="prose")
+        client = OllamaClient(host="h", seed=1, send=send)
+
+        asyncio.run(
+            client.complete(
+                prompt="p",
+                schema=None,
+                max_tokens=32,
+                temperature=0.0,
+                call_kind="trigger",
+            )
+        )
+
+        assert send.calls[0]["think"] is False
 
     def test_num_ctx_override_is_forwarded(self) -> None:
         send = _send_returning()
@@ -395,6 +449,36 @@ class TestTransportResponseMapping:
         raw = _raw_from_generate_response(response, model="requested-model")
         assert raw.model == "requested-model"
 
+    def test_thinking_channel_is_surfaced_for_the_guard(self) -> None:
+        from ollama import GenerateResponse
+
+        from llm.ollama_client import _raw_from_generate_response
+
+        # Ollama surfaces reasoning on the separate ``thinking`` field; the
+        # mapping must carry it through so complete()'s fail-loud guard sees it.
+        response = GenerateResponse(
+            model="m",
+            response="x",
+            thinking="some reasoning",
+            prompt_eval_count=5,
+            eval_count=7,
+        )
+        raw = _raw_from_generate_response(response, model="m")
+        assert raw.thinking == "some reasoning"
+
+    def test_absent_thinking_maps_to_empty_string(self) -> None:
+        from ollama import GenerateResponse
+
+        from llm.ollama_client import _raw_from_generate_response
+
+        # Under think=False Ollama omits thinking (None); it maps to "" so the
+        # guard treats it as absent rather than tripping on a None.
+        response = GenerateResponse(
+            model="m", response="x", prompt_eval_count=5, eval_count=7
+        )
+        raw = _raw_from_generate_response(response, model="m")
+        assert raw.thinking == ""
+
 
 class TestMalformedBodyBecomesFailedCall:
     """A malformed local output is a recoverable FailedCall (cost + partial
@@ -448,6 +532,98 @@ class TestMalformedBodyBecomesFailedCall:
         # The recorded text is the post-extraction JSON object.
         assert response.text == _VALID_BODY
         _SampleReport.model_validate_json(response.text)
+
+
+class TestThinkingFailLoud:
+    """A response that carries populated thinking despite ``think=False``
+    fails loud (AGENTS.md: no silent fallbacks) rather than recording a
+    half-thinking run with un-audited reasoning. The guard reads the
+    response's separate ``thinking`` channel and asserts absent-or-empty
+    (owner decision 2026-06-07, canonical-model migration)."""
+
+    def test_populated_thinking_raises_descriptive_error(self) -> None:
+        send = _send_returning(thinking="Let me reason step by step about p-1...")
+        client = OllamaClient(host="h", seed=1, send=send)
+
+        with pytest.raises(RuntimeError, match="thinking") as exc_info:
+            asyncio.run(
+                client.complete(
+                    prompt="report please",
+                    schema=_SampleReport,
+                    max_tokens=64,
+                    temperature=0.0,
+                )
+            )
+
+        # The message is actionable: it names think=False and the model.
+        message = str(exc_info.value)
+        assert "think=False" in message
+        assert DEFAULT_OLLAMA_MODEL in message
+
+    def test_populated_thinking_is_not_silently_stripped(self) -> None:
+        # Even when the JSON body itself is perfectly valid, a populated
+        # thinking channel must abort the call — the run is NOT recorded with
+        # the thinking quietly dropped.
+        send = _send_returning(text=_VALID_BODY, thinking="hidden reasoning")
+        client = OllamaClient(host="h", seed=1, send=send)
+
+        with pytest.raises(RuntimeError, match="populated thinking"):
+            asyncio.run(
+                client.complete(
+                    prompt="p",
+                    schema=_SampleReport,
+                    max_tokens=64,
+                    temperature=0.0,
+                )
+            )
+
+    def test_free_text_call_with_thinking_also_fails_loud(self) -> None:
+        # The guard runs before JSON extraction, so it also fires on a
+        # free-text (schema=None) call.
+        send = _send_returning(text="some prose", thinking="reasoning")
+        client = OllamaClient(host="h", seed=1, send=send)
+
+        with pytest.raises(RuntimeError, match="populated thinking"):
+            asyncio.run(
+                client.complete(
+                    prompt="p",
+                    schema=None,
+                    max_tokens=64,
+                    temperature=0.0,
+                )
+            )
+
+    def test_empty_thinking_does_not_raise(self) -> None:
+        # The expected state under think=False: an empty thinking channel is
+        # the happy path and completes normally.
+        send = _send_returning(thinking="")
+        client = OllamaClient(host="h", seed=1, send=send)
+
+        response = asyncio.run(
+            client.complete(
+                prompt="p",
+                schema=_SampleReport,
+                max_tokens=64,
+                temperature=0.0,
+            )
+        )
+        assert response.text == _VALID_BODY
+
+    def test_whitespace_only_thinking_does_not_raise(self) -> None:
+        # A whitespace-only channel is effectively absent; the guard strips
+        # before checking so it does not trip on it.
+        send = _send_returning(thinking="  \n\t ")
+        client = OllamaClient(host="h", seed=1, send=send)
+
+        response = asyncio.run(
+            client.complete(
+                prompt="p",
+                schema=_SampleReport,
+                max_tokens=64,
+                temperature=0.0,
+            )
+        )
+        assert response.text == _VALID_BODY
 
 
 class TestSeedDerivation:
@@ -705,7 +881,16 @@ class TestOllamaServerCISkip:
 
 
 class TestOllamaServerRoundTrip:
-    """Live round-trip against a real local Ollama server. Opt-in only."""
+    """Live round-trip against a real local Ollama server. Opt-in only.
+
+    Re-pointed at ``qwen3.5:9b`` via :data:`DEFAULT_OLLAMA_MODEL` (the client
+    is built with no explicit model, so it picks up the migrated default).
+    These run in 9.5's operator session, NOT CI (``AILIBI_RUN_OLLAMA_TESTS``
+    is unset in CI). Each call goes through :meth:`OllamaClient.complete`, so
+    the ``think=False`` payload and the populated-thinking fail-loud guard are
+    both exercised against the real server: a live round-trip that returned
+    thinking content would raise here rather than pass.
+    """
 
     @ollama_server
     def test_real_ollama_round_trip(self) -> None:
@@ -714,6 +899,8 @@ class TestOllamaServerRoundTrip:
             pytest.skip(f"no reachable Ollama server at {host!r}")
 
         client = OllamaClient(host=host, seed=7)
+        # No model arg -> DEFAULT_OLLAMA_MODEL (qwen3.5:9b); think=False and the
+        # thinking guard run live inside complete().
         response = asyncio.run(
             client.complete(
                 prompt="Respond with the single token: OK",

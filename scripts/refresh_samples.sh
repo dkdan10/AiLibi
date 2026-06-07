@@ -279,7 +279,7 @@ fi
 # The resolved provider is echoed (dry-run + real path) and EXPORTED below, so it
 # is never silent and never falls through to build_default_client()'s fake default.
 DEFAULT_OLLAMA_HOST="localhost:11434"
-DEFAULT_OLLAMA_MODEL="qwen2.5:7b-instruct"
+DEFAULT_OLLAMA_MODEL="qwen3.5:9b"
 PROVIDER="$(printf '%s' "${AILIBI_LLM_PROVIDER:-anthropic}" | tr '[:upper:]' '[:lower:]')"
 case "$PROVIDER" in
   ollama) ;;

@@ -106,12 +106,12 @@ This writes per-seed `replay-seed-*.jsonl` files plus a `tournament-eval-report.
 
 ### Run with a local LLM (Ollama)
 
-Phase 7 adds a third provider: a **local Ollama** open model — `qwen2.5:7b-instruct`, free, served from your own machine — which is the canonical provider for the meeting-heavy Phase 7 eval set (a hosted frontier model is costly at that volume and brittle on the strict report schemas). Set it up once, then point AiLibi at it:
+Phase 7 adds a third provider: a **local Ollama** open model — `qwen3.5:9b`, free, served from your own machine — which is the canonical provider for the meeting-heavy eval set (a hosted frontier model is costly at that volume and brittle on the strict report schemas). `qwen3.5:9b` thinks by default; AiLibi disables it per request (`think: false`) on every sim call and fails loud if a response still carries thinking content. Set it up once, then point AiLibi at it:
 
 ```bash
 # 1. Install Ollama: https://ollama.com/download
 # 2. Pull the canonical model and start the server:
-ollama pull qwen2.5:7b-instruct
+ollama pull qwen3.5:9b
 ollama serve                          # serves http://localhost:11434
 
 # 3. In another shell, select the provider and run:
@@ -119,7 +119,7 @@ export AILIBI_LLM_PROVIDER=ollama
 uv run python scripts/run_tournament.py --num-games 50 --output-dir replays
 ```
 
-`AILIBI_OLLAMA_HOST` overrides the server address (default `localhost:11434`); the model knobs (`AILIBI_LLM_MEETING_MODEL` / `AILIBI_LLM_TRIGGER_MODEL`) both default to `qwen2.5:7b-instruct`. Every Ollama completion reports `cost_usd == 0.0`, so the per-game USD budget cap is moot and the token ceiling is the operative backstop. CI never selects Ollama and never reaches the server — the live integration tests are opt-in behind `AILIBI_RUN_OLLAMA_TESTS=1`.
+`AILIBI_OLLAMA_HOST` overrides the server address (default `localhost:11434`); the model knobs (`AILIBI_LLM_MEETING_MODEL` / `AILIBI_LLM_TRIGGER_MODEL`) both default to `qwen3.5:9b`. Every Ollama completion reports `cost_usd == 0.0`, so the per-game USD budget cap is moot and the token ceiling is the operative backstop. CI never selects Ollama and never reaches the server — the live integration tests are opt-in behind `AILIBI_RUN_OLLAMA_TESTS=1`.
 
 The report is consumed by four pure analyzers in `eval/` — each reads the typed `TournamentReport`, never raw JSONL:
 

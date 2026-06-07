@@ -25,9 +25,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _REFRESH_SH = _REPO_ROOT / "scripts" / "refresh_samples.sh"
 _MANIFEST = _REPO_ROOT / "replays" / "samples" / "MANIFEST.md"
 
-# The canonical Phase 7 local model the ollama preflight checks for (mirrors
-# llm.ollama_client.DEFAULT_OLLAMA_MODEL).
-_OLLAMA_MODEL = "qwen2.5:7b-instruct"
+# The canonical local model the ollama preflight checks for (mirrors
+# llm.ollama_client.DEFAULT_OLLAMA_MODEL / refresh_samples.sh's
+# DEFAULT_OLLAMA_MODEL).
+_OLLAMA_MODEL = "qwen3.5:9b"
 
 pytestmark = pytest.mark.skipif(
     shutil.which("bash") is None, reason="bash required to run refresh_samples.sh"
