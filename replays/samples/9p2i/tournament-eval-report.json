@@ -6135,7 +6135,7 @@
             "qwen2.5:7b-instruct": 0.0
           }
         },
-        "kill_gifted": false,
+        "kill_gifted": true,
         "instances_dropped": 6,
         "instances_complete_at_win": 8
       },
@@ -8195,7 +8195,7 @@
           "total_output_tokens": 0,
           "by_model": {}
         },
-        "kill_gifted": false,
+        "kill_gifted": true,
         "instances_dropped": 3,
         "instances_complete_at_win": 11
       },
@@ -9942,7 +9942,7 @@
             "qwen2.5:7b-instruct": 0.0
           }
         },
-        "kill_gifted": false,
+        "kill_gifted": true,
         "instances_dropped": 2,
         "instances_complete_at_win": 12
       },
@@ -19811,7 +19811,7 @@
       48,
       49
     ],
-    "kill_gifted_wins": 8,
+    "kill_gifted_wins": 11,
     "instances_dropped_total": 143,
     "mean_instances_complete_at_win": 11.304347826086957
   },
