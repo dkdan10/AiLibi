@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Final, TypeAlias
 
 from agents.memory.beliefs import (
+    BODY_PROXIMITY_WINDOW_TICKS,
     AlibiClaim,
     BeliefState,
     ContradictionRef,
@@ -122,8 +123,21 @@ def render_for_prompt(
         )
 
     tasks_summary = _latest_tasks_summary(memory.episodic)
+    # Team-internal firewall self-channel (Task 9.3, DESIGN.md §4.7). The
+    # recipient's own id drives self-subject suppression for EVERY role; the
+    # fellow-impostor set drives teammate kill-window suppression and is
+    # role-gated to IMPOSTOR so a non-impostor render never fires the teammate
+    # guard (the reasoner leak-guard role-gating precedent). Both are read
+    # defensively, so an older self_state payload without them renders
+    # byte-identically.
+    own_agent_id, fellow_impostor_ids = _latest_self_guard_fields(memory.episodic)
+    teammate_ids = fellow_impostor_ids if role == "IMPOSTOR" else frozenset()
     observations = sorted(
-        _build_observations(memory.episodic),
+        _build_observations(
+            memory.episodic,
+            own_agent_id=own_agent_id,
+            teammate_ids=teammate_ids,
+        ),
         key=lambda obs: (-obs.salience, -obs.tick, obs.line),
     )
     beliefs_lines = _build_belief_lines(memory.beliefs, memory.working)
@@ -169,6 +183,83 @@ def _latest_role(episodic: MemoryStore) -> str | None:
     return role
 
 
+def _latest_self_guard_fields(
+    episodic: MemoryStore,
+) -> tuple[str | None, frozenset[str]]:
+    """Self-channel inputs for the Task 9.3 firewall (DESIGN.md §4.7).
+
+    Returns the recipient's own ``agent_id`` (or ``None`` when no
+    ``self_state`` event carries it -- hand-built fixtures predating Task
+    9.3) and the set of ``fellow_impostor_ids``. Role / team are stable for
+    the life of a game, so the latest ``self_state`` is authoritative; both
+    keys are read with ``.get`` so a payload missing them yields
+    ``(None, frozenset())`` and the render is byte-identical (crew / older
+    fixtures never drop a row).
+    """
+
+    agent_id: str | None = None
+    teammates: frozenset[str] = frozenset()
+    for event in episodic.recent(since_tick=0):
+        if event.type != _EVENT_SELF_STATE:
+            continue
+        own = event.payload.get("agent_id")
+        if isinstance(own, str):
+            agent_id = own
+        fellows = event.payload.get("fellow_impostor_ids")
+        if isinstance(fellows, (tuple, list)):
+            teammates = frozenset(str(player_id) for player_id in fellows)
+    return agent_id, teammates
+
+
+def _collect_body_sightings(episodic: MemoryStore) -> tuple[tuple[str, int], ...]:
+    """Every ``(room, tick)`` the agent recorded a body, for the §4.7 guard.
+
+    The teammate kill-window check (:func:`_is_kill_window_sighting`) mirrors
+    DESIGN.md §6.3 Rule 1's body-proximity window: a teammate ``saw_player``
+    row counts as "at a kill room/tick" when the agent also saw a body in the
+    same room within ``BODY_PROXIMITY_WINDOW_TICKS`` ticks at or after the
+    sighting. The set is needed up front because the body discovery can be
+    appended after the sighting it incriminates.
+    """
+
+    sightings: list[tuple[str, int]] = []
+    for event in episodic.recent(since_tick=0):
+        if event.type != _EVENT_SAW_BODY:
+            continue
+        room = event.payload.get("room")
+        if isinstance(room, str):
+            sightings.append((room, event.tick))
+    return tuple(sightings)
+
+
+def _is_kill_window_sighting(
+    *,
+    room: str,
+    tick: int,
+    action: str | None,
+    body_sightings: tuple[tuple[str, int], ...],
+) -> bool:
+    """Whether a ``saw_player`` row places its subject at a kill room/tick.
+
+    Two ways a sighting is kill-window incriminating (DESIGN.md §4.7):
+
+    * ``action == "kill"`` -- the agent directly witnessed the subject
+      killing (ObservationService stamps the killer's ``PlayerView.action``
+      ``"kill"`` for witnesses).
+    * the agent saw a body in the same ``room`` within
+      ``BODY_PROXIMITY_WINDOW_TICKS`` ticks at or after the sighting -- the
+      subject was at the scene shortly before the body surfaced there
+      (mirrors the §6.3 Rule 1 proximity window the perception guard uses).
+    """
+
+    if action == "kill":
+        return True
+    return any(
+        body_room == room and 0 <= body_tick - tick <= BODY_PROXIMITY_WINDOW_TICKS
+        for body_room, body_tick in body_sightings
+    )
+
+
 def _latest_tasks_summary(episodic: MemoryStore) -> str | None:
     summary: str | None = None
     for event in episodic.recent(since_tick=0):
@@ -181,12 +272,18 @@ def _latest_tasks_summary(episodic: MemoryStore) -> str | None:
     return summary
 
 
-def _build_observations(episodic: MemoryStore) -> list[_Observation]:
+def _build_observations(
+    episodic: MemoryStore,
+    *,
+    own_agent_id: str | None = None,
+    teammate_ids: frozenset[str] = frozenset(),
+) -> list[_Observation]:
     observations: list[_Observation] = []
     seen_body_ids: set[str] = set()
     last_pending_task: str | None = None
     last_pending_task_room: str | None = None
     first_self_state = True
+    body_sightings = _collect_body_sightings(episodic)
 
     for event in episodic.recent(since_tick=0):
         if event.type == _EVENT_SELF_STATE:
@@ -254,7 +351,12 @@ def _build_observations(episodic: MemoryStore) -> list[_Observation]:
             continue
 
         if event.type == _EVENT_SAW_PLAYER:
-            obs = _render_saw_player(event)
+            obs = _render_saw_player(
+                event,
+                own_agent_id=own_agent_id,
+                teammate_ids=teammate_ids,
+                body_sightings=body_sightings,
+            )
             if obs is not None:
                 observations.append(obs)
             continue
@@ -296,13 +398,37 @@ def _build_observations(episodic: MemoryStore) -> list[_Observation]:
     return observations
 
 
-def _render_saw_player(event: EpisodicEvent) -> _Observation | None:
+def _render_saw_player(
+    event: EpisodicEvent,
+    *,
+    own_agent_id: str | None = None,
+    teammate_ids: frozenset[str] = frozenset(),
+    body_sightings: tuple[tuple[str, int], ...] = (),
+) -> _Observation | None:
     player_id = event.payload.get("player_id")
     room = event.payload.get("room")
     if not isinstance(player_id, str) or not isinstance(room, str):
         return None
     action = event.payload.get("action")
     action_str: str | None = action if isinstance(action, str) else None
+    # Team-internal firewall (Task 9.3, DESIGN.md §4.7), suppress before the
+    # row is built so neither variant ever reaches the prompt:
+    #   * a self-subject sighting (the recipient's own id) -- it would render
+    #     as third-person "You saw {self}" garble; dropped for EVERY role.
+    #   * an impostor's sighting of a fellow impostor at a kill room/tick --
+    #     dropping it from the impostor's own meeting input stops the own-goal
+    #     where it publicly places a teammate at the scene (audit gp-7 seed 47).
+    #     ``teammate_ids`` is empty for crew / sole impostor and is role-gated
+    #     to IMPOSTOR by the caller, so the crew render is byte-identical.
+    if own_agent_id is not None and player_id == own_agent_id:
+        return None
+    if player_id in teammate_ids and _is_kill_window_sighting(
+        room=room,
+        tick=event.tick,
+        action=action_str,
+        body_sightings=body_sightings,
+    ):
+        return None
     if action_str == "vent":
         return _Observation(
             salience=_SALIENCE_VENT_WITNESSED,
