@@ -50,7 +50,7 @@ _FALLBACK_PRICING_USD_PER_MTOK: Final[tuple[float, float]] = (3.00, 15.00)
 
 # Ollama runs a local open model for $0. The rate is keyed by PROVIDER,
 # not by model name: every Ollama model resolves to the (0.0, 0.0)
-# fallback, so an A/B swap (``qwen2.5:7b`` -> ``llama3.1:8b``) cannot
+# fallback, so an A/B swap (``qwen3.5:9b`` -> ``llama3.1:8b``) cannot
 # silently fall back to a non-zero frontier rate the way a model-keyed
 # lookup against the Anthropic table would. The per-model dict is the
 # optional override surface (empty today) for a hypothetical metered
@@ -247,7 +247,8 @@ def build_default_client(
       POSTing to ``AILIBI_OLLAMA_HOST`` (default ``localhost:11434``) and
       reusing the same ``AILIBI_LLM_MEETING_MODEL`` /
       ``AILIBI_LLM_TRIGGER_MODEL`` knobs, both defaulting to
-      ``qwen2.5:7b-instruct`` (the canonical Phase 7 local model).
+      ``qwen3.5:9b`` (the canonical local model, run with thinking disabled —
+      see :class:`llm.ollama_client.OllamaClient`).
 
     ``seed`` is the per-game seed the Ollama client folds into
     ``options.seed`` for reproducible-ish fresh generation; when ``None``

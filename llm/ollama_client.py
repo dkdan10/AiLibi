@@ -1,13 +1,21 @@
 """Local Ollama provider adapter (DESIGN.md §5, §7; Phase 7 Ollama plan).
 
 :class:`OllamaClient` implements the :class:`~llm.client.LLMClient` Protocol
-against a **local** Ollama server, the canonical Phase 7 agent-intelligence
-provider: a self-hosted open model (``qwen2.5:7b-instruct``) that is free
+against a **local** Ollama server, the canonical agent-intelligence
+provider: a self-hosted open model (``qwen3.5:9b``) that is free
 (``cost_usd == 0.0``) and never leaves the owner's machine. It mirrors the
 shape of :class:`llm.provider.AnthropicClient` and
 :class:`llm.fake_provider.FakeProvider`; provider-specific knobs (host,
 per-game ``seed``) live on the constructor and never leak through the
 Protocol.
+
+``qwen3.5:9b`` thinks by default; this adapter disables it per request
+(``think=False`` is a TOP-LEVEL Ollama API field, not an ``options`` entry)
+on every call (owner decision 2026-06-07, canonical model migration). If a
+response nonetheless carries populated thinking content, :meth:`complete`
+raises rather than silently recording it: a half-thinking run would record at
+multiplied latency with un-audited reasoning text, so the guard fails loud and
+does NOT silently strip it (AGENTS.md: no silent fallbacks).
 
 The adapter deliberately REUSES the shared helpers in
 :mod:`llm.provider` rather than re-implementing them:
@@ -59,7 +67,7 @@ if TYPE_CHECKING:
 
 
 DEFAULT_OLLAMA_HOST: Final[str] = "localhost:11434"
-DEFAULT_OLLAMA_MODEL: Final[str] = "qwen2.5:7b-instruct"
+DEFAULT_OLLAMA_MODEL: Final[str] = "qwen3.5:9b"
 # Base seed used when no per-game seed is supplied (e.g. an operator run
 # that does not thread the orchestrator's seed). It is a base, not a
 # baked-in constant for ``options.seed``: the per-game seed passed to the
@@ -84,7 +92,10 @@ class OllamaRawResponse(BaseModel):
     this shape so unit tests can inject deterministic fixtures without the
     SDK. ``prompt_eval_count`` / ``eval_count`` are Ollama's input / output
     token counters (coerced from the SDK's ``Optional[int]`` to ``0`` when
-    absent).
+    absent). ``thinking`` is the separate reasoning channel Ollama surfaces
+    when a model thinks; it must be empty under ``think=False`` and is the
+    field :meth:`OllamaClient.complete` fails loud on (coerced from the SDK's
+    ``Optional[str]`` to ``""`` when absent).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -93,6 +104,7 @@ class OllamaRawResponse(BaseModel):
     model: str
     prompt_eval_count: int
     eval_count: int
+    thinking: str = ""
 
 
 OllamaSendHook = Callable[..., Awaitable[OllamaRawResponse]]
@@ -186,7 +198,27 @@ class OllamaClient:
             prompt=prompt,
             format_schema=format_schema,
             options=options,
+            # ``think`` is a TOP-LEVEL Ollama request field (sibling to
+            # ``options``, not an entry inside it). The canonical model
+            # (``qwen3.5:9b``) thinks by default; disable it on every sim call
+            # (owner decision 2026-06-07).
+            think=False,
         )
+        # Fail loud (AGENTS.md: no silent fallbacks) if the model returned
+        # reasoning despite ``think=False``: a half-thinking run would record at
+        # multiplied latency with un-audited reasoning text. We do NOT silently
+        # strip it — a populated thinking channel means the request flag was not
+        # honored (e.g. an Ollama version predating ``think``), which the
+        # operator must see, not paper over. ``.strip()`` so a whitespace-only
+        # channel (effectively absent) does not trip the guard.
+        if raw.thinking.strip():
+            raise RuntimeError(
+                "Ollama returned populated thinking content despite "
+                f"think=False (model={raw.model!r}, {len(raw.thinking)} chars). "
+                "Refusing to record a half-thinking run; confirm the Ollama "
+                "version honors the `think` parameter for this model "
+                "(CLI spot-check: `ollama run qwen3.5:9b --think=false`)."
+            )
         # Cost is $0 for every Ollama response (rate keyed by provider, not
         # model). Computed up front so the same figure is available both for
         # the successful LLMResponse and for the failure carrier attached to
@@ -252,6 +284,7 @@ async def _default_send(
     prompt: str,
     format_schema: dict[str, Any] | None,
     options: dict[str, Any],
+    think: bool,
 ) -> OllamaRawResponse:
     # Lazy import per the module docstring: the real SDK is only imported
     # when an OllamaClient is actually invoked, so FakeProvider-only test
@@ -263,12 +296,16 @@ async def _default_send(
     # `_default_send` is a stateless module-level send-hook, so there is no
     # OllamaClient instance on which to hang a long-lived pooled client
     # without introducing module-level state (which the design forbids).
+    # ``think`` is forwarded as the SDK's top-level parameter (not inside
+    # ``options``); the response's separate ``thinking`` channel is mapped
+    # below and guarded in :meth:`OllamaClient.complete`.
     async with ollama.AsyncClient(host=host) as client:
         response = await client.generate(
             model=model,
             prompt=prompt,
             format=format_schema,
             options=options,
+            think=think,
             stream=False,
         )
 
@@ -319,6 +356,10 @@ def _raw_from_generate_response(
         # tokens were evaluated, which is the correct charge (see docstring).
         prompt_eval_count=response.prompt_eval_count or 0,
         eval_count=response.eval_count,
+        # Surface the separate thinking channel so complete()'s fail-loud
+        # guard can reject a half-thinking run; None/absent (the expected
+        # state under think=False) maps to "".
+        thinking=response.thinking or "",
     )
 
 

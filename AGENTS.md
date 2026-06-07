@@ -65,8 +65,9 @@ contract for each PR.
   deterministic fake provider and never hit the network. Two real providers
   are supported behind the `LLMClient` Protocol: Anthropic
   (`AILIBI_LLM_PROVIDER=anthropic`, needs `ANTHROPIC_API_KEY`) and a local
-  **Ollama** open model (`AILIBI_LLM_PROVIDER=ollama`, `qwen2.5:7b-instruct`
-  on `localhost:11434` — the Phase 7 canonical eval provider, free). Neither
+  **Ollama** open model (`AILIBI_LLM_PROVIDER=ollama`, `qwen3.5:9b`
+  on `localhost:11434`, run with thinking disabled — the canonical eval
+  provider, free). Neither
   is reached in CI; their integration tests are opt-in behind env gates
   (`AILIBI_RUN_REAL_PROVIDER_TESTS=1` / `AILIBI_RUN_OLLAMA_TESTS=1`).
 
