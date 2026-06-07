@@ -21,8 +21,9 @@
 // committed Python extractor: ground-truth roles, resolved events, hard rule
 // violations, and the new chain-protocol invariants) → 7 parallel analysis
 // lenses → HYBRID verification (code-certain mechanical findings pass straight
-// through; LLM judgment findings get 3 adversarial skeptics, majority-refute
-// drops) → synthesis that writes a Markdown report to audits/.
+// through; each LLM judgment finding gets ONE adversarial skeptic — refuted
+// drops; a skeptic that fails to run passes the finding through flagged
+// unverified) → synthesis that writes a Markdown report to audits/.
 //
 // Invoke from a Claude Code session:
 //   Workflow({scriptPath: "audits/workflows/gameplay-data-audit-v2.workflow.js"})
@@ -37,7 +38,7 @@ export const meta = {
   phases: [
     { title: 'Extract', detail: 'One agent updates + runs the committed extractor: roles, resolved events, hard-rule + chain-protocol violations into a facts JSON' },
     { title: 'Analyze', detail: '7 parallel lenses over the facts + transcripts' },
-    { title: 'Verify', detail: 'Mechanical findings pass through; judgment findings get 3 skeptics (majority refutes to drop)' },
+    { title: 'Verify', detail: 'Mechanical findings pass through; each judgment finding gets one skeptic (refuted drops; a failed skeptic passes it through flagged unverified)' },
     { title: 'Synthesis', detail: 'Group findings, decompose the conversion pipeline, propose improvements, write report' },
   ],
 }
@@ -153,8 +154,8 @@ social-deduction simulation — the committed sample set at ${SAMPLE_DIR} (50 re
 Phase-8 substrate). A deterministic Extract phase already ran: it derived ground-truth player roles
 (re-seeded from the roster — roles are firewalled OUT of the replays), reconstructed the resolved
 per-game events, and code-checked both the hard engine rules AND the chain-protocol invariants. Your
-findings will go through adversarial verification (skeptics try to refute each) and synthesis with the
-other analysts.
+findings will go through adversarial verification (a skeptic tries to refute each) and synthesis with
+the other analysts.
 
 THE SUBSTRATE (Phase 8 — DESIGN.md §3.2/§3.3/§3.5/§5.2 are the rule sources):
 - Roster 9 players / 2 impostors. Tasks are PER-PLAYER instances keyed "{owner}:{map_task_id}"
@@ -192,10 +193,12 @@ Constraints for every lens:
   the numbers.
 - TIME-WASTE CAVEAT: the replays record token counts per LLM call but NO wall-clock duration.
   Measure waste via token sinks + call counts, never latency.
-- ANCHOR HONESTY: the recording-time eval report claims CREW 37 / IMP 13 (impostor wins all
-  IMPOSTOR_PARITY), ~91 meetings (all body-report), 0 ejections, ~93% SKIP ballots, 0 failed_calls.
-  VERIFY every such number from the facts JSON before building on it; if the facts disagree with the
-  report, that disagreement is itself a high-severity finding.
+- ANCHOR HONESTY: do NOT trust any baseline number quoted in planning docs or this prompt — they go
+  stale at every re-record. Derive the recording-time claims yourself from
+  ${SAMPLE_DIR}/tournament-eval-report.json (win split, meetings, ejections, SKIP share,
+  failed_calls) plus the MANIFEST git_sha, and treat THOSE as the briefed anchors. Cross-check them
+  against the facts JSON; a facts-vs-report disagreement is itself a high-severity finding. Any
+  cross-set comparison you make must name the other set's sample dir + commit.
 - Recently FIXED — do NOT re-flag as new defects unless a game in THIS set still exhibits them: the
   win-condition impostor-elimination gap (Phase 6); hollow-meeting timeouts (Wave 0); impostor
   friendly-fire kills (Wave 0.5 — teammate-aware kill + engine guard); impostor betrayal
@@ -491,14 +494,13 @@ if (lensFindings.length === 0) {
 
 const verifiedLens = await parallel(
   lensFindings.map((f) => () =>
-    parallel(
-      Array.from({ length: 3 }, (_, lensIndex) => () =>
-        agent(
-          `You are verifying-by-trying-to-refute a gameplay-data audit finding for AiLibi (Phase-8
+    agent(
+      `You are verifying-by-trying-to-refute a gameplay-data audit finding for AiLibi (Phase-8
 substrate: 9p/2i roster, per-player task instances, reactive accusation-chain meetings — transcripts
 are an ordered turns[] list, ballots carry primary_reason_id referencing turn ids). The data is the
 recorded replay set at ${SAMPLE_DIR}; the facts JSON is at ${factsPath}; roles come from the facts
-JSON (firewalled out of the replays).
+JSON (firewalled out of the replays). You are this finding's ONLY verifier — work all three angles
+below before deciding; your verdict alone keeps or drops it.
 
 Finding:
   Lens: ${f.lens_key} - ${f.lens_name}
@@ -509,63 +511,55 @@ Finding:
   Evidence: ${f.evidence}
   Repair/improvement hint: ${f.repair_hint || '(none)'}
 
-Your job: try to refute it. Default to refuted=true if uncertain. Verify by reading the cited seed's
-replay (and the facts JSON for roles), or the cited metric/rule source. Common refutation grounds:
-- The cited seed/tick/meeting/turn does not show what the finding claims.
-- The roles are misread (check the facts JSON, not behavior).
-- The behavior is intentional/by-design rather than a bug: the §5.2 chain termination is
-  deterministic (a short chain, an un-extended opt_in accusation, or an immediate opening-turn
-  termination is the rule working); §3.5 drops a dead owner's incomplete task instances (a shrinking
-  task denominator is correct); the §4.6 skip rule in vote_ballot.j2 intentionally biases toward
-  SKIP under low confidence; a metric's stated caveat (null ejection metrics at 0 ejections,
-  alibi_fabrication's conservative lower-bound) is documented, not a bug. Check DESIGN.md
-  §3.5/§5.2, engine/rules.py, meetings/manager.py, or the metric source before confirming.
-- It's a token-proxy time-waste claim presented as a latency claim (no wall-clock exists) — refute if
-  it overclaims.
-- The evidence does not actually support the claim, or the numbers are wrong.
+Your job: try to refute it. Verify by reading the cited seed's replay (and the facts JSON for
+roles), or the cited metric/rule source. Work ALL THREE angles:
+1. Literal: does the cited seed/tick/meeting/turn actually show what the finding claims (roles,
+   ticks, turns, votes, numbers)? Roles come from the facts JSON, never inferred from behavior.
+2. By-design: is the behavior intentional rather than a bug — the §5.2 chain termination is
+   deterministic (a short chain, an un-extended opt_in accusation, or an immediate opening-turn
+   termination is the rule working); §3.5 drops a dead owner's incomplete task instances (a
+   shrinking task denominator is correct); the §4.6 skip rule in vote_ballot.j2 intentionally
+   biases toward SKIP under low confidence; a metric's stated caveat (null ejection metrics at 0
+   ejections, alibi_fabrication's conservative lower-bound) is documented, not a bug. Check
+   DESIGN.md §3.5/§5.2, engine/rules.py, meetings/manager.py, or the metric source before
+   confirming.
+3. Context: is there invalidating context elsewhere in the set (other seeds/meetings), a numeric
+   error, or a token-proxy time-waste claim presented as a latency claim (no wall-clock exists)?
 
-Lens index ${lensIndex + 1} of 3: ${
-            lensIndex === 0
-              ? 'Read the cited replay/facts literally — does the data state what the finding claims (roles, ticks, turns, votes)?'
-              : lensIndex === 1
-                ? 'Check whether the behavior is intentional/by-design (the §5.2 termination rule, §3.5 task-drop, the §4.6 threshold, a metric caveat, DESIGN.md).'
-                : 'Look for invalidating context elsewhere in the set (other seeds/meetings) or a numeric error.'
-          }
-
-Output the structured verdict.`,
-          {
-            label: `verify:${f.fully_qualified_id}-l${lensIndex + 1}`,
-            phase: 'Verify',
-            schema: VERDICT_SCHEMA,
-          }
-        )
-      )
-    ).then((votes) => {
-      const valid = votes.filter(Boolean)
-      const refuteCount = valid.filter((v) => v.refuted).length
-      const survived = refuteCount < 2 // majority (2/3) must refute to drop
-      // Consume the verifiers' severity_adjusted: among non-refuting verifiers, adopt a severity
-      // (other than "unchanged") only if >=2 of them agree on it; otherwise keep the lens's original.
-      const adjVotes = valid
-        .filter((v) => !v.refuted && v.severity_adjusted && v.severity_adjusted !== 'unchanged')
-        .map((v) => v.severity_adjusted)
-      const counts = {}
-      for (const s of adjVotes) counts[s] = (counts[s] || 0) + 1
-      let effective = f.severity
-      let best = 1
-      for (const s of Object.keys(counts)) {
-        if (counts[s] >= 2 && counts[s] > best) {
-          best = counts[s]
-          effective = s
+Refute ONLY with a concrete basis from those checks, cited in your reasoning. If the evidence
+cannot be verified either way after honest effort, set refuted=true with reasoning starting
+"unverifiable:". Output the structured verdict.`,
+      {
+        label: `verify:${f.fully_qualified_id}`,
+        phase: 'Verify',
+        schema: VERDICT_SCHEMA,
+      }
+    ).then((verdict) => {
+      if (!verdict) {
+        // The skeptic died (skipped / terminal API error): pass the finding through
+        // UNVERIFIED and flagged — synthesis must label it, never launder it as verified.
+        return {
+          ...f,
+          survived: true,
+          unverified: true,
+          effective_severity: f.severity,
+          severity_changed: false,
+          verifier_votes: [],
+          refute_count: 0,
         }
       }
+      const adjusted =
+        verdict.severity_adjusted && verdict.severity_adjusted !== 'unchanged'
+          ? verdict.severity_adjusted
+          : f.severity
       return {
         ...f,
-        survived,
-        effective_severity: effective,
-        severity_changed: effective !== f.severity,
-        verifier_votes: valid,
-        refute_count: refuteCount,
+        survived: !verdict.refuted,
+        unverified: false,
+        effective_severity: adjusted,
+        severity_changed: adjusted !== f.severity,
+        verifier_votes: [verdict],
+        refute_count: verdict.refuted ? 1 : 0,
       }
     })
   )
@@ -573,10 +567,11 @@ Output the structured verdict.`,
 
 const survivedLens = verifiedLens.filter((v) => v.survived)
 const refutedLens = verifiedLens.filter((v) => !v.survived)
+const unverifiedLens = survivedLens.filter((v) => v.unverified)
 // Mechanical findings are code-certain — they bypass verification.
 const allSurviving = [...mechanicalFindings, ...survivedLens]
 
-log(`Verify complete. ${survivedLens.length}/${lensFindings.length} judgment findings survived (${refutedLens.length} refuted); ${mechanicalFindings.length} mechanical passed through. ${allSurviving.length} total.`)
+log(`Verify complete. ${survivedLens.length}/${lensFindings.length} judgment findings survived (${refutedLens.length} refuted, ${unverifiedLens.length} unverified pass-through); ${mechanicalFindings.length} mechanical passed through. ${allSurviving.length} total.`)
 
 // ---------------------------------------------------------------------------
 // Phase 4: Synthesis
@@ -591,10 +586,12 @@ const synthesisInput = {
   mechanical_finding_count: mechanicalFindings.length,
   judgment_raw_count: lensFindings.length,
   judgment_refuted_count: refutedLens.length,
+  judgment_unverified_count: unverifiedLens.length,
   surviving_findings: allSurviving.map((f) => ({
     lens: f.lens_key,
     id: f.fully_qualified_id,
     mechanical: !!f.mechanical,
+    unverified: !!f.unverified,
     severity: f.effective_severity || f.severity,
     severity_original: f.severity,
     severity_adjusted_by_verifier: !!f.severity_changed,
@@ -612,8 +609,10 @@ const synthesis = await agent(
   `You are synthesizing a gameplay-data audit of AiLibi's committed replay set ${SAMPLE_DIR} — the
 first audit of the Phase-8 substrate (9p/2i, per-player tasks, accusation-chain meetings). A
 deterministic extractor produced code-certain rule/protocol violations (NOT subject to refutation); 7
-analysis lenses produced judgment findings; adversarial verification dropped the ones 2-of-3 skeptics
-refuted. What remains is the load-bearing finding set.
+analysis lenses produced judgment findings; each judgment finding faced ONE adversarial skeptic —
+refuted findings were dropped, and any finding whose skeptic failed to run carries unverified:true.
+Label unverified findings explicitly in the report ("unverified — skeptic did not run"); never
+present them as verified. What remains is the load-bearing finding set.
 
 Input data (JSON):
 ${JSON.stringify(synthesisInput, null, 2)}
@@ -675,6 +674,7 @@ return {
   mechanical_findings: mechanicalFindings.length,
   judgment_findings_surviving: survivedLens.length,
   judgment_findings_refuted: refutedLens.length,
+  judgment_findings_unverified: unverifiedLens.length,
   improvement_proposals: synthesis.improvement_proposals,
   notable_trends: synthesis.notable_trends,
   summary: synthesis.summary,
