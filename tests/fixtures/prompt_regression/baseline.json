@@ -2,15 +2,15 @@
   "v_a": {
     "game_count": 3,
     "metrics": {
-      "accusation_claim_ece": 0.2285714285714286,
-      "alibi_survival_rate": 0.42857142857142855,
-      "body_report_meetings": 7,
+      "accusation_claim_ece": 0.2875000000000001,
+      "alibi_survival_rate": 0.7142857142857143,
+      "body_report_meetings": 9,
       "emergency_meetings": 0,
       "meeting_rate": 1.0,
-      "meetings_total": 7,
+      "meetings_total": 9,
       "total_cost_usd": 0.0,
       "total_impostor_alibis": 7,
-      "vote_ballot_ece": 0.6,
+      "vote_ballot_ece": 0.22999999999999998,
       "vote_correctness_rate": null
     },
     "prompt_versions": [
@@ -36,11 +36,11 @@
         "game_count": 3,
         "template_name": "vote_ballot",
         "total_cost_usd": 0.0,
-        "version": "vote_ballot/v3"
+        "version": "vote_ballot/v4"
       }
     ],
     "seeds": [
-      0,
+      2,
       6,
       26
     ]
@@ -48,15 +48,15 @@
   "v_b": {
     "game_count": 3,
     "metrics": {
-      "accusation_claim_ece": 0.2285714285714286,
-      "alibi_survival_rate": 0.2857142857142857,
-      "body_report_meetings": 7,
+      "accusation_claim_ece": 0.2875000000000001,
+      "alibi_survival_rate": 0.5714285714285714,
+      "body_report_meetings": 9,
       "emergency_meetings": 0,
       "meeting_rate": 1.0,
-      "meetings_total": 7,
+      "meetings_total": 9,
       "total_cost_usd": 0.0,
       "total_impostor_alibis": 7,
-      "vote_ballot_ece": 0.6,
+      "vote_ballot_ece": 0.22999999999999998,
       "vote_correctness_rate": null
     },
     "prompt_versions": [
@@ -82,11 +82,11 @@
         "game_count": 3,
         "template_name": "vote_ballot",
         "total_cost_usd": 0.0,
-        "version": "vote_ballot/v3"
+        "version": "vote_ballot/v4"
       }
     ],
     "seeds": [
-      0,
+      2,
       6,
       26
     ]

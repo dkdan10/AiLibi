@@ -61,13 +61,14 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     )
     assert model == "qwen2.5:7b-instruct"
     # The union of the recorded prompt-version *values*, sorted — using the
-    # actual recorded values (e.g. "vote_ballot/v3"), not the idealized hint.
+    # actual recorded values (e.g. "vote_ballot/v4"), not the idealized hint.
     assert "accusation_round.v4" in prompt_versions
-    assert "vote_ballot/v3" in prompt_versions
+    assert "vote_ballot/v4" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
-    # The Task 8.12 re-record runs on the local Ollama provider: real LLM
-    # calls, zero spend, so the recorded per-seed cost is exactly 0.
+    # The committed re-records (Task 8.12 / Task 8.18) run on the local Ollama
+    # provider: real LLM calls, zero spend, so the recorded per-seed cost is
+    # exactly 0.
     assert float(cost) == 0.0
     # This test pins provenance *extraction*, not the game outcome: the meeting
     # seed's winner is a live-recorded result that can land either way (after the
@@ -248,9 +249,10 @@ def test_update_does_not_truncate_manifest_on_crash(
 
 
 def test_sum_cost(small_samples: Path) -> None:
-    # The Task 8.12 re-record runs on the local Ollama provider ($0/call), so
-    # the meeting-bearing seed's recorded spend is exactly 0 too — the sum is
-    # still exercised over a seed WITH recorded calls (22) and one without (0).
+    # The committed re-records (Task 8.12 / Task 8.18) run on the local Ollama
+    # provider ($0/call), so the meeting-bearing seed's recorded spend is
+    # exactly 0 too — the sum is still exercised over a seed WITH recorded
+    # calls (22) and one without (0).
     assert mw.sum_cost(small_samples, [_NO_MEETING_SEED]) == 0.0
     assert mw.sum_cost(small_samples, [_NO_MEETING_SEED, _MEETING_SEED]) == 0.0
 
