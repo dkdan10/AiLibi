@@ -243,12 +243,15 @@ thinking run — the 9.5 smoke surfaces it immediately. No committed bytes chang
 **Section refs:** DESIGN.md §11.4, §3.5; audits/audit-2026-06-07-0717-gameplay-data.md (the migration + hygiene set)
 **Complexity:** Integration
 
-The Wave-0 gate, mirroring 8.18's operator shape: with the three hygiene fixes and the client
-migration merged, smoke first, then re-record BOTH committed sets on `qwen3.5:9b` (think:false) in
-ONE PR, regenerate both reports + MANIFESTs + the prompt-regression fixtures and baseline, and run
-the validity gate. This establishes the NEW control baseline. The phase pauses at this merge: the
-close audit and the conversion-wave worksheet re-answer happen in the design thread before any 9.6+
-contract exists.
+The Wave-0 gate, mirroring 8.18's operator shape: with the three hygiene fixes, the client
+migration, AND the conversion-prompt PR (#131: crewmate_report v3, accusation_round v5,
+vote_ballot v5) all merged, smoke first, then re-record BOTH committed sets on `qwen3.5:9b`
+(think:false) in ONE PR, regenerate both reports + MANIFESTs + the prompt-regression fixtures and
+baseline, and run the validity gate. This establishes the NEW control baseline — model migration and
+the conversion prompts together, per the SIMPLIFIED-PATH convergence (the four prompt levers were
+validated on the model-probe harness before merge, not designed blind). The phase pauses at this
+merge: the close audit and the conversion-wave worksheet re-answer — did the prompts convert, and
+the abstain/tally decision — happen in the design thread before any 9.6+ contract exists.
 
 **Files in scope:**
 - replays/samples/*.jsonl + tournament-eval-report.json + MANIFEST.md (flat 4p/1i re-recorded on qwen3.5:9b; model rows update)
@@ -258,14 +261,15 @@ contract exists.
 - tests/scripts/test_build_sample_report.py + tests/scripts/test_verify_samples.py + tests/scripts/test_manifest_writer.py + tests/scripts/test_refresh_samples.py (committed-bytes pins: git_sha, model rows `qwen3.5:9b`, cost 0)
 
 **Files NOT in scope:**
-- engine/, meetings/, agents/, llm/, eval/ source (all behavior landed in 9.1–9.4; this task records + regenerates)
+- engine/, meetings/, agents/, llm/, eval/ source (behavior landed in 9.1–9.4 plus the merged conversion-prompt PR #131; this task records + regenerates only). In particular `meetings/manager.py` keeps its token caps at turn 2048 / vote 1024 — do NOT raise the vote cap. The v5 one-sentence rationale is the floor fix; the prior attempt's 8192 does not work (the ~6260-token runaways overrun num_ctx=8192 anyway, trading a truncation abort for a ctx-overrun abort).
 - audits/workflows/extract_gameplay_facts.py (run read-only for the funnel numbers; do not modify)
 
 **Definition of done:**
 - [ ] Smoke first (3–5 seeds at 9p/2i): the think:false guard holds on live calls (zero thinking content), per-seed wall time measured and the full-run projection reported BEFORE the full runs; STOP for operator go. If the smoke surfaces ANY thinking-guard trip (Ollama version predates the `think` parameter, or the flag is not honored), ABANDON this task without recording further: re-open 9.4 (or escalate the Ollama-version/model question to the design thread) — do not proceed to a full record, and do not weaken the guard.
+- [ ] Smoke confirms the floor the prior attempt failed: every smoke seed reaches game_over with zero ballot truncation / unterminated-JSON parse failures. The blocked migration aborted 7/100 games when the 9B's `rationale_text` ran past the vote cap under think:false; the v5 one-sentence-rationale prompt is what closes that runaway (harness: ~104-char ballots). If a seed still aborts on a runaway rationale, STOP — the prompt fix did not hold; escalate to the design thread rather than raising the token cap.
 - [ ] Both sets re-recorded in ONE PR on `qwen3.5:9b`; both reports regenerated (format v2; kill_gifted under the 9.1 definition); both MANIFESTs carry the new git_sha + `qwen3.5:9b` model rows; prompt-regression fixtures + baseline regenerated.
 - [ ] Validity gate (HARD, the v3 set): friendly-fire 0; every game reaches game_over; betrayal ballots/accusations 0 — now structurally absent at the source per 9.3; leak suite green at 4p/1i and 2-of-9; meeting_rate ≥ 0.60 with ≥ 30 resolved meetings at 9p/2i; byte-identical reconstruction; zero tick-1 kills; zero missed-deadline markers; zero dangling primary_reason_id; PLUS migration assertions: zero thinking-guard trips, zero cross-room kill rejections (the 9.2 fix holding), model rows correct.
-- [ ] Funnel report ($0): run audits/workflows/extract_gameplay_facts.py over the new 9p/2i set; PR body reports win split + kill-gifted split (9.1 definition), ejection count, accusation precision, accuser follow-through, persuasion rate, and the threshold-quoting-skip count (the 19/19 inversion class — the migration's headline question). The extractor does NOT compute the threshold-quoting count: derive it operator-inline (a regex over ballot `rationale_text` in the raw replay meeting records — the facts JSON does not carry rationales), and paste the derivation snippet into the PR body so the next migration reuses it instead of rediscovering the gap. Reported, not gated.
+- [ ] Funnel report ($0): run audits/workflows/extract_gameplay_facts.py over the new 9p/2i set; PR body reports win split + kill-gifted split (9.1 definition), ejection count, accusation precision, accuser follow-through, persuasion rate, and the threshold-quoting-skip count (the 19/19 inversion class). The extractor does NOT compute the threshold-quoting count: derive it operator-inline (a regex over ballot `rationale_text` in the raw replay meeting records — the facts JSON does not carry rationales), and paste the derivation snippet into the PR body so the next migration reuses it instead of rediscovering the gap. Because vote_ballot v5 renders the §4.6 verdict in-prompt, the threshold-quoting-skip count is now expected near-zero — its residual is the check that the rendering held, not the headline. The headline is now the conversion result: ejection count and accuracy, and whether opt-in corroboration builds vote consensus that crosses the SKIP-plurality bar (the input to the parked abstain/tally decision). Report both. Reported, not gated.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -280,15 +284,18 @@ Operator-run local session: `ollama pull qwen3.5:9b` first; AILIBI_LLM_PROVIDER=
 refresh invocation (still defaults to anthropic); the model name now comes from 9.4's constant —
 no model env needed. Expect roughly 2× per-token cost vs the 7B — the smoke's projection decides
 whether the full run is an evening or a day. Win split is reported only and may move in ANY
-direction (9.2 raises real kill cadence; the model change moves everything else) — the
-threshold-inversion count is the number that decides what Wave 1 still needs to fix. One atomic
-PR; an intermediate commit is un-reconstructable.
+direction (9.2 raises real kill cadence; the conversion prompts move ejections; the model change
+moves everything else). With v5 the threshold-inversion should be largely closed, so the number that
+decides what Wave 1 still needs to fix is the conversion result — ejection accuracy and whether
+consensus crosses the SKIP-plurality bar. One atomic PR; an intermediate commit is un-reconstructable.
 
 **Integration risk:**
 
-The wave converges here and the phase PAUSES at this merge — do not author, dispatch, or implement
-any conversion-wave work in this task. If the thinking guard trips or the floor fails, STOP and fix
-upstream (9.4 or the model choice) rather than papering the gate.
+The wave converges here and the phase PAUSES at this merge. The conversion prompts are already
+merged (PR #131); 9.5 records them — it does not author, dispatch, or edit any prompt or reasoner
+code. If the thinking guard trips or the floor fails, STOP and fix upstream (the v5 prompt, 9.4, or
+the model/Ollama choice) rather than papering the gate — in particular do NOT raise the vote token
+cap, which the prior attempt tried (8192) and which reintroduces the num_ctx overrun.
 
 **Ready-to-paste prompt:** `agent_prompts/task-9-5-model-migration-rerecord.md`
 
