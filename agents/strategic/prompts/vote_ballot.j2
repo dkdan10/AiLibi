@@ -11,6 +11,16 @@
    text changes in a way that could shift LLM behaviour, so eval runs
    and replay logs can attribute results to a known prompt revision.
 
+   v5 (Phase 9 conversion wave): the §4.6 skip-gate verdict is computed in
+   the template (max suspicion vs threshold) and rendered as an imperative,
+   instead of asking the model to recompute and discount it. The gate max is
+   taken over the VALID ejection targets only — `candidate_targets`
+   intersected with the suspicion graph — so a high-suspicion dead/ejected
+   player carried in the voter's belief rows cannot force a "MUST eject"
+   verdict when no living candidate crosses the threshold. (No production
+   replay has been recorded at v5 yet; this refinement lands before the
+   first v5 re-record, so the version is not re-bumped.)
+
    Task 8.8 reshaped the transcript rendering from the old parallel
    `reports` + fixed-round `statements` to the single ordered `turns`
    list (DESIGN.md §5.2). Task 8.16 (DESIGN.md §5.5; audit gp-3) bumps
@@ -99,14 +109,27 @@ These players are your fellow impostors: {{ fellow_impostor_ids | join(", ") }}.
 Never vote to eject a teammate. If your suspicion points at a fellow impostor,
 set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
 {% endif %}
+{# Gate max is computed over VALID ejection targets only (living, non-self,
+   non-teammate). `candidate_targets` is exactly that living set, and teammates
+   are already stripped from `suspicion_graph` upstream
+   (meetings.manager._suspicion_graph_with_contradictions). Filtering here stops
+   a high-suspicion DEAD / ejected player — still carried in the voter's
+   `known_players()` belief rows — from tripping the "MUST eject" gate when no
+   LIVING candidate actually crosses the threshold (which would force a ballot
+   onto an unrelated living player). Falls back to the full graph only when
+   `candidate_targets` is omitted (ad-hoc renders; production always passes it). #}
+{% if candidate_targets is defined and candidate_targets %}
+{% set _susp = suspicion_graph | selectattr('player_id', 'in', candidate_targets) | map(attribute='suspicion') | list %}
+{% else %}
 {% set _susp = suspicion_graph | map(attribute='suspicion') | list %}
+{% endif %}
 {% set _max = (_susp | max) if _susp else 0.0 %}
 {% set _thr = skip_confidence_threshold | default(0.6) %}
 ## Decision rules
 
 1. **Gate verdict — already computed for you, do not recompute (DESIGN.md §4.6).**
-   Your maximum suspicion across the graph is **{{ "%.2f"|format(_max) }}**; the
-   skip threshold is **{{ "%.2f"|format(_thr) }}**.
+   Your maximum suspicion among the living ejection targets is
+   **{{ "%.2f"|format(_max) }}**; the skip threshold is **{{ "%.2f"|format(_thr) }}**.
    {% if _max >= _thr %}**{{ "%.2f"|format(_max) }} ≥ {{ "%.2f"|format(_thr) }} — you MUST vote to eject; you may NOT skip.** Set `target` to the living player with the highest suspicion / strongest case. The suspicion score **already weighs how good the evidence is**, so do NOT skip on the grounds that it is "not definitive", "circumstantial", or "could be a memory error" — those are exactly the cases the threshold is built for. A met threshold means you VOTE; skipping now is a rule violation.{% else %}**{{ "%.2f"|format(_max) }} < {{ "%.2f"|format(_thr) }} — you MUST set `target` to `"SKIP"`.** No candidate crosses the threshold.{% endif %}
 2. **Pick the strongest case** among the above-threshold players (if more than
    one), using the rendered memory, the transcript, and the contradiction flags.
