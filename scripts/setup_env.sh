@@ -27,7 +27,22 @@ if [ -f frontend/package.json ]; then
     exit 1
   fi
   echo "Installing frontend dependencies (npm ci in frontend/)..."
-  (cd frontend && npm ci)
+  # npm ci pulls from the public registry, which intermittently resets the
+  # connection (ECONNRESET) on CI runners and fails the whole job before any
+  # check runs. Retry a few times with backoff so a transient network blip does
+  # not red the build; a genuine lockfile / package error still fails loudly
+  # once the attempts are exhausted.
+  npm_ci_max_attempts=3
+  npm_ci_attempt=1
+  until (cd frontend && npm ci --fetch-retries=5 --fetch-retry-maxtimeout=120000); do
+    if [ "$npm_ci_attempt" -ge "$npm_ci_max_attempts" ]; then
+      echo "npm ci failed after $npm_ci_max_attempts attempts." >&2
+      exit 1
+    fi
+    echo "npm ci failed (attempt $npm_ci_attempt/$npm_ci_max_attempts) -- retrying in 10s..." >&2
+    npm_ci_attempt=$((npm_ci_attempt + 1))
+    sleep 10
+  done
 else
   echo "No frontend/package.json; skipping frontend dependency install."
 fi
