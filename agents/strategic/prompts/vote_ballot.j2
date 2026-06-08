@@ -6,7 +6,7 @@
    that Pydantic schema; this template only produces the user-facing
    prompt body.
 
-   Prompt version: vote_ballot/v4
+   Prompt version: vote_ballot/v5
    Bump the version line below (and this header) whenever the prompt
    text changes in a way that could shift LLM behaviour, so eval runs
    and replay logs can attribute results to a known prompt revision.
@@ -14,7 +14,7 @@
    Task 8.8 reshaped the transcript rendering from the old parallel
    `reports` + fixed-round `statements` to the single ordered `turns`
    list (DESIGN.md §5.2). Task 8.16 (DESIGN.md §5.5; audit gp-3) bumps
-   the body marker to vote_ballot/v4 in lockstep with
+   the body marker to vote_ballot/v5 in lockstep with
    orchestrator.game.DEFAULT_PROMPT_VERSIONS: the `primary_reason_id`
    decision-rule example now cites a REAL turn id drawn from the
    rendered transcript (the first turn's `turn_id`) instead of a
@@ -55,7 +55,7 @@
 #}
 You are agent `{{ voter_id }}` casting a vote at an AiLibi meeting.
 
-Prompt: vote_ballot/v4 (DESIGN.md §5.5)
+Prompt: vote_ballot/v5 (DESIGN.md §5.5)
 
 Read your rendered memory, the meeting transcript so far, the
 contradiction flags, and your current suspicion graph, then return a
@@ -99,18 +99,18 @@ These players are your fellow impostors: {{ fellow_impostor_ids | join(", ") }}.
 Never vote to eject a teammate. If your suspicion points at a fellow impostor,
 set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
 {% endif %}
+{% set _susp = suspicion_graph | map(attribute='suspicion') | list %}
+{% set _max = (_susp | max) if _susp else 0.0 %}
+{% set _thr = skip_confidence_threshold | default(0.6) %}
 ## Decision rules
 
-1. **Uncertainty-aware skip (DESIGN.md §4.6).** Treat your suspicion
-   score for each player as the confidence-of-guilt belief. If
-   `max(suspicion across the graph) < {{ "%.2f"|format(skip_confidence_threshold|default(0.6)) }}`, you MUST set
-   `target` to `"SKIP"`. A single confident liar can cascade the table
-   into a wrong eject — skipping is the right call when no candidate
-   crosses the threshold.
-2. **Otherwise eject the strongest case.** When the threshold is met,
-   pick the player whose evidence is strongest given the rendered
-   memory, the transcript, and the contradiction flags. The suspicion
-   graph is a prior — fresh transcript evidence may override it.
+1. **Gate verdict — already computed for you, do not recompute (DESIGN.md §4.6).**
+   Your maximum suspicion across the graph is **{{ "%.2f"|format(_max) }}**; the
+   skip threshold is **{{ "%.2f"|format(_thr) }}**.
+   {% if _max >= _thr %}**{{ "%.2f"|format(_max) }} ≥ {{ "%.2f"|format(_thr) }} — you MUST vote to eject; you may NOT skip.** Set `target` to the living player with the highest suspicion / strongest case. The suspicion score **already weighs how good the evidence is**, so do NOT skip on the grounds that it is "not definitive", "circumstantial", or "could be a memory error" — those are exactly the cases the threshold is built for. A met threshold means you VOTE; skipping now is a rule violation.{% else %}**{{ "%.2f"|format(_max) }} < {{ "%.2f"|format(_thr) }} — you MUST set `target` to `"SKIP"`.** No candidate crosses the threshold.{% endif %}
+2. **Pick the strongest case** among the above-threshold players (if more than
+   one), using the rendered memory, the transcript, and the contradiction flags.
+   Do not re-open the gate decision — it is already made above.
 3. **`primary_reason_id`** references the `MeetingTurn` id{% if transcript.turns %} (e.g.
    `"{{ transcript.turns[0].turn_id }}"` — one of the turn ids listed in the
    transcript above){% endif %} that most drove your decision. It MUST be a turn id
@@ -120,9 +120,8 @@ set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
 4. **`considered_alternatives`** lists any other player you seriously
    weighed (empty if there were none). It is for post-hoc analysis and
    does not affect the tally.
-5. **`rationale_text`** is for spectators and post-hoc transparency.
-   Be concrete: cite ticks, rooms, and turn ids. Two or three
-   sentences is enough.
+5. **`rationale_text`** — ONE sentence: state your vote and its single strongest
+   reason (cite a tick, room, or turn id). Do not deliberate or hedge.
 6. **Honesty about your role is a game rule, not a moral question.**
    If you are an impostor, vote in character — your goal is to survive
    the meeting. The schema and the tally do not care about your role.

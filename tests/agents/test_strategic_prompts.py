@@ -164,7 +164,7 @@ class TestCrewmateReportTemplate:
             public_transcript="",
         )
 
-        assert "crewmate_report.v2" in prompt
+        assert "crewmate_report.v3" in prompt
         assert "**crewmate**" in prompt
         assert "opening speaker" in prompt
 
@@ -339,7 +339,7 @@ class TestAccusationRoundTemplate:
             turn_kind="reply",
         )
 
-        assert "accusation_round.v4" in prompt
+        assert "accusation_round.v5" in prompt
         assert "reactive accusation chain" in prompt
 
     def test_reply_turn_frames_the_accuser(self) -> None:
@@ -494,7 +494,7 @@ class TestVoteBallotTemplate:
         # body, bumped to v4 in Task 8.16 (the `primary_reason_id` example
         # is now sourced from the live transcript). A regression that bumps
         # the version without updating the test is the desired failure mode.
-        assert "vote_ballot/v4" in prompt
+        assert "vote_ballot/v5" in prompt
 
     def test_renders_voter_and_candidates(self) -> None:
         prompt = vote_ballot_prompt(
