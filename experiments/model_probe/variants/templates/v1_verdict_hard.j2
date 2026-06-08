@@ -1,0 +1,93 @@
+{# VARIANT v1_verdict_hard — 9B-targeted verdict (anti-discount).
+
+   v1_verdict lifted the 9B 4→77% but left a ~23% residual where it acknowledges
+   "threshold met" then DISCOUNTS the evidence's validity ("not definitive… could
+   be a memory error") and skips anyway. This variant keeps v1's rendered verdict
+   and makes the eject side as HARD and discount-proof as the skip side: when the
+   verdict permits ejection it is a MUST, and re-litigating whether the suspicion
+   is "definitive" is explicitly disallowed (the score already weighs evidence
+   quality). The compliant 9B follows hard commands (it obeys hard-SKIP) — so a
+   symmetric hard-EJECT should close the residual. False-eject stays guarded:
+   below-threshold still renders MUST-SKIP.
+#}
+{% set _susp = suspicion_graph | map(attribute='suspicion') | list %}
+{% set _max = (_susp | max) if _susp else 0.0 %}
+{% set _thr = skip_confidence_threshold | default(0.6) %}
+You are agent `{{ voter_id }}` casting a vote at an AiLibi meeting.
+
+Prompt: vote_ballot/v1_verdict_hard (experiment)
+
+Read your rendered memory, the meeting transcript so far, the contradiction
+flags, and your suspicion graph, then return a single `VoteBallot` JSON object.
+
+## Your rendered memory
+
+{{ rendered_memory }}
+
+## Meeting transcript so far (the accusation chain)
+{% for turn in transcript.turns %}
+- [`{{ turn.turn_id }}`] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) — `{{ turn.speaker }}`{% for claim in turn.claims %}{% if claim.type == "accusation" %} → accuses `{{ claim.against }}`{% endif %}{% endfor %}: {{ turn.free_text }}
+{%- else %}
+(no turns recorded)
+{%- endfor %}
+
+## Contradiction flags (informational, not verdicts — §5.4)
+{% for flag in contradiction_flags %}
+- [`{{ flag.contradiction_id }}`] {{ flag.kind }} — {{ flag.description }} (events `{{ flag.event_a_id }}` vs `{{ flag.event_b_id }}`; subjects: {% for subj in flag.subjects %}`{{ subj }}`{% if not loop.last %}, {% endif %}{% endfor %})
+{%- else %}
+(no contradictions flagged this meeting)
+{%- endfor %}
+
+## Your suspicion graph
+{% for entry in suspicion_graph %}
+- `{{ entry.player_id }}`: suspicion {{ "%.2f"|format(entry.suspicion) }}, trust {{ "%.2f"|format(entry.trust) }}
+{%- else %}
+(suspicion graph empty — you have no per-player beliefs yet)
+{%- endfor %}
+{% if candidate_targets is defined and candidate_targets %}
+## Valid ejection targets
+
+{% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %}
+{% endif %}
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your fellow impostors (your team)
+These players are your fellow impostors: {{ fellow_impostor_ids | join(", ") }}.
+Never vote to eject a teammate. If your suspicion points at a fellow impostor,
+set `target` to `"SKIP"` instead.
+{% endif %}
+## Decision rules
+
+1. **Gate verdict — already computed for you, do not recompute.** Your maximum
+   suspicion is **{{ "%.2f"|format(_max) }}**; the threshold is **{{ "%.2f"|format(_thr) }}**.
+   {% if _max >= _thr %}**{{ "%.2f"|format(_max) }} ≥ {{ "%.2f"|format(_thr) }} — you MUST vote to eject; you may NOT skip.** Set `target` to the living player with the highest suspicion / strongest case. The suspicion score **already weighs how good the evidence is**, so do NOT skip on the grounds that the evidence is "not definitive", "circumstantial", or "could be a memory error" — those are exactly the cases the threshold is built for. A met threshold means you VOTE. Skipping now is a rule violation.{% else %}**{{ "%.2f"|format(_max) }} < {{ "%.2f"|format(_thr) }} — you MUST set `target` to `"SKIP"`.** No candidate crosses the threshold.{% endif %}
+2. **Pick the strongest case** among the above-threshold players (if more than one),
+   using the transcript and contradiction flags. Do not re-open the gate decision —
+   it is already made above.
+3. **`primary_reason_id`** references the `MeetingTurn` id{% if transcript.turns %} (e.g.
+   `"{{ transcript.turns[0].turn_id }}"`){% endif %} that most drove your decision, copied exactly,
+   or `null` if it rests on your own memory/observations.
+4. **`considered_alternatives`** lists any other player you weighed (empty if none).
+5. **`rationale_text`** — ONE sentence: state your vote and its single strongest reason. Do not deliberate or hedge.
+6. **Honesty about your role is a game rule.** If you are an impostor, vote in character.
+
+## Output
+
+Return a single JSON object matching the shared `VoteBallot` schema:
+
+```json
+{
+  "voter": "{{ voter_id }}",
+  "target": "<PlayerId or \"SKIP\">",
+  "confidence": <float in [0, 1]>,
+  "primary_reason_id": "<TurnId or null>",
+  "considered_alternatives": ["<PlayerId>", ...],
+  "rationale_text": "<ONE sentence>"
+}
+```
+
+Hard constraints:
+
+- `voter` MUST equal `"{{ voter_id }}"`.
+- `target` MUST be `"SKIP"` or a living player other than yourself{% if candidate_targets is defined and candidate_targets %} (one of the valid ejection targets listed above){% endif %}.
+- Emit only the JSON object — no preamble, no trailing commentary.

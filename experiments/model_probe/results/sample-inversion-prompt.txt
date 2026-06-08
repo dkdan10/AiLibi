@@ -1,0 +1,122 @@
+# 2:headless-seed-2:meeting-0:p-3 (role=CREWMATE, recorded=SKIP, max_impostor_suspicion=0.80, available=('p-4',))
+
+You are agent `p-3` casting a vote at an AiLibi meeting.
+
+Prompt: vote_ballot/v4 (DESIGN.md §5.5)
+
+Read your rendered memory, the meeting transcript so far, the
+contradiction flags, and your current suspicion graph, then return a
+single `VoteBallot` JSON object that either names exactly one ejection
+target or skips. The structured fields drive the tally; the rationale
+is logged post-hoc for transparency.
+
+## Your rendered memory
+
+## Your role: CREWMATE
+## Tasks completed (global): 8 / 11
+
+## Recent observations (most salient first):
+- [tick 13] You discovered p-2's body in CAFETERIA.
+- [tick 14] You saw p-7 in EAST_HALL.
+- [tick 13] You saw p-1 in WEST_HALL.
+- [tick 13] You saw p-4 in ADMIN.
+- [tick 13] You saw p-6 in ADMIN.
+- [tick 13] You saw p-8 in WEST_HALL.
+- [tick 13] You saw p-9 in WEST_HALL.
+- [tick 12] You saw p-1 in MEDBAY.
+- [tick 12] You saw p-9 in MEDBAY.
+- [tick 11] You saw p-1 in MEDBAY.
+- [tick 11] You saw p-9 in MEDBAY.
+- [tick 10] You saw p-1 in MEDBAY.
+- [tick 10] You saw p-9 in MEDBAY.
+- [tick 9] You saw p-1 in MEDBAY.
+- [tick 9] You saw p-9 in MEDBAY.
+- [tick 8] You saw p-1 in MEDBAY.
+- [tick 8] You saw p-9 in MEDBAY.
+- [tick 7] You saw p-1 in MEDBAY.
+- [tick 7] You saw p-9 in MEDBAY.
+- [tick 6] You saw p-1 in MEDBAY.
+- [tick 6] You saw p-9 in MEDBAY.
+- [tick 5] You saw p-1 in MEDBAY.
+- [tick 5] You saw p-9 in MEDBAY.
+- [tick 4] You saw p-1 in MEDBAY.
+- [tick 4] You saw p-9 in MEDBAY.
+- [tick 3] You saw p-1 in MEDBAY.
+- [tick 3] You saw p-9 in MEDBAY.
+- [tick 2] You saw p-1 in MEDBAY.
+- [tick 2] You saw p-9 in MEDBAY.
+- [tick 1] You saw p-1 in WEST_HALL.
+- [tick 1] You saw p-2 in CAFETERIA.
+- [tick 1] You saw p-4 in CAFETERIA.
+- [tick 1] You saw p-7 in CAFETERIA.
+- [tick 1] You saw p-9 in WEST_HALL.
+- [tick 0] You saw p-1 in CAFETERIA.
+- [tick 0] You saw p-2 in CAFETERIA.
+- [tick 0] You saw p-4 in CAFETERIA.
+- [tick 0] You saw p-5 in CAFETERIA.
+- [tick 0] You saw p-6 in CAFETERIA.
+- [tick 0] You saw p-7 in CAFETERIA.
+- [tick 0] You saw p-8 in CAFETERIA.
+- [tick 0] You saw p-9 in CAFETERIA.
+- [tick 11] You completed log_findings (you were in LABS).
+- [tick 6] You completed inspect_samples (you were in MEDBAY).
+
+
+## Meeting transcript so far (the accusation chain)
+- [`headless-seed-2:meeting-0:turn-0`] turn 0 (opening) — `p-1` → accuses `p-4`: I found the body of p-6 in ADMIN at tick 14. I also witnessed p-4 kill someone in ADMIN around the same time. Given this evidence, I believe p-4 is the impostor.- [`headless-seed-2:meeting-0:turn-1`] turn 1 (reply) — `p-4`: I was in the EAST_HALL at tick 14, so I couldn't have killed p-6. I saw p-7 there as well.
+## Contradiction flags (informational, not verdicts — §5.4)
+- [`contra:alibi_vs_sighting:turn:headless-seed-2:meeting-0:turn-0:obs:1|turn:headless-seed-2:meeting-0:turn-1:claim:0`] alibi_vs_sighting — Alibi places p-4 in EAST_HALL (ticks 13-15); sighting reports p-4 in ADMIN at tick 14. (events `turn:headless-seed-2:meeting-0:turn-0:obs:1` vs `turn:headless-seed-2:meeting-0:turn-1:claim:0`; subjects: `p-4`)
+## Your suspicion graph
+- `p-4`: suspicion 0.80, trust 0.50## Valid ejection targets
+
+`p-1`, `p-4`, `p-7`, `p-8`, `p-9`## Decision rules
+
+1. **Uncertainty-aware skip (DESIGN.md §4.6).** Treat your suspicion
+   score for each player as the confidence-of-guilt belief. If
+   `max(suspicion across the graph) < 0.60`, you MUST set
+   `target` to `"SKIP"`. A single confident liar can cascade the table
+   into a wrong eject — skipping is the right call when no candidate
+   crosses the threshold.
+2. **Otherwise eject the strongest case.** When the threshold is met,
+   pick the player whose evidence is strongest given the rendered
+   memory, the transcript, and the contradiction flags. The suspicion
+   graph is a prior — fresh transcript evidence may override it.
+3. **`primary_reason_id`** references the `MeetingTurn` id (e.g.
+   `"headless-seed-2:meeting-0:turn-0"` — one of the turn ids listed in the
+   transcript above) that most drove your decision. It MUST be a turn id
+   copied exactly from the transcript above. Set it to `null` if the decision
+   rests on your own observations, the rendered memory, or a contradiction flag
+   rather than on something another agent said.
+4. **`considered_alternatives`** lists any other player you seriously
+   weighed (empty if there were none). It is for post-hoc analysis and
+   does not affect the tally.
+5. **`rationale_text`** is for spectators and post-hoc transparency.
+   Be concrete: cite ticks, rooms, and turn ids. Two or three
+   sentences is enough.
+6. **Honesty about your role is a game rule, not a moral question.**
+   If you are an impostor, vote in character — your goal is to survive
+   the meeting. The schema and the tally do not care about your role.
+
+## Output
+
+Return a single JSON object matching the shared `VoteBallot` schema:
+
+```json
+{
+  "voter": "p-3",
+  "target": "<PlayerId or \"SKIP\">",
+  "confidence": <float in [0, 1]>,
+  "primary_reason_id": "<TurnId or null>",
+  "considered_alternatives": ["<PlayerId>", ...],
+  "rationale_text": "<one short paragraph>"
+}
+```
+
+Hard constraints:
+
+- `voter` MUST equal `"p-3"`.
+- `target` MUST be either `"SKIP"` or a living player other than
+  yourself (one of the valid ejection targets listed above).
+- `confidence` is your calibrated probability that this is the right
+  call. Use the same number you would back with chips on a bet.
+- Emit only the JSON object — no preamble, no trailing commentary.

@@ -1,0 +1,93 @@
+{# VARIANT v4_brief — baseline rules + a hard rationale cap.
+
+   Identical to production vote_ballot.j2 EXCEPT rationale_text is capped to one
+   short sentence. Primarily an F2 control (kills the reason-in-output
+   pollution). NOTE the conversion expectation is WEAK: under structured output
+   the model emits `target` BEFORE `rationale_text` (schema field order), so the
+   skip is committed before the rationale is written — the long rationale is
+   post-hoc justification, a symptom not the cause. If v4 nonetheless lifts
+   conversion, that implicates the instruction itself; if not, it confirms the
+   cause is upstream of the rationale (→ a reason-before-decide schema reorder is
+   the next hypothesis).
+#}
+You are agent `{{ voter_id }}` casting a vote at an AiLibi meeting.
+
+Prompt: vote_ballot/v4_brief (experiment)
+
+Read your rendered memory, the meeting transcript so far, the
+contradiction flags, and your current suspicion graph, then return a
+single `VoteBallot` JSON object that either names exactly one ejection
+target or skips.
+
+## Your rendered memory
+
+{{ rendered_memory }}
+
+## Meeting transcript so far (the accusation chain)
+{% for turn in transcript.turns %}
+- [`{{ turn.turn_id }}`] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) — `{{ turn.speaker }}`{% for claim in turn.claims %}{% if claim.type == "accusation" %} → accuses `{{ claim.against }}`{% endif %}{% endfor %}: {{ turn.free_text }}
+{%- else %}
+(no turns recorded)
+{%- endfor %}
+
+## Contradiction flags (informational, not verdicts — §5.4)
+{% for flag in contradiction_flags %}
+- [`{{ flag.contradiction_id }}`] {{ flag.kind }} — {{ flag.description }} (events `{{ flag.event_a_id }}` vs `{{ flag.event_b_id }}`; subjects: {% for subj in flag.subjects %}`{{ subj }}`{% if not loop.last %}, {% endif %}{% endfor %})
+{%- else %}
+(no contradictions flagged this meeting)
+{%- endfor %}
+
+## Your suspicion graph
+{% for entry in suspicion_graph %}
+- `{{ entry.player_id }}`: suspicion {{ "%.2f"|format(entry.suspicion) }}, trust {{ "%.2f"|format(entry.trust) }}
+{%- else %}
+(suspicion graph empty — you have no per-player beliefs yet)
+{%- endfor %}
+{% if candidate_targets is defined and candidate_targets %}
+## Valid ejection targets
+
+{% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %}
+{% endif %}
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your fellow impostors (your team)
+These players are your fellow impostors: {{ fellow_impostor_ids | join(", ") }}.
+Never vote to eject a teammate. If your suspicion points at a fellow impostor,
+set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
+{% endif %}
+## Decision rules
+
+1. **Uncertainty-aware skip (DESIGN.md §4.6).** Treat your suspicion score for each
+   player as the confidence-of-guilt belief. If `max(suspicion across the graph) <
+   {{ "%.2f"|format(skip_confidence_threshold|default(0.6)) }}`, you MUST set `target` to `"SKIP"`.
+2. **Otherwise eject the strongest case.** When the threshold is met, pick the player whose
+   evidence is strongest given the rendered memory, the transcript, and the contradiction flags.
+3. **`primary_reason_id`** references the `MeetingTurn` id{% if transcript.turns %} (e.g.
+   `"{{ transcript.turns[0].turn_id }}"`){% endif %} that most drove your decision, copied exactly
+   from the transcript above, or `null` if it rests on your own memory/observations.
+4. **`considered_alternatives`** lists any other player you seriously weighed (empty if none).
+5. **`rationale_text` MUST be ONE sentence, 25 words or fewer** — state the vote and its single
+   strongest reason. Do NOT deliberate, weigh alternatives, or hedge in the rationale.
+6. **Honesty about your role is a game rule, not a moral question.** If you are an impostor, vote in character.
+
+## Output
+
+Return a single JSON object matching the shared `VoteBallot` schema:
+
+```json
+{
+  "voter": "{{ voter_id }}",
+  "target": "<PlayerId or \"SKIP\">",
+  "confidence": <float in [0, 1]>,
+  "primary_reason_id": "<TurnId or null>",
+  "considered_alternatives": ["<PlayerId>", ...],
+  "rationale_text": "<ONE sentence, <=25 words>"
+}
+```
+
+Hard constraints:
+
+- `voter` MUST equal `"{{ voter_id }}"`.
+- `target` MUST be either `"SKIP"` or a living player other than yourself{% if candidate_targets is defined and candidate_targets %} (one of the valid ejection targets listed above){% endif %}.
+- `confidence` is your calibrated probability that this is the right call.
+- Emit only the JSON object — no preamble, no trailing commentary.

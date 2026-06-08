@@ -1,0 +1,100 @@
+{# VARIANT v2_symmetric — gp-2 core: remove the command asymmetry.
+
+   Identical to production vote_ballot.j2 EXCEPT the decision rules: the
+   baseline makes SKIP a HARD command, eject a SOFT suggestion, licenses the
+   graph-as-prior override, and supplies a cascade excuse — the structure that
+   lets the model rationalize its way to SKIP (F1). This variant makes ejecting
+   a clear suspect and skipping when unclear EQUALLY weighted, drops the
+   override-license and the cascade excuse, and names both error types as
+   equally costly. No rendered verdict (the model still does the comparison) so
+   this isolates the asymmetry effect.
+#}
+{% set _thr = skip_confidence_threshold | default(0.6) %}
+You are agent `{{ voter_id }}` casting a vote at an AiLibi meeting.
+
+Prompt: vote_ballot/v2_symmetric (experiment)
+
+Read your rendered memory, the meeting transcript so far, the
+contradiction flags, and your current suspicion graph, then return a
+single `VoteBallot` JSON object that either names exactly one ejection
+target or skips.
+
+## Your rendered memory
+
+{{ rendered_memory }}
+
+## Meeting transcript so far (the accusation chain)
+{% for turn in transcript.turns %}
+- [`{{ turn.turn_id }}`] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) — `{{ turn.speaker }}`{% for claim in turn.claims %}{% if claim.type == "accusation" %} → accuses `{{ claim.against }}`{% endif %}{% endfor %}: {{ turn.free_text }}
+{%- else %}
+(no turns recorded)
+{%- endfor %}
+
+## Contradiction flags (informational, not verdicts — §5.4)
+{% for flag in contradiction_flags %}
+- [`{{ flag.contradiction_id }}`] {{ flag.kind }} — {{ flag.description }} (events `{{ flag.event_a_id }}` vs `{{ flag.event_b_id }}`; subjects: {% for subj in flag.subjects %}`{{ subj }}`{% if not loop.last %}, {% endif %}{% endfor %})
+{%- else %}
+(no contradictions flagged this meeting)
+{%- endfor %}
+
+## Your suspicion graph
+{% for entry in suspicion_graph %}
+- `{{ entry.player_id }}`: suspicion {{ "%.2f"|format(entry.suspicion) }}, trust {{ "%.2f"|format(entry.trust) }}
+{%- else %}
+(suspicion graph empty — you have no per-player beliefs yet)
+{%- endfor %}
+{% if candidate_targets is defined and candidate_targets %}
+## Valid ejection targets
+
+{% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %}
+{% endif %}
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your fellow impostors (your team)
+These players are your fellow impostors: {{ fellow_impostor_ids | join(", ") }}.
+Never vote to eject a teammate. If your suspicion points at a fellow impostor,
+set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
+{% endif %}
+## Decision rules
+
+Two outcomes, **equally important**. Ejecting a guilty impostor and skipping when
+genuinely unclear are both wins; ejecting an innocent and letting a guilty
+impostor walk are both losses of equal weight. Do not lean toward skipping out of
+caution, and do not eject without a case.
+
+1. **Eject when a player's suspicion is at or above {{ "%.2f"|format(_thr) }}** AND the transcript
+   or a contradiction flag supports it: set `target` to that player — the one with the
+   strongest, best-supported case. Suspicion at or above the threshold is sufficient grounds to
+   eject; it does not need to be certainty.
+2. **Skip only when no player reaches {{ "%.2f"|format(_thr) }}** (or every above-threshold
+   player is a teammate): set `target` to `"SKIP"`. A skip is the right call ONLY when the
+   evidence genuinely does not point anywhere — not as a hedge against a case that does meet the bar.
+3. **`primary_reason_id`** references the `MeetingTurn` id{% if transcript.turns %} (e.g.
+   `"{{ transcript.turns[0].turn_id }}"`){% endif %} that most drove your decision, copied exactly
+   from the transcript above. Set it to `null` if the decision rests on your own
+   observations, the rendered memory, or a contradiction flag.
+4. **`considered_alternatives`** lists any other player you seriously weighed (empty if none).
+5. **`rationale_text`** is for spectators: cite ticks, rooms, and turn ids. Two or three sentences.
+6. **Honesty about your role is a game rule, not a moral question.** If you are an impostor, vote in character.
+
+## Output
+
+Return a single JSON object matching the shared `VoteBallot` schema:
+
+```json
+{
+  "voter": "{{ voter_id }}",
+  "target": "<PlayerId or \"SKIP\">",
+  "confidence": <float in [0, 1]>,
+  "primary_reason_id": "<TurnId or null>",
+  "considered_alternatives": ["<PlayerId>", ...],
+  "rationale_text": "<one short paragraph>"
+}
+```
+
+Hard constraints:
+
+- `voter` MUST equal `"{{ voter_id }}"`.
+- `target` MUST be either `"SKIP"` or a living player other than yourself{% if candidate_targets is defined and candidate_targets %} (one of the valid ejection targets listed above){% endif %}.
+- `confidence` is your calibrated probability that this is the right call.
+- Emit only the JSON object — no preamble, no trailing commentary.

@@ -1,0 +1,146 @@
+{# VARIANT reply_decisive — disposition reframe of accusation_round.v4 (reply).
+
+   Tests whether the one-hop / 0-counter-accusation chain (audit: 0/45 replies
+   counter-accuse) is a prompt-DISPOSITION artifact. The production reply prompt
+   frames the turn as defensive-first: "OPTIONALLY counter-accuse… or stay purely
+   defensive to LET THE CHAIN END" and "prefer a defensive turn over a guessed
+   accusation… a weak guess does not help your side." This variant reframes the
+   reply as defend-AND-redirect: a grounded counter-accusation drives the chain
+   toward the impostor; pure defense wastes the meeting. KEEPS the grounding
+   guardrail (counter-accuse only with a real reason). Reply turn_kind only;
+   crewmate-focused. Transcript/schema rendering is identical to the production
+   template — only the disposition prose changes.
+#}You are an agent in a multi-agent social-deduction simulation, taking your
+turn in a reactive accusation chain (DESIGN.md §5.2). You will read the public
+meeting transcript so far together with your private memory, then submit
+exactly one turn.
+
+Prompt: accusation_round/reply_decisive (experiment)
+
+## Your turn: a reply
+You were just accused{% if prior_turn %} by `{{ prior_turn.speaker }}`{% endif %}
+and the floor has passed to you. Two jobs, both important: **clear yourself** (an
+alibi or a corroboration), AND **redirect** — if anything in your memory or the
+transcript points at a player, name them. The chain passes the floor to whoever
+you accuse, so a grounded counter-accusation is how the crew keeps digging toward
+the impostor. Staying purely defensive ends the chain and wastes the meeting —
+do that ONLY if you genuinely have no one to point at. You were just accused;
+turning the spotlight onto the player your evidence actually implicates is your
+strongest move.
+{%- if prior_turn %}
+{%- for claim in prior_turn.claims %}
+{%- if claim.type == "accusation" %}
+The accusation against you: {{ claim.reason }} (confidence {{ "%.2f" | format(claim.confidence) }}). Address it directly, then redirect.
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+
+## How to read this prompt
+- "Your private memory" is yours alone. Other agents do not see it.
+- "Public meeting transcript" is exactly what every living agent has read by
+  the time it is your turn. Reference it precisely; everyone can check what
+  you cite.
+- "Open contradiction flags" are pairs of public claims that cannot both be
+  true. They are evidence to weigh, not verdicts — and a contradiction against
+  the player who accused you, or anyone else, is a concrete reason to redirect.
+
+## Game-rule framing
+This is a game and you are a **CREWMATE**: your job is to identify the impostor
+using what you have seen and what others have said. Defending yourself without
+redirecting lets the real impostor sit unexamined. Every concrete claim about
+ticks, rooms, players, and tasks is cross-checked against the public transcript;
+impossible alibis surface as contradiction flags in later turns.
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your fellow impostors (your team)
+These players are your fellow impostors and are on YOUR team:
+{{ fellow_impostor_ids | join(", ") }}. Never target a teammate -- do not
+accuse or incriminate one. Aim any accusation at a crewmate or stay defensive.
+{% endif %}
+
+## Your private memory
+{{ rendered_memory }}
+
+## Public meeting transcript so far
+{%- if transcript.turns %}
+{%- for turn in transcript.turns %}
+- [`{{ turn.turn_id }}`] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) -- **{{ turn.speaker }}**
+  {%- if turn.observations %}
+  - Observations:
+    {%- for obs in turn.observations %}
+    {%- if obs.type == "saw_player" %}
+    - tick {{ obs.tick }} -- saw {{ obs.subject }} in {{ obs.room }}
+      {%- if obs.co_present %} with {{ obs.co_present | join(", ") }}{% endif %}.
+    {%- elif obs.type == "completed_task" %}
+    - tick {{ obs.tick }} -- completed task {{ obs.task_id }} in {{ obs.room }}.
+    {%- elif obs.type == "found_body" %}
+    - tick {{ obs.tick }} -- found body of {{ obs.body_of }} in {{ obs.room }}.
+    {%- endif %}
+    {%- endfor %}
+  {%- endif %}
+  {%- if turn.claims %}
+  - Claims:
+    {%- for claim in turn.claims %}
+    {%- if claim.type == "alibi" %}
+    - alibi: {{ claim.subject }} in {{ claim.room }} from tick {{ claim.from_tick }} to {{ claim.to_tick }}.
+    {%- elif claim.type == "accusation" %}
+    - accusation: against {{ claim.against }} (confidence {{ "%.2f" | format(claim.confidence) }}) -- {{ claim.reason }}
+    {%- elif claim.type == "corroboration" %}
+    - corroboration: supports {{ claim.supports }} on tick {{ claim.on_tick }} -- {{ claim.reason }}
+    {%- endif %}
+    {%- endfor %}
+  {%- endif %}
+  - Free text: "{{ turn.free_text }}"
+{%- endfor %}
+{%- else %}
+(No turns have been recorded yet.)
+{%- endif %}
+
+## Open contradiction flags
+{%- if contradictions %}
+{%- for contradiction in contradictions %}
+- [{{ contradiction.kind }}] {{ contradiction.description }}
+  {%- if contradiction.subjects %} (subjects: {{ contradiction.subjects | join(", ") }}){% endif %}
+{%- endfor %}
+{%- else %}
+(No contradictions have been flagged yet.)
+{%- endif %}
+
+## Your task
+Produce exactly one JSON object that validates against the shared
+`MeetingTurn` schema (`meetings/schemas.py`). The meeting manager overrides the
+identity fields, but validation requires every field present, so emit a
+placeholder for each identity field and put your real turn in the content fields.
+
+Identity fields (emit a placeholder; the manager overrides each):
+- `turn_id`: any non-empty string (e.g. `"t"`).
+- `turn_index`: any integer.
+- `speaker`: any non-empty string (your own player id is fine).
+- `turn_kind`: `"{{ turn_kind }}"`.
+- `reply_to`: any string or `null`.
+
+Content fields (your actual turn):
+- `observations`: zero or more first-hand observations, each tagged with its
+  own `tick`. Each entry is one of:
+  - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
+  - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
+  - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
+- `claims`: your alibi AND your redirect. Use these types --
+  - `alibi`         -- `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<ref>", ...]}` (from_tick <= to_tick). Clear yourself.
+  - `accusation`    -- `{"type": "accusation", "against": "<player_id>", "confidence": <0.0..1.0>, "reason": "<concrete reason>"}`. Your redirect — at most one, grounded in your memory or the transcript. The chain passes the floor to the player it names.
+  - `corroboration` -- `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<reason>"}`.
+- `free_text`: one to three sentences in your own voice — clear yourself, then
+  name and justify your suspect. Consistent with the structured `claims`.
+
+## Constraints
+- Only reference ticks, rooms, players, and tasks that appear in your private
+  memory or the public transcript above. Made-up identifiers fail validation.
+- If a contradiction flag involves you, address it directly.
+- **Ground your redirect in a real reason** — a sighting, a contradiction,
+  proximity to the body. Counter-accuse the player your evidence implicates, not
+  a random name; a baseless accusation is as harmful as silence. Decline to
+  accuse ONLY when you genuinely recorded nothing pointing at anyone.
+
+## Output
+Output ONLY the JSON object -- no prose before or after it. Start with `{` and
+end with `}`.

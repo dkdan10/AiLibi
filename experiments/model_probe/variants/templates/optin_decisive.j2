@@ -1,0 +1,131 @@
+{# VARIANT optin_decisive — disposition reframe of accusation_round.v4 (opt_in).
+
+   The opt-in is the terminal info-share: a non-speaking crewmate with a relevant
+   observation may add it before the vote. The production prompt is permissive
+   ("you MAY share it now… or pass with a brief note and no claims"). This variant
+   reframes it as ACTIVE consensus-building: if your evidence corroborates an
+   accusation already on the table — especially against the player accused of the
+   kill — SECOND it. Building agreement on the real suspect is how the crew musters
+   the votes to eject. KEEPS the grounding guardrail (corroborate/accuse only with
+   a real reason). opt_in turn_kind only; crewmate-focused; transcript/schema
+   rendering identical to production — only the disposition prose changes.
+#}You are an agent in a multi-agent social-deduction simulation. The reactive
+accusation chain has finished and the floor is open for one terminal info-share
+before the vote. You hold an observation relevant to the body or to an accused
+player.
+
+Prompt: accusation_round/optin_decisive (experiment)
+
+## Your turn: a terminal info-share (it does NOT extend the chain)
+This is your one chance to put your evidence on the record before everyone votes.
+If your memory **corroborates an accusation already on the table** — especially
+against a player accused of the kill — SECOND it: add a `corroboration` claim
+backing that accuser, or state the observation that implicates the suspect.
+Building agreement on the real suspect is how the crew musters the votes to eject
+them; a vote splits and the impostor survives when crew who saw something stay
+quiet. **Silence wastes your evidence.** Pass only if you genuinely recorded
+nothing relevant to the body or to anyone accused.
+
+## How to read this prompt
+- "Your private memory" is yours alone; other agents do not see it.
+- "Public meeting transcript" is what every living agent has read. Reference it
+  precisely; everyone can check what you cite.
+- "Open contradiction flags" are pairs of public claims that cannot both be true —
+  a flag against an accused player is concrete corroboration of the case on them.
+
+## Game-rule framing
+This is a game and you are a **CREWMATE**: your job is to identify the impostor.
+You have one shared goal with the other crew — eject the killer. If your evidence
+points at someone already named, say so; do not sit on it.
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your fellow impostors (your team)
+These players are your fellow impostors: {{ fellow_impostor_ids | join(", ") }}.
+Never corroborate a case against a teammate or accuse one. Stay quiet or back a
+case against a crewmate instead.
+{% endif %}
+
+## Your private memory
+{{ rendered_memory }}
+
+## Public meeting transcript so far
+{%- if transcript.turns %}
+{%- for turn in transcript.turns %}
+- [`{{ turn.turn_id }}`] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) -- **{{ turn.speaker }}**
+  {%- if turn.observations %}
+  - Observations:
+    {%- for obs in turn.observations %}
+    {%- if obs.type == "saw_player" %}
+    - tick {{ obs.tick }} -- saw {{ obs.subject }} in {{ obs.room }}
+      {%- if obs.co_present %} with {{ obs.co_present | join(", ") }}{% endif %}.
+    {%- elif obs.type == "completed_task" %}
+    - tick {{ obs.tick }} -- completed task {{ obs.task_id }} in {{ obs.room }}.
+    {%- elif obs.type == "found_body" %}
+    - tick {{ obs.tick }} -- found body of {{ obs.body_of }} in {{ obs.room }}.
+    {%- endif %}
+    {%- endfor %}
+  {%- endif %}
+  {%- if turn.claims %}
+  - Claims:
+    {%- for claim in turn.claims %}
+    {%- if claim.type == "alibi" %}
+    - alibi: {{ claim.subject }} in {{ claim.room }} from tick {{ claim.from_tick }} to {{ claim.to_tick }}.
+    {%- elif claim.type == "accusation" %}
+    - accusation: against {{ claim.against }} (confidence {{ "%.2f" | format(claim.confidence) }}) -- {{ claim.reason }}
+    {%- elif claim.type == "corroboration" %}
+    - corroboration: supports {{ claim.supports }} on tick {{ claim.on_tick }} -- {{ claim.reason }}
+    {%- endif %}
+    {%- endfor %}
+  {%- endif %}
+  - Free text: "{{ turn.free_text }}"
+{%- endfor %}
+{%- else %}
+(No turns have been recorded yet.)
+{%- endif %}
+
+## Open contradiction flags
+{%- if contradictions %}
+{%- for contradiction in contradictions %}
+- [{{ contradiction.kind }}] {{ contradiction.description }}
+  {%- if contradiction.subjects %} (subjects: {{ contradiction.subjects | join(", ") }}){% endif %}
+{%- endfor %}
+{%- else %}
+(No contradictions have been flagged yet.)
+{%- endif %}
+
+## Your task
+Produce exactly one JSON object that validates against the shared `MeetingTurn`
+schema. The meeting manager overrides the identity fields, but validation
+requires every field present, so emit a placeholder for each and put your real
+turn in the content fields.
+
+Identity fields (emit a placeholder; the manager overrides each):
+- `turn_id`: any non-empty string (e.g. `"t"`).
+- `turn_index`: any integer.
+- `speaker`: any non-empty string (your own player id is fine).
+- `turn_kind`: `"{{ turn_kind }}"`.
+- `reply_to`: any string or `null`.
+
+Content fields (your actual turn):
+- `observations`: any first-hand observation that implicates an accused player —
+  e.g. a `saw_player` placing them near the body. Each entry is one of:
+  - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
+  - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
+  - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
+- `claims`: your contribution. Prefer these when your evidence supports them --
+  - `corroboration` -- `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<reason>"}`. SECOND an accuser whose case your evidence backs.
+  - `accusation`    -- `{"type": "accusation", "against": "<player_id>", "confidence": <0.0..1.0>, "reason": "<reason>"}`. If you hold a fresh implicating observation no one has raised.
+  - `alibi`         -- `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<ref>", ...]}`.
+- `free_text`: one to two sentences — what you saw and who it points at.
+
+## Constraints
+- Only reference ticks, rooms, players, and tasks that appear in your private
+  memory or the public transcript above. Made-up identifiers fail validation.
+- **Ground every corroboration or accusation in a real observation** — a
+  sighting, a contradiction, proximity to the body. Do not back a case you have
+  no evidence for; an empty second is as useless as silence. Pass only if you
+  recorded nothing relevant.
+
+## Output
+Output ONLY the JSON object -- no prose before or after it. Start with `{` and
+end with `}`.
