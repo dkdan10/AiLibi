@@ -385,10 +385,11 @@ class TestReplayRecordsMeetingArtifacts:
             "accusation_round",
             "vote_ballot",
         }
-        # Task 8.8 bumped the accusation_round template to v4 (the reactive
-        # chain turn prompt). A fresh replay entry must carry the new
-        # version string end-to-end.
-        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v4"
+        # Task 8.8 introduced the reactive chain-turn accusation prompt; the
+        # Phase 9 conversion wave bumped it to v5 (decisive reply + opt-in
+        # corroboration). A fresh replay entry must carry the live version
+        # string end-to-end.
+        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v5"
         # LLM cost metadata recorded per call. The chain protocol:
         #   turns: 1 opening + 1 reply = 2 calls
         #   ballots: 4 living voters = 4 calls

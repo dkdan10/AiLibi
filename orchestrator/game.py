@@ -161,10 +161,10 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # 8.8. The committed sample / prompt-regression bytes still record v3 and
 # are regenerated in Task 8.18, not here.
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
-    "crewmate_report": "crewmate_report.v2",
+    "crewmate_report": "crewmate_report.v3",
     "impostor_report": "impostor_report_v3",
-    "accusation_round": "accusation_round.v4",
-    "vote_ballot": "vote_ballot/v4",
+    "accusation_round": "accusation_round.v5",
+    "vote_ballot": "vote_ballot/v5",
 }
 
 # Headless recording runs meetings deadline-free (DESIGN.md §1.4, §5.2, §8.3:

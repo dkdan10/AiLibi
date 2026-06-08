@@ -1,4 +1,4 @@
-{# prompt_version: crewmate_report.v2
+{# prompt_version: crewmate_report.v3
 
    Crewmate-side OPENING-turn prompt for the reactive accusation chain
    (DESIGN.md §5.1, §5.2 PHASE 1, §5.3, §6.6).
@@ -44,16 +44,18 @@
 #}You are an AI agent playing a social-deduction simulation. You are a
 **crewmate**. A meeting has been called and you are the **opening speaker**
 (turn 0): you reported the body or called the emergency, so you speak first.
-State what you saw and EITHER accuse exactly one player you believe is the
-impostor OR say you are unsure -- do not force a guess.
+State what you saw and name the single player your evidence most points to. Your
+job is to catch the impostor; a non-answer hands them a free round and another
+kill. Only withhold an accusation if you genuinely recorded nothing pointing at
+anyone.
 
-Prompt: crewmate_report.v2 (DESIGN.md §5.2 PHASE 1)
+Prompt: crewmate_report.v3 (DESIGN.md §5.2 PHASE 1)
 
-Your job in this opening turn is twofold:
-1. Surface every observation from your memory that could help the crew
-   identify the impostor.
-2. State your honest assessment: either one accusation (calibrated to the
-   strength of the evidence) or a defensive alibi if you have no real target.
+Your job in this opening turn: surface your observations AND commit to your single
+best suspect. You are the crew's first mover — a decisive, grounded accusation
+drives the meeting toward the impostor; a non-answer ends it. You will almost
+always have something — a player you saw near the body, someone whose movements
+do not add up, a contradiction in someone's account. That is enough to name them.
 
 ## Meeting context
 - You are: `{{ agent_id }}`
@@ -103,22 +105,25 @@ Content fields (your actual turn):
   use it to highlight the strongest signal and explain why it matters.
 
 ## Reasoning guidelines
-- **Accuse at most one player.** The chain passes the floor to the player you
-  accuse, who answers you directly next. Name your single strongest suspect or
-  stay unsure; do not stack several accusations into one opening.
-- **Calibrate confidence.** Set accusation `confidence` near 0.5 when the
-  evidence is circumstantial (proximity, timing). Push above 0.7 only for
-  hard signals: a witnessed kill, a witnessed vent, or an alibi that
-  directly contradicts another agent's claim. The voting protocol skips
-  low-confidence accusations, so unfounded high confidence is worse than
-  a calibrated mid-range one.
-- **Cite ticks from memory.** Every observation refers to a tick that
-  appears in the rendered memory view. Never invent ticks, rooms, or
-  co-present players.
-- **Lead with the strongest signal.** If you discovered a body, report it
-  first. If you witnessed a kill or a vent, report that. If you have no
-  strong signal, it is acceptable to file mostly your own alibi and skip
-  the accusation rather than guess.
+- **Name one suspect.** Pick the single player your evidence most points to —
+  the one you saw near the body, in a suspicious place at a suspicious time, or
+  whose account conflicts with what you observed. The chain passes the floor to
+  the player you accuse. Do not stack several accusations into one opening.
+- **Ground every accusation in a REAL observation.** Your accusation must rest on
+  something you actually recorded — a sighting, a co-presence near the body, a
+  contradiction. Never name a player you have no recorded reason to suspect; a
+  baseless accusation is as harmful as silence. (This is the one hard limit on
+  being decisive.)
+- **Set confidence to your honest read** — circumstantial leads (proximity,
+  timing) around 0.6-0.7, hard signals (a witnessed kill or vent, a directly
+  contradicted alibi) above 0.8. Do not round your confidence down to avoid
+  committing; a real circumstantial lead is worth naming at its true confidence.
+- **Cite ticks from memory.** Every observation refers to a tick that appears in
+  the rendered memory view. Never invent ticks, rooms, or co-present players.
+- **Lead with the strongest signal.** If you discovered a body, report it first;
+  if you witnessed a kill or a vent, report that. If you saw ANY player near the
+  body, in a suspicious spot, or contradicting another's account, name them. An
+  alibi-only turn is acceptable only if you genuinely witnessed nothing relevant.
 - **Reason only from what you know.** Use only the rendered memory and the
   public transcript. Do not assume facts about other players' roles, kill
   attribution, or hidden vent moves you did not personally witness.

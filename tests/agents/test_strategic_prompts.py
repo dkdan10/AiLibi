@@ -164,7 +164,7 @@ class TestCrewmateReportTemplate:
             public_transcript="",
         )
 
-        assert "crewmate_report.v2" in prompt
+        assert "crewmate_report.v3" in prompt
         assert "**crewmate**" in prompt
         assert "opening speaker" in prompt
 
@@ -339,7 +339,7 @@ class TestAccusationRoundTemplate:
             turn_kind="reply",
         )
 
-        assert "accusation_round.v4" in prompt
+        assert "accusation_round.v5" in prompt
         assert "reactive accusation chain" in prompt
 
     def test_reply_turn_frames_the_accuser(self) -> None:
@@ -494,7 +494,7 @@ class TestVoteBallotTemplate:
         # body, bumped to v4 in Task 8.16 (the `primary_reason_id` example
         # is now sourced from the live transcript). A regression that bumps
         # the version without updating the test is the desired failure mode.
-        assert "vote_ballot/v4" in prompt
+        assert "vote_ballot/v5" in prompt
 
     def test_renders_voter_and_candidates(self) -> None:
         prompt = vote_ballot_prompt(
@@ -582,6 +582,56 @@ class TestVoteBallotTemplate:
         assert "suspicion 0.70" in prompt
         assert "trust 0.50" in prompt
         assert "trust 0.30" in prompt
+
+    def test_gate_max_ignores_high_suspicion_non_candidate(self) -> None:
+        """A dead/ejected player's belief row must not trip the §4.6 eject gate.
+
+        ``suspicion_graph_for_meeting`` snapshots every ``known_players()`` row,
+        including players who are no longer living ejection targets. The v5 gate
+        computes its max over ``candidate_targets`` (the living set) so a
+        high-suspicion DEAD player cannot force a "MUST eject" verdict when no
+        LIVING candidate crosses the threshold — that would otherwise coerce a
+        ballot onto an unrelated living player.
+        """
+
+        prompt = vote_ballot_prompt(
+            voter_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradiction_flags=(),
+            suspicion_graph=(
+                SuspicionEntry(player_id="p-1", suspicion=0.40, trust=0.5),
+                SuspicionEntry(player_id="p-2", suspicion=0.45, trust=0.5),
+                # p-9 is dead/ejected — still in the belief snapshot, NOT a
+                # candidate target — and carries the only above-threshold score.
+                SuspicionEntry(player_id="p-9", suspicion=0.95, trust=0.5),
+            ),
+            candidate_targets=("p-1", "p-2"),
+            skip_confidence_threshold=0.6,
+        )
+
+        assert 'you MUST set `target` to `"SKIP"`' in prompt
+        assert "you MUST vote to eject" not in prompt
+
+    def test_gate_max_fires_on_above_threshold_candidate(self) -> None:
+        """Sibling of the dead-player case: a LIVING candidate at/above the
+        threshold still yields a "MUST eject" verdict (conversion preserved)."""
+
+        prompt = vote_ballot_prompt(
+            voter_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradiction_flags=(),
+            suspicion_graph=(
+                SuspicionEntry(player_id="p-1", suspicion=0.40, trust=0.5),
+                SuspicionEntry(player_id="p-2", suspicion=0.72, trust=0.5),
+            ),
+            candidate_targets=("p-1", "p-2"),
+            skip_confidence_threshold=0.6,
+        )
+
+        assert "you MUST vote to eject" in prompt
+        assert 'you MUST set `target` to `"SKIP"`' not in prompt
 
     def test_missing_kwarg_raises_under_strict_undefined(self) -> None:
         # vote_ballot.j2 iterates ``transcript.turns`` near the top

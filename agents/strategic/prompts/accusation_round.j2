@@ -44,29 +44,35 @@ turn in a reactive accusation chain (DESIGN.md §5.2). You will read the public
 meeting transcript so far together with your private memory, then submit
 exactly one turn.
 
-Prompt: accusation_round.v4 (DESIGN.md §5.2)
+Prompt: accusation_round.v5 (DESIGN.md §5.2)
 {% if turn_kind == "reply" %}
 
 ## Your turn: a reply
-You were just accused{% if prior_turn %} by `{{ prior_turn.speaker }}`{% endif %},
-and the floor has passed to you. Defend yourself (give an alibi for yourself or
-corroborate another player's claim) and OPTIONALLY counter-accuse exactly one
-other player. The chain passes next to whoever you accuse, so accuse at most
-one player -- or stay purely defensive (no accusation) to let the chain end.
+You were just accused{% if prior_turn %} by `{{ prior_turn.speaker }}`{% endif %}
+and the floor has passed to you. Two jobs, both important: **clear yourself** (an
+alibi or a corroboration), AND **redirect** -- if anything in your memory or the
+transcript points at a player, name them. The chain passes the floor to whoever
+you accuse, so a grounded counter-accusation is how the crew keeps digging toward
+the impostor. Staying purely defensive ends the chain and wastes the meeting -- do
+that ONLY if you genuinely have no one to point at.
 {%- if prior_turn %}
 {%- for claim in prior_turn.claims %}
 {%- if claim.type == "accusation" %}
-The accusation against you: {{ claim.reason }} (confidence {{ "%.2f" | format(claim.confidence) }}). Address it directly.
+The accusation against you: {{ claim.reason }} (confidence {{ "%.2f" | format(claim.confidence) }}). Address it directly, then redirect.
 {%- endif %}
 {%- endfor %}
 {%- endif %}
 {% else %}
 
 ## Your turn: an opt-in info-share
-You hold an observation relevant to the body or to an accused player, so you
-may share it now. This is a one-time, terminal turn -- it does NOT extend the
-chain. You may accuse, but the floor will not pass on; share what you know
-(or pass with a brief note in `free_text` and no claims).
+This is your one chance to put your evidence on the record before everyone votes;
+this terminal turn does NOT extend the chain. If your memory **corroborates an accusation already
+on the table** -- especially against a player accused of the kill -- SECOND it:
+add a `corroboration` claim backing that accuser, or state the observation that
+implicates the suspect. Building agreement on the real suspect is how the crew
+musters the votes to eject them; crew who saw something staying quiet is how the
+impostor survives. Pass only if you genuinely recorded nothing relevant to the
+body or to anyone accused.
 {% endif %}
 
 ## How to read this prompt
@@ -194,10 +200,12 @@ Content fields (your actual turn):
 - If a contradiction flag involves you, address it -- either with an
   alibi backed by evidence or by acknowledging the conflict. Ignoring
   a flag against you is read by other agents as a tell.
-- If your memory and the transcript give you no honest target, prefer a
-  defensive turn (no accusation, alibi or corroboration claims) over a
-  guessed accusation. Voting (DESIGN.md §5.5) treats low-confidence
-  accusations as skip-leaning, so a weak guess does not help your side.
+- If your memory or the transcript points at a player -- a sighting, a
+  contradiction, proximity to the body -- name them; a grounded counter-accusation
+  or corroboration drives the meeting toward the impostor. Ground every
+  accusation in a real observation -- a baseless guess is as useless as silence --
+  and stay purely defensive only when you genuinely recorded nothing pointing at
+  anyone.
 
 ## Output
 Your in-character voice belongs in the `free_text` field, not before the
