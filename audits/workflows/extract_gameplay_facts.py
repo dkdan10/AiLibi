@@ -1593,9 +1593,7 @@ def main() -> int:
                 }
             ),
             "unparsed": defaulted_turn_unparsed,
-            "by_turn_kind": dict(
-                Counter(d["turn_kind"] for d in defaulted_turns)
-            ),
+            "by_turn_kind": dict(Counter(d["turn_kind"] for d in defaulted_turns)),
             "note": (
                 "count includes byte-identical duplicate failed_call rows "
                 "(seeds 8/36/39 emit the same defaulted-turn row twice); "
