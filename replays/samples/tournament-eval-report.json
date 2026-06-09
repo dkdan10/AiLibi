@@ -3262,5 +3262,21 @@
     "emergency_meetings": 0,
     "skipped_meetings": 6,
     "ejected_meetings": 2
+  },
+  "conversion": {
+    "total_ejections": 2,
+    "impostor_ejections": 1,
+    "ejection_accuracy": 0.5,
+    "impostor_accused_meetings": 7,
+    "impostor_accused_conversions": 1,
+    "impostor_accused_conversion_rate": 0.14285714285714285,
+    "skip_ballots": 19,
+    "correct_skip_ballots": 19,
+    "missed_skip_ballots": 0,
+    "unclassified_skip_ballots": 0,
+    "missed_skip_impostor_voters": 0,
+    "missed_skip_teammate_coerced": 0,
+    "missed_skip_invalid_target": 0,
+    "threshold_inversions": 0
   }
 }

@@ -52,6 +52,10 @@ from engine.events import (
 )
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
+from eval._suspicion_parse import (
+    SKIP_SUSPICION_THRESHOLD,
+    parse_rendered_max_suspicion,
+)
 from meetings.manager import (
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_VOTE_TARGET_MARKER,
@@ -79,16 +83,13 @@ _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
 # v3 (conversion / 9B-artifact) constants.
 #
-# The rendered §4.6 vote-gate line in the v5 vote prompt (meetings.manager builds
-# it; surveyed across the committed 9p2i prompts as
-# "...maximum suspicion among the living ejection targets is    **0.80**; the
-# skip threshold is **0.60**..."). The capture group is the rendered MAX over the
-# living ejection targets that the voter was shown; the SKIP partition classifies
-# each SKIP ballot CORRECT (rendered max < 0.60) vs MISSED (rendered max >= 0.60).
-_VOTE_MAX_SUSPICION_RE: re.Pattern[str] = re.compile(
-    r"maximum suspicion among the living ejection targets is\s*\*\*([0-9]*\.?[0-9]+)\*\*"
-)
-_SKIP_THRESHOLD = 0.60
+# The rendered §4.6 vote-gate parse (the "maximum suspicion among the living
+# ejection targets is **X**" regex) and the CORRECT/MISSED classification
+# threshold are imported from eval._suspicion_parse — the canonical home shared
+# with the shipped eval.meeting_quality conversion sentinels (Task 9.6 / gp-2),
+# so this extractor and the eval report can never drift on what "the rendered
+# max" or "missed" means. The SKIP partition classifies each SKIP ballot
+# CORRECT (rendered max < threshold) vs MISSED (rendered max >= threshold).
 
 # Marker *prefixes* (the literal text minus the {target!r} placeholder) the
 # meeting layer writes when it DROPS a hallucinated non-living target (fb3cfa5):
@@ -116,20 +117,6 @@ _INVALID_ACC_MARKER_FULL_RE: re.Pattern[str] = re.compile(
 
 def _deserialize_actions(raw_actions: list[dict[str, Any]]) -> list[Action]:
     return [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in raw_actions]
-
-
-def _parse_rendered_max_suspicion(prompt: str) -> float | None:
-    """Pull the rendered §4.6 max suspicion from a v5 vote prompt, or None.
-
-    Returns the float captured from the "maximum suspicion among the living
-    ejection targets is **X**" line. ``None`` means the prompt is not a vote
-    prompt (no such line) — the caller treats that as "could not classify".
-    """
-
-    match = _VOTE_MAX_SUSPICION_RE.search(prompt)
-    if match is None:
-        return None
-    return float(match.group(1))
 
 
 def _length_distribution(samples: list[int]) -> dict[str, Any]:
@@ -657,7 +644,7 @@ def _analyze_meeting(
     for call in meeting_entry.llm_calls:
         if call.agent_id is None:
             continue
-        rendered = _parse_rendered_max_suspicion(call.prompt)
+        rendered = parse_rendered_max_suspicion(call.prompt)
         if rendered is not None:
             rendered_max_by_voter[call.agent_id] = rendered
 
@@ -694,7 +681,7 @@ def _analyze_meeting(
             skip_count += 1
             if rendered_max is None:
                 skip_unclassified += 1
-            elif rendered_max < _SKIP_THRESHOLD:
+            elif rendered_max < SKIP_SUSPICION_THRESHOLD:
                 skip_correct += 1
             else:
                 skip_missed += 1

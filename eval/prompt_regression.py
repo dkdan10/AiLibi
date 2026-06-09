@@ -127,7 +127,18 @@ class PromptRegressionMetrics(_FrozenModel):
 
     * ``vote_correctness_rate`` —
       :attr:`eval.vote_correctness.VoteCorrectnessReport.vote_correctness_rate`
-      (``None`` when there were no impostor ejections).
+      (``None`` when there were no impostor ejections). Kept as a
+      **bug-sentinel only** (Task 9.6; audit gp-2): it is structurally pinned
+      to 1.0 on recorded sets, so a baseline delta on it means a
+      detector/recording bug, never a prompt-quality move — the Wave-1 leads
+      are the two conversion fields below.
+    * ``ejection_accuracy`` / ``impostor_accused_conversion_rate`` /
+      ``missed_skip_ballots`` — the Task 9.6 Wave-1 conversion leads
+      (precision and recall) plus the missed-SKIP sentinel count from
+      :class:`eval.meeting_quality.ConversionReport` (the rates are ``None``
+      when their denominators are empty). These are the scalars a Wave-1
+      prompt A/B is gated on, so the committed baseline pins them per prompt
+      version.
     * ``alibi_survival_rate`` / ``total_impostor_alibis`` —
       :class:`eval.alibi_fabrication.AlibiFabricationReport`.
     * ``accusation_claim_ece`` / ``vote_ballot_ece`` — the two expected
@@ -144,6 +155,9 @@ class PromptRegressionMetrics(_FrozenModel):
     """
 
     vote_correctness_rate: float | None
+    ejection_accuracy: float | None
+    impostor_accused_conversion_rate: float | None
+    missed_skip_ballots: int
     alibi_survival_rate: float
     total_impostor_alibis: int
     accusation_claim_ece: float | None
@@ -235,6 +249,11 @@ def run_prompt_regression(
 
     metrics = PromptRegressionMetrics(
         vote_correctness_rate=evaluated.vote_correctness.vote_correctness_rate,
+        ejection_accuracy=evaluated.conversion.ejection_accuracy,
+        impostor_accused_conversion_rate=(
+            evaluated.conversion.impostor_accused_conversion_rate
+        ),
+        missed_skip_ballots=evaluated.conversion.missed_skip_ballots,
         alibi_survival_rate=evaluated.alibi_fabrication.survival_rate,
         total_impostor_alibis=evaluated.alibi_fabrication.total_impostor_alibis,
         accusation_claim_ece=evaluated.accusation_calibration.accusation_claim_ece,

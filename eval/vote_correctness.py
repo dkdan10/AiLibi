@@ -8,6 +8,22 @@ not evidence-backed is a worse signal than a lower rate that is; this metric
 separates the two so the impostor-ejection rate alone cannot be mistaken for
 *correct* voting.
 
+**``vote_correctness_rate`` is a bug-sentinel, NOT a KPI (Task 9.6; audit
+audit-2026-06-09-0347 F-F-1 / gp-2).** In the live pipeline the §4.6 vote gate
+only crosses the eject threshold when the contradiction detector flagged the
+ejected player, so every impostor ejection arrives already carrying the naming
+``ContradictionRef`` that :func:`_has_real_evidence`'s first disjunct counts:
+``evidence_backed_impostor_ejections == impostor_ejections`` by construction
+and the rate is **structurally pinned to 1.0**. It measures the engine's own
+trigger, not voting quality -- a Wave-1 A/B run on it is blind. It stays
+computed (removing it would churn the schema) and is kept as a sentinel: any
+value below 1.0 on a recorded set means an impostor ejection happened WITHOUT
+its own triggering evidence -- a detector/recording bug to chase, never a
+conversion metric to optimize. The published conversion leads live on
+:class:`eval.meeting_quality.ConversionReport`: ``ejection_accuracy`` (the
+PRECISION lead, defined below) and the impostor-accused -> impostor-ejected
+conversion rate (the RECALL lead).
+
 The module reads only :mod:`eval.report_schema` data (composed of
 :mod:`meetings.schemas` leaf types) and the post-game ``roles`` ground truth on
 :class:`~eval.report_schema.GameReport`. It performs no I/O and imports nothing
@@ -66,15 +82,20 @@ Decisions baked into this metric (recorded in the PR's ``## Decisions`` block):
   mistaken for "every ejection was correct" when half the ejections were
   crewmates. The companion ``ejection_accuracy`` below closes that gap.
 
-* **``ejection_accuracy`` is the honest accuracy denominator (audit C-C-4,
-  gp-7).** ``ejection_accuracy = impostor_ejections / total_ejections`` -- the
-  share of *all* ejections that hit an impostor, NOT gated on evidence. It is
-  the field a Wave-1 reader should pair with ``vote_correctness_rate``: in the
-  audited 7p/2i artifact set ``vote_correctness_rate`` was ``1.0`` (3/3
-  evidence-backed impostor ejections) while ``ejection_accuracy`` was ``0.5``
-  (3 impostor / 6 total ejections), because the rate silently dropped the 3
-  wrong crewmate ejections. Like the rate it is :data:`None` (undefined, not
-  ``0.0``) when there were zero ejections at all.
+* **``ejection_accuracy`` is the published PRECISION lead (audit C-C-4, gp-7;
+  promoted to lead by Task 9.6 / gp-2).** ``ejection_accuracy =
+  impostor_ejections / total_ejections`` -- the share of *all* ejections that
+  hit an impostor, NOT gated on evidence. It is the number a Wave-1 reader
+  gates on, never ``vote_correctness_rate``: in the audited 7p/2i artifact set
+  ``vote_correctness_rate`` was ``1.0`` (3/3 evidence-backed impostor
+  ejections) while ``ejection_accuracy`` was ``0.5`` (3 impostor / 6 total
+  ejections), because the rate silently dropped the 3 wrong crewmate
+  ejections -- and on the 9.5 baseline the rate is *structurally* 1.0 (see the
+  bug-sentinel note above) while ``ejection_accuracy`` reads 22/35 = 0.6286.
+  Like the rate it is :data:`None` (undefined, not ``0.0``) when there were
+  zero ejections at all. :class:`eval.meeting_quality.ConversionReport`
+  mirrors it (same fold, never recomputed) so both Wave-1 leads read from one
+  block on the shipped report.
 
 * **Small-n flag.** ``vote_correctness_small_n`` is ``True`` when the rate's
   denominator (``impostor_ejections``) is below
@@ -147,16 +168,21 @@ class VoteCorrectnessReport(BaseModel):
     (:func:`_has_real_evidence`). ``vote_correctness_rate`` is
     ``evidence_backed_impostor_ejections / impostor_ejections`` -- the share of
     impostor ejections actually driven by evidence -- and is ``None`` (undefined,
-    not ``0.0``) when there were no impostor ejections. **It must be paired with
-    ``ejection_accuracy`` to be read honestly:** the rate's denominator is
-    impostor ejections ONLY, so it excludes the wrong crewmate ejections and a
-    ``1.0`` rate read in isolation cannot be mistaken for full ejection accuracy
-    (audit C-C-4 / gp-7).
+    not ``0.0``) when there were no impostor ejections. **It is a bug-sentinel,
+    NOT a KPI (Task 9.6; audit F-F-1 / gp-2):** the live §4.6 gate only ejects
+    when the detector flagged the target, so on recorded sets the rate is
+    structurally pinned to ``1.0`` and a drop below ``1.0`` signals an ejection
+    not backed by its own triggering evidence (a bug to chase), never a
+    conversion improvement to claim. Its denominator also excludes the wrong
+    crewmate ejections, so even read naively a ``1.0`` cannot be mistaken for
+    full ejection accuracy (audit C-C-4 / gp-7).
 
     ``ejection_accuracy`` is ``impostor_ejections / total_ejections`` -- the
     share of *all* ejections that hit an impostor (the full-denominator accuracy
-    the rate omits) -- and is ``None`` (undefined, not ``0.0``) when there were
-    no ejections at all. ``vote_correctness_small_n`` flags an under-powered rate
+    the rate omits) and the published Wave-1 PRECISION lead, mirrored onto
+    :class:`eval.meeting_quality.ConversionReport` -- and is ``None``
+    (undefined, not ``0.0``) when there were no ejections at all.
+    ``vote_correctness_small_n`` flags an under-powered rate
     (``impostor_ejections < `` :data:`VOTE_CORRECTNESS_MIN_SAMPLE`).
     ``contradictions_flagged_but_ignored`` is the secondary "deduction signal
     present but unused" count: ``SKIPPED`` meetings that carried >= 1

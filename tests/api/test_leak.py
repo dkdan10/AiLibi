@@ -292,6 +292,18 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # a rate with no engine, role, or determinism state, so they stay out of
 # ``FORBIDDEN_EVAL_ENGINE_FIELDS`` (the §3.5 drop magnitude is gameplay
 # accounting, not engine internals the firewall guards).
+#
+# The Task 9.6 metric hygiene (DESIGN.md §11.3, §5.5; audit gp-2) adds the
+# ``conversion`` block (``eval.meeting_quality.ConversionReport``): the two
+# Wave-1 conversion leads (``ejection_accuracy`` — already in this set — plus
+# ``impostor_accused_meetings`` / ``impostor_accused_conversions`` /
+# ``impostor_accused_conversion_rate``) and the SKIP sentinels
+# (``skip_ballots`` / ``correct_skip_ballots`` / ``missed_skip_ballots`` /
+# ``unclassified_skip_ballots`` / ``missed_skip_impostor_voters`` /
+# ``missed_skip_teammate_coerced`` / ``missed_skip_invalid_target`` /
+# ``threshold_inversions``). All are pure aggregate counts and rates (no
+# roles, transcripts, or engine types), so they stay out of
+# ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
@@ -317,6 +329,8 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "contradiction_id",
         "contradictions",
         "contradictions_flagged_but_ignored",
+        "conversion",
+        "correct_skip_ballots",
         "cost",
         "cost_dashboard",
         "cost_usd",
@@ -344,6 +358,9 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "games_total",
         "games_with_meeting",
         "hi",
+        "impostor_accused_conversion_rate",
+        "impostor_accused_conversions",
+        "impostor_accused_meetings",
         "impostor_ejections",
         "impostor_hits",
         "input_tokens",
@@ -363,6 +380,10 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "meetings",
         "meetings_total",
         "midpoint",
+        "missed_skip_ballots",
+        "missed_skip_impostor_voters",
+        "missed_skip_invalid_target",
+        "missed_skip_teammate_coerced",
         "model",
         "n_bins",
         "observations",
@@ -385,6 +406,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "room",
         "seed",
         "seeds_used",
+        "skip_ballots",
         "skipped_meetings",
         "speaker",
         "subject",
@@ -395,6 +417,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "target",
         "task_id",
         "template_name",
+        "threshold_inversions",
         "tick",
         "to_tick",
         "total_cost_usd",
@@ -410,6 +433,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "turn_kind",
         "turns",
         "type",
+        "unclassified_skip_ballots",
         "version",
         "vote_ballot_bins",
         "vote_ballot_ece",

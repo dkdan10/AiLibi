@@ -45,7 +45,11 @@ from engine.entities import Role
 from eval.accusation_calibration import AccusationCalibrationReport
 from eval.alibi_fabrication import AlibiFabricationReport
 from eval.cost_dashboard import CostDashboard
-from eval.meeting_quality import MeetingRateReport, TournamentEvalReport
+from eval.meeting_quality import (
+    ConversionReport,
+    MeetingRateReport,
+    TournamentEvalReport,
+)
 from eval.report_schema import GameCostSummary, MeetingReport
 from eval.vote_correctness import VoteCorrectnessReport
 from meetings.schemas import PlayerId
@@ -136,6 +140,7 @@ class _TournamentEvalReportView(BaseModel):
     alibi_fabrication: AlibiFabricationReport
     cost_dashboard: CostDashboard
     meeting_rate: MeetingRateReport
+    conversion: ConversionReport
 
 
 def _sanitized_failed_call(call: Mapping[str, Any]) -> dict[str, Any]:

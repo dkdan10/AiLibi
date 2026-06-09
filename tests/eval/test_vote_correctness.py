@@ -9,16 +9,30 @@ dependency.
 The predicate is exercised adversarially: an impostor ejected on *no* evidence
 (or on an accusation/ballot alone) must score as incorrect, or the metric would
 collapse into the impostor-ejection rate it exists to refine.
+
+Task 9.6 (metric hygiene; DESIGN.md §11.3, §5.5; audit gp-2) adds two suites
+here per the task contract: the ``vote_correctness_rate`` bug-sentinel
+semantics (the rate is structurally pinned to 1.0 on production-shaped data
+and must never be read as the lead), and the
+:class:`eval.meeting_quality.ConversionReport` conversion leads + SKIP
+sentinels, including the committed 9p/2i report's audited regression pins.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from engine.entities import Role
+from eval.meeting_quality import (
+    ConversionReport,
+    TournamentEvalReport,
+    compute_conversion_report,
+)
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
     GameCostSummary,
@@ -32,6 +46,7 @@ from eval.vote_correctness import (
     VoteCorrectnessReport,
     compute_vote_correctness,
 )
+from meetings.manager import INVALID_VOTE_TARGET_MARKER, TEAMMATE_VOTE_TARGET_MARKER
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
@@ -43,6 +58,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     VoteBallot,
 )
+from orchestrator.replay import LLMCallRecord
 
 # Default roster: p-3 is the impostor, the rest crewmates.
 _ROLES: Mapping[PlayerId, Role] = {
@@ -107,13 +123,15 @@ def _report(
     )
 
 
-def _accusation_statement(*, against: PlayerId, sid: str = "s-1") -> MeetingTurn:
+def _accusation_statement(
+    *, against: PlayerId, sid: str = "s-1", speaker: PlayerId = "p-0"
+) -> MeetingTurn:
     """A ``reply`` chain turn carrying one accusation claim (§5.2)."""
 
     return MeetingTurn(
         turn_id=sid,
         turn_index=1,
-        speaker="p-0",
+        speaker=speaker,
         turn_kind="reply",
         reply_to=None,
         observations=(),
@@ -129,13 +147,44 @@ def _accusation_statement(*, against: PlayerId, sid: str = "s-1") -> MeetingTurn
     )
 
 
-def _ballot(*, target: PlayerId, reason_id: str | None = "s-1") -> VoteBallot:
+def _ballot(
+    *,
+    target: PlayerId,
+    reason_id: str | None = "s-1",
+    voter: PlayerId = "p-0",
+    rationale_text: str = "",
+) -> VoteBallot:
     return VoteBallot(
-        voter="p-0",
+        voter=voter,
         target=target,
         confidence=0.9,
         primary_reason_id=reason_id,
-        rationale_text="",
+        rationale_text=rationale_text,
+    )
+
+
+def _vote_call(*, agent_id: PlayerId, rendered_max: float) -> LLMCallRecord:
+    """A vote-prompt LLM call carrying the rendered §4.6 gate line.
+
+    The prompt body mirrors the v5 ``vote_ballot.j2`` render (including the
+    line wrap between "is" and the bolded value) so the test exercises the
+    same parse the committed replays do.
+    """
+
+    return LLMCallRecord(
+        call_kind="meeting",
+        model="fixture-model",
+        prompt=(
+            "## Decision rules\n\n"
+            "1. **Gate verdict — already computed for you (DESIGN.md §4.6).**\n"
+            "   Your maximum suspicion among the living ejection targets is\n"
+            f"   **{rendered_max:.2f}**; the skip threshold is **0.60**.\n"
+        ),
+        response_text="{}",
+        input_tokens=10,
+        output_tokens=5,
+        cost_usd=0.0,
+        agent_id=agent_id,
     )
 
 
@@ -149,6 +198,7 @@ def _meeting(
     statements: tuple[MeetingTurn, ...] = (),
     contradictions: tuple[ContradictionRef, ...] = (),
     ballots: tuple[VoteBallot, ...] = (),
+    llm_calls: tuple[LLMCallRecord, ...] = (),
 ) -> MeetingReport:
     # The chain is one ordered ``turns`` list (DESIGN.md §5.2): the opening
     # ``reports`` turn(s) followed by any ``statements`` (reply / opt-in) turns.
@@ -162,7 +212,7 @@ def _meeting(
         transcript=MeetingTranscript(turns=tuple(reports) + tuple(statements)),
         ballots=ballots,
         contradictions=contradictions,
-        llm_calls=(),
+        llm_calls=llm_calls,
     )
 
 
@@ -758,3 +808,512 @@ def test_result_model_rejects_negative_contradictions_ignored() -> None:
             vote_correctness_small_n=True,
             contradictions_flagged_but_ignored=-1,
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 9.6 — vote_correctness_rate is a bug-sentinel, NOT a KPI (audit gp-2)
+# ---------------------------------------------------------------------------
+
+
+def test_vote_correctness_rate_is_documented_as_a_bug_sentinel() -> None:
+    """The sentinel demotion is load-bearing documentation (Task 9.6 / F-F-1).
+
+    A future reader deciding what to gate a Wave-1 A/B on reads the module and
+    the result model. Both must label ``vote_correctness_rate`` a bug-sentinel
+    that is structurally pinned to 1.0 — never the lead/KPI — so this asserts
+    the labels outlive any docstring rewrite.
+    """
+
+    import eval.vote_correctness as vote_correctness_module
+
+    for doc in (vote_correctness_module.__doc__, VoteCorrectnessReport.__doc__):
+        assert doc is not None
+        assert "bug-sentinel" in doc
+        assert "NOT a KPI" in doc
+        assert "structurally pinned" in doc
+
+
+def test_rate_is_pinned_to_one_on_production_shaped_data() -> None:
+    """The F-F-1 tautology, pinned as semantics: the rate cannot rank tables.
+
+    In the live pipeline an ejection only happens when the detector flagged
+    the ejected player, so every impostor ejection arrives WITH the naming
+    contradiction that satisfies ``_has_real_evidence``. Two tables of very
+    different quality — one all-impostor ejections, one mostly-wrong
+    ejections — therefore BOTH read ``vote_correctness_rate == 1.0``; the
+    published precision lead (``ejection_accuracy``) is what separates them.
+    """
+
+    def _detector_backed_table(crewmate_ejections: int) -> TournamentReport:
+        # Every ejection carries a contradiction naming the ejected player —
+        # the production §4.6 trigger shape, for impostor and crewmate alike.
+        impostor = _meeting(
+            outcome="EJECTED",
+            ejected=_IMPOSTOR,
+            meeting_id="m-imp",
+            contradictions=(_contradiction(subjects=(_IMPOSTOR,)),),
+        )
+        wrong = tuple(
+            _meeting(
+                outcome="EJECTED",
+                ejected=_CREWMATE,
+                meeting_id=f"m-wrong-{i}",
+                contradictions=(_contradiction(subjects=(_CREWMATE,)),),
+            )
+            for i in range(crewmate_ejections)
+        )
+        return _tournament(_game(meetings=(impostor, *wrong)))
+
+    clean_table = compute_vote_correctness(_detector_backed_table(0))
+    railroaded_table = compute_vote_correctness(_detector_backed_table(3))
+
+    # The sentinel reads 1.0 on BOTH tables: it measures the engine's own
+    # trigger, not voting quality. A drop below 1.0 would mean an ejection
+    # without its own triggering evidence — a bug, not a metric move.
+    assert clean_table.vote_correctness_rate == 1.0
+    assert railroaded_table.vote_correctness_rate == 1.0
+    # The published lead is what actually separates the tables.
+    assert clean_table.ejection_accuracy == 1.0
+    assert railroaded_table.ejection_accuracy == 0.25
+
+
+# ---------------------------------------------------------------------------
+# Task 9.6 — ConversionReport: the two published leads (DESIGN.md §11.3, §5.5)
+# ---------------------------------------------------------------------------
+
+
+def test_conversion_mirrors_precision_lead_from_vote_correctness() -> None:
+    """The precision-lead fields are the owning analyzer's numbers, mirrored."""
+
+    report = _tournament(
+        _game(
+            meetings=(
+                _meeting(
+                    outcome="EJECTED",
+                    ejected=_IMPOSTOR,
+                    meeting_id="m-a",
+                    contradictions=(_contradiction(subjects=(_IMPOSTOR,)),),
+                ),
+                _meeting(outcome="EJECTED", ejected=_CREWMATE, meeting_id="m-b"),
+            )
+        )
+    )
+
+    vote_correctness = compute_vote_correctness(report)
+    threaded = compute_conversion_report(report, vote_correctness=vote_correctness)
+    recomputed = compute_conversion_report(report)
+
+    # Threading the precomputed result and letting the analyzer call the
+    # owning module itself agree exactly (one fold, two call shapes).
+    assert threaded == recomputed
+    assert threaded.total_ejections == vote_correctness.total_ejections == 2
+    assert threaded.impostor_ejections == vote_correctness.impostor_ejections == 1
+    assert threaded.ejection_accuracy == vote_correctness.ejection_accuracy == 0.5
+
+
+def test_recall_lead_counts_accused_meetings_and_conversions() -> None:
+    """impostor_accused -> impostor-ejected over meetings naming a true impostor."""
+
+    converted = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        meeting_id="m-converted",
+        statements=(_accusation_statement(against=_IMPOSTOR, sid="s-1"),),
+    )
+    accused_but_skipped = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        meeting_id="m-skipped",
+        statements=(_accusation_statement(against=_IMPOSTOR, sid="s-2"),),
+    )
+    accused_but_wrong_ejection = _meeting(
+        outcome="EJECTED",
+        ejected=_CREWMATE,
+        meeting_id="m-wrong",
+        statements=(_accusation_statement(against=_IMPOSTOR, sid="s-3"),),
+    )
+    # Accuses only a crewmate: not in the denominator even though an impostor
+    # was ejected (the conversion is accusation -> ejection, not ejection alone).
+    crew_accused_impostor_ejected = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        meeting_id="m-crew-accused",
+        statements=(_accusation_statement(against=_CREWMATE, sid="s-4"),),
+    )
+    no_accusation = _meeting(outcome="SKIPPED", ejected=None, meeting_id="m-quiet")
+
+    result = compute_conversion_report(
+        _tournament(
+            _game(
+                meetings=(
+                    converted,
+                    accused_but_skipped,
+                    accused_but_wrong_ejection,
+                    crew_accused_impostor_ejected,
+                    no_accusation,
+                )
+            )
+        )
+    )
+
+    assert result.impostor_accused_meetings == 3
+    assert result.impostor_accused_conversions == 1
+    assert result.impostor_accused_conversion_rate == pytest.approx(1 / 3)
+
+
+def test_recall_lead_counts_impostor_self_accusation() -> None:
+    """A self-accusation by an impostor still puts a true impostor on the table."""
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        statements=(
+            _accusation_statement(against=_IMPOSTOR, sid="s-1", speaker=_IMPOSTOR),
+        ),
+    )
+
+    result = compute_conversion_report(_one_meeting_report(meeting))
+
+    assert result.impostor_accused_meetings == 1
+    assert result.impostor_accused_conversions == 0
+
+
+def test_recall_lead_malformed_ejected_meeting_cannot_convert() -> None:
+    """EJECTED with a None ejected_player_id counts as accused, not converted."""
+
+    malformed = _meeting(
+        outcome="EJECTED",
+        ejected=None,
+        statements=(_accusation_statement(against=_IMPOSTOR, sid="s-1"),),
+    )
+
+    result = compute_conversion_report(_one_meeting_report(malformed))
+
+    assert result.impostor_accused_meetings == 1
+    assert result.impostor_accused_conversions == 0
+
+
+def test_recall_lead_rate_is_none_when_no_meeting_accused_an_impostor() -> None:
+    result = compute_conversion_report(
+        _one_meeting_report(_meeting(outcome="SKIPPED", ejected=None))
+    )
+
+    assert result.impostor_accused_meetings == 0
+    assert result.impostor_accused_conversion_rate is None
+
+
+# ---------------------------------------------------------------------------
+# Task 9.6 — ConversionReport: SKIP sentinels over the rendered §4.6 verdict
+# ---------------------------------------------------------------------------
+
+
+def test_skip_ballots_classified_against_rendered_max() -> None:
+    """CORRECT below the threshold, MISSED at/above it, inclusive boundary."""
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(target="SKIP", voter="p-0", reason_id=None),  # 0.55 correct
+            _ballot(target="SKIP", voter="p-1", reason_id=None),  # 0.60 missed
+            _ballot(target="SKIP", voter="p-2", reason_id=None),  # 0.80 missed
+        ),
+        llm_calls=(
+            _vote_call(agent_id="p-0", rendered_max=0.55),
+            _vote_call(agent_id="p-1", rendered_max=0.60),
+            _vote_call(agent_id="p-2", rendered_max=0.80),
+        ),
+    )
+
+    result = compute_conversion_report(_one_meeting_report(meeting))
+
+    assert result.skip_ballots == 3
+    assert result.correct_skip_ballots == 1
+    assert result.missed_skip_ballots == 2
+    assert result.unclassified_skip_ballots == 0
+    # Both missed voters are crew with valid targets: genuine inversions.
+    assert result.missed_skip_impostor_voters == 0
+    assert result.missed_skip_invalid_target == 0
+    assert result.threshold_inversions == 2
+
+
+def test_missed_skips_partition_impostor_then_invalid_then_genuine() -> None:
+    """The MISSED partition: impostor voter > invalid-target marker > genuine.
+
+    The audited shape (gp-2): most MISSED skips are impostor voters — by
+    design (in-character self-preservation or teammate protection), NOT an
+    error — so the count is a sentinel whose partition must be read, never a
+    down-is-good metric. Within the impostor bucket the §7.12-coerced ballots
+    (stamped with TEAMMATE_VOTE_TARGET_MARKER) are counted separately from
+    voluntary declines, so the two by-design causes can never be confused.
+    """
+
+    invalid_marker = INVALID_VOTE_TARGET_MARKER.format(target="p-99")
+    teammate_marker = TEAMMATE_VOTE_TARGET_MARKER.format(target="p-9")
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            # Impostor voter over a met threshold, no marker: a VOLUNTARY
+            # in-character decline (the only impostor shape on the audited
+            # baseline, where the coercion guard never fired).
+            _ballot(target="SKIP", voter=_IMPOSTOR, reason_id=None),
+            # Crew voter whose hallucinated target was normalized to SKIP.
+            _ballot(
+                target="SKIP",
+                voter="p-1",
+                reason_id=None,
+                rationale_text=invalid_marker + "I vote p-99.",
+            ),
+            # Crew voter, valid ballot, met threshold: genuine inversion.
+            _ballot(target="SKIP", voter="p-2", reason_id=None),
+        ),
+        llm_calls=(
+            _vote_call(agent_id=_IMPOSTOR, rendered_max=0.80),
+            _vote_call(agent_id="p-1", rendered_max=0.75),
+            _vote_call(agent_id="p-2", rendered_max=0.70),
+        ),
+    )
+
+    result = compute_conversion_report(_one_meeting_report(meeting))
+
+    assert result.missed_skip_ballots == 3
+    assert result.missed_skip_impostor_voters == 1
+    assert result.missed_skip_teammate_coerced == 0  # voluntary, not coerced
+    assert result.missed_skip_invalid_target == 1
+    assert result.threshold_inversions == 1
+
+    # The same impostor ballot actually rewritten by the §7.12 guard (the
+    # recorded TEAMMATE marker) still lands in the impostor bucket AND is
+    # counted as a real coercion.
+    coerced = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter=_IMPOSTOR,
+                reason_id=None,
+                rationale_text=teammate_marker + "I vote p-9.",
+            ),
+        ),
+        llm_calls=(_vote_call(agent_id=_IMPOSTOR, rendered_max=0.80),),
+    )
+
+    coerced_result = compute_conversion_report(_one_meeting_report(coerced))
+
+    assert coerced_result.missed_skip_ballots == 1
+    assert coerced_result.missed_skip_impostor_voters == 1
+    assert coerced_result.missed_skip_teammate_coerced == 1
+    assert coerced_result.threshold_inversions == 0
+
+
+def test_skip_ballot_without_vote_prompt_is_unclassified() -> None:
+    """No rendered gate line for the voter -> unclassified, never assumed."""
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(_ballot(target="SKIP", voter="p-0", reason_id=None),),
+        llm_calls=(),
+    )
+
+    result = compute_conversion_report(_one_meeting_report(meeting))
+
+    assert result.skip_ballots == 1
+    assert result.unclassified_skip_ballots == 1
+    assert result.correct_skip_ballots == 0
+    assert result.missed_skip_ballots == 0
+
+
+def test_non_skip_ballots_do_not_enter_the_skip_partition() -> None:
+    meeting = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        ballots=(
+            _ballot(target=_IMPOSTOR, voter="p-0", reason_id=None),
+            _ballot(target="SKIP", voter="p-1", reason_id=None),
+        ),
+        llm_calls=(
+            _vote_call(agent_id="p-0", rendered_max=0.80),
+            _vote_call(agent_id="p-1", rendered_max=0.10),
+        ),
+    )
+
+    result = compute_conversion_report(_one_meeting_report(meeting))
+
+    assert result.skip_ballots == 1
+    assert result.correct_skip_ballots == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 9.6 — ConversionReport model contract
+# ---------------------------------------------------------------------------
+
+
+def test_conversion_model_rejects_bad_skip_partition() -> None:
+    with pytest.raises(ValidationError, match="must equal\\s+skip_ballots"):
+        ConversionReport(
+            total_ejections=0,
+            impostor_ejections=0,
+            ejection_accuracy=None,
+            impostor_accused_meetings=0,
+            impostor_accused_conversions=0,
+            impostor_accused_conversion_rate=None,
+            skip_ballots=2,
+            correct_skip_ballots=1,
+            missed_skip_ballots=0,
+            unclassified_skip_ballots=0,
+            missed_skip_impostor_voters=0,
+            missed_skip_teammate_coerced=0,
+            missed_skip_invalid_target=0,
+            threshold_inversions=0,
+        )
+
+
+def test_conversion_model_rejects_bad_missed_partition() -> None:
+    with pytest.raises(ValidationError, match="must equal\\s+missed_skip_ballots"):
+        ConversionReport(
+            total_ejections=0,
+            impostor_ejections=0,
+            ejection_accuracy=None,
+            impostor_accused_meetings=0,
+            impostor_accused_conversions=0,
+            impostor_accused_conversion_rate=None,
+            skip_ballots=1,
+            correct_skip_ballots=0,
+            missed_skip_ballots=1,
+            unclassified_skip_ballots=0,
+            missed_skip_impostor_voters=1,
+            missed_skip_teammate_coerced=0,
+            missed_skip_invalid_target=1,
+            threshold_inversions=0,
+        )
+
+
+def test_conversion_model_rejects_coerced_exceeding_impostor_bucket() -> None:
+    """The coerced count is a subset annotation of the impostor bucket."""
+
+    with pytest.raises(
+        ValidationError, match="cannot exceed\\s+missed_skip_impostor_voters"
+    ):
+        ConversionReport(
+            total_ejections=0,
+            impostor_ejections=0,
+            ejection_accuracy=None,
+            impostor_accused_meetings=0,
+            impostor_accused_conversions=0,
+            impostor_accused_conversion_rate=None,
+            skip_ballots=1,
+            correct_skip_ballots=0,
+            missed_skip_ballots=1,
+            unclassified_skip_ballots=0,
+            missed_skip_impostor_voters=1,
+            missed_skip_teammate_coerced=2,
+            missed_skip_invalid_target=0,
+            threshold_inversions=0,
+        )
+
+
+def test_conversion_model_rejects_rate_set_with_zero_denominator() -> None:
+    with pytest.raises(ValidationError, match="must be None"):
+        ConversionReport(
+            total_ejections=0,
+            impostor_ejections=0,
+            ejection_accuracy=None,
+            impostor_accused_meetings=0,
+            impostor_accused_conversions=0,
+            impostor_accused_conversion_rate=0.0,
+            skip_ballots=0,
+            correct_skip_ballots=0,
+            missed_skip_ballots=0,
+            unclassified_skip_ballots=0,
+            missed_skip_impostor_voters=0,
+            missed_skip_teammate_coerced=0,
+            missed_skip_invalid_target=0,
+            threshold_inversions=0,
+        )
+
+
+def test_conversion_model_rejects_conversions_exceeding_accused() -> None:
+    with pytest.raises(
+        ValidationError, match="cannot exceed\\s+impostor_accused_meetings"
+    ):
+        ConversionReport(
+            total_ejections=0,
+            impostor_ejections=0,
+            ejection_accuracy=None,
+            impostor_accused_meetings=1,
+            impostor_accused_conversions=2,
+            impostor_accused_conversion_rate=1.0,
+            skip_ballots=0,
+            correct_skip_ballots=0,
+            missed_skip_ballots=0,
+            unclassified_skip_ballots=0,
+            missed_skip_impostor_voters=0,
+            missed_skip_teammate_coerced=0,
+            missed_skip_invalid_target=0,
+            threshold_inversions=0,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Task 9.6 — committed 9p/2i report regression pins (the audited 9.5 baseline)
+# ---------------------------------------------------------------------------
+
+_COMMITTED_9P2I_REPORT = (
+    Path(__file__).resolve().parents[2]
+    / "replays"
+    / "samples"
+    / "9p2i"
+    / "tournament-eval-report.json"
+)
+
+
+def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
+    """The shipped 9p/2i report carries the audited gp-2 values exactly.
+
+    These pin the 9.5 baseline (9p2i @ fb3cfa5, regenerated offline from the
+    committed bytes) and are NOT immutable — the 9.11 re-record regenerates
+    them, the standard re-record pattern. ejection_accuracy 22/35 = 0.6286,
+    impostor-accused conversion 21/47 = 0.45, missed_skip 38 = 34
+    impostor-voter (the audit's "firewall" bucket; 0 of them §7.12-coerced —
+    the guard never fired on this baseline, all 34 are voluntary in-character
+    declines) + 4 invalid-target + 0 genuine.
+    """
+
+    report = TournamentEvalReport.model_validate_json(
+        _COMMITTED_9P2I_REPORT.read_text(encoding="utf-8")
+    )
+    conversion = report.conversion
+
+    assert conversion.total_ejections == 35
+    assert conversion.impostor_ejections == 22
+    assert conversion.ejection_accuracy == pytest.approx(22 / 35)
+    assert conversion.impostor_accused_meetings == 47
+    assert conversion.impostor_accused_conversions == 21
+    assert conversion.impostor_accused_conversion_rate == pytest.approx(21 / 47)
+    assert conversion.skip_ballots == 271
+    assert conversion.correct_skip_ballots == 233
+    assert conversion.missed_skip_ballots == 38
+    assert conversion.unclassified_skip_ballots == 0
+    assert conversion.missed_skip_impostor_voters == 34
+    assert conversion.missed_skip_teammate_coerced == 0
+    assert conversion.missed_skip_invalid_target == 4
+    assert conversion.threshold_inversions == 0
+
+    # The sentinel reads exactly as documented on the audited baseline: every
+    # impostor ejection is backed by its own trigger (structural 1.0).
+    assert report.vote_correctness.vote_correctness_rate == 1.0
+    assert (
+        report.vote_correctness.evidence_backed_impostor_ejections
+        == report.vote_correctness.impostor_ejections
+    )
+    # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
+    assert conversion.ejection_accuracy == report.vote_correctness.ejection_accuracy
+
+    # JSON-level guard: the committed file itself serves both leads (a reader
+    # pulling the raw report sees the published metric surface, gp-2's ask).
+    raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
+    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.6286, abs=1e-4)
+    assert raw["conversion"]["missed_skip_ballots"] == 38

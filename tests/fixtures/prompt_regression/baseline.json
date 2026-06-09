@@ -34,6 +34,9 @@
     ],
     "metrics": {
       "vote_correctness_rate": 1.0,
+      "ejection_accuracy": 1.0,
+      "impostor_accused_conversion_rate": 0.8,
+      "missed_skip_ballots": 7,
       "alibi_survival_rate": 0.2857142857142857,
       "total_impostor_alibis": 7,
       "accusation_claim_ece": 0.1312500000000001,
@@ -80,6 +83,9 @@
     ],
     "metrics": {
       "vote_correctness_rate": 1.0,
+      "ejection_accuracy": 1.0,
+      "impostor_accused_conversion_rate": 0.8,
+      "missed_skip_ballots": 7,
       "alibi_survival_rate": 0.14285714285714285,
       "total_impostor_alibis": 7,
       "accusation_claim_ece": 0.1312500000000001,

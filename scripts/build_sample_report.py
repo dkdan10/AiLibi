@@ -160,9 +160,28 @@ def _summary(report: TournamentEvalReport) -> str:
     impostor = sum(1 for game in games if game.winner == "IMPOSTORS")
     budget = sum(1 for game in games if game.winner is None)
     meeting = report.meeting_rate
+    # The Task 9.6 Wave-1 conversion leads (gp-2): precision (ejection_accuracy),
+    # recall (impostor-accused conversion), and the missed-SKIP sentinel — NOT
+    # vote_correctness_rate, which is a bug-sentinel structurally pinned to 1.0.
+    conversion = report.conversion
+    accuracy = (
+        f"{conversion.ejection_accuracy:.4f}"
+        if conversion.ejection_accuracy is not None
+        else "n/a"
+    )
+    recall = (
+        f"{conversion.impostor_accused_conversion_rate:.4f}"
+        if conversion.impostor_accused_conversion_rate is not None
+        else "n/a"
+    )
     return (
         f"{len(games)} games | CREW {crew} / IMP {impostor} / budget {budget} | "
         f"meeting_rate {meeting.meeting_rate:.2f} ({meeting.meetings_total} meetings)"
+        f" | ejection_accuracy {accuracy} "
+        f"({conversion.impostor_ejections}/{conversion.total_ejections}) | "
+        f"conversion {recall} ({conversion.impostor_accused_conversions}/"
+        f"{conversion.impostor_accused_meetings}) | "
+        f"missed_skip {conversion.missed_skip_ballots}"
     )
 
 
