@@ -106,6 +106,15 @@ from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord, WinnerSide
 # reject every committed v1 ``tournament-eval-report.json`` fail-loud with no
 # back-migration, which is why Task 8.12 regenerates the committed reports + the
 # prompt-regression ``baseline.json`` in the same coordinated re-record.
+#
+# Task 9.6 (metric hygiene) STAYS at 2: it adds the conversion-leads block to
+# :class:`eval.meeting_quality.TournamentEvalReport` -- the un-versioned metric
+# WRAPPER -- and changes nothing in the persisted report tree this marker
+# versions. Per the DESIGN.md §11.4 policy the version bumps only when older
+# readers cannot interpret the shape; wrapper-level aggregates over an
+# unchanged inner report do not qualify (the W0.3 ``meeting_rate`` precedent),
+# and 9.6 regenerates every committed report in the same PR, so no pre-9.6
+# wrapper JSON survives to be read.
 CURRENT_FORMAT_VERSION: Final[int] = 2
 
 

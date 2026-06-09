@@ -111,10 +111,20 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
         summary_a.metrics.alibi_survival_rate != summary_b.metrics.alibi_survival_rate
     )
 
-    # The delta is isolated to the alibi metric: nothing else moved.
+    # The delta is isolated to the alibi metric: nothing else moved — including
+    # the Task 9.6 conversion leads (v_b only flips one alibi contradiction; it
+    # touches no ejection, accusation, or ballot).
     assert (
         summary_a.metrics.vote_correctness_rate
         == summary_b.metrics.vote_correctness_rate
+    )
+    assert summary_a.metrics.ejection_accuracy == summary_b.metrics.ejection_accuracy
+    assert (
+        summary_a.metrics.impostor_accused_conversion_rate
+        == summary_b.metrics.impostor_accused_conversion_rate
+    )
+    assert (
+        summary_a.metrics.missed_skip_ballots == summary_b.metrics.missed_skip_ballots
     )
     assert (
         summary_a.metrics.accusation_claim_ece == summary_b.metrics.accusation_claim_ece
@@ -154,6 +164,30 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
     assert changed == {"impostor_report"}
     assert versions_a["impostor_report"] == "impostor_report_v3"
     assert versions_b["impostor_report"] == "impostor_report_v4"
+
+
+def test_baseline_pins_the_task_9_6_conversion_leads() -> None:
+    """The regression record carries the Wave-1 leads, not just the sentinel.
+
+    Task 9.6 (audit gp-2): ``vote_correctness_rate`` is a bug-sentinel
+    structurally pinned to 1.0, so the baseline must ALSO pin the metrics a
+    Wave-1 prompt A/B actually gates on — the precision lead
+    (``ejection_accuracy``), the recall lead
+    (``impostor_accused_conversion_rate``), and the missed-SKIP sentinel
+    count. Values are the recorded fixture set's (seeds 2/6/26: 4 ejections,
+    all impostors; 4 of 5 impostor-accused meetings converted; 7 missed
+    skips), exact-matched against the committed baseline like every other
+    scalar.
+    """
+
+    summary = _run_fixture("v_a")
+
+    # The sentinel reads its structural 1.0 — and is NOT the lead.
+    assert summary.metrics.vote_correctness_rate == 1.0
+    assert summary.metrics.ejection_accuracy == 1.0
+    assert summary.metrics.impostor_accused_conversion_rate == 0.8
+    assert summary.metrics.missed_skip_ballots == 7
+    assert summary == _load_baseline()["v_a"]
 
 
 def test_delta_exceeds_manual_real_provider_tolerance() -> None:
