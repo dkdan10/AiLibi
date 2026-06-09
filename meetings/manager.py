@@ -148,6 +148,25 @@ INVALID_REASON_ID_MARKER: Final[str] = (
     "[invalid primary_reason_id {reason_id!r} nulled] "
 )
 
+# Audit-trail marker prepended to a turn's ``free_text`` when an
+# ``AccusationClaim`` names a ``target`` (``against``) that is not a living
+# meeting participant. qwen3.5:9b occasionally hallucinates an accusation
+# target id (e.g. ``"imp-2"``) that names no player. The reactive chain
+# already terminates on such a target (``next_chain_step`` ->
+# ``TERMINATION_TARGET_NOT_LIVING``), but the claim was still recorded into
+# the transcript, where the §11.3 accusation-calibration metric -- which
+# resolves every accusation target's role -- failed loud on the unknown id
+# (``roles[target]`` ``KeyError``). The claim is dropped before it is
+# recorded, mirroring the ballot-target normalization above
+# (``INVALID_VOTE_TARGET_MARKER`` -> ``SKIP``): a valid accusation target is
+# a living participant, the same notion of "valid target" the vote path
+# enforces via ``candidate_targets``. The marker preserves the original
+# (invalid) target for replay / audit analysis and lets downstream eval count
+# drops by grepping one string. Pin the literal exactly.
+INVALID_ACCUSATION_TARGET_MARKER: Final[str] = (
+    "[invalid accusation target {target!r} dropped] "
+)
+
 # Matches the trailing ``:turn-{k}`` ordinal of a turn id. A
 # ``primary_reason_id`` whose ordinal exists in THIS meeting but whose
 # meeting prefix is wrong is a recoverable suffix form (the 7B model echoes
@@ -593,6 +612,7 @@ class MeetingManager:
             meeting_id=meeting_id,
             trigger=trigger,
             participant=opener,
+            living_ids=roster,
             turn_index=0,
             turn_kind="opening",
             reply_to=None,
@@ -637,6 +657,7 @@ class MeetingManager:
                 meeting_id=meeting_id,
                 trigger=trigger,
                 participant=by_id[guarded_next],
+                living_ids=roster,
                 turn_index=len(turns),
                 turn_kind="reply",
                 reply_to=prev.turn_id,
@@ -665,6 +686,7 @@ class MeetingManager:
                 meeting_id=meeting_id,
                 trigger=trigger,
                 participant=by_id[opt_in_id],
+                living_ids=roster,
                 turn_index=len(turns),
                 turn_kind="opt_in",
                 reply_to=None,
@@ -708,6 +730,7 @@ class MeetingManager:
         meeting_id: str,
         trigger: MeetingTrigger,
         participant: MeetingParticipant,
+        living_ids: frozenset[PlayerId],
         turn_index: int,
         turn_kind: TurnKind,
         reply_to: str | None,
@@ -811,6 +834,24 @@ class MeetingManager:
             guarded_claims = _guard_teammate_turn_claims(
                 normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
             )
+            # Drop accusation claims naming a non-living target (qwen3.5:9b
+            # hallucinates ids like "imp-2"). The reactive chain already
+            # terminates on such a target, but recording it crashed the §11.3
+            # accusation metric on an unknown role; dropping it here mirrors the
+            # ballot-target normalization and keeps the recorded transcript
+            # resolvable. The original target is preserved in ``free_text``.
+            validated_claims, dropped_targets = _drop_invalid_accusation_targets(
+                guarded_claims, living_ids=living_ids
+            )
+            free_text = parsed.free_text
+            if dropped_targets:
+                free_text = (
+                    "".join(
+                        INVALID_ACCUSATION_TARGET_MARKER.format(target=bad)
+                        for bad in dropped_targets
+                    )
+                    + free_text
+                )
             # This turn parsed, but an earlier retry attempt may have raised a
             # provider parse-failure the recording client never logged. Surface
             # that burned spend so it is recorded even though no default fired
@@ -828,7 +869,8 @@ class MeetingManager:
                     "speaker": participant.agent_id,
                     "turn_kind": turn_kind,
                     "reply_to": reply_to,
-                    "claims": guarded_claims,
+                    "claims": validated_claims,
+                    "free_text": free_text,
                 }
             )
         # Every attempt (1 + ``retries``) failed: surface the fired default so
@@ -1523,6 +1565,42 @@ def _guard_teammate_turn_claims(
     return guarded
 
 
+def _drop_invalid_accusation_targets(
+    claims: tuple[Claim, ...],
+    *,
+    living_ids: frozenset[PlayerId],
+) -> tuple[tuple[Claim, ...], tuple[PlayerId, ...]]:
+    """Drop accusation claims whose ``against`` is not a living participant.
+
+    qwen3.5:9b occasionally hallucinates an accusation target id (e.g.
+    ``"imp-2"``) that names no living player. The reactive chain already
+    terminates on such a target (:func:`meetings.transcript.next_chain_step`
+    -> ``TERMINATION_TARGET_NOT_LIVING``), but the claim was still recorded
+    into the transcript, where the §11.3 accusation-calibration metric --
+    which resolves every accusation target's role -- failed loud on the
+    unknown id (``roles[target]`` ``KeyError``). Mirroring the ballot-target
+    normalization (:func:`_normalize_ballot_target` -> ``SKIP``), an
+    accusation the chain cannot pass to and the eval cannot resolve to a role
+    is dropped before it reaches the transcript, the chain, or the metrics. A
+    valid accusation target is a living meeting participant -- the same notion
+    of "valid target" the vote path enforces via ``candidate_targets``.
+
+    Returns ``(surviving_claims, dropped_targets)`` with both in claim order,
+    so the caller can record an :data:`INVALID_ACCUSATION_TARGET_MARKER` on
+    the turn's ``free_text``. Deterministic and a no-op when every accusation
+    names a living participant, so a clean replay is byte-unaffected.
+    """
+
+    surviving: list[Claim] = []
+    dropped: list[PlayerId] = []
+    for claim in claims:
+        if isinstance(claim, AccusationClaim) and claim.against not in living_ids:
+            dropped.append(claim.against)
+        else:
+            surviving.append(claim)
+    return tuple(surviving), tuple(dropped)
+
+
 __all__ = [
     "DEFAULT_SKIP_CONFIDENCE_THRESHOLD",
     "DEFAULT_TURN_DEADLINE_SECONDS",
@@ -1533,6 +1611,7 @@ __all__ = [
     "DEFAULT_VOTE_MAX_TOKENS",
     "DEFAULT_VOTE_RATIONALE",
     "DEFAULT_VOTE_TEMPERATURE",
+    "INVALID_ACCUSATION_TARGET_MARKER",
     "INVALID_REASON_ID_MARKER",
     "INVALID_VOTE_TARGET_MARKER",
     "TEAMMATE_VOTE_TARGET_MARKER",
