@@ -42,6 +42,7 @@ from llm.fake_provider import FakeProvider
 from meetings.manager import (
     DEFAULT_TURN_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
+    INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
@@ -52,6 +53,7 @@ from meetings.manager import (
     MeetingParticipant,
     MeetingTrigger,
     SuspicionEntry,
+    _drop_invalid_accusation_targets,  # noqa: PLC2701
     _normalize_self_alibi_subjects,  # noqa: PLC2701
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
@@ -1727,6 +1729,88 @@ class TestInvalidBallotTargetNormalised:
 
         p1 = next(b for b in result.ballots if b.voter == "p-1")
         assert p1.target == "p-3"
+
+
+# --- Invalid accusation target dropped (qwen3.5:9b "imp-2" hallucination) -----
+
+
+class TestInvalidAccusationTargetDropped:
+    """Accusations naming a non-living target are dropped before recording.
+
+    qwen3.5:9b occasionally hallucinates an accusation target id (e.g.
+    ``"imp-2"``) that names no living player. The reactive chain already
+    terminates on such a target, but recording the claim crashed the §11.3
+    accusation-calibration metric (it resolves every target's role); the
+    per-turn guard drops it and preserves the original on ``free_text``,
+    mirroring the ballot-target normalisation.
+    """
+
+    def test_unit_drops_only_the_invalid_accusation(self) -> None:
+        claims: tuple[Claim, ...] = (
+            AccusationClaim(
+                type="accusation", against="imp-2", confidence=0.9, reason="r"
+            ),
+            AccusationClaim(
+                type="accusation", against="p-3", confidence=0.6, reason="r"
+            ),
+            CorroborationClaim(
+                type="corroboration", supports="p-3", on_tick=1, reason="r"
+            ),
+        )
+        surviving, dropped = _drop_invalid_accusation_targets(
+            claims, living_ids=frozenset({"p-1", "p-2", "p-3", "p-4"})
+        )
+
+        # The hallucinated 'imp-2' accusation is dropped; the valid 'p-3'
+        # accusation and the (non-accusation) corroboration survive in order.
+        assert dropped == ("imp-2",)
+        accusation_targets = [
+            c.against for c in surviving if isinstance(c, AccusationClaim)
+        ]
+        assert accusation_targets == ["p-3"]
+        assert any(isinstance(c, CorroborationClaim) for c in surviving)
+
+    def test_unit_no_op_when_every_target_living(self) -> None:
+        claims: tuple[Claim, ...] = (
+            AccusationClaim(
+                type="accusation", against="p-3", confidence=0.6, reason="r"
+            ),
+        )
+        surviving, dropped = _drop_invalid_accusation_targets(
+            claims, living_ids=frozenset({"p-1", "p-2", "p-3", "p-4"})
+        )
+        assert dropped == ()
+        assert surviving == claims
+
+    def test_hallucinated_opening_accusation_is_dropped_and_marked(self) -> None:
+        # p-1 (the opener) accuses a non-living id; the chain cannot pass to it
+        # and the metrics cannot resolve its role, so the accusation is dropped
+        # before the turn is recorded, with the original preserved in free_text.
+        result, _ = _run_meeting(_make_responder(accusations={"p-1": "imp-2"}))
+
+        opening = result.transcript.turns[0]
+        assert opening.speaker == "p-1"
+        assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
+        assert opening.free_text.startswith(
+            INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2")
+        )
+        # No recorded accusation names a non-living id, so the §11.3 accusation
+        # metrics can resolve every target's role (the gp surfaced by seed 24).
+        all_targets = {
+            c.against
+            for turn in result.transcript.turns
+            for c in turn.claims
+            if isinstance(c, AccusationClaim)
+        }
+        assert "imp-2" not in all_targets
+
+    def test_valid_opening_accusation_passes_through(self) -> None:
+        result, _ = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
+
+        opening = result.transcript.turns[0]
+        targets = [c.against for c in opening.claims if isinstance(c, AccusationClaim)]
+        assert targets == ["p-3"]
+        assert not opening.free_text.startswith("[invalid accusation target")
 
 
 # --- primary_reason_id integrity (DESIGN.md §5.5; audit gp-3) ----------------

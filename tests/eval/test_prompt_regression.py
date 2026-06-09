@@ -87,8 +87,8 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
 
     The Phase 5 acceptance loop, run deterministically without a model:
 
-    * the alibi-fabrication survival rate genuinely MOVES (``v_a`` 5/7 ->
-      ``v_b`` 4/7) over a real, non-vacuous denominator of impostor alibis;
+    * the alibi-fabrication survival rate genuinely MOVES (``v_a`` 2/7 ->
+      ``v_b`` 1/7) over a real, non-vacuous denominator of impostor alibis;
     * the delta is ISOLATED to that metric — vote-correctness, calibration ECE,
       and total cost are unchanged — so it is not an artifact of comparing
       unrelated fields;
@@ -100,13 +100,13 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
     summary_b = _run_fixture("v_b")
 
     # The metric moved, over a real (non-vacuous) impostor-alibi denominator:
-    # 7 impostor alibis across the three fixture games; 2 are already caught
+    # 7 impostor alibis across the three fixture games; 5 are already caught
     # by the live detector in v_a, and v_b's hand-authored contradiction
-    # catches one more (5/7 surviving -> 4/7).
+    # catches one more (2/7 surviving -> 1/7).
     assert summary_a.metrics.total_impostor_alibis == 7
     assert summary_b.metrics.total_impostor_alibis == 7
-    assert summary_a.metrics.alibi_survival_rate == 5 / 7
-    assert summary_b.metrics.alibi_survival_rate == 4 / 7
+    assert summary_a.metrics.alibi_survival_rate == 2 / 7
+    assert summary_b.metrics.alibi_survival_rate == 1 / 7
     assert (
         summary_a.metrics.alibi_survival_rate != summary_b.metrics.alibi_survival_rate
     )
@@ -126,14 +126,14 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
     # (v_b only flips one alibi contradiction; it touches neither the meeting
     # count nor the trigger classification), so they are identical across both
     # fixtures. All three fixture games (seeds 2/6/26) reach at least one
-    # body-report meeting — 9 resolved meetings in total — so the rate is 1.0
+    # body-report meeting — 8 resolved meetings in total — so the rate is 1.0
     # and emergency is 0 (no emergency meetings observed in the canonical set).
     assert summary_a.metrics.meeting_rate == summary_b.metrics.meeting_rate == 1.0
-    assert summary_a.metrics.meetings_total == summary_b.metrics.meetings_total == 9
+    assert summary_a.metrics.meetings_total == summary_b.metrics.meetings_total == 8
     assert (
         summary_a.metrics.body_report_meetings
         == summary_b.metrics.body_report_meetings
-        == 9
+        == 8
     )
     assert (
         summary_a.metrics.emergency_meetings
@@ -160,7 +160,7 @@ def test_delta_exceeds_manual_real_provider_tolerance() -> None:
     """The demonstrated alibi-rate delta would trip the manual ``> X%`` policy.
 
     CI matches the baseline exactly; the ``> X%`` tolerance governs the manual
-    real-provider re-record comparison. The demonstrated drop (5/7 -> 4/7 =
+    real-provider re-record comparison. The demonstrated drop (2/7 -> 1/7 =
     1/7 ≈ 0.143) exceeds the documented ``REAL_PROVIDER_REGRESSION_TOLERANCE``,
     i.e. a re-record showing this much movement would be flagged as a
     regression.

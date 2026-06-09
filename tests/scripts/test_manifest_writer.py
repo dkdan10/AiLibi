@@ -59,11 +59,11 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     model, prompt_versions, cost, winner = mw.sample_provenance(
         small_samples, _MEETING_SEED, fallback
     )
-    assert model == "qwen2.5:7b-instruct"
+    assert model == "qwen3.5:9b"
     # The union of the recorded prompt-version *values*, sorted — using the
-    # actual recorded values (e.g. "vote_ballot/v4"), not the idealized hint.
-    assert "accusation_round.v4" in prompt_versions
-    assert "vote_ballot/v4" in prompt_versions
+    # actual recorded values (e.g. "vote_ballot/v5"), not the idealized hint.
+    assert "accusation_round.v5" in prompt_versions
+    assert "vote_ballot/v5" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
     # The committed re-records (Task 8.12 / Task 8.18) run on the local Ollama
@@ -85,7 +85,7 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     assert prompt_versions == mw._NO_MEETINGS
     assert cost == "0.0000"
     # No LLM call recorded -> attributed to the directory's meeting model.
-    assert model == fallback == "qwen2.5:7b-instruct"
+    assert model == fallback == "qwen3.5:9b"
     assert winner in {"CREWMATES", "IMPOSTORS", "null"}
 
 
@@ -98,7 +98,7 @@ def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None
     assert mw._SEPARATOR in text
     rows = mw.parse_manifest(text)
     assert list(rows) == [0, 22]  # parsed in file order -> ascending
-    assert rows[22].prompt_versions.startswith("accusation_round.v4")
+    assert rows[22].prompt_versions.startswith("accusation_round.v5")
     assert rows[0].prompt_versions == mw._NO_MEETINGS
 
 
@@ -109,7 +109,7 @@ def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     rows = mw.parse_manifest(manifest.read_text())
     assert set(rows) == set(range(50))
     for seed in (22, 24, 26, 49):
-        assert "accusation_round.v4" in rows[seed].prompt_versions
+        assert "accusation_round.v5" in rows[seed].prompt_versions
         assert rows[seed].git_sha  # non-empty provenance
     assert rows[0].prompt_versions == mw._NO_MEETINGS
 
@@ -342,7 +342,7 @@ def test_update_model_override_attributes_no_call_seed(
     # No meetings -> attributed to the active (override) model...
     assert rows[0].model == "claude-opus-4-8"
     # ...but a seed that recorded calls keeps its own recorded model.
-    assert rows[22].model == "qwen2.5:7b-instruct"
+    assert rows[22].model == "qwen3.5:9b"
 
 
 def test_prune_drops_rows_without_files(small_samples: Path, tmp_path: Path) -> None:
