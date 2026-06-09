@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Final, TypeAlias
 
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
+from meetings.transcript import is_weak_contradiction
 from observation.packet import ObservationPacket
 
 PlayerId: TypeAlias = str
@@ -49,6 +50,23 @@ count as "shortly before" for the proximity adjustment."""
 CONTRADICTION_SUSPICION_DELTA: Final[float] = 0.3
 """DESIGN.md §6.3 Rule 2: suspicion added when a player's claimed alibi
 contradicts another agent's testimony (a detected meeting contradiction)."""
+
+WEAK_CONTRADICTION_SUSPICION_DELTA: Final[float] = 0.08
+"""Graduated §6.3 Rule 2 delta for detector-flagged WEAK contradictions
+(Task 9.7; audit gp-1 precision).
+
+A self-stated or narrow-window ``alibi_vs_sighting``
+(:func:`meetings.transcript.is_weak_contradiction`) is the audited
+false-positive pattern: under the full 0.3 delta one such flag lifted
+the default 0.5 prior to 0.8, crossing the §4.6 0.60 eject gate alone
+and railroading 13/13 wrong ejections. The graduated delta keeps a lone
+weak flag *suspicious but below the gate* -- 0.5 + 0.08 = 0.58, inside
+[0.5, 0.60) -- not zeroed: a self-stated conflict IS mildly suspicious.
+Corroboration still converts: a second weak flag (0.66), a strong
+contradiction (0.88), or a body-proximity / vent-elevated prior all
+carry the subject across 0.60, so innocents stay ejectable on a second
+independent signal. Strong contradictions keep the full
+``CONTRADICTION_SUSPICION_DELTA``; recall is not paid for globally."""
 
 # The action label the observation layer stamps on a ``PlayerView`` when the
 # observer *witnesses* a player using a vent (observation/service.py
@@ -330,8 +348,18 @@ def apply_contradiction_rule(
     two shapes are deliberately distinct (the belief store predates the
     detector's data model).
 
+    Detector-flagged weak contradictions (Task 9.7, audit gp-1) lift by
+    the graduated ``WEAK_CONTRADICTION_SUSPICION_DELTA`` instead, so a
+    lone self-stated / narrow-window ``alibi_vs_sighting`` lands in the
+    suspicious-but-below-gate band [0.5, 0.60) rather than mechanically
+    crossing the §4.6 eject gate. The classification is read off the
+    flag itself (:func:`meetings.transcript.is_weak_contradiction`), so
+    the rule stays a pure function of its arguments.
+
     A subject appearing in multiple flags is bumped once per flag,
-    matching "each detected contradiction is one piece of evidence".
+    matching "each detected contradiction is one piece of evidence" --
+    which is also the corroboration path: two weak flags, or a weak plus
+    a strong one, still accumulate past the gate.
     Subjects are processed in sorted order per flag so the resulting
     state is deterministic regardless of subject tuple ordering -- a
     precondition for replay-stable belief snapshots.
@@ -344,9 +372,14 @@ def apply_contradiction_rule(
             left_ref=contradiction.event_a_id,
             right_ref=contradiction.event_b_id,
         )
+        delta = (
+            WEAK_CONTRADICTION_SUSPICION_DELTA
+            if is_weak_contradiction(contradiction)
+            else CONTRADICTION_SUSPICION_DELTA
+        )
         for subject in sorted(contradiction.subjects):
             result.record_contradiction(subject, belief_ref)
-            result.adjust_suspicion(subject, delta=CONTRADICTION_SUSPICION_DELTA)
+            result.adjust_suspicion(subject, delta=delta)
     return result
 
 
@@ -356,6 +389,7 @@ __all__ = [
     "CONTRADICTION_SUSPICION_DELTA",
     "OBSERVED_VENT_ACTION",
     "VENTING_SUSPICION_DELTA",
+    "WEAK_CONTRADICTION_SUSPICION_DELTA",
     "AlibiClaim",
     "BeliefState",
     "ContradictionRef",

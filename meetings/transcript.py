@@ -37,13 +37,24 @@ turn and returns a sorted tuple of
 :class:`meetings.schemas.ContradictionRef` flags. Downstream consumers
 -- the turn / vote prompt renderers, the agent-side rendered memory view
 in §6.6 -- decide how to surface and weigh these flags.
+
+Task 9.7 (audit gp-1 precision): an ``alibi_vs_sighting`` flag whose
+alibi is *self-stated* (the speaker is the alibi's own subject) or whose
+alibi window is *narrow* (below :data:`NARROW_ALIBI_WINDOW_TICKS`) is a
+known false-positive pattern -- 13/13 wrong ejections in the 9.5
+baseline were lone contradictions of this shape. The detector still
+emits the flag (the recorded flag set stays the honest full set) but
+appends a :data:`WEAK_CONTRADICTION_MARKER_PREFIX` audit marker to the
+description; :func:`is_weak_contradiction` is the predicate consumers
+(belief Rule 2 in :mod:`agents.memory.beliefs`) use to apply a
+graduated, below-gate suspicion delta instead of the full one.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Literal
+from typing import Final, Literal
 
 from meetings.schemas import (
     AccusationClaim,
@@ -314,6 +325,52 @@ def is_canonically_ordered(turns: Iterable[MeetingTurn]) -> bool:
 # Contradiction detection (DESIGN.md §5.4, §6.4)
 # ---------------------------------------------------------------------------
 
+# Task 9.7 weak-signal classification (DESIGN.md §5.4; audit
+# audit-2026-06-09-0347 gp-1 precision). An ``alibi_vs_sighting`` whose
+# alibi window spans fewer than this many ticks is tick-boundary noise:
+# movement resolves one room per tick, so a 1-2 tick claim and a sighting
+# at the range edge can both be honest accounts of the same transit.
+NARROW_ALIBI_WINDOW_TICKS: Final[int] = 2
+
+# Audit-trail marker appended to a weak ``alibi_vs_sighting`` description.
+# Mirrors the canonical-marker convention in :mod:`meetings.manager`
+# (``INVALID_VOTE_TARGET_MARKER`` et al.): a pinned literal downstream
+# code matches on. :func:`is_weak_contradiction` is the one reader; the
+# description also renders into turn / ballot prompts, so the LLM sees
+# *why* the flag is down-weighted (§5.4 "flags are information"). The
+# marker is detector-appended, never parsed back out of LLM free text,
+# and the full flag set is still emitted -- weak flags are down-weighted
+# by belief Rule 2, not filtered. Pin the literal exactly.
+WEAK_CONTRADICTION_MARKER_PREFIX: Final[str] = "[weak signal: "
+
+# Reason literals joined (in this order, "; "-separated) inside the weak
+# marker. Self-stated: the alibi's speaker is its own subject, so a third
+# party's sighting contradicts only the subject's own coarse recollection
+# (8/13 audited wrong ejections were the body reporter railroaded this
+# way). Narrow window: see ``NARROW_ALIBI_WINDOW_TICKS``.
+WEAK_REASON_SELF_STATED: Final[str] = "self-stated alibi"
+WEAK_REASON_NARROW_WINDOW: Final[str] = "narrow alibi window"
+
+
+def is_weak_contradiction(flag: ContradictionRef) -> bool:
+    """Whether ``flag`` is a detector-flagged weak signal (Task 9.7).
+
+    True iff the flag is an ``alibi_vs_sighting`` whose description
+    carries the :data:`WEAK_CONTRADICTION_MARKER_PREFIX` audit marker the
+    detector appended for a self-stated or narrow-window alibi. Belief
+    Rule 2 (:func:`agents.memory.beliefs.apply_contradiction_rule`) keys
+    its graduated down-weight on this predicate; keeping the predicate
+    beside the marker writer means the two cannot drift. Re-derivable:
+    re-running the pure detector on the same transcript re-produces the
+    same marker, so the classification survives any record/replay
+    round-trip without a schema field.
+    """
+
+    return (
+        flag.kind == "alibi_vs_sighting"
+        and WEAK_CONTRADICTION_MARKER_PREFIX in flag.description
+    )
+
 
 def detect_contradictions(
     transcript: MeetingTranscript,
@@ -392,17 +449,24 @@ def _subject_in_roster(subject: PlayerId, roster: frozenset[PlayerId]) -> bool:
 
 @dataclass(frozen=True)
 class _IndexedAlibi:
-    """An :class:`AlibiClaim` paired with its synthetic event id."""
+    """An :class:`AlibiClaim` paired with its event id and speaker.
+
+    ``speaker`` is the player who *stated* the claim (``turn.speaker``),
+    which the Task 9.7 weak-signal classification compares against the
+    claim's ``subject`` to recognise a self-stated alibi.
+    """
 
     event_id: str
+    speaker: PlayerId
     claim: AlibiClaim
 
 
 @dataclass(frozen=True)
 class _IndexedSighting:
-    """A :class:`SawPlayerObservation` paired with its synthetic event id."""
+    """A :class:`SawPlayerObservation` paired with its event id and speaker."""
 
     event_id: str
+    speaker: PlayerId
     observation: SawPlayerObservation
 
 
@@ -412,6 +476,7 @@ def _iter_alibis(transcript: MeetingTranscript) -> Iterator[_IndexedAlibi]:
             if isinstance(claim, AlibiClaim):
                 yield _IndexedAlibi(
                     event_id=_turn_claim_id(turn=turn, index=index),
+                    speaker=turn.speaker,
                     claim=claim,
                 )
 
@@ -422,6 +487,7 @@ def _iter_sightings(transcript: MeetingTranscript) -> Iterator[_IndexedSighting]
             if isinstance(observation, SawPlayerObservation):
                 yield _IndexedSighting(
                     event_id=_turn_observation_id(turn=turn, index=index),
+                    speaker=turn.speaker,
                     observation=observation,
                 )
 
@@ -460,6 +526,7 @@ def _detect_alibi_vs_sightings(
     sightings: tuple[_IndexedSighting, ...],
 ) -> Iterator[ContradictionRef]:
     for alibi in alibis:
+        weak_reasons = _weak_signal_reasons(alibi)
         for sighting in sightings:
             if sighting.observation.subject != alibi.claim.subject:
                 continue
@@ -477,9 +544,28 @@ def _detect_alibi_vs_sightings(
                 event_b_id=sighting.event_id,
                 subjects=(alibi.claim.subject,),
                 description=_describe_alibi_vs_sighting(
-                    alibi=alibi.claim, sighting=sighting.observation
+                    alibi=alibi.claim,
+                    sighting=sighting.observation,
+                    weak_reasons=weak_reasons,
                 ),
             )
+
+
+def _weak_signal_reasons(alibi: _IndexedAlibi) -> tuple[str, ...]:
+    """The Task 9.7 false-positive patterns ``alibi`` matches, if any.
+
+    Both patterns are properties of the alibi side alone, so the
+    classification is computed once per alibi regardless of how many
+    sightings it is paired with. Order is fixed (self-stated, then
+    narrow window) so the rendered marker is byte-stable across runs.
+    """
+
+    reasons: list[str] = []
+    if alibi.speaker == alibi.claim.subject:
+        reasons.append(WEAK_REASON_SELF_STATED)
+    if alibi.claim.to_tick - alibi.claim.from_tick < NARROW_ALIBI_WINDOW_TICKS:
+        reasons.append(WEAK_REASON_NARROW_WINDOW)
+    return tuple(reasons)
 
 
 # -- Internal: construction -------------------------------------------------
@@ -524,13 +610,19 @@ def _describe_alibi_conflict(left: AlibiClaim, right: AlibiClaim) -> str:
 
 
 def _describe_alibi_vs_sighting(
-    *, alibi: AlibiClaim, sighting: SawPlayerObservation
+    *,
+    alibi: AlibiClaim,
+    sighting: SawPlayerObservation,
+    weak_reasons: tuple[str, ...] = (),
 ) -> str:
-    return (
+    base = (
         f"Alibi places {alibi.subject} in {alibi.room} "
         f"(ticks {alibi.from_tick}-{alibi.to_tick}); sighting reports "
         f"{sighting.subject} in {sighting.room} at tick {sighting.tick}."
     )
+    if not weak_reasons:
+        return base
+    return f"{base} {WEAK_CONTRADICTION_MARKER_PREFIX}{'; '.join(weak_reasons)}]"
 
 
 # -- Internal: event ids and predicates -------------------------------------
@@ -551,12 +643,17 @@ def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
 
 
 __all__ = [
+    "NARROW_ALIBI_WINDOW_TICKS",
+    "WEAK_CONTRADICTION_MARKER_PREFIX",
+    "WEAK_REASON_NARROW_WINDOW",
+    "WEAK_REASON_SELF_STATED",
     "ChainStep",
     "ChainTermination",
     "ChainWalk",
     "accusation_target",
     "detect_contradictions",
     "is_canonically_ordered",
+    "is_weak_contradiction",
     "next_chain_step",
     "sort_turns_canonically",
     "walk_chain",
