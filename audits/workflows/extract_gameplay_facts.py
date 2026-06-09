@@ -33,6 +33,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import statistics
 import subprocess
 import sys
 from collections import Counter
@@ -50,7 +52,11 @@ from engine.events import (
 )
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
-from meetings.manager import _opt_in_eligible_ids
+from meetings.manager import (
+    INVALID_ACCUSATION_TARGET_MARKER,
+    INVALID_VOTE_TARGET_MARKER,
+    _opt_in_eligible_ids,
+)
 from meetings.schemas import AccusationClaim, MeetingResult, MeetingTranscript, TurnKind
 from meetings.transcript import is_canonically_ordered, next_chain_step
 from orchestrator.game import apply_meeting_result
@@ -71,9 +77,76 @@ SEEDSET = "9p2i"
 # Action adapter for deserializing recorded raw actions.
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
+# v3 (conversion / 9B-artifact) constants.
+#
+# The rendered §4.6 vote-gate line in the v5 vote prompt (meetings.manager builds
+# it; surveyed across the committed 9p2i prompts as
+# "...maximum suspicion among the living ejection targets is    **0.80**; the
+# skip threshold is **0.60**..."). The capture group is the rendered MAX over the
+# living ejection targets that the voter was shown; the SKIP partition classifies
+# each SKIP ballot CORRECT (rendered max < 0.60) vs MISSED (rendered max >= 0.60).
+_VOTE_MAX_SUSPICION_RE: re.Pattern[str] = re.compile(
+    r"maximum suspicion among the living ejection targets is\s*\*\*([0-9]*\.?[0-9]+)\*\*"
+)
+_SKIP_THRESHOLD = 0.60
+
+# Marker *prefixes* (the literal text minus the {target!r} placeholder) the
+# meeting layer writes when it DROPS a hallucinated non-living target (fb3cfa5):
+# an accusation-claim target is dropped and the original recorded on the turn's
+# free_text; a ballot target is normalised to SKIP and the original recorded on
+# the ballot's rationale_text. Split on "{target!r}" so the prefix matches
+# regardless of the (quoted) id that follows.
+_INVALID_ACC_MARKER_PREFIX = INVALID_ACCUSATION_TARGET_MARKER.split("{target!r}")[0]
+_INVALID_VOTE_MARKER_PREFIX = INVALID_VOTE_TARGET_MARKER.split("{target!r}")[0]
+
+# A defaulted-turn failed_call carries the turn coordinates in its error_message,
+# e.g. "reply turn (turn 1) defaulted (validation); p-9 submitted no turn ...".
+_DEFAULTED_TURN_RE: re.Pattern[str] = re.compile(
+    r"(?P<kind>opening|reply|opt_in) turn \(turn (?P<index>\d+)\) defaulted"
+    r"[^;]*;\s*(?P<speaker>\S+) submitted no turn"
+)
+
+# Full invalid-accusation-target marker, including the quoted id it wraps, so the
+# whole "[invalid accusation target 'imp-2' dropped] " span can be stripped out
+# before measuring the model's actual prose length.
+_INVALID_ACC_MARKER_FULL_RE: re.Pattern[str] = re.compile(
+    re.escape(_INVALID_ACC_MARKER_PREFIX) + r".*?dropped\] "
+)
+
 
 def _deserialize_actions(raw_actions: list[dict[str, Any]]) -> list[Action]:
     return [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in raw_actions]
+
+
+def _parse_rendered_max_suspicion(prompt: str) -> float | None:
+    """Pull the rendered §4.6 max suspicion from a v5 vote prompt, or None.
+
+    Returns the float captured from the "maximum suspicion among the living
+    ejection targets is **X**" line. ``None`` means the prompt is not a vote
+    prompt (no such line) — the caller treats that as "could not classify".
+    """
+
+    match = _VOTE_MAX_SUSPICION_RE.search(prompt)
+    if match is None:
+        return None
+    return float(match.group(1))
+
+
+def _length_distribution(samples: list[int]) -> dict[str, Any]:
+    """median / p95 / max char-length over a turn-kind's non-defaulted turns."""
+
+    if not samples:
+        return {"n": 0, "median": None, "p95": None, "max": None}
+    ordered = sorted(samples)
+    # Nearest-rank p95 (deterministic, no interpolation): the smallest sample
+    # at or above the 95th percentile position.
+    rank = max(0, min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1)))))
+    return {
+        "n": len(ordered),
+        "median": int(statistics.median(ordered)),
+        "p95": ordered[rank],
+        "max": ordered[-1],
+    }
 
 
 def _git_head() -> str:
@@ -478,9 +551,25 @@ def _analyze_meeting(
         )
 
     # ---- Accusations (all turn kinds), 7.12 firewall, dead speakers ----
+    # Also: per-turn invalid-accusation-target drops (fb3cfa5 marker on
+    # free_text — model-hallucination signal, NOT a violation) and free_text
+    # length samples per turn_kind over NON-defaulted turns (a defaulted turn
+    # has an empty free_text; the burned-token verbosity lives on the
+    # failed_call record instead, handled in the per-game failed-call loop).
     accusations: list[dict[str, Any]] = []
+    invalid_accusation_target_drops = 0
+    free_text_lengths: dict[str, list[int]] = {"opening": [], "reply": [], "opt_in": []}
     for t in turns:
         speaker_role = roles.get(t.speaker, "UNKNOWN")
+        ft = t.free_text or ""
+        if _INVALID_ACC_MARKER_PREFIX in ft:
+            invalid_accusation_target_drops += ft.count(_INVALID_ACC_MARKER_PREFIX)
+        # Strip the audit-trail marker span before measuring length so it doesn't
+        # inflate the model's prose length; only measure turns the model actually
+        # produced text for (a defaulted turn has empty free_text).
+        measured = _INVALID_ACC_MARKER_FULL_RE.sub("", ft)
+        if measured.strip():
+            free_text_lengths.setdefault(t.turn_kind, []).append(len(measured))
         if t.speaker not in living_ids:
             findings.append(
                 {
@@ -559,19 +648,69 @@ def _analyze_meeting(
         if t.turn_kind == "opt_in"
     ]
 
+    # ---- Per-voter rendered §4.6 max suspicion (for the SKIP partition) ----
+    # Match each ballot to the voter's vote-prompt llm_call (the call whose
+    # prompt carries the rendered "maximum suspicion ... is **X**" line) by
+    # agent_id, and regex the rendered max the voter was shown. A voter can have
+    # both a turn call and a vote call; only the vote call carries the line.
+    rendered_max_by_voter: dict[str, float] = {}
+    for call in meeting_entry.llm_calls:
+        if call.agent_id is None:
+            continue
+        rendered = _parse_rendered_max_suspicion(call.prompt)
+        if rendered is not None:
+            rendered_max_by_voter[call.agent_id] = rendered
+
     # ---- Ballots: roles, skip, follows-chain, dangling reason, firewall ----
     ejected_id = meeting_entry.ejected_player_id
     ejected_role = roles.get(ejected_id) if ejected_id is not None else None
     ballots_out: list[dict[str, Any]] = []
     skip_count = 0
+    invalid_ballot_target_drops = 0
+    skip_correct = 0
+    skip_missed = 0
+    skip_unclassified = 0
+    threshold_inversions: list[dict[str, Any]] = []
     for b in meeting_entry.ballots:
         voter_role = roles.get(b.voter, "UNKNOWN")
         is_skip = b.target == "SKIP"
         target_role = None if is_skip else roles.get(b.target, "UNKNOWN")
-        follows_chain: bool | None = None
+        # Invalid ballot-target normalization (fb3cfa5): an out-of-roster target
+        # is rewritten to SKIP and the original recorded on rationale_text. Count
+        # it as a hallucination signal and remember it so the SKIP partition and
+        # the threshold-inversion test can exclude these by-design coercions.
+        is_invalid_target_skip = _INVALID_VOTE_MARKER_PREFIX in (b.rationale_text or "")
+        if is_invalid_target_skip:
+            invalid_ballot_target_drops += 1
+        # Firewall coercion: an impostor voter whose rendered max is met but who
+        # SKIPs to avoid voting a fellow impostor is a by-design protection, not
+        # a genuine threshold inversion. Detect by checking whether every living
+        # ejection target with suspicion >= threshold is a fellow impostor — we
+        # cannot see the per-target graph here, so we approximate conservatively:
+        # treat an impostor voter's met-threshold SKIP as a firewall coercion
+        # (impostors are the only role the firewall protects), excluded below.
+        rendered_max = rendered_max_by_voter.get(b.voter)
         if is_skip:
             skip_count += 1
-        else:
+            if rendered_max is None:
+                skip_unclassified += 1
+            elif rendered_max < _SKIP_THRESHOLD:
+                skip_correct += 1
+            else:
+                skip_missed += 1
+                # Genuine threshold INVERSION = rendered max >= threshold over a
+                # living target yet SKIP, MINUS firewall coercions (impostor
+                # voter) and invalid-target normalizations.
+                if voter_role != "IMPOSTOR" and not is_invalid_target_skip:
+                    threshold_inversions.append(
+                        {
+                            "voter": b.voter,
+                            "voter_role": voter_role,
+                            "rendered_max": rendered_max,
+                        }
+                    )
+        follows_chain: bool | None = None
+        if not is_skip:
             follows_chain = False
             if b.primary_reason_id is not None and b.primary_reason_id in turn_by_id:
                 cited = turn_by_id[b.primary_reason_id]
@@ -697,6 +836,13 @@ def _analyze_meeting(
         "opt_in_eligible_derived": list(derived_eligible),
         "ballots": ballots_out,
         "skip_count": skip_count,
+        "skip_correct": skip_correct,
+        "skip_missed": skip_missed,
+        "skip_unclassified": skip_unclassified,
+        "threshold_inversions": threshold_inversions,
+        "invalid_accusation_target_drops": invalid_accusation_target_drops,
+        "invalid_ballot_target_drops": invalid_ballot_target_drops,
+        "free_text_lengths": free_text_lengths,
         "n_contradictions": len(meeting_entry.contradictions),
     }
 
@@ -753,6 +899,29 @@ def main() -> int:
     ballots_follow_chain = 0
     ballots_non_skip_null_reason = 0
     total_contradictions = 0
+    # v3 conversion / 9B-artifact aggregates.
+    ejections_total = 0
+    ejections_impostor = 0
+    wrong_ejections: list[dict[str, Any]] = []
+    skip_correct_total = 0
+    skip_missed_total = 0
+    skip_unclassified_total = 0
+    threshold_inversions_all: list[dict[str, Any]] = []
+    invalid_accusation_target_drops_total = 0
+    invalid_ballot_target_drops_total = 0
+    invalid_accusation_target_seeds: set[int] = set()
+    invalid_ballot_target_seeds: set[int] = set()
+    free_text_len_samples: dict[str, list[int]] = {
+        "opening": [],
+        "reply": [],
+        "opt_in": [],
+    }
+    defaulted_turns: list[dict[str, Any]] = []
+    defaulted_turn_unparsed = 0
+    duplicate_failed_call_rows = 0
+    duplicate_failed_call_input_tokens = 0
+    duplicate_failed_call_output_tokens = 0
+    duplicate_failed_call_seeds: set[int] = set()
 
     for path in replay_paths:
         seed = int(path.stem.rsplit("-", 1)[1])
@@ -997,12 +1166,34 @@ def main() -> int:
                     ballots_non_skip_null_reason += 1
             total_contradictions += m_facts["n_contradictions"]
 
+            # v3 conversion / 9B-artifact aggregates.
+            skip_correct_total += m_facts["skip_correct"]
+            skip_missed_total += m_facts["skip_missed"]
+            skip_unclassified_total += m_facts["skip_unclassified"]
+            for inv in m_facts["threshold_inversions"]:
+                threshold_inversions_all.append({"seed": seed, **inv})
+            invalid_accusation_target_drops_total += m_facts[
+                "invalid_accusation_target_drops"
+            ]
+            invalid_ballot_target_drops_total += m_facts["invalid_ballot_target_drops"]
+            if m_facts["invalid_accusation_target_drops"]:
+                invalid_accusation_target_seeds.add(seed)
+            if m_facts["invalid_ballot_target_drops"]:
+                invalid_ballot_target_seeds.add(seed)
+            for kind, lengths in m_facts["free_text_lengths"].items():
+                free_text_len_samples[kind].extend(lengths)
+
             ejected_id = meeting_entry.ejected_player_id
             ejected_role = roles.get(ejected_id) if ejected_id is not None else None
             if ejected_id is not None and ejected_role is not None:
                 ejections_by_role[ejected_role] = (
                     ejections_by_role.get(ejected_role, 0) + 1
                 )
+                ejections_total += 1
+                if ejected_role == "IMPOSTOR":
+                    ejections_impostor += 1
+                elif ejected_role == "CREWMATE":
+                    wrong_ejections.append({"seed": seed, "ejected_player": ejected_id})
 
             # Per-call token totals from this meeting's llm_calls.
             for call in meeting_entry.llm_calls:
@@ -1039,13 +1230,58 @@ def main() -> int:
                 break
 
         # Failed-call accounting (these carry burned tokens for the aborted run).
+        # On the 9B set these are FAIL-SOFT defaulted turns (lens H): a turn whose
+        # structured output truncated at the output cap so the manager defaulted
+        # the turn and the meeting still resolved. The turn coordinates
+        # (turn_kind / turn_index / speaker) are encoded in the error_message
+        # ("reply turn (turn 1) defaulted (validation); p-9 submitted no turn ...").
         failed_calls_out: list[dict[str, Any]] = []
+        seen_failed_call_keys: set[tuple[Any, ...]] = set()
         for fc in failed_call_entries:
             total_failed_calls += 1
             total_calls += 1
             agg_input_tokens += fc.input_tokens
             agg_output_tokens += fc.output_tokens
             agg_cost += fc.cost_usd
+            # Detect byte-identical duplicate failed_call rows (the same
+            # defaulted-turn failure recorded twice; seeds 8/36/39). The key
+            # spans every distinguishing field, so two genuinely-distinct
+            # failures never collide.
+            fc_key = (
+                fc.meeting_id,
+                fc.tick,
+                fc.error_message,
+                fc.raw_response,
+                fc.input_tokens,
+                fc.output_tokens,
+            )
+            if fc_key in seen_failed_call_keys:
+                duplicate_failed_call_rows += 1
+                duplicate_failed_call_input_tokens += fc.input_tokens
+                duplicate_failed_call_output_tokens += fc.output_tokens
+                duplicate_failed_call_seeds.add(seed)
+            seen_failed_call_keys.add(fc_key)
+            parsed = _DEFAULTED_TURN_RE.search(fc.error_message)
+            turn_kind = parsed.group("kind") if parsed else None
+            turn_index = int(parsed.group("index")) if parsed else None
+            speaker = parsed.group("speaker") if parsed else None
+            if fc.error_type == "deadline_default":
+                if parsed is not None:
+                    fc_speaker = parsed.group("speaker")
+                    defaulted_turns.append(
+                        {
+                            "seed": seed,
+                            "meeting_id": fc.meeting_id,
+                            "tick": fc.tick,
+                            "turn_index": turn_index,
+                            "turn_kind": turn_kind,
+                            "speaker": fc_speaker,
+                            "speaker_role": roles.get(fc_speaker, "UNKNOWN"),
+                            "output_tokens": fc.output_tokens,
+                        }
+                    )
+                else:
+                    defaulted_turn_unparsed += 1
             failed_calls_out.append(
                 {
                     "meeting_id": fc.meeting_id,
@@ -1053,6 +1289,9 @@ def main() -> int:
                     "model": fc.model,
                     "error_type": fc.error_type,
                     "error_message": fc.error_message[:200],
+                    "turn_kind": turn_kind,
+                    "turn_index": turn_index,
+                    "speaker": speaker,
                     "input_tokens": fc.input_tokens,
                     "output_tokens": fc.output_tokens,
                     "cost_usd": fc.cost_usd,
@@ -1305,6 +1544,80 @@ def main() -> int:
             "non_skip_with_null_reason": ballots_non_skip_null_reason,
         },
         "total_contradictions": total_contradictions,
+        "ejection_accuracy": {
+            "total_ejections": ejections_total,
+            "impostor_ejections": ejections_impostor,
+            "accuracy": (
+                round(ejections_impostor / ejections_total, 4)
+                if ejections_total
+                else None
+            ),
+            "wrong_ejections": wrong_ejections,
+        },
+        "skip_partition": {
+            "skip_ballots": total_skip_ballots,
+            "correct": skip_correct_total,
+            "missed": skip_missed_total,
+            "unclassified": skip_unclassified_total,
+            "note": (
+                "CORRECT = rendered §4.6 max < 0.60; MISSED = rendered max >= "
+                "0.60 over a living target yet voter SKIPped. unclassified = SKIP "
+                "ballot with no matched vote-prompt suspicion line."
+            ),
+        },
+        "threshold_inversions": {
+            "count": len(threshold_inversions_all),
+            "note": (
+                "rendered max >= 0.60 over a living target yet target == SKIP, "
+                "MINUS firewall coercions (impostor voter) and invalid-target "
+                "normalizations; ~0 expected on a clean baseline."
+            ),
+            "records": threshold_inversions_all,
+        },
+        "invalid_accusation_target_drops": {
+            "accusation_claim_drops": invalid_accusation_target_drops_total,
+            "accusation_claim_seeds": sorted(invalid_accusation_target_seeds),
+            "ballot_target_drops": invalid_ballot_target_drops_total,
+            "ballot_target_seeds": sorted(invalid_ballot_target_seeds),
+            "total": (
+                invalid_accusation_target_drops_total
+                + invalid_ballot_target_drops_total
+            ),
+        },
+        "defaulted_turns": {
+            "count": len(defaulted_turns),
+            "distinct": len(
+                {
+                    (d["seed"], d["meeting_id"], d["turn_index"], d["speaker"])
+                    for d in defaulted_turns
+                }
+            ),
+            "unparsed": defaulted_turn_unparsed,
+            "by_turn_kind": dict(
+                Counter(d["turn_kind"] for d in defaulted_turns)
+            ),
+            "note": (
+                "count includes byte-identical duplicate failed_call rows "
+                "(seeds 8/36/39 emit the same defaulted-turn row twice); "
+                "distinct is the de-duplicated turn count."
+            ),
+            "records": defaulted_turns,
+        },
+        "free_text_length_chars": {
+            kind: _length_distribution(samples)
+            for kind, samples in free_text_len_samples.items()
+        },
+        "duplicate_failed_call_rows": {
+            "count": duplicate_failed_call_rows,
+            "seeds": sorted(duplicate_failed_call_seeds),
+            "double_counted_input_tokens": duplicate_failed_call_input_tokens,
+            "double_counted_output_tokens": duplicate_failed_call_output_tokens,
+            "note": (
+                "byte-identical failed_call rows written twice for one "
+                "defaulted turn; inflates failed-call token telemetry but "
+                "not meeting outcomes."
+            ),
+        },
         "total_calls": total_calls,
         "total_failed_calls": total_failed_calls,
         "tokens": {
