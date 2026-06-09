@@ -6,18 +6,32 @@ Exercises the pure chain logic that backs the reactive accusation chain
 helpers are the single source of truth shared by
 :class:`meetings.manager.MeetingManager` (recording) and the replay-walk
 (reconstruction), so these tests pin the determinism the replay invariant
-relies on. Contradiction detection over ``transcript.turns`` lives in
-``test_contradictions.py``.
+relies on. General contradiction detection over ``transcript.turns``
+lives in ``test_contradictions.py``; the Task 9.7 weak-signal
+classification (DESIGN.md §5.4; audit gp-1 precision) is pinned here.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from meetings.schemas import AccusationClaim, MeetingTranscript, MeetingTurn
+from meetings.schemas import (
+    AccusationClaim,
+    AlibiClaim,
+    ContradictionRef,
+    MeetingTranscript,
+    MeetingTurn,
+    SawPlayerObservation,
+)
 from meetings.transcript import (
+    NARROW_ALIBI_WINDOW_TICKS,
+    WEAK_CONTRADICTION_MARKER_PREFIX,
+    WEAK_REASON_NARROW_WINDOW,
+    WEAK_REASON_SELF_STATED,
     accusation_target,
+    detect_contradictions,
     is_canonically_ordered,
+    is_weak_contradiction,
     next_chain_step,
     sort_turns_canonically,
     walk_chain,
@@ -275,3 +289,284 @@ class TestIsCanonicallyOrdered:
         )
 
         assert is_canonically_ordered(turns) is False
+
+
+# --- Weak-signal classification (Task 9.7; DESIGN.md §5.4, audit gp-1) ------
+
+
+def _alibi_turn(
+    *,
+    turn_index: int,
+    speaker: str,
+    subject: str,
+    from_tick: int,
+    to_tick: int,
+    room: str,
+) -> MeetingTurn:
+    return MeetingTurn(
+        turn_id=f"m-1:turn-{turn_index}",
+        turn_index=turn_index,
+        speaker=speaker,
+        turn_kind="opening" if turn_index == 0 else "reply",
+        reply_to=None,
+        claims=(
+            AlibiClaim(
+                type="alibi",
+                subject=subject,
+                from_tick=from_tick,
+                to_tick=to_tick,
+                room=room,
+            ),
+        ),
+        free_text=f"turn {turn_index}",
+    )
+
+
+def _sighting_turn(
+    *, turn_index: int, speaker: str, subject: str, tick: int, room: str
+) -> MeetingTurn:
+    return MeetingTurn(
+        turn_id=f"m-1:turn-{turn_index}",
+        turn_index=turn_index,
+        speaker=speaker,
+        turn_kind="opening" if turn_index == 0 else "reply",
+        reply_to=None,
+        observations=(
+            SawPlayerObservation(
+                type="saw_player", tick=tick, subject=subject, room=room
+            ),
+        ),
+        free_text=f"turn {turn_index}",
+    )
+
+
+class TestWeakContradictionClassification:
+    """Task 9.7: the detector marks the audited false-positive patterns.
+
+    A lone ``alibi_vs_sighting`` railroaded 13/13 wrong ejections in the
+    9.5 baseline; 8/13 were the reporter's own self-stated alibi against
+    a third party's sighting. The detector still emits every flag (the
+    recorded set stays honest) but appends the weak audit marker for the
+    two patterns, and :func:`is_weak_contradiction` is the predicate
+    belief Rule 2 keys its graduated delta on.
+    """
+
+    def test_self_stated_alibi_vs_third_party_sighting_is_weak(self) -> None:
+        # The seed-3 audited shape: the reporter's own alibi (CAFETERIA)
+        # against a third party's sighting of them (EAST_HALL).
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-5",
+                    subject="p-5",
+                    from_tick=100,
+                    to_tick=200,
+                    room="CAFETERIA",
+                ),
+                _sighting_turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    subject="p-5",
+                    tick=150,
+                    room="EAST_HALL",
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+
+        assert len(flags) == 1
+        flag = flags[0]
+        assert flag.kind == "alibi_vs_sighting"
+        assert WEAK_CONTRADICTION_MARKER_PREFIX in flag.description
+        assert WEAK_REASON_SELF_STATED in flag.description
+        assert WEAK_REASON_NARROW_WINDOW not in flag.description
+        assert is_weak_contradiction(flag) is True
+
+    def test_third_party_alibi_wide_window_stays_strong(self) -> None:
+        # Two third parties disagreeing about the subject's location is
+        # the strong pattern: no marker, full Rule-2 weight downstream.
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    subject="p-5",
+                    from_tick=100,
+                    to_tick=200,
+                    room="CAFETERIA",
+                ),
+                _sighting_turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    subject="p-5",
+                    tick=150,
+                    room="EAST_HALL",
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+
+        assert len(flags) == 1
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flags[0].description
+        assert is_weak_contradiction(flags[0]) is False
+
+    def test_narrow_window_third_party_alibi_is_weak(self) -> None:
+        # A 2-tick claim and an in-range sighting elsewhere can both be
+        # honest accounts of one transit (movement is one room per tick).
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    subject="p-5",
+                    from_tick=3,
+                    to_tick=4,
+                    room="STORAGE",
+                ),
+                _sighting_turn(
+                    turn_index=1, speaker="p-2", subject="p-5", tick=3, room="MEDBAY"
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+
+        assert len(flags) == 1
+        assert WEAK_REASON_NARROW_WINDOW in flags[0].description
+        assert WEAK_REASON_SELF_STATED not in flags[0].description
+        assert is_weak_contradiction(flags[0]) is True
+
+    def test_window_at_threshold_is_not_narrow(self) -> None:
+        # Boundary pin: width == NARROW_ALIBI_WINDOW_TICKS is NOT narrow
+        # ("below a small constant"), so a third-party claim spanning it
+        # keeps full weight.
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    subject="p-5",
+                    from_tick=100,
+                    to_tick=100 + NARROW_ALIBI_WINDOW_TICKS,
+                    room="STORAGE",
+                ),
+                _sighting_turn(
+                    turn_index=1, speaker="p-2", subject="p-5", tick=101, room="MEDBAY"
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+
+        assert len(flags) == 1
+        assert is_weak_contradiction(flags[0]) is False
+
+    def test_self_stated_and_narrow_reasons_render_in_fixed_order(self) -> None:
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-5",
+                    subject="p-5",
+                    from_tick=7,
+                    to_tick=7,
+                    room="ADMIN",
+                ),
+                _sighting_turn(
+                    turn_index=1, speaker="p-2", subject="p-5", tick=7, room="MEDBAY"
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+
+        assert len(flags) == 1
+        marker = (
+            f"{WEAK_CONTRADICTION_MARKER_PREFIX}"
+            f"{WEAK_REASON_SELF_STATED}; {WEAK_REASON_NARROW_WINDOW}]"
+        )
+        assert flags[0].description.endswith(marker)
+        assert is_weak_contradiction(flags[0]) is True
+
+    def test_alibi_conflict_is_never_weak(self) -> None:
+        # The classification is alibi_vs_sighting-only: a self-stated
+        # narrow alibi conflicting with ANOTHER ALIBI is two positive
+        # claims that cannot both be true, not sighting noise.
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-5",
+                    subject="p-5",
+                    from_tick=7,
+                    to_tick=7,
+                    room="ADMIN",
+                ),
+                _alibi_turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    subject="p-5",
+                    from_tick=7,
+                    to_tick=7,
+                    room="MEDBAY",
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_conflict"
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flags[0].description
+        assert is_weak_contradiction(flags[0]) is False
+
+    def test_weak_classification_is_deterministic(self) -> None:
+        # Re-running the pure detector yields byte-identical flags,
+        # marker included -- the replay-determinism contract.
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-5",
+                    subject="p-5",
+                    from_tick=100,
+                    to_tick=200,
+                    room="CAFETERIA",
+                ),
+                _sighting_turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    subject="p-5",
+                    tick=150,
+                    room="EAST_HALL",
+                ),
+            )
+        )
+        first = detect_contradictions(transcript)
+        second = detect_contradictions(transcript)
+
+        assert first == second
+        assert [f.model_dump_json() for f in first] == [
+            f.model_dump_json() for f in second
+        ]
+
+    def test_predicate_requires_both_kind_and_marker(self) -> None:
+        # is_weak_contradiction is kind-gated AND marker-gated: a marker
+        # on an alibi_conflict (never produced by the detector) and a
+        # marker-free alibi_vs_sighting are both strong.
+        marked_conflict = ContradictionRef(
+            contradiction_id="contra:alibi_conflict:a|b",
+            kind="alibi_conflict",
+            event_a_id="a",
+            event_b_id="b",
+            subjects=("p-5",),
+            description=f"x {WEAK_CONTRADICTION_MARKER_PREFIX}{WEAK_REASON_SELF_STATED}]",
+        )
+        unmarked_sighting = ContradictionRef(
+            contradiction_id="contra:alibi_vs_sighting:a|b",
+            kind="alibi_vs_sighting",
+            event_a_id="a",
+            event_b_id="b",
+            subjects=("p-5",),
+            description="no marker here",
+        )
+
+        assert is_weak_contradiction(marked_conflict) is False
+        assert is_weak_contradiction(unmarked_sighting) is False

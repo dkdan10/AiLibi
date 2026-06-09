@@ -75,7 +75,12 @@ from meetings.schemas import (
     SawPlayerObservation,
     VoteBallot,
 )
-from meetings.transcript import is_canonically_ordered, walk_chain
+from meetings.transcript import (
+    WEAK_CONTRADICTION_MARKER_PREFIX,
+    WEAK_REASON_SELF_STATED,
+    is_canonically_ordered,
+    walk_chain,
+)
 
 _T = TypeVar("_T")
 
@@ -979,6 +984,277 @@ def _suspicion_of(player_id: str, suspicion_line: str) -> float:
         if part.startswith(f"{player_id}:"):
             return float(part.split(":")[1].split("/")[0])
     raise AssertionError(f"{player_id} not found in {suspicion_line!r}")
+
+
+def _vote_prompt_suspicion(client: _ScriptedLLMClient, *, voter: str, of: str) -> float:
+    """The rendered suspicion of ``of`` in ``voter``'s ballot prompt."""
+
+    vote_calls = [c for c in client.calls if "PHASE=VOTE" in c.prompt]
+    call = next(c for c in vote_calls if f"voter={voter}\n" in c.prompt)
+    suspicion_line = next(
+        line for line in call.prompt.splitlines() if line.startswith("suspicion=")
+    )
+    return _suspicion_of(of, suspicion_line)
+
+
+# --- Detector precision: graduated weak-contradiction weight (Task 9.7) -----
+
+
+class TestDetectorPrecisionGraduatedSuspicion:
+    """Task 9.7 (DESIGN.md §5.4, §6.3 Rule 2, §4.6; audit gp-1 precision).
+
+    The production path end-to-end: ``detect_contradictions`` over the
+    final transcript -> belief Rule 2 -> the ballot-prompt suspicion
+    graph. A lone weak ``alibi_vs_sighting`` (self-stated / narrow
+    window) lands the subject in [0.5, 0.60) -- below the §4.6 0.60
+    eject gate the meeting runs with (``skip_confidence_threshold=0.6``
+    here, matching the production default), so the audited seed-3/16/47
+    railroad shapes no longer auto-eject. Corroboration -- a second
+    independent sighting, a strong contradiction, or a body-proximity
+    prior -- still carries the subject across the gate.
+    """
+
+    def test_seed3_shape_lone_self_stated_contradiction_stays_below_gate(
+        self,
+    ) -> None:
+        # The seed-3 audited false positive: the reporter p-1 self-states
+        # an alibi (CAFETERIA) and a third party's sighting places them
+        # in EAST_HALL inside the window. One weak flag: 0.5 + 0.08 =
+        # 0.58, suspicious but below the 0.60 gate.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-2": None},
+            claims_by={
+                "p-1": (
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-1",
+                        from_tick=100,
+                        to_tick=200,
+                        room="CAFETERIA",
+                    ),
+                ),
+            },
+            observations={
+                "p-2": (
+                    SawPlayerObservation(
+                        type="saw_player",
+                        subject="p-1",
+                        room="EAST_HALL",
+                        tick=150,
+                    ),
+                ),
+            },
+        )
+        result, client = _run_meeting(responder)
+
+        assert len(result.contradictions) == 1
+        flag = result.contradictions[0]
+        assert flag.kind == "alibi_vs_sighting"
+        assert flag.subjects == ("p-1",)
+        assert WEAK_CONTRADICTION_MARKER_PREFIX in flag.description
+        assert WEAK_REASON_SELF_STATED in flag.description
+
+        for voter in ("p-2", "p-3", "p-4"):
+            suspicion = _vote_prompt_suspicion(client, voter=voter, of="p-1")
+            assert suspicion == pytest.approx(0.58)
+            assert _DEFAULT_TEST_SUSPICION < suspicion < 0.6
+
+    def test_narrow_window_shape_stays_below_gate(self) -> None:
+        # The narrow-window false positive: a third party's 2-tick alibi
+        # claim about p-3 vs a sighting at the range edge is transit
+        # noise, not a lie. Weak flag -> 0.58 < 0.60.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-2": None},
+            claims_by={
+                "p-1": (
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-3",
+                        from_tick=3,
+                        to_tick=4,
+                        room="STORAGE",
+                    ),
+                ),
+            },
+            observations={
+                "p-2": (
+                    SawPlayerObservation(
+                        type="saw_player", subject="p-3", room="MEDBAY", tick=3
+                    ),
+                ),
+            },
+        )
+        result, client = _run_meeting(responder)
+
+        assert len(result.contradictions) == 1
+        suspicion = _vote_prompt_suspicion(client, voter="p-4", of="p-3")
+        assert suspicion == pytest.approx(0.58)
+        assert suspicion < 0.6
+
+    def test_second_independent_sighting_corroborates_across_gate(self) -> None:
+        # Corroboration converts: TWO third parties independently sight
+        # the self-alibi'd reporter elsewhere -> two weak flags ->
+        # 0.5 + 0.08 + 0.08 = 0.66 >= 0.60. The reporter stays ejectable
+        # on a second signal; only the lone-signal railroad is gone.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-2": "p-3", "p-3": None},
+            claims_by={
+                "p-1": (
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-1",
+                        from_tick=100,
+                        to_tick=200,
+                        room="CAFETERIA",
+                    ),
+                ),
+            },
+            observations={
+                "p-2": (
+                    SawPlayerObservation(
+                        type="saw_player",
+                        subject="p-1",
+                        room="EAST_HALL",
+                        tick=150,
+                    ),
+                ),
+                "p-3": (
+                    SawPlayerObservation(
+                        type="saw_player", subject="p-1", room="MEDBAY", tick=180
+                    ),
+                ),
+            },
+        )
+        result, client = _run_meeting(responder)
+
+        assert len(result.contradictions) == 2
+        suspicion = _vote_prompt_suspicion(client, voter="p-4", of="p-1")
+        assert suspicion == pytest.approx(0.66)
+        assert suspicion >= 0.6
+
+    def test_body_proximity_prior_plus_weak_flag_crosses_gate(self) -> None:
+        # The second signal can come from outside the meeting: a voter
+        # whose persistent beliefs already hold a Rule-1 body-proximity
+        # prior (0.5 + 0.2 = 0.7) sees the weak flag land on it ->
+        # 0.78 >= 0.60, while a prior-free voter stays at 0.58 < 0.60.
+        participants = (
+            _participant("p-1"),
+            _participant("p-2"),
+            _participant("p-3"),
+            _participant(
+                "p-4",
+                suspicion_graph=(
+                    SuspicionEntry(player_id="p-1", suspicion=0.7, trust=0.5),
+                ),
+            ),
+        )
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-2": None},
+            claims_by={
+                "p-1": (
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-1",
+                        from_tick=100,
+                        to_tick=200,
+                        room="CAFETERIA",
+                    ),
+                ),
+            },
+            observations={
+                "p-2": (
+                    SawPlayerObservation(
+                        type="saw_player",
+                        subject="p-1",
+                        room="EAST_HALL",
+                        tick=150,
+                    ),
+                ),
+            },
+        )
+        _, client = _run_meeting(responder, participants=participants)
+
+        corroborated = _vote_prompt_suspicion(client, voter="p-4", of="p-1")
+        assert corroborated == pytest.approx(0.78)
+        assert corroborated >= 0.6
+
+        prior_free = _vote_prompt_suspicion(client, voter="p-3", of="p-1")
+        assert prior_free == pytest.approx(0.58)
+        assert prior_free < 0.6
+
+    def test_third_party_contradiction_keeps_full_weight_and_crosses(self) -> None:
+        # Recall control: two third parties disagreeing about p-3 is the
+        # STRONG pattern and keeps the full 0.3 delta -> 0.8 >= 0.60.
+        # The graduated weight narrows precision; it does not weaken
+        # strong evidence.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-2": None},
+            claims_by={
+                "p-1": (
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-3",
+                        from_tick=100,
+                        to_tick=200,
+                        room="STORAGE",
+                    ),
+                ),
+            },
+            observations={
+                "p-2": (
+                    SawPlayerObservation(
+                        type="saw_player",
+                        subject="p-3",
+                        room="CAFETERIA",
+                        tick=150,
+                    ),
+                ),
+            },
+        )
+        result, client = _run_meeting(responder)
+
+        assert len(result.contradictions) == 1
+        assert (
+            WEAK_CONTRADICTION_MARKER_PREFIX not in result.contradictions[0].description
+        )
+        suspicion = _vote_prompt_suspicion(client, voter="p-4", of="p-3")
+        assert suspicion == pytest.approx(0.8)
+        assert suspicion >= 0.6
+
+    def test_graph_helper_applies_graduated_weight(self) -> None:
+        # Unit pin at the manager seam: a weak flag lifts a default-prior
+        # subject to 0.58, a strong flag to 0.8, in the same graph.
+        contradictions = (
+            ContradictionRef(
+                contradiction_id="c-weak",
+                kind="alibi_vs_sighting",
+                event_a_id="a",
+                event_b_id="b",
+                subjects=("p-2",),
+                description=(
+                    f"x {WEAK_CONTRADICTION_MARKER_PREFIX}{WEAK_REASON_SELF_STATED}]"
+                ),
+            ),
+            ContradictionRef(
+                contradiction_id="c-strong",
+                kind="alibi_vs_sighting",
+                event_a_id="c",
+                event_b_id="d",
+                subjects=("p-3",),
+                description="strong third-party flag",
+            ),
+        )
+        graph = _suspicion_graph_with_contradictions(
+            voter_id="p-1",
+            suspicion_graph=(),
+            contradictions=contradictions,
+        )
+
+        by_id = {entry.player_id: entry.suspicion for entry in graph}
+        assert by_id["p-2"] == pytest.approx(0.58)
+        assert by_id["p-2"] < 0.6
+        assert by_id["p-3"] == pytest.approx(0.8)
+        assert by_id["p-3"] >= 0.6
 
 
 # --- Self-alibi normalization ----------------------------------------------
