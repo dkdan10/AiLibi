@@ -3274,7 +3274,8 @@
     "correct_skip_ballots": 19,
     "missed_skip_ballots": 0,
     "unclassified_skip_ballots": 0,
-    "missed_skip_firewall_coercions": 0,
+    "missed_skip_impostor_voters": 0,
+    "missed_skip_teammate_coerced": 0,
     "missed_skip_invalid_target": 0,
     "threshold_inversions": 0
   }

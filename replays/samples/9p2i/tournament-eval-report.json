@@ -23497,7 +23497,8 @@
     "correct_skip_ballots": 233,
     "missed_skip_ballots": 38,
     "unclassified_skip_ballots": 0,
-    "missed_skip_firewall_coercions": 34,
+    "missed_skip_impostor_voters": 34,
+    "missed_skip_teammate_coerced": 0,
     "missed_skip_invalid_target": 4,
     "threshold_inversions": 0
   }

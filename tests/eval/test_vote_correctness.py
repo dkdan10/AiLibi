@@ -46,7 +46,7 @@ from eval.vote_correctness import (
     VoteCorrectnessReport,
     compute_vote_correctness,
 )
-from meetings.manager import INVALID_VOTE_TARGET_MARKER
+from meetings.manager import INVALID_VOTE_TARGET_MARKER, TEAMMATE_VOTE_TARGET_MARKER
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
@@ -1032,25 +1032,31 @@ def test_skip_ballots_classified_against_rendered_max() -> None:
     assert result.missed_skip_ballots == 2
     assert result.unclassified_skip_ballots == 0
     # Both missed voters are crew with valid targets: genuine inversions.
-    assert result.missed_skip_firewall_coercions == 0
+    assert result.missed_skip_impostor_voters == 0
     assert result.missed_skip_invalid_target == 0
     assert result.threshold_inversions == 2
 
 
-def test_missed_skips_partition_firewall_then_invalid_then_genuine() -> None:
+def test_missed_skips_partition_impostor_then_invalid_then_genuine() -> None:
     """The MISSED partition: impostor voter > invalid-target marker > genuine.
 
-    The audited shape (gp-2): most MISSED skips are the teammate firewall
-    coercing an impostor's ballot — by design, NOT an error — so the count is
-    a sentinel whose partition must be read, never a down-is-good metric.
+    The audited shape (gp-2): most MISSED skips are impostor voters — by
+    design (in-character self-preservation or teammate protection), NOT an
+    error — so the count is a sentinel whose partition must be read, never a
+    down-is-good metric. Within the impostor bucket the §7.12-coerced ballots
+    (stamped with TEAMMATE_VOTE_TARGET_MARKER) are counted separately from
+    voluntary declines, so the two by-design causes can never be confused.
     """
 
     invalid_marker = INVALID_VOTE_TARGET_MARKER.format(target="p-99")
+    teammate_marker = TEAMMATE_VOTE_TARGET_MARKER.format(target="p-9")
     meeting = _meeting(
         outcome="SKIPPED",
         ejected=None,
         ballots=(
-            # Impostor voter over a met threshold: firewall coercion.
+            # Impostor voter over a met threshold, no marker: a VOLUNTARY
+            # in-character decline (the only impostor shape on the audited
+            # baseline, where the coercion guard never fired).
             _ballot(target="SKIP", voter=_IMPOSTOR, reason_id=None),
             # Crew voter whose hallucinated target was normalized to SKIP.
             _ballot(
@@ -1072,9 +1078,34 @@ def test_missed_skips_partition_firewall_then_invalid_then_genuine() -> None:
     result = compute_conversion_report(_one_meeting_report(meeting))
 
     assert result.missed_skip_ballots == 3
-    assert result.missed_skip_firewall_coercions == 1
+    assert result.missed_skip_impostor_voters == 1
+    assert result.missed_skip_teammate_coerced == 0  # voluntary, not coerced
     assert result.missed_skip_invalid_target == 1
     assert result.threshold_inversions == 1
+
+    # The same impostor ballot actually rewritten by the §7.12 guard (the
+    # recorded TEAMMATE marker) still lands in the impostor bucket AND is
+    # counted as a real coercion.
+    coerced = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter=_IMPOSTOR,
+                reason_id=None,
+                rationale_text=teammate_marker + "I vote p-9.",
+            ),
+        ),
+        llm_calls=(_vote_call(agent_id=_IMPOSTOR, rendered_max=0.80),),
+    )
+
+    coerced_result = compute_conversion_report(_one_meeting_report(coerced))
+
+    assert coerced_result.missed_skip_ballots == 1
+    assert coerced_result.missed_skip_impostor_voters == 1
+    assert coerced_result.missed_skip_teammate_coerced == 1
+    assert coerced_result.threshold_inversions == 0
 
 
 def test_skip_ballot_without_vote_prompt_is_unclassified() -> None:
@@ -1133,7 +1164,8 @@ def test_conversion_model_rejects_bad_skip_partition() -> None:
             correct_skip_ballots=1,
             missed_skip_ballots=0,
             unclassified_skip_ballots=0,
-            missed_skip_firewall_coercions=0,
+            missed_skip_impostor_voters=0,
+            missed_skip_teammate_coerced=0,
             missed_skip_invalid_target=0,
             threshold_inversions=0,
         )
@@ -1152,8 +1184,33 @@ def test_conversion_model_rejects_bad_missed_partition() -> None:
             correct_skip_ballots=0,
             missed_skip_ballots=1,
             unclassified_skip_ballots=0,
-            missed_skip_firewall_coercions=1,
+            missed_skip_impostor_voters=1,
+            missed_skip_teammate_coerced=0,
             missed_skip_invalid_target=1,
+            threshold_inversions=0,
+        )
+
+
+def test_conversion_model_rejects_coerced_exceeding_impostor_bucket() -> None:
+    """The coerced count is a subset annotation of the impostor bucket."""
+
+    with pytest.raises(
+        ValidationError, match="cannot exceed\\s+missed_skip_impostor_voters"
+    ):
+        ConversionReport(
+            total_ejections=0,
+            impostor_ejections=0,
+            ejection_accuracy=None,
+            impostor_accused_meetings=0,
+            impostor_accused_conversions=0,
+            impostor_accused_conversion_rate=None,
+            skip_ballots=1,
+            correct_skip_ballots=0,
+            missed_skip_ballots=1,
+            unclassified_skip_ballots=0,
+            missed_skip_impostor_voters=1,
+            missed_skip_teammate_coerced=2,
+            missed_skip_invalid_target=0,
             threshold_inversions=0,
         )
 
@@ -1171,7 +1228,8 @@ def test_conversion_model_rejects_rate_set_with_zero_denominator() -> None:
             correct_skip_ballots=0,
             missed_skip_ballots=0,
             unclassified_skip_ballots=0,
-            missed_skip_firewall_coercions=0,
+            missed_skip_impostor_voters=0,
+            missed_skip_teammate_coerced=0,
             missed_skip_invalid_target=0,
             threshold_inversions=0,
         )
@@ -1192,7 +1250,8 @@ def test_conversion_model_rejects_conversions_exceeding_accused() -> None:
             correct_skip_ballots=0,
             missed_skip_ballots=0,
             unclassified_skip_ballots=0,
-            missed_skip_firewall_coercions=0,
+            missed_skip_impostor_voters=0,
+            missed_skip_teammate_coerced=0,
             missed_skip_invalid_target=0,
             threshold_inversions=0,
         )
@@ -1217,8 +1276,10 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     These pin the 9.5 baseline (9p2i @ fb3cfa5, regenerated offline from the
     committed bytes) and are NOT immutable — the 9.11 re-record regenerates
     them, the standard re-record pattern. ejection_accuracy 22/35 = 0.6286,
-    impostor-accused conversion 21/47 = 0.45, missed_skip 38 = 34 firewall +
-    4 invalid-target + 0 genuine.
+    impostor-accused conversion 21/47 = 0.45, missed_skip 38 = 34
+    impostor-voter (the audit's "firewall" bucket; 0 of them §7.12-coerced —
+    the guard never fired on this baseline, all 34 are voluntary in-character
+    declines) + 4 invalid-target + 0 genuine.
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -1236,7 +1297,8 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     assert conversion.correct_skip_ballots == 233
     assert conversion.missed_skip_ballots == 38
     assert conversion.unclassified_skip_ballots == 0
-    assert conversion.missed_skip_firewall_coercions == 34
+    assert conversion.missed_skip_impostor_voters == 34
+    assert conversion.missed_skip_teammate_coerced == 0
     assert conversion.missed_skip_invalid_target == 4
     assert conversion.threshold_inversions == 0
 

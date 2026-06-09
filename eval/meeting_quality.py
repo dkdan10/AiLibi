@@ -71,15 +71,21 @@ from eval.alibi_fabrication import (
 from eval.cost_dashboard import CostDashboard, compute_cost_dashboard
 from eval.report_schema import GameReport, TournamentReport
 from eval.vote_correctness import VoteCorrectnessReport, compute_vote_correctness
-from meetings.manager import INVALID_VOTE_TARGET_MARKER
+from meetings.manager import INVALID_VOTE_TARGET_MARKER, TEAMMATE_VOTE_TARGET_MARKER
 from meetings.schemas import AccusationClaim, PlayerId
 
-# The literal prefix (the marker text minus the ``{target!r}`` placeholder) the
-# meeting layer stamps onto ``rationale_text`` when it normalizes a ballot's
-# hallucinated out-of-roster target to SKIP. Matching the prefix identifies a
-# by-design coercion regardless of the (quoted) id that follows, mirroring the
-# audit extractor's use of the same pinned literal.
+# The literal prefixes (the marker text minus the ``{target!r}`` placeholder)
+# the meeting layer stamps onto ``rationale_text`` when it normalizes a
+# ballot: a hallucinated out-of-roster target rewritten to SKIP, and a
+# teammate-betrayal target the §7.12 guard
+# (:func:`meetings.manager.coerce_teammate_ballot_to_skip`) coerced to SKIP.
+# Matching the prefix identifies the by-design rewrite regardless of the
+# (quoted) id that follows, mirroring the audit extractor's use of the same
+# pinned literals.
 _INVALID_VOTE_MARKER_PREFIX: Final[str] = INVALID_VOTE_TARGET_MARKER.split(
+    "{target!r}"
+)[0]
+_TEAMMATE_VOTE_MARKER_PREFIX: Final[str] = TEAMMATE_VOTE_TARGET_MARKER.split(
     "{target!r}"
 )[0]
 
@@ -285,24 +291,37 @@ class ConversionReport(BaseModel):
       SKIPped), and ``unclassified_skip_ballots`` (no rendered gate line was
       found for the voter — older prompt version or missing vote call).
     * ``missed_skip_ballots`` is a **SENTINEL, not a down-is-good metric**:
-      it partitions exactly into ``missed_skip_firewall_coercions`` (the
-      voter is an impostor whose ballot the teammate firewall coerced to
-      SKIP — by-design protection, not an error),
-      ``missed_skip_invalid_target`` (a hallucinated out-of-roster target
-      normalized to SKIP, identified by the pinned
+      it partitions exactly into ``missed_skip_impostor_voters`` (the voter
+      is an impostor — the audited exclusion class: impostor in-character
+      voting is sanctioned by the vote prompt, so a met-threshold SKIP by an
+      impostor is adversarial play / teammate protection by design, never a
+      crew gate bug), ``missed_skip_invalid_target`` (a hallucinated
+      out-of-roster target normalized to SKIP, identified by the pinned
       :data:`~meetings.manager.INVALID_VOTE_TARGET_MARKER` audit trail), and
       ``threshold_inversions`` (the genuine remainder). On the audited 9.5
-      baseline the partition is 38 = 34 firewall + 4 invalid-target + 0
-      genuine — driving the count down would mostly mean breaking the
-      firewall, so read the partition, not the total.
+      baseline the partition is 38 = 34 impostor-voter + 4 invalid-target +
+      0 genuine — driving the count down would mostly mean breaking impostor
+      play, so read the partition, not the total.
+    * ``missed_skip_teammate_coerced`` annotates the impostor bucket (a
+      sub-count, NOT a fourth partition bucket): how many of those missed
+      skips carry the pinned
+      :data:`~meetings.manager.TEAMMATE_VOTE_TARGET_MARKER` — i.e. the §7.12
+      output guard (:func:`meetings.manager.coerce_teammate_ballot_to_skip`)
+      actually rewrote a recorded betrayal ballot, as opposed to the model
+      declining on its own. It is 0 on the audited 9.5 baseline: the guard
+      never fired there — every impostor missed skip was a voluntary
+      in-character decline — so this count is what keeps deterministic
+      coercions and voluntary declines from being fused under one number in
+      a later A/B.
     * ``threshold_inversions`` is the **§4.6 gate-obedience (firewall)
-      sentinel**: a crew voter shown a met threshold over a living target who
-      SKIPped anyway with no by-design excuse. Expected ~0 on a clean
-      baseline; a nonzero count is a gate-render/obedience bug to chase, NOT
-      a conversion knob to optimize (the old facts-only name read as "the
-      model obeyed the verdict", audit F-F-5).
+      sentinel**, scoped to CREW voters: a crew voter shown a met threshold
+      over a living target who SKIPped anyway with no by-design excuse.
+      Expected ~0 on a clean baseline; a nonzero count is a
+      gate-render/obedience bug to chase, NOT a conversion knob to optimize
+      (the old facts-only name read as "the model obeyed the verdict", audit
+      F-F-5).
 
-    **Leak-safety.** Every field is a pure aggregate (two rates and eleven
+    **Leak-safety.** Every field is a pure aggregate (two rates and twelve
     integers). The report carries no roles, no transcripts, and no
     engine-owned types, so it adds no leak risk to the
     ``/eval/tournament-report`` surface (``tests/api/test_leak.py``).
@@ -324,7 +343,8 @@ class ConversionReport(BaseModel):
     correct_skip_ballots: int
     missed_skip_ballots: int
     unclassified_skip_ballots: int
-    missed_skip_firewall_coercions: int
+    missed_skip_impostor_voters: int
+    missed_skip_teammate_coerced: int
     missed_skip_invalid_target: int
     threshold_inversions: int
 
@@ -339,7 +359,8 @@ class ConversionReport(BaseModel):
             self.correct_skip_ballots,
             self.missed_skip_ballots,
             self.unclassified_skip_ballots,
-            self.missed_skip_firewall_coercions,
+            self.missed_skip_impostor_voters,
+            self.missed_skip_teammate_coerced,
             self.missed_skip_invalid_target,
             self.threshold_inversions,
         )
@@ -369,16 +390,24 @@ class ConversionReport(BaseModel):
                 f"!= {self.skip_ballots}"
             )
         missed_parts = (
-            self.missed_skip_firewall_coercions
+            self.missed_skip_impostor_voters
             + self.missed_skip_invalid_target
             + self.threshold_inversions
         )
         if missed_parts != self.missed_skip_ballots:
             raise ValueError(
-                "firewall + invalid-target + inversions must equal "
-                f"missed_skip_ballots: {self.missed_skip_firewall_coercions} + "
+                "impostor-voter + invalid-target + inversions must equal "
+                f"missed_skip_ballots: {self.missed_skip_impostor_voters} + "
                 f"{self.missed_skip_invalid_target} + {self.threshold_inversions} "
                 f"!= {self.missed_skip_ballots}"
+            )
+        # The coerced count annotates the impostor bucket (a marker-verified
+        # subset), so it can never exceed it.
+        if self.missed_skip_teammate_coerced > self.missed_skip_impostor_voters:
+            raise ValueError(
+                "missed_skip_teammate_coerced cannot exceed "
+                f"missed_skip_impostor_voters: {self.missed_skip_teammate_coerced} "
+                f"> {self.missed_skip_impostor_voters}"
             )
         self._validate_rate(
             "ejection_accuracy", self.ejection_accuracy, self.total_ejections
@@ -445,10 +474,16 @@ def compute_conversion_report(
     max is computed over LIVING ejection candidates by construction — the
     template filters ``candidate_targets``). A voter with no parsed gate line
     is ``unclassified``, never assumed correct. MISSED ballots partition
-    firewall-first: an impostor voter is a firewall coercion regardless of
-    any invalid-target marker (the firewall is the stronger by-design cause),
-    then invalid-target normalizations, then the genuine
-    ``threshold_inversions`` remainder.
+    role-first: an impostor voter lands in ``missed_skip_impostor_voters``
+    regardless of any normalization marker (the audited exclusion class —
+    impostor in-character voting is sanctioned by the vote prompt, so it is
+    never a crew gate bug), then invalid-target normalizations, then the
+    genuine ``threshold_inversions`` remainder. Within the impostor bucket,
+    ballots stamped with the §7.12
+    :data:`~meetings.manager.TEAMMATE_VOTE_TARGET_MARKER` are additionally
+    counted as ``missed_skip_teammate_coerced`` — the guard-rewritten
+    betrayal ballots, as opposed to the model declining on its own — so the
+    two by-design causes stay separately measurable.
     """
 
     games = report.games if isinstance(report, TournamentReport) else tuple(report)
@@ -461,7 +496,8 @@ def compute_conversion_report(
     correct_skip_ballots = 0
     missed_skip_ballots = 0
     unclassified_skip_ballots = 0
-    missed_skip_firewall_coercions = 0
+    missed_skip_impostor_voters = 0
+    missed_skip_teammate_coerced = 0
     missed_skip_invalid_target = 0
     threshold_inversions = 0
 
@@ -508,7 +544,9 @@ def compute_conversion_report(
                 else:
                     missed_skip_ballots += 1
                     if game.roles[ballot.voter] == "IMPOSTOR":
-                        missed_skip_firewall_coercions += 1
+                        missed_skip_impostor_voters += 1
+                        if _TEAMMATE_VOTE_MARKER_PREFIX in ballot.rationale_text:
+                            missed_skip_teammate_coerced += 1
                     elif _INVALID_VOTE_MARKER_PREFIX in ballot.rationale_text:
                         missed_skip_invalid_target += 1
                     else:
@@ -531,7 +569,8 @@ def compute_conversion_report(
         correct_skip_ballots=correct_skip_ballots,
         missed_skip_ballots=missed_skip_ballots,
         unclassified_skip_ballots=unclassified_skip_ballots,
-        missed_skip_firewall_coercions=missed_skip_firewall_coercions,
+        missed_skip_impostor_voters=missed_skip_impostor_voters,
+        missed_skip_teammate_coerced=missed_skip_teammate_coerced,
         missed_skip_invalid_target=missed_skip_invalid_target,
         threshold_inversions=threshold_inversions,
     )

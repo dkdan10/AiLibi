@@ -299,10 +299,11 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # ``impostor_accused_meetings`` / ``impostor_accused_conversions`` /
 # ``impostor_accused_conversion_rate``) and the SKIP sentinels
 # (``skip_ballots`` / ``correct_skip_ballots`` / ``missed_skip_ballots`` /
-# ``unclassified_skip_ballots`` / ``missed_skip_firewall_coercions`` /
-# ``missed_skip_invalid_target`` / ``threshold_inversions``). All are pure
-# aggregate counts and rates (no roles, transcripts, or engine types), so they
-# stay out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
+# ``unclassified_skip_ballots`` / ``missed_skip_impostor_voters`` /
+# ``missed_skip_teammate_coerced`` / ``missed_skip_invalid_target`` /
+# ``threshold_inversions``). All are pure aggregate counts and rates (no
+# roles, transcripts, or engine types), so they stay out of
+# ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
@@ -380,8 +381,9 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "meetings_total",
         "midpoint",
         "missed_skip_ballots",
-        "missed_skip_firewall_coercions",
+        "missed_skip_impostor_voters",
         "missed_skip_invalid_target",
+        "missed_skip_teammate_coerced",
         "model",
         "n_bins",
         "observations",
