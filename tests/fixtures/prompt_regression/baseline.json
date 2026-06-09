@@ -1,94 +1,94 @@
 {
   "v_a": {
-    "game_count": 3,
-    "metrics": {
-      "accusation_claim_ece": 0.2875000000000001,
-      "alibi_survival_rate": 0.7142857142857143,
-      "body_report_meetings": 9,
-      "emergency_meetings": 0,
-      "meeting_rate": 1.0,
-      "meetings_total": 9,
-      "total_cost_usd": 0.0,
-      "total_impostor_alibis": 7,
-      "vote_ballot_ece": 0.22999999999999998,
-      "vote_correctness_rate": null
-    },
-    "prompt_versions": [
-      {
-        "game_count": 3,
-        "template_name": "accusation_round",
-        "total_cost_usd": 0.0,
-        "version": "accusation_round.v4"
-      },
-      {
-        "game_count": 3,
-        "template_name": "crewmate_report",
-        "total_cost_usd": 0.0,
-        "version": "crewmate_report.v2"
-      },
-      {
-        "game_count": 3,
-        "template_name": "impostor_report",
-        "total_cost_usd": 0.0,
-        "version": "impostor_report_v3"
-      },
-      {
-        "game_count": 3,
-        "template_name": "vote_ballot",
-        "total_cost_usd": 0.0,
-        "version": "vote_ballot/v4"
-      }
-    ],
     "seeds": [
       2,
       6,
       26
-    ]
+    ],
+    "game_count": 3,
+    "prompt_versions": [
+      {
+        "template_name": "accusation_round",
+        "version": "accusation_round.v5",
+        "total_cost_usd": 0.0,
+        "game_count": 3
+      },
+      {
+        "template_name": "crewmate_report",
+        "version": "crewmate_report.v3",
+        "total_cost_usd": 0.0,
+        "game_count": 3
+      },
+      {
+        "template_name": "impostor_report",
+        "version": "impostor_report_v3",
+        "total_cost_usd": 0.0,
+        "game_count": 3
+      },
+      {
+        "template_name": "vote_ballot",
+        "version": "vote_ballot/v5",
+        "total_cost_usd": 0.0,
+        "game_count": 3
+      }
+    ],
+    "metrics": {
+      "vote_correctness_rate": 1.0,
+      "alibi_survival_rate": 0.2857142857142857,
+      "total_impostor_alibis": 7,
+      "accusation_claim_ece": 0.1312500000000001,
+      "vote_ballot_ece": 0.09782608695652178,
+      "total_cost_usd": 0.0,
+      "meeting_rate": 1.0,
+      "meetings_total": 8,
+      "body_report_meetings": 8,
+      "emergency_meetings": 0
+    }
   },
   "v_b": {
-    "game_count": 3,
-    "metrics": {
-      "accusation_claim_ece": 0.2875000000000001,
-      "alibi_survival_rate": 0.5714285714285714,
-      "body_report_meetings": 9,
-      "emergency_meetings": 0,
-      "meeting_rate": 1.0,
-      "meetings_total": 9,
-      "total_cost_usd": 0.0,
-      "total_impostor_alibis": 7,
-      "vote_ballot_ece": 0.22999999999999998,
-      "vote_correctness_rate": null
-    },
-    "prompt_versions": [
-      {
-        "game_count": 3,
-        "template_name": "accusation_round",
-        "total_cost_usd": 0.0,
-        "version": "accusation_round.v4"
-      },
-      {
-        "game_count": 3,
-        "template_name": "crewmate_report",
-        "total_cost_usd": 0.0,
-        "version": "crewmate_report.v2"
-      },
-      {
-        "game_count": 3,
-        "template_name": "impostor_report",
-        "total_cost_usd": 0.0,
-        "version": "impostor_report_v4"
-      },
-      {
-        "game_count": 3,
-        "template_name": "vote_ballot",
-        "total_cost_usd": 0.0,
-        "version": "vote_ballot/v4"
-      }
-    ],
     "seeds": [
       2,
       6,
       26
-    ]
+    ],
+    "game_count": 3,
+    "prompt_versions": [
+      {
+        "template_name": "accusation_round",
+        "version": "accusation_round.v5",
+        "total_cost_usd": 0.0,
+        "game_count": 3
+      },
+      {
+        "template_name": "crewmate_report",
+        "version": "crewmate_report.v3",
+        "total_cost_usd": 0.0,
+        "game_count": 3
+      },
+      {
+        "template_name": "impostor_report",
+        "version": "impostor_report_v4",
+        "total_cost_usd": 0.0,
+        "game_count": 3
+      },
+      {
+        "template_name": "vote_ballot",
+        "version": "vote_ballot/v5",
+        "total_cost_usd": 0.0,
+        "game_count": 3
+      }
+    ],
+    "metrics": {
+      "vote_correctness_rate": 1.0,
+      "alibi_survival_rate": 0.14285714285714285,
+      "total_impostor_alibis": 7,
+      "accusation_claim_ece": 0.1312500000000001,
+      "vote_ballot_ece": 0.09782608695652178,
+      "total_cost_usd": 0.0,
+      "meeting_rate": 1.0,
+      "meetings_total": 8,
+      "body_report_meetings": 8,
+      "emergency_meetings": 0
+    }
   }
 }

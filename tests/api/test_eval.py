@@ -178,10 +178,12 @@ def test_committed_4p1i_report_validates_against_current_model() -> None:
     assert isinstance(report, TournamentEvalReport)
     # The regenerated committed report carries every Task 7.11 field.
     # ejection_accuracy is None iff the set has no ejections (the field's own
-    # validator); the Task 8.12 chain-protocol re-record resolves every flat
-    # 4p/1i meeting SKIPPED, so the committed ground truth is None here.
-    assert report.vote_correctness.ejection_accuracy is None
-    assert report.vote_correctness.impostor_ejections == 0
+    # validator). The Task 9.5 migration re-record (conversion prompts on
+    # qwen3.5:9b) now ejects in the flat 4p/1i set — the 7B chain-protocol set
+    # ejected none (Task 8.12) — so the committed ground truth is non-None: two
+    # ejections, one of them an impostor (accuracy 0.5; small-n flag set below).
+    assert report.vote_correctness.ejection_accuracy == 0.5
+    assert report.vote_correctness.impostor_ejections == 1
     assert isinstance(report.vote_correctness.vote_correctness_small_n, bool)
     assert report.vote_correctness.contradictions_flagged_but_ignored >= 0
     assert isinstance(report.accusation_calibration.vote_ballot_low_power, bool)
