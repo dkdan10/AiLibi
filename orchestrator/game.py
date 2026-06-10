@@ -162,10 +162,19 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # single-template prompt-text revision, not the four-template lockstep of
 # 8.8. The committed sample / prompt-regression bytes still record v3 and
 # are regenerated in Task 8.18, not here.
+#
+# Task 9.9 (DESIGN.md §5.1, §5.2, §5.5; audit gp-3) bumps the two TURN
+# templates -- crewmate_report v3 -> v4 and accusation_round v5 -> v6: both
+# gain the free_text length discipline (the 9B relocates its deliberation
+# into free_text and overruns the frozen 2048 turn cap) and the gated
+# living-roster accusation block (living players minus the speaker, threaded
+# like the vote ballot's candidate_targets). Prompt-text revisions to the two
+# turn templates only, not a lockstep bump; the committed sample bytes still
+# record v3/v5 and are re-recorded in Task 9.11, not here.
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
-    "crewmate_report": "crewmate_report.v3",
+    "crewmate_report": "crewmate_report.v4",
     "impostor_report": "impostor_report_v3",
-    "accusation_round": "accusation_round.v5",
+    "accusation_round": "accusation_round.v6",
     "vote_ballot": "vote_ballot/v5",
 }
 
