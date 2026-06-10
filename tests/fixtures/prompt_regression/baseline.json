@@ -2,20 +2,20 @@
   "v_a": {
     "seeds": [
       2,
-      6,
-      26
+      4,
+      6
     ],
     "game_count": 3,
     "prompt_versions": [
       {
         "template_name": "accusation_round",
-        "version": "accusation_round.v5",
+        "version": "accusation_round.v6",
         "total_cost_usd": 0.0,
         "game_count": 3
       },
       {
         "template_name": "crewmate_report",
-        "version": "crewmate_report.v3",
+        "version": "crewmate_report.v4",
         "total_cost_usd": 0.0,
         "game_count": 3
       },
@@ -33,14 +33,14 @@
       }
     ],
     "metrics": {
-      "vote_correctness_rate": 1.0,
+      "vote_correctness_rate": 0.0,
       "ejection_accuracy": 1.0,
-      "impostor_accused_conversion_rate": 0.8,
-      "missed_skip_ballots": 7,
-      "alibi_survival_rate": 0.2857142857142857,
-      "total_impostor_alibis": 7,
-      "accusation_claim_ece": 0.1312500000000001,
-      "vote_ballot_ece": 0.09782608695652178,
+      "impostor_accused_conversion_rate": 0.125,
+      "missed_skip_ballots": 6,
+      "alibi_survival_rate": 1.0,
+      "total_impostor_alibis": 8,
+      "accusation_claim_ece": 0.16076923076923078,
+      "vote_ballot_ece": 0.18562500000000004,
       "total_cost_usd": 0.0,
       "meeting_rate": 1.0,
       "meetings_total": 8,
@@ -51,20 +51,20 @@
   "v_b": {
     "seeds": [
       2,
-      6,
-      26
+      4,
+      6
     ],
     "game_count": 3,
     "prompt_versions": [
       {
         "template_name": "accusation_round",
-        "version": "accusation_round.v5",
+        "version": "accusation_round.v6",
         "total_cost_usd": 0.0,
         "game_count": 3
       },
       {
         "template_name": "crewmate_report",
-        "version": "crewmate_report.v3",
+        "version": "crewmate_report.v4",
         "total_cost_usd": 0.0,
         "game_count": 3
       },
@@ -82,14 +82,14 @@
       }
     ],
     "metrics": {
-      "vote_correctness_rate": 1.0,
+      "vote_correctness_rate": 0.0,
       "ejection_accuracy": 1.0,
-      "impostor_accused_conversion_rate": 0.8,
-      "missed_skip_ballots": 7,
-      "alibi_survival_rate": 0.14285714285714285,
-      "total_impostor_alibis": 7,
-      "accusation_claim_ece": 0.1312500000000001,
-      "vote_ballot_ece": 0.09782608695652178,
+      "impostor_accused_conversion_rate": 0.125,
+      "missed_skip_ballots": 6,
+      "alibi_survival_rate": 0.875,
+      "total_impostor_alibis": 8,
+      "accusation_claim_ece": 0.16076923076923078,
+      "vote_ballot_ece": 0.18562500000000004,
       "total_cost_usd": 0.0,
       "meeting_rate": 1.0,
       "meetings_total": 8,

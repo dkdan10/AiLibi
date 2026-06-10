@@ -10,7 +10,7 @@ This task IS the Phase 5 close gate, so these tests do two things:
   :func:`test_delta_exceeds_manual_real_provider_tolerance`, not CI's gate.)
 
 * **Demonstrate the prompt-change -> metric-diff loop.** Two fixture sets —
-  ``v_a`` (recorded 9p/2i canonical-set replays, seeds 2/6/26) and a variant
+  ``v_a`` (recorded 9p/2i canonical-set replays, seeds 2/4/6) and a variant
   ``v_b`` whose ``impostor_report`` template is bumped one step (``v3 -> v4``)
   and whose recorded meeting gains an ``alibi_conflict`` naming the impostor —
   produce a measurable, attributable delta in the alibi-fabrication survival
@@ -87,8 +87,8 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
 
     The Phase 5 acceptance loop, run deterministically without a model:
 
-    * the alibi-fabrication survival rate genuinely MOVES (``v_a`` 2/7 ->
-      ``v_b`` 1/7) over a real, non-vacuous denominator of impostor alibis;
+    * the alibi-fabrication survival rate genuinely MOVES (``v_a`` 8/8 ->
+      ``v_b`` 7/8) over a real, non-vacuous denominator of impostor alibis;
     * the delta is ISOLATED to that metric — vote-correctness, calibration ECE,
       and total cost are unchanged — so it is not an artifact of comparing
       unrelated fields;
@@ -100,13 +100,14 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
     summary_b = _run_fixture("v_b")
 
     # The metric moved, over a real (non-vacuous) impostor-alibi denominator:
-    # 7 impostor alibis across the three fixture games; 5 are already caught
-    # by the live detector in v_a, and v_b's hand-authored contradiction
-    # catches one more (2/7 surviving -> 1/7).
-    assert summary_a.metrics.total_impostor_alibis == 7
-    assert summary_b.metrics.total_impostor_alibis == 7
-    assert summary_a.metrics.alibi_survival_rate == 2 / 7
-    assert summary_b.metrics.alibi_survival_rate == 1 / 7
+    # 8 impostor alibis across the three fixture games; none is caught by the
+    # live detector in v_a (the Task 9.11 re-record's fixture games carry no
+    # alibi contradictions), and v_b's hand-authored contradiction catches one
+    # (8/8 surviving -> 7/8).
+    assert summary_a.metrics.total_impostor_alibis == 8
+    assert summary_b.metrics.total_impostor_alibis == 8
+    assert summary_a.metrics.alibi_survival_rate == 1.0
+    assert summary_b.metrics.alibi_survival_rate == 7 / 8
     assert (
         summary_a.metrics.alibi_survival_rate != summary_b.metrics.alibi_survival_rate
     )
@@ -135,7 +136,7 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
     # The W0.3 meeting-rate scalars are orthogonal to the prompt-version change
     # (v_b only flips one alibi contradiction; it touches neither the meeting
     # count nor the trigger classification), so they are identical across both
-    # fixtures. All three fixture games (seeds 2/6/26) reach at least one
+    # fixtures. All three fixture games (seeds 2/4/6) reach at least one
     # body-report meeting — 8 resolved meetings in total — so the rate is 1.0
     # and emergency is 0 (no emergency meetings observed in the canonical set).
     assert summary_a.metrics.meeting_rate == summary_b.metrics.meeting_rate == 1.0
@@ -169,24 +170,33 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
 def test_baseline_pins_the_task_9_6_conversion_leads() -> None:
     """The regression record carries the Wave-1 leads, not just the sentinel.
 
-    Task 9.6 (audit gp-2): ``vote_correctness_rate`` is a bug-sentinel
-    structurally pinned to 1.0, so the baseline must ALSO pin the metrics a
-    Wave-1 prompt A/B actually gates on — the precision lead
-    (``ejection_accuracy``), the recall lead
-    (``impostor_accused_conversion_rate``), and the missed-SKIP sentinel
-    count. Values are the recorded fixture set's (seeds 2/6/26: 4 ejections,
-    all impostors; 4 of 5 impostor-accused meetings converted; 7 missed
-    skips), exact-matched against the committed baseline like every other
-    scalar.
+    Task 9.6 (audit gp-2): ``vote_correctness_rate`` is a bug-sentinel — NOT a
+    KPI — so the baseline must ALSO pin the metrics a Wave-1 prompt A/B
+    actually gates on: the precision lead (``ejection_accuracy``), the recall
+    lead (``impostor_accused_conversion_rate``), and the missed-SKIP sentinel
+    count. Values are the recorded fixture set's (Task 9.11 re-record, seeds
+    2/4/6: 1 ejection, an impostor — ejection_accuracy 1.0; 1 of 8
+    impostor-accused meetings converted; 6 missed skips), exact-matched
+    against the committed baseline like every other scalar.
+
+    On this fixture set the sentinel reads 0.0, not its usual structural 1.0:
+    the trio's single impostor ejection (seed 6, meeting-2) carries neither a
+    naming contradiction nor a kill-witness chain in its transcript — it
+    converted on persisted §6.3 observation-rule suspicion (the Task 9.8
+    cross-meeting belief path), which ``_has_real_evidence`` deliberately does
+    not consult. That is exactly the sentinel doing its job (flagging
+    ejections without transcript-expressible evidence), and exactly why it is
+    not the lead.
     """
 
     summary = _run_fixture("v_a")
 
-    # The sentinel reads its structural 1.0 — and is NOT the lead.
-    assert summary.metrics.vote_correctness_rate == 1.0
+    # The sentinel reads the fixture truth (0.0 here, see docstring) — and is
+    # NOT the lead.
+    assert summary.metrics.vote_correctness_rate == 0.0
     assert summary.metrics.ejection_accuracy == 1.0
-    assert summary.metrics.impostor_accused_conversion_rate == 0.8
-    assert summary.metrics.missed_skip_ballots == 7
+    assert summary.metrics.impostor_accused_conversion_rate == 0.125
+    assert summary.metrics.missed_skip_ballots == 6
     assert summary == _load_baseline()["v_a"]
 
 
@@ -194,8 +204,8 @@ def test_delta_exceeds_manual_real_provider_tolerance() -> None:
     """The demonstrated alibi-rate delta would trip the manual ``> X%`` policy.
 
     CI matches the baseline exactly; the ``> X%`` tolerance governs the manual
-    real-provider re-record comparison. The demonstrated drop (2/7 -> 1/7 =
-    1/7 ≈ 0.143) exceeds the documented ``REAL_PROVIDER_REGRESSION_TOLERANCE``,
+    real-provider re-record comparison. The demonstrated drop (8/8 -> 7/8 =
+    1/8 = 0.125) exceeds the documented ``REAL_PROVIDER_REGRESSION_TOLERANCE``,
     i.e. a re-record showing this much movement would be flagged as a
     regression.
     """
@@ -206,7 +216,7 @@ def test_delta_exceeds_manual_real_provider_tolerance() -> None:
     delta = abs(
         summary_a.metrics.alibi_survival_rate - summary_b.metrics.alibi_survival_rate
     )
-    assert delta == pytest.approx(1 / 7)
+    assert delta == pytest.approx(1 / 8)
     assert delta > REAL_PROVIDER_REGRESSION_TOLERANCE
 
 
