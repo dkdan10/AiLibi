@@ -62,7 +62,7 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     assert model == "qwen3.5:9b"
     # The union of the recorded prompt-version *values*, sorted — using the
     # actual recorded values (e.g. "vote_ballot/v5"), not the idealized hint.
-    assert "accusation_round.v5" in prompt_versions
+    assert "accusation_round.v6" in prompt_versions
     assert "vote_ballot/v5" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
@@ -98,7 +98,7 @@ def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None
     assert mw._SEPARATOR in text
     rows = mw.parse_manifest(text)
     assert list(rows) == [0, 22]  # parsed in file order -> ascending
-    assert rows[22].prompt_versions.startswith("accusation_round.v5")
+    assert rows[22].prompt_versions.startswith("accusation_round.v6")
     assert rows[0].prompt_versions == mw._NO_MEETINGS
 
 
@@ -109,7 +109,7 @@ def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     rows = mw.parse_manifest(manifest.read_text())
     assert set(rows) == set(range(50))
     for seed in (22, 24, 26, 49):
-        assert "accusation_round.v5" in rows[seed].prompt_versions
+        assert "accusation_round.v6" in rows[seed].prompt_versions
         assert rows[seed].git_sha  # non-empty provenance
     assert rows[0].prompt_versions == mw._NO_MEETINGS
 
