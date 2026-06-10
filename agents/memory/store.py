@@ -11,7 +11,7 @@ through (audit R-6, `audits/audit-2026-05-15-0225-reconciled.md`).
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Final, TypeAlias
 
@@ -21,6 +21,7 @@ from agents.memory.beliefs import (
     BeliefState,
     ContradictionRef,
     PlayerBelief,
+    apply_meeting_evidence_rules,
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.working import LastSeen, WorkingMemory
@@ -150,6 +151,63 @@ def render_for_prompt(
         beliefs_lines=beliefs_lines,
         contradiction_lines=contradiction_lines,
         token_budget=token_budget,
+    )
+
+
+def absorb_meeting_evidence(
+    memory: AgentMemory,
+    *,
+    accused: Sequence[PlayerId],
+    corroborated: Sequence[PlayerId] = (),
+    contradicted: Sequence[PlayerId] = (),
+) -> None:
+    """Fold one meeting's public evidence into ``memory.beliefs`` (Task 9.8).
+
+    The composite-store half of the persistent post-meeting belief path:
+    the orchestrator extracts the meeting's deduplicated subject sets
+    (``meetings.manager.extract_belief_evidence``) and calls this once per
+    living agent after the meeting result is applied. The belief update
+    itself is the pure :func:`agents.memory.beliefs.apply_meeting_evidence_rules`;
+    this wrapper adopts the result in place (the ``load_from`` pattern
+    perception uses), so the accusation bump, Rule 3 corroboration, and
+    Rule 5 decay land on the SAME :class:`BeliefState` the next meeting's
+    suspicion graph and rendered memory are built from -- which is what
+    makes suspicion carry forward across meetings instead of being
+    rebuilt and thrown away at vote time.
+
+    The recipient's own id and teammate set come from the latest
+    ``self_state`` episodic event -- the identical privileged self channel
+    the Task 9.3 render guard reads (:func:`_latest_self_guard_fields`),
+    role-gated to IMPOSTOR so a crewmate never carries a teammate guard.
+    An impostor therefore accrues NO accusation bump against a fellow
+    impostor (DESIGN.md §4.7, the 7.12/9.3 firewall), with zero new
+    orchestrator-supplied channel.
+
+    Raises :class:`ValueError` when no ``self_state`` event carrying the
+    agent's own id has been recorded: the self-subject guard cannot run
+    without it, and a meeting before perception is a wiring bug, not a
+    normal state (AGENTS.md "no silent fallbacks"; production perception
+    has recorded ``agent_id`` on every tick since Task 9.3).
+    """
+
+    role = _latest_role(memory.episodic)
+    own_agent_id, fellow_impostor_ids = _latest_self_guard_fields(memory.episodic)
+    if role is None or own_agent_id is None:
+        raise ValueError(
+            "cannot absorb meeting evidence: no self_state event carrying "
+            "'agent_id' has been recorded; perception must run at least once "
+            "before a meeting's beliefs are folded."
+        )
+    teammate_ids = fellow_impostor_ids if role == "IMPOSTOR" else frozenset()
+    memory.beliefs.load_from(
+        apply_meeting_evidence_rules(
+            memory.beliefs,
+            own_id=own_agent_id,
+            accused=accused,
+            corroborated=corroborated,
+            contradicted=contradicted,
+            fellow_impostor_ids=tuple(sorted(teammate_ids)),
+        )
     )
 
 
@@ -647,5 +705,6 @@ __all__ = [
     "RoomId",
     "TaskId",
     "WorkingMemory",
+    "absorb_meeting_evidence",
     "render_for_prompt",
 ]

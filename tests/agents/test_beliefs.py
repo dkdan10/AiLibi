@@ -5,13 +5,17 @@ from collections.abc import Mapping, Sequence
 import pytest
 
 from agents.memory.beliefs import (
+    ACCUSATION_SUSPICION_DELTA,
     BODY_PROXIMITY_SUSPICION_DELTA,
     CONTRADICTION_SUSPICION_DELTA,
+    CORROBORATION_SUSPICION_DELTA,
+    MEETING_SUSPICION_DECAY_RATE,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
     BeliefState,
     PlayerBelief,
     VENTING_SUSPICION_DELTA,
     apply_contradiction_rule,
+    apply_meeting_evidence_rules,
     apply_observation_rules,
 )
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
@@ -398,3 +402,241 @@ class TestContradictionRuleGraduatedWeight:
             _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
         )
         assert _DEFAULT_SUSPICION < suspicion < 0.60
+
+
+# --- Task 9.8 accusation accumulator + Rule 3 / Rule 5 (audit gp-1 recall) --
+
+# The §4.6 eject gate the accumulator's numeric pins are calibrated against
+# (DESIGN.md §4.6: max suspicion < 0.6 -> the ballot verdict is MUST-SKIP).
+_EJECT_GATE = 0.60
+
+
+def _absorb_meetings(
+    beliefs: BeliefState,
+    evidence_per_meeting: Sequence[Mapping[str, Sequence[str]]],
+    *,
+    own_id: str = "observer",
+    fellow_impostor_ids: Sequence[str] = (),
+) -> BeliefState:
+    """Apply :func:`apply_meeting_evidence_rules` once per meeting in order."""
+
+    state = beliefs
+    for evidence in evidence_per_meeting:
+        state = apply_meeting_evidence_rules(
+            state,
+            own_id=own_id,
+            accused=evidence.get("accused", ()),
+            corroborated=evidence.get("corroborated", ()),
+            contradicted=evidence.get("contradicted", ()),
+            fellow_impostor_ids=fellow_impostor_ids,
+        )
+    return state
+
+
+class TestMeetingEvidenceRules:
+    """Task 9.8 (DESIGN.md §6.3 Rules 3 + 5, §4.6; audit gp-1 recall).
+
+    The decaying accusation accumulator: a single accusation lands well
+    under the 0.60 gate, the same subject accused across 2-3 meetings
+    accumulates over it, an unreinforced bump decays back toward 0.5,
+    and a corroboration lowers suspicion. All pinned numerically.
+    """
+
+    def test_single_accusation_adds_small_delta_well_under_gate(self) -> None:
+        updated = _absorb_meetings(BeliefState(), [{"accused": ["p-5"]}])
+
+        suspicion = updated.view("p-5").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        # Well under the gate: under the weak-contradiction band (0.58)
+        # too -- a verbal accusation is the weakest tracked signal.
+        assert suspicion < _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        assert suspicion < _EJECT_GATE
+
+    def test_accusations_across_meetings_accumulate_over_gate(self) -> None:
+        # Reinforced every meeting, so Rule 5 never erodes the bump: the
+        # trajectory is 0.55 -> 0.60 -> 0.65. The second consecutive
+        # accusation reaches the inclusive >= 0.60 gate and the third
+        # clears it with margin, pinning "across 2-3 meetings converts"
+        # while one meeting never does.
+        meeting = {"accused": ["p-5"]}
+
+        after_one = _absorb_meetings(BeliefState(), [meeting])
+        after_two = _absorb_meetings(BeliefState(), [meeting, meeting])
+        after_three = _absorb_meetings(BeliefState(), [meeting, meeting, meeting])
+
+        assert after_one.view("p-5").suspicion < _EJECT_GATE
+        assert after_two.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + 2 * ACCUSATION_SUSPICION_DELTA
+        )
+        assert after_two.view("p-5").suspicion >= _EJECT_GATE
+        assert after_three.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + 3 * ACCUSATION_SUSPICION_DELTA
+        )
+        assert after_three.view("p-5").suspicion > _EJECT_GATE
+
+    def test_unreinforced_bump_decays_back_toward_default(self) -> None:
+        # Rule 5: accused once, then two evidence-free meetings. Each
+        # quiet round pulls suspicion 25% of the way back to the 0.5
+        # prior: 0.55 -> 0.5375 -> 0.528125, monotonically toward 0.5
+        # and never past it.
+        bumped = _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        decayed_once = bumped + (_DEFAULT_SUSPICION - bumped) * (
+            MEETING_SUSPICION_DECAY_RATE
+        )
+
+        after_quiet_one = _absorb_meetings(BeliefState(), [{"accused": ["p-5"]}, {}])
+        after_quiet_two = _absorb_meetings(
+            BeliefState(), [{"accused": ["p-5"]}, {}, {}]
+        )
+
+        one = after_quiet_one.view("p-5").suspicion
+        two = after_quiet_two.view("p-5").suspicion
+        assert one == pytest.approx(decayed_once)
+        assert two == pytest.approx(
+            decayed_once
+            + (_DEFAULT_SUSPICION - decayed_once) * (MEETING_SUSPICION_DECAY_RATE)
+        )
+        assert bumped > one > two > _DEFAULT_SUSPICION
+
+    def test_decay_drifts_low_suspicion_up_toward_default(self) -> None:
+        # Rule 5 is "drift toward 0.5", not "drift down": a cleared
+        # (below-prior) row also relaxes back when unreinforced.
+        beliefs = BeliefState()
+        beliefs.seed_player("p-5", suspicion=0.45, trust=0.5)
+
+        updated = _absorb_meetings(beliefs, [{}])
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            0.45 + (_DEFAULT_SUSPICION - 0.45) * MEETING_SUSPICION_DECAY_RATE
+        )
+
+    def test_reinforced_subject_does_not_decay(self) -> None:
+        # "Unreinforced" is the Rule 5 trigger: a subject accused THIS
+        # meeting has new evidence, so the bump lands on the undecayed
+        # prior (0.55 + 0.05, not 0.5375 + 0.05).
+        updated = _absorb_meetings(
+            BeliefState(), [{"accused": ["p-5"]}, {"accused": ["p-5"]}]
+        )
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + 2 * ACCUSATION_SUSPICION_DELTA
+        )
+
+    def test_corroboration_lowers_suspicion(self) -> None:
+        # Rule 3: one vouch cancels one accusation-meeting exactly
+        # (0.55 -> 0.50), and a corroborated subject is reinforced, so
+        # no decay stacks on top of the lowering.
+        updated = _absorb_meetings(
+            BeliefState(), [{"accused": ["p-5"]}, {"corroborated": ["p-5"]}]
+        )
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION
+            + ACCUSATION_SUSPICION_DELTA
+            - CORROBORATION_SUSPICION_DELTA
+        )
+
+    def test_accused_and_corroborated_same_meeting_net_zero(self) -> None:
+        updated = _absorb_meetings(
+            BeliefState(), [{"accused": ["p-5"], "corroborated": ["p-5"]}]
+        )
+
+        assert updated.view("p-5").suspicion == pytest.approx(_DEFAULT_SUSPICION)
+
+    def test_contradicted_subject_is_exempt_from_decay_but_not_lifted(self) -> None:
+        # A detected contradiction is NEW evidence (no Rule-5 drift this
+        # round) but its persistent lift stays Rule 2's transient
+        # vote-time mechanism -- the stored score is unchanged.
+        beliefs = BeliefState()
+        beliefs.seed_player("p-5", suspicion=0.7, trust=0.5)
+        beliefs.seed_player("p-6", suspicion=0.7, trust=0.5)
+
+        updated = _absorb_meetings(beliefs, [{"contradicted": ["p-5"]}])
+
+        assert updated.view("p-5").suspicion == pytest.approx(0.7)
+        assert updated.view("p-6").suspicion == pytest.approx(
+            0.7 + (_DEFAULT_SUSPICION - 0.7) * MEETING_SUSPICION_DECAY_RATE
+        )
+
+    def test_impostor_accrues_no_accusation_bump_against_teammate(self) -> None:
+        # §1.3 / §4.7 firewall (the 7.12/9.3 teammate guard): the bump is
+        # dropped on the input side for a fellow impostor -- no row is
+        # even materialised -- while the same accusation against a
+        # non-teammate lands normally.
+        updated = _absorb_meetings(
+            BeliefState(),
+            [{"accused": ["p-2", "p-5"]}],
+            fellow_impostor_ids=("p-2",),
+        )
+
+        assert "p-2" not in updated.known_players()
+        assert updated.view("p-2").suspicion == _DEFAULT_SUSPICION
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+
+    def test_accused_teammate_row_still_decays_toward_neutral(self) -> None:
+        # The guard drops teammate evidence entirely (input-side, like
+        # 9.3): an accused teammate is NOT "reinforced", so any residual
+        # teammate suspicion decays toward 0.5 like an unreinforced row.
+        beliefs = BeliefState()
+        beliefs.seed_player("p-2", suspicion=0.6, trust=0.5)
+
+        updated = _absorb_meetings(
+            beliefs,
+            [{"accused": ["p-2"], "contradicted": ["p-2"]}],
+            fellow_impostor_ids=("p-2",),
+        )
+
+        assert updated.view("p-2").suspicion == pytest.approx(
+            0.6 + (_DEFAULT_SUSPICION - 0.6) * MEETING_SUSPICION_DECAY_RATE
+        )
+
+    def test_own_id_is_excluded_from_every_rule(self) -> None:
+        # A recorded self-accusation (audit: 5 across the baseline) bumps
+        # everyone ELSE's view of the speaker; the speaker's own store
+        # never grows a self row, and an existing (defensive) self row is
+        # never decayed.
+        updated = _absorb_meetings(
+            BeliefState(),
+            [{"accused": ["observer"], "corroborated": ["observer"]}],
+        )
+
+        assert updated.known_players() == ()
+
+    def test_decay_never_materialises_a_row(self) -> None:
+        updated = _absorb_meetings(BeliefState(), [{}])
+
+        assert updated.known_players() == ()
+
+    def test_pure_function_does_not_mutate_input_and_is_deterministic(self) -> None:
+        base = BeliefState()
+        base.adjust_suspicion("prior_suspect", delta=0.2)
+        before = _snapshot(base)
+        evidence: Mapping[str, Sequence[str]] = {
+            "accused": ["p-5", "p-3"],
+            "corroborated": ["p-7"],
+        }
+
+        first = _absorb_meetings(base, [evidence])
+        second = _absorb_meetings(base, [evidence])
+
+        assert _snapshot(base) == before
+        assert first is not base
+        assert _snapshot(first) == _snapshot(second)
+        # Unordered evidence lands deterministically: both accused rows
+        # bumped, the corroborated row lowered, the stale prior decayed.
+        assert first.view("p-3").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert first.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert first.view("p-7").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION - CORROBORATION_SUSPICION_DELTA
+        )
+        assert first.view("prior_suspect").suspicion == pytest.approx(
+            0.7 + (_DEFAULT_SUSPICION - 0.7) * MEETING_SUSPICION_DECAY_RATE
+        )

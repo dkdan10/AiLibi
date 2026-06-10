@@ -67,6 +67,7 @@ from meetings.schemas import (
     AlibiClaim,
     Claim,
     ContradictionRef,
+    CorroborationClaim,
     FoundBodyObservation,
     MeetingOutcome,
     MeetingResult,
@@ -1565,6 +1566,81 @@ def _guard_teammate_turn_claims(
     return guarded
 
 
+# ---------------------------------------------------------------------------
+# Post-meeting belief evidence (Task 9.8).
+#
+# The vote-time contradiction lift (`_suspicion_graph_with_contradictions`)
+# rebuilds a throwaway BeliefState and is discarded with the meeting, so until
+# Task 9.8 a verbal accusation touched nothing durable -- 25/47 impostor-accused
+# meetings carried no contradiction and the §4.6 gate forced SKIP (audit gp-1
+# recall). `extract_belief_evidence` is the meeting-side half of the persistent
+# path: it reduces a resolved MeetingResult to the deduplicated public subject
+# sets that `agents.memory.beliefs.apply_meeting_evidence_rules` folds into
+# each living agent's STORED beliefs after the meeting (the orchestrator owns
+# the per-agent fan-out). Evidence is read from the recorded transcript and
+# flags only -- ballots are post-hoc transparency, never visible to agents
+# (DESIGN.md §5.5) -- so a replay re-derives identical evidence from the
+# recorded meeting alone.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MeetingBeliefEvidence:
+    """One meeting's public belief-relevant subjects (Task 9.8).
+
+    Each tuple is sorted and deduplicated, so a pile-on of accusers within
+    one meeting is a single meeting-level "was accused" event -- the
+    accusation bump is per meeting, not per accuser -- and downstream
+    iteration is deterministic.
+
+    * ``accused`` -- subjects named by at least one recorded
+      :class:`~meetings.schemas.AccusationClaim` (teammate-guarded and
+      living-validated by the per-turn chokepoint before recording).
+    * ``corroborated`` -- subjects supported by at least one
+      :class:`~meetings.schemas.CorroborationClaim` (§6.3 Rule 3).
+    * ``contradicted`` -- subjects of the meeting's detected
+      :class:`~meetings.schemas.ContradictionRef` flags; new evidence for
+      the §6.3 Rule 5 decay exemption (the persistent lift itself stays
+      Rule 2's transient vote-time mechanism).
+    """
+
+    accused: tuple[PlayerId, ...]
+    corroborated: tuple[PlayerId, ...]
+    contradicted: tuple[PlayerId, ...]
+
+
+def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
+    """Reduce a resolved meeting to its public belief evidence (Task 9.8).
+
+    Pure function of the :class:`~meetings.schemas.MeetingResult`: walks
+    every recorded turn's claims (opening / reply / opt-in alike -- an
+    opt-in accusation is as public as a chain one) plus the detected
+    contradiction flags. Claims are read AS RECORDED, i.e. after the
+    per-turn guards ran: a teammate accusation was already stripped
+    (Task 7.12) and a non-living target already dropped, so the evidence
+    can only name living meeting participants the chain itself honoured.
+    """
+
+    accused: set[PlayerId] = set()
+    corroborated: set[PlayerId] = set()
+    for turn in result.transcript.turns:
+        for claim in turn.claims:
+            if isinstance(claim, AccusationClaim):
+                accused.add(claim.against)
+            elif isinstance(claim, CorroborationClaim):
+                corroborated.add(claim.supports)
+    contradicted = {
+        subject
+        for contradiction in result.contradictions
+        for subject in contradiction.subjects
+    }
+    return MeetingBeliefEvidence(
+        accused=tuple(sorted(accused)),
+        corroborated=tuple(sorted(corroborated)),
+        contradicted=tuple(sorted(contradicted)),
+    )
+
+
 def _drop_invalid_accusation_targets(
     claims: tuple[Claim, ...],
     *,
@@ -1619,6 +1695,7 @@ __all__ = [
     "DefaultedCall",
     "DefaultedPhase",
     "LLMProviderError",
+    "MeetingBeliefEvidence",
     "MeetingConfig",
     "MeetingDeadlines",
     "MeetingManager",
@@ -1632,4 +1709,5 @@ __all__ = [
     "coerce_teammate_ballot_to_skip",
     "drop_teammate_statement_target",
     "exclude_teammate_accusation_claims",
+    "extract_belief_evidence",
 ]

@@ -41,7 +41,12 @@ from typing import Any, Final, Literal
 from fastapi import Request
 from pydantic import TypeAdapter
 
-from agents.memory.store import DEFAULT_TOKEN_BUDGET, AgentMemory, render_for_prompt
+from agents.memory.store import (
+    DEFAULT_TOKEN_BUDGET,
+    AgentMemory,
+    absorb_meeting_evidence,
+    render_for_prompt,
+)
 from agents.perception import EVENT_SAW_BODY, EVENT_SAW_PLAYER, ingest_packet
 from api.schemas import (
     AccusationClaimView,
@@ -88,6 +93,7 @@ from engine.events import (
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from eval.meeting_quality import TournamentEvalReport
+from meetings.manager import extract_belief_evidence
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -593,6 +599,24 @@ class ReplayLoader:
                         expected=meeting_entry.state_hash_after,
                         actual=after,
                     )
+                if collect_memory:
+                    # Mirror the live loop's post-meeting belief fold (Task
+                    # 9.8, orchestrator.game._absorb_meeting_beliefs): the
+                    # recorded meeting's evidence lands in each still-living
+                    # agent's reconstructed beliefs, so the NEXT meeting's
+                    # memory snapshot shows the same accumulated/decayed
+                    # suspicion the live agents held. Memory-side only --
+                    # engine state and its hash checks are untouched.
+                    evidence = extract_belief_evidence(result)
+                    for pid in sorted(state.players):
+                        if not state.players[pid].alive:
+                            continue
+                        absorb_meeting_evidence(
+                            memories[pid],
+                            accused=evidence.accused,
+                            corroborated=evidence.corroborated,
+                            contradicted=evidence.contradicted,
+                        )
                 meeting_index += 1
                 if state.phase == "GAME_OVER":
                     break
