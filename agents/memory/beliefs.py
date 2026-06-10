@@ -68,6 +68,46 @@ carry the subject across 0.60, so innocents stay ejectable on a second
 independent signal. Strong contradictions keep the full
 ``CONTRADICTION_SUSPICION_DELTA``; recall is not paid for globally."""
 
+ACCUSATION_SUSPICION_DELTA: Final[float] = 0.05
+"""Accusation-driven suspicion bump (Task 9.8; audit gp-1 recall).
+
+The persistent delta a subject gains, once per meeting, for being named
+by an accusation claim in that meeting's transcript. Deliberately the
+smallest evidence weight in the file -- below the weak-contradiction
+0.08 band and far below the §4.6 0.60 eject gate -- because a verbal
+accusation is the weakest signal the belief store tracks: one meeting
+lands at 0.55, well under the gate, while the same subject accused
+across 2-3 meetings accumulates over it (0.60 / 0.65). The bump is
+applied POST-meeting (:func:`apply_meeting_evidence_rules`), so it can
+never move the meeting it was uttered in -- the owner principle that no
+single round ejects is structural, not tuned."""
+
+CORROBORATION_SUSPICION_DELTA: Final[float] = 0.05
+"""DESIGN.md §6.3 Rule 3 magnitude: suspicion REMOVED when a subject is
+publicly corroborated in a meeting (Task 9.8).
+
+§6.3 frames Rule 3 as corroboration-lowers-suspicion (its original
+-0.4 example is a *verified* shared task); the meeting-layer signal is
+a :class:`meetings.schemas.CorroborationClaim`, which is verbal and
+therefore weighted to mirror the accusation bump exactly -- one vouch
+cancels one accusation-meeting, the "collective clear" half of the
+owner's collective-suspicion model. Applied once per subject per
+meeting, after the accusation bumps (so at the clamp ceiling the
+corroboration, not the bump, has the last word)."""
+
+MEETING_SUSPICION_DECAY_RATE: Final[float] = 0.25
+"""DESIGN.md §6.3 Rule 5 decay rate, per meeting round (Task 9.8).
+
+Fraction of the distance to the 0.5 prior a player's suspicion drifts
+after a meeting that produced no new evidence about them
+(:meth:`BeliefState.decay_suspicion` ``rate``). "Rounds" in Rule 5 are
+meeting rounds: gameplay-phase ticks never decay, so the perception
+rules (1/4) keep their per-tick semantics and a no-meeting game is
+byte-identical. 0.25 erodes an unreinforced accusation bump in a few
+quiet meetings (0.55 -> 0.5375 -> 0.528 ...) while a Rule-4 vent
+witness (1.0) stays over the 0.60 gate for several rounds -- strong
+evidence outlives weak evidence."""
+
 # The action label the observation layer stamps on a ``PlayerView`` when the
 # observer *witnesses* a player using a vent (observation/service.py
 # ``_vent_observation_for_agent``). Seeing the vent is the player-attributed
@@ -383,10 +423,92 @@ def apply_contradiction_rule(
     return result
 
 
+def apply_meeting_evidence_rules(
+    beliefs: BeliefState,
+    *,
+    own_id: PlayerId,
+    accused: Sequence[PlayerId],
+    corroborated: Sequence[PlayerId] = (),
+    contradicted: Sequence[PlayerId] = (),
+    fellow_impostor_ids: Sequence[PlayerId] = (),
+) -> BeliefState:
+    """Fold one meeting's public evidence into persistent beliefs (Task 9.8).
+
+    Pure: returns a new :class:`BeliefState`; ``beliefs`` is not mutated.
+    Runs POST-meeting on every living agent's stored beliefs (DESIGN.md
+    §4.4 step 4's belief-update hook, rule-based), so the suspicion it
+    writes carries forward into the NEXT meeting's suspicion graph --
+    unlike Rule 2's vote-time contradiction lift, which stays transient
+    inside the meeting that detected the flag. Three rules:
+
+    * **Accusation bump** (``ACCUSATION_SUSPICION_DELTA``, audit gp-1
+      recall): every subject in ``accused`` -- the deduplicated set of
+      players named by an accusation claim in the meeting -- gains the
+      small delta once. The caller deduplicates per meeting, so a
+      pile-on of accusers is one meeting-level "was accused" event, and
+      because the fold runs after the vote, one round can never eject
+      through it.
+    * **Rule 3 corroboration** (``CORROBORATION_SUSPICION_DELTA``):
+      every subject in ``corroborated`` loses the mirror delta --
+      a public vouch is the collective clear.
+    * **Rule 5 decay** (``MEETING_SUSPICION_DECAY_RATE``): every
+      *already-known* player about whom this meeting produced no new
+      evidence (not accused, not corroborated, not a subject of a
+      detected contradiction) drifts toward the 0.5 prior. Decay never
+      materialises a row -- a player the agent holds no belief about
+      has nothing to drift.
+
+    Team-internal firewall (DESIGN.md §4.7, the 7.12/9.3 guard): a
+    subject in ``fellow_impostor_ids`` is dropped from the accusation
+    and contradiction evidence on the input side, so an impostor never
+    accrues the accusation bump against a teammate -- and an unreinforced
+    teammate row decays toward neutral like any other. Corroboration of
+    a teammate is retained (it lowers suspicion, which helps the team --
+    the same asymmetry as :func:`exclude_teammate_accusation_claims`
+    keeping teammate alibis). The caller role-gates the list: it is
+    empty for every crewmate and a sole impostor, making the guard a
+    no-op on the crew path. ``own_id`` is excluded from every rule -- an
+    agent holds no belief row about itself (a recorded self-accusation
+    bumps everyone else's view of the speaker, never the speaker's own).
+
+    All subject sets are processed in sorted order; the result is a
+    deterministic function of its arguments (replay-stable).
+    """
+
+    teammates = frozenset(fellow_impostor_ids)
+    bumped = {
+        subject for subject in accused if subject != own_id and subject not in teammates
+    }
+    lowered = {subject for subject in corroborated if subject != own_id}
+    reinforced = (
+        bumped
+        | lowered
+        | {
+            subject
+            for subject in contradicted
+            if subject != own_id and subject not in teammates
+        }
+    )
+
+    result = beliefs.copy()
+    for subject in sorted(bumped):
+        result.adjust_suspicion(subject, delta=ACCUSATION_SUSPICION_DELTA)
+    for subject in sorted(lowered):
+        result.adjust_suspicion(subject, delta=-CORROBORATION_SUSPICION_DELTA)
+    for player_id in sorted(result.known_players()):
+        if player_id == own_id or player_id in reinforced:
+            continue
+        result.decay_suspicion(player_id, rate=MEETING_SUSPICION_DECAY_RATE)
+    return result
+
+
 __all__ = [
+    "ACCUSATION_SUSPICION_DELTA",
     "BODY_PROXIMITY_SUSPICION_DELTA",
     "BODY_PROXIMITY_WINDOW_TICKS",
     "CONTRADICTION_SUSPICION_DELTA",
+    "CORROBORATION_SUSPICION_DELTA",
+    "MEETING_SUSPICION_DECAY_RATE",
     "OBSERVED_VENT_ACTION",
     "VENTING_SUSPICION_DELTA",
     "WEAK_CONTRADICTION_SUSPICION_DELTA",
@@ -395,5 +517,6 @@ __all__ = [
     "ContradictionRef",
     "PlayerBelief",
     "apply_contradiction_rule",
+    "apply_meeting_evidence_rules",
     "apply_observation_rules",
 ]

@@ -29,6 +29,7 @@ from agents.base import AgentInterface
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
+    absorb_meeting_evidence,
     render_for_prompt,
 )
 from agents.perception import ingest_packet
@@ -66,6 +67,7 @@ from meetings.manager import (
     StatementPromptRenderer,
     SuspicionEntry,
     VotePromptRenderer,
+    extract_belief_evidence,
 )
 from meetings.schemas import (
     MeetingResult,
@@ -272,6 +274,37 @@ class MeetingAwareAgent(Protocol):
     ) -> str: ...
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]: ...
+
+
+@runtime_checkable
+class BeliefPersistingAgent(Protocol):
+    """Agent that folds a meeting's evidence into persistent beliefs (Task 9.8).
+
+    The post-meeting half of DESIGN.md §4.4 step 4 (rule-based, no LLM):
+    after :func:`apply_meeting_result` the orchestrator calls this on every
+    living agent so the meeting's accusation bump, Rule 3 corroboration,
+    and Rule 5 decay land in the SAME stored :class:`BeliefState` the next
+    meeting's :meth:`MeetingAwareAgent.suspicion_graph_for_meeting` reads --
+    the persistence that lets suspicion accumulate across rounds instead of
+    being rebuilt and discarded at vote time (audit gp-1 recall).
+
+    Deliberately a separate, OPTIONAL capability rather than an extension
+    of :class:`MeetingAwareAgent`: an agent without a persistent belief
+    store (a scripted / packet-recording test agent whose suspicion graph
+    is canned) has nothing to fold, exactly as ``ingest_packet(beliefs=None)``
+    skips the belief rules for store-less runtimes. The production
+    :class:`TacticalAgent` implements it; the across-meeting persistence of
+    that path is pinned by integration test so a silent regression (the
+    "inert accumulator" failure mode) cannot pass CI.
+    """
+
+    def absorb_meeting_evidence(
+        self,
+        *,
+        accused: tuple[PlayerId, ...],
+        corroborated: tuple[PlayerId, ...],
+        contradicted: tuple[PlayerId, ...],
+    ) -> None: ...
 
 
 class _RecordingLLMClient:
@@ -1064,6 +1097,16 @@ class HeadlessGame:
             tick=trigger.trigger_tick,
             failures=artifacts.recovered_call_failures,
         )
+        # Post-meeting belief fold (Task 9.8, DESIGN.md §4.4 step 4; audit
+        # gp-1 recall): write the meeting's public evidence into each living
+        # agent's PERSISTENT belief state so suspicion accumulates across
+        # meetings and decays between them. Runs AFTER apply_meeting_result
+        # (the ejected player's beliefs are never read again) and OUTSIDE it
+        # (the replay re-walk re-applies recorded results through that pure
+        # function with no agents in hand -- engine bytes stay untouched).
+        _absorb_meeting_beliefs(
+            result=artifacts.result, state=next_state, agents=agents
+        )
         return next_state, post_events
 
     def _build_agents(
@@ -1267,6 +1310,43 @@ def _deadline_default_message(
     return f"{base} [{failure.error_type}: {failure.error_message}]"
 
 
+def _absorb_meeting_beliefs(
+    *,
+    result: MeetingResult,
+    state: WorldState,
+    agents: Mapping[PlayerId, AgentInterface],
+) -> None:
+    """Fold a resolved meeting's evidence into living agents' beliefs (Task 9.8).
+
+    The orchestrator-owned fan-out of the persistent post-meeting belief
+    path: one :func:`meetings.manager.extract_belief_evidence` reduction,
+    then one :meth:`BeliefPersistingAgent.absorb_meeting_evidence` per
+    player still alive in the post-meeting ``state`` (a player alive after
+    the meeting was necessarily a participant -- meetings only remove
+    players). Iteration is sorted for determinism. The fold itself fires
+    even when the meeting produced no evidence at all: an evidence-free
+    round is exactly when §6.3 Rule 5 decays every unreinforced suspicion
+    toward 0.5.
+
+    Agents that do not implement the optional
+    :class:`BeliefPersistingAgent` capability (scripted test agents with
+    no belief store) are skipped -- see the protocol docstring for why
+    that is a capability gate, not a silent fallback.
+    """
+
+    evidence = extract_belief_evidence(result)
+    for player_id in sorted(state.players):
+        if not state.players[player_id].alive:
+            continue
+        agent = agents.get(player_id)
+        if isinstance(agent, BeliefPersistingAgent):
+            agent.absorb_meeting_evidence(
+                accused=evidence.accused,
+                corroborated=evidence.corroborated,
+                contradicted=evidence.contradicted,
+            )
+
+
 def _build_meeting_trigger(
     *,
     state: WorldState,
@@ -1451,6 +1531,29 @@ class TacticalAgent:
             )
         return tuple(entries)
 
+    def absorb_meeting_evidence(
+        self,
+        *,
+        accused: tuple[PlayerId, ...],
+        corroborated: tuple[PlayerId, ...],
+        contradicted: tuple[PlayerId, ...],
+    ) -> None:
+        """Fold one meeting's public evidence into stored beliefs (Task 9.8).
+
+        Implements :class:`BeliefPersistingAgent` by delegating to the
+        composite store (``agents.memory.store.absorb_meeting_evidence``),
+        which mutates the SAME :class:`AgentMemory` belief state
+        :meth:`suspicion_graph_for_meeting` snapshots -- so the bump a
+        meeting writes here is what the next meeting's vote prompt sees.
+        """
+
+        absorb_meeting_evidence(
+            self._memory,
+            accused=accused,
+            corroborated=corroborated,
+            contradicted=contradicted,
+        )
+
 
 def _infer_role_from_policy(policy: CrewmatePolicy | ImpostorPolicy) -> Role:
     if isinstance(policy, ImpostorPolicy):
@@ -1480,6 +1583,7 @@ def build_default_agent_factory() -> AgentFactory:
 
 __all__ = [
     "AgentFactory",
+    "BeliefPersistingAgent",
     "DEFAULT_MAX_TICKS",
     "DEFAULT_NUM_IMPOSTORS",
     "DEFAULT_NUM_PLAYERS",

@@ -60,6 +60,7 @@ from orchestrator.game import (
     DefaultMeetingRunner,
     HeadlessGame,
     MeetingArtifacts,
+    TacticalAgent,
     _build_participants,  # noqa: PLC2701
     apply_meeting_result,
     build_default_agent_factory,
@@ -1685,3 +1686,239 @@ class TestSeed6ImpostorMeetingCoordination:
         # The teammate-betrayal votes removed, the table does not eject an
         # impostor (the audit's seed-6 outcome flip).
         assert result.outcome == "SKIPPED"
+
+
+# ---------------------------------------------------------------------------
+# Task 9.8 — the persistent post-meeting belief path through the game loop.
+# ---------------------------------------------------------------------------
+
+
+class _PerceivingScriptedAgent:
+    """A real :class:`TacticalAgent`'s memory behind a scripted intent stream.
+
+    Perception runs through the production ``TacticalAgent.decide`` path
+    (so the composite memory holds a genuine self_state channel), but the
+    returned intent is overridden by the script -- the test needs p-1 to
+    report two seeded bodies on consecutive resumable ticks, which the
+    tactical policy's task-seeking movement would not guarantee. Implements
+    the :class:`orchestrator.game.BeliefPersistingAgent` capability by
+    delegating to the wrapped production agent.
+    """
+
+    def __init__(
+        self,
+        *,
+        inner: TacticalAgent,
+        intents: Iterable[ActionIntent] = (),
+    ) -> None:
+        self._inner = inner
+        self._intents = list(intents)
+        self._cursor = 0
+
+    @property
+    def memory_beliefs_suspicion_of(self) -> Callable[[str], float]:
+        return lambda player_id: self._inner.memory.beliefs.view(player_id).suspicion
+
+    def decide(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+    ) -> ActionIntent:
+        self._inner.decide(packet, public_map)
+        if self._cursor < len(self._intents):
+            intent = self._intents[self._cursor]
+            self._cursor += 1
+            return intent
+        return _intent({"type": "wait", "actor": self._inner.agent_id, "payload": {}})
+
+    def absorb_meeting_evidence(
+        self,
+        *,
+        accused: tuple[PlayerId, ...],
+        corroborated: tuple[PlayerId, ...],
+        contradicted: tuple[PlayerId, ...],
+    ) -> None:
+        self._inner.absorb_meeting_evidence(
+            accused=accused,
+            corroborated=corroborated,
+            contradicted=contradicted,
+        )
+
+
+@dataclass
+class _AccusingMeetingRunner:
+    """Canned runner whose every meeting publicly accuses ``accused``.
+
+    Snapshots each living agent's PERSISTED suspicion of the accused at
+    meeting entry, so the test can assert meeting N+1's inputs carry
+    meeting N's fold (the across-meeting persistence the task builds).
+    """
+
+    accused: PlayerId
+    suspicion_at_entry: list[dict[PlayerId, float]] = field(default_factory=list)
+
+    async def run_meeting(
+        self,
+        *,
+        meeting_id: str,
+        trigger: MeetingTrigger,
+        state: WorldState,
+        agents: Mapping[PlayerId, object],
+    ) -> MeetingArtifacts:
+        self.suspicion_at_entry.append(
+            {
+                pid: agent.memory_beliefs_suspicion_of(self.accused)
+                for pid, agent in agents.items()
+                if isinstance(agent, _PerceivingScriptedAgent)
+                and state.players[pid].alive
+            }
+        )
+        turn = MeetingTurn(
+            turn_id=f"{meeting_id}:turn-0",
+            turn_index=0,
+            speaker=trigger.triggered_by,
+            turn_kind="opening",
+            reply_to=None,
+            observations=(),
+            claims=(
+                AccusationClaim(
+                    type="accusation",
+                    against=self.accused,
+                    confidence=0.6,
+                    reason=f"accuse {self.accused}",
+                ),
+            ),
+            free_text=f"{trigger.triggered_by} accuses {self.accused}",
+        )
+        result = MeetingResult(
+            meeting_id=meeting_id,
+            triggered_by=trigger.triggered_by,
+            trigger_tick=trigger.trigger_tick,
+            outcome="SKIPPED",
+            ejected_player_id=None,
+            ballots=(),
+            contradictions=(),
+            transcript=MeetingTranscript(turns=(turn,)),
+        )
+        return MeetingArtifacts(
+            result=result,
+            llm_calls=(),
+            prompt_versions={"crewmate_report": "test.v0"},
+        )
+
+
+def _two_body_meeting_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    game_map: Map,
+    seed: int = 2026,
+) -> tuple[str, str]:
+    """Pre-seed a world with TWO corpses so two report meetings can fire."""
+
+    initial = seed_initial_state(seed=seed, game_map=game_map, num_players=4)
+    bodies = {
+        body_id: BodyState(
+            id=body_id,
+            player_id="p-2",
+            room=game_map.spawn.room,
+            position=(0.0, 0.0),
+            killed_by="p-3",
+            discovered_by=None,
+        )
+        for body_id in ("body-a", "body-b")
+    }
+    state_with_bodies = replace(
+        initial,
+        bodies=bodies,
+        players={
+            **initial.players,
+            "p-2": replace(initial.players["p-2"], alive=False),
+        },
+    )
+
+    def _stub(
+        *,
+        seed: int,
+        game_map: Map,
+        num_players: int,
+        num_impostors: int = 1,
+        tasks_per_crewmate: int = 1,
+    ) -> WorldState:
+        return state_with_bodies
+
+    monkeypatch.setattr("orchestrator.game.seed_initial_state", _stub)
+    return "body-a", "body-b"
+
+
+class TestPostMeetingBeliefPersistence:
+    """Task 9.8 (DESIGN.md §6.3 Rules 3 + 5, §4.6; audit gp-1 recall).
+
+    The orchestrator's post-meeting hook folds each meeting's public
+    accusations into every living agent's PERSISTENT beliefs, so the
+    second meeting's inputs carry the first meeting's bump -- unlike the
+    vote-time contradiction lift, which is rebuilt and discarded.
+    """
+
+    def test_accusation_bump_persists_across_two_meetings(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        game_map = load_canonical_map()
+        body_a, body_b = _two_body_meeting_setup(monkeypatch, game_map=game_map)
+        runner = _AccusingMeetingRunner(accused="p-4")
+        agents: dict[PlayerId, _PerceivingScriptedAgent] = {}
+        inner_factory = build_default_agent_factory()
+
+        def factory(agent_id: PlayerId, role: Role) -> _PerceivingScriptedAgent:
+            inner = inner_factory(agent_id, role)
+            assert isinstance(inner, TacticalAgent)
+            intents = (
+                [
+                    _intent(
+                        {
+                            "type": "report",
+                            "actor": "p-1",
+                            "payload": {"body_id": body_id},
+                        }
+                    )
+                    for body_id in (body_a, body_b)
+                ]
+                if agent_id == "p-1"
+                else []
+            )
+            agent = _PerceivingScriptedAgent(inner=inner, intents=intents)
+            agents[agent_id] = agent
+            return agent
+
+        game = HeadlessGame(
+            seed=2026,
+            game_map=game_map,
+            agent_factory=factory,
+            replay_path=tmp_path / "belief-persistence.jsonl",
+            scheduler=TickScheduler(max_ticks=8),
+            meeting_runner=runner,
+        )
+
+        result = game.run()
+
+        assert result.outcome == "TICK_BUDGET_REACHED"
+        assert len(runner.suspicion_at_entry) == 2
+        # Meeting 0 opens on untouched priors: nobody suspects p-4 yet.
+        assert runner.suspicion_at_entry[0] == {
+            "p-1": 0.5,
+            "p-3": 0.5,
+            "p-4": 0.5,
+        }
+        # Meeting 1's INPUTS carry meeting 0's persisted fold: every other
+        # living agent holds the accusation bump, while p-4's own store
+        # never grows a self row (the own-id guard at loop level).
+        assert runner.suspicion_at_entry[1]["p-1"] == pytest.approx(0.55)
+        assert runner.suspicion_at_entry[1]["p-3"] == pytest.approx(0.55)
+        assert runner.suspicion_at_entry[1]["p-4"] == 0.5
+        # After both meetings the second consecutive accusation has
+        # accumulated to the 0.60 §4.6 gate in the persistent store the
+        # next vote's suspicion graph would be built from.
+        assert agents["p-1"].memory_beliefs_suspicion_of("p-4") == pytest.approx(0.60)
+        assert agents["p-1"].memory_beliefs_suspicion_of("p-4") >= 0.60
+        # The dead player's agent (p-2, the seeded victim) never absorbs:
+        # its belief store holds no p-4 row.
+        assert agents["p-2"].memory_beliefs_suspicion_of("p-4") == 0.5

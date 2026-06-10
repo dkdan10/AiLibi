@@ -47,6 +47,7 @@ from meetings.manager import (
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     LLMProviderError,
+    MeetingBeliefEvidence,
     MeetingConfig,
     MeetingDeadlines,
     MeetingManager,
@@ -59,6 +60,7 @@ from meetings.manager import (
     coerce_teammate_ballot_to_skip,
     drop_teammate_statement_target,
     exclude_teammate_accusation_claims,
+    extract_belief_evidence,
 )
 from meetings.schemas import (
     AccusationClaim,
@@ -2717,3 +2719,197 @@ class TestLLMCallAgentIdAttribution:
             "p-3",
             "p-4",
         ]
+
+
+# --- Post-meeting belief evidence extraction (Task 9.8) ---------------------
+
+
+def _result_with(
+    *,
+    turns: tuple[MeetingTurn, ...] = (),
+    contradictions: tuple[ContradictionRef, ...] = (),
+) -> MeetingResult:
+    return MeetingResult(
+        meeting_id="m-1",
+        triggered_by="p-1",
+        trigger_tick=410,
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        ballots=(),
+        contradictions=contradictions,
+        transcript=MeetingTranscript(turns=turns),
+    )
+
+
+def _evidence_turn(
+    *,
+    turn_index: int,
+    speaker: str,
+    accuses: tuple[str, ...] = (),
+    corroborates: tuple[str, ...] = (),
+) -> MeetingTurn:
+    claims: list[Claim] = [
+        AccusationClaim(
+            type="accusation",
+            against=target,
+            confidence=0.6,
+            reason=f"{speaker} accuses {target}",
+        )
+        for target in accuses
+    ]
+    claims.extend(
+        CorroborationClaim(
+            type="corroboration",
+            supports=subject,
+            on_tick=400,
+            reason=f"{speaker} vouches for {subject}",
+        )
+        for subject in corroborates
+    )
+    return MeetingTurn(
+        turn_id=f"m-1:turn-{turn_index}",
+        turn_index=turn_index,
+        speaker=speaker,
+        turn_kind="opening" if turn_index == 0 else "reply",
+        reply_to=None,
+        observations=(),
+        claims=tuple(claims),
+        free_text=f"turn from {speaker}",
+    )
+
+
+class TestExtractBeliefEvidence:
+    """Task 9.8 (DESIGN.md §6.3 Rules 3 + 5, §4.6; audit gp-1 recall).
+
+    ``extract_belief_evidence`` reduces a resolved ``MeetingResult`` to
+    the deduplicated public subject sets the post-meeting hook folds
+    into each living agent's persistent beliefs.
+    """
+
+    def test_collects_accused_corroborated_and_contradicted_sorted(self) -> None:
+        result = _result_with(
+            turns=(
+                _evidence_turn(turn_index=0, speaker="p-1", accuses=("p-3",)),
+                _evidence_turn(
+                    turn_index=1,
+                    speaker="p-3",
+                    accuses=("p-2",),
+                    corroborates=("p-4",),
+                ),
+            ),
+            contradictions=(
+                ContradictionRef(
+                    contradiction_id="contra:alibi_vs_sighting:a|b",
+                    kind="alibi_vs_sighting",
+                    event_a_id="a",
+                    event_b_id="b",
+                    subjects=("p-5",),
+                    description="Alibi places p-5 in A; sighting reports p-5 in B.",
+                ),
+            ),
+        )
+
+        evidence = extract_belief_evidence(result)
+
+        assert evidence == MeetingBeliefEvidence(
+            accused=("p-2", "p-3"),
+            corroborated=("p-4",),
+            contradicted=("p-5",),
+        )
+
+    def test_pile_on_accusations_deduplicate_to_one_meeting_event(self) -> None:
+        # The accusation bump is per MEETING, not per accuser: three
+        # turns piling onto p-3 are one "was accused" event, so audit
+        # G-G-2's herding (0.935 ballot concentration) cannot multiply
+        # the delta within a round.
+        result = _result_with(
+            turns=(
+                _evidence_turn(turn_index=0, speaker="p-1", accuses=("p-3",)),
+                _evidence_turn(turn_index=1, speaker="p-3", accuses=()),
+                _evidence_turn(turn_index=2, speaker="p-2", accuses=("p-3",)),
+                _evidence_turn(turn_index=3, speaker="p-4", accuses=("p-3",)),
+            )
+        )
+
+        assert extract_belief_evidence(result).accused == ("p-3",)
+
+    def test_empty_meeting_yields_empty_evidence(self) -> None:
+        evidence = extract_belief_evidence(_result_with())
+
+        assert evidence == MeetingBeliefEvidence(
+            accused=(), corroborated=(), contradicted=()
+        )
+
+    def test_ballots_are_not_evidence(self) -> None:
+        # Ballots are post-hoc transparency, never visible to agents
+        # (DESIGN.md §5.5) -- a vote target must not feed the accumulator.
+        ballot = VoteBallot(
+            voter="p-1",
+            target="p-2",
+            confidence=0.9,
+            primary_reason_id=None,
+            considered_alternatives=(),
+            rationale_text="vote p-2",
+        )
+        result = _result_with().model_copy(
+            update={
+                "outcome": "EJECTED",
+                "ejected_player_id": "p-2",
+                "ballots": (ballot,),
+            }
+        )
+
+        assert extract_belief_evidence(result).accused == ()
+
+    def test_production_meeting_round_trips_into_evidence(self) -> None:
+        # Drift guard: a manager-produced MeetingResult (not a hand-built
+        # one) feeds the extractor -- the chain p-1 -> p-2 -> p-3 records
+        # two accusations plus p-4's opt-in corroboration of p-1.
+        result, _ = _run_meeting(
+            _make_responder(
+                accusations={"p-1": "p-2", "p-2": "p-3", "p-3": None},
+                observations={
+                    "p-1": (
+                        SawPlayerObservation(
+                            type="saw_player",
+                            tick=400,
+                            subject="p-2",
+                            room="CAFETERIA",
+                            co_present=("p-4",),
+                        ),
+                    ),
+                },
+                claims_by={
+                    "p-4": (
+                        CorroborationClaim(
+                            type="corroboration",
+                            supports="p-1",
+                            on_tick=400,
+                            reason="p-4 vouches for p-1",
+                        ),
+                    ),
+                },
+            )
+        )
+
+        evidence = extract_belief_evidence(result)
+
+        assert evidence.accused == ("p-2", "p-3")
+        assert evidence.corroborated == ("p-1",)
+
+    def test_teammate_accusation_never_reaches_the_evidence(self) -> None:
+        # 7.12 interplay: an impostor opener's accusation of its teammate
+        # is stripped at the per-turn chokepoint BEFORE recording, so the
+        # accumulator sees no teammate subject from any agent's fold --
+        # the evidence path inherits the firewall it rides on.
+        result, _ = _run_meeting(
+            _make_responder(accusations={"p-1": "p-2"}),
+            participants=(
+                _participant("p-1", role="IMPOSTOR", fellow_impostor_ids=("p-2",)),
+                _participant("p-2", role="IMPOSTOR", fellow_impostor_ids=("p-1",)),
+                _participant("p-3"),
+                _participant("p-4"),
+            ),
+        )
+
+        assert extract_belief_evidence(result).accused == ()
