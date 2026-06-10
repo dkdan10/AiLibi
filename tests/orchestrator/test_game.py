@@ -1178,9 +1178,13 @@ def test_provider_validation_default_preserves_spend_end_to_end(
     # The 2 burned opening attempts raised before the recording client logged
     # them, so llm_calls holds only the 3 SKIP votes (no double-count)...
     assert len(meeting.llm_calls) == 3
-    # ...and the 2 burned calls are preserved as deadline_default rows with REAL
-    # spend (not zeroed), so the audit trail stays accurate.
-    assert len(failed) == 2
+    # ...and the burned spend is preserved as a deadline_default row with REAL
+    # values (not zeroed), so the audit trail stays accurate. The retry burned
+    # a byte-identical generation (this client, like a seeded local model,
+    # regenerates the same failing response for the unchanged prompt), so the
+    # single-write guard collapses it to exactly ONE row instead of the
+    # duplicate that double-counted seeds 8/36/39 (Task 9.10, audit gp-4).
+    assert len(failed) == 1
     assert all(f.error_type == "deadline_default" for f in failed)
     assert all(f.model == "qwen2.5:7b-instruct" for f in failed)
     assert all(f.input_tokens == 200 and f.output_tokens == 9 for f in failed)

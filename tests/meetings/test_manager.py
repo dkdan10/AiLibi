@@ -2530,6 +2530,14 @@ class TestDefaultsSurfacedAndOpeningRetry:
         assert len(default.parse_failures) == 2
         assert all(f.model == "qwen2.5:7b-instruct" for f in default.parse_failures)
         assert all(f.input_tokens == 123 for f in default.parse_failures)
+        # The deterministic-retry shape (Task 9.10, audit gp-4): the retry of
+        # an unchanged prompt against a deterministic provider regenerates the
+        # SAME failing response, so the two carried failures are byte-equal —
+        # the manager surfaces every burned attempt faithfully, and
+        # ``ReplayLog.record_failed_call`` collapses the byte-identical write
+        # so a defaulted turn whose parse failed records exactly ONE
+        # failed_call row (seeds 8/36/39 no longer double-count).
+        assert default.parse_failures[0] == default.parse_failures[1]
 
     def test_recovered_failure_surfaced_when_retry_succeeds(self) -> None:
         # First opening attempt raises (provider-side); the retry parses, so the

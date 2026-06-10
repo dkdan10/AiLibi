@@ -1259,6 +1259,13 @@ def _record_deadline_defaults(
     is a ZERO-spend visibility marker: a deadline miss completed nothing, and a
     manager-side validation of a returned-but-invalid payload already has its
     spend in ``llm_calls``, so charging it here too would double-count.
+
+    De-dup (Task 9.10, audit gp-4): a deterministic provider regenerates the
+    SAME failing response on the in-turn retry, so a single default can carry
+    the same burned generation twice; :meth:`ReplayLog.record_failed_call`
+    drops the byte-identical second row at the write chokepoint, so each
+    distinct burned generation -- and each distinct zero-spend marker, whose
+    ``error_message`` names its participant -- records exactly once.
     """
 
     for default in defaulted_calls:

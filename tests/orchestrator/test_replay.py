@@ -37,6 +37,12 @@ from orchestrator.replay import (
 )
 from tests._helpers.world_state import scripted_initial_world_state
 
+# The committed 9p2i sample set the gp-4 audit measured; read-only here (the
+# re-record itself is Task 9.11).
+_COMMITTED_9P2I_REPLAYS = (
+    Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
+)
+
 
 class TestGameEndRecording:
     def test_record_game_end_round_trips_via_read_game_outcome(
@@ -189,6 +195,157 @@ class TestFailedCallRecording:
         )
 
         assert compute_cost_usd(path) == 0.0
+
+
+class TestFailedCallSingleWriteGuard:
+    """Byte-identical failed-call rows write once (Task 9.10, audit gp-4).
+
+    The lived incident (MECH-B-1): a deterministic provider (seeded local
+    model, fixed prompt) regenerates the SAME failing response on the in-turn
+    retry, so a single defaulted opening surfaced the same burned generation
+    twice and seeds 8/36/39 each persisted a duplicate ``failed_call`` row —
+    double-counting 5,969 input / 6,144 output tokens and inflating
+    ``total_failed_calls`` 4→7. ``record_failed_call`` now drops a row that is
+    byte-identical (the FULL frozen entry) to one this log already wrote.
+    Distinct rows — including zero-spend ``deadline_default`` visibility
+    markers that share the zero ``(model, raw_response, input_tokens,
+    output_tokens)`` tuple but name different participants in
+    ``error_message`` — still each record once.
+    """
+
+    @staticmethod
+    def _record_seed_shape_row(
+        log: ReplayLog,
+        *,
+        model: str = "qwen3.5:9b",
+        raw_response: str = '{\n  "turn_id": "t",\n  "turn_index": 0,\n  "speaker": "p-2"',
+        input_tokens: int = 1984,
+        output_tokens: int = 2048,
+        error_message: str = (
+            "opening turn (turn 0) defaulted (validation); p-2 submitted no "
+            "turn [ValidationError: EOF while parsing a string]"
+        ),
+    ) -> None:
+        # Field values mirror the committed seed-8 duplicate (meeting-1,
+        # tick 14) — the audited double-count shape.
+        log.record_failed_call(
+            meeting_id="headless-seed-8:meeting-1",
+            tick=14,
+            model=model,
+            prompt_length=6627,
+            raw_response=raw_response,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=0.0,
+            error_type="deadline_default",
+            error_message=error_message,
+        )
+
+    def test_byte_identical_retry_row_records_exactly_once(
+        self, tmp_path: Path
+    ) -> None:
+        # The seed-8/36/39 shape: the opening's single retry burned a
+        # byte-identical generation, so the defaulted turn issues the same
+        # write twice; exactly one row may land.
+        path = tmp_path / "dedup.jsonl"
+        with ReplayLog(path, game_id="headless-seed-8") as log:
+            self._record_seed_shape_row(log)
+            self._record_seed_shape_row(log)
+
+        failed = read_failed_call_entries(path)
+        assert len(failed) == 1
+        # The spend is counted once, not doubled.
+        assert sum(f.input_tokens for f in failed) == 1984
+        assert sum(f.output_tokens for f in failed) == 2048
+
+    def test_distinct_failures_in_one_meeting_each_record_once(
+        self, tmp_path: Path
+    ) -> None:
+        # Two genuinely different burned generations in the same meeting
+        # (different raw response / spend) are NOT duplicates.
+        path = tmp_path / "distinct.jsonl"
+        with ReplayLog(path, game_id="headless-seed-8") as log:
+            self._record_seed_shape_row(log)
+            self._record_seed_shape_row(
+                log,
+                raw_response='{\n  "turn_id": "t",\n  "claims": [',
+                output_tokens=903,
+            )
+
+        failed = read_failed_call_entries(path)
+        assert len(failed) == 2
+        assert sum(f.output_tokens for f in failed) == 2048 + 903
+
+    def test_zero_spend_markers_for_different_defaults_each_record_once(
+        self, tmp_path: Path
+    ) -> None:
+        # Two zero-spend visibility markers (a defaulted turn and a defaulted
+        # vote) share the zero (model, raw_response, tokens) tuple and differ
+        # only in error_message; deduping on the FULL row keeps both visible.
+        path = tmp_path / "markers.jsonl"
+        with ReplayLog(path, game_id="g-1") as log:
+            for message in (
+                "reply turn (turn 2) defaulted (deadline); p-2 submitted no turn",
+                "vote defaulted (deadline); p-3 submitted no ballot",
+            ):
+                log.record_failed_call(
+                    meeting_id="g-1:meeting-0",
+                    tick=30,
+                    model="(deadline_default)",
+                    prompt_length=0,
+                    raw_response="",
+                    input_tokens=0,
+                    output_tokens=0,
+                    cost_usd=0.0,
+                    error_type="deadline_default",
+                    error_message=message,
+                )
+
+        assert len(read_failed_call_entries(path)) == 2
+
+    def test_guard_is_per_log_not_per_process(self, tmp_path: Path) -> None:
+        # The same failure shape in a DIFFERENT game's log is a different
+        # burned call and must still record.
+        with ReplayLog(tmp_path / "a.jsonl", game_id="g-a") as log:
+            self._record_seed_shape_row(log)
+        with ReplayLog(tmp_path / "b.jsonl", game_id="g-b") as log:
+            self._record_seed_shape_row(log)
+
+        assert len(read_failed_call_entries(tmp_path / "a.jsonl")) == 1
+        assert len(read_failed_call_entries(tmp_path / "b.jsonl")) == 1
+
+    def test_committed_9p2i_rows_rerecord_to_their_distinct_set(
+        self, tmp_path: Path
+    ) -> None:
+        # Offline confirmation against the committed 9p2i set (audit gp-4):
+        # re-recording each replay's failed-call rows through the guarded
+        # chokepoint yields exactly its distinct rows in order — on the
+        # audited bytes, seeds 8/36/39 collapse 2→1 while seed 5's single
+        # non-duplicated default is untouched. Stays green after the 9.11
+        # re-record (clean bytes re-record to themselves).
+        sample_files = sorted(_COMMITTED_9P2I_REPLAYS.glob("replay-seed-*.jsonl"))
+        assert sample_files, f"no committed replays under {_COMMITTED_9P2I_REPLAYS}"
+        for sample in sample_files:
+            originals = read_failed_call_entries(sample)
+            if not originals:
+                continue
+            distinct = list(dict.fromkeys(originals))
+            rerecord_path = tmp_path / sample.name
+            with ReplayLog(rerecord_path, game_id=originals[0].game_id) as log:
+                for entry in originals:
+                    log.record_failed_call(
+                        meeting_id=entry.meeting_id,
+                        tick=entry.tick,
+                        model=entry.model,
+                        prompt_length=entry.prompt_length,
+                        raw_response=entry.raw_response,
+                        input_tokens=entry.input_tokens,
+                        output_tokens=entry.output_tokens,
+                        cost_usd=entry.cost_usd,
+                        error_type=entry.error_type,
+                        error_message=entry.error_message,
+                    )
+            assert list(read_failed_call_entries(rerecord_path)) == distinct
 
 
 class TestLLMCallRecordAgentId:
