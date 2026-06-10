@@ -250,6 +250,10 @@ class ReplayLog:
         self._path = path
         self._game_id = game_id
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        # Single-write guard for failed-call rows (Task 9.10, audit gp-4):
+        # every row already written by :meth:`record_failed_call`, keyed by
+        # the full frozen entry. See that method for the dedup contract.
+        self._recorded_failed_calls: set[FailedCallReplayEntry] = set()
 
     @property
     def path(self) -> Path:
@@ -353,6 +357,20 @@ class ReplayLog:
         and partial response for the rejected call so per-meeting cost is
         reconstructable even though the meeting crashed and
         :meth:`record_meeting` never ran.
+
+        Single-write guard (Task 9.10, audit gp-4 / MECH-B-1): a row that is
+        byte-identical to one already written by this log is dropped instead
+        of appended. A deterministic provider (seeded local model, fixed
+        prompt) regenerates the SAME failing response on the in-turn retry,
+        so a single defaulted opening surfaced the same burned generation
+        twice — seeds 8/36/39 each persisted a duplicate ``failed_call`` row,
+        double-counting 5,969 input / 6,144 output tokens. De-duplication is
+        on the FULL frozen entry — the audit's byte-identity tuple
+        ``(model, raw_response, input_tokens, output_tokens)`` scoped by
+        ``meeting_id`` / ``tick`` / error fields — so two zero-spend
+        ``deadline_default`` visibility markers from DIFFERENT participants
+        (which share the zero tuple but differ in ``error_message``) and any
+        genuinely distinct failures in one meeting still each record once.
         """
 
         entry = FailedCallReplayEntry(
@@ -368,6 +386,9 @@ class ReplayLog:
             error_type=error_type,
             error_message=error_message,
         )
+        if entry in self._recorded_failed_calls:
+            return
+        self._recorded_failed_calls.add(entry)
         self._append(entry.model_dump(mode="json"))
 
     def read_entries(self) -> tuple[ReplayEntry, ...]:
