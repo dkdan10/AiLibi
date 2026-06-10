@@ -106,6 +106,12 @@ def _fellow_impostors_line(fellow_impostor_ids: tuple[PlayerId, ...]) -> str:
     return f"FELLOW_IMPOSTORS={','.join(fellow_impostor_ids)}\n"
 
 
+def _living_ids_line(living_ids: tuple[PlayerId, ...]) -> str:
+    if not living_ids:
+        return ""
+    return f"LIVING_IDS={','.join(living_ids)}\n"
+
+
 def _crewmate_report_prompt(
     *,
     agent_id: PlayerId,
@@ -114,11 +120,13 @@ def _crewmate_report_prompt(
     rendered_memory: str,
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    living_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=CREWMATE agent_id={agent_id} tick={current_tick}\n"
         f"TRIGGER: {meeting_trigger}\n"
         f"{_fellow_impostors_line(fellow_impostor_ids)}"
+        f"{_living_ids_line(living_ids)}"
         f"MEMORY:\n{rendered_memory}\n"
         f"PUBLIC_TRANSCRIPT:\n{public_transcript}\n"
     )
@@ -132,11 +140,13 @@ def _impostor_report_prompt(
     rendered_memory: str,
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    living_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=IMPOSTOR agent_id={agent_id} tick={current_tick}\n"
         f"TRIGGER: {meeting_trigger}\n"
         f"{_fellow_impostors_line(fellow_impostor_ids)}"
+        f"{_living_ids_line(living_ids)}"
         f"MEMORY:\n{rendered_memory}\n"
         f"PUBLIC_TRANSCRIPT:\n{public_transcript}\n"
     )
@@ -151,11 +161,13 @@ def _statement_prompt(
     prior_turn: MeetingTurn | None,
     turn_kind: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    living_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     prior = prior_turn.speaker if prior_turn is not None else "none"
     return (
         f"PHASE=TURN turn_kind={turn_kind} agent_id={agent_id} prior={prior}\n"
         f"{_fellow_impostors_line(fellow_impostor_ids)}"
+        f"{_living_ids_line(living_ids)}"
         f"MEMORY:\n{rendered_memory}\n"
         f"TURNS_COUNT={len(transcript.turns)}\n"
         f"CONTRADICTIONS_COUNT={len(contradictions)}\n"
@@ -914,6 +926,29 @@ class TestVotePromptInputs:
         vote_calls = [c for c in client.calls if "PHASE=VOTE" in c.prompt]
         # opening + one reply = 2 turns visible at the vote.
         assert all("TURNS_COUNT=2" in c.prompt for c in vote_calls)
+
+
+class TestTurnPromptLivingRoster:
+    """Task 9.9 (DESIGN.md §5.1, §5.2, §5.5; audit gp-3): every turn prompt
+    receives the living-roster accusation list -- living participants minus
+    the turn's own speaker -- through the same ``_candidate_targets`` filter
+    the vote ballot uses for its eject targets (living minus voter)."""
+
+    def test_opening_roster_is_living_minus_speaker_sorted(self) -> None:
+        _, client = _run_meeting(_make_responder())
+
+        opening = next(c for c in client.calls if "PHASE=OPENING" in c.prompt)
+        # p-1 opens; the roster is the other three living players, sorted.
+        assert "LIVING_IDS=p-2,p-3,p-4\n" in opening.prompt
+
+    def test_reply_roster_excludes_the_replying_speaker(self) -> None:
+        _, client = _run_meeting(
+            _make_responder(accusations={"p-1": "p-2", "p-2": None})
+        )
+
+        reply = next(c for c in client.calls if "PHASE=TURN" in c.prompt)
+        assert "agent_id=p-2" in reply.prompt
+        assert "LIVING_IDS=p-1,p-3,p-4\n" in reply.prompt
 
 
 # --- Contradictions wiring -------------------------------------------------

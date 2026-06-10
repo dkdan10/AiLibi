@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Coroutine, Mapping, Sequence
+from collections.abc import Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 
@@ -392,6 +392,12 @@ class ReportPromptRenderer(Protocol):
     surfaced into the impostor opening prompt so the model never accuses /
     incriminates a teammate. It is ``()`` for a crewmate and a sole
     impostor; the crewmate template ignores it.
+
+    ``living_ids`` (Task 9.9, audit gp-3) is the living-roster accusation
+    list -- living participants minus the speaker, the turn-side mirror of
+    the vote ballot's ``candidate_targets`` -- rendered so the model never
+    wastes its opening accusing a dead / ejected player. ``()`` (ad-hoc
+    renders) omits the roster block.
     """
 
     def __call__(
@@ -403,6 +409,7 @@ class ReportPromptRenderer(Protocol):
         rendered_memory: str,
         public_transcript: str,
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
+        living_ids: tuple[PlayerId, ...] = (),
     ) -> str: ...
 
 
@@ -421,6 +428,12 @@ class StatementPromptRenderer(Protocol):
     ``fellow_impostor_ids`` (Task 7.12) is the impostor-only teammate list;
     the shared template renders a teammate block only when it is non-empty,
     so a crewmate / sole-impostor prompt is byte-unchanged.
+
+    ``living_ids`` (Task 9.9, audit gp-3) is the living-roster accusation
+    list -- living participants minus the speaker, the turn-side mirror of
+    the vote ballot's ``candidate_targets`` -- rendered so a reply / opt-in
+    accusation stays on the living roster. ``()`` (ad-hoc renders) omits
+    the roster block.
     """
 
     def __call__(
@@ -433,6 +446,7 @@ class StatementPromptRenderer(Protocol):
         prior_turn: MeetingTurn | None,
         turn_kind: TurnKind,
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
+        living_ids: tuple[PlayerId, ...] = (),
     ) -> str: ...
 
 
@@ -763,6 +777,7 @@ class MeetingManager:
             transcript_so_far=transcript_so_far,
             contradictions=contradictions,
             prior_turn=prior_turn,
+            living_ids=living_ids,
         )
         turn_id = _turn_id(meeting_id=meeting_id, turn_index=turn_index)
         # The trigger kind of the LAST failed attempt, recorded with the
@@ -904,7 +919,15 @@ class MeetingManager:
         transcript_so_far: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
         prior_turn: MeetingTurn | None,
+        living_ids: frozenset[PlayerId],
     ) -> str:
+        # Living-roster accusation list (Task 9.9, audit gp-3): living
+        # participants minus this turn's speaker -- an agent cannot accuse
+        # itself -- via the same ``_candidate_targets`` filter the vote
+        # ballot uses for its eject targets (living minus voter).
+        accusation_targets = _candidate_targets(
+            living_ids, exclude=participant.agent_id
+        )
         if turn_kind == "opening":
             renderer = (
                 self._impostor_report_prompt
@@ -918,6 +941,7 @@ class MeetingManager:
                 rendered_memory=participant.rendered_memory,
                 public_transcript="",
                 fellow_impostor_ids=participant.fellow_impostor_ids,
+                living_ids=accusation_targets,
             )
         return self._statement_prompt(
             agent_id=participant.agent_id,
@@ -927,6 +951,7 @@ class MeetingManager:
             prior_turn=prior_turn,
             turn_kind=turn_kind,
             fellow_impostor_ids=participant.fellow_impostor_ids,
+            living_ids=accusation_targets,
         )
 
     # -- Voting -----------------------------------------------------------
@@ -968,13 +993,12 @@ class MeetingManager:
         contradictions: tuple[ContradictionRef, ...],
     ) -> VoteBallot:
         # Confirm the candidate set over the FINAL transcript: every living
-        # participant except the voter is an eligible eject target.
-        candidate_targets = tuple(
-            sorted(
-                other.agent_id
-                for other in participants
-                if other.agent_id != participant.agent_id
-            )
+        # participant except the voter is an eligible eject target (the same
+        # ``_candidate_targets`` filter the turn prompts use for their
+        # living-roster accusation list -- Task 9.9).
+        candidate_targets = _candidate_targets(
+            (other.agent_id for other in participants),
+            exclude=participant.agent_id,
         )
         # Belief Rule 2 (DESIGN.md §6.3): a detected contradiction lifts the
         # contradicted subject's suspicion in this voter's graph before the
@@ -1639,6 +1663,23 @@ def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
         corroborated=tuple(sorted(corroborated)),
         contradicted=tuple(sorted(contradicted)),
     )
+
+
+def _candidate_targets(
+    player_ids: Iterable[PlayerId],
+    *,
+    exclude: PlayerId,
+) -> tuple[PlayerId, ...]:
+    """Living players minus ``exclude``, sorted (DESIGN.md §5.5).
+
+    The single definition of "valid target" shared by the vote ballot's
+    ``candidate_targets`` (living minus voter) and the turn prompts'
+    living-roster accusation list (living minus speaker -- an agent cannot
+    accuse itself; Task 9.9, audit gp-3). One filter, two prompt surfaces,
+    so the rosters can never drift.
+    """
+
+    return tuple(sorted(pid for pid in player_ids if pid != exclude))
 
 
 def _drop_invalid_accusation_targets(

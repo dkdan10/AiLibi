@@ -1,13 +1,23 @@
 {# Reactive accusation-chain turn prompt (DESIGN.md §5.2, §5.3).
 
    prompt_id: accusation_round
-   version: 4
+   version: 6
    (v4, Task 8.8: reshaped from the fixed-round `Statement` turn to a reactive
     chain turn -- output is now meetings.schemas.MeetingTurn (turn_kind =
     "reply" or "opt_in"). Gains two inputs over the old renderer: `prior_turn`
     (the accusing turn this speaker answers; None for an opt-in) and
     `turn_kind`. The gated "Your fellow impostors" 7.12 block is preserved,
     rendered only when fellow_impostor_ids is non-empty.)
+   (v6, Task 9.9 -- DESIGN.md §5.1, §5.2, §5.5; audit gp-3: two prompt-layer
+    fixes for qwen3.5:9b artifacts. (1) free_text length discipline: at most
+    2-3 sentences stating the single conclusion, no narrated / second-guessed
+    reasoning -- with think:false the model relocates its deliberation into
+    free_text and overruns the frozen 2048 turn cap, truncating the turn into
+    a fail-soft default. (2) A gated living-roster block listing the only
+    valid accusation targets via the new optional `living_ids` input -- the
+    living players minus this speaker, mirroring the vote ballot's
+    candidate_targets -- so a turn never wastes its accusation on a dead /
+    ejected player.)
 
    Targets the shared `MeetingTurn` schema (meetings/schemas.py). The meeting
    manager substitutes the deterministic identity fields (`turn_id`,
@@ -35,6 +45,12 @@
                         turn this speaker is answering (turn_kind == "reply");
                         None for a terminal opt-in info-share turn.
      turn_kind       -- "reply" | "opt_in". Frames the turn.
+     living_ids      -- optional tuple of PlayerIds (Task 9.9, audit gp-3):
+                        the living players minus this speaker (an agent
+                        cannot accuse itself), i.e. the only valid accusation
+                        targets. The roster block is guarded on a non-empty
+                        value, so omitting it (or passing the default ())
+                        renders without the block under StrictUndefined.
 
    These inputs are exhaustive: the template references nothing else, so no
    hidden engine state can reach the LLM through this prompt.
@@ -44,7 +60,7 @@ turn in a reactive accusation chain (DESIGN.md §5.2). You will read the public
 meeting transcript so far together with your private memory, then submit
 exactly one turn.
 
-Prompt: accusation_round.v5 (DESIGN.md §5.2)
+Prompt: accusation_round.v6 (DESIGN.md §5.2)
 {% if turn_kind == "reply" %}
 
 ## Your turn: a reply
@@ -100,6 +116,16 @@ These players are your fellow impostors and are on YOUR team:
 accuse or incriminate one (do not name one in an `accusation` claim). If it
 helps your cover you may corroborate a teammate's alibi instead. Aim any
 accusation at a crewmate or stay defensive.
+{% endif %}
+{% if living_ids is defined and living_ids %}
+
+## Living players (the only valid accusation targets)
+You may ONLY accuse a player on the LIVING list below. Players found dead or
+previously ejected are out of the game and naming one wastes your turn; your
+own id is not listed because you cannot accuse yourself.
+
+{% for pid in living_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}
+
 {% endif %}
 
 ## Your private memory
@@ -189,7 +215,10 @@ Content fields (your actual turn):
                        floor to the player it names.
   - `corroboration` -- `{type: "corroboration", supports, on_tick, reason}`.
                        Backs up another player's claim with what you saw.
-- `free_text`: one to three sentences in your own voice. It must be
+- `free_text`: at most 2-3 sentences stating your single conclusion, in
+  your own voice. Do NOT narrate or second-guess your reasoning: no
+  step-by-step deliberation, no weighing of alternatives; state your
+  conclusion and the single strongest reason behind it. It must be
   consistent with the structured `claims`; the contradiction detector
   cross-references both layers in later turns.
 

@@ -153,9 +153,10 @@ class TestCrewmateReportTemplate:
 
     def test_rendered_output_contains_version_marker(self) -> None:
         # The crewmate opening template carries a visible version marker
-        # (bumped to v2 in Task 8.8) plus the role framing the LLM plays.
-        # A regression that swaps this for the impostor framing, or fails
-        # to bump the marker in lockstep, must fail the test.
+        # (bumped to v4 in Task 9.9: free_text length discipline + the
+        # living-roster accusation constraint) plus the role framing the LLM
+        # plays. A regression that swaps this for the impostor framing, or
+        # fails to bump the marker in lockstep, must fail the test.
         prompt = crewmate_report_prompt(
             agent_id="p-3",
             current_tick=412,
@@ -164,7 +165,7 @@ class TestCrewmateReportTemplate:
             public_transcript="",
         )
 
-        assert "crewmate_report.v3" in prompt
+        assert "crewmate_report.v4" in prompt
         assert "**crewmate**" in prompt
         assert "opening speaker" in prompt
 
@@ -195,6 +196,55 @@ class TestCrewmateReportTemplate:
                 # rendered_memory omitted on purpose.
                 public_transcript="",
             )
+
+    def test_living_roster_renders_and_constrains_accusations(self) -> None:
+        # Task 9.9 (audit gp-3): the living-roster accusation list (living
+        # players minus this speaker, threaded like the vote ballot's
+        # candidate_targets) renders into the opening prompt with the
+        # only-accuse-the-living instruction.
+        prompt = crewmate_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            public_transcript="",
+            living_ids=("p-1", "p-5"),
+        )
+
+        assert "You may ONLY accuse a player on the LIVING list below" in prompt
+        assert "`p-1`, `p-5`" in prompt
+
+    def test_free_text_length_discipline_is_present(self) -> None:
+        # Task 9.9 (audit gp-3): with think:false the 9B relocates its
+        # deliberation into free_text and overruns the frozen 2048 turn cap,
+        # so the template must carry the length discipline.
+        prompt = crewmate_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            public_transcript="",
+        )
+
+        assert "at most 2-3 sentences stating your single conclusion" in prompt
+        assert "Do NOT narrate or second-guess your reasoning" in prompt
+
+    def test_render_without_living_ids_validates_under_strict_undefined(
+        self,
+    ) -> None:
+        # The roster block is guarded with `is defined` (the optional-kwarg
+        # pattern, like fellow_impostor_ids), so a raw render that omits
+        # living_ids entirely still validates under StrictUndefined and
+        # simply omits the block.
+        prompt = _ENV.get_template(CREWMATE_REPORT_TEMPLATE).render(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            public_transcript="",
+        )
+
+        assert "LIVING list" not in prompt
 
     def test_fake_provider_response_parses_into_meeting_turn(self) -> None:
         prompt = crewmate_report_prompt(
@@ -339,7 +389,7 @@ class TestAccusationRoundTemplate:
             turn_kind="reply",
         )
 
-        assert "accusation_round.v5" in prompt
+        assert "accusation_round.v6" in prompt
         assert "reactive accusation chain" in prompt
 
     def test_reply_turn_frames_the_accuser(self) -> None:
@@ -423,6 +473,58 @@ class TestAccusationRoundTemplate:
                 prior_turn=None,
                 turn_kind="reply",
             )
+
+    def test_living_roster_renders_and_constrains_accusations(self) -> None:
+        # Task 9.9 (audit gp-3): the living-roster accusation list (living
+        # players minus this speaker, threaded like the vote ballot's
+        # candidate_targets) renders into reply / opt-in prompts with the
+        # only-accuse-the-living instruction.
+        prompt = accusation_round_prompt(
+            agent_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradictions=(),
+            prior_turn=_opening_turn(),
+            turn_kind="reply",
+            living_ids=("p-1", "p-5"),
+        )
+
+        assert "You may ONLY accuse a player on the LIVING list below" in prompt
+        assert "`p-1`, `p-5`" in prompt
+
+    def test_free_text_length_discipline_is_present(self) -> None:
+        # Task 9.9 (audit gp-3): with think:false the 9B relocates its
+        # deliberation into free_text and overruns the frozen 2048 turn cap,
+        # so the template must carry the length discipline.
+        prompt = accusation_round_prompt(
+            agent_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradictions=(),
+            prior_turn=_opening_turn(),
+            turn_kind="reply",
+        )
+
+        assert "at most 2-3 sentences stating your single conclusion" in prompt
+        assert "Do NOT narrate or second-guess your reasoning" in prompt
+
+    def test_render_without_living_ids_validates_under_strict_undefined(
+        self,
+    ) -> None:
+        # The roster block is guarded with `is defined` (the optional-kwarg
+        # pattern, like fellow_impostor_ids), so a raw render that omits
+        # living_ids entirely still validates under StrictUndefined and
+        # simply omits the block.
+        prompt = _ENV.get_template(ACCUSATION_ROUND_TEMPLATE).render(
+            agent_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradictions=(),
+            prior_turn=_opening_turn(),
+            turn_kind="reply",
+        )
+
+        assert "LIVING list" not in prompt
 
     def test_renders_speaker_self_alibi_example_with_own_id(self) -> None:
         # The template must anchor the self-alibi example to the speaker's

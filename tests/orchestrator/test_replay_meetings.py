@@ -165,6 +165,7 @@ def _crewmate_prompt(
     rendered_memory: str,
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    living_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"CR:{agent_id}:{current_tick}"
 
@@ -177,6 +178,7 @@ def _impostor_prompt(
     rendered_memory: str,
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    living_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"IM:{agent_id}:{current_tick}"
 
@@ -190,6 +192,7 @@ def _statement_prompt(
     prior_turn: MeetingTurn | None,
     turn_kind: TurnKind,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    living_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"ST:{agent_id}:{turn_kind}:{len(transcript.turns)}"
 
@@ -387,9 +390,10 @@ class TestReplayRecordsMeetingArtifacts:
         }
         # Task 8.8 introduced the reactive chain-turn accusation prompt; the
         # Phase 9 conversion wave bumped it to v5 (decisive reply + opt-in
-        # corroboration). A fresh replay entry must carry the live version
-        # string end-to-end.
-        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v5"
+        # corroboration) and Task 9.9 to v6 (free_text length discipline +
+        # the living-roster accusation constraint). A fresh replay entry must
+        # carry the live version string end-to-end.
+        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v6"
         # LLM cost metadata recorded per call. The chain protocol:
         #   turns: 1 opening + 1 reply = 2 calls
         #   ballots: 4 living voters = 4 calls

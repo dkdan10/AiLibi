@@ -905,6 +905,7 @@ def _stub_crewmate_prompt(
     rendered_memory: str,
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    living_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"CREWMATE_REPORT agent_id={agent_id} tick={current_tick}"
 
@@ -917,6 +918,7 @@ def _stub_impostor_prompt(
     rendered_memory: str,
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    living_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"IMPOSTOR_REPORT agent_id={agent_id} tick={current_tick}"
 
@@ -930,6 +932,7 @@ def _stub_statement_prompt(
     prior_turn: MeetingTurn | None,
     turn_kind: TurnKind,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    living_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"STATEMENT_PROMPT agent_id={agent_id} kind={turn_kind}"
 

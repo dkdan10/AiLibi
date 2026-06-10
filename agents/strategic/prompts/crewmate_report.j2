@@ -1,7 +1,18 @@
-{# prompt_version: crewmate_report.v3
+{# prompt_version: crewmate_report.v4
 
    Crewmate-side OPENING-turn prompt for the reactive accusation chain
    (DESIGN.md §5.1, §5.2 PHASE 1, §5.3, §6.6).
+
+   Task 9.9 (DESIGN.md §5.1, §5.2, §5.5; audit gp-3) bumped v3 -> v4 with two
+   prompt-layer fixes for qwen3.5:9b artifacts: (1) a free_text length
+   discipline (at most 2-3 sentences stating the single conclusion; no
+   narrated / second-guessed reasoning) -- with think:false the model
+   relocates its deliberation into free_text and overruns the frozen 2048
+   turn cap, truncating the turn into a fail-soft default; and (2) a
+   living-roster constraint block listing the only valid accusation targets
+   (living players minus this speaker, mirroring the vote ballot's
+   candidate_targets) so the opening never wastes itself on a dead / ejected
+   player.
 
    Task 8.8 reshaped this template from the old parallel-reports
    ReportDocument intake to the chain's opening turn: the body-reporter /
@@ -28,6 +39,13 @@
      public_transcript   -- Markdown string of any prior public turns in this
                             meeting. Empty / falsy at the opening (turn 0
                             precedes every other turn).
+     living_ids          -- optional tuple of PlayerIds: the living players
+                            minus this speaker (an agent cannot accuse
+                            itself), i.e. the only valid accusation targets
+                            (Task 9.9, audit gp-3). The roster block is
+                            guarded on a non-empty value, so omitting it (or
+                            passing the default ()) renders without the
+                            block under StrictUndefined.
 
    Output contract: the LLM must emit one JSON object conforming exactly to
    meetings.schemas.MeetingTurn (re-exported via
@@ -49,7 +67,7 @@ job is to catch the impostor; a non-answer hands them a free round and another
 kill. Only withhold an accusation if you genuinely recorded nothing pointing at
 anyone.
 
-Prompt: crewmate_report.v3 (DESIGN.md §5.2 PHASE 1)
+Prompt: crewmate_report.v4 (DESIGN.md §5.2 PHASE 1)
 
 Your job in this opening turn: surface your observations AND commit to your single
 best suspect. You are the crew's first mover — a decisive, grounded accusation
@@ -61,6 +79,16 @@ do not add up, a contradiction in someone's account. That is enough to name them
 - You are: `{{ agent_id }}`
 - Current tick: {{ current_tick }}
 - Meeting trigger: {{ meeting_trigger }}
+{% if living_ids is defined and living_ids %}
+
+## Living players (the only valid accusation targets)
+You may ONLY accuse a player on the LIVING list below. Players found dead or
+previously ejected are out of the game and naming one wastes your turn; your
+own id is not listed because you cannot accuse yourself.
+
+{% for pid in living_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}
+
+{% endif %}
 
 ## Your memory (rendered view)
 {{ rendered_memory }}
@@ -99,10 +127,11 @@ Content fields (your actual turn):
     - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`
   To accuse, add exactly one `accusation` claim naming your single best
   suspect. To stay unsure, add no `accusation` claim (a self-alibi is fine).
-- `free_text`: one short paragraph (1-4 sentences) that you would say aloud
-  to the table. This is the natural-language argument other agents will see
-  in the transcript. Do not duplicate the entire `observations` list here;
-  use it to highlight the strongest signal and explain why it matters.
+- `free_text`: at most 2-3 sentences stating your single conclusion -- what
+  you would say aloud to the table. Do NOT narrate or second-guess your reasoning:
+  no step-by-step deliberation, no weighing of alternatives; state your
+  conclusion and the single strongest signal behind it. Do not duplicate the
+  entire `observations` list here.
 
 ## Reasoning guidelines
 - **Name one suspect.** Pick the single player your evidence most points to —
