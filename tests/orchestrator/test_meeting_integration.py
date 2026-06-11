@@ -866,7 +866,10 @@ class _ScriptedLLMClient:
             # Identity fields are placeholders: the manager overrides
             # turn_id / turn_index / speaker / turn_kind / reply_to. A
             # claim-free turn never extends the accusation chain, so the
-            # meeting is exactly: opening turn -> ballots.
+            # meeting is exactly: opening turn -> ballots. The free_text
+            # declares "unsure" so the claim-free OPENING satisfies the
+            # Task 10.3 accuse-or-declare-unsure validation and records on
+            # its first attempt (no retry call, no default).
             text = MeetingTurn(
                 turn_id="placeholder",
                 turn_index=0,
@@ -875,7 +878,7 @@ class _ScriptedLLMClient:
                 reply_to=None,
                 observations=(),
                 claims=(),
-                free_text="stub-turn",
+                free_text="stub-turn (unsure)",
             ).model_dump_json()
         elif schema is VoteBallot:
             text = VoteBallot(
@@ -906,6 +909,7 @@ def _stub_crewmate_prompt(
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"CREWMATE_REPORT agent_id={agent_id} tick={current_tick}"
 
@@ -919,6 +923,7 @@ def _stub_impostor_prompt(
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"IMPOSTOR_REPORT agent_id={agent_id} tick={current_tick}"
 
@@ -933,6 +938,7 @@ def _stub_statement_prompt(
     turn_kind: TurnKind,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return f"STATEMENT_PROMPT agent_id={agent_id} kind={turn_kind}"
 
@@ -1116,6 +1122,9 @@ class TestDefaultMeetingRunner:
             ) -> LLMResponse:
                 self._count += 1
                 if schema is MeetingTurn and self._count == 1:
+                    # "unsure" satisfies the Task 10.3 opening validation, so
+                    # the meeting still aborts on the SECOND call (the vote),
+                    # not on an opening retry.
                     return LLMResponse(
                         text=MeetingTurn(
                             turn_id="placeholder",
@@ -1125,7 +1134,7 @@ class TestDefaultMeetingRunner:
                             reply_to=None,
                             observations=(),
                             claims=(),
-                            free_text="r",
+                            free_text="r (unsure)",
                         ).model_dump_json(),
                         usage=TokenUsage(input_tokens=1, output_tokens=1),
                         cost_usd=0.0,

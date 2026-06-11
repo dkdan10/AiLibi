@@ -79,6 +79,7 @@ def crewmate_report_prompt(
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     """Render the Phase-1 crewmate report prompt (DESIGN.md §5.3).
 
@@ -94,6 +95,10 @@ def crewmate_report_prompt(
     the vote ballot's ``candidate_targets`` -- rendered as the only valid
     accusation targets. The template guards the block on a non-empty value,
     so the default ``()`` (ad-hoc renders) keeps the prompt byte-unchanged.
+
+    ``dead_ids`` (Task 10.3, audit gp-9) is the dead / ejected negative
+    list, rendered as an explicit do-not-accuse line under the living
+    roster. Guarded the same way: the default ``()`` omits the line.
     """
 
     return _ENV.get_template(CREWMATE_REPORT_TEMPLATE).render(
@@ -103,6 +108,7 @@ def crewmate_report_prompt(
         rendered_memory=rendered_memory,
         public_transcript=public_transcript,
         living_ids=living_ids,
+        dead_ids=dead_ids,
     )
 
 
@@ -115,6 +121,7 @@ def impostor_report_prompt(
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     """Render the Phase-1 impostor report prompt (DESIGN.md §4.5, §5.3).
 
@@ -130,10 +137,13 @@ def impostor_report_prompt(
     block only when it is non-empty, so a sole impostor (``()``) gets a
     byte-unchanged prompt.
 
-    ``living_ids`` (Task 9.9) is the living-roster accusation list. The
-    impostor template does not reference it yet — it is accepted and
-    passed through, like ``agent_id`` above, so a future template
-    revision can opt in without breaking call sites.
+    ``living_ids`` (Task 9.9) is the living-roster accusation list,
+    rendered since impostor_report_v4 (Task 10.3): the dead-id
+    accusation hallucination was disproportionately impostor-spoken
+    (12/18, audit gp-9 D-D-8), so the impostor opening now carries the
+    same roster block as the crewmate one. ``dead_ids`` (Task 10.3) is
+    the matching dead / ejected do-not-accuse line. Both are guarded on
+    a non-empty value, so the defaults (``()``) omit the blocks.
     """
 
     return _ENV.get_template(IMPOSTOR_REPORT_TEMPLATE).render(
@@ -144,6 +154,7 @@ def impostor_report_prompt(
         public_transcript=public_transcript,
         fellow_impostor_ids=fellow_impostor_ids,
         living_ids=living_ids,
+        dead_ids=dead_ids,
     )
 
 
@@ -157,6 +168,7 @@ def accusation_round_prompt(
     turn_kind: TurnKind,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
@@ -191,6 +203,10 @@ def accusation_round_prompt(
     the vote ballot's ``candidate_targets`` -- rendered as the only valid
     accusation targets. The template guards the block on a non-empty value,
     so the default ``()`` (ad-hoc renders) keeps the prompt byte-unchanged.
+
+    ``dead_ids`` (Task 10.3, audit gp-9) is the dead / ejected negative
+    list, rendered as an explicit do-not-accuse line under the living
+    roster. Guarded the same way: the default ``()`` omits the line.
     """
 
     return _ENV.get_template(ACCUSATION_ROUND_TEMPLATE).render(
@@ -202,6 +218,7 @@ def accusation_round_prompt(
         turn_kind=turn_kind,
         fellow_impostor_ids=fellow_impostor_ids,
         living_ids=living_ids,
+        dead_ids=dead_ids,
     )
 
 
