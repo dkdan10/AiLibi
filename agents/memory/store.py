@@ -141,8 +141,18 @@ def render_for_prompt(
         ),
         key=lambda obs: (-obs.salience, -obs.tick, obs.line),
     )
-    beliefs_lines = _build_belief_lines(memory.beliefs, memory.working)
-    contradiction_lines = _build_contradiction_lines(memory.beliefs)
+    # §6.6 roster filter (Task 10.2, audit gp-6 C-C-8): belief rows AND
+    # open-contradiction lines render only for engine-witnessed player
+    # ids, so a garbage subject that somehow reached the store (the
+    # seed-12 m2 turn-id-as-player rows) cannot render into any prompt
+    # through either section. Gated on the same 9.3 self channel as the
+    # guards above: with no recorded ``agent_id`` (pre-9.3 fixtures) the
+    # roster is underivable and the render is byte-identical to today --
+    # production perception has recorded the id on every tick since
+    # Task 9.3.
+    roster = _known_roster_ids(memory.episodic) if own_agent_id is not None else None
+    beliefs_lines = _build_belief_lines(memory.beliefs, memory.working, roster=roster)
+    contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
 
     return _assemble_view(
         role=role,
@@ -183,6 +193,25 @@ def absorb_meeting_evidence(
     impostor (DESIGN.md §4.7, the 7.12/9.3 firewall), with zero new
     orchestrator-supplied channel.
 
+    Roster filter (Task 10.2; audit gp-6 C-C-8, H-H-6). The fold is
+    filtered to the agent's engine-witnessed player-id set
+    (:func:`_known_roster_ids`, derived from the same episodic store), so
+    a hallucinated structural id in the evidence -- a game id, a turn id,
+    a free-text phrase -- never materialises a persistent belief row and
+    therefore never renders into the §6.6 view or the next meeting's
+    suspicion graph (the seed-12 m2 garbage-row shape). The fold also
+    PURGES any pre-existing non-roster row from the store
+    (:meth:`~agents.memory.beliefs.BeliefState.drop_player`), so even a
+    store polluted by a hypothetical write path the filters do not cover
+    self-heals at its first post-meeting fold -- every downstream
+    snapshot, including the vote prompt's suspicion graph
+    (``orchestrator.game.TacticalAgent.suspicion_graph_for_meeting``),
+    carries roster ids only. Players co-spawn, so the set covers the
+    full roster from the first perception tick and both filters are
+    no-ops on real-player data. This is the defense-in-depth backstop
+    behind the Task 10.2 meeting-layer chokepoint, which already drops
+    garbage-subject claims before they are recorded.
+
     Raises :class:`ValueError` when no ``self_state`` event carrying the
     agent's own id has been recorded: the self-subject guard cannot run
     without it, and a meeting before perception is a wiring bug, not a
@@ -207,6 +236,7 @@ def absorb_meeting_evidence(
             corroborated=corroborated,
             contradicted=contradicted,
             fellow_impostor_ids=tuple(sorted(teammate_ids)),
+            roster=_known_roster_ids(memory.episodic),
         )
     )
 
@@ -267,6 +297,54 @@ def _latest_self_guard_fields(
         if isinstance(fellows, (tuple, list)):
             teammates = frozenset(str(player_id) for player_id in fellows)
     return agent_id, teammates
+
+
+def _known_roster_ids(episodic: MemoryStore) -> frozenset[str]:
+    """Player ids the agent witnessed through the observation firewall.
+
+    The agent-side notion of "known roster ids" (Task 10.2; audit gp-6
+    C-C-8): every id below entered the episodic store from an
+    engine-derived :class:`~observation.packet.ObservationPacket` field
+    (``agents.perception.ingest_packet``), so the set can contain real
+    players only -- an LLM-hallucinated structural id (a game id, a turn
+    id, a free-text phrase) has no path into it. Sources:
+
+    * ``self_state`` -- the recipient's own ``agent_id`` plus the
+      privileged ``fellow_impostor_ids`` self channel;
+    * ``saw_player`` -- every first-hand sighting's ``player_id``;
+    * ``saw_body`` -- every discovered body's ``victim_id``.
+
+    Players co-spawn in one room (``orchestrator.seeder``), so in
+    production the set covers the full game roster -- living AND dead --
+    from the first perception tick; dead players stay in it, matching
+    "roster id" (liveness is the meeting chokepoint's rule, not this
+    set's). Used by :func:`absorb_meeting_evidence` to filter the
+    post-meeting fold and by :func:`render_for_prompt` to filter the
+    §6.6 belief rows, so garbage subjects neither materialise belief
+    rows nor render into any prompt surface. Payload fields are read
+    defensively (the :func:`_latest_self_guard_fields` convention), so a
+    hand-built fixture event missing a field contributes nothing rather
+    than failing.
+    """
+
+    ids: set[str] = set()
+    for event in episodic.recent(since_tick=0):
+        if event.type == _EVENT_SELF_STATE:
+            own = event.payload.get("agent_id")
+            if isinstance(own, str):
+                ids.add(own)
+            fellows = event.payload.get("fellow_impostor_ids")
+            if isinstance(fellows, (tuple, list)):
+                ids.update(str(player_id) for player_id in fellows)
+        elif event.type == _EVENT_SAW_PLAYER:
+            player_id = event.payload.get("player_id")
+            if isinstance(player_id, str):
+                ids.add(player_id)
+        elif event.type == _EVENT_SAW_BODY:
+            victim_id = event.payload.get("victim_id")
+            if isinstance(victim_id, str):
+                ids.add(victim_id)
+    return frozenset(ids)
 
 
 def _collect_body_sightings(episodic: MemoryStore) -> tuple[tuple[str, int], ...]:
@@ -528,9 +606,26 @@ def _render_heard(
     return _Observation(salience=salience, tick=event.tick, line=line)
 
 
-def _build_belief_lines(beliefs: BeliefState, working: WorkingMemory) -> list[str]:
+def _build_belief_lines(
+    beliefs: BeliefState,
+    working: WorkingMemory,
+    *,
+    roster: frozenset[str] | None = None,
+) -> list[str]:
+    """Render the §6.6 belief rows, filtered to ``roster`` when supplied.
+
+    ``roster`` is the engine-witnessed player-id set
+    (:func:`_known_roster_ids`): a belief row outside it is a phantom
+    subject (audit gp-6 C-C-8 -- e.g. a turn id materialised as a player
+    row) and is skipped rather than rendered into the prompt. ``None``
+    renders every known row (legacy fixtures without the 9.3 self
+    channel, where the roster is underivable).
+    """
+
     lines: list[str] = []
     for player_id in sorted(beliefs.known_players()):
+        if roster is not None and player_id not in roster:
+            continue
         belief = beliefs.view(player_id)
         belief_text = _format_belief_score(belief)
         if belief_text is None:
@@ -565,10 +660,28 @@ def _format_last_seen_suffix(last_seen: LastSeen | None) -> str:
     return f"last seen in {last_seen.room} at tick {last_seen.tick}"
 
 
-def _build_contradiction_lines(beliefs: BeliefState) -> list[str]:
+def _build_contradiction_lines(
+    beliefs: BeliefState,
+    *,
+    roster: frozenset[str] | None = None,
+) -> list[str]:
+    """Render the §6.6 open-contradiction lines, roster-filtered like beliefs.
+
+    ``roster`` is the engine-witnessed player-id set
+    (:func:`_known_roster_ids`): an inconsistency recorded on a
+    non-roster (phantom-subject) row is skipped, mirroring
+    :func:`_build_belief_lines`, so neither §6.6 section can surface a
+    garbage subject (audit gp-6 C-C-8). The cross-player dedup is
+    unchanged -- a flag recorded on both a roster and a non-roster row
+    still renders once, via the roster row. ``None`` renders every known
+    row (legacy fixtures without the 9.3 self channel).
+    """
+
     seen: set[tuple[str, str, str]] = set()
     contradictions: list[ContradictionRef] = []
     for player_id in sorted(beliefs.known_players()):
+        if roster is not None and player_id not in roster:
+            continue
         belief = beliefs.view(player_id)
         for contradiction in belief.inconsistencies:
             key = (

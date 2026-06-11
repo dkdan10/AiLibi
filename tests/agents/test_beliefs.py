@@ -856,3 +856,92 @@ class TestMeetingEvidenceRules:
         assert first.view("prior_suspect").suspicion == pytest.approx(
             0.7 + (_DEFAULT_SUSPICION - 0.7) * MEETING_SUSPICION_DECAY_RATE
         )
+
+
+class TestMeetingEvidenceRosterFilter:
+    """Task 10.2 (DESIGN.md §6.3; audit gp-6 C-C-8, H-H-6).
+
+    ``apply_meeting_evidence_rules`` with a ``roster`` drops non-roster
+    evidence subjects on the input side AND purges pre-existing
+    non-roster rows from the returned state -- the belief-store half of
+    the defense-in-depth behind the meeting-layer chokepoint, so a
+    hallucinated structural id never materialises a row however it
+    arrives, and a row that somehow predates the filters does not
+    survive a fold. ``roster=None`` preserves the unfiltered legacy
+    shape (no input filter, no purge).
+    """
+
+    def test_non_roster_subjects_are_dropped_from_every_channel(self) -> None:
+        # The audit's garbage shapes (a game id, a turn id, a free-text
+        # phrase) across all three channels: no row materialises, while
+        # the roster subjects folded alongside land at the exact deltas.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("headless-seed-9", "p-5"),
+            corroborated=("headless-seed-12:meeting-0:turn-0", "p-3"),
+            contradicted=("p-2 dead",),
+            roster=frozenset({"observer", "p-2", "p-3", "p-4", "p-5"}),
+        )
+
+        assert set(updated.known_players()) == {"p-3", "p-5"}
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert updated.view("p-3").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION - CORROBORATION_SUSPICION_DELTA
+        )
+
+    def test_pre_existing_non_roster_row_is_purged_by_the_fold(self) -> None:
+        # The output-side half (Codex review, PR #140): a garbage row
+        # that already exists -- pollution predating the filters, or a
+        # hypothetical write path they do not cover -- is DELETED by the
+        # fold, not decayed, so the returned state and every snapshot
+        # built from it (the §6.6 render, the next vote prompt's
+        # suspicion graph) carry roster ids only. New garbage evidence
+        # about the same id is likewise ignored; the roster row alongside
+        # decays normally, untouched by the purge.
+        beliefs = BeliefState()
+        beliefs.seed_player(
+            "headless-seed-12:meeting-0:turn-0", suspicion=0.45, trust=0.5
+        )
+        beliefs.seed_player("p-3", suspicion=0.7, trust=0.5)
+
+        updated = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=(),
+            corroborated=("headless-seed-12:meeting-0:turn-0",),
+            contradicted=("headless-seed-12:meeting-0:turn-0",),
+            roster=frozenset({"observer", "p-3"}),
+        )
+
+        assert updated.known_players() == ("p-3",)
+        assert updated.view("p-3").suspicion == pytest.approx(
+            0.7 + (_DEFAULT_SUSPICION - 0.7) * MEETING_SUSPICION_DECAY_RATE
+        )
+        # Purity holds: the purge mutated the returned copy, never the
+        # caller's state.
+        assert "headless-seed-12:meeting-0:turn-0" in beliefs.known_players()
+
+    def test_none_roster_applies_no_filter_and_no_purge(self) -> None:
+        # The legacy / pure-math call shape: without a roster channel the
+        # rules behave exactly as before this task -- non-roster evidence
+        # lands, and a pre-existing unknown row decays instead of being
+        # purged.
+        beliefs = BeliefState()
+        beliefs.seed_player("stale-unknown-id", suspicion=0.7, trust=0.5)
+
+        updated = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=("headless-seed-9",),
+            roster=None,
+        )
+
+        assert updated.view("headless-seed-9").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert updated.view("stale-unknown-id").suspicion == pytest.approx(
+            0.7 + (_DEFAULT_SUSPICION - 0.7) * MEETING_SUSPICION_DECAY_RATE
+        )
