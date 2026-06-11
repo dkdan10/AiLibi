@@ -14,22 +14,34 @@
 // concrete improvement proposals — purely from the recorded data (no Ollama; the
 // recorded LLM outputs carry no role, and roles are re-derived from the seeder).
 //
-// CURRENT TARGET — the Phase-9 conversion baseline: 9p/2i re-recorded on
-// qwen3.5:9b with the conversion prompts (crewmate_report v3 / accusation_round
-// v5 / vote_ballot v5) + the fb3cfa5 accusation-target validation. The 7B
-// baseline's headline (0 ejections / ~93% SKIP — "where does conversion break")
-// is SOLVED: vote_ballot v5 RENDERS the §4.6 verdict and the crew now ejects. So
-// the headline questions FLIP — derive the real numbers from the pointed set, do
-// not trust any quoted here:
-//   (1) Is this baseline VALID to anchor Wave-1 on?
-//   (2) Conversion QUALITY now that the crew ejects — what is the PRECISION
-//       (wrong-ejection rate), is the still-substantial SKIP share correct
-//       caution or missed ejections, and is opt-in corroboration the consensus
-//       mechanism that carries a ballot past the SKIP-plurality bar?
-//   (3) The known residuals — BALANCE (crew win share + how many wins are by
-//       task-stopwatch vs by ejection → impostor competitiveness) and the 9B
-//       ARTIFACTS (turn-verbosity reasoning-relocation that fail-softs turns past
-//       the 2048 cap; accusation-id hallucination dropped by fb3cfa5).
+// CURRENT TARGET — the Phase-9 WAVE-1 baseline: 9p/2i re-recorded at e750b40 on
+// qwen3.5:9b with the Wave-1 conversion-quality bundle landed (9.7 detector
+// down-weight: weak self-stated/narrow-window contradictions land in [0.5,0.60);
+// 9.8 persistent suspicion accumulator + decay: +0.05/accused-meeting,
+// −0.05/corroboration, 25%/meeting decay, fold runs AFTER the vote; 9.9
+// crewmate_report v4 + accusation_round v6: free_text discipline + living-roster;
+// 9.10 failed-call de-dup) on top of vote_ballot v5's rendered §4.6 verdict +
+// the fb3cfa5 target validation. The re-record's HARD validity gate is GREEN,
+// and its headline is KNOWN-ADVERSE (PR #138): conversion REGRESSED vs the
+// fb3cfa5 baseline (ejection_accuracy ~0.63→~0.48, impostor-accused conversion
+// ~0.45→~0.18, impostor ejections 22→10) while DETECTION improved
+// (impostor-accused meetings 47→55). Derive this set's real numbers yourself —
+// never trust quoted ones. The audit's job is NOT to re-discover the regression;
+// it is to DECOMPOSE it as the Phase-10 fork's decision input:
+//   (1) The 11 wrong ejections — what evidence class drove each (weak-self-stated
+//       / weak-narrow-window / strong contradiction / prior-meeting accumulator
+//       carry)? Did the old self-reporter railroad class actually die?
+//   (2) The ~45 missed conversions (impostor accused, no ejection) — partition:
+//       weak-flag-landed-sub-gate (the 9.7-down-weighted mass) vs no structured
+//       evidence at all (purely verbal accusation) vs an opt-in corroboration
+//       existed that an evidence-backed-seconding rule would have converted vs
+//       strong-evidence-yet-skipped (genuine inversion; should be 0).
+//   (3) The accumulator's first conversions (~2 zero-contradiction ejections) —
+//       verify the cross-meeting mechanism independently from the bytes.
+//   (4) The known residuals as PHASE-10 INPUT — balance (stopwatch-dominated
+//       wins), pacing/evidence-supply (meetings per game, evidence per meeting),
+//       impostor passivity, and the 9B artifacts (living-roster did NOT cut id
+//       hallucination 17→18; defaulted turns 4→3 not 0).
 //
 // Structure: a deterministic Extract pre-phase (one agent UPDATES + runs the
 // committed Python extractor: ground-truth roles, resolved events, hard rule
@@ -48,13 +60,13 @@
 
 export const meta = {
   name: 'gameplay-data-audit-v2',
-  description: 'Structured audit of a committed chain-protocol replay set (9p/2i, per-player tasks, accusation-chain meetings): deterministic rule + chain-protocol + conversion / 9B-artifact checks, parallel analysis lenses, adversarial verify, synthesis. Baseline-agnostic (derives anchors from the pointed set). Output is a findings + improvement-proposal report.',
-  whenToUse: 'After a chain-protocol eval set is recorded (post-PR-#119); analyzes gameplay data to VALIDATE the baseline and find bugs/trends/faults — conversion QUALITY + precision, balance / impostor-competitiveness, and model artifacts — and propose improvements before/within Wave-1 work.',
+  description: 'Structured audit of a committed chain-protocol replay set (9p/2i, per-player tasks, accusation-chain meetings): deterministic rule + chain-protocol + conversion / artifact checks in Extract, 4 focused analysis lenses (regression decomposition, pacing, impostor, model artifacts), adversarial verify, synthesis. Baseline-agnostic (derives anchors from the pointed set); model-tiered (Fable on the headline lens + synthesis, Opus elsewhere).',
+  whenToUse: 'After a chain-protocol eval set is recorded; validates the baseline and decomposes the conversion result — currently the Wave-1 ADVERSE regression — into the Phase-10 fork decision input (detector-class decomposition, missed-conversion partition, accumulator verification, pacing/impostor/artifact residuals).',
   phases: [
-    { title: 'Extract', detail: 'One agent updates + runs the committed extractor: roles, resolved events, hard-rule + chain-protocol + conversion / 9B-artifact aggregates into a facts JSON' },
-    { title: 'Analyze', detail: 'Parallel lenses over the facts + transcripts' },
+    { title: 'Extract', detail: 'One agent updates + runs the committed extractor: roles, resolved events, hard-rule + chain-protocol checks, conversion-decomposition aggregates into a facts JSON' },
+    { title: 'Analyze', detail: '4 parallel lenses over the facts + transcripts (C regression headline on Fable; B pacing, D impostor, H artifacts on Opus)' },
     { title: 'Verify', detail: 'Mechanical findings pass through; each judgment finding gets one skeptic (refuted drops; a failed skeptic passes it through flagged unverified)' },
-    { title: 'Synthesis', detail: 'Group findings, decompose conversion quality + precision, propose improvements, write report' },
+    { title: 'Synthesis', detail: 'Group findings, decompose the regression, propose Phase-10-input improvements, write report' },
   ],
 }
 
@@ -146,7 +158,7 @@ const SYNTHESIS_SCHEMA = {
           title: { type: 'string' },
           finding_ids: { type: 'array', items: { type: 'string' } },
           scope_sketch: { type: 'string' },
-          priority: { type: 'string', enum: ['urgent', 'pre-wave-1', 'opportunistic'] },
+          priority: { type: 'string', enum: ['urgent', 'phase-10-input', 'opportunistic'] },
         },
         required: ['proposed_id', 'title', 'finding_ids', 'scope_sketch', 'priority'],
       },
@@ -191,14 +203,30 @@ THE SUBSTRATE (Phase 8 — DESIGN.md §3.2/§3.3/§3.5/§5.2 are the rule source
 - CONVERSION LAYER + MODEL (the current target's prompts — DESIGN.md §4.6/§5.5): the vote ballot
   (vote_ballot v5) RENDERS the §4.6 skip-gate verdict in-prompt ("maximum suspicion among the living
   ejection targets is X; threshold 0.60 -> MUST vote / MUST skip"), the max taken over candidate_targets
-  ONLY; the opening (crewmate_report v3) and reply/opt-in (accusation_round v5) push a decisive,
-  grounded accusation + opt-in corroboration. ACCUSATION-TARGET VALIDATION (fb3cfa5,
-  meetings/manager.py): an accusation or ballot naming a non-living player is DROPPED and the original
-  recorded on free_text via INVALID_ACCUSATION_TARGET_MARKER (mirrors the ballot-target normalization)
-  — a dropped target is BY DESIGN, not a protocol violation, but its RATE is a model-quality signal
-  (qwen3.5:9b hallucinates ids like "imp-2"). The set's MODEL and prompt versions are in the MANIFEST /
-  replays — derive them; do not assume the model, or that any prompt-era number quoted in planning docs
-  still holds.
+  ONLY; the opening (crewmate_report v4) and reply/opt-in (accusation_round v6) push a decisive,
+  grounded accusation + opt-in corroboration, with a free_text length discipline and a living-roster
+  accusation constraint. ACCUSATION-TARGET VALIDATION (fb3cfa5, meetings/manager.py): an accusation or
+  ballot naming a non-living player is DROPPED and the original recorded on free_text via
+  INVALID_ACCUSATION_TARGET_MARKER — a dropped target is BY DESIGN, not a protocol violation, but its
+  RATE is a model-quality signal (qwen3.5:9b hallucinates ids like "imp-2"). The set's MODEL and prompt
+  versions are in the MANIFEST / replays — derive them; do not assume the model, or that any prompt-era
+  number quoted in planning docs still holds.
+- WAVE-1 SUSPICION MECHANICS (DESIGN.md §6.3/§4.6 — load-bearing for every by-design judgment):
+  (a) 9.7 detector precision: a contradiction classified WEAK (self-stated alibi — speaker == subject —
+  or narrow tick window) carries a reduced delta landing suspicion in [0.5, 0.60) ALONE — suspicious
+  but below the eject gate; a second independent signal (another contradiction, body-proximity, vent,
+  a prior-meeting accumulator carry) crosses. A lone weak contradiction NOT converting is the DESIGN,
+  not a detector failure. NOTE the shape ambiguity: a self-stated alibi contradicted by a sighting is
+  BOTH the innocent-reporter railroad shape AND the catch-a-lying-impostor shape — the classifier keys
+  on evidence shape, not target guilt. That symmetry is the heart of the regression.
+  (b) 9.8 accumulator + decay (PERSISTENT, cross-meeting): being accused in a meeting adds +0.05 to
+  every living agent's view of the accused (deduped per meeting — a pile-on cannot multiply it); a
+  corroboration lowers −0.05; suspicion with no new evidence decays 25% of the way toward the 0.5
+  prior per meeting. THE FOLD RUNS AFTER THE VOTE: a meeting's own accusations NEVER move its own
+  ballots — only the NEXT meeting's. Trajectory 0.5→0.55→0.60: crossing requires 2+ reinforcing
+  meetings BY DESIGN ("no single round ejects" — owner principle). At ~1.5 meetings/game this rarely
+  fires; that is a GAME-LENGTH limitation, not a mechanism bug. Ballots are NOT evidence (never feed
+  the accumulator). An impostor never accrues a bump against a fellow impostor (teammate guard).
 
 Inputs available to you:
 - FACTS JSON at: ${factsPath} — READ THIS FIRST. Per game: roles by player; kills (killer + victim +
@@ -225,21 +253,25 @@ Constraints for every lens:
   failed_calls) plus the MANIFEST git_sha, and treat THOSE as the briefed anchors. Cross-check them
   against the facts JSON; a facts-vs-report disagreement is itself a high-severity finding. Any
   cross-set comparison you make must name the other set's sample dir + commit.
-- Recently FIXED — do NOT re-flag as new defects unless a game in THIS set still exhibits them: the
-  win-condition impostor-elimination gap (Phase 6); hollow-meeting timeouts (Wave 0); impostor
-  friendly-fire kills (Wave 0.5 — teammate-aware kill + engine guard); impostor betrayal
-  ballots/accusations (7.12 — the firewall now wraps every turn kind and ballots); meeting
-  STARVATION (the chain substrate raised meeting_rate well above the 0.60 floor); and — Phase 9 — the
-  CONVERSION gap itself: the 7B's 0-ejection / threshold-quoting-SKIP inversion is fixed by the
-  vote_ballot v5 verdict rendering, so do NOT flag "the crew never ejects" or "the model quotes the
-  threshold then skips" as defects — characterize the conversion that NOW happens (its precision and
-  skip-correctness) instead. Invalid accusation/ballot targets (fb3cfa5) are dropped BY DESIGN — the
-  hallucination RATE is a quality signal, the drop itself is not a bug. Flag only if the DATA shows a
-  fixed item recurring in THIS set.
+- Recently FIXED or KNOWN — do NOT re-flag as new defects unless a game in THIS set still exhibits
+  them: the win-condition impostor-elimination gap (Phase 6); hollow-meeting timeouts (Wave 0);
+  impostor friendly-fire kills (Wave 0.5); impostor betrayal ballots/accusations (7.12); meeting
+  STARVATION (meeting_rate well above the 0.60 floor); the 7B threshold-quoting inversion (fixed by
+  the v5 verdict render). Invalid accusation/ballot targets are dropped BY DESIGN — the hallucination
+  RATE is the signal, the drop is not a bug. KNOWN-AND-REPORTED on THIS set (PR #138) — your job is to
+  DECOMPOSE these, not to re-discover them as findings: the conversion REGRESSION itself (do not file
+  "ejection accuracy fell" as a finding — decompose WHY, per your lens scope); the living-roster
+  constraint NOT cutting id-hallucination (17→18 — verify the shape, e.g. are the hallucinated ids the
+  same class as before, does the roster render correctly in the prompt); defaulted turns 3 (fail-soft,
+  no aborts); the vote_correctness sentinel reading 0.9 (verified mechanism: a persisted-suspicion
+  conversion that _has_real_evidence deliberately does not consult — working as designed); ~21 cross-room
+  kill rejections of the MECH-B-2 same-tick id-order class + ~77 dead-actor same-tick rejections
+  (MECH-B-3) — both engine-correct, informational. Flag only what is genuinely NEW or contradicts the
+  PR's self-report (a self-report contradiction IS a high finding).
 - No drive-by suggestions: a recommendation must address a cited finding.
 - Severity: "blocking" = invalidates this baseline's validity (the set must be re-recorded or the
-  engine fixed); "high" = shapes the Wave-1 crew-intel contract; "medium" = worth fixing before
-  Wave 1; "low" = opportunistic; "informational" = trend/observation only.
+  engine fixed); "high" = changes the Phase-10 fork decision or its contract; "medium" = worth fixing
+  in/before Phase 10; "low" = opportunistic; "informational" = trend/observation only.
 
 Your lens-specific scope is below. Stay within it; do not duplicate other lenses.
 
@@ -251,169 +283,96 @@ Your lens-specific scope is below. Stay within it; do not duplicate other lenses
 
 const LENSES = [
   {
-    key: 'A',
-    name: 'Engine rule-correctness',
-    scope: `The Extract phase already flagged the HARD, code-certain violations (engine-rule breaches
-surfaced as ActionRejected, impostor-victim kills, win-condition anomalies, chain-protocol rule
-breaks) — those go straight to synthesis. YOUR job is twofold:
-(1) Interpret each mechanical flag: true BUG or intended-by-design? Confirm against roles + the rule
-source (engine/rules.py, meetings/manager.py).
-(2) Find SUBTLER correctness issues the mechanical pass cannot: win attributions that disagree with
-the final state — note the §3.5 semantics: state.tasks holds per-player instances and the kill
-handler already drops a victim's incomplete instances, so CREWMATE_TASKS means "every remaining
-instance complete", and CREWMATE_EJECT (alive impostors == 0) is ordered BEFORE the task check in
-engine/win_conditions.py; meetings that triggered with no valid trigger; bodies created but never
-reportable; any game that continued past the last impostor's elimination (must be zero — flag
-loudly if not); per-player task anomalies (an instance progressed by a non-owner, a dead owner's
-instance completing after death). Reference engine/win_conditions.py and engine/rules.py. Cite
-seed+tick.`,
-  },
-  {
     key: 'B',
-    name: 'Gameplay trends & pacing',
-    scope: `From the facts aggregates, characterize gameplay across the 50 games (informational/low
-severity unless a trend exposes a defect). Cover: win split + win-REASON distribution (DERIVE the
-split AND the win-REASON breakdown — CREWMATE_TASKS vs CREWMATE_EJECT vs IMPOSTOR_PARITY — from the
-report/facts, then characterize; note that CREWMATE_EJECT wins are new on this baseline); game
-LENGTH and the restructure's core intent — did 9p/2i lengthen the race (game_over tick distribution;
-parity needs 5 crew deaths now) and where does the task-clock sit vs the kill-clock when games end
-(stopwatch-race profile)?; kill patterns (rooms, ticks-into-game, witnessed rate, body-report rate,
-bodies never reported); meeting patterns (per-game meeting counts, when they happen, the body-report
-vs emergency split — derive it — is the emergency button ever exercised, and is its absence a behavior
-gap or a structural one?); per-player task completion pacing (instances/crewmate completed over time, the
-§3.5 denominator shrink on deaths); role↔outcome correlations. Report the NUMBERS for each trend.
-Flag any degenerate cluster (one win-reason dominating, kills always in one room, all games ending
-in a narrow tick band).`,
+    name: 'Pacing, balance & evidence supply (Phase-10 design input)',
+    scope: `Characterize the GAME SHAPE that Phase 10 (impostor gameplay + pacing) must change — every
+number here is a Phase-10 design input. Cover: win split + win-REASON breakdown (derive it; if
+CREWMATE_TASKS dominates with gap-0 task completion, quantify the stopwatch margin — how many ticks
+separate the task win from the kill-clock's parity pace?); game LENGTH distribution and MEETINGS per
+game (the evidence-supply numbers: the 9.8 accumulator needs 2+ reinforcing meetings and the 9.7
+corroboration requirement needs 2+ signals per meeting — quantify how often games supply either:
+meetings/game histogram, evidence-bearing observations per meeting, witnesses per kill); kill patterns
+(rooms, tick-of-first-kill cluster, witnessed rate, body-report rate + latency, bodies never reported);
+the emergency button (0 expected — structural absence vs behavior gap; meetings currently trigger only
+on bodies, so impostors control meeting cadence via kill cadence — a Phase-10 lever); per-player task
+pacing (front-loading, the §3.5 denominator shrink); role↔outcome correlations. Report NUMBERS; flag
+degenerate clusters. Severity informational/low unless a trend exposes a defect.`,
   },
   {
     key: 'C',
-    name: 'Crew conversion quality & precision (detection→ejection)',
-    scope: `THE HEADLINE LENS — the question has FLIPPED. On the 7B baseline the crew never ejected
-(0 ejections, ~93% SKIP, threshold-quoting inversion); vote_ballot v5 now RENDERS the §4.6 verdict and
-the crew DOES eject. Derive THIS set's numbers (ejection count, ejection_accuracy, skip share) from the
-report + facts, then decompose the pipeline stage by stage WITH COUNTS, cross-referenced with FACTS
-roles — the goal is conversion QUALITY and its PRECISION LEAK, not "where it breaks":
-(1) Rendering held: confirm the §4.6 verdict rendered on the ballots and genuine threshold-inversions
-are ~0 — a voter whose max suspicion over a LIVING target is >= 0.60 that still SKIPs, MINUS firewall
-coercions (impostor protecting a teammate) and invalid-target normalizations. A non-zero genuine-
-inversion count is a HIGH finding (the rendering leaked).
-(2) Conversion: of meetings where a true impostor was accused or contradicted, how many END in an
-impostor ejection? Where consensus forms, is OPT-IN CORROBORATION the mechanism that carries the ballot
-past the SKIP-plurality bar (count meetings where an opt_in seconds the accusation the ejection then
-follows)?
-(3) PRECISION leak (the new Wave-1 target): of all ejections, how many hit an INNOCENT crewmate
-(derive ejection_accuracy)? Walk the wrong ejections — is the crew ejecting on thin proximity, on an
-impostor-STEERED chain, or on a genuine-looking but false contradiction? This is the cost side of
-making the crew decisive, and the input to the tally/abstain question.
-(4) SKIP correctness: the skip share is still substantial — PARTITION it. How many skips are CORRECT
-(no living impostor was >= 0.60 in that voter's graph) vs MISSED (an impostor WAS available >= 0.60 and
-the meeting skipped anyway)? Missed-ejection meetings are where conversion still leaks.
-(5) Ejection threshold: with 9 voters, what plurality does an ejection need, and how close do the
-SKIP-plurality meetings get — is a small consensus nudge (more opt-in corroboration, or an abstain-vs-
-skip ballot that does not count toward the no-eject plurality) the lever?
-Name the SINGLE biggest remaining conversion leak (missed ejections vs precision-cost vs consensus
-shortfall) — that is the input to the Wave-1 tally/abstain decision. Reference eval/vote_correctness.py
-and the §4.6 rendering in agents/strategic/prompts/vote_ballot.j2 (v5). Cite seed+meeting+turn with
-votes/roles.`,
+    name: 'Conversion-regression decomposition (the Phase-10 fork input)',
+    scope: `THE HEADLINE LENS. The regression is KNOWN (PR #138: ejection_accuracy ~0.63→~0.48,
+conversion ~0.45→~0.18, impostor ejections 22→10, while impostor-accused meetings ROSE 47→55) — do NOT
+re-discover it; DECOMPOSE it. Derive this set's numbers from the facts first, then answer FOUR asks
+with per-meeting walks, each cross-referenced with FACTS roles:
+(1) WRONG-EJECTION DECOMPOSITION (~11): for EACH wrong ejection, classify the evidence that carried
+the ejected innocent over 0.60 — a strong (non-weak) contradiction? a weak contradiction PLUS a
+prior-meeting accumulator carry (0.55 + weak-band delta crosses — legitimate corroboration-across-
+rounds by design, but check the prior accusation's quality)? multiple weak signals? Compare against
+the OLD baseline's railroad class (lone weak self-stated contradiction): did the 8/13 self-reporter
+class actually DIE, shrink, or shape-shift? Old bytes for targeted spot-checks:
+\`git show fb3cfa5:replays/samples/9p2i/replay-seed-N.jsonl\`.
+(2) MISSED-CONVERSION PARTITION (~45 = accused-but-not-ejected): partition EVERY one into
+(a) weak-flag-landed-sub-gate — a contradiction named the impostor but classified weak, so suspicion
+parked in [0.5,0.60): the mass 9.7's down-weight cost; for these, did ANY second signal exist in the
+meeting (body-proximity, a second contradiction, an opt-in corroborating the accuser) that a
+differently-shaped rule would have combined to cross?
+(b) no structured evidence at all — purely verbal accusation, nothing the detector could see: prompts
+cannot fix these; only more evidence supply (longer games, more witnesses) can;
+(c) accumulator near-miss — the impostor carried a prior-meeting bump and ONE more reinforcing
+meeting would have crossed (count how many games ended exactly one meeting short);
+(d) strong-evidence-yet-skipped — should be 0 (a genuine inversion; HIGH finding if found).
+Report the four bucket counts — bucket (a) vs (b) sizes are THE fork decision input: a large (a) says
+the weak-classifier shape is recoverable (e.g. kill-window/body-proximate contradictions kept strong);
+a large (b) says only the GAME (Phase 10 activity + pacing) can fix conversion.
+(3) ACCUMULATOR VERIFICATION: independently verify the ~2 zero-contradiction impostor ejections
+(reportedly seeds 6, 12) from the bytes — reconstruct the cross-meeting suspicion trajectory (prior
+meeting's accusations → +0.05 fold → this meeting's rendered max), confirm the rendered vote-prompt
+suspicion matches quantized rule deltas, and confirm the win attribution. Also count the accumulator's
+MISSES: meetings where a prior bump existed but decay erased it before the next meeting (the
+decay-rate question).
+(4) OLD-RAILROAD TRUE-POSITIVE LOAD (the question we failed to ask pre-wave): for the ~12 OLD-baseline
+impostor ejections that no longer happen, spot-check 4-6 via git show — was the old conviction
+evidence a lone weak self-stated contradiction (the railroad catching real liars)? This confirms or
+refutes PR #138's attribution that the railroad carried true positives.
+Reference meetings/transcript.py (the 9.7 weak classification), agents/memory/beliefs.py (the 9.8
+rules), eval/_suspicion_parse.py. Cite seed+meeting+turn with votes/roles/suspicion values.`,
   },
   {
     key: 'D',
-    name: 'Impostor behavior & chain exploitation',
-    scope: `Assess impostor play from transcripts + FACTS roles. Derive the impostor win count + reasons
-(on this baseline impostors win only a small fraction, ~all by parity) — characterize whether they are
-merely passive stopwatch-runners or actively deceptive. Under
-the chain protocol: when an impostor is ACCUSED, does the reply rebut/deflect/counter-accuse
-plausibly — and does the chain then move off them? Do impostors steer chains toward innocents? Do
-they exploit opt_in turns (volunteering misdirection) or stay silent? Do they corroborate/defend a
-teammate WITHOUT tripping the 7.12 firewall (betrayal must be 0 — Extract checks it; your job is the
-softer coordination quality)? Are fabricated alibis plausible + effective under chain confrontation
-(read the alibi-survival figure from the facts/report — don't assume; it is set-specific)? Do
-impostors ever vent or sabotage (likely never — confirm the behavioral gap from the action data;
-that is the known gp-4 toolkit gap, quantify it for this set)? Do impostor reporters self-report
-their own kills' bodies as misdirection? Reference observation/service.py (fellow_impostor_ids
-firewall) and eval/alibi_fabrication.py. Cite seed+meeting+turn.`,
-  },
-  {
-    key: 'E',
-    name: 'Call economics & waste',
-    scope: `CAVEAT: no wall-clock duration is recorded — reason from token sinks + call counts only.
-The chain protocol changed the meeting cost model: calls/meeting = 1 opening + (chain length - 1)
-replies + opt_in turns + N ballots (no more fixed R=2 statement rounds). From the facts: the
-calls-per-meeting distribution and its drivers (chain length vs opt-in count vs roster size); how
-that compares to the old protocol's cost at the same roster (old: N reports + 2×N statements + N
-votes — is the chain actually cheaper per meeting, as designed?); the biggest token sinks; meetings
-that run a long chain + full opt-ins and then SKIP anyway (deliberation that buys nothing — quantify
-the wasted calls); opt_in turns that add no new observations/claims (pure pass-throughs — eligible
-players who had nothing to say; is the eligibility gate too loose?); failed_calls — on the 9B set
-these are NON-zero: fail-soft turn defaults where the model's free_text reasoning-relocation overran
-the 2048 turn cap and truncated (a FailedCallReplayEntry per §11.4). COUNT them, name the seeds /
-turn-kinds, and treat the verbosity as a call-WASTE finding (a defaulted opening is a wasted call AND
-a lost accusation) — distinct from a parse-tolerance regression (8.9) and from a deadline timeout
-(headless is deadline-free, 8.15); coordinate with lens H for the root-cause read. Derive token totals
-(in/out) and the biggest sinks from the facts. Propose concrete reductions (each with the call/token
-savings). Cite seed + counts.`,
-  },
-  {
-    key: 'F',
-    name: 'Metric soundness, coverage & balance',
-    scope: `Three sub-checks. (1) Metric soundness ON THE NEW SUBSTRATE: the metrics were re-pointed to
-transcript.turns in 8.10 — sanity-check the tournament-report metrics (meeting_rate,
-vote_correctness, accusation_calibration, alibi_fabrication, cost_dashboard) against the raw facts.
-Do any mislead a Wave-1 A/B? Specifically: ejections now OCCUR, so vote_correctness_rate and
-ejection_accuracy are LIVE (no longer null/small_n) — sanity-check them against the raw facts and NAME
-the Wave-1 LEAD METRIC + its denominator (ejection_accuracy? a contradiction→ejection conversion rate?
-accusation precision?). Flag any metric that would mislead a Wave-1 A/B — in particular the WIN SPLIT
-is balance-dominated and is NOT a conversion signal (the standing "gate on conversion, not win-split"
-note), so name what to gate on instead; derive meeting_rate and say whether it still discriminates or
-sits near ceiling; does the body/emergency trigger split read correctly? (2) Seed coverage /
-representativeness: do the 50 seeds cover diverse situations (kill counts, meeting counts, chain
-lengths, room spread) or cluster degenerately? (3) Balance: DERIVE the crew win share AND its REASON
-split (task-stopwatch vs ejection). If nearly all crew wins are by task completion with impostor wins
-near zero, the meetings-now-work machinery is barely load-bearing on OUTCOMES — characterize that as
-the balance / impostor-competitiveness question (ties to the gp-4 toolkit gap + gp-6 balance knobs):
-is IMPOSTOR_PARITY-only winning evidence the impostor side lacks any other viable path, and is a
-crew-favored-by-stopwatch split a healthy pre-Wave-1 baseline or a new degeneracy? Reference eval/*.py.
-Cite numbers.`,
-  },
-  {
-    key: 'G',
-    name: 'Chain-protocol dynamics',
-    scope: `The protocol as a MECHANISM (rule VIOLATIONS are Extract's job; you judge whether the
-protocol produces good deliberation). From the per-meeting chain facts: the chain-length
-distribution and the termination-condition mix — what fraction end by (a) no-new-accusation, (b)
-re-accusation cycle, (c) the living-player cap? If (a) on the opening turn dominates (reporter opens
-"unsure" → instant termination → straight to opt-ins/vote), the chain never engages — quantify how
-often the protocol's reactive core actually runs. When the chain DOES run: does the accused actually
-rebut the accusation made against them (responsive replies) or talk past it? Do re-accusation cycles
-(condition b) represent genuine convergence (two players locked on each other) or ping-pong noise?
-Opt-in usage: how many eligible non-speakers exist per meeting, how many speak, do their
-observations add NEW information (facts not already in the chain), and do ballots cite opt_in turns?
-Does speaking ORDER shape outcomes (is the opening speaker's accusation disproportionately followed
-in ballots)? Propose protocol-level tunings only where a cited dynamic warrants one (e.g. eligibility
-gate, opening-turn prompt shape) — prompt-level fixes belong to Wave 1. Cite seed+meeting+turn.`,
+    name: 'Impostor behavior (Phase-10 toolkit input)',
+    scope: `Assess impostor play from transcripts + FACTS roles — this lens's output directly shapes the
+Phase-10 impostor-gameplay contract, so quantify each TOOLKIT GAP, not just "passive": (1) blending —
+do impostors emit do_task/report actions at all (expected ~0; exact counts), and what does their
+movement look like vs crew (stalking? loitering?); (2) under accusation — does the reply
+rebut/deflect/counter-accuse plausibly, does the chain move off them, and how often does an accused
+impostor SURVIVE the vote (the deception-effectiveness number); (3) fabricated alibis — plausible and
+effective under the NEW detector (alibi-survival figure from the facts; how many impostor alibis drew
+a weak vs strong contradiction — the 9.7 weak band now shelters lone-weak-contradicted impostors:
+quantify how many impostors survived BECAUSE of the down-weight); (4) misdirection — do impostors
+steer chains at innocents, exploit opt_ins, self-report their own kills; did any wrong ejection have
+impostor votes as the decisive margin; (5) teammate coordination quality WITHOUT firewall trips
+(betrayal must be 0 — Extract checks); (6) kill-intent discipline — the cross-room/timing waste
+classes. Reference observation/service.py, eval/alibi_fabrication.py. Cite seed+meeting+turn.`,
   },
   {
     key: 'H',
-    name: 'Model artifacts (qwen3.5:9b behavior)',
-    scope: `NEW for the 9B baseline — characterize the model's output PATHOLOGIES as data (derive
-counts; do not assume). (1) TURN VERBOSITY / reasoning-relocation: with think=false the 9B can dump
-deliberation into a turn's free_text and run past the 2048 turn cap, so the 7.10 fail-soft defaults
-the turn (a failed_call record + the "(missed deadline; no turn submitted)" placeholder). Find every
-such defaulted turn (failed_call records; output_tokens pinned at the cap), which seeds + turn-kinds,
-and the COST: a defaulted OPENING is a lost chain-driving accusation, a defaulted reply collapses the
-chain. Read the raw_response TAILS to classify the cause — reasoning-relocation ("Wait... actually...
-re-evaluating...") vs a legitimately-large turn — because that decides the fix (a prompt
-length-discipline, the vote-rationale analog, vs a cap raise; note a cap raise risks the same num_ctx
-overrun the vote hit). Also sample free_text LENGTH across NON-truncated turns: is the 9B broadly
-verbose (bloating cost + parse-risk) even when it does not truncate? (2) ID HALLUCINATION: count
-accusations/ballots whose target was DROPPED by the fb3cfa5 validation (INVALID_ACCUSATION_TARGET_MARKER
-on free_text) — the rate, the seeds, and whether a dropped accusation WEAKENED the meeting (a lost
-opening accusation → instant chain termination → straight to vote). (3) Any other 9B-specific tell in
-the recorded outputs: fabricated tick/room ids that pass schema but fail cross-check, repetition,
-schema-gaming, confidence miscalibration. Each is a model-quality signal that informs whether a
-prompt-length / turn-cap follow-up should ride the next re-record (a Wave-1 input, NOT a re-record
-blocker — the baseline is valid with these accounted). Reference meetings/manager.py (the 7.10
-fail-soft + the fb3cfa5 marker) and the turn prompts. Cite seed+meeting+turn.`,
+    name: 'Model artifacts: 9.9 effectiveness check (qwen3.5:9b)',
+    scope: `VERIFY the 9.9 prompt levers against the bytes — both are KNOWN-partial from PR #138;
+your job is the shape and the residual, not re-discovery. (1) FREE_TEXT DISCIPLINE: compare the
+free_text length distribution per turn_kind (in the facts) against what discipline should produce —
+did v4/v6's "2-3 sentences" instruction actually shrink typical turns, or only trim the tail? For the
+~3 remaining defaulted turns (2048-cap fail-softs), read the raw_response tails: still
+reasoning-relocation ("Wait... actually..."), or a new shape? A defaulted OPENING costs the meeting
+its chain-driving accusation — note which. Do NOT propose a cap raise (frozen; num_ctx overrun risk).
+(2) ID HALLUCINATION residual: the living-roster constraint did NOT cut drops (17→18) — read the
+actual dropped ids + their prompts: does the rendered roster contain the right ids (a render bug would
+be a HIGH finding)? Are the hallucinated ids the same shapes as pre-9.9 ("imp-2", dead players)? Did
+any dropped accusation cost a meeting its opening accusation (instant termination)? If the roster
+renders correctly and the model still invents ids, conclude prompt-saturation (contained by the
+fb3cfa5 guard; a model artifact, not a fixable prompt bug). (3) Any genuinely NEW 9B tell on this
+re-record (fabricated ticks/rooms passing schema, repetition, confidence quantization beyond the known
+rule-delta values). Reference the turn prompts + meetings/manager.py. Cite seed+meeting+turn.`,
   },
 ]
 
@@ -431,14 +390,16 @@ structured FACTS file and code-check the hard violations for the committed repla
 re-derive them. (Unlike the read-only analysis lenses that follow, THIS Extract phase MAY write — it
 updates the extractor script and writes the facts JSON to a temp path.)
 
-START FROM THE COMMITTED EXTRACTOR: audits/workflows/extract_gameplay_facts.py. It was written for the
-pre-Phase-8 7p/2i set and is structurally sound (role re-derivation via orchestrator.seeder, a full
-advance_tick + apply_meeting_result re-walk with per-tick state-hash verification, hard-rule
-classification via ActionRejected reasons, win cross-checks, fail-loud invariants). UPDATE IT IN PLACE
-(edit the file; it gets committed alongside the audit report) rather than writing a new script:
+START FROM THE COMMITTED EXTRACTOR: audits/workflows/extract_gameplay_facts.py. It is CURRENT through
+the last audit + Task 9.6 (role re-derivation via orchestrator.seeder, a full advance_tick +
+apply_meeting_result re-walk with per-tick state-hash verification, hard-rule classification, win
+cross-checks, chain-protocol checks, the SKIP partition via the shared eval/_suspicion_parse import,
+fail-loud invariants). UPDATE IT IN PLACE (edit the file; it gets committed alongside the audit
+report) rather than writing a new script — most existing machinery stays; your job is mainly ADDING
+the Wave-1 decomposition aggregates (point 6b):
 
-1. RE-POINT: SAMPLE_DIR / SEEDSET constants -> "${SAMPLE_DIR}" and its basename. The roster.json read
-   already parameterizes players/impostors/tasks, so 9p/2i seeds correctly.
+1. RE-POINT if needed: SAMPLE_DIR / SEEDSET constants -> "${SAMPLE_DIR}" and its basename (likely
+   already correct). The roster.json read parameterizes players/impostors/tasks.
 
 2. VERIFY THE WALK AGAINST THE 8.7 SCHEMA: the MeetingResult(...) construction from each
    MeetingReplayEntry must match the current meetings/schemas.py (transcript is now the turns-based
@@ -505,6 +466,30 @@ classification via ActionRejected reasons, win cross-checks, fail-loud invariant
      from the failed_call records — these are the 9B turn-verbosity truncations (lens H).
    - free_text length distribution per turn_kind (median / p95 / max chars) over NON-defaulted turns.
 
+6b. ADD THE WAVE-1 DECOMPOSITION AGGREGATES (new this audit — the regression-decomposition lens
+   depends on these; re-derive, do not trust PR #138's numbers):
+   - PER-EJECTION EVIDENCE CLASS: for each ejection (right or wrong), every contradiction whose
+     subjects include the ejected player, classified with the SAME logic the 9.7 detector uses
+     (import/replicate the weak classification from meetings/transcript.py: self-stated = the alibi's
+     speaker == its subject; narrow window = the tick-window test) → per-ejection record {seed,
+     meeting, ejected, ejected_role, contradictions: [{kind, weak_self_stated, weak_narrow, strong}],
+     plus the ejected player's max rendered suspicion from the vote prompts and whether any voter's
+     rendered max implies a PRIOR-meeting accumulator carry (suspicion value not explainable by
+     this meeting's deltas alone — quantized rule-delta arithmetic)}.
+   - MISSED-CONVERSION RECORDS: for each meeting where a living TRUE impostor was verbally accused
+     but NOT ejected → {seed, meeting, impostor, accused_by, contradictions_naming_impostor +
+     their weak/strong classes, impostor_max_rendered_suspicion (from vote prompts),
+     opt_in_corroborations_supporting_an_accuser_of_the_impostor (count), outcome (SKIPPED /
+     ejected-someone-else), meetings_remaining_in_game_after_this_one (for the accumulator
+     one-more-meeting question)}.
+   - ZERO-CONTRADICTION EJECTIONS: ejections where NO contradiction names the ejected player —
+     the accumulator-conversion candidates {seed, meeting, ejected, ejected_role, prior-meeting
+     accusations naming them (count + meetings), rendered max suspicion}.
+   - WIN-ATTRIBUTION CROSS-CHECK (absorbed from the old lens A — deterministic, not judgment):
+     re-derive each game's winner from the walked final state and compare to the recorded
+     game_over (CREWMATE_EJECT ordered before the task check; zombie-game check = no game continues
+     past the last impostor's elimination). Mismatch -> blocking mechanical finding.
+
 7. SELF-CHECK INVARIANTS (keep the existing fail-loud set: per-seed impostor count == roster,
    games_analyzed == file count, meeting-record count match, kill-victim/death consistency,
    state-hash matches) and ADD: every meeting's transcript.turns is non-empty with exactly one
@@ -525,6 +510,9 @@ convention).`,
     label: 'extract:facts-and-protocol-check',
     phase: 'Extract',
     schema: EXTRACT_SCHEMA,
+    // Careful code-editing + deterministic checks — Opus; the judgment premium
+    // is reserved for the regression-decomposition lens and synthesis.
+    model: 'opus',
   }
 )
 
@@ -540,7 +528,9 @@ const mechanicalFindings = (extract.mechanical_findings || []).map((f, i) => ({
 log(`Extract complete: ${extract.games_analyzed} games. ${mechanicalFindings.length} code-certain violations. Facts at ${factsPath}.`)
 
 // ---------------------------------------------------------------------------
-// Phase 2: Analyze (7 parallel lenses)
+// Phase 2: Analyze (4 parallel lenses — C regression headline on Fable,
+// B/D/H on Opus; the cut lenses' live questions were folded into C/B/H or the
+// extractor, see the header)
 // ---------------------------------------------------------------------------
 
 phase('Analyze')
@@ -557,6 +547,9 @@ const lensReports = await parallel(
         label: `analyze:${l.key}-${l.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 28)}`,
         phase: 'Analyze',
         schema: FINDINGS_SCHEMA,
+        // The regression decomposition is the fork's decision input — Fable;
+        // the supporting characterization lenses run on Opus.
+        model: l.key === 'C' ? 'fable' : 'opus',
       }
     )
   )
@@ -577,7 +570,8 @@ const lensFindings = lensReports
 log(`Analyze complete. ${lensFindings.length} judgment findings across ${lensReports.filter(Boolean).length} lenses (plus ${mechanicalFindings.length} mechanical).`)
 
 // ---------------------------------------------------------------------------
-// Phase 3: Verify (hybrid — mechanical pass through; judgment findings 3-skeptic)
+// Phase 3: Verify (hybrid — mechanical pass through; one skeptic per judgment
+// finding; C-lens findings get Fable skeptics, the rest Opus)
 // ---------------------------------------------------------------------------
 
 phase('Verify')
@@ -612,11 +606,16 @@ roles), or the cited metric/rule source. Work ALL THREE angles:
 2. By-design: is the behavior intentional rather than a bug — the §5.2 chain termination is
    deterministic (a short chain, an un-extended opt_in accusation, or an immediate opening-turn
    termination is the rule working); §3.5 drops a dead owner's incomplete task instances (a
-   shrinking task denominator is correct); the §4.6 skip rule in vote_ballot.j2 intentionally
-   biases toward SKIP under low confidence; a metric's stated caveat (null ejection metrics at 0
-   ejections, alibi_fabrication's conservative lower-bound) is documented, not a bug. Check
-   DESIGN.md §3.5/§5.2, engine/rules.py, meetings/manager.py, or the metric source before
-   confirming.
+   shrinking task denominator is correct); the §4.6 skip rule intentionally biases toward SKIP
+   under low confidence; AND the Wave-1 suspicion mechanics (DESIGN.md §6.3, the audit's known
+   layer): a lone WEAK contradiction (self-stated alibi or narrow window) landing in [0.5,0.60)
+   without ejecting is the 9.7 DESIGN; an accusation not moving its OWN meeting's ballots is the
+   9.8 fold-after-vote DESIGN; a single meeting never ejecting on accumulator alone ("no single
+   round ejects") is the OWNER PRINCIPLE; suspicion decaying toward 0.5 across quiet meetings is
+   Rule 5; invalid-target drops are the fb3cfa5 guard working; a metric's stated caveat (the
+   vote_correctness sentinel at 0.9 with a verified persisted-suspicion mechanism) is documented,
+   not a bug. Check DESIGN.md §3.5/§5.2/§6.3, engine/rules.py, meetings/manager.py,
+   agents/memory/beliefs.py, or the metric source before confirming.
 3. Context: is there invalidating context elsewhere in the set (other seeds/meetings), a numeric
    error, or a token-proxy time-waste claim presented as a latency claim (no wall-clock exists)?
 
@@ -627,6 +626,8 @@ cannot be verified either way after honest effort, set refuted=true with reasoni
         label: `verify:${f.fully_qualified_id}`,
         phase: 'Verify',
         schema: VERDICT_SCHEMA,
+        // The headline lens's findings drive the fork decision — strongest skeptics.
+        model: f.lens_key === 'C' ? 'fable' : 'opus',
       }
     ).then((verdict) => {
       if (!verdict) {
@@ -700,11 +701,14 @@ const synthesisInput = {
 }
 
 const synthesis = await agent(
-  `You are synthesizing a gameplay-data audit of AiLibi's committed replay set ${SAMPLE_DIR} — an
-audit of the chain-protocol substrate (current target: the Phase-9 conversion baseline — 9p/2i on
-qwen3.5:9b with the conversion prompts crewmate_report v3 / accusation_round v5 / vote_ballot v5). A
-deterministic extractor produced code-certain rule/protocol violations (NOT subject to refutation); the
-analysis lenses produced judgment findings; each judgment finding faced ONE adversarial skeptic —
+  `You are synthesizing a gameplay-data audit of AiLibi's committed replay set ${SAMPLE_DIR} — the
+post-Wave-1 close audit (9p/2i on qwen3.5:9b @ e750b40; the Wave-1 conversion-quality bundle landed
+and its headline is the KNOWN-ADVERSE regression reported in PR #138 — conversion fell while detection
+rose). The audit's purpose is the REGRESSION DECOMPOSITION as the Phase-10 fork's decision input: the
+verdict is about baseline VALIDITY + whether the decomposition surfaced anything NEW, not about
+re-reporting the known regression. A deterministic extractor produced code-certain rule/protocol
+violations (NOT subject to refutation) plus the decomposition aggregates; the analysis lenses produced
+judgment findings; each judgment finding faced ONE adversarial skeptic —
 refuted findings were dropped, and any finding whose skeptic failed to run carries unverified:true.
 Label unverified findings explicitly in the report ("unverified — skeptic did not run"); never
 present them as verified. What remains is the load-bearing finding set.
@@ -713,40 +717,41 @@ Input data (JSON):
 ${JSON.stringify(synthesisInput, null, 2)}
 
 Your output has two parts:
-1. Structured synthesis: verdict (CLEAN / MINOR_ISSUES / SIGNIFICANT_ISSUES) + rationale;
-   notable_trends (evidence-backed, with numbers); improvement_proposals (group related findings; one
-   proposal per group with a reproducible scope sketch — cite the seed+tick/meeting+turn to reproduce
-   — and a priority, where "urgent" = invalidates this baseline / blocks the Phase-8 close,
-   "pre-wave-1" = must shape or precede the Wave-1 crew-intel contract, "opportunistic" = later).
+1. Structured synthesis: verdict (CLEAN / MINOR_ISSUES / SIGNIFICANT_ISSUES) + rationale — the
+   regression itself is KNOWN and does NOT by itself drive the verdict; judge baseline validity and
+   what is NEW; notable_trends (evidence-backed, with numbers); improvement_proposals (group related
+   findings; one proposal per group with a reproducible scope sketch — cite the seed+tick/meeting+turn
+   to reproduce — and a priority, where "urgent" = invalidates this baseline / must fix before ANY
+   next wave, "phase-10-input" = must shape the Phase-10 contract (impostor gameplay + pacing) or the
+   detector-refinement decision, "opportunistic" = later).
 2. report_markdown: the full Markdown report body, to be written to
    audits/audit-YYYY-MM-DD-HHMM-gameplay-data.md. Use this section structure:
-   - "# Gameplay Data Audit — YYYY-MM-DD HH:MM (${SAMPLE_DIR}, Phase-8 substrate)"
+   - "# Gameplay Data Audit — YYYY-MM-DD HH:MM (${SAMPLE_DIR}, post-Wave-1 close)"
    - "## 1. Verdict" (CLEAN | MINOR_ISSUES | SIGNIFICANT_ISSUES + 2-3 paragraphs; state explicitly
-     whether the new baseline is VALID to anchor Wave-1 work on)
+     whether the baseline is VALID and what the decomposition says the Phase-10 fork should do)
    - "## 2. Environment" (timestamp from \`date\`, audited HEAD from \`git log -1 --oneline\`, sample
      dir, games analyzed, mechanical vs judgment finding counts, refute rate)
    - "## 3. Confirmed bugs & rule violations" (mechanical findings first — labelled code-certain —
-     then surviving engine/correctness judgment findings; use the verifier-adjusted severity and note
+     then surviving correctness judgment findings; use the verifier-adjusted severity and note
      where severity_adjusted_by_verifier is true; cite evidence + repair hint)
-   - "## 4. Conversion quality & precision (headline)" — confirm the §4.6 verdict rendered and genuine
-     threshold-inversions are ~0; then the stage-by-stage decomposition WITH COUNTS (contradictions →
-     incriminating turns → accusations at impostors → chain convergence / opt-in corroboration →
-     ejections), the ejection PRECISION (ejection_accuracy + the wrong-ejection walk), and the SKIP
-     partition (correct vs missed); name the SINGLE biggest remaining conversion leak (missed ejections
-     vs precision-cost vs consensus shortfall) as the Wave-1 tally/abstain input.
-   - "## 5. Gameplay trends & pacing" (the notable_trends, with numbers — include the
-     did-the-restructure-lengthen-the-race answer)
-   - "## 6. Decision-quality & model-artifact findings" (crew + impostor lenses, plus the 9B-behavior
-     lens: turn-verbosity reasoning-relocation / fail-soft truncations and accusation-id hallucination)
-   - "## 7. Chain-protocol dynamics" (termination mix, chain engagement rate, opt-in usage, order
-     effects)
-   - "## 8. Call-economics findings" (with the no-wall-clock caveat stated explicitly; the
-     old-vs-new protocol cost comparison)
-   - "## 9. Metric soundness, coverage & balance" (including the named Wave-1 lead-metric
-     recommendation now that ejections occur, and the balance / impostor-competitiveness read)
-   - "## 10. Improvement proposals" (one subsection each: proposed_id, title, finding ids, scope
+   - "## 4. The regression decomposition (headline)" — the four asks with COUNTS: (1) the
+     wrong-ejection evidence-class walk + did the old railroad class die; (2) the missed-conversion
+     partition (weak-sub-gate vs no-evidence vs accumulator-near-miss vs genuine-inversion) — state
+     the (a)-vs-(b) bucket sizes as THE fork signal: large (a) = detector-shape recoverable, large
+     (b) = only the game (Phase 10 activity + pacing) fixes conversion; (3) the accumulator
+     verification (mechanism confirmed or not, + decay-erased near-misses); (4) the old-railroad
+     true-positive spot-check (does PR #138's attribution hold). End with ONE paragraph: what these
+     numbers say the fork should choose.
+   - "## 5. Pacing, balance & evidence supply (Phase-10 design input)" (game length, meetings/game,
+     evidence/meeting, witnesses/kill, the stopwatch margin, the emergency-button structural note)
+   - "## 6. Impostor behavior & model artifacts" (the Phase-10 toolkit gaps quantified; the 9.9
+     effectiveness check — free_text discipline shape, id-hallucination residual + roster-render
+     verification)
+   - "## 7. Metric & coverage notes" (any metric that would mislead a Phase-10 A/B; seed coverage;
+     the sentinel state)
+   - "## 8. Improvement proposals" (one subsection each: proposed_id, title, finding ids, scope
      sketch with a reproduction citation, priority)
-   - "## 11. Lens coverage notes" (per-lens what-was-examined)
+   - "## 9. Lens coverage notes" (per-lens what-was-examined)
 
 After producing the structured synthesis + report_markdown, write the report to disk in THIS EXACT
 ORDER (do NOT reorder; do NOT hardcode or guess a date):
@@ -760,6 +765,8 @@ Report the final written path in the "summary" field.`,
     label: 'synthesize',
     phase: 'Synthesis',
     schema: SYNTHESIS_SCHEMA,
+    // The capstone judgment — the fork recommendation rides on it.
+    model: 'fable',
   }
 )
 

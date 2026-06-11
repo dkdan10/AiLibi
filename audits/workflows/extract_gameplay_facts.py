@@ -61,8 +61,24 @@ from meetings.manager import (
     INVALID_VOTE_TARGET_MARKER,
     _opt_in_eligible_ids,
 )
-from meetings.schemas import AccusationClaim, MeetingResult, MeetingTranscript, TurnKind
-from meetings.transcript import is_canonically_ordered, next_chain_step
+from meetings.schemas import (
+    AccusationClaim,
+    CorroborationClaim,
+    MeetingResult,
+    MeetingTranscript,
+    TurnKind,
+)
+from meetings.transcript import (
+    WEAK_CONTRADICTION_MARKER_PREFIX,
+    WEAK_REASON_NARROW_WINDOW,
+    WEAK_REASON_SELF_STATED,
+    is_canonically_ordered,
+    next_chain_step,
+)
+from agents.memory.beliefs import (
+    CONTRADICTION_SUSPICION_DELTA,
+    WEAK_CONTRADICTION_SUSPICION_DELTA,
+)
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
     FailedCallReplayEntry,
@@ -113,6 +129,74 @@ _DEFAULTED_TURN_RE: re.Pattern[str] = re.compile(
 _INVALID_ACC_MARKER_FULL_RE: re.Pattern[str] = re.compile(
     re.escape(_INVALID_ACC_MARKER_PREFIX) + r".*?dropped\] "
 )
+
+# ---------------------------------------------------------------------------
+# Wave-1 decomposition constants (point 6b — regression-decomposition lens).
+# ---------------------------------------------------------------------------
+#
+# The §6.6 vote prompt renders the voter's OWN suspicion graph as a block under
+# a "## Your suspicion graph" header, one row per known player:
+#
+#     ## Your suspicion graph
+#     - `p-2`: suspicion 0.70, trust 0.50- `p-6`: suspicion 0.78, trust 0.50
+#
+# This is the only place a per-TARGET (not just the max) §4.6 suspicion value
+# survives into the replay, so the decomposition reads the EJECTED player's
+# rendered suspicion off the graphs of the OTHER voters (a voter holds no row
+# about itself, so the ejected player's value never appears in their own
+# prompt). Pin the header literal and the row regex; both are produced by the
+# committed vote_ballot.j2 template.
+_SUSPICION_GRAPH_HEADER = "## Your suspicion graph"
+_SUSPICION_GRAPH_ROW_RE: re.Pattern[str] = re.compile(
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
+    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+)
+
+
+# A contradiction's WEAK classification is read off the detector-written
+# description marker (meetings.transcript._describe_alibi_vs_sighting appends
+# "[weak signal: <reason>; <reason>]"). Replicating the detector's own marker
+# logic — rather than re-deriving from the raw claims — is exactly what the 9.7
+# consumers (belief Rule 2) do, so this classification cannot drift from the
+# shipped down-weight. A contradiction with NO marker is STRONG; the two weak
+# reasons are independent flags inside one marker.
+def _classify_contradiction(contra: Any) -> dict[str, bool]:
+    """Classify a recorded ContradictionRef the same way the 9.7 detector does.
+
+    ``weak_self_stated`` / ``weak_narrow`` are read off the description marker
+    (the detector appends ``WEAK_REASON_SELF_STATED`` / ``WEAK_REASON_NARROW_WINDOW``
+    inside ``WEAK_CONTRADICTION_MARKER_PREFIX``). ``strong`` is the absence of
+    the marker — the full ``CONTRADICTION_SUSPICION_DELTA`` flag belief Rule 2
+    does NOT down-weight. ``alibi_conflict`` flags never carry the weak marker
+    (it is only appended to ``alibi_vs_sighting``), so they are strong.
+    """
+
+    desc = contra.description or ""
+    weak = WEAK_CONTRADICTION_MARKER_PREFIX in desc
+    return {
+        "kind": contra.kind,
+        "weak_self_stated": weak and WEAK_REASON_SELF_STATED in desc,
+        "weak_narrow": weak and WEAK_REASON_NARROW_WINDOW in desc,
+        "strong": not weak,
+    }
+
+
+def _parse_suspicion_graph(prompt: str) -> dict[str, float]:
+    """Return {player_id: rendered_suspicion} from a vote prompt's graph block.
+
+    Empty if the prompt carries no ``## Your suspicion graph`` section (the
+    voter holds no beliefs about anyone — a 0.00 rendered max). The block ends
+    at the next ``## `` header.
+    """
+
+    if _SUSPICION_GRAPH_HEADER not in prompt:
+        return {}
+    after = prompt.split(_SUSPICION_GRAPH_HEADER, 1)[1]
+    block = after.split("## ", 1)[0]
+    return {
+        m.group("pid"): float(m.group("sus"))
+        for m in _SUSPICION_GRAPH_ROW_RE.finditer(block)
+    }
 
 
 def _deserialize_actions(raw_actions: list[dict[str, Any]]) -> list[Action]:
@@ -635,18 +719,53 @@ def _analyze_meeting(
         if t.turn_kind == "opt_in"
     ]
 
+    # Opt-in corroborations grouped by the player they SUPPORT (Wave-1
+    # decomposition: an opt_in volunteer publicly backing an accuser of a true
+    # impostor is the "more corroboration would have converted" signal). Count
+    # only opt_in turns (the terminal info-share); a CorroborationClaim on a
+    # chain turn is a different lever.
+    opt_in_corroborations_by_supported: dict[str, int] = {}
+    for t in turns:
+        if t.turn_kind != "opt_in":
+            continue
+        for c in t.claims:
+            if isinstance(c, CorroborationClaim):
+                opt_in_corroborations_by_supported[c.supports] = (
+                    opt_in_corroborations_by_supported.get(c.supports, 0) + 1
+                )
+
     # ---- Per-voter rendered §4.6 max suspicion (for the SKIP partition) ----
     # Match each ballot to the voter's vote-prompt llm_call (the call whose
     # prompt carries the rendered "maximum suspicion ... is **X**" line) by
     # agent_id, and regex the rendered max the voter was shown. A voter can have
     # both a turn call and a vote call; only the vote call carries the line.
+    # Also parse each voter's rendered §6.6 per-target suspicion GRAPH (Wave-1
+    # decomposition): the only place a per-target (not just max) suspicion value
+    # survives into the replay, so the decomposition can read the suspicion
+    # OTHER voters held for the ejected / accused player.
     rendered_max_by_voter: dict[str, float] = {}
+    suspicion_graph_by_voter: dict[str, dict[str, float]] = {}
     for call in meeting_entry.llm_calls:
         if call.agent_id is None:
             continue
         rendered = parse_rendered_max_suspicion(call.prompt)
         if rendered is not None:
             rendered_max_by_voter[call.agent_id] = rendered
+        graph = _parse_suspicion_graph(call.prompt)
+        if graph:
+            suspicion_graph_by_voter[call.agent_id] = graph
+
+    # Per-TARGET rendered suspicion = the MAX value any OTHER voter rendered for
+    # that player (a voter holds no row about itself). This is the deterministic
+    # "the player's max rendered suspicion from the vote prompts" the lens needs.
+    rendered_suspicion_by_target: dict[str, float] = {}
+    for voter, graph in suspicion_graph_by_voter.items():
+        for pid, sus in graph.items():
+            if pid == voter:
+                continue
+            prior_max = rendered_suspicion_by_target.get(pid)
+            if prior_max is None or sus > prior_max:
+                rendered_suspicion_by_target[pid] = sus
 
     # ---- Ballots: roles, skip, follows-chain, dangling reason, firewall ----
     ejected_id = meeting_entry.ejected_player_id
@@ -658,6 +777,10 @@ def _analyze_meeting(
     skip_missed = 0
     skip_unclassified = 0
     threshold_inversions: list[dict[str, Any]] = []
+    # Voters who cast a ballot AT the ejected player (Wave-1 decomposition: the
+    # ejected player's rendered suspicion among the voters who actually ejected
+    # them, read off those voters' own suspicion graphs).
+    ejecting_voters: list[str] = []
     for b in meeting_entry.ballots:
         voter_role = roles.get(b.voter, "UNKNOWN")
         is_skip = b.target == "SKIP"
@@ -784,6 +907,8 @@ def _analyze_meeting(
                     ),
                 }
             )
+        if not is_skip and ejected_id is not None and b.target == ejected_id:
+            ejecting_voters.append(b.voter)
         ballots_out.append(
             {
                 "voter": b.voter,
@@ -794,6 +919,33 @@ def _analyze_meeting(
                 "follows_chain": follows_chain,
             }
         )
+
+    # ---- Wave-1 decomposition: per-subject classified contradictions + the
+    # ejected / accused players' rendered suspicion (point 6b). ----
+    # Group every recorded contradiction by each of its subjects, classified
+    # with the SAME weak/strong logic the 9.7 detector wrote into the marker.
+    contradictions_by_subject: dict[str, list[dict[str, bool]]] = {}
+    for contra in meeting_entry.contradictions:
+        cls = _classify_contradiction(contra)
+        for subject in contra.subjects:
+            contradictions_by_subject.setdefault(subject, []).append(cls)
+
+    # The ejected player's rendered suspicion, two ways: the global max any
+    # voter rendered for them, and the max among the voters who actually
+    # ejected them (the decisive value).
+    ejected_rendered_suspicion = (
+        rendered_suspicion_by_target.get(ejected_id) if ejected_id is not None else None
+    )
+    ejected_rendered_suspicion_among_ejectors: float | None = None
+    if ejected_id is not None:
+        ej_values = [
+            suspicion_graph_by_voter[v][ejected_id]
+            for v in ejecting_voters
+            if v in suspicion_graph_by_voter
+            and ejected_id in suspicion_graph_by_voter[v]
+        ]
+        if ej_values:
+            ejected_rendered_suspicion_among_ejectors = max(ej_values)
 
     kind_counts = Counter(t.turn_kind for t in turns)
     turn_kinds: tuple[TurnKind, ...] = ("opening", "reply", "opt_in")
@@ -831,6 +983,16 @@ def _analyze_meeting(
         "invalid_ballot_target_drops": invalid_ballot_target_drops,
         "free_text_lengths": free_text_lengths,
         "n_contradictions": len(meeting_entry.contradictions),
+        # Wave-1 decomposition payloads (assembled with cross-meeting context
+        # in the per-game loop).
+        "contradictions_by_subject": contradictions_by_subject,
+        "opt_in_corroborations_by_supported": opt_in_corroborations_by_supported,
+        "rendered_suspicion_by_target": rendered_suspicion_by_target,
+        "ejected_rendered_suspicion": ejected_rendered_suspicion,
+        "ejected_rendered_suspicion_among_ejectors": (
+            ejected_rendered_suspicion_among_ejectors
+        ),
+        "ejecting_voters": ejecting_voters,
     }
 
 
@@ -909,6 +1071,12 @@ def main() -> int:
     duplicate_failed_call_input_tokens = 0
     duplicate_failed_call_output_tokens = 0
     duplicate_failed_call_seeds: set[int] = set()
+    # Wave-1 decomposition record sets (point 6b — re-derived, NOT trusting
+    # PR #138 numbers). Assembled per game so cross-meeting accusation history
+    # is in scope (the accumulator-carry question).
+    per_ejection_evidence: list[dict[str, Any]] = []
+    missed_conversions: list[dict[str, Any]] = []
+    zero_contradiction_ejections: list[dict[str, Any]] = []
 
     for path in replay_paths:
         seed = int(path.stem.rsplit("-", 1)[1])
@@ -1400,6 +1568,145 @@ def main() -> int:
                     f"not in deaths set"
                 )
 
+        # ---- Wave-1 decomposition assembly (point 6b) ----
+        # Walk this game's meetings in order, carrying per-player accusation
+        # history (who was verbally accused in EARLIER meetings + in which
+        # meeting indices) so the accumulator-carry question is answerable.
+        # `prior_accusations[pid]` = sorted list of earlier meeting_indexes in
+        # which pid was named by an accusation claim (excluding self-accusations).
+        n_game_meetings = len(meetings_out)
+        prior_accusations: dict[str, list[int]] = {}
+        for mi, mf in enumerate(meetings_out):
+            m_idx = mf["meeting_index"]
+            remaining_after = n_game_meetings - (mi + 1)
+            # Players verbally accused THIS meeting (deduped, excluding self).
+            accused_this_meeting = {
+                acc["accused"]
+                for acc in mf["accusations"]
+                if acc["accused"] != acc["speaker"]
+            }
+            contra_by_subj = mf["contradictions_by_subject"]
+            ej_id = mf["ejected_player_id"]
+            ej_role = mf["ejected_role"]
+
+            # (i) PER-EJECTION EVIDENCE CLASS (right or wrong).
+            if ej_id is not None:
+                ej_contras = contra_by_subj.get(ej_id, [])
+                strong_n = sum(1 for c in ej_contras if c["strong"])
+                weak_n = len(ej_contras) - strong_n
+                ej_max_sus = mf["ejected_rendered_suspicion"]
+                # Accumulator-carry heuristic for the ejected player: their max
+                # rendered suspicion exceeds what THIS meeting's own
+                # contradictions naming them could reach from the 0.5 prior
+                # (weak=0.08, strong=0.30 each, Rule-2 vote-time lift), AND they
+                # were accused in a PRIOR meeting. Both prongs are quantized /
+                # deterministic; recording the components lets the lens judge.
+                this_meeting_contra_ceiling = 0.5 + (
+                    strong_n * CONTRADICTION_SUSPICION_DELTA
+                    + weak_n * WEAK_CONTRADICTION_SUSPICION_DELTA
+                )
+                priors = sorted(prior_accusations.get(ej_id, []))
+                carry_unexplained_by_this_meeting = bool(
+                    ej_max_sus is not None
+                    and ej_max_sus > round(this_meeting_contra_ceiling, 4) + 1e-9
+                )
+                per_ejection_evidence.append(
+                    {
+                        "seed": seed,
+                        "meeting_index": m_idx,
+                        "ejected": ej_id,
+                        "ejected_role": ej_role,
+                        "correct": ej_role == "IMPOSTOR",
+                        "contradictions": ej_contras,
+                        "n_contradictions_naming_ejected": len(ej_contras),
+                        "n_strong": strong_n,
+                        "n_weak": weak_n,
+                        "ejected_max_rendered_suspicion": ej_max_sus,
+                        "ejected_max_rendered_suspicion_among_ejectors": mf[
+                            "ejected_rendered_suspicion_among_ejectors"
+                        ],
+                        "this_meeting_contra_ceiling": round(
+                            this_meeting_contra_ceiling, 4
+                        ),
+                        "prior_meeting_accusations": priors,
+                        "n_prior_meeting_accusations": len(priors),
+                        "carry_unexplained_by_this_meeting_contradictions": (
+                            carry_unexplained_by_this_meeting
+                        ),
+                    }
+                )
+
+                # (iii) ZERO-CONTRADICTION EJECTIONS (accumulator-conversion
+                # candidates): ejected, but NO contradiction names them.
+                if not ej_contras:
+                    zero_contradiction_ejections.append(
+                        {
+                            "seed": seed,
+                            "meeting_index": m_idx,
+                            "ejected": ej_id,
+                            "ejected_role": ej_role,
+                            "correct": ej_role == "IMPOSTOR",
+                            "prior_meeting_accusations": priors,
+                            "n_prior_meeting_accusations": len(priors),
+                            "accused_this_meeting": ej_id in accused_this_meeting,
+                            "ejected_max_rendered_suspicion": ej_max_sus,
+                        }
+                    )
+
+            # (ii) MISSED-CONVERSION RECORDS: a living TRUE impostor was verbally
+            # accused this meeting but NOT ejected (skipped, or someone else was).
+            for impostor_id in sorted(accused_this_meeting):
+                if roles.get(impostor_id) != "IMPOSTOR":
+                    continue
+                if impostor_id == ej_id:
+                    continue  # this impostor WAS ejected — a conversion, not a miss
+                imp_contras = contra_by_subj.get(impostor_id, [])
+                imp_strong = sum(1 for c in imp_contras if c["strong"])
+                # opt-in corroborations supporting an accuser of this impostor:
+                # an opt_in turn whose CorroborationClaim.supports names a player
+                # who accused this impostor this meeting.
+                accusers_of_impostor = {
+                    acc["speaker"]
+                    for acc in mf["accusations"]
+                    if acc["accused"] == impostor_id
+                }
+                opt_in_corr_map = mf["opt_in_corroborations_by_supported"]
+                opt_in_corroborations_for_accusers = sum(
+                    opt_in_corr_map.get(accuser, 0) for accuser in accusers_of_impostor
+                )
+                missed_conversions.append(
+                    {
+                        "seed": seed,
+                        "meeting_index": m_idx,
+                        "impostor": impostor_id,
+                        "accused_by": sorted(accusers_of_impostor),
+                        "n_contradictions_naming_impostor": len(imp_contras),
+                        "n_strong_naming_impostor": imp_strong,
+                        "n_weak_naming_impostor": len(imp_contras) - imp_strong,
+                        "contradictions": imp_contras,
+                        "impostor_max_rendered_suspicion": mf[
+                            "rendered_suspicion_by_target"
+                        ].get(impostor_id),
+                        "opt_in_corroborations_supporting_an_accuser": (
+                            opt_in_corroborations_for_accusers
+                        ),
+                        "outcome": (
+                            "ejected_someone_else" if ej_id is not None else "SKIPPED"
+                        ),
+                        "ejected_instead": ej_id,
+                        "ejected_instead_role": ej_role,
+                        "meetings_remaining_after": remaining_after,
+                        "n_prior_meeting_accusations": len(
+                            prior_accusations.get(impostor_id, [])
+                        ),
+                    }
+                )
+
+            # Roll this meeting's accusations into the prior-history map AFTER
+            # processing it (so "prior" is strictly earlier meetings).
+            for acc_pid in accused_this_meeting:
+                prior_accusations.setdefault(acc_pid, []).append(m_idx)
+
         games.append(
             {
                 "seed": seed,
@@ -1560,6 +1867,101 @@ def main() -> int:
                 "normalizations; ~0 expected on a clean baseline."
             ),
             "records": threshold_inversions_all,
+        },
+        "wave1_decomposition": {
+            "note": (
+                "Re-derived regression-decomposition aggregates (point 6b; NOT "
+                "PR #138's numbers). Contradiction weak/strong classes use the "
+                "same marker logic the 9.7 detector wrote (self-stated / narrow "
+                "window from the description; strong = no marker). Rendered "
+                "suspicion is read off the §6.6 'Your suspicion graph' block in "
+                "each voter's vote prompt (max over OTHER voters' rows, since a "
+                "voter holds no row about itself)."
+            ),
+            "per_ejection_evidence": {
+                "count": len(per_ejection_evidence),
+                "wrong": sum(1 for r in per_ejection_evidence if not r["correct"]),
+                "correct": sum(1 for r in per_ejection_evidence if r["correct"]),
+                "wrong_with_only_weak_contradictions": sum(
+                    1
+                    for r in per_ejection_evidence
+                    if not r["correct"]
+                    and r["n_contradictions_naming_ejected"] > 0
+                    and r["n_strong"] == 0
+                ),
+                "wrong_with_zero_contradictions": sum(
+                    1
+                    for r in per_ejection_evidence
+                    if not r["correct"] and r["n_contradictions_naming_ejected"] == 0
+                ),
+                "correct_with_a_strong_contradiction": sum(
+                    1
+                    for r in per_ejection_evidence
+                    if r["correct"] and r["n_strong"] > 0
+                ),
+                "with_accumulator_carry_signal": sum(
+                    1
+                    for r in per_ejection_evidence
+                    if r["carry_unexplained_by_this_meeting_contradictions"]
+                    and r["n_prior_meeting_accusations"] > 0
+                ),
+                "records": per_ejection_evidence,
+            },
+            "missed_conversions": {
+                "count": len(missed_conversions),
+                "skipped": sum(
+                    1 for r in missed_conversions if r["outcome"] == "SKIPPED"
+                ),
+                "ejected_someone_else": sum(
+                    1
+                    for r in missed_conversions
+                    if r["outcome"] == "ejected_someone_else"
+                ),
+                "with_a_strong_contradiction_naming_the_impostor": sum(
+                    1 for r in missed_conversions if r["n_strong_naming_impostor"] > 0
+                ),
+                "with_only_weak_contradictions": sum(
+                    1
+                    for r in missed_conversions
+                    if r["n_contradictions_naming_impostor"] > 0
+                    and r["n_strong_naming_impostor"] == 0
+                ),
+                "with_zero_contradictions": sum(
+                    1
+                    for r in missed_conversions
+                    if r["n_contradictions_naming_impostor"] == 0
+                ),
+                "with_a_later_meeting_available": sum(
+                    1 for r in missed_conversions if r["meetings_remaining_after"] > 0
+                ),
+                "note": (
+                    "One record per (meeting, living true impostor accused but "
+                    "not ejected). A game with 2 impostors accused in one "
+                    "skipped meeting contributes 2 records."
+                ),
+                "records": missed_conversions,
+            },
+            "zero_contradiction_ejections": {
+                "count": len(zero_contradiction_ejections),
+                "impostor": sum(
+                    1 for r in zero_contradiction_ejections if r["correct"]
+                ),
+                "crew": sum(
+                    1 for r in zero_contradiction_ejections if not r["correct"]
+                ),
+                "with_prior_meeting_accusation": sum(
+                    1
+                    for r in zero_contradiction_ejections
+                    if r["n_prior_meeting_accusations"] > 0
+                ),
+                "note": (
+                    "Ejections with NO contradiction naming the ejected — the "
+                    "accumulator-conversion candidates (suspicion crossed the "
+                    "gate via accusation bumps / decay, not a contradiction "
+                    "flag)."
+                ),
+                "records": zero_contradiction_ejections,
+            },
         },
         "invalid_accusation_target_drops": {
             "accusation_claim_drops": invalid_accusation_target_drops_total,
