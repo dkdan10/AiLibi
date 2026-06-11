@@ -3498,14 +3498,18 @@ class TestDetectorCorroborationFold:
 
 # --- Task 10.1 acceptance pins against the committed replay bytes -----------
 #
-# Offline reconstructions per the task contract (the committed bytes do not
-# change until 10.5): the RECORDED contradiction flags from the audited
-# meetings are fed through the repaired vote-time lift
-# (`_suspicion_graph_with_contradictions`), and the result is compared
-# against the §4.6 gate and the values the old lift actually rendered into
-# the committed vote prompts. Audit anchor:
+# Originally (at 10.1 merge time) these fed the e750b40 era's RECORDED defect
+# flags (the seed-9 19-flag fountain, the seed-26 defense-echo inversion)
+# through the repaired vote-time lift and proved the collapse offline. The
+# Task 10.5 re-record replaced the committed bytes with a set RECORDED UNDER
+# the repaired detector+lift, so those defect inputs no longer exist anywhere
+# in the tree; the per-scenario proofs are preserved in git history (the 10.1
+# acceptance gate) and by the synthetic lift tests above. What remains
+# meaningful on the new bytes is the INVARIANT the scenarios instantiated,
+# pinned set-wide below. Audit anchor:
 # audit-2026-06-10-1820-gameplay-data.md gp-2 (C-C-3).
 
+import json  # noqa: E402
 import re  # noqa: E402
 
 from orchestrator.replay import (  # noqa: E402
@@ -3554,62 +3558,56 @@ def _recorded_rendered_suspicions(entry: MeetingReplayEntry, *, of: str) -> list
 
 
 class TestCommittedBytesLiftPins:
-    """The repaired lift on the RECORDED flags (gp-2 C-C-3 acceptance)."""
+    """The 10.1 lift invariant on the RECORDED bytes (gp-2 C-C-3).
 
-    def test_seed9_m1_renders_p8_at_058_not_10(self) -> None:
-        # The archetype railroad: 19 recorded near-duplicate weak flags
-        # (one truthful alibi x repeated sightings) summed to +1.52 and
-        # rendered crew p-8 at a clamped 1.0 in every committed vote
-        # prompt -- ejected 5-0. Under the repaired lift the 19 flags
-        # share one (subject, alibi-claim) group: ONE weak delta, 0.58,
-        # below the 0.60 gate. Voter priors on p-8 were the 0.5 default
-        # (no voter held a p-8 belief row at m1 -- verified against the
-        # replay-loader memory reconstruction; m0 carried no p-8
-        # evidence), so the empty incoming graph is the faithful prior.
-        entry = _committed_meeting(9, 1)
-        assert len(entry.contradictions) == 19
-        assert max(_recorded_rendered_suspicions(entry, of="p-8")) == 1.0
+    Set-wide successor to the per-scenario era pins (see the section
+    comment): on a set recorded under the repaired lift, no crew member
+    may render at a clamped 1.0 in ANY committed vote prompt off stacked
+    same-meeting contradiction flags — the railroad class the seed-9
+    fountain (19 flags -> 1.0, ejected 5-0) and the seed-26 defense-echo
+    inversion instantiated on the e750b40 era bytes.
+    """
 
-        for voter in sorted(_living_voters(entry) - {"p-8"}):
-            graph = _suspicion_graph_with_contradictions(
-                voter_id=voter,
-                suspicion_graph=(),
-                contradictions=entry.contradictions,
+    def test_no_crew_member_renders_at_one_on_the_committed_set(self) -> None:
+        # Roles come from the committed report's per-game role map (derived
+        # from the same bytes at report-build time; the eval-layer pins in
+        # tests/eval/test_gate_metrics.py hold the report to those bytes),
+        # so this stays a meetings-layer walk: every meeting's vote
+        # prompts, every rendered crew row.
+        # On the Task 10.5 set the recorded truth is stronger than the
+        # invariant needs: NO crew member renders at 1.0 at all (an
+        # impostor legitimately can, e.g. kill-witness + contradiction).
+        # A future re-record may carry a legitimate crew 1.0 (e.g. stacked
+        # ACROSS meetings by the 9.8 accumulator) — if this fires, check
+        # the same-meeting flag count before treating it as the railroad:
+        # the 10.1 cap bounds the per-meeting contradiction lift at one
+        # strong flag's worth (0.3), so a same-meeting flag-stacked 1.0 is
+        # the repaired defect re-appearing.
+        report = json.loads(
+            (_COMMITTED_9P2I_DIR / "tournament-eval-report.json").read_text(
+                encoding="utf-8"
             )
-            by_id = {row.player_id: row.suspicion for row in graph}
-            assert by_id["p-8"] == pytest.approx(0.58)
-            assert by_id["p-8"] < 0.6
-
-    def test_seed26_m1_innocent_p6_no_longer_outscores_impostor_p3(self) -> None:
-        # The defense-echo inversion: 4 weak + 4 STRONG recorded flags on
-        # innocent p-6 (p-2's echo of p-6's own alibi) rendered p-6 at a
-        # clamped 1.0 while the true impostor p-3 peaked at 0.9 -- the
-        # crew ejected the wrong player on flag arithmetic alone. Under
-        # the repaired lift p-6's flags collapse to two claim groups
-        # (weak 0.08 + strong 0.3) capped at one strong flag's worth:
-        # 0.5 + 0.3 = 0.8, strictly below p-3's recorded 0.9 ceiling.
-        # p-6's voters held no prior p-6 row (loader-reconstruction
-        # verified), so the default prior is faithful; p-3 carries no
-        # flag, so their recorded render is untouched by the lift repair.
-        entry = _committed_meeting(26, 1)
-        assert len(entry.contradictions) == 8
-        assert max(_recorded_rendered_suspicions(entry, of="p-6")) == 1.0
-        recorded_p3_max = max(_recorded_rendered_suspicions(entry, of="p-3"))
-        assert recorded_p3_max == 0.9
-
-        repaired_p6 = [
-            row.suspicion
-            for voter in sorted(_living_voters(entry) - {"p-6"})
-            for row in _suspicion_graph_with_contradictions(
-                voter_id=voter,
-                suspicion_graph=(),
-                contradictions=entry.contradictions,
-            )
-            if row.player_id == "p-6"
-        ]
-        assert repaired_p6
-        assert max(repaired_p6) == pytest.approx(0.8)
-        assert max(repaired_p6) < recorded_p3_max
+        )
+        roles_by_seed: dict[int, dict[str, str]] = {
+            game["seed"]: game["roles"] for game in report["report"]["games"]
+        }
+        prompts_scanned = 0
+        for seed in range(50):
+            path = _COMMITTED_9P2I_DIR / f"replay-seed-{seed}.jsonl"
+            roles = roles_by_seed[seed]
+            for entry in read_all_entries(path):
+                if not isinstance(entry, MeetingReplayEntry):
+                    continue
+                for player_id, role in roles.items():
+                    if role != "CREWMATE":
+                        continue
+                    rendered = _recorded_rendered_suspicions(entry, of=player_id)
+                    prompts_scanned += len(rendered)
+                    assert all(value < 1.0 for value in rendered), (
+                        f"crew {player_id} rendered at 1.0 in {entry.meeting_id}"
+                    )
+        # Non-vacuous: the walk actually read rendered crew rows.
+        assert prompts_scanned > 0
 
 
 def _living_voters(entry: MeetingReplayEntry) -> set[str]:
@@ -3954,67 +3952,43 @@ class TestCorroborationRule3FiresEndToEnd:
 
 
 class TestCommittedBytesRosterDropPins:
-    """The recorded gp-6 shapes through the 10.2 chokepoint (offline).
+    """The 10.2 chokepoint held during the 10.5 recording (gp-6, offline).
 
-    Acceptance pins against the committed replay bytes (the bytes do not
-    change until the 10.5 re-record): the audited garbage claims from
-    seeds 9 and 40, exactly as recorded, drop under
-    ``_drop_non_roster_claims`` with each meeting's living roster (its
-    ballot voters), while the valid claims beside them survive.
+    The original pins fed the e750b40 era's RECORDED garbage claims (seed 9's
+    "headless-seed-9" subjects, seed 40's "p-2 dead" supports — recorded
+    before the guard existed) through ``_drop_non_roster_claims`` and proved
+    the drop. The Task 10.5 set was recorded WITH the guard in the manager,
+    so garbage never reaches the bytes; the set-wide successor pin asserts
+    exactly that: replaying the chokepoint over every recorded turn is a
+    NO-OP (every subject-bearing claim field already names a living
+    participant — zero drops, zero markers). The drop machinery itself stays
+    covered by the synthetic ``TestNonRosterClaimSubjectsDropped`` above.
     """
 
-    def test_seed9_m1_recorded_garbage_claims_drop_under_the_guard(self) -> None:
-        entry = _committed_meeting(9, 1)
-        living = frozenset(_living_voters(entry))
-        turn2 = entry.transcript.turns[2]
-        turn3 = entry.transcript.turns[3]
-        # The recorded shapes the audit named (gp-6 reproduce): the game
-        # id as turn 2's alibi subject and turn 3's corroboration target.
-        assert [c.subject for c in turn2.claims if isinstance(c, AlibiClaim)] == [
-            "headless-seed-9"
-        ]
-        assert [
-            c.supports for c in turn3.claims if isinstance(c, CorroborationClaim)
-        ] == ["headless-seed-9"]
-
-        surviving2, markers2 = _drop_non_roster_claims(turn2.claims, living_ids=living)
-        assert markers2 == (
-            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9"),
-        )
-        # Turn 2's valid corroboration of living p-8 survives.
-        assert [
-            c.supports for c in surviving2 if isinstance(c, CorroborationClaim)
-        ] == ["p-8"]
-
-        surviving3, markers3 = _drop_non_roster_claims(turn3.claims, living_ids=living)
-        assert surviving3 == ()
-        assert markers3 == (
-            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="headless-seed-9"),
-            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9"),
-        )
-
-    def test_seed40_m0_dead_player_supports_drops_under_the_guard(self) -> None:
-        entry = _committed_meeting(40, 0)
-        living = frozenset(_living_voters(entry))
-        assert "p-2" not in living  # the meeting's victim -- dead, real roster id
-        turn1 = entry.transcript.turns[1]
-        assert [
-            c.supports for c in turn1.claims if isinstance(c, CorroborationClaim)
-        ] == ["p-2 dead"]
-
-        surviving, markers = _drop_non_roster_claims(turn1.claims, living_ids=living)
-
-        assert markers == (
-            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="p-2 dead"),
-        )
-        # The speaker's own valid self-alibi beside it survives.
-        assert [c.subject for c in surviving if isinstance(c, AlibiClaim)] == ["p-6"]
-        # And the DEAD-roster rule itself: plain "p-2" -- a real roster id,
-        # dead at this meeting -- drops under the same living-roster rule.
-        dead_named = CorroborationClaim(
-            type="corroboration", supports="p-2", on_tick=7, reason="r"
-        )
-        _, dead_markers = _drop_non_roster_claims((dead_named,), living_ids=living)
-        assert dead_markers == (
-            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="p-2"),
-        )
+    def test_every_recorded_claim_field_is_living_roster_valid(self) -> None:
+        turns_walked = 0
+        subject_bearing_claims = 0
+        for seed in range(50):
+            path = _COMMITTED_9P2I_DIR / f"replay-seed-{seed}.jsonl"
+            for entry in read_all_entries(path):
+                if not isinstance(entry, MeetingReplayEntry):
+                    continue
+                living = frozenset(_living_voters(entry))
+                for turn in entry.transcript.turns:
+                    turns_walked += 1
+                    subject_bearing_claims += sum(
+                        1
+                        for claim in turn.claims
+                        if isinstance(claim, (AlibiClaim, CorroborationClaim))
+                    )
+                    surviving, markers = _drop_non_roster_claims(
+                        turn.claims, living_ids=living
+                    )
+                    assert markers == (), (
+                        f"recorded claim would drop in {entry.meeting_id} "
+                        f"turn {turn.turn_index}: {markers}"
+                    )
+                    assert surviving == turn.claims
+        # Non-vacuous: the walk exercised real subject-bearing claims.
+        assert turns_walked > 0
+        assert subject_bearing_claims > 0
