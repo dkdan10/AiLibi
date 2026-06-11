@@ -2827,14 +2827,29 @@ def _result_with(
     *,
     turns: tuple[MeetingTurn, ...] = (),
     contradictions: tuple[ContradictionRef, ...] = (),
+    voters: tuple[str, ...] = (),
 ) -> MeetingResult:
+    # ``voters`` materialises one default-SKIP ballot per id: in a
+    # production result every living participant casts exactly one ballot,
+    # and ``extract_belief_evidence`` reads the voter set as the meeting's
+    # living roster for its detector-derived corroborations (Task 10.1).
     return MeetingResult(
         meeting_id="m-1",
         triggered_by="p-1",
         trigger_tick=410,
         outcome="SKIPPED",
         ejected_player_id=None,
-        ballots=(),
+        ballots=tuple(
+            VoteBallot(
+                voter=voter,
+                target="SKIP",
+                confidence=0.0,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text="skip",
+            )
+            for voter in voters
+        ),
         contradictions=contradictions,
         transcript=MeetingTranscript(turns=turns),
     )
@@ -3066,7 +3081,7 @@ class TestDetectorCorroborationFold:
                 free_text="confirming sighting",
             ),
         )
-        return _result_with(turns=turns)
+        return _result_with(turns=turns, voters=("p-1", "p-2", "p-3", "p-4"))
 
     def test_containment_pair_lands_in_corroborated(self) -> None:
         evidence = extract_belief_evidence(self._containment_result())
@@ -3074,6 +3089,48 @@ class TestDetectorCorroborationFold:
         assert evidence.corroborated == ("p-1",)
         assert evidence.accused == ()
         assert evidence.contradicted == ()
+
+    def test_hallucinated_subject_cannot_corroborate_itself(self) -> None:
+        # The detector-derived path is roster-filtered to the recorded
+        # ballot voters, mirroring the recording-time detection call: a
+        # hallucinated non-player subject (audit C-8) whose alibi and
+        # sighting happen to agree must not materialise a phantom belief
+        # row through the fold.
+        turns = (
+            MeetingTurn(
+                turn_id="m-1:turn-0",
+                turn_index=0,
+                speaker="p-1",
+                turn_kind="opening",
+                reply_to=None,
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-99",
+                        from_tick=100,
+                        to_tick=200,
+                        room="MEDBAY",
+                    ),
+                ),
+                free_text="alibi for a hallucinated id",
+            ),
+            MeetingTurn(
+                turn_id="m-1:turn-1",
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="reply",
+                reply_to=None,
+                observations=(
+                    SawPlayerObservation(
+                        type="saw_player", tick=150, subject="p-99", room="MEDBAY"
+                    ),
+                ),
+                free_text="matching hallucinated sighting",
+            ),
+        )
+        result = _result_with(turns=turns, voters=("p-1", "p-2", "p-3", "p-4"))
+
+        assert extract_belief_evidence(result).corroborated == ()
 
     def test_containment_pair_lowers_suspicion_through_the_fold(self) -> None:
         # Integration pin: the detector-derived subject moves the stored
