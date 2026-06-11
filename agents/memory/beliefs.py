@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Final, TypeAlias
 
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
-from meetings.transcript import is_weak_contradiction
+from meetings.transcript import contradiction_lift_key, is_weak_contradiction
 from observation.packet import ObservationPacket
 
 PlayerId: TypeAlias = str
@@ -62,11 +62,34 @@ the default 0.5 prior to 0.8, crossing the §4.6 0.60 eject gate alone
 and railroading 13/13 wrong ejections. The graduated delta keeps a lone
 weak flag *suspicious but below the gate* -- 0.5 + 0.08 = 0.58, inside
 [0.5, 0.60) -- not zeroed: a self-stated conflict IS mildly suspicious.
-Corroboration still converts: a second weak flag (0.66), a strong
-contradiction (0.88), or a body-proximity / vent-elevated prior all
-carry the subject across 0.60, so innocents stay ejectable on a second
-independent signal. Strong contradictions keep the full
-``CONTRADICTION_SUSPICION_DELTA``; recall is not paid for globally."""
+Corroboration still converts: a second weak flag from an independent
+claim (0.66), a strong contradiction, or a body-proximity /
+vent-elevated prior all carry the subject across 0.60, so innocents
+stay ejectable on a second independent signal. Strong contradictions
+keep the full ``CONTRADICTION_SUSPICION_DELTA``; recall is not paid for
+globally. Task 10.1 extends the weak classification to the
+``alibi_conflict`` kind (self-pair / adversarial / narrow /
+boundary-overlap flags), which previously always carried the full
+delta."""
+
+MEETING_CONTRADICTION_LIFT_CAP: Final[float] = CONTRADICTION_SUSPICION_DELTA
+"""Per-subject cap on one meeting's total Rule-2 contradiction lift
+(Task 10.1; audit gp-2 C-C-3).
+
+The detector emits one flag per (alibi, sighting) pair, so a verbose
+truthful alibi paired against N repeated sightings minted N flags -- and
+the vote-time lift summed per flag, lifting one innocent from the 0.5
+prior to a clamped 1.0 off 19 near-duplicate weak flags (seed 9 m1,
+ejected 5-0). Flag fountains anti-correlate with guilt (the audited set:
+23 crew vs 11 impostor containment-class flags), so unbounded stacking
+inverts the signal. Two layers repair it: the per-(subject, alibi-claim)
+dedup in :func:`apply_contradiction_rule` (one delta per claim however
+many sightings it pairs against), and this cap bounding a subject's
+TOTAL transient lift per meeting at one strong flag's worth -- a single
+strong contradiction still lands its full weight (the cap never bites a
+lone flag), while no volume of flags can exceed it. Transient: the cap
+applies inside one ``apply_contradiction_rule`` call (the per-meeting
+vote-time lift); cross-meeting accumulation stays the 9.8 channel."""
 
 ACCUSATION_SUSPICION_DELTA: Final[float] = 0.05
 """Accusation-driven suspicion bump (Task 9.8; audit gp-1 recall).
@@ -390,22 +413,38 @@ def apply_contradiction_rule(
 
     Detector-flagged weak contradictions (Task 9.7, audit gp-1) lift by
     the graduated ``WEAK_CONTRADICTION_SUSPICION_DELTA`` instead, so a
-    lone self-stated / narrow-window ``alibi_vs_sighting`` lands in the
+    lone self-stated / narrow-window ``alibi_vs_sighting`` -- and, since
+    Task 10.1, a weak-classified ``alibi_conflict`` -- lands in the
     suspicious-but-below-gate band [0.5, 0.60) rather than mechanically
     crossing the §4.6 eject gate. The classification is read off the
     flag itself (:func:`meetings.transcript.is_weak_contradiction`), so
     the rule stays a pure function of its arguments.
 
-    A subject appearing in multiple flags is bumped once per flag,
-    matching "each detected contradiction is one piece of evidence" --
-    which is also the corroboration path: two weak flags, or a weak plus
-    a strong one, still accumulate past the gate.
-    Subjects are processed in sorted order per flag so the resulting
-    state is deterministic regardless of subject tuple ordering -- a
-    precondition for replay-stable belief snapshots.
+    Lift dedup + cap (Task 10.1; audit gp-2 C-C-3). "Each detected
+    contradiction is one piece of evidence" turned out to multiply: the
+    detector emits one flag per (alibi, sighting) pair, so one alibi
+    against N repeated sightings was N flags and the per-flag sum lifted
+    an innocent to a clamped 1.0 (seed 9 m1: 19 near-duplicate weak
+    flags = +1.52). The lift is therefore deduplicated per
+    (subject, alibi-claim) pair -- one delta per underlying claim,
+    however many sightings it pairs against, keyed by
+    :func:`meetings.transcript.contradiction_lift_key`; a key whose
+    flags classify both weak and strong contributes its strongest delta
+    once. Flags from DIFFERENT claims still accumulate (two independent
+    weak signals remain corroboration), but a subject's total lift per
+    call is capped at ``MEETING_CONTRADICTION_LIFT_CAP`` (one strong
+    flag's worth), so no flag volume alone reaches 1.0. Every flag is
+    still recorded on the subject's inconsistency list -- the dedup is
+    about the score, never the information (§5.4 "flags are
+    information").
+
+    Subjects are processed in sorted order so the resulting state is
+    deterministic regardless of input ordering -- a precondition for
+    replay-stable belief snapshots.
     """
 
     result = beliefs.copy()
+    lift_groups: dict[tuple[PlayerId, str], float] = {}
     for contradiction in contradictions:
         belief_ref = ContradictionRef(
             summary=contradiction.description,
@@ -417,9 +456,20 @@ def apply_contradiction_rule(
             if is_weak_contradiction(contradiction)
             else CONTRADICTION_SUSPICION_DELTA
         )
+        lift_key = contradiction_lift_key(contradiction)
         for subject in sorted(contradiction.subjects):
             result.record_contradiction(subject, belief_ref)
-            result.adjust_suspicion(subject, delta=delta)
+            group = (subject, lift_key)
+            lift_groups[group] = max(lift_groups.get(group, 0.0), delta)
+
+    lift_by_subject: dict[PlayerId, float] = {}
+    for (subject, _), delta in lift_groups.items():
+        lift_by_subject[subject] = lift_by_subject.get(subject, 0.0) + delta
+    for subject in sorted(lift_by_subject):
+        result.adjust_suspicion(
+            subject,
+            delta=min(lift_by_subject[subject], MEETING_CONTRADICTION_LIFT_CAP),
+        )
     return result
 
 
@@ -508,6 +558,7 @@ __all__ = [
     "BODY_PROXIMITY_WINDOW_TICKS",
     "CONTRADICTION_SUSPICION_DELTA",
     "CORROBORATION_SUSPICION_DELTA",
+    "MEETING_CONTRADICTION_LIFT_CAP",
     "MEETING_SUSPICION_DECAY_RATE",
     "OBSERVED_VENT_ACTION",
     "VENTING_SUSPICION_DELTA",
