@@ -21,7 +21,10 @@ TASK_HEADER_RE = re.compile(
     r" — (?P<title>.+)$",
     re.MULTILINE,
 )
-FUTURE_TASK_ID_RE = re.compile(r"^[2-9]\d*\.[1-9]\d*(?:\.[1-9]\d*)?$")
+# Phase number is any integer >= 2: a single digit 2-9, or two-plus digits
+# (10 and up). The previous pattern `[2-9]\d*` required the FIRST digit to be
+# 2-9, silently excluding phases 10-19; it surfaced the day phase-10.md landed.
+FUTURE_TASK_ID_RE = re.compile(r"^(?:[2-9]|[1-9]\d+)\.[1-9]\d*(?:\.[1-9]\d*)?$")
 PROMPT_PATH_RE = re.compile(
     r"\*\*Ready-to-paste prompt:\*\* `(?P<path>agent_prompts/[^`]+\.md)`"
 )
