@@ -47,6 +47,7 @@ from eval.alibi_fabrication import AlibiFabricationReport
 from eval.cost_dashboard import CostDashboard
 from eval.meeting_quality import (
     ConversionReport,
+    GateMetricsReport,
     MeetingRateReport,
     TournamentEvalReport,
 )
@@ -141,6 +142,7 @@ class _TournamentEvalReportView(BaseModel):
     cost_dashboard: CostDashboard
     meeting_rate: MeetingRateReport
     conversion: ConversionReport
+    gate_metrics: GateMetricsReport
 
 
 def _sanitized_failed_call(call: Mapping[str, Any]) -> dict[str, Any]:

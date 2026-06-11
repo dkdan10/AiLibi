@@ -35,6 +35,22 @@ analyzer defined in this module:
   1.0 (see :mod:`eval.vote_correctness`) and measures nothing, so the real
   leads are published beside it on the shipped report surface.
 
+Phase 10 Wave 0 (Task 10.4, gate metrics) adds a seventh, the Phase-10 A/B
+ruler defined in this module:
+
+* *Gate metrics* — the Phase-10 gate surface specified by audit
+  audit-2026-06-10-1820 gp-7 (:func:`compute_gate_metrics` /
+  :class:`GateMetricsReport`): the genuine-class conversion pair (the
+  phase's PRIMARY progress gate, computed by the owning
+  :func:`eval.vote_correctness.compute_genuine_class_conversion`), the
+  lost-opening-accusation count split from cap-defaulted turns (H-H-5 vs
+  H-H-2 — different causes, same chain-killing symptom, so an A/B must read
+  them separately), and accused-impostor survival partitioned by the
+  rendered §4.6 verdict (D-D-2) so Wave-2 deception claims are
+  conversion-controlled from day one. The win split is deliberately NOT on
+  this surface: it is a constant of the race structure (~90/10, zero
+  ejection-driven wins, B-B-1) and gates nothing.
+
 :class:`~eval.report_schema.TournamentReport` is frozen with
 ``extra="forbid"``, so the metric outputs cannot be added as fields on it.
 They live instead on :class:`TournamentEvalReport`, a frozen wrapper that
@@ -51,6 +67,7 @@ module, never re-derived here.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Final
 
@@ -69,10 +86,16 @@ from eval.alibi_fabrication import (
     compute_alibi_fabrication_rate,
 )
 from eval.cost_dashboard import CostDashboard, compute_cost_dashboard
-from eval.report_schema import GameReport, TournamentReport
-from eval.vote_correctness import VoteCorrectnessReport, compute_vote_correctness
+from eval.report_schema import GameReport, MeetingReport, TournamentReport
+from eval.vote_correctness import (
+    GenuineClassConversionReport,
+    VoteCorrectnessReport,
+    compute_genuine_class_conversion,
+    compute_vote_correctness,
+)
 from meetings.manager import INVALID_VOTE_TARGET_MARKER, TEAMMATE_VOTE_TARGET_MARKER
 from meetings.schemas import AccusationClaim, PlayerId
+from meetings.transcript import detect_contradictions
 
 # The literal prefixes (the marker text minus the ``{target!r}`` placeholder)
 # the meeting layer stamps onto ``rationale_text`` when it normalizes a
@@ -88,6 +111,68 @@ _INVALID_VOTE_MARKER_PREFIX: Final[str] = INVALID_VOTE_TARGET_MARKER.split(
 _TEAMMATE_VOTE_MARKER_PREFIX: Final[str] = TEAMMATE_VOTE_TARGET_MARKER.split(
     "{target!r}"
 )[0]
+
+# ---------------------------------------------------------------------------
+# Task 10.4 gate-metric parses (ported from the audit extractor's derivations,
+# audits/workflows/extract_gameplay_facts.py — the gp-7 instruction is to ship
+# those derivations here so later waves read them off the report instead of
+# re-deriving operator-inline).
+# ---------------------------------------------------------------------------
+
+# The §6.6 vote prompt renders the voter's OWN suspicion graph under a
+# "## Your suspicion graph" header, one row per known player:
+#
+#     ## Your suspicion graph
+#     - `p-2`: suspicion 0.70, trust 0.50- `p-6`: suspicion 0.78, trust 0.50
+#
+# This is the only place a per-TARGET (not just the per-voter max) §4.6
+# suspicion value survives into the replay, so the deception-control split
+# reads an accused impostor's rendered suspicion off the OTHER voters' graph
+# rows (a voter holds no row about itself). Both literals are produced by the
+# committed ``vote_ballot.j2`` template; the row regex pins the production
+# ``p-{n}`` id shape, so a non-roster garbage row (audit C-C-8) can never
+# match. The per-voter MAX line stays the shared
+# :mod:`eval._suspicion_parse` parse — this block adds only the per-target
+# graph read that parse does not cover.
+_SUSPICION_GRAPH_HEADER: Final[str] = "## Your suspicion graph"
+_SUSPICION_GRAPH_ROW_RE: Final[re.Pattern[str]] = re.compile(
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
+    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+)
+
+# A defaulted-turn ``deadline_default`` failed-call row carries the turn
+# coordinates in its ``error_message``, written by
+# ``orchestrator.game._default_error_message``: "reply turn (turn 1)
+# defaulted (validation); p-9 submitted no turn ...". A defaulted VOTE
+# writes "vote defaulted (...); p-9 submitted no ballot" instead and is NOT
+# a cap-defaulted turn. Counting distinct parsed coordinates (rather than
+# raw rows) keeps the count stable even if a single default ever writes
+# multiple rows again (the pre-9.10 duplicate shape, or one row per burned
+# parse-failure call).
+_DEFAULTED_TURN_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?P<kind>opening|reply|opt_in) turn \(turn (?P<index>\d+)\) defaulted"
+    r"[^;]*;\s*(?P<speaker>\S+) submitted no turn"
+)
+_DEFAULTED_VOTE_PREFIX: Final[str] = "vote defaulted"
+
+
+def _parse_suspicion_graph(prompt: str) -> dict[PlayerId, float]:
+    """Return ``{player_id: rendered_suspicion}`` from a vote prompt's graph.
+
+    Empty when the prompt carries no ``## Your suspicion graph`` section (a
+    voter with no beliefs about anyone, or a non-vote prompt). The block ends
+    at the next ``## `` header. See the constants above for why this parse
+    lives here.
+    """
+
+    if _SUSPICION_GRAPH_HEADER not in prompt:
+        return {}
+    after = prompt.split(_SUSPICION_GRAPH_HEADER, 1)[1]
+    block = after.split("## ", 1)[0]
+    return {
+        match.group("pid"): float(match.group("sus"))
+        for match in _SUSPICION_GRAPH_ROW_RE.finditer(block)
+    }
 
 
 class MeetingRateReport(BaseModel):
@@ -576,6 +661,275 @@ def compute_conversion_report(
     )
 
 
+class GateMetricsReport(BaseModel):
+    """The Phase-10 A/B gate surface (Task 10.4; DESIGN.md §11.3; audit gp-7).
+
+    Frozen value object publishing the counters the Phase-10 waves gate on,
+    so 10.5 and every later wave reads them off the shipped report instead of
+    deriving them operator-inline (audit audit-2026-06-10-1820 gp-7: B-B-1,
+    C-C-6, D-D-2, H-H-5, H-H-7). The win split is deliberately ABSENT: it is
+    a constant of the race structure (~90/10 with zero ejection-driven wins,
+    B-B-1) and is excluded from every Phase-10 gate. H-H-7's confidence
+    calibration cleared (monotone bins, informative spread), so no
+    quantization caveat ships either.
+
+    * ``genuine_class_conversion`` — the phase's PRIMARY progress gate,
+      computed by the owning
+      :func:`eval.vote_correctness.compute_genuine_class_conversion` (the
+      CANON-class definition imports the Task 10.1 detector classifier — one
+      home, never a parallel implementation) and carried here so the whole
+      gate surface reads from one block. Its ``note`` field documents why
+      raw ``ejection_accuracy`` parity with the artifact-era 0.63 is an
+      invalid gate.
+    * ``lost_opening_accusations`` — meetings whose opening turn carries
+      ZERO accusation claims (the chain dies on turn 0: ``chain_length=1``
+      SKIP; H-H-5). Counted SEPARATELY from ``cap_defaulted_turns`` —
+      different causes, same chain-killing symptom, and a conversion A/B
+      that fuses them cannot tell a narration tail from a token-cap
+      truncation (5 vs 2 on the audited set, and the seed-23 opening sits
+      in both counters by design: it defaulted AND lost its accusation).
+    * ``cap_defaulted_turns`` — distinct defaulted turns (opening / reply /
+      opt_in), i.e. ``deadline_default`` failed-call rows whose
+      ``error_message`` names a turn, deduped on (game, meeting, kind,
+      index, speaker); defaulted VOTES are not turns and are excluded. A
+      ``deadline_default`` row naming neither a turn nor a vote is foreign
+      data and fails loud rather than being silently dropped from the count
+      (AGENTS.md "no silent fallbacks").
+    * ``accused_impostor_events`` / ``accused_impostor_survivals`` — the
+      D-D-2 deception-control denominator: one event per (meeting, living
+      true impostor verbally accused by someone else); self-accusations are
+      excluded (an impostor naming themselves is not crew pressure —
+      deliberately stricter than the recall lead's self-inclusive
+      convention, matching the audited 55/45). The impostor SURVIVES unless
+      that meeting's well-formed outcome ejected them.
+    * The survival partition (``rendered_met`` + ``sheltered_sub_gate`` +
+      ``unevidenced`` == ``survivals``) is the deception-vs-under-conversion
+      split, classified against the rendered §4.6 suspicion the OTHER
+      voters' graph rows carried for the impostor
+      (:data:`_SUSPICION_GRAPH_ROW_RE`; threshold =
+      :data:`eval._suspicion_parse.SKIP_SUSPICION_THRESHOLD`):
+
+      - ``survivals_rendered_met`` — some voter was shown a met-threshold
+        verdict on the impostor yet the table failed to convert. These are
+        CREW-conversion failures; reading them as impostor deception is the
+        exact misread D-D-2 warns against (32/45 on the audited set).
+      - ``survivals_sheltered_sub_gate`` — a rendered row existed, stayed
+        below the threshold, AND at least one re-derived detector flag named
+        the impostor: their account was actively challenged and the weak
+        band genuinely sheltered them. This is the conversion-controlled
+        deception-credit count Wave-2 claims must cite (n=1/45 audited:
+        seed 8 m1 at 0.58).
+      - ``survivals_unevidenced`` — the remainder: no rendered row at all,
+        or sub-gate with zero flags. Evidence starvation, not deception.
+
+    **Leak-safety.** Pure aggregates (counts plus the nested genuine-class
+    block: two counts, a rate, and a pinned documentation string). No roles,
+    no transcripts, no engine-owned types, so the block adds no leak risk to
+    the ``/eval/tournament-report`` surface (``tests/api/test_leak.py``).
+
+    The post-init validator enforces the partition invariants fail-loud so an
+    inconsistent result can never be constructed (mirrors
+    :class:`ConversionReport`).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    genuine_class_conversion: GenuineClassConversionReport
+    lost_opening_accusations: int
+    cap_defaulted_turns: int
+    accused_impostor_events: int
+    accused_impostor_survivals: int
+    survivals_rendered_met: int
+    survivals_sheltered_sub_gate: int
+    survivals_unevidenced: int
+
+    @model_validator(mode="after")
+    def _validate_buckets(self) -> GateMetricsReport:
+        counts = (
+            self.lost_opening_accusations,
+            self.cap_defaulted_turns,
+            self.accused_impostor_events,
+            self.accused_impostor_survivals,
+            self.survivals_rendered_met,
+            self.survivals_sheltered_sub_gate,
+            self.survivals_unevidenced,
+        )
+        if any(count < 0 for count in counts):
+            raise ValueError("gate-metric counts must be non-negative")
+        if self.accused_impostor_survivals > self.accused_impostor_events:
+            raise ValueError(
+                "accused_impostor_survivals cannot exceed accused_impostor_events: "
+                f"{self.accused_impostor_survivals} > {self.accused_impostor_events}"
+            )
+        survival_parts = (
+            self.survivals_rendered_met
+            + self.survivals_sheltered_sub_gate
+            + self.survivals_unevidenced
+        )
+        if survival_parts != self.accused_impostor_survivals:
+            raise ValueError(
+                "met + sheltered + unevidenced survivals must equal "
+                f"accused_impostor_survivals: {self.survivals_rendered_met} + "
+                f"{self.survivals_sheltered_sub_gate} + "
+                f"{self.survivals_unevidenced} != {self.accused_impostor_survivals}"
+            )
+        return self
+
+
+def compute_gate_metrics(
+    report: TournamentReport | Sequence[GameReport],
+) -> GateMetricsReport:
+    """Fold a tournament report into the Phase-10 gate surface (Task 10.4).
+
+    Accepts either a :class:`~eval.report_schema.TournamentReport` or a bare
+    sequence of :class:`~eval.report_schema.GameReport` (matching the other
+    analyzers' signature). Pure: no I/O, no engine/agent/LLM calls — every
+    derivation is a fold over recorded artifacts, ported from the audit
+    extractor (``audits/workflows/extract_gameplay_facts.py``) so the shipped
+    surface and the audited numbers share one definition.
+
+    The genuine-class pair is produced by the owning
+    :func:`eval.vote_correctness.compute_genuine_class_conversion`, never
+    re-derived here. Lost openings count meetings whose first turn carries no
+    :class:`~meetings.schemas.AccusationClaim` (an empty transcript vacuously
+    counts — its opening supplied nothing). Cap-defaults walk each game's
+    ``failed_calls`` for ``deadline_default`` rows and dedupe parsed turn
+    coordinates; an unparseable ``deadline_default`` row fails loud. The
+    survival partition reads each accused impostor's rendered suspicion off
+    the other voters' §6.6 graph rows and — for the sub-gate shelter test
+    only — re-derives detector flags through
+    :func:`meetings.transcript.detect_contradictions` under the ballot-voter
+    roster (the same one-home classifier the genuine-class pair imports).
+    """
+
+    games = report.games if isinstance(report, TournamentReport) else tuple(report)
+
+    lost_opening_accusations = 0
+    defaulted_turn_keys: set[tuple[str, str, str, int, str]] = set()
+    accused_impostor_events = 0
+    accused_impostor_survivals = 0
+    survivals_rendered_met = 0
+    survivals_sheltered_sub_gate = 0
+    survivals_unevidenced = 0
+
+    for game in games:
+        for failed_call in game.failed_calls:
+            if failed_call.error_type != "deadline_default":
+                continue
+            parsed = _DEFAULTED_TURN_RE.search(failed_call.error_message)
+            if parsed is not None:
+                defaulted_turn_keys.add(
+                    (
+                        game.game_id,
+                        failed_call.meeting_id,
+                        parsed.group("kind"),
+                        int(parsed.group("index")),
+                        parsed.group("speaker"),
+                    )
+                )
+            elif not failed_call.error_message.startswith(_DEFAULTED_VOTE_PREFIX):
+                raise ValueError(
+                    "unclassifiable deadline_default failed-call row in game "
+                    f"{game.game_id!r}: {failed_call.error_message!r} names "
+                    "neither a defaulted turn nor a defaulted vote. The "
+                    "cap-default count would silently drift on foreign data, "
+                    "so this fails loud."
+                )
+
+        for meeting in game.meetings:
+            turns = meeting.transcript.turns
+            opening_has_accusation = bool(turns) and any(
+                isinstance(claim, AccusationClaim) for claim in turns[0].claims
+            )
+            if not opening_has_accusation:
+                lost_opening_accusations += 1
+
+            # D-D-2 deception control: living true impostors verbally accused
+            # by someone else this meeting (self-accusations are not crew
+            # pressure; roles subscript fails loud like the recall lead).
+            accused_impostors = sorted(
+                {
+                    claim.against
+                    for turn in turns
+                    for claim in turn.claims
+                    if isinstance(claim, AccusationClaim)
+                    and claim.against != turn.speaker
+                    and game.roles[claim.against] == "IMPOSTOR"
+                }
+            )
+            if not accused_impostors:
+                continue
+
+            rendered = _rendered_suspicion_by_target(meeting)
+            # Re-derived flag subjects, computed lazily: only a sub-gate
+            # survivor needs the shelter test (the detector re-run is pure
+            # and deterministic — the same one-home classifier the
+            # genuine-class pair imports).
+            flagged_subjects: frozenset[PlayerId] | None = None
+            for impostor in accused_impostors:
+                accused_impostor_events += 1
+                if (
+                    meeting.outcome == "EJECTED"
+                    and meeting.ejected_player_id == impostor
+                ):
+                    continue
+                accused_impostor_survivals += 1
+                rendered_max = rendered.get(impostor)
+                if (
+                    rendered_max is not None
+                    and rendered_max >= SKIP_SUSPICION_THRESHOLD
+                ):
+                    survivals_rendered_met += 1
+                    continue
+                if flagged_subjects is None:
+                    roster = frozenset(ballot.voter for ballot in meeting.ballots)
+                    flagged_subjects = frozenset(
+                        subject
+                        for flag in detect_contradictions(
+                            meeting.transcript, roster=roster
+                        )
+                        for subject in flag.subjects
+                    )
+                if rendered_max is not None and impostor in flagged_subjects:
+                    survivals_sheltered_sub_gate += 1
+                else:
+                    survivals_unevidenced += 1
+
+    return GateMetricsReport(
+        genuine_class_conversion=compute_genuine_class_conversion(games),
+        lost_opening_accusations=lost_opening_accusations,
+        cap_defaulted_turns=len(defaulted_turn_keys),
+        accused_impostor_events=accused_impostor_events,
+        accused_impostor_survivals=accused_impostor_survivals,
+        survivals_rendered_met=survivals_rendered_met,
+        survivals_sheltered_sub_gate=survivals_sheltered_sub_gate,
+        survivals_unevidenced=survivals_unevidenced,
+    )
+
+
+def _rendered_suspicion_by_target(meeting: MeetingReport) -> dict[PlayerId, float]:
+    """Max §4.6 suspicion any OTHER voter's graph rendered per target.
+
+    A voter holds no row about itself, so a player's rendered value comes
+    from the other voters' prompts; the max is the strongest verdict anyone
+    at the table was shown (the audit extractor's
+    ``rendered_suspicion_by_target`` derivation). Non-vote prompts carry no
+    graph and contribute nothing.
+    """
+
+    rendered: dict[PlayerId, float] = {}
+    for call in meeting.llm_calls:
+        if call.agent_id is None:
+            continue
+        for target, suspicion in _parse_suspicion_graph(call.prompt).items():
+            if target == call.agent_id:
+                continue
+            best = rendered.get(target)
+            if best is None or suspicion > best:
+                rendered[target] = suspicion
+    return rendered
+
+
 class TournamentEvalReport(BaseModel):
     """A tournament report bundled with its Phase 5 / W0.3 metric results.
 
@@ -597,7 +951,11 @@ class TournamentEvalReport(BaseModel):
     :data:`~eval.report_schema.CURRENT_FORMAT_VERSION` is NOT bumped. The Task
     9.6 ``conversion`` block follows the same rule: a wrapper-level aggregate
     over the unchanged inner report, so the version stays 2 (DESIGN.md §11.4
-    bumps it only when older readers cannot interpret the shape).
+    bumps it only when older readers cannot interpret the shape). The Task
+    10.4 ``gate_metrics`` block follows it again — wrapper-level only, inner
+    shape untouched, version stays 2 — and both committed reports are
+    regenerated in the same PR, so no pre-10.4 wrapper JSON survives to be
+    read.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -609,6 +967,7 @@ class TournamentEvalReport(BaseModel):
     cost_dashboard: CostDashboard
     meeting_rate: MeetingRateReport
     conversion: ConversionReport
+    gate_metrics: GateMetricsReport
 
 
 def build_tournament_eval_report(report: TournamentReport) -> TournamentEvalReport:
@@ -618,8 +977,8 @@ def build_tournament_eval_report(report: TournamentReport) -> TournamentEvalRepo
     entry point over the same :class:`~eval.report_schema.TournamentReport`, and
     the results are packed into a :class:`TournamentEvalReport`. No metric math
     is reimplemented here — this function only orchestrates the analyzers
-    (including :func:`compute_meeting_rate` and
-    :func:`compute_conversion_report`) and bundles their outputs with the
+    (including :func:`compute_meeting_rate`, :func:`compute_conversion_report`,
+    and :func:`compute_gate_metrics`) and bundles their outputs with the
     source report; it never re-derives a count inline. The vote-correctness
     result is computed once and threaded into the conversion analyzer so its
     mirrored precision-lead fields come from the same fold.
@@ -634,14 +993,17 @@ def build_tournament_eval_report(report: TournamentReport) -> TournamentEvalRepo
         cost_dashboard=compute_cost_dashboard(report),
         meeting_rate=compute_meeting_rate(report),
         conversion=compute_conversion_report(report, vote_correctness=vote_correctness),
+        gate_metrics=compute_gate_metrics(report),
     )
 
 
 __all__ = [
     "ConversionReport",
+    "GateMetricsReport",
     "MeetingRateReport",
     "TournamentEvalReport",
     "build_tournament_eval_report",
     "compute_conversion_report",
+    "compute_gate_metrics",
     "compute_meeting_rate",
 ]
