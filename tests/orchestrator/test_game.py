@@ -1314,7 +1314,9 @@ class _RaiseFirstTurnThenSucceedClient:
                     reply_to=None,
                     observations=(),
                     claims=(),
-                    free_text="recovered opening",
+                    # "unsure" satisfies the Task 10.3 opening validation, so
+                    # the retry genuinely recovers (no default fires).
+                    free_text="recovered opening (unsure)",
                 ).model_dump_json(),
                 usage=TokenUsage(input_tokens=1, output_tokens=1),
                 cost_usd=0.0,

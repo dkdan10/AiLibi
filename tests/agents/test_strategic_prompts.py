@@ -153,10 +153,11 @@ class TestCrewmateReportTemplate:
 
     def test_rendered_output_contains_version_marker(self) -> None:
         # The crewmate opening template carries a visible version marker
-        # (bumped to v4 in Task 9.9: free_text length discipline + the
-        # living-roster accusation constraint) plus the role framing the LLM
-        # plays. A regression that swaps this for the impostor framing, or
-        # fails to bump the marker in lockstep, must fail the test.
+        # (bumped to v5 in Task 10.3: accuse-or-declare-unsure hard rule,
+        # the anti-repetition line, and the DEAD do-not-accuse roster line)
+        # plus the role framing the LLM plays. A regression that swaps this
+        # for the impostor framing, or fails to bump the marker in lockstep,
+        # must fail the test.
         prompt = crewmate_report_prompt(
             agent_id="p-3",
             current_tick=412,
@@ -165,7 +166,7 @@ class TestCrewmateReportTemplate:
             public_transcript="",
         )
 
-        assert "crewmate_report.v4" in prompt
+        assert "crewmate_report.v5" in prompt
         assert "**crewmate**" in prompt
         assert "opening speaker" in prompt
 
@@ -246,6 +247,70 @@ class TestCrewmateReportTemplate:
 
         assert "LIVING list" not in prompt
 
+    def test_accuse_or_declare_unsure_hard_rule_is_present(self) -> None:
+        # Task 10.3 (audit gp-9 H-H-1): the §5.2 PHASE 1 choice is a hard
+        # requirement -- accuse one player or write "unsure" in free_text --
+        # backing the manager-side opening validation. 5 of 76 audited
+        # meetings opened narration-only and every one killed the chain.
+        prompt = crewmate_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            public_transcript="",
+        )
+
+        assert "must EITHER include one `accusation` claim OR say" in prompt
+        assert '"unsure" in `free_text`' in prompt
+
+    def test_anti_repetition_line_is_present(self) -> None:
+        # Task 10.3 (audit gp-9 H-H-2): the remaining 2048-cap defaults were
+        # structured-array repetition loops (one sighting repeated ~5x).
+        prompt = crewmate_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            public_transcript="",
+        )
+
+        assert "List each sighting once" in prompt
+
+    def test_dead_roster_renders_as_do_not_accuse_line(self) -> None:
+        # Task 10.3 (audit gp-9 H-H-3/D-D-8): 17/18 invalid accusation
+        # targets named a real-but-DEAD player; the living list alone never
+        # said who is dead. The DEAD line renders under the living roster.
+        prompt = crewmate_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            public_transcript="",
+            living_ids=("p-1", "p-5"),
+            dead_ids=("p-2", "p-8"),
+        )
+
+        assert "`p-1`, `p-5`" in prompt
+        assert "DEAD or EJECTED -- do NOT accuse: `p-2`, `p-8`." in prompt
+
+    def test_render_without_dead_ids_validates_under_strict_undefined(
+        self,
+    ) -> None:
+        # dead_ids follows the same optional-kwarg pattern as living_ids: a
+        # raw render that omits it entirely still validates and omits the
+        # DEAD line (the living roster renders alone).
+        prompt = _ENV.get_template(CREWMATE_REPORT_TEMPLATE).render(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            public_transcript="",
+            living_ids=("p-1", "p-5"),
+        )
+
+        assert "`p-1`, `p-5`" in prompt
+        assert "DEAD or EJECTED" not in prompt
+
     def test_fake_provider_response_parses_into_meeting_turn(self) -> None:
         prompt = crewmate_report_prompt(
             agent_id="p-3",
@@ -287,7 +352,9 @@ class TestImpostorReportTemplate:
 
     def test_rendered_output_contains_version_marker(self) -> None:
         # The impostor opening template carries its visible version marker
-        # (bumped to v3 in Task 8.8) and the explicit role line.
+        # (bumped to v4 in Task 10.3: accuse-or-declare-unsure hard rule,
+        # the anti-repetition line, and the gated living/DEAD roster block)
+        # and the explicit role line.
         prompt = impostor_report_prompt(
             agent_id="p-3",
             current_tick=412,
@@ -296,7 +363,7 @@ class TestImpostorReportTemplate:
             public_transcript="",
         )
 
-        assert "impostor_report_v3" in prompt
+        assert "impostor_report_v4" in prompt
         assert "Your role for this match is IMPOSTOR" in prompt
 
     def test_renders_memory_into_prompt(self) -> None:
@@ -331,6 +398,81 @@ class TestImpostorReportTemplate:
         assert "fellow impostors" not in without.lower()
         assert "fellow impostors" in with_team.lower()
         assert "p-5" in with_team
+
+    def test_accuse_or_declare_unsure_hard_rule_is_present(self) -> None:
+        # Task 10.3 (audit gp-9 H-H-1): the same §5.2 PHASE 1 hard rule as
+        # the crewmate opening -- the manager validates impostor openings
+        # identically, so the impostor prompt must carry the instruction.
+        prompt = impostor_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_IMPOSTOR_MEMORY,
+            public_transcript="",
+        )
+
+        assert "must EITHER include one `accusation` claim OR say" in prompt
+        assert '"unsure" in `free_text`' in prompt
+
+    def test_anti_repetition_line_is_present(self) -> None:
+        # Task 10.3 (audit gp-9 H-H-2): the structured-array repetition loop
+        # nudge, carried by all three turn templates.
+        prompt = impostor_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_IMPOSTOR_MEMORY,
+            public_transcript="",
+        )
+
+        assert "List each sighting once" in prompt
+
+    def test_living_roster_renders_and_constrains_accusations(self) -> None:
+        # New in impostor_report_v4 (Task 10.3): the living-roster block was
+        # crewmate-only, and 12 of the 18 dead-id accusation drops were
+        # impostor-spoken (audit gp-9 D-D-8) -- the impostor opening now
+        # renders the same roster constraint as the crewmate one.
+        prompt = impostor_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_IMPOSTOR_MEMORY,
+            public_transcript="",
+            living_ids=("p-1", "p-5"),
+        )
+
+        assert "You may ONLY accuse a player on the LIVING list below" in prompt
+        assert "`p-1`, `p-5`" in prompt
+
+    def test_dead_roster_renders_as_do_not_accuse_line(self) -> None:
+        # Task 10.3 (audit gp-9 H-H-3/D-D-8): the explicit DEAD negative
+        # list under the living roster.
+        prompt = impostor_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_IMPOSTOR_MEMORY,
+            public_transcript="",
+            living_ids=("p-1", "p-5"),
+            dead_ids=("p-8",),
+        )
+
+        assert "DEAD or EJECTED -- do NOT accuse: `p-8`." in prompt
+
+    def test_render_without_rosters_validates_under_strict_undefined(self) -> None:
+        # Both roster inputs follow the optional-kwarg pattern: a raw render
+        # omitting living_ids and dead_ids entirely still validates and
+        # omits both blocks.
+        prompt = _ENV.get_template(IMPOSTOR_REPORT_TEMPLATE).render(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="trigger",
+            rendered_memory=_STUB_IMPOSTOR_MEMORY,
+            public_transcript="",
+        )
+
+        assert "LIVING list" not in prompt
+        assert "DEAD or EJECTED" not in prompt
 
     def test_missing_kwarg_raises_under_strict_undefined(self) -> None:
         # impostor_report.j2 references ``rendered_memory`` and
@@ -389,7 +531,7 @@ class TestAccusationRoundTemplate:
             turn_kind="reply",
         )
 
-        assert "accusation_round.v6" in prompt
+        assert "accusation_round.v7" in prompt
         assert "reactive accusation chain" in prompt
 
     def test_reply_turn_frames_the_accuser(self) -> None:
@@ -525,6 +667,56 @@ class TestAccusationRoundTemplate:
         )
 
         assert "LIVING list" not in prompt
+
+    def test_anti_repetition_line_is_present(self) -> None:
+        # Task 10.3 (audit gp-9 H-H-2): the structured-array repetition loop
+        # nudge, carried by all three turn templates.
+        prompt = accusation_round_prompt(
+            agent_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradictions=(),
+            prior_turn=_opening_turn(),
+            turn_kind="reply",
+        )
+
+        assert "List each sighting once" in prompt
+
+    def test_dead_roster_renders_as_do_not_accuse_line(self) -> None:
+        # Task 10.3 (audit gp-9 H-H-3/D-D-8): the explicit DEAD negative
+        # list under the living roster, on reply / opt-in turns too.
+        prompt = accusation_round_prompt(
+            agent_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradictions=(),
+            prior_turn=_opening_turn(),
+            turn_kind="reply",
+            living_ids=("p-1", "p-5"),
+            dead_ids=("p-2", "p-9"),
+        )
+
+        assert "`p-1`, `p-5`" in prompt
+        assert "DEAD or EJECTED -- do NOT accuse: `p-2`, `p-9`." in prompt
+
+    def test_render_without_dead_ids_validates_under_strict_undefined(
+        self,
+    ) -> None:
+        # dead_ids follows the same optional-kwarg pattern as living_ids: a
+        # raw render that omits it entirely still validates and omits the
+        # DEAD line (the living roster renders alone).
+        prompt = _ENV.get_template(ACCUSATION_ROUND_TEMPLATE).render(
+            agent_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradictions=(),
+            prior_turn=_opening_turn(),
+            turn_kind="reply",
+            living_ids=("p-1", "p-5"),
+        )
+
+        assert "`p-1`, `p-5`" in prompt
+        assert "DEAD or EJECTED" not in prompt
 
     def test_renders_speaker_self_alibi_example_with_own_id(self) -> None:
         # The template must anchor the self-alibi example to the speaker's

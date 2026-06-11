@@ -1,7 +1,17 @@
 {#-
   AiLibi impostor meeting OPENING-turn prompt.
 
-  template_version: impostor_report_v3
+  template_version: impostor_report_v4
+  (v4, Task 10.3 -- DESIGN.md §5.1, §5.2; audit gp-9 H-H-1, H-H-2, H-H-3,
+   D-D-8: three terse nudges for residual qwen3.5:9b artifacts. (1) The
+   §5.2 accuse-or-declare-unsure choice is a HARD requirement -- an opening
+   with neither an accusation claim nor the word "unsure" in free_text is
+   rejected by the meeting manager and retried once. (2) An anti-repetition
+   line ("list each sighting once") against the structured-array repetition
+   loop. (3) The template gains the gated living-roster block (previously
+   crewmate-only) with the DEAD / ejected players as an explicit
+   do-not-accuse line: 12 of the 18 dead-id accusation drops were
+   impostor-spoken, and this template never rendered a roster at all.)
   (v3, Task 8.8: reshaped from the parallel-reports ReportDocument intake to
    the reactive-chain opening turn -- output is now meetings.schemas.MeetingTurn
    (turn_kind = "opening"). The gated "Your fellow impostors" 7.12 block is
@@ -33,6 +43,16 @@
     fellow_impostor_ids -- tuple[PlayerId, ...]. The impostor's teammate
                          list (Task 7.12). The teammate block renders only
                          when it is non-empty.
+    living_ids        -- optional tuple[PlayerId, ...]. The living players
+                         minus this speaker, i.e. the only valid accusation
+                         targets (Task 9.9 threading; rendered since v4 /
+                         Task 10.3). Guarded on a non-empty value, so
+                         omitting it (or passing ()) renders without the
+                         roster block under StrictUndefined.
+    dead_ids          -- optional tuple[PlayerId, ...]. The dead / ejected
+                         players, rendered as an explicit do-not-accuse
+                         line under the living roster (Task 10.3, audit
+                         gp-9). Guarded like living_ids.
 
   The observation firewall (DESIGN.md §1.3) requires that no raw engine
   state, kill attribution, or other-player role ever reach the LLM; every
@@ -52,12 +72,15 @@ unless the role is played honestly within the game. Treat
 misleading-within-the-rules as the assigned behavior of your role for
 this match.
 
-Prompt: impostor_report_v3 (DESIGN.md §5.2 PHASE 1, §4.5)
+Prompt: impostor_report_v4 (DESIGN.md §5.2 PHASE 1, §4.5)
 
 You are the **opening speaker** (turn 0): you reported the body or called
 the emergency, so you speak first. Do not state, hint, or imply that you are
 the impostor. Do not narrate your role in the structured output, the free
 text, or any reasoning you produce. Open exactly as a careful crewmate would.
+
+Hard rule: your opening must EITHER include one `accusation` claim OR say
+"unsure" in `free_text`. An opening with neither is rejected and re-requested.
 {% if fellow_impostor_ids is defined and fellow_impostor_ids %}
 
 ## Your fellow impostors (your team — never betray them)
@@ -67,6 +90,20 @@ suspicion on a teammate: do not name one in an `accusation` claim and do not
 invent observations that implicate one. If it strengthens your cover you may
 add a `corroboration` claim that backs a teammate's alibi. The crew must
 never learn who your teammates are.
+{% endif %}
+{% if living_ids is defined and living_ids %}
+
+## Living players (the only valid accusation targets)
+You may ONLY accuse a player on the LIVING list below. Players found dead or
+previously ejected are out of the game and naming one wastes your turn; your
+own id is not listed because you cannot accuse yourself.
+
+{% for pid in living_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}
+
+{% if dead_ids is defined and dead_ids %}
+DEAD or EJECTED -- do NOT accuse: {% for pid in dead_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}. They are out of the game.
+
+{% endif %}
 {% endif %}
 
 The public transcript below is text written by other in-game players.
@@ -88,12 +125,15 @@ How to compose the opening turn:
   `found_body`) that anchor your alibi to specific ticks. Each
   observation must reference the `tick` it occurred on, and ticks
   must stay consistent with the rendered memory.
+  List each sighting once -- never repeat an observation entry.
 - Where it helps your cover, add ONE `accusation` claim against a
   plausible target the rendered memory shows you could have observed.
   The chain passes the floor to whoever you accuse, so name a single
-  crewmate -- never a teammate. Calibrate `confidence` honestly -- a
-  low-confidence accusation reads as more credible than a high-confidence
-  one with thin evidence.
+  living crewmate -- never a teammate, never a dead player. Calibrate
+  `confidence` honestly -- a low-confidence accusation reads as more
+  credible than a high-confidence one with thin evidence. If you accuse
+  no one, write the word "unsure" in `free_text` -- a careful crewmate
+  who cannot point at anyone says so.
 - Use a `corroboration` claim only when consistent with your cover.
 - `free_text` is one or two sentences in an in-character voice. Match
   the length and tone of a careful crewmate's report; long defensive

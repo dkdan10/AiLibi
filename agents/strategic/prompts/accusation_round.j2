@@ -1,7 +1,17 @@
 {# Reactive accusation-chain turn prompt (DESIGN.md §5.2, §5.3).
 
    prompt_id: accusation_round
-   version: 6
+   version: 7
+   (v7, Task 10.3 -- DESIGN.md §5.1, §5.2; audit gp-9 H-H-2, H-H-3, D-D-8:
+    two terse nudges for residual qwen3.5:9b artifacts; the reply / opt-in
+    framing is otherwise unchanged. (1) An anti-repetition line ("list each
+    sighting once") against the structured-array repetition loop -- the
+    remaining cap-defaults were a single sighting repeated ~5x until the
+    frozen 2048 cap truncated the JSON. (2) The DEAD / ejected players
+    render as an explicit do-not-accuse line under the living roster via
+    the new optional `dead_ids` input -- 17/18 invalid accusation targets
+    named a real-but-DEAD player, and the living list alone never said who
+    is dead.)
    (v4, Task 8.8: reshaped from the fixed-round `Statement` turn to a reactive
     chain turn -- output is now meetings.schemas.MeetingTurn (turn_kind =
     "reply" or "opt_in"). Gains two inputs over the old renderer: `prior_turn`
@@ -51,6 +61,11 @@
                         targets. The roster block is guarded on a non-empty
                         value, so omitting it (or passing the default ())
                         renders without the block under StrictUndefined.
+     dead_ids        -- optional tuple of PlayerIds (Task 10.3, audit gp-9):
+                        the dead / ejected players, rendered as an explicit
+                        do-not-accuse line under the living roster. Guarded
+                        like living_ids: omitting it (or passing ()) renders
+                        without the line.
 
    These inputs are exhaustive: the template references nothing else, so no
    hidden engine state can reach the LLM through this prompt.
@@ -60,7 +75,7 @@ turn in a reactive accusation chain (DESIGN.md §5.2). You will read the public
 meeting transcript so far together with your private memory, then submit
 exactly one turn.
 
-Prompt: accusation_round.v6 (DESIGN.md §5.2)
+Prompt: accusation_round.v7 (DESIGN.md §5.2)
 {% if turn_kind == "reply" %}
 
 ## Your turn: a reply
@@ -126,6 +141,10 @@ own id is not listed because you cannot accuse yourself.
 
 {% for pid in living_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}
 
+{% if dead_ids is defined and dead_ids %}
+DEAD or EJECTED -- do NOT accuse: {% for pid in dead_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}. They are out of the game.
+
+{% endif %}
 {% endif %}
 
 ## Your private memory
@@ -194,7 +213,8 @@ Identity fields (emit a placeholder; the manager overrides each):
 
 Content fields (your actual turn):
 - `observations`: zero or more first-hand observations, each tagged with its
-  own `tick`. Each entry is one of:
+  own `tick`. List each sighting once -- never repeat an observation entry.
+  Each entry is one of:
   - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
   - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
   - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`

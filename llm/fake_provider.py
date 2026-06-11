@@ -170,6 +170,16 @@ def _zero_value_from_annotation(
     if origin is dict:
         return {}
     if annotation is str:
+        if field_name == "free_text":
+            # A turn's conversational field. The meeting manager
+            # content-validates OPENING turns (Task 10.3, DESIGN.md §5.2
+            # PHASE 1): accuse or explicitly declare "unsure". The fake's
+            # minimal instance carries no claims, so its free_text declares
+            # unsure -- keeping the fake a protocol-valid participant the
+            # call site accepts on the first attempt (no synthetic
+            # retry/default noise in CI meeting records). Deterministic per
+            # prompt like every other fake field.
+            return f"fake-free_text-{seed} (unsure)"
         return f"fake-{field_name}-{seed}"
     if annotation is int:
         return 0

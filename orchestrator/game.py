@@ -171,10 +171,20 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # like the vote ballot's candidate_targets). Prompt-text revisions to the two
 # turn templates only, not a lockstep bump; the committed sample bytes still
 # record v3/v5 and are re-recorded in Task 9.11, not here.
+#
+# Task 10.3 (DESIGN.md §5.1, §5.2; audit gp-9) bumps the THREE turn templates
+# -- crewmate_report v4 -> v5, impostor_report v3 -> v4, accusation_round
+# v6 -> v7: the openings make the §5.2 accuse-or-declare-unsure choice a hard
+# requirement (backed by the manager's opening retry), all three carry the
+# list-each-sighting-once anti-repetition line, and the roster block renders
+# the DEAD / ejected players as an explicit do-not-accuse line (the impostor
+# template gains the roster block itself). vote_ballot is FROZEN (the §4.6
+# render). The committed sample bytes still record v4/v3/v6 and are
+# re-recorded in Task 10.5, not here.
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
-    "crewmate_report": "crewmate_report.v4",
-    "impostor_report": "impostor_report_v3",
-    "accusation_round": "accusation_round.v6",
+    "crewmate_report": "crewmate_report.v5",
+    "impostor_report": "impostor_report_v4",
+    "accusation_round": "accusation_round.v7",
     "vote_ballot": "vote_ballot/v5",
 }
 
@@ -430,11 +440,25 @@ class DefaultMeetingRunner:
             agents=agents,
             token_budget=self._token_budget,
         )
+        # Dead / ejected roster (Task 10.3, audit gp-9): the orchestrator is
+        # the only meeting-adjacent layer that may read world state, so it
+        # derives the negative list here and the manager threads it into the
+        # turn prompts as the explicit do-not-accuse line. "Who is dead" is
+        # public knowledge (deaths and ejections are announced), so this
+        # stays firewall-safe. Sorted for a deterministic render.
+        dead_ids = tuple(
+            sorted(
+                player_id
+                for player_id, player in state.players.items()
+                if not player.alive
+            )
+        )
         try:
             result = await self._manager.run(
                 meeting_id=meeting_id,
                 trigger=trigger,
                 participants=participants,
+                dead_ids=dead_ids,
             )
         except BaseException as exc:
             # On failure, drop the partial captures so a retry against

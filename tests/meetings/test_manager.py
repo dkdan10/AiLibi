@@ -52,6 +52,7 @@ from meetings.manager import (
     INVALID_CORROBORATION_SUPPORTS_MARKER,
     INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
+    OPENING_UNSURE_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     LLMProviderError,
     MeetingBeliefEvidence,
@@ -120,6 +121,12 @@ def _living_ids_line(living_ids: tuple[PlayerId, ...]) -> str:
     return f"LIVING_IDS={','.join(living_ids)}\n"
 
 
+def _dead_ids_line(dead_ids: tuple[PlayerId, ...]) -> str:
+    if not dead_ids:
+        return ""
+    return f"DEAD_IDS={','.join(dead_ids)}\n"
+
+
 def _crewmate_report_prompt(
     *,
     agent_id: PlayerId,
@@ -129,12 +136,14 @@ def _crewmate_report_prompt(
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=CREWMATE agent_id={agent_id} tick={current_tick}\n"
         f"TRIGGER: {meeting_trigger}\n"
         f"{_fellow_impostors_line(fellow_impostor_ids)}"
         f"{_living_ids_line(living_ids)}"
+        f"{_dead_ids_line(dead_ids)}"
         f"MEMORY:\n{rendered_memory}\n"
         f"PUBLIC_TRANSCRIPT:\n{public_transcript}\n"
     )
@@ -149,12 +158,14 @@ def _impostor_report_prompt(
     public_transcript: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     return (
         f"PHASE=OPENING ROLE=IMPOSTOR agent_id={agent_id} tick={current_tick}\n"
         f"TRIGGER: {meeting_trigger}\n"
         f"{_fellow_impostors_line(fellow_impostor_ids)}"
         f"{_living_ids_line(living_ids)}"
+        f"{_dead_ids_line(dead_ids)}"
         f"MEMORY:\n{rendered_memory}\n"
         f"PUBLIC_TRANSCRIPT:\n{public_transcript}\n"
     )
@@ -170,12 +181,14 @@ def _statement_prompt(
     turn_kind: str,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> str:
     prior = prior_turn.speaker if prior_turn is not None else "none"
     return (
         f"PHASE=TURN turn_kind={turn_kind} agent_id={agent_id} prior={prior}\n"
         f"{_fellow_impostors_line(fellow_impostor_ids)}"
         f"{_living_ids_line(living_ids)}"
+        f"{_dead_ids_line(dead_ids)}"
         f"MEMORY:\n{rendered_memory}\n"
         f"TURNS_COUNT={len(transcript.turns)}\n"
         f"CONTRADICTIONS_COUNT={len(contradictions)}\n"
@@ -269,6 +282,7 @@ def _turn_json(
     accuses: str | None = None,
     observations: tuple[ObservationClaim, ...] = (),
     claims: tuple[Claim, ...] = (),
+    free_text: str | None = None,
 ) -> str:
     turn_claims: list[Claim] = list(claims)
     if accuses is not None:
@@ -280,6 +294,16 @@ def _turn_json(
                 reason=f"{speaker} accuses {accuses}",
             )
         )
+    if free_text is None:
+        free_text = f"turn from {speaker}"
+        if accuses is None:
+            # Protocol-valid stance for a non-accusing stub turn (DESIGN.md
+            # §5.2 PHASE 1; Task 10.3): an opening that names no accusation
+            # must declare "unsure" or the manager retries it. Appended only
+            # when no accusation is scripted, so accusing stubs keep their
+            # pre-10.3 text; pass an explicit ``free_text`` to exercise the
+            # narration-only validation itself.
+            free_text += " -- unsure"
     # turn_id / turn_index / speaker / turn_kind / reply_to are overwritten by
     # the manager; the values here are placeholders.
     return MeetingTurn(
@@ -290,7 +314,7 @@ def _turn_json(
         reply_to=None,
         observations=observations,
         claims=tuple(turn_claims),
-        free_text=f"turn from {speaker}",
+        free_text=free_text,
     ).model_dump_json()
 
 
@@ -432,6 +456,7 @@ def _run_meeting(
     meeting_id: str = "m-1",
     deadlines: MeetingDeadlines | None = None,
     skip_confidence_threshold: float = 0.6,
+    dead_ids: tuple[PlayerId, ...] = (),
 ) -> tuple[MeetingResult, _ScriptedLLMClient]:
     client = _ScriptedLLMClient(responder=responder)
     manager = _make_manager(
@@ -446,6 +471,7 @@ def _run_meeting(
             participants=participants
             if participants is not None
             else _crew_participants(),
+            dead_ids=dead_ids,
         )
     )
     return result, client
@@ -671,6 +697,10 @@ class TestReactiveChain:
         result, _ = _run_meeting(_make_responder(accusations={"p-1": "p-99"}))
 
         # The floor cannot pass to a non-participant -> chain stops at opening.
+        # (Since Task 10.3 the dropped target also makes the opening
+        # narration-only, so the deterministic stub burns its single retry
+        # and the opening records as the fail-soft default -- still exactly
+        # one opening turn, never a reply.)
         assert [t.turn_kind for t in result.transcript.turns] == ["opening"]
 
 
@@ -957,6 +987,41 @@ class TestTurnPromptLivingRoster:
         reply = next(c for c in client.calls if "PHASE=TURN" in c.prompt)
         assert "agent_id=p-2" in reply.prompt
         assert "LIVING_IDS=p-1,p-3,p-4\n" in reply.prompt
+
+
+class TestTurnPromptDeadRoster:
+    """Task 10.3 (DESIGN.md §5.1, §5.2; audit gp-9 H-H-3, D-D-8): the
+    orchestrator-supplied dead / ejected roster threads into every turn
+    prompt as the explicit do-not-accuse list; the default ``()`` renders
+    no line, and a dead id overlapping the living roster fails loud."""
+
+    def test_dead_ids_thread_into_every_turn_prompt_sorted(self) -> None:
+        _, client = _run_meeting(
+            _make_responder(accusations={"p-1": "p-2", "p-2": None}),
+            dead_ids=("p-9", "p-5"),
+        )
+
+        opening = next(c for c in client.calls if "PHASE=OPENING" in c.prompt)
+        assert "DEAD_IDS=p-5,p-9\n" in opening.prompt  # sorted at run() entry
+        reply = next(c for c in client.calls if "PHASE=TURN" in c.prompt)
+        assert "DEAD_IDS=p-5,p-9\n" in reply.prompt
+
+    def test_default_empty_dead_ids_render_no_line(self) -> None:
+        _, client = _run_meeting(_make_responder())
+
+        assert all("DEAD_IDS=" not in c.prompt for c in client.calls)
+
+    def test_dead_id_overlapping_living_roster_fails_loud(self) -> None:
+        manager = _make_manager(llm_client=_ScriptedLLMClient(_make_responder()))
+        with pytest.raises(ValueError, match="dead_ids overlap living"):
+            _run(
+                manager.run(
+                    meeting_id="m-1",
+                    trigger=_default_trigger(),
+                    participants=_crew_participants(),
+                    dead_ids=("p-2",),
+                )
+            )
 
 
 # --- Contradictions wiring -------------------------------------------------
@@ -1490,7 +1555,11 @@ class TestTeammateGuardOnProductionPath:
     def test_impostor_opening_accusation_of_teammate_is_dropped(self) -> None:
         # p-4 (impostor) opens and accuses teammate p-5 -> the accusation
         # is stripped, so the chain never passes the floor to p-5 and p-5 is
-        # not publicly incriminated.
+        # not publicly incriminated. (Since Task 10.3 the stripped opening is
+        # also narration-only, so the deterministic stub burns its single
+        # retry and the opening records as the fail-soft default -- the
+        # firewall outcome is identical either way: no teammate accusation,
+        # no floor pass.)
         trigger = MeetingTrigger(
             triggered_by="p-4", trigger_tick=1, description="p-4 reports"
         )
@@ -2153,18 +2222,22 @@ class TestInvalidAccusationTargetDropped:
         assert markers == ()
         assert surviving == claims
 
-    def test_hallucinated_opening_accusation_is_dropped_and_marked(self) -> None:
-        # p-1 (the opener) accuses a non-living id; the chain cannot pass to it
-        # and the metrics cannot resolve its role, so the accusation is dropped
-        # before the turn is recorded, with the original preserved in free_text.
-        result, _ = _run_meeting(_make_responder(accusations={"p-1": "imp-2"}))
+    def test_hallucinated_opening_accusation_retries_then_defaults(self) -> None:
+        # p-1 (the opener) accuses a non-living id; the accusation is dropped
+        # before the turn is recorded, which leaves the opening with neither
+        # an accusation nor an unsure declaration -- the Task 10.3 opening
+        # validation treats that exactly like a parse failure, so the
+        # deterministic stub burns its single retry and the opening records
+        # as the fail-soft default (the audit's seed-13-m0 dead-id shape).
+        result, client = _run_meeting(_make_responder(accusations={"p-1": "imp-2"}))
 
         opening = result.transcript.turns[0]
         assert opening.speaker == "p-1"
+        assert opening.free_text == DEFAULT_TURN_FREE_TEXT
         assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
-        assert opening.free_text.startswith(
-            INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2")
-        )
+        # Exactly one retry: two opening attempts, then the standing default.
+        opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
+        assert len(opening_calls) == 2
         # No recorded accusation names a non-living id, so the §11.3 accusation
         # metrics can resolve every target's role (the gp surfaced by seed 24).
         all_targets = {
@@ -2174,6 +2247,34 @@ class TestInvalidAccusationTargetDropped:
             if isinstance(c, AccusationClaim)
         }
         assert "imp-2" not in all_targets
+
+    def test_hallucinated_opening_accusation_with_unsure_records_marked(self) -> None:
+        # The opener accuses a non-living id but ALSO declares unsure in its
+        # free_text: the drop+marker shape records on the first attempt (no
+        # retry), preserving the original target for replay analysis -- the
+        # pre-10.3 marker pin, now reachable via the unsure declaration.
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
+                speaker = _extract_marker(prompt, "agent_id=")
+                return _turn_json(
+                    speaker=speaker,
+                    accuses="imp-2" if speaker == "p-1" else None,
+                    free_text=f"unsure, but imp-2 felt off to {speaker}",
+                )
+            return _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+
+        result, client = _run_meeting(_responder)
+
+        opening = result.transcript.turns[0]
+        assert opening.speaker == "p-1"
+        assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
+        assert opening.free_text.startswith(
+            INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2")
+        )
+        # Recorded on the first attempt: the unsure declaration satisfies the
+        # opening validation, so no retry fires.
+        opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
+        assert len(opening_calls) == 1
 
     def test_valid_opening_accusation_passes_through(self) -> None:
         result, _ = _run_meeting(_make_responder(accusations={"p-1": "p-3"}))
@@ -2755,6 +2856,203 @@ class TestDefaultsSurfacedAndOpeningRetry:
             )
         )
         assert manager.defaulted_calls == ()  # run 2 clean -> ledger reset
+
+
+# --- Opening accuse-or-unsure validation (Task 10.3, audit gp-9) ------------
+
+
+@dataclass
+class _ScriptedOpeningsClient:
+    """Returns the scripted opening payloads in order (repeating the last);
+    replies / opt-ins and votes are standard valid stubs.
+
+    Unlike :class:`_OpeningValidationClient` every payload here is
+    schema-VALID: the scripted shapes exercise the Task 10.3 opening
+    CONTENT validation (accuse-or-declare-unsure), not the parse path.
+    """
+
+    opening_payloads: tuple[str, ...]
+    opening_calls: int = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if "PHASE=OPENING" in prompt:
+            index = min(self.opening_calls, len(self.opening_payloads) - 1)
+            self.opening_calls += 1
+            text = self.opening_payloads[index]
+        elif "PHASE=TURN" in prompt:
+            text = _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+        else:  # PHASE=VOTE
+            text = _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "scripted-openings",
+        )
+
+
+def _run_with_openings(
+    *payloads: str,
+) -> tuple[MeetingResult, _ScriptedOpeningsClient, MeetingManager]:
+    client = _ScriptedOpeningsClient(opening_payloads=payloads)
+    manager = _make_manager(
+        llm_client=client,
+        deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+    )
+    result = _run(
+        manager.run(
+            meeting_id="m-1",
+            trigger=_default_trigger(),
+            participants=_crew_participants(),
+        )
+    )
+    return result, client, manager
+
+
+class TestOpeningAccuseOrUnsureValidation:
+    """Task 10.3 (DESIGN.md §5.2 PHASE 1; audit gp-9 H-H-1).
+
+    A narration-only opening -- recorded claims carry no accusation, model
+    free_text carries no "unsure" declaration -- killed the chain on turn 0
+    in 5 of 76 audited meetings. The manager now treats it as a validation
+    failure through the EXISTING gp-2 single-retry path: one retry, then
+    the standing fail-soft default. Replies / opt-ins are never
+    content-validated (a defensive reply is a legitimate terminator).
+    """
+
+    _NARRATION = "I was in MEDBAY doing wiring, then walked to CAFETERIA."
+
+    def test_unsure_marker_literal_is_pinned(self) -> None:
+        # The opening templates instruct the model to write this exact word;
+        # the manager matches it case-insensitively. A drive-by change here
+        # silently un-aligns prompt and validation.
+        assert OPENING_UNSURE_MARKER == "unsure"
+
+    def test_narration_only_opening_retries_once_and_recovers(self) -> None:
+        # The DoD pin: a stub that returns narration-only once, then a valid
+        # accusing opening -- the retry recovers and no default fires.
+        result, client, manager = _run_with_openings(
+            _turn_json(speaker="p-1", free_text=self._NARRATION),
+            _turn_json(speaker="p-1", accuses="p-3"),
+        )
+
+        assert client.opening_calls == 2
+        assert manager.defaulted_calls == ()
+        opening = result.transcript.turns[0]
+        targets = [c.against for c in opening.claims if isinstance(c, AccusationClaim)]
+        assert targets == ["p-3"]
+        # The recovered accusation drives the chain: the floor passes to p-3.
+        assert result.transcript.turns[1].speaker == "p-3"
+
+    def test_narration_only_twice_fail_softs_as_today(self) -> None:
+        # Both attempts narration-only -> exactly one retry (never a loop),
+        # then the standing fail-soft default with the validation trigger.
+        result, client, manager = _run_with_openings(
+            _turn_json(speaker="p-1", free_text=self._NARRATION),
+        )
+
+        assert client.opening_calls == 2
+        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "opening"
+        assert default.trigger == "validation"
+        assert default.turn_index == 0
+        # The payloads RETURNED (the recording client logged their spend), so
+        # the default carries no provider parse-failures and nothing was
+        # "recovered" -- no double-count (mirrors the manager-side
+        # validation-default contract).
+        assert default.parse_failures == ()
+        assert manager.recovered_call_failures == ()
+
+    def test_unsure_opening_records_on_first_attempt(self) -> None:
+        result, client, manager = _run_with_openings(
+            _turn_json(speaker="p-1", free_text="I am unsure who did this."),
+        )
+
+        assert client.opening_calls == 1
+        assert manager.defaulted_calls == ()
+        assert result.transcript.turns[0].free_text == "I am unsure who did this."
+
+    def test_unsure_marker_matches_case_insensitively(self) -> None:
+        result, client, _ = _run_with_openings(
+            _turn_json(speaker="p-1", free_text="Unsure. No one stood out."),
+        )
+
+        assert client.opening_calls == 1
+        assert result.transcript.turns[0].free_text == "Unsure. No one stood out."
+
+    def test_accusing_opening_records_on_first_attempt(self) -> None:
+        result, client, manager = _run_with_openings(
+            _turn_json(speaker="p-1", accuses="p-2", free_text="It was p-2."),
+        )
+
+        assert client.opening_calls == 1
+        assert manager.defaulted_calls == ()
+        assert result.transcript.turns[1].speaker == "p-2"
+
+    def test_dead_id_opening_accusation_retries_and_recovers(self) -> None:
+        # The audit's seed-13-m0 shape with a recovering retry: the first
+        # attempt's only accusation names a non-living player and is dropped
+        # (leaving the opening narration-only); the retry accuses a living
+        # player and records normally.
+        result, client, manager = _run_with_openings(
+            _turn_json(speaker="p-1", accuses="p-99", free_text="p-99 did it."),
+            _turn_json(speaker="p-1", accuses="p-3"),
+        )
+
+        assert client.opening_calls == 2
+        assert manager.defaulted_calls == ()
+        opening = result.transcript.turns[0]
+        targets = [c.against for c in opening.claims if isinstance(c, AccusationClaim)]
+        assert targets == ["p-3"]
+
+    def test_drop_marker_text_never_self_certifies_unsure(self) -> None:
+        # A hallucinated target literally named "unsure" produces a drop
+        # marker quoting it ("[invalid accusation target 'unsure' ...]").
+        # The validation reads the MODEL-AUTHORED free_text, never the
+        # marker-prefixed text, so the quoted value cannot satisfy the
+        # unsure check and the opening still retries then defaults.
+        result, client, manager = _run_with_openings(
+            _turn_json(speaker="p-1", accuses="unsure", free_text="It was them."),
+        )
+
+        assert client.opening_calls == 2
+        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert len(manager.defaulted_calls) == 1
+        assert manager.defaulted_calls[0].trigger == "validation"
+
+    def test_narration_only_reply_records_without_retry(self) -> None:
+        # The content validation is opening-only: a purely defensive reply
+        # (no accusation, no unsure declaration) is a legitimate chain
+        # terminator and records on its single attempt.
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=OPENING" in prompt:
+                return _turn_json(speaker="p-1", accuses="p-3")
+            if "PHASE=TURN" in prompt:
+                return _turn_json(
+                    speaker=_extract_marker(prompt, "agent_id="),
+                    free_text="I deny that completely.",
+                )
+            return _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+
+        result, client = _run_meeting(_responder)
+
+        reply = result.transcript.turns[1]
+        assert reply.turn_kind == "reply"
+        assert reply.free_text == "I deny that completely."
+        turn_calls = [c for c in client.calls if "PHASE=TURN" in c.prompt]
+        assert len(turn_calls) == 1
 
 
 # --- Unknown role rejected -------------------------------------------------
@@ -3523,7 +3821,7 @@ class TestNonRosterClaimSubjectsDropped:
 
         opening = result.transcript.turns[0]
         assert len(opening.claims) == 2
-        assert opening.free_text == "turn from p-1"
+        assert opening.free_text == "turn from p-1 -- unsure"
 
     def test_dropped_garbage_subject_never_reaches_detection_or_the_fold(
         self,

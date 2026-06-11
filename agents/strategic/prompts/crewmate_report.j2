@@ -1,7 +1,20 @@
-{# prompt_version: crewmate_report.v4
+{# prompt_version: crewmate_report.v5
 
    Crewmate-side OPENING-turn prompt for the reactive accusation chain
    (DESIGN.md §5.1, §5.2 PHASE 1, §5.3, §6.6).
+
+   Task 10.3 (DESIGN.md §5.1, §5.2; audit gp-9 H-H-1, H-H-2, H-H-3) bumped
+   v4 -> v5 with three terse nudges for residual qwen3.5:9b artifacts:
+   (1) the §5.2 accuse-or-declare-unsure choice is now a HARD requirement
+   -- an opening with neither an accusation claim nor the word "unsure" in
+   free_text is rejected by the meeting manager and retried once (5 of 76
+   audited meetings opened narration-only and every one killed the chain
+   on turn 0); (2) an anti-repetition line ("list each sighting once")
+   against the structured-array repetition loop that rode observations to
+   the frozen 2048 cap; (3) the DEAD / ejected players render as an
+   explicit do-not-accuse line under the living roster via the new
+   optional `dead_ids` input -- 17/18 invalid accusation targets named a
+   real-but-DEAD player, and the living list alone never said who is dead.
 
    Task 9.9 (DESIGN.md §5.1, §5.2, §5.5; audit gp-3) bumped v3 -> v4 with two
    prompt-layer fixes for qwen3.5:9b artifacts: (1) a free_text length
@@ -46,6 +59,11 @@
                             guarded on a non-empty value, so omitting it (or
                             passing the default ()) renders without the
                             block under StrictUndefined.
+     dead_ids            -- optional tuple of PlayerIds: the dead / ejected
+                            players, rendered as an explicit do-not-accuse
+                            line under the living roster (Task 10.3, audit
+                            gp-9). Guarded like living_ids: omitting it (or
+                            passing ()) renders without the line.
 
    Output contract: the LLM must emit one JSON object conforming exactly to
    meetings.schemas.MeetingTurn (re-exported via
@@ -65,9 +83,12 @@
 State what you saw and name the single player your evidence most points to. Your
 job is to catch the impostor; a non-answer hands them a free round and another
 kill. Only withhold an accusation if you genuinely recorded nothing pointing at
-anyone.
+anyone -- and if so, you MUST write the word "unsure" in your `free_text`.
 
-Prompt: crewmate_report.v4 (DESIGN.md §5.2 PHASE 1)
+Hard rule: your opening must EITHER include one `accusation` claim OR say
+"unsure" in `free_text`. An opening with neither is rejected and re-requested.
+
+Prompt: crewmate_report.v5 (DESIGN.md §5.2 PHASE 1)
 
 Your job in this opening turn: surface your observations AND commit to your single
 best suspect. You are the crew's first mover — a decisive, grounded accusation
@@ -88,6 +109,10 @@ own id is not listed because you cannot accuse yourself.
 
 {% for pid in living_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}
 
+{% if dead_ids is defined and dead_ids %}
+DEAD or EJECTED -- do NOT accuse: {% for pid in dead_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}. They are out of the game.
+
+{% endif %}
 {% endif %}
 
 ## Your memory (rendered view)
@@ -119,14 +144,16 @@ Content fields (your actual turn):
   Only include observations whose `tick` matches an event that appears in
   the rendered memory above. If you discovered the body, lead with the
   `found_body` observation. Fabricated or unsupported ticks will be rejected
-  by validation.
+  by validation. List each sighting once -- never repeat an observation
+  entry.
 - `claims`: an ordered list of higher-level claims. Each entry is one of:
     - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short evidence ref>", ...]}`
       (use chronological ticks: `from_tick <= to_tick`).
     - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0..1.0>, "reason": "<short reason>"}`
     - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`
   To accuse, add exactly one `accusation` claim naming your single best
-  suspect. To stay unsure, add no `accusation` claim (a self-alibi is fine).
+  suspect. To stay unsure, add no `accusation` claim and write the word
+  "unsure" in `free_text` (a self-alibi is fine).
 - `free_text`: at most 2-3 sentences stating your single conclusion -- what
   you would say aloud to the table. Do NOT narrate or second-guess your reasoning:
   no step-by-step deliberation, no weighing of alternatives; state your

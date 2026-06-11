@@ -47,6 +47,13 @@ the strict :class:`~meetings.schemas.AlibiClaim` chronology, and the
 Task 7.10 fail-soft (a malformed turn degrades to a default turn rather
 than aborting the meeting). The vote inherits the third 7.12 guard,
 :func:`coerce_teammate_ballot_to_skip`.
+
+The opening additionally content-validates (Task 10.3, audit gp-9): its
+recorded claims must carry an accusation OR its free_text an explicit
+"unsure" declaration (DESIGN.md §5.2 PHASE 1), enforced through the same
+single-retry-then-default machinery the audit-gp-2 opening retry built --
+a narration-only opening consumes an attempt exactly like a
+schema-validation failure.
 """
 
 from __future__ import annotations
@@ -192,6 +199,20 @@ INVALID_ALIBI_SUBJECT_MARKER: Final[str] = (
 INVALID_CORROBORATION_SUPPORTS_MARKER: Final[str] = (
     "[invalid corroboration supports {supports!r} dropped] "
 )
+
+# The explicit "unsure" declaration an opening turn may carry INSTEAD of an
+# accusation claim (DESIGN.md §5.2 PHASE 1: the opener "EITHER accuses one
+# player OR declares 'unsure'"; Task 10.3, audit gp-9 H-H-1). Matched
+# case-insensitively as a substring of the model-authored ``free_text``
+# (the schema is unchanged -- the marker is free_text-level, validated
+# manager-side). An opening whose recorded claims carry no accusation and
+# whose free_text carries no such declaration is narration-only: it kills
+# the reactive chain on turn 0 (5 of 76 audited meetings), so
+# :meth:`MeetingManager._collect_turn` treats it as a validation failure
+# and routes it through the existing single-retry path before the standing
+# fail-soft. The opening templates instruct the model to write this exact
+# word; pin the literal.
+OPENING_UNSURE_MARKER: Final[str] = "unsure"
 
 # Matches the trailing ``:turn-{k}`` ordinal of a turn id. A
 # ``primary_reason_id`` whose ordinal exists in THIS meeting but whose
@@ -423,6 +444,13 @@ class ReportPromptRenderer(Protocol):
     the vote ballot's ``candidate_targets`` -- rendered so the model never
     wastes its opening accusing a dead / ejected player. ``()`` (ad-hoc
     renders) omits the roster block.
+
+    ``dead_ids`` (Task 10.3, audit gp-9 H-H-3/D-D-8) is the negative
+    list: the dead / ejected players, rendered as an explicit
+    do-not-accuse line under the living roster. The living-roster block
+    alone left "who is dead" implicit and 17/18 hallucinated accusation
+    targets named a dead real player. ``()`` (ad-hoc renders) omits the
+    line.
     """
 
     def __call__(
@@ -435,6 +463,7 @@ class ReportPromptRenderer(Protocol):
         public_transcript: str,
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
         living_ids: tuple[PlayerId, ...] = (),
+        dead_ids: tuple[PlayerId, ...] = (),
     ) -> str: ...
 
 
@@ -459,6 +488,11 @@ class StatementPromptRenderer(Protocol):
     the vote ballot's ``candidate_targets`` -- rendered so a reply / opt-in
     accusation stays on the living roster. ``()`` (ad-hoc renders) omits
     the roster block.
+
+    ``dead_ids`` (Task 10.3, audit gp-9 H-H-3/D-D-8) is the dead /
+    ejected negative list rendered as an explicit do-not-accuse line
+    under the living roster (17/18 hallucinated targets were dead real
+    players). ``()`` (ad-hoc renders) omits the line.
     """
 
     def __call__(
@@ -472,6 +506,7 @@ class StatementPromptRenderer(Protocol):
         turn_kind: TurnKind,
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
         living_ids: tuple[PlayerId, ...] = (),
+        dead_ids: tuple[PlayerId, ...] = (),
     ) -> str: ...
 
 
@@ -607,6 +642,7 @@ class MeetingManager:
         meeting_id: str,
         trigger: MeetingTrigger,
         participants: Sequence[MeetingParticipant],
+        dead_ids: tuple[PlayerId, ...] = (),
     ) -> MeetingResult:
         """Run opening -> reactive chain -> opt-in -> voting -> resolution.
 
@@ -618,6 +654,14 @@ class MeetingManager:
         The chain's next speaker and its termination are pure functions of
         the recorded turns, so a replay reconstructs the discussion from
         ``transcript.turns`` without re-calling the LLM.
+
+        ``dead_ids`` (Task 10.3, audit gp-9) is the dead / ejected roster
+        the orchestrator derived from world state. It is render-only
+        context -- threaded into the turn prompts as an explicit
+        do-not-accuse line under the living roster -- and never widens any
+        validation: a claim naming a dead player still drops at the
+        per-turn chokepoint exactly as before. ``()`` (existing call
+        sites, ad-hoc runs) omits the line.
         """
 
         if not meeting_id:
@@ -627,6 +671,18 @@ class MeetingManager:
                 "MeetingManager.run requires at least one living participant"
             )
         self._validate_participants(participants, trigger=trigger)
+        # A dead id that is also a living participant is contradictory
+        # orchestrator wiring -- it would render the same player as both a
+        # valid accusation target and a do-not-accuse line. Fail loud at
+        # meeting entry (AGENTS.md "no silent fallbacks"); sort for a
+        # deterministic prompt render regardless of caller ordering.
+        overlap = {p.agent_id for p in participants} & set(dead_ids)
+        if overlap:
+            raise ValueError(
+                f"dead_ids overlap living participants: {sorted(overlap)}; "
+                "a meeting participant cannot also be dead"
+            )
+        dead_ids = tuple(sorted(dead_ids))
 
         # Fresh per-run ledgers (the manager is reused across a game's
         # meetings); the orchestrator reads :attr:`defaulted_calls` and
@@ -653,6 +709,7 @@ class MeetingManager:
             trigger=trigger,
             participant=opener,
             living_ids=roster,
+            dead_ids=dead_ids,
             turn_index=0,
             turn_kind="opening",
             reply_to=None,
@@ -698,6 +755,7 @@ class MeetingManager:
                 trigger=trigger,
                 participant=by_id[guarded_next],
                 living_ids=roster,
+                dead_ids=dead_ids,
                 turn_index=len(turns),
                 turn_kind="reply",
                 reply_to=prev.turn_id,
@@ -727,6 +785,7 @@ class MeetingManager:
                 trigger=trigger,
                 participant=by_id[opt_in_id],
                 living_ids=roster,
+                dead_ids=dead_ids,
                 turn_index=len(turns),
                 turn_kind="opt_in",
                 reply_to=None,
@@ -777,6 +836,7 @@ class MeetingManager:
         prior_turn: MeetingTurn | None,
         transcript_so_far: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
+        dead_ids: tuple[PlayerId, ...] = (),
         retries: int = 0,
     ) -> MeetingTurn:
         """Collect one turn through the shared guard chokepoint.
@@ -793,6 +853,16 @@ class MeetingManager:
         fired default is appended to :attr:`defaulted_calls` so the orchestrator
         can record it in the replay; the prompt is rendered once and reused
         across attempts (its inputs do not change between retries).
+
+        An OPENING attempt is additionally content-validated (Task 10.3,
+        audit gp-9 H-H-1): a turn whose recorded claims carry no
+        accusation and whose free_text carries no explicit
+        :data:`OPENING_UNSURE_MARKER` declaration is narration-only -- it
+        kills the reactive chain on turn 0 -- so it is treated exactly
+        like a schema-validation failure and consumes an attempt through
+        this same loop (one retry, then the standing fail-soft; no second
+        retry channel). Replies / opt-ins are never content-validated: a
+        purely defensive reply is a legitimate chain terminator.
         """
 
         prompt = self._render_turn_prompt(
@@ -803,6 +873,7 @@ class MeetingManager:
             contradictions=contradictions,
             prior_turn=prior_turn,
             living_ids=living_ids,
+            dead_ids=dead_ids,
         )
         turn_id = _turn_id(meeting_id=meeting_id, turn_index=turn_index)
         # The trigger kind of the LAST failed attempt, recorded with the
@@ -889,6 +960,23 @@ class MeetingManager:
             validated_claims, drop_markers = _drop_non_roster_claims(
                 guarded_claims, living_ids=living_ids
             )
+            # Opening content validation (Task 10.3, audit gp-9 H-H-1): the
+            # opener must accuse or explicitly declare "unsure" (DESIGN.md
+            # §5.2 PHASE 1). Checked AFTER the guards, against the claims as
+            # they would record -- an opening whose only accusation named a
+            # dead player (the seed-13-m0 shape) or a teammate is as
+            # chain-dead as pure narration -- and against the MODEL-AUTHORED
+            # free_text, never the marker-prefixed text (a drop marker quotes
+            # the original value verbatim, so a hallucinated target literally
+            # named "unsure" must not self-certify the turn). A failure
+            # consumes this attempt like any validation failure: the opening's
+            # single retry (``retries=1``) re-asks once, then the standing
+            # fail-soft default fires.
+            if turn_kind == "opening" and not _opening_takes_position(
+                claims=validated_claims, free_text=parsed.free_text
+            ):
+                trigger_kind = "validation"
+                continue
             free_text = parsed.free_text
             if drop_markers:
                 free_text = "".join(drop_markers) + free_text
@@ -944,11 +1032,15 @@ class MeetingManager:
         contradictions: tuple[ContradictionRef, ...],
         prior_turn: MeetingTurn | None,
         living_ids: frozenset[PlayerId],
+        dead_ids: tuple[PlayerId, ...] = (),
     ) -> str:
         # Living-roster accusation list (Task 9.9, audit gp-3): living
         # participants minus this turn's speaker -- an agent cannot accuse
         # itself -- via the same ``_candidate_targets`` filter the vote
         # ballot uses for its eject targets (living minus voter).
+        # ``dead_ids`` (Task 10.3, audit gp-9) is the matching negative
+        # list, passed verbatim to every turn renderer: the do-not-accuse
+        # line names the dead for every speaker alike.
         accusation_targets = _candidate_targets(
             living_ids, exclude=participant.agent_id
         )
@@ -966,6 +1058,7 @@ class MeetingManager:
                 public_transcript="",
                 fellow_impostor_ids=participant.fellow_impostor_ids,
                 living_ids=accusation_targets,
+                dead_ids=dead_ids,
             )
         return self._statement_prompt(
             agent_id=participant.agent_id,
@@ -976,6 +1069,7 @@ class MeetingManager:
             turn_kind=turn_kind,
             fellow_impostor_ids=participant.fellow_impostor_ids,
             living_ids=accusation_targets,
+            dead_ids=dead_ids,
         )
 
     # -- Voting -----------------------------------------------------------
@@ -1406,6 +1500,35 @@ def _normalize_self_alibi_subjects(
     return tuple(normalized)
 
 
+def _opening_takes_position(
+    *,
+    claims: tuple[Claim, ...],
+    free_text: str,
+) -> bool:
+    """True iff an opening turn commits to a position (DESIGN.md §5.2 PHASE 1).
+
+    The opening must EITHER accuse one player OR declare "unsure"; a
+    narration-only opening kills the reactive chain on turn 0 (Task 10.3,
+    audit gp-9 H-H-1: 5 of 76 audited meetings opened without either and
+    every one collapsed to a chain-length-1 SKIP). The check is a pure
+    function of the turn content the manager is about to record:
+
+    * ``claims`` are the POST-GUARD claims (teammate-firewalled and
+      roster-validated), so an accusation that was dropped -- a dead-id
+      target, a teammate -- does not count: the recorded turn would carry
+      no accusation and the chain would still die.
+    * ``free_text`` is the MODEL-AUTHORED text (``parsed.free_text``,
+      before any drop markers are prefixed); the
+      :data:`OPENING_UNSURE_MARKER` substring is matched
+      case-insensitively, per the opening templates' instruction to write
+      the word "unsure".
+    """
+
+    if any(isinstance(claim, AccusationClaim) for claim in claims):
+        return True
+    return OPENING_UNSURE_MARKER in free_text.lower()
+
+
 def _normalize_ballot_target(
     *,
     ballot: VoteBallot,
@@ -1817,6 +1940,7 @@ __all__ = [
     "INVALID_CORROBORATION_SUPPORTS_MARKER",
     "INVALID_REASON_ID_MARKER",
     "INVALID_VOTE_TARGET_MARKER",
+    "OPENING_UNSURE_MARKER",
     "TEAMMATE_VOTE_TARGET_MARKER",
     "DefaultTrigger",
     "DefaultedCall",
