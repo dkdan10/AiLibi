@@ -61,8 +61,10 @@ classification now also covers ``alibi_conflict`` (self-pair /
 adversarial / narrow / boundary-overlap reasons) and endpoint-tick-only
 ``alibi_vs_sighting`` mismatches; a defense-echo alibi (an exact
 restatement of an earlier alibi about the same subject) dedupes to the
-original claim before any pairing. :func:`contradiction_lift_key` is the
-per-claim dedup key belief Rule 2 caps its lift on.
+original claim before contradiction pairing (the corroboration path
+instead pairs every stated version -- its per-pair independence gate
+does the filtering). :func:`contradiction_lift_key` is the per-claim
+dedup key belief Rule 2 caps its lift on.
 """
 
 from __future__ import annotations
@@ -611,27 +613,39 @@ def detect_corroborations(
     """Containment-consistent (alibi, sighting) pairs (Task 10.1; §6.3 Rule 3).
 
     The corroboration-path twin of :func:`detect_contradictions`: the
-    same indexing (same roster filter, same echo dedup, same
-    :func:`canonical_rooms` parse -- one canonicalisation, every
-    consumer), but it pairs an alibi with the sightings that CONFIRM it:
-    the sighting's canonical rooms intersect the alibi's and the sighting
-    tick falls inside the alibi window. Pure and deterministic; the
-    result is sorted by ``(subject, alibi_event_id, sighting_event_id)``.
+    same roster filter and the same :func:`canonical_rooms` parse (one
+    canonicalisation, every consumer), but it pairs an alibi with the
+    sightings that CONFIRM it: the sighting's canonical rooms intersect
+    the alibi's and the sighting tick falls inside the alibi window.
+    Pure and deterministic; the result is sorted by
+    ``(subject, alibi_event_id, sighting_event_id)``.
 
     Independence gate: the sighting speaker must differ from BOTH the
     alibi's subject (you cannot vouch for yourself) and the alibi's
     speaker (one witness restating their own account in two formats is
     not a second voice). No-room sides (placeholders) corroborate
     nothing, mirroring the contradiction side.
+
+    Unlike the contradiction path, echo alibis are NOT deduped here.
+    The echo dedup exists to stop flag multiplication and classification
+    flips on the contradiction side; corroboration needs every stated
+    version of an account, because the independence gate is per
+    (claim-speaker, sighting-speaker) pair -- when a witness vouches an
+    alibi for the subject FIRST (alongside their own matching sighting)
+    and the subject restates it later, the subject's echo is exactly the
+    self-stated account that witness's sighting independently confirms;
+    deduping it to the witness's claim would orphan the sighting on the
+    same-speaker gate and silently drop a genuine Rule-3 signal. No
+    inflation is possible: the belief fold reduces these pairs to a
+    per-meeting subject set, so a subject is corroborated once however
+    many stated versions and sightings agree.
     """
 
     effective_roster = _NO_ROSTER if roster is None else roster
-    alibis = _dedupe_echo_alibis(
-        tuple(
-            indexed
-            for indexed in _iter_alibis(transcript)
-            if _subject_in_roster(indexed.claim.subject, effective_roster)
-        )
+    alibis = tuple(
+        indexed
+        for indexed in _iter_alibis(transcript)
+        if _subject_in_roster(indexed.claim.subject, effective_roster)
     )
     sightings = tuple(
         indexed
@@ -764,6 +778,11 @@ def _dedupe_echo_alibis(
     classification. A restatement that changes the rooms or the window
     asserts new information and is NOT an echo. Deterministic: turns are
     walked in transcript order, so "first" is the chain's own order.
+
+    Contradiction-side only: :func:`detect_corroborations` deliberately
+    pairs against every stated version of an account, because its
+    independence gate is per claim-speaker -- see its docstring for the
+    witness-vouches-first shape the dedup would otherwise silently drop.
     """
 
     seen: set[tuple[PlayerId, frozenset[str], int, int]] = set()

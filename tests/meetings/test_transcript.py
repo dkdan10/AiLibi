@@ -1288,6 +1288,53 @@ class TestDetectCorroborations:
         )
         assert detect_corroborations(transcript) == ()
 
+    def test_subject_echo_of_witness_vouch_still_corroborates(self) -> None:
+        # The witness-vouches-first shape: p-5 states p-8's alibi AND the
+        # matching sighting; p-8 restates the same alibi later. The echo
+        # dedup is contradiction-side only -- here p-8's self-stated
+        # version is exactly the account p-5's sighting independently
+        # confirms (sighting speaker != subject != claim speaker), while
+        # p-5's sighting against p-5's OWN claim stays gated as one
+        # voice. Deduping the echo to p-5's first statement would orphan
+        # the sighting and silently drop a genuine Rule-3 signal.
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-5",
+                    subject="p-8",
+                    from_tick=2,
+                    to_tick=7,
+                    room="MEDBAY",
+                ),
+                _sighting_turn(
+                    turn_index=1, speaker="p-5", subject="p-8", tick=4, room="MEDBAY"
+                ),
+                _alibi_turn(
+                    turn_index=2,
+                    speaker="p-8",
+                    subject="p-8",
+                    from_tick=2,
+                    to_tick=7,
+                    room="MEDBAY",
+                ),
+            )
+        )
+        corroborations = detect_corroborations(transcript)
+
+        # Exactly one pair: the subject's own (echoed) claim x the
+        # witness's sighting; the witness's claim x their own sighting
+        # is still rejected by the independence gate.
+        assert corroborations == (
+            DetectedCorroboration(
+                subject="p-8",
+                alibi_event_id="turn:m-1:turn-2:claim:0",
+                sighting_event_id="turn:m-1:turn-1:obs:0",
+            ),
+        )
+        # And the same echo still mints no contradiction flag.
+        assert detect_contradictions(transcript) == ()
+
     def test_roster_filters_subjects(self) -> None:
         corroborations = detect_corroborations(
             self._containment_transcript(), roster=frozenset({"p-1", "p-5"})
