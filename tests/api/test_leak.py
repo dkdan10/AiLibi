@@ -304,6 +304,20 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # ``threshold_inversions``). All are pure aggregate counts and rates (no
 # roles, transcripts, or engine types), so they stay out of
 # ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
+#
+# The Task 10.4 Phase-10 gate metrics (DESIGN.md §11.3; audit
+# audit-2026-06-10-1820 gp-7) add the ``gate_metrics`` block
+# (``eval.meeting_quality.GateMetricsReport``): the nested
+# ``genuine_class_conversion`` PRIMARY gate
+# (``eval.vote_correctness.GenuineClassConversionReport``: ``supplied`` /
+# ``converted`` / ``conversion_rate`` / ``note`` — the ``note`` is a pinned
+# documentation literal, not data), the lost-opening / cap-default split
+# (``lost_opening_accusations`` / ``cap_defaulted_turns``), and the D-D-2
+# deception-control survival partition (``accused_impostor_events`` /
+# ``accused_impostor_survivals`` / ``survivals_rendered_met`` /
+# ``survivals_sheltered_sub_gate`` / ``survivals_unevidenced``). All are pure
+# aggregate counts, rates, and a pinned string (no roles, transcripts, or
+# engine types), so they stay out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
 EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "accusation_calibration",
@@ -312,6 +326,8 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "accusation_claim_low_power",
         "accusation_claim_populated_bins",
         "accusation_claim_total",
+        "accused_impostor_events",
+        "accused_impostor_survivals",
         "actual_impostor_rate",
         "against",
         "agent_id",
@@ -322,6 +338,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "body_report_meetings",
         "by_model",
         "call_kind",
+        "cap_defaulted_turns",
         "claims",
         "co_present",
         "confidence",
@@ -330,6 +347,8 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "contradictions",
         "contradictions_flagged_but_ignored",
         "conversion",
+        "conversion_rate",
+        "converted",
         "correct_skip_ballots",
         "cost",
         "cost_dashboard",
@@ -357,6 +376,8 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "games",
         "games_total",
         "games_with_meeting",
+        "gate_metrics",
+        "genuine_class_conversion",
         "hi",
         "impostor_accused_conversion_rate",
         "impostor_accused_conversions",
@@ -372,6 +393,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "kind",
         "llm_calls",
         "lo",
+        "lost_opening_accusations",
         "mean_confidence",
         "mean_cost_per_game",
         "mean_instances_complete_at_win",
@@ -386,6 +408,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "missed_skip_teammate_coerced",
         "model",
         "n_bins",
+        "note",
         "observations",
         "on_tick",
         "outcome",
@@ -411,8 +434,12 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "speaker",
         "subject",
         "subjects",
+        "supplied",
         "supports",
         "survival_rate",
+        "survivals_rendered_met",
+        "survivals_sheltered_sub_gate",
+        "survivals_unevidenced",
         "survived",
         "target",
         "task_id",

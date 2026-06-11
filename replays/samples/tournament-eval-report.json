@@ -3242,5 +3242,20 @@
     "missed_skip_teammate_coerced": 0,
     "missed_skip_invalid_target": 0,
     "threshold_inversions": 0
+  },
+  "gate_metrics": {
+    "genuine_class_conversion": {
+      "supplied": 0,
+      "converted": 0,
+      "conversion_rate": null,
+      "note": "genuine_class_conversion is the PRIMARY Phase-10 progress gate. Raw ejection_accuracy comparisons against pre-repair eras are INVALID: the artifact-era 0.63 (and the mixed-era 0.476) were built on detector artifacts -- 14/22 of the old impostor convictions carried zero genuine-shaped flags -- so parity with those numbers would be railroading regained, not detection recovered. Gate on this supplied/converted pair and the accumulator/testimony channels; the win split is likewise excluded as a gate signal (constant ~90/10, zero ejection-driven wins)."
+    },
+    "lost_opening_accusations": 1,
+    "cap_defaulted_turns": 1,
+    "accused_impostor_events": 6,
+    "accused_impostor_survivals": 5,
+    "survivals_rendered_met": 1,
+    "survivals_sheltered_sub_gate": 1,
+    "survivals_unevidenced": 3
   }
 }

@@ -122,6 +122,19 @@ Decisions baked into this metric (recorded in the PR's ``## Decisions`` block):
   raising, matching the stated partial-replay robustness requirement. A *real*
   ejected player absent from ``roles`` is a different case: that is an internal
   inconsistency, so the ``roles`` subscript is left to fail loud.
+
+**Task 10.4 (Phase-10 gate metrics; audit audit-2026-06-10-1820 gp-7 / C-C-6)
+adds the phase's PRIMARY progress gate to this module:**
+:func:`compute_genuine_class_conversion` /
+:class:`GenuineClassConversionReport` — of the meetings where the repaired
+detector hands the crew a *genuine-class* (CANON-interior) contradiction
+naming a true impostor, how many convert that flag into that impostor's
+ejection. Phase 10 gates on THIS pair (0/4 on the audited e750b40 set), never
+on raw ``ejection_accuracy`` parity with the artifact-era 0.63 — that number
+was built on detector artifacts (14/22 of the old impostor convictions carried
+zero genuine-shaped flags), so parity with it would be railroading regained,
+not detection recovered. :data:`GENUINE_CLASS_GATE_NOTE` ships that warning on
+the report itself.
 """
 
 from __future__ import annotations
@@ -137,6 +150,7 @@ from meetings.schemas import (
     PlayerId,
     SawPlayerObservation,
 )
+from meetings.transcript import WEAK_REASON_ENDPOINT_TICK, detect_contradictions
 
 # Symmetric tick tolerance for the kill-witness chain: a sighting of the ejected
 # player counts as placing them at a body's scene when it is in the same room
@@ -152,6 +166,22 @@ KILL_WITNESS_TICK_WINDOW: Final[int] = 5
 # samples before trusting a proportion" rule of thumb; it flags interpretation
 # only and changes no computed number.
 VOTE_CORRECTNESS_MIN_SAMPLE: Final[int] = 10
+
+# The metric-hygiene warning every shipped report carries beside the
+# genuine-class numbers (Task 10.4 DoD; audit audit-2026-06-10-1820 gp-7
+# items 1 and 3). Pinned as a module constant so tests can assert the
+# committed reports ship it verbatim.
+GENUINE_CLASS_GATE_NOTE: Final[str] = (
+    "genuine_class_conversion is the PRIMARY Phase-10 progress gate. Raw "
+    "ejection_accuracy comparisons against pre-repair eras are INVALID: the "
+    "artifact-era 0.63 (and the mixed-era 0.476) were built on detector "
+    "artifacts -- 14/22 of the old impostor convictions carried zero "
+    "genuine-shaped flags -- so parity with those numbers would be "
+    "railroading regained, not detection recovered. Gate on this supplied/"
+    "converted pair and the accumulator/testimony channels; the win split is "
+    "likewise excluded as a gate signal (constant ~90/10, zero "
+    "ejection-driven wins)."
+)
 
 
 class VoteCorrectnessReport(BaseModel):
@@ -387,9 +417,153 @@ def _has_kill_witness_chain(meeting: MeetingReport, ejected: PlayerId) -> bool:
     )
 
 
+class GenuineClassConversionReport(BaseModel):
+    """The Phase-10 PRIMARY progress gate (Task 10.4; DESIGN.md §11.3; gp-7).
+
+    Frozen value object publishing the genuine-class conversion pair the
+    Phase-10 waves gate on (audit audit-2026-06-10-1820 C-C-6: CANON_INTERIOR
+    flags naming impostors — 4 supplied / 0 converted on the audited set).
+
+    **Genuine-class (CANON-class) definition — one home, imported.** A
+    (meeting, impostor) pair is SUPPLIED when re-running the repaired Task
+    10.1 detector (:func:`meetings.transcript.detect_contradictions`, with
+    the meeting's ballot-voter roster — every living participant casts
+    exactly one ballot, the same roster recording-time detection received)
+    over the recorded transcript emits at least one ``alibi_vs_sighting``
+    flag naming that true impostor whose sighting is NOT endpoint-banded
+    (no :data:`meetings.transcript.WEAK_REASON_ENDPOINT_TICK` in the
+    description). Under the repaired detector every emitted
+    ``alibi_vs_sighting`` flag already has canonically-disjoint room sets
+    and an in-window sighting (placeholders, containment-consistent pairs,
+    and echo restatements mint nothing), so non-endpoint == interior-tick ==
+    exactly the audit's genuinely-diagnostic CANON_INTERIOR class. The pair
+    is CONVERTED when that meeting ejected that impostor.
+
+    Two definitional consequences, both deliberate:
+
+    * **The self-stated weak band does NOT disqualify.** A fabricated alibi
+      is self-stated by construction (audit D-D-3), so on current rules the
+      genuine channel rides the weak band — all 4 supplied flags on the
+      audited set are weak self-stated. Requiring an unmarked "strong" flag
+      would define the gate to zero; recall past weak is the explicit D-D-3
+      follow-on, not this metric's job.
+    * **Recorded ``ContradictionRef`` rows are IGNORED; the detector is
+      re-run.** On pre-repair recordings the recorded flags are 93%
+      artifacts; re-derivation through the one-home classifier is what makes
+      these numbers honest. The detector is a pure function of the
+      transcript, so on post-repair recordings (Task 10.5 onward) re-derived
+      flags equal recorded flags byte-for-byte and the re-run is a no-op.
+
+    ``supplied`` counts (meeting, impostor) pairs — deduped per meeting, so
+    a compound alibi pairing against N interior sightings supplies once, not
+    N times (the gp-2 flag-fountain lesson applied to the gate's own
+    denominator). ``conversion_rate`` is ``converted / supplied`` and
+    ``None`` (undefined, not ``0.0``) when nothing was supplied, mirroring
+    the module's rate convention. ``note`` ships
+    :data:`GENUINE_CLASS_GATE_NOTE` on every report: raw
+    ``ejection_accuracy`` comparisons against pre-repair eras are invalid
+    (the 0.63 was artifact-built) and the win split is excluded as a gate
+    signal (gp-7 items 1 and 3).
+
+    **Leak-safety.** Two counts, a rate, and a pinned documentation string —
+    no roles, transcripts, or engine-owned types are exposed.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    supplied: int
+    converted: int
+    conversion_rate: float | None
+    note: str = GENUINE_CLASS_GATE_NOTE
+
+    @model_validator(mode="after")
+    def _validate_buckets(self) -> GenuineClassConversionReport:
+        if self.supplied < 0 or self.converted < 0:
+            raise ValueError("genuine-class counts must be non-negative")
+        if self.converted > self.supplied:
+            raise ValueError(
+                f"converted cannot exceed supplied: {self.converted} > {self.supplied}"
+            )
+        if self.supplied == 0:
+            if self.conversion_rate is not None:
+                raise ValueError(
+                    "conversion_rate must be None when nothing was supplied: "
+                    "the rate is undefined, not 0.0"
+                )
+        else:
+            if self.conversion_rate is None:
+                raise ValueError("conversion_rate must be set when supplied > 0")
+            if not 0.0 <= self.conversion_rate <= 1.0:
+                raise ValueError(
+                    f"conversion_rate must be in [0.0, 1.0]: {self.conversion_rate}"
+                )
+        return self
+
+
+def compute_genuine_class_conversion(
+    report: TournamentReport | Sequence[GameReport],
+) -> GenuineClassConversionReport:
+    """Fold a tournament report into the genuine-class conversion pair (10.4).
+
+    Accepts either a :class:`~eval.report_schema.TournamentReport` or a bare
+    sequence of :class:`~eval.report_schema.GameReport` (matching the other
+    analyzers' signature). Pure: no I/O, no engine/agent/LLM calls — the
+    repaired detector re-run is a pure function of each recorded transcript.
+
+    Per meeting: re-derive flags via
+    :func:`meetings.transcript.detect_contradictions` under the ballot-voter
+    roster, keep the ``alibi_vs_sighting`` flags without the endpoint band
+    (the genuine CANON-interior class — see
+    :class:`GenuineClassConversionReport` for why this is an import of the
+    Task 10.1 classifier, never a parallel implementation), and count each
+    flagged true impostor once as SUPPLIED (``roles`` subscript — a flagged
+    subject passed the living-roster filter, so one absent from the ground
+    truth is an internal inconsistency that fails loud). The pair CONVERTS
+    when the meeting's well-formed outcome ejected that impostor. A meeting
+    with no ballots derives nothing (an explicitly-empty roster indexes
+    nothing — the recording path always writes one ballot per living
+    participant, so this arises only on hand-built partial data).
+    """
+
+    games = report.games if isinstance(report, TournamentReport) else tuple(report)
+
+    supplied = 0
+    converted = 0
+    for game in games:
+        for meeting in game.meetings:
+            roster = frozenset(ballot.voter for ballot in meeting.ballots)
+            flags = detect_contradictions(meeting.transcript, roster=roster)
+            genuine_subjects: set[PlayerId] = set()
+            for flag in flags:
+                if flag.kind != "alibi_vs_sighting":
+                    continue
+                if WEAK_REASON_ENDPOINT_TICK in flag.description:
+                    continue
+                genuine_subjects.update(flag.subjects)
+            for subject in genuine_subjects:
+                if game.roles[subject] != "IMPOSTOR":
+                    continue
+                supplied += 1
+                if (
+                    meeting.outcome == "EJECTED"
+                    and meeting.ejected_player_id == subject
+                ):
+                    converted += 1
+
+    rate = converted / supplied if supplied > 0 else None
+    return GenuineClassConversionReport(
+        supplied=supplied,
+        converted=converted,
+        conversion_rate=rate,
+    )
+
+
 __all__ = [
+    "GENUINE_CLASS_GATE_NOTE",
     "KILL_WITNESS_TICK_WINDOW",
     "VOTE_CORRECTNESS_MIN_SAMPLE",
+    "GenuineClassConversionReport",
     "VoteCorrectnessReport",
+    "compute_genuine_class_conversion",
     "compute_vote_correctness",
 ]

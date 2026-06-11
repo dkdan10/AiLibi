@@ -174,6 +174,12 @@ def _summary(report: TournamentEvalReport) -> str:
         if conversion.impostor_accused_conversion_rate is not None
         else "n/a"
     )
+    # The Task 10.4 Phase-10 gate surface (gp-7), led by the PRIMARY gate:
+    # genuine-class conversion. ejection_accuracy stays printed above but is
+    # NOT a gate against pre-repair eras (the 0.63 was artifact-built — see
+    # eval.vote_correctness.GENUINE_CLASS_GATE_NOTE on the report itself).
+    gate = report.gate_metrics
+    genuine = gate.genuine_class_conversion
     return (
         f"{len(games)} games | CREW {crew} / IMP {impostor} / budget {budget} | "
         f"meeting_rate {meeting.meeting_rate:.2f} ({meeting.meetings_total} meetings)"
@@ -181,7 +187,12 @@ def _summary(report: TournamentEvalReport) -> str:
         f"({conversion.impostor_ejections}/{conversion.total_ejections}) | "
         f"conversion {recall} ({conversion.impostor_accused_conversions}/"
         f"{conversion.impostor_accused_meetings}) | "
-        f"missed_skip {conversion.missed_skip_ballots}"
+        f"missed_skip {conversion.missed_skip_ballots} | "
+        f"genuine_class {genuine.converted}/{genuine.supplied} | "
+        f"lost_openings {gate.lost_opening_accusations} "
+        f"(defaults {gate.cap_defaulted_turns}) | "
+        f"sheltered_survival {gate.survivals_sheltered_sub_gate}/"
+        f"{gate.accused_impostor_survivals}"
     )
 
 

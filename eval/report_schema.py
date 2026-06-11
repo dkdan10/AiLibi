@@ -115,6 +115,12 @@ from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord, WinnerSide
 # unchanged inner report do not qualify (the W0.3 ``meeting_rate`` precedent),
 # and 9.6 regenerates every committed report in the same PR, so no pre-9.6
 # wrapper JSON survives to be read.
+#
+# Task 10.4 (Phase-10 gate metrics) STAYS at 2 by the same rule: the
+# ``gate_metrics`` block is another wrapper-level aggregate over the unchanged
+# inner report (no persisted report/replay field changes shape), and both
+# committed reports plus the prompt-regression baseline are regenerated in the
+# same PR, so no pre-10.4 wrapper JSON survives to be read.
 CURRENT_FORMAT_VERSION: Final[int] = 2
 
 
