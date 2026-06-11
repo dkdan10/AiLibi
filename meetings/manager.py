@@ -82,6 +82,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     accusation_target,
     detect_contradictions,
+    detect_corroborations,
     next_chain_step,
 )
 
@@ -1621,7 +1622,15 @@ class MeetingBeliefEvidence:
       :class:`~meetings.schemas.AccusationClaim` (teammate-guarded and
       living-validated by the per-turn chokepoint before recording).
     * ``corroborated`` -- subjects supported by at least one
-      :class:`~meetings.schemas.CorroborationClaim` (§6.3 Rule 3).
+      :class:`~meetings.schemas.CorroborationClaim`, plus subjects of a
+      detector-derived containment-consistent (alibi, sighting) pair
+      (:func:`meetings.transcript.detect_corroborations`, Task 10.1) --
+      a third-party sighting confirming a stated alibi is
+      corroboration-class evidence (§6.3 Rule 3). The detector-derived
+      half is roster-filtered to the recorded ballot voters (the living
+      participants), matching the recording-time detection path. The set
+      is deduplicated per meeting, so a corroborated subject receives the
+      Rule-3 delta exactly once however many pairs confirm them.
     * ``contradicted`` -- subjects of the meeting's detected
       :class:`~meetings.schemas.ContradictionRef` flags; new evidence for
       the §6.3 Rule 5 decay exemption (the persistent lift itself stays
@@ -1653,6 +1662,25 @@ def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
                 accused.add(claim.against)
             elif isinstance(claim, CorroborationClaim):
                 corroborated.add(claim.supports)
+    # Detector-derived corroboration (Task 10.1, audit gp-2 C-C-1): a
+    # containment-consistent (alibi, sighting) pair re-derived from the
+    # recorded transcript is Rule-3 evidence alongside the claim-stated
+    # CorroborationClaims. Pure re-derivation, so a replay folds the
+    # identical evidence from the recorded meeting alone. The roster is
+    # the recorded ballot voters: every living participant casts exactly
+    # one ballot (defaults included), so this is the same
+    # living-participant set the recording-time ``detect_contradictions``
+    # call received -- a hallucinated non-player subject (audit C-8) whose
+    # alibi and sighting happen to agree can never corroborate itself into
+    # a phantom belief row. A hand-built result with no ballots therefore
+    # derives nothing (an explicitly-empty roster indexes nothing); the
+    # claim-stated ``corroboration.supports`` field stays unvalidated here
+    # -- its roster chokepoint is Task 10.2's contract.
+    roster = frozenset(ballot.voter for ballot in result.ballots)
+    corroborated.update(
+        corroboration.subject
+        for corroboration in detect_corroborations(result.transcript, roster=roster)
+    )
     contradicted = {
         subject
         for contradiction in result.contradictions

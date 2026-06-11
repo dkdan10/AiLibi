@@ -48,6 +48,23 @@ appends a :data:`WEAK_CONTRADICTION_MARKER_PREFIX` audit marker to the
 description; :func:`is_weak_contradiction` is the predicate consumers
 (belief Rule 2 in :mod:`agents.memory.beliefs`) use to apply a
 graduated, below-gate suspicion delta instead of the full one.
+
+Task 10.1 (audit gp-2 C-C-1/C-C-2/C-C-3): rooms are canonicalised ONCE
+at claim-parse (:func:`canonical_rooms` at indexing time), so every
+comparison -- alibi vs alibi, alibi vs sighting, and the corroboration
+path -- sees the same canonical room set. Compound labels the 9B freely
+emits ("LABS/MEDBAY") split into their member rooms; placeholder labels
+("VARIOUS") canonicalise to *no room* and mint no flag; a sighting whose
+room sits inside the alibi's room set is CONSISTENT and surfaces through
+:func:`detect_corroborations` instead of a contradiction. The 9.7 weak
+classification now also covers ``alibi_conflict`` (self-pair /
+adversarial / narrow / boundary-overlap reasons) and endpoint-tick-only
+``alibi_vs_sighting`` mismatches; a defense-echo alibi (an exact
+restatement of an earlier alibi about the same subject) dedupes to the
+original claim before contradiction pairing (the corroboration path
+instead pairs every stated version -- its per-pair independence gate
+does the filtering). :func:`contradiction_lift_key` is the per-claim
+dedup key belief Rule 2 caps its lift on.
 """
 
 from __future__ import annotations
@@ -343,21 +360,109 @@ NARROW_ALIBI_WINDOW_TICKS: Final[int] = 2
 # by belief Rule 2, not filtered. Pin the literal exactly.
 WEAK_CONTRADICTION_MARKER_PREFIX: Final[str] = "[weak signal: "
 
-# Reason literals joined (in this order, "; "-separated) inside the weak
+# Reason literals joined (in fixed order, "; "-separated) inside the weak
 # marker. Self-stated: the alibi's speaker is its own subject, so a third
 # party's sighting contradicts only the subject's own coarse recollection
 # (8/13 audited wrong ejections were the body reporter railroaded this
-# way). Narrow window: see ``NARROW_ALIBI_WINDOW_TICKS``.
+# way). Narrow window: see ``NARROW_ALIBI_WINDOW_TICKS``. The Task 10.1
+# additions (audit gp-2): endpoint-tick -- the sighting sits exactly on
+# the alibi window's edge tick (movement resolves one room per tick, so
+# an edge-tick sighting elsewhere is transit fuzz; 31 such flags split
+# crew/impostor evenly with no guilt signal); self-pair -- BOTH conflicting
+# alibis are the subject's own claims (the subject's coarse recollection
+# disagreeing with itself, the 9.7 self-stated rationale a fortiori);
+# adversarial -- a non-subject speaker in an accuser/accused relation with
+# the subject stated one side (accusation-chain adversaries manufacture
+# counter-alibis; seed 13 m2's impostor weaponised exactly this);
+# boundary overlap -- the two alibis overlap only on the junction tick
+# where one ends and the other begins (a movement pair, not a lie).
 WEAK_REASON_SELF_STATED: Final[str] = "self-stated alibi"
 WEAK_REASON_NARROW_WINDOW: Final[str] = "narrow alibi window"
+WEAK_REASON_ENDPOINT_TICK: Final[str] = "endpoint-tick sighting"
+WEAK_REASON_SELF_PAIR: Final[str] = "self-stated alibi pair"
+WEAK_REASON_ADVERSARIAL: Final[str] = "adversarial testimony"
+WEAK_REASON_BOUNDARY_OVERLAP: Final[str] = "endpoint-tick overlap"
+
+# Room labels that name no actual room (Task 10.1; audit gp-2 C-C-1).
+# qwen3.5:9b emits these as alibi rooms when it cannot or will not commit
+# to a location; under exact string comparison they mismatched every real
+# room and minted 11 artifact flags on the audited set. They canonicalise
+# to *no room*: a claim with no canonical room participates in no room
+# comparison and therefore mints no flag (DESIGN.md §5.4 -- the detector
+# reports what cannot both be true, and "somewhere" contradicts nothing).
+# The set is the complete inventory observed across both committed replay
+# sets; membership is case-insensitive via the :func:`canonical_rooms`
+# upper-casing.
+PLACEHOLDER_ROOM_LABELS: Final[frozenset[str]] = frozenset(
+    {
+        "VARIOUS",
+        "VARIABLE",
+        "VARYING",
+        "UNKNOWN",
+        "UNKNOWN_ROOM",
+    }
+)
+
+# Compound-label separators observed in the committed sets ("LABS/MEDBAY",
+# "WEST_HALL|LABS", "ENGINEERING-EAST_HALL_TRANSITION",
+# "EAST_HALL_AND_ADMIN_TRANSITION"). "_AND_" is replaced before "-" so the
+# word joiner never half-splits; "_" alone is NOT a separator (canonical
+# room ids are UPPERCASE_SNAKE, e.g. EAST_HALL).
+_COMPOUND_ROOM_JOINERS: Final[tuple[str, ...]] = ("_AND_", "|", "-")
+
+# Trailing token the model appends to a room it names as transit
+# ("ADMIN_TRANSITION" = "moving through ADMIN"); stripped so the member
+# room matches its canonical id.
+_ROOM_TRANSITION_SUFFIX: Final[str] = "_TRANSITION"
+
+
+def canonical_rooms(room: str) -> frozenset[str]:
+    """Canonical room-name set for one claim/sighting room label (Task 10.1).
+
+    The single normalisation point for every room comparison the detector
+    and the corroboration path make (audit gp-2 C-C-1: canonicalise ONCE
+    at claim-parse, never per comparison site). Pure string transformation
+    -- :mod:`meetings` is firewalled from the engine map, so membership in
+    the canonical map is deliberately NOT checked here:
+
+    * upper-case (the model emits ``"CAFEteria"`` / ``"cafeteria"``),
+    * split compound labels on ``"/"``, ``"|"``, ``"-"``, and ``"_AND_"``
+      (a compound label is a multi-room account of movement, so each
+      member room is somewhere the subject claims to have been),
+    * strip a trailing ``"_TRANSITION"`` token from each member,
+    * drop :data:`PLACEHOLDER_ROOM_LABELS` members and empties.
+
+    An all-placeholder label returns the empty set -- "no room" -- which
+    every comparison site treats as *not comparable* (no flag, no
+    corroboration). Two labels are CONSISTENT when their canonical sets
+    intersect and contradictory only when both are non-empty and disjoint.
+    """
+
+    text = room.upper()
+    for joiner in _COMPOUND_ROOM_JOINERS:
+        text = text.replace(joiner, "/")
+    members: set[str] = set()
+    for raw_part in text.split("/"):
+        part = raw_part.strip().strip("_")
+        if part.endswith(_ROOM_TRANSITION_SUFFIX):
+            part = part[: -len(_ROOM_TRANSITION_SUFFIX)].rstrip("_")
+        if not part or part in PLACEHOLDER_ROOM_LABELS:
+            continue
+        members.add(part)
+    return frozenset(members)
 
 
 def is_weak_contradiction(flag: ContradictionRef) -> bool:
-    """Whether ``flag`` is a detector-flagged weak signal (Task 9.7).
+    """Whether ``flag`` is a detector-flagged weak signal (Tasks 9.7, 10.1).
 
-    True iff the flag is an ``alibi_vs_sighting`` whose description
-    carries the :data:`WEAK_CONTRADICTION_MARKER_PREFIX` audit marker the
-    detector appended for a self-stated or narrow-window alibi. Belief
+    True iff the flag's description carries the
+    :data:`WEAK_CONTRADICTION_MARKER_PREFIX` audit marker the detector
+    appended -- for an ``alibi_vs_sighting``: a self-stated or
+    narrow-window alibi (9.7) or an endpoint-tick sighting (10.1); for an
+    ``alibi_conflict``: a self-pair, adversarial testimony, a narrow
+    window, or a boundary-tick-only overlap (10.1 -- the conflict path
+    previously never received the 9.7 classification, so self-pairs
+    carried the full Rule-2 delta and drove 5 wrong ejections). Belief
     Rule 2 (:func:`agents.memory.beliefs.apply_contradiction_rule`) keys
     its graduated down-weight on this predicate; keeping the predicate
     beside the marker writer means the two cannot drift. Re-derivable:
@@ -366,10 +471,43 @@ def is_weak_contradiction(flag: ContradictionRef) -> bool:
     round-trip without a schema field.
     """
 
-    return (
-        flag.kind == "alibi_vs_sighting"
-        and WEAK_CONTRADICTION_MARKER_PREFIX in flag.description
-    )
+    return WEAK_CONTRADICTION_MARKER_PREFIX in flag.description
+
+
+# The event-id segment that identifies an alibi-claim event
+# (:func:`_turn_claim_id` writes ``turn:{turn_id}:claim:{index}``;
+# sightings get ``:obs:``). Kept beside the id writers so the lift-key
+# parser below can never drift from the id format.
+_CLAIM_EVENT_SEGMENT: Final[str] = ":claim:"
+
+
+def contradiction_lift_key(flag: ContradictionRef) -> str:
+    """The per-claim dedup key for belief Rule 2's lift (Task 10.1).
+
+    Audit gp-2 C-C-3: the detector emits one ``alibi_vs_sighting`` flag
+    per (alibi, sighting) pair, so one alibi paired against N sightings
+    is N flags -- and the vote-time lift summed per flag, letting one
+    truthful compound alibi stack 19 weak deltas to suspicion 1.0 (seed 9
+    m1). The repair caps the lift at one delta per (subject, alibi-claim)
+    pair; this function supplies the alibi-claim half of that key: the
+    flag's claim event id(s), i.e. ``event_a_id``/``event_b_id`` filtered
+    to the ``:claim:`` segment :func:`_turn_claim_id` writes. For an
+    ``alibi_vs_sighting`` that is the single alibi claim (every sighting
+    paired against it shares the key); for an ``alibi_conflict`` it is
+    the claim pair (each distinct pair of claims stays its own piece of
+    evidence). A flag built outside the detector whose event ids carry no
+    claim segment falls back to its full event-id pair -- one key per
+    flag, the pre-10.1 behaviour.
+    """
+
+    claim_ids = [
+        event_id
+        for event_id in (flag.event_a_id, flag.event_b_id)
+        if _CLAIM_EVENT_SEGMENT in event_id
+    ]
+    if claim_ids:
+        return "|".join(claim_ids)
+    return f"{flag.event_a_id}|{flag.event_b_id}"
 
 
 def detect_contradictions(
@@ -409,8 +547,98 @@ def detect_contradictions(
     default) indexes every subject, preserving behaviour for
     callers/tests that exercise the detector without a roster.
 
+    Task 10.1 (audit gp-2): rooms are compared as canonical sets
+    (:func:`canonical_rooms`, computed once at indexing) -- a placeholder
+    side mints no flag, intersecting sets are consistent, and a
+    defense-echo alibi is deduped to the original claim before pairing.
+    Endpoint-tick mismatches and the conflict false-positive shapes carry
+    the weak marker instead of being excluded: an endpoint mismatch can
+    still be a real signal under corroboration, so the recorded flag set
+    stays the honest full set and belief Rule 2 applies the graduated
+    delta (the 9.7 down-weight convention).
+
     The function is pure: it does not mutate the transcript and has no
     side effects.
+    """
+
+    effective_roster = _NO_ROSTER if roster is None else roster
+    alibis = _dedupe_echo_alibis(
+        tuple(
+            indexed
+            for indexed in _iter_alibis(transcript)
+            if _subject_in_roster(indexed.claim.subject, effective_roster)
+        )
+    )
+    sightings = tuple(
+        indexed
+        for indexed in _iter_sightings(transcript)
+        if _subject_in_roster(indexed.observation.subject, effective_roster)
+    )
+
+    flags: list[ContradictionRef] = []
+    flags.extend(
+        _detect_alibi_conflicts(alibis, accusation_pairs=_accusation_pairs(transcript))
+    )
+    flags.extend(_detect_alibi_vs_sightings(alibis=alibis, sightings=sightings))
+    return tuple(sorted(flags, key=lambda flag: flag.contradiction_id))
+
+
+@dataclass(frozen=True)
+class DetectedCorroboration:
+    """A containment-consistent (alibi, sighting) pair (Task 10.1).
+
+    Audit gp-2 C-C-1: a third-party sighting whose room sits inside the
+    subject's stated alibi rooms, at a tick inside the alibi window, is
+    *corroboration-class* evidence -- the old detector string-compared
+    the rooms and flagged exactly these confirmations as contradictions
+    (34 of 83 flags on the audited set). ``subject`` is the corroborated
+    player; the event ids reference the contributing turn artifacts the
+    same way :class:`~meetings.schemas.ContradictionRef` does. Consumed
+    by :func:`meetings.manager.extract_belief_evidence`, which folds the
+    subject into the meeting's ``corroborated`` set -- the §6.3 Rule-3
+    channel, so the magnitude is exactly the Rule-3 delta and the fold's
+    per-meeting subject dedup caps it once per subject.
+    """
+
+    subject: PlayerId
+    alibi_event_id: str
+    sighting_event_id: str
+
+
+def detect_corroborations(
+    transcript: MeetingTranscript,
+    *,
+    roster: frozenset[PlayerId] | None = None,
+) -> tuple[DetectedCorroboration, ...]:
+    """Containment-consistent (alibi, sighting) pairs (Task 10.1; §6.3 Rule 3).
+
+    The corroboration-path twin of :func:`detect_contradictions`: the
+    same roster filter and the same :func:`canonical_rooms` parse (one
+    canonicalisation, every consumer), but it pairs an alibi with the
+    sightings that CONFIRM it: the sighting's canonical rooms intersect
+    the alibi's and the sighting tick falls inside the alibi window.
+    Pure and deterministic; the result is sorted by
+    ``(subject, alibi_event_id, sighting_event_id)``.
+
+    Independence gate: the sighting speaker must differ from BOTH the
+    alibi's subject (you cannot vouch for yourself) and the alibi's
+    speaker (one witness restating their own account in two formats is
+    not a second voice). No-room sides (placeholders) corroborate
+    nothing, mirroring the contradiction side.
+
+    Unlike the contradiction path, echo alibis are NOT deduped here.
+    The echo dedup exists to stop flag multiplication and classification
+    flips on the contradiction side; corroboration needs every stated
+    version of an account, because the independence gate is per
+    (claim-speaker, sighting-speaker) pair -- when a witness vouches an
+    alibi for the subject FIRST (alongside their own matching sighting)
+    and the subject restates it later, the subject's echo is exactly the
+    self-stated account that witness's sighting independently confirms;
+    deduping it to the witness's claim would orphan the sighting on the
+    same-speaker gate and silently drop a genuine Rule-3 signal. No
+    inflation is possible: the belief fold reduces these pairs to a
+    per-meeting subject set, so a subject is corroborated once however
+    many stated versions and sightings agree.
     """
 
     effective_roster = _NO_ROSTER if roster is None else roster
@@ -425,10 +653,38 @@ def detect_contradictions(
         if _subject_in_roster(indexed.observation.subject, effective_roster)
     )
 
-    flags: list[ContradictionRef] = []
-    flags.extend(_detect_alibi_conflicts(alibis))
-    flags.extend(_detect_alibi_vs_sightings(alibis=alibis, sightings=sightings))
-    return tuple(sorted(flags, key=lambda flag: flag.contradiction_id))
+    corroborations: list[DetectedCorroboration] = []
+    for alibi in alibis:
+        if not alibi.rooms:
+            continue
+        for sighting in sightings:
+            if sighting.observation.subject != alibi.claim.subject:
+                continue
+            if sighting.speaker == alibi.claim.subject:
+                continue
+            if sighting.speaker == alibi.speaker:
+                continue
+            if not sighting.rooms or not (sighting.rooms & alibi.rooms):
+                continue
+            if not (
+                alibi.claim.from_tick
+                <= sighting.observation.tick
+                <= alibi.claim.to_tick
+            ):
+                continue
+            corroborations.append(
+                DetectedCorroboration(
+                    subject=alibi.claim.subject,
+                    alibi_event_id=alibi.event_id,
+                    sighting_event_id=sighting.event_id,
+                )
+            )
+    return tuple(
+        sorted(
+            corroborations,
+            key=lambda c: (c.subject, c.alibi_event_id, c.sighting_event_id),
+        )
+    )
 
 
 def _subject_in_roster(subject: PlayerId, roster: frozenset[PlayerId]) -> bool:
@@ -449,25 +705,36 @@ def _subject_in_roster(subject: PlayerId, roster: frozenset[PlayerId]) -> bool:
 
 @dataclass(frozen=True)
 class _IndexedAlibi:
-    """An :class:`AlibiClaim` paired with its event id and speaker.
+    """An :class:`AlibiClaim` paired with its event id, speaker, and rooms.
 
     ``speaker`` is the player who *stated* the claim (``turn.speaker``),
     which the Task 9.7 weak-signal classification compares against the
-    claim's ``subject`` to recognise a self-stated alibi.
+    claim's ``subject`` to recognise a self-stated alibi. ``rooms`` is
+    the claim's canonical room set (:func:`canonical_rooms`), computed
+    once at indexing so every comparison site -- conflicts, sightings,
+    corroborations -- reads the same canonical parse (Task 10.1).
     """
 
     event_id: str
     speaker: PlayerId
     claim: AlibiClaim
+    rooms: frozenset[str]
 
 
 @dataclass(frozen=True)
 class _IndexedSighting:
-    """A :class:`SawPlayerObservation` paired with its event id and speaker."""
+    """A :class:`SawPlayerObservation` with its event id, speaker, and rooms.
+
+    ``rooms`` is the canonical parse of the sighting's room label
+    (:func:`canonical_rooms`) -- the model occasionally emits compound or
+    case-variant sighting rooms too, so both sides of every comparison
+    canonicalise identically (Task 10.1).
+    """
 
     event_id: str
     speaker: PlayerId
     observation: SawPlayerObservation
+    rooms: frozenset[str]
 
 
 def _iter_alibis(transcript: MeetingTranscript) -> Iterator[_IndexedAlibi]:
@@ -478,6 +745,7 @@ def _iter_alibis(transcript: MeetingTranscript) -> Iterator[_IndexedAlibi]:
                     event_id=_turn_claim_id(turn=turn, index=index),
                     speaker=turn.speaker,
                     claim=claim,
+                    rooms=canonical_rooms(claim.room),
                 )
 
 
@@ -489,7 +757,68 @@ def _iter_sightings(transcript: MeetingTranscript) -> Iterator[_IndexedSighting]
                     event_id=_turn_observation_id(turn=turn, index=index),
                     speaker=turn.speaker,
                     observation=observation,
+                    rooms=canonical_rooms(observation.room),
                 )
+
+
+def _dedupe_echo_alibis(
+    alibis: tuple[_IndexedAlibi, ...],
+) -> tuple[_IndexedAlibi, ...]:
+    """Drop alibi restatements, keeping each account's FIRST statement.
+
+    Task 10.1 (audit gp-2 C-C-2, the defense-echo shape): a speaker
+    restating an alibi already on the record -- a defender repeating the
+    accused's own self-alibi (seed 26 m1: p-2's echo of p-6 minted 4
+    strong flags against the player being defended), or the subject
+    re-asserting their alibi after an accusation -- adds no new location
+    account. An echo is an alibi whose (subject, canonical rooms, tick
+    range) exactly matches an earlier claim in transcript order; it is
+    deduped to that original BEFORE pairing, so it mints no flag of its
+    own and the original's speaker keeps deciding the weak/strong
+    classification. A restatement that changes the rooms or the window
+    asserts new information and is NOT an echo. Deterministic: turns are
+    walked in transcript order, so "first" is the chain's own order.
+
+    Contradiction-side only: :func:`detect_corroborations` deliberately
+    pairs against every stated version of an account, because its
+    independence gate is per claim-speaker -- see its docstring for the
+    witness-vouches-first shape the dedup would otherwise silently drop.
+    """
+
+    seen: set[tuple[PlayerId, frozenset[str], int, int]] = set()
+    deduped: list[_IndexedAlibi] = []
+    for alibi in alibis:
+        key = (
+            alibi.claim.subject,
+            alibi.rooms,
+            alibi.claim.from_tick,
+            alibi.claim.to_tick,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(alibi)
+    return tuple(deduped)
+
+
+def _accusation_pairs(
+    transcript: MeetingTranscript,
+) -> frozenset[tuple[PlayerId, PlayerId]]:
+    """Every recorded ``(accuser, accused)`` pair in the transcript.
+
+    Feeds the Task 10.1 adversarial classification: an alibi about
+    subject S stated by a speaker who accused S -- or whom S accused --
+    is testimony from across the accusation chain, capped at weak
+    (audit gp-2 C-C-2: an accused impostor's counter-alibi about their
+    accuser put a strong flag on the accuser in seeds 13/17).
+    """
+
+    return frozenset(
+        (turn.speaker, claim.against)
+        for turn in transcript.turns
+        for claim in turn.claims
+        if isinstance(claim, AccusationClaim)
+    )
 
 
 # -- Internal: detectors ----------------------------------------------------
@@ -497,12 +826,21 @@ def _iter_sightings(transcript: MeetingTranscript) -> Iterator[_IndexedSighting]
 
 def _detect_alibi_conflicts(
     alibis: tuple[_IndexedAlibi, ...],
+    *,
+    accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
 ) -> Iterator[ContradictionRef]:
     for i, left in enumerate(alibis):
         for right in alibis[i + 1 :]:
             if left.claim.subject != right.claim.subject:
                 continue
-            if left.claim.room == right.claim.room:
+            # Canonical room comparison (Task 10.1): a no-room side
+            # (placeholder label) is not comparable and mints no flag;
+            # intersecting sets are a CONSISTENT multi-room account, not
+            # a conflict -- only two non-empty, disjoint sets cannot both
+            # be true.
+            if not left.rooms or not right.rooms:
+                continue
+            if left.rooms & right.rooms:
                 continue
             if not _ranges_overlap(
                 left.claim.from_tick,
@@ -516,7 +854,13 @@ def _detect_alibi_conflicts(
                 event_a_id=left.event_id,
                 event_b_id=right.event_id,
                 subjects=(left.claim.subject,),
-                description=_describe_alibi_conflict(left.claim, right.claim),
+                description=_describe_alibi_conflict(
+                    left.claim,
+                    right.claim,
+                    weak_reasons=_conflict_weak_reasons(
+                        left, right, accusation_pairs=accusation_pairs
+                    ),
+                ),
             )
 
 
@@ -526,11 +870,17 @@ def _detect_alibi_vs_sightings(
     sightings: tuple[_IndexedSighting, ...],
 ) -> Iterator[ContradictionRef]:
     for alibi in alibis:
-        weak_reasons = _weak_signal_reasons(alibi)
+        if not alibi.rooms:
+            continue
+        base_reasons = _weak_signal_reasons(alibi)
         for sighting in sightings:
             if sighting.observation.subject != alibi.claim.subject:
                 continue
-            if sighting.observation.room == alibi.claim.room:
+            # Canonical room comparison (Task 10.1): a no-room sighting
+            # is not comparable; a sighting room inside the alibi's room
+            # set is CONSISTENT (corroboration-class evidence surfaced by
+            # :func:`detect_corroborations`, never a flag).
+            if not sighting.rooms or (sighting.rooms & alibi.rooms):
                 continue
             if not (
                 alibi.claim.from_tick
@@ -538,6 +888,16 @@ def _detect_alibi_vs_sightings(
                 <= alibi.claim.to_tick
             ):
                 continue
+            weak_reasons = base_reasons
+            # Endpoint-tick weak band (Task 10.1, audit gp-2 C-C-1): a
+            # sighting exactly on the window's edge tick is movement fuzz
+            # -- weak-banded rather than excluded, because an endpoint
+            # mismatch can still be a real signal once corroborated.
+            if sighting.observation.tick in (
+                alibi.claim.from_tick,
+                alibi.claim.to_tick,
+            ):
+                weak_reasons = (*base_reasons, WEAK_REASON_ENDPOINT_TICK)
             yield _build_contradiction(
                 kind="alibi_vs_sighting",
                 event_a_id=alibi.event_id,
@@ -558,6 +918,8 @@ def _weak_signal_reasons(alibi: _IndexedAlibi) -> tuple[str, ...]:
     classification is computed once per alibi regardless of how many
     sightings it is paired with. Order is fixed (self-stated, then
     narrow window) so the rendered marker is byte-stable across runs.
+    The Task 10.1 conflict classification reuses this helper per side,
+    so the two paths share one definition of self-stated / narrow.
     """
 
     reasons: list[str] = []
@@ -565,6 +927,68 @@ def _weak_signal_reasons(alibi: _IndexedAlibi) -> tuple[str, ...]:
         reasons.append(WEAK_REASON_SELF_STATED)
     if alibi.claim.to_tick - alibi.claim.from_tick < NARROW_ALIBI_WINDOW_TICKS:
         reasons.append(WEAK_REASON_NARROW_WINDOW)
+    return tuple(reasons)
+
+
+def _conflict_weak_reasons(
+    left: _IndexedAlibi,
+    right: _IndexedAlibi,
+    *,
+    accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
+) -> tuple[str, ...]:
+    """The Task 10.1 weak patterns an alibi-conflict pair matches, if any.
+
+    The conflict-path counterpart of :func:`_weak_signal_reasons` -- the
+    9.7 classification the audit found the conflict path never received
+    (gp-2 C-C-2), built from the same per-side helper rather than a
+    parallel implementation. Order is fixed (self-pair, narrow window,
+    adversarial, boundary overlap) so the marker is byte-stable:
+
+    * self-pair -- BOTH claims are the subject's own statements (the
+      9.7 self-stated rationale a fortiori: the subject's coarse
+      recollection disagreeing with itself; seeds 11 m2 / 17 m0).
+    * narrow window -- either claim spans fewer than
+      :data:`NARROW_ALIBI_WINDOW_TICKS` ticks (a 1-2 tick claim is one
+      transit observation; a conflict built on it inherits the fuzz).
+    * adversarial -- a non-subject speaker on either side sits across the
+      accusation chain from the subject (they accused the subject, or
+      the subject accused them): capped at weak so an accused player's
+      counter-alibi cannot mint a strong flag on their accuser (the
+      seed 13 m2 impostor deflection).
+    * boundary overlap -- the windows overlap ONLY on the junction tick
+      where one claim ends and the other begins: a movement pair
+      ("CAFETERIA t0-6" + "STORAGE t6-9"), not two incompatible accounts.
+    """
+
+    subject = left.claim.subject
+    left_reasons = _weak_signal_reasons(left)
+    right_reasons = _weak_signal_reasons(right)
+
+    reasons: list[str] = []
+    if (
+        WEAK_REASON_SELF_STATED in left_reasons
+        and WEAK_REASON_SELF_STATED in right_reasons
+    ):
+        reasons.append(WEAK_REASON_SELF_PAIR)
+    if (
+        WEAK_REASON_NARROW_WINDOW in left_reasons
+        or WEAK_REASON_NARROW_WINDOW in right_reasons
+    ):
+        reasons.append(WEAK_REASON_NARROW_WINDOW)
+    if any(
+        speaker != subject
+        and (
+            (speaker, subject) in accusation_pairs
+            or (subject, speaker) in accusation_pairs
+        )
+        for speaker in (left.speaker, right.speaker)
+    ):
+        reasons.append(WEAK_REASON_ADVERSARIAL)
+    if (
+        left.claim.to_tick == right.claim.from_tick
+        or right.claim.to_tick == left.claim.from_tick
+    ):
+        reasons.append(WEAK_REASON_BOUNDARY_OVERLAP)
     return tuple(reasons)
 
 
@@ -596,17 +1020,25 @@ def _build_contradiction(
     )
 
 
-def _describe_alibi_conflict(left: AlibiClaim, right: AlibiClaim) -> str:
+def _describe_alibi_conflict(
+    left: AlibiClaim,
+    right: AlibiClaim,
+    *,
+    weak_reasons: tuple[str, ...] = (),
+) -> str:
     # Order the two alibis lexically by room so the description is
     # stable regardless of iteration order. The contradiction_id is
     # already canonicalised; doing the same for free text keeps the
     # rendered memory view byte-stable across replays.
     first, second = sorted((left, right), key=lambda claim: claim.room)
-    return (
+    base = (
         f"Alibis place {first.subject} in {first.room} "
         f"(ticks {first.from_tick}-{first.to_tick}) and in {second.room} "
         f"(ticks {second.from_tick}-{second.to_tick}); intervals overlap."
     )
+    if not weak_reasons:
+        return base
+    return f"{base} {WEAK_CONTRADICTION_MARKER_PREFIX}{'; '.join(weak_reasons)}]"
 
 
 def _describe_alibi_vs_sighting(
@@ -644,14 +1076,23 @@ def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
 
 __all__ = [
     "NARROW_ALIBI_WINDOW_TICKS",
+    "PLACEHOLDER_ROOM_LABELS",
     "WEAK_CONTRADICTION_MARKER_PREFIX",
+    "WEAK_REASON_ADVERSARIAL",
+    "WEAK_REASON_BOUNDARY_OVERLAP",
+    "WEAK_REASON_ENDPOINT_TICK",
     "WEAK_REASON_NARROW_WINDOW",
+    "WEAK_REASON_SELF_PAIR",
     "WEAK_REASON_SELF_STATED",
     "ChainStep",
     "ChainTermination",
     "ChainWalk",
+    "DetectedCorroboration",
     "accusation_target",
+    "canonical_rooms",
+    "contradiction_lift_key",
     "detect_contradictions",
+    "detect_corroborations",
     "is_canonically_ordered",
     "is_weak_contradiction",
     "next_chain_step",

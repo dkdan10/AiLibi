@@ -9,6 +9,7 @@ from agents.memory.beliefs import (
     BODY_PROXIMITY_SUSPICION_DELTA,
     CONTRADICTION_SUSPICION_DELTA,
     CORROBORATION_SUSPICION_DELTA,
+    MEETING_CONTRADICTION_LIFT_CAP,
     MEETING_SUSPICION_DECAY_RATE,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
     BeliefState,
@@ -270,9 +271,10 @@ class TestContradictionRuleGraduatedWeight:
         assert suspicion >= 0.60
 
     def test_two_weak_flags_corroborate_across_the_gate(self) -> None:
-        # Two independent weak signals (e.g. two third-party sightings
-        # against the same self-stated alibi) ARE corroboration: the
-        # subject stays ejectable, the lone-signal railroad is gone.
+        # Two independent weak signals -- flags riding two DIFFERENT
+        # alibi claims (distinct lift keys; Task 10.1 dedups only flags
+        # that share a claim) -- ARE corroboration: the subject stays
+        # ejectable, the lone-signal railroad is gone.
         updated = apply_contradiction_rule(
             BeliefState(),
             [
@@ -287,7 +289,11 @@ class TestContradictionRuleGraduatedWeight:
         )
         assert suspicion >= 0.60
 
-    def test_weak_plus_strong_crosses_gate(self) -> None:
+    def test_weak_plus_strong_crosses_gate_at_the_capped_lift(self) -> None:
+        # Task 10.1: the per-subject per-meeting cap bounds the summed
+        # lift at one strong flag's worth (0.3), so weak + strong lands
+        # at 0.8 -- still decisively over the gate; the cap trims the
+        # stack, never the conversion.
         updated = apply_contradiction_rule(
             BeliefState(),
             [
@@ -297,10 +303,12 @@ class TestContradictionRuleGraduatedWeight:
         )
 
         suspicion = updated.view("p-5").suspicion
+        assert (
+            WEAK_CONTRADICTION_SUSPICION_DELTA + CONTRADICTION_SUSPICION_DELTA
+            > MEETING_CONTRADICTION_LIFT_CAP
+        )
         assert suspicion == pytest.approx(
-            _DEFAULT_SUSPICION
-            + WEAK_CONTRADICTION_SUSPICION_DELTA
-            + CONTRADICTION_SUSPICION_DELTA
+            _DEFAULT_SUSPICION + MEETING_CONTRADICTION_LIFT_CAP
         )
         assert suspicion >= 0.60
 
@@ -328,14 +336,27 @@ class TestContradictionRuleGraduatedWeight:
         )
         assert suspicion >= 0.60
 
-    def test_marker_on_alibi_conflict_keeps_full_weight(self) -> None:
-        # The graduated delta is kind-gated to alibi_vs_sighting; an
-        # alibi_conflict is two positive claims that cannot both be true
-        # and keeps the full Rule-2 weight even if its description ever
-        # carried the marker text.
+    def test_marked_alibi_conflict_takes_the_graduated_delta(self) -> None:
+        # Task 10.1 (audit gp-2 C-C-2): the conflict path now carries the
+        # 9.7 weak classification -- the detector marks self-pair /
+        # adversarial / narrow / boundary-overlap conflicts, and Rule 2
+        # honours the marker on either kind. Pre-10.1 this flag kept the
+        # full delta and drove 5 of the 11 audited wrong ejections.
         updated = apply_contradiction_rule(
             BeliefState(),
             [_meeting_flag(subject="p-5", weak=True, kind="alibi_conflict")],
+        )
+
+        suspicion = updated.view("p-5").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+        assert suspicion < 0.60
+
+    def test_unmarked_alibi_conflict_keeps_full_weight(self) -> None:
+        updated = apply_contradiction_rule(
+            BeliefState(),
+            [_meeting_flag(subject="p-5", weak=False, kind="alibi_conflict")],
         )
 
         assert updated.view("p-5").suspicion == pytest.approx(
@@ -402,6 +423,201 @@ class TestContradictionRuleGraduatedWeight:
             _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
         )
         assert _DEFAULT_SUSPICION < suspicion < 0.60
+
+
+# --- Task 10.1 lift dedup + per-meeting cap (audit gp-2 C-C-3) --------------
+
+
+def _fountain_flag(
+    *, subject: str, claim_ordinal: int, sighting_ordinal: int, weak: bool = True
+) -> MeetingContradictionRef:
+    """A detector-shaped flag with realistic claim/obs event ids.
+
+    ``claim_ordinal`` selects the alibi claim's turn, so flags sharing it
+    share the Task 10.1 lift key (one alibi paired against many
+    sightings) while distinct ordinals are independent claims.
+    """
+
+    claim_id = f"turn:m-1:turn-{claim_ordinal}:claim:0"
+    obs_id = f"turn:m-1:turn-{sighting_ordinal}:obs:0"
+    return _meeting_flag(subject=subject, weak=weak, pair=f"{claim_id}|{obs_id}")
+
+
+class TestContradictionLiftDedupAndCap:
+    """Task 10.1 (DESIGN.md §6.3 Rule 2; audit gp-2 C-C-3).
+
+    The detector emits one flag per (alibi, sighting) pair, so one alibi
+    against N sightings is N flags; pre-10.1 the lift summed per flag and
+    19 near-duplicate weak flags lifted an innocent from 0.5 to a clamped
+    1.0 (seed 9 m1, ejected 5-0). The lift now dedups per
+    (subject, alibi-claim) and the per-subject sum caps at one strong
+    flag's worth -- flag volume can never substitute for evidence.
+    """
+
+    def test_fountain_of_same_claim_weak_flags_lifts_once(self) -> None:
+        # The seed-9 m1 shape, synthetic: ONE alibi claim paired against
+        # 19 repeated sightings. 19 flags, one effective weak delta.
+        flags = [
+            _fountain_flag(subject="p-8", claim_ordinal=1, sighting_ordinal=n)
+            for n in range(2, 21)
+        ]
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        suspicion = updated.view("p-8").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+        assert suspicion < 0.60
+
+    def test_flags_from_distinct_claims_still_accumulate(self) -> None:
+        # Dedup is per claim, not per subject: two weak flags riding two
+        # DIFFERENT alibi claims remain two pieces of evidence (the 9.7
+        # corroboration path survives the dedup).
+        flags = [
+            _fountain_flag(subject="p-8", claim_ordinal=1, sighting_ordinal=3),
+            _fountain_flag(subject="p-8", claim_ordinal=2, sighting_ordinal=4),
+        ]
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        assert updated.view("p-8").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + 2 * WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+
+    def test_mixed_weak_and_strong_on_one_claim_takes_the_strongest(self) -> None:
+        # One claim, two sightings -- one endpoint-weak, one interior
+        # strong: the claim is strong-contradicted once, the weak
+        # duplicate adds nothing.
+        flags = [
+            _fountain_flag(
+                subject="p-8", claim_ordinal=1, sighting_ordinal=2, weak=True
+            ),
+            _fountain_flag(
+                subject="p-8", claim_ordinal=1, sighting_ordinal=3, weak=False
+            ),
+        ]
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        assert updated.view("p-8").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+
+    def test_per_subject_lift_caps_at_one_strong_flag(self) -> None:
+        # Two independent STRONG claims would sum to 0.6; the per-subject
+        # per-meeting cap bounds the transient lift at one strong flag's
+        # worth. Cross-meeting accumulation stays the 9.8 channel.
+        flags = [
+            _fountain_flag(
+                subject="p-8", claim_ordinal=1, sighting_ordinal=3, weak=False
+            ),
+            _fountain_flag(
+                subject="p-8", claim_ordinal=2, sighting_ordinal=4, weak=False
+            ),
+        ]
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        assert updated.view("p-8").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + MEETING_CONTRADICTION_LIFT_CAP
+        )
+
+    def test_no_flag_volume_reaches_certainty_from_the_default_prior(self) -> None:
+        # The headline property: however many flags (weak, strong, any
+        # mix of claims), one meeting's lift cannot carry a default-prior
+        # subject to 1.0 -- the audited railroad ceiling.
+        flags = [
+            _fountain_flag(
+                subject="p-8",
+                claim_ordinal=claim,
+                sighting_ordinal=10 + sighting,
+                weak=sighting % 2 == 0,
+            )
+            for claim in range(8)
+            for sighting in range(6)
+        ]
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        assert updated.view("p-8").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + MEETING_CONTRADICTION_LIFT_CAP
+        )
+        assert updated.view("p-8").suspicion < 1.0
+
+    def test_single_strong_flag_is_never_capped(self) -> None:
+        # The cap bounds stacking only: a lone strong flag keeps its
+        # existing single-flag weight exactly.
+        updated = apply_contradiction_rule(
+            BeliefState(),
+            [
+                _fountain_flag(
+                    subject="p-8", claim_ordinal=1, sighting_ordinal=2, weak=False
+                )
+            ],
+        )
+
+        assert updated.view("p-8").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+
+    def test_deduped_flags_still_record_every_inconsistency(self) -> None:
+        # The dedup is about the score, never the information: all N
+        # flags land on the subject's inconsistency list (§5.4 "flags
+        # are information").
+        flags = [
+            _fountain_flag(subject="p-8", claim_ordinal=1, sighting_ordinal=n)
+            for n in range(2, 7)
+        ]
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        assert len(updated.view("p-8").inconsistencies) == 5
+
+    def test_detector_fountain_round_trips_into_one_lift(self) -> None:
+        # Drift guard on the real pipeline: one self-stated alibi, three
+        # third-party sightings elsewhere -> three weak flags from the
+        # detector -> ONE effective weak delta through the rule.
+        turns = [
+            MeetingTurn(
+                turn_id="m-1:turn-0",
+                turn_index=0,
+                speaker="p-5",
+                turn_kind="opening",
+                reply_to=None,
+                claims=(
+                    SchemaAlibiClaim(
+                        type="alibi",
+                        subject="p-5",
+                        from_tick=100,
+                        to_tick=200,
+                        room="CAFETERIA",
+                    ),
+                ),
+                free_text="reporter self-alibi",
+            ),
+        ]
+        for n, tick in enumerate((150, 160, 170), start=1):
+            turns.append(
+                MeetingTurn(
+                    turn_id=f"m-1:turn-{n}",
+                    turn_index=n,
+                    speaker=f"p-{n + 5}",
+                    turn_kind="reply",
+                    reply_to=None,
+                    observations=(
+                        SawPlayerObservation(
+                            type="saw_player",
+                            tick=tick,
+                            subject="p-5",
+                            room="EAST_HALL",
+                        ),
+                    ),
+                    free_text="third-party sighting",
+                )
+            )
+        flags = detect_contradictions(MeetingTranscript(turns=tuple(turns)))
+        assert len(flags) == 3
+
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
 
 
 # --- Task 9.8 accusation accumulator + Rule 3 / Rule 5 (audit gp-1 recall) --

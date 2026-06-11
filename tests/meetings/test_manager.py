@@ -34,6 +34,11 @@ from typing import TypeVar
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from agents.memory.beliefs import (
+    CORROBORATION_SUSPICION_DELTA,
+    BeliefState,
+    apply_meeting_evidence_rules,
+)
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import AgentMemory, render_for_prompt
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
@@ -80,6 +85,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_SELF_STATED,
+    detect_corroborations,
     is_canonically_ordered,
     walk_chain,
 )
@@ -1128,11 +1134,13 @@ class TestDetectorPrecisionGraduatedSuspicion:
         assert suspicion == pytest.approx(0.58)
         assert suspicion < 0.6
 
-    def test_second_independent_sighting_corroborates_across_gate(self) -> None:
-        # Corroboration converts: TWO third parties independently sight
-        # the self-alibi'd reporter elsewhere -> two weak flags ->
-        # 0.5 + 0.08 + 0.08 = 0.66 >= 0.60. The reporter stays ejectable
-        # on a second signal; only the lone-signal railroad is gone.
+    def test_sighting_fountain_against_one_claim_lifts_once(self) -> None:
+        # Task 10.1 (audit gp-2 C-C-3): two third parties sighting the
+        # self-alibi'd reporter elsewhere still emit two flags, but both
+        # ride the SAME alibi claim, so the lift dedups to one weak delta
+        # -> 0.58 < 0.60. Pre-10.1 these summed per flag (0.66) -- the
+        # fountain that let one truthful alibi rail an innocent over the
+        # gate on sighting volume alone.
         responder = _make_responder(
             accusations={"p-1": "p-2", "p-2": "p-3", "p-3": None},
             claims_by={
@@ -1158,6 +1166,54 @@ class TestDetectorPrecisionGraduatedSuspicion:
                 "p-3": (
                     SawPlayerObservation(
                         type="saw_player", subject="p-1", room="MEDBAY", tick=180
+                    ),
+                ),
+            },
+        )
+        result, client = _run_meeting(responder)
+
+        assert len(result.contradictions) == 2
+        suspicion = _vote_prompt_suspicion(client, voter="p-4", of="p-1")
+        assert suspicion == pytest.approx(0.58)
+        assert suspicion < 0.6
+
+    def test_second_signal_from_an_independent_claim_corroborates(self) -> None:
+        # Corroboration still converts under the Task 10.1 dedup when the
+        # second weak signal rides a DIFFERENT claim: the reporter's two
+        # separate alibi claims each draw a contradicting sighting ->
+        # two lift groups -> 0.5 + 0.08 + 0.08 = 0.66 >= 0.60.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-2": "p-3", "p-3": None},
+            claims_by={
+                "p-1": (
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-1",
+                        from_tick=100,
+                        to_tick=200,
+                        room="CAFETERIA",
+                    ),
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-1",
+                        from_tick=300,
+                        to_tick=400,
+                        room="STORAGE",
+                    ),
+                ),
+            },
+            observations={
+                "p-2": (
+                    SawPlayerObservation(
+                        type="saw_player",
+                        subject="p-1",
+                        room="EAST_HALL",
+                        tick=150,
+                    ),
+                ),
+                "p-3": (
+                    SawPlayerObservation(
+                        type="saw_player", subject="p-1", room="MEDBAY", tick=350
                     ),
                 ),
             },
@@ -2771,14 +2827,29 @@ def _result_with(
     *,
     turns: tuple[MeetingTurn, ...] = (),
     contradictions: tuple[ContradictionRef, ...] = (),
+    voters: tuple[str, ...] = (),
 ) -> MeetingResult:
+    # ``voters`` materialises one default-SKIP ballot per id: in a
+    # production result every living participant casts exactly one ballot,
+    # and ``extract_belief_evidence`` reads the voter set as the meeting's
+    # living roster for its detector-derived corroborations (Task 10.1).
     return MeetingResult(
         meeting_id="m-1",
         triggered_by="p-1",
         trigger_tick=410,
         outcome="SKIPPED",
         ejected_player_id=None,
-        ballots=(),
+        ballots=tuple(
+            VoteBallot(
+                voter=voter,
+                target="SKIP",
+                confidence=0.0,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text="skip",
+            )
+            for voter in voters
+        ),
         contradictions=contradictions,
         transcript=MeetingTranscript(turns=turns),
     )
@@ -2956,3 +3027,290 @@ class TestExtractBeliefEvidence:
         )
 
         assert extract_belief_evidence(result).accused == ()
+
+
+# --- Task 10.1: detector-derived corroboration feeds the Rule-3 fold --------
+
+
+class TestDetectorCorroborationFold:
+    """The corroboration fold ACCEPTS a detector-derived pair (Task 10.1).
+
+    Audit gp-2 C-C-1: the old detector flagged containment-consistent
+    (alibi, sighting) pairs as contradictions; canonicalisation now reads
+    them as CONSISTENT and they must flow into the §6.3 Rule-3 channel --
+    a containment pair that silently no-op'd would leave half the
+    canonicalisation inert (the audit proved Rule 3 never fired, so this
+    is the second never-exercised ingestion path). Magnitude is the
+    Rule-3 delta, applied once per subject per meeting by the fold's
+    set-dedup.
+    """
+
+    def _containment_result(self) -> MeetingResult:
+        # p-1's self-alibi (MEDBAY t100-200) confirmed by p-2's sighting
+        # of p-1 in MEDBAY at t150. NO CorroborationClaim anywhere: the
+        # evidence is detector-derived only.
+        turns = (
+            MeetingTurn(
+                turn_id="m-1:turn-0",
+                turn_index=0,
+                speaker="p-1",
+                turn_kind="opening",
+                reply_to=None,
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-1",
+                        from_tick=100,
+                        to_tick=200,
+                        room="MEDBAY",
+                    ),
+                ),
+                free_text="self alibi",
+            ),
+            MeetingTurn(
+                turn_id="m-1:turn-1",
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="reply",
+                reply_to=None,
+                observations=(
+                    SawPlayerObservation(
+                        type="saw_player", tick=150, subject="p-1", room="MEDBAY"
+                    ),
+                ),
+                free_text="confirming sighting",
+            ),
+        )
+        return _result_with(turns=turns, voters=("p-1", "p-2", "p-3", "p-4"))
+
+    def test_containment_pair_lands_in_corroborated(self) -> None:
+        evidence = extract_belief_evidence(self._containment_result())
+
+        assert evidence.corroborated == ("p-1",)
+        assert evidence.accused == ()
+        assert evidence.contradicted == ()
+
+    def test_hallucinated_subject_cannot_corroborate_itself(self) -> None:
+        # The detector-derived path is roster-filtered to the recorded
+        # ballot voters, mirroring the recording-time detection call: a
+        # hallucinated non-player subject (audit C-8) whose alibi and
+        # sighting happen to agree must not materialise a phantom belief
+        # row through the fold.
+        turns = (
+            MeetingTurn(
+                turn_id="m-1:turn-0",
+                turn_index=0,
+                speaker="p-1",
+                turn_kind="opening",
+                reply_to=None,
+                claims=(
+                    AlibiClaim(
+                        type="alibi",
+                        subject="p-99",
+                        from_tick=100,
+                        to_tick=200,
+                        room="MEDBAY",
+                    ),
+                ),
+                free_text="alibi for a hallucinated id",
+            ),
+            MeetingTurn(
+                turn_id="m-1:turn-1",
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="reply",
+                reply_to=None,
+                observations=(
+                    SawPlayerObservation(
+                        type="saw_player", tick=150, subject="p-99", room="MEDBAY"
+                    ),
+                ),
+                free_text="matching hallucinated sighting",
+            ),
+        )
+        result = _result_with(turns=turns, voters=("p-1", "p-2", "p-3", "p-4"))
+
+        assert extract_belief_evidence(result).corroborated == ()
+
+    def test_containment_pair_lowers_suspicion_through_the_fold(self) -> None:
+        # Integration pin: the detector-derived subject moves the stored
+        # belief by exactly the Rule-3 delta through the production fold
+        # -- the path is alive end-to-end, not just extracted.
+        evidence = extract_belief_evidence(self._containment_result())
+        beliefs = BeliefState()
+        beliefs.seed_player("p-1", suspicion=0.55, trust=0.5)
+
+        updated = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="p-4",
+            accused=evidence.accused,
+            corroborated=evidence.corroborated,
+            contradicted=evidence.contradicted,
+        )
+
+        assert updated.view("p-1").suspicion == pytest.approx(
+            0.55 - CORROBORATION_SUSPICION_DELTA
+        )
+
+    def test_production_meeting_detector_corroboration_round_trips(self) -> None:
+        # The same pair through a manager-RUN meeting (not a hand-built
+        # result): p-1 self-alibis in the opening; the accused p-2's
+        # reply carries the sighting that confirms it.
+        result, _ = _run_meeting(
+            _make_responder(
+                accusations={"p-1": "p-2", "p-2": None},
+                claims_by={
+                    "p-1": (
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-1",
+                            from_tick=100,
+                            to_tick=200,
+                            room="MEDBAY",
+                        ),
+                    ),
+                },
+                observations={
+                    "p-2": (
+                        SawPlayerObservation(
+                            type="saw_player",
+                            tick=150,
+                            subject="p-1",
+                            room="MEDBAY",
+                        ),
+                    ),
+                },
+            )
+        )
+
+        assert detect_corroborations(result.transcript) != ()
+        assert "p-1" in extract_belief_evidence(result).corroborated
+
+    def test_claim_stated_corroboration_still_folds(self) -> None:
+        # The pre-10.1 ingestion path is untouched: a CorroborationClaim
+        # without any containment pair still lands.
+        result = _result_with(
+            turns=(_evidence_turn(turn_index=0, speaker="p-2", corroborates=("p-4",)),)
+        )
+
+        assert extract_belief_evidence(result).corroborated == ("p-4",)
+
+
+# --- Task 10.1 acceptance pins against the committed replay bytes -----------
+#
+# Offline reconstructions per the task contract (the committed bytes do not
+# change until 10.5): the RECORDED contradiction flags from the audited
+# meetings are fed through the repaired vote-time lift
+# (`_suspicion_graph_with_contradictions`), and the result is compared
+# against the §4.6 gate and the values the old lift actually rendered into
+# the committed vote prompts. Audit anchor:
+# audit-2026-06-10-1820-gameplay-data.md gp-2 (C-C-3).
+
+import re  # noqa: E402
+
+from orchestrator.replay import (  # noqa: E402
+    MeetingReplayEntry,
+    read_all_entries,
+)
+
+_COMMITTED_9P2I_DIR = (
+    Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
+)
+
+# The committed vote_ballot.j2 renders the voter's suspicion graph as
+# "- `p-N`: suspicion X, trust Y" rows under this header (the same parse the
+# audit extractor used to read the decomposition's rendered values).
+_SUSPICION_GRAPH_HEADER = "## Your suspicion graph"
+_SUSPICION_GRAPH_ROW_RE = re.compile(
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
+    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+)
+
+
+def _committed_meeting(seed: int, meeting_index: int) -> MeetingReplayEntry:
+    path = _COMMITTED_9P2I_DIR / f"replay-seed-{seed}.jsonl"
+    meetings = [
+        entry
+        for entry in read_all_entries(path)
+        if isinstance(entry, MeetingReplayEntry)
+    ]
+    return meetings[meeting_index]
+
+
+def _recorded_rendered_suspicions(entry: MeetingReplayEntry, *, of: str) -> list[float]:
+    """Every suspicion value the committed vote prompts rendered for ``of``."""
+
+    values: list[float] = []
+    for call in entry.llm_calls:
+        if _SUSPICION_GRAPH_HEADER not in call.prompt:
+            continue
+        block = call.prompt.split(_SUSPICION_GRAPH_HEADER, 1)[1].split("## ", 1)[0]
+        values.extend(
+            float(match.group("sus"))
+            for match in _SUSPICION_GRAPH_ROW_RE.finditer(block)
+            if match.group("pid") == of
+        )
+    return values
+
+
+class TestCommittedBytesLiftPins:
+    """The repaired lift on the RECORDED flags (gp-2 C-C-3 acceptance)."""
+
+    def test_seed9_m1_renders_p8_at_058_not_10(self) -> None:
+        # The archetype railroad: 19 recorded near-duplicate weak flags
+        # (one truthful alibi x repeated sightings) summed to +1.52 and
+        # rendered crew p-8 at a clamped 1.0 in every committed vote
+        # prompt -- ejected 5-0. Under the repaired lift the 19 flags
+        # share one (subject, alibi-claim) group: ONE weak delta, 0.58,
+        # below the 0.60 gate. Voter priors on p-8 were the 0.5 default
+        # (no voter held a p-8 belief row at m1 -- verified against the
+        # replay-loader memory reconstruction; m0 carried no p-8
+        # evidence), so the empty incoming graph is the faithful prior.
+        entry = _committed_meeting(9, 1)
+        assert len(entry.contradictions) == 19
+        assert max(_recorded_rendered_suspicions(entry, of="p-8")) == 1.0
+
+        for voter in sorted(_living_voters(entry) - {"p-8"}):
+            graph = _suspicion_graph_with_contradictions(
+                voter_id=voter,
+                suspicion_graph=(),
+                contradictions=entry.contradictions,
+            )
+            by_id = {row.player_id: row.suspicion for row in graph}
+            assert by_id["p-8"] == pytest.approx(0.58)
+            assert by_id["p-8"] < 0.6
+
+    def test_seed26_m1_innocent_p6_no_longer_outscores_impostor_p3(self) -> None:
+        # The defense-echo inversion: 4 weak + 4 STRONG recorded flags on
+        # innocent p-6 (p-2's echo of p-6's own alibi) rendered p-6 at a
+        # clamped 1.0 while the true impostor p-3 peaked at 0.9 -- the
+        # crew ejected the wrong player on flag arithmetic alone. Under
+        # the repaired lift p-6's flags collapse to two claim groups
+        # (weak 0.08 + strong 0.3) capped at one strong flag's worth:
+        # 0.5 + 0.3 = 0.8, strictly below p-3's recorded 0.9 ceiling.
+        # p-6's voters held no prior p-6 row (loader-reconstruction
+        # verified), so the default prior is faithful; p-3 carries no
+        # flag, so their recorded render is untouched by the lift repair.
+        entry = _committed_meeting(26, 1)
+        assert len(entry.contradictions) == 8
+        assert max(_recorded_rendered_suspicions(entry, of="p-6")) == 1.0
+        recorded_p3_max = max(_recorded_rendered_suspicions(entry, of="p-3"))
+        assert recorded_p3_max == 0.9
+
+        repaired_p6 = [
+            row.suspicion
+            for voter in sorted(_living_voters(entry) - {"p-6"})
+            for row in _suspicion_graph_with_contradictions(
+                voter_id=voter,
+                suspicion_graph=(),
+                contradictions=entry.contradictions,
+            )
+            if row.player_id == "p-6"
+        ]
+        assert repaired_p6
+        assert max(repaired_p6) == pytest.approx(0.8)
+        assert max(repaired_p6) < recorded_p3_max
+
+
+def _living_voters(entry: MeetingReplayEntry) -> set[str]:
+    return {ballot.voter for ballot in entry.ballots}
