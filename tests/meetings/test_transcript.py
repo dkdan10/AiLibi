@@ -1534,73 +1534,57 @@ def _classify_removed_flag(
 
 
 class TestCommittedBytesArtifactCollapse:
-    """The audited artifact classes no longer reproduce (gp-2 C-C-1/C-C-2).
+    """The committed bytes are detector-exact and artifact-free (gp-2).
 
-    The audit classified 77/83 recorded flags as artifacts; the dominant
-    removable classes -- 34 compound-label containments, 11 placeholders
-    (plus the echo duplicates behind the defense-echo shape) -- must not
-    re-derive under the repaired detector, while everything the new
-    detector still emits must be a flag the old detector also emitted
-    (the repair only removes and reclassifies; it invents no pairing).
+    At 10.1 merge time this class proved the collapse against the e750b40
+    era bytes (83 recorded flags, 53 artifact-classified removals under
+    re-derivation — preserved in git history as the merge gate). The Task
+    10.5 set was RECORDED under the repaired detector, so the live form of
+    the same pin is exactness: re-deriving every committed transcript must
+    reproduce the recorded flags byte-for-byte — zero removals, zero new
+    pairings. A non-empty removal set here means the detector drifted from
+    the committed bytes without a re-record; a removal that
+    artifact-classifies means an artifact got RE-recorded.
     """
 
-    def test_rederived_flags_are_a_subset_and_removals_are_all_artifacts(
+    def test_rederivation_is_exact_and_nothing_artifact_classifies(
         self,
     ) -> None:
         recorded_total = 0
-        removed_by_class = {"placeholder": 0, "containment": 0, "echo": 0}
-        removed_total = 0
         for seed in range(50):
             for entry in _committed_meetings(seed):
                 recorded_by_id = {
                     flag.contradiction_id: flag for flag in entry.contradictions
                 }
                 recorded_total += len(recorded_by_id)
-                rederived_ids = {flag.contradiction_id for flag in _rederive(entry)}
-                # No new pairings on the committed bytes: every re-derived
-                # flag is one the old detector also emitted.
-                assert rederived_ids <= set(recorded_by_id)
+                rederived_by_id = {
+                    flag.contradiction_id: flag for flag in _rederive(entry)
+                }
+                # Exactness, both directions: the recording-time detector IS
+                # the current detector, so the committed flags re-derive
+                # identically (ids and full payloads).
+                assert set(rederived_by_id) == set(recorded_by_id)
                 for flag_id, flag in recorded_by_id.items():
+                    assert rederived_by_id[flag_id] == flag
+                    # And no recorded flag is an artifact-class pairing: a
+                    # placeholder or containment flag surviving into the
+                    # bytes would be the 10.1 repair regressing at the
+                    # recording seam.
                     classes = _classify_removed_flag(entry, flag)
-                    if "placeholder" in classes or "containment" in classes:
-                        # The DoD pin: a containment- or placeholder-class
-                        # recorded flag cannot reproduce under the new
-                        # detector.
-                        assert flag_id not in rederived_ids
-                    if flag_id in rederived_ids:
-                        continue
-                    # Nothing genuine was removed: every removal is
-                    # explained by an audited artifact class.
-                    assert classes, (
-                        f"non-artifact flag removed: {flag.contradiction_id}"
-                    )
-                    removed_total += 1
-                    for cls in classes:
-                        removed_by_class[cls] += 1
+                    assert "placeholder" not in classes, flag.contradiction_id
+                    assert "containment" not in classes, flag.contradiction_id
 
-        # The committed set carries 83 flags (audit C-1) and the repaired
-        # detector removes 53 of them, every one artifact-classified. The
-        # audit's facts (34 compound-label containments + 11 placeholders
-        # = 45) sit INSIDE these removals: the production canonicaliser
-        # also case-folds ('CAFEteria') and splits the richer joiners
-        # ("|", "-", "_AND_", "_TRANSITION"), so flags the audit binned
-        # as boundary/non-canonical mismatches resolve to containment
-        # here too, and the 9 defense-echo rides (audit C-2's seed 26/28
-        # shapes) dedup away -- 4 of them doubly classified as
-        # placeholder+echo, hence 36 + 12 + 9 > 53.
-        assert recorded_total == 83
-        assert removed_total == 53
-        assert removed_by_class["containment"] == 36
-        assert removed_by_class["placeholder"] == 12
-        assert removed_by_class["echo"] == 9
+        # The honest-baseline set carries 87 recorded flags (vs the era's
+        # 83 over 76 meetings — 78 meetings here; composition shifted
+        # 74-weak/9-strong -> 84-weak/3-strong).
+        assert recorded_total == 87
 
     def test_surviving_endpoint_flags_are_weak_banded(self) -> None:
-        # The audit's 31 endpoint-fuzz flags (29 CANON_BOUNDARY + 2
-        # CONFLICT_BOUNDARY_TICK_ONLY) collapse: the compound/case-variant
-        # members resolve as containment and disappear, and every
-        # SURVIVING edge-tick flag -- 24 across the set -- now carries
-        # the weak marker (weak-banded by preference over exclusion: an
-        # endpoint mismatch can still convert under corroboration).
+        # The endpoint class survives ONLY weak-banded (the 10.1 decision:
+        # weak-banded by preference over exclusion — an endpoint mismatch
+        # can still convert under corroboration). On the honest-baseline
+        # bytes 57 recorded flags carry an endpoint reason; every one
+        # carries the weak marker, none full weight.
         endpoint_weak = 0
         for seed in range(50):
             for entry in _committed_meetings(seed):
@@ -1611,7 +1595,7 @@ class TestCommittedBytesArtifactCollapse:
                     ):
                         assert is_weak_contradiction(flag)
                         endpoint_weak += 1
-        assert endpoint_weak == 24
+        assert endpoint_weak == 57
 
     def test_every_surviving_flag_remains_deterministic(self) -> None:
         # Byte-identical re-derivation: running the pure detector twice
@@ -1627,89 +1611,98 @@ class TestCommittedBytesArtifactCollapse:
 
 
 class TestCommittedBytesSeedPins:
-    """The task contract's named acceptance seeds, pinned individually."""
+    """Named acceptance pins, re-pointed at the Task 10.5 honest baseline.
 
-    def test_seed9_m1_fountain_no_longer_reproduces(self) -> None:
-        # 19 recorded flags from ONE truthful compound alibi
-        # ("LABS/MEDBAY" t2-7) x repeated containment-consistent
-        # sightings; the repaired detector emits none of them, and the
-        # third-party sightings now corroborate p-8 instead.
-        entry = _committed_meetings(9)[1]
-        assert len(entry.contradictions) == 19
+    The 10.1-era pins named the e750b40 defect coordinates (the seed-9
+    fountain, the seed-26 placeholder/echo stack, the seed-13 adversarial
+    counter-alibi, the seed-11/17 self-pairs); those inputs no longer exist
+    in the tree — the proofs live in git history at the 10.1 merge. The
+    live successors pin (a) the artifact INPUT classes still occurring in
+    the new bytes minting nothing, (b) every recorded conflict flag sitting
+    in the weak band, and (c) the genuine-class supply at its recorded
+    coordinates.
+    """
 
-        assert _rederive(entry) == ()
-        corroborated = {
-            corroboration.subject
-            for corroboration in detect_corroborations(
-                entry.transcript, roster=_living_roster(entry)
-            )
-        }
-        assert "p-8" in corroborated
+    def test_artifact_input_classes_still_occur_and_mint_nothing(self) -> None:
+        # The 9B still emits compound-label and placeholder rooms (13 and 5
+        # claim rooms respectively on this set) — the artifact INPUTS the
+        # era's 34 containment + 11 placeholder flags rode. Under the
+        # repaired detector a placeholder side mints no flag at all and a
+        # compound side pairs only through canonical-set logic, so: no
+        # recorded flag resolves to a placeholder or containment pairing
+        # (exactness test above), and here the inputs themselves are
+        # confirmed present — this census failing on a future re-record
+        # means the model stopped emitting the class, not that the repair
+        # regressed.
+        compound_claim_rooms = 0
+        placeholder_claim_rooms = 0
+        for seed in range(50):
+            for entry in _committed_meetings(seed):
+                for turn in entry.transcript.turns:
+                    for claim in turn.claims:
+                        room = getattr(claim, "room", None)
+                        if not room:
+                            continue
+                        canon = canonical_rooms(room)
+                        if len(canon) > 1:
+                            compound_claim_rooms += 1
+                        elif not canon:
+                            placeholder_claim_rooms += 1
+        assert compound_claim_rooms == 13
+        assert placeholder_claim_rooms == 5
 
-    def test_seed26_m1_placeholder_and_echo_flags_no_longer_reproduce(self) -> None:
-        # 8 recorded flags on innocent p-6: 4 weak off p-6's own
-        # placeholder alibi ("VARIABLE") + 4 STRONG off p-2's defense
-        # echo of that same alibi. Placeholder canonicalisation removes
-        # the pairing entirely (the echo dedup would otherwise fold the
-        # strong four into the original's weak classification).
-        entry = _committed_meetings(26)[1]
-        assert len(entry.contradictions) == 8
-        assert all("p-6" in flag.subjects for flag in entry.contradictions)
-
-        assert _rederive(entry) == ()
-
-    def test_seed13_m2_adversarial_counter_alibi_no_longer_reproduces(self) -> None:
-        # The accused impostor's counter-alibi about their accuser
-        # overlapped the accuser's "VARIOUS" self-alibi: the placeholder
-        # side mints no conflict under the repaired detector.
-        entry = _committed_meetings(13)[2]
-        assert len(entry.contradictions) == 1
-        assert entry.contradictions[0].kind == "alibi_conflict"
-
-        assert _rederive(entry) == ()
-
-    @pytest.mark.parametrize("seed", [11, 17])
-    def test_self_pair_conflicts_land_in_the_weak_band(self, seed: int) -> None:
-        # Seeds 11 m2 / 17 m0 (audit C-2): the self-stated movement-pair
-        # conflicts that ejected their own speakers re-derive as WEAK --
-        # every conflict flag in these meetings carries the marker, and
-        # the self-pair itself names the reason.
-        meeting_index = {11: 2, 17: 0}[seed]
-        entry = _committed_meetings(seed)[meeting_index]
-        rederived = _rederive(entry)
-
-        conflicts = [flag for flag in rederived if flag.kind == "alibi_conflict"]
-        assert conflicts
-        assert all(is_weak_contradiction(flag) for flag in conflicts)
-        assert any(WEAK_REASON_SELF_PAIR in flag.description for flag in conflicts)
+    def test_recorded_conflict_flags_sit_in_the_weak_band(self) -> None:
+        # The honest baseline records exactly two alibi_conflict flags
+        # (seed 33 m1, seed 43 m0) — both weak-banded, the 10.1 conflict
+        # classification holding at the recording seam. No self-pair
+        # instance exists on this set (the era's seed-11/17 shapes were
+        # model behavior); the self-pair classification itself stays
+        # covered by the synthetic weak-band tests above.
+        conflict_sites: list[tuple[int, int]] = []
+        for seed in range(50):
+            for index, entry in enumerate(_committed_meetings(seed)):
+                for flag in entry.contradictions:
+                    if flag.kind != "alibi_conflict":
+                        continue
+                    assert is_weak_contradiction(flag), flag.contradiction_id
+                    conflict_sites.append((seed, index))
+        assert conflict_sites == [(33, 1), (43, 0)]
 
     @pytest.mark.parametrize(
-        ("seed", "subject", "interior_tick"),
-        [(3, "p-6", 10), (30, "p-3", 7), (42, "p-7", 9), (45, "p-9", 4)],
+        ("seed", "subject", "interior_tick", "expect_weak"),
+        [
+            (1, "p-6", 2, True),
+            (1, "p-7", 6, True),
+            (9, "p-7", 1, True),
+            (17, "p-2", 6, True),
+            (24, "p-4", 8, False),
+            (38, "p-3", 6, True),
+        ],
     )
     def test_genuine_canon_interior_impostor_flag_survives(
-        self, seed: int, subject: str, interior_tick: int
+        self, seed: int, subject: str, interior_tick: int, expect_weak: bool
     ) -> None:
-        # THE survival pin (gp-2 acceptance: "the 4 genuine
-        # CANON_INTERIOR impostor flags survive untouched"): the only
-        # genuinely diagnostic flags the audited set produced -- an
-        # impostor's own alibi contradicted by an interior-tick sighting
-        # in a different canonical room -- re-derive BYTE-IDENTICALLY
-        # (same id, same description, same weak self-stated
-        # classification; recall past weak is the explicit D-D-3
-        # follow-on, not this task). Killing artifacts must not kill
-        # detection. ``interior_tick`` selects the audited interior
-        # sighting -- seed 30 also carries an edge-tick flag on the same
-        # subject, which is endpoint-banded, not this pin.
+        # THE survival pin, re-pointed at the honest baseline's genuine
+        # supply (10.4's definition: alibi_vs_sighting without the endpoint
+        # band, subject a true impostor — 7 supplied across seeds
+        # 1/9/17/24/38; one representative interior-tick flag per supplied
+        # (meeting, subject) pair is pinned here). Each re-derives
+        # byte-identically from the recorded transcript. Most are weak
+        # self-stated by construction (a fabricated alibi is self-stated);
+        # seed 24's is the set's one STRONG genuine flag — third-party
+        # adversarial-capped pairings can exceed the weak band — and it is
+        # the flag behind the set's single genuine-class CONVERSION (m0
+        # ejected p-4).
         entry = _committed_meetings(seed)[0]
         recorded = [
             flag
             for flag in entry.contradictions
             if subject in flag.subjects
+            and flag.kind == "alibi_vs_sighting"
             and f"at tick {interior_tick}." in flag.description
         ]
         assert len(recorded) == 1
         rederived = _rederive(entry)
 
         assert recorded[0] in rederived
-        assert is_weak_contradiction(recorded[0])
+        assert is_weak_contradiction(recorded[0]) == expect_weak

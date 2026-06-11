@@ -1273,23 +1273,21 @@ _COMMITTED_9P2I_REPORT = (
 def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     """The shipped 9p/2i report carries the recorded gp-2 values exactly.
 
-    These pin the Wave-1 baseline (Task 9.11 re-record, 9p2i @ e750b40,
-    regenerated offline from the committed bytes) and are NOT immutable — the
-    next re-record regenerates them, the standard re-record pattern.
-    ejection_accuracy 10/21 = 0.4762, impostor-accused conversion 10/55 =
-    0.18, missed_skip 31 = 27 impostor-voter (voluntary in-character declines;
-    0 §7.12-coerced) + 4 invalid-target + 0 genuine.
+    These pin the Wave-0 HONEST baseline (Task 10.5 combined re-record — the
+    first set recorded with the 10.1-10.4 repairs in) and are NOT immutable —
+    the next re-record regenerates them, the standard re-record pattern.
+    ejection_accuracy 5/12 = 0.4167, impostor-accused conversion 5/54 =
+    0.0926, missed_skip 28 = 28 impostor-voter (in-character declines, 1 of
+    them §7.12-coerced) + 0 invalid-target + 0 genuine. Raw comparisons to
+    the 0.629 (artifact-era) and 0.476 (mixed-era) accuracy numbers are
+    provenance-noted history, not gates: those eras' conversions rode the
+    repaired artifact classes (the audit's railroads), so the gate frame is
+    genuine_class_conversion (tests/eval/test_gate_metrics.py pins).
 
-    The sentinel reads 0.9, not its usual structural 1.0: one of the ten
-    impostor ejections (seed 6, meeting-2) carries neither a naming
-    contradiction nor a kill-witness chain in its transcript — it converted on
-    persisted §6.3 observation-rule suspicion (the Task 9.8 cross-meeting
-    belief path), which ``_has_real_evidence`` deliberately does not consult
-    (free text, accusations, ballots, and private belief state are out of
-    scope by design). That is the sentinel doing its job — flagging an
-    ejection without transcript-expressible evidence — not a detector or
-    recording bug; the mechanism was verified from the recorded vote prompts
-    (rendered §4.6 verdict over persisted suspicion, byte-identical replay).
+    The sentinel reads its structural 1.0 again (the 9.11-era 0.9 was one
+    ejection converted on persisted §6.3 observation-rule suspicion, which
+    ``_has_real_evidence`` deliberately does not consult; no such case in
+    this set): all 5 impostor ejections are transcript-evidence-backed.
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -1297,31 +1295,31 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     )
     conversion = report.conversion
 
-    assert conversion.total_ejections == 21
-    assert conversion.impostor_ejections == 10
-    assert conversion.ejection_accuracy == pytest.approx(10 / 21)
-    assert conversion.impostor_accused_meetings == 55
-    assert conversion.impostor_accused_conversions == 10
-    assert conversion.impostor_accused_conversion_rate == pytest.approx(10 / 55)
-    assert conversion.skip_ballots == 325
-    assert conversion.correct_skip_ballots == 294
-    assert conversion.missed_skip_ballots == 31
+    assert conversion.total_ejections == 12
+    assert conversion.impostor_ejections == 5
+    assert conversion.ejection_accuracy == pytest.approx(5 / 12)
+    assert conversion.impostor_accused_meetings == 54
+    assert conversion.impostor_accused_conversions == 5
+    assert conversion.impostor_accused_conversion_rate == pytest.approx(5 / 54)
+    assert conversion.skip_ballots == 384
+    assert conversion.correct_skip_ballots == 356
+    assert conversion.missed_skip_ballots == 28
     assert conversion.unclassified_skip_ballots == 0
-    assert conversion.missed_skip_impostor_voters == 27
-    assert conversion.missed_skip_teammate_coerced == 0
-    assert conversion.missed_skip_invalid_target == 4
+    assert conversion.missed_skip_impostor_voters == 28
+    assert conversion.missed_skip_teammate_coerced == 1
+    assert conversion.missed_skip_invalid_target == 0
     assert conversion.threshold_inversions == 0
 
-    # The sentinel reads the recorded truth (9 of 10 impostor ejections are
-    # transcript-backed; see docstring for the tenth).
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(0.9)
-    assert report.vote_correctness.evidence_backed_impostor_ejections == 9
-    assert report.vote_correctness.impostor_ejections == 10
+    # The sentinel reads the recorded truth (all 5 impostor ejections are
+    # transcript-backed; see docstring).
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(1.0)
+    assert report.vote_correctness.evidence_backed_impostor_ejections == 5
+    assert report.vote_correctness.impostor_ejections == 5
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
     assert conversion.ejection_accuracy == report.vote_correctness.ejection_accuracy
 
     # JSON-level guard: the committed file itself serves both leads (a reader
     # pulling the raw report sees the published metric surface, gp-2's ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.4762, abs=1e-4)
-    assert raw["conversion"]["missed_skip_ballots"] == 31
+    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.4167, abs=1e-4)
+    assert raw["conversion"]["missed_skip_ballots"] == 28

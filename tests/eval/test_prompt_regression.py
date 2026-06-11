@@ -10,8 +10,8 @@ This task IS the Phase 5 close gate, so these tests do two things:
   :func:`test_delta_exceeds_manual_real_provider_tolerance`, not CI's gate.)
 
 * **Demonstrate the prompt-change -> metric-diff loop.** Two fixture sets —
-  ``v_a`` (recorded 9p/2i canonical-set replays, seeds 2/4/6) and a variant
-  ``v_b`` whose ``impostor_report`` template is bumped one step (``v3 -> v4``)
+  ``v_a`` (recorded 9p/2i canonical-set replays, seeds 8/13/30) and a variant
+  ``v_b`` whose ``impostor_report`` template is bumped one step (``v4 -> v5``)
   and whose recorded meeting gains an ``alibi_conflict`` naming the impostor —
   produce a measurable, attributable delta in the alibi-fabrication survival
   rate. The suite detects the delta and attributes it to the one changed
@@ -101,9 +101,9 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
 
     # The metric moved, over a real (non-vacuous) impostor-alibi denominator:
     # 8 impostor alibis across the three fixture games; none is caught by the
-    # live detector in v_a (the Task 9.11 re-record's fixture games carry no
-    # alibi contradictions), and v_b's hand-authored contradiction catches one
-    # (8/8 surviving -> 7/8).
+    # live detector in v_a (no Task 10.5 re-record fixture meeting carries an
+    # alibi contradiction naming that meeting's impostor-alibi subject), and
+    # v_b's hand-authored contradiction catches one (8/8 surviving -> 7/8).
     assert summary_a.metrics.total_impostor_alibis == 8
     assert summary_b.metrics.total_impostor_alibis == 8
     assert summary_a.metrics.alibi_survival_rate == 1.0
@@ -136,15 +136,15 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
     # The W0.3 meeting-rate scalars are orthogonal to the prompt-version change
     # (v_b only flips one alibi contradiction; it touches neither the meeting
     # count nor the trigger classification), so they are identical across both
-    # fixtures. All three fixture games (seeds 2/4/6) reach at least one
-    # body-report meeting — 8 resolved meetings in total — so the rate is 1.0
+    # fixtures. All three fixture games (seeds 8/13/30) reach at least one
+    # body-report meeting — 10 resolved meetings in total — so the rate is 1.0
     # and emergency is 0 (no emergency meetings observed in the canonical set).
     assert summary_a.metrics.meeting_rate == summary_b.metrics.meeting_rate == 1.0
-    assert summary_a.metrics.meetings_total == summary_b.metrics.meetings_total == 8
+    assert summary_a.metrics.meetings_total == summary_b.metrics.meetings_total == 10
     assert (
         summary_a.metrics.body_report_meetings
         == summary_b.metrics.body_report_meetings
-        == 8
+        == 10
     )
     assert (
         summary_a.metrics.emergency_meetings
@@ -163,40 +163,39 @@ def test_close_gate_prompt_change_moves_metric_and_attributes_to_template() -> N
         if versions_a[template] != versions_b[template]
     }
     assert changed == {"impostor_report"}
-    assert versions_a["impostor_report"] == "impostor_report_v3"
-    assert versions_b["impostor_report"] == "impostor_report_v4"
+    assert versions_a["impostor_report"] == "impostor_report_v4"
+    assert versions_b["impostor_report"] == "impostor_report_v5"
 
 
 def test_baseline_pins_the_task_9_6_conversion_leads() -> None:
     """The regression record carries the Wave-1 leads, not just the sentinel.
 
     Task 9.6 (audit gp-2): ``vote_correctness_rate`` is a bug-sentinel — NOT a
-    KPI — so the baseline must ALSO pin the metrics a Wave-1 prompt A/B
+    KPI — so the baseline must ALSO pin the metrics a prompt A/B
     actually gates on: the precision lead (``ejection_accuracy``), the recall
     lead (``impostor_accused_conversion_rate``), and the missed-SKIP sentinel
-    count. Values are the recorded fixture set's (Task 9.11 re-record, seeds
-    2/4/6: 1 ejection, an impostor — ejection_accuracy 1.0; 1 of 8
-    impostor-accused meetings converted; 6 missed skips), exact-matched
-    against the committed baseline like every other scalar.
+    count. Values are the recorded fixture set's (Task 10.5 re-record, seeds
+    8/13/30: 2 ejections — seed 8 m2 ejects impostor p-5, seed 13 m3 wrongly
+    ejects crewmate p-9 — ejection_accuracy 0.5; 1 of 8 impostor-accused
+    meetings converted; 5 missed skips), exact-matched against the committed
+    baseline like every other scalar.
 
-    On this fixture set the sentinel reads 0.0, not its usual structural 1.0:
-    the trio's single impostor ejection (seed 6, meeting-2) carries neither a
-    naming contradiction nor a kill-witness chain in its transcript — it
-    converted on persisted §6.3 observation-rule suspicion (the Task 9.8
-    cross-meeting belief path), which ``_has_real_evidence`` deliberately does
-    not consult. That is exactly the sentinel doing its job (flagging
-    ejections without transcript-expressible evidence), and exactly why it is
-    not the lead.
+    On this fixture set the sentinel reads its structural 1.0: the trio's one
+    impostor ejection (seed 8, meeting-2) is transcript-evidence-backed, so
+    ``_has_real_evidence`` finds it. (The 9.11-era trio pinned 0.0 — an
+    ejection converted on persisted §6.3 observation-rule suspicion, which the
+    sentinel deliberately does not consult; this trio carries no such case.
+    Fixture truth, not a metric change.)
     """
 
     summary = _run_fixture("v_a")
 
-    # The sentinel reads the fixture truth (0.0 here, see docstring) — and is
-    # NOT the lead.
-    assert summary.metrics.vote_correctness_rate == 0.0
-    assert summary.metrics.ejection_accuracy == 1.0
+    # The sentinel reads the fixture truth (structural 1.0 here, see
+    # docstring) — and is NOT the lead.
+    assert summary.metrics.vote_correctness_rate == 1.0
+    assert summary.metrics.ejection_accuracy == 0.5
     assert summary.metrics.impostor_accused_conversion_rate == 0.125
-    assert summary.metrics.missed_skip_ballots == 6
+    assert summary.metrics.missed_skip_ballots == 5
     assert summary == _load_baseline()["v_a"]
 
 
