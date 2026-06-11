@@ -58,13 +58,32 @@ def _self_state_event(
     )
 
 
+def _saw_player_event(
+    *, tick: int, player_id: str, room: str = "CAFETERIA"
+) -> EpisodicEvent:
+    return EpisodicEvent(
+        tick=tick,
+        type="saw_player",
+        payload={"player_id": player_id, "room": room, "action": None},
+        provenance="observed",
+    )
+
+
 def _memory_for(
     *,
     agent_id: str = "p-1",
     role: str = "CREWMATE",
     fellow_impostor_ids: tuple[str, ...] | None = None,
+    roster_sightings: tuple[str, ...] = ("p-2", "p-3", "p-4", "p-5"),
 ) -> AgentMemory:
-    """An ``AgentMemory`` whose perception has run once (self_state recorded)."""
+    """An ``AgentMemory`` whose perception has run once (self_state recorded).
+
+    ``roster_sightings`` records one tick-0 ``saw_player`` row per id --
+    the production co-spawn shape (every player sees the full roster in
+    the spawn room on the first perception tick), which is what makes the
+    Task 10.2 fold filter (:func:`_known_roster_ids`) a no-op on
+    real-player evidence in these tests.
+    """
 
     memory = AgentMemory()
     memory.episodic.append(
@@ -75,6 +94,8 @@ def _memory_for(
             fellow_impostor_ids=fellow_impostor_ids,
         )
     )
+    for player_id in roster_sightings:
+        memory.episodic.append(_saw_player_event(tick=0, player_id=player_id))
     return memory
 
 
@@ -211,3 +232,117 @@ class TestAbsorbMeetingEvidenceGuards:
 
         with pytest.raises(ValueError, match="agent_id"):
             absorb_meeting_evidence(memory, accused=("p-5",))
+
+
+class TestRosterFilteredFoldAndRender:
+    """Task 10.2 (DESIGN.md §6.3, §6.6; audit gp-6 C-C-8, H-H-6).
+
+    The agents-side defense-in-depth behind the meeting-layer chokepoint:
+    the post-meeting fold and the §6.6 belief rows are filtered to the
+    agent's engine-witnessed player-id set, so a hallucinated structural
+    id (a game id, a turn id, a free-text phrase) neither materialises a
+    persistent belief row nor renders into any prompt surface -- even if
+    a future claim type slips one past the meeting layer.
+    """
+
+    def test_garbage_subjects_never_materialise_belief_rows(self) -> None:
+        # The audit's three garbage shapes, one per evidence channel: a
+        # game id accused, a turn id corroborated (seed 12 m0's shape),
+        # a free-text phrase contradicted. None may grow a row; the
+        # roster subjects folded alongside them land normally.
+        memory = _memory_for()
+
+        absorb_meeting_evidence(
+            memory,
+            accused=("headless-seed-9", "p-5"),
+            corroborated=("headless-seed-12:meeting-0:turn-0", "p-3"),
+            contradicted=("p-2 dead",),
+        )
+
+        assert set(memory.beliefs.known_players()) == {"p-3", "p-5"}
+        assert memory.beliefs.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert memory.beliefs.view("p-3").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION - CORROBORATION_SUSPICION_DELTA
+        )
+
+    def test_seed12_garbage_row_shape_cannot_reach_any_prompt_surface(self) -> None:
+        # The seed-12 m2 shape end-to-end: m0's fold corroborated the
+        # turn id "headless-seed-12:meeting-0:turn-0", materialising a
+        # 0.45 row that decayed to 0.46 and rendered inside m2's vote
+        # prompts (both the §6.6 beliefs block and the suspicion-graph
+        # block snapshot ``beliefs.known_players()``). Under the filter
+        # the row never exists, so NO snapshot of this store -- the §6.6
+        # render here, ``suspicion_graph_for_meeting`` in the
+        # orchestrator -- can carry it into a vote prompt.
+        memory = _memory_for()
+
+        absorb_meeting_evidence(
+            memory,
+            accused=(),
+            corroborated=("headless-seed-12:meeting-0:turn-0", "p-4"),
+        )
+        absorb_meeting_evidence(memory, accused=())  # the quiet decay round
+
+        assert "headless-seed-12:meeting-0:turn-0" not in memory.beliefs.known_players()
+        view = render_for_prompt(memory)
+        assert "headless-seed-12" not in view
+        assert "p-4: suspicion" in view
+
+    def test_render_filters_a_pre_polluted_store_to_roster_rows(self) -> None:
+        # The render-side backstop is independent of the fold: a garbage
+        # row already in the store (written before this task, or by a
+        # hypothetical future write path the fold filter does not cover)
+        # still cannot render -- roster rows are untouched.
+        memory = _memory_for()
+        memory.beliefs.adjust_suspicion(
+            "headless-seed-12:meeting-0:turn-0", delta=-0.04
+        )
+        memory.beliefs.adjust_suspicion("p-5", delta=0.2)
+
+        view = render_for_prompt(memory)
+
+        assert "headless-seed-12" not in view
+        assert "- p-5: suspicion 0.70" in view
+
+    def test_dead_roster_player_rows_still_render(self) -> None:
+        # "Roster ids" means the GAME roster, living and dead: the agent
+        # witnessed p-5 at spawn, so a belief row about the now-dead p-5
+        # (their body discovered later) keeps rendering -- liveness is
+        # the meeting chokepoint's rule, never the render filter's.
+        memory = _memory_for(roster_sightings=("p-5",))
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=7,
+                type="saw_body",
+                payload={"body_id": "body-p-5-7", "victim_id": "p-5", "room": "MEDBAY"},
+                provenance="observed",
+            )
+        )
+        memory.beliefs.adjust_suspicion("p-5", delta=0.2)
+
+        assert "- p-5: suspicion 0.70" in render_for_prompt(memory)
+
+    def test_render_without_self_channel_is_unfiltered(self) -> None:
+        # Pre-9.3 fixture shape (no ``agent_id`` on self_state): the
+        # roster is underivable, so the filter is inert and the render is
+        # byte-identical to today -- the same degradation contract as the
+        # 9.3 self-subject guard. Production is never in this state
+        # (perception records the id every tick).
+        memory = AgentMemory()
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=0,
+                type="self_state",
+                payload={
+                    "room": "CAFETERIA",
+                    "role": "CREWMATE",
+                    "pending_task_id": None,
+                },
+                provenance="observed",
+            )
+        )
+        memory.beliefs.adjust_suspicion("not-a-roster-id", delta=0.2)
+
+        assert "- not-a-roster-id: suspicion 0.70" in render_for_prompt(memory)

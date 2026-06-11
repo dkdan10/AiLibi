@@ -169,6 +169,30 @@ INVALID_ACCUSATION_TARGET_MARKER: Final[str] = (
     "[invalid accusation target {target!r} dropped] "
 )
 
+# Audit-trail markers prepended to a turn's ``free_text`` when an
+# ``AlibiClaim`` / ``CorroborationClaim`` carries a subject-bearing field
+# (``subject`` / ``supports``) that is not a living meeting participant
+# (Task 10.2; audit gp-6 C-C-8, H-H-6). The fb3cfa5 guard above covered
+# accusation targets only, so the 9B's hallucinated structural ids -- a
+# game id (``"headless-seed-9"``) as an alibi subject / corroboration
+# target, a turn id or a free-text phrase (``"p-2 dead"``) in
+# ``supports`` -- were still recorded: they flowed through the
+# post-meeting fold into persistent belief rows and rendered as §6.6
+# suspicion-graph rows inside vote prompts, and 15 corroborations
+# silently no-op'd on phantom subjects (the reason belief Rule 3 never
+# fired in any recorded set). The claims are dropped at the same
+# per-turn chokepoint, BEFORE the turn is recorded -- a garbage subject
+# never reaches contradiction detection, the belief fold, or any prompt
+# surface -- with the original preserved on ``free_text``. A valid
+# subject is a living meeting participant (a DEAD roster player drops
+# too, the same rule as accusations). Pin the literals exactly.
+INVALID_ALIBI_SUBJECT_MARKER: Final[str] = (
+    "[invalid alibi subject {subject!r} dropped] "
+)
+INVALID_CORROBORATION_SUPPORTS_MARKER: Final[str] = (
+    "[invalid corroboration supports {supports!r} dropped] "
+)
+
 # Matches the trailing ``:turn-{k}`` ordinal of a turn id. A
 # ``primary_reason_id`` whose ordinal exists in THIS meeting but whose
 # meeting prefix is wrong is a recoverable suffix form (the 7B model echoes
@@ -851,24 +875,23 @@ class MeetingManager:
             guarded_claims = _guard_teammate_turn_claims(
                 normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
             )
-            # Drop accusation claims naming a non-living target (qwen3.5:9b
-            # hallucinates ids like "imp-2"). The reactive chain already
-            # terminates on such a target, but recording it crashed the §11.3
-            # accusation metric on an unknown role; dropping it here mirrors the
-            # ballot-target normalization and keeps the recorded transcript
-            # resolvable. The original target is preserved in ``free_text``.
-            validated_claims, dropped_targets = _drop_invalid_accusation_targets(
+            # Drop claims whose subject-bearing field names no living
+            # participant: accusation targets (the fb3cfa5 guard) plus
+            # alibi subjects and corroboration supports (Task 10.2, audit
+            # gp-6). The 9B emits structural ids ("headless-seed-9", turn
+            # ids, "p-2 dead") that would otherwise record into the
+            # transcript, reach §5.4 detection and the post-meeting fold,
+            # and render as phantom §6.6 suspicion rows. Validation runs
+            # here -- BEFORE the turn is recorded -- so a dropped subject
+            # never mints a contradiction flag and never materialises a
+            # belief row; each dropped claim's original value is preserved
+            # on ``free_text`` via its per-field audit marker.
+            validated_claims, drop_markers = _drop_non_roster_claims(
                 guarded_claims, living_ids=living_ids
             )
             free_text = parsed.free_text
-            if dropped_targets:
-                free_text = (
-                    "".join(
-                        INVALID_ACCUSATION_TARGET_MARKER.format(target=bad)
-                        for bad in dropped_targets
-                    )
-                    + free_text
-                )
+            if drop_markers:
+                free_text = "".join(drop_markers) + free_text
             # This turn parsed, but an earlier retry attempt may have raised a
             # provider parse-failure the recording client never logged. Surface
             # that burned spend so it is recorded even though no default fired
@@ -1622,8 +1645,11 @@ class MeetingBeliefEvidence:
       :class:`~meetings.schemas.AccusationClaim` (teammate-guarded and
       living-validated by the per-turn chokepoint before recording).
     * ``corroborated`` -- subjects supported by at least one
-      :class:`~meetings.schemas.CorroborationClaim`, plus subjects of a
-      detector-derived containment-consistent (alibi, sighting) pair
+      :class:`~meetings.schemas.CorroborationClaim` (living-validated by
+      the per-turn chokepoint since Task 10.2 -- audit H-H-6's 15
+      phantom-subject no-ops can no longer reach the fold), plus
+      subjects of a detector-derived containment-consistent
+      (alibi, sighting) pair
       (:func:`meetings.transcript.detect_corroborations`, Task 10.1) --
       a third-party sighting confirming a stated alibi is
       corroboration-class evidence (§6.3 Rule 3). The detector-derived
@@ -1650,8 +1676,11 @@ def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
     opt-in accusation is as public as a chain one) plus the detected
     contradiction flags. Claims are read AS RECORDED, i.e. after the
     per-turn guards ran: a teammate accusation was already stripped
-    (Task 7.12) and a non-living target already dropped, so the evidence
-    can only name living meeting participants the chain itself honoured.
+    (Task 7.12) and a claim naming a non-living subject -- accusation
+    target, alibi subject, or corroboration supports -- already dropped
+    (:func:`_drop_non_roster_claims`; fb3cfa5 + Task 10.2), so the
+    evidence can only name living meeting participants the chain itself
+    honoured.
     """
 
     accused: set[PlayerId] = set()
@@ -1673,9 +1702,11 @@ def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
     # call received -- a hallucinated non-player subject (audit C-8) whose
     # alibi and sighting happen to agree can never corroborate itself into
     # a phantom belief row. A hand-built result with no ballots therefore
-    # derives nothing (an explicitly-empty roster indexes nothing); the
-    # claim-stated ``corroboration.supports`` field stays unvalidated here
-    # -- its roster chokepoint is Task 10.2's contract.
+    # derives nothing (an explicitly-empty roster indexes nothing). The
+    # claim-stated fields need no second filter here: the per-turn
+    # chokepoint (``_drop_non_roster_claims``, Task 10.2) drops any claim
+    # naming a non-living subject before the turn is recorded, and this
+    # function reads claims AS RECORDED.
     roster = frozenset(ballot.voter for ballot in result.ballots)
     corroborated.update(
         corroboration.subject
@@ -1710,40 +1741,65 @@ def _candidate_targets(
     return tuple(sorted(pid for pid in player_ids if pid != exclude))
 
 
-def _drop_invalid_accusation_targets(
+def _drop_non_roster_claims(
     claims: tuple[Claim, ...],
     *,
     living_ids: frozenset[PlayerId],
-) -> tuple[tuple[Claim, ...], tuple[PlayerId, ...]]:
-    """Drop accusation claims whose ``against`` is not a living participant.
+) -> tuple[tuple[Claim, ...], tuple[str, ...]]:
+    """Drop claims whose subject-bearing field names no living participant.
 
-    qwen3.5:9b occasionally hallucinates an accusation target id (e.g.
-    ``"imp-2"``) that names no living player. The reactive chain already
-    terminates on such a target (:func:`meetings.transcript.next_chain_step`
-    -> ``TERMINATION_TARGET_NOT_LIVING``), but the claim was still recorded
-    into the transcript, where the §11.3 accusation-calibration metric --
-    which resolves every accusation target's role -- failed loud on the
-    unknown id (``roles[target]`` ``KeyError``). Mirroring the ballot-target
-    normalization (:func:`_normalize_ballot_target` -> ``SKIP``), an
-    accusation the chain cannot pass to and the eval cannot resolve to a role
-    is dropped before it reaches the transcript, the chain, or the metrics. A
-    valid accusation target is a living meeting participant -- the same notion
-    of "valid target" the vote path enforces via ``candidate_targets``.
+    The single roster-validation chokepoint for every subject-bearing
+    claim field (Task 10.2; audit gp-6 C-C-8, H-H-6), extending the
+    fb3cfa5 accusation-target guard:
 
-    Returns ``(surviving_claims, dropped_targets)`` with both in claim order,
-    so the caller can record an :data:`INVALID_ACCUSATION_TARGET_MARKER` on
-    the turn's ``free_text``. Deterministic and a no-op when every accusation
-    names a living participant, so a clean replay is byte-unaffected.
+    * ``accusation.against`` -- the fb3cfa5 case: a hallucinated target
+      (e.g. ``"imp-2"``) the chain cannot pass to
+      (:func:`meetings.transcript.next_chain_step` ->
+      ``TERMINATION_TARGET_NOT_LIVING``) and the §11.3
+      accusation-calibration metric cannot resolve to a role.
+    * ``alibi.subject`` -- the 9B emitted game ids as alibi subjects
+      (``"headless-seed-9"``, seed 9 m1 turns 2-3); recorded, they reach
+      §5.4 contradiction detection and render as phantom players.
+    * ``corroboration.supports`` -- 15 recorded corroborations carried a
+      turn id or a free-text phrase (``"p-2 dead"``, seed 40 m0) and
+      silently no-op'd the §9.8 fold on a phantom subject -- the reason
+      belief Rule 3 never fired in any recorded set.
+
+    A valid subject is a living meeting participant -- the same notion of
+    "valid target" the vote path enforces via ``candidate_targets`` -- so
+    a corroboration naming a DEAD roster player is dropped exactly like
+    an accusation naming one. Runs at the per-turn chokepoint BEFORE the
+    turn is recorded: a dropped claim never reaches the transcript,
+    contradiction detection, the post-meeting belief fold, or any prompt
+    surface.
+
+    Returns ``(surviving_claims, markers)``, both in claim order; the
+    caller prepends the pre-formatted audit markers
+    (:data:`INVALID_ACCUSATION_TARGET_MARKER` /
+    :data:`INVALID_ALIBI_SUBJECT_MARKER` /
+    :data:`INVALID_CORROBORATION_SUPPORTS_MARKER`) to the turn's
+    ``free_text``, so the original value stays auditable and downstream
+    eval can count drops per field by grepping one string each.
+    Deterministic and a no-op when every claim names a living
+    participant, so a clean replay is byte-unaffected.
     """
 
     surviving: list[Claim] = []
-    dropped: list[PlayerId] = []
+    markers: list[str] = []
     for claim in claims:
         if isinstance(claim, AccusationClaim) and claim.against not in living_ids:
-            dropped.append(claim.against)
+            markers.append(
+                INVALID_ACCUSATION_TARGET_MARKER.format(target=claim.against)
+            )
+        elif isinstance(claim, AlibiClaim) and claim.subject not in living_ids:
+            markers.append(INVALID_ALIBI_SUBJECT_MARKER.format(subject=claim.subject))
+        elif isinstance(claim, CorroborationClaim) and claim.supports not in living_ids:
+            markers.append(
+                INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports=claim.supports)
+            )
         else:
             surviving.append(claim)
-    return tuple(surviving), tuple(dropped)
+    return tuple(surviving), tuple(markers)
 
 
 __all__ = [
@@ -1757,6 +1813,8 @@ __all__ = [
     "DEFAULT_VOTE_RATIONALE",
     "DEFAULT_VOTE_TEMPERATURE",
     "INVALID_ACCUSATION_TARGET_MARKER",
+    "INVALID_ALIBI_SUBJECT_MARKER",
+    "INVALID_CORROBORATION_SUPPORTS_MARKER",
     "INVALID_REASON_ID_MARKER",
     "INVALID_VOTE_TARGET_MARKER",
     "TEAMMATE_VOTE_TARGET_MARKER",

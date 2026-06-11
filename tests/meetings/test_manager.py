@@ -40,7 +40,7 @@ from agents.memory.beliefs import (
     apply_meeting_evidence_rules,
 )
 from agents.memory.episodic import EpisodicEvent
-from agents.memory.store import AgentMemory, render_for_prompt
+from agents.memory.store import AgentMemory, absorb_meeting_evidence, render_for_prompt
 from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.provider import LLMCallFailure, _attach_parse_failure  # noqa: PLC2701
 from llm.fake_provider import FakeProvider
@@ -48,6 +48,8 @@ from meetings.manager import (
     DEFAULT_TURN_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
     INVALID_ACCUSATION_TARGET_MARKER,
+    INVALID_ALIBI_SUBJECT_MARKER,
+    INVALID_CORROBORATION_SUPPORTS_MARKER,
     INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
@@ -59,7 +61,7 @@ from meetings.manager import (
     MeetingParticipant,
     MeetingTrigger,
     SuspicionEntry,
-    _drop_invalid_accusation_targets,  # noqa: PLC2701
+    _drop_non_roster_claims,  # noqa: PLC2701
     _normalize_self_alibi_subjects,  # noqa: PLC2701
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
@@ -2126,13 +2128,13 @@ class TestInvalidAccusationTargetDropped:
                 type="corroboration", supports="p-3", on_tick=1, reason="r"
             ),
         )
-        surviving, dropped = _drop_invalid_accusation_targets(
+        surviving, markers = _drop_non_roster_claims(
             claims, living_ids=frozenset({"p-1", "p-2", "p-3", "p-4"})
         )
 
         # The hallucinated 'imp-2' accusation is dropped; the valid 'p-3'
-        # accusation and the (non-accusation) corroboration survive in order.
-        assert dropped == ("imp-2",)
+        # accusation and the (valid-supports) corroboration survive in order.
+        assert markers == (INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2"),)
         accusation_targets = [
             c.against for c in surviving if isinstance(c, AccusationClaim)
         ]
@@ -2145,10 +2147,10 @@ class TestInvalidAccusationTargetDropped:
                 type="accusation", against="p-3", confidence=0.6, reason="r"
             ),
         )
-        surviving, dropped = _drop_invalid_accusation_targets(
+        surviving, markers = _drop_non_roster_claims(
             claims, living_ids=frozenset({"p-1", "p-2", "p-3", "p-4"})
         )
-        assert dropped == ()
+        assert markers == ()
         assert surviving == claims
 
     def test_hallucinated_opening_accusation_is_dropped_and_marked(self) -> None:
@@ -3314,3 +3316,407 @@ class TestCommittedBytesLiftPins:
 
 def _living_voters(entry: MeetingReplayEntry) -> set[str]:
     return {ballot.voter for ballot in entry.ballots}
+
+
+# --- Task 10.2: roster validation for every subject-bearing claim field -------
+#
+# Audit gp-6 (C-C-8, H-H-6): the fb3cfa5 guard covered accusation targets
+# only, so the 9B's hallucinated structural ids in ``alibi.subject`` /
+# ``corroboration.supports`` were recorded, folded into persistent belief
+# rows, and rendered as §6.6 suspicion-graph rows -- and 15 corroborations
+# no-op'd on phantom subjects, which is why belief Rule 3 never fired in
+# any recorded set. DESIGN.md §5.2, §6.3.
+
+
+def _voter_memory(
+    agent_id: str,
+    *,
+    sightings: tuple[str, ...] = ("p-2", "p-3", "p-4"),
+) -> AgentMemory:
+    """A production-shaped ``AgentMemory`` for the post-meeting fold.
+
+    Mirrors what perception leaves behind by meeting time: a ``self_state``
+    carrying the agent's own id (the 9.3 self channel the fold requires)
+    plus tick-0 co-spawn sightings of the roster (what makes the Task 10.2
+    fold filter a no-op on real-player evidence).
+    """
+
+    memory = AgentMemory()
+    memory.episodic.append(
+        EpisodicEvent(
+            tick=0,
+            type="self_state",
+            payload={
+                "agent_id": agent_id,
+                "room": "CAFETERIA",
+                "role": "CREWMATE",
+                "pending_task_id": None,
+            },
+            provenance="observed",
+        )
+    )
+    for player_id in sightings:
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=0,
+                type="saw_player",
+                payload={"player_id": player_id, "room": "CAFETERIA", "action": None},
+                provenance="observed",
+            )
+        )
+    return memory
+
+
+class TestNonRosterClaimSubjectsDropped:
+    """Alibi subjects / corroboration supports are living-roster validated.
+
+    The Task 10.2 extension of the fb3cfa5 chokepoint: an
+    :class:`AlibiClaim` whose ``subject`` -- or a
+    :class:`CorroborationClaim` whose ``supports`` -- is not a living
+    meeting participant is dropped before the turn is recorded, the
+    original preserved on ``free_text`` via its per-field audit marker.
+    Same rule as accusations, so a DEAD roster player drops too.
+    """
+
+    def test_unit_drops_each_non_roster_field_with_its_marker(self) -> None:
+        claims: tuple[Claim, ...] = (
+            AlibiClaim(
+                type="alibi",
+                subject="headless-seed-9",
+                from_tick=2,
+                to_tick=7,
+                room="MEDBAY",
+            ),
+            AlibiClaim(
+                type="alibi", subject="p-1", from_tick=2, to_tick=7, room="MEDBAY"
+            ),
+            AccusationClaim(
+                type="accusation", against="imp-2", confidence=0.9, reason="r"
+            ),
+            CorroborationClaim(
+                type="corroboration", supports="m-1:turn-0", on_tick=6, reason="r"
+            ),
+            CorroborationClaim(
+                type="corroboration", supports="p-3", on_tick=6, reason="r"
+            ),
+        )
+
+        surviving, markers = _drop_non_roster_claims(
+            claims, living_ids=frozenset({"p-1", "p-2", "p-3", "p-4"})
+        )
+
+        # Markers carry each dropped field's original value, in claim order.
+        assert markers == (
+            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9"),
+            INVALID_ACCUSATION_TARGET_MARKER.format(target="imp-2"),
+            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="m-1:turn-0"),
+        )
+        # The valid alibi and corroboration survive, in order.
+        assert [c.subject for c in surviving if isinstance(c, AlibiClaim)] == ["p-1"]
+        assert [c.supports for c in surviving if isinstance(c, CorroborationClaim)] == [
+            "p-3"
+        ]
+
+    def test_seed9_shape_garbage_subject_and_supports_drop_and_mark(self) -> None:
+        # The seed-9 m1 turns 2-3 shape live through the chokepoint: an
+        # alibi whose subject is the game id and a corroboration whose
+        # supports is the game id both drop, each marker preserving the
+        # original on ``free_text`` in claim order; the valid
+        # corroboration of a living participant survives.
+        result, _ = _run_meeting(
+            _make_responder(
+                accusations={"p-1": None},
+                claims_by={
+                    "p-1": (
+                        AlibiClaim(
+                            type="alibi",
+                            subject="headless-seed-9",
+                            from_tick=2,
+                            to_tick=7,
+                            room="MEDBAY",
+                        ),
+                        CorroborationClaim(
+                            type="corroboration",
+                            supports="p-3",
+                            on_tick=6,
+                            reason="real vouch",
+                        ),
+                        CorroborationClaim(
+                            type="corroboration",
+                            supports="headless-seed-9",
+                            on_tick=6,
+                            reason="vouch for a game id",
+                        ),
+                    ),
+                },
+            )
+        )
+
+        opening = result.transcript.turns[0]
+        assert not any(isinstance(c, AlibiClaim) for c in opening.claims)
+        kept = [c.supports for c in opening.claims if isinstance(c, CorroborationClaim)]
+        assert kept == ["p-3"]
+        assert opening.free_text.startswith(
+            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9")
+            + INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="headless-seed-9")
+        )
+
+    def test_corroboration_naming_a_dead_roster_player_is_dropped(self) -> None:
+        # The seed-40 shape generalised: p-2 is a real roster id but DEAD
+        # (not a meeting participant), so a corroboration naming them
+        # drops under the same living-roster rule as accusations. (The
+        # literal recorded value was the free-text phrase "p-2 dead"; the
+        # committed-bytes pin below covers it.)
+        result, _ = _run_meeting(
+            _make_responder(
+                accusations={"p-1": None},
+                claims_by={
+                    "p-1": (
+                        CorroborationClaim(
+                            type="corroboration",
+                            supports="p-2",
+                            on_tick=7,
+                            reason="vouch for the dead",
+                        ),
+                    ),
+                },
+            ),
+            participants=(
+                _participant("p-1"),
+                _participant("p-3"),
+                _participant("p-4"),
+            ),
+        )
+
+        opening = result.transcript.turns[0]
+        assert not any(isinstance(c, CorroborationClaim) for c in opening.claims)
+        assert opening.free_text.startswith(
+            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="p-2")
+        )
+        assert "p-2" not in extract_belief_evidence(result).corroborated
+
+    def test_valid_alibi_and_corroboration_pass_through_unmarked(self) -> None:
+        # The no-op guarantee: claims naming living participants record
+        # byte-unchanged, so a clean replay is unaffected.
+        result, _ = _run_meeting(
+            _make_responder(
+                accusations={"p-1": None},
+                claims_by={
+                    "p-1": (
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-1",
+                            from_tick=2,
+                            to_tick=7,
+                            room="MEDBAY",
+                        ),
+                        CorroborationClaim(
+                            type="corroboration",
+                            supports="p-2",
+                            on_tick=6,
+                            reason="vouch",
+                        ),
+                    ),
+                },
+            )
+        )
+
+        opening = result.transcript.turns[0]
+        assert len(opening.claims) == 2
+        assert opening.free_text == "turn from p-1"
+
+    def test_dropped_garbage_subject_never_reaches_detection_or_the_fold(
+        self,
+    ) -> None:
+        # Ordering pin (the 10.2 hint): the chokepoint runs BEFORE §5.4
+        # detection and before the post-meeting fold. p-1's garbage alibi
+        # meets p-2's same-id sighting in a different room over the same
+        # ticks -- the shape that would pair into an alibi_vs_sighting
+        # flag were the claim recorded and indexed. Dropped at the
+        # chokepoint, it mints no flag (so it can never consume any 10.1
+        # lift/cap accounting), reaches no evidence set, and materialises
+        # no belief row through the production fold.
+        result, _ = _run_meeting(
+            _make_responder(
+                accusations={"p-1": "p-2", "p-2": None},
+                claims_by={
+                    "p-1": (
+                        AlibiClaim(
+                            type="alibi",
+                            subject="headless-seed-9",
+                            from_tick=2,
+                            to_tick=7,
+                            room="MEDBAY",
+                        ),
+                    ),
+                },
+                observations={
+                    "p-2": (
+                        SawPlayerObservation(
+                            type="saw_player",
+                            tick=4,
+                            subject="headless-seed-9",
+                            room="STORAGE",
+                        ),
+                    ),
+                },
+            )
+        )
+
+        # Never recorded -> never detected -> never folded.
+        assert not any(
+            isinstance(c, AlibiClaim)
+            for turn in result.transcript.turns
+            for c in turn.claims
+        )
+        assert result.transcript.turns[0].free_text.startswith(
+            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9")
+        )
+        assert all(
+            "headless-seed-9" not in flag.subjects for flag in result.contradictions
+        )
+        evidence = extract_belief_evidence(result)
+        assert "headless-seed-9" not in (
+            evidence.accused + evidence.corroborated + evidence.contradicted
+        )
+        memory = _voter_memory("p-3")
+        absorb_meeting_evidence(
+            memory,
+            accused=evidence.accused,
+            corroborated=evidence.corroborated,
+            contradicted=evidence.contradicted,
+        )
+        assert "headless-seed-9" not in memory.beliefs.known_players()
+
+
+class TestCorroborationRule3FiresEndToEnd:
+    """Belief Rule 3's first live path (Task 10.2 DoD, the hard line).
+
+    Every prior recorded set carried only invalid ``supports`` values, so
+    the corroboration channel was structurally dead: the -0.05 delta had
+    never travelled meeting -> evidence -> fold -> store -> render. This
+    pins the whole production seam: a real :class:`MeetingManager` run
+    records the valid claim through the chokepoint,
+    ``extract_belief_evidence`` carries the subject, and the same
+    ``absorb_meeting_evidence`` fold the orchestrator fans out
+    (``orchestrator.game._absorb_meeting_beliefs``) lowers the supported
+    player's PERSISTED suspicion by exactly the Rule-3 delta -- which is
+    what the next meeting's §6.6 render and suspicion graph then show.
+    """
+
+    def test_valid_corroboration_lowers_suspicion_by_the_rule3_delta(self) -> None:
+        # p-1 opens accusing p-4; the accused p-4's reply corroborates
+        # p-2 (a living participant), ending the chain.
+        result, _ = _run_meeting(
+            _make_responder(
+                accusations={"p-1": "p-4", "p-4": None},
+                claims_by={
+                    "p-4": (
+                        CorroborationClaim(
+                            type="corroboration",
+                            supports="p-2",
+                            on_tick=400,
+                            reason="p-4 vouches for p-2",
+                        ),
+                    ),
+                },
+            )
+        )
+
+        # The chokepoint recorded the valid claim (no drop, no marker).
+        recorded = [
+            c.supports
+            for turn in result.transcript.turns
+            for c in turn.claims
+            if isinstance(c, CorroborationClaim)
+        ]
+        assert recorded == ["p-2"]
+        evidence = extract_belief_evidence(result)
+        assert "p-2" in evidence.corroborated
+
+        # The orchestrator fan-out shape: fold the evidence into a living
+        # voter's production store.
+        memory = _voter_memory("p-3")
+        absorb_meeting_evidence(
+            memory,
+            accused=evidence.accused,
+            corroborated=evidence.corroborated,
+            contradicted=evidence.contradicted,
+        )
+
+        # Rule 3 FIRED: the supported player's persisted suspicion moved
+        # down by exactly the Rule-3 delta; the accused moved up by the
+        # accusation bump (the fold ran wholesale, not just Rule 3).
+        assert memory.beliefs.view("p-2").suspicion == pytest.approx(
+            _DEFAULT_TEST_SUSPICION - CORROBORATION_SUSPICION_DELTA
+        )
+        assert memory.beliefs.view("p-4").suspicion > _DEFAULT_TEST_SUSPICION
+        # And the lowered score is what the NEXT meeting's prompts see.
+        assert "p-2: suspicion 0.45" in render_for_prompt(memory)
+
+
+class TestCommittedBytesRosterDropPins:
+    """The recorded gp-6 shapes through the 10.2 chokepoint (offline).
+
+    Acceptance pins against the committed replay bytes (the bytes do not
+    change until the 10.5 re-record): the audited garbage claims from
+    seeds 9 and 40, exactly as recorded, drop under
+    ``_drop_non_roster_claims`` with each meeting's living roster (its
+    ballot voters), while the valid claims beside them survive.
+    """
+
+    def test_seed9_m1_recorded_garbage_claims_drop_under_the_guard(self) -> None:
+        entry = _committed_meeting(9, 1)
+        living = frozenset(_living_voters(entry))
+        turn2 = entry.transcript.turns[2]
+        turn3 = entry.transcript.turns[3]
+        # The recorded shapes the audit named (gp-6 reproduce): the game
+        # id as turn 2's alibi subject and turn 3's corroboration target.
+        assert [c.subject for c in turn2.claims if isinstance(c, AlibiClaim)] == [
+            "headless-seed-9"
+        ]
+        assert [
+            c.supports for c in turn3.claims if isinstance(c, CorroborationClaim)
+        ] == ["headless-seed-9"]
+
+        surviving2, markers2 = _drop_non_roster_claims(turn2.claims, living_ids=living)
+        assert markers2 == (
+            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9"),
+        )
+        # Turn 2's valid corroboration of living p-8 survives.
+        assert [
+            c.supports for c in surviving2 if isinstance(c, CorroborationClaim)
+        ] == ["p-8"]
+
+        surviving3, markers3 = _drop_non_roster_claims(turn3.claims, living_ids=living)
+        assert surviving3 == ()
+        assert markers3 == (
+            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="headless-seed-9"),
+            INVALID_ALIBI_SUBJECT_MARKER.format(subject="headless-seed-9"),
+        )
+
+    def test_seed40_m0_dead_player_supports_drops_under_the_guard(self) -> None:
+        entry = _committed_meeting(40, 0)
+        living = frozenset(_living_voters(entry))
+        assert "p-2" not in living  # the meeting's victim -- dead, real roster id
+        turn1 = entry.transcript.turns[1]
+        assert [
+            c.supports for c in turn1.claims if isinstance(c, CorroborationClaim)
+        ] == ["p-2 dead"]
+
+        surviving, markers = _drop_non_roster_claims(turn1.claims, living_ids=living)
+
+        assert markers == (
+            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="p-2 dead"),
+        )
+        # The speaker's own valid self-alibi beside it survives.
+        assert [c.subject for c in surviving if isinstance(c, AlibiClaim)] == ["p-6"]
+        # And the DEAD-roster rule itself: plain "p-2" -- a real roster id,
+        # dead at this meeting -- drops under the same living-roster rule.
+        dead_named = CorroborationClaim(
+            type="corroboration", supports="p-2", on_tick=7, reason="r"
+        )
+        _, dead_markers = _drop_non_roster_claims((dead_named,), living_ids=living)
+        assert dead_markers == (
+            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports="p-2"),
+        )

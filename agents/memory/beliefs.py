@@ -481,6 +481,7 @@ def apply_meeting_evidence_rules(
     corroborated: Sequence[PlayerId] = (),
     contradicted: Sequence[PlayerId] = (),
     fellow_impostor_ids: Sequence[PlayerId] = (),
+    roster: AbstractSet[PlayerId] | None = None,
 ) -> BeliefState:
     """Fold one meeting's public evidence into persistent beliefs (Task 9.8).
 
@@ -521,10 +522,31 @@ def apply_meeting_evidence_rules(
     agent holds no belief row about itself (a recorded self-accusation
     bumps everyone else's view of the speaker, never the speaker's own).
 
+    Roster filter (Task 10.2; audit gp-6 C-C-8, H-H-6). When ``roster``
+    is supplied -- the production fold passes the agent's
+    engine-witnessed player-id set
+    (``agents.memory.store._known_roster_ids``) -- an evidence subject
+    outside it is dropped from all three sets on the input side, like
+    the teammate guard: a hallucinated structural id (a game id such as
+    ``"headless-seed-9"``, a turn id, a free-text phrase) never
+    materialises a belief row, never bumps or lowers a score, and never
+    counts as reinforced. This is the defense-in-depth backstop behind
+    the Task 10.2 meeting-layer chokepoint
+    (``meetings.manager._drop_non_roster_claims``): even if a garbage
+    subject slips through a future claim type, the belief store -- and
+    therefore every suspicion-graph / §6.6 prompt surface built from it
+    -- stays roster-only. ``roster=None`` (the default) applies no
+    filter, preserving the pure-math call shape for callers without a
+    roster channel.
+
     All subject sets are processed in sorted order; the result is a
     deterministic function of its arguments (replay-stable).
     """
 
+    if roster is not None:
+        accused = [subject for subject in accused if subject in roster]
+        corroborated = [subject for subject in corroborated if subject in roster]
+        contradicted = [subject for subject in contradicted if subject in roster]
     teammates = frozenset(fellow_impostor_ids)
     bumped = {
         subject for subject in accused if subject != own_id and subject not in teammates

@@ -856,3 +856,75 @@ class TestMeetingEvidenceRules:
         assert first.view("prior_suspect").suspicion == pytest.approx(
             0.7 + (_DEFAULT_SUSPICION - 0.7) * MEETING_SUSPICION_DECAY_RATE
         )
+
+
+class TestMeetingEvidenceRosterFilter:
+    """Task 10.2 (DESIGN.md §6.3; audit gp-6 C-C-8, H-H-6).
+
+    ``apply_meeting_evidence_rules`` drops evidence subjects outside the
+    supplied ``roster`` on the input side -- the belief-store half of the
+    defense-in-depth behind the meeting-layer chokepoint, so a
+    hallucinated structural id never materialises a row however it
+    arrives. ``roster=None`` preserves the unfiltered legacy shape.
+    """
+
+    def test_non_roster_subjects_are_dropped_from_every_channel(self) -> None:
+        # The audit's garbage shapes (a game id, a turn id, a free-text
+        # phrase) across all three channels: no row materialises, while
+        # the roster subjects folded alongside land at the exact deltas.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("headless-seed-9", "p-5"),
+            corroborated=("headless-seed-12:meeting-0:turn-0", "p-3"),
+            contradicted=("p-2 dead",),
+            roster=frozenset({"observer", "p-2", "p-3", "p-4", "p-5"}),
+        )
+
+        assert set(updated.known_players()) == {"p-3", "p-5"}
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert updated.view("p-3").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION - CORROBORATION_SUSPICION_DELTA
+        )
+
+    def test_filtered_subject_is_not_reinforced_against_decay(self) -> None:
+        # The seed-12 m2 trajectory, inverted: a garbage row that already
+        # exists (pre-filter pollution) gains NOTHING from new garbage
+        # evidence -- dropped from ``corroborated``/``contradicted`` it is
+        # not "reinforced", so Rule 5 decays it toward neutral like any
+        # stale row instead of the fold keeping it alive.
+        beliefs = BeliefState()
+        beliefs.seed_player(
+            "headless-seed-12:meeting-0:turn-0", suspicion=0.45, trust=0.5
+        )
+
+        updated = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=(),
+            corroborated=("headless-seed-12:meeting-0:turn-0",),
+            contradicted=("headless-seed-12:meeting-0:turn-0",),
+            roster=frozenset({"observer", "p-3"}),
+        )
+
+        assert updated.view(
+            "headless-seed-12:meeting-0:turn-0"
+        ).suspicion == pytest.approx(
+            0.45 + (_DEFAULT_SUSPICION - 0.45) * MEETING_SUSPICION_DECAY_RATE
+        )
+
+    def test_none_roster_applies_no_filter(self) -> None:
+        # The legacy / pure-math call shape: without a roster channel the
+        # rules behave exactly as before this task.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("headless-seed-9",),
+            roster=None,
+        )
+
+        assert updated.view("headless-seed-9").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
