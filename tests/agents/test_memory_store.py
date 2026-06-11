@@ -21,6 +21,7 @@ from agents.memory.beliefs import (
     ACCUSATION_SUSPICION_DELTA,
     CORROBORATION_SUSPICION_DELTA,
     MEETING_SUSPICION_DECAY_RATE,
+    ContradictionRef,
 )
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
@@ -238,11 +239,13 @@ class TestRosterFilteredFoldAndRender:
     """Task 10.2 (DESIGN.md §6.3, §6.6; audit gp-6 C-C-8, H-H-6).
 
     The agents-side defense-in-depth behind the meeting-layer chokepoint:
-    the post-meeting fold and the §6.6 belief rows are filtered to the
-    agent's engine-witnessed player-id set, so a hallucinated structural
-    id (a game id, a turn id, a free-text phrase) neither materialises a
-    persistent belief row nor renders into any prompt surface -- even if
-    a future claim type slips one past the meeting layer.
+    the post-meeting fold (inputs filtered, pre-existing non-roster rows
+    purged) and both §6.6 sections (belief rows and open-contradiction
+    lines) are filtered to the agent's engine-witnessed player-id set, so
+    a hallucinated structural id (a game id, a turn id, a free-text
+    phrase) neither materialises a persistent belief row, nor survives a
+    fold, nor renders into any prompt surface -- even if a future claim
+    type slips one past the meeting layer.
     """
 
     def test_garbage_subjects_never_materialise_belief_rows(self) -> None:
@@ -305,6 +308,50 @@ class TestRosterFilteredFoldAndRender:
 
         assert "headless-seed-12" not in view
         assert "- p-5: suspicion 0.70" in view
+
+    def test_render_filters_non_roster_contradiction_lines_too(self) -> None:
+        # Both §6.6 sections are covered (Codex review, PR #140): an
+        # inconsistency recorded on a garbage row cannot surface through
+        # "## Open contradictions" either -- while one recorded on a
+        # roster row renders as before.
+        memory = _memory_for()
+        memory.beliefs.record_contradiction(
+            "headless-seed-12:meeting-0:turn-0",
+            ContradictionRef(
+                summary="phantom subject headless-seed-12:meeting-0:turn-0 conflict",
+                left_ref="alibi:garbage",
+                right_ref="sighting:garbage",
+            ),
+        )
+        memory.beliefs.record_contradiction(
+            "p-5",
+            ContradictionRef(
+                summary="p-5 alibi conflict around tick 7",
+                left_ref="alibi:p-5",
+                right_ref="sighting:p-3:p-5",
+            ),
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "headless-seed-12" not in view
+        assert "- p-5 alibi conflict around tick 7" in view
+
+    def test_pre_polluted_store_self_heals_at_the_first_fold(self) -> None:
+        # The fold's output-side purge (Codex review, PR #140): a garbage
+        # row that somehow predates the filters is DELETED from the store
+        # by the next post-meeting fold -- so every downstream snapshot,
+        # including the vote prompt's suspicion graph
+        # (``suspicion_graph_for_meeting`` iterates ``known_players()``),
+        # carries roster ids only from that fold onward.
+        memory = _memory_for()
+        memory.beliefs.adjust_suspicion(
+            "headless-seed-12:meeting-0:turn-0", delta=-0.04
+        )
+
+        absorb_meeting_evidence(memory, accused=("p-5",))
+
+        assert memory.beliefs.known_players() == ("p-5",)
 
     def test_dead_roster_player_rows_still_render(self) -> None:
         # "Roster ids" means the GAME roster, living and dead: the agent

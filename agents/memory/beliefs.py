@@ -280,6 +280,22 @@ class BeliefState:
         belief.inconsistencies.append(contradiction)
         return belief.snapshot()
 
+    def drop_player(self, player_id: PlayerId) -> None:
+        """Remove ``player_id``'s belief row entirely; no-op when unknown.
+
+        The roster purge primitive (Task 10.2; audit gp-6 C-C-8): a row
+        whose id is not a real player -- a phantom subject materialised
+        before the roster filters existed, or by a hypothetical future
+        write path they do not cover -- is deleted by
+        :func:`apply_meeting_evidence_rules` rather than left to decay,
+        so the belief store carries roster ids only after any
+        post-meeting fold. Deliberately a full-row removal: a non-player
+        "row" holds no evidence about anyone, so there is nothing to
+        preserve.
+        """
+
+        self._beliefs.pop(player_id, None)
+
     def decay_suspicion(
         self,
         player_id: PlayerId,
@@ -525,19 +541,29 @@ def apply_meeting_evidence_rules(
     Roster filter (Task 10.2; audit gp-6 C-C-8, H-H-6). When ``roster``
     is supplied -- the production fold passes the agent's
     engine-witnessed player-id set
-    (``agents.memory.store._known_roster_ids``) -- an evidence subject
-    outside it is dropped from all three sets on the input side, like
-    the teammate guard: a hallucinated structural id (a game id such as
-    ``"headless-seed-9"``, a turn id, a free-text phrase) never
-    materialises a belief row, never bumps or lowers a score, and never
-    counts as reinforced. This is the defense-in-depth backstop behind
-    the Task 10.2 meeting-layer chokepoint
+    (``agents.memory.store._known_roster_ids``) -- two filters run, so
+    the RETURNED state carries roster ids only:
+
+    * input side, like the teammate guard: an evidence subject outside
+      the roster is dropped from all three sets -- a hallucinated
+      structural id (a game id such as ``"headless-seed-9"``, a turn id,
+      a free-text phrase) never materialises a belief row, never bumps
+      or lowers a score, and never counts as reinforced;
+    * output side, the purge: a PRE-EXISTING non-roster row (one
+      materialised before these filters existed, or by a hypothetical
+      future write path they do not cover) is dropped from the returned
+      state via :meth:`BeliefState.drop_player` rather than left to
+      decay -- so the store self-heals at every fold and every
+      downstream snapshot (the §6.6 render, the next meeting's
+      suspicion graph) is roster-only by construction.
+
+    This is the defense-in-depth backstop behind the Task 10.2
+    meeting-layer chokepoint
     (``meetings.manager._drop_non_roster_claims``): even if a garbage
     subject slips through a future claim type, the belief store -- and
-    therefore every suspicion-graph / §6.6 prompt surface built from it
-    -- stays roster-only. ``roster=None`` (the default) applies no
-    filter, preserving the pure-math call shape for callers without a
-    roster channel.
+    therefore every prompt surface built from it -- stays roster-only.
+    ``roster=None`` (the default) applies neither filter, preserving
+    the pure-math call shape for callers without a roster channel.
 
     All subject sets are processed in sorted order; the result is a
     deterministic function of its arguments (replay-stable).
@@ -563,6 +589,10 @@ def apply_meeting_evidence_rules(
     )
 
     result = beliefs.copy()
+    if roster is not None:
+        for player_id in result.known_players():
+            if player_id not in roster:
+                result.drop_player(player_id)
     for subject in sorted(bumped):
         result.adjust_suspicion(subject, delta=ACCUSATION_SUSPICION_DELTA)
     for subject in sorted(lowered):
