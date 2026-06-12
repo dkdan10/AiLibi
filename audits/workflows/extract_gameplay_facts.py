@@ -245,9 +245,7 @@ def _testimony_vehicle(turn: Any, subject: str) -> tuple[str | None, bool]:
     sights = any(
         isinstance(o, SawPlayerObservation) and o.subject == subject
         for o in turn.observations
-    ) or any(
-        isinstance(c, AlibiClaim) and c.subject == subject for c in turn.claims
-    )
+    ) or any(isinstance(c, AlibiClaim) and c.subject == subject for c in turn.claims)
     if accuses:
         return "accusation", has_observation
     if sights:
@@ -1088,9 +1086,7 @@ def _analyze_meeting(
     # the per-meeting set so the genuine-class records can be assembled with
     # cross-meeting context in the per-game loop.
     ballot_voter_roster = frozenset(b.voter for b in meeting_entry.ballots)
-    genuine_subjects = _genuine_subjects(
-        meeting_entry.transcript, ballot_voter_roster
-    )
+    genuine_subjects = _genuine_subjects(meeting_entry.transcript, ballot_voter_roster)
 
     # Ballot tallies (non-skip) for plurality + margin, and the set of accusers
     # who followed through on their own target.
@@ -1686,9 +1682,7 @@ def main() -> int:
             # calls are burned-then-defaulted, attributed below). The earliest
             # opening-slot calls are the burned attempt(s); the last recorded as
             # the opening.
-            opener_defaulted = (
-                meeting_entry.meeting_id in opening_defaulted_meeting_ids
-            )
+            opener_defaulted = meeting_entry.meeting_id in opening_defaulted_meeting_ids
             if opener is not None and not opener_defaulted:
                 opener_opening_calls = opening_calls_by_agent.get(opener, [])
                 extra = max(0, len(opener_opening_calls) - 1)
@@ -2209,15 +2203,11 @@ def main() -> int:
         }
         opening_defaults += len(this_game_opening_defaults)
         for d_mid, d_idx, d_spk in this_game_opening_defaults:
-            mf_for = next(
-                (m for m in meetings_out if m["meeting_id"] == d_mid), None
-            )
+            mf_for = next((m for m in meetings_out if m["meeting_id"] == d_mid), None)
             lost = mf_for is not None and not mf_for["opening_has_accusation"]
             if lost:
                 meetings_lost_opening += 1
-            m_entry = next(
-                (m for m in meeting_entries if m.meeting_id == d_mid), None
-            )
+            m_entry = next((m for m in meeting_entries if m.meeting_id == d_mid), None)
             burned_in = burned_out = 0
             if m_entry is not None:
                 for call in m_entry.llm_calls:
@@ -2620,9 +2610,7 @@ def main() -> int:
             "testimony": {
                 "count": len(testimony_records_all),
                 "subjects_impostor": sum(
-                    1
-                    for r in testimony_records_all
-                    if r["subject_role"] == "IMPOSTOR"
+                    1 for r in testimony_records_all if r["subject_role"] == "IMPOSTOR"
                 ),
                 "subjects_crew": sum(
                     1 for r in testimony_records_all if r["subject_role"] == "CREWMATE"
