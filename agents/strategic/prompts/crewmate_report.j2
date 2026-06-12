@@ -1,7 +1,20 @@
-{# prompt_version: crewmate_report.v5
+{# prompt_version: crewmate_report.v6
 
    Crewmate-side OPENING-turn prompt for the reactive accusation chain
    (DESIGN.md §5.1, §5.2 PHASE 1, §5.3, §6.6).
+
+   Task 10.8 (DESIGN.md §3.2, §5.2; audit gp-3 B-B-1..B-B-9) bumped v5 -> v6
+   with an emergency-opening branch ONLY: now that the crewmate tactical
+   policy can reach the emergency button on accumulated suspicion, a meeting
+   whose trigger is EMERGENCY has no body -- the opener is the caller, and
+   the opening frame tells the model the meeting was called on suspicion
+   (state who you suspect and the first-hand basis, or unsure). The branch
+   keys off the orchestrator's trigger description (the rendered
+   `meeting_trigger` contains "called an emergency meeting" exactly when the
+   engine trigger was EMERGENCY -- see orchestrator.game._build_meeting_trigger,
+   which documents the phrase as load-bearing). The branch is additive: a
+   body-report render is byte-identical to v5 apart from the version marker
+   line (golden-pinned in tests/agents/test_strategic_prompts.py).
 
    Task 10.3 (DESIGN.md §5.1, §5.2; audit gp-9 H-H-1, H-H-2, H-H-3) bumped
    v4 -> v5 with three terse nudges for residual qwen3.5:9b artifacts:
@@ -43,7 +56,10 @@
      meeting_trigger     -- short free-text description of what triggered
                             the meeting (e.g. "p3 reported p2's body in
                             MedBay at tick 410" or "p4 called an emergency
-                            meeting at tick 320")
+                            meeting at tick 320"). The "called an emergency
+                            meeting" substring selects the v6
+                            emergency-opening branch; any other description
+                            renders the body-report branch.
      rendered_memory     -- Markdown string produced by
                             agents.memory.store.render_for_prompt; it
                             already carries the agent's role, tasks summary,
@@ -77,24 +93,45 @@
    was not witnessed by this agent. Everything visible to the LLM here comes
    from the rendered memory view (derived from this agent's episodic store)
    and the public meeting transcript.
-#}You are an AI agent playing a social-deduction simulation. You are a
+#}{% set emergency_opening = "called an emergency meeting" in meeting_trigger %}
+{% if emergency_opening %}
+You are an AI agent playing a social-deduction simulation. You are a
+**crewmate**. YOU called this emergency meeting and you are the **opening
+speaker** (turn 0): no body was reported -- you pressed the button because your
+own observations point at someone. State who you suspect and the first-hand
+basis for it. Your job is to catch the impostor; a meeting called on suspicion
+with no named suspect hands them a free round and another kill. Only withhold
+an accusation if you genuinely cannot back one -- and if so, you MUST write the
+word "unsure" in your `free_text`.
+{% else %}
+You are an AI agent playing a social-deduction simulation. You are a
 **crewmate**. A meeting has been called and you are the **opening speaker**
 (turn 0): you reported the body or called the emergency, so you speak first.
 State what you saw and name the single player your evidence most points to. Your
 job is to catch the impostor; a non-answer hands them a free round and another
 kill. Only withhold an accusation if you genuinely recorded nothing pointing at
 anyone -- and if so, you MUST write the word "unsure" in your `free_text`.
+{% endif %}
 
 Hard rule: your opening must EITHER include one `accusation` claim OR say
 "unsure" in `free_text`. An opening with neither is rejected and re-requested.
 
-Prompt: crewmate_report.v5 (DESIGN.md §5.2 PHASE 1)
+Prompt: crewmate_report.v6 (DESIGN.md §5.2 PHASE 1)
 
+{% if emergency_opening %}
+Your job in this opening turn: state why you called the meeting and commit to
+your single best suspect. You spent the crew's one emergency call on this -- a
+decisive, grounded accusation makes it count; a non-answer wastes it. Lead with
+the first-hand observations that drove you to the button: a player whose
+movements do not add up, a suspicious co-presence, a contradiction in someone's
+account. That is enough to name them.
+{% else %}
 Your job in this opening turn: surface your observations AND commit to your single
 best suspect. You are the crew's first mover — a decisive, grounded accusation
 drives the meeting toward the impostor; a non-answer ends it. You will almost
 always have something — a player you saw near the body, someone whose movements
 do not add up, a contradiction in someone's account. That is enough to name them.
+{% endif %}
 
 ## Meeting context
 - You are: `{{ agent_id }}`

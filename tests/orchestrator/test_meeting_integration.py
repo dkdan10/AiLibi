@@ -47,9 +47,11 @@ from meetings.manager import (
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
+    FoundBodyObservation,
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    SawPlayerObservation,
     TurnKind,
     VoteBallot,
 )
@@ -1374,6 +1376,12 @@ class TestMeetingTriggerExtraction:
         trigger = observed_triggers[0]
         assert trigger.triggered_by == "p-1"
         assert "emergency" in trigger.description.lower()
+        # Task 10.8: the exact phrase is load-bearing — crewmate_report v6
+        # selects its emergency-opening branch on this substring of the
+        # rendered ``meeting_trigger`` (no structured trigger kind reaches
+        # the prompt renderers). The template-side half of this pin lives in
+        # tests/agents/test_strategic_prompts.py.
+        assert "called an emergency meeting" in trigger.description
 
 
 class TestPublicCliMeetingWireUp:
@@ -1934,3 +1942,438 @@ class TestPostMeetingBeliefPersistence:
         # The dead player's agent (p-2, the seeded victim) never absorbs:
         # its belief store holds no p-4 row.
         assert agents["p-2"].memory_beliefs_suspicion_of("p-4") == 0.5
+
+
+# ---------------------------------------------------------------------------
+# Task 10.8 — crew emergency meeting end-to-end (DESIGN.md §3.2, §5.2; audit
+# gp-3 B-B-4): an unwitnessed kill, suspicion accumulation, the button walk,
+# and an EMERGENCY-triggered meeting with the caller as opener.
+# ---------------------------------------------------------------------------
+
+_EMERGENCY_SEED = 4242
+
+
+class _MeetingAwareScriptedAgent:
+    """A real :class:`TacticalAgent` behind a scripted intent stream.
+
+    Like :class:`_PerceivingScriptedAgent`, perception runs through the
+    production decide path so the composite memory is genuine; unlike it,
+    the full :class:`~orchestrator.game.MeetingAwareAgent` surface is
+    delegated too, because the Task 10.8 scenario runs a REAL
+    :class:`DefaultMeetingRunner` meeting in which the scripted impostor is
+    a living participant.
+    """
+
+    def __init__(
+        self,
+        *,
+        inner: TacticalAgent,
+        intents: Iterable[ActionIntent] = (),
+    ) -> None:
+        self._inner = inner
+        self._intents = list(intents)
+        self._cursor = 0
+
+    def decide(
+        self,
+        packet: ObservationPacket,
+        public_map: PublicMapView,
+    ) -> ActionIntent:
+        self._inner.decide(packet, public_map)
+        if self._cursor < len(self._intents):
+            intent = self._intents[self._cursor]
+            self._cursor += 1
+            return intent
+        return _intent({"type": "wait", "actor": self._inner.agent_id, "payload": {}})
+
+    @property
+    def agent_id(self) -> PlayerId:
+        return self._inner.agent_id
+
+    @property
+    def role(self) -> Role:
+        return self._inner.role
+
+    def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+        return self._inner.render_memory_for_meeting(token_budget=token_budget)
+
+    def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+        return self._inner.suspicion_graph_for_meeting()
+
+
+class _EmergencyChainLLMClient:
+    """Deterministic LLM stub for the Task 10.8 emergency meeting.
+
+    Turn calls in protocol order: the FIRST turn is the caller's opening —
+    an accusation against the impostor backed by a first-hand ``saw_player``
+    observation whose ``co_present`` makes the remaining crewmate opt-in
+    eligible (no ``found_body`` observation: the meeting is body-less).
+    Every later turn (the accused's reply, the opt-in) carries no claims, so
+    the §5.2 chain terminates exactly as in a body meeting. Ballots all name
+    ``vote_target`` (the accused's own ballot self-target is normalized to
+    SKIP by the manager).
+    """
+
+    def __init__(self, *, vote_target: str) -> None:
+        self._vote_target = vote_target
+        self._turn_calls = 0
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if schema is MeetingTurn:
+            self._turn_calls += 1
+            if self._turn_calls == 1:
+                turn = MeetingTurn(
+                    turn_id="placeholder",
+                    turn_index=0,
+                    speaker="placeholder",
+                    turn_kind="opening",
+                    reply_to=None,
+                    observations=(
+                        SawPlayerObservation(
+                            type="saw_player",
+                            tick=0,
+                            subject="p-3",
+                            room="WEST_HALL",
+                            co_present=("p-2",),
+                        ),
+                    ),
+                    claims=(
+                        AccusationClaim(
+                            type="accusation",
+                            against="p-3",
+                            confidence=0.9,
+                            reason="alone with the victim in WEST_HALL",
+                        ),
+                    ),
+                    free_text=(
+                        "I called this meeting: p-3 was alone with p-4 in "
+                        "WEST_HALL and p-4 has not been seen since."
+                    ),
+                )
+            else:
+                turn = MeetingTurn(
+                    turn_id="placeholder",
+                    turn_index=0,
+                    speaker="placeholder",
+                    turn_kind="reply",
+                    reply_to=None,
+                    observations=(),
+                    claims=(),
+                    free_text="stub-defense (unsure)",
+                )
+            text = turn.model_dump_json()
+        elif schema is VoteBallot:
+            text = VoteBallot(
+                voter="placeholder",
+                target=self._vote_target,
+                confidence=0.9,
+                primary_reason_id=None,
+                considered_alternatives=(),
+                rationale_text="stub-vote",
+            ).model_dump_json()
+        else:
+            raise AssertionError(f"unexpected schema {schema!r}")
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "stub-model",
+        )
+
+
+def _emergency_scenario_setup(
+    monkeypatch: pytest.MonkeyPatch, *, game_map: Map
+) -> WorldState:
+    """Seed the audit gp-3 B-B-4 shape: an about-to-be-unwitnessed kill.
+
+    p-3 (forced impostor, cooldown 0) and its victim p-4 stand in WEST_HALL;
+    crewmate p-1 works an ADMIN task next door (ADMIN is adjacent to
+    WEST_HALL, so p-1 sees the players and later the body, but the kill is
+    not in p-1's OWN room — the witnessed-kill interrupt never fires and the
+    body is never reportable from ADMIN); crewmate p-2 works the REACTOR
+    task two rooms away and observes nothing. The crew task pool is exactly
+    p-1's and p-2's instances, so the SKIP variant ends in a clean
+    CREWMATE_TASKS game-over for the eval readers.
+    """
+
+    from engine.entities import TaskState
+
+    base = seed_initial_state(seed=_EMERGENCY_SEED, game_map=game_map, num_players=4)
+    rooms = {
+        "p-1": "ADMIN",
+        "p-2": "REACTOR",
+        "p-3": "WEST_HALL",
+        "p-4": "WEST_HALL",
+    }
+    players: dict[PlayerId, PlayerState] = {}
+    for pid, player in base.players.items():
+        forced_role: Role = "IMPOSTOR" if pid == "p-3" else "CREWMATE"
+        players[pid] = replace(player, role=forced_role, room=rooms[pid])
+    tasks = {
+        "p-1:upload_logs": TaskState(
+            id="p-1:upload_logs",
+            owner="p-1",
+            map_task_id="upload_logs",
+            room="ADMIN",
+            progress=0,
+            required_ticks=6,
+            completed=False,
+        ),
+        "p-2:start_reactor": TaskState(
+            id="p-2:start_reactor",
+            owner="p-2",
+            map_task_id="start_reactor",
+            room="REACTOR",
+            progress=0,
+            required_ticks=10,
+            completed=False,
+        ),
+    }
+    state = replace(base, players=players, tasks=tasks, cooldowns={"p-3": 0})
+
+    def _stub(
+        *,
+        seed: int,
+        game_map: Map,
+        num_players: int,
+        num_impostors: int = 1,
+        tasks_per_crewmate: int = 1,
+    ) -> WorldState:
+        return state
+
+    monkeypatch.setattr("orchestrator.game.seed_initial_state", _stub)
+    return state
+
+
+def _emergency_agent_factory() -> Callable[[PlayerId, Role], object]:
+    """p-1 / p-2 are production tactical agents; p-3 kills p-4 then idles."""
+
+    from agents.tactical.crewmate_policy import CrewmatePolicy
+    from agents.tactical.impostor_policy import ImpostorPolicy
+
+    def factory(agent_id: PlayerId, role: Role) -> object:
+        policy = (
+            ImpostorPolicy(agent_id=agent_id)
+            if role == "IMPOSTOR"
+            else CrewmatePolicy(agent_id=agent_id)
+        )
+        inner = TacticalAgent(agent_id=agent_id, role=role, policy=policy)
+        if agent_id == "p-3":
+            return _MeetingAwareScriptedAgent(
+                inner=inner,
+                intents=[
+                    _intent(
+                        {
+                            "type": "kill",
+                            "actor": "p-3",
+                            "payload": {"target": "p-4"},
+                        }
+                    )
+                ],
+            )
+        if agent_id == "p-4":
+            return _MeetingAwareScriptedAgent(inner=inner)
+        return inner
+
+    return factory
+
+
+def _emergency_runner(vote_target: str) -> DefaultMeetingRunner:
+    """A :class:`DefaultMeetingRunner` over the REAL prompt templates."""
+
+    from agents.strategic.prompts import (
+        accusation_round_prompt,
+        crewmate_report_prompt,
+        impostor_report_prompt,
+        vote_ballot_prompt,
+    )
+
+    return DefaultMeetingRunner(
+        llm_client=_EmergencyChainLLMClient(vote_target=vote_target),
+        crewmate_report_prompt=crewmate_report_prompt,
+        impostor_report_prompt=impostor_report_prompt,
+        statement_prompt=accusation_round_prompt,
+        vote_prompt=vote_ballot_prompt,
+        config=MeetingConfig(
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        ),
+    )
+
+
+def _run_emergency_game(
+    *,
+    replay_path: Path,
+    vote_target: str,
+    max_ticks: int = 40,
+) -> tuple[WorldState, str]:
+    game_map = load_canonical_map()
+    game = HeadlessGame(
+        seed=_EMERGENCY_SEED,
+        game_map=game_map,
+        agent_factory=_emergency_agent_factory(),  # type: ignore[arg-type]
+        replay_path=replay_path,
+        scheduler=TickScheduler(max_ticks=max_ticks),
+        meeting_runner=_emergency_runner(vote_target),
+    )
+    result = game.run()
+    return result.final_state, result.outcome
+
+
+class TestEmergencySuspicionMeetingEndToEnd:
+    """The Task 10.8 DoD scenario, through the production game loop.
+
+    Tick 0: p-3 kills p-4 in WEST_HALL — unwitnessed (no other player in
+    that room). Tick 1: p-1 sees the body from adjacent ADMIN; §6.3 Rule 1
+    lifts p-3 across the §4.6 gate in p-1's private beliefs. Ticks 1-2: p-1
+    abandons its task and walks ADMIN -> EAST_HALL -> CAFETERIA (the A*
+    tie-break avoids the body room, so the body stays unreported). Tick 3:
+    p-1 presses the button; the engine opens an EMERGENCY meeting with p-1
+    as caller/opener and the meeting runs the unchanged §5.2 protocol.
+    """
+
+    def test_unwitnessed_kill_produces_emergency_meeting(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        game_map = load_canonical_map()
+        _emergency_scenario_setup(monkeypatch, game_map=game_map)
+        replay_dir = tmp_path / "eject"
+        replay_dir.mkdir()
+        replay_path = replay_dir / f"replay-seed-{_EMERGENCY_SEED}.jsonl"
+
+        final_state, outcome = _run_emergency_game(
+            replay_path=replay_path, vote_target="p-3"
+        )
+
+        # Ejecting the sole impostor ends the game: CREWMATE_EJECT.
+        assert outcome == "CREWMATES"
+        assert final_state.players["p-3"].alive is False
+        # The caller's one emergency call per game is spent — engine truth.
+        assert final_state.emergency_uses == {"p-1": 1}
+
+        entries = read_all_entries(replay_path)
+        meetings = [e for e in entries if isinstance(e, MeetingReplayEntry)]
+        assert len(meetings) == 1
+        meeting = meetings[0]
+
+        # EMERGENCY-triggered, caller as opener, at the post-walk tick.
+        assert meeting.triggered_by == "p-1"
+        assert meeting.tick == 3
+        opening = meeting.transcript.turns[0]
+        assert opening.turn_kind == "opening"
+        assert opening.speaker == "p-1"
+
+        # §5.2 chain rules unchanged: the accused replies, the chain
+        # terminates on the claim-free reply, and the co-present
+        # non-speaker takes a terminal opt-in turn.
+        kinds = [(t.turn_kind, t.speaker) for t in meeting.transcript.turns]
+        assert kinds == [("opening", "p-1"), ("reply", "p-3"), ("opt_in", "p-2")]
+        assert meeting.transcript.turns[1].reply_to == opening.turn_id
+
+        # Ballots run normally: one per living participant; the accused's
+        # self-target ballot is normalized to SKIP, the two crew votes
+        # carry the plurality over the §4.6 threshold.
+        assert len(meeting.ballots) == 3
+        assert meeting.outcome == "EJECTED"
+        assert meeting.ejected_player_id == "p-3"
+
+        # Body-less meeting: no found_body observation anywhere in the
+        # transcript (the body was never discovered in-room).
+        for turn in meeting.transcript.turns:
+            assert not any(
+                isinstance(obs, FoundBodyObservation) for obs in turn.observations
+            )
+
+        # A fresh replay records the v6 template revision (DoD version pin).
+        assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v6"
+
+        # The opening prompt rendered through the REAL crewmate template
+        # carries the emergency trigger description and the v6
+        # called-on-suspicion frame — the orchestrator phrase and the
+        # template branch met end-to-end.
+        opening_call = meeting.llm_calls[0]
+        assert opening_call.call_kind == "meeting"
+        assert "called an emergency meeting" in opening_call.prompt
+        assert "YOU called this emergency meeting" in opening_call.prompt
+        assert "no body was reported" in opening_call.prompt
+
+    def test_eval_readers_run_clean_on_emergency_meeting_replay(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # DoD: nothing downstream assumes a body — the eval loaders and
+        # every §11.3 analyzer run clean over an EMERGENCY meeting replay,
+        # and the trigger breakdown positively identifies it.
+        from eval.balance_eval import load_tournament_report
+        from eval.meeting_quality import build_tournament_eval_report
+
+        game_map = load_canonical_map()
+        scenario = _emergency_scenario_setup(monkeypatch, game_map=game_map)
+        replay_dir = tmp_path / "eval-read"
+        replay_dir.mkdir()
+        replay_path = replay_dir / f"replay-seed-{_EMERGENCY_SEED}.jsonl"
+        _run_emergency_game(replay_path=replay_path, vote_target="p-3")
+
+        roles = {pid: player.role for pid, player in scenario.players.items()}
+        report = load_tournament_report(
+            replay_dir,
+            roles_by_seed={_EMERGENCY_SEED: roles},
+            game_map=game_map,
+            derive_kill_gift=False,
+        )
+        evaluated = build_tournament_eval_report(report)
+
+        assert evaluated.meeting_rate.meetings_total == 1
+        assert evaluated.meeting_rate.emergency_meetings == 1
+        assert evaluated.meeting_rate.body_report_meetings == 0
+        # The ejection resolved against the impostor, so the conversion
+        # analyzers see a well-formed meeting (no crash, sane scalars).
+        assert evaluated.conversion.ejection_accuracy == 1.0
+
+    def test_skip_outcome_paces_exactly_one_meeting(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # After a SKIP resolution the crossed flag resets and the caller's
+        # call is spent, so the same accumulated suspicion cannot spam a
+        # second meeting; the game runs on to a clean CREWMATE_TASKS end.
+        game_map = load_canonical_map()
+        _emergency_scenario_setup(monkeypatch, game_map=game_map)
+        replay_path = tmp_path / f"replay-seed-{_EMERGENCY_SEED}.jsonl"
+
+        final_state, outcome = _run_emergency_game(
+            replay_path=replay_path, vote_target="SKIP"
+        )
+
+        assert outcome == "CREWMATES"
+        entries = read_all_entries(replay_path)
+        meetings = [e for e in entries if isinstance(e, MeetingReplayEntry)]
+        assert len(meetings) == 1
+        assert meetings[0].outcome == "SKIPPED"
+        assert final_state.emergency_uses == {"p-1": 1}
+        # The impostor survived the skip; the crew won on tasks, so the
+        # single emergency meeting neither railroaded nor stalled the game.
+        assert final_state.players["p-3"].alive is True
+
+    def test_emergency_game_replays_byte_identically(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Determinism DoD: trigger evaluation and cooldown bookkeeping are
+        # deterministic, so two fresh runs of the identical scenario write
+        # byte-identical replay logs (meeting included).
+        game_map = load_canonical_map()
+        _emergency_scenario_setup(monkeypatch, game_map=game_map)
+        first_path = tmp_path / "first.jsonl"
+        second_path = tmp_path / "second.jsonl"
+
+        _run_emergency_game(replay_path=first_path, vote_target="SKIP")
+        _run_emergency_game(replay_path=second_path, vote_target="SKIP")
+
+        assert first_path.read_bytes() == second_path.read_bytes()

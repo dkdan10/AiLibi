@@ -39,7 +39,7 @@ from agents.strategic.prompts import (
     impostor_report_prompt,
     vote_ballot_prompt,
 )
-from agents.tactical.crewmate_policy import CrewmatePolicy
+from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.entities import BodyId, PlayerId, PlayerState, Role
 from engine.events import (
@@ -181,8 +181,20 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # template gains the roster block itself). vote_ballot is FROZEN (the §4.6
 # render). The committed sample bytes still record v4/v3/v6 and are
 # re-recorded in Task 10.5, not here.
+#
+# Task 10.8 (DESIGN.md §3.2, §5.2; audit gp-3) bumps crewmate_report alone
+# v5 -> v6: the template gains an emergency-opening branch (keyed off the
+# orchestrator's "called an emergency meeting" trigger description) that
+# frames a body-less, called-on-suspicion meeting -- state who you suspect
+# and the first-hand basis, or unsure -- now that the suspicion-accumulation
+# trigger makes the emergency channel reachable for crew. The body-report
+# branch is byte-identical to v5 apart from this version marker (golden-
+# pinned). Lineage confirmed at branch time: builds on the v5 merged in
+# Wave 0 and recorded by 10.5; no Wave-1 task touches the template in
+# parallel (10.7 is prompts-frozen). The committed sample bytes still record
+# v5 and are re-recorded in Task 10.9, not here.
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
-    "crewmate_report": "crewmate_report.v5",
+    "crewmate_report": "crewmate_report.v6",
     "impostor_report": "impostor_report_v4",
     "accusation_round": "accusation_round.v7",
     "vote_ballot": "vote_ballot/v5",
@@ -323,6 +335,38 @@ class BeliefPersistingAgent(Protocol):
         accused: tuple[PlayerId, ...],
         corroborated: tuple[PlayerId, ...],
         contradicted: tuple[PlayerId, ...],
+    ) -> None: ...
+
+
+@runtime_checkable
+class MeetingPacingAgent(Protocol):
+    """Agent that bookkeeps meeting-end pacing facts (Task 10.8).
+
+    After every resolved meeting the orchestrator notifies each living
+    agent of three PUBLIC facts -- when gameplay resumes (``end_tick``),
+    the announced post-meeting dead roster (deaths and ejections are
+    public at meetings, the same knowledge the Task 10.3 DEAD prompt line
+    renders), and which player's emergency action opened the meeting
+    (``None`` for a body report). The crewmate emergency trigger's
+    :class:`~agents.tactical.crewmate_policy.EmergencyPacingTracker`
+    consumes these for the global
+    :data:`~agents.tactical.crewmate_policy.EMERGENCY_COOLDOWN_TICKS`
+    cooldown, the one-call-per-game accounting (a call is spent only when
+    a meeting actually OPENS from it -- engine truth, so a pre-empted
+    intent does not burn the call), and the crossed-since-meeting reset.
+
+    Optional capability like :class:`BeliefPersistingAgent`: a scripted /
+    packet-recording test agent without pacing bookkeeping is skipped, and
+    an impostor :class:`TacticalAgent` implements it as a no-op (impostors
+    gain no button behavior until Wave 2 decides it).
+    """
+
+    def note_meeting_concluded(
+        self,
+        *,
+        end_tick: int,
+        dead_ids: tuple[PlayerId, ...],
+        emergency_caller_id: PlayerId | None,
     ) -> None: ...
 
 
@@ -1042,7 +1086,9 @@ class HeadlessGame:
             raise RuntimeError(
                 "_run_and_apply_meeting called without a configured meeting runner"
             )
-        trigger, triggering_body_id = _build_meeting_trigger(state=state, events=events)
+        trigger, triggering_body_id, trigger_kind = _build_meeting_trigger(
+            state=state, events=events
+        )
         meeting_id = f"{self._game_id()}:meeting-{meeting_index}"
         try:
             artifacts = _drive_async(
@@ -1139,6 +1185,17 @@ class HeadlessGame:
         # function with no agents in hand -- engine bytes stay untouched).
         _absorb_meeting_beliefs(
             result=artifacts.result, state=next_state, agents=agents
+        )
+        # Meeting-end pacing notification (Task 10.8). Runs AFTER the belief
+        # fold so the emergency tracker's post-meeting over-gate baseline
+        # samples the folded beliefs -- only a fresh below-to-above crossing
+        # after this point re-arms the suspicion trigger.
+        _notify_meeting_concluded(
+            state=next_state,
+            agents=agents,
+            emergency_caller_id=(
+                trigger.triggered_by if trigger_kind == "emergency" else None
+            ),
         )
         return next_state, post_events
 
@@ -1387,11 +1444,48 @@ def _absorb_meeting_beliefs(
             )
 
 
+def _notify_meeting_concluded(
+    *,
+    state: WorldState,
+    agents: Mapping[PlayerId, AgentInterface],
+    emergency_caller_id: PlayerId | None,
+) -> None:
+    """Fan one concluded meeting's pacing facts out to living agents (10.8).
+
+    The orchestrator-owned mirror of :func:`_absorb_meeting_beliefs` for the
+    :class:`MeetingPacingAgent` capability: every player still alive in the
+    post-meeting ``state`` learns the tick gameplay resumes at
+    (``state.tick`` -- :func:`apply_meeting_result` already advanced it),
+    the announced dead roster (sorted, post-ejection -- everyone at the
+    table saw who is gone), and the meeting's emergency caller (``None``
+    for a body report). All three are public knowledge at a meeting, so no
+    engine-private state crosses the firewall. Iteration is sorted for
+    determinism; agents without the capability are skipped (capability
+    gate, not a silent fallback -- see :class:`MeetingPacingAgent`).
+    """
+
+    dead_ids = tuple(
+        sorted(
+            player_id for player_id, player in state.players.items() if not player.alive
+        )
+    )
+    for player_id in sorted(state.players):
+        if not state.players[player_id].alive:
+            continue
+        agent = agents.get(player_id)
+        if isinstance(agent, MeetingPacingAgent):
+            agent.note_meeting_concluded(
+                end_tick=state.tick,
+                dead_ids=dead_ids,
+                emergency_caller_id=emergency_caller_id,
+            )
+
+
 def _build_meeting_trigger(
     *,
     state: WorldState,
     events: Sequence[EngineEvent],
-) -> tuple[MeetingTrigger, BodyId | None]:
+) -> tuple[MeetingTrigger, BodyId | None, Literal["report", "emergency"]]:
     """Construct a :class:`MeetingTrigger` from the engine's transition events.
 
     The engine emits a :class:`MeetingTriggeredEvent` from
@@ -1402,6 +1496,14 @@ def _build_meeting_trigger(
     it into the human-readable description the report prompt
     surfaces.
 
+    The emergency description's "called an emergency meeting" phrase is
+    load-bearing (Task 10.8): ``crewmate_report.j2`` v6 branches its
+    emergency-opening frame on exactly that substring of the rendered
+    ``meeting_trigger`` (the meeting layer threads no structured trigger
+    kind to the prompt renderers, by design — the description IS the
+    trigger surface). A wording change here must move in lockstep with
+    the template branch; the strategic-prompt tests pin both ends.
+
     The second element of the returned tuple is the ``body_id`` of
     the corpse that triggered a ``report`` meeting (``None`` for an
     ``emergency`` meeting). :func:`apply_meeting_result` consumes
@@ -1411,6 +1513,10 @@ def _build_meeting_trigger(
     tactical agents, but the engine's ``resolve_report`` does not
     reject already-discovered bodies, so an adversarial / scripted
     intent could otherwise replay the trigger).
+
+    The third element is the engine's trigger kind, consumed by the
+    Task 10.8 post-meeting pacing notification (an ``emergency``
+    meeting spends its caller's one emergency call per game).
     """
 
     trigger_event: MeetingTriggeredEvent | None = None
@@ -1441,7 +1547,7 @@ def _build_meeting_trigger(
         trigger_tick=trigger_event.tick,
         description=description,
     )
-    return trigger, body_id
+    return trigger, body_id, trigger_event.trigger
 
 
 def _drive_async(coro: Coroutine[object, object, _T]) -> _T:
@@ -1514,6 +1620,17 @@ class TacticalAgent:
         # kwarg at every call site.
         self._role: Role = role if role is not None else _infer_role_from_policy(policy)
         self._memory = memory if memory is not None else AgentMemory()
+        # Emergency pacing bookkeeping (Task 10.8) exists only for a
+        # crewmate running the crewmate FSM: the suspicion-accumulation
+        # trigger is crew-only, and an impostor agent must carry NO button
+        # bookkeeping at all (impostors gain no button behavior until
+        # Wave 2 decides it -- this gate is what the no-impostor-emergency
+        # pin asserts against).
+        self._emergency_tracker: EmergencyPacingTracker | None = (
+            EmergencyPacingTracker()
+            if self._role == "CREWMATE" and isinstance(policy, CrewmatePolicy)
+            else None
+        )
 
     @property
     def agent_id(self) -> PlayerId:
@@ -1542,6 +1659,23 @@ class TacticalAgent:
             memory=self._memory.episodic,
             beliefs=self._memory.beliefs,
         )
+        # Crewmate path (Task 10.8): sample the emergency tracker AFTER
+        # perception (so this tick's §6.3 belief updates are visible) and
+        # hand the policy the immutable eligibility snapshot. The sample is
+        # idempotent for a given state, so repeated decide() calls stay
+        # equal (the policy-determinism contract).
+        if self._emergency_tracker is not None and isinstance(
+            self._policy, CrewmatePolicy
+        ):
+            view = self._emergency_tracker.observe_tick(
+                tick=packet.tick,
+                memory=self._memory.episodic,
+                beliefs=self._memory.beliefs,
+                own_id=self._agent_id,
+            )
+            return self._policy.decide(
+                self._memory.episodic, public_map, emergency=view
+            )
         return self._policy.decide(self._memory.episodic, public_map)
 
     def render_memory_for_meeting(
@@ -1594,6 +1728,34 @@ class TacticalAgent:
             contradicted=contradicted,
         )
 
+    def note_meeting_concluded(
+        self,
+        *,
+        end_tick: int,
+        dead_ids: tuple[PlayerId, ...],
+        emergency_caller_id: PlayerId | None,
+    ) -> None:
+        """Fold one meeting's pacing facts into the emergency tracker (10.8).
+
+        Implements :class:`MeetingPacingAgent`. A no-op for an impostor
+        agent (no tracker -- impostors gain no button behavior). The
+        orchestrator calls this AFTER :meth:`absorb_meeting_evidence`, so
+        the tracker's post-meeting over-gate baseline reads the folded
+        beliefs and only a fresh below-to-above crossing re-arms the
+        suspicion trigger.
+        """
+
+        if self._emergency_tracker is None:
+            return
+        self._emergency_tracker.observe_meeting_end(
+            end_tick=end_tick,
+            announced_dead=dead_ids,
+            was_own_emergency_call=emergency_caller_id == self._agent_id,
+            memory=self._memory.episodic,
+            beliefs=self._memory.beliefs,
+            own_id=self._agent_id,
+        )
+
 
 def _infer_role_from_policy(policy: CrewmatePolicy | ImpostorPolicy) -> Role:
     if isinstance(policy, ImpostorPolicy):
@@ -1635,6 +1797,7 @@ __all__ = [
     "HeadlessGameResult",
     "MeetingArtifacts",
     "MeetingAwareAgent",
+    "MeetingPacingAgent",
     "MeetingRunner",
     "Outcome",
     "ROSTER_PRESETS",
