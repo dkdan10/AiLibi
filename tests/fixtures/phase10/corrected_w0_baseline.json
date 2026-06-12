@@ -1,0 +1,59 @@
+{
+  "genuine_class_conversion": {
+    "conversion_rate": 0.14285714285714285,
+    "converted": 1,
+    "note": "genuine_class_conversion is the PRIMARY Phase-10 progress gate. Raw ejection_accuracy comparisons against pre-repair eras are INVALID: the artifact-era 0.63 (and the mixed-era 0.476) were built on detector artifacts -- 14/22 of the old impostor convictions carried zero genuine-shaped flags -- so parity with those numbers would be railroading regained, not detection recovered. Gate on this supplied/converted pair and the accumulator/testimony channels; the win split is likewise excluded as a gate signal (constant ~90/10, zero ejection-driven wins).",
+    "supplied": 7
+  },
+  "impostor_ejection_channels": {
+    "seed-11:m2": [
+      "body_proximity",
+      "contradiction_flag",
+      "prior_meeting_carry"
+    ],
+    "seed-24:m0": [
+      "contradiction_flag"
+    ],
+    "seed-26:m1": [
+      "body_proximity",
+      "contradiction_flag",
+      "prior_meeting_carry"
+    ],
+    "seed-39:m1": [
+      "body_proximity",
+      "contradiction_flag",
+      "prior_meeting_carry"
+    ],
+    "seed-8:m2": [
+      "prior_meeting_carry",
+      "vent_witness"
+    ]
+  },
+  "multi_signal_conversion": {
+    "conversions_with_body_proximity": 3,
+    "conversions_with_contradiction_flag": 4,
+    "conversions_with_prior_meeting_carry": 4,
+    "conversions_with_vent_witness": 1,
+    "impostor_ejections": 5,
+    "multi_signal_conversions": 4,
+    "multi_signal_rate": 0.8,
+    "single_signal_conversions": 1,
+    "unattributed_conversions": 0
+  },
+  "sample_dir": "9p2i",
+  "supply_gauges": {
+    "accused_impostor_meetings": 54,
+    "flag_subjects_crew": 36,
+    "flag_subjects_impostor": 29,
+    "genuine_subject_meetings": 8,
+    "genuine_subject_share": 0.10256410256410256,
+    "meetings_total": 78,
+    "over_gate_listener_rows": 76,
+    "over_gate_listeners_per_accused_impostor_meeting": 1.4074074074074074,
+    "strong_flags": 1,
+    "total_flags": 65,
+    "weak_flags": 64,
+    "zero_contradiction_meetings": 49,
+    "zero_contradiction_share": 0.6282051282051282
+  }
+}

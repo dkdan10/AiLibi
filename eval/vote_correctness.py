@@ -150,7 +150,11 @@ from meetings.schemas import (
     PlayerId,
     SawPlayerObservation,
 )
-from meetings.transcript import WEAK_REASON_ENDPOINT_TICK, detect_contradictions
+from meetings.transcript import (
+    WEAK_REASON_ENDPOINT_TICK,
+    WEAK_REASON_RETARGETED_PROXY,
+    detect_contradictions,
+)
 
 # Symmetric tick tolerance for the kill-witness chain: a sighting of the ejected
 # player counts as placing them at a body's scene when it is in the same room
@@ -500,6 +504,52 @@ class GenuineClassConversionReport(BaseModel):
         return self
 
 
+def genuine_class_subjects(meeting: MeetingReport) -> frozenset[PlayerId]:
+    """One meeting's genuine-class (CANON-interior) subjects (Tasks 10.4, 10.6).
+
+    The single home of the genuine-class membership rule: re-derive flags
+    via :func:`meetings.transcript.detect_contradictions` under the
+    ballot-voter roster and keep every subject of an ``alibi_vs_sighting``
+    flag without the endpoint band (see
+    :class:`GenuineClassConversionReport` for the full definitional
+    rationale). Extracted from :func:`compute_genuine_class_conversion` in
+    Task 10.6 so the gp-7 supply gauges (the genuine-subject share in
+    :func:`eval.meeting_quality.compute_supply_gauges`) read the identical
+    rule by import instead of re-deriving it. Role-blind by design: the
+    caller applies ground truth (the conversion pair keeps impostors; the
+    share gauge counts any genuine-class subject as supply). Pure and
+    deterministic; a meeting with no ballots derives nothing (an
+    explicitly-empty roster indexes nothing).
+
+    Re-targeted proxy flags are NOT genuine class. A Task 10.6
+    :data:`meetings.transcript.WEAK_REASON_RETARGETED_PROXY` flag names
+    the PROXY SPEAKER — the player whose claim about someone else
+    conflicts with both the sighting and the subject's own account — not
+    a player whose own location a sighting contradicted. The genuine
+    class is the alibi-LIE gauge (audit gp-7 item 1: "keep
+    genuine_class_conversion as the alibi-lie gauge"), and the gate was
+    baselined on that semantics; admitting the lying-about-others class
+    would silently inflate the PRIMARY gate's supply (and the
+    genuine-subject share gauge) with a flag shape whose evidence is one
+    weak re-target, exactly across the 10.9 A/B this baseline anchors.
+    On the committed Wave-0 bytes every re-target names a crewmate, so
+    the supplied/converted pair is identical either way; the exclusion
+    pins the DEFINITION, not these bytes.
+    """
+
+    roster = frozenset(ballot.voter for ballot in meeting.ballots)
+    subjects: set[PlayerId] = set()
+    for flag in detect_contradictions(meeting.transcript, roster=roster):
+        if flag.kind != "alibi_vs_sighting":
+            continue
+        if WEAK_REASON_ENDPOINT_TICK in flag.description:
+            continue
+        if WEAK_REASON_RETARGETED_PROXY in flag.description:
+            continue
+        subjects.update(flag.subjects)
+    return frozenset(subjects)
+
+
 def compute_genuine_class_conversion(
     report: TournamentReport | Sequence[GameReport],
 ) -> GenuineClassConversionReport:
@@ -510,19 +560,16 @@ def compute_genuine_class_conversion(
     analyzers' signature). Pure: no I/O, no engine/agent/LLM calls — the
     repaired detector re-run is a pure function of each recorded transcript.
 
-    Per meeting: re-derive flags via
-    :func:`meetings.transcript.detect_contradictions` under the ballot-voter
-    roster, keep the ``alibi_vs_sighting`` flags without the endpoint band
-    (the genuine CANON-interior class — see
-    :class:`GenuineClassConversionReport` for why this is an import of the
-    Task 10.1 classifier, never a parallel implementation), and count each
-    flagged true impostor once as SUPPLIED (``roles`` subscript — a flagged
-    subject passed the living-roster filter, so one absent from the ground
-    truth is an internal inconsistency that fails loud). The pair CONVERTS
-    when the meeting's well-formed outcome ejected that impostor. A meeting
-    with no ballots derives nothing (an explicitly-empty roster indexes
-    nothing — the recording path always writes one ballot per living
-    participant, so this arises only on hand-built partial data).
+    Per meeting: take the genuine CANON-interior subjects from the one-home
+    :func:`genuine_class_subjects` (the import of the Task 10.1 classifier,
+    never a parallel implementation) and count each flagged true impostor
+    once as SUPPLIED (``roles`` subscript — a flagged subject passed the
+    living-roster filter, so one absent from the ground truth is an
+    internal inconsistency that fails loud). The pair CONVERTS when the
+    meeting's well-formed outcome ejected that impostor. A meeting with no
+    ballots derives nothing (an explicitly-empty roster indexes nothing —
+    the recording path always writes one ballot per living participant, so
+    this arises only on hand-built partial data).
     """
 
     games = report.games if isinstance(report, TournamentReport) else tuple(report)
@@ -531,16 +578,7 @@ def compute_genuine_class_conversion(
     converted = 0
     for game in games:
         for meeting in game.meetings:
-            roster = frozenset(ballot.voter for ballot in meeting.ballots)
-            flags = detect_contradictions(meeting.transcript, roster=roster)
-            genuine_subjects: set[PlayerId] = set()
-            for flag in flags:
-                if flag.kind != "alibi_vs_sighting":
-                    continue
-                if WEAK_REASON_ENDPOINT_TICK in flag.description:
-                    continue
-                genuine_subjects.update(flag.subjects)
-            for subject in genuine_subjects:
+            for subject in genuine_class_subjects(meeting):
                 if game.roles[subject] != "IMPOSTOR":
                     continue
                 supplied += 1
@@ -566,4 +604,5 @@ __all__ = [
     "VoteCorrectnessReport",
     "compute_genuine_class_conversion",
     "compute_vote_correctness",
+    "genuine_class_subjects",
 ]

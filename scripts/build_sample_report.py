@@ -23,11 +23,23 @@ friendly-fire guard that breaks raw replay reconstruction.
 Usage::
 
     python scripts/build_sample_report.py [--sample-dir DIR] [--check]
+    python scripts/build_sample_report.py --sample-dir DIR --baseline-out PATH
 
 The default writes the report and prints a one-line summary;
 ``refresh_samples.sh`` invokes it after every real refresh. ``--check`` rebuilds
 in memory and diffs against the committed report, exiting non-zero on drift (the
 consistency gate that ``tests/scripts/test_build_sample_report.py`` and CI use).
+
+``--baseline-out`` (Task 10.6; audit gp-7) derives the CORRECTED Wave-0
+baseline from the committed bytes WITHOUT touching the committed
+``tournament-eval-report.json`` (the sample dir stays single-era): the
+re-derived flag census plus the Task 10.6 gate-spec metrics
+(:func:`eval.meeting_quality.compute_multi_signal_conversion` /
+``compute_supply_gauges``) and the per-ejection channel decomposition,
+written as deterministic JSON. The committed home is
+``tests/fixtures/phase10/corrected_w0_baseline.json`` — the exact file the
+10.9 A/B reads as its baseline; a fixture test pins it byte-identical to a
+re-derivation, so the artifact cannot drift from the committed bytes.
 """
 
 from __future__ import annotations
@@ -48,6 +60,9 @@ from eval.balance_eval import load_tournament_report  # noqa: E402
 from eval.meeting_quality import (  # noqa: E402
     TournamentEvalReport,
     build_tournament_eval_report,
+    compute_multi_signal_conversion,
+    compute_supply_gauges,
+    decompose_ejection_channels,
 )
 from orchestrator.seeder import seed_initial_state  # noqa: E402
 
@@ -180,8 +195,21 @@ def _summary(report: TournamentEvalReport) -> str:
     # eval.vote_correctness.GENUINE_CLASS_GATE_NOTE on the report itself).
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
+    # The Task 10.6 gp-7 companions: the multi-signal conversion split and
+    # the supply gauges, derived fresh per run (they live on no committed
+    # report block until the 10.9 re-record). The win split prints with an
+    # explicit NON-GATE label: it is a constant of the race structure
+    # (~90/10, zero ejection-driven wins) and gates nothing.
+    multi = compute_multi_signal_conversion(games)
+    gauges = compute_supply_gauges(games)
+    over_gate = (
+        f"{gauges.over_gate_listeners_per_accused_impostor_meeting:.2f}"
+        if gauges.over_gate_listeners_per_accused_impostor_meeting is not None
+        else "n/a"
+    )
     return (
-        f"{len(games)} games | CREW {crew} / IMP {impostor} / budget {budget} | "
+        f"{len(games)} games | win split (non-gate) "
+        f"CREW {crew} / IMP {impostor} / budget {budget} | "
         f"meeting_rate {meeting.meeting_rate:.2f} ({meeting.meetings_total} meetings)"
         f" | ejection_accuracy {accuracy} "
         f"({conversion.impostor_ejections}/{conversion.total_ejections}) | "
@@ -189,10 +217,16 @@ def _summary(report: TournamentEvalReport) -> str:
         f"{conversion.impostor_accused_meetings}) | "
         f"missed_skip {conversion.missed_skip_ballots} | "
         f"genuine_class {genuine.converted}/{genuine.supplied} | "
+        f"multi_signal {multi.multi_signal_conversions}/{multi.impostor_ejections} | "
         f"lost_openings {gate.lost_opening_accusations} "
         f"(defaults {gate.cap_defaulted_turns}) | "
         f"sheltered_survival {gate.survivals_sheltered_sub_gate}/"
-        f"{gate.accused_impostor_survivals}"
+        f"{gate.accused_impostor_survivals} | "
+        f"flags {gauges.total_flags} ({gauges.weak_flags}w/{gauges.strong_flags}s) | "
+        f"zero_contra {gauges.zero_contradiction_meetings}/{gauges.meetings_total} | "
+        f"genuine_subject_meetings {gauges.genuine_subject_meetings} | "
+        f"flag_roles {gauges.flag_subjects_crew}c/{gauges.flag_subjects_impostor}i | "
+        f"over_gate_listeners/meeting {over_gate}"
     )
 
 
@@ -202,6 +236,46 @@ def write_report(sample_dir: Path) -> TournamentEvalReport:
     report = build_report(sample_dir)
     (sample_dir / _REPORT_FILENAME).write_text(_serialize(report), encoding="utf-8")
     return report
+
+
+def corrected_baseline_from_report(
+    report: TournamentEvalReport, *, sample_dir_name: str
+) -> dict[str, object]:
+    """Derive the corrected Wave-0 baseline table from a rebuilt report (10.6).
+
+    The 10.9 A/B baseline: the 10.4 re-deriver (the eval analyzers, which
+    re-run the one-home repaired detector per meeting) plus the Task 10.6
+    gate-spec metrics, folded over the committed replays WITHOUT touching
+    the committed report. Three blocks, every number produced by its
+    owning ``compute_*`` analyzer (the flag census and role split live on
+    the supply gauges), plus the per-ejection channel decomposition keyed
+    ``"seed-{seed}:m{index}"``. Pure and deterministic: re-running over
+    the same bytes is byte-identical, which the fixture test pins.
+    """
+
+    games = report.report.games
+    genuine = report.gate_metrics.genuine_class_conversion
+    multi = compute_multi_signal_conversion(games)
+    gauges = compute_supply_gauges(games)
+    ejection_channels = {
+        f"seed-{game.seed}:m{meeting_index}": sorted(channels)
+        for game in games
+        for meeting_index in range(len(game.meetings))
+        if (channels := decompose_ejection_channels(game, meeting_index)) is not None
+    }
+    return {
+        "sample_dir": sample_dir_name,
+        "genuine_class_conversion": genuine.model_dump(mode="json"),
+        "multi_signal_conversion": multi.model_dump(mode="json"),
+        "supply_gauges": gauges.model_dump(mode="json"),
+        "impostor_ejection_channels": ejection_channels,
+    }
+
+
+def serialize_corrected_baseline(baseline: dict[str, object]) -> str:
+    """Deterministic baseline JSON: sorted keys, 2-space indent, newline."""
+
+    return json.dumps(baseline, indent=2, sort_keys=True) + "\n"
 
 
 def check_report(sample_dir: Path) -> int:
@@ -241,11 +315,32 @@ def main() -> int:
         action="store_true",
         help="Rebuild and diff against the committed report; exit 1 on drift.",
     )
+    parser.add_argument(
+        "--baseline-out",
+        type=Path,
+        default=None,
+        help=(
+            "Derive the Task 10.6 corrected baseline from the committed bytes "
+            "and write it to this path (the committed report is NOT touched)."
+        ),
+    )
     args = parser.parse_args()
     sample_dir: Path = args.sample_dir
 
     if args.check:
         return check_report(sample_dir)
+    if args.baseline_out is not None:
+        report = build_report(sample_dir)
+        baseline = corrected_baseline_from_report(
+            report, sample_dir_name=sample_dir.name
+        )
+        baseline_out: Path = args.baseline_out
+        baseline_out.parent.mkdir(parents=True, exist_ok=True)
+        baseline_out.write_text(
+            serialize_corrected_baseline(baseline), encoding="utf-8"
+        )
+        print(f"Wrote {baseline_out}: {_summary(report)}")
+        return 0
     report = write_report(sample_dir)
     print(f"Wrote {sample_dir / _REPORT_FILENAME}: {_summary(report)}")
     return 0

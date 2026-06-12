@@ -945,3 +945,86 @@ class TestMeetingEvidenceRosterFilter:
         assert updated.view("stale-unknown-id").suspicion == pytest.approx(
             0.7 + (_DEFAULT_SUSPICION - 0.7) * MEETING_SUSPICION_DECAY_RATE
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 10.6: the Rule-3 relevance gate at the fold, walked on committed bytes
+# (audit gp-2 C-C-3 -- the seed-6 cancellation byte walk).
+# ---------------------------------------------------------------------------
+
+
+class TestRelevanceGatedFoldOnCommittedBytes:
+    """The seed-6 trajectory pin: gated Rule 3 lets accusation carry climb.
+
+    Audit C-C-3: impostor p-6 was accused in m0+m1+m2 yet rendered flat
+    0.5/0.5/0.55 -- each meeting's accusation bump cancelled in-meeting by
+    an evidentially-empty Rule-3 vouch (at m1, the accuser's OWN
+    kill-scene sighting: p-6 in ADMIN@16, where p-6 had just killed p-4,
+    body found @17). Under the relevance gate the kill-scene vouches die,
+    so the re-derived cross-meeting fold RISES across the accused
+    meetings instead of netting to zero.
+    """
+
+    def _seed6_trajectory(self) -> list[float]:
+        from pathlib import Path
+
+        from meetings.manager import extract_belief_evidence
+        from meetings.schemas import MeetingResult
+        from orchestrator.replay import MeetingReplayEntry, read_all_entries
+
+        replay = (
+            Path(__file__).resolve().parents[2]
+            / "replays"
+            / "samples"
+            / "9p2i"
+            / "replay-seed-6.jsonl"
+        )
+        beliefs = BeliefState()
+        trajectory: list[float] = []
+        for entry in read_all_entries(replay):
+            if not isinstance(entry, MeetingReplayEntry):
+                continue
+            result = MeetingResult(
+                meeting_id=entry.meeting_id,
+                triggered_by=entry.transcript.turns[0].speaker,
+                trigger_tick=0,
+                outcome=entry.outcome,
+                ejected_player_id=entry.ejected_player_id,
+                ballots=entry.ballots,
+                contradictions=entry.contradictions,
+                transcript=entry.transcript,
+            )
+            evidence = extract_belief_evidence(result)
+            beliefs = apply_meeting_evidence_rules(
+                beliefs,
+                own_id="observer",
+                accused=evidence.accused,
+                corroborated=evidence.corroborated,
+                contradicted=evidence.contradicted,
+            )
+            trajectory.append(beliefs.view("p-6").suspicion)
+        return trajectory
+
+    def test_seed6_p6_trajectory_rises_instead_of_rendering_flat(self) -> None:
+        trajectory = self._seed6_trajectory()
+
+        # Four committed meetings; p-6 is accused in m0/m1/m2. Pre-gate
+        # the fold read 0.5 / 0.5 / 0.55 / ... (m0's and m1's bumps each
+        # cancelled by a same-meeting vouch -- m0's survives the gate as a
+        # genuine EAST_HALL@8 sighting, m1's was the kill-scene vouch and
+        # dies). Post-gate: m1's and m2's bumps land uncancelled and the
+        # trajectory CLIMBS to the 0.60 gate by m2.
+        assert len(trajectory) == 4
+        assert trajectory[0] == pytest.approx(0.5)
+        assert trajectory[1] == pytest.approx(0.5 + ACCUSATION_SUSPICION_DELTA)
+        assert trajectory[2] == pytest.approx(0.5 + 2 * ACCUSATION_SUSPICION_DELTA)
+        # Strictly rising across the accused meetings -- the flat-render
+        # cancellation is gone.
+        assert trajectory[1] > trajectory[0]
+        assert trajectory[2] > trajectory[1]
+
+    def test_corroboration_magnitude_is_untouched(self) -> None:
+        # "No constant changes": the gate filters subjects, never re-tunes
+        # the §6.3 weights (freeze-during-measurement).
+        assert CORROBORATION_SUSPICION_DELTA == 0.05
+        assert ACCUSATION_SUSPICION_DELTA == 0.05
