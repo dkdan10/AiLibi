@@ -25,6 +25,20 @@ condition, accusations with re-seeded roles, opt-in substance, ballots with
 (termination / turn-id-order / reply_to / opt-in containment / 7.12 firewall /
 dangling primary_reason_id / dead speakers-voters).
 
+v3 (Phase-10 W0+ baseline, 2026-06-11 @ 9p2i post-10.5):
+* Every weak/strong + genuine-class classification is now IMPORTED from the
+  one-home repaired sources (``meetings.transcript.is_weak_contradiction`` /
+  ``detect_contradictions``; ``eval.vote_correctness.compute_genuine_class_
+  conversion``) — never an era-frozen replica — and the re-derived genuine
+  pair is CROSS-CHECKED against the shipped 10.4 metric on the same bytes
+  (mismatch -> blocking finding; one classifier would be wrong).
+* Point-6c Wave-1 contract-input aggregates: per-(meeting, accused-subject)
+  TESTIMONY records (both roles — innocents are the cascade-risk input),
+  GENUINE-CLASS records, ACCUMULATOR TRAJECTORY facts (per multi-meeting vote
+  candidate's rendered-suspicion series + Rule-3/Rule-5 downward-move sanity),
+  and 10.3 OPENING-RETRY telemetry (recovered single-retries from duplicate
+  opening-slot llm_calls; defaults from the deadline_default rows).
+
 Usage:
     PYTHONPATH=<repo root> uv run python audits/workflows/extract_gameplay_facts.py
 """
@@ -63,21 +77,31 @@ from meetings.manager import (
 )
 from meetings.schemas import (
     AccusationClaim,
+    AlibiClaim,
     CorroborationClaim,
+    FoundBodyObservation,
     MeetingResult,
     MeetingTranscript,
+    SawPlayerObservation,
     TurnKind,
 )
 from meetings.transcript import (
-    WEAK_CONTRADICTION_MARKER_PREFIX,
+    WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_STATED,
+    detect_contradictions,
     is_canonically_ordered,
+    is_weak_contradiction,
     next_chain_step,
 )
 from agents.memory.beliefs import (
     CONTRADICTION_SUSPICION_DELTA,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
+)
+from eval.balance_eval import load_tournament_report
+from eval.vote_correctness import (
+    compute_genuine_class_conversion,
+    compute_vote_correctness,
 )
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
@@ -153,32 +177,111 @@ _SUSPICION_GRAPH_ROW_RE: re.Pattern[str] = re.compile(
 )
 
 
-# A contradiction's WEAK classification is read off the detector-written
-# description marker (meetings.transcript._describe_alibi_vs_sighting appends
-# "[weak signal: <reason>; <reason>]"). Replicating the detector's own marker
-# logic — rather than re-deriving from the raw claims — is exactly what the 9.7
-# consumers (belief Rule 2) do, so this classification cannot drift from the
-# shipped down-weight. A contradiction with NO marker is STRONG; the two weak
-# reasons are independent flags inside one marker.
+# A contradiction's WEAK classification comes from the ONE-HOME predicate
+# meetings.transcript.is_weak_contradiction (imported, never replicated): the
+# 10.1-repaired predicate belief Rule 2 keys its graduated down-weight on, so
+# this extractor and the shipped down-weight can never drift on what "weak"
+# means. The individual weak REASONS (self-stated / narrow-window / endpoint-
+# tick) are still read off the detector-written description marker so the
+# decomposition can surface WHY a flag is weak (the endpoint-tick band is the
+# genuine-class disqualifier — a non-endpoint alibi_vs_sighting naming a true
+# impostor is the CANON-interior genuine class the 10.4 gate counts). A
+# contradiction is_weak_contradiction()==False is STRONG (the full
+# CONTRADICTION_SUSPICION_DELTA flag Rule 2 does NOT down-weight).
 def _classify_contradiction(contra: Any) -> dict[str, bool]:
-    """Classify a recorded ContradictionRef the same way the 9.7 detector does.
+    """Classify a recorded ContradictionRef via the imported one-home predicate.
 
-    ``weak_self_stated`` / ``weak_narrow`` are read off the description marker
-    (the detector appends ``WEAK_REASON_SELF_STATED`` / ``WEAK_REASON_NARROW_WINDOW``
-    inside ``WEAK_CONTRADICTION_MARKER_PREFIX``). ``strong`` is the absence of
-    the marker — the full ``CONTRADICTION_SUSPICION_DELTA`` flag belief Rule 2
-    does NOT down-weight. ``alibi_conflict`` flags never carry the weak marker
-    (it is only appended to ``alibi_vs_sighting``), so they are strong.
+    ``strong`` is ``not is_weak_contradiction(flag)`` — the imported
+    10.1-repaired predicate, never an inline marker check. The three weak
+    reason flags are read off the description marker (the detector appends
+    ``WEAK_REASON_*`` inside ``WEAK_CONTRADICTION_MARKER_PREFIX``) and are
+    informational sub-classifications inside one weak marker. ``endpoint_tick``
+    is the 10.1 band that disqualifies an ``alibi_vs_sighting`` from the
+    genuine CANON-interior class.
     """
 
     desc = contra.description or ""
-    weak = WEAK_CONTRADICTION_MARKER_PREFIX in desc
+    weak = is_weak_contradiction(contra)
     return {
         "kind": contra.kind,
+        "weak": weak,
         "weak_self_stated": weak and WEAK_REASON_SELF_STATED in desc,
         "weak_narrow": weak and WEAK_REASON_NARROW_WINDOW in desc,
+        "weak_endpoint_tick": weak and WEAK_REASON_ENDPOINT_TICK in desc,
         "strong": not weak,
     }
+
+
+def _testimony_vehicle(turn: Any, subject: str) -> tuple[str | None, bool]:
+    """How a turn names ``subject``, and whether the mention is observation-backed.
+
+    Wave-1 testimony lens (point 6c): for a turn that mentions ``subject``,
+    classify the VEHICLE the mention rides:
+
+    * ``"accusation"`` — an :class:`AccusationClaim` against ``subject`` (the
+      chain-driving vehicle).
+    * ``"sighting"`` — a :class:`SawPlayerObservation` of ``subject`` or an
+      other-player :class:`AlibiClaim` placing ``subject`` somewhere (a
+      location claim that feeds §5.4 detection).
+    * ``"free_text_only"`` — ``subject`` appears only in the turn's free_text
+      with no structured claim/observation naming them (the cascade-prone
+      bare verbal mention that never enters a listener's belief store).
+    * ``None`` — the turn does not name ``subject`` at all.
+
+    ``observation_backed`` is True when the turn carries a first-hand
+    :class:`SawPlayerObservation` / :class:`FoundBodyObservation` (a structured
+    sighting), the signal that separates an evidence-grounded accusation from a
+    bare vibe. The two returns are independent: an accusation CAN be
+    observation-backed (the accuser also logged a sighting on the same turn).
+    """
+
+    has_observation = any(
+        isinstance(o, (SawPlayerObservation, FoundBodyObservation))
+        for o in turn.observations
+    )
+    accuses = any(
+        isinstance(c, AccusationClaim) and c.against == subject for c in turn.claims
+    )
+    sights = any(
+        isinstance(o, SawPlayerObservation) and o.subject == subject
+        for o in turn.observations
+    ) or any(
+        isinstance(c, AlibiClaim) and c.subject == subject for c in turn.claims
+    )
+    if accuses:
+        return "accusation", has_observation
+    if sights:
+        return "sighting", has_observation
+    # free_text-only mention: the subject id appears verbatim in the prose but
+    # no structured claim/observation carries it (the bare verbal-testimony
+    # vehicle the Wave-1 testimony-ingestion lever targets).
+    if subject in (turn.free_text or ""):
+        return "free_text_only", has_observation
+    return None, has_observation
+
+
+def _genuine_subjects(transcript: Any, roster: frozenset[str]) -> frozenset[str]:
+    """Re-derive the genuine CANON-interior subjects (one-home, Task 10.4).
+
+    Re-runs the imported repaired detector
+    (:func:`meetings.transcript.detect_contradictions`) over the recorded
+    transcript under the ballot-voter roster — exactly the
+    :func:`eval.vote_correctness.compute_genuine_class_conversion` definition —
+    and returns every subject named by an ``alibi_vs_sighting`` flag WITHOUT the
+    endpoint band (non-endpoint == interior-tick == the audit's genuinely-
+    diagnostic class). Imported, never re-implemented: on post-repair
+    recordings the re-run equals the recorded flags byte-for-byte (verified by
+    the genuine-class cross-check invariant).
+    """
+
+    genuine: set[str] = set()
+    for flag in detect_contradictions(transcript, roster=roster):
+        if flag.kind != "alibi_vs_sighting":
+            continue
+        if WEAK_REASON_ENDPOINT_TICK in flag.description:
+            continue
+        genuine.update(flag.subjects)
+    return frozenset(genuine)
 
 
 def _parse_suspicion_graph(prompt: str) -> dict[str, float]:
@@ -197,6 +300,45 @@ def _parse_suspicion_graph(prompt: str) -> dict[str, float]:
         m.group("pid"): float(m.group("sus"))
         for m in _SUSPICION_GRAPH_ROW_RE.finditer(block)
     }
+
+
+# Vote-prompt graph block header (pinned in the constants above) and the
+# turn-prompt first-header literals the committed templates emit, used to
+# classify each meeting llm_call by the slot it filled (Task 10.3 retry lens).
+# A VOTE call is the only one that renders "## Your suspicion graph"; the three
+# turn kinds are distinguished by their first markdown header (the opening's
+# "## Meeting context" vs the reply / opt-in statement headers). These are the
+# literals the regression-pinned vote_ballot.v5 / accusation_round.v7 /
+# crewmate_report.v5 / impostor_report_v4 templates produce on this set.
+_OPENING_PROMPT_FIRST_HEADER = "## Meeting context"
+_REPLY_PROMPT_FIRST_HEADER = "## Your turn: a reply"
+_OPTIN_PROMPT_FIRST_HEADER = "## Your turn: an opt-in info-share"
+_FIRST_HEADER_RE: re.Pattern[str] = re.compile(r"^#+ .*$", re.MULTILINE)
+
+
+def _classify_call_slot(prompt: str) -> str:
+    """Classify a meeting llm_call by the meeting slot it filled.
+
+    Returns one of ``vote`` / ``opening`` / ``reply`` / ``opt_in`` / ``other``.
+    The §6.6 vote ballot is the only prompt carrying ``## Your suspicion
+    graph``; the three turn kinds carry distinct first markdown headers (the
+    opening's ``## Meeting context`` vs the reply / opt-in statement headers).
+    Deterministic over the regression-pinned templates this set was recorded
+    with — a divergent header lands in ``other`` rather than silently
+    mis-binning, so the retry counts stay honest.
+    """
+
+    if _SUSPICION_GRAPH_HEADER in prompt:
+        return "vote"
+    match = _FIRST_HEADER_RE.search(prompt)
+    first = match.group(0) if match else ""
+    if first == _OPENING_PROMPT_FIRST_HEADER:
+        return "opening"
+    if first == _REPLY_PROMPT_FIRST_HEADER:
+        return "reply"
+    if first == _OPTIN_PROMPT_FIRST_HEADER:
+        return "opt_in"
+    return "other"
 
 
 def _deserialize_actions(raw_actions: list[dict[str, Any]]) -> list[Action]:
@@ -930,6 +1072,125 @@ def _analyze_meeting(
         for subject in contra.subjects:
             contradictions_by_subject.setdefault(subject, []).append(cls)
 
+    # ---- Wave-1 contract-input: TESTIMONY RECORDS (point 6c) ----
+    # One record per (meeting, verbally-accused LIVING subject of EITHER role).
+    # The innocent rows are the cascade-risk input the testimony-ingestion lens
+    # (the dominant b1 finding: spoken testimony never enters listeners'
+    # beliefs) reads, so this is NOT restricted to impostors. A subject is
+    # "verbally accused" iff some turn carries an AccusationClaim against it
+    # (the chain-driving vehicle); for each such subject we collect EVERY turn
+    # that names it (by any vehicle), the structured flags naming it (with
+    # weak/strong class), each living voter's rendered suspicion OF that subject
+    # (per-target, not just the max), the ballots cast for it, the plurality
+    # winner + margin, and the witnesses' own ballot follow-through.
+    #
+    # Genuine CANON-interior subjects (Task 10.4, imported detector re-run) —
+    # the per-meeting set so the genuine-class records can be assembled with
+    # cross-meeting context in the per-game loop.
+    ballot_voter_roster = frozenset(b.voter for b in meeting_entry.ballots)
+    genuine_subjects = _genuine_subjects(
+        meeting_entry.transcript, ballot_voter_roster
+    )
+
+    # Ballot tallies (non-skip) for plurality + margin, and the set of accusers
+    # who followed through on their own target.
+    ballot_targets = [b.target for b in meeting_entry.ballots if b.target != "SKIP"]
+    target_vote_counts = Counter(ballot_targets)
+    plurality_target: str | None = None
+    plurality_votes = 0
+    plurality_margin = 0
+    if target_vote_counts:
+        ordered_counts = target_vote_counts.most_common()
+        plurality_target, plurality_votes = ordered_counts[0]
+        runner_up = ordered_counts[1][1] if len(ordered_counts) > 1 else 0
+        plurality_margin = plurality_votes - runner_up
+
+    # Players named by at least one AccusationClaim (excluding self), restricted
+    # to the living roster (a verbally-accused dead/hallucinated target is a
+    # drop, counted elsewhere).
+    accused_subjects = sorted(
+        {
+            acc["accused"]
+            for acc in accusations
+            if acc["accused"] != acc["speaker"] and acc["accused"] in living_ids
+        }
+    )
+    testimony_records: list[dict[str, Any]] = []
+    for subject in accused_subjects:
+        subj_role = roles.get(subject, "UNKNOWN")
+        testimony_turns: list[dict[str, Any]] = []
+        for t in turns:
+            vehicle, obs_backed = _testimony_vehicle(t, subject)
+            if vehicle is None:
+                continue
+            testimony_turns.append(
+                {
+                    "turn_index": t.turn_index,
+                    "speaker": t.speaker,
+                    "speaker_role": roles.get(t.speaker, "UNKNOWN"),
+                    "turn_kind": t.turn_kind,
+                    "vehicle": vehicle,
+                    "observation_backed": obs_backed,
+                }
+            )
+        subj_flags = [
+            _classify_contradiction(c)
+            for c in meeting_entry.contradictions
+            if subject in c.subjects
+        ]
+        n_strong_flags = sum(1 for f in subj_flags if f["strong"])
+        # Per-voter rendered suspicion OF this subject: read each LIVING voter's
+        # own §6.6 graph for the subject's row. A voter holds no row about
+        # itself, so derived=False rows are real renders; if a voter rendered no
+        # row for the subject (it held no belief), the value is None (not
+        # derivable from the prompt alone). The max-over-others value is the
+        # decisive table verdict the §4.6 gate reads.
+        per_voter_susp: dict[str, dict[str, Any]] = {}
+        for voter in sorted(living_ids):
+            graph = suspicion_graph_by_voter.get(voter, {})
+            if voter == subject:
+                continue
+            if subject in graph:
+                per_voter_susp[voter] = {
+                    "suspicion": graph[subject],
+                    "derived": False,
+                }
+            else:
+                per_voter_susp[voter] = {"suspicion": None, "derived": False}
+        accusers_of_subject = {
+            acc["speaker"] for acc in accusations if acc["accused"] == subject
+        }
+        ballots_for_subject = target_vote_counts.get(subject, 0)
+        witness_follow_through = sum(
+            1
+            for b in meeting_entry.ballots
+            if b.voter in accusers_of_subject and b.target == subject
+        )
+        testimony_records.append(
+            {
+                "subject": subject,
+                "subject_role": subj_role,
+                "is_genuine_class": subject in genuine_subjects,
+                "testimony_turns": testimony_turns,
+                "n_testimony_turns": len(testimony_turns),
+                "accusers": sorted(accusers_of_subject),
+                "structured_flags_naming_subject": subj_flags,
+                "n_structured_flags": len(subj_flags),
+                "n_strong_flags": n_strong_flags,
+                "per_voter_rendered_suspicion": per_voter_susp,
+                "max_rendered_suspicion": rendered_suspicion_by_target.get(subject),
+                "ballots_for_subject": ballots_for_subject,
+                "plurality_target": plurality_target,
+                "plurality_votes": plurality_votes,
+                "plurality_margin": plurality_margin,
+                "is_plurality_winner": subject == plurality_target,
+                "n_accusers": len(accusers_of_subject),
+                "witness_ballot_follow_through": witness_follow_through,
+                "ejected": subject == ejected_id,
+                "outcome": meeting_entry.outcome,
+            }
+        )
+
     # The ejected player's rendered suspicion, two ways: the global max any
     # voter rendered for them, and the max among the voters who actually
     # ejected them (the decisive value).
@@ -993,6 +1254,13 @@ def _analyze_meeting(
             ejected_rendered_suspicion_among_ejectors
         ),
         "ejecting_voters": ejecting_voters,
+        # Wave-1 contract-input payloads (point 6c).
+        "testimony_records": testimony_records,
+        "genuine_subjects": sorted(genuine_subjects),
+        "suspicion_graph_by_voter": suspicion_graph_by_voter,
+        "ballot_voter_roster": sorted(ballot_voter_roster),
+        "plurality_target": plurality_target,
+        "plurality_margin": plurality_margin,
     }
 
 
@@ -1077,6 +1345,24 @@ def main() -> int:
     per_ejection_evidence: list[dict[str, Any]] = []
     missed_conversions: list[dict[str, Any]] = []
     zero_contradiction_ejections: list[dict[str, Any]] = []
+    # Wave-1 contract-input record sets (point 6c — the headline lens depends
+    # on these). Testimony rows for EVERY verbally-accused living subject of
+    # either role; genuine-class rows (10.4 imported definition); accumulator
+    # trajectory rows; opening-validation retry rows (10.3).
+    testimony_records_all: list[dict[str, Any]] = []
+    genuine_class_records: list[dict[str, Any]] = []
+    accumulator_trajectories: list[dict[str, Any]] = []
+    # Genuine-class cross-check accumulators (vs the shipped 10.4 metric).
+    genuine_supplied_rederived = 0
+    genuine_converted_rederived = 0
+    # 10.3 opening-retry aggregates.
+    opening_defaults = 0
+    opening_retries_recovered = 0
+    opening_retry_extra_calls = 0
+    opening_retry_extra_input_tokens = 0
+    opening_retry_extra_output_tokens = 0
+    meetings_lost_opening = 0
+    opening_retry_records: list[dict[str, Any]] = []
 
     for path in replay_paths:
         seed = int(path.stem.rsplit("-", 1)[1])
@@ -1108,6 +1394,20 @@ def main() -> int:
         game_end = next((e for e in entries if isinstance(e, GameEndReplayEntry)), None)
         meeting_by_tick = {e.tick: e for e in meeting_entries}
         total_meeting_records += len(meeting_entries)
+
+        # Meetings whose OPENING defaulted (exhausted its single retry): the
+        # recorded opening is the husk. Precomputed from the deadline_default
+        # rows so the recovered-retry detector can EXCLUDE them — a defaulted
+        # opening's two opening-slot llm_calls are burned attempts that ended in
+        # a default, NOT a recovery (their waste is attributed to the default
+        # bucket below, never double-counted as a recovery).
+        opening_defaulted_meeting_ids: set[str] = set()
+        for fc in failed_call_entries:
+            if fc.error_type != "deadline_default":
+                continue
+            m = _DEFAULTED_TURN_RE.search(fc.error_message)
+            if m is not None and m.group("kind") == "opening":
+                opening_defaulted_meeting_ids.add(fc.meeting_id)
 
         kills: list[dict[str, Any]] = []
         deaths: set[str] = set()
@@ -1357,6 +1657,115 @@ def main() -> int:
                 agg_output_tokens += call.output_tokens
                 agg_cost += call.cost_usd
 
+            # ---- 10.3 OPENING-VALIDATION RETRY DETECTION (point 6c) ----
+            # The opening is the only turn collected with retries=1: a
+            # narration-only / guard-emptied / schema-invalid opening that
+            # RETURNED text consumes an attempt and re-asks once. In headless
+            # Ollama those returned-but-rejected attempts are LOGGED in
+            # llm_calls (the recording client saw the text; the manager-side
+            # validation rejected it AFTER logging, so extract_parse_failure
+            # returns None and no separate failed_call row is written). So a
+            # RECOVERED opening retry surfaces as >1 opening-slot llm_call for
+            # the opener (the recorded opening's speaker); the extra call(s) are
+            # the burned retry attempt(s). An opening that EXHAUSTED its retry
+            # surfaces instead as a deadline_default failed_call row (counted in
+            # the failed-call loop below, where turn_kind=="opening").
+            opener = (
+                meeting_entry.transcript.turns[0].speaker
+                if meeting_entry.transcript.turns
+                else None
+            )
+            opening_calls_by_agent: dict[str, list[Any]] = {}
+            for call in meeting_entry.llm_calls:
+                if call.agent_id is None:
+                    continue
+                if _classify_call_slot(call.prompt) == "opening":
+                    opening_calls_by_agent.setdefault(call.agent_id, []).append(call)
+            # A RECOVERED retry is an opener with >1 opening-slot call whose
+            # opening did NOT ultimately default (a defaulted opening's extra
+            # calls are burned-then-defaulted, attributed below). The earliest
+            # opening-slot calls are the burned attempt(s); the last recorded as
+            # the opening.
+            opener_defaulted = (
+                meeting_entry.meeting_id in opening_defaulted_meeting_ids
+            )
+            if opener is not None and not opener_defaulted:
+                opener_opening_calls = opening_calls_by_agent.get(opener, [])
+                extra = max(0, len(opener_opening_calls) - 1)
+                if extra > 0:
+                    opening_retries_recovered += 1
+                    opening_retry_extra_calls += extra
+                    burned = opener_opening_calls[:extra]
+                    extra_in = sum(c.input_tokens for c in burned)
+                    extra_out = sum(c.output_tokens for c in burned)
+                    opening_retry_extra_input_tokens += extra_in
+                    opening_retry_extra_output_tokens += extra_out
+                    opening_retry_records.append(
+                        {
+                            "seed": seed,
+                            "meeting_index": meeting_index,
+                            "meeting_id": meeting_entry.meeting_id,
+                            "opener": opener,
+                            "opener_role": roles.get(opener, "UNKNOWN"),
+                            "extra_opening_calls": extra,
+                            "extra_input_tokens": extra_in,
+                            "extra_output_tokens": extra_out,
+                            "recovered_accusation": m_facts["opening_has_accusation"],
+                            "outcome": "recovered",
+                        }
+                    )
+
+            # ---- 10.4 GENUINE-CLASS records + cross-check (point 6b/6c) ----
+            # m_facts["genuine_subjects"] is the imported-detector re-run over
+            # this meeting's transcript (non-endpoint alibi_vs_sighting). Keep
+            # the true-impostor subset as SUPPLIED, CONVERTED when this meeting
+            # ejected that impostor — byte-equal to the shipped
+            # compute_genuine_class_conversion (asserted as an invariant after
+            # the walk).
+            for subject in m_facts["genuine_subjects"]:
+                if roles.get(subject) != "IMPOSTOR":
+                    continue
+                genuine_supplied_rederived += 1
+                converted = (
+                    meeting_entry.outcome == "EJECTED"
+                    and meeting_entry.ejected_player_id == subject
+                )
+                if converted:
+                    genuine_converted_rederived += 1
+                # Find this subject's strong/weak markers + testimony summary
+                # from its testimony record (if it was verbally accused).
+                t_rec = next(
+                    (
+                        r
+                        for r in m_facts["testimony_records"]
+                        if r["subject"] == subject
+                    ),
+                    None,
+                )
+                genuine_class_records.append(
+                    {
+                        "seed": seed,
+                        "meeting_index": meeting_index,
+                        "subject": subject,
+                        "subject_role": roles.get(subject, "UNKNOWN"),
+                        "n_strong_flags": (
+                            t_rec["n_strong_flags"] if t_rec is not None else None
+                        ),
+                        "n_structured_flags": (
+                            t_rec["n_structured_flags"] if t_rec is not None else None
+                        ),
+                        "verbally_accused": t_rec is not None,
+                        "max_rendered_suspicion": m_facts[
+                            "rendered_suspicion_by_target"
+                        ].get(subject),
+                        "ballots_for_subject": (
+                            t_rec["ballots_for_subject"] if t_rec is not None else 0
+                        ),
+                        "converted": bool(converted),
+                        "outcome": meeting_entry.outcome,
+                    }
+                )
+
             state, post_events = apply_meeting_result(
                 state,
                 result,
@@ -1589,6 +1998,21 @@ def main() -> int:
             ej_id = mf["ejected_player_id"]
             ej_role = mf["ejected_role"]
 
+            # (0) TESTIMONY RECORDS (point 6c): stamp each per-meeting testimony
+            # row (one per verbally-accused living subject of EITHER role) with
+            # the seed, meeting index, and the meetings-remaining count so the
+            # cascade-risk + accumulator one-more-meeting questions are
+            # answerable from the flat record set.
+            for t_rec in mf["testimony_records"]:
+                testimony_records_all.append(
+                    {
+                        "seed": seed,
+                        "meeting_index": m_idx,
+                        "meetings_remaining_after": remaining_after,
+                        **t_rec,
+                    }
+                )
+
             # (i) PER-EJECTION EVIDENCE CLASS (right or wrong).
             if ej_id is not None:
                 ej_contras = contra_by_subj.get(ej_id, [])
@@ -1707,6 +2131,125 @@ def main() -> int:
             for acc_pid in accused_this_meeting:
                 prior_accusations.setdefault(acc_pid, []).append(m_idx)
 
+        # ---- ACCUMULATOR TRAJECTORY FACTS (point 6c) ----
+        # For each player who is a vote CANDIDATE (appears in some other voter's
+        # §6.6 suspicion graph) in 2+ meetings of THIS game, build the
+        # across-meeting sequence of their rendered max suspicion plus the
+        # accusations / opt-in corroborations naming them in the same meeting.
+        # The lenses verify carry vs the 25% Rule-5 decay vs Rule-3 corroboration
+        # drops from these. We also count DOWNWARD moves (a later meeting's
+        # rendered value strictly below the earlier one) — the sanity signal
+        # that 10.2's un-gated Rule-3 corroboration / Rule-5 decay is live on
+        # these bytes (a pre-10.2 monotone-up store would show zero).
+        candidate_meetings: dict[str, list[dict[str, Any]]] = {}
+        for mf in meetings_out:
+            rendered = mf["rendered_suspicion_by_target"]
+            # Accusations / corroborations naming each player THIS meeting.
+            acc_count: dict[str, int] = {}
+            for acc in mf["accusations"]:
+                if acc["accused"] != acc["speaker"]:
+                    acc_count[acc["accused"]] = acc_count.get(acc["accused"], 0) + 1
+            corr_count = mf["opt_in_corroborations_by_supported"]
+            for pid, sus in rendered.items():
+                candidate_meetings.setdefault(pid, []).append(
+                    {
+                        "meeting_index": mf["meeting_index"],
+                        "rendered_suspicion": sus,
+                        "accusations_naming": acc_count.get(pid, 0),
+                        "opt_in_corroborations_naming": corr_count.get(pid, 0),
+                        "ejected_here": mf["ejected_player_id"] == pid,
+                    }
+                )
+        for pid, seq in candidate_meetings.items():
+            if len(seq) < 2:
+                continue
+            ordered = sorted(seq, key=lambda s: s["meeting_index"])
+            downward_moves = 0
+            downward_with_corroboration = 0
+            for prev_pt, cur in zip(ordered, ordered[1:]):
+                if cur["rendered_suspicion"] < prev_pt["rendered_suspicion"] - 1e-9:
+                    downward_moves += 1
+                    # A downward move where the EARLIER meeting carried a
+                    # corroboration of this player is the Rule-3 (corroboration
+                    # −0.05) signature; decay (Rule 5) also drives down moves.
+                    if prev_pt["opt_in_corroborations_naming"] > 0:
+                        downward_with_corroboration += 1
+            accumulator_trajectories.append(
+                {
+                    "seed": seed,
+                    "player": pid,
+                    "player_role": roles.get(pid, "UNKNOWN"),
+                    "n_candidate_meetings": len(ordered),
+                    "sequence": ordered,
+                    "rendered_suspicion_series": [
+                        s["rendered_suspicion"] for s in ordered
+                    ],
+                    "downward_moves": downward_moves,
+                    "downward_moves_with_prior_corroboration": (
+                        downward_with_corroboration
+                    ),
+                }
+            )
+
+        # ---- 10.3 opening-DEFAULT count (point 6c) ----
+        # Openings that EXHAUSTED their single retry surface as deadline_default
+        # rows with turn_kind=="opening" (collected, de-duplicated, in
+        # defaulted_turns). A defaulted opening that left the recorded opening
+        # with no accusation lost its chain-driving opening. Burned spend lands
+        # in TWO places depending on how the attempt failed: a returned-but-
+        # rejected attempt (manager-side validation) is in the meeting's
+        # llm_calls (opening-slot calls for the opener); an attempt that raised
+        # a ValidationError before the recording client logged it rides the
+        # deadline_default row's own tokens. Both are summed here so the per-
+        # opening burned cost is visible (already in the global token totals).
+        this_game_opening_defaults = {
+            (d["meeting_id"], d["turn_index"], d["speaker"])
+            for d in defaulted_turns
+            if d["seed"] == seed and d["turn_kind"] == "opening"
+        }
+        opening_defaults += len(this_game_opening_defaults)
+        for d_mid, d_idx, d_spk in this_game_opening_defaults:
+            mf_for = next(
+                (m for m in meetings_out if m["meeting_id"] == d_mid), None
+            )
+            lost = mf_for is not None and not mf_for["opening_has_accusation"]
+            if lost:
+                meetings_lost_opening += 1
+            m_entry = next(
+                (m for m in meeting_entries if m.meeting_id == d_mid), None
+            )
+            burned_in = burned_out = 0
+            if m_entry is not None:
+                for call in m_entry.llm_calls:
+                    if call.agent_id == d_spk and (
+                        _classify_call_slot(call.prompt) == "opening"
+                    ):
+                        burned_in += call.input_tokens
+                        burned_out += call.output_tokens
+            for fc in failed_call_entries:
+                if (
+                    fc.meeting_id == d_mid
+                    and fc.error_type == "deadline_default"
+                    and (mm := _DEFAULTED_TURN_RE.search(fc.error_message)) is not None
+                    and mm.group("kind") == "opening"
+                    and mm.group("speaker") == d_spk
+                ):
+                    burned_in += fc.input_tokens
+                    burned_out += fc.output_tokens
+            opening_retry_records.append(
+                {
+                    "seed": seed,
+                    "meeting_id": d_mid,
+                    "opener": d_spk,
+                    "opener_role": roles.get(d_spk, "UNKNOWN"),
+                    "turn_index": d_idx,
+                    "outcome": "defaulted",
+                    "lost_chain_driving_opening": lost,
+                    "burned_input_tokens": burned_in,
+                    "burned_output_tokens": burned_out,
+                }
+            )
+
         games.append(
             {
                 "seed": seed,
@@ -1726,6 +2269,73 @@ def main() -> int:
                 },
                 "failed_calls": failed_calls_out,
             }
+        )
+
+    # --- 10.4 genuine-class + vote-correctness CROSS-CHECK (point 6b) ---
+    # Build the SHIPPED tournament report over the SAME bytes (re-seeding the
+    # firewalled roles) and fold it through the owning eval helpers, then assert
+    # the extractor's RE-DERIVED genuine-class supplied/converted equals the
+    # shipped compute_genuine_class_conversion to the unit. A mismatch means one
+    # of the two classifiers is wrong (a divergent replica would poison the
+    # whole decomposition) -> BLOCKING mechanical finding. On a post-repair
+    # recording (10.5+) the imported detector re-run equals the recorded flags,
+    # so the two must agree exactly; the assertion is the trust anchor that they
+    # do. ejection_accuracy / contradictions-flagged-but-ignored are folded for
+    # the summary and a sanity cross-check against the extractor's own tallies.
+    roles_by_seed = {g["seed"]: dict(g["roles"]) for g in games}
+    shipped_report = load_tournament_report(
+        SAMPLE_DIR,
+        roles_by_seed=roles_by_seed,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    shipped_genuine = compute_genuine_class_conversion(shipped_report)
+    shipped_vc = compute_vote_correctness(shipped_report)
+    genuine_crosscheck_ok = (
+        genuine_supplied_rederived == shipped_genuine.supplied
+        and genuine_converted_rederived == shipped_genuine.converted
+    )
+    if not genuine_crosscheck_ok:
+        findings.append(
+            {
+                "id": "GENUINE-CROSSCHECK",
+                "severity": "blocking",
+                "title": (
+                    "Re-derived genuine-class diverges from the shipped 10.4 metric"
+                ),
+                "claim": (
+                    "The extractor's imported-detector genuine-class re-run and "
+                    "eval.vote_correctness.compute_genuine_class_conversion over "
+                    "the same bytes must agree to the unit; they do not, so one "
+                    "of the two classifiers is wrong and the whole decomposition "
+                    "is poisoned."
+                ),
+                "evidence": (
+                    f"extractor supplied={genuine_supplied_rederived} "
+                    f"converted={genuine_converted_rederived}; shipped "
+                    f"supplied={shipped_genuine.supplied} "
+                    f"converted={shipped_genuine.converted}"
+                ),
+                "repair_hint": (
+                    "Re-sync the extractor's _genuine_subjects to the imported "
+                    "meetings.transcript.detect_contradictions + the 10.4 "
+                    "non-endpoint alibi_vs_sighting definition; a drift means an "
+                    "era-frozen replica crept back in."
+                ),
+            }
+        )
+    # Cross-check the extractor's own ejection tallies against the shipped
+    # vote-correctness fold (both re-derive roles the same way; a mismatch is an
+    # internal inconsistency -> invariant failure, not a substrate finding).
+    if shipped_vc.impostor_ejections != ejections_impostor:
+        invariant_failures.append(
+            f"impostor-ejection count mismatch: extractor {ejections_impostor} "
+            f"vs shipped vote_correctness {shipped_vc.impostor_ejections}"
+        )
+    if shipped_vc.crewmate_ejections != len(wrong_ejections):
+        invariant_failures.append(
+            f"crew-ejection count mismatch: extractor {len(wrong_ejections)} "
+            f"vs shipped vote_correctness {shipped_vc.crewmate_ejections}"
         )
 
     # --- Self-check invariants (FAIL LOUD) ---
@@ -1787,6 +2397,22 @@ def main() -> int:
     self_checks.append(
         "per-tick + post-meeting state hashes match the recorded log: "
         f"{'OK' if not walk_hash_failures else 'FAIL'}"
+    )
+    self_checks.append(
+        "re-derived genuine-class == shipped compute_genuine_class_conversion "
+        f"(supplied {genuine_supplied_rederived}/{shipped_genuine.supplied}, "
+        f"converted {genuine_converted_rederived}/{shipped_genuine.converted}): "
+        f"{'OK' if genuine_crosscheck_ok else 'FAIL'}"
+    )
+    ejection_crosscheck_ok = (
+        shipped_vc.impostor_ejections == ejections_impostor
+        and shipped_vc.crewmate_ejections == len(wrong_ejections)
+    )
+    self_checks.append(
+        "extractor ejection tallies == shipped vote_correctness "
+        f"(imp {ejections_impostor}/{shipped_vc.impostor_ejections}, crew "
+        f"{len(wrong_ejections)}/{shipped_vc.crewmate_ejections}): "
+        f"{'OK' if ejection_crosscheck_ok else 'FAIL'}"
     )
 
     for line in self_checks:
@@ -1961,6 +2587,154 @@ def main() -> int:
                     "flag)."
                 ),
                 "records": zero_contradiction_ejections,
+            },
+            "genuine_class_crosscheck": {
+                "rederived_supplied": genuine_supplied_rederived,
+                "rederived_converted": genuine_converted_rederived,
+                "shipped_supplied": shipped_genuine.supplied,
+                "shipped_converted": shipped_genuine.converted,
+                "shipped_conversion_rate": shipped_genuine.conversion_rate,
+                "match": genuine_crosscheck_ok,
+                "shipped_ejection_accuracy": shipped_vc.ejection_accuracy,
+                "shipped_contradictions_flagged_but_ignored": (
+                    shipped_vc.contradictions_flagged_but_ignored
+                ),
+                "note": (
+                    "The extractor's imported-detector genuine-class re-run vs "
+                    "the shipped eval.vote_correctness.compute_genuine_class_"
+                    "conversion over the same bytes. match=False is a BLOCKING "
+                    "finding (one classifier is wrong)."
+                ),
+            },
+        },
+        "wave1_contract_inputs": {
+            "note": (
+                "Point-6c Wave-1 contract-input aggregates (the headline lens "
+                "depends on these). Testimony rows cover EVERY verbally-accused "
+                "living subject of either role (innocent rows = cascade-risk "
+                "input). Genuine-class rows use the imported 10.4 definition. "
+                "Trajectory rows track each multi-meeting vote candidate's "
+                "rendered suspicion across meetings. Retry rows are the 10.3 "
+                "opening-validation retries / defaults."
+            ),
+            "testimony": {
+                "count": len(testimony_records_all),
+                "subjects_impostor": sum(
+                    1
+                    for r in testimony_records_all
+                    if r["subject_role"] == "IMPOSTOR"
+                ),
+                "subjects_crew": sum(
+                    1 for r in testimony_records_all if r["subject_role"] == "CREWMATE"
+                ),
+                "genuine_class_subjects": sum(
+                    1 for r in testimony_records_all if r["is_genuine_class"]
+                ),
+                "ejected_subjects": sum(
+                    1 for r in testimony_records_all if r["ejected"]
+                ),
+                "subjects_with_zero_structured_flags": sum(
+                    1 for r in testimony_records_all if r["n_structured_flags"] == 0
+                ),
+                "subjects_with_a_strong_flag": sum(
+                    1 for r in testimony_records_all if r["n_strong_flags"] > 0
+                ),
+                "accused_impostor_not_plurality": sum(
+                    1
+                    for r in testimony_records_all
+                    if r["subject_role"] == "IMPOSTOR" and not r["is_plurality_winner"]
+                ),
+                "impostor_subjects_who_won_plurality": sum(
+                    1
+                    for r in testimony_records_all
+                    if r["subject_role"] == "IMPOSTOR" and r["is_plurality_winner"]
+                ),
+                "witnesses_total": sum(r["n_accusers"] for r in testimony_records_all),
+                "witness_follow_through_total": sum(
+                    r["witness_ballot_follow_through"] for r in testimony_records_all
+                ),
+                "note": (
+                    "One record per (meeting, verbally-accused living subject). "
+                    "witness_ballot_follow_through = accusers of the subject who "
+                    "also voted for it; the spoken-testimony-never-ingested lens "
+                    "reads the gap between accusers and the subject's rendered "
+                    "suspicion across the OTHER voters' graphs."
+                ),
+                "records": testimony_records_all,
+            },
+            "genuine_class": {
+                "count": len(genuine_class_records),
+                "supplied": genuine_supplied_rederived,
+                "converted": genuine_converted_rederived,
+                "conversion_rate": (
+                    round(genuine_converted_rederived / genuine_supplied_rederived, 4)
+                    if genuine_supplied_rederived
+                    else None
+                ),
+                "verbally_accused": sum(
+                    1 for r in genuine_class_records if r["verbally_accused"]
+                ),
+                "note": (
+                    "Every (meeting, true impostor) the imported 10.4 detector "
+                    "re-run flags genuine (non-endpoint alibi_vs_sighting). "
+                    "converted == ejected that impostor that meeting."
+                ),
+                "records": genuine_class_records,
+            },
+            "accumulator_trajectories": {
+                "count": len(accumulator_trajectories),
+                "players_with_a_downward_move": sum(
+                    1 for r in accumulator_trajectories if r["downward_moves"] > 0
+                ),
+                "total_downward_moves": sum(
+                    r["downward_moves"] for r in accumulator_trajectories
+                ),
+                "downward_moves_with_prior_corroboration": sum(
+                    r["downward_moves_with_prior_corroboration"]
+                    for r in accumulator_trajectories
+                ),
+                "note": (
+                    "Per multi-meeting vote candidate, the rendered-suspicion "
+                    "series across meetings + accusations/corroborations naming "
+                    "them. total_downward_moves > 0 confirms Rule-3 / Rule-5 "
+                    "un-gating (10.2) is live (a monotone-up store shows zero)."
+                ),
+                "records": accumulator_trajectories,
+            },
+            "opening_retries": {
+                "recovered": opening_retries_recovered,
+                "defaulted": opening_defaults,
+                "extra_calls_recovered": opening_retry_extra_calls,
+                "extra_input_tokens_recovered": opening_retry_extra_input_tokens,
+                "extra_output_tokens_recovered": opening_retry_extra_output_tokens,
+                "meetings_that_lost_their_chain_driving_opening": meetings_lost_opening,
+                "defaulted_burned_input_tokens": sum(
+                    r.get("burned_input_tokens", 0)
+                    for r in opening_retry_records
+                    if r["outcome"] == "defaulted"
+                ),
+                "defaulted_burned_output_tokens": sum(
+                    r.get("burned_output_tokens", 0)
+                    for r in opening_retry_records
+                    if r["outcome"] == "defaulted"
+                ),
+                "note": (
+                    "10.3 opening single-retry telemetry. A RECOVERED retry "
+                    "(failed once, succeeded second attempt) surfaces as >1 "
+                    "opening-slot llm_call for the opener (the burned attempt is "
+                    "logged in llm_calls because the manager rejected it AFTER "
+                    "the recording client logged the returned text). A DEFAULTED "
+                    "opening (exhausted its single retry) surfaces as a "
+                    "deadline_default row with turn_kind=='opening'; its burned "
+                    "spend lands either in the opening-slot llm_calls (returned-"
+                    "but-rejected) or on the deadline_default row itself (a "
+                    "pre-log ValidationError). 'lost its chain-driving opening' "
+                    "= a defaulted opening whose recorded opening carries no "
+                    "accusation. On THIS set every opening-validation event "
+                    "ended in a default (recovered==0) and every default lost "
+                    "its chain-driving opening."
+                ),
+                "records": opening_retry_records,
             },
         },
         "invalid_accusation_target_drops": {
