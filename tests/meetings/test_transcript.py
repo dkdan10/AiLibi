@@ -24,13 +24,15 @@ from meetings.schemas import (
     SawPlayerObservation,
 )
 from meetings.transcript import (
+    CANONICAL_ROOMS,
     NARROW_ALIBI_WINDOW_TICKS,
-    PLACEHOLDER_ROOM_LABELS,
+    SPAWN_WINDOW_LAST_TICK,
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_ADVERSARIAL,
     WEAK_REASON_BOUNDARY_OVERLAP,
     WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_NARROW_WINDOW,
+    WEAK_REASON_RETARGETED_PROXY,
     WEAK_REASON_SELF_PAIR,
     WEAK_REASON_SELF_STATED,
     DetectedCorroboration,
@@ -40,9 +42,11 @@ from meetings.transcript import (
     detect_contradictions,
     detect_corroborations,
     is_canonically_ordered,
+    is_relevant_sighting,
     is_weak_contradiction,
     next_chain_step,
     sort_turns_canonically,
+    triggering_body_rooms,
     walk_chain,
 )
 
@@ -637,8 +641,28 @@ class TestCanonicalRooms:
         # never splits (canonical ids are UPPERCASE_SNAKE: EAST_HALL).
         assert canonical_rooms(label) == frozenset(expected)
 
-    @pytest.mark.parametrize("label", sorted(PLACEHOLDER_ROOM_LABELS))
-    def test_placeholders_canonicalise_to_no_room(self, label: str) -> None:
+    @pytest.mark.parametrize(
+        "label",
+        [
+            # The 10.1 denylist inventory...
+            "VARIOUS",
+            "VARIABLE",
+            "VARYING",
+            "UNKNOWN",
+            "UNKNOWN_ROOM",
+            # ...plus the variants that LEAKED past it (audit C-C-5): the
+            # allowlist kills the class, not the observed instances.
+            "VARYING_ROOMS",
+            "HALLS",
+            "SOMEWHERE",
+        ],
+    )
+    def test_non_map_labels_canonicalise_to_no_room(self, label: str) -> None:
+        # Task 10.6 (audit gp-1 C-C-5): membership in the frozen
+        # CANONICAL_ROOMS allowlist replaces the placeholder denylist --
+        # "VARYING_ROOMS" escaped the denylist and minted 25% of the
+        # Wave-0 set's flag volume against one innocent. A non-map label
+        # is non-spatial: no flag, no corroboration.
         assert canonical_rooms(label) == frozenset()
         assert canonical_rooms(label.lower()) == frozenset()
 
@@ -647,6 +671,24 @@ class TestCanonicalRooms:
 
     def test_underscore_rooms_never_split(self) -> None:
         assert canonical_rooms("EAST_HALL") == frozenset({"EAST_HALL"})
+
+    def test_every_canonical_room_is_its_own_canonical_form(self) -> None:
+        for room in CANONICAL_ROOMS:
+            assert canonical_rooms(room) == frozenset({room})
+
+    def test_allowlist_equals_the_engine_map_room_set(self) -> None:
+        # The Task 10.6 review tripwire: CANONICAL_ROOMS is deliberately
+        # DATA inside meetings/ (agents/ imports this module, so an
+        # engine import here would breach the §1.3 firewall
+        # transitively). This test is the one place the duplication is
+        # reconciled -- a future map change MUST fail here and
+        # re-trigger detector review, otherwise the new rooms would
+        # silently canonicalise to "no room" and re-open the
+        # placeholder-leak class. Tests sit outside the firewall, so the
+        # engine import is legal exactly here.
+        from engine.world import load_canonical_map
+
+        assert CANONICAL_ROOMS == frozenset(load_canonical_map().rooms)
 
 
 class TestCanonicalRoomComparison:
@@ -1534,56 +1576,95 @@ def _classify_removed_flag(
 
 
 class TestCommittedBytesArtifactCollapse:
-    """The committed bytes are detector-exact and artifact-free (gp-2).
+    """Re-derivation diverges from the recorded bytes ONLY at the 10.6 repairs.
 
-    At 10.1 merge time this class proved the collapse against the e750b40
-    era bytes (83 recorded flags, 53 artifact-classified removals under
-    re-derivation — preserved in git history as the merge gate). The Task
-    10.5 set was RECORDED under the repaired detector, so the live form of
-    the same pin is exactness: re-deriving every committed transcript must
-    reproduce the recorded flags byte-for-byte — zero removals, zero new
-    pairings. A non-empty removal set here means the detector drifted from
-    the committed bytes without a re-record; a removal that
-    artifact-classifies means an artifact got RE-recorded.
+    At 10.1 merge time this class proved the artifact collapse against the
+    e750b40 era bytes; at 10.5 it pinned exactness (the set was recorded
+    under the then-current detector). Task 10.6 repairs the detector
+    OFFLINE against the same committed bytes (no re-record), so the live
+    form of the pin is a controlled divergence: re-derivation must differ
+    from the recorded flags at EXACTLY the three audited repair
+    coordinates and nowhere else —
+
+    * seed 13 m1: the 22-flag ``VARYING_ROOMS`` placeholder-variant storm
+      (audit C-C-5) re-derives to zero,
+    * seed 28 m1: 5 proxy-alibi flags on innocent p-9 suppress and
+      re-target weak at the proxy speaker p-7 (audit C-C-4, option (b)),
+    * seed 33 m1: 1 proxy flag on the railroaded innocent p-6 re-targets
+      at the proxy speaker p-2 (same rule, found by the same census).
+
+    Every other recorded flag re-derives byte-identically, and every
+    ADDED flag is a weak re-target — any other divergence means the
+    detector drifted from the committed bytes outside the audited repair.
     """
 
-    def test_rederivation_is_exact_and_nothing_artifact_classifies(
-        self,
-    ) -> None:
+    # (seed, meeting_index) -> recorded flags that no longer re-derive.
+    _REPAIRED_SITES: dict[tuple[int, int], int] = {
+        (13, 1): 22,
+        (28, 1): 5,
+        (33, 1): 1,
+    }
+
+    def test_rederivation_diverges_only_at_the_repaired_sites(self) -> None:
         recorded_total = 0
+        rederived_total = 0
+        removed_sites: dict[tuple[int, int], int] = {}
         for seed in range(50):
-            for entry in _committed_meetings(seed):
+            for index, entry in enumerate(_committed_meetings(seed)):
                 recorded_by_id = {
                     flag.contradiction_id: flag for flag in entry.contradictions
                 }
-                recorded_total += len(recorded_by_id)
                 rederived_by_id = {
                     flag.contradiction_id: flag for flag in _rederive(entry)
                 }
-                # Exactness, both directions: the recording-time detector IS
-                # the current detector, so the committed flags re-derive
-                # identically (ids and full payloads).
-                assert set(rederived_by_id) == set(recorded_by_id)
-                for flag_id, flag in recorded_by_id.items():
-                    assert rederived_by_id[flag_id] == flag
-                    # And no recorded flag is an artifact-class pairing: a
-                    # placeholder or containment flag surviving into the
-                    # bytes would be the 10.1 repair regressing at the
-                    # recording seam.
+                recorded_total += len(recorded_by_id)
+                rederived_total += len(rederived_by_id)
+                removed = [
+                    flag
+                    for flag_id, flag in recorded_by_id.items()
+                    if rederived_by_id.get(flag_id) != flag
+                ]
+                added = [
+                    flag
+                    for flag_id, flag in rederived_by_id.items()
+                    if recorded_by_id.get(flag_id) != flag
+                ]
+                if removed:
+                    removed_sites[(seed, index)] = len(removed)
+                for flag in removed:
+                    # Each removal must be explained by a 10.6 repair: a
+                    # placeholder-variant side (the allowlist kill) or a
+                    # proxy flag whose re-target now exists in the
+                    # re-derived set under the same event-id pair.
                     classes = _classify_removed_flag(entry, flag)
-                    assert "placeholder" not in classes, flag.contradiction_id
-                    assert "containment" not in classes, flag.contradiction_id
+                    retargeted = (
+                        flag.contradiction_id in rederived_by_id
+                        and WEAK_REASON_RETARGETED_PROXY
+                        in rederived_by_id[flag.contradiction_id].description
+                    )
+                    assert "placeholder" in classes or retargeted, flag.contradiction_id
+                for flag in added:
+                    # The only NEW pairings 10.6 may mint are the weak
+                    # re-targets at the proxy speaker.
+                    assert WEAK_REASON_RETARGETED_PROXY in flag.description, (
+                        flag.contradiction_id
+                    )
+                    assert is_weak_contradiction(flag)
 
-        # The honest-baseline set carries 87 recorded flags (vs the era's
-        # 83 over 76 meetings — 78 meetings here; composition shifted
-        # 74-weak/9-strong -> 84-weak/3-strong).
+        assert removed_sites == self._REPAIRED_SITES
+        # Recorded bytes untouched (87 — the Wave-0 honest baseline);
+        # the corrected re-derivation: 87 − 22 (storm) − 6 (suppressed
+        # proxies) + 6 (weak re-targets) = 65.
         assert recorded_total == 87
+        assert rederived_total == 65
 
     def test_surviving_endpoint_flags_are_weak_banded(self) -> None:
         # The endpoint class survives ONLY weak-banded (the 10.1 decision:
         # weak-banded by preference over exclusion — an endpoint mismatch
-        # can still convert under corroboration). On the honest-baseline
-        # bytes 57 recorded flags carry an endpoint reason; every one
+        # can still convert under corroboration). On the corrected
+        # re-derivation 45 flags carry an endpoint reason (the recorded
+        # 57 minus the storm's 8, seed 28's 3 endpoint proxies, and seed
+        # 33's 1 — re-targets carry only the re-target reason); every one
         # carries the weak marker, none full weight.
         endpoint_weak = 0
         for seed in range(50):
@@ -1595,7 +1676,7 @@ class TestCommittedBytesArtifactCollapse:
                     ):
                         assert is_weak_contradiction(flag)
                         endpoint_weak += 1
-        assert endpoint_weak == 57
+        assert endpoint_weak == 45
 
     def test_every_surviving_flag_remains_deterministic(self) -> None:
         # Byte-identical re-derivation: running the pure detector twice
@@ -1624,16 +1705,17 @@ class TestCommittedBytesSeedPins:
     """
 
     def test_artifact_input_classes_still_occur_and_mint_nothing(self) -> None:
-        # The 9B still emits compound-label and placeholder rooms (13 and 5
-        # claim rooms respectively on this set) — the artifact INPUTS the
-        # era's 34 containment + 11 placeholder flags rode. Under the
-        # repaired detector a placeholder side mints no flag at all and a
-        # compound side pairs only through canonical-set logic, so: no
-        # recorded flag resolves to a placeholder or containment pairing
-        # (exactness test above), and here the inputs themselves are
-        # confirmed present — this census failing on a future re-record
-        # means the model stopped emitting the class, not that the repair
-        # regressed.
+        # The 9B still emits compound-label and non-spatial rooms (13 and
+        # 7 claim rooms respectively on this set) — the artifact INPUTS
+        # the era's 34 containment + 11 placeholder flags rode. The
+        # non-spatial census rose 5 -> 7 under the Task 10.6 allowlist:
+        # the two labels that LEAKED past the denylist (seed 13 m1's
+        # ``VARYING_ROOMS``, seed 6 m1's ``HALLS``) now classify
+        # correctly as no-room. Under the repaired detector a non-spatial
+        # side mints no flag at all and a compound side pairs only
+        # through canonical-set logic; this census failing on a future
+        # re-record means the model stopped emitting the class, not that
+        # the repair regressed.
         compound_claim_rooms = 0
         placeholder_claim_rooms = 0
         for seed in range(50):
@@ -1649,7 +1731,7 @@ class TestCommittedBytesSeedPins:
                         elif not canon:
                             placeholder_claim_rooms += 1
         assert compound_claim_rooms == 13
-        assert placeholder_claim_rooms == 5
+        assert placeholder_claim_rooms == 7
 
     def test_recorded_conflict_flags_sit_in_the_weak_band(self) -> None:
         # The honest baseline records exactly two alibi_conflict flags
@@ -1706,3 +1788,547 @@ class TestCommittedBytesSeedPins:
 
         assert recorded[0] in rederived
         assert is_weak_contradiction(recorded[0]) == expect_weak
+
+
+# ---------------------------------------------------------------------------
+# Task 10.6: allowlist, proxy subject-account consistency, Rule-3 relevance.
+#
+# Audit anchors: audit-2026-06-11-2218-gameplay-data.md gp-1 (C-C-5, C-C-4),
+# C-C-3. Synthetic shapes first; the committed-bytes acceptance pins (the
+# DoD coordinates) close the section, walked offline against the Task 10.5
+# bytes exactly like the 10.1/10.5 pin classes above.
+# ---------------------------------------------------------------------------
+
+from meetings.schemas import FoundBodyObservation  # noqa: E402
+
+
+def _body_report_turn(
+    *, turn_index: int, speaker: str, body_of: str, tick: int, room: str
+) -> MeetingTurn:
+    return MeetingTurn(
+        turn_id=f"m-1:turn-{turn_index}",
+        turn_index=turn_index,
+        speaker=speaker,
+        turn_kind="opening" if turn_index == 0 else "reply",
+        reply_to=None,
+        observations=(
+            FoundBodyObservation(
+                type="found_body", tick=tick, body_of=body_of, room=room
+            ),
+        ),
+        free_text=f"turn {turn_index}",
+    )
+
+
+class TestProxyAlibiSubjectAccountConsistency:
+    """Audit C-C-4, owner option (b): suppress + re-target proxy alibis.
+
+    The Wave-0 strong band was 3/3 proxy-shaped (alibi speaker != subject
+    always escapes the self-stated weak band) at 1 TP / 2 FP. When the
+    subject's OWN account agrees with the conflicting sighting, the proxy
+    claim is the odd account out: the flag re-targets WEAK at the proxy
+    speaker. When the subject echoed the proxy's (false) alibi -- the
+    seed-24 true-positive shape -- nothing suppresses.
+    """
+
+    def _seed28_shape(self) -> MeetingTranscript:
+        # Miniature of seed 28 m1: p-7's over-broad proxy alibi for p-9
+        # vs sightings of p-9 in WEST_HALL -- which p-9's OWN
+        # self-sighting agrees with.
+        subject_turn = MeetingTurn(
+            turn_id="m-1:turn-1",
+            turn_index=1,
+            speaker="p-9",
+            turn_kind="reply",
+            reply_to=None,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=17, subject="p-9", room="WEST_HALL"
+                ),
+            ),
+            free_text="turn 1",
+        )
+        return MeetingTranscript(
+            turns=(
+                _sighting_turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    subject="p-9",
+                    tick=17,
+                    room="WEST_HALL",
+                ),
+                subject_turn,
+                _alibi_turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    subject="p-9",
+                    from_tick=0,
+                    to_tick=18,
+                    room="CAFETERIA",
+                ),
+            )
+        )
+
+    def test_consistent_subject_account_suppresses_and_retargets(self) -> None:
+        flags = detect_contradictions(self._seed28_shape())
+
+        # Both sightings (p-3's and p-9's own) conflicted with p-7's
+        # proxy alibi; both flags re-target at p-7, none lands on p-9.
+        assert flags
+        assert all(flag.subjects == ("p-7",) for flag in flags)
+        for flag in flags:
+            assert flag.kind == "alibi_vs_sighting"
+            assert is_weak_contradiction(flag)
+            assert WEAK_REASON_RETARGETED_PROXY in flag.description
+
+    def test_retargets_share_the_proxy_claim_lift_key(self) -> None:
+        # Belief Rule 2 dedups its lift per (subject, alibi-claim) key, so
+        # however many sightings the proxy claim conflicts with, the
+        # re-targets sum to ONE weak delta on the proxy speaker -- a
+        # re-target can never eject alone (the gp-1 over-suppression
+        # tripwire's flip side).
+        flags = detect_contradictions(self._seed28_shape())
+        assert len({contradiction_lift_key(flag) for flag in flags}) == 1
+
+    def test_subject_echo_of_the_proxy_alibi_keeps_the_strong_flag(self) -> None:
+        # The seed-24 TP shape: the proxy (fellow impostor) states the
+        # false alibi FIRST, the subject ECHOES it, and the subject's own
+        # per-tick accounts agree with the ALIBI, not the sighting. No
+        # self-account matches the sighting room, so no suppression -- the
+        # strong flag on the subject survives.
+        transcript = MeetingTranscript(
+            turns=(
+                _sighting_turn(
+                    turn_index=0, speaker="p-7", subject="p-4", tick=8, room="WEST_HALL"
+                ),
+                _alibi_turn(
+                    turn_index=1,
+                    speaker="p-1",
+                    subject="p-4",
+                    from_tick=0,
+                    to_tick=9,
+                    room="CAFETERIA",
+                ),
+                _alibi_turn(
+                    turn_index=2,
+                    speaker="p-4",
+                    subject="p-4",
+                    from_tick=0,
+                    to_tick=9,
+                    room="CAFETERIA",
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+
+        assert len(flags) == 1
+        assert flags[0].subjects == ("p-4",)
+        assert not is_weak_contradiction(flags[0])
+
+    def test_subject_account_is_read_before_echo_dedup(self) -> None:
+        # The ordering subtlety the contract names: the agreeing
+        # self-account is itself an alibi the PROXY stated first, so
+        # echo-dedup keeps the proxy's copy and discards the subject's --
+        # the subject's own account would be invisible to a post-dedup
+        # lookup exactly when the proxy spoke first. The pre-dedup lookup
+        # still sees it: the conflicting blanket alibi suppresses and
+        # re-targets.
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    subject="p-5",
+                    from_tick=0,
+                    to_tick=10,
+                    room="CAFETERIA",
+                ),
+                _alibi_turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    subject="p-5",
+                    from_tick=4,
+                    to_tick=6,
+                    room="WEST_HALL",
+                ),
+                _alibi_turn(
+                    turn_index=2,
+                    speaker="p-5",
+                    subject="p-5",
+                    from_tick=4,
+                    to_tick=6,
+                    room="WEST_HALL",
+                ),
+                _sighting_turn(
+                    turn_index=3, speaker="p-8", subject="p-5", tick=5, room="WEST_HALL"
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+
+        retargets = [
+            flag for flag in flags if WEAK_REASON_RETARGETED_PROXY in flag.description
+        ]
+        assert len(retargets) == 1
+        assert retargets[0].subjects == ("p-1",)
+        # The proxy rule owns the alibi_vs_sighting path: no SIGHTING flag
+        # lands on the subject. (The p-1 vs p-2 alibi_conflict pair still
+        # names p-5 -- the conflict path is outside the rule's contract
+        # scope, and that flag is weak-banded.)
+        assert not any(
+            "p-5" in flag.subjects and flag.kind == "alibi_vs_sighting"
+            for flag in flags
+        )
+
+    def test_account_outside_the_proxy_window_does_not_suppress(self) -> None:
+        # The subject admits the sighting's room only OUTSIDE the proxy
+        # claim's window: the proxy claim and the sighting still cannot
+        # both be true, and the subject's account does not arbitrate --
+        # the flag stays on the subject.
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-9",
+                    subject="p-9",
+                    from_tick=12,
+                    to_tick=14,
+                    room="WEST_HALL",
+                ),
+                _alibi_turn(
+                    turn_index=1,
+                    speaker="p-7",
+                    subject="p-9",
+                    from_tick=2,
+                    to_tick=8,
+                    room="CAFETERIA",
+                ),
+                _sighting_turn(
+                    turn_index=2, speaker="p-3", subject="p-9", tick=5, room="WEST_HALL"
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+
+        assert any(
+            flag.subjects == ("p-9",) and flag.kind == "alibi_vs_sighting"
+            for flag in flags
+        )
+        assert not any(
+            WEAK_REASON_RETARGETED_PROXY in flag.description for flag in flags
+        )
+
+    def test_self_stated_alibi_never_retargets(self) -> None:
+        # The proxy rule keys on speaker != subject; a self-stated alibi
+        # conflicting with a sighting stays the 9.7 weak self-stated flag
+        # on the subject even when another self-account agrees with the
+        # sighting (the subject contradicting themselves is the
+        # self-pair/self-stated band's business, not the proxy rule's).
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-9",
+                    subject="p-9",
+                    from_tick=0,
+                    to_tick=9,
+                    room="CAFETERIA",
+                ),
+                _sighting_turn(
+                    turn_index=1, speaker="p-3", subject="p-9", tick=5, room="WEST_HALL"
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        assert len(flags) == 1
+        assert flags[0].subjects == ("p-9",)
+        assert WEAK_REASON_SELF_STATED in flags[0].description
+
+
+class TestIsRelevantSighting:
+    """The named pure Rule-3 relevance predicate (audit C-C-3; 10.7 reuses it)."""
+
+    def test_spawn_window_ticks_are_never_relevant(self) -> None:
+        for tick in range(SPAWN_WINDOW_LAST_TICK + 1):
+            assert not is_relevant_sighting(
+                tick=tick,
+                rooms=frozenset({"MEDBAY"}),
+                triggering_body_rooms=frozenset(),
+            )
+
+    def test_tick_two_or_later_is_outside_the_spawn_window(self) -> None:
+        assert is_relevant_sighting(
+            tick=SPAWN_WINDOW_LAST_TICK + 1,
+            rooms=frozenset({"MEDBAY"}),
+            triggering_body_rooms=frozenset(),
+        )
+
+    def test_kill_scene_sighting_is_not_relevant(self) -> None:
+        assert not is_relevant_sighting(
+            tick=16,
+            rooms=frozenset({"ADMIN"}),
+            triggering_body_rooms=frozenset({"ADMIN"}),
+        )
+
+    def test_non_scene_room_is_relevant(self) -> None:
+        assert is_relevant_sighting(
+            tick=16,
+            rooms=frozenset({"MEDBAY"}),
+            triggering_body_rooms=frozenset({"ADMIN"}),
+        )
+
+    def test_roomless_account_gates_only_on_the_spawn_window(self) -> None:
+        # The claim-stated corroboration shape: no room, so the kill-scene
+        # prong can never bind -- only the tick prong gates.
+        assert is_relevant_sighting(
+            tick=2, rooms=frozenset(), triggering_body_rooms=frozenset({"ADMIN"})
+        )
+        assert not is_relevant_sighting(
+            tick=0, rooms=frozenset(), triggering_body_rooms=frozenset({"ADMIN"})
+        )
+
+
+class TestTriggeringBodyRooms:
+    """The kill-scene set is the OPENING turn's found_body rooms only."""
+
+    def test_opening_body_room_is_canonicalised(self) -> None:
+        transcript = MeetingTranscript(
+            turns=(
+                _body_report_turn(
+                    turn_index=0, speaker="p-3", body_of="p-4", tick=17, room="admin"
+                ),
+            )
+        )
+        assert triggering_body_rooms(transcript) == frozenset({"ADMIN"})
+
+    def test_empty_transcript_has_no_scene(self) -> None:
+        assert triggering_body_rooms(MeetingTranscript()) == frozenset()
+
+    def test_later_turn_bodies_do_not_widen_the_scene(self) -> None:
+        transcript = MeetingTranscript(
+            turns=(
+                _sighting_turn(
+                    turn_index=0, speaker="p-3", subject="p-6", tick=5, room="MEDBAY"
+                ),
+                _body_report_turn(
+                    turn_index=1, speaker="p-8", body_of="p-4", tick=17, room="ADMIN"
+                ),
+            )
+        )
+        assert triggering_body_rooms(transcript) == frozenset()
+
+
+class TestDetectCorroborationsRelevanceGate:
+    """Audit C-C-3: evidentially-empty vouches no longer corroborate."""
+
+    def test_spawn_window_sighting_does_not_corroborate(self) -> None:
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-8",
+                    subject="p-8",
+                    from_tick=0,
+                    to_tick=7,
+                    room="CAFETERIA",
+                ),
+                _sighting_turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    subject="p-8",
+                    tick=SPAWN_WINDOW_LAST_TICK,
+                    room="CAFETERIA",
+                ),
+            )
+        )
+        assert detect_corroborations(transcript) == ()
+
+    def test_kill_scene_sighting_does_not_corroborate(self) -> None:
+        # The seed-6 m1 byte shape in miniature: the reporter found the
+        # body in ADMIN and ALSO saw the subject in ADMIN inside the
+        # subject's alibi window -- presence at the scene must never
+        # exonerate.
+        opening = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-3",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(
+                FoundBodyObservation(
+                    type="found_body", tick=17, body_of="p-4", room="ADMIN"
+                ),
+                SawPlayerObservation(
+                    type="saw_player", tick=16, subject="p-6", room="ADMIN"
+                ),
+            ),
+            free_text="turn 0",
+        )
+        transcript = MeetingTranscript(
+            turns=(
+                opening,
+                _alibi_turn(
+                    turn_index=1,
+                    speaker="p-6",
+                    subject="p-6",
+                    from_tick=15,
+                    to_tick=17,
+                    room="ADMIN",
+                ),
+            )
+        )
+        assert detect_corroborations(transcript) == ()
+
+    def test_interior_non_scene_sighting_still_corroborates(self) -> None:
+        # The gate prunes, never kills: an interior-tick sighting away
+        # from the scene is exactly the Rule-3 evidence that should count.
+        transcript = MeetingTranscript(
+            turns=(
+                _body_report_turn(
+                    turn_index=0, speaker="p-3", body_of="p-4", tick=17, room="ADMIN"
+                ),
+                _alibi_turn(
+                    turn_index=1,
+                    speaker="p-8",
+                    subject="p-8",
+                    from_tick=2,
+                    to_tick=7,
+                    room="MEDBAY",
+                ),
+                _sighting_turn(
+                    turn_index=2, speaker="p-5", subject="p-8", tick=4, room="MEDBAY"
+                ),
+            )
+        )
+        corroborations = detect_corroborations(transcript)
+        assert len(corroborations) == 1
+        assert corroborations[0].subject == "p-8"
+
+
+class TestCommittedBytes106Pins:
+    """The Task 10.6 DoD acceptance pins, walked offline (no re-record)."""
+
+    def test_seed13_m1_varying_rooms_storm_rederives_to_zero(self) -> None:
+        # Audit C-C-5: the recorded bytes carry 22 flags, every one minted
+        # off the "p-9 in VARYING_ROOMS (ticks 2-7)" phantom-room alibi
+        # against CREWMATE p-9 (25% of set volume). Under the allowlist
+        # the label is non-spatial: zero flags re-derive.
+        entry = _committed_meetings(13)[1]
+        assert len(entry.contradictions) == 22
+        assert all("VARYING_ROOMS" in flag.description for flag in entry.contradictions)
+        assert _rederive(entry) == ()
+
+    def test_seed6_m1_halls_mints_nothing(self) -> None:
+        # The latent sibling class: "HALLS" appears as a claim room on
+        # this meeting and is non-spatial under the allowlist -- zero
+        # flags, exactly as recorded (the label never happened to pair
+        # here; the allowlist closes the class, not the instance).
+        entry = _committed_meetings(6)[1]
+        halls_rooms = [
+            claim.room
+            for turn in entry.transcript.turns
+            for claim in turn.claims
+            if isinstance(claim, AlibiClaim) and claim.room == "HALLS"
+        ]
+        assert halls_rooms == ["HALLS"]
+        assert canonical_rooms("HALLS") == frozenset()
+        assert entry.contradictions == ()
+        assert _rederive(entry) == ()
+
+    def test_seed28_m1_proxy_flags_suppress_and_retarget(self) -> None:
+        # Audit C-C-4 FP: innocent p-9 was ejected 4-3 off 2 strong proxy
+        # flags (p-7's over-broad "p-9 CAFETERIA 0-18" vs p-9's own
+        # truthful WEST_HALL@17 self-sighting). Re-derived: NO strong flag
+        # on p-9, every flag sourced from p-7's proxy alibi re-targets
+        # weak at p-7.
+        entry = _committed_meetings(28)[1]
+        recorded_strong = [
+            flag for flag in entry.contradictions if not is_weak_contradiction(flag)
+        ]
+        assert len(recorded_strong) == 2
+        assert all(flag.subjects == ("p-9",) for flag in recorded_strong)
+
+        rederived = _rederive(entry)
+        assert not any(
+            "p-9" in flag.subjects and not is_weak_contradiction(flag)
+            for flag in rederived
+        )
+        retargets = [
+            flag
+            for flag in rederived
+            if WEAK_REASON_RETARGETED_PROXY in flag.description
+        ]
+        assert retargets
+        assert all(flag.subjects == ("p-7",) for flag in retargets)
+
+    def test_seed28_m1_p9_rederived_max_below_the_gate(self) -> None:
+        # The re-derived §4.6 verdict: from the 0.5 prior, p-9's surviving
+        # flags (two self-stated endpoint flags off one claim) lift one
+        # graduated weak delta -- 0.58, below the 0.60 eject gate. The
+        # re-target lands the same single weak delta on p-7 (weak, so it
+        # cannot eject alone either).
+        from agents.memory.beliefs import BeliefState, apply_contradiction_rule
+
+        entry = _committed_meetings(28)[1]
+        rederived = _rederive(entry)
+        for player in ("p-9", "p-7"):
+            beliefs = BeliefState()
+            beliefs.seed_player(player, suspicion=0.5, trust=0.5)
+            lifted = apply_contradiction_rule(
+                beliefs, [flag for flag in rederived if player in flag.subjects]
+            )
+            assert lifted.view(player).suspicion == pytest.approx(0.58)
+            assert lifted.view(player).suspicion < 0.60
+
+    def test_seed24_m0_strong_flag_on_p4_survives(self) -> None:
+        # Audit C-C-4 TP: the subject ECHOED the fellow impostor's false
+        # alibi, so no self-account agrees with the reporter's sighting
+        # and no suppression fires -- the set's one genuine strong
+        # conversion keeps its full-weight flag, byte-identical.
+        entry = _committed_meetings(24)[0]
+        recorded_strong = [
+            flag for flag in entry.contradictions if not is_weak_contradiction(flag)
+        ]
+        assert len(recorded_strong) == 1
+        assert recorded_strong[0].subjects == ("p-4",)
+        assert recorded_strong[0] in _rederive(entry)
+
+    def test_seed6_m1_kill_scene_sighting_produces_no_corroboration(self) -> None:
+        # Audit C-C-3 byte walk: accuser p-3's own ADMIN@16 sighting of
+        # impostor p-6 (who had just killed p-4 there, body found @17)
+        # corroborated p-6's "ADMIN 15-17" alibi and cancelled the
+        # accusation. Under the relevance gate the meeting re-derives ZERO
+        # corroborations (the second recorded pair -- p-9 vouched at the
+        # same scene -- is equally evidence-free).
+        entry = _committed_meetings(6)[1]
+        assert (
+            detect_corroborations(entry.transcript, roster=_living_roster(entry)) == ()
+        )
+
+    def test_no_spawn_window_corroboration_survives_set_wide(self) -> None:
+        # DoD pin: spawn-window-sourced corroborations count 0 set-wide,
+        # and the channel survives the gate (re-derived Rule-3 pairs stay
+        # well above zero -- gated, not killed).
+        surviving = 0
+        for seed in range(50):
+            for entry in _committed_meetings(seed):
+                sightings_by_id = {
+                    f"turn:{turn.turn_id}:obs:{index}": observation
+                    for turn in entry.transcript.turns
+                    for index, observation in enumerate(turn.observations)
+                    if isinstance(observation, SawPlayerObservation)
+                }
+                for pair in detect_corroborations(
+                    entry.transcript, roster=_living_roster(entry)
+                ):
+                    surviving += 1
+                    sighting = sightings_by_id[pair.sighting_event_id]
+                    assert sighting.tick > SPAWN_WINDOW_LAST_TICK, (
+                        f"spawn-window corroboration survived: seed {seed}, "
+                        f"{pair.sighting_event_id}"
+                    )
+        # 73 pairs survive the gate on the committed bytes (115 recorded-era
+        # pairs minus 15 spawn-window and 27 kill-scene) -- the over-
+        # suppression tripwire: a future change driving this to 0 means the
+        # channel died, which the audit ranks as bad as the artifacts.
+        assert surviving == 73

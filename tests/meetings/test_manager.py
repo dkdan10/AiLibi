@@ -52,6 +52,11 @@ from meetings.manager import (
     INVALID_CORROBORATION_SUPPORTS_MARKER,
     INVALID_REASON_ID_MARKER,
     INVALID_VOTE_TARGET_MARKER,
+    MARKER_QUOTED_ORIGINAL_MAX_CHARS,
+    OPENING_RETRY_FEEDBACK_DEMAND,
+    OPENING_RETRY_FEEDBACK_HEADER,
+    OPENING_RETRY_FEEDBACK_NO_POSITION,
+    OPENING_UNSURE_DEGRADE_MARKER,
     OPENING_UNSURE_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     LLMProviderError,
@@ -2222,22 +2227,35 @@ class TestInvalidAccusationTargetDropped:
         assert markers == ()
         assert surviving == claims
 
-    def test_hallucinated_opening_accusation_retries_then_defaults(self) -> None:
+    def test_hallucinated_opening_accusation_retries_then_degrades(self) -> None:
         # p-1 (the opener) accuses a non-living id; the accusation is dropped
         # before the turn is recorded, which leaves the opening with neither
         # an accusation nor an unsure declaration -- the Task 10.3 opening
         # validation treats that exactly like a parse failure, so the
-        # deterministic stub burns its single retry and the opening records
-        # as the fail-soft default (the audit's seed-13-m0 dead-id shape).
+        # deterministic stub burns its single retry. Both attempts PARSED,
+        # so the Task 10.6 fail-soft degrades to an UNSURE opening built
+        # from the last attempt (audit gp-5 H-H-2: the full default cost
+        # the whole meeting) instead of the placeholder default.
         result, client = _run_meeting(_make_responder(accusations={"p-1": "imp-2"}))
 
         opening = result.transcript.turns[0]
         assert opening.speaker == "p-1"
-        assert opening.free_text == DEFAULT_TURN_FREE_TEXT
+        assert opening.free_text.startswith(OPENING_UNSURE_DEGRADE_MARKER)
+        assert OPENING_UNSURE_MARKER in opening.free_text.lower()
+        assert opening.free_text != DEFAULT_TURN_FREE_TEXT
         assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
-        # Exactly one retry: two opening attempts, then the standing default.
+        # Exactly one retry: two opening attempts, then the degrade.
         opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
         assert len(opening_calls) == 2
+        # The retry prompt states the failure reason: it names the dropped
+        # dead target and demands a LIVING target or unsure (gp-5 H-H-1 --
+        # the byte-identical re-ask was provably a no-op at temp 0.4).
+        retry_prompt = opening_calls[1].prompt
+        assert OPENING_RETRY_FEEDBACK_HEADER in retry_prompt
+        assert "'imp-2'" in retry_prompt
+        assert "LIVING" in retry_prompt
+        assert OPENING_RETRY_FEEDBACK_DEMAND in retry_prompt
+        assert OPENING_RETRY_FEEDBACK_HEADER not in opening_calls[0].prompt
         # No recorded accusation names a non-living id, so the §11.3 accusation
         # metrics can resolve every target's role (the gp surfaced by seed 24).
         all_targets = {
@@ -2873,6 +2891,7 @@ class _ScriptedOpeningsClient:
 
     opening_payloads: tuple[str, ...]
     opening_calls: int = 0
+    opening_prompts: list[str] = field(default_factory=list)
 
     async def complete(
         self,
@@ -2888,6 +2907,7 @@ class _ScriptedOpeningsClient:
         if "PHASE=OPENING" in prompt:
             index = min(self.opening_calls, len(self.opening_payloads) - 1)
             self.opening_calls += 1
+            self.opening_prompts.append(prompt)
             text = self.opening_payloads[index]
         elif "PHASE=TURN" in prompt:
             text = _turn_json(speaker=_extract_marker(prompt, "agent_id="))
@@ -2954,20 +2974,30 @@ class TestOpeningAccuseOrUnsureValidation:
         # The recovered accusation drives the chain: the floor passes to p-3.
         assert result.transcript.turns[1].speaker == "p-3"
 
-    def test_narration_only_twice_fail_softs_as_today(self) -> None:
+    def test_narration_only_twice_degrades_to_an_unsure_opening(self) -> None:
         # Both attempts narration-only -> exactly one retry (never a loop),
-        # then the standing fail-soft default with the validation trigger.
+        # then the Task 10.6 fail-soft: the attempts PARSED, so the opening
+        # degrades to an unsure turn that keeps the model's prose instead of
+        # the chain-killing placeholder default (audit gp-5 H-H-2).
         result, client, manager = _run_with_openings(
             _turn_json(speaker="p-1", free_text=self._NARRATION),
         )
 
         assert client.opening_calls == 2
-        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        opening = result.transcript.turns[0]
+        assert opening.free_text == OPENING_UNSURE_DEGRADE_MARKER + self._NARRATION
         assert len(manager.defaulted_calls) == 1
         default = manager.defaulted_calls[0]
         assert default.phase == "opening"
         assert default.trigger == "validation"
         assert default.turn_index == 0
+        # The gp-5 telemetry split: this is a validation-DEGRADE, not a
+        # cap/deadline default.
+        assert default.degraded is True
+        # The narration-only retry feedback states the no-position reason
+        # (no dropped target to name).
+        assert OPENING_RETRY_FEEDBACK_NO_POSITION in client.opening_prompts[1]
+        assert OPENING_RETRY_FEEDBACK_NO_POSITION not in client.opening_prompts[0]
         # The payloads RETURNED (the recording client logged their spend), so
         # the default carries no provider parse-failures and nothing was
         # "recovered" -- no double-count (mirrors the manager-side
@@ -3022,15 +3052,23 @@ class TestOpeningAccuseOrUnsureValidation:
         # marker quoting it ("[invalid accusation target 'unsure' ...]").
         # The validation reads the MODEL-AUTHORED free_text, never the
         # marker-prefixed text, so the quoted value cannot satisfy the
-        # unsure check and the opening still retries then defaults.
+        # unsure check and the opening still retries -- then degrades,
+        # with the drop marker preserved AFTER the degrade marker.
         result, client, manager = _run_with_openings(
             _turn_json(speaker="p-1", accuses="unsure", free_text="It was them."),
         )
 
         assert client.opening_calls == 2
-        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        opening = result.transcript.turns[0]
+        assert opening.free_text == (
+            OPENING_UNSURE_DEGRADE_MARKER
+            + INVALID_ACCUSATION_TARGET_MARKER.format(target="unsure")
+            + "It was them."
+        )
+        assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
         assert len(manager.defaulted_calls) == 1
         assert manager.defaulted_calls[0].trigger == "validation"
+        assert manager.defaulted_calls[0].degraded is True
 
     def test_narration_only_reply_records_without_retry(self) -> None:
         # The content validation is opening-only: a purely defensive reply
@@ -3992,3 +4030,238 @@ class TestCommittedBytesRosterDropPins:
         # Non-vacuous: the walk exercised real subject-bearing claims.
         assert turns_walked > 0
         assert subject_bearing_claims > 0
+
+
+# ---------------------------------------------------------------------------
+# Task 10.6: fail-soft degrade, retry feedback, bounded markers, Rule-3 gate
+# at the evidence seam (audit gp-5 H-H-1/H-H-2, gp-6 H-H-4, gp-2 C-C-3).
+# ---------------------------------------------------------------------------
+
+
+class TestOpeningUnsureDegrade:
+    """A degraded opening keeps the meeting alive (audit gp-5 H-H-2).
+
+    The seed-12 m0 shape: the opener's body report parsed fine, only its
+    accusation named a dead player. The old full default erased the body
+    report too, reducing the meeting to a 1-turn SKIP husk; the degrade
+    keeps the observations, so the opt-in co-presence gate and the
+    ballots still see them.
+    """
+
+    def _run_degraded(self) -> tuple[MeetingResult, MeetingManager]:
+        # p-1's opening carries the body report (ADMIN) plus a sighting
+        # placing p-3 there -- and accuses only the dead "p-99", which the
+        # chokepoint drops on both attempts.
+        responder = _make_responder(
+            accusations={"p-1": "p-99"},
+            observations={
+                "p-1": (
+                    FoundBodyObservation(
+                        type="found_body", tick=410, body_of="p-9", room="ADMIN"
+                    ),
+                    SawPlayerObservation(
+                        type="saw_player", tick=409, subject="p-3", room="ADMIN"
+                    ),
+                ),
+            },
+        )
+        client = _ScriptedLLMClient(responder)
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+        return result, manager
+
+    def test_degraded_opening_keeps_observations_and_reaches_opt_ins(self) -> None:
+        result, manager = self._run_degraded()
+
+        opening = result.transcript.turns[0]
+        assert opening.turn_kind == "opening"
+        assert opening.free_text.startswith(OPENING_UNSURE_DEGRADE_MARKER)
+        # The body report SURVIVES the degrade -- the whole point.
+        assert any(isinstance(o, FoundBodyObservation) for o in opening.observations)
+        assert not any(isinstance(c, AccusationClaim) for c in opening.claims)
+        # The kept sighting makes p-3 opt-in-eligible (co-present with the
+        # body room), so the meeting still has an info-share phase...
+        opt_ins = [t for t in result.transcript.turns if t.turn_kind == "opt_in"]
+        assert [t.speaker for t in opt_ins] == ["p-3"]
+        # ...and every living participant still casts a ballot.
+        assert sorted(b.voter for b in result.ballots) == [
+            "p-1",
+            "p-2",
+            "p-3",
+            "p-4",
+        ]
+
+    def test_degrade_telemetry_split(self) -> None:
+        _, manager = self._run_degraded()
+
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "opening"
+        assert default.trigger == "validation"
+        assert default.degraded is True
+
+    def test_parse_failed_opening_still_full_defaults(self) -> None:
+        # The other tier: nothing ever PARSED (schema-invalid payloads),
+        # so there is no attempt to degrade from -- the placeholder
+        # default fires and the telemetry reads degraded=False
+        # (cap/deadline-default class, not validation-degrade).
+        client = _OpeningValidationClient(invalid_opening_attempts=2)
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert result.transcript.turns[0].free_text == DEFAULT_TURN_FREE_TEXT
+        assert len(manager.defaulted_calls) == 1
+        assert manager.defaulted_calls[0].degraded is False
+
+
+class TestBoundedDropMarkers:
+    """Audit gp-6 H-H-4: the quoted-original in a drop marker is bounded."""
+
+    def test_mega_subject_yields_a_bounded_marker(self) -> None:
+        # The seed-35 m1 shape: a 3499-char reasoning blob hallucinated AS
+        # the alibi SUBJECT. The marker quotes only the bounded head.
+        blob = "I think the body was found near ADMIN and " * 80
+        assert len(blob) > 3000  # the audited ~3.5k-char scale
+        claims: tuple[Claim, ...] = (
+            AlibiClaim(
+                type="alibi", subject=blob, from_tick=400, to_tick=410, room="ADMIN"
+            ),
+        )
+        surviving, markers = _drop_non_roster_claims(
+            claims, living_ids=frozenset({"p-1", "p-2"})
+        )
+
+        assert surviving == ()
+        assert markers == (
+            INVALID_ALIBI_SUBJECT_MARKER.format(
+                subject=blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
+            ),
+        )
+        assert len(markers[0]) < 120
+
+    def test_sibling_markers_share_the_bound(self) -> None:
+        blob = "x" * 500
+        claims: tuple[Claim, ...] = (
+            AccusationClaim(
+                type="accusation", against=blob, confidence=0.5, reason="r"
+            ),
+            CorroborationClaim(
+                type="corroboration", supports=blob, on_tick=400, reason="r"
+            ),
+        )
+        _, markers = _drop_non_roster_claims(claims, living_ids=frozenset({"p-1"}))
+
+        bounded = blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
+        assert markers == (
+            INVALID_ACCUSATION_TARGET_MARKER.format(target=bounded),
+            INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports=bounded),
+        )
+
+    def test_real_player_ids_pass_through_verbatim(self) -> None:
+        claims: tuple[Claim, ...] = (
+            AccusationClaim(
+                type="accusation", against="p-99", confidence=0.5, reason="r"
+            ),
+        )
+        _, markers = _drop_non_roster_claims(claims, living_ids=frozenset({"p-1"}))
+        assert markers == (INVALID_ACCUSATION_TARGET_MARKER.format(target="p-99"),)
+
+
+class TestRule3RelevanceGateAtTheEvidenceSeam:
+    """Audit gp-2 C-C-3: claim-stated vouches pass the same relevance gate."""
+
+    def test_spawn_window_corroboration_claim_is_not_evidence(self) -> None:
+        # "I can vouch for p-4 (tick 0)" is the everyone-was-at-spawn
+        # shape: it confirms nothing and must not cancel an accusation
+        # bump at the fold.
+        turn = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-2",
+            turn_kind="opening",
+            reply_to=None,
+            claims=(
+                CorroborationClaim(
+                    type="corroboration", supports="p-4", on_tick=0, reason="spawn"
+                ),
+                CorroborationClaim(
+                    type="corroboration", supports="p-3", on_tick=1, reason="spawn"
+                ),
+            ),
+            free_text="unsure",
+        )
+        evidence = extract_belief_evidence(_result_with(turns=(turn,)))
+        assert evidence.corroborated == ()
+
+    def test_post_spawn_corroboration_claim_still_counts(self) -> None:
+        evidence = extract_belief_evidence(
+            _result_with(
+                turns=(
+                    _evidence_turn(turn_index=0, speaker="p-2", corroborates=("p-4",)),
+                )
+            )
+        )
+        # _evidence_turn vouches at on_tick=400 -- far outside the spawn
+        # window; the claim-stated channel survives the gate.
+        assert evidence.corroborated == ("p-4",)
+
+    def test_kill_scene_detector_pair_is_not_evidence(self) -> None:
+        # The seed-6 m1 fold shape: the opening reports the body in ADMIN
+        # and sights the subject there inside their own alibi window. The
+        # detector-derived pair dies at the one-home gate inside
+        # detect_corroborations, so the fold never sees it.
+        opening = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-3",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(
+                FoundBodyObservation(
+                    type="found_body", tick=410, body_of="p-9", room="ADMIN"
+                ),
+                SawPlayerObservation(
+                    type="saw_player", tick=409, subject="p-6", room="ADMIN"
+                ),
+            ),
+            free_text="unsure",
+        )
+        alibi_turn = MeetingTurn(
+            turn_id="m-1:turn-1",
+            turn_index=1,
+            speaker="p-6",
+            turn_kind="reply",
+            reply_to=None,
+            claims=(
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-6",
+                    from_tick=405,
+                    to_tick=410,
+                    room="ADMIN",
+                ),
+            ),
+            free_text="I was in ADMIN doing the swipe task.",
+        )
+        evidence = extract_belief_evidence(
+            _result_with(turns=(opening, alibi_turn), voters=("p-3", "p-6", "p-7"))
+        )
+        assert evidence.corroborated == ()

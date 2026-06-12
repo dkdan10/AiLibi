@@ -51,6 +51,27 @@ ruler defined in this module:
   this surface: it is a constant of the race structure (~90/10, zero
   ejection-driven wins, B-B-1) and gates nothing.
 
+Phase 10 Wave 1 (Task 10.6, gate spec) adds the gp-7 companions defined in
+this module (audit audit-2026-06-11-2218 C-C-6):
+
+* *Multi-signal conversion* — impostor ejections whose rendered pre-vote
+  lift decomposes into 2+ distinct §6.3 design channels over the quantized
+  rule lattice (:func:`compute_multi_signal_conversion` /
+  :class:`MultiSignalConversionReport`; per-ejection decomposition via
+  :func:`decompose_ejection_channels`). The genuine-class ruler credited 1
+  of the Wave-0 set's 5 real conversions; the intended multi-signal
+  pipeline produced the other 4 invisibly.
+* *Supply gauges* — the evidence-supply context (re-derived flag census,
+  zero-contradiction share, genuine-subject share, flag-subject role split,
+  over-gate listeners per accused-impostor meeting)
+  (:func:`compute_supply_gauges` / :class:`SupplyGaugesReport`).
+
+Neither joins :class:`TournamentEvalReport` yet: the committed Wave-0
+sample reports stay single-era (no regeneration without a re-record), so
+the report builder publishes both and the corrected Wave-0 baseline
+fixture (``tests/fixtures/phase10/corrected_w0_baseline.json``) is their
+committed home until the 10.9 re-record.
+
 :class:`~eval.report_schema.TournamentReport` is frozen with
 ``extra="forbid"``, so the metric outputs cannot be added as fields on it.
 They live instead on :class:`TournamentEvalReport`, a frozen wrapper that
@@ -73,6 +94,12 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from agents.memory.beliefs import (
+    ACCUSATION_SUSPICION_DELTA,
+    VENTING_SUSPICION_DELTA,
+    BeliefState,
+    apply_contradiction_rule,
+)
 from eval._suspicion_parse import (
     SKIP_SUSPICION_THRESHOLD,
     parse_rendered_max_suspicion,
@@ -92,10 +119,11 @@ from eval.vote_correctness import (
     VoteCorrectnessReport,
     compute_genuine_class_conversion,
     compute_vote_correctness,
+    genuine_class_subjects,
 )
 from meetings.manager import INVALID_VOTE_TARGET_MARKER, TEAMMATE_VOTE_TARGET_MARKER
 from meetings.schemas import AccusationClaim, PlayerId
-from meetings.transcript import detect_contradictions
+from meetings.transcript import detect_contradictions, is_weak_contradiction
 
 # The literal prefixes (the marker text minus the ``{target!r}`` placeholder)
 # the meeting layer stamps onto ``rationale_text`` when it normalizes a
@@ -930,6 +958,499 @@ def _rendered_suspicion_by_target(meeting: MeetingReport) -> dict[PlayerId, floa
     return rendered
 
 
+# ---------------------------------------------------------------------------
+# Task 10.6 gate-spec metrics (audit audit-2026-06-11-2218 gp-7: C-C-6).
+#
+# The Wave-1 A/B companions to the genuine-class pair: the 10.4 ruler credits
+# only the alibi-lie pipeline, which produced 1 of the Wave-0 set's 5 real
+# impostor ejections — the intended multi-signal §6.3 pipeline (flag +
+# proximity + vent + carry) produced the other 4 and was invisible to the
+# gate. ``compute_multi_signal_conversion`` makes that pipeline measurable;
+# ``compute_supply_gauges`` publishes the evidence-supply context every
+# conversion number must be read against. Neither joins
+# :class:`TournamentEvalReport` — the committed Wave-0 sample reports stay
+# single-era (no regeneration without a re-record); the report builder
+# publishes both, and the corrected Wave-0 baseline fixture
+# (``tests/fixtures/phase10/corrected_w0_baseline.json``) is their one
+# committed home until the 10.9 re-record folds them into the wrapper.
+# ---------------------------------------------------------------------------
+
+# The four §6.3 design channels an ejection's rendered pre-vote lift can
+# decompose into over the quantized rule lattice. Pinned literals: the
+# fixture, the report builder, and the 10.9 A/B all read these names.
+CHANNEL_CONTRADICTION_FLAG: Final[str] = "contradiction_flag"
+CHANNEL_BODY_PROXIMITY: Final[str] = "body_proximity"
+CHANNEL_VENT_WITNESS: Final[str] = "vent_witness"
+CHANNEL_PRIOR_MEETING_CARRY: Final[str] = "prior_meeting_carry"
+
+# Float guard for lattice arithmetic on 2-decimal rendered values.
+_CHANNEL_EPS: Final[float] = 1e-9
+
+
+def decompose_ejection_channels(
+    game: GameReport, meeting_index: int
+) -> frozenset[str] | None:
+    """Design channels behind one impostor ejection's rendered lift (10.6).
+
+    Returns ``None`` unless ``game.meetings[meeting_index]`` is a
+    well-formed ``EJECTED`` meeting whose ejected player is a true
+    impostor; otherwise the subset of the four ``CHANNEL_*`` constants the
+    ejection's rendered pre-vote verdict decomposes into over the
+    quantized §6.3 rule lattice. Pure and deterministic — a fold over
+    recorded artifacts plus the one-home belief math:
+
+    * ``contradiction_flag`` — THIS meeting's re-derived flags name the
+      ejected player; the flag mass ``F`` is computed by running
+      :func:`agents.memory.beliefs.apply_contradiction_rule` from the 0.5
+      prior (the identical dedup-and-cap arithmetic the vote-time lift
+      applied), never a parallel sum.
+    * The remaining channels read the PRE-MEETING carry-in ``C = R − F``
+      (``R`` = the ejected player's max rendered §6.6 graph row across
+      the other voters), whose persistent mass ``P = C − 0.5`` is
+      quantized by construction: vent +0.5, body proximity +0.2,
+      accusation carry +0.05 per prior accused meeting, decay only ever
+      shrinking those quanta.
+    * ``prior_meeting_carry`` — the ejected player was verbally accused
+      by another speaker in an EARLIER meeting of this game AND ``P > 0``
+      (presence-based: at the 1.0 clamp the bump mass is arithmetically
+      invisible — the audited seed-8 vent witness — but the accusation
+      history is recorded fact).
+    * ``vent_witness`` — ``P >=`` the Rule-4 delta: on the lattice no
+      other single channel reaches +0.5 (the Wave-0 census: the only 1.0
+      is the vent-witnessed impostor).
+    * ``body_proximity`` — mass remains after subtracting the vent delta
+      and the carry ceiling (``ACCUSATION_SUSPICION_DELTA`` x prior
+      accused meetings, floored at the remainder): decayed carry can only
+      shrink below its ceiling, so a positive remainder cannot be carry
+      and the only §6.3 channel left is Rule 1. Conservative at the
+      clamp: a 1.0 row under-reports ``C`` by ``F``, never over-credits.
+
+    A meeting with no rendered row for the ejected player decomposes to
+    the flag channel alone (nothing else is attributable without the
+    rendered surface).
+    """
+
+    meeting = game.meetings[meeting_index]
+    if meeting.outcome != "EJECTED":
+        return None
+    ejected = meeting.ejected_player_id
+    if ejected is None:
+        return None
+    if game.roles[ejected] != "IMPOSTOR":
+        return None
+
+    channels: set[str] = set()
+
+    roster = frozenset(ballot.voter for ballot in meeting.ballots)
+    naming_flags = [
+        flag
+        for flag in detect_contradictions(meeting.transcript, roster=roster)
+        if ejected in flag.subjects
+    ]
+    flag_mass = 0.0
+    if naming_flags:
+        beliefs = BeliefState()
+        beliefs.seed_player(ejected, suspicion=0.5, trust=0.5)
+        lifted = apply_contradiction_rule(beliefs, naming_flags)
+        flag_mass = lifted.view(ejected).suspicion - 0.5
+    if flag_mass > _CHANNEL_EPS:
+        channels.add(CHANNEL_CONTRADICTION_FLAG)
+
+    rendered = _rendered_suspicion_by_target(meeting).get(ejected)
+    if rendered is None:
+        return frozenset(channels)
+    persistent = round(rendered - flag_mass - 0.5, 4)
+    if persistent <= _CHANNEL_EPS:
+        return frozenset(channels)
+
+    prior_accused_meetings = sum(
+        1
+        for earlier in game.meetings[:meeting_index]
+        if any(
+            isinstance(claim, AccusationClaim)
+            and claim.against == ejected
+            and turn.speaker != ejected
+            for turn in earlier.transcript.turns
+            for claim in turn.claims
+        )
+    )
+    if prior_accused_meetings > 0:
+        channels.add(CHANNEL_PRIOR_MEETING_CARRY)
+
+    remaining = persistent
+    if remaining >= VENTING_SUSPICION_DELTA - _CHANNEL_EPS:
+        channels.add(CHANNEL_VENT_WITNESS)
+        remaining = round(remaining - VENTING_SUSPICION_DELTA, 4)
+    carry_ceiling = ACCUSATION_SUSPICION_DELTA * prior_accused_meetings
+    remaining = round(remaining - min(remaining, carry_ceiling), 4)
+    if remaining > _CHANNEL_EPS:
+        channels.add(CHANNEL_BODY_PROXIMITY)
+    return frozenset(channels)
+
+
+class MultiSignalConversionReport(BaseModel):
+    """The gp-7 companion conversion metric (Task 10.6; audit C-C-6).
+
+    Frozen value object counting the impostor ejections whose rendered
+    pre-vote lift decomposes into 2+ DISTINCT §6.3 design channels
+    (:func:`decompose_ejection_channels`) — the intended multi-signal
+    pipeline the genuine-class ruler is blind to. On the Wave-0 bytes the
+    ruler credited 1 of 5 real conversions; the other 4 (seeds 8/11/26/39)
+    converted via flag+proximity+carry / vent+carry stacks, so a detector-
+    precision repair that shifts flag composition cannot masquerade as a
+    conversion regression once this companion is on the gate surface
+    (audit gp-7 item 1).
+
+    * ``impostor_ejections`` — decomposable impostor ejections (the
+      denominator; matches the precision lead's impostor bucket).
+    * ``multi_signal_conversions`` — ejections with >= 2 channels.
+    * ``single_signal_conversions`` — exactly 1 channel (the seed-24
+      flag-only conversion lives here).
+    * ``unattributed_conversions`` — zero channels: an ejection whose
+      lift the lattice cannot explain. Always counted, never dropped — a
+      non-zero value is a decomposition bug or an off-lattice mechanism
+      to chase.
+    * ``conversions_with_*`` — per-channel presence counts (an ejection
+      counts in every channel it decomposes into).
+    * ``multi_signal_rate`` — ``multi_signal_conversions /
+      impostor_ejections``; ``None`` (undefined, not 0.0) with no
+      impostor ejections, the module's rate convention.
+
+    **Leak-safety.** Pure aggregates; no roles, transcripts, or
+    engine-owned types.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    impostor_ejections: int
+    multi_signal_conversions: int
+    single_signal_conversions: int
+    unattributed_conversions: int
+    conversions_with_contradiction_flag: int
+    conversions_with_body_proximity: int
+    conversions_with_vent_witness: int
+    conversions_with_prior_meeting_carry: int
+    multi_signal_rate: float | None
+
+    @model_validator(mode="after")
+    def _validate_buckets(self) -> MultiSignalConversionReport:
+        counts = (
+            self.impostor_ejections,
+            self.multi_signal_conversions,
+            self.single_signal_conversions,
+            self.unattributed_conversions,
+            self.conversions_with_contradiction_flag,
+            self.conversions_with_body_proximity,
+            self.conversions_with_vent_witness,
+            self.conversions_with_prior_meeting_carry,
+        )
+        if any(count < 0 for count in counts):
+            raise ValueError("multi-signal counts must be non-negative")
+        partition = (
+            self.multi_signal_conversions
+            + self.single_signal_conversions
+            + self.unattributed_conversions
+        )
+        if partition != self.impostor_ejections:
+            raise ValueError(
+                "multi + single + unattributed must equal impostor_ejections: "
+                f"{self.multi_signal_conversions} + "
+                f"{self.single_signal_conversions} + "
+                f"{self.unattributed_conversions} != {self.impostor_ejections}"
+            )
+        if self.impostor_ejections == 0:
+            if self.multi_signal_rate is not None:
+                raise ValueError(
+                    "multi_signal_rate must be None with no impostor ejections: "
+                    "the rate is undefined, not 0.0"
+                )
+        else:
+            if self.multi_signal_rate is None:
+                raise ValueError(
+                    "multi_signal_rate must be set when impostor_ejections > 0"
+                )
+            if not 0.0 <= self.multi_signal_rate <= 1.0:
+                raise ValueError(
+                    f"multi_signal_rate must be in [0.0, 1.0]: {self.multi_signal_rate}"
+                )
+        return self
+
+
+def compute_multi_signal_conversion(
+    report: TournamentReport | Sequence[GameReport],
+) -> MultiSignalConversionReport:
+    """Fold a tournament report into the multi-signal companion (Task 10.6).
+
+    Accepts either a :class:`~eval.report_schema.TournamentReport` or a
+    bare sequence of :class:`~eval.report_schema.GameReport`. Pure: every
+    number is a fold of :func:`decompose_ejection_channels` over the
+    well-formed impostor ejections (a malformed ``EJECTED`` meeting with
+    no ejected id, a crewmate ejection, and a SKIP all contribute
+    nothing).
+    """
+
+    games = report.games if isinstance(report, TournamentReport) else tuple(report)
+
+    impostor_ejections = 0
+    multi_signal = 0
+    single_signal = 0
+    unattributed = 0
+    with_channel = {
+        CHANNEL_CONTRADICTION_FLAG: 0,
+        CHANNEL_BODY_PROXIMITY: 0,
+        CHANNEL_VENT_WITNESS: 0,
+        CHANNEL_PRIOR_MEETING_CARRY: 0,
+    }
+    for game in games:
+        for meeting_index in range(len(game.meetings)):
+            channels = decompose_ejection_channels(game, meeting_index)
+            if channels is None:
+                continue
+            impostor_ejections += 1
+            if len(channels) >= 2:
+                multi_signal += 1
+            elif len(channels) == 1:
+                single_signal += 1
+            else:
+                unattributed += 1
+            for channel in channels:
+                with_channel[channel] += 1
+
+    rate = multi_signal / impostor_ejections if impostor_ejections > 0 else None
+    return MultiSignalConversionReport(
+        impostor_ejections=impostor_ejections,
+        multi_signal_conversions=multi_signal,
+        single_signal_conversions=single_signal,
+        unattributed_conversions=unattributed,
+        conversions_with_contradiction_flag=with_channel[CHANNEL_CONTRADICTION_FLAG],
+        conversions_with_body_proximity=with_channel[CHANNEL_BODY_PROXIMITY],
+        conversions_with_vent_witness=with_channel[CHANNEL_VENT_WITNESS],
+        conversions_with_prior_meeting_carry=with_channel[CHANNEL_PRIOR_MEETING_CARRY],
+        multi_signal_rate=rate,
+    )
+
+
+class SupplyGaugesReport(BaseModel):
+    """The gp-7 evidence-supply gauges (Task 10.6; audit C-C-6, B-B-3, C-C-8).
+
+    Frozen value object publishing the supply context every Wave-1
+    conversion number must be read against — supply, not follow-through,
+    is the audited binding constraint (62% of Wave-0 meetings carried
+    zero contradictions; crew compliance with the rendered verdict was
+    already 100%). Every flag-derived field re-runs the one-home detector
+    under the ballot-voter roster, so the gauges read the CORRECTED
+    instrument on any era's bytes:
+
+    * ``meetings_total`` / ``total_flags`` / ``weak_flags`` /
+      ``strong_flags`` — the re-derived flag census (the corrected
+      Wave-0 baseline's headline volume row).
+    * ``zero_contradiction_meetings`` (+ ``..._share``) — meetings whose
+      re-derived flag set is empty (B-B-3's 62%).
+    * ``genuine_subject_meetings`` (+ ``..._share``) — meetings
+      supplying at least one genuine-class subject
+      (:func:`eval.vote_correctness.genuine_class_subjects`, one home —
+      role-blind: supply is about the detector handing the table a
+      diagnostic flag at all).
+    * ``flag_subjects_crew`` / ``flag_subjects_impostor`` — the
+      flag-subject role split, counted per (flag, subject): the cascade
+      base-rate denominator any future magnitude change multiplies
+      (C-C-8: the honest detector still points at innocents more often
+      than impostors).
+    * ``accused_impostor_meetings`` / ``over_gate_listener_rows`` (+
+      ``over_gate_listeners_per_accused_impostor_meeting``) — for every
+      meeting with a living verbally-accused true impostor (the D-D-2
+      event population), the number of OTHER voters whose rendered §6.6
+      row for an accused impostor met the §4.6 threshold. THE Wave-1
+      success gauge: 10.6's job is growing the over-gate POPULATION past
+      the 4-7 mandatory-skip bloc, not witness follow-through. ``None``
+      share/rate fields follow the undefined-not-zero convention.
+
+    **Leak-safety.** Pure aggregates; no roles, transcripts, or
+    engine-owned types.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    meetings_total: int
+    total_flags: int
+    weak_flags: int
+    strong_flags: int
+    zero_contradiction_meetings: int
+    zero_contradiction_share: float | None
+    genuine_subject_meetings: int
+    genuine_subject_share: float | None
+    flag_subjects_crew: int
+    flag_subjects_impostor: int
+    accused_impostor_meetings: int
+    over_gate_listener_rows: int
+    over_gate_listeners_per_accused_impostor_meeting: float | None
+
+    @model_validator(mode="after")
+    def _validate_buckets(self) -> SupplyGaugesReport:
+        counts = (
+            self.meetings_total,
+            self.total_flags,
+            self.weak_flags,
+            self.strong_flags,
+            self.zero_contradiction_meetings,
+            self.genuine_subject_meetings,
+            self.flag_subjects_crew,
+            self.flag_subjects_impostor,
+            self.accused_impostor_meetings,
+            self.over_gate_listener_rows,
+        )
+        if any(count < 0 for count in counts):
+            raise ValueError("supply-gauge counts must be non-negative")
+        if self.weak_flags + self.strong_flags != self.total_flags:
+            raise ValueError(
+                "weak_flags + strong_flags must equal total_flags: "
+                f"{self.weak_flags} + {self.strong_flags} != {self.total_flags}"
+            )
+        for name, share, denominator in (
+            (
+                "zero_contradiction_share",
+                self.zero_contradiction_share,
+                self.meetings_total,
+            ),
+            ("genuine_subject_share", self.genuine_subject_share, self.meetings_total),
+            (
+                "over_gate_listeners_per_accused_impostor_meeting",
+                self.over_gate_listeners_per_accused_impostor_meeting,
+                self.accused_impostor_meetings,
+            ),
+        ):
+            if denominator == 0:
+                if share is not None:
+                    raise ValueError(
+                        f"{name} must be None when its denominator is 0: "
+                        "the value is undefined, not 0.0"
+                    )
+            elif share is None:
+                raise ValueError(f"{name} must be set when its denominator > 0")
+        return self
+
+
+def compute_supply_gauges(
+    report: TournamentReport | Sequence[GameReport],
+) -> SupplyGaugesReport:
+    """Fold a tournament report into the gp-7 supply gauges (Task 10.6).
+
+    Accepts either a :class:`~eval.report_schema.TournamentReport` or a
+    bare sequence of :class:`~eval.report_schema.GameReport`. Pure: the
+    flag census re-runs the one-home detector per meeting, the genuine
+    share reads :func:`eval.vote_correctness.genuine_class_subjects`, and
+    the over-gate gauge reads each accused impostor's rendered row off the
+    other voters' recorded §6.6 graphs (``roles`` subscripts fail loud on
+    internal inconsistency, the module convention).
+    """
+
+    games = report.games if isinstance(report, TournamentReport) else tuple(report)
+
+    meetings_total = 0
+    total_flags = 0
+    weak_flags = 0
+    strong_flags = 0
+    zero_contradiction_meetings = 0
+    genuine_subject_meetings = 0
+    flag_subjects_crew = 0
+    flag_subjects_impostor = 0
+    accused_impostor_meetings = 0
+    over_gate_listener_rows = 0
+
+    for game in games:
+        for meeting in game.meetings:
+            meetings_total += 1
+            roster = frozenset(ballot.voter for ballot in meeting.ballots)
+            flags = detect_contradictions(meeting.transcript, roster=roster)
+            total_flags += len(flags)
+            if not flags:
+                zero_contradiction_meetings += 1
+            for flag in flags:
+                if is_weak_contradiction(flag):
+                    weak_flags += 1
+                else:
+                    strong_flags += 1
+                for subject in flag.subjects:
+                    if game.roles[subject] == "IMPOSTOR":
+                        flag_subjects_impostor += 1
+                    else:
+                        flag_subjects_crew += 1
+            if genuine_class_subjects(meeting):
+                genuine_subject_meetings += 1
+
+            accused_impostors = sorted(
+                {
+                    claim.against
+                    for turn in meeting.transcript.turns
+                    for claim in turn.claims
+                    if isinstance(claim, AccusationClaim)
+                    and claim.against != turn.speaker
+                    and game.roles[claim.against] == "IMPOSTOR"
+                }
+            )
+            if not accused_impostors:
+                continue
+            accused_impostor_meetings += 1
+            rendered = _rendered_suspicion_by_target_per_voter(meeting)
+            for impostor in accused_impostors:
+                for voter, rows in rendered.items():
+                    if voter == impostor:
+                        continue
+                    row = rows.get(impostor)
+                    if row is not None and row >= SKIP_SUSPICION_THRESHOLD:
+                        over_gate_listener_rows += 1
+
+    return SupplyGaugesReport(
+        meetings_total=meetings_total,
+        total_flags=total_flags,
+        weak_flags=weak_flags,
+        strong_flags=strong_flags,
+        zero_contradiction_meetings=zero_contradiction_meetings,
+        zero_contradiction_share=(
+            zero_contradiction_meetings / meetings_total if meetings_total else None
+        ),
+        genuine_subject_meetings=genuine_subject_meetings,
+        genuine_subject_share=(
+            genuine_subject_meetings / meetings_total if meetings_total else None
+        ),
+        flag_subjects_crew=flag_subjects_crew,
+        flag_subjects_impostor=flag_subjects_impostor,
+        accused_impostor_meetings=accused_impostor_meetings,
+        over_gate_listener_rows=over_gate_listener_rows,
+        over_gate_listeners_per_accused_impostor_meeting=(
+            over_gate_listener_rows / accused_impostor_meetings
+            if accused_impostor_meetings
+            else None
+        ),
+    )
+
+
+def _rendered_suspicion_by_target_per_voter(
+    meeting: MeetingReport,
+) -> dict[PlayerId, dict[PlayerId, float]]:
+    """Each voter's rendered §6.6 graph rows, keyed voter -> target.
+
+    The per-VOTER companion of :func:`_rendered_suspicion_by_target` (which
+    keeps only the cross-voter max): the over-gate-listener gauge counts
+    LISTENERS, so it needs every voter's own row for the accused impostor.
+    A voter with several calls keeps the highest row per target (the vote
+    call is the graph-bearing one; non-vote prompts contribute nothing).
+    """
+
+    rendered: dict[PlayerId, dict[PlayerId, float]] = {}
+    for call in meeting.llm_calls:
+        if call.agent_id is None:
+            continue
+        for target, suspicion in _parse_suspicion_graph(call.prompt).items():
+            if target == call.agent_id:
+                continue
+            rows = rendered.setdefault(call.agent_id, {})
+            best = rows.get(target)
+            if best is None or suspicion > best:
+                rows[target] = suspicion
+    return rendered
+
+
 class TournamentEvalReport(BaseModel):
     """A tournament report bundled with its Phase 5 / W0.3 metric results.
 
@@ -998,12 +1519,21 @@ def build_tournament_eval_report(report: TournamentReport) -> TournamentEvalRepo
 
 
 __all__ = [
+    "CHANNEL_BODY_PROXIMITY",
+    "CHANNEL_CONTRADICTION_FLAG",
+    "CHANNEL_PRIOR_MEETING_CARRY",
+    "CHANNEL_VENT_WITNESS",
     "ConversionReport",
     "GateMetricsReport",
     "MeetingRateReport",
+    "MultiSignalConversionReport",
+    "SupplyGaugesReport",
     "TournamentEvalReport",
     "build_tournament_eval_report",
     "compute_conversion_report",
     "compute_gate_metrics",
     "compute_meeting_rate",
+    "compute_multi_signal_conversion",
+    "compute_supply_gauges",
+    "decompose_ejection_channels",
 ]

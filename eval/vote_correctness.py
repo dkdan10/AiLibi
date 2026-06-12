@@ -500,6 +500,35 @@ class GenuineClassConversionReport(BaseModel):
         return self
 
 
+def genuine_class_subjects(meeting: MeetingReport) -> frozenset[PlayerId]:
+    """One meeting's genuine-class (CANON-interior) subjects (Tasks 10.4, 10.6).
+
+    The single home of the genuine-class membership rule: re-derive flags
+    via :func:`meetings.transcript.detect_contradictions` under the
+    ballot-voter roster and keep every subject of an ``alibi_vs_sighting``
+    flag without the endpoint band (see
+    :class:`GenuineClassConversionReport` for the full definitional
+    rationale). Extracted from :func:`compute_genuine_class_conversion` in
+    Task 10.6 so the gp-7 supply gauges (the genuine-subject share in
+    :func:`eval.meeting_quality.compute_supply_gauges`) read the identical
+    rule by import instead of re-deriving it. Role-blind by design: the
+    caller applies ground truth (the conversion pair keeps impostors; the
+    share gauge counts any genuine-class subject as supply). Pure and
+    deterministic; a meeting with no ballots derives nothing (an
+    explicitly-empty roster indexes nothing).
+    """
+
+    roster = frozenset(ballot.voter for ballot in meeting.ballots)
+    subjects: set[PlayerId] = set()
+    for flag in detect_contradictions(meeting.transcript, roster=roster):
+        if flag.kind != "alibi_vs_sighting":
+            continue
+        if WEAK_REASON_ENDPOINT_TICK in flag.description:
+            continue
+        subjects.update(flag.subjects)
+    return frozenset(subjects)
+
+
 def compute_genuine_class_conversion(
     report: TournamentReport | Sequence[GameReport],
 ) -> GenuineClassConversionReport:
@@ -510,19 +539,16 @@ def compute_genuine_class_conversion(
     analyzers' signature). Pure: no I/O, no engine/agent/LLM calls — the
     repaired detector re-run is a pure function of each recorded transcript.
 
-    Per meeting: re-derive flags via
-    :func:`meetings.transcript.detect_contradictions` under the ballot-voter
-    roster, keep the ``alibi_vs_sighting`` flags without the endpoint band
-    (the genuine CANON-interior class — see
-    :class:`GenuineClassConversionReport` for why this is an import of the
-    Task 10.1 classifier, never a parallel implementation), and count each
-    flagged true impostor once as SUPPLIED (``roles`` subscript — a flagged
-    subject passed the living-roster filter, so one absent from the ground
-    truth is an internal inconsistency that fails loud). The pair CONVERTS
-    when the meeting's well-formed outcome ejected that impostor. A meeting
-    with no ballots derives nothing (an explicitly-empty roster indexes
-    nothing — the recording path always writes one ballot per living
-    participant, so this arises only on hand-built partial data).
+    Per meeting: take the genuine CANON-interior subjects from the one-home
+    :func:`genuine_class_subjects` (the import of the Task 10.1 classifier,
+    never a parallel implementation) and count each flagged true impostor
+    once as SUPPLIED (``roles`` subscript — a flagged subject passed the
+    living-roster filter, so one absent from the ground truth is an
+    internal inconsistency that fails loud). The pair CONVERTS when the
+    meeting's well-formed outcome ejected that impostor. A meeting with no
+    ballots derives nothing (an explicitly-empty roster indexes nothing —
+    the recording path always writes one ballot per living participant, so
+    this arises only on hand-built partial data).
     """
 
     games = report.games if isinstance(report, TournamentReport) else tuple(report)
@@ -531,16 +557,7 @@ def compute_genuine_class_conversion(
     converted = 0
     for game in games:
         for meeting in game.meetings:
-            roster = frozenset(ballot.voter for ballot in meeting.ballots)
-            flags = detect_contradictions(meeting.transcript, roster=roster)
-            genuine_subjects: set[PlayerId] = set()
-            for flag in flags:
-                if flag.kind != "alibi_vs_sighting":
-                    continue
-                if WEAK_REASON_ENDPOINT_TICK in flag.description:
-                    continue
-                genuine_subjects.update(flag.subjects)
-            for subject in genuine_subjects:
+            for subject in genuine_class_subjects(meeting):
                 if game.roles[subject] != "IMPOSTOR":
                     continue
                 supplied += 1
@@ -566,4 +583,5 @@ __all__ = [
     "VoteCorrectnessReport",
     "compute_genuine_class_conversion",
     "compute_vote_correctness",
+    "genuine_class_subjects",
 ]

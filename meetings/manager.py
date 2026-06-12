@@ -80,6 +80,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    ObservationClaim,
     PlayerId,
     SawPlayerObservation,
     TurnId,
@@ -90,7 +91,9 @@ from meetings.transcript import (
     accusation_target,
     detect_contradictions,
     detect_corroborations,
+    is_relevant_sighting,
     next_chain_step,
+    triggering_body_rooms,
 )
 
 Role = Literal["CREWMATE", "IMPOSTOR"]
@@ -213,6 +216,58 @@ INVALID_CORROBORATION_SUPPORTS_MARKER: Final[str] = (
 # fail-soft. The opening templates instruct the model to write this exact
 # word; pin the literal.
 OPENING_UNSURE_MARKER: Final[str] = "unsure"
+
+# Opening retry feedback (Task 10.6; audit gp-5 H-H-1/H-H-2). The single
+# opening retry previously re-sent the byte-identical prompt, and at
+# temp 0.4 the model returned the byte-identical failure -- 0/3 recovered
+# openings for ~14.5k burned tokens on the Wave-0 set. The retry prompt
+# now appends a feedback block STATING the failure: the dead-target form
+# names the dropped target(s) verbatim (bounded -- see
+# ``MARKER_QUOTED_ORIGINAL_MAX_CHARS``), the no-position form covers the
+# narration-only shape, and both demand a LIVING target or an explicit
+# "unsure". Pinned literals so tests and downstream prompt audits can
+# match them exactly; appended to the rendered base prompt, never spliced
+# into it (the §4.6 render itself stays frozen).
+OPENING_RETRY_FEEDBACK_HEADER: Final[str] = (
+    "\n\n## Retry feedback\n\nYour previous opening was INVALID: "
+)
+OPENING_RETRY_FEEDBACK_DEAD_TARGET: Final[str] = (
+    "your accusation named {targets}, who is DEAD or not at this table. "
+)
+OPENING_RETRY_FEEDBACK_NO_POSITION: Final[str] = (
+    'it neither accused a living player nor declared "unsure". '
+)
+OPENING_RETRY_FEEDBACK_DEMAND: Final[str] = (
+    "You MUST either accuse exactly ONE LIVING player from the living "
+    'roster above or explicitly write "unsure".'
+)
+
+# Audit-trail marker prefixed to a degraded opening's ``free_text`` (Task
+# 10.6; audit gp-5 H-H-2). A twice-failed opening whose failures were
+# CONTENT-validation failures (the turn parsed but took no position --
+# e.g. its only accusation named a dead player and was guard-dropped)
+# degrades to an UNSURE opening built from the model's last parsed
+# attempt instead of the full placeholder default: the observations (the
+# body report itself!) and surviving claims are kept, only the position
+# is recorded as unsure. The full default cost the whole meeting -- a
+# guard-emptied opening reduced it to a 1-turn SKIP husk with no body
+# room for the opt-in gate (seed 12 m0 opened an impostor-win game that
+# way). The marker contains the word "unsure", so the recorded turn
+# satisfies the §5.2 PHASE 1 opening contract on its face. Pin the
+# literal exactly.
+OPENING_UNSURE_DEGRADE_MARKER: Final[str] = (
+    "[opening degraded to unsure after failed validation] "
+)
+
+# Bound on the quoted-original inside every per-claim drop marker (Task
+# 10.6; audit gp-6 H-H-4). The markers quote the invalid value verbatim
+# for the audit trail; seed 35 m1's opener hallucinated a 3499-char
+# reasoning blob AS the alibi subject, and the unbounded quote spliced
+# the whole blob mid-``free_text`` -- a Frankenstein turn record. A
+# value longer than this many chars is truncated with a trailing "..."
+# before quoting; the marker stays greppable (prefix and "dropped]"
+# suffix unchanged) and the original's head stays auditable.
+MARKER_QUOTED_ORIGINAL_MAX_CHARS: Final[int] = 60
 
 # Matches the trailing ``:turn-{k}`` ordinal of a turn id. A
 # ``primary_reason_id`` whose ordinal exists in THIS meeting but whose
@@ -415,6 +470,15 @@ class DefaultedCall:
       meeting's ``llm_calls``) -- in both cases the orchestrator writes a
       zero-spend visibility marker instead. :func:`llm.provider.extract_parse_failure`
       is the seam that distinguishes the two, so there is no double-count.
+    * ``degraded`` -- ``True`` when the recorded turn is the Task 10.6
+      VALIDATION-DEGRADE (an opening rebuilt as an unsure turn from the
+      model's last parsed-but-position-less attempt,
+      :data:`OPENING_UNSURE_DEGRADE_MARKER`) rather than the full
+      placeholder default. This is the gp-5 telemetry split: a
+      cap/deadline default (``degraded=False``) lost the model's output
+      entirely; a validation-degrade kept its observations and surviving
+      claims and lost only the invalid position. Always ``False`` for
+      replies, opt-ins, and votes (only openings degrade).
     """
 
     phase: DefaultedPhase
@@ -422,6 +486,7 @@ class DefaultedCall:
     trigger: DefaultTrigger
     turn_index: int | None = None
     parse_failures: tuple[LLMCallFailure, ...] = ()
+    degraded: bool = False
 
 
 @runtime_checkable
@@ -851,8 +916,13 @@ class MeetingManager:
         ``retries`` is the number of EXTRA attempts on top of the first before
         the turn defaults (the opening passes ``retries=1`` -- audit gp-2). A
         fired default is appended to :attr:`defaulted_calls` so the orchestrator
-        can record it in the replay; the prompt is rendered once and reused
-        across attempts (its inputs do not change between retries).
+        can record it in the replay. The BASE prompt is rendered once (its
+        inputs do not change between retries); an opening retry after a
+        content-validation failure re-sends it with the Task 10.6 feedback
+        block appended (:data:`OPENING_RETRY_FEEDBACK_HEADER` ...), naming
+        the dropped dead target(s) when the guard emptied the accusation --
+        the Wave-0 retries were byte-identical re-asks at temp 0.4 and
+        recovered 0/3 openings (audit gp-5 H-H-1).
 
         An OPENING attempt is additionally content-validated (Task 10.3,
         audit gp-9 H-H-1): a turn whose recorded claims carry no
@@ -860,12 +930,20 @@ class MeetingManager:
         :data:`OPENING_UNSURE_MARKER` declaration is narration-only -- it
         kills the reactive chain on turn 0 -- so it is treated exactly
         like a schema-validation failure and consumes an attempt through
-        this same loop (one retry, then the standing fail-soft; no second
-        retry channel). Replies / opt-ins are never content-validated: a
-        purely defensive reply is a legitimate chain terminator.
+        this same loop (one retry, then the fail-soft; no second retry
+        channel). The fail-soft itself is two-tier since Task 10.6 (audit
+        gp-5 H-H-2): when at least one attempt PARSED but took no
+        position, the opening degrades to an UNSURE turn built from that
+        attempt -- observations and surviving claims kept, position
+        recorded as unsure via :data:`OPENING_UNSURE_DEGRADE_MARKER` --
+        so the meeting keeps its body report and still reaches opt-ins
+        and ballots; only when nothing ever parsed (deadline / schema
+        failure on every attempt) does the full placeholder default fire.
+        Replies / opt-ins are never content-validated: a purely defensive
+        reply is a legitimate chain terminator.
         """
 
-        prompt = self._render_turn_prompt(
+        base_prompt = self._render_turn_prompt(
             participant=participant,
             turn_kind=turn_kind,
             trigger=trigger,
@@ -875,6 +953,7 @@ class MeetingManager:
             living_ids=living_ids,
             dead_ids=dead_ids,
         )
+        prompt = base_prompt
         turn_id = _turn_id(meeting_id=meeting_id, turn_index=turn_index)
         # The trigger kind of the LAST failed attempt, recorded with the
         # default so the orchestrator can name it (deadline vs validation).
@@ -882,6 +961,9 @@ class MeetingManager:
         # Per-attempt provider parse-failure metadata (real spend the recording
         # client never logged because ``complete()`` raised before it could).
         attempt_failures: list[LLMCallFailure] = []
+        # The most recent opening attempt that parsed but took no position
+        # (Task 10.6 unsure-degrade source); ``None`` until one exists.
+        positionless_opening: _PositionlessOpening | None = None
         for _attempt in range(retries + 1):
             try:
                 response = await asyncio.wait_for(
@@ -967,15 +1049,31 @@ class MeetingManager:
             # dead player (the seed-13-m0 shape) or a teammate is as
             # chain-dead as pure narration -- and against the MODEL-AUTHORED
             # free_text, never the marker-prefixed text (a drop marker quotes
-            # the original value verbatim, so a hallucinated target literally
-            # named "unsure" must not self-certify the turn). A failure
-            # consumes this attempt like any validation failure: the opening's
-            # single retry (``retries=1``) re-asks once, then the standing
-            # fail-soft default fires.
+            # the original value, so a hallucinated target literally named
+            # "unsure" must not self-certify the turn). A failure consumes
+            # this attempt like any validation failure: the opening's single
+            # retry (``retries=1``) re-asks once -- WITH the Task 10.6
+            # feedback block naming the failure appended to the base prompt
+            # -- then the fail-soft fires (the unsure-degrade, since this
+            # attempt parsed).
             if turn_kind == "opening" and not _opening_takes_position(
                 claims=validated_claims, free_text=parsed.free_text
             ):
                 trigger_kind = "validation"
+                positionless_opening = _PositionlessOpening(
+                    observations=parsed.observations,
+                    claims=validated_claims,
+                    free_text=parsed.free_text,
+                    drop_markers=drop_markers,
+                )
+                prompt = base_prompt + _opening_retry_feedback(
+                    dropped_targets=tuple(
+                        claim.against
+                        for claim in guarded_claims
+                        if isinstance(claim, AccusationClaim)
+                        and claim.against not in living_ids
+                    )
+                )
                 continue
             free_text = parsed.free_text
             if drop_markers:
@@ -1004,7 +1102,13 @@ class MeetingManager:
         # Every attempt (1 + ``retries``) failed: surface the fired default so
         # the orchestrator records it in the replay (audit gp-2 -- a defaulted
         # turn must never be invisible), carrying any provider parse-failure
-        # spend so the audit trail stays accurate, then return the placeholder.
+        # spend so the audit trail stays accurate. Two tiers (Task 10.6, audit
+        # gp-5 H-H-2): an opening with a parsed-but-position-less attempt
+        # degrades to an UNSURE opening built from that attempt -- the body
+        # report and surviving claims are kept, so opt-in eligibility and the
+        # ballots still see them -- while a turn that never parsed returns
+        # the full placeholder. ``degraded`` is the telemetry split between
+        # the two (cap/deadline default vs validation-degrade).
         self._defaulted_calls.append(
             DefaultedCall(
                 phase=turn_kind,
@@ -1012,8 +1116,24 @@ class MeetingManager:
                 trigger=trigger_kind,
                 turn_index=turn_index,
                 parse_failures=tuple(attempt_failures),
+                degraded=positionless_opening is not None,
             )
         )
+        if positionless_opening is not None:
+            return MeetingTurn(
+                turn_id=turn_id,
+                turn_index=turn_index,
+                speaker=participant.agent_id,
+                turn_kind=turn_kind,
+                reply_to=reply_to,
+                observations=positionless_opening.observations,
+                claims=positionless_opening.claims,
+                free_text=(
+                    OPENING_UNSURE_DEGRADE_MARKER
+                    + "".join(positionless_opening.drop_markers)
+                    + positionless_opening.free_text
+                ),
+            )
         return _default_turn(
             turn_id=turn_id,
             turn_index=turn_index,
@@ -1500,6 +1620,64 @@ def _normalize_self_alibi_subjects(
     return tuple(normalized)
 
 
+@dataclass(frozen=True)
+class _PositionlessOpening:
+    """An opening attempt that parsed but took no position (Task 10.6).
+
+    The unsure-degrade source: the model's structured output survived the
+    guards but its recorded claims carry no accusation and its free_text
+    no "unsure" declaration -- the seed-12/seed-48 shape, where the only
+    accusation named a dead player and the chokepoint dropped it. The
+    fields are the post-guard artifacts exactly as the success path would
+    have recorded them, so the degraded turn loses ONLY the invalid
+    position, never the body report.
+    """
+
+    observations: tuple[ObservationClaim, ...]
+    claims: tuple[Claim, ...]
+    free_text: str
+    drop_markers: tuple[str, ...]
+
+
+def _opening_retry_feedback(*, dropped_targets: tuple[PlayerId, ...]) -> str:
+    """The Task 10.6 feedback block appended to an opening retry prompt.
+
+    States the failure reason -- the dead-target form names every dropped
+    accusation target (bounded, deduplicated, in claim order) and the
+    no-position form covers pure narration -- then demands a LIVING
+    target or an explicit "unsure" (audit gp-5 H-H-1: a byte-identical
+    retry at temp 0.4 is provably a no-op against this failure shape).
+    """
+
+    if dropped_targets:
+        seen: set[PlayerId] = set()
+        names: list[str] = []
+        for target in dropped_targets:
+            if target in seen:
+                continue
+            seen.add(target)
+            names.append(repr(_bounded_original(target)))
+        reason = OPENING_RETRY_FEEDBACK_DEAD_TARGET.format(targets=", ".join(names))
+    else:
+        reason = OPENING_RETRY_FEEDBACK_NO_POSITION
+    return OPENING_RETRY_FEEDBACK_HEADER + reason + OPENING_RETRY_FEEDBACK_DEMAND
+
+
+def _bounded_original(value: str) -> str:
+    """Truncate a marker's quoted-original to the audit-safe bound (Task 10.6).
+
+    Values at or under :data:`MARKER_QUOTED_ORIGINAL_MAX_CHARS` chars pass
+    through verbatim (every real player id does); a longer value -- the
+    seed-35 3499-char reasoning blob hallucinated as an alibi subject --
+    keeps its head plus a literal ``"..."`` so the marker cannot balloon
+    the recorded turn while the original stays identifiable.
+    """
+
+    if len(value) <= MARKER_QUOTED_ORIGINAL_MAX_CHARS:
+        return value
+    return value[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
+
+
 def _opening_takes_position(
     *,
     claims: tuple[Claim, ...],
@@ -1777,7 +1955,13 @@ class MeetingBeliefEvidence:
       a third-party sighting confirming a stated alibi is
       corroboration-class evidence (§6.3 Rule 3). The detector-derived
       half is roster-filtered to the recorded ballot voters (the living
-      participants), matching the recording-time detection path. The set
+      participants), matching the recording-time detection path. BOTH
+      halves pass the Task 10.6 Rule-3 relevance gate
+      (:func:`meetings.transcript.is_relevant_sighting`, audit C-C-3):
+      the detector half inside ``detect_corroborations`` itself, the
+      claim-stated half here against the claim's ``on_tick`` (a claim
+      carries no room, so only the spawn-window prong can gate it --
+      tick-0/1 vouches are the everyone-was-at-spawn shape). The set
       is deduplicated per meeting, so a corroborated subject receives the
       Rule-3 delta exactly once however many pairs confirm them.
     * ``contradicted`` -- subjects of the meeting's detected
@@ -1808,11 +1992,23 @@ def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
 
     accused: set[PlayerId] = set()
     corroborated: set[PlayerId] = set()
+    # Rule-3 relevance gate (Task 10.6; audit gp-2 C-C-3): a claim-stated
+    # vouch passes the same named predicate the detector-derived pairs go
+    # through inside ``detect_corroborations`` -- one gate, two producers.
+    # A CorroborationClaim carries a tick but no room, so its empty room
+    # set can never trip the kill-scene prong; the spawn-window prong is
+    # the operative one (a tick-0/1 "I can vouch" is the
+    # everyone-spawned-together shape that confirms nothing).
+    body_rooms = triggering_body_rooms(result.transcript)
     for turn in result.transcript.turns:
         for claim in turn.claims:
             if isinstance(claim, AccusationClaim):
                 accused.add(claim.against)
-            elif isinstance(claim, CorroborationClaim):
+            elif isinstance(claim, CorroborationClaim) and is_relevant_sighting(
+                tick=claim.on_tick,
+                rooms=frozenset(),
+                triggering_body_rooms=body_rooms,
+            ):
                 corroborated.add(claim.supports)
     # Detector-derived corroboration (Task 10.1, audit gp-2 C-C-1): a
     # containment-consistent (alibi, sighting) pair re-derived from the
@@ -1902,9 +2098,14 @@ def _drop_non_roster_claims(
     :data:`INVALID_ALIBI_SUBJECT_MARKER` /
     :data:`INVALID_CORROBORATION_SUPPORTS_MARKER`) to the turn's
     ``free_text``, so the original value stays auditable and downstream
-    eval can count drops per field by grepping one string each.
-    Deterministic and a no-op when every claim names a living
-    participant, so a clean replay is byte-unaffected.
+    eval can count drops per field by grepping one string each. The
+    quoted-original inside each marker is bounded
+    (:func:`_bounded_original`, Task 10.6 / audit gp-6 H-H-4): a
+    hallucinated mega-value -- the seed-35 3499-char reasoning blob
+    emitted AS an alibi subject -- can no longer balloon the recorded
+    turn; real player ids pass through verbatim. Deterministic and a
+    no-op when every claim names a living participant, so a clean
+    replay is byte-unaffected.
     """
 
     surviving: list[Claim] = []
@@ -1912,13 +2113,21 @@ def _drop_non_roster_claims(
     for claim in claims:
         if isinstance(claim, AccusationClaim) and claim.against not in living_ids:
             markers.append(
-                INVALID_ACCUSATION_TARGET_MARKER.format(target=claim.against)
+                INVALID_ACCUSATION_TARGET_MARKER.format(
+                    target=_bounded_original(claim.against)
+                )
             )
         elif isinstance(claim, AlibiClaim) and claim.subject not in living_ids:
-            markers.append(INVALID_ALIBI_SUBJECT_MARKER.format(subject=claim.subject))
+            markers.append(
+                INVALID_ALIBI_SUBJECT_MARKER.format(
+                    subject=_bounded_original(claim.subject)
+                )
+            )
         elif isinstance(claim, CorroborationClaim) and claim.supports not in living_ids:
             markers.append(
-                INVALID_CORROBORATION_SUPPORTS_MARKER.format(supports=claim.supports)
+                INVALID_CORROBORATION_SUPPORTS_MARKER.format(
+                    supports=_bounded_original(claim.supports)
+                )
             )
         else:
             surviving.append(claim)
@@ -1940,6 +2149,12 @@ __all__ = [
     "INVALID_CORROBORATION_SUPPORTS_MARKER",
     "INVALID_REASON_ID_MARKER",
     "INVALID_VOTE_TARGET_MARKER",
+    "MARKER_QUOTED_ORIGINAL_MAX_CHARS",
+    "OPENING_RETRY_FEEDBACK_DEAD_TARGET",
+    "OPENING_RETRY_FEEDBACK_DEMAND",
+    "OPENING_RETRY_FEEDBACK_HEADER",
+    "OPENING_RETRY_FEEDBACK_NO_POSITION",
+    "OPENING_UNSURE_DEGRADE_MARKER",
     "OPENING_UNSURE_MARKER",
     "TEAMMATE_VOTE_TARGET_MARKER",
     "DefaultTrigger",

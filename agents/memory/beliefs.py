@@ -116,7 +116,22 @@ therefore weighted to mirror the accusation bump exactly -- one vouch
 cancels one accusation-meeting, the "collective clear" half of the
 owner's collective-suspicion model. Applied once per subject per
 meeting, after the accusation bumps (so at the clamp ceiling the
-corroboration, not the bump, has the last word)."""
+corroboration, not the bump, has the last word).
+
+Relevance-gated input (Task 10.6; audit gp-2 C-C-3). The ``corroborated``
+set this delta is applied over is built EXCLUSIVELY through the §6.3
+Rule-3 relevance gate, :func:`meetings.transcript.is_relevant_sighting`
+-- both halves of the evidence: detector-derived containment pairs are
+gated inside :func:`meetings.transcript.detect_corroborations`, and
+claim-stated :class:`~meetings.schemas.CorroborationClaim` vouches are
+gated by :func:`meetings.manager.extract_belief_evidence` (the only
+producer of the fold's ``corroborated`` argument). Spawn-window
+(tick 0-1) and kill-scene vouches are evidentially empty -- on the
+Wave-0 set they cancelled 52% of impostor accusation flow in-meeting,
+the C-C-3 asymmetry: the +0.05 accusation side dedupes per meeting
+while the -0.05 side needed only one sloppy vouch. The MAGNITUDE is
+untouched: the gate changes which subjects arrive here, never how far
+they move."""
 
 MEETING_SUSPICION_DECAY_RATE: Final[float] = 0.25
 """DESIGN.md §6.3 Rule 5 decay rate, per meeting round (Task 9.8).
@@ -517,7 +532,13 @@ def apply_meeting_evidence_rules(
       through it.
     * **Rule 3 corroboration** (``CORROBORATION_SUSPICION_DELTA``):
       every subject in ``corroborated`` loses the mirror delta --
-      a public vouch is the collective clear.
+      a public vouch is the collective clear. The set arrives
+      relevance-gated (Task 10.6): every producer routes both
+      claim-stated and detector-derived corroborations through
+      :func:`meetings.transcript.is_relevant_sighting` before this
+      seam, so a spawn-window or kill-scene vouch never reaches the
+      delta (see ``CORROBORATION_SUSPICION_DELTA``'s docstring for the
+      gate's two homes).
     * **Rule 5 decay** (``MEETING_SUSPICION_DECAY_RATE``): every
       *already-known* player about whom this meeting produced no new
       evidence (not accused, not corroborated, not a subject of a
