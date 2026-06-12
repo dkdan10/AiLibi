@@ -1022,8 +1022,24 @@ def decompose_ejection_channels(
       and the carry ceiling (``ACCUSATION_SUSPICION_DELTA`` x prior
       accused meetings, floored at the remainder): decayed carry can only
       shrink below its ceiling, so a positive remainder cannot be carry
-      and the only §6.3 channel left is Rule 1. Conservative at the
-      clamp: a 1.0 row under-reports ``C`` by ``F``, never over-credits.
+      and the only §6.3 channel left is Rule 1.
+
+    **The 1.0 clamp is a special case.** A row at the rendered ceiling may
+    have absorbed any amount of over-mass, so subtracting ``F`` from it is
+    NOT a faithful carry-in inverse: a vent witness (carry-in 1.0) plus
+    any same-meeting flag would read ``P = 0.5 − F``, lose the vent
+    channel, and mis-attribute the residue to body proximity. At the
+    ceiling the decomposition therefore switches to bounds: the persistent
+    mass is read WITHOUT the flag subtraction (its upper bound, exactly
+    the Rule-4 delta), ``vent_witness`` is attributed — §6.3 calls a
+    witnessed vent "almost certain" and the Wave-0 census found every
+    observed 1.0 to be the vent-witnessed impostor, so the ceiling is
+    Rule 4's signature on this lattice — and ``body_proximity`` is never
+    attributed from the un-invertible remainder (carry stays
+    presence-based). The one ambiguity this trades away (a no-vent stack
+    landing on exactly 1.00 — e.g. an undeacayed strong flag + one body
+    proximity — reading vent instead of proximity) cannot change the
+    multi-signal verdict, only swap which perception channel is named.
 
     A meeting with no rendered row for the ejected player decomposes to
     the flag channel alone (nothing else is attributable without the
@@ -1059,7 +1075,11 @@ def decompose_ejection_channels(
     rendered = _rendered_suspicion_by_target(meeting).get(ejected)
     if rendered is None:
         return frozenset(channels)
-    persistent = round(rendered - flag_mass - 0.5, 4)
+    # At the rendered ceiling the clamp may have absorbed mass, so the
+    # flag subtraction is not a faithful carry-in inverse (see the
+    # docstring's clamp paragraph): read the persistent mass without it.
+    clamped = rendered >= 1.0 - _CHANNEL_EPS
+    persistent = round(rendered - 0.5 if clamped else rendered - flag_mass - 0.5, 4)
     if persistent <= _CHANNEL_EPS:
         return frozenset(channels)
 
@@ -1076,6 +1096,15 @@ def decompose_ejection_channels(
     )
     if prior_accused_meetings > 0:
         channels.add(CHANNEL_PRIOR_MEETING_CARRY)
+
+    if clamped:
+        # The ceiling is Rule 4's lattice signature: attribute the vent
+        # witness, never body proximity (the remainder under a clamp is
+        # un-invertible — inventing proximity from it was exactly the
+        # mis-attribution the clamp paragraph describes).
+        if persistent >= VENTING_SUSPICION_DELTA - _CHANNEL_EPS:
+            channels.add(CHANNEL_VENT_WITNESS)
+        return frozenset(channels)
 
     remaining = persistent
     if remaining >= VENTING_SUSPICION_DELTA - _CHANNEL_EPS:

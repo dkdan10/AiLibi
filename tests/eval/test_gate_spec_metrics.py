@@ -46,7 +46,10 @@ from eval.report_schema import (
     GameReport,
     MeetingReport,
 )
-from eval.vote_correctness import genuine_class_subjects
+from eval.vote_correctness import (
+    compute_genuine_class_conversion,
+    genuine_class_subjects,
+)
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -57,6 +60,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     VoteBallot,
 )
+from meetings.transcript import WEAK_REASON_RETARGETED_PROXY, detect_contradictions
 from orchestrator.replay import LLMCallRecord
 
 # The baseline builder is a top-level script module (mypy_path = "scripts";
@@ -352,6 +356,37 @@ class TestDecomposeEjectionChannels:
             {CHANNEL_VENT_WITNESS, CHANNEL_PRIOR_MEETING_CARRY}
         )
 
+    def test_flag_stacked_on_a_clamped_vent_row_keeps_the_vent_channel(
+        self,
+    ) -> None:
+        # The Codex-review clamp shape: a vent witness's 1.00 row plus a
+        # SAME-meeting weak flag. Subtracting the flag mass from the
+        # clamped ceiling would read persistent 0.42, lose the vent
+        # channel, and invent body proximity from the residue; the
+        # clamp-aware branch keeps vent and never attributes proximity
+        # from an un-invertible remainder.
+        game = _game(
+            meetings=(
+                _accused_meeting(meeting_id="m-a"),
+                _meeting(
+                    meeting_id="m-eject",
+                    outcome="EJECTED",
+                    ejected=_IMPOSTOR,
+                    turns=_weak_flag_turns(),
+                    llm_calls=(_graph_call(agent_id="p-0", rows={_IMPOSTOR: 1.00}),),
+                ),
+            )
+        )
+        channels = decompose_ejection_channels(game, 1)
+        assert channels == frozenset(
+            {
+                CHANNEL_CONTRADICTION_FLAG,
+                CHANNEL_VENT_WITNESS,
+                CHANNEL_PRIOR_MEETING_CARRY,
+            }
+        )
+        assert channels is not None and CHANNEL_BODY_PROXIMITY not in channels
+
     def test_carry_needs_a_prior_meeting_not_just_mass(self) -> None:
         # Persistent mass with NO prior accusation history attributes to
         # the perception channels only (decayed carry cannot exist
@@ -610,6 +645,81 @@ class TestComputeSupplyGauges:
         assert gauges.genuine_subject_meetings == 1
 
 
+def _retargeted_proxy_turns() -> tuple[MeetingTurn, ...]:
+    """A transcript whose ONLY non-endpoint sighting-flag is a re-target.
+
+    The impostor states a proxy alibi about a crewmate (CAFETERIA 2-8); a
+    third party sights the crewmate in a disjoint room at an interior tick
+    (STORAGE@5) and the crewmate's OWN self-sighting agrees — the Task
+    10.6 proxy rule suppresses the flag on the crewmate and re-targets it
+    WEAK at the impostor speaker.
+    """
+
+    return (
+        _turn(
+            speaker=_IMPOSTOR,
+            index=0,
+            kind="opening",
+            claims=(_alibi(subject=_CREWMATE),),
+        ),
+        _turn(
+            speaker=_CREWMATE,
+            index=1,
+            kind="reply",
+            observations=(_sighting(subject=_CREWMATE, tick=5),),
+        ),
+        _turn(
+            speaker="p-2",
+            index=2,
+            kind="reply",
+            observations=(_sighting(subject=_CREWMATE, tick=5),),
+        ),
+    )
+
+
+class TestRetargetedProxyFlagsAreNotGenuineClass:
+    """A re-target names the proxy speaker, not a sighted-and-contradicted
+    subject — it must not enter the alibi-lie gauge (Codex review, P1).
+
+    Without the exclusion, an impostor whose false PROXY alibi about
+    someone else gets re-targeted would count as genuine-class SUPPLIED
+    (the re-target flag is ``alibi_vs_sighting`` with no endpoint band),
+    inflating the PRIMARY gate and the genuine-subject gauge with a flag
+    class whose evidence is one weak re-target.
+    """
+
+    def test_retarget_at_an_impostor_does_not_supply_the_gate(self) -> None:
+        meeting = _meeting(turns=_retargeted_proxy_turns())
+
+        # The re-target exists (a non-endpoint alibi_vs_sighting naming
+        # the impostor)...
+        roster = frozenset(ballot.voter for ballot in meeting.ballots)
+        flags = detect_contradictions(meeting.transcript, roster=roster)
+        assert any(
+            _IMPOSTOR in flag.subjects
+            and WEAK_REASON_RETARGETED_PROXY in flag.description
+            for flag in flags
+        )
+        # ...but it is NOT genuine-class supply: no one's own location was
+        # contradicted by a sighting here.
+        assert genuine_class_subjects(meeting) == frozenset()
+
+        conversion = compute_genuine_class_conversion((_game(meetings=(meeting,)),))
+        assert conversion.supplied == 0
+        assert conversion.converted == 0
+
+    def test_retarget_meeting_is_not_a_genuine_subject_meeting(self) -> None:
+        gauges = compute_supply_gauges(
+            (_game(meetings=(_meeting(turns=_retargeted_proxy_turns()),)),)
+        )
+        assert gauges.genuine_subject_meetings == 0
+        # The re-target still shows in the honest flag census (one weak
+        # flag naming the impostor speaker) — the exclusion is about the
+        # genuine CLASS, never about hiding the flag.
+        assert gauges.total_flags >= 1
+        assert gauges.flag_subjects_impostor >= 1
+
+
 # ---------------------------------------------------------------------------
 # Committed pins + the corrected Wave-0 baseline fixture (the 10.9 A/B home)
 # ---------------------------------------------------------------------------
@@ -673,8 +783,13 @@ class TestCommittedW0GateSpecPins:
         # The corrected Wave-0 supply row: 65 re-derived flags (64w/1s —
         # the storm and the suppressed proxies gone), zero-contradiction
         # share UP one meeting (seed 13 m1 now reads empty), genuine
-        # supply untouched at 10 meetings, and the audited role split net
-        # of the storm (36 CREW / 29 IMP — C-C-8's cascade base rate).
+        # supply at 8 meetings — the audit's 10 minus seed 13 m1 (its
+        # storm flags were never genuine evidence) and minus seed 28 m1
+        # (its only non-endpoint flags are now re-targets, which are not
+        # alibi-lie supply; seed 33 m1's re-target likewise stays out) —
+        # and the audited role split net of the storm (36 CREW / 29 IMP —
+        # C-C-8's cascade base rate; re-target subjects count in the
+        # census, never in the genuine class).
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
@@ -683,7 +798,7 @@ class TestCommittedW0GateSpecPins:
         assert gauges.weak_flags == 64
         assert gauges.strong_flags == 1
         assert gauges.zero_contradiction_meetings == 49
-        assert gauges.genuine_subject_meetings == 10
+        assert gauges.genuine_subject_meetings == 8
         assert gauges.flag_subjects_crew == 36
         assert gauges.flag_subjects_impostor == 29
         assert gauges.accused_impostor_meetings == 54
