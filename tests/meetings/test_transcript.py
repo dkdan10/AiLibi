@@ -2332,3 +2332,443 @@ class TestCommittedBytes106Pins:
         # suppression tripwire: a future change driving this to 0 means the
         # channel died, which the audit ranks as bad as the artifacts.
         assert surviving == 73
+
+
+# ---------------------------------------------------------------------------
+# Task 10.7: independent voices -- the pre-vote two-witness fold's pure
+# transcript half (audit gp-2 C-C-1/C-C-2; the corroborate-within-round
+# owner principle). Synthetic shapes first; the committed-bytes pins (the
+# DoD coordinates: the seed-30 pile-on STOP pin and the seed-2/5 yield
+# voices) close the section, walked offline against the Task 10.5 bytes.
+# ---------------------------------------------------------------------------
+
+from meetings.schemas import (  # noqa: E402
+    Claim,
+    CompletedTaskObservation,
+    CorroborationClaim,
+    ObservationClaim,
+    TurnKind,
+)
+from meetings.transcript import independent_voices  # noqa: E402
+
+
+def _voice_turn(
+    *,
+    turn_index: int,
+    speaker: str,
+    turn_kind: TurnKind,
+    accuses: tuple[str, ...] = (),
+    supports: tuple[str, ...] = (),
+    sightings: tuple[tuple[str, str, int], ...] = (),
+    body: tuple[str, str, int] | None = None,
+) -> MeetingTurn:
+    """One turn for the voices tests: ``sightings`` are (subject, room, tick),
+    ``body`` is (body_of, room, tick)."""
+
+    observations: list[ObservationClaim] = []
+    if body is not None:
+        body_of, body_room, body_tick = body
+        observations.append(
+            FoundBodyObservation(
+                type="found_body", tick=body_tick, body_of=body_of, room=body_room
+            )
+        )
+    for subject, room, tick in sightings:
+        observations.append(
+            SawPlayerObservation(
+                type="saw_player", tick=tick, subject=subject, room=room
+            )
+        )
+    claims: list[Claim] = []
+    for target in accuses:
+        claims.append(
+            AccusationClaim(
+                type="accusation",
+                against=target,
+                confidence=0.6,
+                reason=f"{speaker} accuses {target}",
+            )
+        )
+    for supported in supports:
+        claims.append(
+            CorroborationClaim(
+                type="corroboration",
+                supports=supported,
+                on_tick=5,
+                reason=f"{speaker} vouches for {supported}",
+            )
+        )
+    return MeetingTurn(
+        turn_id=f"m-1:turn-{turn_index}",
+        turn_index=turn_index,
+        speaker=speaker,
+        turn_kind=turn_kind,
+        reply_to=None,
+        observations=tuple(observations),
+        claims=tuple(claims),
+        free_text=f"turn {turn_index}",
+    )
+
+
+class TestIndependentVoices:
+    """The Task 10.7 voice definition, prong by prong.
+
+    A voice is a chain/opening accusation with relevance-grade
+    observation backing, or an opt-in corroboration aligned with an
+    existing accuser that carries the same backing. Bare verbal
+    accusations carry no voice; opt-in DIRECT accusations carry no
+    voice (the seed-30 anti-pile-on property).
+    """
+
+    _BODY = ("p-9", "MEDBAY", 10)
+
+    def _two_voice_transcript(self) -> MeetingTranscript:
+        return MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    body=self._BODY,
+                ),
+                _voice_turn(turn_index=1, speaker="p-2", turn_kind="reply"),
+                _voice_turn(
+                    turn_index=2,
+                    speaker="p-3",
+                    turn_kind="opt_in",
+                    supports=("p-1",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                ),
+            )
+        )
+
+    def test_observation_backed_accuser_plus_aligned_opt_in_are_two_voices(
+        self,
+    ) -> None:
+        voices = independent_voices(self._two_voice_transcript())
+
+        assert voices == {"p-2": ("p-1", "p-3")}
+
+    def test_bare_verbal_accusation_carries_no_voice(self) -> None:
+        # The opening accuses with NO observations at all: no voice, and
+        # the opt-in corroboration still aligns with the accuser and
+        # carries backing, so the subject sits at one voice.
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    body=self._BODY,
+                ),
+                _voice_turn(
+                    turn_index=1,
+                    speaker="p-3",
+                    turn_kind="opt_in",
+                    supports=("p-1",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-3",)}
+
+    def test_kill_scene_only_backing_carries_no_voice(self) -> None:
+        # The seed-30 deflection shape: every located observation on the
+        # accusing turn sits at the kill scene, which the §6.3 relevance
+        # predicate prices as evidentially empty -- anyone at the scene
+        # can say it (one home with the Task 10.6 corroboration gate).
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "MEDBAY", 9), ("p-4", "MEDBAY", 9)),
+                    body=self._BODY,
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {}
+
+    def test_spawn_window_only_backing_carries_no_voice(self) -> None:
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "CAFETERIA", SPAWN_WINDOW_LAST_TICK),),
+                    body=self._BODY,
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {}
+
+    def test_placeholder_room_backing_carries_no_voice(self) -> None:
+        # A non-spatial label locates nothing (the 10.6 allowlist), so it
+        # cannot back a voice -- "I saw them somewhere" is bare testimony.
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "VARYING_ROOMS", 8),),
+                    body=self._BODY,
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {}
+
+    def test_opt_in_direct_accusation_is_never_a_voice(self) -> None:
+        # THE anti-pile-on property: an opt-in turn may accuse (§5.2
+        # PHASE 3) and may even carry relevant backing, but its direct
+        # accusation adds no voice -- only its corroboration can, and
+        # only when aligned with an existing accuser of the subject.
+        # Witness COUNT cannot filter the seed-30 pile-on; independence
+        # can.
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    body=self._BODY,
+                ),
+                _voice_turn(turn_index=1, speaker="p-2", turn_kind="reply"),
+                _voice_turn(
+                    turn_index=2,
+                    speaker="p-3",
+                    turn_kind="opt_in",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                ),
+                _voice_turn(
+                    turn_index=3,
+                    speaker="p-4",
+                    turn_kind="opt_in",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-1",)}
+
+    def test_opt_in_corroboration_of_a_non_accuser_adds_no_voice(self) -> None:
+        # The exact seed-30 m1 mechanics: the opt-in accuses subject B
+        # directly while its corroboration supports an accuser of
+        # subject A -- it is a voice for A, never for B.
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    body=self._BODY,
+                ),
+                _voice_turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="reply",
+                    accuses=("p-3",),
+                ),
+                _voice_turn(turn_index=2, speaker="p-3", turn_kind="reply"),
+                _voice_turn(
+                    turn_index=3,
+                    speaker="p-4",
+                    turn_kind="opt_in",
+                    accuses=("p-3",),
+                    supports=("p-1",),
+                    sightings=(("p-3", "ADMIN", 8),),
+                ),
+            )
+        )
+
+        voices = independent_voices(transcript)
+
+        assert voices == {"p-2": ("p-1", "p-4")}
+        assert "p-3" not in voices
+
+    def test_opt_in_corroboration_without_backing_adds_no_voice(self) -> None:
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    body=self._BODY,
+                ),
+                _voice_turn(
+                    turn_index=1,
+                    speaker="p-3",
+                    turn_kind="opt_in",
+                    supports=("p-1",),
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-1",)}
+
+    def test_task_completion_backing_counts(self) -> None:
+        # "Observation backing" is turn-level first-hand located content:
+        # a completed task in a non-scene room outside the spawn window
+        # stakes the speaker's whereabouts exactly like a self-sighting
+        # (the seed-2 m1 witness shape).
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    body=self._BODY,
+                ).model_copy(
+                    update={
+                        "observations": (
+                            FoundBodyObservation(
+                                type="found_body",
+                                tick=10,
+                                body_of="p-9",
+                                room="MEDBAY",
+                            ),
+                            CompletedTaskObservation(
+                                type="completed_task",
+                                tick=8,
+                                task_id="wires",
+                                room="ADMIN",
+                            ),
+                        )
+                    }
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-1",)}
+
+    def test_subject_is_never_a_voice(self) -> None:
+        # A self-accusation mints no voice, and the subject vouching for
+        # their own accuser (the seed-30 m1 turn-2 shape, were it an
+        # opt-in) can never voice against themselves.
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-2",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    body=self._BODY,
+                ),
+                _voice_turn(
+                    turn_index=1,
+                    speaker="p-1",
+                    turn_kind="reply",
+                    accuses=("p-3",),
+                    sightings=(("p-3", "ADMIN", 8),),
+                ),
+                _voice_turn(
+                    turn_index=2,
+                    speaker="p-3",
+                    turn_kind="opt_in",
+                    supports=("p-1",),
+                    sightings=(("p-3", "ADMIN", 8),),
+                ),
+            )
+        )
+
+        voices = independent_voices(transcript)
+
+        assert "p-2" not in voices
+        assert voices == {"p-3": ("p-1",)}
+
+    def test_one_speaker_is_one_voice_however_many_claims(self) -> None:
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2", "p-2"),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    body=self._BODY,
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-1",)}
+
+    def test_roster_filters_subjects(self) -> None:
+        transcript = self._two_voice_transcript()
+
+        assert independent_voices(transcript, roster=frozenset({"p-1", "p-3"})) == {}
+        assert independent_voices(transcript, roster=frozenset()) == {}
+
+    def test_deterministic_and_sorted(self) -> None:
+        transcript = self._two_voice_transcript()
+
+        first = independent_voices(transcript)
+        second = independent_voices(transcript)
+
+        assert first == second
+        assert all(speakers == tuple(sorted(speakers)) for speakers in first.values())
+        assert list(first) == sorted(first)
+
+
+class TestCommittedBytes107VoicePins:
+    """The Task 10.7 DoD voice coordinates, walked offline (no re-record)."""
+
+    def test_seed30_m1_derives_no_voice_for_p7(self) -> None:
+        # THE owner-principle tripwire (the STOP pin's transcript half):
+        # p-7 is accused three times -- p-6's deflecting reply (every
+        # located observation at the CAFETERIA kill scene: no backing)
+        # and two opt-in direct accusations (whose corroborations support
+        # p-2, an accuser of p-6, NOT of p-7) -- and not one is a voice.
+        # The two-witness fold therefore never sees p-7. If a future
+        # change makes a voice appear here, the rule converts a bare
+        # pile-on: STOP and escalate, per the contract.
+        entry = _committed_meetings(30)[1]
+        voices = independent_voices(entry.transcript, roster=_living_roster(entry))
+
+        assert "p-7" not in voices
+        # The same mechanics document where the voices DID land: the
+        # accused impostor p-6 carries the opening accuser plus the two
+        # aligned opt-in corroborations.
+        assert voices.get("p-6") == ("p-2", "p-3", "p-4")
+
+    def test_seed2_m1_derives_two_voices_for_p4(self) -> None:
+        # Yield-pin coordinates: impostor p-4's accuser p-8 (a reply
+        # staking its own ENGINEERING whereabouts) plus p-9's opt-in
+        # corroboration of p-8 -- the "accuse-capable opt-in
+        # corroboration counts as the second voice" owner decision.
+        entry = _committed_meetings(2)[1]
+        voices = independent_voices(entry.transcript, roster=_living_roster(entry))
+
+        assert voices.get("p-4") == ("p-8", "p-9")
+
+    def test_seed5_m1_derives_voices_for_p4(self) -> None:
+        # The richer yield shape: the opening eyewitness plus four
+        # opt-in corroborations aligned with accusers of p-4 -- minus
+        # p-5, whose only located content is spawn-window/kill-scene
+        # CAFETERIA and therefore carries no backing.
+        entry = _committed_meetings(5)[1]
+        voices = independent_voices(entry.transcript, roster=_living_roster(entry))
+
+        assert voices.get("p-4") == ("p-1", "p-2", "p-3", "p-7", "p-9")
+        assert "p-5" not in (voices.get("p-4") or ())
