@@ -397,11 +397,12 @@ class TestReplayRecordsMeetingArtifacts:
         # the living-roster accusation constraint), and Task 10.3 to v7
         # (anti-repetition + the DEAD do-not-accuse line) alongside
         # crewmate_report v5 and impostor_report v4 (accuse-or-declare-unsure
-        # openings). A fresh replay entry must carry the live version strings
-        # end-to-end; the committed sample bytes still record v6/v4/v3 until
-        # the Task 10.5 re-record.
+        # openings). Task 10.8 bumped crewmate_report alone to v6 (the
+        # emergency-opening called-on-suspicion branch). A fresh replay entry
+        # must carry the live version strings end-to-end; the committed
+        # sample bytes still record v5/v4/v7 until the Task 10.9 re-record.
         assert meeting.prompt_versions["accusation_round"] == "accusation_round.v7"
-        assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v5"
+        assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v6"
         assert meeting.prompt_versions["impostor_report"] == "impostor_report_v4"
         # LLM cost metadata recorded per call. The chain protocol:
         #   turns: 1 opening + 1 reply = 2 calls
