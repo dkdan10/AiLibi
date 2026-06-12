@@ -11,6 +11,7 @@ from agents.memory.beliefs import (
     CORROBORATION_SUSPICION_DELTA,
     MEETING_CONTRADICTION_LIFT_CAP,
     MEETING_SUSPICION_DECAY_RATE,
+    TESTIMONY_INDEPENDENCE_BAR,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
     BeliefState,
     PlayerBelief,
@@ -945,6 +946,308 @@ class TestMeetingEvidenceRosterFilter:
         assert updated.view("stale-unknown-id").suspicion == pytest.approx(
             0.7 + (_DEFAULT_SUSPICION - 0.7) * MEETING_SUSPICION_DECAY_RATE
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 10.7: the two-witness fold phases (audit gp-2 C-C-1/C-C-2; the
+# corroborate-within-round owner principle). One fold function, a phase
+# argument: ``pre_vote`` moves the folded testimony bumps + this meeting's
+# corroborations, ``post_vote`` moves the single-voice bumps + Rule-5 decay,
+# and the default composed call stays byte-identical to the pre-10.7 fold.
+# ---------------------------------------------------------------------------
+
+
+class TestMeetingFoldPhases:
+    """The Task 10.7 phase routing in ``apply_meeting_evidence_rules``.
+
+    The double-fold hazard -- a folded subject bumped pre-vote AND
+    post-vote, silently doubling the +0.05 constant -- is the one bug
+    class the contract names non-negotiable; the composition and
+    per-meeting-total pins below are its guards.
+    """
+
+    def test_independence_bar_is_two_witnesses(self) -> None:
+        # The owner decision (audit §4.2): two-witness, not single
+        # (single-witness pre-vote was REJECTED at +14/-9 meetings).
+        assert TESTIMONY_INDEPENDENCE_BAR == 2
+
+    def test_pre_vote_bumps_only_folded_subjects(self) -> None:
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        # The single-voice subject is untouched pre-vote -- the channel
+        # is invisible until independence is met.
+        assert "p-2" not in updated.known_players()
+
+    def test_pre_vote_applies_corroborations_same_phase(self) -> None:
+        # Same-phase symmetry (audit C-C-3 "corroborations must move at
+        # the SAME phase as accusations"): a defended subject is cleared
+        # before ballots, in the same half the folded bumps move.
+        beliefs = BeliefState()
+        beliefs.seed_player("p-3", suspicion=0.58, trust=0.5)
+
+        updated = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=(),
+            corroborated=("p-3",),
+            phase="pre_vote",
+        )
+
+        assert updated.view("p-3").suspicion == pytest.approx(
+            0.58 - CORROBORATION_SUSPICION_DELTA
+        )
+
+    def test_pre_vote_never_decays(self) -> None:
+        # Rule 5 belongs to the post-vote half; an uninvolved row is
+        # byte-untouched by the pre-vote fold.
+        beliefs = BeliefState()
+        beliefs.seed_player("p-7", suspicion=0.7, trust=0.5)
+
+        updated = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+
+        assert updated.view("p-7").suspicion == pytest.approx(0.7)
+
+    def test_post_vote_skips_the_folded_subjects_bump(self) -> None:
+        # The pre-vote fold REPLACES the post-vote accused-bump for that
+        # subject-meeting: the post-vote half demonstrably skips it,
+        # while the single-voice subject takes its bump exactly as
+        # before 10.7.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+            phase="post_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+
+        assert updated.view("p-2").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert "p-5" not in updated.known_players()
+
+    def test_post_vote_applies_no_corroboration_delta_but_exempts_decay(
+        self,
+    ) -> None:
+        # The corroboration delta moved pre-vote; post-vote the
+        # corroborated subject is still REINFORCED (new evidence this
+        # meeting), so Rule 5 does not erode them either.
+        beliefs = BeliefState()
+        beliefs.seed_player("p-3", suspicion=0.55, trust=0.5)
+
+        updated = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=(),
+            corroborated=("p-3",),
+            phase="post_vote",
+        )
+
+        assert updated.view("p-3").suspicion == pytest.approx(0.55)
+
+    def test_post_vote_decay_exempts_folded_subjects(self) -> None:
+        # A folded subject got new evidence this meeting: the post-vote
+        # half skips its bump AND its decay -- the bump landed pre-vote
+        # and must not erode in the same meeting.
+        beliefs = BeliefState()
+        beliefs.seed_player(
+            "p-5",
+            suspicion=_DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA,
+            trust=0.5,
+        )
+
+        updated = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=("p-5",),
+            phase="post_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+
+    def test_phases_compose_to_the_default_call(self) -> None:
+        # THE function-level double-fold guard: pre_vote then post_vote
+        # over the same evidence equals the composed default call -- each
+        # accused subject is bumped exactly once whichever half carried
+        # it, corroborations land once, decay runs once.
+        beliefs = BeliefState()
+        beliefs.seed_player("p-2", suspicion=0.55, trust=0.5)
+        beliefs.seed_player("p-7", suspicion=0.7, trust=0.5)
+        evidence: Mapping[str, Sequence[str]] = {
+            "accused": ["p-2", "p-5"],
+            "corroborated": ["p-3"],
+            "contradicted": ["p-6"],
+        }
+
+        composed = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=evidence["accused"],
+            corroborated=evidence["corroborated"],
+            contradicted=evidence["contradicted"],
+        )
+        pre = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=evidence["accused"],
+            corroborated=evidence["corroborated"],
+            contradicted=evidence["contradicted"],
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+        split = apply_meeting_evidence_rules(
+            pre,
+            own_id="observer",
+            accused=evidence["accused"],
+            corroborated=evidence["corroborated"],
+            contradicted=evidence["contradicted"],
+            phase="post_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+
+        assert _snapshot(split) == _snapshot(composed)
+
+    def test_folded_subject_per_meeting_total_equals_unfolded(self) -> None:
+        # The DoD double-fold pin at the store level: run the two-phase
+        # protocol with the subject FOLDED and the composed call with the
+        # subject unfolded -- the persistent per-meeting total is the
+        # identical single +0.05 either way.
+        evidence: Mapping[str, Sequence[str]] = {"accused": ["p-5"]}
+
+        folded_pre = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=evidence["accused"],
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+        folded_total = apply_meeting_evidence_rules(
+            folded_pre,
+            own_id="observer",
+            accused=evidence["accused"],
+            phase="post_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+        unfolded_total = _absorb_meetings(BeliefState(), [evidence])
+
+        assert folded_total.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert _snapshot(folded_total) == _snapshot(unfolded_total)
+
+    def test_default_call_result_is_independent_of_folded_marks(self) -> None:
+        # The composed call (the standing post-meeting absorb shape)
+        # bumps each accused subject exactly once whether or not the
+        # caller marks it folded -- the persistent path cannot
+        # double-fold by construction.
+        with_marks = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+        without_marks = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+        )
+
+        assert _snapshot(with_marks) == _snapshot(without_marks)
+
+    def test_teammate_guard_holds_on_the_pre_vote_channel(self) -> None:
+        # DESIGN.md §4.7 (the 7.12/9.3 firewall) applies to the new
+        # channel: an impostor listener never takes a pre-vote testimony
+        # bump against a fellow impostor, however many voices stood
+        # behind the accusation.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+            fellow_impostor_ids=("p-2",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-2", "p-5"}),
+        )
+
+        assert "p-2" not in updated.known_players()
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+
+    def test_own_id_is_excluded_from_the_pre_vote_channel(self) -> None:
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("observer",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"observer"}),
+        )
+
+        assert updated.known_players() == ()
+
+    def test_roster_filter_applies_to_the_folded_channel(self) -> None:
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("headless-seed-9",),
+            roster=frozenset({"observer", "p-5"}),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"headless-seed-9"}),
+        )
+
+        assert updated.known_players() == ()
+
+    def test_folded_subject_nobody_accused_fails_loud(self) -> None:
+        # A folded subject outside ``accused`` is caller drift between
+        # the evidence derivation and the fold -- never silently ignored
+        # (AGENTS.md "no silent fallbacks").
+        with pytest.raises(ValueError, match="pre_vote_folded"):
+            apply_meeting_evidence_rules(
+                BeliefState(),
+                own_id="observer",
+                accused=("p-2",),
+                phase="pre_vote",
+                pre_vote_folded=frozenset({"p-5"}),
+            )
+
+    def test_phase_calls_are_pure_and_deterministic(self) -> None:
+        beliefs = BeliefState()
+        beliefs.seed_player("p-5", suspicion=0.55, trust=0.5)
+        before = _snapshot(beliefs)
+
+        first = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+        second = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+
+        assert _snapshot(beliefs) == before
+        assert _snapshot(first) == _snapshot(second)
 
 
 # ---------------------------------------------------------------------------

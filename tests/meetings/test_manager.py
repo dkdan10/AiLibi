@@ -35,6 +35,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from agents.memory.beliefs import (
+    ACCUSATION_SUSPICION_DELTA,
     CORROBORATION_SUSPICION_DELTA,
     BeliefState,
     apply_meeting_evidence_rules,
@@ -71,6 +72,7 @@ from meetings.manager import (
     _normalize_self_alibi_subjects,  # noqa: PLC2701
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
+    derive_belief_evidence,
     drop_teammate_statement_target,
     exclude_teammate_accusation_claims,
     extract_belief_evidence,
@@ -93,6 +95,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_SELF_STATED,
+    detect_contradictions,
     detect_corroborations,
     is_canonically_ordered,
     walk_chain,
@@ -4265,3 +4268,595 @@ class TestRule3RelevanceGateAtTheEvidenceSeam:
             _result_with(turns=(opening, alibi_turn), voters=("p-3", "p-6", "p-7"))
         )
         assert evidence.corroborated == ()
+
+
+# --- Task 10.7: testimony ingestion (pre-vote, two-witness) -------------------
+#
+# Audit gp-2 (C-C-1, C-C-2, C-C-3, D-D-3, C-C-6); DESIGN.md §5.2, §6.3, §4.6;
+# the corroborate-within-round owner principle. The meeting fold runs in two
+# deterministic halves: the manager derives the evidence from the FINAL
+# transcript and applies the pre-vote half (two-witness testimony bumps +
+# this meeting's relevance-gated corroborations) to every voter's suspicion
+# graph before the ballot prompts render; the post-vote half (single-voice
+# bumps + Rule-5 decay) stays the orchestrator's standing absorb. Synthetic
+# production-path shapes first; the committed-bytes DoD pins (the seed-30
+# pile-on STOP pin, the seed-2/5 yield pins, the seed-28 same-phase shape)
+# close the section.
+
+from agents.strategic.prompts import vote_ballot_prompt  # noqa: E402
+from eval._suspicion_parse import parse_rendered_max_suspicion  # noqa: E402,PLC2701
+
+
+def _backed_observations(
+    *, body_room: str = "MEDBAY", seen: tuple[tuple[str, str, int], ...]
+) -> tuple[ObservationClaim, ...]:
+    """A found-body observation plus (subject, room, tick) sightings."""
+
+    observations: list[ObservationClaim] = [
+        FoundBodyObservation(type="found_body", tick=405, body_of="p-9", room=body_room)
+    ]
+    observations.extend(
+        SawPlayerObservation(type="saw_player", tick=tick, subject=subject, room=room)
+        for subject, room, tick in seen
+    )
+    return tuple(observations)
+
+
+def _two_voice_responder() -> Callable[[str, type[BaseModel] | None], str]:
+    """p-1 opens accusing p-2 with relevant backing; p-3's opt-in vouches
+    for p-1 with its own backing -- two independent voices on p-2 (and the
+    corroboration makes p-1 a defended subject in the same meeting)."""
+
+    return _make_responder(
+        accusations={"p-1": "p-2", "p-2": None},
+        observations={
+            "p-1": _backed_observations(
+                seen=(("p-2", "ADMIN", 402), ("p-3", "MEDBAY", 404))
+            ),
+            "p-3": (
+                SawPlayerObservation(
+                    type="saw_player", tick=402, subject="p-2", room="ADMIN"
+                ),
+            ),
+        },
+        claims_by={
+            "p-3": (
+                CorroborationClaim(
+                    type="corroboration",
+                    supports="p-1",
+                    on_tick=402,
+                    reason="p-3 vouches for p-1",
+                ),
+            ),
+        },
+    )
+
+
+def _single_voice_responder() -> Callable[[str, type[BaseModel] | None], str]:
+    """The two-voice shape minus the second voice: p-3 opts in with the
+    same backing but vouches for nobody -- the channel must stay invisible."""
+
+    return _make_responder(
+        accusations={"p-1": "p-2", "p-2": None},
+        observations={
+            "p-1": _backed_observations(
+                seen=(("p-2", "ADMIN", 402), ("p-3", "MEDBAY", 404))
+            ),
+            "p-3": (
+                SawPlayerObservation(
+                    type="saw_player", tick=402, subject="p-2", room="ADMIN"
+                ),
+            ),
+        },
+    )
+
+
+def _fold_participants(
+    *, p4_role: str = "CREWMATE", p4_teammates: tuple[PlayerId, ...] = ()
+) -> tuple[MeetingParticipant, ...]:
+    return (
+        _participant(
+            "p-1",
+            suspicion_graph=(
+                SuspicionEntry(player_id="p-2", suspicion=0.75, trust=0.5),
+            ),
+        ),
+        _participant("p-2", role="IMPOSTOR" if p4_teammates else "CREWMATE"),
+        _participant("p-3"),
+        _participant(
+            "p-4",
+            role=p4_role,
+            suspicion_graph=(
+                SuspicionEntry(player_id="p-1", suspicion=0.5, trust=0.5),
+                SuspicionEntry(player_id="p-2", suspicion=0.55, trust=0.5),
+            ),
+            fellow_impostor_ids=p4_teammates,
+        ),
+    )
+
+
+def _stub_vote_graph(client: _ScriptedLLMClient, *, voter: str) -> str:
+    """The ``suspicion=...`` block the stub vote prompt rendered for ``voter``."""
+
+    prompt = next(
+        call.prompt
+        for call in client.calls
+        if "PHASE=VOTE" in call.prompt and f"voter={voter}" in call.prompt
+    )
+    return next(line for line in prompt.splitlines() if line.startswith("suspicion="))
+
+
+class TestDeriveBeliefEvidenceFolded:
+    """``derive_belief_evidence`` marks the two-witness subjects (Task 10.7).
+
+    The folded mark lives on the meeting context
+    (``MeetingBeliefEvidence.pre_vote_folded``), never in the belief
+    store, and ``extract_belief_evidence`` delegates to the same
+    derivation -- one home, two invocation points.
+    """
+
+    def _two_voice_turns(self) -> tuple[MeetingTurn, ...]:
+        opening = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-1",
+            turn_kind="opening",
+            reply_to=None,
+            observations=_backed_observations(seen=(("p-2", "ADMIN", 402),)),
+            claims=(
+                AccusationClaim(
+                    type="accusation", against="p-2", confidence=0.7, reason="seen"
+                ),
+            ),
+            free_text="I accuse p-2.",
+        )
+        opt_in = MeetingTurn(
+            turn_id="m-1:turn-1",
+            turn_index=1,
+            speaker="p-3",
+            turn_kind="opt_in",
+            reply_to=None,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=402, subject="p-2", room="ADMIN"
+                ),
+            ),
+            claims=(
+                CorroborationClaim(
+                    type="corroboration",
+                    supports="p-1",
+                    on_tick=402,
+                    reason="vouch",
+                ),
+            ),
+            free_text="I vouch for p-1.",
+        )
+        return (opening, opt_in)
+
+    def test_two_voice_subject_is_marked_folded(self) -> None:
+        evidence = derive_belief_evidence(
+            MeetingTranscript(turns=self._two_voice_turns()),
+            contradictions=(),
+            roster=frozenset({"p-1", "p-2", "p-3", "p-4"}),
+        )
+
+        assert evidence.pre_vote_folded == ("p-2",)
+        assert evidence.accused == ("p-2",)
+        # The corroboration moves in the same evidence -- the symmetric
+        # defended-subject channel.
+        assert evidence.corroborated == ("p-1",)
+
+    def test_single_voice_subject_is_not_marked(self) -> None:
+        opening, _ = self._two_voice_turns()
+        evidence = derive_belief_evidence(
+            MeetingTranscript(turns=(opening,)),
+            contradictions=(),
+            roster=frozenset({"p-1", "p-2", "p-3", "p-4"}),
+        )
+
+        assert evidence.pre_vote_folded == ()
+        assert evidence.accused == ("p-2",)
+
+    def test_extract_delegates_to_the_one_derivation(self) -> None:
+        result = _result_with(
+            turns=self._two_voice_turns(), voters=("p-1", "p-2", "p-3", "p-4")
+        )
+
+        extracted = extract_belief_evidence(result)
+        derived = derive_belief_evidence(
+            result.transcript,
+            contradictions=result.contradictions,
+            roster=frozenset(ballot.voter for ballot in result.ballots),
+        )
+
+        assert extracted == derived
+        assert extracted.pre_vote_folded == ("p-2",)
+
+
+class TestPreVoteFoldOnProductionPath:
+    """The two-half fold through ``MeetingManager.run`` (Task 10.7).
+
+    The pre-vote half lands on every voter's rendered suspicion graph
+    exactly once; the single-voice / bare-verbal channel is invisible
+    (byte-identical to pre-change behaviour); the persistent per-meeting
+    total for a folded subject equals the unfolded total (the mandatory
+    double-fold pin); the teammate guard holds on the new channel.
+    """
+
+    def test_two_voice_fold_moves_every_living_listener_once(self) -> None:
+        result, client = _run_meeting(
+            _two_voice_responder(), participants=_fold_participants()
+        )
+
+        evidence = extract_belief_evidence(result)
+        assert evidence.pre_vote_folded == ("p-2",)
+        # Every living listener's rendered view of p-2 moved by exactly
+        # +0.05 over their snapshot -- once, on the quantized lattice
+        # (the stub renders the same %.2f the production template uses):
+        # p-1's 0.75 eyewitness prior reads 0.80; p-3 had no row and the
+        # fold materialises the 0.5-prior bump at 0.55; p-4's 0.55
+        # parked-listener prior CROSSES the §4.6 gate at 0.60. The
+        # same-phase corroboration of p-1 (the vouched accuser) renders
+        # symmetrically: p-4's existing 0.50 row reads 0.45.
+        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.80/0.50"
+        assert (
+            _stub_vote_graph(client, voter="p-3")
+            == "suspicion=p-1:0.45/0.50,p-2:0.55/0.50"
+        )
+        assert (
+            _stub_vote_graph(client, voter="p-4")
+            == "suspicion=p-1:0.45/0.50,p-2:0.60/0.50"
+        )
+        # The subject votes too: no self row, and the defended accuser
+        # renders lowered in their graph as well.
+        assert _stub_vote_graph(client, voter="p-2") == "suspicion=p-1:0.45/0.50"
+
+    def test_folded_per_meeting_total_equals_unfolded_total(self) -> None:
+        # THE mandatory double-fold pin, meeting-level: the pre-vote fold
+        # REPLACES the post-vote accused-bump, so after the orchestrator's
+        # standing absorb the folded subject's persistent total is the
+        # identical single +0.05 a single-voice meeting produces.
+        folded_result, _ = _run_meeting(
+            _two_voice_responder(), participants=_fold_participants()
+        )
+        single_result, _ = _run_meeting(
+            _single_voice_responder(), participants=_fold_participants()
+        )
+        folded_evidence = extract_belief_evidence(folded_result)
+        single_evidence = extract_belief_evidence(single_result)
+        assert folded_evidence.pre_vote_folded == ("p-2",)
+        assert single_evidence.pre_vote_folded == ()
+
+        def absorb(evidence: MeetingBeliefEvidence) -> AgentMemory:
+            memory = _voter_memory("p-4", sightings=("p-1", "p-2", "p-3"))
+            absorb_meeting_evidence(
+                memory,
+                accused=evidence.accused,
+                corroborated=evidence.corroborated,
+                contradicted=evidence.contradicted,
+            )
+            return memory
+
+        folded_view = absorb(folded_evidence).beliefs.view("p-2")
+        single_view = absorb(single_evidence).beliefs.view("p-2")
+
+        assert folded_view.suspicion == pytest.approx(
+            _DEFAULT_TEST_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert folded_view.suspicion == single_view.suspicion
+
+    def test_single_voice_meeting_is_byte_identical_to_pre_change(self) -> None:
+        # The single-voice regression: one observation-backed accuser is
+        # below the independence bar, so the vote-prompt path takes the
+        # unchanged fast path (the rendered graphs ARE the snapshots)
+        # and the persistent post-meeting state is the standing
+        # post-vote math, value-pinned.
+        result, client = _run_meeting(
+            _single_voice_responder(), participants=_fold_participants()
+        )
+
+        assert extract_belief_evidence(result).pre_vote_folded == ()
+        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.75/0.50"
+        assert (
+            _stub_vote_graph(client, voter="p-4")
+            == "suspicion=p-1:0.50/0.50,p-2:0.55/0.50"
+        )
+        memory = _voter_memory("p-4", sightings=("p-1", "p-2", "p-3"))
+        evidence = extract_belief_evidence(result)
+        absorb_meeting_evidence(
+            memory,
+            accused=evidence.accused,
+            corroborated=evidence.corroborated,
+            contradicted=evidence.contradicted,
+        )
+        assert memory.beliefs.view("p-2").suspicion == pytest.approx(
+            _DEFAULT_TEST_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+
+    def test_bare_verbal_pile_on_folds_nothing(self) -> None:
+        # Any number of bare verbal accusers stays below the bar: a
+        # three-accuser chain whose only located content sits at the
+        # kill scene derives no voices, renders unchanged snapshots, and
+        # keeps the standing post-vote accumulator math.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-2": "p-3", "p-3": "p-1"},
+            observations={
+                "p-1": _backed_observations(seen=(("p-2", "MEDBAY", 404),)),
+            },
+        )
+        result, client = _run_meeting(responder, participants=_fold_participants())
+
+        evidence = extract_belief_evidence(result)
+        assert evidence.accused == ("p-1", "p-2", "p-3")
+        assert evidence.pre_vote_folded == ()
+        assert (
+            _stub_vote_graph(client, voter="p-4")
+            == "suspicion=p-1:0.50/0.50,p-2:0.55/0.50"
+        )
+
+    def test_no_fold_evidence_keeps_the_snapshot_object(self) -> None:
+        # The fast-path identity: evidence that folds nothing (no
+        # two-voice subject, no relevance-gated corroboration) returns
+        # the voter's snapshot graph object untouched -- the channel is
+        # invisible until independence is met, byte-identically.
+        graph = (SuspicionEntry(player_id="p-2", suspicion=0.55, trust=0.5),)
+        evidence = MeetingBeliefEvidence(
+            accused=("p-2",), corroborated=(), contradicted=()
+        )
+
+        out = _suspicion_graph_with_contradictions(
+            voter_id="p-1",
+            suspicion_graph=graph,
+            contradictions=(),
+            evidence=evidence,
+        )
+
+        assert out is graph
+
+    def test_teammate_guard_holds_on_the_fold_channel(self) -> None:
+        # DESIGN.md §4.7 on the new channel: the folded subject is the
+        # impostor voter's teammate, so the impostor's rendered graph
+        # carries NO p-2 edge at all (no bump, no row), while crew
+        # listeners take the fold normally.
+        result, client = _run_meeting(
+            _two_voice_responder(),
+            participants=_fold_participants(p4_role="IMPOSTOR", p4_teammates=("p-2",)),
+        )
+
+        assert extract_belief_evidence(result).pre_vote_folded == ("p-2",)
+        assert _stub_vote_graph(client, voter="p-4") == "suspicion=p-1:0.45/0.50"
+        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.80/0.50"
+
+    def test_fold_is_deterministic_across_runs(self) -> None:
+        first_result, first_client = _run_meeting(
+            _two_voice_responder(), participants=_fold_participants()
+        )
+        second_result, second_client = _run_meeting(
+            _two_voice_responder(), participants=_fold_participants()
+        )
+
+        assert first_result == second_result
+        assert [call.prompt for call in first_client.calls] == [
+            call.prompt for call in second_client.calls
+        ]
+
+
+class TestRenderAfterFoldConsistency:
+    """The render-after-fold DoD pin, against the REAL vote template.
+
+    When a listener's view of a folded subject crosses 0.60 pre-vote,
+    the rendered vote prompt shows the post-fold value AND the in-prompt
+    §4.6 verdict reads MUST vote -- graph and verdict computed from ONE
+    post-fold state source (the template derives the verdict max from
+    the same ``suspicion_graph`` rows it renders, so a stale pre-fold
+    graph anywhere in the path would break both assertions at once).
+    """
+
+    @staticmethod
+    def _real_template_responder(prompt: str, schema: type[BaseModel] | None) -> str:
+        if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
+            return _two_voice_responder()(prompt, schema)
+        # The real vote_ballot.j2 prompt: the manager overrides the voter
+        # field, so a fixed stub ballot suffices.
+        return _vote_json(voter="p-0", target="SKIP")
+
+    def _vote_prompts(self) -> dict[str, str]:
+        client = _ScriptedLLMClient(responder=self._real_template_responder)
+        manager = MeetingManager(
+            llm_client=client,
+            crewmate_report_prompt=_crewmate_report_prompt,
+            impostor_report_prompt=_impostor_report_prompt,
+            statement_prompt=_statement_prompt,
+            vote_prompt=vote_ballot_prompt,
+        )
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_fold_participants(),
+            )
+        )
+        prompts: dict[str, str] = {}
+        for call in client.calls:
+            if call.schema_name == "VoteBallot":
+                assert call.agent_id is not None
+                prompts[call.agent_id] = call.prompt
+        return prompts
+
+    def test_fold_crossed_listener_renders_post_fold_value_and_must_vote(
+        self,
+    ) -> None:
+        prompts = self._vote_prompts()
+        crossed = prompts["p-4"]
+
+        # The graph row shows the post-fold value, on the quantized
+        # 2-decimal lattice...
+        assert "- `p-2`: suspicion 0.60, trust 0.50" in crossed
+        # ...and the §4.6 verdict -- computed by the frozen template from
+        # the SAME rendered graph -- reads the post-fold max and the
+        # MUST-vote imperative (the gate computation itself untouched).
+        assert parse_rendered_max_suspicion(crossed) == pytest.approx(0.60)
+        assert "you MUST vote to eject; you may NOT skip" in crossed
+        assert 'you MUST set `target` to `"SKIP"`' not in crossed
+
+    def test_sub_gate_listener_still_reads_must_skip(self) -> None:
+        # The fold materialises p-2 at 0.55 for the no-prior listener:
+        # below the gate, so the same one-source verdict reads MUST SKIP
+        # -- the fold moves values, never the §4.6 rule.
+        prompts = self._vote_prompts()
+        sub_gate = prompts["p-3"]
+
+        assert "- `p-2`: suspicion 0.55, trust 0.50" in sub_gate
+        assert parse_rendered_max_suspicion(sub_gate) == pytest.approx(0.55)
+        assert 'you MUST set `target` to `"SKIP"`' in sub_gate
+
+
+class TestCommittedBytes107FoldPins:
+    """The Task 10.7 DoD fold pins, walked offline against the 10.5 bytes.
+
+    The audit's §4.2 two-witness simulation is the executable spec: the
+    implemented rule, replayed over the recorded per-voter rendered
+    suspicion graphs, must reproduce its rows -- seeds 2 m1 / 5 m1 lift
+    additional listeners over the §4.6 gate, and seed 30 m1 (the
+    three-accuser pile-on) folds nothing for p-7 and converts nothing.
+    """
+
+    @staticmethod
+    def _recorded_vote_graphs(
+        entry: MeetingReplayEntry,
+    ) -> dict[str, dict[str, float]]:
+        """Per-voter rendered suspicion graph from the committed vote prompts."""
+
+        graphs: dict[str, dict[str, float]] = {}
+        for call in entry.llm_calls:
+            if _SUSPICION_GRAPH_HEADER not in call.prompt:
+                continue
+            assert call.agent_id is not None
+            block = call.prompt.split(_SUSPICION_GRAPH_HEADER, 1)[1].split("## ", 1)[0]
+            graphs[call.agent_id] = {
+                match.group("pid"): float(match.group("sus"))
+                for match in _SUSPICION_GRAPH_ROW_RE.finditer(block)
+            }
+        return graphs
+
+    @staticmethod
+    def _replay_pre_vote_fold(
+        entry: MeetingReplayEntry,
+    ) -> tuple[
+        MeetingBeliefEvidence, dict[str, dict[str, float]], dict[str, dict[str, float]]
+    ]:
+        """Replay the implemented rule over the recorded voter graphs.
+
+        Returns ``(evidence, recorded_graphs, folded_graphs)`` where the
+        folded graphs are each voter's recorded rendered graph with the
+        pre-vote half applied through the production helper -- exactly
+        the values the vote prompts would have rendered had the fold
+        been live at recording time.
+        """
+
+        roster = frozenset(ballot.voter for ballot in entry.ballots)
+        evidence = derive_belief_evidence(
+            entry.transcript, contradictions=entry.contradictions, roster=roster
+        )
+        recorded = TestCommittedBytes107FoldPins._recorded_vote_graphs(entry)
+        folded: dict[str, dict[str, float]] = {}
+        for voter, graph in recorded.items():
+            entries = _suspicion_graph_with_contradictions(
+                voter_id=voter,
+                suspicion_graph=tuple(
+                    SuspicionEntry(player_id=pid, suspicion=value, trust=0.5)
+                    for pid, value in sorted(graph.items())
+                ),
+                contradictions=(),
+                evidence=evidence,
+            )
+            folded[voter] = {item.player_id: item.suspicion for item in entries}
+        return evidence, recorded, folded
+
+    def test_seed30_m1_pile_on_stop_pin(self) -> None:
+        # THE owner-principle tripwire: 3 accusers on p-7, none a voice
+        # (the deflecting reply's only located content sits at the kill
+        # scene; the opt-in corroborations align with an accuser of
+        # p-6, not p-7) -- NO pre-vote fold for p-7, p-7's rendered
+        # values are byte-unchanged, and no listener reaches the §4.6
+        # gate, so the rule cannot convert this meeting (it stays the
+        # recorded SKIP). A qualifying second voice appearing here is
+        # the STOP-and-escalate condition of the task contract.
+        entry = _committed_meeting(30, 1)
+        evidence, recorded, folded = self._replay_pre_vote_fold(entry)
+
+        assert "p-7" not in evidence.pre_vote_folded
+        assert recorded and folded
+        for voter, graph in folded.items():
+            if "p-7" in recorded[voter]:
+                assert graph["p-7"] == pytest.approx(recorded[voter]["p-7"])
+            assert all(value < 0.60 for value in graph.values()), (
+                f"{voter} crossed the gate -- the pile-on converted"
+            )
+
+    @pytest.mark.parametrize(("seed", "expected_new_over_gate"), [(2, 2), (5, 4)])
+    def test_yield_pins_reproduce_the_audit_simulation_rows(
+        self, seed: int, expected_new_over_gate: int
+    ) -> None:
+        # The audit §4.2 two-witness rows: seeds 2 m1 and 5 m1 are the
+        # two new converting meetings -- impostor p-4 folds and the
+        # +0.05 lifts ADDITIONAL listeners (parked at 0.55) to 0.60 or
+        # above pre-vote: seed 2 lifts p-3 and p-8; seed 5 lifts p-1,
+        # p-2, p-5, and p-9. The DoD bar is >= 1 additional listener
+        # each; the exact counts pin the rule's reproduction of the
+        # simulation.
+        entry = _committed_meeting(seed, 1)
+        evidence, recorded, folded = self._replay_pre_vote_fold(entry)
+
+        assert evidence.pre_vote_folded == ("p-4",)
+        newly_over_gate = [
+            voter
+            for voter, graph in folded.items()
+            if graph.get("p-4", 0.0) >= 0.60 and recorded[voter].get("p-4", 0.0) < 0.60
+        ]
+        assert len(newly_over_gate) >= 1
+        assert len(newly_over_gate) == expected_new_over_gate
+
+    def test_seed28_m1_defended_subject_clears_before_ballots(self) -> None:
+        # Same-phase symmetry on the audited shape: innocent p-9 was
+        # ejected 4-3 with three live corroborations arriving
+        # structurally a phase late. Under the repaired detector (10.6)
+        # plus the pre-vote fold, the relevance-gated vouches (the
+        # tick-17 accounts survive; the tick-0 spawn vouch dies) land
+        # BEFORE ballots: p-9's re-derived view reads 0.58 (one weak
+        # flag) minus the Rule-3 delta = 0.53, under the §4.6 gate --
+        # cleared before ballots, not a meeting late.
+        entry = _committed_meeting(28, 1)
+        roster = frozenset(ballot.voter for ballot in entry.ballots)
+        rederived_flags = detect_contradictions(entry.transcript, roster=roster)
+        evidence = derive_belief_evidence(
+            entry.transcript, contradictions=rederived_flags, roster=roster
+        )
+
+        assert "p-9" in evidence.corroborated
+        assert "p-9" not in evidence.pre_vote_folded
+        # The voices land where the audited testimony actually points:
+        # p-9's defenders vouch for p-9, whose counter-accusation names
+        # the reporter p-1 -- a 0.55 carry, below the gate.
+        assert evidence.pre_vote_folded == ("p-1",)
+
+        graph = _suspicion_graph_with_contradictions(
+            voter_id="p-4",
+            suspicion_graph=(),
+            contradictions=rederived_flags,
+            evidence=evidence,
+        )
+        by_id = {item.player_id: item.suspicion for item in graph}
+        no_fold = {
+            item.player_id: item.suspicion
+            for item in _suspicion_graph_with_contradictions(
+                voter_id="p-4",
+                suspicion_graph=(),
+                contradictions=rederived_flags,
+            )
+        }
+
+        assert no_fold["p-9"] == pytest.approx(0.58)
+        assert by_id["p-9"] == pytest.approx(0.58 - CORROBORATION_SUSPICION_DELTA)
+        assert by_id["p-9"] < 0.60
+        assert by_id["p-1"] == pytest.approx(0.50)

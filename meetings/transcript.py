@@ -76,6 +76,16 @@ and Rule-3 corroboration is relevance-gated through the named pure
 predicate :func:`is_relevant_sighting` (no spawn-window vouches, no
 kill-scene vouches), which Task 10.7 reuses for accusation-side
 observation backing.
+
+Task 10.7 (audit gp-2 C-C-1/C-C-2): :func:`independent_voices` derives
+the INDEPENDENT VOICES against each accused subject -- the
+observation-backed, relevance-gated testimony count the pre-vote
+two-witness fold (belief side: :mod:`agents.memory.beliefs`) gates on.
+A bare verbal accusation carries no voice, and an opt-in turn
+contributes a voice only through a corroboration aligned with an
+existing accuser, which is what keeps the seed-30 three-accuser
+pile-on powerless (witness COUNT cannot filter pile-ons; independence
+can).
 """
 
 from __future__ import annotations
@@ -88,6 +98,7 @@ from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
     ContradictionRef,
+    CorroborationClaim,
     FoundBodyObservation,
     MeetingTranscript,
     MeetingTurn,
@@ -835,6 +846,143 @@ def detect_corroborations(
     )
 
 
+def independent_voices(
+    transcript: MeetingTranscript,
+    *,
+    roster: frozenset[PlayerId] | None = None,
+) -> Mapping[PlayerId, tuple[PlayerId, ...]]:
+    """The INDEPENDENT VOICES against each accused subject (Task 10.7).
+
+    The pure transcript half of the pre-vote two-witness testimony fold
+    (audit gp-2 C-C-1/C-C-2; the corroborate-within-round owner
+    principle): a subject folds pre-vote only when at least
+    :data:`agents.memory.beliefs.TESTIMONY_INDEPENDENCE_BAR` distinct
+    voices stand behind the accusation. Returns
+    ``{subject: sorted distinct voice speakers}`` for every subject with
+    at least one voice; subjects accused only by voiceless turns are
+    absent. A voice is one of:
+
+    * **A chain/opening turn accusing the subject** (``turn_kind`` in
+      ``opening`` / ``reply``) that carries OBSERVATION BACKING -- at
+      least one first-hand observation claim whose canonical room is
+      spatial and which passes the §6.3 relevance predicate
+      (:func:`is_relevant_sighting` against this meeting's
+      :func:`triggering_body_rooms` -- one home, reused verbatim from
+      the Task 10.6 corroboration gate). A bare verbal accusation
+      carries no voice, and neither does a turn whose only located
+      content is evidentially empty: spawn-window (tick 0-1)
+      observations and kill-scene observations are exactly the
+      everyone-can-say-it shapes (the seed-30 deflection's only
+      sightings sat at the kill scene -- no voice).
+    * **An opt-in corroboration aligned with an existing accuser**: an
+      ``opt_in`` turn whose :class:`CorroborationClaim` supports a
+      player who accused the subject this meeting, where the opt-in
+      turn itself carries the same observation backing. An opt-in
+      turn's DIRECT accusation never adds a voice -- the §5.2 opt-in
+      phase is where pile-ons form (seed 30 m1: two opt-in accusers of
+      p-7 whose corroborations aligned with an accuser of a DIFFERENT
+      subject), and witness count alone cannot filter a pile-on; the
+      corroboration-targeting requirement is the independence gate the
+      owner decision named ("accuse-capable opt-in corroborations count
+      as the second voice").
+
+    Backing is deliberately TURN-LEVEL: the voice's turn must stake
+    relevance-grade first-hand content, not specifically a sighting of
+    the accused -- on the Wave-0 set the two-witness yield meetings
+    (seeds 2/5 m1) carry no sighting of the folded subject anywhere in
+    the transcript (the witnesses stake their own whereabouts and
+    co-movement), so a subject-targeted gate would silence the channel
+    the audit's §4.2 simulation proved out while the turn-level gate
+    reproduces its rows exactly and still zeroes the seed-30 pile-on.
+
+    Voices are distinct speakers and never the subject (a
+    self-accusation or a subject's own vouch for their accuser adds
+    nothing). "An accuser of the subject" means any speaker with a
+    recorded :class:`AccusationClaim` against the subject, any turn
+    kind -- an opt-in accusation is as public as a chain one. The
+    roster filter mirrors :func:`detect_contradictions`: ``roster=None``
+    indexes every subject (unit-test behaviour); an explicit roster --
+    the live path passes the living participants, the replay path the
+    recorded ballot voters -- drops non-roster subjects. Claims are
+    read AS RECORDED, after the per-turn chokepoint guards, so a
+    teammate accusation (stripped, Task 7.12) or a non-roster subject
+    (dropped, Task 10.2) can never mint a voice. Pure and
+    deterministic: same transcript, byte-identical voices.
+    """
+
+    effective_roster = _NO_ROSTER if roster is None else roster
+    body_rooms = triggering_body_rooms(transcript)
+
+    # Transcript-wide accuser index: subject -> speakers with a recorded
+    # accusation against them (never the subject accusing themselves).
+    accusers: dict[PlayerId, set[PlayerId]] = {}
+    for turn in transcript.turns:
+        for claim in turn.claims:
+            if (
+                isinstance(claim, AccusationClaim)
+                and claim.against != turn.speaker
+                and _subject_in_roster(claim.against, effective_roster)
+            ):
+                accusers.setdefault(claim.against, set()).add(turn.speaker)
+
+    voices: dict[PlayerId, set[PlayerId]] = {}
+    for turn in transcript.turns:
+        if not _carries_relevant_observation(turn, triggering_body_rooms=body_rooms):
+            continue
+        if turn.turn_kind in ("opening", "reply"):
+            for claim in turn.claims:
+                if not isinstance(claim, AccusationClaim):
+                    continue
+                subject = claim.against
+                if subject == turn.speaker:
+                    continue
+                if not _subject_in_roster(subject, effective_roster):
+                    continue
+                voices.setdefault(subject, set()).add(turn.speaker)
+        elif turn.turn_kind == "opt_in":
+            for claim in turn.claims:
+                if not isinstance(claim, CorroborationClaim):
+                    continue
+                for subject, subject_accusers in accusers.items():
+                    if claim.supports not in subject_accusers:
+                        continue
+                    if subject == turn.speaker:
+                        continue
+                    voices.setdefault(subject, set()).add(turn.speaker)
+
+    return {
+        subject: tuple(sorted(speakers)) for subject, speakers in sorted(voices.items())
+    }
+
+
+def _carries_relevant_observation(
+    turn: MeetingTurn, *, triggering_body_rooms: frozenset[str]
+) -> bool:
+    """Whether ``turn`` stakes relevance-grade first-hand content (Task 10.7).
+
+    The observation-backing gate of :func:`independent_voices`: at least
+    one of the turn's observation claims (sighting, task completion, or
+    body discovery alike -- each carries a room and a tick) must
+    canonicalise to a SPATIAL room (:func:`canonical_rooms`; a
+    placeholder label locates nothing, so it backs nothing) and pass
+    :func:`is_relevant_sighting` against the meeting's kill scene. The
+    triggering body's own ``found_body`` observation sits at the scene
+    by construction and therefore never backs a voice on its own.
+    """
+
+    for observation in turn.observations:
+        rooms = canonical_rooms(observation.room)
+        if not rooms:
+            continue
+        if is_relevant_sighting(
+            tick=observation.tick,
+            rooms=rooms,
+            triggering_body_rooms=triggering_body_rooms,
+        ):
+            return True
+    return False
+
+
 def _subject_in_roster(subject: PlayerId, roster: frozenset[PlayerId]) -> bool:
     """Whether ``subject`` should be indexed given the effective roster.
 
@@ -1385,6 +1533,7 @@ __all__ = [
     "contradiction_lift_key",
     "detect_contradictions",
     "detect_corroborations",
+    "independent_voices",
     "is_canonically_ordered",
     "is_relevant_sighting",
     "is_weak_contradiction",

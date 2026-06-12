@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
-from typing import Final, TypeAlias
+from typing import Final, Literal, TypeAlias
 
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
 from meetings.transcript import contradiction_lift_key, is_weak_contradiction
@@ -92,7 +92,7 @@ applies inside one ``apply_contradiction_rule`` call (the per-meeting
 vote-time lift); cross-meeting accumulation stays the 9.8 channel."""
 
 ACCUSATION_SUSPICION_DELTA: Final[float] = 0.05
-"""Accusation-driven suspicion bump (Task 9.8; audit gp-1 recall).
+"""Accusation-driven suspicion bump (Tasks 9.8, 10.7; audit gp-1 recall).
 
 The persistent delta a subject gains, once per meeting, for being named
 by an accusation claim in that meeting's transcript. Deliberately the
@@ -100,10 +100,40 @@ smallest evidence weight in the file -- below the weak-contradiction
 0.08 band and far below the §4.6 0.60 eject gate -- because a verbal
 accusation is the weakest signal the belief store tracks: one meeting
 lands at 0.55, well under the gate, while the same subject accused
-across 2-3 meetings accumulates over it (0.60 / 0.65). The bump is
-applied POST-meeting (:func:`apply_meeting_evidence_rules`), so it can
-never move the meeting it was uttered in -- the owner principle that no
-single round ejects is structural, not tuned."""
+across 2-3 meetings accumulates over it (0.60 / 0.65).
+
+Fold timing (Task 10.7; audit gp-2 C-C-1/C-C-2). The bump moves in one
+of the two halves of the meeting fold, never both: a subject with
+:data:`TESTIMONY_INDEPENDENCE_BAR` or more independent voices behind
+the accusation (``pre_vote_folded``) takes it in the PRE-VOTE half --
+so an eyewitness with observation-backed corroboration can recruit a
+plurality within the round -- while every other accused subject keeps
+the POST-VOTE path, where the bump can never move the meeting it was
+uttered in. The owner principle is unchanged in substance, sharpened in
+wording: no single VOICE ejects -- a lone accuser or any number of bare
+verbal pile-on accusers stays post-vote; only independence-gated
+testimony moves early. The pre-vote fold REPLACES the post-vote bump
+for that subject-meeting (the phase routing in
+:func:`apply_meeting_evidence_rules`), so the per-meeting total is
++0.05 either way -- the channel is reused, not re-tuned (the 9.8
+constants are frozen through Phase 10)."""
+
+TESTIMONY_INDEPENDENCE_BAR: Final[int] = 2
+"""Distinct independent voices required before testimony folds PRE-VOTE
+(Task 10.7; audit gp-2 C-C-2, the fold-timing owner decision).
+
+The two-witness independence requirement: a subject takes the pre-vote
+``ACCUSATION_SUSPICION_DELTA`` only when at least this many distinct
+speakers stand behind the accusation as voices --
+:func:`meetings.transcript.independent_voices`, where a voice must
+carry relevance-gated observation backing and an opt-in turn counts
+only through a corroboration aligned with an existing accuser. The
+audit's §4.2 fold-timing table is the spec: single-witness pre-vote
+roughly doubled wrong-ejection games (+14 impostor meetings at 9
+innocent meetings -- an owner-principle violation, REJECTED) while the
+two-witness point converts at 3:1 meeting-level yield/cost; the
+seed-30 m1 three-accuser pile-on is the tripwire a bare witness COUNT
+cannot filter and the voice definition does."""
 
 CORROBORATION_SUSPICION_DELTA: Final[float] = 0.05
 """DESIGN.md §6.3 Rule 3 magnitude: suspicion REMOVED when a subject is
@@ -117,6 +147,16 @@ cancels one accusation-meeting, the "collective clear" half of the
 owner's collective-suspicion model. Applied once per subject per
 meeting, after the accusation bumps (so at the clamp ceiling the
 corroboration, not the bump, has the last word).
+
+Same-phase movement (Task 10.7; audit gp-2 C-C-3 "corroborations must
+move at the SAME phase as accusations"): in the two-half fold protocol
+this delta belongs to the PRE-VOTE half alongside the two-witness
+testimony bumps -- a defended subject is cleared before ballots, not a
+meeting late (the seed-28 shape: three live corroborations of the
+wrongly-accused arrived structurally post-vote). Within the pre-vote
+half the within-meeting order is unchanged: folded bumps first, then
+corroborations, so the clamp-ceiling last word stays with the
+corroboration.
 
 Relevance-gated input (Task 10.6; audit gp-2 C-C-3). The ``corroborated``
 set this delta is applied over is built EXCLUSIVELY through the §6.3
@@ -152,6 +192,18 @@ evidence outlives weak evidence."""
 # signal Rule 4 keys on; the room-only ``vent_use_heard`` AudibleEvent carries
 # no subject and is deliberately not used.
 OBSERVED_VENT_ACTION: Final[str] = "vent"
+
+# The two deterministic halves of the per-meeting belief fold (Task 10.7;
+# audit gp-2). ``pre_vote`` runs BEFORE ballots: two-witness testimony
+# bumps plus this meeting's relevance-gated corroborations, both
+# directions symmetric, never Rule-5 decay. ``post_vote`` runs after
+# resolution: the single-voice accused-bumps plus Rule-5 decay, exactly
+# the pre-10.7 path. ``None`` (the default, and the standing
+# ``agents.memory.store.absorb_meeting_evidence`` call shape) composes
+# both halves in one call -- byte-identical to the pre-10.7 fold, which
+# is what keeps the persistent per-meeting total for a folded subject
+# equal to the unfolded total (the double-fold guard).
+MeetingFoldPhase: TypeAlias = Literal["pre_vote", "post_vote"]
 
 
 @dataclass(frozen=True)
@@ -513,23 +565,27 @@ def apply_meeting_evidence_rules(
     contradicted: Sequence[PlayerId] = (),
     fellow_impostor_ids: Sequence[PlayerId] = (),
     roster: AbstractSet[PlayerId] | None = None,
+    phase: MeetingFoldPhase | None = None,
+    pre_vote_folded: AbstractSet[PlayerId] = frozenset(),
 ) -> BeliefState:
-    """Fold one meeting's public evidence into persistent beliefs (Task 9.8).
+    """Fold one meeting's public evidence into persistent beliefs (Tasks 9.8, 10.7).
 
     Pure: returns a new :class:`BeliefState`; ``beliefs`` is not mutated.
-    Runs POST-meeting on every living agent's stored beliefs (DESIGN.md
-    §4.4 step 4's belief-update hook, rule-based), so the suspicion it
-    writes carries forward into the NEXT meeting's suspicion graph --
-    unlike Rule 2's vote-time contradiction lift, which stays transient
-    inside the meeting that detected the flag. Three rules:
+    Runs on every living agent's stored beliefs (DESIGN.md §4.4 step 4's
+    belief-update hook, rule-based), so the suspicion it writes carries
+    forward into the NEXT meeting's suspicion graph -- unlike Rule 2's
+    vote-time contradiction lift, which stays transient inside the
+    meeting that detected the flag. Three rules:
 
     * **Accusation bump** (``ACCUSATION_SUSPICION_DELTA``, audit gp-1
       recall): every subject in ``accused`` -- the deduplicated set of
       players named by an accusation claim in the meeting -- gains the
       small delta once. The caller deduplicates per meeting, so a
-      pile-on of accusers is one meeting-level "was accused" event, and
-      because the fold runs after the vote, one round can never eject
-      through it.
+      pile-on of accusers is one meeting-level "was accused" event. A
+      subject below the two-witness independence bar takes the bump in
+      the post-vote half, where one round can never eject through it;
+      a ``pre_vote_folded`` subject takes the identical bump in the
+      pre-vote half instead (see *Fold phases* below).
     * **Rule 3 corroboration** (``CORROBORATION_SUSPICION_DELTA``):
       every subject in ``corroborated`` loses the mirror delta --
       a public vouch is the collective clear. The set arrives
@@ -586,10 +642,58 @@ def apply_meeting_evidence_rules(
     ``roster=None`` (the default) applies neither filter, preserving
     the pure-math call shape for callers without a roster channel.
 
+    **Fold phases (Task 10.7; audit gp-2 C-C-1/C-C-2).** One fold
+    function, a ``phase`` argument, called twice per meeting -- never
+    duplicated logic. ``pre_vote_folded`` names the subjects with
+    :data:`TESTIMONY_INDEPENDENCE_BAR`+ independent voices
+    (:func:`meetings.transcript.independent_voices`, derived by
+    ``meetings.manager.derive_belief_evidence`` and carried on the
+    meeting context -- this store never knows about phases beyond the
+    routing below) and must be a subset of ``accused`` (fail-loud
+    otherwise: a folded subject nobody accused is caller drift):
+
+    * ``phase="pre_vote"`` -- the half the meeting manager applies to
+      every living listener BEFORE ballots: the accusation bump for
+      ``pre_vote_folded`` subjects only, plus ALL of this meeting's
+      relevance-gated corroborations (same-phase movement, both
+      directions symmetric -- a defended subject is cleared before
+      ballots). Never decays: Rule 5 is the post-vote half's.
+    * ``phase="post_vote"`` -- the half that runs after resolution,
+      exactly the pre-10.7 path for everything it touches: the
+      accusation bump for every accused subject NOT in
+      ``pre_vote_folded`` (the pre-vote fold REPLACES the post-vote
+      bump for a folded subject-meeting -- the double-fold guard), no
+      corroboration deltas (they moved pre-vote), and Rule-5 decay.
+      The decay exemption still reads the FULL evidence -- a folded or
+      corroborated subject got new evidence this meeting and must not
+      decay -- so ``accused`` / ``corroborated`` are passed whole to
+      both phases, never pre-partitioned by the caller.
+    * ``phase=None`` (default) -- both halves composed in one call: the
+      pre-10.7 behaviour, byte-for-byte, and the call shape of the
+      standing post-meeting absorb
+      (:func:`agents.memory.store.absorb_meeting_evidence`). Because
+      the composition bumps each accused subject exactly once, the
+      persistent per-meeting total for a folded subject equals the
+      unfolded total by construction. (At a clamp boundary the
+      composed call keeps the pre-10.7 bump-then-corroborate order;
+      the split phases order a single-voice bump after the pre-vote
+      corroborations -- interior values are order-independent.)
+
+    The impostor teammate guard applies to the new channel exactly as
+    to the old: ``pre_vote_folded`` is intersected with the
+    teammate-and-self-filtered bump set, so an impostor listener never
+    takes a pre-vote bump against a fellow impostor.
+
     All subject sets are processed in sorted order; the result is a
     deterministic function of its arguments (replay-stable).
     """
 
+    unknown_folded = set(pre_vote_folded) - set(accused)
+    if unknown_folded:
+        raise ValueError(
+            "pre_vote_folded must be a subset of accused; "
+            f"unknown folded subjects: {sorted(unknown_folded)}"
+        )
     if roster is not None:
         accused = [subject for subject in accused if subject in roster]
         corroborated = [subject for subject in corroborated if subject in roster]
@@ -608,20 +712,37 @@ def apply_meeting_evidence_rules(
             if subject != own_id and subject not in teammates
         }
     )
+    # Phase routing (Task 10.7). The teammate / own-id / roster guards
+    # above already shaped ``bumped``, so intersecting the folded set
+    # with it applies every guard to the testimony channel for free.
+    folded = bumped & set(pre_vote_folded)
+    if phase == "pre_vote":
+        bump_now = folded
+        lower_now = lowered
+        decay_now = False
+    elif phase == "post_vote":
+        bump_now = bumped - folded
+        lower_now = set()
+        decay_now = True
+    else:
+        bump_now = bumped
+        lower_now = lowered
+        decay_now = True
 
     result = beliefs.copy()
     if roster is not None:
         for player_id in result.known_players():
             if player_id not in roster:
                 result.drop_player(player_id)
-    for subject in sorted(bumped):
+    for subject in sorted(bump_now):
         result.adjust_suspicion(subject, delta=ACCUSATION_SUSPICION_DELTA)
-    for subject in sorted(lowered):
+    for subject in sorted(lower_now):
         result.adjust_suspicion(subject, delta=-CORROBORATION_SUSPICION_DELTA)
-    for player_id in sorted(result.known_players()):
-        if player_id == own_id or player_id in reinforced:
-            continue
-        result.decay_suspicion(player_id, rate=MEETING_SUSPICION_DECAY_RATE)
+    if decay_now:
+        for player_id in sorted(result.known_players()):
+            if player_id == own_id or player_id in reinforced:
+                continue
+            result.decay_suspicion(player_id, rate=MEETING_SUSPICION_DECAY_RATE)
     return result
 
 
@@ -634,11 +755,13 @@ __all__ = [
     "MEETING_CONTRADICTION_LIFT_CAP",
     "MEETING_SUSPICION_DECAY_RATE",
     "OBSERVED_VENT_ACTION",
+    "TESTIMONY_INDEPENDENCE_BAR",
     "VENTING_SUSPICION_DELTA",
     "WEAK_CONTRADICTION_SUSPICION_DELTA",
     "AlibiClaim",
     "BeliefState",
     "ContradictionRef",
+    "MeetingFoldPhase",
     "PlayerBelief",
     "apply_contradiction_rule",
     "apply_meeting_evidence_rules",

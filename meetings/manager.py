@@ -33,8 +33,16 @@ A meeting is one ordered ``transcript.turns`` list followed by a vote:
    accused) each take one terminal turn; an opt-in turn may accuse but
    never extends the chain.
 4. **Voting** -- contradictions (§5.4) recompute once over the full
-   transcript, then every living agent submits a :class:`VoteBallot`.
+   transcript; the PRE-VOTE half of the meeting fold (Task 10.7) is
+   derived from the same final transcript (two-witness testimony bumps
+   + this meeting's relevance-gated corroborations, §6.3) and applied
+   to every voter's suspicion graph BEFORE the ballot prompt renders,
+   so the in-prompt §4.6 verdict reads post-fold values; then every
+   living agent submits a :class:`VoteBallot`.
 5. **Resolution** -- plurality tally with the confidence threshold.
+   The POST-VOTE half of the fold (single-voice accused-bumps + Rule-5
+   decay) stays the orchestrator-owned post-meeting absorb, exactly as
+   the 9.8 design wired it.
 
 Single per-turn chokepoint
 ===========================
@@ -66,7 +74,12 @@ from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 
 from pydantic import ValidationError
 
-from agents.memory.beliefs import BeliefState, apply_contradiction_rule
+from agents.memory.beliefs import (
+    TESTIMONY_INDEPENDENCE_BAR,
+    BeliefState,
+    apply_contradiction_rule,
+    apply_meeting_evidence_rules,
+)
 from llm.client import LLMClient
 from llm.provider import LLMCallFailure, extract_parse_failure
 from meetings.schemas import (
@@ -91,6 +104,7 @@ from meetings.transcript import (
     accusation_target,
     detect_contradictions,
     detect_corroborations,
+    independent_voices,
     is_relevant_sighting,
     next_chain_step,
     triggering_body_rooms,
@@ -864,13 +878,27 @@ class MeetingManager:
         transcript = MeetingTranscript(turns=tuple(turns))
 
         # Phase 4: contradictions recompute ONCE over the full transcript
-        # before voting (DESIGN.md §5.4), then collect ballots.
+        # before voting (DESIGN.md §5.4), then the PRE-VOTE half of the
+        # meeting fold (Task 10.7; audit gp-2): the meeting's belief
+        # evidence -- including the two-witness ``pre_vote_folded``
+        # subjects and the relevance-gated ``corroborated`` set -- is
+        # derived once from the final transcript and threaded into every
+        # ballot, so each voter's suspicion graph (and therefore the
+        # in-prompt §4.6 verdict, which the frozen template computes from
+        # that same graph) reads post-fold values. Both fold halves ALWAYS
+        # run: this pre-vote derivation is unconditional (an evidence-free
+        # meeting derives empty sets and folds nothing), and the post-vote
+        # half is the orchestrator's standing post-meeting absorb.
         contradictions = detect_contradictions(transcript, roster=roster)
+        evidence = derive_belief_evidence(
+            transcript, contradictions=contradictions, roster=roster
+        )
         ballots = await self._collect_ballots(
             trigger=trigger,
             participants=ordered_participants,
             transcript=transcript,
             contradictions=contradictions,
+            evidence=evidence,
         )
 
         # Phase 5: resolution.
@@ -1201,6 +1229,7 @@ class MeetingManager:
         participants: Sequence[MeetingParticipant],
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
+        evidence: MeetingBeliefEvidence,
     ) -> tuple[VoteBallot, ...]:
         # Sequential collection: concurrent ballots on a single local GPU
         # inflate each call's wall-clock past vote_seconds (measured 0.71x
@@ -1217,6 +1246,7 @@ class MeetingManager:
                     participants=participants,
                     transcript=transcript,
                     contradictions=contradictions,
+                    evidence=evidence,
                 )
             )
         return tuple(ballots)
@@ -1229,6 +1259,7 @@ class MeetingManager:
         participants: Sequence[MeetingParticipant],
         transcript: MeetingTranscript,
         contradictions: tuple[ContradictionRef, ...],
+        evidence: MeetingBeliefEvidence,
     ) -> VoteBallot:
         # Confirm the candidate set over the FINAL transcript: every living
         # participant except the voter is an eligible eject target (the same
@@ -1241,13 +1272,17 @@ class MeetingManager:
         # Belief Rule 2 (DESIGN.md §6.3): a detected contradiction lifts the
         # contradicted subject's suspicion in this voter's graph before the
         # ballot prompt renders, so the vote sees the detected lie reflected
-        # in its suspicion prior -- not just in the raw flag list. Engine
-        # state is never touched.
+        # in its suspicion prior -- not just in the raw flag list. The
+        # pre-vote half of the meeting fold (Task 10.7) is applied to the
+        # same graph in the same reconstruction, so the rendered graph AND
+        # the in-template §4.6 verdict read one post-fold state source.
+        # Engine state is never touched.
         suspicion_graph = _suspicion_graph_with_contradictions(
             voter_id=participant.agent_id,
             suspicion_graph=participant.suspicion_graph,
             contradictions=contradictions,
             fellow_impostor_ids=participant.fellow_impostor_ids,
+            evidence=evidence,
         )
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
@@ -1487,18 +1522,41 @@ def _suspicion_graph_with_contradictions(
     suspicion_graph: tuple[SuspicionEntry, ...],
     contradictions: tuple[ContradictionRef, ...],
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    evidence: MeetingBeliefEvidence | None = None,
 ) -> tuple[SuspicionEntry, ...]:
-    """Apply belief Rule 2 to a voter's suspicion graph (DESIGN.md §6.3).
+    """Apply belief Rule 2 + the pre-vote fold to a voter's graph (§6.3, §4.6).
 
     Reconstructs an agents-side :class:`BeliefState` from the voter's
     incoming suspicion-graph snapshot, runs
     :func:`agents.memory.beliefs.apply_contradiction_rule` over the
-    detected ``contradictions``, and projects the result back into a
-    sorted :class:`SuspicionEntry` tuple for the vote-ballot prompt.
+    detected ``contradictions``, applies the PRE-VOTE half of the
+    meeting fold (Task 10.7) when ``evidence`` carries one, and projects
+    the result back into a sorted :class:`SuspicionEntry` tuple for the
+    vote-ballot prompt.
 
-    A contradicted subject the voter had no prior row for is added (the
-    belief store materialises a default 0.5 prior before the +0.3 bump).
-    The voter never accrues suspicion about themselves.
+    A contradicted / folded / corroborated subject the voter had no
+    prior row for is added (the belief store materialises a default 0.5
+    prior before the delta). The voter never accrues suspicion about
+    themselves.
+
+    Pre-vote fold (Task 10.7; audit gp-2). When ``evidence`` names
+    ``pre_vote_folded`` subjects or ``corroborated`` subjects, the same
+    reconstructed state takes
+    :func:`agents.memory.beliefs.apply_meeting_evidence_rules` with
+    ``phase="pre_vote"`` AFTER the Rule-2 lift: the two-witness +0.05
+    testimony bumps and this meeting's relevance-gated -0.05
+    corroborations land on the graph the ballot prompt renders -- and
+    because the frozen vote template computes the §4.6 verdict from
+    that same rendered graph, the graph and the verdict read ONE
+    post-fold state source by construction (the render-after-fold
+    consistency pin). The fold is the recording-time twin of the
+    post-meeting persistent absorb: the identical +0.05/-0.05 deltas
+    persist at the meeting boundary through
+    ``orchestrator.game._absorb_meeting_beliefs``, so what the voter
+    saw pre-vote is exactly what carries forward. When the evidence
+    folds nothing (no two-voice subject, no relevance-gated
+    corroboration), this path is byte-identical to the pre-10.7
+    behaviour -- the channel is invisible until independence is met.
 
     Team-internal firewall (Task 9.3, DESIGN.md §4.7), the deterministic
     voter-side backstop that mirrors the 7.12 ballot coercion on the input
@@ -1507,15 +1565,21 @@ def _suspicion_graph_with_contradictions(
     projected graph in BOTH paths -- so even if a teammate-incriminating
     sighting slipped through perception/render and a contradiction lifted
     the teammate, the impostor's ballot prompt still shows no team
-    suspicion. The list is ``()`` for every crewmate and a sole impostor,
-    where this is a no-op: with no contradictions and no teammates the
-    incoming graph is returned unchanged, so the crew / no-flag path is
-    byte-identical (a precondition for replay stability).
+    suspicion -- and the pre-vote fold call carries the same
+    ``fellow_impostor_ids``, so its input-side guard drops a teammate
+    from the testimony bump as well (the 10.7 teammate guard on the new
+    channel). The list is ``()`` for every crewmate and a sole impostor,
+    where this is a no-op: with no contradictions, no fold, and no
+    teammates the incoming graph is returned unchanged, so the crew /
+    no-flag path is byte-identical (a precondition for replay stability).
     """
 
     teammates = frozenset(fellow_impostor_ids)
+    folds = evidence is not None and bool(
+        evidence.pre_vote_folded or evidence.corroborated
+    )
 
-    if not contradictions:
+    if not contradictions and not folds:
         if not teammates:
             return suspicion_graph
         return tuple(
@@ -1528,6 +1592,17 @@ def _suspicion_graph_with_contradictions(
             entry.player_id, suspicion=entry.suspicion, trust=entry.trust
         )
     updated = apply_contradiction_rule(beliefs, contradictions)
+    if folds and evidence is not None:
+        updated = apply_meeting_evidence_rules(
+            updated,
+            own_id=voter_id,
+            accused=evidence.accused,
+            corroborated=evidence.corroborated,
+            contradicted=evidence.contradicted,
+            fellow_impostor_ids=fellow_impostor_ids,
+            phase="pre_vote",
+            pre_vote_folded=frozenset(evidence.pre_vote_folded),
+        )
 
     entries: list[SuspicionEntry] = []
     for player_id in sorted(updated.known_players()):
@@ -1916,26 +1991,44 @@ def _guard_teammate_turn_claims(
 
 
 # ---------------------------------------------------------------------------
-# Post-meeting belief evidence (Task 9.8).
+# Meeting belief evidence (Tasks 9.8, 10.7).
 #
 # The vote-time contradiction lift (`_suspicion_graph_with_contradictions`)
 # rebuilds a throwaway BeliefState and is discarded with the meeting, so until
 # Task 9.8 a verbal accusation touched nothing durable -- 25/47 impostor-accused
 # meetings carried no contradiction and the §4.6 gate forced SKIP (audit gp-1
-# recall). `extract_belief_evidence` is the meeting-side half of the persistent
-# path: it reduces a resolved MeetingResult to the deduplicated public subject
-# sets that `agents.memory.beliefs.apply_meeting_evidence_rules` folds into
-# each living agent's STORED beliefs after the meeting (the orchestrator owns
-# the per-agent fan-out). Evidence is read from the recorded transcript and
-# flags only -- ballots are post-hoc transparency, never visible to agents
-# (DESIGN.md §5.5) -- so a replay re-derives identical evidence from the
-# recorded meeting alone.
+# recall). `derive_belief_evidence` is the meeting-side half of the persistent
+# path: it reduces a final transcript + flags to the deduplicated public
+# subject sets that `agents.memory.beliefs.apply_meeting_evidence_rules` folds
+# into each living agent's STORED beliefs. Task 10.7 split the fold into two
+# deterministic halves that ALWAYS run, sharing this one derivation:
+#
+# * PRE-VOTE half -- the manager derives the evidence from the final
+#   transcript inside :meth:`MeetingManager.run` and applies the two-witness
+#   testimony bumps + this meeting's relevance-gated corroborations
+#   (``phase="pre_vote"``) to every voter's suspicion graph BEFORE the ballot
+#   prompts render, so the §4.6 verdict reads post-fold values. The
+#   ``pre_vote_folded`` subjects are marked HERE, on the meeting context --
+#   the belief store never knows about phases.
+# * POST-VOTE half -- the orchestrator's standing post-meeting fan-out
+#   (``orchestrator.game._absorb_meeting_beliefs`` ->
+#   ``agents.memory.store.absorb_meeting_evidence``) persists the whole
+#   meeting's evidence into each living agent's store through the composed
+#   default-phase call: single-voice accused-bumps + Rule-5 decay land there
+#   exactly as before 10.7, and the pre-vote deltas persist at the same
+#   boundary -- once, because the composition bumps each accused subject
+#   exactly once (the double-fold guard; the per-meeting total for a folded
+#   subject equals the unfolded total).
+#
+# Evidence is read from the recorded transcript and flags only -- ballots are
+# post-hoc transparency, never visible to agents (DESIGN.md §5.5) -- so a
+# replay re-derives identical evidence from the recorded meeting alone.
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class MeetingBeliefEvidence:
-    """One meeting's public belief-relevant subjects (Task 9.8).
+    """One meeting's public belief-relevant subjects (Tasks 9.8, 10.7).
 
     Each tuple is sorted and deduplicated, so a pile-on of accusers within
     one meeting is a single meeting-level "was accused" event -- the
@@ -1954,9 +2047,9 @@ class MeetingBeliefEvidence:
       (:func:`meetings.transcript.detect_corroborations`, Task 10.1) --
       a third-party sighting confirming a stated alibi is
       corroboration-class evidence (§6.3 Rule 3). The detector-derived
-      half is roster-filtered to the recorded ballot voters (the living
-      participants), matching the recording-time detection path. BOTH
-      halves pass the Task 10.6 Rule-3 relevance gate
+      half is roster-filtered to the meeting's living participants,
+      matching the recording-time detection path. BOTH halves pass the
+      Task 10.6 Rule-3 relevance gate
       (:func:`meetings.transcript.is_relevant_sighting`, audit C-C-3):
       the detector half inside ``detect_corroborations`` itself, the
       claim-stated half here against the claim's ``on_tick`` (a claim
@@ -1968,26 +2061,59 @@ class MeetingBeliefEvidence:
       :class:`~meetings.schemas.ContradictionRef` flags; new evidence for
       the §6.3 Rule 5 decay exemption (the persistent lift itself stays
       Rule 2's transient vote-time mechanism).
+    * ``pre_vote_folded`` -- the Task 10.7 two-witness subjects: accused
+      subjects with at least
+      :data:`agents.memory.beliefs.TESTIMONY_INDEPENDENCE_BAR` distinct
+      independent voices behind the accusation
+      (:func:`meetings.transcript.independent_voices` -- observation
+      backing, the §6.3 relevance predicate, and the opt-in
+      corroboration-alignment rule are the three guards). These subjects
+      take the +0.05 accused-bump in the PRE-VOTE half; the post-vote
+      half skips them (the phase routing in
+      :func:`agents.memory.beliefs.apply_meeting_evidence_rules`), so
+      the bump lands exactly once per meeting. Always a subset of
+      ``accused``. The folded mark lives here, on the meeting context --
+      never in the belief store.
     """
 
     accused: tuple[PlayerId, ...]
     corroborated: tuple[PlayerId, ...]
     contradicted: tuple[PlayerId, ...]
+    pre_vote_folded: tuple[PlayerId, ...] = ()
 
 
-def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
-    """Reduce a resolved meeting to its public belief evidence (Task 9.8).
+def derive_belief_evidence(
+    transcript: MeetingTranscript,
+    *,
+    contradictions: Sequence[ContradictionRef],
+    roster: frozenset[PlayerId],
+) -> MeetingBeliefEvidence:
+    """Derive a meeting's public belief evidence (Tasks 9.8, 10.7).
 
-    Pure function of the :class:`~meetings.schemas.MeetingResult`: walks
-    every recorded turn's claims (opening / reply / opt-in alike -- an
-    opt-in accusation is as public as a chain one) plus the detected
-    contradiction flags. Claims are read AS RECORDED, i.e. after the
-    per-turn guards ran: a teammate accusation was already stripped
-    (Task 7.12) and a claim naming a non-living subject -- accusation
-    target, alibi subject, or corroboration supports -- already dropped
+    The single evidence derivation behind BOTH fold halves: the manager
+    calls it pre-vote on the final transcript (Task 10.7 -- the
+    invocation point moved, the logic did not), and
+    :func:`extract_belief_evidence` delegates here post-meeting for the
+    orchestrator's persistent absorb and for replay-side re-derivation.
+    Pure function of its arguments: walks every recorded turn's claims
+    (opening / reply / opt-in alike -- an opt-in accusation is as public
+    as a chain one) plus the detected contradiction flags. Claims are
+    read AS RECORDED, i.e. after the per-turn guards ran: a teammate
+    accusation was already stripped (Task 7.12) and a claim naming a
+    non-living subject -- accusation target, alibi subject, or
+    corroboration supports -- already dropped
     (:func:`_drop_non_roster_claims`; fb3cfa5 + Task 10.2), so the
     evidence can only name living meeting participants the chain itself
     honoured.
+
+    ``roster`` is the meeting's living-participant set: the live path
+    passes the participant ids, the replay path the recorded ballot
+    voters (identical sets -- every living participant casts exactly one
+    ballot, defaults included). It scopes the detector-derived
+    corroborations and the independent-voices derivation exactly as the
+    recording-time ``detect_contradictions`` call was scoped; the
+    claim-stated fields need no second filter (the chokepoint already
+    validated them before recording).
     """
 
     accused: set[PlayerId] = set()
@@ -1999,8 +2125,8 @@ def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
     # set can never trip the kill-scene prong; the spawn-window prong is
     # the operative one (a tick-0/1 "I can vouch" is the
     # everyone-spawned-together shape that confirms nothing).
-    body_rooms = triggering_body_rooms(result.transcript)
-    for turn in result.transcript.turns:
+    body_rooms = triggering_body_rooms(transcript)
+    for turn in transcript.turns:
         for claim in turn.claims:
             if isinstance(claim, AccusationClaim):
                 accused.add(claim.against)
@@ -2012,34 +2138,58 @@ def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
                 corroborated.add(claim.supports)
     # Detector-derived corroboration (Task 10.1, audit gp-2 C-C-1): a
     # containment-consistent (alibi, sighting) pair re-derived from the
-    # recorded transcript is Rule-3 evidence alongside the claim-stated
+    # transcript is Rule-3 evidence alongside the claim-stated
     # CorroborationClaims. Pure re-derivation, so a replay folds the
-    # identical evidence from the recorded meeting alone. The roster is
-    # the recorded ballot voters: every living participant casts exactly
-    # one ballot (defaults included), so this is the same
-    # living-participant set the recording-time ``detect_contradictions``
-    # call received -- a hallucinated non-player subject (audit C-8) whose
-    # alibi and sighting happen to agree can never corroborate itself into
-    # a phantom belief row. A hand-built result with no ballots therefore
-    # derives nothing (an explicitly-empty roster indexes nothing). The
-    # claim-stated fields need no second filter here: the per-turn
-    # chokepoint (``_drop_non_roster_claims``, Task 10.2) drops any claim
-    # naming a non-living subject before the turn is recorded, and this
-    # function reads claims AS RECORDED.
-    roster = frozenset(ballot.voter for ballot in result.ballots)
+    # identical evidence from the recorded meeting alone; a hallucinated
+    # non-player subject (audit C-8) whose alibi and sighting happen to
+    # agree can never corroborate itself into a phantom belief row (an
+    # explicitly-empty roster indexes nothing).
     corroborated.update(
         corroboration.subject
-        for corroboration in detect_corroborations(result.transcript, roster=roster)
+        for corroboration in detect_corroborations(transcript, roster=roster)
     )
     contradicted = {
         subject
-        for contradiction in result.contradictions
+        for contradiction in contradictions
         for subject in contradiction.subjects
     }
+    # The two-witness derivation (Task 10.7; audit gp-2 C-C-2): subjects
+    # whose independent-voice count meets the bar fold pre-vote. Voice
+    # subjects are accusation targets by construction, so the folded set
+    # is a subset of ``accused`` (the invariant the belief-side phase
+    # routing validates).
+    voices = independent_voices(transcript, roster=roster)
+    pre_vote_folded = tuple(
+        sorted(
+            subject
+            for subject, speakers in voices.items()
+            if len(speakers) >= TESTIMONY_INDEPENDENCE_BAR
+        )
+    )
     return MeetingBeliefEvidence(
         accused=tuple(sorted(accused)),
         corroborated=tuple(sorted(corroborated)),
         contradicted=tuple(sorted(contradicted)),
+        pre_vote_folded=pre_vote_folded,
+    )
+
+
+def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
+    """Reduce a resolved meeting to its public belief evidence (Task 9.8).
+
+    The post-meeting / replay entry point: delegates to
+    :func:`derive_belief_evidence` (one derivation, two invocation
+    points -- Task 10.7) with the roster read off the recorded ballots.
+    Every living participant casts exactly one ballot (defaults
+    included), so the ballot voters ARE the living-participant roster
+    the meeting ran with; a hand-built result with no ballots therefore
+    derives no detector-sourced corroborations and no voices.
+    """
+
+    return derive_belief_evidence(
+        result.transcript,
+        contradictions=result.contradictions,
+        roster=frozenset(ballot.voter for ballot in result.ballots),
     )
 
 
@@ -2173,6 +2323,7 @@ __all__ = [
     "SuspicionEntry",
     "VotePromptRenderer",
     "coerce_teammate_ballot_to_skip",
+    "derive_belief_evidence",
     "drop_teammate_statement_target",
     "exclude_teammate_accusation_claims",
     "extract_belief_evidence",
