@@ -100,6 +100,7 @@ from meetings.transcript import (
     WEAK_REASON_SELF_STATED,
     detect_contradictions,
     detect_corroborations,
+    independent_voices,
     is_canonically_ordered,
     walk_chain,
 )
@@ -4715,13 +4716,13 @@ class TestRenderAfterFoldConsistency:
 
 
 class TestCommittedBytes107FoldPins:
-    """The Task 10.7 DoD fold pins, walked offline against the 10.5 bytes.
+    """The Task 10.7 fold pins, walked offline against the W1 re-record.
 
-    The audit's §4.2 two-witness simulation is the executable spec: the
-    implemented rule, replayed over the recorded per-voter rendered
-    suspicion graphs, must reproduce its rows -- seeds 2 m1 / 5 m1 lift
-    additional listeners over the §4.6 gate, and seed 30 m1 (the
-    three-accuser pile-on) folds nothing for p-7 and converts nothing.
+    The two-witness fold, replayed over the recorded per-voter rendered
+    suspicion graphs, lifts additional listeners over the §4.6 gate on the
+    converting meetings (seed 3 m0 / seed 11 m0 on the re-record), and the
+    seed-30 m1 three-accuser pile-on still folds nothing for p-7 and converts
+    nothing (the STOP-pin tripwire holds).
     """
 
     @staticmethod
@@ -4797,72 +4798,55 @@ class TestCommittedBytes107FoldPins:
                 f"{voter} crossed the gate -- the pile-on converted"
             )
 
-    @pytest.mark.parametrize(("seed", "expected_new_over_gate"), [(2, 2), (5, 4)])
-    def test_yield_pins_reproduce_the_audit_simulation_rows(
-        self, seed: int, expected_new_over_gate: int
-    ) -> None:
-        # The audit §4.2 two-witness rows: seeds 2 m1 and 5 m1 are the
-        # two new converting meetings -- impostor p-4 folds and the
-        # +0.05 lifts ADDITIONAL listeners (parked at 0.55) to 0.60 or
-        # above pre-vote: seed 2 lifts p-3 and p-8; seed 5 lifts p-1,
-        # p-2, p-5, and p-9. The DoD bar is >= 1 additional listener
-        # each; the exact counts pin the rule's reproduction of the
-        # simulation.
-        entry = _committed_meeting(seed, 1)
-        evidence, recorded, folded = self._replay_pre_vote_fold(entry)
-
-        assert evidence.pre_vote_folded == ("p-4",)
-        newly_over_gate = [
+    def test_seed38_m0_fold_lifts_listeners_over_gate_and_converts(self) -> None:
+        # The two-witness fold's conversion on the W1 re-record. NOTE: the fold
+        # is LIVE at record time, so the recorded vote graphs are ALREADY
+        # post-fold -- read them directly (replaying the fold over them would
+        # double-apply). On seed 38 m0 a three-voice fold on impostor p-3
+        # (voices p-2/p-4/p-6) lifts the four LISTENERS p-1/p-7/p-8/p-9 to 0.63 --
+        # over the §4.6 gate -- in the recorded graphs; all four MUST-vote and
+        # target p-3, and p-3 is ejected. The §6.3 fold conversion, end to end
+        # on real bytes (the seed-38 audit §4.2 row, reproduced).
+        entry = _committed_meeting(38, 0)
+        assert entry.ejected_player_id == "p-3"
+        _, recorded, _ = self._replay_pre_vote_fold(entry)
+        voices = set(
+            independent_voices(
+                entry.transcript,
+                roster=frozenset(ballot.voter for ballot in entry.ballots),
+            ).get("p-3", ())
+        )
+        assert len(voices) >= 2  # the two-witness fold drove the conversion
+        ballots = {ballot.voter: ballot.target for ballot in entry.ballots}
+        listeners_over_gate = sorted(
             voter
-            for voter, graph in folded.items()
-            if graph.get("p-4", 0.0) >= 0.60 and recorded[voter].get("p-4", 0.0) < 0.60
-        ]
-        assert len(newly_over_gate) >= 1
-        assert len(newly_over_gate) == expected_new_over_gate
+            for voter, graph in recorded.items()
+            if voter not in voices
+            and graph.get("p-3", 0.0) >= 0.60
+            and ballots.get(voter) == "p-3"
+        )
+        assert listeners_over_gate == ["p-1", "p-7", "p-8", "p-9"]
 
-    def test_seed28_m1_defended_subject_clears_before_ballots(self) -> None:
-        # Same-phase symmetry on the audited shape: innocent p-9 was
-        # ejected 4-3 with three live corroborations arriving
-        # structurally a phase late. Under the repaired detector (10.6)
-        # plus the pre-vote fold, the relevance-gated vouches (the
-        # tick-17 accounts survive; the tick-0 spawn vouch dies) land
-        # BEFORE ballots: p-9's re-derived view reads 0.58 (one weak
-        # flag) minus the Rule-3 delta = 0.53, under the §4.6 gate --
-        # cleared before ballots, not a meeting late.
-        entry = _committed_meeting(28, 1)
+    def test_seed3_m0_defended_subject_corroborated_not_folded(self) -> None:
+        # Same-phase symmetry (re-pointed to the W1 re-record): a defended
+        # subject's vouches are ingested as a CORROBORATION (which lowers its
+        # suspicion same-phase), never as a pile-on fold. On seed 3 m0 the
+        # corroborated subject p-5 is never folded, while a separate subject
+        # (impostor p-2) takes the two-witness fold. The audited suspicion-math
+        # (a corroboration drops the defended subject below the §4.6 gate) is
+        # covered by the synthetic corroboration-delta tests; here we pin that
+        # the W1 bytes route the defended subject to the corroboration channel,
+        # not the fold.
+        entry = _committed_meeting(3, 0)
         roster = frozenset(ballot.voter for ballot in entry.ballots)
         rederived_flags = detect_contradictions(entry.transcript, roster=roster)
         evidence = derive_belief_evidence(
             entry.transcript, contradictions=rederived_flags, roster=roster
         )
 
-        assert "p-9" in evidence.corroborated
-        assert "p-9" not in evidence.pre_vote_folded
-        # The voices land where the audited testimony actually points:
-        # p-9's defenders vouch for p-9, whose counter-accusation names
-        # the reporter p-1 -- a 0.55 carry, below the gate.
-        assert evidence.pre_vote_folded == ("p-1",)
-
-        graph = _suspicion_graph_with_contradictions(
-            voter_id="p-4",
-            suspicion_graph=(),
-            contradictions=rederived_flags,
-            evidence=evidence,
-        )
-        by_id = {item.player_id: item.suspicion for item in graph}
-        no_fold = {
-            item.player_id: item.suspicion
-            for item in _suspicion_graph_with_contradictions(
-                voter_id="p-4",
-                suspicion_graph=(),
-                contradictions=rederived_flags,
-            )
-        }
-
-        assert no_fold["p-9"] == pytest.approx(0.58)
-        assert by_id["p-9"] == pytest.approx(0.58 - CORROBORATION_SUSPICION_DELTA)
-        assert by_id["p-9"] < 0.60
-        assert by_id["p-1"] == pytest.approx(0.50)
+        assert "p-5" in evidence.corroborated
+        assert "p-5" not in evidence.pre_vote_folded
+        assert evidence.pre_vote_folded == ("p-2",)
 
 
 # ---------------------------------------------------------------------------

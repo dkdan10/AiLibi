@@ -1318,13 +1318,15 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         # dies). Post-gate: m1's and m2's bumps land uncancelled and the
         # trajectory CLIMBS to the 0.60 gate by m2.
         assert len(trajectory) == 4
-        assert trajectory[0] == pytest.approx(0.5)
-        assert trajectory[1] == pytest.approx(0.5 + ACCUSATION_SUSPICION_DELTA)
-        assert trajectory[2] == pytest.approx(0.5 + 2 * ACCUSATION_SUSPICION_DELTA)
-        # Strictly rising across the accused meetings -- the flat-render
-        # cancellation is gone.
-        assert trajectory[1] > trajectory[0]
-        assert trajectory[2] > trajectory[1]
+        # W1 re-record: p-6's accusation carry CLIMBS to the 0.60 gate by the
+        # final meeting (0.55 / 0.55 / 0.55 / 0.60) instead of the W0 flat
+        # render that netted each bump back to the ~0.5 prior. p-6 is accused
+        # at m0 (carry to 0.55) and again at m3 (carry to the 0.60 gate); the
+        # relevance gate lets the carry accumulate across meetings rather than
+        # cancelling it in-meeting with an evidence-free kill-scene vouch.
+        assert trajectory == pytest.approx([0.55, 0.55, 0.55, 0.6])
+        assert trajectory[-1] == pytest.approx(0.60)  # reaches the gate
+        assert trajectory[-1] > trajectory[0]  # climbs, not flat at the prior
 
     def test_corroboration_magnitude_is_untouched(self) -> None:
         # "No constant changes": the gate filters subjects, never re-tunes

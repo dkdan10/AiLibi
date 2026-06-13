@@ -1599,11 +1599,14 @@ class TestCommittedBytesArtifactCollapse:
     """
 
     # (seed, meeting_index) -> recorded flags that no longer re-derive.
-    _REPAIRED_SITES: dict[tuple[int, int], int] = {
-        (13, 1): 22,
-        (28, 1): 5,
-        (33, 1): 1,
-    }
+    # Task 10.9: EMPTY on the re-recorded bytes. At W0 this class proved the
+    # 10.6 detector repairs as an OFFLINE divergence from the pre-repair
+    # recorded flags (storm + proxies at three sites). The 10.9 re-record bakes
+    # those repairs in at RECORD time, so the committed bytes ARE the repaired
+    # output: re-derivation now matches the recording everywhere (no divergence).
+    # The set-wide artifact-absence is pinned below (VARYING_ROOMS / placeholder
+    # / over-broad-proxy classes mint nothing on the recorded W1 bytes).
+    _REPAIRED_SITES: dict[tuple[int, int], int] = {}
 
     def test_rederivation_diverges_only_at_the_repaired_sites(self) -> None:
         recorded_total = 0
@@ -1652,20 +1655,17 @@ class TestCommittedBytesArtifactCollapse:
                     assert is_weak_contradiction(flag)
 
         assert removed_sites == self._REPAIRED_SITES
-        # Recorded bytes untouched (87 — the Wave-0 honest baseline);
-        # the corrected re-derivation: 87 − 22 (storm) − 6 (suppressed
-        # proxies) + 6 (weak re-targets) = 65.
-        assert recorded_total == 87
-        assert rederived_total == 65
+        # W1: no offline divergence — the committed bytes were recorded with the
+        # repaired detector, so re-derivation reproduces them byte-for-byte
+        # (self-anchoring; the absolute flag count is pinned by the report).
+        assert recorded_total == rederived_total
 
     def test_surviving_endpoint_flags_are_weak_banded(self) -> None:
         # The endpoint class survives ONLY weak-banded (the 10.1 decision:
         # weak-banded by preference over exclusion — an endpoint mismatch
-        # can still convert under corroboration). On the corrected
-        # re-derivation 45 flags carry an endpoint reason (the recorded
-        # 57 minus the storm's 8, seed 28's 3 endpoint proxies, and seed
-        # 33's 1 — re-targets carry only the re-target reason); every one
-        # carries the weak marker, none full weight.
+        # can still convert under corroboration). The invariant is that every
+        # endpoint-reason flag carries the weak marker (asserted in-loop); the
+        # count is 52 on the W1 re-record (was 45 on the W0 bytes).
         endpoint_weak = 0
         for seed in range(50):
             for entry in _committed_meetings(seed):
@@ -1676,7 +1676,7 @@ class TestCommittedBytesArtifactCollapse:
                     ):
                         assert is_weak_contradiction(flag)
                         endpoint_weak += 1
-        assert endpoint_weak == 45
+        assert endpoint_weak == 52
 
     def test_every_surviving_flag_remains_deterministic(self) -> None:
         # Byte-identical re-derivation: running the pure detector twice
@@ -1705,17 +1705,13 @@ class TestCommittedBytesSeedPins:
     """
 
     def test_artifact_input_classes_still_occur_and_mint_nothing(self) -> None:
-        # The 9B still emits compound-label and non-spatial rooms (13 and
-        # 7 claim rooms respectively on this set) — the artifact INPUTS
-        # the era's 34 containment + 11 placeholder flags rode. The
-        # non-spatial census rose 5 -> 7 under the Task 10.6 allowlist:
-        # the two labels that LEAKED past the denylist (seed 13 m1's
-        # ``VARYING_ROOMS``, seed 6 m1's ``HALLS``) now classify
-        # correctly as no-room. Under the repaired detector a non-spatial
-        # side mints no flag at all and a compound side pairs only
-        # through canonical-set logic; this census failing on a future
-        # re-record means the model stopped emitting the class, not that
-        # the repair regressed.
+        # The 9B still emits compound-label and non-spatial rooms (8 and
+        # 6 claim rooms respectively on the W1 re-record) — the artifact
+        # INPUT classes the W0 era's containment + placeholder flags rode.
+        # Under the Task 10.6 allowlist a non-spatial side mints no flag at
+        # all and a compound side pairs only through canonical-set logic;
+        # this census failing on a future re-record means the model stopped
+        # emitting the class, not that the repair regressed.
         compound_claim_rooms = 0
         placeholder_claim_rooms = 0
         for seed in range(50):
@@ -1730,16 +1726,15 @@ class TestCommittedBytesSeedPins:
                             compound_claim_rooms += 1
                         elif not canon:
                             placeholder_claim_rooms += 1
-        assert compound_claim_rooms == 13
-        assert placeholder_claim_rooms == 7
+        assert compound_claim_rooms == 8
+        assert placeholder_claim_rooms == 6
 
     def test_recorded_conflict_flags_sit_in_the_weak_band(self) -> None:
-        # The honest baseline records exactly two alibi_conflict flags
-        # (seed 33 m1, seed 43 m0) — both weak-banded, the 10.1 conflict
-        # classification holding at the recording seam. No self-pair
-        # instance exists on this set (the era's seed-11/17 shapes were
-        # model behavior); the self-pair classification itself stays
-        # covered by the synthetic weak-band tests above.
+        # The W1 re-record records five alibi_conflict flags (seeds
+        # 6/15/23/33/40) — every one weak-banded, the 10.1 conflict
+        # classification holding at the recording seam. The self-pair
+        # classification itself stays covered by the synthetic weak-band
+        # tests above.
         conflict_sites: list[tuple[int, int]] = []
         for seed in range(50):
             for index, entry in enumerate(_committed_meetings(seed)):
@@ -1748,33 +1743,31 @@ class TestCommittedBytesSeedPins:
                         continue
                     assert is_weak_contradiction(flag), flag.contradiction_id
                     conflict_sites.append((seed, index))
-        assert conflict_sites == [(33, 1), (43, 0)]
+        assert conflict_sites == [(6, 3), (15, 0), (23, 0), (33, 1), (40, 0)]
 
     @pytest.mark.parametrize(
         ("seed", "subject", "interior_tick", "expect_weak"),
         [
-            (1, "p-6", 2, True),
-            (1, "p-7", 6, True),
-            (9, "p-7", 1, True),
-            (17, "p-2", 6, True),
-            (24, "p-4", 8, False),
-            (38, "p-3", 6, True),
+            (1, "p-6", 7, True),
+            (4, "p-3", 16, True),
+            (26, "p-2", 5, True),
+            (28, "p-4", 9, True),
+            (39, "p-6", 9, True),
+            (43, "p-7", 8, True),
         ],
     )
     def test_genuine_canon_interior_impostor_flag_survives(
         self, seed: int, subject: str, interior_tick: int, expect_weak: bool
     ) -> None:
-        # THE survival pin, re-pointed at the honest baseline's genuine
-        # supply (10.4's definition: alibi_vs_sighting without the endpoint
-        # band, subject a true impostor — 7 supplied across seeds
-        # 1/9/17/24/38; one representative interior-tick flag per supplied
-        # (meeting, subject) pair is pinned here). Each re-derives
-        # byte-identically from the recorded transcript. Most are weak
-        # self-stated by construction (a fabricated alibi is self-stated);
-        # seed 24's is the set's one STRONG genuine flag — third-party
-        # adversarial-capped pairings can exceed the weak band — and it is
-        # the flag behind the set's single genuine-class CONVERSION (m0
-        # ejected p-4).
+        # THE survival pin, re-pointed at the W1 re-record's genuine supply
+        # (10.4's definition: alibi_vs_sighting without the endpoint band,
+        # subject a true impostor — 8 supplied; one representative
+        # interior-tick flag per supplied (meeting-0, subject) pair is pinned
+        # here). Each re-derives byte-identically from the recorded transcript.
+        # All are weak self-stated by construction (a fabricated alibi is
+        # self-stated); the W1 set's single STRONG contradiction lands on a
+        # crew subject (seed-12 m0 p-6), so it is OUTSIDE the genuine class and
+        # pinned separately by test_seed12_m0_strong_flag_survives below.
         entry = _committed_meetings(seed)[0]
         recorded = [
             flag
@@ -2208,65 +2201,48 @@ class TestDetectCorroborationsRelevanceGate:
 class TestCommittedBytes106Pins:
     """The Task 10.6 DoD acceptance pins, walked offline (no re-record)."""
 
-    def test_seed13_m1_varying_rooms_storm_rederives_to_zero(self) -> None:
-        # Audit C-C-5: the recorded bytes carry 22 flags, every one minted
-        # off the "p-9 in VARYING_ROOMS (ticks 2-7)" phantom-room alibi
-        # against CREWMATE p-9 (25% of set volume). Under the allowlist
-        # the label is non-spatial: zero flags re-derive.
-        entry = _committed_meetings(13)[1]
-        assert len(entry.contradictions) == 22
-        assert all("VARYING_ROOMS" in flag.description for flag in entry.contradictions)
-        assert _rederive(entry) == ()
-
-    def test_seed6_m1_halls_mints_nothing(self) -> None:
-        # The latent sibling class: "HALLS" appears as a claim room on
-        # this meeting and is non-spatial under the allowlist -- zero
-        # flags, exactly as recorded (the label never happened to pair
-        # here; the allowlist closes the class, not the instance).
-        entry = _committed_meetings(6)[1]
-        halls_rooms = [
-            claim.room
-            for turn in entry.transcript.turns
-            for claim in turn.claims
-            if isinstance(claim, AlibiClaim) and claim.room == "HALLS"
+    def test_varying_rooms_mints_nothing_set_wide(self) -> None:
+        # Audit C-C-5: at W0 the "p-9 in VARYING_ROOMS" phantom-room alibi
+        # minted a 22-flag storm on seed 13 m1 (25% of set volume), which the
+        # 10.6 allowlist collapsed OFFLINE. The 10.9 re-record runs the allowlist
+        # at RECORD time, so the non-spatial label never pairs: zero recorded
+        # contradictions reference it anywhere on the set.
+        flagged = [
+            flag
+            for seed in range(50)
+            for entry in _committed_meetings(seed)
+            for flag in entry.contradictions
+            if "VARYING_ROOMS" in flag.description
         ]
-        assert halls_rooms == ["HALLS"]
-        assert canonical_rooms("HALLS") == frozenset()
-        assert entry.contradictions == ()
-        assert _rederive(entry) == ()
+        assert flagged == []
 
-    def test_seed28_m1_proxy_flags_suppress_and_retarget(self) -> None:
-        # Audit C-C-4 FP: innocent p-9 was ejected 4-3 off 2 strong proxy
-        # flags (p-7's over-broad "p-9 CAFETERIA 0-18" vs p-9's own
-        # truthful WEST_HALL@17 self-sighting). Re-derived: NO strong flag
-        # on p-9, every flag sourced from p-7's proxy alibi re-targets
-        # weak at p-7.
+    def test_placeholder_labels_classify_non_spatial(self) -> None:
+        # The allowlist's classification of the two W0-leaked placeholder
+        # labels (seed-13's ``VARYING_ROOMS`` storm, seed-6's ``HALLS``): both
+        # canonicalize to the empty set, so a non-spatial side mints no flag.
+        # Pinned as pure logic (the W0 seed-6 m1 HALLS claim is not present in
+        # the re-record); the set-wide absence is pinned above.
+        assert canonical_rooms("HALLS") == frozenset()
+        assert canonical_rooms("VARYING_ROOMS") == frozenset()
+
+    def test_seed28_m1_proxy_fp_does_not_recur(self) -> None:
+        # Audit C-C-4 FP: at W0 innocent p-9 was ejected 4-3 off 2 over-broad
+        # proxy strong flags on seed 28 m1, which 10.6 suppressed+re-targeted
+        # OFFLINE. On the re-record (proxy gate at record time) the FP does not
+        # recur — seed 28 m1 carries no strong flag at all. (The
+        # suppress+re-target LOGIC is covered by the synthetic proxy tests.)
         entry = _committed_meetings(28)[1]
         recorded_strong = [
             flag for flag in entry.contradictions if not is_weak_contradiction(flag)
         ]
-        assert len(recorded_strong) == 2
-        assert all(flag.subjects == ("p-9",) for flag in recorded_strong)
-
-        rederived = _rederive(entry)
-        assert not any(
-            "p-9" in flag.subjects and not is_weak_contradiction(flag)
-            for flag in rederived
-        )
-        retargets = [
-            flag
-            for flag in rederived
-            if WEAK_REASON_RETARGETED_PROXY in flag.description
-        ]
-        assert retargets
-        assert all(flag.subjects == ("p-7",) for flag in retargets)
+        assert recorded_strong == []
 
     def test_seed28_m1_p9_rederived_max_below_the_gate(self) -> None:
-        # The re-derived §4.6 verdict: from the 0.5 prior, p-9's surviving
-        # flags (two self-stated endpoint flags off one claim) lift one
-        # graduated weak delta -- 0.58, below the 0.60 eject gate. The
-        # re-target lands the same single weak delta on p-7 (weak, so it
-        # cannot eject alone either).
+        # The re-derived §4.6 verdict from the 0.5 prior stays BELOW the 0.60
+        # eject gate for p-9 and p-7 on the re-record (the proxy FP cannot
+        # eject alone). The exact lift is not pinned — seed 28 m1's flag shape
+        # moved with the re-record — but the below-gate property is what the
+        # audit C-C-4 repair guarantees.
         from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 
         entry = _committed_meetings(28)[1]
@@ -2277,33 +2253,40 @@ class TestCommittedBytes106Pins:
             lifted = apply_contradiction_rule(
                 beliefs, [flag for flag in rederived if player in flag.subjects]
             )
-            assert lifted.view(player).suspicion == pytest.approx(0.58)
             assert lifted.view(player).suspicion < 0.60
 
-    def test_seed24_m0_strong_flag_on_p4_survives(self) -> None:
-        # Audit C-C-4 TP: the subject ECHOED the fellow impostor's false
-        # alibi, so no self-account agrees with the reporter's sighting
-        # and no suppression fires -- the set's one genuine strong
-        # conversion keeps its full-weight flag, byte-identical.
-        entry = _committed_meetings(24)[0]
+    def test_seed12_m0_strong_flag_survives(self) -> None:
+        # The W1 set's single STRONG (full-weight) contradiction: seed 12 m0
+        # carries one non-weak flag on p-6, and it re-derives byte-identically
+        # (no suppression fires). p-6 is a crew subject, so this strong flag is
+        # OUTSIDE the genuine class — it is the set's one strong-band exemplar
+        # wherever a third-party adversarial-capped pairing exceeds the weak band.
+        entry = _committed_meetings(12)[0]
         recorded_strong = [
             flag for flag in entry.contradictions if not is_weak_contradiction(flag)
         ]
         assert len(recorded_strong) == 1
-        assert recorded_strong[0].subjects == ("p-4",)
+        assert recorded_strong[0].subjects == ("p-6",)
         assert recorded_strong[0] in _rederive(entry)
 
-    def test_seed6_m1_kill_scene_sighting_produces_no_corroboration(self) -> None:
-        # Audit C-C-3 byte walk: accuser p-3's own ADMIN@16 sighting of
-        # impostor p-6 (who had just killed p-4 there, body found @17)
-        # corroborated p-6's "ADMIN 15-17" alibi and cancelled the
-        # accusation. Under the relevance gate the meeting re-derives ZERO
-        # corroborations (the second recorded pair -- p-9 vouched at the
-        # same scene -- is equally evidence-free).
+    def test_seed6_m1_surviving_corroborations_are_interior_tick(self) -> None:
+        # Audit C-C-3: at W0 a kill-scene sighting at seed 6 m1 was relevance-
+        # gated to ZERO corroborations. On the re-record seed 6 m1 is a
+        # different meeting whose corroborations DO survive the gate; assert
+        # every one is backed by an interior-tick sighting, so no kill-scene /
+        # spawn-window evidence-free pair leaks through (the same property the
+        # set-wide pin below enforces across all 50 seeds).
         entry = _committed_meetings(6)[1]
-        assert (
-            detect_corroborations(entry.transcript, roster=_living_roster(entry)) == ()
-        )
+        sightings_by_id = {
+            f"turn:{turn.turn_id}:obs:{index}": observation
+            for turn in entry.transcript.turns
+            for index, observation in enumerate(turn.observations)
+            if isinstance(observation, SawPlayerObservation)
+        }
+        pairs = detect_corroborations(entry.transcript, roster=_living_roster(entry))
+        assert pairs  # the re-record meeting does produce backed corroborations
+        for pair in pairs:
+            assert sightings_by_id[pair.sighting_event_id].tick > SPAWN_WINDOW_LAST_TICK
 
     def test_no_spawn_window_corroboration_survives_set_wide(self) -> None:
         # DoD pin: spawn-window-sourced corroborations count 0 set-wide,
@@ -2327,11 +2310,11 @@ class TestCommittedBytes106Pins:
                         f"spawn-window corroboration survived: seed {seed}, "
                         f"{pair.sighting_event_id}"
                     )
-        # 73 pairs survive the gate on the committed bytes (115 recorded-era
-        # pairs minus 15 spawn-window and 27 kill-scene) -- the over-
-        # suppression tripwire: a future change driving this to 0 means the
-        # channel died, which the audit ranks as bad as the artifacts.
-        assert surviving == 73
+        # 59 pairs survive the gate on the W1 re-record (was 73 on the W0
+        # bytes) -- the over-suppression tripwire: a future change driving this
+        # to 0 means the channel died, which the audit ranks as bad as the
+        # artifacts. Well above zero: the channel is gated, not killed.
+        assert surviving == 59
 
 
 # ---------------------------------------------------------------------------
@@ -2734,41 +2717,36 @@ class TestIndependentVoices:
 class TestCommittedBytes107VoicePins:
     """The Task 10.7 DoD voice coordinates, walked offline (no re-record)."""
 
-    def test_seed30_m1_derives_no_voice_for_p7(self) -> None:
-        # THE owner-principle tripwire (the STOP pin's transcript half):
-        # p-7 is accused three times -- p-6's deflecting reply (every
-        # located observation at the CAFETERIA kill scene: no backing)
-        # and two opt-in direct accusations (whose corroborations support
-        # p-2, an accuser of p-6, NOT of p-7) -- and not one is a voice.
-        # The two-witness fold therefore never sees p-7. If a future
-        # change makes a voice appear here, the rule converts a bare
-        # pile-on: STOP and escalate, per the contract.
-        entry = _committed_meetings(30)[1]
+    def test_seed33_m0_derives_no_voice_for_multiply_accused_p6(self) -> None:
+        # THE owner-principle tripwire (re-pointed to the W1 re-record): p-6 is
+        # accused twice yet derives NO voice -- neither accusation is
+        # observation-backed, so the two-witness fold never sees it and a bare
+        # pile-on cannot convert. If a future change makes a voice appear here,
+        # the rule converts a bare pile-on: STOP and escalate, per the contract.
+        entry = _committed_meetings(33)[0]
         voices = independent_voices(entry.transcript, roster=_living_roster(entry))
 
-        assert "p-7" not in voices
-        # The same mechanics document where the voices DID land: the
-        # accused impostor p-6 carries the opening accuser plus the two
-        # aligned opt-in corroborations.
-        assert voices.get("p-6") == ("p-2", "p-3", "p-4")
+        assert "p-6" not in voices
+        # The same mechanics document where a voice DID land: p-2 carries an
+        # observation-backed accuser.
+        assert voices.get("p-2") == ("p-6",)
 
-    def test_seed2_m1_derives_two_voices_for_p4(self) -> None:
-        # Yield-pin coordinates: impostor p-4's accuser p-8 (a reply
-        # staking its own ENGINEERING whereabouts) plus p-9's opt-in
-        # corroboration of p-8 -- the "accuse-capable opt-in
-        # corroboration counts as the second voice" owner decision.
-        entry = _committed_meetings(2)[1]
+    def test_seed3_m0_derives_two_voices_for_p2(self) -> None:
+        # Yield-pin (re-pointed to the W1 re-record): impostor p-2 takes a
+        # two-voice pre-vote fold -- an observation-backed accuser plus an
+        # aligned opt-in corroboration (the "accuse-capable opt-in
+        # corroboration counts as the second voice" owner decision).
+        entry = _committed_meetings(3)[0]
         voices = independent_voices(entry.transcript, roster=_living_roster(entry))
 
-        assert voices.get("p-4") == ("p-8", "p-9")
+        assert voices.get("p-2") == ("p-5", "p-6")
 
-    def test_seed5_m1_derives_voices_for_p4(self) -> None:
-        # The richer yield shape: the opening eyewitness plus four
-        # opt-in corroborations aligned with accusers of p-4 -- minus
-        # p-5, whose only located content is spawn-window/kill-scene
-        # CAFETERIA and therefore carries no backing.
-        entry = _committed_meetings(5)[1]
+    def test_seed38_m0_derives_multiple_voices_for_p3(self) -> None:
+        # The richer yield shape (re-pointed to the W1 re-record): impostor p-3
+        # takes a three-voice pre-vote fold -- an observation-backed accuser
+        # plus two aligned opt-in corroborations. (The W1 set's deepest fold is
+        # three voices; W0's five-voice seed-5 shape did not recur.)
+        entry = _committed_meetings(38)[0]
         voices = independent_voices(entry.transcript, roster=_living_roster(entry))
 
-        assert voices.get("p-4") == ("p-1", "p-2", "p-3", "p-7", "p-9")
-        assert "p-5" not in (voices.get("p-4") or ())
+        assert voices.get("p-3") == ("p-2", "p-4", "p-6")
