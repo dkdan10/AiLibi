@@ -14,44 +14,51 @@
 // concrete improvement proposals — purely from the recorded data (no Ollama; the
 // recorded LLM outputs carry no role, and roles are re-derived from the seeder).
 //
-// CURRENT TARGET — the Phase-10 WAVE-0 HONEST BASELINE: 9p/2i re-recorded at
-// 59e4111 (PR #143) on qwen3.5:9b with the Wave-0 instrument repairs landed:
-// 10.1 detector repairs (room labels canonicalized at claim parse; endpoint
-// sightings weak-banded, never full-weight; alibi_conflict weak-classified;
-// per-player contradiction deltas deduped/capped so flag stacking cannot run
-// suspicion to 1.0; detector-derived corroboration with an independence gate),
-// 10.2 claim-subject roster validation (un-gates §6.3 Rule 3 — corroboration
-// fires for the first time on this set), 10.3 prompt nudges (crewmate_report v5
-// + accusation_round v7: DEAD-marked roster lines + ONE retry of
-// validation-failing openings), 10.4 honest gate metrics
-// (genuine_class_conversion = the primary conversion ruler; flags re-derived
-// through the repaired detector, never trusted from the recording). The
-// re-record's HARD validity gate is GREEN and the headline numbers are KNOWN
-// (PR #143): artifact flag classes ~0, endpoint flags survive only as weak,
-// strong flags ~3, innocents-at-1.0 zero, ejection_accuracy ~0.42, and
-// genuine_class_conversion 1/7 — the FIRST genuine conversion ever (seed 24).
-// Derive this set's real numbers yourself — never trust quoted ones. The
-// audit's job is NOT to re-litigate the artifact era or re-discover the known
-// low conversion; it is to produce the WAVE-1 CONTRACT INPUT on honest bytes:
-//   (1) TESTIMONY-LEVER SIZING (the 10.6 input): the prior-era audit (e750b40
-//       set) found the DOMINANT miss class was spoken testimony that never
-//       enters listeners' beliefs — 27 meetings, 22 with the witness voting
-//       the impostor and losing plurality. Re-partition every missed
-//       conversion on THIS set: does the testimony class stay dominant, how
-//       big, and what would ingestion have yielded?
-//   (2) FOLD-TIMING DECISION INPUT (owner call pending on 10.6): per
-//       testimony-class meeting, would PRE-VOTE ingestion (same meeting) have
-//       converted it — and how many INNOCENTS would the same rule have
-//       railroaded (the cascade-risk number)? Versus POST-VOTE (next-meeting
-//       fold): did a next meeting even exist, or would decay erase the carry?
-//   (3) GENUINE-CLASS WALK: every genuine-class flag (per 10.4's re-derived
-//       definition) walked end-to-end — the seed-24 conversion verified at
-//       byte level, each non-conversion bucketed (sub-gate / plurality lost).
-//   (4) RESIDUALS AS WAVE-1/2 INPUT — pacing/evidence supply (meetings per
-//       game, accumulator runway, emergency-button absence) for 10.7; the
-//       impostor toolkit gaps (do_task, idling, kill-intent waste) for
-//       10.9/10.10; 9B artifacts (id-hallucination shape under the DEAD
-//       marker, retry yield, defaulted-turn residual).
+// CURRENT TARGET — the Phase-10 WAVE-1 CLOSE BASELINE: 9p/2i re-recorded at
+// 0ed6962 (PR #150, attempt-2) on qwen3.5:9b with the full Wave-1 crew evidence
+// economy landed on top of the Wave-0 honest instrument: 10.6 instrument
+// integrity (canonical-room ALLOWLIST kills the VARYING_ROOMS placeholder leak;
+// proxy-alibi subject-account-consistency — a third-party alibi the subject's
+// OWN account contradicts is re-targeted weak at the proxy speaker; Rule-3
+// relevance gate — spawn-window and kill-scene sightings no longer corroborate),
+// 10.7 testimony ingestion (PRE-VOTE two-witness fold: 2+ independent
+// observation-backed voices move every living listener +0.05 BEFORE ballots,
+// so an eyewitness recruits a plurality in-meeting; single-voice and bare
+// pile-ons stay powerless), 10.8 crew emergency meeting (a suspicion-
+// accumulation trigger at the §4.6 0.60 gate breaks the impostor's kill-cadence
+// monopoly; crewmate_report v6), 10.9.1 vote-ballot fail-soft (a twice-failed
+// ballot degrades to a marked SKIP instead of aborting the game), 10.9.2
+// ballot-target graph guard (an under-gate eject target is redirected to the
+// voter's own argmax ≥0.60 candidate, or coerced to SKIP — no ungrounded
+// ejections). HARD validity gate GREEN both sets, and the headline numbers are
+// KNOWN (PR #150): genuine_class 2/8, multi_signal 11/11, over-gate listeners
+// 1.62, emergency 7, ejection_accuracy 0.579 (NON-GATE), wrong-ejection games 8,
+// meetings/game median 1.5. Derive this set's real numbers yourself — never
+// trust quoted ones. The audit is the WAVE-1 CLOSE GATE: confirm the baseline is
+// VALID for Wave-2 authoring and answer the four questions the re-record left:
+//   (1) THE REDIRECT-INTO-CREW PATTERN (the headline — PR #150 Q-b): the 10.9.2
+//       guard fired on 3 of the 8 wrong-ejection seeds (12/33/40). On seed-12 it
+//       converted attempt-1's lucky-impostor railroad (bare-accused under-gate
+//       p-1, an impostor caught by accident) into a PRINCIPLED crew ejection
+//       (innocent p-6 redirected-to at 0.80). Decompose every redirect: WHY is
+//       the redirected-to innocent at ≥0.60 — earned suspicion (fair, deception
+//       is the game) or over-accumulation (the guard launders ungrounded-target
+//       into over-suspicion)? This is the deduction-quality seam.
+//   (2) GAINS ARE STRUCTURAL, NOT SEED-LUCK: verify the testimony fold (seed-38
+//       m0: 3 voices → 4 listeners cross to 0.63 → impostor ejected) and the
+//       accumulator carry (6 zero-contradiction ejections; seed-6 climbs
+//       0.55→0.60 across meetings) are the §6.3 mechanism working, not noise —
+//       reconstruct the trajectories from the bytes.
+//   (3) THE RESIDUAL CONVERSION GAP is detection→conversion, NOT cadence (30 of
+//       59 impostor-survivals had a later meeting available). Partition the
+//       survivors: what evidence shape would have converted them, and is the
+//       binding constraint now the SKIP-plurality bloc, weak-band shelter, or
+//       true evidence absence? This sizes whether Wave-2 needs a crew lever too.
+//   (4) WAVE-2 TOOLKIT INPUT (impostor gameplay): re-derive the toolkit gaps
+//       (do_task 0, idle concentration, kill-intent cross-room waste, accused-
+//       survival active-vs-passive split) AND the self-accusation class the
+//       deception lab flagged (impostor self-accuses, voters adopt the target) —
+//       it is game-deciding and the 10.9.2 guard does not cover it.
 //
 // Structure: a deterministic Extract pre-phase (one agent UPDATES + runs the
 // committed Python extractor: ground-truth roles, resolved events, hard rule
@@ -70,13 +77,13 @@
 
 export const meta = {
   name: 'gameplay-data-audit-v2',
-  description: 'Structured audit of a committed chain-protocol replay set (9p/2i, per-player tasks, accusation-chain meetings): deterministic rule + chain-protocol + conversion / artifact checks in Extract, 4 focused analysis lenses (Wave-1 contract input, pacing, impostor toolkit, model artifacts), adversarial verify, synthesis. Baseline-agnostic (derives anchors from the pointed set); model-tiered (Fable on the headline lens + synthesis, Opus elsewhere).',
-  whenToUse: 'After a chain-protocol eval set is recorded; validates the baseline and produces the next wave\'s contract input — currently the Phase-10 Wave-0 honest baseline → Wave-1 input (testimony-lever sizing, fold-timing decision table, genuine-class walk, pacing/impostor/artifact residuals).',
+  description: 'Structured audit of a committed chain-protocol replay set (9p/2i, per-player tasks, accusation-chain meetings): deterministic rule + chain-protocol + conversion / artifact checks in Extract, 4 focused analysis lenses (redirect-into-crew + conversion-quality headline, pacing/structural-gains, impostor toolkit, model artifacts), adversarial verify, synthesis. Baseline-agnostic (derives anchors from the pointed set); model-tiered (Fable on the headline lens + synthesis, Opus elsewhere).',
+  whenToUse: 'After a chain-protocol eval set is recorded; validates the baseline and produces the next wave\'s contract input — currently the Phase-10 Wave-1 CLOSE GATE (decompose the 10.9.2 redirect-into-crew pattern, verify the testimony/accumulator gains are structural, partition the residual conversion gap, and produce the Wave-2 impostor-toolkit + self-accusation input).',
   phases: [
     { title: 'Extract', detail: 'One agent updates + runs the committed extractor: roles, resolved events, hard-rule + chain-protocol checks, conversion/testimony aggregates into a facts JSON' },
-    { title: 'Analyze', detail: '4 parallel lenses over the facts + transcripts (C Wave-1 input headline on Fable; B pacing, D impostor, H artifacts on Opus)' },
+    { title: 'Analyze', detail: '4 parallel lenses over the facts + transcripts (C redirect/conversion-quality headline on Fable; B pacing/structural-gains, D impostor toolkit, H artifacts on Opus)' },
     { title: 'Verify', detail: 'Mechanical findings pass through; each judgment finding gets one skeptic (refuted drops; a failed skeptic passes it through flagged unverified)' },
-    { title: 'Synthesis', detail: 'Group findings, decompose the regression, propose Phase-10-input improvements, write report' },
+    { title: 'Synthesis', detail: 'Group findings, decompose the redirect-into-crew pattern, judge baseline validity for Wave-2, propose Wave-2 contract input, write report' },
   ],
 }
 
@@ -224,22 +231,25 @@ THE SUBSTRATE (Phase 8 — DESIGN.md §3.2/§3.3/§3.5/§5.2 are the rule source
   RATE is a model-quality signal (qwen3.5:9b hallucinates ids like "imp-2"). The set's MODEL and prompt
   versions are in the MANIFEST / replays — derive them; do not assume the model, or that any prompt-era
   number quoted in planning docs still holds.
-- WAVE-1 SUSPICION MECHANICS (DESIGN.md §6.3/§4.6 — load-bearing for every by-design judgment):
+- SUSPICION MECHANICS (DESIGN.md §6.3/§4.6 — load-bearing for every by-design judgment; layers
+  (a)-(c) are the §6.3 + Wave-0 substrate, layer (d) is the Wave-1 crew economy that landed on THIS set):
   (a) 9.7 detector precision: a contradiction classified WEAK (self-stated alibi — speaker == subject —
   or narrow tick window) carries a reduced delta landing suspicion in [0.5, 0.60) ALONE — suspicious
   but below the eject gate; a second independent signal (another contradiction, body-proximity, vent,
   a prior-meeting accumulator carry) crosses. A lone weak contradiction NOT converting is the DESIGN,
   not a detector failure. NOTE the shape ambiguity: a self-stated alibi contradicted by a sighting is
   BOTH the innocent-reporter railroad shape AND the catch-a-lying-impostor shape — the classifier keys
-  on evidence shape, not target guilt. That symmetry is the heart of the regression.
+  on evidence shape, not target guilt. That symmetry underlies the redirect-into-crew question.
   (b) 9.8 accumulator + decay (PERSISTENT, cross-meeting): being accused in a meeting adds +0.05 to
   every living agent's view of the accused (deduped per meeting — a pile-on cannot multiply it); a
   corroboration lowers −0.05; suspicion with no new evidence decays 25% of the way toward the 0.5
-  prior per meeting. THE FOLD RUNS AFTER THE VOTE: a meeting's own accusations NEVER move its own
-  ballots — only the NEXT meeting's. Trajectory 0.5→0.55→0.60: crossing requires 2+ reinforcing
-  meetings BY DESIGN ("no single round ejects" — owner principle). At ~1.5 meetings/game this rarely
-  fires; that is a GAME-LENGTH limitation, not a mechanism bug. Ballots are NOT evidence (never feed
-  the accumulator). An impostor never accrues a bump against a fellow impostor (teammate guard).
+  prior per meeting. SINGLE-VOICE accusations still fold POST-VOTE (a meeting's own single-accuser
+  bump moves only the NEXT meeting's ballots); the 10.7 TWO-WITNESS channel folds PRE-VOTE (see (d)).
+  Trajectory 0.5→0.55→0.60: crossing on accumulation alone requires 2+ reinforcing meetings BY DESIGN
+  ("no single round ejects" — owner principle). A zero-contradiction ejection whose subject carried a
+  prior-meeting accusation is the accumulator CONVERTING (the intended cross-meeting arc), not an
+  anomaly. Ballots are NOT evidence (never feed the accumulator). An impostor never accrues a bump
+  against a fellow impostor (teammate guard).
   (c) WAVE-0 INSTRUMENT REPAIRS (10.1-10.4, landed ON this set — load-bearing for every honesty
   judgment): room labels are CANONICALIZED at claim parse (compound labels no longer mint phantom
   room-mismatch contradictions); endpoint-tick sightings produce WEAK flags only; alibi_conflict is
@@ -252,8 +262,40 @@ THE SUBSTRATE (Phase 8 — DESIGN.md §3.2/§3.3/§3.5/§5.2 are the rule source
   disqualify (a fabricated alibi is self-stated by construction — all impostor fabricated-alibi
   flags are weak; assert presence, never marker strength). CONSEQUENCES you must not misread: total
   contradiction volume DROPPED HARD vs the e750b40 era (the repair working, not lost detection), and
-  ejection_accuracy ~0.42 is NOT comparable to the artifact-era ~0.63 (that number was artifact
-  railroads at roughly the accusation base rate; never benchmark this set against it).
+  ejection_accuracy is NOT comparable to the artifact-era ~0.63 (that number was artifact railroads
+  at roughly the accusation base rate; never benchmark this set against it).
+  (d) WAVE-1 CREW EVIDENCE ECONOMY (10.6-10.9.2, landed ON this set — load-bearing for EVERY
+  by-design judgment on the close baseline):
+  - 10.6 instrument integrity: the VARYING_ROOMS placeholder leak is GONE (a canonical-room ALLOWLIST
+    replaced the denylist — a non-allowlisted room mints NO flag); PROXY-ALIBI subject-account
+    consistency — when a third-party alibi about a subject conflicts with a sighting AND the subject's
+    OWN account agrees with the sighting, the flag is suppressed against the subject and re-targeted
+    WEAK at the proxy speaker (a WEAK_REASON_RETARGETED_PROXY flag naming the speaker, never the
+    subject; it cannot eject alone); the RULE-3 RELEVANCE GATE — a spawn-window (tick 0-1) sighting or
+    a kill-scene sighting placing the subject in the triggering-body room within their alibi window NO
+    LONGER corroborates. Re-targeted-proxy flags and relevance-gated non-corroborations are BY DESIGN.
+  - 10.7 PRE-VOTE TWO-WITNESS TESTIMONY FOLD (the headline mechanism): 2+ INDEPENDENT
+    observation-backed voices accusing a subject (a chain/opening accusation OR an opt-in
+    corroboration of an accuser, each carrying a first-hand relevance-passing sighting, distinct
+    speakers, never the subject) move EVERY living listener +0.05 against the subject BEFORE ballots
+    render — so a listener can cross 0.60 and the §4.6 verdict reads MUST-vote on testimony alone.
+    A single voice or a bare verbal pile-on (no observation backing) folds NOTHING pre-vote. This
+    REPLACES the post-vote bump for that subject-meeting (never doubles). A listener freshly folded
+    over 0.60 voting to eject is the MECHANISM, not an inversion.
+  - 10.8 CREW EMERGENCY MEETING: a living crewmate whose private max suspicion reaches 0.60 with no
+    meeting since that belief crossed can call an EMERGENCY meeting (once per player per game, plus a
+    global cooldown), trigger_kind "emergency", crewmate_report v6. An emergency meeting has NO
+    found_body. Emergency meetings > 0 is the intended break from the impostor kill-cadence monopoly.
+  - 10.9.1 VOTE-BALLOT FAIL-SOFT: a vote completion that fails to parse twice degrades to a SKIP
+    stamped VOTE_PARSE_DEFAULT_MARKER (a defaulted-ballot), the game CONTINUES. A defaulted SKIP is
+    NEVER a threshold_inversion and never a silent missed_skip — by design.
+  - 10.9.2 BALLOT-TARGET GRAPH GUARD: an eject ballot under a MUST-vote verdict that names a target
+    the voter's own rendered graph carries BELOW 0.60 (or no row for) is REDIRECTED to the voter's
+    argmax-rendered ≥0.60 eligible candidate (ties lowest id; teammate-only-over-gate → SKIP), stamped
+    BALLOT_TARGET_REDIRECT_MARKER. The redirect is BY DESIGN — it kills ungrounded-target ejections.
+    A redirect that lands on an INNOCENT (the argmax happened to be crew) is graph-consistent, NOT a
+    railroad; whether the redirected-to innocent's ≥0.60 is EARNED is the audit's headline question,
+    not a mechanical defect. A redirected eject is never a threshold_inversion.
 
 Inputs available to you:
 - FACTS JSON at: ${factsPath} — READ THIS FIRST. Per game: roles by player; kills (killer + victim +
@@ -286,21 +328,26 @@ Constraints for every lens:
   STARVATION (meeting_rate well above the 0.60 floor); the 7B threshold-quoting inversion (fixed by
   the v5 verdict render); the e750b40-era detector ARTIFACT classes (compound-label, placeholder,
   full-weight endpoint) — repaired by 10.1; Rule 3's silent no-ops on garbage subjects — repaired by
-  10.2. Invalid accusation/ballot targets are dropped BY DESIGN — the hallucination RATE is the
-  signal, the drop is not a bug. KNOWN-AND-REPORTED on THIS set (PR #143) — your job is to BUILD ON
-  these, not re-discover them as findings: genuine_class_conversion ~1/7 and ejection_accuracy ~0.42
-  (the honest numbers; LOW conversion is the EXPECTED state — the testimony lever is un-pulled until
-  10.6; do not file "conversion is low" as a finding, size its components per your lens scope); the
-  hard drop in total contradiction volume vs e750b40 (repair, not regression); endpoint flags
-  surviving as weak-banded (the 10.1 decision); Rule-3 corroboration events appearing for the first
-  time (10.2 un-gating); a handful of opening-retry calls (10.3 validation, one retry max, by
-  design); the remaining fail-soft defaulted turns (no aborts); cross-room/dead-actor same-tick kill
+  10.2; the VARYING_ROOMS placeholder leak — repaired by 10.6's allowlist (expect 0 such flags); the
+  seed-8-class vote-truncation ABORT — repaired by 10.9.1 (a truncating ballot now degrades to a
+  defaulted SKIP, the game finishes; do not file the defaulted ballot as a defect). Invalid
+  accusation/ballot targets are dropped BY DESIGN — the hallucination RATE is the signal, the drop is
+  not a bug. KNOWN-AND-REPORTED on THIS set (PR #150) — your job is to BUILD ON these, not re-discover
+  them as findings: genuine_class_conversion ~2/8, multi_signal ~11/11, over-gate listeners ~1.62,
+  emergency meetings ~7, ejection_accuracy ~0.58 (NON-GATE — never benchmark against the artifact-era
+  0.63); the two OWNER-ACCEPTED deviations (wrong-ejection games 8 vs the W0 ceiling of 7 — the +1 is
+  the seed-12 redirect, owner gated anti-railroad on CHARACTER = no bare-pile-on, not the count; and
+  meetings/game median 1.5 vs 2.0 — within run-to-run variance) — do NOT file either as a finding;
+  the redirect-into-crew DECOMPOSITION (why the redirected-to innocents are ≥0.60) is the headline
+  lens's job, not a re-discovery; the testimony pre-vote folds and emergency meetings firing (the
+  10.7/10.8 mechanisms working); the defaulted ballot (1, seed-8) and ballot redirects (6, seeds
+  12/33/40) telemetry; downward Rule-3 corroboration moves; cross-room/dead-actor same-tick kill
   rejections (engine-correct, informational). Flag only what is genuinely NEW or contradicts the
   PR's self-report (a self-report contradiction IS a high finding).
 - No drive-by suggestions: a recommendation must address a cited finding.
-- Severity: "blocking" = invalidates this baseline's validity (the set must be re-recorded or the
-  engine fixed); "high" = changes the Phase-10 fork decision or its contract; "medium" = worth fixing
-  in/before Phase 10; "low" = opportunistic; "informational" = trend/observation only.
+- Severity: "blocking" = invalidates this baseline's validity for Wave-2 (the set must be re-recorded
+  or the engine fixed); "high" = changes the Wave-2 contract or a pending owner decision; "medium" =
+  worth fixing in/before Wave 2; "low" = opportunistic; "informational" = trend/observation only.
 
 Your lens-specific scope is below. Stay within it; do not duplicate other lenses.
 
@@ -313,117 +360,136 @@ Your lens-specific scope is below. Stay within it; do not duplicate other lenses
 const LENSES = [
   {
     key: 'B',
-    name: 'Pacing, balance & evidence supply (the 10.7 sizing input)',
-    scope: `Characterize the GAME SHAPE that Wave 1's pacing contract (10.7 emergency meeting /
-pacing) must change — every number here sizes that contract. Cover: win split + win-REASON breakdown
-(derive it; if CREWMATE_TASKS dominates with gap-0 task completion, quantify the stopwatch margin —
-how many ticks separate the task win from the kill-clock's parity pace?); game LENGTH distribution
-and MEETINGS per game (the evidence-supply numbers: the 9.8 accumulator needs 2+ reinforcing
-meetings and within-round corroboration needs 2+ signals per meeting — quantify how often games
-supply either: meetings/game histogram, share of games reaching 2+ meetings = the ACCUMULATOR
-RUNWAY, evidence-bearing observations per meeting, witnesses per kill); the accumulator's
-cross-meeting reality from the trajectory facts (carries that survived to the next meeting vs
-erased by the 25% decay first — the decay-rate question 10.7 must answer); kill patterns (rooms,
-tick-of-first-kill cluster, witnessed rate, body-report rate + latency, bodies never reported); the
-emergency button (0 expected — structural absence vs behavior gap; meetings currently trigger only
-on bodies, so impostors control meeting cadence via kill cadence — THE 10.7 lever); per-player task
-pacing (front-loading, the §3.5 denominator shrink); role↔outcome correlations. Report NUMBERS;
-flag degenerate clusters. Severity informational/low unless a trend exposes a defect.`,
+    name: 'Pacing, balance & the emergency channel (did the 10.8 lever land; Wave-2 sizing)',
+    scope: `Characterize the GAME SHAPE on the Wave-1 close baseline and verify the 10.8 emergency
+channel landed as intended — every number is a Wave-2 input. Cover: (1) EMERGENCY CHANNEL (the 10.8
+verification): emergency meetings fired ~7 — break that down (which seeds, caller role, the
+triggering suspicion, did the called meeting reach a vote / change an outcome?); confirm every
+emergency meeting carries NO found_body and nothing downstream assumed one; did emergency meetings
+add the cross-round runway the accumulator needs (an emergency meeting that supplies the 2nd meeting
+for a carry to fold)? An emergency meeting firing on an UN-earned 0.60 (the caller's max traces to
+over-accumulation) is a HIGH finding — coordinate with lens C. (2) PACING/RUNWAY: meetings/game
+histogram + share reaching 2+ (the accumulator runway); is the median ~1.5 a starvation risk or did
+emergency meetings lift the tail? Cross the meetings-count against the win split (the W0 audit found
+pacing INVERTED — more meetings correlated with MORE impostor wins; re-derive that table here and say
+whether Wave-1 broke the inversion). (3) BALANCE: win split + win-REASON breakdown; if CREWMATE_TASKS
+still dominates, the stopwatch margin (ticks between the task win and the kill-clock's parity pace —
+the lab found this a hair-trigger: ~6 ticks of slowdown flips ~25% of outcomes, so REPORT the margin,
+do not propose tuning it). (4) SUPPLY: evidence-bearing observations per meeting, witnesses per kill,
+kill patterns (rooms, first-kill tick cluster, witnessed rate, body-report rate + latency, bodies
+never reported); per-player task pacing + the §3.5 denominator shrink; role↔outcome correlations.
+Report NUMBERS; flag degenerate clusters. Severity informational/low unless a trend exposes a defect
+or the emergency channel misbehaves.`,
   },
   {
     key: 'C',
-    name: 'Wave-1 contract input: testimony lever, fold timing, genuine-class walk',
-    scope: `THE HEADLINE LENS. The instrument is now honest (Wave 0 landed; artifact flag classes ~0)
-and the headline numbers are KNOWN (PR #143: genuine_class_conversion ~1/7, ejection_accuracy ~0.42)
-— do NOT re-discover them; produce the WAVE-1 CONTRACT INPUT. Derive this set's numbers from the
-facts first, then answer FOUR asks with per-meeting walks, each cross-referenced with FACTS roles:
-(1) MISSED-CONVERSION RE-PARTITION on honest bytes: partition EVERY meeting where a living TRUE
-impostor was accused but not ejected into
-(a) weak-flag-sub-gate — a structured flag named the impostor but parked suspicion in [0.5,0.60)
-with no second signal;
-(b1) TESTIMONY CLASS — spoken testimony named the impostor (accusation or sighting claim in a turn)
-but no structured flag reached the OTHER listeners' beliefs; check the witness's own ballot
-(did they vote their accusation?) and the plurality outcome (use the per-subject testimony records
-in the facts: per-voter suspicions, ballots-for-subject, plurality margin);
-(b2) true no-evidence — nobody spoke testimony naming them AND no flag: only more evidence supply
-(longer games, more witnesses — 10.7 territory) can fix these;
-(c) accumulator near-miss — a prior-meeting carry existed and ONE more reinforcing meeting would
-have crossed (count games ending exactly one meeting short);
-(d) strong-evidence-yet-skipped — should be 0 (genuine inversion; HIGH finding if found).
-The prior-era audit (e750b40 set) found b1 DOMINANT: 27 meetings, 22 with witness-ballot
-follow-through that lost plurality. State whether b1 stays dominant on honest bytes — its size IS
-the 10.6 yield ceiling. Cross-set spot-checks: \`git show e750b40:replays/samples/9p2i/replay-seed-N.jsonl\`.
-(2) FOLD-TIMING DECISION TABLE (the pending owner call on 10.6 — this table is the deliverable):
-for EACH testimony-class meeting, simulate both ingestion options using the per-voter rendered
-suspicions in the facts + the §6.3 quantized rule arithmetic, under the two most plausible ingestion
-magnitudes (the 9.8 accusation unit +0.05, deduped per meeting; a weak-band flag-equivalent delta) —
-label each result with its assumed magnitude:
-PRE-VOTE (testimony moves listener beliefs in the SAME meeting, before ballots): would listeners'
-max have crossed 0.60, and would plurality have converted? Then run the SAME rule against testimony
-naming INNOCENTS (the facts carry testimony records for every accused subject, both roles): how
-many innocent ejections would pre-vote ingestion have created? That cascade-risk count is the cost
-column — the owner principle (no single signal/round ejects; corroborate-within-round) is the
-constraint any pre-vote rule must satisfy, so also report how yield/cost shift if ingestion requires
-TWO independent witnesses in-meeting.
-POST-VOTE (next-meeting fold, the existing 9.8 shape): did a next meeting exist at all, and would
-the 25%/meeting decay have erased the carry before it folded in? Report yield under pacing-as-is.
-End with the side-by-side: pre-vote yield/cascade-cost (per magnitude, with and without the
-two-witness requirement) vs post-vote yield — the numbers Daniel decides 10.6 fold timing on.
-(3) GENUINE-CLASS WALK (~7 flags expected): every genuine-class flag (per the 10.4 re-derived
-definition, in the facts), walked end-to-end. Verify the seed-24 conversion at BYTE level: flag →
-delta arithmetic → rendered max >= 0.60 → ballots → plurality → ejection → win attribution; confirm
-it is MECHANISM, not coincidence (would the ejection have happened without the flag?). Bucket each
-non-conversion: sub-gate weak vs over-gate-but-plurality-failed (votes scattered or outvoted).
-(4) DETECTOR HONESTY CONFIRMATION: from the facts flag inventory, confirm the artifact classes are
-actually ~0 on these bytes (compound-label, placeholder, full-weight endpoint), confirm stacking
-cannot reach 1.0 (per-player max-suspicion distribution), and hunt for any NEW artifact class the
-repairs introduced — a canonicalization COLLISION (two genuinely different rooms mapping to one
-canonical label, suppressing a real mismatch) would be a HIGH finding.
-Reference meetings/transcript.py (the repaired classifier), agents/memory/beliefs.py (the 9.8
-rules), eval/vote_correctness.py + eval/meeting_quality.py (the 10.4 metric definitions — the
-one-home source). Cite seed+meeting+turn with votes/roles/suspicion values.`,
+    name: 'Wave-1 close: redirect-into-crew decomposition + structural-gains + residual partition',
+    scope: `THE HEADLINE LENS — the Wave-1 CLOSE GATE. The instrument is honest and the crew evidence
+economy landed; the headline numbers are KNOWN (PR #150: genuine_class ~2/8, multi_signal ~11/11,
+over-gate listeners ~1.62, ejection_accuracy ~0.58 NON-GATE) — do NOT re-discover them. Derive this
+set's numbers from the facts first, then answer FOUR asks with per-meeting byte walks, each
+cross-referenced with FACTS roles:
+(1) THE REDIRECT-INTO-CREW DECOMPOSITION (the headline deliverable). The 10.9.2 ballot-target graph
+guard fired on ~6 redirects across ~3 of the 8 wrong-ejection seeds (reportedly 12/33/40). For EACH
+redirect event (find them via the BALLOT_TARGET_REDIRECT_MARKER on ballot rationale + the facts'
+redirect records): identify the ORIGINAL under-gate target (was it a true impostor? — seed-12's was
+impostor p-1, a lucky-hit the guard correctly refused) and the REDIRECTED-TO candidate (the voter's
+argmax ≥0.60). For every redirect that landed on an INNOCENT, decompose WHY that innocent is rendered
+≥0.60 in the voter's graph: walk the quantized §6.3 arithmetic back to its sources — is the ≥0.60
+(i) EARNED — a genuine flag, a real first-hand sighting, body-proximity, or a multi-meeting
+accumulation from substantive accusations (then the ejection is FAIR: innocents are ejectable, just
+not at random, and this is deduction working); or (ii) OVER-ACCUMULATED — the ≥0.60 traces to
+pile-on bumps, a relevance-gate miss, or a weak-flag that should not have stacked (then the guard
+LAUNDERED an ungrounded-target problem into an over-suspicion problem — a HIGH finding that shapes a
+Wave-2 crew-side fix). Report the earned-vs-over-accumulated split across all redirect-into-crew
+events; that split is the deduction-quality verdict on the whole guard.
+(2) STRUCTURAL-GAINS VERIFICATION (are the wins MECHANISM, not seed-luck?). (a) TESTIMONY FOLD: from
+the facts' fold events, verify the pre-vote two-witness folds at BYTE level — pick the seed-38 m0
+showcase plus 2-3 others: 2+ independent observation-backed voices → every listener +0.05 → at least
+one listener crosses 0.60 → rendered verdict reads MUST-vote → ballot complies → ejection. Confirm a
+freshly-folded ≥0.60 ballot is NOT counted as a threshold_inversion (the render-seam check). Count
+how many of the set's impostor ejections were testimony-fold-driven vs flag-driven vs carry-driven.
+(b) ACCUMULATOR CARRY: reconstruct the ~6 zero-contradiction ejections (no flag named the ejected) —
+walk each subject's cross-meeting suspicion trajectory (prior accusation → +0.05 carry → this
+meeting's rendered ≥0.60); confirm the seed-6-class climb (0.55→0.60 across meetings) is the §6.3
+accumulator converting, with the right quantized deltas. A zero-contradiction ejection whose
+trajectory does NOT reconstruct from accumulation arithmetic is a HIGH finding.
+(3) RESIDUAL CONVERSION-GAP PARTITION (sizes whether Wave-2 needs a crew lever). The re-record found
+30 of ~59 impostor-survivals had a later meeting available — so cadence is NOT the binding
+constraint; the gap is detection→conversion. Partition EVERY living-impostor-accused-not-ejected
+meeting: (a) weak-flag-sub-gate; (b) testimony existed but folded sub-gate (single voice, or two
+voices that still did not cross); (c) over-gate but lost the SKIP-plurality bloc (the tally bar —
+how many voters crossed vs the mandatory-skip count); (d) true no-evidence; (e) strong-evidence-yet-
+skipped = genuine inversion, must be 0 (HIGH if found). Name the DOMINANT residual class — it is the
+single biggest input to whether Wave-2 is impostor-only or needs a paired crew conversion lever.
+(4) BASELINE-VALIDITY + NEW-ARTIFACT HUNT. Confirm for Wave-2 authoring: VARYING_ROOMS-class flags 0
+(the 10.6 allowlist held), no canonicalization COLLISION (two real rooms → one label suppressing a
+mismatch — HIGH if found), stacking cannot reach 1.0, threshold_inversions 0, the defaulted ballot
+and redirects never became inversions. Any NEW artifact the Wave-1 mechanisms introduced (a spurious
+pre-vote fold, an over-eager relevance suppression hiding a real contradiction, an emergency meeting
+firing on an un-earned 0.60) is the find that matters.
+Reference meetings/transcript.py + meetings/manager.py (the repaired classifier, the 10.7 fold, the
+10.9.2 guard), agents/memory/beliefs.py (the 9.8 + two-witness rules), eval/vote_correctness.py +
+eval/meeting_quality.py (the one-home metric definitions). Cite seed+meeting+turn with
+votes/roles/suspicion values.`,
   },
   {
     key: 'D',
-    name: 'Impostor behavior (Wave-2 toolkit input: 10.9 probe / 10.10 contracts)',
+    name: 'Impostor behavior (Wave-2 toolkit input: 10.10 probe / 10.11 contracts)',
     scope: `Assess impostor play from transcripts + FACTS roles — this lens's output is the direct
-input to the Wave-2 deception probe (10.9) and toolkit contracts (10.10), so quantify each TOOLKIT
-GAP, not just "passive". Prior-era anchors to re-derive on THIS set (do not trust them): 0 do_task
-emissions, ~54% of impostor action turns waiting, 2 idlers covering 92/100 top-idle slots.
-(1) blending — do impostors emit do_task/report actions at all (exact counts), and what does their
-movement look like vs crew (stalking? loitering? the idle concentration); (2) under accusation —
-does the reply rebut/deflect/counter-accuse plausibly, does the chain move off them, and how often
-does an accused impostor SURVIVE the vote (the deception-effectiveness number); (3) fabricated
-alibis under the REPAIRED detector — how many impostor alibis drew a flag at all, weak vs strong
-(all fabricated-alibi flags are weak self-stated by construction); quantify how many impostors
-survived specifically BECAUSE their only flag was weak-banded (the shelter count — a Wave-1 design
-tension to surface, not a bug); (4) misdirection — do impostors steer chains at innocents, exploit
-opt_ins, self-report their own kills; did any wrong ejection have impostor votes as the decisive
-margin; (5) teammate coordination quality WITHOUT firewall trips (betrayal must be 0 — Extract
-checks); (6) kill-intent discipline — the cross-room/timing waste classes (share of kill intents
-wasted). Reference observation/service.py, eval/alibi_fabrication.py. Cite seed+meeting+turn.`,
+input to the Wave-2 deception probe (10.10) and toolkit contracts (10.11), so quantify each TOOLKIT
+GAP, not just "passive". The deception LAB (experiments/lab) already established the Wave-2 thesis:
+the 9B cannot INVENT a lie (2/18 spontaneous self-report fabrication) but PERFORMS a handed cover
+story ~92% sheltered — so the toolkit is POLICY-AUTHORED deception (mint a cover story at kill time,
+inject into memory), not a "be deceptive" instruction. This lens supplies the live-bytes baselines
+that toolkit A/B must move. Prior-era anchors to re-derive on THIS set (do not trust them): 0 do_task
+emissions, ~54% of impostor action turns waiting, idle concentration in 2 players.
+(1) BLENDING — do impostors emit do_task/report at all (exact counts; expected 0 — confirm the path
+is policy-unreachable), movement vs crew (loitering, idle concentration); (2) UNDER ACCUSATION — the
+deception-effectiveness number, but SPLIT accused-impostor survival into ACTIVE (a plausible
+rebut/deflect/counter-accuse moved the chain off them) vs PASSIVE (they survived because the crew
+could not convert — that is lens C's missed-conversion mass, NOT deception skill); the lab found ~28
+active / ~25 passive — re-derive the split, because the Wave-2 A/B gates on the ACTIVE subcount;
+(3) THE SELF-ACCUSATION CLASS (the lab's emergence finding — game-deciding, NOT covered by 10.9.2):
+count impostor self-accusations (speaker accuses themself) and trace consequences — did voters ADOPT
+the self-named target (the seed-12-class F2 shape)? The 10.9.2 guard redirects ungrounded targets but
+does not address an impostor STEERING the vote by self-naming; quantify how often this happens and
+whether it helped or hurt the impostor side; (4) FABRICATED ALIBIS under the repaired detector — how
+many impostor alibis drew a flag, weak vs strong; the shelter count (impostors who survived because
+their only flag was weak-banded — a design tension to surface, not a bug); (5) MISDIRECTION — do
+impostors steer chains at innocents, exploit opt_ins, was impostor-vote the decisive margin in any
+wrong ejection (note: the 10.9.2 redirect now reshapes impostor ballots too — flag any interaction);
+(6) TEAMMATE COORDINATION without firewall trips (betrayal must be 0 — Extract checks); (7) KILL-INTENT
+discipline — cross-room/timing waste (share of kill intents wasted — the ~15% MECH-B-1 class).
+Reference observation/service.py, eval/alibi_fabrication.py, impostor_policy.py. Cite seed+meeting+turn.`,
   },
   {
     key: 'H',
-    name: 'Model artifacts: 10.3 effectiveness check (qwen3.5:9b)',
-    scope: `VERIFY the 10.3 prompt levers against the bytes — your job is the shape and the residual,
-not re-discovery. (1) RETRY YIELD: validation-failing openings (narration-only OR guard-emptied
-after target validation) get exactly ONE retry. From the facts' retry aggregates + the bytes: how
-many openings failed validation, how many retries RECOVERED a usable accusation vs failed again,
-what did retries cost (extra calls/tokens), and did any meeting still lose its chain-driving opening
-(instant termination)? A second retry or a retry on a non-failing opening would contradict the
-design — HIGH finding. (2) DEAD-MARKER residual: the prior era hallucinated mostly DEAD-REAL ids
-(17-18 dropped targets, dead players rather than invented names). With roster lines now DEAD-marked
-(v5/v7): did the drop count actually fall, and what shape remains (dead-real vs invented like
-"imp-2")? Read the rendered prompts for 2-3 dropped cases: does the roster render with correct
-DEAD markers (a render bug would be a HIGH finding)? If it renders correctly and the model still
-names the dead, conclude prompt-saturation (contained by the fb3cfa5 guard — model artifact, not a
-fixable prompt bug). (3) FREE_TEXT DISCIPLINE state: length distribution per turn_kind vs the
-~230-char medians of the prior era; for any remaining defaulted turns (2048-cap fail-softs), read
-the raw_response tails — still reasoning-relocation ("Wait... actually..."), or a new shape? Do NOT
-propose a cap raise (frozen; num_ctx overrun risk). (4) Any genuinely NEW 9B tell on this re-record
+    name: 'Model artifacts + Wave-1 fail-soft behavior on the 9B (qwen3.5:9b)',
+    scope: `VERIFY the Wave-1 fail-soft / guard machinery behaved correctly against the 9B's actual
+output shapes, and characterize the residual model artifacts — your job is the shape and the
+residual, not re-discovery. (1) VOTE-BALLOT FAIL-SOFT (10.9.1): there is ~1 defaulted ballot
+(seed-8). Read its bytes — confirm the rationale genuinely ran to the 1024-token cap mid-JSON (the
+truncation class, not a different failure), the degrade stamped VOTE_PARSE_DEFAULT_MARKER, the game
+finished, and the defaulted SKIP rendered under a MUST-SKIP verdict (so it is correct-skip telemetry,
+never a missed_skip or inversion). A defaulted ballot under a MUST-VOTE render that was NOT diverted
+out of the decision census would be a HIGH finding. (2) BALLOT-TARGET REDIRECT (10.9.2) model side:
+for the ~6 redirects, confirm each ORIGINAL target was genuinely under-gate in that voter's rendered
+graph (the guard did not fire spuriously on an at-gate target) and the redirect math (argmax ≥0.60,
+ties lowest id, teammate→SKIP) is exactly right; a redirect that changed a CORRECT ballot is a HIGH
+finding. (lens C owns whether the redirected-to innocent is earned; you own whether the GUARD
+COMPUTED correctly.) (3) OPENING VALIDATION residual (10.3, still live): lost_openings / defaults
+count; for any defaulted opening read the raw_response tail — reasoning-relocation ("Wait...
+actually...") or a new shape? Did any meeting lose its chain-driving opening? Do NOT propose a cap
+raise (frozen; num_ctx overrun risk). (4) DEAD/INVALID-id residual: drop count + shape (dead-real vs
+invented "imp-2"); spot-read 2-3 rendered prompts — roster renders with correct DEAD markers? a
+render bug is HIGH; correct render + model still names the dead = prompt-saturation, contained by the
+guard. (5) FREE_TEXT DISCIPLINE: length distribution per turn_kind vs the ~225-char prior medians;
+the catastrophic-tail rate (a 3000+ char reasoning-relocation opening colliding with a drop marker
+is the H-H-4 corruption class — check the marker bound held). (6) Any genuinely NEW 9B tell
 (fabricated ticks/rooms passing schema, repetition loops, confidence values outside the quantized
-rule-delta lattice). Reference the turn prompts + meetings/manager.py. Cite seed+meeting+turn.`,
+rule-delta lattice, an emergency-meeting opening the v6 branch rendered wrong). Reference the turn
+prompts + meetings/manager.py. Cite seed+meeting+turn.`,
   },
 ]
 
@@ -442,14 +508,16 @@ re-derive them. (Unlike the read-only analysis lenses that follow, THIS Extract 
 updates the extractor script and writes the facts JSON to a temp path.)
 
 START FROM THE COMMITTED EXTRACTOR: audits/workflows/extract_gameplay_facts.py. It is CURRENT through
-the 2026-06-10 post-Wave-1 close audit (role re-derivation via orchestrator.seeder, a full
+the 2026-06-11 post-Wave-0 close audit (role re-derivation via orchestrator.seeder, a full
 advance_tick + apply_meeting_result re-walk with per-tick state-hash verification, hard-rule
 classification, win cross-checks, chain-protocol checks, the SKIP partition via the shared
-eval/_suspicion_parse import, the point-6b decomposition aggregates, fail-loud invariants). UPDATE
-IT IN PLACE (edit the file; it gets committed alongside the audit report) rather than writing a new
-script — most machinery stays; your job is (i) RE-SYNCING every classification to the Wave-0
-repaired one-home sources (point 6b) and (ii) ADDING the testimony / genuine-class / trajectory /
-retry aggregates (point 6c):
+eval/_suspicion_parse import, the point-6b/6c decomposition aggregates, the 10.6 retarget exclusion
+in _genuine_subjects, the ballot confidence field, fail-loud invariants). UPDATE IT IN PLACE (edit
+the file; it gets committed alongside the audit report) rather than writing a new script — most
+machinery stays; your job is (i) RE-SYNCING every classification to the one-home repaired sources
+(point 6b — these are unchanged by Wave 1, the detector source did not move) and (ii) ADDING the
+WAVE-1-CLOSE aggregates the lenses need: redirect records, pre-vote fold events, emergency meetings,
+self-accusations, and the per-subject cross-meeting trajectory (point 6c, extended below):
 
 1. RE-POINT if needed: SAMPLE_DIR / SEEDSET constants -> "${SAMPLE_DIR}" and its basename (likely
    already correct). The roster.json read parameterizes players/impostors/tasks.
@@ -574,6 +642,38 @@ retry aggregates (point 6c):
      validation, retries that recovered a usable accusation vs failed again, extra calls/tokens
      spent, and any meeting that still lost its chain-driving opening.
 
+6d. ADD THE WAVE-1-CLOSE AGGREGATES (NEW this audit — the close-gate lenses depend on these; key
+   markers/fields are in meetings/manager.py and eval/meeting_quality.py, IMPORT the marker
+   constants, never hardcode their text):
+   - REDIRECT RECORDS (10.9.2 — the headline). For every ballot whose rationale carries
+     BALLOT_TARGET_REDIRECT_MARKER: {seed, meeting, voter, voter_role, original_target (parsed from
+     the marker's preserved value) + original_target_role + the voter's rendered suspicion of that
+     original (confirm it was BELOW 0.60 — the guard's precondition), redirected_to_target +
+     role + the voter's rendered suspicion of it (confirm ≥0.60, argmax over the eligible pool),
+     was_coerced_to_SKIP (teammate-only-over-gate case), and the meeting OUTCOME + ejected role}.
+     Aggregate: redirect count, redirected-onto-impostor vs redirected-onto-crew split, and which
+     wrong-ejection games owe their ejected to a redirect (the lens-C headline input).
+   - DEFAULTED-BALLOT RECORDS (10.9.1): every ballot carrying VOTE_PARSE_DEFAULT_MARKER {seed,
+     meeting, voter, voter_role, the voter's rendered verdict (MUST-vote / MUST-skip / no-render),
+     and that the game still reached game_over}. Cross-check against eval.meeting_quality
+     .compute_defaulted_ballots (mismatch = blocking).
+   - PRE-VOTE FOLD EVENTS (10.7): reconstruct each two-witness pre-vote fold from the transcript +
+     the rendered vote-prompt graphs (the fold is LIVE at record time, so the recorded listener
+     suspicions ALREADY include it — do not re-apply it). Per fold: {seed, meeting, subject,
+     subject_role, the independent voices (speaker + their backing observation, confirm distinct,
+     observation-backed, relevance-passing), listeners whose rendered suspicion of the subject is
+     ≥0.60, whether any of those listeners voted to eject, outcome}. This is how lens C verifies
+     the fold is mechanism. (Deriving "voices" — replicate the 10.7 voice predicate by importing
+     it if exposed, else from the transcript per the documented rule; flag if you must approximate.)
+   - EMERGENCY MEETINGS (10.8): every meeting with trigger_kind "emergency" {seed, meeting, caller,
+     caller_role, the caller's rendered max suspicion at call time if recoverable, whether the
+     meeting carried any found_body (MUST be none — a found_body on an emergency meeting is a
+     blocking finding), outcome}. Aggregate emergency count + body-report count (should partition
+     the meeting total).
+   - SELF-ACCUSATIONS (the lab's emergence class): every accusation where speaker == accused
+     {seed, meeting, speaker, speaker_role, and whether any OTHER voter then targeted that speaker
+     (adoption)} — the game-deciding impostor-self-steer the 10.9.2 guard does not cover.
+
 7. SELF-CHECK INVARIANTS (keep the existing fail-loud set: per-seed impostor count == roster,
    games_analyzed == file count, meeting-record count match, kill-victim/death consistency,
    state-hash matches) and ADD: every meeting's transcript.turns is non-empty with exactly one
@@ -612,7 +712,7 @@ const mechanicalFindings = (extract.mechanical_findings || []).map((f, i) => ({
 log(`Extract complete: ${extract.games_analyzed} games. ${mechanicalFindings.length} code-certain violations. Facts at ${factsPath}.`)
 
 // ---------------------------------------------------------------------------
-// Phase 2: Analyze (4 parallel lenses — C Wave-1-input headline on Fable,
+// Phase 2: Analyze (4 parallel lenses — C Wave-1-close headline on Fable,
 // B/D/H on Opus; the cut lenses' live questions were folded into C/B/H or the
 // extractor, see the header)
 // ---------------------------------------------------------------------------
@@ -631,8 +731,9 @@ const lensReports = await parallel(
         label: `analyze:${l.key}-${l.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 28)}`,
         phase: 'Analyze',
         schema: FINDINGS_SCHEMA,
-        // The Wave-1 contract input (testimony sizing + fold-timing table)
-        // rides on lens C — Fable; the characterization lenses run on Opus.
+        // The Wave-1 close headline (redirect-into-crew decomposition +
+        // structural-gains verification) rides on lens C — Fable; the
+        // characterization lenses run on Opus.
         model: l.key === 'C' ? 'fable' : 'opus',
       }
     )
@@ -691,18 +792,25 @@ roles), or the cited metric/rule source. Work ALL THREE angles:
    deterministic (a short chain, an un-extended opt_in accusation, or an immediate opening-turn
    termination is the rule working); §3.5 drops a dead owner's incomplete task instances (a
    shrinking task denominator is correct); the §4.6 skip rule intentionally biases toward SKIP
-   under low confidence; AND the Wave-1 suspicion mechanics (DESIGN.md §6.3, the audit's known
-   layer): a lone WEAK contradiction (self-stated alibi or narrow window) landing in [0.5,0.60)
-   without ejecting is the 9.7 DESIGN; an accusation not moving its OWN meeting's ballots is the
-   9.8 fold-after-vote DESIGN; a single meeting never ejecting on accumulator alone ("no single
-   round ejects") is the OWNER PRINCIPLE; suspicion decaying toward 0.5 across quiet meetings is
-   Rule 5; AND the Wave-0 instrument layer (10.1-10.4, landed ON this set): canonicalized room
-   labels, endpoint sightings weak-banded, alibi_conflict weak-classified, capped/deduped flag
-   deltas (no 1.0 stacking), Rule-3 DOWNWARD corroboration moves, exactly ONE opening-validation
-   retry, and a hard drop in total contradiction volume vs the prior era are all BY DESIGN here;
-   invalid-target drops are the fb3cfa5 guard working; a metric's documented caveat is not a bug.
-   Check DESIGN.md §3.5/§5.2/§6.3, engine/rules.py, meetings/manager.py, meetings/transcript.py,
-   agents/memory/beliefs.py, or the metric source before confirming.
+   under low confidence; AND the suspicion mechanics (DESIGN.md §6.3): a lone WEAK contradiction
+   (self-stated alibi or narrow window) landing in [0.5,0.60) without ejecting is the 9.7 DESIGN;
+   a SINGLE-voice accusation not moving its own meeting's ballots is the 9.8 post-vote-fold DESIGN;
+   a single meeting never ejecting on accumulator alone ("no single round ejects") is the OWNER
+   PRINCIPLE; suspicion decaying toward 0.5 across quiet meetings is Rule 5; the Wave-0 instrument
+   layer (canonicalized rooms, weak-banded endpoints/alibi_conflict, capped flag deltas, Rule-3
+   DOWNWARD moves) is BY DESIGN; AND THE WAVE-1 CREW ECONOMY (10.6-10.9.2, landed ON this set): a
+   2+ INDEPENDENT-witness pre-vote fold lifting listeners over 0.60 before ballots is the 10.7
+   DESIGN (a freshly-folded MUST-vote ballot is NOT an inversion); a re-targeted-proxy weak flag
+   naming the proxy speaker and a relevance-gated spawn-window/kill-scene sighting NOT corroborating
+   are the 10.6 DESIGN; an emergency meeting with no found_body called on a ≥0.60 max is the 10.8
+   DESIGN; a twice-failed ballot degrading to a marked SKIP (game continues) is the 10.9.1 DESIGN
+   and is never an inversion; an under-gate eject target REDIRECTED to the voter's argmax ≥0.60
+   candidate (even when that lands on an innocent) is the 10.9.2 DESIGN — graph-consistent, NOT a
+   railroad (the OPEN question is whether the redirected-to ≥0.60 is EARNED, which is a deduction-
+   quality finding lens C decomposes, NOT a mechanical refutation). The invalid-target drop is the
+   fb3cfa5 guard; a metric's documented caveat is not a bug. Check DESIGN.md §3.5/§5.2/§6.3,
+   engine/rules.py, meetings/manager.py, meetings/transcript.py, agents/memory/beliefs.py, or the
+   metric source before confirming.
 3. Context: is there invalidating context elsewhere in the set (other seeds/meetings), a numeric
    error, or a token-proxy time-waste claim presented as a latency claim (no wall-clock exists)?
 
@@ -713,7 +821,7 @@ cannot be verified either way after honest effort, set refuted=true with reasoni
         label: `verify:${f.fully_qualified_id}`,
         phase: 'Verify',
         schema: VERDICT_SCHEMA,
-        // The headline lens's findings drive the Wave-1 contracts — strongest skeptics.
+        // The headline lens's findings drive the Wave-2 contracts — strongest skeptics.
         model: f.lens_key === 'C' ? 'fable' : 'opus',
       }
     ).then((verdict) => {
@@ -789,12 +897,14 @@ const synthesisInput = {
 
 const synthesis = await agent(
   `You are synthesizing a gameplay-data audit of AiLibi's committed replay set ${SAMPLE_DIR} — the
-post-Wave-0 close audit of Phase 10 (9p/2i on qwen3.5:9b @ 59e4111; the Wave-0 instrument repairs
-landed, making this the first HONEST baseline — known headline per PR #143: genuine_class_conversion
-~1/7, ejection_accuracy ~0.42, artifact flag classes ~0). The audit's purpose is the WAVE-1 CONTRACT
-INPUT (10.6 testimony ingestion + 10.7 emergency-meeting/pacing, plus the Wave-2 impostor work): the
-verdict is about baseline VALIDITY + whether the analysis surfaced anything NEW, not about
-re-reporting the known-low conversion. A deterministic extractor produced code-certain rule/protocol
+WAVE-1 CLOSE audit of Phase 10 (9p/2i on qwen3.5:9b @ 0ed6962; the full crew evidence economy landed
+— 10.6 instrument integrity, 10.7 pre-vote two-witness testimony fold, 10.8 emergency meeting, 10.9.1
+vote fail-soft, 10.9.2 ballot-target guard; known headline per PR #150: genuine_class ~2/8,
+multi_signal ~11/11, over-gate listeners ~1.62, emergency ~7, ejection_accuracy ~0.58 NON-GATE,
+wrong-ejection games 8, two owner-accepted deviations). The audit is the WAVE-1 CLOSE GATE: judge
+whether the baseline is VALID for Wave-2 authoring, decompose the redirect-into-crew pattern, confirm
+the testimony/accumulator gains are structural, and produce the Wave-2 contract input — NOT
+re-reporting the known headline. A deterministic extractor produced code-certain rule/protocol
 violations (NOT subject to refutation) plus the decomposition aggregates; the analysis lenses produced
 judgment findings; each judgment finding faced ONE adversarial skeptic —
 refuted findings were dropped, and any finding whose skeptic failed to run carries unverified:true.
@@ -805,41 +915,44 @@ Input data (JSON):
 ${JSON.stringify(synthesisInput, null, 2)}
 
 Your output has two parts:
-1. Structured synthesis: verdict (CLEAN / MINOR_ISSUES / SIGNIFICANT_ISSUES) + rationale — the
-   regression itself is KNOWN and does NOT by itself drive the verdict; judge baseline validity and
-   what is NEW; notable_trends (evidence-backed, with numbers); improvement_proposals (group related
-   findings; one proposal per group with a reproducible scope sketch — cite the seed+tick/meeting+turn
-   to reproduce — and a priority, where "urgent" = invalidates this baseline / must fix before ANY
-   next wave, "phase-10-input" = must shape a Phase-10 Wave-1/2 contract (10.6 testimony, 10.7
-   pacing, 10.9/10.10 impostor) or a pending owner decision, "opportunistic" = later).
+1. Structured synthesis: verdict (CLEAN / MINOR_ISSUES / SIGNIFICANT_ISSUES) + rationale — the known
+   headline numbers and the two owner-accepted deviations do NOT by themselves drive the verdict;
+   judge baseline VALIDITY for Wave-2 and what is NEW (especially the redirect-into-crew earned-vs-
+   over-accumulated split); notable_trends (evidence-backed, with numbers); improvement_proposals
+   (group related findings; one proposal per group with a reproducible scope sketch — cite the
+   seed+tick/meeting+turn to reproduce — and a priority, where "urgent" = invalidates this baseline /
+   must fix before Wave 2, "phase-10-input" = must shape a Wave-2 contract (10.10 deception probe,
+   10.11 toolkit, 10.12 metrics) or a pending owner decision (e.g. a crew-side over-accumulation fix,
+   the self-accusation class), "opportunistic" = later).
 2. report_markdown: the full Markdown report body, to be written to
    audits/audit-YYYY-MM-DD-HHMM-gameplay-data.md. Use this section structure:
-   - "# Gameplay Data Audit — YYYY-MM-DD HH:MM (${SAMPLE_DIR}, post-Wave-0 close, Phase 10)"
+   - "# Gameplay Data Audit — YYYY-MM-DD HH:MM (${SAMPLE_DIR}, Wave-1 close, Phase 10)"
    - "## 1. Verdict" (CLEAN | MINOR_ISSUES | SIGNIFICANT_ISSUES + 2-3 paragraphs; state explicitly
-     whether the baseline is VALID and what the numbers say Wave 1 — 10.6 fold timing + 10.7
-     pacing — should do)
+     whether the baseline is VALID for Wave-2 authoring and what the redirect-into-crew decomposition
+     says the crew side still needs, if anything)
    - "## 2. Environment" (timestamp from \`date\`, audited HEAD from \`git log -1 --oneline\`, sample
      dir, games analyzed, mechanical vs judgment finding counts, refute rate)
    - "## 3. Confirmed bugs & rule violations" (mechanical findings first — labelled code-certain —
      then surviving correctness judgment findings; use the verifier-adjusted severity and note
      where severity_adjusted_by_verifier is true; cite evidence + repair hint)
-   - "## 4. Wave-1 contract input (headline)" — the four asks with COUNTS: (1) the
-     missed-conversion re-partition (weak-sub-gate / TESTIMONY class / true no-evidence /
-     accumulator-near-miss / inversion) — state whether the testimony class stays dominant and its
-     size, the 10.6 yield ceiling; (2) THE FOLD-TIMING DECISION TABLE — pre-vote yield +
-     innocent-cascade cost (per assumed ingestion magnitude, with and without a two-witness
-     requirement) vs post-vote yield under pacing-as-is; render it as an actual table — it is the
-     owner's 10.6 decision input; (3) the genuine-class walk (seed-24 mechanism-or-coincidence
-     verdict; non-conversion buckets); (4) the detector honesty confirmation (artifact classes ~0,
-     stacking capped, any NEW artifact class). End with ONE paragraph: what these numbers recommend
-     for 10.6 (fold timing + expected yield) and how they size 10.7.
-   - "## 5. Pacing, balance & evidence supply (the 10.7 sizing input)" (game length, meetings/game,
-     the accumulator runway + decay-erasure counts, evidence/meeting, witnesses/kill, the stopwatch
-     margin, the emergency-button structural note)
-   - "## 6. Impostor behavior & model artifacts" (the Wave-2 toolkit gaps quantified — the 10.9/10.10
-     input; the 10.3 effectiveness check — retry yield, DEAD-marker residual, free_text state)
-   - "## 7. Metric & coverage notes" (any metric that would mislead a Wave-1 A/B; seed coverage;
-     sentinel states)
+   - "## 4. Wave-1 close: redirect, structural gains, residual gap (headline)" — the four asks with
+     COUNTS: (1) THE REDIRECT-INTO-CREW DECOMPOSITION — per-redirect earned-vs-over-accumulated split
+     (render the redirects as a table: seed, original under-gate target + role, redirected-to + role,
+     why ≥0.60, earned/over-accumulated), the verdict on whether the 10.9.2 guard is sound or
+     launders over-suspicion; (2) STRUCTURAL-GAINS VERIFICATION — testimony folds + accumulator
+     carries byte-verified as mechanism (the counts: ejections testimony-fold-driven / flag-driven /
+     carry-driven), the render-seam inversion check; (3) RESIDUAL CONVERSION-GAP partition with the
+     DOMINANT class named (the input to whether Wave-2 needs a crew lever); (4) baseline validity +
+     any NEW artifact. End with ONE paragraph: is the baseline VALID for Wave-2, and does the crew
+     side need a paired fix first.
+   - "## 5. Pacing, balance & the emergency channel" (the 10.8 verification — emergency count +
+     behavior + body-less correctness; meetings/game + runway; the pacing-inversion re-derivation;
+     the stopwatch margin REPORTED not tuned)
+   - "## 6. Impostor behavior & model artifacts (Wave-2 input)" (the toolkit gaps quantified — the
+     active-vs-passive survival split, the self-accusation class, do_task/idle/kill-waste; the
+     Wave-1 fail-soft model-side checks — defaulted ballot, redirect computation, opening residual)
+   - "## 7. Metric & coverage notes" (any metric that would mislead a Wave-2 A/B; the corrected_w1
+     baseline; seed coverage; sentinel states)
    - "## 8. Improvement proposals" (one subsection each: proposed_id, title, finding ids, scope
      sketch with a reproduction citation, priority)
    - "## 9. Lens coverage notes" (per-lens what-was-examined)
@@ -856,7 +969,7 @@ Report the final written path in the "summary" field.`,
     label: 'synthesize',
     phase: 'Synthesis',
     schema: SYNTHESIS_SCHEMA,
-    // The capstone judgment — the fork recommendation rides on it.
+    // The capstone judgment — the Wave-2 readiness verdict rides on it.
     model: 'fable',
   }
 )
