@@ -12,7 +12,13 @@ from engine.world import Map, WorldState, load_canonical_map
 from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.fake_provider import FakeProvider
 from llm.provider import LLMCallFailure, _attach_parse_failure  # noqa: PLC2701
-from meetings.manager import DefaultedCall, MeetingTrigger, SuspicionEntry
+from meetings.manager import (
+    VOTE_PARSE_DEFAULT_MARKER,
+    DefaultedCall,
+    LLMProviderError,
+    MeetingTrigger,
+    SuspicionEntry,
+)
 from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
@@ -1192,10 +1198,14 @@ def test_provider_validation_default_preserves_spend_end_to_end(
     assert all("opening" in f.error_message for f in failed)
 
 
-class _OpeningDefaultsThenBallotAbortsClient:
-    """Opening returns invalid text (manager-side default after retry); the
-    first ballot returns invalid text so ``VoteBallot.model_validate_json``
-    raises and ABORTS the meeting. The opening default must survive the abort.
+class _OpeningDefaultsThenBallotsDefaultClient:
+    """Opening AND ballots return invalid text — every call fails validation.
+
+    Pre-10.9.1 this client ABORTED the game on the first ballot (votes had
+    no fail-soft; the seed-8 / PR #147 F1 shape). Under the vote-ballot
+    fail-soft the same payloads degrade: the opening to its placeholder
+    default (after the retry) and every ballot to a marked SKIP, so the
+    meeting resolves and the run continues.
     """
 
     async def complete(
@@ -1210,20 +1220,30 @@ class _OpeningDefaultsThenBallotAbortsClient:
         agent_id: str | None = None,
     ) -> LLMResponse:
         # "{}" is invalid for both MeetingTurn and VoteBallot. The turn path
-        # fail-softs into a default; the vote path re-raises (votes do not
-        # fail-soft) and aborts the meeting.
+        # fail-softs into a default (Task 7.10); since Task 10.9.1 the vote
+        # path fail-softs too (a marked SKIP) instead of re-raising.
         return LLMResponse(
             text="{}",
             usage=TokenUsage(input_tokens=1, output_tokens=1),
             cost_usd=0.0,
-            model=model or "aborts",
+            model=model or "all-invalid",
         )
 
 
-def test_default_recorded_when_a_later_ballot_aborts(
+def test_malformed_ballots_no_longer_abort_and_every_default_is_recorded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A default that fired before a meeting-aborting ballot is still recorded."""
+    """The PR #147 F1 abort path is unreachable from a malformed ballot.
+
+    The orchestrator-level read-verify for Task 10.9.1: the exact client
+    shape that used to kill the game (every completion schema-invalid) now
+    yields a RESOLVED meeting — the opening placeholder-defaults, every
+    ballot degrades to a ``VOTE_PARSE_DEFAULT_MARKER`` SKIP, the meeting
+    row records, and one zero-spend ``deadline_default`` visibility row
+    per fired default reaches the replay through the UNCHANGED
+    ``_record_deadline_defaults`` writer (no new trigger literal; the
+    pre-existing ``validation`` trigger + ``vote`` phase name the rows).
+    """
 
     game_map = load_canonical_map()
     body_id = _seed_meeting_with_body(monkeypatch, game_map=game_map)
@@ -1236,7 +1256,98 @@ def test_default_recorded_when_a_later_ballot_aborts(
         )
 
     runner = build_default_meeting_runner(
-        llm_client=_OpeningDefaultsThenBallotAbortsClient()
+        llm_client=_OpeningDefaultsThenBallotsDefaultClient()
+    )
+    replay_path = tmp_path / "ballots-default-no-abort.jsonl"
+    game = HeadlessGame(
+        seed=2026,
+        game_map=game_map,
+        agent_factory=factory,
+        replay_path=replay_path,
+        scheduler=TickScheduler(max_ticks=6),
+        meeting_runner=runner,
+    )
+    game.run()  # completes; the old behavior raised ValidationError here
+
+    entries = read_all_entries(replay_path)
+    # The meeting resolved and recorded; every ballot is the marked
+    # degraded SKIP, so the tally is a clean SKIPPED, not a crash.
+    meeting = next(e for e in entries if isinstance(e, MeetingReplayEntry))
+    assert meeting.outcome == "SKIPPED"
+    marker_prefix = VOTE_PARSE_DEFAULT_MARKER.split("{head!r}")[0]
+    assert meeting.ballots
+    assert all(b.target == "SKIP" for b in meeting.ballots)
+    assert all(b.rationale_text.startswith(marker_prefix) for b in meeting.ballots)
+    # One visibility row per fired default: the opening (validation, after
+    # its retry) plus one per degraded ballot — none lost, none double-spent
+    # (manager-side validation rows are zero-spend; llm_calls holds the real
+    # spend).
+    deadline_defaults = [
+        e
+        for e in entries
+        if isinstance(e, FailedCallReplayEntry) and e.error_type == "deadline_default"
+    ]
+    opening_rows = [e for e in deadline_defaults if "opening" in e.error_message]
+    vote_rows = [
+        e for e in deadline_defaults if "vote defaulted (validation)" in e.error_message
+    ]
+    assert len(opening_rows) == 1
+    assert len(vote_rows) == len(meeting.ballots)
+    assert len(deadline_defaults) == len(opening_rows) + len(vote_rows)
+
+
+class _OpeningDefaultsThenBallotTransportAbortsClient:
+    """Opening returns invalid text (manager-side default after retry); the
+    first ballot raises a transport ``TimeoutError``, which the manager
+    re-tags ``LLMProviderError`` and propagates — the abort vector that
+    REMAINS fail-loud after Task 10.9.1 (only deadline + parse failures
+    fail soft). The opening default must survive that abort.
+    """
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if schema is VoteBallot:
+            raise TimeoutError("provider transport timeout")
+        return LLMResponse(
+            text="{}",
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "transport-aborts",
+        )
+
+
+def test_default_recorded_when_a_later_ballot_aborts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A default that fired before a meeting-aborting ballot is still recorded.
+
+    The gp-2 abort-survival pin, re-anchored on the abort vector that still
+    exists after Task 10.9.1: a provider/transport failure on the ballot
+    (``LLMProviderError``) — a malformed ballot no longer aborts (see
+    ``test_malformed_ballots_no_longer_abort_and_every_default_is_recorded``).
+    """
+
+    game_map = load_canonical_map()
+    body_id = _seed_meeting_with_body(monkeypatch, game_map=game_map)
+
+    def factory(agent_id: PlayerId, role: Role) -> _MeetingAwareReporter:
+        return _MeetingAwareReporter(
+            agent_id=agent_id,
+            role=role,
+            report_body_id=body_id if agent_id == "p-1" else None,
+        )
+
+    runner = build_default_meeting_runner(
+        llm_client=_OpeningDefaultsThenBallotTransportAbortsClient()
     )
     replay_path = tmp_path / "abort-after-default.jsonl"
     game = HeadlessGame(
@@ -1247,7 +1358,7 @@ def test_default_recorded_when_a_later_ballot_aborts(
         scheduler=TickScheduler(max_ticks=6),
         meeting_runner=runner,
     )
-    with pytest.raises(ValidationError):
+    with pytest.raises(LLMProviderError):
         game.run()
 
     entries = read_all_entries(replay_path)

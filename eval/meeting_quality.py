@@ -72,6 +72,19 @@ the report builder publishes both and the corrected Wave-0 baseline
 fixture (``tests/fixtures/phase10/corrected_w0_baseline.json``) is their
 committed home until the 10.9 re-record.
 
+Phase 10 Wave 1 repair (Task 10.9.1, PR #147 F1) extends the SKIP
+partition with a DEFAULTED class in this module:
+
+* *Defaulted-ballot census* — the ballots the meeting layer's vote
+  fail-soft degraded to SKIP, keyed on
+  :data:`~meetings.manager.VOTE_PARSE_DEFAULT_MARKER` and split by the
+  rendered §4.6 verdict (:func:`compute_defaulted_ballots` /
+  :class:`DefaultedBallotReport`). The decision census in
+  :func:`compute_conversion_report` diverts these ballots (a degraded
+  SKIP is never a missed skip and never a threshold inversion); like the
+  Task 10.6 metrics this surface stays off the frozen
+  :class:`TournamentEvalReport` wrapper until the 10.9 re-record.
+
 :class:`~eval.report_schema.TournamentReport` is frozen with
 ``extra="forbid"``, so the metric outputs cannot be added as fields on it.
 They live instead on :class:`TournamentEvalReport`, a frozen wrapper that
@@ -121,7 +134,11 @@ from eval.vote_correctness import (
     compute_vote_correctness,
     genuine_class_subjects,
 )
-from meetings.manager import INVALID_VOTE_TARGET_MARKER, TEAMMATE_VOTE_TARGET_MARKER
+from meetings.manager import (
+    INVALID_VOTE_TARGET_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
+)
 from meetings.schemas import AccusationClaim, PlayerId
 from meetings.transcript import detect_contradictions, is_weak_contradiction
 
@@ -138,6 +155,15 @@ _INVALID_VOTE_MARKER_PREFIX: Final[str] = INVALID_VOTE_TARGET_MARKER.split(
 )[0]
 _TEAMMATE_VOTE_MARKER_PREFIX: Final[str] = TEAMMATE_VOTE_TARGET_MARKER.split(
     "{target!r}"
+)[0]
+# The Task 10.9.1 parse-default marker prefix (the text minus the
+# ``{head!r}`` placeholder): the manager's vote fail-soft stamps it as the
+# WHOLE ``rationale_text`` of a ballot that degraded to SKIP after its
+# completion failed schema validation (PR #147 F1, the seed-8
+# vote-truncation abort). The prefix keys the DEFAULTED class of the SKIP
+# partition below.
+_VOTE_PARSE_DEFAULT_MARKER_PREFIX: Final[str] = VOTE_PARSE_DEFAULT_MARKER.split(
+    "{head!r}"
 )[0]
 
 # ---------------------------------------------------------------------------
@@ -403,6 +429,15 @@ class ConversionReport(BaseModel):
       ``missed_skip_ballots`` (rendered max met the threshold yet the voter
       SKIPped), and ``unclassified_skip_ballots`` (no rendered gate line was
       found for the voter — older prompt version or missing vote call).
+      Task 10.9.1 narrows the census to voter DECISIONS: a SKIP stamped with
+      the parse-default marker
+      (:data:`~meetings.manager.VOTE_PARSE_DEFAULT_MARKER`, the manager's
+      vote fail-soft over an unparseable completion — PR #147 F1) enters
+      these buckets only when it coincides with a correct skip; under a
+      MUST-vote render or with no rendered verdict it is DIVERTED to the
+      standalone :class:`DefaultedBallotReport` census instead, so a
+      degraded SKIP can never read as a missed skip or a genuine
+      ``threshold_inversions`` entry.
     * ``missed_skip_ballots`` is a **SENTINEL, not a down-is-good metric**:
       it partitions exactly into ``missed_skip_impostor_voters`` (the voter
       is an impostor — the audited exclusion class: impostor in-character
@@ -585,7 +620,11 @@ def compute_conversion_report(
     the shared :func:`eval._suspicion_parse.parse_rendered_max_suspicion`
     (the voter's per-ballot gate input survives nowhere else; the rendered
     max is computed over LIVING ejection candidates by construction — the
-    template filters ``candidate_targets``). A voter with no parsed gate line
+    template filters ``candidate_targets``). A parse-DEFAULTED skip (Task
+    10.9.1: the ``VOTE_PARSE_DEFAULT_MARKER``-stamped fail-soft ballot) is
+    counted here only as a correct skip under a MUST-skip render; otherwise
+    it is diverted to :func:`compute_defaulted_ballots` (see the
+    :class:`ConversionReport` docstring). A voter with no parsed gate line
     is ``unclassified``, never assumed correct. MISSED ballots partition
     role-first: an impostor voter lands in ``missed_skip_impostor_voters``
     regardless of any normalization marker (the audited exclusion class —
@@ -648,8 +687,26 @@ def compute_conversion_report(
             for ballot in meeting.ballots:
                 if ballot.target != "SKIP":
                     continue
-                skip_ballots += 1
                 rendered_max = rendered_max_by_voter.get(ballot.voter)
+                # DEFAULTED diversion (Task 10.9.1; PR #147 F1): a SKIP
+                # stamped with the parse-default marker is the manager's
+                # fail-soft net, never the voter's decision, so it enters
+                # this decision census only when it coincides with a
+                # correct skip -- under a MUST-skip render the recorded
+                # SKIP complies with the verdict and counts correct as
+                # ever. Under a MUST-vote render, or with no rendered
+                # verdict at all (a REAL provider's failed call raises
+                # before the recording client logs its prompt), the ballot
+                # is censused by :func:`compute_defaulted_ballots` instead:
+                # NEVER a missed skip and NEVER a threshold inversion -- a
+                # degraded SKIP miscounted as a genuine inversion would
+                # poison the §4.6 0-inversion HARD line on the very
+                # re-record the fail-soft exists to unblock.
+                if _VOTE_PARSE_DEFAULT_MARKER_PREFIX in ballot.rationale_text and (
+                    rendered_max is None or rendered_max >= SKIP_SUSPICION_THRESHOLD
+                ):
+                    continue
+                skip_ballots += 1
                 if rendered_max is None:
                     unclassified_skip_ballots += 1
                 elif rendered_max < SKIP_SUSPICION_THRESHOLD:
@@ -686,6 +743,137 @@ def compute_conversion_report(
         missed_skip_teammate_coerced=missed_skip_teammate_coerced,
         missed_skip_invalid_target=missed_skip_invalid_target,
         threshold_inversions=threshold_inversions,
+    )
+
+
+class DefaultedBallotReport(BaseModel):
+    """The DEFAULTED extension of the SKIP partition (Task 10.9.1; PR #147 F1).
+
+    Frozen value object censusing the ballots the meeting layer's vote
+    fail-soft degraded to SKIP -- keyed on the pinned
+    :data:`~meetings.manager.VOTE_PARSE_DEFAULT_MARKER` -- split by the
+    voter's rendered §4.6 verdict, reported beside the coerced/missed
+    counts so the two by-design SKIP rewrites (teammate coercion, parse
+    default) stay separately measurable:
+
+    * ``defaulted_skip_ballots`` -- every marker-bearing SKIP ballot (the
+      census headline; partitions exactly into the three buckets below).
+    * ``defaulted_under_must_vote`` -- the rendered max met the threshold
+      (the verdict read MUST vote). The DoD class: such a ballot is the
+      system's net over an unparseable response, NEVER a genuine
+      ``threshold_inversions`` entry and never a silent
+      ``missed_skip_ballots`` entry -- :func:`compute_conversion_report`
+      diverts it out of the decision census entirely, because a degraded
+      SKIP miscounted as an inversion would poison the §4.6 0-inversion
+      HARD line.
+    * ``defaulted_under_must_skip`` -- the rendered max was below the
+      threshold, so the degraded SKIP coincides with the correct decision:
+      it stays a ``correct_skip_ballots`` entry in the decision census and
+      appears here as telemetry only (the one deliberate overlap between
+      the two surfaces).
+    * ``defaulted_without_render`` -- no rendered gate line was recovered
+      for the voter. This is the common REAL-provider shape: a provider
+      that validates internally raises before the recording client can
+      log the vote call, so the prompt (and its rendered verdict) never
+      reaches ``llm_calls`` -- the marker is then the only witness, which
+      is why the bucket is keyed on it rather than left to drown in
+      ``unclassified_skip_ballots``.
+
+    Like the Task 10.6 gate-spec metrics this does NOT join
+    :class:`TournamentEvalReport` yet: the committed sample reports stay
+    single-era (no regeneration without a re-record), so
+    :class:`ConversionReport`'s serialized shape is frozen and this
+    surface ships standalone until the 10.9 re-record turns the era over.
+
+    **Leak-safety.** Four integers; no roles, transcripts, or engine-owned
+    types.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    defaulted_skip_ballots: int
+    defaulted_under_must_vote: int
+    defaulted_under_must_skip: int
+    defaulted_without_render: int
+
+    @model_validator(mode="after")
+    def _validate_buckets(self) -> DefaultedBallotReport:
+        counts = (
+            self.defaulted_skip_ballots,
+            self.defaulted_under_must_vote,
+            self.defaulted_under_must_skip,
+            self.defaulted_without_render,
+        )
+        if any(count < 0 for count in counts):
+            raise ValueError("defaulted-ballot counts must be non-negative")
+        parts = (
+            self.defaulted_under_must_vote
+            + self.defaulted_under_must_skip
+            + self.defaulted_without_render
+        )
+        if parts != self.defaulted_skip_ballots:
+            raise ValueError(
+                "must-vote + must-skip + without-render must equal "
+                f"defaulted_skip_ballots: {self.defaulted_under_must_vote} + "
+                f"{self.defaulted_under_must_skip} + "
+                f"{self.defaulted_without_render} != {self.defaulted_skip_ballots}"
+            )
+        return self
+
+
+def compute_defaulted_ballots(
+    report: TournamentReport | Sequence[GameReport],
+) -> DefaultedBallotReport:
+    """Fold a tournament report into the DEFAULTED-ballot census (Task 10.9.1).
+
+    Accepts either a :class:`~eval.report_schema.TournamentReport` or a bare
+    sequence of :class:`~eval.report_schema.GameReport` (matching the other
+    analyzers' signature). Pure: no I/O, no engine/agent/LLM calls.
+
+    A ballot is DEFAULTED iff it is a SKIP carrying the pinned
+    :data:`~meetings.manager.VOTE_PARSE_DEFAULT_MARKER` prefix; its bucket
+    is the voter's rendered §4.6 verdict, recovered through the same
+    :func:`eval._suspicion_parse.parse_rendered_max_suspicion` walk the
+    decision census uses, so the two surfaces can never disagree about a
+    voter's verdict. Role-blind: the degrade fires on response bytes, not
+    on who voted.
+    """
+
+    games = report.games if isinstance(report, TournamentReport) else tuple(report)
+
+    defaulted = 0
+    under_must_vote = 0
+    under_must_skip = 0
+    without_render = 0
+
+    for game in games:
+        for meeting in game.meetings:
+            rendered_max_by_voter: dict[PlayerId, float] = {}
+            for call in meeting.llm_calls:
+                if call.agent_id is None:
+                    continue
+                rendered = parse_rendered_max_suspicion(call.prompt)
+                if rendered is not None:
+                    rendered_max_by_voter[call.agent_id] = rendered
+            for ballot in meeting.ballots:
+                if ballot.target != "SKIP":
+                    continue
+                if _VOTE_PARSE_DEFAULT_MARKER_PREFIX not in ballot.rationale_text:
+                    continue
+                defaulted += 1
+                rendered_max = rendered_max_by_voter.get(ballot.voter)
+                if rendered_max is None:
+                    without_render += 1
+                elif rendered_max >= SKIP_SUSPICION_THRESHOLD:
+                    under_must_vote += 1
+                else:
+                    under_must_skip += 1
+
+    return DefaultedBallotReport(
+        defaulted_skip_ballots=defaulted,
+        defaulted_under_must_vote=under_must_vote,
+        defaulted_under_must_skip=under_must_skip,
+        defaulted_without_render=without_render,
     )
 
 
@@ -1553,6 +1741,7 @@ __all__ = [
     "CHANNEL_PRIOR_MEETING_CARRY",
     "CHANNEL_VENT_WITNESS",
     "ConversionReport",
+    "DefaultedBallotReport",
     "GateMetricsReport",
     "MeetingRateReport",
     "MultiSignalConversionReport",
@@ -1560,6 +1749,7 @@ __all__ = [
     "TournamentEvalReport",
     "build_tournament_eval_report",
     "compute_conversion_report",
+    "compute_defaulted_ballots",
     "compute_gate_metrics",
     "compute_meeting_rate",
     "compute_multi_signal_conversion",
