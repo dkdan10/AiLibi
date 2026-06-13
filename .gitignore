@@ -23,3 +23,6 @@ replays/*.jsonl
 replays/tournament-eval-report.json
 # Internal leak-test packet logs from the observation firewall — never commit.
 **/*.audit.jsonl
+
+# Design-thread local working docs (not committed; the canonical plan lives in tasks/ + memory)
+*.local.md

@@ -720,38 +720,231 @@ anti-railroad gate is the arbiter) and the testimony channel vs §4.6 inversions
 - Measured once (10.9): one combined re-record; HARD + Wave-1 gates green; anti-railroad holds; funnel published against the corrected baseline.
 - THE PAUSE: Wave 1 ends at 10.9's merge. The design thread re-runs the close audit on the new baseline; Wave-2 contracts are authored only after that audit AND the 10.10 deception probe.
 
-## Wave 2 — Impostor gameplay (SKETCH — contracts authored after the Wave-1 gate + deception probe)
+## Wave 2 — Make the meeting layer load-bearing (impostor pressure + crew conversion)
 
-Updated inputs from the 2026-06-11 close audit (gp-4): the fake-task path is structurally
-unreachable today (impostor_policy.py:570-595 falls to wait because pending_task_id is never
-populated — 0 do_task / 0 report across 50 games, 53.3% wait vs crew 10.4%); accused-impostor
-survival is 93% but only 28/53 survivals involved ACTIVE deflection (25 were passive crew
-under-conversion) — any toolkit A/B gates on the active subcount with 10.7 frozen during
-measurement; impostor ballot-push was the decisive margin in 2/7 wrong ejections; 19/50 games
-ran on one active killer, so toolkit activation shifts the supply/stopwatch numbers and B-2,
-B-5, B-8 get re-derived.
+Anchor: audits/audit-2026-06-13-1816-gameplay-data.md (the Wave-1 close audit; SIGNIFICANT_ISSUES,
+baseline VALID). The reframe that drives this wave: the game is DEGENERATE, not balanced — 45 of 46
+crew wins are the task stopwatch, deduction decided exactly 1 game, both impostors usually survive.
+The lever that makes the meeting layer matter is the IMPOSTOR BUFF (competent impostors → parity
+pressure → catching becomes necessary), and the CREW-CONVERSION lever is its counterweight (because
+the dominant residual is the SKIP-plurality tally bar — 37/59 = 63% of detected impostors lose the
+plurality, NOT a detection or cadence gap). They land together in one combined re-record; the
+impostor buff is primary and the crew lever is gentle, with the win rate as a guardrail. The 10.10
+deception probe is already ANSWERED by the lab (experiments/lab): the 9B cannot invent a lie (2/18
+spontaneous) but performs a handed script (~92% sheltered), so the toolkit is POLICY-AUTHORED
+deception, not a "be deceptive" instruction — assembly, not research.
 
-- 10.10 Deception probe (the pre-contract gate, model-probe harness): before any toolkit
-  contract is written, extend experiments/model_probe to measure whether qwen3.5:9b can
-  (a) emit a plausible fake-task pattern, (b) deflect an accusation without boomeranging onto
-  itself, (c) self-report a kill with a pre-built alibi that survives the repaired detector.
-  Cheap, offline, $0 — the same pre-validation pattern that de-risked the conversion prompts.
-  If the 9B cannot play the villain, the toolkit contract changes shape (or the model question
-  reopens) BEFORE a wave is spent on it.
-- 10.11 Impostor toolkit (gp-4): fake do_task (consumes the tick, renders as do_task, no
-  progress — ships only WITH a crew-side checkability counter) + an idle budget tuned toward
-  the crew wait-rate (~10%); a report action with an occasional self-report-own-kill policy;
-  kill-intent gating on same-room co-presence at intent time (eliminates the ~20 cross-room
-  MECH-B-1 refusals, ~15% of kill intents; this shifts the kill cadence that anchors
-  EMERGENCY_COOLDOWN_TICKS — re-derive that anchor at the 10.13 gate). The 7.12/9.3 firewalls
-  and betrayal==0 stay inviolate.
-- 10.12 Indistinguishability metrics (gp-4 gate): impostor wait-rate vs crew, task-emission
-  overlap, top-2-idler overlap (the fingerprint to erase), impostor-reporter share,
-  kill-success rate; deception metrics conversion-controlled per 10.4, and the
-  deflection-effectiveness gate reads the ACTIVE subcount, never raw accused-survival.
-- 10.13 Wave-2 combined re-record + the phase-close audit.
+Sequencing (the walkthrough): STAGE 1 = measurement-integrity repairs (10.10-10.12, offline, no
+re-record — make the bytes clean so the wave measures signal). STAGE 2 = the capability map
+(10.13 — the lab batteries + targeting baselines). STAGE 3 = the source bundle (10.14 impostor
+toolkit ∥ 10.15 crew lever). STAGE 4 = metrics/gate spec (10.16). STAGE 5 = combined re-record +
+phase-close audit (10.17). Track with `python3 scripts/compute_next_task.py --phase 10`.
+
+### Task 10.10 — Proxy-intra-turn detector guard
+**Branch:** `phase-10-proxy-intra-turn`
+**Depends on:** none (Stage-1 root)
+**Section refs:** DESIGN.md §5.4, §6.3; audits/audit-2026-06-13-1816-gameplay-data.md C-C-2, C-C-3
+**Complexity:** Medium
+
+The close audit's one wrong ejection on an otherwise-clean baseline: the 10.9.2 guard redirected an
+ungrounded ballot to an innocent (seed-40 p-4 @0.66) whose suspicion was a pure flag-stacking
+ARTIFACT — TWO weak contradictions both minted from ONE speaker (p-5, crew) emitting two
+mutually-contradictory proxy-alibis ABOUT p-4 in a single turn: an `alibi_conflict` between p-5's two
+p-4-alibis and an `alibi_vs_sighting` between p-5's alibi-for-p-4 and p-5's own sighting of p-4.
+Different lift-keys, so the 10.1 per-(subject,claim) dedup did NOT merge them (0.5+0.08+0.08=0.66).
+This is the laundering case — a single unreliable speaker's claims ABOUT a third party stacking over
+the gate. Generalizes set-wide: 3 of 9 single-turn self-contradictions are proxy (seed-40, seed-2).
+The 10.6 proxy-alibi rule covers a third-party alibi the subject's own account contradicts; it does
+NOT cover two same-speaker proxy-claims conflicting with EACH OTHER.
+
+**CAREFUL LINE (the hard constraint):** this fixes ONLY the same-speaker intra-turn case. It must NOT
+touch the cross-speaker third-party alibi where an impostor frames an innocent (seed-12 — impostor
+p-1's alibi for p-6 minting the set's lone strong flag). That is a LEGITIMATE deception surface and a
+10.13 probe input, not a bug; hardening it would blunt honest crew alibis. The guard keys on a single
+speaker authoring BOTH events, which seed-12 (cross-speaker) does not satisfy.
+
+**Files in scope:**
+- meetings/transcript.py (a detector guard at contradiction construction: when BOTH events of a contradiction (event_a_id, event_b_id) resolve to turns by the SAME speaker AND that speaker is NOT in the flag's subjects, retarget the flag WEAK at the speaker via a new `WEAK_REASON_PROXY_INTRA_TURN` reason, OR suppress it against the subject — prefer re-target so the speaker's unreliability is still recorded, capped weak so it cannot eject alone; the event→turn→speaker resolution reuses the existing event-id parsing the lift-key machinery already does at `_contradiction_lift_key`; the guard runs AFTER the existing weak classification so a flag already weak stays weak)
+- agents/memory/beliefs.py (only if the new weak reason needs registering in the weak-delta path; no constant changes)
+- tests/meetings/test_transcript.py + tests/agents/test_beliefs.py (pins below, offline against committed bytes)
+
+**Files NOT in scope:**
+- the cross-speaker proxy-alibi rule (10.6 `WEAK_REASON_RETARGETED_PROXY` — untouched; the seed-12 strong flag must SURVIVE)
+- meetings/manager.py ballot-target guard (10.9.2 — the redirect logic is correct; this fixes the detector feeding it)
+- the §4.6 render/threshold, 9.8 constants, token caps (frozen)
+- replays/samples/** (no re-record)
+
+**Definition of done:**
+- [ ] Seed-40 pin: m0's two contradictions on p-4 (both from p-5's turn-1) are re-targeted WEAK at p-5 (or suppressed against p-4); p-4's re-derived max drops below 0.60; under the original recorded ballots p-4 is no longer the redirect argmax (walked offline against committed bytes).
+- [ ] Seed-2 pin: the proxy intra-turn contradiction (p-7 about p-8) is re-targeted/suppressed identically.
+- [ ] The seed-12 STRONG flag SURVIVES (cross-speaker: impostor p-1's alibi vs the reporter's sighting — different speakers, so the guard does not fire). Pinned individually — this is the tripwire.
+- [ ] A genuine same-subject contradiction from TWO different speakers (a real two-witness disagreement) is unaffected; seed-14 m0's real two-witness fold on p-3 still classifies as today.
+- [ ] Determinism: the guard is a pure function of the transcript; re-runs are byte-identical.
+- [ ] `uv run mypy .`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run python scripts/generate_prompts.py --check`, `uv run python scripts/validate_task_docs.py`, `uv run pytest`, and `bash scripts/check.sh` all pass.
+
+**Public types introduced:**
+- WEAK_REASON_PROXY_INTRA_TURN
+
+**Implementation hint:**
+
+The event-id → speaker map already exists in spirit: `_contradiction_lift_key` parses the
+`event_a_id`/`event_b_id` to group flags. Reuse the same parse to find each event's turn, then the
+turn's speaker. One-home: the guard lives beside the existing weak classification in transcript.py,
+not in a new module. The seed-40 and seed-12 walks both run offline via the replay-loader pattern the
+audit extractor demonstrates — every pin is checkable for $0.
+
+**Integration risk:**
+
+The failure mode is over-firing onto the legitimate cross-speaker frame (seed-12) — the guard's
+single-speaker-authors-both-events condition is precisely what prevents that, and the seed-12
+survival pin is the tripwire. Recording-side only; committed reconstruction unaffected.
+
+**Ready-to-paste prompt:** `agent_prompts/task-10-10-proxy-intra-turn-detector-guard.md`
+
+### Task 10.11 — Emergency-meeting opening: no fabricated body
+**Branch:** `phase-10-emergency-no-body`
+**Depends on:** 10.10
+**Section refs:** DESIGN.md §3.2, §5.2, §5.4; audits/audit-2026-06-13-1816-gameplay-data.md B-B-1
+**Complexity:** Medium
+
+All 7 emergency meetings on the close baseline fabricate a found_body on the opening turn:
+crewmate_report.v6's emergency variant re-narrates a real-but-stale corpse as a fresh discovery to
+justify the suspicion-triggered meeting, and voters anchor ejections on it (seed-27 m1 5/5 cite it,
+seed-29 m1 3/6). The 10.8 self-check "no engine body" is TRUE (`body_id` is None) but MASKS the
+transcript-level fabrication — it checks the engine field, not the opening turn's observations. Two
+loads: (1) `triggering_body_rooms()` reads found_body off turn-0 and now applies a kill-scene Rule-3
+exclusion zone to a meeting the design says has no kill scene; (2) the justification chain runs
+through a non-existent body. Outcomes were correct, but the basis is fabricated — and it gets worse
+under Wave-2 when competent impostors trigger more suspicion meetings.
+
+**Files in scope:**
+- agents/strategic/prompts/crewmate_report.j2 (the emergency branch must NOT present a found_body observation — lead with the SUSPICION that crossed 0.60, naming who and the first-hand basis; the body-report branch stays byte-identical; bump crewmate_report v6→v7)
+- meetings/transcript.py (`triggering_body_rooms()` gates on the meeting trigger: an emergency meeting returns `frozenset()` regardless of any opening observation, so a fabricated body cannot widen the relevance-gate exclusion zone; thread the trigger_kind in if the transcript does not already carry it — minimal signature extension, one call site)
+- orchestrator/game.py (verify the trigger_kind reaches the renderer + the detector path; DEFAULT_PROMPT_VERSIONS crewmate_report v7)
+- tests/agents/test_strategic_prompts.py + tests/meetings/test_transcript.py + tests/orchestrator/* + tests/fixtures/prompt_regression/ (regenerate baseline for v7; pins below)
+
+**Files NOT in scope:**
+- the emergency TRIGGER / cooldown / eligibility (10.8 — landed and correct; this fixes only the opening's content)
+- the body-report opening branch (byte-stable; golden-pinned)
+- vote_ballot, the §4.6 render (frozen)
+- replays/samples/** (no re-record)
+
+**Definition of done:**
+- [ ] The emergency opening renders with NO found_body observation and the called-on-suspicion frame; golden-pin it.
+- [ ] The body-report branch renders byte-identically to v6 for body meetings (golden pin both branches); DEFAULT_PROMPT_VERSIONS + version test pins read v7; prompt-regression baseline regenerated.
+- [ ] `triggering_body_rooms()` returns `frozenset()` for an emergency meeting even if the opening carries a (fabricated) found_body — unit-pinned; a NEW self-check asserts NO found_body observation on any emergency opening transcript turn (not just `body_id is None`).
+- [ ] Offline re-derivation against the committed bytes: confirm the 7 emergency openings' fabricated bodies no longer widen the Rule-3 exclusion zone (the relevance gate result is unchanged or more-correct, never less); no impostor ejection that should have converted is lost.
+- [ ] Determinism + the full `bash scripts/check.sh` gate (mypy/ruff/format/lint-imports/generate_prompts --check/validate_task_docs/pytest/frontend) pass.
+
+**Public types introduced:**
+- (none)
+
+**Implementation hint:**
+
+Follow the 10.8 v6 emergency-branch style (it already branches the template on the trigger
+substring); this removes the found_body block from that branch rather than adding one. The
+`triggering_body_rooms()` gate is the defense-in-depth half — even after the prompt fix, the engine
+must not trust an opening's body on an emergency meeting. The new transcript-turn self-check is the
+thing the 10.8 check missed; word it to fail loud on any emergency opening with a found_body.
+
+**Integration risk:**
+
+The v7 bump must keep the body-report path byte-stable (the golden pin enforces it); the regression
+risk is the relevance gate changing a contradiction classification on a body meeting, which the
+offline re-derivation guards. Recording-side only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-10-11-emergency-meeting-no-fabricated-body.md`
+
+### Task 10.12 — Measurement hygiene: unsure-guard + defaulted-ballot telemetry
+**Branch:** `phase-10-measurement-hygiene`
+**Depends on:** none (file-disjoint from the detector repairs — touches manager.py + orchestrator/eval, dispatchable in parallel)
+**Section refs:** DESIGN.md §5.2, §4.6, §9; audits/audit-2026-06-13-1816-gameplay-data.md H-H-1, H-H-2, H-H-5
+**Complexity:** Medium
+
+Two measurement blind spots to close before the Wave-2 re-record, so the gate reads true. (1) The
+10.3 opening-position guard accepts a 5266-char reasoning-relocation as a deliberate "unsure"
+declaration via a bare substring match (`OPENING_UNSURE_MARKER in free_text.lower()`), so the retry
+never fires and the meeting collapses to a SKIP husk (seed-30 m1, cost a body-report meeting its
+accusation signal). (2) `defaulted_under_must_vote=0` is green BY CONSTRUCTION: a defaulted ballot's
+vote call failed and the failed_call record does NOT persist the prompt, so the extractor's §4.6
+verdict reconstruction (from successful llm_calls only) always reads `no-render` and routes the
+ballot to `skip_unclassified` before the verdict check — seed-8's defaulted ballot was actually a
+MUST-VOTE (a firewalled-correct impostor SKIP), invisible to the invariant. A future CREWMATE default
+under a real MUST-VOTE would be silently absorbed and mask a missed eject.
+
+**Files in scope:**
+- meetings/manager.py (`_opening_takes_position`: gate the unsure declaration on free_text structure — require the position in a SHORT opening (length within a documented bound near the p95 of ~225 chars), OR require non-empty claims/observations when free_text is far above p95, OR route the reasoning-relocation shape (free_text ≫ p95 with empty claims AND empty observations) through the existing 10.3 retry rather than accepting it; do NOT raise the token cap)
+- orchestrator/replay.py + orchestrator/game.py (persist the rendered vote PROMPT — or at minimum the rendered §4.6 max/verdict line — onto the failed_call record for a defaulted ballot, so a defaulted ballot's true verdict is classifiable; additive field, replay-row writers updated minimally)
+- eval/meeting_quality.py + audits/workflows/extract_gameplay_facts.py (consume the persisted verdict so `defaulted_under_must_vote` can be non-zero; relabel a firewalled impostor MUST-VOTE→SKIP correctly; fix the stale `defaulted_turns.note` that names seeds 8/36/39 — 36/39 have 0 failed_calls)
+- tests/meetings/test_manager.py + tests/orchestrator/* + tests/eval/* (pins below)
+
+**Files NOT in scope:**
+- the 2048 turn cap / 1024 vote cap (frozen — the fix is the guard + telemetry, never a cap raise)
+- the §4.6 render, the retry COUNT (one retry stays one)
+- replays/samples/** (no re-record; the persisted-prompt field starts populating at the 10.17 record)
+
+**Definition of done:**
+- [ ] Unsure-guard pin: seed-30 m1's 5266-char hollow opening (claims=[] observations=[] containing "unsure") no longer passes `_opening_takes_position`; it routes to the retry or defaults, not a silent valid-unsure; a SHORT genuine "unsure" opening still passes (both pinned).
+- [ ] Telemetry pin: a synthetic defaulted ballot whose persisted verdict line reads MUST-VOTE is classified `defaulted_under_must_vote` ≥ 1 (no longer green-by-construction); the seed-8 record is relabelled firewall-correct-SKIP-under-MUST-VOTE; the stale note is corrected/dropped.
+- [ ] The persisted-prompt field is additive and the replay reconstructs byte-identically on existing committed bytes (which carry no such field — the reader tolerates its absence).
+- [ ] Determinism + full `bash scripts/check.sh` pass.
+
+**Public types introduced:**
+- (none — an additive failed_call field; name it in the PR)
+
+**Implementation hint:**
+
+The unsure guard is a few lines at `_opening_takes_position` (manager.py:1898-1924); the structural
+test (length/empty-claims-and-observations) is the cheap robust version. The telemetry half is the
+more careful one: thread the rendered verdict onto the failed_call at the vote site
+(meetings/manager.py vote path → orchestrator replay row), keeping the field optional so committed
+single-era bytes still load. The extractor change mirrors the eval one (one-home: consume, don't
+re-derive).
+
+**Integration risk:**
+
+The replay-row schema touch is the watch point — keep the field optional and additive so every
+committed set still reconstructs byte-identically; the telemetry is recording-forward (populates at
+the next record), the unsure guard is recording-side and offline-checkable now.
+
+**Ready-to-paste prompt:** `agent_prompts/task-10-12-measurement-hygiene-unsure-and-telemetry.md`
+
+### Wave-2 Stages 2-5 (SKETCH — authored after Stage 1 + the owner crew-lever decision)
+
+- **10.13 Capability map (gp-5; offline, mostly DONE by the lab).** Records the deception-battery
+  findings (experiments/lab) as the toolkit design input + the A/B targeting baselines: effective
+  deflection 5-9 of 59 survivals (NOT raw 27), do_task 0, wait-share ~51% vs crew ~12%, the kill
+  cross-room waste ~15%; anchor seeds seed-12 (third-party-alibi frame — the strong-flag exploit
+  surface, a design tension surfaced to the owner) and seed-6 (sustained single-target framing →
+  IMPOSTOR_PARITY); self-accusation folded in (ineffective standalone, 0/4 converted). Plus the
+  battery-2 creative probes (sustained-framing persistence, adaptive-redirect quality, anticipatory
+  alibi, implicit teammate corroboration, tell-detection).
+- **10.14 Impostor toolkit (gp-4 + gp-8; PRIMARY).** Activate the dormant do_task path (seed impostor
+  pretend-task instances so `ImpostorPolicy._idle` fires — observation/service.py filters
+  `task.owner==agent_id`); policy-authored cover stories injected at kill time (the lab's
+  perform-not-invent finding); an idle budget toward crew wait-share; same-room kill-intent gating
+  (gp-8/MECH-B-1 — elevated to credible-threat, removing ~15% wasted cross-room kills raises parity
+  pressure; re-derive the EMERGENCY_COOLDOWN_TICKS anchor at the 10.17 gate). 7.12/9.3 firewalls +
+  betrayal==0 inviolate.
+- **10.15 Crew-conversion lever (the counterweight; OWNER DECISION gates the shape).** Belief-spread
+  first (Path B): fix the testimony fold's fixable underperformance (the two-witness rarity + the
+  9B's rationale-echo undercutting "independence" — H-4) so detection reaches the majority and the
+  EQUAL tally convicts on its own; V3 skip-halfweight only as the fallback if the lab re-run shows
+  belief-spread cannot close enough of the 37-case SKIP-plurality bloc. Gentle by design — the
+  impostor buff leads.
+- **10.16 Wave-2 metrics + gate spec (gp-4 gate).** conversion-per-meeting (NOT meeting count — the
+  pacing inversion persists, all 4 impostor wins in 3-4-meeting games), the effective-deflection
+  subcount (5-9), indistinguishability (wait-share, do_task emission, idler fingerprint),
+  conversion-controlled; the confounding-aware attribution plan (channel decomposition separates
+  crew-lever from toolkit effects in one re-record); a balance guardrail (impostor win rate in a sane
+  band, guardrail not gate).
+- **10.17 Wave-2 combined re-record + phase-close audit.** One combined re-record, smoke-first so the
+  rough balance is visible before the full run (stop+retune the crew lever if the smoke overshoots);
+  stacked HARD gate + Wave-2 gates + close audit → Phase 10 closes.
 
 Parked / explicit non-goals for the phase: tie-break + accused-self-vote semantics (gp-8,
-owner-parked — ties stay SKIPPED); §4.6 gate or threshold changes; tally/abstain redesign
-(refuted); turn/vote token caps; accumulator constant re-tuning; the MANIFEST provenance
-convention (affirmed).
+owner-parked — ties stay SKIPPED). The SKIP-PLURALITY tally / crew-conversion question is NO LONGER
+parked — it is the Wave-2 10.15 lever (belief-spread preferred, V3 skip-halfweight fallback; the
+audit sized it as the single biggest conversion input). Still frozen: the §4.6 gate render +
+threshold, turn/vote token caps, the 9.8 accumulator constants (re-tunable only by an explicit owner
+decision at 10.15-authoring time), the MANIFEST provenance convention (affirmed).
