@@ -1063,6 +1063,11 @@ def _analyze_meeting(
                 "voter_role": voter_role,
                 "target": b.target,
                 "target_role": target_role,
+                # The §4.6 confident-ballot prong input: the recorded tally
+                # ejects only if >= 1 leader ballot meets the threshold. The
+                # tally-counterfactual lab (experiments/lab) replays variants
+                # from these rows, so the field rides along.
+                "confidence": b.confidence,
                 "primary_reason_id": b.primary_reason_id,
                 "follows_chain": follows_chain,
             }

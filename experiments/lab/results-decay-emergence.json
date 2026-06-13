@@ -1,0 +1,238 @@
+{
+  "decay_sweep_on_w0": {
+    "carry_survival_ge_055_by_decay": {
+      "0.1": "36/82",
+      "0.25": "36/82",
+      "0.4": "36/82"
+    },
+    "excluded_unexplained (corroboration etc.)": 78,
+    "from_below_crossings_by_decay": {
+      "0.1": 0,
+      "0.25": 0,
+      "0.4": 0
+    },
+    "transitions_validated_at_d25": 82,
+    "unexplained_share": 0.487
+  },
+  "decay_sweep_on_w1a_directional_only": {
+    "carry_survival_ge_055_by_decay": {
+      "0.1": "56/136",
+      "0.25": "56/136",
+      "0.4": "56/136"
+    },
+    "excluded_unexplained (corroboration etc.)": 228,
+    "from_below_crossings_by_decay": {
+      "0.1": 0,
+      "0.25": 0,
+      "0.4": 0
+    },
+    "transitions_validated_at_d25": 136,
+    "unexplained_share": 0.626
+  },
+  "emergence_census_w0": {
+    "E1_impostor_strategic_skips": {
+      "cites": [
+        {
+          "meeting": 0,
+          "rendered_max": 0.7,
+          "seed": 2,
+          "voter": "p-4"
+        },
+        {
+          "meeting": 2,
+          "rendered_max": 0.7,
+          "seed": 2,
+          "voter": "p-4"
+        },
+        {
+          "meeting": 0,
+          "rendered_max": 0.7,
+          "seed": 3,
+          "voter": "p-2"
+        },
+        {
+          "meeting": 0,
+          "rendered_max": 0.7,
+          "seed": 3,
+          "voter": "p-6"
+        },
+        {
+          "meeting": 2,
+          "rendered_max": 0.75,
+          "seed": 6,
+          "voter": "p-9"
+        },
+        {
+          "meeting": 3,
+          "rendered_max": 0.75,
+          "seed": 6,
+          "voter": "p-6"
+        }
+      ],
+      "n": 44
+    },
+    "E2_self_accusations": {
+      "cites": [
+        {
+          "meeting": 0,
+          "role": "IMPOSTOR",
+          "seed": 1,
+          "speaker": "p-6"
+        },
+        {
+          "meeting": 0,
+          "role": "IMPOSTOR",
+          "seed": 8,
+          "speaker": "p-5"
+        },
+        {
+          "meeting": 0,
+          "role": "IMPOSTOR",
+          "seed": 24,
+          "speaker": "p-1"
+        },
+        {
+          "meeting": 0,
+          "role": "IMPOSTOR",
+          "seed": 25,
+          "speaker": "p-5"
+        },
+        {
+          "meeting": 2,
+          "role": "CREWMATE",
+          "seed": 30,
+          "speaker": "p-7"
+        },
+        {
+          "meeting": 1,
+          "role": "CREWMATE",
+          "seed": 33,
+          "speaker": "p-2"
+        }
+      ],
+      "n": 8
+    },
+    "E3_impostor_reporters": {
+      "cites": [],
+      "n": 0
+    },
+    "E4_openings_without_accusation": {
+      "cites": [
+        {
+          "meeting": 0,
+          "seed": 12
+        },
+        {
+          "meeting": 0,
+          "seed": 21
+        },
+        {
+          "meeting": 1,
+          "seed": 48
+        }
+      ],
+      "n": 3
+    }
+  },
+  "emergence_census_w1a": {
+    "E1_impostor_strategic_skips": {
+      "cites": [
+        {
+          "meeting": 0,
+          "rendered_max": 0.78,
+          "seed": 2,
+          "voter": "p-4"
+        },
+        {
+          "meeting": 0,
+          "rendered_max": 0.78,
+          "seed": 2,
+          "voter": "p-7"
+        },
+        {
+          "meeting": 1,
+          "rendered_max": 0.65,
+          "seed": 2,
+          "voter": "p-4"
+        },
+        {
+          "meeting": 1,
+          "rendered_max": 0.65,
+          "seed": 2,
+          "voter": "p-7"
+        },
+        {
+          "meeting": 2,
+          "rendered_max": 0.65,
+          "seed": 2,
+          "voter": "p-4"
+        },
+        {
+          "meeting": 2,
+          "rendered_max": 0.65,
+          "seed": 2,
+          "voter": "p-7"
+        }
+      ],
+      "n": 44
+    },
+    "E2_self_accusations": {
+      "cites": [
+        {
+          "meeting": 0,
+          "role": "IMPOSTOR",
+          "seed": 12,
+          "speaker": "p-1"
+        },
+        {
+          "meeting": 0,
+          "role": "IMPOSTOR",
+          "seed": 15,
+          "speaker": "p-3"
+        },
+        {
+          "meeting": 1,
+          "role": "IMPOSTOR",
+          "seed": 18,
+          "speaker": "p-7"
+        },
+        {
+          "meeting": 1,
+          "role": "CREWMATE",
+          "seed": 29,
+          "speaker": "p-2"
+        },
+        {
+          "meeting": 1,
+          "role": "CREWMATE",
+          "seed": 33,
+          "speaker": "p-2"
+        },
+        {
+          "meeting": 1,
+          "role": "CREWMATE",
+          "seed": 35,
+          "speaker": "p-6"
+        }
+      ],
+      "n": 9
+    },
+    "E3_impostor_reporters": {
+      "cites": [],
+      "n": 0
+    },
+    "E4_openings_without_accusation": {
+      "cites": [
+        {
+          "meeting": 1,
+          "seed": 30
+        },
+        {
+          "meeting": 1,
+          "seed": 42
+        }
+      ],
+      "n": 2
+    }
+  }
+}

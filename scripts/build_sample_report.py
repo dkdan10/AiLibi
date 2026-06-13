@@ -60,6 +60,8 @@ from eval.balance_eval import load_tournament_report  # noqa: E402
 from eval.meeting_quality import (  # noqa: E402
     TournamentEvalReport,
     build_tournament_eval_report,
+    compute_ballot_target_redirects,
+    compute_defaulted_ballots,
     compute_multi_signal_conversion,
     compute_supply_gauges,
     decompose_ejection_channels,
@@ -202,6 +204,13 @@ def _summary(report: TournamentEvalReport) -> str:
     # (~90/10, zero ejection-driven wins) and gates nothing.
     multi = compute_multi_signal_conversion(games)
     gauges = compute_supply_gauges(games)
+    # The Task 10.9.1/10.9.2 PR #147 repair censuses (standalone, off the frozen
+    # committed report exactly like the gp-7 companions): the vote fail-soft
+    # defaulted-ballot count and the ballot-target redirect count. The 10.9 gate
+    # requires both reported (zero is fine, unreported is not), so they ride the
+    # summary the operator generates rather than living only in their analyzers.
+    defaulted = compute_defaulted_ballots(games)
+    redirects = compute_ballot_target_redirects(games)
     over_gate = (
         f"{gauges.over_gate_listeners_per_accused_impostor_meeting:.2f}"
         if gauges.over_gate_listeners_per_accused_impostor_meeting is not None
@@ -220,6 +229,10 @@ def _summary(report: TournamentEvalReport) -> str:
         f"multi_signal {multi.multi_signal_conversions}/{multi.impostor_ejections} | "
         f"lost_openings {gate.lost_opening_accusations} "
         f"(defaults {gate.cap_defaulted_turns}) | "
+        f"vote_defaults {defaulted.defaulted_skip_ballots}"
+        f" (must_vote {defaulted.defaulted_under_must_vote}) | "
+        f"ballot_redirects {redirects.redirected_ballots}"
+        f" (eject {redirects.redirected_eject_ballots}) | "
         f"sheltered_survival {gate.survivals_sheltered_sub_gate}/"
         f"{gate.accused_impostor_survivals} | "
         f"flags {gauges.total_flags} ({gauges.weak_flags}w/{gauges.strong_flags}s) | "

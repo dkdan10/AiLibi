@@ -81,7 +81,13 @@ def is_task_merged(task: TaskDoc, branches: set[str], titles: list[str]) -> bool
 
     if task.branch in branches:
         return True
-    pattern = re.compile(rf"^\s*task\s+{re.escape(task.task_id)}\b", re.IGNORECASE)
+    # The negative lookahead keeps a PARENT id (10.9) from matching a SUB-task's
+    # title (``task 10.9.1: ...``): a plain ``\b`` sits at the 9->. boundary and
+    # would mark 10.9 merged the moment 10.9.1 lands. Reject a following ``.digit``
+    # (longer id) or bare digit (10.9 vs 10.91).
+    pattern = re.compile(
+        rf"^\s*task\s+{re.escape(task.task_id)}(?!\.?\d)", re.IGNORECASE
+    )
     return any(pattern.search(title) for title in titles)
 
 

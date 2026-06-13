@@ -1,0 +1,878 @@
+{
+  "sets": [
+    {
+      "flip_margin_quartiles": [
+        2.5,
+        6,
+        13.0,
+        21.4,
+        48
+      ],
+      "plausible_flips_at_clock_slow_delta": {
+        "12": 22,
+        "16": 28,
+        "2": 0,
+        "24": 41,
+        "4": 5,
+        "6": 12,
+        "8": 17
+      },
+      "rows": [
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 0
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 1
+        },
+        {
+          "flip_margin_ticks": 4.3,
+          "game_over_tick": 25,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 4.33,
+          "seed": 2
+        },
+        {
+          "flip_margin_ticks": 8,
+          "game_over_tick": 17,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 4,
+          "seed": 3
+        },
+        {
+          "flip_margin_ticks": 9.0,
+          "game_over_tick": 18,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 4.5,
+          "seed": 4
+        },
+        {
+          "flip_margin_ticks": 17.0,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 8.5,
+          "seed": 5
+        },
+        {
+          "flip_margin_ticks": 6,
+          "game_over_tick": 24,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 6,
+          "seed": 6
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 7
+        },
+        {
+          "flip_margin_ticks": 8.7,
+          "game_over_tick": 25,
+          "kills_needed_for_parity": 2,
+          "living_crew": 3,
+          "living_imp": 1,
+          "observed_cadence": 4.33,
+          "seed": 8
+        },
+        {
+          "flip_margin_ticks": 3.7,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 3.67,
+          "seed": 9
+        },
+        {
+          "flip_margin_ticks": 5,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 1,
+          "living_crew": 2,
+          "living_imp": 1,
+          "observed_cadence": 5,
+          "seed": 11
+        },
+        {
+          "flip_margin_ticks": 16.0,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 14
+        },
+        {
+          "flip_margin_ticks": 6,
+          "game_over_tick": 15,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 3,
+          "seed": 15
+        },
+        {
+          "flip_margin_ticks": 24,
+          "game_over_tick": 28,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 8,
+          "seed": 16
+        },
+        {
+          "flip_margin_ticks": 3.3,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 3.33,
+          "seed": 17
+        },
+        {
+          "flip_margin_ticks": 33,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 11,
+          "seed": 18
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 19
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 23,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 20
+        },
+        {
+          "flip_margin_ticks": 27,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 9,
+          "seed": 21
+        },
+        {
+          "flip_margin_ticks": 30,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 10,
+          "seed": 22
+        },
+        {
+          "flip_margin_ticks": 9,
+          "game_over_tick": 18,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 3,
+          "seed": 23
+        },
+        {
+          "flip_margin_ticks": 24,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 4,
+          "living_crew": 5,
+          "living_imp": 1,
+          "observed_cadence": 6,
+          "seed": 24
+        },
+        {
+          "flip_margin_ticks": 7.0,
+          "game_over_tick": 28,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 3.5,
+          "seed": 25
+        },
+        {
+          "flip_margin_ticks": 12.7,
+          "game_over_tick": 24,
+          "kills_needed_for_parity": 2,
+          "living_crew": 3,
+          "living_imp": 1,
+          "observed_cadence": 6.33,
+          "seed": 26
+        },
+        {
+          "flip_margin_ticks": 48,
+          "game_over_tick": 26,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 16,
+          "seed": 27
+        },
+        {
+          "flip_margin_ticks": 7.5,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 7.5,
+          "seed": 28
+        },
+        {
+          "flip_margin_ticks": 30,
+          "game_over_tick": 18,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 10,
+          "seed": 29
+        },
+        {
+          "flip_margin_ticks": 6.3,
+          "game_over_tick": 25,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 6.33,
+          "seed": 30
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 31
+        },
+        {
+          "flip_margin_ticks": 15,
+          "game_over_tick": 17,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 5,
+          "seed": 32
+        },
+        {
+          "flip_margin_ticks": 2.5,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 2.5,
+          "seed": 33
+        },
+        {
+          "flip_margin_ticks": 18,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 6,
+          "seed": 34
+        },
+        {
+          "flip_margin_ticks": 4,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 4,
+          "seed": 35
+        },
+        {
+          "flip_margin_ticks": 8,
+          "game_over_tick": 17,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 4,
+          "seed": 36
+        },
+        {
+          "flip_margin_ticks": 10,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 5,
+          "seed": 37
+        },
+        {
+          "flip_margin_ticks": 15,
+          "game_over_tick": 25,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 5,
+          "seed": 38
+        },
+        {
+          "flip_margin_ticks": 4.5,
+          "game_over_tick": 25,
+          "kills_needed_for_parity": 1,
+          "living_crew": 2,
+          "living_imp": 1,
+          "observed_cadence": 4.5,
+          "seed": 39
+        },
+        {
+          "flip_margin_ticks": 6,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 6,
+          "seed": 40
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 23,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 41
+        },
+        {
+          "flip_margin_ticks": 5,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 5,
+          "seed": 42
+        },
+        {
+          "flip_margin_ticks": 16.0,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 43
+        },
+        {
+          "flip_margin_ticks": 13.0,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 6.5,
+          "seed": 44
+        },
+        {
+          "flip_margin_ticks": 12,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 6,
+          "seed": 45
+        },
+        {
+          "flip_margin_ticks": 24,
+          "game_over_tick": 16,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 8,
+          "seed": 46
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 24,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.34,
+          "seed": 47
+        },
+        {
+          "flip_margin_ticks": 4,
+          "game_over_tick": 18,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 4,
+          "seed": 48
+        },
+        {
+          "flip_margin_ticks": 42,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 14,
+          "seed": 49
+        }
+      ],
+      "set": "9p2i",
+      "set_mean_kill_interval": 5.34,
+      "task_wins_analyzed": 47
+    },
+    {
+      "flip_margin_quartiles": [
+        2.5,
+        6.3,
+        13.5,
+        21.4,
+        64
+      ],
+      "plausible_flips_at_clock_slow_delta": {
+        "12": 22,
+        "16": 24,
+        "2": 0,
+        "24": 39,
+        "4": 8,
+        "6": 10,
+        "8": 15
+      },
+      "rows": [
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.36,
+          "seed": 0
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.36,
+          "seed": 1
+        },
+        {
+          "flip_margin_ticks": 3.8,
+          "game_over_tick": 28,
+          "kills_needed_for_parity": 1,
+          "living_crew": 2,
+          "living_imp": 1,
+          "observed_cadence": 3.75,
+          "seed": 2
+        },
+        {
+          "flip_margin_ticks": 12,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 4,
+          "seed": 3
+        },
+        {
+          "flip_margin_ticks": 9.0,
+          "game_over_tick": 18,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 4.5,
+          "seed": 4
+        },
+        {
+          "flip_margin_ticks": 17.0,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 8.5,
+          "seed": 5
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.36,
+          "seed": 7
+        },
+        {
+          "flip_margin_ticks": 3.7,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 3.67,
+          "seed": 9
+        },
+        {
+          "flip_margin_ticks": 5.3,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 5.33,
+          "seed": 11
+        },
+        {
+          "flip_margin_ticks": 16.5,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 3,
+          "living_crew": 4,
+          "living_imp": 1,
+          "observed_cadence": 5.5,
+          "seed": 12
+        },
+        {
+          "flip_margin_ticks": 14,
+          "game_over_tick": 17,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 7,
+          "seed": 14
+        },
+        {
+          "flip_margin_ticks": 24,
+          "game_over_tick": 18,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 8,
+          "seed": 15
+        },
+        {
+          "flip_margin_ticks": 3.3,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 3.33,
+          "seed": 17
+        },
+        {
+          "flip_margin_ticks": 11.0,
+          "game_over_tick": 24,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 5.5,
+          "seed": 18
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.36,
+          "seed": 19
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 23,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.36,
+          "seed": 20
+        },
+        {
+          "flip_margin_ticks": 27,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 9,
+          "seed": 21
+        },
+        {
+          "flip_margin_ticks": 30,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 10,
+          "seed": 22
+        },
+        {
+          "flip_margin_ticks": 9,
+          "game_over_tick": 18,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 3,
+          "seed": 23
+        },
+        {
+          "flip_margin_ticks": 18,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 6,
+          "seed": 24
+        },
+        {
+          "flip_margin_ticks": 4,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 1,
+          "living_crew": 2,
+          "living_imp": 1,
+          "observed_cadence": 4,
+          "seed": 25
+        },
+        {
+          "flip_margin_ticks": 6.3,
+          "game_over_tick": 24,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 6.33,
+          "seed": 26
+        },
+        {
+          "flip_margin_ticks": 64,
+          "game_over_tick": 27,
+          "kills_needed_for_parity": 4,
+          "living_crew": 5,
+          "living_imp": 1,
+          "observed_cadence": 16,
+          "seed": 27
+        },
+        {
+          "flip_margin_ticks": 6,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 3,
+          "seed": 28
+        },
+        {
+          "flip_margin_ticks": 30,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 3,
+          "living_crew": 4,
+          "living_imp": 1,
+          "observed_cadence": 10,
+          "seed": 29
+        },
+        {
+          "flip_margin_ticks": 6.3,
+          "game_over_tick": 25,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 6.33,
+          "seed": 30
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.36,
+          "seed": 31
+        },
+        {
+          "flip_margin_ticks": 11.0,
+          "game_over_tick": 18,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 5.5,
+          "seed": 32
+        },
+        {
+          "flip_margin_ticks": 2.5,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 2.5,
+          "seed": 33
+        },
+        {
+          "flip_margin_ticks": 21,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 7,
+          "seed": 34
+        },
+        {
+          "flip_margin_ticks": 4,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 4,
+          "seed": 35
+        },
+        {
+          "flip_margin_ticks": 8,
+          "game_over_tick": 17,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 4,
+          "seed": 36
+        },
+        {
+          "flip_margin_ticks": 10,
+          "game_over_tick": 19,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 5,
+          "seed": 37
+        },
+        {
+          "flip_margin_ticks": 21,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 3,
+          "living_crew": 4,
+          "living_imp": 1,
+          "observed_cadence": 7,
+          "seed": 38
+        },
+        {
+          "flip_margin_ticks": 8.7,
+          "game_over_tick": 26,
+          "kills_needed_for_parity": 2,
+          "living_crew": 3,
+          "living_imp": 1,
+          "observed_cadence": 4.33,
+          "seed": 39
+        },
+        {
+          "flip_margin_ticks": 28,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 14,
+          "seed": 40
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 23,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.36,
+          "seed": 41
+        },
+        {
+          "flip_margin_ticks": 4,
+          "game_over_tick": 20,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 4,
+          "seed": 42
+        },
+        {
+          "flip_margin_ticks": 13.5,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 3,
+          "living_crew": 4,
+          "living_imp": 1,
+          "observed_cadence": 4.5,
+          "seed": 43
+        },
+        {
+          "flip_margin_ticks": 8,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 2,
+          "living_crew": 3,
+          "living_imp": 1,
+          "observed_cadence": 4,
+          "seed": 44
+        },
+        {
+          "flip_margin_ticks": 21,
+          "game_over_tick": 21,
+          "kills_needed_for_parity": 3,
+          "living_crew": 4,
+          "living_imp": 1,
+          "observed_cadence": 7,
+          "seed": 45
+        },
+        {
+          "flip_margin_ticks": 7.0,
+          "game_over_tick": 16,
+          "kills_needed_for_parity": 2,
+          "living_crew": 4,
+          "living_imp": 2,
+          "observed_cadence": 3.5,
+          "seed": 46
+        },
+        {
+          "flip_margin_ticks": 21.4,
+          "game_over_tick": 24,
+          "kills_needed_for_parity": 4,
+          "living_crew": 6,
+          "living_imp": 2,
+          "observed_cadence": 5.36,
+          "seed": 47
+        },
+        {
+          "flip_margin_ticks": 4,
+          "game_over_tick": 18,
+          "kills_needed_for_parity": 1,
+          "living_crew": 3,
+          "living_imp": 2,
+          "observed_cadence": 4,
+          "seed": 48
+        },
+        {
+          "flip_margin_ticks": 42,
+          "game_over_tick": 22,
+          "kills_needed_for_parity": 3,
+          "living_crew": 5,
+          "living_imp": 2,
+          "observed_cadence": 14,
+          "seed": 49
+        }
+      ],
+      "set": "9p2i-w1a",
+      "set_mean_kill_interval": 5.36,
+      "task_wins_analyzed": 45
+    }
+  ]
+}
