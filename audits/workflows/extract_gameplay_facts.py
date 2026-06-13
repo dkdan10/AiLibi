@@ -71,8 +71,10 @@ from eval._suspicion_parse import (
     parse_rendered_max_suspicion,
 )
 from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_VOTE_TARGET_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
     _opt_in_eligible_ids,
 )
 from meetings.schemas import (
@@ -91,15 +93,21 @@ from meetings.transcript import (
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_STATED,
     detect_contradictions,
+    independent_voices,
     is_canonically_ordered,
     is_weak_contradiction,
     next_chain_step,
 )
 from agents.memory.beliefs import (
     CONTRADICTION_SUSPICION_DELTA,
+    TESTIMONY_INDEPENDENCE_BAR,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
 )
 from eval.balance_eval import load_tournament_report
+from eval.meeting_quality import (
+    compute_ballot_target_redirects,
+    compute_defaulted_ballots,
+)
 from eval.vote_correctness import (
     compute_genuine_class_conversion,
     compute_vote_correctness,
@@ -140,6 +148,31 @@ _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 # regardless of the (quoted) id that follows.
 _INVALID_ACC_MARKER_PREFIX = INVALID_ACCUSATION_TARGET_MARKER.split("{target!r}")[0]
 _INVALID_VOTE_MARKER_PREFIX = INVALID_VOTE_TARGET_MARKER.split("{target!r}")[0]
+
+# Wave-1-CLOSE marker prefixes (point 6d), imported from meetings.manager so the
+# extractor and the shipped eval.meeting_quality census (compute_defaulted_ballots
+# / compute_ballot_target_redirects) can never drift on what a redirect / a
+# defaulted ballot is. The 10.9.2 ballot-target graph guard prepends
+# BALLOT_TARGET_REDIRECT_MARKER (preserving the original under-gate target) to a
+# rewritten eject ballot's rationale_text; the 10.9.1 vote-parse fail-soft writes
+# VOTE_PARSE_DEFAULT_MARKER as the WHOLE rationale_text of a twice-failed ballot
+# degraded to SKIP. Split each on its placeholder so the prefix matches whatever
+# (bounded) original / response-head follows. The redirect marker's preserved
+# original target is recovered with the FULL regex below (the quoted value between
+# the prefix and " redirected] ").
+_BALLOT_REDIRECT_MARKER_PREFIX = BALLOT_TARGET_REDIRECT_MARKER.split("{target!r}")[0]
+_VOTE_PARSE_DEFAULT_MARKER_PREFIX = VOTE_PARSE_DEFAULT_MARKER.split("{head!r}")[0]
+
+# The redirect marker wraps the (bounded) original under-gate target in single
+# quotes between the pinned prefix and " redirected] ", e.g.
+# "[under-gate eject target 'p-1' redirected] ". Recover that original id so the
+# redirect lens can resolve its role + the voter's rendered suspicion of it (the
+# guard's precondition: original below the gate, redirect at/above). A player id
+# is short, so _bounded_original never truncates it; the capture is non-greedy in
+# case a bounded blob ever lands here.
+_BALLOT_REDIRECT_ORIGINAL_RE: re.Pattern[str] = re.compile(
+    re.escape(_BALLOT_REDIRECT_MARKER_PREFIX) + r"'(?P<orig>.*?)' redirected\] "
+)
 
 # A defaulted-turn failed_call carries the turn coordinates in its error_message,
 # e.g. "reply turn (turn 1) defaulted (validation); p-9 submitted no turn ...".
@@ -347,6 +380,21 @@ def _classify_call_slot(prompt: str) -> str:
     return "other"
 
 
+def _parse_redirect_original(rationale_text: str) -> str | None:
+    """The original under-gate target a 10.9.2 redirect rewrote, or None.
+
+    Reads the (bounded) preserved id out of the
+    :data:`BALLOT_TARGET_REDIRECT_MARKER` span at the head of a redirected
+    ballot's ``rationale_text``. None when the ballot carries no redirect
+    marker (the common case). Player ids are short so the bounding never
+    truncates; the value is returned verbatim for role / rendered-suspicion
+    resolution by the redirect lens.
+    """
+
+    m = _BALLOT_REDIRECT_ORIGINAL_RE.search(rationale_text or "")
+    return m.group("orig") if m is not None else None
+
+
 def _deserialize_actions(raw_actions: list[dict[str, Any]]) -> list[Action]:
     return [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in raw_actions]
 
@@ -414,6 +462,7 @@ def _analyze_meeting(
     meeting_index: int,
     meeting_entry: MeetingReplayEntry,
     trigger_kind: str | None,
+    trigger_body_id: str | None,
     roles: Mapping[str, str],
     living_ids: frozenset[str],
     findings: list[dict[str, Any]],
@@ -929,10 +978,90 @@ def _analyze_meeting(
     # ejected player's rendered suspicion among the voters who actually ejected
     # them, read off those voters' own suspicion graphs).
     ejecting_voters: list[str] = []
+    # ---- Wave-1-CLOSE per-ballot records (point 6d) ----
+    # 10.9.2 REDIRECT records (the headline) and 10.9.1 DEFAULTED-ballot records,
+    # both detected on the imported pinned markers so the extractor and the
+    # shipped eval.meeting_quality census can never drift. A voter's own §6.6
+    # graph (suspicion_graph_by_voter) carries the per-TARGET rendered values the
+    # redirect lens needs to confirm the guard's precondition (original below the
+    # gate, redirected-to at/above the argmax).
+    redirect_records: list[dict[str, Any]] = []
+    defaulted_ballot_records: list[dict[str, Any]] = []
     for b in meeting_entry.ballots:
         voter_role = roles.get(b.voter, "UNKNOWN")
         is_skip = b.target == "SKIP"
         target_role = None if is_skip else roles.get(b.target, "UNKNOWN")
+        voter_graph = suspicion_graph_by_voter.get(b.voter, {})
+        rationale = b.rationale_text or ""
+
+        # ---- 10.9.1 DEFAULTED ballot (VOTE_PARSE_DEFAULT_MARKER is the WHOLE
+        # rationale_text) ----
+        if _VOTE_PARSE_DEFAULT_MARKER_PREFIX in rationale:
+            v_rendered = rendered_max_by_voter.get(b.voter)
+            if v_rendered is None:
+                verdict = "no-render"
+            elif v_rendered >= SKIP_SUSPICION_THRESHOLD:
+                verdict = "MUST-vote"
+            else:
+                verdict = "MUST-skip"
+            defaulted_ballot_records.append(
+                {
+                    "seed": seed,
+                    "meeting_index": meeting_index,
+                    "voter": b.voter,
+                    "voter_role": voter_role,
+                    "target": b.target,
+                    "rendered_verdict": verdict,
+                    "rendered_max": v_rendered,
+                }
+            )
+
+        # ---- 10.9.2 REDIRECT ballot (BALLOT_TARGET_REDIRECT_MARKER prefix) ----
+        if _BALLOT_REDIRECT_MARKER_PREFIX in rationale:
+            original_target = _parse_redirect_original(rationale)
+            original_role = (
+                roles.get(original_target, "UNKNOWN")
+                if original_target is not None
+                else None
+            )
+            # The voter's OWN rendered suspicion of the original (the guard's
+            # precondition: below the gate) and of the recorded redirected-to
+            # target (at/above, the argmax over the eligible pool). A SKIP target
+            # is the teammate-only-over-gate coercion case.
+            original_rendered = (
+                voter_graph.get(original_target)
+                if original_target is not None
+                else None
+            )
+            redirected_rendered = None if is_skip else voter_graph.get(b.target)
+            redirect_records.append(
+                {
+                    "seed": seed,
+                    "meeting_index": meeting_index,
+                    "voter": b.voter,
+                    "voter_role": voter_role,
+                    "original_target": original_target,
+                    "original_target_role": original_role,
+                    "voter_rendered_suspicion_of_original": original_rendered,
+                    # The guard's precondition: the original target's rendered
+                    # row is below the gate OR absent (no row == 0.0 in the
+                    # verdict math, the F2 seed-12 shape -- a bare verbal
+                    # accusation the voter's own graph carries no row for).
+                    "original_below_gate": (
+                        original_rendered is None
+                        or original_rendered < SKIP_SUSPICION_THRESHOLD
+                    ),
+                    "original_row_absent": original_rendered is None,
+                    "redirected_to_target": b.target,
+                    "redirected_to_role": target_role,
+                    "voter_rendered_suspicion_of_redirect": redirected_rendered,
+                    "redirect_at_or_above_gate": (
+                        redirected_rendered is not None
+                        and redirected_rendered >= SKIP_SUSPICION_THRESHOLD
+                    ),
+                    "was_coerced_to_SKIP": is_skip,
+                }
+            )
         # Invalid ballot-target normalization (fb3cfa5): an out-of-roster target
         # is rewritten to SKIP and the original recorded on rationale_text. Count
         # it as a hallucination signal and remember it so the SKIP partition and
@@ -1217,6 +1346,155 @@ def _analyze_meeting(
         if ej_values:
             ejected_rendered_suspicion_among_ejectors = max(ej_values)
 
+    # ---- Wave-1-CLOSE: PRE-VOTE FOLD events (10.7, point 6d) ----
+    # Reconstruct each two-witness pre-vote fold by re-running the IMPORTED
+    # meetings.transcript.independent_voices over the recorded transcript under
+    # the ballot-voter roster (the same roster the live path's
+    # derive_belief_evidence used) and keeping every subject whose distinct-voice
+    # count meets TESTIMONY_INDEPENDENCE_BAR. The fold is LIVE at record time, so
+    # the recorded vote-prompt suspicions ALREADY include the +0.05 bump — we do
+    # NOT re-apply it; we only report which listeners' rendered suspicion of the
+    # folded subject crossed the §4.6 gate and whether any of them ejected. Voices
+    # are the imported predicate verbatim (no approximation): the function exposes
+    # the speaker set per subject, so "independent voices" need not be replicated.
+    voices = independent_voices(meeting_entry.transcript, roster=ballot_voter_roster)
+    prevote_folds: list[dict[str, Any]] = []
+    for subject in sorted(voices):
+        voice_speakers = voices[subject]
+        if len(voice_speakers) < TESTIMONY_INDEPENDENCE_BAR:
+            continue
+        subj_role = roles.get(subject, "UNKNOWN")
+        # The independent voices' backing: for each voice speaker, the observation
+        # claim(s) on the turn that named the subject (the fold's relevance-gated,
+        # observation-backed, distinct second voice — already validated inside the
+        # imported predicate; surfaced here for the lens to confirm distinctness).
+        voice_backing: list[dict[str, Any]] = []
+        for vsp in voice_speakers:
+            vsp_obs: list[str] = []
+            for t in turns:
+                if t.speaker != vsp:
+                    continue
+                for o in t.observations:
+                    if isinstance(o, SawPlayerObservation):
+                        vsp_obs.append(f"saw {o.subject} in {o.room} @t{o.tick}")
+                    elif isinstance(o, FoundBodyObservation):
+                        vsp_obs.append(f"found_body {o.body_of} in {o.room} @t{o.tick}")
+            voice_backing.append(
+                {
+                    "speaker": vsp,
+                    "speaker_role": roles.get(vsp, "UNKNOWN"),
+                    "observations": vsp_obs,
+                }
+            )
+        # Listeners (living voters who are not the subject) whose rendered
+        # suspicion of the subject is at/above the gate, and whether each ejected.
+        listeners_over_gate: list[dict[str, Any]] = []
+        for voter in sorted(living_ids):
+            if voter == subject:
+                continue
+            listener_sus = suspicion_graph_by_voter.get(voter, {}).get(subject)
+            if listener_sus is None or listener_sus < SKIP_SUSPICION_THRESHOLD:
+                continue
+            voted_eject = any(
+                b.voter == voter and b.target == subject for b in meeting_entry.ballots
+            )
+            listeners_over_gate.append(
+                {
+                    "listener": voter,
+                    "rendered_suspicion": listener_sus,
+                    "voted_to_eject_subject": voted_eject,
+                }
+            )
+        prevote_folds.append(
+            {
+                "subject": subject,
+                "subject_role": subj_role,
+                "n_independent_voices": len(voice_speakers),
+                "independent_voices": voice_backing,
+                "n_listeners_over_gate": len(listeners_over_gate),
+                "listeners_over_gate": listeners_over_gate,
+                "any_listener_ejected_subject": any(
+                    listener["voted_to_eject_subject"]
+                    for listener in listeners_over_gate
+                ),
+                "ballots_for_subject": target_vote_counts.get(subject, 0),
+                "ejected": subject == ejected_id,
+                "outcome": meeting_entry.outcome,
+            }
+        )
+
+    # ---- Wave-1-CLOSE: SELF-ACCUSATIONS (point 6d) ----
+    # Every accusation where speaker == accused (the lab's emergence class: the
+    # game-deciding impostor self-steer the 10.9.2 guard does not cover, since it
+    # only constrains the ballot TARGET, not a turn's accusation). For each, did
+    # ANY OTHER voter then target the self-accuser (adoption)?
+    self_accusation_records: list[dict[str, Any]] = []
+    for acc in accusations:
+        if acc["accused"] != acc["speaker"]:
+            continue
+        speaker = acc["speaker"]
+        adopters = sorted(
+            b.voter
+            for b in meeting_entry.ballots
+            if b.target == speaker and b.voter != speaker
+        )
+        self_accusation_records.append(
+            {
+                "seed": seed,
+                "meeting_index": meeting_index,
+                "turn_index": acc["turn_index"],
+                "speaker": speaker,
+                "speaker_role": acc["speaker_role"],
+                "adopted_by": adopters,
+                "n_adopters": len(adopters),
+                "self_accuser_ejected": speaker == ejected_id,
+            }
+        )
+
+    # ---- Wave-1-CLOSE: EMERGENCY meeting fact (10.8, point 6d) ----
+    # A meeting is emergency iff its engine-recorded trigger is "emergency"
+    # (re-derived in the per-game walk from MeetingTriggeredEvent.trigger and
+    # passed in). The AUTHORITATIVE "carried a body" signal is the engine's
+    # MeetingTriggeredEvent.body_id (trigger_body_id) -- an emergency button
+    # reports NO corpse, so the engine attaches body_id=None; a non-None body_id
+    # on an emergency trigger is the blocking 10.8 violation (the caller's loop
+    # raises off `carried_body`). The opening turn's model-authored
+    # FoundBodyObservation is SEPARATE: on this 9B set every emergency opening
+    # fabricates a found_body in its ReportDocument (a model hallucination, not an
+    # engine body), so it is recorded as a signal (`opening_found_body_subjects`)
+    # but NEVER drives the blocking finding -- the engine correctly attached no
+    # corpse.
+    opening_found_body_subjects = (
+        [
+            o.body_of
+            for o in turns[0].observations
+            if isinstance(o, FoundBodyObservation)
+        ]
+        if turns
+        else []
+    )
+    is_emergency = trigger_kind == "emergency"
+    caller = meeting_entry.triggered_by
+    emergency_fact: dict[str, Any] | None = None
+    if is_emergency:
+        emergency_fact = {
+            "seed": seed,
+            "meeting_index": meeting_index,
+            "meeting_id": mid,
+            "caller": caller,
+            "caller_role": roles.get(caller, "UNKNOWN"),
+            "caller_rendered_max_suspicion": rendered_max_by_voter.get(caller),
+            # Engine-authoritative: an emergency trigger must carry no body_id.
+            "carried_body": trigger_body_id is not None,
+            "trigger_body_id": trigger_body_id,
+            # Model-authored opening content (hallucination signal, NOT a body).
+            "opening_found_body_subjects": opening_found_body_subjects,
+            "opening_fabricated_found_body": bool(opening_found_body_subjects),
+            "outcome": meeting_entry.outcome,
+            "ejected_player_id": ejected_id,
+            "ejected_role": ejected_role,
+        }
+
     kind_counts = Counter(t.turn_kind for t in turns)
     turn_kinds: tuple[TurnKind, ...] = ("opening", "reply", "opt_in")
     return {
@@ -1270,6 +1548,14 @@ def _analyze_meeting(
         "ballot_voter_roster": sorted(ballot_voter_roster),
         "plurality_target": plurality_target,
         "plurality_margin": plurality_margin,
+        # Wave-1-CLOSE payloads (point 6d).
+        "redirect_records": redirect_records,
+        "defaulted_ballot_records": defaulted_ballot_records,
+        "prevote_folds": prevote_folds,
+        "self_accusation_records": self_accusation_records,
+        "emergency_fact": emergency_fact,
+        "is_emergency": is_emergency,
+        "opening_fabricated_found_body": bool(opening_found_body_subjects),
     }
 
 
@@ -1372,6 +1658,12 @@ def main() -> int:
     opening_retry_extra_output_tokens = 0
     meetings_lost_opening = 0
     opening_retry_records: list[dict[str, Any]] = []
+    # Wave-1-CLOSE record sets (point 6d — the close-gate lenses depend on these).
+    redirect_records_all: list[dict[str, Any]] = []
+    defaulted_ballot_records_all: list[dict[str, Any]] = []
+    prevote_fold_records_all: list[dict[str, Any]] = []
+    self_accusation_records_all: list[dict[str, Any]] = []
+    emergency_meeting_records: list[dict[str, Any]] = []
 
     for path in replay_paths:
         seed = int(path.stem.rsplit("-", 1)[1])
@@ -1586,6 +1878,7 @@ def main() -> int:
                 meeting_index=meeting_index,
                 meeting_entry=meeting_entry,
                 trigger_kind=trigger_kind,
+                trigger_body_id=body_id,
                 roles=roles,
                 living_ids=living_ids,
                 findings=findings,
@@ -1646,6 +1939,51 @@ def main() -> int:
                 invalid_ballot_target_seeds.add(seed)
             for kind, lengths in m_facts["free_text_lengths"].items():
                 free_text_len_samples[kind].extend(lengths)
+
+            # ---- Wave-1-CLOSE aggregation (point 6d) ----
+            redirect_records_all.extend(m_facts["redirect_records"])
+            defaulted_ballot_records_all.extend(m_facts["defaulted_ballot_records"])
+            for fold in m_facts["prevote_folds"]:
+                prevote_fold_records_all.append(
+                    {"seed": seed, "meeting_index": m_facts["meeting_index"], **fold}
+                )
+            self_accusation_records_all.extend(m_facts["self_accusation_records"])
+            if m_facts["emergency_fact"] is not None:
+                emergency_meeting_records.append(m_facts["emergency_fact"])
+                # 10.8 invariant: an emergency trigger must carry no engine body
+                # (body_id is None) — the emergency button reports no corpse. A
+                # non-None body_id on an emergency trigger is the blocking
+                # violation. NOTE: a model-FABRICATED found_body in the opening's
+                # ReportDocument is NOT this (the engine attached no body); it is
+                # recorded as a hallucination signal, never a finding.
+                if m_facts["emergency_fact"]["carried_body"]:
+                    findings.append(
+                        {
+                            "id": f"EMERGENCY-BODY-{seed}-{m_facts['meeting_index']}",
+                            "severity": "blocking",
+                            "title": (
+                                "Emergency meeting carried an engine-attached body"
+                            ),
+                            "claim": (
+                                "An emergency-triggered meeting must carry no "
+                                "engine body (the emergency button reports no "
+                                "corpse); the MeetingTriggeredEvent carries a "
+                                "non-None body_id."
+                            ),
+                            "evidence": (
+                                f"seed {seed} meeting {m_facts['meeting_index']} "
+                                f"({m_facts['emergency_fact']['meeting_id']}): "
+                                "emergency trigger but body_id="
+                                f"{m_facts['emergency_fact']['trigger_body_id']!r}"
+                            ),
+                            "repair_hint": (
+                                "Trace engine.tick's meeting-trigger path; an "
+                                "emergency trigger carrying a body_id means the "
+                                "trigger classification or corpse attachment "
+                                "mislabeled a body report as emergency."
+                            ),
+                        }
+                    )
 
             ejected_id = meeting_entry.ejected_player_id
             ejected_role = roles.get(ejected_id) if ejected_id is not None else None
@@ -2341,6 +2679,88 @@ def main() -> int:
             f"vs shipped vote_correctness {shipped_vc.crewmate_ejections}"
         )
 
+    # --- Wave-1-CLOSE census CROSS-CHECKS (point 6d) ---
+    # The extractor's own marker-derived redirect / defaulted-ballot record sets
+    # must equal the shipped eval.meeting_quality censuses over the same bytes
+    # (both key on the identical imported pinned markers; a mismatch means one of
+    # the two readers is wrong -> BLOCKING). The redirect census splits the count
+    # into eject vs coerced-SKIP; the extractor's was_coerced_to_SKIP flag gives
+    # the same split, so both prongs are checked.
+    shipped_defaulted = compute_defaulted_ballots(shipped_report)
+    shipped_redirects = compute_ballot_target_redirects(shipped_report)
+    redirect_eject_rederived = sum(
+        1 for r in redirect_records_all if not r["was_coerced_to_SKIP"]
+    )
+    redirect_skip_rederived = sum(
+        1 for r in redirect_records_all if r["was_coerced_to_SKIP"]
+    )
+    defaulted_ballots_crosscheck_ok = (
+        len(defaulted_ballot_records_all) == shipped_defaulted.defaulted_skip_ballots
+    )
+    redirect_crosscheck_ok = (
+        len(redirect_records_all) == shipped_redirects.redirected_ballots
+        and redirect_eject_rederived == shipped_redirects.redirected_eject_ballots
+        and redirect_skip_rederived == shipped_redirects.redirect_coerced_skip_ballots
+    )
+    if not defaulted_ballots_crosscheck_ok:
+        findings.append(
+            {
+                "id": "DEFAULTED-BALLOT-CROSSCHECK",
+                "severity": "blocking",
+                "title": (
+                    "Re-derived defaulted-ballot count diverges from the shipped "
+                    "10.9.1 census"
+                ),
+                "claim": (
+                    "The extractor's VOTE_PARSE_DEFAULT_MARKER record set and "
+                    "eval.meeting_quality.compute_defaulted_ballots over the same "
+                    "bytes must agree to the unit; they do not, so one of the two "
+                    "marker readers is wrong."
+                ),
+                "evidence": (
+                    f"extractor defaulted ballots={len(defaulted_ballot_records_all)}; "
+                    f"shipped defaulted_skip_ballots="
+                    f"{shipped_defaulted.defaulted_skip_ballots}"
+                ),
+                "repair_hint": (
+                    "Both read the pinned meetings.manager.VOTE_PARSE_DEFAULT_MARKER "
+                    "prefix off ballot.rationale_text; re-sync the extractor's "
+                    "_VOTE_PARSE_DEFAULT_MARKER_PREFIX to the imported constant."
+                ),
+            }
+        )
+    if not redirect_crosscheck_ok:
+        findings.append(
+            {
+                "id": "REDIRECT-CROSSCHECK",
+                "severity": "blocking",
+                "title": (
+                    "Re-derived ballot-redirect counts diverge from the shipped "
+                    "10.9.2 census"
+                ),
+                "claim": (
+                    "The extractor's BALLOT_TARGET_REDIRECT_MARKER record set and "
+                    "eval.meeting_quality.compute_ballot_target_redirects over the "
+                    "same bytes must agree to the unit (total + eject/coerced-SKIP "
+                    "split); they do not, so one of the two marker readers is wrong."
+                ),
+                "evidence": (
+                    f"extractor redirects total={len(redirect_records_all)} "
+                    f"(eject={redirect_eject_rederived}, "
+                    f"coerced_skip={redirect_skip_rederived}); shipped "
+                    f"redirected_ballots={shipped_redirects.redirected_ballots} "
+                    f"(eject={shipped_redirects.redirected_eject_ballots}, "
+                    f"coerced_skip={shipped_redirects.redirect_coerced_skip_ballots})"
+                ),
+                "repair_hint": (
+                    "Both read the pinned meetings.manager.BALLOT_TARGET_REDIRECT_"
+                    "MARKER prefix off ballot.rationale_text; re-sync the "
+                    "extractor's _BALLOT_REDIRECT_MARKER_PREFIX to the imported "
+                    "constant."
+                ),
+            }
+        )
+
     # --- Self-check invariants (FAIL LOUD) ---
     self_checks: list[str] = []
     ok_meetings = total_meetings == total_meeting_records
@@ -2417,6 +2837,59 @@ def main() -> int:
         f"{len(wrong_ejections)}/{shipped_vc.crewmate_ejections}): "
         f"{'OK' if ejection_crosscheck_ok else 'FAIL'}"
     )
+    # Wave-1-CLOSE census cross-checks (point 6d): the extractor's marker-derived
+    # redirect / defaulted-ballot record sets vs the shipped eval.meeting_quality
+    # censuses. A mismatch is a trust-anchor failure (one of two readers of the
+    # same pinned marker is wrong) -> raise loud, like the genuine cross-check.
+    self_checks.append(
+        "re-derived defaulted-ballot count == shipped compute_defaulted_ballots "
+        f"({len(defaulted_ballot_records_all)}/"
+        f"{shipped_defaulted.defaulted_skip_ballots}): "
+        f"{'OK' if defaulted_ballots_crosscheck_ok else 'FAIL'}"
+    )
+    self_checks.append(
+        "re-derived ballot-redirect counts == shipped "
+        "compute_ballot_target_redirects "
+        f"(total {len(redirect_records_all)}/{shipped_redirects.redirected_ballots}, "
+        f"eject {redirect_eject_rederived}/"
+        f"{shipped_redirects.redirected_eject_ballots}, coerced_skip "
+        f"{redirect_skip_rederived}/"
+        f"{shipped_redirects.redirect_coerced_skip_ballots}): "
+        f"{'OK' if redirect_crosscheck_ok else 'FAIL'}"
+    )
+    if not defaulted_ballots_crosscheck_ok:
+        invariant_failures.append(
+            "defaulted-ballot census mismatch: extractor "
+            f"{len(defaulted_ballot_records_all)} vs shipped "
+            f"compute_defaulted_ballots {shipped_defaulted.defaulted_skip_ballots}"
+        )
+    if not redirect_crosscheck_ok:
+        invariant_failures.append(
+            "ballot-redirect census mismatch: extractor total "
+            f"{len(redirect_records_all)} (eject {redirect_eject_rederived}, "
+            f"coerced_skip {redirect_skip_rederived}) vs shipped "
+            f"compute_ballot_target_redirects total "
+            f"{shipped_redirects.redirected_ballots} (eject "
+            f"{shipped_redirects.redirected_eject_ballots}, coerced_skip "
+            f"{shipped_redirects.redirect_coerced_skip_ballots})"
+        )
+    # Emergency meetings must carry no engine body (10.8 invariant). The blocking
+    # finding is emitted per-meeting above; surface the aggregate self-check here
+    # AND raise loud on any breach. The check is engine-authoritative (body_id),
+    # NOT the model-fabricated opening found_body.
+    emergency_with_body = [r for r in emergency_meeting_records if r["carried_body"]]
+    self_checks.append(
+        "every emergency meeting carries no engine body (body_id is None) "
+        f"({len(emergency_meeting_records)} emergency meetings, "
+        f"{len(emergency_with_body)} with a body): "
+        f"{'OK' if not emergency_with_body else 'FAIL'}"
+    )
+    if emergency_with_body:
+        for r in emergency_with_body:
+            invariant_failures.append(
+                f"emergency meeting carried an engine body: seed {r['seed']} "
+                f"meeting {r['meeting_index']} body_id={r['trigger_body_id']!r}"
+            )
 
     for line in self_checks:
         print(line, file=sys.stderr)
@@ -2736,6 +3209,204 @@ def main() -> int:
                     "its chain-driving opening."
                 ),
                 "records": opening_retry_records,
+            },
+        },
+        "wave1_close": {
+            "note": (
+                "Point-6d Wave-1-CLOSE aggregates (the close-gate lenses depend "
+                "on these). REDIRECT = 10.9.2 ballot-target graph guard rewrites "
+                "(BALLOT_TARGET_REDIRECT_MARKER); DEFAULTED = 10.9.1 vote-parse "
+                "fail-soft SKIPs (VOTE_PARSE_DEFAULT_MARKER); PRE-VOTE FOLDs = "
+                "10.7 two-witness testimony folds re-run from the imported "
+                "independent_voices predicate (LIVE at record time, the rendered "
+                "suspicions already include the bump); EMERGENCY = 10.8 emergency "
+                "meetings (must carry no found_body); SELF-ACCUSATIONS = the "
+                "lab's emergence class (speaker == accused) the redirect guard "
+                "does not cover. Redirect / defaulted counts are cross-checked "
+                "against the shipped eval.meeting_quality censuses (a mismatch "
+                "raises)."
+            ),
+            "redirects": {
+                "count": len(redirect_records_all),
+                "onto_impostor": sum(
+                    1
+                    for r in redirect_records_all
+                    if not r["was_coerced_to_SKIP"]
+                    and r["redirected_to_role"] == "IMPOSTOR"
+                ),
+                "onto_crew": sum(
+                    1
+                    for r in redirect_records_all
+                    if not r["was_coerced_to_SKIP"]
+                    and r["redirected_to_role"] == "CREWMATE"
+                ),
+                "coerced_to_skip": redirect_skip_rederived,
+                "redirected_eject": redirect_eject_rederived,
+                "original_target_impostor": sum(
+                    1
+                    for r in redirect_records_all
+                    if r["original_target_role"] == "IMPOSTOR"
+                ),
+                "original_target_crew": sum(
+                    1
+                    for r in redirect_records_all
+                    if r["original_target_role"] == "CREWMATE"
+                ),
+                "precondition_holds": sum(
+                    1
+                    for r in redirect_records_all
+                    if r["original_below_gate"]
+                    and (r["was_coerced_to_SKIP"] or r["redirect_at_or_above_gate"])
+                ),
+                # Wrong-ejection games whose ejected player owes its plurality to
+                # a redirect (the lens-C headline input): a CREWMATE ejected this
+                # meeting who was the redirected-to target of >=1 redirect ballot.
+                "wrong_ejections_owing_to_a_redirect": sorted(
+                    {
+                        (r["seed"], r["redirected_to_target"])
+                        for r in redirect_records_all
+                        for w in wrong_ejections
+                        if r["seed"] == w["seed"]
+                        and not r["was_coerced_to_SKIP"]
+                        and r["redirected_to_target"] == w["ejected_player"]
+                    }
+                ),
+                "shipped_census": {
+                    "redirected_ballots": shipped_redirects.redirected_ballots,
+                    "redirected_eject_ballots": (
+                        shipped_redirects.redirected_eject_ballots
+                    ),
+                    "redirect_coerced_skip_ballots": (
+                        shipped_redirects.redirect_coerced_skip_ballots
+                    ),
+                },
+                "crosscheck_ok": redirect_crosscheck_ok,
+                "records": redirect_records_all,
+            },
+            "defaulted_ballots": {
+                "count": len(defaulted_ballot_records_all),
+                "by_rendered_verdict": dict(
+                    Counter(r["rendered_verdict"] for r in defaulted_ballot_records_all)
+                ),
+                "seeds": sorted({r["seed"] for r in defaulted_ballot_records_all}),
+                "all_games_reached_game_over": no_game_over == 0,
+                "shipped_census": {
+                    "defaulted_skip_ballots": (
+                        shipped_defaulted.defaulted_skip_ballots
+                    ),
+                    "defaulted_under_must_vote": (
+                        shipped_defaulted.defaulted_under_must_vote
+                    ),
+                    "defaulted_under_must_skip": (
+                        shipped_defaulted.defaulted_under_must_skip
+                    ),
+                    "defaulted_without_render": (
+                        shipped_defaulted.defaulted_without_render
+                    ),
+                },
+                "crosscheck_ok": defaulted_ballots_crosscheck_ok,
+                "note": (
+                    "Every ballot carrying VOTE_PARSE_DEFAULT_MARKER (the whole "
+                    "rationale_text). rendered_verdict is the voter's rendered "
+                    "§4.6 read (MUST-vote / MUST-skip / no-render). The game "
+                    "still reaching game_over is the 10.9.1 DoD."
+                ),
+                "records": defaulted_ballot_records_all,
+            },
+            "prevote_folds": {
+                "count": len(prevote_fold_records_all),
+                "subjects_impostor": sum(
+                    1
+                    for r in prevote_fold_records_all
+                    if r["subject_role"] == "IMPOSTOR"
+                ),
+                "subjects_crew": sum(
+                    1
+                    for r in prevote_fold_records_all
+                    if r["subject_role"] == "CREWMATE"
+                ),
+                "with_a_listener_over_gate": sum(
+                    1
+                    for r in prevote_fold_records_all
+                    if r["n_listeners_over_gate"] > 0
+                ),
+                "with_a_listener_ejecting": sum(
+                    1
+                    for r in prevote_fold_records_all
+                    if r["any_listener_ejected_subject"]
+                ),
+                "converted": sum(1 for r in prevote_fold_records_all if r["ejected"]),
+                "note": (
+                    "Two-witness pre-vote folds re-run from the imported "
+                    "meetings.transcript.independent_voices (>= "
+                    f"{TESTIMONY_INDEPENDENCE_BAR} distinct relevance-gated, "
+                    "observation-backed voices). The fold is LIVE at record time "
+                    "so the listeners' rendered suspicions already carry the "
+                    "+0.05 bump; listeners_over_gate are those whose rendered "
+                    "suspicion of the folded subject is >= the §4.6 gate."
+                ),
+                "records": prevote_fold_records_all,
+            },
+            "emergency_meetings": {
+                "count": len(emergency_meeting_records),
+                "body_report_count": total_meetings - len(emergency_meeting_records),
+                "with_engine_body": sum(
+                    1 for r in emergency_meeting_records if r["carried_body"]
+                ),
+                "with_opening_fabricated_found_body": sum(
+                    1
+                    for r in emergency_meeting_records
+                    if r["opening_fabricated_found_body"]
+                ),
+                "caller_impostor": sum(
+                    1
+                    for r in emergency_meeting_records
+                    if r["caller_role"] == "IMPOSTOR"
+                ),
+                "caller_crew": sum(
+                    1
+                    for r in emergency_meeting_records
+                    if r["caller_role"] == "CREWMATE"
+                ),
+                "ejected_someone": sum(
+                    1
+                    for r in emergency_meeting_records
+                    if r["ejected_player_id"] is not None
+                ),
+                "note": (
+                    "Every meeting whose engine-recorded trigger is 'emergency'. "
+                    "emergency + body_report partitions total_meetings "
+                    f"({len(emergency_meeting_records)} + "
+                    f"{total_meetings - len(emergency_meeting_records)} == "
+                    f"{total_meetings}). with_engine_body (the authoritative "
+                    "MeetingTriggeredEvent.body_id) MUST be 0 -- a non-None "
+                    "body_id on an emergency trigger is a blocking finding. "
+                    "with_opening_fabricated_found_body is the SEPARATE 9B "
+                    "hallucination signal: the model fabricates a found_body in "
+                    "the emergency opening's ReportDocument even though the engine "
+                    "attached no corpse (never a finding)."
+                ),
+                "records": emergency_meeting_records,
+            },
+            "self_accusations": {
+                "count": len(self_accusation_records_all),
+                "by_speaker_role": dict(
+                    Counter(r["speaker_role"] for r in self_accusation_records_all)
+                ),
+                "with_an_adopter": sum(
+                    1 for r in self_accusation_records_all if r["n_adopters"] > 0
+                ),
+                "self_accuser_ejected": sum(
+                    1 for r in self_accusation_records_all if r["self_accuser_ejected"]
+                ),
+                "seeds": sorted({r["seed"] for r in self_accusation_records_all}),
+                "note": (
+                    "Every accusation where speaker == accused (the impostor "
+                    "self-steer the 10.9.2 ballot-target guard does not cover -- "
+                    "it constrains the ballot TARGET, not a turn accusation). "
+                    "adopted_by = OTHER voters who then targeted the self-accuser."
+                ),
+                "records": self_accusation_records_all,
             },
         },
         "invalid_accusation_target_drops": {
