@@ -59,7 +59,13 @@ than aborting the meeting). The vote inherits the third 7.12 guard,
 schema validation after the provider-level retry degrades to the
 default SKIP stamped with :data:`VOTE_PARSE_DEFAULT_MARKER` instead of
 aborting the game. Caps and retry counts are frozen; the net catches,
-it never re-asks.
+it never re-asks. Last in the ballot chain -- after roster
+normalization and the teammate coercion -- the Task 10.9.2 ballot-target
+graph guard (:func:`guard_ballot_target_graph`, PR #147 F2) binds an
+eject ballot under a MUST-vote verdict to a target whose rendered
+suspicion meets the §4.6 threshold, redirecting an under-gate target to
+the argmax-rendered eligible candidate with
+:data:`BALLOT_TARGET_REDIRECT_MARKER`.
 
 The opening additionally content-validates (Task 10.3, audit gp-9): its
 recorded claims must carry an accusation OR its free_text an explicit
@@ -164,6 +170,30 @@ INVALID_VOTE_TARGET_MARKER: Final[str] = (
 # preserves the original (teammate) target for replay / audit analysis.
 TEAMMATE_VOTE_TARGET_MARKER: Final[str] = (
     "[teammate target {target!r} coerced to SKIP] "
+)
+
+# Audit-trail marker prepended to ``rationale_text`` when the ballot-target
+# graph guard (Task 10.9.2; PR #147 finding F2) rewrites an eject ballot
+# whose target carries no over-gate rendered row. The seed-12 m0 shape:
+# three voters whose rendered §4.6 verdict read MUST-vote off an over-gate
+# row adopted the opening's bare verbal accusation of p-1 -- a candidate
+# their own rendered graph carried NO row for -- and p-1 was ejected 3-2-2
+# with zero design-channel attribution. Every other layered guard held;
+# the leak was that ballot TARGET is unconstrained by the graph the
+# verdict was computed from. The guard (:func:`guard_ballot_target_graph`)
+# redirects such a target to the argmax-rendered eligible candidate (ties
+# to the lowest player id), or coerces to SKIP when no eligible candidate
+# meets the gate (an impostor voter whose only over-gate row is a
+# teammate); either way this marker preserves the original target,
+# bounded per the Task 10.6 rule (:func:`_bounded_original`). The guard
+# NEVER fires on a SKIP ballot or under a MUST-skip verdict -- a vote
+# against a MUST-skip verdict stays a recorded inversion (frozen
+# measurement semantics). Downstream eval counts redirects on this
+# literal beside the invalid-target and teammate-coercion counts. Pin the
+# literal exactly. The owner principle this enforces is the phase's
+# oldest line: innocents are ejectable, never at RANDOM.
+BALLOT_TARGET_REDIRECT_MARKER: Final[str] = (
+    "[under-gate eject target {target!r} redirected] "
 )
 
 # Audit-trail marker recorded AS ``rationale_text`` when a vote-ballot
@@ -1431,6 +1461,26 @@ class MeetingManager:
         normalized = coerce_teammate_ballot_to_skip(
             ballot=normalized, fellow_impostor_ids=participant.fellow_impostor_ids
         )
+        # Ballot-target graph guard (Task 10.9.2; PR #147 F2): an eject
+        # ballot under a MUST-vote verdict must name a target whose
+        # rendered suspicion meets the threshold, or it is redirected to
+        # the argmax-rendered eligible candidate (SKIP-coerced when only a
+        # teammate row is over the gate). The verdict is recomputed from
+        # the SAME ``suspicion_graph`` / ``candidate_targets`` /
+        # ``skip_confidence_threshold`` passed to the prompt renderer
+        # above, so guard and in-prompt §4.6 verdict read one source. Runs
+        # LAST in the chain -- after roster normalization and the §7.12
+        # coercion -- so it only sees valid living non-teammate targets
+        # and can never create a betrayal ballot for the firewall to
+        # re-coerce.
+        normalized = guard_ballot_target_graph(
+            ballot=normalized,
+            voter_id=participant.agent_id,
+            suspicion_graph=suspicion_graph,
+            candidate_targets=candidate_targets,
+            skip_confidence_threshold=self._config.skip_confidence_threshold,
+            fellow_impostor_ids=participant.fellow_impostor_ids,
+        )
         return normalized.model_copy(update={"voter": participant.agent_id})
 
     # -- Resolution -------------------------------------------------------
@@ -2042,6 +2092,101 @@ def coerce_teammate_ballot_to_skip(
     )
 
 
+def guard_ballot_target_graph(
+    *,
+    ballot: VoteBallot,
+    voter_id: PlayerId,
+    suspicion_graph: Sequence[SuspicionEntry],
+    candidate_targets: tuple[PlayerId, ...],
+    skip_confidence_threshold: float,
+    fellow_impostor_ids: tuple[PlayerId, ...] = (),
+) -> VoteBallot:
+    """Bind an eject ballot's target to the voter's rendered graph (Task 10.9.2).
+
+    The PR #147 F2 repair, the last unguarded seam for a RANDOM ejection
+    (DESIGN.md §4.6, §6.3): a voter whose rendered verdict reads MUST-vote
+    may name ANY living candidate -- including one their own rendered graph
+    carries no over-gate row for (seed 12 m0: the opening's bare verbal
+    accusation adopted as ballot target over the graph's 0.80 argmax). The
+    guard is deterministic and fires only when ALL of:
+
+    * the ballot is an eject (``target != "SKIP"``) -- a SKIP ballot is
+      byte-unchanged, always;
+    * the verdict over ``candidate_targets`` reads MUST-vote: the max
+      rendered suspicion among the graph rows naming a candidate is at or
+      above ``skip_confidence_threshold``, the IDENTICAL derivation the
+      frozen ``vote_ballot.j2`` template renders in-prompt (the same
+      ``suspicion_graph`` / ``candidate_targets`` the prompt renderer
+      received, so guard and rendered verdict cannot disagree). Under a
+      MUST-skip verdict an eject ballot is byte-unchanged -- it stays a
+      recorded inversion, frozen measurement semantics;
+    * the named target's rendered row is below the threshold or absent.
+      ANY over-gate target passes unredirected, even when a higher row
+      exists -- the model keeps free choice among over-gate targets.
+
+    The redirect goes to the argmax-rendered candidate in the eligible
+    pool -- ``candidate_targets`` minus the voter minus
+    ``fellow_impostor_ids`` -- with ties broken by the lowest player id
+    (lexicographic ``min``, the module's id-ordering convention). The
+    teammate exclusion composes with the §7.12 firewall by construction:
+    the guard can never create the betrayal ballot the firewall exists to
+    coerce. When the eligible pool's max is itself below the threshold (an
+    impostor voter whose only over-gate row is a teammate), the ballot
+    coerces to SKIP instead, nulling the now-stale ``primary_reason_id``
+    exactly as :func:`coerce_teammate_ballot_to_skip` does. Either way
+    :data:`BALLOT_TARGET_REDIRECT_MARKER` is prepended to
+    ``rationale_text`` preserving the original target (bounded per the
+    Task 10.6 rule). A redirected eject keeps its ``primary_reason_id``:
+    the cited turn still drove the decision to EJECT -- the guard
+    constrains only the target.
+
+    Runs AFTER roster normalization (:func:`_normalize_ballot_target`) and
+    the §7.12 teammate coercion, so it only ever sees a valid living
+    non-teammate eject target. Pure function of its inputs -- no RNG, no
+    clock -- so replaying the same graph + ballot yields the same redirect.
+    """
+
+    if ballot.target == _SKIP_TARGET:
+        return ballot
+    rendered = {
+        entry.player_id: entry.suspicion
+        for entry in suspicion_graph
+        if entry.player_id in candidate_targets
+    }
+    # The in-prompt §4.6 verdict, recomputed bit-for-bit: the frozen
+    # template takes max(suspicion over candidate_targets, default 0.0)
+    # and reads MUST-vote at or above the threshold.
+    verdict_max = max(rendered.values(), default=0.0)
+    if verdict_max < skip_confidence_threshold:
+        return ballot
+    target_row = rendered.get(ballot.target)
+    if target_row is not None and target_row >= skip_confidence_threshold:
+        return ballot
+    marker = BALLOT_TARGET_REDIRECT_MARKER.format(
+        target=_bounded_original(ballot.target)
+    )
+    eligible = {
+        player_id: suspicion
+        for player_id, suspicion in rendered.items()
+        if player_id != voter_id and player_id not in fellow_impostor_ids
+    }
+    if not eligible or max(eligible.values()) < skip_confidence_threshold:
+        return ballot.model_copy(
+            update={
+                "target": _SKIP_TARGET,
+                "primary_reason_id": None,
+                "rationale_text": marker + ballot.rationale_text,
+            }
+        )
+    redirect = min(eligible, key=lambda player_id: (-eligible[player_id], player_id))
+    return ballot.model_copy(
+        update={
+            "target": redirect,
+            "rationale_text": marker + ballot.rationale_text,
+        }
+    )
+
+
 def _guard_teammate_turn_claims(
     claims: tuple[Claim, ...],
     *,
@@ -2377,6 +2522,7 @@ def _drop_non_roster_claims(
 
 
 __all__ = [
+    "BALLOT_TARGET_REDIRECT_MARKER",
     "DEFAULT_SKIP_CONFIDENCE_THRESHOLD",
     "DEFAULT_TURN_DEADLINE_SECONDS",
     "DEFAULT_TURN_FREE_TEXT",
@@ -2420,4 +2566,5 @@ __all__ = [
     "drop_teammate_statement_target",
     "exclude_teammate_accusation_claims",
     "extract_belief_evidence",
+    "guard_ballot_target_graph",
 ]

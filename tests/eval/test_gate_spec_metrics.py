@@ -474,6 +474,80 @@ class TestDecomposeEjectionChannels:
         assert first == second
 
 
+class TestPostGuardUnattributedImpossible:
+    """Task 10.9.2 (PR #147 F2): unattributed ejections are structurally gone.
+
+    The seed-12 m0 shape — an impostor ejected with NO rendered over-gate
+    row anywhere and no naming flag — decomposed to zero channels (the gp-7
+    decomposition itself flagged it; W0 unattributed was 0). The
+    ballot-target graph guard makes that shape impossible on post-guard
+    recordings: every eject ballot under a MUST-vote verdict names a target
+    whose rendered row meets the 0.60 gate, and a rendered row at or above
+    the gate always decomposes to at least one §6.3 channel — the lift over
+    the 0.5 prior is either flag mass (flag channel) or persistent mass
+    (proximity / vent / carry).
+    """
+
+    def test_pre_guard_seed12_shape_decomposes_to_zero_channels(self) -> None:
+        # The class the guard removes: ejected impostor, no naming flag,
+        # no rendered row for the ejected anywhere — [] channels.
+        game = _game(
+            meetings=(
+                _meeting(
+                    outcome="EJECTED",
+                    ejected=_IMPOSTOR,
+                    llm_calls=(_graph_call(agent_id="p-0", rows={"p-1": 0.80}),),
+                ),
+            )
+        )
+        assert decompose_ejection_channels(game, 0) == frozenset()
+
+    def test_over_gate_rendered_row_always_attributes_a_channel(self) -> None:
+        # Post-guard, the winning eject target carries a rendered row at or
+        # above the gate. At the 0.60 floor with no flags the 0.10 lift
+        # over the prior is persistent mass (body proximity); with a flag
+        # the flag channel is present; at the 1.0 clamp the vent channel
+        # is. No over-gate row can decompose to zero channels.
+        no_flag = _game(
+            meetings=(
+                _meeting(
+                    outcome="EJECTED",
+                    ejected=_IMPOSTOR,
+                    llm_calls=(_graph_call(agent_id="p-0", rows={_IMPOSTOR: 0.60}),),
+                ),
+            )
+        )
+        with_flag = _game(
+            meetings=(
+                _meeting(
+                    outcome="EJECTED",
+                    ejected=_IMPOSTOR,
+                    turns=_weak_flag_turns(),
+                    llm_calls=(_graph_call(agent_id="p-0", rows={_IMPOSTOR: 0.60}),),
+                ),
+            )
+        )
+        clamped = _game(
+            meetings=(
+                _meeting(
+                    outcome="EJECTED",
+                    ejected=_IMPOSTOR,
+                    llm_calls=(_graph_call(agent_id="p-0", rows={_IMPOSTOR: 1.00}),),
+                ),
+            )
+        )
+
+        assert decompose_ejection_channels(no_flag, 0) == frozenset(
+            {CHANNEL_BODY_PROXIMITY}
+        )
+        flag_channels = decompose_ejection_channels(with_flag, 0)
+        assert flag_channels is not None
+        assert CHANNEL_CONTRADICTION_FLAG in flag_channels
+        assert decompose_ejection_channels(clamped, 0) == frozenset(
+            {CHANNEL_VENT_WITNESS}
+        )
+
+
 class TestComputeMultiSignalConversion:
     def test_partition_and_channel_counts(self) -> None:
         games = (
