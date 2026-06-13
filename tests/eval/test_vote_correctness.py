@@ -30,8 +30,10 @@ from pydantic import ValidationError
 from engine.entities import Role
 from eval.meeting_quality import (
     ConversionReport,
+    DefaultedBallotReport,
     TournamentEvalReport,
     compute_conversion_report,
+    compute_defaulted_ballots,
 )
 from eval.report_schema import (
     CURRENT_FORMAT_VERSION,
@@ -46,7 +48,11 @@ from eval.vote_correctness import (
     VoteCorrectnessReport,
     compute_vote_correctness,
 )
-from meetings.manager import INVALID_VOTE_TARGET_MARKER, TEAMMATE_VOTE_TARGET_MARKER
+from meetings.manager import (
+    INVALID_VOTE_TARGET_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
+)
 from meetings.schemas import (
     AccusationClaim,
     ContradictionRef,
@@ -1144,6 +1150,174 @@ def test_non_skip_ballots_do_not_enter_the_skip_partition() -> None:
 
     assert result.skip_ballots == 1
     assert result.correct_skip_ballots == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 10.9.1 — the DEFAULTED class of the SKIP partition (PR #147 F1)
+# ---------------------------------------------------------------------------
+
+# What the manager's vote fail-soft records as the WHOLE rationale_text of a
+# ballot degraded after its completion failed schema validation: the pinned
+# marker quoting a bounded head of the unparseable response (the seed-8
+# cap-truncation shape).
+_DEFAULTED_RATIONALE = VOTE_PARSE_DEFAULT_MARKER.format(
+    head='{"voter": "p-0", "target": "p-3", "confidence": 0.72, "rationa...'
+)
+
+
+def test_defaulted_skip_under_must_vote_lands_in_defaulted_class() -> None:
+    """The DoD partition pin: a degraded SKIP under a MUST-vote render.
+
+    The integration risk this guards (the contract's tripwire): a degraded
+    SKIP miscounted as a genuine inversion would poison the §4.6
+    0-inversion HARD line on the very re-record the fail-soft exists to
+    unblock. The decision census must read byte-identically with and
+    without the defaulted ballot — threshold_inversions does not move,
+    missed_skip does not move — while the DEFAULTED census reads 1.
+    """
+
+    # Control: a genuine inversion (crew voter, met threshold, no marker)
+    # so the pin proves non-contamination, not just zeros.
+    control_ballots = (_ballot(target="SKIP", voter="p-2", reason_id=None),)
+    control_calls = (_vote_call(agent_id="p-2", rendered_max=0.80),)
+    without_defaulted = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=control_ballots,
+        llm_calls=control_calls,
+    )
+    with_defaulted = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=control_ballots
+        + (
+            _ballot(
+                target="SKIP",
+                voter="p-0",
+                reason_id=None,
+                rationale_text=_DEFAULTED_RATIONALE,
+            ),
+        ),
+        llm_calls=control_calls + (_vote_call(agent_id="p-0", rendered_max=0.80),),
+    )
+
+    baseline = compute_conversion_report(_one_meeting_report(without_defaulted))
+    result = compute_conversion_report(_one_meeting_report(with_defaulted))
+
+    # The decision census is untouched by the defaulted ballot.
+    assert result == baseline
+    assert result.threshold_inversions == 1  # the control only
+    assert result.missed_skip_ballots == 1
+    assert result.skip_ballots == 1
+
+    defaulted = compute_defaulted_ballots(_one_meeting_report(with_defaulted))
+    assert defaulted.defaulted_skip_ballots == 1
+    assert defaulted.defaulted_under_must_vote == 1
+    assert defaulted.defaulted_under_must_skip == 0
+    assert defaulted.defaulted_without_render == 0
+
+
+def test_defaulted_skip_under_must_skip_is_correct_skip_with_telemetry() -> None:
+    """A marker-bearing SKIP under a MUST-skip render is simply correct-skip.
+
+    The degrade coincides with the decision the verdict demanded, so it
+    stays in the decision census as a correct skip; the DEFAULTED census
+    still sees it (the telemetry overlap is deliberate).
+    """
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter="p-0",
+                reason_id=None,
+                rationale_text=_DEFAULTED_RATIONALE,
+            ),
+        ),
+        llm_calls=(_vote_call(agent_id="p-0", rendered_max=0.55),),
+    )
+
+    result = compute_conversion_report(_one_meeting_report(meeting))
+
+    assert result.skip_ballots == 1
+    assert result.correct_skip_ballots == 1
+    assert result.missed_skip_ballots == 0
+    assert result.threshold_inversions == 0
+
+    defaulted = compute_defaulted_ballots(_one_meeting_report(meeting))
+    assert defaulted.defaulted_skip_ballots == 1
+    assert defaulted.defaulted_under_must_skip == 1
+    assert defaulted.defaulted_under_must_vote == 0
+
+
+def test_defaulted_skip_without_render_is_censused_not_unclassified() -> None:
+    """No rendered verdict (the REAL-provider shape) — the marker still keys it.
+
+    A real provider's failed vote call raises before the recording client
+    logs its prompt, so no gate line is recoverable; the marker is the only
+    witness, and the ballot must land in the DEFAULTED census rather than
+    drowning in ``unclassified_skip_ballots``.
+    """
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter="p-0",
+                reason_id=None,
+                rationale_text=_DEFAULTED_RATIONALE,
+            ),
+        ),
+        llm_calls=(),
+    )
+
+    result = compute_conversion_report(_one_meeting_report(meeting))
+
+    assert result.skip_ballots == 0
+    assert result.unclassified_skip_ballots == 0
+    assert result.missed_skip_ballots == 0
+    assert result.threshold_inversions == 0
+
+    defaulted = compute_defaulted_ballots(_one_meeting_report(meeting))
+    assert defaulted.defaulted_skip_ballots == 1
+    assert defaulted.defaulted_without_render == 1
+
+
+def test_defaulted_census_ignores_non_skip_and_unmarked_ballots() -> None:
+    """Only marker-bearing SKIPs are DEFAULTED; everything else is invisible."""
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(target=_IMPOSTOR, voter="p-0", reason_id=None),
+            _ballot(target="SKIP", voter="p-1", reason_id=None),
+        ),
+        llm_calls=(_vote_call(agent_id="p-1", rendered_max=0.10),),
+    )
+
+    defaulted = compute_defaulted_ballots(_one_meeting_report(meeting))
+
+    assert defaulted == DefaultedBallotReport(
+        defaulted_skip_ballots=0,
+        defaulted_under_must_vote=0,
+        defaulted_under_must_skip=0,
+        defaulted_without_render=0,
+    )
+
+
+def test_defaulted_model_rejects_bad_partition() -> None:
+    with pytest.raises(ValidationError, match="must equal\\s+defaulted_skip_ballots"):
+        DefaultedBallotReport(
+            defaulted_skip_ballots=2,
+            defaulted_under_must_vote=1,
+            defaulted_under_must_skip=0,
+            defaulted_without_render=0,
+        )
 
 
 # ---------------------------------------------------------------------------

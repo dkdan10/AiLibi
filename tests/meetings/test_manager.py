@@ -60,6 +60,7 @@ from meetings.manager import (
     OPENING_UNSURE_DEGRADE_MARKER,
     OPENING_UNSURE_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
     LLMProviderError,
     MeetingBeliefEvidence,
     MeetingConfig,
@@ -4860,3 +4861,303 @@ class TestCommittedBytes107FoldPins:
         assert by_id["p-9"] == pytest.approx(0.58 - CORROBORATION_SUSPICION_DELTA)
         assert by_id["p-9"] < 0.60
         assert by_id["p-1"] == pytest.approx(0.50)
+
+
+# ---------------------------------------------------------------------------
+# Task 10.9.1: vote-ballot fail-soft (PR #147 finding F1 — the seed-8
+# vote-truncation abort). A ballot completion that fails schema validation
+# degrades to the default SKIP with VOTE_PARSE_DEFAULT_MARKER instead of
+# propagating and killing the game; the deadline path is byte-unchanged.
+# ---------------------------------------------------------------------------
+
+# The seed-8 shape: a rationale rambles toward the frozen 1024-token vote cap
+# and the JSON is cut mid-string ("Invalid JSON: EOF while parsing a string").
+_TRUNCATED_BALLOT_JSON = (
+    '{"voter": "p-2", "target": "p-4", "confidence": 0.72, '
+    '"primary_reason_id": null, "considered_alternatives": [], '
+    '"rationale_text": "p-4 was in ELECTRICAL with the body and I saw them '
+    "leave right before the report, which means the only consistent story"
+)
+
+
+def _expected_parse_default_rationale(raw_response: str) -> str:
+    head = raw_response
+    if len(head) > MARKER_QUOTED_ORIGINAL_MAX_CHARS:
+        head = head[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
+    return VOTE_PARSE_DEFAULT_MARKER.format(head=head)
+
+
+@dataclass
+class _TruncatedVoteClient:
+    """Returns an unparseable (cap-truncated) payload for selected voters'
+    vote calls; turns and the other votes are valid.
+
+    Unlike :class:`_ScriptedLLMClient` it does NOT self-validate, so the
+    manager's own ``VoteBallot.model_validate_json`` raises the
+    ``ValidationError`` — the manager-side parse path, whose spend the
+    recording client has already captured (``parse_failures`` stays empty).
+    """
+
+    truncated_voters: frozenset[str]
+    truncated_text: str = _TRUNCATED_BALLOT_JSON
+    vote_targets: dict[str, str] = field(default_factory=dict)
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if "PHASE=VOTE" in prompt:
+            voter = _extract_marker(prompt, "voter=")
+            if voter in self.truncated_voters:
+                text = self.truncated_text
+            else:
+                text = _vote_json(
+                    voter=voter, target=self.vote_targets.get(voter, "SKIP")
+                )
+        else:
+            text = _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "truncated-vote",
+        )
+
+
+@dataclass
+class _ProviderRaisesOnVoteClient:
+    """Mimics a REAL provider on the VOTE call: ``complete()`` validates
+    internally and RAISES a ``ValidationError`` carrying ``LLMCallFailure``
+    metadata for the selected voters (the Anthropic/Ollama
+    ``_attach_parse_failure`` pattern — the provider-level retry has already
+    failed by the time this surfaces), so the recording client never logs
+    the burned call and the spend must ride the surfaced default. Turns and
+    the other votes are valid.
+    """
+
+    truncated_voters: frozenset[str]
+    truncated_text: str = _TRUNCATED_BALLOT_JSON
+    input_tokens: int = 321
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        schema: type[BaseModel] | None,
+        max_tokens: int,
+        temperature: float,
+        call_kind: CallKind = "meeting",
+        model: str | None = None,
+        agent_id: str | None = None,
+    ) -> LLMResponse:
+        if "PHASE=VOTE" in prompt:
+            voter = _extract_marker(prompt, "voter=")
+            if voter in self.truncated_voters:
+                try:
+                    VoteBallot.model_validate_json(self.truncated_text)
+                except ValidationError as exc:
+                    _attach_parse_failure(
+                        exc,
+                        LLMCallFailure(
+                            model="qwen3.5:9b",
+                            prompt_length=len(prompt),
+                            raw_response=self.truncated_text,
+                            input_tokens=self.input_tokens,
+                            output_tokens=1024,
+                            cost_usd=0.0,
+                            error_type="ValidationError",
+                            error_message="Invalid JSON: EOF while parsing a string",
+                        ),
+                    )
+                    raise
+                raise AssertionError(
+                    "truncated ballot json must fail validation"
+                )  # pragma: no cover
+            text = _vote_json(voter=voter, target="SKIP")
+        else:
+            text = _turn_json(speaker=_extract_marker(prompt, "agent_id="))
+        return LLMResponse(
+            text=text,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+            cost_usd=0.0,
+            model=model or "provider-raises-vote",
+        )
+
+
+class TestVoteBallotFailSoft:
+    """A twice-failed ballot degrades to a marked SKIP; the game continues."""
+
+    def test_truncated_ballot_degrades_to_skip_and_meeting_tallies(self) -> None:
+        # p-2's ballot is the seed-8 truncation; the other three voters
+        # still produce a real tally (p-4 ejected 2-1-1), proving the
+        # meeting TALLIES and the run continues instead of aborting —
+        # the manager-level integration pin for the F1 repair.
+        client = _TruncatedVoteClient(
+            truncated_voters=frozenset({"p-2"}),
+            vote_targets={"p-1": "p-4", "p-3": "p-4", "p-4": "p-1"},
+        )
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert result.outcome == "EJECTED"
+        assert result.ejected_player_id == "p-4"
+        assert sorted(b.voter for b in result.ballots) == ["p-1", "p-2", "p-3", "p-4"]
+
+        degraded = next(b for b in result.ballots if b.voter == "p-2")
+        assert degraded.target == "SKIP"
+        assert degraded.confidence == 0.0
+        assert degraded.primary_reason_id is None
+        assert degraded.rationale_text == _expected_parse_default_rationale(
+            _TRUNCATED_BALLOT_JSON
+        )
+        assert degraded.rationale_text.startswith(
+            VOTE_PARSE_DEFAULT_MARKER.split("{head!r}")[0]
+        )
+
+        # Telemetry: one DefaultedCall with phase vote / trigger validation.
+        # The manager-side parse of a returned payload carries no
+        # parse_failures (its spend is already in llm_calls — no
+        # double-count) and never reads as the opening unsure-degrade.
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "vote"
+        assert default.agent_id == "p-2"
+        assert default.trigger == "validation"
+        assert default.turn_index is None
+        assert default.parse_failures == ()
+        assert default.degraded is False
+        assert manager.recovered_call_failures == ()
+
+    def test_provider_raised_ballot_degrades_and_carries_spend(self) -> None:
+        # The REAL-provider path: complete() raises before the recording
+        # client can log the call, so the surfaced default carries the
+        # burned spend and the marker head comes off the carried
+        # LLMCallFailure.raw_response — the same bytes, hence the same
+        # recorded ballot as the manager-side path.
+        client = _ProviderRaisesOnVoteClient(truncated_voters=frozenset({"p-2"}))
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert result.outcome == "SKIPPED"
+        degraded = next(b for b in result.ballots if b.voter == "p-2")
+        assert degraded.target == "SKIP"
+        assert degraded.rationale_text == _expected_parse_default_rationale(
+            _TRUNCATED_BALLOT_JSON
+        )
+
+        assert len(manager.defaulted_calls) == 1
+        default = manager.defaulted_calls[0]
+        assert default.phase == "vote"
+        assert default.trigger == "validation"
+        assert len(default.parse_failures) == 1
+        failure = default.parse_failures[0]
+        assert failure.raw_response == _TRUNCATED_BALLOT_JSON
+        assert failure.input_tokens == 321
+        assert failure.output_tokens == 1024
+
+    def test_marker_head_is_bounded_for_a_3000_char_blob(self) -> None:
+        # The 10.6 60-char rule on the vote marker: a 3,000-char
+        # unparseable response quotes only its bounded head.
+        blob = "I must now explain every tick of my reasoning in detail " * 60
+        assert len(blob) > 3000
+        client = _TruncatedVoteClient(
+            truncated_voters=frozenset({"p-2"}), truncated_text=blob
+        )
+        manager = _make_manager(
+            llm_client=client,
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        degraded = next(b for b in result.ballots if b.voter == "p-2")
+        assert degraded.rationale_text == VOTE_PARSE_DEFAULT_MARKER.format(
+            head=blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] + "..."
+        )
+        assert blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] in degraded.rationale_text
+        assert blob[MARKER_QUOTED_ORIGINAL_MAX_CHARS + 1 :] not in (
+            degraded.rationale_text
+        )
+        assert len(degraded.rationale_text) < 200
+
+    def test_degrade_is_deterministic_and_total_failure_still_resolves(self) -> None:
+        # Every ballot truncated: the meeting still resolves (4 SKIP
+        # defaults -> SKIPPED) and re-running the identical bytes yields
+        # byte-identical ballots — the degrade is a pure function of the
+        # failed response, so replay reconstruction cannot drift.
+        def _run_once() -> MeetingResult:
+            client = _TruncatedVoteClient(
+                truncated_voters=frozenset({"p-1", "p-2", "p-3", "p-4"})
+            )
+            manager = _make_manager(
+                llm_client=client,
+                deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None),
+            )
+            return _run(
+                manager.run(
+                    meeting_id="m-1",
+                    trigger=_default_trigger(),
+                    participants=_crew_participants(),
+                )
+            )
+
+        first = _run_once()
+        second = _run_once()
+
+        assert first.outcome == "SKIPPED"
+        assert first.ballots == second.ballots
+        expected = _expected_parse_default_rationale(_TRUNCATED_BALLOT_JSON)
+        assert all(b.rationale_text == expected for b in first.ballots)
+        assert all(b.target == "SKIP" for b in first.ballots)
+
+    def test_deadline_default_ballot_is_byte_unchanged(self) -> None:
+        # The 10.9.1 net must not touch the deadline path: a wall-clock
+        # miss still records the pre-existing DEFAULT_VOTE_RATIONALE
+        # literal (no parse marker) with trigger="deadline".
+        manager = _make_manager(
+            llm_client=_SleepOnPhaseClient(sleep_phase="PHASE=VOTE"),
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=0.01),
+        )
+        result = _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=_crew_participants(),
+            )
+        )
+
+        assert all(b.rationale_text == DEFAULT_VOTE_RATIONALE for b in result.ballots)
+        assert all(
+            v.trigger == "deadline" and v.parse_failures == ()
+            for v in manager.defaulted_calls
+        )

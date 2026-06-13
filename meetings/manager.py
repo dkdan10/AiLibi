@@ -54,7 +54,12 @@ firewall (an impostor never accuses / incriminates a fellow impostor),
 the strict :class:`~meetings.schemas.AlibiClaim` chronology, and the
 Task 7.10 fail-soft (a malformed turn degrades to a default turn rather
 than aborting the meeting). The vote inherits the third 7.12 guard,
-:func:`coerce_teammate_ballot_to_skip`.
+:func:`coerce_teammate_ballot_to_skip`, and -- since Task 10.9.1 (PR
+#147 F1) -- its own fail-soft: a ballot completion that still fails
+schema validation after the provider-level retry degrades to the
+default SKIP stamped with :data:`VOTE_PARSE_DEFAULT_MARKER` instead of
+aborting the game. Caps and retry counts are frozen; the net catches,
+it never re-asks.
 
 The opening additionally content-validates (Task 10.3, audit gp-9): its
 recorded claims must carry an accusation OR its free_text an explicit
@@ -80,7 +85,7 @@ from agents.memory.beliefs import (
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
 )
-from llm.client import LLMClient
+from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
 from meetings.schemas import (
     AccusationClaim,
@@ -159,6 +164,28 @@ INVALID_VOTE_TARGET_MARKER: Final[str] = (
 # preserves the original (teammate) target for replay / audit analysis.
 TEAMMATE_VOTE_TARGET_MARKER: Final[str] = (
     "[teammate target {target!r} coerced to SKIP] "
+)
+
+# Audit-trail marker recorded AS ``rationale_text`` when a vote-ballot
+# completion fails schema validation and the ballot degrades to the
+# default SKIP (Task 10.9.1; PR #147 finding F1). The seed-8 abort shape:
+# a rationale rambled past the frozen 1024-token vote cap, the JSON was
+# left unterminated mid-string, the provider-level single retry failed the
+# same way, and the propagating ``ValidationError`` killed the game
+# (game_over 49/50) -- because turns have had a fail-soft since Task 7.10
+# while the vote path caught only the deadline. A twice-failed ballot now
+# degrades to the existing default SKIP with this marker carrying a
+# BOUNDED head of the unparseable response (the Task 10.6 60-char rule,
+# :func:`_bounded_original`) so the runaway stays auditable in the replay
+# without splicing kilobytes into the ballot record. Unlike the sibling
+# markers above this is the WHOLE ``rationale_text``, not a prefix to
+# model-authored text -- nothing parsed, so there is no rationale to
+# preserve. Caps and retry counts stay frozen: this is a net, never a
+# retry. Downstream eval partitions the degraded SKIP on this literal
+# (a DEFAULTED class beside coerced/missed -- never a threshold
+# inversion, never a silent missed skip). Pin the literal exactly.
+VOTE_PARSE_DEFAULT_MARKER: Final[str] = (
+    "[unparseable ballot defaulted to SKIP; response head: {head!r}] "
 )
 
 # Audit-trail marker prepended to ``rationale_text`` when a ballot's
@@ -492,7 +519,11 @@ class DefaultedCall:
       cap/deadline default (``degraded=False``) lost the model's output
       entirely; a validation-degrade kept its observations and surviving
       claims and lost only the invalid position. Always ``False`` for
-      replies, opt-ins, and votes (only openings degrade).
+      replies, opt-ins, and votes (only openings degrade) -- including the
+      Task 10.9.1 vote parse-default, whose recorded ballot is the full
+      default SKIP (the bounded head quoted by
+      :data:`VOTE_PARSE_DEFAULT_MARKER` is an audit echo of the discarded
+      response, not retained content).
     """
 
     phase: DefaultedPhase
@@ -1235,8 +1266,10 @@ class MeetingManager:
         # inflate each call's wall-clock past vote_seconds (measured 0.71x
         # concurrency), so votes time out into default SKIP and nothing is
         # ever ejected. One-by-one keeps each call inside its deadline. Each
-        # _collect_one_ballot retains its own deadline + default; a genuine
-        # parse error still propagates and fails the meeting.
+        # _collect_one_ballot retains its own deadline + default, and since
+        # Task 10.9.1 its own parse fail-soft (a twice-failed ballot degrades
+        # to a marked SKIP, PR #147 F1); only a provider/transport error
+        # still propagates and fails the meeting.
         ballots: list[VoteBallot] = []
         for participant in participants:
             ballots.append(
@@ -1294,6 +1327,13 @@ class MeetingManager:
             skip_confidence_threshold=self._config.skip_confidence_threshold,
             fellow_impostor_ids=participant.fellow_impostor_ids,
         )
+        # ``response`` must survive into the ValidationError handler below:
+        # when the manager-side parse of a returned payload fails, the
+        # unparseable bytes are ``response.text``; when ``complete()`` itself
+        # raised (a REAL provider validates internally, before the recording
+        # client can log the call), it stays ``None`` and the head comes off
+        # the carried ``LLMCallFailure`` instead.
+        response: LLMResponse | None = None
         try:
             response = await asyncio.wait_for(
                 _isolate_provider_timeout(
@@ -1308,12 +1348,13 @@ class MeetingManager:
                 ),
                 timeout=self._config.deadlines.vote_seconds,
             )
+            parsed = VoteBallot.model_validate_json(response.text)
         except asyncio.TimeoutError:
-            # The vote catches only the deadline (a malformed ballot still
-            # propagates and aborts the meeting, unchanged); surface the fired
-            # default so the orchestrator records it (audit gp-2). Deadline-free
-            # headless recording never reaches here -- a vote default is an
-            # interactive-mode wall-clock miss.
+            # Deadline miss: surface the fired default so the orchestrator
+            # records it (audit gp-2). Deadline-free headless recording never
+            # reaches here -- a vote default with this trigger is an
+            # interactive-mode wall-clock miss. This branch is byte-unchanged
+            # by Task 10.9.1: same ``DefaultedCall``, same default ballot.
             self._defaulted_calls.append(
                 DefaultedCall(
                     phase="vote",
@@ -1322,7 +1363,41 @@ class MeetingManager:
                 )
             )
             return _default_vote(voter=participant.agent_id)
-        parsed = VoteBallot.model_validate_json(response.text)
+        except ValidationError as exc:
+            # Vote-ballot fail-soft (Task 10.9.1; PR #147 finding F1, the
+            # seed-8 vote-truncation abort). A ballot that still fails schema
+            # validation after the provider-level retry -- the cap-truncation
+            # runaway class, accepted at ~1/50 -- degrades to the default
+            # SKIP instead of aborting the game: the same discipline the turn
+            # path has had since Task 7.10, mirrored at the seam where the
+            # deadline catch sits. NO new retry and no cap change -- this is
+            # a net. The degrade is a pure function of the failed response
+            # (:func:`_vote_parse_default`), so replaying the same bytes
+            # yields the same ballot. A provider/transport timeout is still
+            # re-tagged ``LLMProviderError`` by ``_isolate_provider_timeout``
+            # and propagates -- only the deadline + parse failures fail soft.
+            # ``extract_parse_failure`` carries a REAL provider's burned
+            # spend onto the surfaced default (it raised before the recording
+            # client could log the call); it is ``None`` for the manager-side
+            # parse of a returned payload, whose spend ``llm_calls`` already
+            # holds -- no double-count (the turn-path convention, audit gp-2).
+            failure = extract_parse_failure(exc)
+            self._defaulted_calls.append(
+                DefaultedCall(
+                    phase="vote",
+                    agent_id=participant.agent_id,
+                    trigger="validation",
+                    parse_failures=() if failure is None else (failure,),
+                )
+            )
+            unparseable = (
+                response.text
+                if response is not None
+                else ("" if failure is None else failure.raw_response)
+            )
+            return _vote_parse_default(
+                voter=participant.agent_id, raw_response=unparseable
+            )
         # Defensive normalization: if the LLM hallucinates a target id that
         # is not in ``candidate_targets`` (and not ``"SKIP"``), ``_tally``
         # would otherwise count it as a real eject and could resolve to
@@ -1659,6 +1734,23 @@ def _default_vote(*, voter: PlayerId) -> VoteBallot:
         considered_alternatives=(),
         rationale_text=DEFAULT_VOTE_RATIONALE,
     )
+
+
+def _vote_parse_default(*, voter: PlayerId, raw_response: str) -> VoteBallot:
+    """Degraded SKIP ballot for a twice-failed ballot completion (Task 10.9.1).
+
+    Reuses the :func:`_default_vote` shape (target ``SKIP``, confidence
+    ``0.0``, no reason id -- the tally can never eject off it) and records
+    :data:`VOTE_PARSE_DEFAULT_MARKER` as the whole ``rationale_text``,
+    quoting a bounded head of the unparseable response per the Task 10.6
+    rule (:func:`_bounded_original`) so the seed-8 runaway class stays
+    auditable without splicing the full blob into the ballot. A pure
+    function of ``(voter, raw_response)`` -- no clock, no RNG, no state --
+    so replaying the same recorded bytes yields the same ballot.
+    """
+
+    marker = VOTE_PARSE_DEFAULT_MARKER.format(head=_bounded_original(raw_response))
+    return _default_vote(voter=voter).model_copy(update={"rationale_text": marker})
 
 
 def _normalize_self_alibi_subjects(
@@ -2307,6 +2399,7 @@ __all__ = [
     "OPENING_UNSURE_DEGRADE_MARKER",
     "OPENING_UNSURE_MARKER",
     "TEAMMATE_VOTE_TARGET_MARKER",
+    "VOTE_PARSE_DEFAULT_MARKER",
     "DefaultTrigger",
     "DefaultedCall",
     "DefaultedPhase",
