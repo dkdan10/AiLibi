@@ -545,17 +545,139 @@ is reported in 10.9, never tuned here.
 
 **Ready-to-paste prompt:** `agent_prompts/task-10-8-crew-emergency-meeting-and-pacing.md`
 
+### Task 10.9.1 — Vote-ballot fail-soft
+**Branch:** `phase-10-vote-ballot-failsoft`
+**Depends on:** none (PR #147 F1 repair; all Wave-1 source tasks are merged)
+**Section refs:** DESIGN.md §5.2, §4.6; PR #147 finding F1 (seed-8 vote-truncation abort)
+**Complexity:** Medium
+
+The first Wave-1 re-record attempt STOPPED on a HARD red: one vote ballot ran to the frozen
+1024-token vote cap mid-JSON, the provider-level single retry also failed, the
+ValidationError propagated, and the game aborted (game_over 49/50). The asymmetry is the
+gap: turns have a fail-soft (7.10 degrades them; 10.6 extended it), ballots do not — the
+vote path catches ONLY the deadline (meetings/manager.py:1311-1324 documents malformed
+ballots as propagating). A twice-failed ballot must degrade to SKIP with an audit trail, not
+kill the game. Caps and retry counts stay FROZEN — this task adds a net, never a retry.
+
+**Files in scope:**
+- meetings/manager.py (catch parse/validation failure of a vote-ballot completion AFTER the existing provider-level retry — the same seam where the deadline catch sits; degrade to the existing _default_vote SKIP with a new VOTE_PARSE_DEFAULT_MARKER on rationale_text preserving a BOUNDED head of the unparseable response per the 10.6 60-char rule; record a DefaultedCall with phase vote — follow the 10.6 telemetry precedent: prefer an additive field over a new trigger literal IF a new literal would touch the orchestrator's replay-row writing, verify and document which; the deadline path is byte-unchanged; no new retries, no cap changes)
+- eval/vote_correctness.py + eval/meeting_quality.py (extend the standing SKIP partition with a DEFAULTED class keyed on the marker: a degraded SKIP under a MUST-vote render is partitioned like the coerced class — it is NEVER a genuine inversion and never a silent missed skip; report the count beside coerced/missed)
+- tests/meetings/test_manager.py + tests/eval/* (pins below)
+
+**Files NOT in scope:**
+- the vote/turn token caps and temperatures (frozen), the provider retry count (frozen)
+- agents/strategic/prompts/** (no prompt change; the runaway class is accepted at ~1/50 and netted, not prompted away)
+- orchestrator/** beyond verifying the abort path is no longer reachable from a malformed ballot (read-verify; if a literal change is forced, stop and surface it in the PR Decisions)
+- replays/samples/** (the re-record is 10.9)
+
+**Definition of done:**
+- [ ] A ballot completion that fails schema validation twice (synthetic truncated-JSON fixture mirroring the seed-8 shape: response cut mid-string at the cap) degrades to SKIP with VOTE_PARSE_DEFAULT_MARKER, records the DefaultedCall telemetry, and the meeting tallies and the game CONTINUES — integration-pinned at the manager level.
+- [ ] The deadline-default path is byte-unchanged (existing pins stay green untouched).
+- [ ] Partition pins: a marker-bearing SKIP under a MUST-vote render lands in the DEFAULTED class — threshold_inversions does not move, missed_skip does not move, the defaulted count reads 1; a marker-bearing SKIP under a MUST-skip render is simply correct-skip with telemetry.
+- [ ] The marker's quoted head is bounded (unit test with a 3,000-char unparseable blob).
+- [ ] Determinism: the degrade is a pure function of the failed response; replaying the same bytes yields the same ballot.
+- [ ] `uv run mypy .`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run python scripts/generate_prompts.py --check`, `uv run python scripts/validate_task_docs.py`, `uv run pytest`, and `bash scripts/check.sh` all pass.
+
+**Public types introduced:**
+- VOTE_PARSE_DEFAULT_MARKER
+
+**Implementation hint:**
+
+Mirror the deadline catch four lines above the parse site: wrap the model_validate_json in
+the same try discipline, reuse _default_vote, and thread the marker through the rationale
+the way the teammate-coercion marker does. The 10.6 unsure-degrade decision (additive
+DefaultedCall field rather than a new trigger literal, to leave replay-row writing
+untouched) is the precedent to follow or consciously diverge from — state which in the PR.
+
+**Integration risk:**
+
+The partition is the risk surface, not the catch: a degraded SKIP miscounted as a genuine
+inversion would poison the §4.6 0-inversion HARD line on the very re-record this task
+exists to unblock. The partition pins are the tripwire. Recording-side only; committed
+bytes unchanged until 10.9.
+
+**Ready-to-paste prompt:** `agent_prompts/task-10-9-1-vote-ballot-fail-soft.md`
+
+### Task 10.9.2 — Ballot-target graph guard
+**Branch:** `phase-10-ballot-target-guard`
+**Depends on:** 10.9.1
+**Section refs:** DESIGN.md §4.6, §6.3; PR #147 finding F2 (seed-12 m0 unattributed ejection); the fb3cfa5 layered-guard pattern
+**Complexity:** Medium
+
+The last unguarded seam for a RANDOM ejection: a voter whose §4.6 verdict reads MUST-vote
+may name ANY living candidate as target — including one their own rendered graph carries no
+over-gate row for (seed 12 m0: three voters MUST-vote off p-6 at 0.80, adopted the
+opening's bare verbal accusation of p-1 instead, p-1 ejected 3-2-2 with zero design-channel
+attribution). Every existing guard held; the leak is that ballot TARGET is unconstrained by
+the graph the verdict was computed from. Add the deterministic guard at the existing
+normalization chokepoint: an eject ballot under a MUST-vote verdict must name a target
+whose rendered suspicion meets the threshold; otherwise redirect to the highest-rendered
+eligible candidate with an audit marker. The owner principle this enforces is the phase's
+oldest line: innocents are ejectable, never at RANDOM.
+
+**Files in scope:**
+- meetings/manager.py (extend the _normalize_ballot_target chain — AFTER roster normalization and the 7.12 teammate coercion: when the verdict over candidate_targets reads MUST-vote (max rendered suspicion at or above skip_confidence_threshold, computed from the SAME suspicion_graph and candidate_targets passed to the prompt renderer) and the ballot names an eject target whose rendered row is below threshold or absent, redirect the target to the argmax-rendered candidate in the eligible pool — candidate_targets minus the voter minus fellow_impostor_ids — with ties broken by lowest player id; if the eligible pool's max is below threshold (an impostor voter whose only over-gate row is a teammate), coerce to SKIP instead; either way mark rationale_text with BALLOT_TARGET_REDIRECT_MARKER preserving the original target, bounded per the 10.6 rule. The guard NEVER fires on SKIP ballots, never on MUST-skip verdicts — a vote against a MUST-skip verdict stays a recorded inversion, frozen measurement semantics)
+- eval/vote_correctness.py + eval/meeting_quality.py (the gp-7 channel decomposition and the graph-consistency census read the REDIRECTED target; the redirect marker count publishes beside the invalid-target and coercion counts; unattributed impostor ejections must be structurally impossible on post-guard recordings)
+- tests/meetings/test_manager.py + tests/eval/* (pins below)
+
+**Files NOT in scope:**
+- the §4.6 threshold/render and the tally (frozen — this guard constrains the TARGET of an eject ballot, never the eject-vs-skip choice and never the plurality rule)
+- agents/strategic/prompts/** (no prompt change; the model keeps free choice among over-gate targets)
+- agents/memory/beliefs.py, meetings/transcript.py (the graph is consumed, not changed)
+- replays/samples/**
+
+**Definition of done:**
+- [ ] Seed-12 byte pin (from the PR #147 evidence branch fixture, reproduced synthetically if the branch is pruned): given m0's recorded graphs and ballots, the guard redirects the three no-row p-1 ballots to p-6 (the 0.80 argmax) with markers; the two over-gate-consistent ballots are untouched.
+- [ ] Over-gate freedom: a ballot naming ANY target whose row meets the threshold passes unredirected even when a higher row exists (no argmax-only over-constraint).
+- [ ] Firewall composition: an impostor voter is never redirected to a fellow impostor; the teammate-only-over-gate case coerces to SKIP with the marker; betrayal stays 0 by construction.
+- [ ] Frozen-semantics regression: MUST-skip-verdict ballots and SKIP ballots are byte-unchanged through the guard; threshold_inversions and missed_skip move by exactly 0 on a no-redirect transcript.
+- [ ] Verdict-equality cross-check: the guard's MUST-vote derivation equals the rendered in-prompt verdict on the same inputs (parse the rendered line in-test via the eval suspicion-parse helper).
+- [ ] Determinism: same graph + ballot yields the same redirect; tie-break pinned.
+- [ ] `uv run mypy .`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run lint-imports`, `uv run python scripts/generate_prompts.py --check`, `uv run python scripts/validate_task_docs.py`, `uv run pytest`, and `bash scripts/check.sh` all pass.
+
+**Public types introduced:**
+- BALLOT_TARGET_REDIRECT_MARKER
+
+**Implementation hint:**
+
+The chokepoint already has every input in scope at the call site (suspicion_graph,
+candidate_targets, skip_confidence_threshold, fellow_impostor_ids — manager.py:1292-1295).
+Order matters and is pinned: roster normalization, then teammate coercion, then this guard
+— so the guard only ever sees valid living non-teammate targets and cannot create a
+betrayal ballot for the firewall to re-coerce. Reuse the marker construction discipline
+from the teammate-coercion marker.
+
+**Integration risk:**
+
+This intentionally changes recorded ballots on future recordings (a redirected target is a
+different vote), which is why it lands BEFORE the wave's one re-record rather than after —
+account-don't-rule-change applies to measurement eras, and the era starts at 10.9. The
+frozen-semantics regression pin is the line: eject-vs-skip choice, inversion accounting,
+and the tally are untouched. Expect the gp-7 unattributed count to read 0 forever after.
+
+**Ready-to-paste prompt:** `agent_prompts/task-10-9-2-ballot-target-graph-guard.md`
+
 ### Task 10.9 — Wave-1 combined re-record and gate
 **Branch:** `phase-10-wave1-rerecord`
-**Depends on:** 10.6, 10.7, 10.8
+**Depends on:** 10.6, 10.7, 10.8, 10.9.1, 10.9.2
 **Section refs:** DESIGN.md §9, §11.4; tasks/phase-9.md 9.5 protocol; audits/audit-2026-06-11-2218-gameplay-data.md gp-7
 **Complexity:** Integration
 
-Operator task, local session, after 10.6-10.8 merge. ONE combined re-record of BOTH sets
-(flat 4p/1i + 9p2i) on qwen3.5:9b via scripts/refresh_samples.sh, smoke-first with
-STOP-for-go, then the stacked gate. The A/B baseline is the 10.6-re-derived corrected W0
-table read from `tests/fixtures/phase10/corrected_w0_baseline.json` — the one home 10.6
-committed; never PR #143's raw numbers, never a re-derivation inside this task.
+Operator task, local session, after 10.6-10.8 AND the two PR #147 repairs (10.9.1, 10.9.2)
+merge. ONE combined re-record of BOTH sets (flat 4p/1i + 9p2i) on qwen3.5:9b via
+scripts/refresh_samples.sh, smoke-first with STOP-for-go, then the stacked gate. The A/B
+baseline is the 10.6-re-derived corrected W0 table read from
+`tests/fixtures/phase10/corrected_w0_baseline.json` — the one home 10.6 committed; never
+PR #143's raw numbers, never a re-derivation inside this task.
+
+ATTEMPT-1 PROVENANCE: the first run STOPPED per the hard-red clause — PR #147 @ aa259f5,
+the smoke-abandon evidence branch, closed UNMERGED. Sole red line: game_over 49/50 (seed-8
+vote-ballot truncation abort, repaired by 10.9.1); every other HARD line and every Wave-1
+gate was GREEN there (emergency 7, median 2.0, genuine 2/8, multi-signal 11/12, over-gate
+listeners 1.625, wrong-ejection games 7, accuracy 0.63). Treat that table as the expected
+shape, not a guarantee — this is a fresh record on a changed source state (the fail-soft
+and the target guard alter bytes wherever they fire), so every number re-derives from
+scratch and the full smoke-first protocol runs again from zero.
 
 **Files in scope:**
 - replays/samples/** (both sets re-recorded; MANIFEST provenance per the rev-parse-HEAD convention)
@@ -568,8 +690,8 @@ committed; never PR #143's raw numbers, never a re-derivation inside this task.
 **Definition of done:**
 - [ ] Smoke (5 seeds, 9p2i) green, then STOP for explicit owner go before the full run.
 - [ ] HARD validity gate (stacked, all green): friendly-fire 0; game_over 50/50 both sets; betrayal ballots/accusations 0; byte-identical reconstruction; threshold inversions 0; thinking-leak trips 0; dangling reason ids 0; meeting_rate at or above the 0.60 floor.
-- [ ] Wave-1 gates: emergency_meetings above 0 set-wide; meetings/game median at or above 2 (report the share of games with 2+ meetings beside it); genuine_class_conversion at or above the corrected baseline; multi_signal_conversion UP vs the corrected baseline — gate on the conversion COUNT (4 on the corrected W0), report the rate beside it: a larger ejection denominator must never read as regression; over-gate listeners per accused-impostor meeting UP (1.41 on the corrected W0); ANTI-RAILROAD HARD: games with a wrong ejection NOT above the W0 count of 7, innocents-at-1.0 still 0.
-- [ ] Channel telemetry: every pre-vote fold event lists its voices with observation backing (spot-walk 3 from the bytes, and at least one spot-walk must be a ballot whose voter crossed 0.60 BY the pre-vote fold — verify the rendered verdict read MUST-vote and the ballot complied; that is the new render seam where a fresh inversion class would appear); VARYING_ROOMS-class flags 0; retry/unsure-degrade telemetry present; no seed-30-class conversion (a bare-pile-on ejection anywhere fails the gate).
+- [ ] Wave-1 gates: emergency_meetings above 0 set-wide; meetings/game median at or above 2 (report the share of games with 2+ meetings beside it); genuine_class_conversion at or above the corrected baseline; multi_signal_conversion UP vs the corrected baseline — gate on the conversion COUNT (4 on the corrected W0), report the rate beside it: a larger ejection denominator must never read as regression; over-gate listeners per accused-impostor meeting UP (1.41 on the corrected W0); ANTI-RAILROAD HARD: games with a wrong ejection NOT above the W0 count of 7, innocents-at-1.0 still 0; gp-7 unattributed impostor ejections 0 (the 10.9.2 guard makes the seed-12 class structurally impossible — a non-zero count here is a guard escape, HARD red).
+- [ ] Channel telemetry: every pre-vote fold event lists its voices with observation backing (spot-walk 3 from the bytes, and at least one spot-walk must be a ballot whose voter crossed 0.60 BY the pre-vote fold — verify the rendered verdict read MUST-vote and the ballot complied; that is the new render seam where a fresh inversion class would appear); VARYING_ROOMS-class flags 0; retry/unsure-degrade telemetry present; defaulted-ballot (10.9.1) and target-redirect (10.9.2) counts reported with a spot-walk each IF either fired — zero is fine, unreported is not; no seed-30-class conversion (a bare-pile-on ejection anywhere fails the gate).
 - [ ] The funnel table in the PR: supply gauges (zero-contradiction share, genuine-subject share, over-gate listeners), conversion metrics vs corrected baseline, meetings histogram, emergency usage, win split REPORTED and labelled non-gate, decay/carry survival accounting (the decay-vs-cadence question is answered with data here, decided in a later wave if at all).
 - [ ] Provenance tuple (sample dir + commit + model) in the PR; `bash scripts/check.sh` green; any truncation runaway is a STOP (the cap stays frozen).
 
@@ -592,6 +714,7 @@ anti-railroad gate is the arbiter) and the testimony channel vs §4.6 inversions
 
 ## Merge Criteria (Phase 10 Wave 1 — crew evidence economy)
 - Instrument closed (10.6): allowlist kills the placeholder class with zero TP loss; proxy flags subject-account-gated with the seed-24 TP preserved; Rule-3 relevance-gated but alive; fail-softs degrade instead of dying; gp-7 metrics + corrected W0 baseline shipped.
+- Vote path fail-closed (10.9.1) + ballot targets graph-bound (10.9.2): the two PR #147 repairs — a twice-failed ballot degrades to a partitioned SKIP instead of aborting the game, and an eject ballot under MUST-vote names an over-gate target or is deterministically redirected with a marker. Both land BEFORE the fresh record so the measurement era starts clean.
 - Testimony converts (10.7): pre-vote two-witness fold live with the seed-30 pile-on pin green; single-voice behavior byte-identical; no double-fold.
 - Supply unblocked (10.8): emergency channel reachable with caps; v6 opening branch; body path byte-stable.
 - Measured once (10.9): one combined re-record; HARD + Wave-1 gates green; anti-railroad holds; funnel published against the corrected baseline.

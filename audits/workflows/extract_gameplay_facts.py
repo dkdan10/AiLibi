@@ -87,6 +87,7 @@ from meetings.schemas import (
 )
 from meetings.transcript import (
     WEAK_REASON_ENDPOINT_TICK,
+    WEAK_REASON_RETARGETED_PROXY,
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_STATED,
     detect_contradictions,
@@ -277,6 +278,13 @@ def _genuine_subjects(transcript: Any, roster: frozenset[str]) -> frozenset[str]
         if flag.kind != "alibi_vs_sighting":
             continue
         if WEAK_REASON_ENDPOINT_TICK in flag.description:
+            continue
+        # 10.6 retarget exclusion (mirrors eval.vote_correctness
+        # .genuine_class_subjects): a re-targeted proxy flag names the proxy
+        # SPEAKER, not a player whose own location a sighting contradicted,
+        # so it never supplies the alibi-lie gate. First bites on W1 bytes
+        # (seeds 16/49 impostor-named retargets — PR #147 F3).
+        if WEAK_REASON_RETARGETED_PROXY in flag.description:
             continue
         genuine.update(flag.subjects)
     return frozenset(genuine)

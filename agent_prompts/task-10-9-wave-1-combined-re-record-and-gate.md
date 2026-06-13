@@ -12,15 +12,25 @@ Implement Task 10.9 — Wave-1 combined re-record and gate, anchored to DESIGN.m
 The authoritative task contract is copied below from tasks/phase-10.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-10-wave1-rerecord`
-**Depends on:** 10.6, 10.7, 10.8
+**Depends on:** 10.6, 10.7, 10.8, 10.9.1, 10.9.2
 **Section refs:** DESIGN.md §9, §11.4; tasks/phase-9.md 9.5 protocol; audits/audit-2026-06-11-2218-gameplay-data.md gp-7
 **Complexity:** Integration
 
-Operator task, local session, after 10.6-10.8 merge. ONE combined re-record of BOTH sets
-(flat 4p/1i + 9p2i) on qwen3.5:9b via scripts/refresh_samples.sh, smoke-first with
-STOP-for-go, then the stacked gate. The A/B baseline is the 10.6-re-derived corrected W0
-table read from `tests/fixtures/phase10/corrected_w0_baseline.json` — the one home 10.6
-committed; never PR #143's raw numbers, never a re-derivation inside this task.
+Operator task, local session, after 10.6-10.8 AND the two PR #147 repairs (10.9.1, 10.9.2)
+merge. ONE combined re-record of BOTH sets (flat 4p/1i + 9p2i) on qwen3.5:9b via
+scripts/refresh_samples.sh, smoke-first with STOP-for-go, then the stacked gate. The A/B
+baseline is the 10.6-re-derived corrected W0 table read from
+`tests/fixtures/phase10/corrected_w0_baseline.json` — the one home 10.6 committed; never
+PR #143's raw numbers, never a re-derivation inside this task.
+
+ATTEMPT-1 PROVENANCE: the first run STOPPED per the hard-red clause — PR #147 @ aa259f5,
+the smoke-abandon evidence branch, closed UNMERGED. Sole red line: game_over 49/50 (seed-8
+vote-ballot truncation abort, repaired by 10.9.1); every other HARD line and every Wave-1
+gate was GREEN there (emergency 7, median 2.0, genuine 2/8, multi-signal 11/12, over-gate
+listeners 1.625, wrong-ejection games 7, accuracy 0.63). Treat that table as the expected
+shape, not a guarantee — this is a fresh record on a changed source state (the fail-soft
+and the target guard alter bytes wherever they fire), so every number re-derives from
+scratch and the full smoke-first protocol runs again from zero.
 
 **Files in scope:**
 - replays/samples/** (both sets re-recorded; MANIFEST provenance per the rev-parse-HEAD convention)
@@ -33,8 +43,8 @@ committed; never PR #143's raw numbers, never a re-derivation inside this task.
 **Definition of done:**
 - [ ] Smoke (5 seeds, 9p2i) green, then STOP for explicit owner go before the full run.
 - [ ] HARD validity gate (stacked, all green): friendly-fire 0; game_over 50/50 both sets; betrayal ballots/accusations 0; byte-identical reconstruction; threshold inversions 0; thinking-leak trips 0; dangling reason ids 0; meeting_rate at or above the 0.60 floor.
-- [ ] Wave-1 gates: emergency_meetings above 0 set-wide; meetings/game median at or above 2 (report the share of games with 2+ meetings beside it); genuine_class_conversion at or above the corrected baseline; multi_signal_conversion UP vs the corrected baseline — gate on the conversion COUNT (4 on the corrected W0), report the rate beside it: a larger ejection denominator must never read as regression; over-gate listeners per accused-impostor meeting UP (1.41 on the corrected W0); ANTI-RAILROAD HARD: games with a wrong ejection NOT above the W0 count of 7, innocents-at-1.0 still 0.
-- [ ] Channel telemetry: every pre-vote fold event lists its voices with observation backing (spot-walk 3 from the bytes, and at least one spot-walk must be a ballot whose voter crossed 0.60 BY the pre-vote fold — verify the rendered verdict read MUST-vote and the ballot complied; that is the new render seam where a fresh inversion class would appear); VARYING_ROOMS-class flags 0; retry/unsure-degrade telemetry present; no seed-30-class conversion (a bare-pile-on ejection anywhere fails the gate).
+- [ ] Wave-1 gates: emergency_meetings above 0 set-wide; meetings/game median at or above 2 (report the share of games with 2+ meetings beside it); genuine_class_conversion at or above the corrected baseline; multi_signal_conversion UP vs the corrected baseline — gate on the conversion COUNT (4 on the corrected W0), report the rate beside it: a larger ejection denominator must never read as regression; over-gate listeners per accused-impostor meeting UP (1.41 on the corrected W0); ANTI-RAILROAD HARD: games with a wrong ejection NOT above the W0 count of 7, innocents-at-1.0 still 0; gp-7 unattributed impostor ejections 0 (the 10.9.2 guard makes the seed-12 class structurally impossible — a non-zero count here is a guard escape, HARD red).
+- [ ] Channel telemetry: every pre-vote fold event lists its voices with observation backing (spot-walk 3 from the bytes, and at least one spot-walk must be a ballot whose voter crossed 0.60 BY the pre-vote fold — verify the rendered verdict read MUST-vote and the ballot complied; that is the new render seam where a fresh inversion class would appear); VARYING_ROOMS-class flags 0; retry/unsure-degrade telemetry present; defaulted-ballot (10.9.1) and target-redirect (10.9.2) counts reported with a spot-walk each IF either fired — zero is fine, unreported is not; no seed-30-class conversion (a bare-pile-on ejection anywhere fails the gate).
 - [ ] The funnel table in the PR: supply gauges (zero-contradiction share, genuine-subject share, over-gate listeners), conversion metrics vs corrected baseline, meetings histogram, emergency usage, win split REPORTED and labelled non-gate, decay/carry survival accounting (the decay-vs-cadence question is answered with data here, decided in a later wave if at all).
 - [ ] Provenance tuple (sample dir + commit + model) in the PR; `bash scripts/check.sh` green; any truncation runaway is a STOP (the cap stays frozen).
 
