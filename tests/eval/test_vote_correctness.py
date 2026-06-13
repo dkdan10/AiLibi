@@ -29,9 +29,11 @@ from pydantic import ValidationError
 
 from engine.entities import Role
 from eval.meeting_quality import (
+    BallotTargetRedirectReport,
     ConversionReport,
     DefaultedBallotReport,
     TournamentEvalReport,
+    compute_ballot_target_redirects,
     compute_conversion_report,
     compute_defaulted_ballots,
 )
@@ -49,6 +51,7 @@ from eval.vote_correctness import (
     compute_vote_correctness,
 )
 from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -1317,6 +1320,140 @@ def test_defaulted_model_rejects_bad_partition() -> None:
             defaulted_under_must_vote=1,
             defaulted_under_must_skip=0,
             defaulted_without_render=0,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Task 10.9.2 — the ballot-target redirect census (PR #147 F2)
+# ---------------------------------------------------------------------------
+
+# What the manager's ballot-target graph guard prepends to the rationale of
+# a ballot whose eject target carried no over-gate rendered row under a
+# MUST-vote verdict: the pinned marker preserving the original target. The
+# recorded target is already the REDIRECT (or the coerced SKIP).
+_REDIRECTED_RATIONALE = BALLOT_TARGET_REDIRECT_MARKER.format(target="p-1") + "stub"
+
+
+def test_redirected_eject_ballot_is_censused_and_decision_census_frozen() -> None:
+    """The redirect census reads the marker; the SKIP partition never moves.
+
+    A redirected ballot still EJECTS (at the guard's over-gate target), so
+    it can never enter the SKIP partition: threshold_inversions and
+    missed_skip move by exactly 0 when the redirected ballot is added —
+    the frozen-semantics regression pin on the eval side.
+    """
+
+    # Control: a genuine inversion (crew voter, met threshold, no marker)
+    # so the pin proves non-contamination, not just zeros.
+    control_ballots = (_ballot(target="SKIP", voter="p-2", reason_id=None),)
+    control_calls = (_vote_call(agent_id="p-2", rendered_max=0.80),)
+    without_redirect = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        ballots=control_ballots,
+        llm_calls=control_calls,
+    )
+    with_redirect = _meeting(
+        outcome="EJECTED",
+        ejected=_IMPOSTOR,
+        ballots=control_ballots
+        + (
+            _ballot(
+                target=_IMPOSTOR,
+                voter="p-0",
+                reason_id=None,
+                rationale_text=_REDIRECTED_RATIONALE,
+            ),
+        ),
+        llm_calls=control_calls + (_vote_call(agent_id="p-0", rendered_max=0.80),),
+    )
+
+    baseline = compute_conversion_report(_one_meeting_report(without_redirect))
+    result = compute_conversion_report(_one_meeting_report(with_redirect))
+
+    # The decision census is untouched by the redirected eject ballot.
+    assert result == baseline
+    assert result.threshold_inversions == 1  # the control only
+    assert result.missed_skip_ballots == 1
+    assert result.skip_ballots == 1
+
+    redirects = compute_ballot_target_redirects(_one_meeting_report(with_redirect))
+    assert redirects.redirected_ballots == 1
+    assert redirects.redirected_eject_ballots == 1
+    assert redirects.redirect_coerced_skip_ballots == 0
+
+
+def test_redirect_coerced_skip_is_impostor_missed_skip_never_inversion() -> None:
+    """The teammate-only-over-gate coercion: by-design play, not an inversion.
+
+    The SKIP-coerce branch fires only for an impostor voter (the verdict
+    can only exceed the eligible pool through a teammate row), so in the
+    decision census the coerced SKIP lands in the impostor bucket exactly
+    like a §7.12 teammate coercion — threshold_inversions stays 0 and
+    betrayal stays 0 by construction.
+    """
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter=_IMPOSTOR,
+                reason_id=None,
+                rationale_text=_REDIRECTED_RATIONALE,
+            ),
+        ),
+        llm_calls=(_vote_call(agent_id=_IMPOSTOR, rendered_max=0.80),),
+    )
+
+    result = compute_conversion_report(_one_meeting_report(meeting))
+
+    assert result.skip_ballots == 1
+    assert result.missed_skip_ballots == 1
+    assert result.missed_skip_impostor_voters == 1
+    assert result.threshold_inversions == 0
+
+    redirects = compute_ballot_target_redirects(_one_meeting_report(meeting))
+    assert redirects.redirected_ballots == 1
+    assert redirects.redirect_coerced_skip_ballots == 1
+    assert redirects.redirected_eject_ballots == 0
+
+
+def test_redirect_census_ignores_unmarked_ballots() -> None:
+    """Eject ballots and clean SKIPs without the marker are invisible."""
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(target=_IMPOSTOR, voter="p-0", reason_id=None),
+            _ballot(target="SKIP", voter="p-1", reason_id=None),
+            _ballot(
+                target="SKIP",
+                voter="p-2",
+                reason_id=None,
+                rationale_text=VOTE_PARSE_DEFAULT_MARKER.format(head="{}"),
+            ),
+        ),
+        llm_calls=(),
+    )
+
+    redirects = compute_ballot_target_redirects(_one_meeting_report(meeting))
+
+    assert redirects == BallotTargetRedirectReport(
+        redirected_ballots=0,
+        redirected_eject_ballots=0,
+        redirect_coerced_skip_ballots=0,
+    )
+
+
+def test_redirect_model_rejects_bad_partition() -> None:
+    with pytest.raises(ValidationError, match="must equal redirected_ballots"):
+        BallotTargetRedirectReport(
+            redirected_ballots=2,
+            redirected_eject_ballots=1,
+            redirect_coerced_skip_ballots=0,
         )
 
 

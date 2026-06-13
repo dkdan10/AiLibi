@@ -46,6 +46,7 @@ from llm.client import CallKind, LLMClient, LLMResponse, TokenUsage
 from llm.provider import LLMCallFailure, _attach_parse_failure  # noqa: PLC2701
 from llm.fake_provider import FakeProvider
 from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_TURN_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
     INVALID_ACCUSATION_TARGET_MARKER,
@@ -77,6 +78,7 @@ from meetings.manager import (
     drop_teammate_statement_target,
     exclude_teammate_accusation_claims,
     extract_belief_evidence,
+    guard_ballot_target_graph,
 )
 from meetings.schemas import (
     AccusationClaim,
@@ -5161,3 +5163,459 @@ class TestVoteBallotFailSoft:
             v.trigger == "deadline" and v.parse_failures == ()
             for v in manager.defaulted_calls
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 10.9.2: ballot-target graph guard (PR #147 finding F2 — the seed-12
+# m0 unattributed ejection). An eject ballot under a MUST-vote verdict must
+# name a target whose rendered suspicion meets the threshold; an under-gate
+# target redirects to the argmax-rendered eligible candidate with
+# BALLOT_TARGET_REDIRECT_MARKER (SKIP-coerced when only a teammate row is
+# over the gate). SKIP ballots and MUST-skip verdicts are byte-unchanged.
+# ---------------------------------------------------------------------------
+
+
+def _graph(*rows: tuple[str, float]) -> tuple[SuspicionEntry, ...]:
+    return tuple(
+        SuspicionEntry(player_id=player_id, suspicion=suspicion, trust=0.5)
+        for player_id, suspicion in rows
+    )
+
+
+def _guard_ballot(
+    *,
+    voter: str,
+    target: str,
+    confidence: float = 0.85,
+    primary_reason_id: str | None = None,
+    rationale_text: str = "model rationale",
+) -> VoteBallot:
+    return VoteBallot(
+        voter=voter,
+        target=target,
+        confidence=confidence,
+        primary_reason_id=primary_reason_id,
+        considered_alternatives=(),
+        rationale_text=rationale_text,
+    )
+
+
+# The PR #147 evidence-branch fixture (branch ``phase-10-wave1-rerecord``,
+# ``replays/samples/9p2i/replay-seed-12.jsonl``, meeting
+# ``headless-seed-12:meeting-0``), reproduced here as recorded constants so
+# the pin survives the branch being pruned. Living voters p-1..p-9 minus the
+# dead p-4 / p-8; impostors p-1 and p-7 (each the other's fellow). The
+# rendered per-voter graphs below are exactly the "## Your suspicion graph"
+# rows of the recorded vote prompts (teammates already masked upstream), and
+# the ballots are the recorded ones: p-1 was ejected 3-2-2 off three ballots
+# whose voters' graphs carried NO p-1 row — their MUST-vote verdicts were
+# driven by other players' over-gate rows, and they adopted the opening's
+# bare verbal accusation of p-1 as ballot target instead.
+_SEED12_LIVING: tuple[str, ...] = ("p-1", "p-2", "p-3", "p-5", "p-6", "p-7", "p-9")
+_SEED12_TURN_0 = "headless-seed-12:meeting-0:turn-0"
+_SEED12_TURN_3 = "headless-seed-12:meeting-0:turn-3"
+_SEED12_GRAPHS: dict[str, tuple[SuspicionEntry, ...]] = {
+    "p-1": _graph(("p-5", 0.70), ("p-6", 0.80)),
+    "p-2": _graph(("p-6", 0.80)),
+    "p-3": _graph(("p-6", 0.80)),
+    "p-5": _graph(("p-6", 0.80)),
+    "p-6": _graph(("p-5", 0.70), ("p-7", 0.70)),
+    "p-7": _graph(("p-5", 0.70), ("p-6", 0.80)),
+    "p-9": _graph(("p-6", 0.80)),
+}
+_SEED12_FELLOWS: dict[str, tuple[str, ...]] = {"p-1": ("p-7",), "p-7": ("p-1",)}
+_SEED12_BALLOTS: dict[str, VoteBallot] = {
+    "p-1": _guard_ballot(voter="p-1", target="SKIP", confidence=0.95),
+    "p-2": _guard_ballot(
+        voter="p-2", target="p-1", confidence=0.85, primary_reason_id=_SEED12_TURN_3
+    ),
+    "p-3": _guard_ballot(
+        voter="p-3", target="p-1", confidence=0.95, primary_reason_id=_SEED12_TURN_0
+    ),
+    "p-5": _guard_ballot(voter="p-5", target="p-6", confidence=0.82),
+    "p-6": _guard_ballot(
+        voter="p-6", target="p-1", confidence=0.75, primary_reason_id=_SEED12_TURN_3
+    ),
+    "p-7": _guard_ballot(voter="p-7", target="SKIP", confidence=0.95),
+    "p-9": _guard_ballot(voter="p-9", target="p-6", confidence=0.85),
+}
+
+
+def _seed12_guarded(voter: str) -> VoteBallot:
+    return guard_ballot_target_graph(
+        ballot=_SEED12_BALLOTS[voter],
+        voter_id=voter,
+        suspicion_graph=_SEED12_GRAPHS[voter],
+        candidate_targets=tuple(p for p in _SEED12_LIVING if p != voter),
+        skip_confidence_threshold=0.6,
+        fellow_impostor_ids=_SEED12_FELLOWS.get(voter, ()),
+    )
+
+
+class TestBallotTargetGuardSeed12Pin:
+    """The seed-12 m0 byte pin: recorded graphs + ballots through the guard."""
+
+    def test_no_row_p1_ballots_redirect_to_the_rendered_argmax(self) -> None:
+        # p-2 and p-3 MUST-vote off p-6 at 0.80 — the only row each graph
+        # carries — yet both ballots named p-1 (no row at all). The guard
+        # redirects each to the 0.80 argmax, p-6, preserving the original.
+        for voter in ("p-2", "p-3"):
+            redirected = _seed12_guarded(voter)
+            assert redirected.target == "p-6"
+            assert redirected.rationale_text.startswith(
+                BALLOT_TARGET_REDIRECT_MARKER.format(target="p-1")
+            )
+            # The redirect constrains the target only: confidence and the
+            # deliberation link survive.
+            assert redirected.confidence == _SEED12_BALLOTS[voter].confidence
+            assert (
+                redirected.primary_reason_id == _SEED12_BALLOTS[voter].primary_reason_id
+            )
+
+    def test_third_no_row_ballot_redirects_by_the_pinned_tie_break(self) -> None:
+        # The third no-row p-1 ballot is voter p-6's own, whose rendered
+        # graph reads p-5/p-7 at 0.70 each (it holds no row about itself,
+        # so the 0.80 argmax the contract names is unreachable for this
+        # voter): MUST-vote at 0.70, redirect ties at 0.70, and the pinned
+        # tie-break (lowest player id) lands on p-5.
+        redirected = _seed12_guarded("p-6")
+        assert redirected.target == "p-5"
+        assert redirected.rationale_text.startswith(
+            BALLOT_TARGET_REDIRECT_MARKER.format(target="p-1")
+        )
+
+    def test_over_gate_consistent_ballots_are_byte_unchanged(self) -> None:
+        # p-5 and p-9 voted p-6, whose rendered row (0.80) meets the gate:
+        # the guard never touches an over-gate-consistent eject ballot.
+        for voter in ("p-5", "p-9"):
+            assert _seed12_guarded(voter) == _SEED12_BALLOTS[voter]
+
+    def test_skip_ballots_are_byte_unchanged(self) -> None:
+        # The two impostor SKIPs (p-1, p-7) pass through untouched even
+        # under their MUST-vote renders: the guard NEVER fires on a SKIP
+        # ballot — eject-vs-skip stays the frozen §4.6 semantics.
+        for voter in ("p-1", "p-7"):
+            assert _seed12_guarded(voter) == _SEED12_BALLOTS[voter]
+
+
+class TestBallotTargetGuardUnit:
+    """Pure-function contract of :func:`guard_ballot_target_graph`."""
+
+    _CANDIDATES = ("p-2", "p-3", "p-4", "p-5")
+
+    def test_over_gate_freedom_any_met_row_passes_unredirected(self) -> None:
+        # A ballot naming ANY target whose row meets the threshold passes
+        # even when a higher row exists — no argmax-only over-constraint;
+        # the model keeps free choice among over-gate targets.
+        ballot = _guard_ballot(voter="p-1", target="p-3")
+        guarded = guard_ballot_target_graph(
+            ballot=ballot,
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-2", 0.90), ("p-3", 0.65)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+        )
+        assert guarded == ballot
+
+    def test_exactly_at_threshold_row_passes(self) -> None:
+        # The gate is inclusive at the cutoff (mirrors the tally rule).
+        ballot = _guard_ballot(voter="p-1", target="p-3")
+        guarded = guard_ballot_target_graph(
+            ballot=ballot,
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-3", 0.60)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+        )
+        assert guarded == ballot
+
+    def test_must_skip_verdict_eject_ballot_is_byte_unchanged(self) -> None:
+        # No candidate row meets the gate: the verdict reads MUST-skip, so
+        # an eject ballot stays a recorded inversion — frozen measurement
+        # semantics, never papered by the guard.
+        ballot = _guard_ballot(voter="p-1", target="p-4")
+        guarded = guard_ballot_target_graph(
+            ballot=ballot,
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-2", 0.55), ("p-3", 0.40)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+        )
+        assert guarded == ballot
+
+    def test_non_candidate_row_never_trips_the_verdict(self) -> None:
+        # A high-suspicion row for a player OUTSIDE candidate_targets (a
+        # dead / ejected player still carried in the belief rows) does not
+        # produce a MUST-vote verdict — the same candidate filter the
+        # frozen template applies, so guard and rendered verdict agree.
+        ballot = _guard_ballot(voter="p-1", target="p-4")
+        guarded = guard_ballot_target_graph(
+            ballot=ballot,
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-9", 0.95), ("p-2", 0.40)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+        )
+        assert guarded == ballot
+
+    def test_under_gate_target_redirects_with_marker(self) -> None:
+        ballot = _guard_ballot(voter="p-1", target="p-4", rationale_text="weak hunch")
+        guarded = guard_ballot_target_graph(
+            ballot=ballot,
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-2", 0.75), ("p-4", 0.30)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+        )
+        assert guarded.target == "p-2"
+        assert guarded.rationale_text == (
+            BALLOT_TARGET_REDIRECT_MARKER.format(target="p-4") + "weak hunch"
+        )
+
+    def test_redirect_never_names_the_voter_or_a_teammate(self) -> None:
+        # The eligible pool is candidate_targets minus the voter minus
+        # fellow_impostor_ids: even when a teammate row is the argmax, the
+        # redirect lands on the best NON-teammate row — the guard composes
+        # with the §7.12 firewall by construction and can never mint the
+        # betrayal ballot the firewall exists to coerce.
+        ballot = _guard_ballot(voter="p-1", target="p-4")
+        guarded = guard_ballot_target_graph(
+            ballot=ballot,
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-5", 0.95), ("p-2", 0.70)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+            fellow_impostor_ids=("p-5",),
+        )
+        assert guarded.target == "p-2"
+
+    def test_teammate_only_over_gate_coerces_to_skip(self) -> None:
+        # An impostor voter whose ONLY over-gate row is a teammate: the
+        # eligible pool's max is below the gate, so the ballot coerces to
+        # SKIP with the marker and the now-stale reason id nulled (the
+        # teammate-coercion discipline) — betrayal stays 0 by construction.
+        ballot = _guard_ballot(
+            voter="p-1",
+            target="p-3",
+            primary_reason_id="m-1:turn-2",
+            rationale_text="pressed",
+        )
+        guarded = guard_ballot_target_graph(
+            ballot=ballot,
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-5", 0.90), ("p-3", 0.40)),
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+            fellow_impostor_ids=("p-5",),
+        )
+        assert guarded.target == "SKIP"
+        assert guarded.primary_reason_id is None
+        assert guarded.rationale_text == (
+            BALLOT_TARGET_REDIRECT_MARKER.format(target="p-3") + "pressed"
+        )
+
+    def test_tie_break_is_lowest_player_id_and_input_order_free(self) -> None:
+        ballot = _guard_ballot(voter="p-1", target="p-4")
+        for rows in (
+            (("p-3", 0.70), ("p-2", 0.70)),
+            (("p-2", 0.70), ("p-3", 0.70)),
+        ):
+            guarded = guard_ballot_target_graph(
+                ballot=ballot,
+                voter_id="p-1",
+                suspicion_graph=_graph(*rows),
+                candidate_targets=self._CANDIDATES,
+                skip_confidence_threshold=0.6,
+            )
+            assert guarded.target == "p-2"
+
+    def test_guard_is_deterministic(self) -> None:
+        ballot = _guard_ballot(voter="p-1", target="p-4")
+        results = {
+            guard_ballot_target_graph(
+                ballot=ballot,
+                voter_id="p-1",
+                suspicion_graph=_graph(("p-2", 0.75), ("p-3", 0.65)),
+                candidate_targets=self._CANDIDATES,
+                skip_confidence_threshold=0.6,
+            ).model_dump_json()
+            for _ in range(5)
+        }
+        assert len(results) == 1
+
+    def test_marker_quoted_target_is_bounded(self) -> None:
+        # The 10.6 rule: the marker quotes a bounded head of the original
+        # target. Unreachable for a real roster id (roster normalization
+        # runs first), pinned for the discipline.
+        blob = "p-" + "9" * 3000
+        ballot = _guard_ballot(voter="p-1", target=blob)
+        guarded = guard_ballot_target_graph(
+            ballot=ballot,
+            voter_id="p-1",
+            suspicion_graph=_graph(("p-2", 0.75)),
+            candidate_targets=(blob, "p-2"),
+            skip_confidence_threshold=0.6,
+        )
+        assert guarded.target == "p-2"
+        assert blob[:MARKER_QUOTED_ORIGINAL_MAX_CHARS] in guarded.rationale_text
+        assert len(guarded.rationale_text) < 200
+
+
+class TestBallotTargetGuardVerdictEquality:
+    """The guard's MUST-vote derivation equals the rendered in-prompt verdict.
+
+    Renders the REAL frozen ``vote_ballot.j2`` over the same
+    ``suspicion_graph`` / ``candidate_targets`` /
+    ``skip_confidence_threshold`` the guard receives and parses the §4.6
+    line back out via the shared eval helper: the guard fires on a no-row
+    eject ballot exactly when the rendered verdict reads MUST-vote.
+    """
+
+    _CANDIDATES = ("p-2", "p-3", "p-4")
+
+    def _rendered_prompt(self, graph: tuple[SuspicionEntry, ...]) -> str:
+        return vote_ballot_prompt(
+            voter_id="p-1",
+            rendered_memory="## Your role: CREWMATE",
+            transcript=MeetingTranscript(turns=()),
+            contradiction_flags=(),
+            suspicion_graph=graph,
+            candidate_targets=self._CANDIDATES,
+            skip_confidence_threshold=0.6,
+        )
+
+    def _guard_fired(self, graph: tuple[SuspicionEntry, ...]) -> bool:
+        ballot = _guard_ballot(voter="p-1", target="p-4")
+        return (
+            guard_ballot_target_graph(
+                ballot=ballot,
+                voter_id="p-1",
+                suspicion_graph=graph,
+                candidate_targets=self._CANDIDATES,
+                skip_confidence_threshold=0.6,
+            )
+            != ballot
+        )
+
+    @pytest.mark.parametrize(
+        ("graph_rows", "expect_must_vote"),
+        [
+            ((("p-2", 0.80),), True),
+            ((("p-2", 0.60),), True),
+            ((("p-2", 0.55),), False),
+            # The dead-player filter: p-9 is not a candidate, so its 0.95
+            # row trips neither the rendered verdict nor the guard.
+            ((("p-9", 0.95), ("p-2", 0.40)), False),
+            ((), False),
+        ],
+    )
+    def test_guard_fires_iff_rendered_verdict_reads_must_vote(
+        self,
+        graph_rows: tuple[tuple[str, float], ...],
+        expect_must_vote: bool,
+    ) -> None:
+        graph = _graph(*graph_rows)
+        prompt = self._rendered_prompt(graph)
+
+        rendered_max = parse_rendered_max_suspicion(prompt)
+        assert rendered_max is not None
+        must_vote_rendered = rendered_max >= 0.6
+        assert must_vote_rendered == expect_must_vote
+        assert ("you MUST vote to eject" in prompt) == expect_must_vote
+
+        assert self._guard_fired(graph) == expect_must_vote
+
+
+class TestBallotTargetGuardOnProductionPath:
+    """Chain order at the chokepoint: roster -> teammate coercion -> guard."""
+
+    def _participants(self) -> tuple[MeetingParticipant, ...]:
+        return (
+            _participant("p-1"),
+            _participant(
+                "p-2",
+                suspicion_graph=_graph(("p-3", 0.80)),
+            ),
+            _participant("p-3"),
+            _participant("p-4"),
+        )
+
+    def test_under_gate_eject_target_is_redirected_on_the_recorded_ballot(
+        self,
+    ) -> None:
+        # p-2's verdict reads MUST-vote off p-3 at 0.80; its ballot names
+        # p-4 (no row). The RECORDED ballot carries the redirected target
+        # and the marker — the seed-12 leak closed at the chokepoint.
+        result, _ = _run_meeting(
+            _make_responder(vote_targets={"p-2": "p-4"}),
+            participants=self._participants(),
+        )
+
+        ballot = next(b for b in result.ballots if b.voter == "p-2")
+        assert ballot.target == "p-3"
+        assert ballot.rationale_text.startswith(
+            BALLOT_TARGET_REDIRECT_MARKER.format(target="p-4")
+        )
+
+    def test_hallucinated_target_normalizes_to_skip_and_is_never_redirected(
+        self,
+    ) -> None:
+        # Roster normalization runs FIRST: an out-of-roster target becomes
+        # a marked SKIP, and the guard never fires on a SKIP — one rewrite,
+        # not two, even under a MUST-vote verdict.
+        result, _ = _run_meeting(
+            _make_responder(vote_targets={"p-2": "p-99"}),
+            participants=self._participants(),
+        )
+
+        ballot = next(b for b in result.ballots if b.voter == "p-2")
+        assert ballot.target == "SKIP"
+        assert INVALID_VOTE_TARGET_MARKER.format(target="p-99") in (
+            ballot.rationale_text
+        )
+        assert BALLOT_TARGET_REDIRECT_MARKER.split("{target!r}")[0] not in (
+            ballot.rationale_text
+        )
+
+    def test_teammate_ballot_coerces_to_skip_and_is_never_redirected(self) -> None:
+        # The §7.12 coercion runs SECOND: an impostor's betrayal ballot is
+        # already a marked SKIP by the time the guard sees it, so the
+        # guard cannot redirect it back onto a living target.
+        participants = (
+            _participant("p-1"),
+            _participant(
+                "p-2",
+                role="IMPOSTOR",
+                suspicion_graph=_graph(("p-3", 0.80)),
+                fellow_impostor_ids=("p-4",),
+            ),
+            _participant("p-3"),
+            _participant("p-4", role="IMPOSTOR", fellow_impostor_ids=("p-2",)),
+        )
+        result, _ = _run_meeting(
+            _make_responder(vote_targets={"p-2": "p-4"}),
+            participants=participants,
+        )
+
+        ballot = next(b for b in result.ballots if b.voter == "p-2")
+        assert ballot.target == "SKIP"
+        assert TEAMMATE_VOTE_TARGET_MARKER.format(target="p-4") in (
+            ballot.rationale_text
+        )
+        assert BALLOT_TARGET_REDIRECT_MARKER.split("{target!r}")[0] not in (
+            ballot.rationale_text
+        )
+
+    def test_no_redirect_meeting_is_byte_identical(self) -> None:
+        # Frozen-semantics regression: with every ballot either SKIP or
+        # over-gate-consistent the guard is invisible — no marker anywhere.
+        result, _ = _run_meeting(
+            _make_responder(vote_targets={"p-2": "p-3"}),
+            participants=self._participants(),
+        )
+
+        prefix = BALLOT_TARGET_REDIRECT_MARKER.split("{target!r}")[0]
+        assert all(prefix not in b.rationale_text for b in result.ballots)
+        ballot = next(b for b in result.ballots if b.voter == "p-2")
+        assert ballot.target == "p-3"
+        assert ballot.rationale_text == "stub-vote-p-2-p-3"

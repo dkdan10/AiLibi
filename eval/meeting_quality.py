@@ -85,6 +85,23 @@ partition with a DEFAULTED class in this module:
   Task 10.6 metrics this surface stays off the frozen
   :class:`TournamentEvalReport` wrapper until the 10.9 re-record.
 
+Phase 10 Wave 1 repair (Task 10.9.2, PR #147 F2) adds the redirect
+census in this module:
+
+* *Ballot-target redirect census* — the eject ballots the meeting
+  layer's ballot-target graph guard rewrote because their target carried
+  no over-gate rendered row under a MUST-vote verdict, keyed on
+  :data:`~meetings.manager.BALLOT_TARGET_REDIRECT_MARKER` and split by
+  the guard's outcome (:func:`compute_ballot_target_redirects` /
+  :class:`BallotTargetRedirectReport`), published beside the
+  invalid-target and teammate-coercion counts. Recorded ballots are
+  post-guard, so the gp-7 channel decomposition
+  (:func:`decompose_ejection_channels`) and every graph-consistency read
+  over ballots / ejections see the REDIRECTED target by construction —
+  the seed-12 unattributed-impostor-ejection class is structurally
+  impossible on post-guard recordings. Same single-era rule: off the
+  frozen wrapper until the 10.9 re-record.
+
 :class:`~eval.report_schema.TournamentReport` is frozen with
 ``extra="forbid"``, so the metric outputs cannot be added as fields on it.
 They live instead on :class:`TournamentEvalReport`, a frozen wrapper that
@@ -135,6 +152,7 @@ from eval.vote_correctness import (
     genuine_class_subjects,
 )
 from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -164,6 +182,15 @@ _TEAMMATE_VOTE_MARKER_PREFIX: Final[str] = TEAMMATE_VOTE_TARGET_MARKER.split(
 # partition below.
 _VOTE_PARSE_DEFAULT_MARKER_PREFIX: Final[str] = VOTE_PARSE_DEFAULT_MARKER.split(
     "{head!r}"
+)[0]
+# The Task 10.9.2 ballot-target redirect marker prefix (the text minus the
+# ``{target!r}`` placeholder): the manager's ballot-target graph guard
+# stamps it onto a ballot whose eject target carried no over-gate rendered
+# row under a MUST-vote verdict (PR #147 F2, the seed-12 m0 unattributed
+# ejection). The prefix keys the redirect census below, published beside
+# the invalid-target and teammate-coercion counts.
+_BALLOT_REDIRECT_MARKER_PREFIX: Final[str] = BALLOT_TARGET_REDIRECT_MARKER.split(
+    "{target!r}"
 )[0]
 
 # ---------------------------------------------------------------------------
@@ -874,6 +901,108 @@ def compute_defaulted_ballots(
         defaulted_under_must_vote=under_must_vote,
         defaulted_under_must_skip=under_must_skip,
         defaulted_without_render=without_render,
+    )
+
+
+class BallotTargetRedirectReport(BaseModel):
+    """The ballot-target redirect census (Task 10.9.2; PR #147 F2).
+
+    Frozen value object censusing the ballots the meeting layer's
+    ballot-target graph guard
+    (:func:`meetings.manager.guard_ballot_target_graph`) rewrote -- keyed
+    on the pinned :data:`~meetings.manager.BALLOT_TARGET_REDIRECT_MARKER`
+    -- published beside the invalid-target
+    (``missed_skip_invalid_target``) and teammate-coercion
+    (``missed_skip_teammate_coerced``) counts so every deterministic
+    ballot rewrite stays separately measurable:
+
+    * ``redirected_ballots`` -- every marker-bearing ballot (the census
+      headline; partitions exactly into the two buckets below).
+    * ``redirected_eject_ballots`` -- the recorded target is the guard's
+      argmax-rendered eligible candidate (the seed-12 m0 repair shape:
+      the under-gate target was rewritten, the ballot still ejects). The
+      ballot never enters the SKIP partition, so ``threshold_inversions``
+      and ``missed_skip_ballots`` are untouched by construction.
+    * ``redirect_coerced_skip_ballots`` -- the eligible pool's max was
+      below the gate (an impostor voter whose only over-gate row is a
+      teammate) and the ballot coerced to SKIP. Structurally an
+      impostor-voter-only shape, so in the decision census it lands in
+      ``missed_skip_impostor_voters`` exactly like the §7.12 teammate
+      coercion -- by-design play, never a genuine
+      ``threshold_inversions`` entry.
+
+    Like the Task 10.9.1 DEFAULTED census this does NOT join
+    :class:`TournamentEvalReport` yet: the committed sample reports stay
+    single-era (no regeneration without a re-record), so the surface
+    ships standalone until the 10.9 re-record turns the era over.
+
+    **Leak-safety.** Three integers; no roles, transcripts, or
+    engine-owned types.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    redirected_ballots: int
+    redirected_eject_ballots: int
+    redirect_coerced_skip_ballots: int
+
+    @model_validator(mode="after")
+    def _validate_buckets(self) -> BallotTargetRedirectReport:
+        counts = (
+            self.redirected_ballots,
+            self.redirected_eject_ballots,
+            self.redirect_coerced_skip_ballots,
+        )
+        if any(count < 0 for count in counts):
+            raise ValueError("ballot-redirect counts must be non-negative")
+        parts = self.redirected_eject_ballots + self.redirect_coerced_skip_ballots
+        if parts != self.redirected_ballots:
+            raise ValueError(
+                "eject + coerced-skip must equal redirected_ballots: "
+                f"{self.redirected_eject_ballots} + "
+                f"{self.redirect_coerced_skip_ballots} != {self.redirected_ballots}"
+            )
+        return self
+
+
+def compute_ballot_target_redirects(
+    report: TournamentReport | Sequence[GameReport],
+) -> BallotTargetRedirectReport:
+    """Fold a tournament report into the redirect census (Task 10.9.2).
+
+    Accepts either a :class:`~eval.report_schema.TournamentReport` or a bare
+    sequence of :class:`~eval.report_schema.GameReport` (matching the other
+    analyzers' signature). Pure: no I/O, no engine/agent/LLM calls.
+
+    A ballot is REDIRECTED iff its ``rationale_text`` carries the pinned
+    :data:`~meetings.manager.BALLOT_TARGET_REDIRECT_MARKER` prefix; the
+    recorded target splits the bucket (an eject kept ejecting at the
+    guard's redirect, a SKIP is the coerced teammate-only-over-gate
+    shape). Role-blind: the guard fires on the rendered graph, not on who
+    voted.
+    """
+
+    games = report.games if isinstance(report, TournamentReport) else tuple(report)
+
+    redirected = 0
+    redirected_eject = 0
+    coerced_skip = 0
+
+    for game in games:
+        for meeting in game.meetings:
+            for ballot in meeting.ballots:
+                if _BALLOT_REDIRECT_MARKER_PREFIX not in ballot.rationale_text:
+                    continue
+                redirected += 1
+                if ballot.target == "SKIP":
+                    coerced_skip += 1
+                else:
+                    redirected_eject += 1
+
+    return BallotTargetRedirectReport(
+        redirected_ballots=redirected,
+        redirected_eject_ballots=redirected_eject,
+        redirect_coerced_skip_ballots=coerced_skip,
     )
 
 
@@ -1740,6 +1869,7 @@ __all__ = [
     "CHANNEL_CONTRADICTION_FLAG",
     "CHANNEL_PRIOR_MEETING_CARRY",
     "CHANNEL_VENT_WITNESS",
+    "BallotTargetRedirectReport",
     "ConversionReport",
     "DefaultedBallotReport",
     "GateMetricsReport",
@@ -1748,6 +1878,7 @@ __all__ = [
     "SupplyGaugesReport",
     "TournamentEvalReport",
     "build_tournament_eval_report",
+    "compute_ballot_target_redirects",
     "compute_conversion_report",
     "compute_defaulted_ballots",
     "compute_gate_metrics",
