@@ -77,11 +77,11 @@
 
 export const meta = {
   name: 'gameplay-data-audit-v2',
-  description: 'Structured audit of a committed chain-protocol replay set (9p/2i, per-player tasks, accusation-chain meetings): deterministic rule + chain-protocol + conversion / artifact checks in Extract, 4 focused analysis lenses (redirect-into-crew + conversion-quality headline, pacing/structural-gains, impostor toolkit, model artifacts), adversarial verify, synthesis. Baseline-agnostic (derives anchors from the pointed set); model-tiered (Fable on the headline lens + synthesis, Opus elsewhere).',
+  description: 'Structured audit of a committed chain-protocol replay set (9p/2i, per-player tasks, accusation-chain meetings): deterministic rule + chain-protocol + conversion / artifact checks in Extract, 4 focused analysis lenses (redirect-into-crew + conversion-quality headline, pacing/structural-gains, impostor toolkit, model artifacts), adversarial verify, synthesis. Baseline-agnostic (derives anchors from the pointed set); runs on Opus 4.8 throughout (Fable 5 suspended; the headline lens C + synthesis were the Fable tier).',
   whenToUse: 'After a chain-protocol eval set is recorded; validates the baseline and produces the next wave\'s contract input — currently the Phase-10 Wave-1 CLOSE GATE (decompose the 10.9.2 redirect-into-crew pattern, verify the testimony/accumulator gains are structural, partition the residual conversion gap, and produce the Wave-2 impostor-toolkit + self-accusation input).',
   phases: [
     { title: 'Extract', detail: 'One agent updates + runs the committed extractor: roles, resolved events, hard-rule + chain-protocol checks, conversion/testimony aggregates into a facts JSON' },
-    { title: 'Analyze', detail: '4 parallel lenses over the facts + transcripts (C redirect/conversion-quality headline on Fable; B pacing/structural-gains, D impostor toolkit, H artifacts on Opus)' },
+    { title: 'Analyze', detail: '4 parallel lenses over the facts + transcripts on Opus 4.8 (C redirect/conversion-quality headline; B pacing/structural-gains, D impostor toolkit, H artifacts)' },
     { title: 'Verify', detail: 'Mechanical findings pass through; each judgment finding gets one skeptic (refuted drops; a failed skeptic passes it through flagged unverified)' },
     { title: 'Synthesis', detail: 'Group findings, decompose the redirect-into-crew pattern, judge baseline validity for Wave-2, propose Wave-2 contract input, write report' },
   ],
@@ -712,9 +712,9 @@ const mechanicalFindings = (extract.mechanical_findings || []).map((f, i) => ({
 log(`Extract complete: ${extract.games_analyzed} games. ${mechanicalFindings.length} code-certain violations. Facts at ${factsPath}.`)
 
 // ---------------------------------------------------------------------------
-// Phase 2: Analyze (4 parallel lenses — C Wave-1-close headline on Fable,
-// B/D/H on Opus; the cut lenses' live questions were folded into C/B/H or the
-// extractor, see the header)
+// Phase 2: Analyze (4 parallel lenses on Opus 4.8 — Fable 5 suspended; C is the
+// Wave-1-close headline; the cut lenses' live questions were folded into C/B/H
+// or the extractor, see the header)
 // ---------------------------------------------------------------------------
 
 phase('Analyze')
@@ -731,10 +731,11 @@ const lensReports = await parallel(
         label: `analyze:${l.key}-${l.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 28)}`,
         phase: 'Analyze',
         schema: FINDINGS_SCHEMA,
-        // The Wave-1 close headline (redirect-into-crew decomposition +
-        // structural-gains verification) rides on lens C — Fable; the
-        // characterization lenses run on Opus.
-        model: l.key === 'C' ? 'fable' : 'opus',
+        // All lenses run on Opus 4.8 (Fable 5 suspended 2026-06-13). The
+        // Wave-1 close headline (redirect-into-crew decomposition +
+        // structural-gains verification) is lens C; when Fable returns,
+        // restore the tier: l.key === 'C' ? 'fable' : 'opus'.
+        model: 'opus',
       }
     )
   )
@@ -756,7 +757,7 @@ log(`Analyze complete. ${lensFindings.length} judgment findings across ${lensRep
 
 // ---------------------------------------------------------------------------
 // Phase 3: Verify (hybrid — mechanical pass through; one skeptic per judgment
-// finding; C-lens findings get Fable skeptics, the rest Opus)
+// finding; all skeptics on Opus 4.8 — Fable 5 suspended)
 // ---------------------------------------------------------------------------
 
 phase('Verify')
@@ -821,8 +822,9 @@ cannot be verified either way after honest effort, set refuted=true with reasoni
         label: `verify:${f.fully_qualified_id}`,
         phase: 'Verify',
         schema: VERDICT_SCHEMA,
-        // The headline lens's findings drive the Wave-2 contracts — strongest skeptics.
-        model: f.lens_key === 'C' ? 'fable' : 'opus',
+        // All skeptics on Opus 4.8 (Fable 5 suspended). When Fable returns,
+        // restore the headline-lens tier: f.lens_key === 'C' ? 'fable' : 'opus'.
+        model: 'opus',
       }
     ).then((verdict) => {
       if (!verdict) {
@@ -970,7 +972,8 @@ Report the final written path in the "summary" field.`,
     phase: 'Synthesis',
     schema: SYNTHESIS_SCHEMA,
     // The capstone judgment — the Wave-2 readiness verdict rides on it.
-    model: 'fable',
+    // Opus 4.8 (Fable 5 suspended; restore 'fable' when it returns).
+    model: 'opus',
   }
 )
 
