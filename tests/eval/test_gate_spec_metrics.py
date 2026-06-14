@@ -60,7 +60,12 @@ from meetings.schemas import (
     SawPlayerObservation,
     VoteBallot,
 )
-from meetings.transcript import WEAK_REASON_RETARGETED_PROXY, detect_contradictions
+from meetings.transcript import (
+    WEAK_REASON_ENDPOINT_TICK,
+    WEAK_REASON_PROXY_INTRA_TURN,
+    WEAK_REASON_RETARGETED_PROXY,
+    detect_contradictions,
+)
 from orchestrator.replay import LLMCallRecord
 
 # The baseline builder is a top-level script module (mypy_path = "scripts";
@@ -801,6 +806,56 @@ class TestRetargetedProxyFlagsAreNotGenuineClass:
         assert gauges.flag_subjects_impostor >= 1
 
 
+def _proxy_intra_turn_turns() -> tuple[MeetingTurn, ...]:
+    """A transcript whose only non-endpoint sighting flag is a 10.10 re-target.
+
+    The impostor authors BOTH a proxy alibi about a crewmate (CAFETERIA
+    2-8) AND a contradicting sighting of that crewmate (STORAGE@5,
+    interior tick) on ONE turn. The Task 10.10 same-speaker guard re-targets
+    the flag WEAK at the impostor SPEAKER — whose own location was never
+    contradicted — so it must not enter the alibi-lie gauge.
+    """
+
+    return (
+        _turn(
+            speaker=_IMPOSTOR,
+            index=0,
+            kind="opening",
+            claims=(_alibi(subject=_CREWMATE),),
+            observations=(_sighting(subject=_CREWMATE, tick=5),),
+        ),
+    )
+
+
+class TestProxyIntraTurnRetargetsAreNotGenuineClass:
+    """A 10.10 same-speaker re-target names the speaker, not a contradicted
+    subject — like the 10.6 cross-speaker re-target, it must stay out of the
+    genuine alibi-lie gauge (Codex review on PR #152, P2).
+    """
+
+    def test_proxy_intra_turn_retarget_does_not_supply_the_gate(self) -> None:
+        meeting = _meeting(turns=_proxy_intra_turn_turns())
+
+        # The re-target exists (a non-endpoint alibi_vs_sighting naming the
+        # impostor speaker)...
+        roster = frozenset(ballot.voter for ballot in meeting.ballots)
+        flags = detect_contradictions(meeting.transcript, roster=roster)
+        assert any(
+            _IMPOSTOR in flag.subjects
+            and flag.kind == "alibi_vs_sighting"
+            and WEAK_REASON_PROXY_INTRA_TURN in flag.description
+            and WEAK_REASON_ENDPOINT_TICK not in flag.description
+            for flag in flags
+        )
+        # ...but it is NOT genuine-class supply: no one's own location was
+        # contradicted by a sighting here.
+        assert genuine_class_subjects(meeting) == frozenset()
+
+        conversion = compute_genuine_class_conversion((_game(meetings=(meeting,)),))
+        assert conversion.supplied == 0
+        assert conversion.converted == 0
+
+
 # ---------------------------------------------------------------------------
 # Committed pins + the corrected Wave-0 baseline fixture (the 10.9 A/B home)
 # ---------------------------------------------------------------------------
@@ -855,9 +910,12 @@ class TestCommittedW1GateSpecPins:
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
         # The W1 supply row (10.9 re-record): 85 flags (84w/1s), meetings up to
         # 88 with the emergency channel live (W0 78), zero-contradiction share
-        # down to 46/88 (W0 49/78), genuine supply at 13 meetings (W0 8), role
-        # split 44 CREW / 41 IMP (W0 36/29), over-gate listener rows 102 — 1.62
-        # per accused-impostor meeting (W0 76 / 1.41).
+        # down to 46/88 (W0 49/78), genuine supply at 13 meetings (W0 8),
+        # over-gate listener rows 102 — 1.62 per accused-impostor meeting (W0 76
+        # / 1.41). Role split 43 CREW / 42 IMP: the Task 10.10 same-speaker
+        # guard re-derives seed-2 m0's proxy flag off crew p-8 onto its actual
+        # speaker, impostor p-7 (was 44/41 pre-guard) — the corrected
+        # instrument now credits the unreliable narrator, not the innocent.
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
@@ -867,8 +925,8 @@ class TestCommittedW1GateSpecPins:
         assert gauges.strong_flags == 1
         assert gauges.zero_contradiction_meetings == 46
         assert gauges.genuine_subject_meetings == 13
-        assert gauges.flag_subjects_crew == 44
-        assert gauges.flag_subjects_impostor == 41
+        assert gauges.flag_subjects_crew == 43
+        assert gauges.flag_subjects_impostor == 42
         assert gauges.accused_impostor_meetings == 63
         assert gauges.over_gate_listener_rows == 102
 

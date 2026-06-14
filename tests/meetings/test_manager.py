@@ -1740,11 +1740,13 @@ class TestTeammateFirewallInputSide:
         )
 
     def test_impostor_voter_graph_masks_contradicted_teammate(self) -> None:
-        # p-1 (crew) opens with an alibi for p-5 AND a sighting placing p-5
-        # elsewhere -> alibi_vs_sighting names p-5. The impostor voter p-4's
-        # ballot-prompt suspicion graph carries no p-5 edge; crew p-1's does.
+        # p-1 (crew) alibis p-5 and a DIFFERENT crew witness p-2 places p-5
+        # elsewhere -> a cross-speaker alibi_vs_sighting names p-5 (the 10.10
+        # same-speaker guard does not fire on two distinct authors). The
+        # impostor voter p-4's ballot-prompt suspicion graph carries no p-5
+        # edge; crew p-1's does.
         responder = _make_responder(
-            accusations={"p-1": None},
+            accusations={"p-1": "p-2", "p-2": None},
             claims_by={
                 "p-1": (
                     AlibiClaim(
@@ -1757,7 +1759,7 @@ class TestTeammateFirewallInputSide:
                 ),
             },
             observations={
-                "p-1": (
+                "p-2": (
                     SawPlayerObservation(
                         type="saw_player",
                         subject="p-5",

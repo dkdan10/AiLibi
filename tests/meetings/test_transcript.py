@@ -32,6 +32,7 @@ from meetings.transcript import (
     WEAK_REASON_BOUNDARY_OVERLAP,
     WEAK_REASON_ENDPOINT_TICK,
     WEAK_REASON_NARROW_WINDOW,
+    WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_RETARGETED_PROXY,
     WEAK_REASON_SELF_PAIR,
     WEAK_REASON_SELF_STATED,
@@ -1599,14 +1600,15 @@ class TestCommittedBytesArtifactCollapse:
     """
 
     # (seed, meeting_index) -> recorded flags that no longer re-derive.
-    # Task 10.9: EMPTY on the re-recorded bytes. At W0 this class proved the
-    # 10.6 detector repairs as an OFFLINE divergence from the pre-repair
-    # recorded flags (storm + proxies at three sites). The 10.9 re-record bakes
-    # those repairs in at RECORD time, so the committed bytes ARE the repaired
-    # output: re-derivation now matches the recording everywhere (no divergence).
-    # The set-wide artifact-absence is pinned below (VARYING_ROOMS / placeholder
-    # / over-broad-proxy classes mint nothing on the recorded W1 bytes).
-    _REPAIRED_SITES: dict[tuple[int, int], int] = {}
+    # At W0/W1 this class proved the 10.6 detector repairs as an OFFLINE
+    # divergence from the pre-repair recorded flags; the 10.9 re-record baked
+    # those in, so the only surviving divergence is the Task 10.10 guard, which
+    # was NOT yet in the detector when the committed bytes were recorded. The
+    # guard re-targets the close-baseline's three proxy-intra-turn flags
+    # (audit-2026-06-13-1816 C-C-2: seed-40 m0's two p-4 flags from p-5's turn,
+    # seed-2 m0's one p-8 flag from p-7's turn) WEAK at the speaker. Every other
+    # recorded flag still re-derives byte-identically.
+    _REPAIRED_SITES: dict[tuple[int, int], int] = {(2, 0): 1, (40, 0): 2}
 
     def test_rederivation_diverges_only_at_the_repaired_sites(self) -> None:
         recorded_total = 0
@@ -1635,23 +1637,28 @@ class TestCommittedBytesArtifactCollapse:
                 if removed:
                     removed_sites[(seed, index)] = len(removed)
                 for flag in removed:
-                    # Each removal must be explained by a 10.6 repair: a
-                    # placeholder-variant side (the allowlist kill) or a
-                    # proxy flag whose re-target now exists in the
-                    # re-derived set under the same event-id pair.
+                    # Each removal must be explained by a repair: a 10.6
+                    # placeholder-variant side (the allowlist kill) or a flag
+                    # whose re-target now exists in the re-derived set under the
+                    # same event-id pair -- the 10.6 cross-speaker proxy alibi
+                    # or the 10.10 same-speaker proxy-intra-turn guard.
                     classes = _classify_removed_flag(entry, flag)
-                    retargeted = (
-                        flag.contradiction_id in rederived_by_id
-                        and WEAK_REASON_RETARGETED_PROXY
-                        in rederived_by_id[flag.contradiction_id].description
+                    retargeted = flag.contradiction_id in rederived_by_id and any(
+                        reason in rederived_by_id[flag.contradiction_id].description
+                        for reason in (
+                            WEAK_REASON_RETARGETED_PROXY,
+                            WEAK_REASON_PROXY_INTRA_TURN,
+                        )
                     )
                     assert "placeholder" in classes or retargeted, flag.contradiction_id
                 for flag in added:
-                    # The only NEW pairings 10.6 may mint are the weak
-                    # re-targets at the proxy speaker.
-                    assert WEAK_REASON_RETARGETED_PROXY in flag.description, (
-                        flag.contradiction_id
-                    )
+                    # The only NEW pairings a repair may mint are the weak
+                    # re-targets at the proxy speaker (10.6 cross-speaker, 10.10
+                    # same-speaker).
+                    assert (
+                        WEAK_REASON_RETARGETED_PROXY in flag.description
+                        or WEAK_REASON_PROXY_INTRA_TURN in flag.description
+                    ), flag.contradiction_id
                     assert is_weak_contradiction(flag)
 
         assert removed_sites == self._REPAIRED_SITES
@@ -2038,6 +2045,294 @@ class TestProxyAlibiSubjectAccountConsistency:
         assert WEAK_REASON_SELF_STATED in flags[0].description
 
 
+class TestProxyIntraTurnGuard:
+    """Task 10.10 (audit-2026-06-13-1816 C-C-2, C-C-3): the same-speaker guard.
+
+    When BOTH events of a contradiction resolve to ONE speaker who is NOT
+    the subject, the flag is one narrator's two proxy-claims about a third
+    party in mutual conflict -- a flag-stacking artifact, re-targeted WEAK
+    at the speaker. Cross-speaker pairings (two-witness disagreements, the
+    impostor-frames-innocent deception frame) and self-contradictions
+    (speaker IS the subject) are untouched.
+    """
+
+    def _proxy_pair_turn(
+        self,
+        *,
+        speaker: str,
+        subject: str,
+        alibi_room: str,
+        other_room: str,
+        sighting_tick: int,
+    ) -> MeetingTurn:
+        # One speaker, one turn: a proxy alibi about ``subject`` plus a
+        # contradicting proxy sighting of the same subject. Both events
+        # resolve to ``speaker`` (the guard's single-author condition).
+        return MeetingTurn(
+            turn_id="m-1:turn-1",
+            turn_index=1,
+            speaker=speaker,
+            turn_kind="reply",
+            reply_to=None,
+            claims=(
+                AlibiClaim(
+                    type="alibi",
+                    subject=subject,
+                    from_tick=2,
+                    to_tick=8,
+                    room=alibi_room,
+                ),
+            ),
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player",
+                    tick=sighting_tick,
+                    subject=subject,
+                    room=other_room,
+                ),
+            ),
+            free_text="turn 1",
+        )
+
+    def test_same_speaker_alibi_vs_sighting_retargets_weak(self) -> None:
+        # The seed-2/seed-40 alibi_vs_sighting shape: p-5's proxy alibi
+        # for p-4 conflicts with p-5's own sighting of p-4 -- a would-be
+        # STRONG flag (speaker != subject), capped WEAK at the speaker.
+        transcript = MeetingTranscript(
+            turns=(
+                self._proxy_pair_turn(
+                    speaker="p-5",
+                    subject="p-4",
+                    alibi_room="ENGINEERING",
+                    other_room="EAST_HALL",
+                    sighting_tick=5,
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        sightings = [f for f in flags if f.kind == "alibi_vs_sighting"]
+        assert len(sightings) == 1
+        flag = sightings[0]
+        assert flag.subjects == ("p-5",)
+        assert is_weak_contradiction(flag)
+        assert WEAK_REASON_PROXY_INTRA_TURN in flag.description
+        # p-4 -- the third party the claims were ABOUT -- carries no flag.
+        assert not any("p-4" in f.subjects for f in flags)
+
+    def test_same_speaker_alibi_conflict_retargets_weak(self) -> None:
+        # The seed-40 alibi_conflict shape: p-5's two p-4-alibis name p-4
+        # in disjoint rooms over the same window -- a would-be STRONG
+        # conflict, re-targeted WEAK at p-5.
+        conflict_turn = MeetingTurn(
+            turn_id="m-1:turn-1",
+            turn_index=1,
+            speaker="p-5",
+            turn_kind="reply",
+            reply_to=None,
+            claims=(
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-4",
+                    from_tick=1,
+                    to_tick=6,
+                    room="EAST_HALL",
+                ),
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-4",
+                    from_tick=1,
+                    to_tick=6,
+                    room="ENGINEERING",
+                ),
+            ),
+            free_text="turn 1",
+        )
+        flags = detect_contradictions(MeetingTranscript(turns=(conflict_turn,)))
+        conflicts = [f for f in flags if f.kind == "alibi_conflict"]
+        assert len(conflicts) == 1
+        flag = conflicts[0]
+        assert flag.subjects == ("p-5",)
+        assert is_weak_contradiction(flag)
+        assert WEAK_REASON_PROXY_INTRA_TURN in flag.description
+
+    def test_cross_speaker_conflict_is_untouched(self) -> None:
+        # The legitimate two-witness disagreement: two DIFFERENT speakers
+        # place p-4 in incompatible rooms. Different authors, so the guard
+        # never fires -- the flag stays on the subject (the seed-14 shape,
+        # the seed-12 deception frame's structural sibling).
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    subject="p-4",
+                    from_tick=1,
+                    to_tick=6,
+                    room="EAST_HALL",
+                ),
+                _alibi_turn(
+                    turn_index=1,
+                    speaker="p-2",
+                    subject="p-4",
+                    from_tick=1,
+                    to_tick=6,
+                    room="ENGINEERING",
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        assert len(flags) == 1
+        assert flags[0].subjects == ("p-4",)
+        assert WEAK_REASON_PROXY_INTRA_TURN not in flags[0].description
+
+    def test_cross_speaker_alibi_vs_sighting_is_untouched(self) -> None:
+        # A proxy alibi (p-1 about p-4) vs a THIRD party's sighting (p-2 of
+        # p-4): two authors, so the same-speaker guard never fires. (The
+        # subject's own account does not agree, so the 10.6 rule stays out
+        # too -- this is the cross-speaker frame the guard must not blunt.)
+        transcript = MeetingTranscript(
+            turns=(
+                _alibi_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    subject="p-4",
+                    from_tick=2,
+                    to_tick=8,
+                    room="ENGINEERING",
+                ),
+                _sighting_turn(
+                    turn_index=1, speaker="p-2", subject="p-4", tick=5, room="EAST_HALL"
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        assert len(flags) == 1
+        assert flags[0].subjects == ("p-4",)
+        assert WEAK_REASON_PROXY_INTRA_TURN not in flags[0].description
+
+    def test_self_contradiction_is_not_retargeted(self) -> None:
+        # The subject contradicting THEMSELVES (speaker IS subject): the
+        # self-pair weak band's business, not the proxy guard's. The flag
+        # stays on the subject and keeps its self-pair reason.
+        self_turn = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-4",
+            turn_kind="opening",
+            reply_to=None,
+            claims=(
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-4",
+                    from_tick=1,
+                    to_tick=6,
+                    room="EAST_HALL",
+                ),
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-4",
+                    from_tick=1,
+                    to_tick=6,
+                    room="ENGINEERING",
+                ),
+            ),
+            free_text="turn 0",
+        )
+        flags = detect_contradictions(MeetingTranscript(turns=(self_turn,)))
+        conflicts = [f for f in flags if f.kind == "alibi_conflict"]
+        assert len(conflicts) == 1
+        assert conflicts[0].subjects == ("p-4",)
+        assert WEAK_REASON_SELF_PAIR in conflicts[0].description
+        assert WEAK_REASON_PROXY_INTRA_TURN not in conflicts[0].description
+
+    def test_retarget_is_deterministic(self) -> None:
+        transcript = MeetingTranscript(
+            turns=(
+                self._proxy_pair_turn(
+                    speaker="p-5",
+                    subject="p-4",
+                    alibi_room="ENGINEERING",
+                    other_room="EAST_HALL",
+                    sighting_tick=5,
+                ),
+            )
+        )
+        first = detect_contradictions(transcript)
+        second = detect_contradictions(transcript)
+        assert [f.model_dump_json() for f in first] == [
+            f.model_dump_json() for f in second
+        ]
+
+    def test_same_author_10_6_retarget_folds_under_one_lift_key(self) -> None:
+        # Codex PR #152 review, P1 #2: one turn where p-5 gives two
+        # conflicting p-4 alibis PLUS a p-4 sighting (also by p-5) that p-4's
+        # OWN account confirms. The conflict re-targets via 10.10; the two
+        # alibi_vs_sighting flags re-target via the 10.6 subject-account rule
+        # (WEAK_REASON_RETARGETED_PROXY). All three are one narrator's single
+        # turn, so they must fold to ONE weak lift key on p-5 -- otherwise the
+        # per-claim 10.6 keys stack with the 10.10 key (0.5 + 0.08*3 = 0.74)
+        # and the single-turn artifact crosses the gate on the proxy speaker.
+        from agents.memory.beliefs import BeliefState, apply_contradiction_rule
+
+        transcript = MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m-1:turn-1",
+                    turn_index=1,
+                    speaker="p-5",
+                    turn_kind="reply",
+                    reply_to=None,
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-4",
+                            from_tick=1,
+                            to_tick=6,
+                            room="EAST_HALL",
+                        ),
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-4",
+                            from_tick=1,
+                            to_tick=6,
+                            room="ENGINEERING",
+                        ),
+                    ),
+                    observations=(
+                        SawPlayerObservation(
+                            type="saw_player", tick=3, subject="p-4", room="STORAGE"
+                        ),
+                    ),
+                    free_text="turn 1",
+                ),
+                _alibi_turn(
+                    turn_index=2,
+                    speaker="p-4",
+                    subject="p-4",
+                    from_tick=2,
+                    to_tick=4,
+                    room="STORAGE",
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        p5_flags = [flag for flag in flags if flag.subjects == ("p-5",)]
+        # The 10.6 + 10.10 re-targets all land on p-5 under ONE fold key.
+        assert len(p5_flags) >= 2
+        assert {contradiction_lift_key(flag) for flag in p5_flags} == {
+            "proxy-intra-turn"
+        }
+        assert all(
+            WEAK_REASON_PROXY_INTRA_TURN in flag.description for flag in p5_flags
+        )
+
+        beliefs = BeliefState()
+        beliefs.seed_player("p-5", suspicion=0.5, trust=0.5)
+        lifted = apply_contradiction_rule(beliefs, p5_flags)
+        assert lifted.view("p-5").suspicion == pytest.approx(0.58)
+        assert lifted.view("p-5").suspicion < 0.60
+
+
 class TestIsRelevantSighting:
     """The named pure Rule-3 relevance predicate (audit C-C-3; 10.7 reuses it)."""
 
@@ -2315,6 +2610,128 @@ class TestCommittedBytes106Pins:
         # to 0 means the channel died, which the audit ranks as bad as the
         # artifacts. Well above zero: the channel is gated, not killed.
         assert surviving == 59
+
+
+class TestCommittedBytes1010Pins:
+    """Task 10.10 DoD pins, walked offline against the close-baseline bytes.
+
+    audit-2026-06-13-1816 C-C-2/C-C-3. The committed 9p2i set was recorded
+    BEFORE the same-speaker guard, so re-derivation diverges at exactly the
+    three proxy-intra-turn flags (seed-40 m0's two, seed-2 m0's one) and
+    nowhere else (the set-wide divergence is bounded by
+    ``TestCommittedBytesArtifactCollapse._REPAIRED_SITES``).
+    """
+
+    def test_seed40_m0_both_flags_retarget_weak_at_p5(self) -> None:
+        # C-C-2: p-5's two contradictory proxy-claims ABOUT p-4 (an
+        # alibi_conflict between p-5's two p-4-alibis, plus an
+        # alibi_vs_sighting between p-5's p-4-alibi and p-5's own sighting
+        # of p-4) both re-target WEAK at p-5.
+        entry = _committed_meetings(40)[0]
+        rederived = _rederive(entry)
+        on_p4 = [flag for flag in rederived if "p-4" in flag.subjects]
+        retargeted = [
+            flag
+            for flag in rederived
+            if flag.subjects == ("p-5",)
+            and WEAK_REASON_PROXY_INTRA_TURN in flag.description
+        ]
+        assert on_p4 == []
+        assert len(retargeted) == 2
+        assert all(is_weak_contradiction(flag) for flag in retargeted)
+        assert sorted(flag.kind for flag in retargeted) == [
+            "alibi_conflict",
+            "alibi_vs_sighting",
+        ]
+
+    def test_seed40_m0_p4_below_gate_and_not_redirect_argmax(self) -> None:
+        # C-C-2: p-4's re-derived max drops below the §4.6 gate, so the
+        # 10.9.2 redirect -- which only ever targets an over-gate candidate
+        # -- can no longer launder an ungrounded ballot onto p-4. AND the
+        # re-target does not just move the artifact: p-5 (the proxy speaker)
+        # also stays below the gate, because the two same-turn proxy flags
+        # share the proxy-intra-turn lift key and fold to ONE weak delta
+        # (0.5 + 0.08 = 0.58), so the single turn's artifact crosses the gate
+        # on NO ONE. Walked from the 0.5 prior, the seed-28 pin's convention.
+        from agents.memory.beliefs import BeliefState, apply_contradiction_rule
+
+        entry = _committed_meetings(40)[0]
+        rederived = _rederive(entry)
+
+        def lifted_max(player: str) -> float:
+            beliefs = BeliefState()
+            beliefs.seed_player(player, suspicion=0.5, trust=0.5)
+            return (
+                apply_contradiction_rule(
+                    beliefs, [flag for flag in rederived if player in flag.subjects]
+                )
+                .view(player)
+                .suspicion
+            )
+
+        assert lifted_max("p-4") < 0.60
+        # The proxy speaker absorbs the re-target but the stack folds to one
+        # weak delta -- 0.58, still below the gate (the P1-review tripwire).
+        assert lifted_max("p-5") == pytest.approx(0.58)
+        assert lifted_max("p-5") < 0.60
+        # The redirect argmax is the highest over-gate candidate (ties to
+        # the lowest id); no proxy artifact row is over-gate, so p-4 (and
+        # p-5) can never be that argmax.
+        graph = {player: lifted_max(player) for player in sorted(_living_roster(entry))}
+        over_gate = {p: s for p, s in graph.items() if s >= 0.60}
+        assert "p-4" not in over_gate
+        assert "p-5" not in over_gate
+        if over_gate:
+            argmax = min(over_gate, key=lambda p: (-over_gate[p], p))
+            assert argmax != "p-4"
+
+    def test_seed2_m0_proxy_intra_turn_retargets(self) -> None:
+        # C-C-3: the seed-2 proxy intra-turn flag (p-7's claims ABOUT p-8)
+        # re-targets WEAK at p-7 identically; p-8 carries no sighting flag.
+        entry = _committed_meetings(2)[0]
+        rederived = _rederive(entry)
+        retargets = [
+            flag
+            for flag in rederived
+            if WEAK_REASON_PROXY_INTRA_TURN in flag.description
+        ]
+        assert len(retargets) == 1
+        assert retargets[0].subjects == ("p-7",)
+        assert is_weak_contradiction(retargets[0])
+        assert not any(
+            "p-8" in flag.subjects and flag.kind == "alibi_vs_sighting"
+            for flag in rederived
+        )
+
+    def test_seed12_m0_strong_flag_survives_cross_speaker(self) -> None:
+        # THE TRIPWIRE: seed-12's lone STRONG flag is CROSS-speaker
+        # (impostor p-1's alibi vs the reporter's sighting -- two distinct
+        # authors), so the single-author guard never fires and the strong
+        # flag survives byte-identically as the 10.13 deception probe input.
+        entry = _committed_meetings(12)[0]
+        rederived = _rederive(entry)
+        recorded_strong = [
+            flag for flag in entry.contradictions if not is_weak_contradiction(flag)
+        ]
+        assert len(recorded_strong) == 1
+        assert recorded_strong[0].subjects == ("p-6",)
+        assert recorded_strong[0] in rederived
+        assert not any(
+            WEAK_REASON_PROXY_INTRA_TURN in flag.description for flag in rederived
+        )
+
+    def test_seed14_m0_two_witness_disagreement_unaffected(self) -> None:
+        # A genuine same-subject contradiction from TWO different speakers
+        # (the seed-14 m0 two-witness fold on p-3) classifies exactly as
+        # today: no retarget, re-derivation byte-identical to the record.
+        entry = _committed_meetings(14)[0]
+        rederived = _rederive(entry)
+        recorded_by_id = {flag.contradiction_id: flag for flag in entry.contradictions}
+        rederived_by_id = {flag.contradiction_id: flag for flag in rederived}
+        assert rederived_by_id == recorded_by_id
+        assert not any(
+            WEAK_REASON_PROXY_INTRA_TURN in flag.description for flag in rederived
+        )
 
 
 # ---------------------------------------------------------------------------
