@@ -193,7 +193,8 @@ class ImpostorPolicy:
                 "impostor policy requires a cooldown_status event at the latest tick"
             )
 
-        if self._body_visible_in(latest_events, own_room=own_room):
+        body_rooms = self._body_visible_rooms(latest_events)
+        if own_room in body_rooms:
             return self._cover(public_map=public_map, own_room=own_room)
 
         confirmed_dead = self._confirmed_dead_from_bodies(events)
@@ -251,6 +252,7 @@ class ImpostorPolicy:
             public_map=public_map,
             own_room=own_room,
             pending_task_id=pending_task_id,
+            body_rooms=body_rooms,
         )
 
     @staticmethod
@@ -330,11 +332,19 @@ class ImpostorPolicy:
         return None
 
     @staticmethod
-    def _body_visible_in(
+    def _body_visible_rooms(
         latest_events: tuple[EpisodicEvent, ...],
-        *,
-        own_room: RoomId,
-    ) -> bool:
+    ) -> frozenset[RoomId]:
+        """Rooms holding a body the impostor sees THIS tick (``saw_body``).
+
+        Drives two seams: the ``COVER`` interrupt (a body in the impostor's OWN
+        room) and the Task 10.14 cover-discipline gate in ``_idle`` (never route
+        the blend back into a room that holds a body — see ``_idle``). A missing
+        or non-string ``room`` is a boundary-contract violation and raises (no
+        silent guess), mirroring the other ``saw_body`` scanners.
+        """
+
+        rooms: set[RoomId] = set()
         for event in latest_events:
             if event.type != EVENT_SAW_BODY:
                 continue
@@ -343,9 +353,8 @@ class ImpostorPolicy:
                 raise ValueError(
                     f"saw_body event missing string 'room' field: {event.payload!r}"
                 )
-            if room == own_room:
-                return True
-        return False
+            rooms.add(room)
+        return frozenset(rooms)
 
     @staticmethod
     def _target_colocated_now(
@@ -589,11 +598,23 @@ class ImpostorPolicy:
         public_map: PublicMapView,
         own_room: RoomId,
         pending_task_id: str | None,
+        body_rooms: frozenset[RoomId],
     ) -> ActionIntent:
         if pending_task_id is None:
             return self._wait()
         task_room = public_map.task_locations.get(pending_task_id)
         if task_room is None:
+            return self._wait()
+        # Cover-discipline (Task 10.14, audit-2026-06-13-1816; Codex review):
+        # never route the blend back into a room that holds a visible body. After
+        # a kill, ``_cover`` vacates the scene; if the pretend task sits in that
+        # room, routing toward it would drag the impostor straight back onto the
+        # corpse — oscillating against the COVER interrupt and destroying the
+        # sheltered alibi the cover exists to build. ``own_room`` never holds a
+        # body here (that is the COVER branch, taken before ``_idle``), so this
+        # only gates the routing/performing target; the impostor waits sheltered
+        # instead until the body is reported and removed.
+        if task_room in body_rooms:
             return self._wait()
         if own_room == task_room:
             return DoTaskIntent.model_validate(

@@ -964,3 +964,38 @@ class TestImpostorToolkit1014:
         assert not isinstance(intent, KillIntent)
         assert isinstance(intent, DoTaskIntent)
         assert intent.payload.task_id == "swipe_card"
+
+    def test_cover_discipline_does_not_route_blend_into_a_body_room(self) -> None:
+        # Cover discipline (Codex review): after a kill the impostor must not let
+        # its pretend task drag it back onto the corpse. Here the impostor is on
+        # cooldown in CAFETERIA with a pretend task in ADMIN, but a body is
+        # visible in ADMIN -- routing there would oscillate against the COVER
+        # interrupt and blow the sheltered alibi, so the impostor waits instead.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA", pending_task_id="swipe_card"),
+            _cooldown_event(tick=10, cooldown=3),
+            _saw_body_event(tick=10, body_id="body-v-7", room="ADMIN", victim_id="v"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        # swipe_card lives in ADMIN (a body room): no move-toward, no do_task.
+        assert isinstance(intent, WaitIntent)
+
+    def test_blend_still_performs_when_body_is_in_a_different_room(self) -> None:
+        # The gate is narrow: a body in some OTHER room (not the pretend task's)
+        # does not block the blend. The impostor is in its sheltered task room
+        # ADMIN (no body) and performs the fake task; the body in MEDBAY is
+        # irrelevant to the routing/performing target.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id="swipe_card"),
+            _cooldown_event(tick=10, cooldown=3),
+            _saw_body_event(tick=10, body_id="body-v-7", room="MEDBAY", victim_id="v"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, DoTaskIntent)
+        assert intent.payload.task_id == "swipe_card"

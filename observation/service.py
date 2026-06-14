@@ -41,13 +41,32 @@ from observation.packet import (
 # help the crew win (verified offline in tests/observation). The pretend id is
 # the contract's ``PRETEND_TASK_MARKER`` (named ``impostor_pretend_task_id`` per
 # "or equivalent"); downstream eval (10.17) imports it to identify pretend tasks.
+#
+# The blend roams a small per-impostor SET (the contract's "small per-impostor
+# pretend-task set"): each seat draws a disjoint window of the sorted map tasks
+# and rotates through it by ``tick // dwell``, so the impostor moves room-to-room
+# like a crewmate working its task list rather than camping one room. Camping a
+# single fixed room is BOTH a weaker blend and, empirically, a degenerate balance
+# shift (a systematic ambush in the same rooms every game), so the roam is kept.
+#
+# The rotation is reconciled with the memory renderer (Codex review, PR #155).
+# ``agents/memory/store.py`` infers a "You completed {task}" observation on ANY
+# change of ``pending_task_id`` away from a non-None value — correct for a
+# crewmate (its owned set only shrinks, so a change IS a completion) but a lie for
+# the impostor, whose pretend tasks never complete. Rather than freeze the blend
+# (which costs the roam AND balance), the renderer's completion inference is
+# role-GATED to crewmates, so a rotating impostor pretend id mints NO fictitious
+# completed-task memory and cannot become a fabricated ``completed_task`` alibi —
+# the impostor's memory stays accurate; the alibi fabrication is the LLM's job at
+# the meeting (DESIGN.md §4.7). Seats are taken over ALL role==IMPOSTOR players
+# (alive or dead — ejection marks ``alive=False`` but never removes the player),
+# so a seat never shifts mid-game when a teammate is ejected.
 IMPOSTOR_PRETEND_TASK_SET_SIZE: Final[int] = 3
 # How many ticks the impostor dwells on one pretend task before the deterministic
 # rotation advances to the next in its per-seat set. Anchored above the map
 # diameter and the kill cooldown so the impostor reaches and "performs" a task
-# within a window (no per-tick re-route oscillation), then roams to the next —
-# crewmate-like movement, not a single camped room. Re-derived at 10.17 against
-# the toolkit-shifted kill cadence alongside EMERGENCY_COOLDOWN_TICKS.
+# within a window (no per-tick re-route oscillation), then roams to the next.
+# Re-derived at 10.17 against the toolkit-shifted kill cadence.
 IMPOSTOR_PRETEND_TASK_DWELL_TICKS: Final[int] = 6
 
 
@@ -65,13 +84,19 @@ def impostor_pretend_task_id(
     instance (impostors own none) — so the engine rejects the resulting
     ``do_task`` and the win denominator never counts it (see the module note).
 
-    Determinism / replay safety: every seat draws a stable, per-impostor set
-    from the sorted map task ids (disjoint windows offset by the impostor's
-    sorted-seat index, so two impostors never pretend the same task in lockstep),
-    and the current member rotates purely by ``tick // dwell``. No RNG, no module
-    state — the same ``(game_map, agent_id, tick)`` always yields the same id,
-    keeping replay reconstruction byte-identical. Returns ``None`` only for a
-    task-less map (no blend target exists).
+    Determinism / replay safety: each seat (the agent's index in the sorted
+    impostor roster) draws a stable, disjoint per-impostor window of the sorted
+    map tasks and rotates through it purely by ``tick // dwell``. No RNG, no
+    module state — the same ``(game_map, agent_id, impostor_ids, tick)`` always
+    yields the same id, keeping replay reconstruction byte-identical. The
+    rotation is safe for the renderer because its completion inference is
+    role-gated to crewmates (see the module note). Returns ``None`` only for a
+    task-less map.
+
+    Fail-loud (AGENTS.md no silent fallbacks): ``agent_id`` MUST be a member of
+    ``impostor_ids``. A non-member is a caller wiring error (a filtered or stale
+    roster) — it raises rather than silently reusing seat 0's window and masking
+    the bug (Codex review, PR #155).
     """
 
     map_task_ids = sorted(game_map.tasks)
@@ -79,7 +104,12 @@ def impostor_pretend_task_id(
     if n == 0:
         return None
     sorted_impostors = sorted(impostor_ids)
-    seat = sorted_impostors.index(agent_id) if agent_id in sorted_impostors else 0
+    if agent_id not in sorted_impostors:
+        raise ValueError(
+            f"impostor_pretend_task_id called for {agent_id!r}, which is not in "
+            f"impostor_ids {tuple(sorted_impostors)!r} (caller wiring error)"
+        )
+    seat = sorted_impostors.index(agent_id)
     offset = (seat * IMPOSTOR_PRETEND_TASK_SET_SIZE) % n
     pretend_set: list[TaskId] = []
     for i in range(min(IMPOSTOR_PRETEND_TASK_SET_SIZE, n)):

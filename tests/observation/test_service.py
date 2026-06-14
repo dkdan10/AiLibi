@@ -793,6 +793,59 @@ def test_multi_impostor_packets_carry_no_foreign_task_ownership(
     assert packets["p-4"].self_state.fellow_impostor_ids == ("p-2",)
 
 
+class TestImpostorPretendTaskSelector:
+    """The pretend-task selector contract (Task 10.14; Codex review, PR #155)."""
+
+    def test_pretend_set_is_disjoint_across_seats_and_deterministic(self) -> None:
+        # Disjoint per-seat windows so two impostors never pretend the SAME task in
+        # lockstep, and a pure function of (map, seat, tick) -- deterministic /
+        # replay-safe.
+        game_map = load_canonical_map()
+        impostor_ids = ["p-2", "p-4"]
+        a = impostor_pretend_task_id(
+            game_map=game_map, agent_id="p-2", impostor_ids=impostor_ids, tick=0
+        )
+        b = impostor_pretend_task_id(
+            game_map=game_map, agent_id="p-4", impostor_ids=impostor_ids, tick=0
+        )
+        assert a is not None and b is not None
+        assert a != b
+        # Same inputs -> same id (no RNG, no module state).
+        assert (
+            impostor_pretend_task_id(
+                game_map=game_map, agent_id="p-2", impostor_ids=impostor_ids, tick=0
+            )
+            == a
+        )
+
+    def test_pretend_task_rotates_through_a_per_seat_set(self) -> None:
+        # The blend roams: across dwell boundaries the pretend id advances through
+        # the seat's set (so the impostor moves room-to-room, not camps one).
+        game_map = load_canonical_map()
+        seen = {
+            impostor_pretend_task_id(
+                game_map=game_map,
+                agent_id="p-2",
+                impostor_ids=["p-2", "p-4"],
+                tick=t,
+            )
+            for t in range(0, 6 * 3, 6)  # one tick per dwell window
+        }
+        assert len(seen) > 1  # more than one distinct task over the rotation
+
+    def test_pretend_task_raises_for_non_member_agent(self) -> None:
+        # Fail-loud (no silent fallback): a non-member agent id is a caller wiring
+        # error, not a seat-0 default.
+        game_map = load_canonical_map()
+        with pytest.raises(ValueError, match="not in impostor_ids"):
+            impostor_pretend_task_id(
+                game_map=game_map,
+                agent_id="p-9",
+                impostor_ids=["p-2", "p-4"],
+                tick=0,
+            )
+
+
 class TestImpostorPretendTaskIntegrity:
     """The blending pretend-task never advances the real task counter (Task
     10.14, DESIGN.md §3.4/§3.5; audit-2026-06-13-1816 D-D-1). The fake

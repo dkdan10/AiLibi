@@ -41,13 +41,14 @@ def _self_state_event(
     agent_id: str,
     role: str = "CREWMATE",
     room: str = "CAFETERIA",
+    pending_task_id: str | None = None,
     fellow_impostor_ids: tuple[str, ...] | None = None,
 ) -> EpisodicEvent:
     payload: dict[str, Any] = {
         "agent_id": agent_id,
         "room": room,
         "role": role,
-        "pending_task_id": None,
+        "pending_task_id": pending_task_id,
     }
     if fellow_impostor_ids is not None:
         payload["fellow_impostor_ids"] = fellow_impostor_ids
@@ -393,3 +394,59 @@ class TestRosterFilteredFoldAndRender:
         memory.beliefs.adjust_suspicion("not-a-roster-id", delta=0.2)
 
         assert "- not-a-roster-id: suspicion 0.70" in render_for_prompt(memory)
+
+
+class TestImpostorPretendTaskCompletionGate:
+    """The completion inference is crewmate-only (Task 10.14; Codex review,
+    PR #155). An IMPOSTOR's ``pending_task_id`` is a fabricated blend target that
+    rotates across a per-seat set and never completes, so a change in it must NOT
+    render a "You completed ..." observation — else the blend would manufacture a
+    ``completed_task`` alibi and corrupt the meeting/eval evidence. The crewmate
+    path (a real pending change IS a completion) is unchanged.
+    """
+
+    def test_impostor_pending_change_mints_no_completed_task(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=0,
+                agent_id="p-3",
+                role="IMPOSTOR",
+                pending_task_id="align_engine_output",
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=6,
+                agent_id="p-3",
+                role="IMPOSTOR",
+                pending_task_id="analyze_specimen",
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You completed" not in view
+
+    def test_crewmate_pending_change_still_mints_completed_task(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=0,
+                agent_id="p-1",
+                role="CREWMATE",
+                pending_task_id="swipe_card",
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=6,
+                agent_id="p-1",
+                role="CREWMATE",
+                pending_task_id="submit_scan",
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You completed swipe_card" in view
