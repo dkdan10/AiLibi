@@ -29,6 +29,7 @@ from meetings.schemas import (
 )
 from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
+    WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_SELF_STATED,
     detect_contradictions,
 )
@@ -259,6 +260,30 @@ class TestContradictionRuleGraduatedWeight:
         # The contract band: suspicious (above the 0.5 prior) but below
         # the 0.60 eject gate.
         assert _DEFAULT_SUSPICION < suspicion < 0.60
+
+    def test_proxy_intra_turn_retarget_lifts_speaker_by_the_weak_delta(self) -> None:
+        # Task 10.10: a same-speaker proxy-intra-turn flag carries the weak
+        # marker (with WEAK_REASON_PROXY_INTRA_TURN), so the marker-keyed
+        # weak path lifts the re-targeted speaker by the graduated delta --
+        # no beliefs.py change is needed to register the new reason.
+        flag = _meeting_flag(subject="p-5", weak=False)
+        retargeted = flag.model_copy(
+            update={
+                "description": (
+                    "Alibis place p-4 in A and in B; intervals overlap. "
+                    f"{WEAK_CONTRADICTION_MARKER_PREFIX}{WEAK_REASON_PROXY_INTRA_TURN}]"
+                )
+            }
+        )
+
+        updated = apply_contradiction_rule(BeliefState(), [retargeted])
+
+        suspicion = updated.view("p-5").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+        # A lone re-target can never eject alone: below the §4.6 gate.
+        assert suspicion < 0.60
 
     def test_lone_strong_flag_keeps_full_weight_and_crosses_gate(self) -> None:
         updated = apply_contradiction_rule(

@@ -855,9 +855,12 @@ class TestCommittedW1GateSpecPins:
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
         # The W1 supply row (10.9 re-record): 85 flags (84w/1s), meetings up to
         # 88 with the emergency channel live (W0 78), zero-contradiction share
-        # down to 46/88 (W0 49/78), genuine supply at 13 meetings (W0 8), role
-        # split 44 CREW / 41 IMP (W0 36/29), over-gate listener rows 102 — 1.62
-        # per accused-impostor meeting (W0 76 / 1.41).
+        # down to 46/88 (W0 49/78), genuine supply at 13 meetings (W0 8),
+        # over-gate listener rows 102 — 1.62 per accused-impostor meeting (W0 76
+        # / 1.41). Role split 43 CREW / 42 IMP: the Task 10.10 same-speaker
+        # guard re-derives seed-2 m0's proxy flag off crew p-8 onto its actual
+        # speaker, impostor p-7 (was 44/41 pre-guard) — the corrected
+        # instrument now credits the unreliable narrator, not the innocent.
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
@@ -867,8 +870,8 @@ class TestCommittedW1GateSpecPins:
         assert gauges.strong_flags == 1
         assert gauges.zero_contradiction_meetings == 46
         assert gauges.genuine_subject_meetings == 13
-        assert gauges.flag_subjects_crew == 44
-        assert gauges.flag_subjects_impostor == 41
+        assert gauges.flag_subjects_crew == 43
+        assert gauges.flag_subjects_impostor == 42
         assert gauges.accused_impostor_meetings == 63
         assert gauges.over_gate_listener_rows == 102
 
