@@ -1,0 +1,96 @@
+{
+  "seedset": "9p2i",
+  "git_head": "537c9dcc2189fc89a3b2dac32c3eb7415c057da6",
+  "rows": [
+    {
+      "item": "R1 ejection-driven win share",
+      "value": "1/50 (2%)",
+      "desired": "UP (deduction, not the clock)"
+    },
+    {
+      "item": "R1 task-stopwatch win share",
+      "value": "45/50 (90%)",
+      "desired": "DOWN"
+    },
+    {
+      "item": "R1 zero-meeting games",
+      "value": "4/50 (8%)",
+      "desired": "DOWN"
+    },
+    {
+      "item": "R2 accused-impostor survival",
+      "value": "39/49 (80%)",
+      "desired": "DOWN as deception gets catchable; effective-deflection subcount = 10.16"
+    },
+    {
+      "item": "R2 impostor do_task emissions",
+      "value": "NEEDS-10.16 (action-by-role ingest)",
+      "desired": "UP from 0 (blending)"
+    },
+    {
+      "item": "R3 carry-driven ejections (zero-contradiction)",
+      "value": "6/19 (32%)",
+      "desired": "present (arcs land), reconstructed in the close audit"
+    },
+    {
+      "item": "R4 threshold inversions",
+      "value": "0",
+      "desired": "0 (hard floor)"
+    },
+    {
+      "item": "R4 wrong-ejection games",
+      "value": "8",
+      "desired": "not RISING; all graph-consistent (close audit verifies)"
+    },
+    {
+      "item": "R4 impostor-victim (friendly) kills",
+      "value": "0",
+      "desired": "0 (hard floor)"
+    },
+    {
+      "item": "R5 win-reason distribution",
+      "value": "{\"CREWMATE_TASKS\": 45, \"IMPOSTOR_PARITY\": 4, \"CREWMATE_EJECT\": 1}",
+      "desired": ">=3 shapes each >=10% (aspirational)"
+    },
+    {
+      "item": "R5 ejections/game histogram",
+      "value": "{\"0\": 33, \"1\": 15, \"2\": 2}",
+      "desired": "spread up from 0-2"
+    },
+    {
+      "item": "R5 meetings/game histogram",
+      "value": "{\"0\": 4, \"1\": 21, \"2\": 12, \"3\": 9, \"4\": 4}",
+      "desired": "median up; runway for arcs"
+    },
+    {
+      "item": "R6 self-accusations (emergence class)",
+      "value": "10",
+      "desired": "tracked; game-deciding per the audit"
+    },
+    {
+      "item": "R6 impostor-reporter meetings",
+      "value": "0",
+      "desired": "0 today (toolkit greenfield)"
+    },
+    {
+      "item": "R6 emergency meetings",
+      "value": "7",
+      "desired": ">0 (10.8 channel live)"
+    },
+    {
+      "item": "R7 evidence-bearing meeting share",
+      "value": "42/88 (48%)",
+      "desired": "UP (stories have evidence)"
+    },
+    {
+      "item": "R7 free_text medians (open/reply/optin)",
+      "value": "235/227/196 (max 5266)",
+      "desired": "stable ~225; no catastrophic tail"
+    },
+    {
+      "item": "R7 ballot-follows-chain",
+      "value": "30/187 (16%)",
+      "desired": "UP (votes cite the chain)"
+    }
+  ]
+}
