@@ -178,14 +178,17 @@ def test_committed_4p1i_report_validates_against_current_model() -> None:
     assert isinstance(report, TournamentEvalReport)
     # The regenerated committed report carries every Task 7.11 field.
     # ejection_accuracy is None iff the set has no ejections (the field's own
-    # validator). The Task 9.11 Wave-1 re-record keeps the flat 4p/1i set
-    # ejecting (the 9.5 set had two ejections at accuracy 0.5): the committed
-    # ground truth is now exactly one ejection, the impostor (accuracy 1.0;
-    # small-n flag set below).
+    # validator). The Task 10.17 Wave-2 re-record keeps the flat 4p/1i set
+    # ejecting and every ejection correct (the 9.11 Wave-1 set had a single
+    # impostor ejection): the committed ground truth is now four ejections,
+    # all impostors (accuracy 1.0; small-n flag set below).
+    assert report.vote_correctness.total_ejections == 4
     assert report.vote_correctness.ejection_accuracy == 1.0
-    assert report.vote_correctness.impostor_ejections == 1
-    assert isinstance(report.vote_correctness.vote_correctness_small_n, bool)
-    assert report.vote_correctness.contradictions_flagged_but_ignored >= 0
+    assert report.vote_correctness.impostor_ejections == 4
+    assert report.vote_correctness.crewmate_ejections == 0
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(0.75)
+    assert report.vote_correctness.vote_correctness_small_n is True
+    assert report.vote_correctness.contradictions_flagged_but_ignored == 2
     assert isinstance(report.accusation_calibration.vote_ballot_low_power, bool)
     assert (
         report.meeting_rate.skipped_meetings + report.meeting_rate.ejected_meetings

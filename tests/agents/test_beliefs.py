@@ -1524,20 +1524,33 @@ class TestSingleWitnessInform:
 
 
 class TestRelevanceGatedFoldOnCommittedBytes:
-    """The seed-6 trajectory pin: gated Rule 3 lets accusation carry climb.
+    """The seed-13 trajectory pin: gated Rule 3 lets accusation carry climb.
 
-    Audit C-C-3: impostor p-6 was accused in m0+m1+m2 yet rendered flat
-    0.5/0.5/0.55 -- each meeting's accusation bump cancelled in-meeting by
-    an evidentially-empty Rule-3 vouch (at m1, the accuser's OWN
-    kill-scene sighting: p-6 in ADMIN@16, where p-6 had just killed p-4,
-    body found @17). Under the relevance gate the kill-scene vouches die,
-    so the re-derived cross-meeting fold RISES across the accused
-    meetings instead of netting to zero.
+    Audit C-C-3: a repeat-accused impostor's accusation carry is cancelled
+    in-meeting by an evidentially-empty Rule-3 vouch (the accuser's OWN
+    kill-scene sighting, which places the killer at the scene inside their
+    corroborated alibi window). Under the relevance gate the kill-scene
+    vouches die, so the re-derived cross-meeting fold RISES across the
+    accused meetings instead of netting back to the prior.
+
+    The Wave-2 re-record (Task 10.17) moved the witnessed seed: the W1
+    coordinate (seed-6, p-6) no longer has a repeat-accused impostor, so
+    this re-anchors to the faithful W2 successor -- seed-13, impostor p-4,
+    four meetings -- which exhibits the identical property. p-4 is accused
+    in m0, m1 and m3 across four committed meetings; at m3 (an ENGINEERING
+    report meeting, the kill scene) the detector re-derives a
+    corroboration for p-4 from p-4's own ENGINEERING@17-18 alibi confirmed
+    by a third party's ENGINEERING@17-18 sighting -- a presence-at-the-
+    scene vouch that the kill-scene prong of the relevance gate drops.
+    With the gate the m3 bump lands uncancelled and the carry climbs to
+    0.5875; WITHOUT the gate (re-derived below) the m3 bump cancels and
+    the trajectory goes flat (0.5375) -- the gate is load-bearing.
     """
 
-    def _seed6_trajectory(self) -> list[float]:
+    def _seed13_trajectory(self, *, gate_killscene_vouches: bool = True) -> list[float]:
         from pathlib import Path
 
+        import meetings.transcript as transcript_mod
         from meetings.manager import extract_belief_evidence
         from meetings.schemas import MeetingResult
         from orchestrator.replay import MeetingReplayEntry, read_all_entries
@@ -1547,53 +1560,99 @@ class TestRelevanceGatedFoldOnCommittedBytes:
             / "replays"
             / "samples"
             / "9p2i"
-            / "replay-seed-6.jsonl"
+            / "replay-seed-13.jsonl"
         )
-        beliefs = BeliefState()
-        trajectory: list[float] = []
-        for entry in read_all_entries(replay):
-            if not isinstance(entry, MeetingReplayEntry):
-                continue
-            result = MeetingResult(
-                meeting_id=entry.meeting_id,
-                triggered_by=entry.transcript.turns[0].speaker,
-                trigger_tick=0,
-                outcome=entry.outcome,
-                ejected_player_id=entry.ejected_player_id,
-                ballots=entry.ballots,
-                contradictions=entry.contradictions,
-                transcript=entry.transcript,
-            )
-            evidence = extract_belief_evidence(result)
-            beliefs = apply_meeting_evidence_rules(
-                beliefs,
-                own_id="observer",
-                accused=evidence.accused,
-                corroborated=evidence.corroborated,
-                contradicted=evidence.contradicted,
-            )
-            trajectory.append(beliefs.view("p-6").suspicion)
+
+        # The ungated comparison disables ONLY the relevance predicate (a
+        # pass-through that keeps every supporting sighting), so the second
+        # trajectory isolates exactly the gate's contribution -- the rest of
+        # the §6.3 fold (deltas, dedup, decay) is byte-identical. The m3
+        # kill-scene vouch is detector-derived (the detect_corroborations
+        # path inside meetings.transcript), so patching that module's
+        # predicate is the whole of the gate; ``setattr`` keeps the swap
+        # mypy-clean against the re-exported name.
+        original_gate = transcript_mod.is_relevant_sighting
+        if not gate_killscene_vouches:
+
+            def _ungated(
+                *, tick: int, rooms: object, triggering_body_rooms: object
+            ) -> bool:
+                return True
+
+            setattr(transcript_mod, "is_relevant_sighting", _ungated)
+        try:
+            beliefs = BeliefState()
+            trajectory: list[float] = []
+            for entry in read_all_entries(replay):
+                if not isinstance(entry, MeetingReplayEntry):
+                    continue
+                result = MeetingResult(
+                    meeting_id=entry.meeting_id,
+                    triggered_by=entry.transcript.turns[0].speaker,
+                    trigger_tick=0,
+                    outcome=entry.outcome,
+                    ejected_player_id=entry.ejected_player_id,
+                    ballots=entry.ballots,
+                    contradictions=entry.contradictions,
+                    transcript=entry.transcript,
+                )
+                evidence = extract_belief_evidence(result)
+                beliefs = apply_meeting_evidence_rules(
+                    beliefs,
+                    own_id="observer",
+                    accused=evidence.accused,
+                    corroborated=evidence.corroborated,
+                    contradicted=evidence.contradicted,
+                )
+                trajectory.append(beliefs.view("p-4").suspicion)
+        finally:
+            setattr(transcript_mod, "is_relevant_sighting", original_gate)
         return trajectory
 
-    def test_seed6_p6_trajectory_rises_instead_of_rendering_flat(self) -> None:
-        trajectory = self._seed6_trajectory()
+    def test_seed13_subject_is_a_true_impostor(self) -> None:
+        # The property is only meaningful for a true impostor: re-derive the
+        # roster via the seeder (as the other committed-bytes tests do) at the
+        # recorded 9p/2i config and confirm p-4 is an IMPOSTOR.
+        from engine.world import load_canonical_map
+        from orchestrator.seeder import seed_initial_state
 
-        # Four committed meetings; p-6 is accused in m0/m1/m2. Pre-gate
-        # the fold read 0.5 / 0.5 / 0.55 / ... (m0's and m1's bumps each
-        # cancelled by a same-meeting vouch -- m0's survives the gate as a
-        # genuine EAST_HALL@8 sighting, m1's was the kill-scene vouch and
-        # dies). Post-gate: m1's and m2's bumps land uncancelled and the
-        # trajectory CLIMBS to the 0.60 gate by m2.
+        state = seed_initial_state(
+            seed=13,
+            game_map=load_canonical_map(),
+            num_players=9,
+            num_impostors=2,
+            tasks_per_crewmate=2,
+        )
+        assert state.players["p-4"].role == "IMPOSTOR"
+
+    def test_seed13_p4_trajectory_rises_instead_of_rendering_flat(self) -> None:
+        trajectory = self._seed13_trajectory()
+
+        # Four committed meetings; impostor p-4 is accused in m0/m1/m3.
+        # The relevance gate lets the carry accumulate across meetings
+        # rather than cancelling it in-meeting with an evidence-free
+        # kill-scene vouch: m0's bump cancels (a GENUINE tick-6 sighting
+        # survives the gate), m1's lands (0.55), m2 is a quiet meeting so
+        # the carry decays (0.5375), and at m3 the kill-scene vouch dies so
+        # the bump lands uncancelled and the carry climbs to 0.5875.
         assert len(trajectory) == 4
-        # W1 re-record: p-6's accusation carry CLIMBS to the 0.60 gate by the
-        # final meeting (0.55 / 0.55 / 0.55 / 0.60) instead of the W0 flat
-        # render that netted each bump back to the ~0.5 prior. p-6 is accused
-        # at m0 (carry to 0.55) and again at m3 (carry to the 0.60 gate); the
-        # relevance gate lets the carry accumulate across meetings rather than
-        # cancelling it in-meeting with an evidence-free kill-scene vouch.
-        assert trajectory == pytest.approx([0.55, 0.55, 0.55, 0.6])
-        assert trajectory[-1] == pytest.approx(0.60)  # reaches the gate
+        assert trajectory == pytest.approx([0.5, 0.55, 0.5375, 0.5875])
         assert trajectory[-1] > trajectory[0]  # climbs, not flat at the prior
+
+    def test_seed13_gate_is_load_bearing_at_the_kill_scene_meeting(self) -> None:
+        # The gate's contribution, isolated: WITHOUT the relevance predicate
+        # the m3 detector re-derives a corroboration for p-4 from p-4's own
+        # ENGINEERING@17-18 alibi (ENGINEERING is the triggering body room)
+        # confirmed by a third party's ENGINEERING sighting -- a presence-at-
+        # the-kill-scene vouch -- which cancels the m3 accusation bump and
+        # flattens the trajectory. The gate dropping that vouch is the whole
+        # difference between a rising and a flat final carry.
+        gated = self._seed13_trajectory()
+        ungated = self._seed13_trajectory(gate_killscene_vouches=False)
+
+        assert ungated == pytest.approx([0.5, 0.55, 0.5375, 0.5375])
+        assert ungated[-1] == pytest.approx(ungated[-2])  # flat without the gate
+        assert gated[-1] > ungated[-1]  # the gate is what makes it climb
 
     def test_corroboration_magnitude_is_untouched(self) -> None:
         # "No constant changes": the gate filters subjects, never re-tunes

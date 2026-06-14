@@ -108,7 +108,10 @@ def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     assert written == 50
     rows = mw.parse_manifest(manifest.read_text())
     assert set(rows) == set(range(50))
-    for seed in (22, 24, 26, 49):
+    # Meeting-bearing seeds in the Task 10.17 Wave-2 flat 4p/1i re-record (seed 49
+    # is meeting-free on this set, so it is no longer a probe — seed 39 is one of
+    # the now-meeting-bearing seeds).
+    for seed in (22, 24, 26, 39):
         assert "accusation_round.v7" in rows[seed].prompt_versions
         assert rows[seed].git_sha  # non-empty provenance
     assert rows[0].prompt_versions == mw._NO_MEETINGS
