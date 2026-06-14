@@ -152,6 +152,7 @@ from meetings.schemas import (
 )
 from meetings.transcript import (
     WEAK_REASON_ENDPOINT_TICK,
+    WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_RETARGETED_PROXY,
     detect_contradictions,
 )
@@ -522,17 +523,19 @@ def genuine_class_subjects(meeting: MeetingReport) -> frozenset[PlayerId]:
     explicitly-empty roster indexes nothing).
 
     Re-targeted proxy flags are NOT genuine class. A Task 10.6
-    :data:`meetings.transcript.WEAK_REASON_RETARGETED_PROXY` flag names
-    the PROXY SPEAKER — the player whose claim about someone else
-    conflicts with both the sighting and the subject's own account — not
-    a player whose own location a sighting contradicted. The genuine
-    class is the alibi-LIE gauge (audit gp-7 item 1: "keep
-    genuine_class_conversion as the alibi-lie gauge"), and the gate was
-    baselined on that semantics; admitting the lying-about-others class
-    would silently inflate the PRIMARY gate's supply (and the
-    genuine-subject share gauge) with a flag shape whose evidence is one
-    weak re-target, exactly across the 10.9 A/B this baseline anchors.
-    On the committed Wave-0 bytes every re-target names a crewmate, so
+    :data:`meetings.transcript.WEAK_REASON_RETARGETED_PROXY` flag (the
+    CROSS-speaker case) and a Task 10.10
+    :data:`meetings.transcript.WEAK_REASON_PROXY_INTRA_TURN` flag (the
+    SAME-speaker case) both name the PROXY SPEAKER — the player whose
+    claim about someone else is the odd account out — not a player whose
+    own location a sighting contradicted. The genuine class is the
+    alibi-LIE gauge (audit gp-7 item 1: "keep genuine_class_conversion as
+    the alibi-lie gauge"), and the gate was baselined on that semantics;
+    admitting either lying-about-others class would silently inflate the
+    PRIMARY gate's supply (and the genuine-subject share gauge) with a
+    flag shape whose evidence is one weak re-target, exactly across the
+    10.9 A/B this baseline anchors. On the committed bytes the
+    proxy-intra-turn re-targets are endpoint-banded or name a crewmate, so
     the supplied/converted pair is identical either way; the exclusion
     pins the DEFINITION, not these bytes.
     """
@@ -545,6 +548,8 @@ def genuine_class_subjects(meeting: MeetingReport) -> frozenset[PlayerId]:
         if WEAK_REASON_ENDPOINT_TICK in flag.description:
             continue
         if WEAK_REASON_RETARGETED_PROXY in flag.description:
+            continue
+        if WEAK_REASON_PROXY_INTRA_TURN in flag.description:
             continue
         subjects.update(flag.subjects)
     return frozenset(subjects)
