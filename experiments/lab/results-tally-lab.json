@@ -7,339 +7,23 @@
           "ballots": [
             [
               "p-1",
-              "p-4",
-              0.75
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.92
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.75
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 2,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-4",
-              0.75
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.92
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.75
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 2,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-4",
-              0.75
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.92
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.75
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 2,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-4",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 2,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-4",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 2,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-4",
-              0.85
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.92
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 2,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-4",
-              0.85
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.92
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 2,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-4",
-              0.85
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.92
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 2,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
               "SKIP",
               0.95
             ],
             [
               "p-2",
+              "p-5",
+              0.85
+            ],
+            [
+              "p-4",
               "SKIP",
               0.95
             ],
             [
               "p-5",
               "p-2",
-              0.85
+              0.78
             ],
             [
               "p-6",
@@ -349,7 +33,7 @@
             [
               "p-7",
               "p-2",
-              0.65
+              0.85
             ],
             [
               "p-8",
@@ -359,7 +43,7 @@
             [
               "p-9",
               "SKIP",
-              1.0
+              0.85
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -380,13 +64,18 @@
             ],
             [
               "p-2",
+              "p-5",
+              0.85
+            ],
+            [
+              "p-4",
               "SKIP",
               0.95
             ],
             [
               "p-5",
               "p-2",
-              0.85
+              0.78
             ],
             [
               "p-6",
@@ -396,7 +85,7 @@
             [
               "p-7",
               "p-2",
-              0.65
+              0.85
             ],
             [
               "p-8",
@@ -406,7 +95,7 @@
             [
               "p-9",
               "SKIP",
-              1.0
+              0.85
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -438,12 +127,12 @@
             [
               "p-7",
               "SKIP",
-              0.52
+              0.95
             ],
             [
               "p-8",
               "SKIP",
-              0.51
+              0.95
             ],
             [
               "p-9",
@@ -480,12 +169,12 @@
             [
               "p-7",
               "SKIP",
-              0.52
+              0.95
             ],
             [
               "p-8",
               "SKIP",
-              0.51
+              0.95
             ],
             [
               "p-9",
@@ -506,7 +195,7 @@
           "ballots": [
             [
               "p-1",
-              "p-4",
+              "p-7",
               0.85
             ],
             [
@@ -541,7 +230,7 @@
             ],
             [
               "p-9",
-              "p-4",
+              "p-7",
               0.85
             ]
           ],
@@ -552,13 +241,13 @@
           "set": "9p2i",
           "v0": null,
           "variant": "V1_option_c",
-          "variant_ejected": "p-4"
+          "variant_ejected": "p-7"
         },
         {
           "ballots": [
             [
               "p-1",
-              "p-4",
+              "p-7",
               0.85
             ],
             [
@@ -593,7 +282,7 @@
             ],
             [
               "p-9",
-              "p-4",
+              "p-7",
               0.85
             ]
           ],
@@ -604,14 +293,14 @@
           "set": "9p2i",
           "v0": null,
           "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-4"
+          "variant_ejected": "p-7"
         },
         {
           "ballots": [
             [
               "p-1",
               "p-4",
-              0.85
+              0.75
             ],
             [
               "p-4",
@@ -636,7 +325,7 @@
             [
               "p-9",
               "p-4",
-              0.78
+              0.75
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -653,7 +342,7 @@
             [
               "p-1",
               "p-4",
-              0.85
+              0.75
             ],
             [
               "p-4",
@@ -678,7 +367,7 @@
             [
               "p-9",
               "p-4",
-              0.78
+              0.75
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -694,8 +383,8 @@
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
+              "p-9",
+              0.65
             ],
             [
               "p-3",
@@ -703,36 +392,41 @@
               0.95
             ],
             [
-              "p-6",
-              "p-7",
-              0.85
+              "p-5",
+              "p-9",
+              0.68
             ],
             [
-              "p-7",
+              "p-6",
               "SKIP",
               0.95
             ],
             [
-              "p-9",
               "p-7",
-              0.85
+              "p-9",
+              0.65
+            ],
+            [
+              "p-9",
+              "SKIP",
+              0.54
             ]
           ],
-          "ejected_role": "IMPOSTOR",
+          "ejected_role": "CREWMATE",
           "kind": "gain",
           "meeting": 2,
-          "seed": 12,
+          "seed": 10,
           "set": "9p2i",
           "v0": null,
           "variant": "V1_option_c",
-          "variant_ejected": "p-7"
+          "variant_ejected": "p-9"
         },
         {
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
+              "p-9",
+              0.65
             ],
             [
               "p-3",
@@ -740,36 +434,41 @@
               0.95
             ],
             [
-              "p-6",
-              "p-7",
-              0.85
+              "p-5",
+              "p-9",
+              0.68
             ],
             [
-              "p-7",
+              "p-6",
               "SKIP",
               0.95
             ],
             [
-              "p-9",
               "p-7",
-              0.85
+              "p-9",
+              0.65
+            ],
+            [
+              "p-9",
+              "SKIP",
+              0.54
             ]
           ],
-          "ejected_role": "IMPOSTOR",
+          "ejected_role": "CREWMATE",
           "kind": "gain",
           "meeting": 2,
-          "seed": 12,
+          "seed": 10,
           "set": "9p2i",
           "v0": null,
           "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
+          "variant_ejected": "p-9"
         },
         {
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
+              "p-9",
+              0.65
             ],
             [
               "p-3",
@@ -777,36 +476,41 @@
               0.95
             ],
             [
-              "p-6",
-              "p-7",
-              0.85
+              "p-5",
+              "p-9",
+              0.68
             ],
             [
-              "p-7",
+              "p-6",
               "SKIP",
               0.95
             ],
             [
-              "p-9",
               "p-7",
-              0.85
+              "p-9",
+              0.65
+            ],
+            [
+              "p-9",
+              "SKIP",
+              0.54
             ]
           ],
-          "ejected_role": "IMPOSTOR",
+          "ejected_role": "CREWMATE",
           "kind": "gain",
           "meeting": 2,
-          "seed": 12,
+          "seed": 10,
           "set": "9p2i",
           "v0": null,
           "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-7"
+          "variant_ejected": "p-9"
         },
         {
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
+              "p-7",
+              0.85
             ],
             [
               "p-3",
@@ -814,14 +518,19 @@
               0.95
             ],
             [
+              "p-5",
+              "SKIP",
+              0.98
+            ],
+            [
               "p-6",
-              "p-7",
-              0.85
+              "SKIP",
+              0.95
             ],
             [
               "p-7",
-              "SKIP",
-              0.95
+              "p-1",
+              0.65
             ],
             [
               "p-9",
@@ -831,8 +540,8 @@
           ],
           "ejected_role": "IMPOSTOR",
           "kind": "gain",
-          "meeting": 3,
-          "seed": 12,
+          "meeting": 1,
+          "seed": 11,
           "set": "9p2i",
           "v0": null,
           "variant": "V1_option_c",
@@ -842,8 +551,8 @@
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
+              "p-7",
+              0.85
             ],
             [
               "p-3",
@@ -851,14 +560,19 @@
               0.95
             ],
             [
+              "p-5",
+              "SKIP",
+              0.98
+            ],
+            [
               "p-6",
-              "p-7",
-              0.85
+              "SKIP",
+              0.95
             ],
             [
               "p-7",
-              "SKIP",
-              0.95
+              "p-1",
+              0.65
             ],
             [
               "p-9",
@@ -868,8 +582,8 @@
           ],
           "ejected_role": "IMPOSTOR",
           "kind": "gain",
-          "meeting": 3,
-          "seed": 12,
+          "meeting": 1,
+          "seed": 11,
           "set": "9p2i",
           "v0": null,
           "variant": "V2_nonskip_majority",
@@ -879,8 +593,8 @@
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
+              "p-7",
+              0.85
             ],
             [
               "p-3",
@@ -888,14 +602,19 @@
               0.95
             ],
             [
+              "p-5",
+              "SKIP",
+              0.98
+            ],
+            [
               "p-6",
-              "p-7",
-              0.85
+              "SKIP",
+              0.95
             ],
             [
               "p-7",
-              "SKIP",
-              0.95
+              "p-1",
+              0.65
             ],
             [
               "p-9",
@@ -905,8 +624,8 @@
           ],
           "ejected_role": "IMPOSTOR",
           "kind": "gain",
-          "meeting": 3,
-          "seed": 12,
+          "meeting": 1,
+          "seed": 11,
           "set": "9p2i",
           "v0": null,
           "variant": "V3_skip_halfweight",
@@ -922,7 +641,7 @@
             [
               "p-2",
               "SKIP",
-              0.58
+              0.53
             ],
             [
               "p-4",
@@ -937,12 +656,12 @@
             [
               "p-6",
               "SKIP",
-              0.58
+              0.53
             ],
             [
               "p-7",
               "SKIP",
-              0.95
+              0.53
             ],
             [
               "p-9",
@@ -969,7 +688,7 @@
             [
               "p-2",
               "SKIP",
-              0.58
+              0.53
             ],
             [
               "p-4",
@@ -984,12 +703,12 @@
             [
               "p-6",
               "SKIP",
-              0.58
+              0.53
             ],
             [
               "p-7",
               "SKIP",
-              0.95
+              0.53
             ],
             [
               "p-9",
@@ -1004,6 +723,132 @@
           "set": "9p2i",
           "v0": null,
           "variant": "V2_nonskip_majority",
+          "variant_ejected": "p-7"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "p-7",
+              0.65
+            ],
+            [
+              "p-4",
+              "p-7",
+              0.61
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.92
+            ],
+            [
+              "p-6",
+              "SKIP",
+              0.52
+            ],
+            [
+              "p-7",
+              "SKIP",
+              0.53
+            ],
+            [
+              "p-9",
+              "p-1",
+              0.75
+            ]
+          ],
+          "ejected_role": "CREWMATE",
+          "kind": "gain",
+          "meeting": 2,
+          "seed": 13,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V1_option_c",
+          "variant_ejected": "p-7"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "p-7",
+              0.65
+            ],
+            [
+              "p-4",
+              "p-7",
+              0.61
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.92
+            ],
+            [
+              "p-6",
+              "SKIP",
+              0.52
+            ],
+            [
+              "p-7",
+              "SKIP",
+              0.53
+            ],
+            [
+              "p-9",
+              "p-1",
+              0.75
+            ]
+          ],
+          "ejected_role": "CREWMATE",
+          "kind": "gain",
+          "meeting": 2,
+          "seed": 13,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V2_nonskip_majority",
+          "variant_ejected": "p-7"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "p-7",
+              0.65
+            ],
+            [
+              "p-4",
+              "p-7",
+              0.61
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.92
+            ],
+            [
+              "p-6",
+              "SKIP",
+              0.52
+            ],
+            [
+              "p-7",
+              "SKIP",
+              0.53
+            ],
+            [
+              "p-9",
+              "p-1",
+              0.75
+            ]
+          ],
+          "ejected_role": "CREWMATE",
+          "kind": "gain",
+          "meeting": 2,
+          "seed": 13,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V3_skip_halfweight",
           "variant_ejected": "p-7"
         },
         {
@@ -1041,7 +886,7 @@
             [
               "p-8",
               "SKIP",
-              1.0
+              0.95
             ],
             [
               "p-9",
@@ -1093,7 +938,7 @@
             [
               "p-8",
               "SKIP",
-              1.0
+              0.95
             ],
             [
               "p-9",
@@ -1115,12 +960,7 @@
             [
               "p-1",
               "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
+              0.55
             ],
             [
               "p-5",
@@ -1130,7 +970,7 @@
             [
               "p-6",
               "p-5",
-              0.85
+              0.75
             ],
             [
               "p-7",
@@ -1140,12 +980,12 @@
             [
               "p-8",
               "p-5",
-              0.72
+              0.75
             ],
             [
               "p-9",
               "SKIP",
-              0.58
+              0.55
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1162,12 +1002,7 @@
             [
               "p-1",
               "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
+              0.55
             ],
             [
               "p-5",
@@ -1177,7 +1012,7 @@
             [
               "p-6",
               "p-5",
-              0.85
+              0.75
             ],
             [
               "p-7",
@@ -1187,12 +1022,12 @@
             [
               "p-8",
               "p-5",
-              0.72
+              0.75
             ],
             [
               "p-9",
               "SKIP",
-              0.58
+              0.55
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1208,13 +1043,97 @@
           "ballots": [
             [
               "p-1",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.98
+            ],
+            [
               "p-6",
-              0.75
+              "p-5",
+              0.82
+            ],
+            [
+              "p-7",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-8",
+              "p-5",
+              0.72
+            ],
+            [
+              "p-9",
+              "SKIP",
+              0.85
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
+          "meeting": 2,
+          "seed": 18,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V1_option_c",
+          "variant_ejected": "p-5"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.98
+            ],
+            [
+              "p-6",
+              "p-5",
+              0.82
+            ],
+            [
+              "p-7",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-8",
+              "p-5",
+              0.72
+            ],
+            [
+              "p-9",
+              "SKIP",
+              0.85
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
+          "meeting": 2,
+          "seed": 18,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V2_nonskip_majority",
+          "variant_ejected": "p-5"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "p-7",
+              0.85
             ],
             [
               "p-2",
               "SKIP",
-              1.0
+              0.58
             ],
             [
               "p-3",
@@ -1224,7 +1143,7 @@
             [
               "p-5",
               "SKIP",
-              1.0
+              0.92
             ],
             [
               "p-6",
@@ -1238,13 +1157,13 @@
             ],
             [
               "p-8",
-              "p-6",
-              0.75
+              "p-7",
+              0.65
             ],
             [
               "p-9",
-              "p-6",
-              0.75
+              "p-7",
+              0.85
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1254,19 +1173,19 @@
           "set": "9p2i",
           "v0": null,
           "variant": "V1_option_c",
-          "variant_ejected": "p-6"
+          "variant_ejected": "p-7"
         },
         {
           "ballots": [
             [
               "p-1",
-              "p-6",
-              0.75
+              "p-7",
+              0.85
             ],
             [
               "p-2",
               "SKIP",
-              1.0
+              0.58
             ],
             [
               "p-3",
@@ -1276,7 +1195,7 @@
             [
               "p-5",
               "SKIP",
-              1.0
+              0.92
             ],
             [
               "p-6",
@@ -1290,13 +1209,13 @@
             ],
             [
               "p-8",
-              "p-6",
-              0.75
+              "p-7",
+              0.65
             ],
             [
               "p-9",
-              "p-6",
-              0.75
+              "p-7",
+              0.85
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1306,19 +1225,19 @@
           "set": "9p2i",
           "v0": null,
           "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-6"
+          "variant_ejected": "p-7"
         },
         {
           "ballots": [
             [
               "p-1",
-              "p-6",
-              0.75
+              "p-7",
+              0.85
             ],
             [
               "p-2",
               "SKIP",
-              1.0
+              0.58
             ],
             [
               "p-3",
@@ -1328,7 +1247,7 @@
             [
               "p-5",
               "SKIP",
-              1.0
+              0.92
             ],
             [
               "p-6",
@@ -1342,13 +1261,13 @@
             ],
             [
               "p-8",
-              "p-6",
-              0.75
+              "p-7",
+              0.65
             ],
             [
               "p-9",
-              "p-6",
-              0.75
+              "p-7",
+              0.85
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1358,182 +1277,14 @@
           "set": "9p2i",
           "v0": null,
           "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-6"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "p-5",
-              0.72
-            ],
-            [
-              "p-4",
-              "p-5",
-              0.72
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 25,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "p-5",
-              0.72
-            ],
-            [
-              "p-4",
-              "p-5",
-              0.72
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 25,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.55
-            ],
-            [
-              "p-3",
-              "p-5",
-              0.75
-            ],
-            [
-              "p-4",
-              "p-5",
-              0.75
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.55
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 25,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.55
-            ],
-            [
-              "p-3",
-              "p-5",
-              0.75
-            ],
-            [
-              "p-4",
-              "p-5",
-              0.75
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.55
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 25,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-5"
+          "variant_ejected": "p-7"
         },
         {
           "ballots": [
             [
               "p-1",
               "p-2",
-              0.78
+              0.73
             ],
             [
               "p-2",
@@ -1548,7 +1299,7 @@
             [
               "p-4",
               "p-2",
-              0.78
+              0.73
             ],
             [
               "p-5",
@@ -1558,7 +1309,7 @@
             [
               "p-6",
               "p-2",
-              0.78
+              0.73
             ],
             [
               "p-7",
@@ -1568,7 +1319,7 @@
             [
               "p-9",
               "p-2",
-              0.85
+              0.73
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1585,7 +1336,7 @@
             [
               "p-1",
               "p-2",
-              0.78
+              0.73
             ],
             [
               "p-2",
@@ -1600,7 +1351,7 @@
             [
               "p-4",
               "p-2",
-              0.78
+              0.73
             ],
             [
               "p-5",
@@ -1610,7 +1361,7 @@
             [
               "p-6",
               "p-2",
-              0.78
+              0.73
             ],
             [
               "p-7",
@@ -1620,7 +1371,7 @@
             [
               "p-9",
               "p-2",
-              0.85
+              0.73
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1637,7 +1388,7 @@
             [
               "p-1",
               "p-2",
-              0.78
+              0.73
             ],
             [
               "p-2",
@@ -1652,7 +1403,7 @@
             [
               "p-4",
               "p-2",
-              0.78
+              0.73
             ],
             [
               "p-5",
@@ -1662,7 +1413,7 @@
             [
               "p-6",
               "p-2",
-              0.78
+              0.73
             ],
             [
               "p-7",
@@ -1672,7 +1423,7 @@
             [
               "p-9",
               "p-2",
-              0.85
+              0.73
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1688,107 +1439,13 @@
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-6",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 28,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-8"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-6",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 28,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-8"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
+              "p-2",
+              0.73
             ],
             [
               "p-2",
-              "p-6",
-              0.85
+              "SKIP",
+              0.95
             ],
             [
               "p-3",
@@ -1802,35 +1459,35 @@
             ],
             [
               "p-6",
-              "SKIP",
-              0.95
+              "p-3",
+              0.85
             ],
             [
               "p-9",
-              "p-6",
+              "p-2",
               0.85
             ]
           ],
-          "ejected_role": "CREWMATE",
+          "ejected_role": "IMPOSTOR",
           "kind": "gain",
-          "meeting": 0,
-          "seed": 33,
+          "meeting": 1,
+          "seed": 26,
           "set": "9p2i",
           "v0": null,
           "variant": "V1_option_c",
-          "variant_ejected": "p-6"
+          "variant_ejected": "p-2"
         },
         {
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
+              "p-2",
+              0.73
             ],
             [
               "p-2",
-              "p-6",
-              0.85
+              "SKIP",
+              0.95
             ],
             [
               "p-3",
@@ -1844,28 +1501,33 @@
             ],
             [
               "p-6",
-              "SKIP",
-              0.95
+              "p-3",
+              0.85
             ],
             [
               "p-9",
-              "p-6",
+              "p-2",
               0.85
             ]
           ],
-          "ejected_role": "CREWMATE",
+          "ejected_role": "IMPOSTOR",
           "kind": "gain",
-          "meeting": 0,
-          "seed": 33,
+          "meeting": 1,
+          "seed": 26,
           "set": "9p2i",
           "v0": null,
           "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-6"
+          "variant_ejected": "p-2"
         },
         {
           "ballots": [
             [
               "p-1",
+              "p-2",
+              0.73
+            ],
+            [
+              "p-2",
               "SKIP",
               0.95
             ],
@@ -1875,24 +1537,56 @@
               0.95
             ],
             [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
               "p-5",
-              "p-4",
-              0.78
+              "SKIP",
+              0.98
             ],
             [
               "p-6",
+              "p-3",
+              0.85
+            ],
+            [
+              "p-9",
+              "p-2",
+              0.85
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
+          "meeting": 1,
+          "seed": 26,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V3_skip_halfweight",
+          "variant_ejected": "p-2"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "SKIP",
+              0.58
+            ],
+            [
+              "p-3",
+              "p-8",
+              0.75
+            ],
+            [
+              "p-4",
               "SKIP",
               0.95
             ],
             [
+              "p-6",
+              "p-8",
+              0.75
+            ],
+            [
               "p-7",
-              "p-4",
-              0.85
+              "SKIP",
+              0.95
             ],
             [
               "p-8",
@@ -1903,6 +1597,189 @@
               "p-9",
               "SKIP",
               0.58
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
+          "meeting": 0,
+          "seed": 28,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V1_option_c",
+          "variant_ejected": "p-8"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "SKIP",
+              0.58
+            ],
+            [
+              "p-3",
+              "p-8",
+              0.75
+            ],
+            [
+              "p-4",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-6",
+              "p-8",
+              0.75
+            ],
+            [
+              "p-7",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-8",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-9",
+              "SKIP",
+              0.58
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
+          "meeting": 0,
+          "seed": 28,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V2_nonskip_majority",
+          "variant_ejected": "p-8"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-2",
+              "p-1",
+              0.85
+            ],
+            [
+              "p-3",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.98
+            ],
+            [
+              "p-6",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-9",
+              "p-1",
+              0.85
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
+          "meeting": 0,
+          "seed": 33,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V1_option_c",
+          "variant_ejected": "p-1"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-2",
+              "p-1",
+              0.85
+            ],
+            [
+              "p-3",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.98
+            ],
+            [
+              "p-6",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-9",
+              "p-1",
+              0.85
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
+          "meeting": 0,
+          "seed": 33,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V2_nonskip_majority",
+          "variant_ejected": "p-1"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-3",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-4",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-5",
+              "p-4",
+              0.78
+            ],
+            [
+              "p-6",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-7",
+              "p-4",
+              0.85
+            ],
+            [
+              "p-8",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-9",
+              "SKIP",
+              0.65
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1954,7 +1831,7 @@
             [
               "p-9",
               "SKIP",
-              0.58
+              0.65
             ]
           ],
           "ejected_role": "IMPOSTOR",
@@ -1970,18 +1847,13 @@
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "p-3",
+              "p-7",
               0.85
             ],
             [
               "p-3",
               "SKIP",
-              0.95
+              0.58
             ],
             [
               "p-4",
@@ -1989,14 +1861,118 @@
               0.95
             ],
             [
+              "p-5",
+              "SKIP",
+              0.92
+            ],
+            [
               "p-6",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-7",
               "p-3",
+              0.65
+            ],
+            [
+              "p-8",
+              "p-7",
+              0.65
+            ],
+            [
+              "p-9",
+              "SKIP",
               0.85
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
+          "meeting": 0,
+          "seed": 43,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V1_option_c",
+          "variant_ejected": "p-7"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "p-7",
+              0.85
+            ],
+            [
+              "p-3",
+              "SKIP",
+              0.58
+            ],
+            [
+              "p-4",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.92
+            ],
+            [
+              "p-6",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-7",
+              "p-3",
+              0.65
+            ],
+            [
+              "p-8",
+              "p-7",
+              0.65
+            ],
+            [
+              "p-9",
+              "SKIP",
+              0.85
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
+          "meeting": 0,
+          "seed": 43,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V2_nonskip_majority",
+          "variant_ejected": "p-7"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "p-7",
+              0.85
+            ],
+            [
+              "p-4",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.92
             ],
             [
               "p-7",
               "SKIP",
               0.95
+            ],
+            [
+              "p-8",
+              "p-7",
+              0.92
             ],
             [
               "p-9",
@@ -2006,29 +1982,19 @@
           ],
           "ejected_role": "IMPOSTOR",
           "kind": "gain",
-          "meeting": 0,
-          "seed": 38,
+          "meeting": 1,
+          "seed": 43,
           "set": "9p2i",
           "v0": null,
           "variant": "V1_option_c",
-          "variant_ejected": "p-3"
+          "variant_ejected": "p-7"
         },
         {
           "ballots": [
             [
               "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "p-3",
+              "p-7",
               0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
             ],
             [
               "p-4",
@@ -2036,14 +2002,19 @@
               0.95
             ],
             [
-              "p-6",
-              "p-3",
-              0.85
+              "p-5",
+              "SKIP",
+              0.92
             ],
             [
               "p-7",
               "SKIP",
               0.95
+            ],
+            [
+              "p-8",
+              "p-7",
+              0.92
             ],
             [
               "p-9",
@@ -2053,12 +2024,64 @@
           ],
           "ejected_role": "IMPOSTOR",
           "kind": "gain",
+          "meeting": 1,
+          "seed": 43,
+          "set": "9p2i",
+          "v0": null,
+          "variant": "V2_nonskip_majority",
+          "variant_ejected": "p-7"
+        },
+        {
+          "ballots": [
+            [
+              "p-1",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-2",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-4",
+              "p-1",
+              0.75
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.92
+            ],
+            [
+              "p-6",
+              "p-1",
+              0.75
+            ],
+            [
+              "p-7",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-8",
+              "SKIP",
+              0.95
+            ],
+            [
+              "p-9",
+              "SKIP",
+              0.85
+            ]
+          ],
+          "ejected_role": "IMPOSTOR",
+          "kind": "gain",
           "meeting": 0,
-          "seed": 38,
+          "seed": 47,
           "set": "9p2i",
           "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-3"
+          "variant": "V1_option_c",
+          "variant_ejected": "p-1"
         },
         {
           "ballots": [
@@ -2069,26 +2092,31 @@
             ],
             [
               "p-2",
-              "p-3",
-              0.85
-            ],
-            [
-              "p-3",
               "SKIP",
               0.95
             ],
             [
               "p-4",
+              "p-1",
+              0.75
+            ],
+            [
+              "p-5",
+              "SKIP",
+              0.92
+            ],
+            [
+              "p-6",
+              "p-1",
+              0.75
+            ],
+            [
+              "p-7",
               "SKIP",
               0.95
             ],
             [
-              "p-6",
-              "p-3",
-              0.85
-            ],
-            [
-              "p-7",
+              "p-8",
               "SKIP",
               0.95
             ],
@@ -2100,12 +2128,12 @@
           ],
           "ejected_role": "IMPOSTOR",
           "kind": "gain",
-          "meeting": 1,
-          "seed": 38,
+          "meeting": 0,
+          "seed": 47,
           "set": "9p2i",
           "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-3"
+          "variant": "V2_nonskip_majority",
+          "variant_ejected": "p-1"
         },
         {
           "ballots": [
@@ -2116,2644 +2144,107 @@
             ],
             [
               "p-2",
-              "p-3",
-              0.85
-            ],
-            [
-              "p-3",
               "SKIP",
-              0.95
+              0.58
             ],
             [
               "p-4",
               "SKIP",
-              0.95
-            ],
-            [
-              "p-6",
-              "p-3",
-              0.85
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 38,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-3"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-5",
-              0.82
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
+              0.58
             ],
             [
               "p-6",
               "SKIP",
-              0.95
+              0.53
             ],
             [
               "p-7",
-              "SKIP",
-              0.95
+              "p-6",
+              0.85
             ],
             [
               "p-8",
-              "p-5",
-              0.72
+              "p-6",
+              0.75
             ],
             [
               "p-9",
-              "p-5",
-              0.82
+              "SKIP",
+              0.58
             ]
           ],
-          "ejected_role": "IMPOSTOR",
+          "ejected_role": "CREWMATE",
           "kind": "gain",
-          "meeting": 1,
-          "seed": 44,
+          "meeting": 0,
+          "seed": 48,
           "set": "9p2i",
           "v0": null,
           "variant": "V1_option_c",
-          "variant_ejected": "p-5"
+          "variant_ejected": "p-6"
         },
         {
           "ballots": [
             [
               "p-1",
-              "p-5",
-              0.82
-            ],
-            [
-              "p-3",
               "SKIP",
               0.95
             ],
             [
-              "p-5",
+              "p-2",
               "SKIP",
-              0.98
+              0.58
+            ],
+            [
+              "p-4",
+              "SKIP",
+              0.58
             ],
             [
               "p-6",
               "SKIP",
-              0.95
+              0.53
             ],
             [
               "p-7",
-              "SKIP",
-              0.95
+              "p-6",
+              0.85
             ],
             [
               "p-8",
-              "p-5",
-              0.72
+              "p-6",
+              0.75
             ],
             [
               "p-9",
-              "p-5",
-              0.82
+              "SKIP",
+              0.58
             ]
           ],
-          "ejected_role": "IMPOSTOR",
+          "ejected_role": "CREWMATE",
           "kind": "gain",
-          "meeting": 1,
-          "seed": 44,
+          "meeting": 0,
+          "seed": 48,
           "set": "9p2i",
           "v0": null,
           "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-5",
-              0.82
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-5",
-              0.72
-            ],
-            [
-              "p-9",
-              "p-5",
-              0.82
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 44,
-          "set": "9p2i",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-5"
+          "variant_ejected": "p-6"
         }
       ],
-      "meetings": 78,
+      "meetings": 88,
       "set": "9p2i",
       "summary": {
         "V0_as_is": {},
         "V1_option_c": {
-          "gain:CREWMATE": 4,
-          "gain:IMPOSTOR": 18
-        },
-        "V2_nonskip_majority": {
-          "gain:CREWMATE": 4,
-          "gain:IMPOSTOR": 17
-        },
-        "V3_skip_halfweight": {
-          "gain:IMPOSTOR": 8
-        }
-      },
-      "v0_selfcheck_mismatches": []
-    },
-    {
-      "facts": "/var/folders/45/z6kbb3x1103dgy43qkw1s3vw0000gn/T/ailibi-gameplay-facts-9p2i-w1a.json",
-      "flips": [
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "p-5",
-              0.85
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "p-2",
-              0.78
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-2",
-              0.85
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 3,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-2"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "p-5",
-              0.85
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "p-2",
-              0.78
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-2",
-              0.85
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 3,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-2"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-6",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-8",
-              0.75
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 6,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-8"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-6",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-8",
-              0.75
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 6,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-8"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 9,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 9,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-4",
-              0.75
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.75
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 9,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-4",
-              0.75
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-4",
-              0.75
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 9,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-9",
-              0.65
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "p-9",
-              0.68
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-9",
-              0.65
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.54
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 10,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-9"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-9",
-              0.65
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "p-9",
-              0.68
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-9",
-              0.65
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.54
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 10,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-9"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-9",
-              0.65
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "p-9",
-              0.68
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-9",
-              0.65
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.54
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 10,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-9"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-1",
-              0.65
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 11,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-1",
-              0.65
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 11,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-1",
-              0.65
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 11,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-2",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-5",
-              0.72
-            ],
-            [
-              "p-7",
-              "p-5",
-              0.68
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.58
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 12,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-2",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-5",
-              0.72
-            ],
-            [
-              "p-7",
-              "p-5",
-              0.68
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.58
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 12,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-7",
-              "p-5",
-              0.85
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 12,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-7",
-              "p-5",
-              0.85
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 12,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-7",
-              "p-5",
-              0.85
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 12,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-4",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.52
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 13,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-4",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.52
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 13,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-4",
-              "p-7",
-              0.61
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.52
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-9",
-              "p-1",
-              0.75
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 13,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-4",
-              "p-7",
-              0.61
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.52
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-9",
-              "p-1",
-              0.75
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 13,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-4",
-              "p-7",
-              0.61
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.52
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-9",
-              "p-1",
-              0.75
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 13,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 16,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 16,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.55
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-5",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-5",
-              0.75
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.55
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 18,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.55
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-5",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-5",
-              0.75
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.55
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 18,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "p-5",
-              0.82
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-5",
-              0.72
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 18,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "p-5",
-              0.82
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-5",
-              0.72
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 2,
-          "seed": 18,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-5"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 23,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 23,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-9",
-              "p-7",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 23,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-2",
-              0.73
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 26,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-2"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-2",
-              0.73
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 26,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-2"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-2",
-              0.73
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 26,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-2"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "p-3",
-              0.85
-            ],
-            [
-              "p-9",
-              "p-2",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 26,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-2"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "p-3",
-              0.85
-            ],
-            [
-              "p-9",
-              "p-2",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 26,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-2"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-2",
-              0.73
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "p-3",
-              0.85
-            ],
-            [
-              "p-9",
-              "p-2",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 26,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V3_skip_halfweight",
-          "variant_ejected": "p-2"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-3",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-6",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.58
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 28,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-8"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-3",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-6",
-              "p-8",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.58
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 28,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-8"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "p-6",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-6",
-              0.85
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 33,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-6"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "p-6",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.98
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "p-6",
-              0.85
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 33,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-6"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "p-4",
-              0.78
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-4",
-              0.85
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.65
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 34,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "p-4",
-              0.78
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-4",
-              0.85
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.65
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 34,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-4"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-3",
-              0.65
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 43,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-3",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-7",
-              "p-3",
-              0.65
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.65
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 43,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.92
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.65
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 43,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "p-7",
-              0.85
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "p-7",
-              0.92
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.65
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 1,
-          "seed": 43,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-7"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "p-1",
-              0.75
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-1",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 47,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-1"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-4",
-              "p-1",
-              0.75
-            ],
-            [
-              "p-5",
-              "SKIP",
-              0.92
-            ],
-            [
-              "p-6",
-              "p-1",
-              0.75
-            ],
-            [
-              "p-7",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-8",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.85
-            ]
-          ],
-          "ejected_role": "IMPOSTOR",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 47,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-1"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-7",
-              "p-6",
-              0.85
-            ],
-            [
-              "p-8",
-              "p-6",
-              0.75
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.58
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 48,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V1_option_c",
-          "variant_ejected": "p-6"
-        },
-        {
-          "ballots": [
-            [
-              "p-1",
-              "SKIP",
-              0.95
-            ],
-            [
-              "p-2",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-4",
-              "SKIP",
-              0.58
-            ],
-            [
-              "p-6",
-              "SKIP",
-              0.53
-            ],
-            [
-              "p-7",
-              "p-6",
-              0.85
-            ],
-            [
-              "p-8",
-              "p-6",
-              0.75
-            ],
-            [
-              "p-9",
-              "SKIP",
-              0.58
-            ]
-          ],
-          "ejected_role": "CREWMATE",
-          "kind": "gain",
-          "meeting": 0,
-          "seed": 48,
-          "set": "9p2i-w1a",
-          "v0": null,
-          "variant": "V2_nonskip_majority",
-          "variant_ejected": "p-6"
-        }
-      ],
-      "meetings": 87,
-      "set": "9p2i-w1a",
-      "summary": {
-        "V0_as_is": {},
-        "V1_option_c": {
-          "gain:CREWMATE": 8,
+          "gain:CREWMATE": 6,
           "gain:IMPOSTOR": 15
         },
         "V2_nonskip_majority": {
-          "gain:CREWMATE": 8,
+          "gain:CREWMATE": 6,
           "gain:IMPOSTOR": 15
         },
         "V3_skip_halfweight": {
           "gain:CREWMATE": 2,
-          "gain:IMPOSTOR": 5
+          "gain:IMPOSTOR": 4
         }
       },
       "v0_selfcheck_mismatches": []

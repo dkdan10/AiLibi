@@ -909,29 +909,137 @@ the next record), the unsure guard is recording-side and offline-checkable now.
 
 **Ready-to-paste prompt:** `agent_prompts/task-10-12-measurement-hygiene-unsure-and-telemetry.md`
 
-### Wave-2 Stages 2-5 (SKETCH — authored after Stage 1 + the owner crew-lever decision)
+### Wave-2 Stage 2 — Capability map (DONE; the committed lab reports ARE the artifact)
 
-- **10.13 Capability map (gp-5; offline, mostly DONE by the lab).** Records the deception-battery
-  findings (experiments/lab) as the toolkit design input + the A/B targeting baselines: effective
-  deflection 5-9 of 59 survivals (NOT raw 27), do_task 0, wait-share ~51% vs crew ~12%, the kill
-  cross-room waste ~15%; anchor seeds seed-12 (third-party-alibi frame — the strong-flag exploit
-  surface, a design tension surfaced to the owner) and seed-6 (sustained single-target framing →
-  IMPOSTOR_PARITY); self-accusation folded in (ineffective standalone, 0/4 converted). Plus the
-  battery-2 creative probes (sustained-framing persistence, adaptive-redirect quality, anticipatory
-  alibi, implicit teammate corroboration, tell-detection).
-- **10.14 Impostor toolkit (gp-4 + gp-8; PRIMARY).** Activate the dormant do_task path (seed impostor
-  pretend-task instances so `ImpostorPolicy._idle` fires — observation/service.py filters
-  `task.owner==agent_id`); policy-authored cover stories injected at kill time (the lab's
-  perform-not-invent finding); an idle budget toward crew wait-share; same-room kill-intent gating
-  (gp-8/MECH-B-1 — elevated to credible-threat, removing ~15% wasted cross-room kills raises parity
-  pressure; re-derive the EMERGENCY_COOLDOWN_TICKS anchor at the 10.17 gate). 7.12/9.3 firewalls +
-  betrayal==0 inviolate.
-- **10.15 Crew-conversion lever (the counterweight; OWNER DECISION gates the shape).** Belief-spread
-  first (Path B): fix the testimony fold's fixable underperformance (the two-witness rarity + the
-  9B's rationale-echo undercutting "independence" — H-4) so detection reaches the majority and the
-  EQUAL tally convicts on its own; V3 skip-halfweight only as the fallback if the lab re-run shows
-  belief-spread cannot close enough of the 37-case SKIP-plurality bloc. Gentle by design — the
-  impostor buff leads.
+No separate web task. The 10.10 deception-probe question is ANSWERED by the two lab batteries
+(experiments/lab/report-deception-battery.md + report-deception-battery-2.md): the 9B cannot invent a
+lie spontaneously (2/18) but performs a handed OR anticipatory script (battery-2 P3: a stated-goal
+directive → 8/12 sheltered lies), holds a frame target across meetings (P1 persistence 0.86, but the
+justification drifts → PIN the cover evidence once), and backs a teammate's alibi without betraying
+(P5, firewall guard stays load-bearing). The A/B targeting baselines the toolkit must move:
+do_task 0, wait-share ~51% (vs crew ~12%), effective deflection 5-9 of 59 survivals (NOT raw 27),
+kill cross-room waste ~15%; P2 legal-redirect 9/15; scripted lies carry NO hedge-tells (P6 — do NOT
+bank on lie-catchability). Anchor deception seeds: seed-12 (third-party-alibi frame, the strong-flag
+exploit surface — a design tension, NOT a detector fix) and seed-6 (sustained framing → IMPOSTOR_PARITY).
+These feed the 10.14 toolkit design and the 10.16 gate baselines directly.
+
+### Task 10.14 — Impostor toolkit (blending + anticipatory cover + kill discipline)
+**Branch:** `phase-10-impostor-toolkit`
+**Depends on:** none (Stage-1 detector repairs merged; impostor-side, file-disjoint from the crew lever)
+**Section refs:** DESIGN.md §3.4, §4.5, §5.3; audits/audit-2026-06-13-1816-gameplay-data.md D-D-1/D-D-2/D-D-7 + MECH-B-1; experiments/lab/report-deception-battery-2.md
+**Complexity:** Integration
+
+The PRIMARY Wave-2 lever — make impostors a credible threat so the meeting layer becomes
+load-bearing. Today impostors are passive: do_task 0 / report 0 / emergency 0, wait-share ~51% (crew
+~12% — the "never-tasks" fingerprint), and ~15% of kill intents are wasted cross-room. The lab found
+the toolkit is TRACTABLE: the do_task path is dormant-REACHABLE (not missing), and a lightweight
+anticipatory-cover DIRECTIVE makes the 9B generate its own sheltered alibi 8/12 (no full script
+generator needed). Activate blending + anticipatory cover + kill discipline; the 7.12/9.3 firewalls
+and betrayal==0 stay inviolate.
+
+**Files in scope:**
+- agents/tactical/impostor_policy.py (BLENDING: make the dormant `_idle` do_task branch fire — an idle impostor emits a fake do_task that consumes the tick and RENDERS as do_task but makes NO task progress, drawn from a small per-impostor pretend-task set; tune the idle budget so impostor wait-share trends toward the crew ~10-12%, not 51%. KILL DISCIPLINE: gate the chosen kill target on same-room co-presence in the proposed action BEFORE emitting — a cross-room target degrades to move-toward/wait, eliminating the MECH-B-1 ~15% cross-room no-ops; also suppress a kill emission during cooldown)
+- observation/service.py (surface a pretend `pending_task_id` for impostors so `_idle`'s do_task branch is reachable — today `_pending_task_id_for_agent` filters `task.owner==agent_id` and impostors own none; the pretend id must NOT create a real task instance or advance the task-win denominator)
+- agents/strategic/prompts/impostor_report.j2 (ANTICIPATORY COVER: when the impostor recently killed, the opening frames "prepare an account that does NOT place you at the kill room/tick" — the lab's perform-from-a-goal directive, not a verbatim script; the cover room/window is PINNED by the policy once and reused so the justification does not drift per turn — battery-2 P1; impostor_report v4→v5)
+- orchestrator/game.py (DEFAULT_PROMPT_VERSIONS impostor_report v5)
+- tests/agents/test_impostor_policy.py + tests/agents/test_strategic_prompts.py + tests/observation/* + tests/fixtures/prompt_regression/ (regenerate for v5; pins below)
+
+**Files NOT in scope:**
+- the crew belief-spread lever (crew-side; the impostor toolkit must not touch the fold/tally)
+- the 7.12 teammate firewall + betrayal coercion (inviolate — never weakened)
+- engine/** kill resolution / win conditions (the fake task must not reach the real task counter — verify, do not change)
+- the §4.6 render, the 9.8 constants, token caps (frozen)
+- replays/samples/** (no re-record; the toolkit is measured at 10.17)
+
+**Definition of done:**
+- [ ] Blending: an idle impostor emits a fake do_task that renders as do_task and consumes the tick; offline/unit-verified it advances NO real task instance and does NOT move the CREWMATE_TASKS win denominator (the crew-side integrity invariant — a fake task can never help the crew win).
+- [ ] Idle budget: impostor wait-share in a fresh smoke trends toward crew levels (target the ~10-12% band, reported not hard-pinned); do_task emissions > 0.
+- [ ] Kill discipline: a cross-room kill intent degrades to move-toward/wait before emit (no ActionRejected cross-room no-op); a cooldown kill is suppressed; unit-pinned, and the MECH-B-1 class drops to ~0 on a fresh smoke.
+- [ ] Anticipatory cover: the impostor_report v5 opening, given a recent kill, renders the prepare-an-alibi-away-from-the-scene frame; the policy supplies a PINNED cover room/window (reused, not regenerated); golden-pin the v5 opening.
+- [ ] Firewall: betrayal accusations/ballots stay 0 by construction; the 7.12 guard is untouched; impostor never fake-tasks in a way that names a teammate.
+- [ ] Determinism + full `bash scripts/check.sh` (mypy/ruff/format/lint-imports/generate_prompts --check/validate_task_docs/pytest/frontend) pass.
+
+**Public types introduced:**
+- PRETEND_TASK_MARKER (or equivalent — name in the PR; the fake-task sentinel that keeps it off the real task counter)
+
+**Implementation hint:**
+
+The do_task path is dormant-reachable: `ImpostorPolicy._idle` already has a do_task branch gated on
+`pending_task_id`; surface a pretend id from observation/service.py keyed so the win-counter never
+sees it. The anticipatory cover is a DIRECTIVE not a generator (battery-2 P3 — the 9B fabricates from
+a stated goal); pin the cover evidence once (battery-2 P1 — persistence is good, justification drifts).
+The kill-discipline gate is agent-side producer logic (the engine refusal is correct; this stops the
+wasted intent before it reaches the engine).
+
+**Integration risk:**
+
+The one inviolable invariant is the fake task NEVER advancing the real task-win denominator (else
+impostors help the crew win) — pin it explicitly. The firewall stays the deterministic backstop
+(battery-2 P5 found 1/11 prompt-level teammate leaks). Recording-side only; measured at 10.17, where
+the EMERGENCY_COOLDOWN_TICKS anchor is re-derived against the toolkit-shifted kill cadence.
+
+**Ready-to-paste prompt:** `agent_prompts/task-10-14-impostor-toolkit.md`
+
+### Task 10.15 — Crew belief-spread lever (single-witness inform)
+**Branch:** `phase-10-belief-spread`
+**Depends on:** 10.7 (extends the merged two-witness pre-vote fold; crew-side, file-disjoint from the impostor toolkit so it dispatches in parallel with it)
+**Section refs:** DESIGN.md §5.2, §6.3, §4.6; audits/audit-2026-06-13-1816-gameplay-data.md C-C-1 + H-4; the owner belief-spread-first decision (2026-06-14); [[project_ejection_suspicion_principle]]
+**Complexity:** Integration
+
+The crew counterweight, OWNER-LOCKED to belief-spread (NOT a tally reweight — the lab re-run showed
+V3 skip-halfweight degraded to +4 imp / +2 innocent on the honest W1 bytes, no longer free). The
+dominant residual is the SKIP-plurality bloc: 37/59 over-gate-lost-plurality meetings where the
+impostor is over-gate for ONE witness but the listeners stay under-gate, so the equal tally's SKIP
+bloc wins. The 10.7 two-witness pre-vote fold underperformed (1/11 conversions) because two
+independent observation-backed witnesses are rare in the single-accuser chain. The fix SPREADS a
+single witness's first-hand testimony to the listeners — informing the majority so enough independently
+cross 0.60 and the EQUAL tally convicts on its own. This honors the owner principle: the inform alone
+cannot eject (it lifts near-gate listeners, never a baseline listener), so crossing still requires the
+listener's own prior (accumulate-across-rounds) PLUS the witness's inform (corroborate-within-round) —
+never a single signal, never a bare-verbal cascade.
+
+**Files in scope:**
+- meetings/transcript.py (extend the 10.7 voices/independence helper: a SINGLE relevance-passing first-hand observation-backed testimony about a subject is an INFORM voice — the 10.7 two-witness FOLD stays as-is above it; ECHO-DEDUP — near-identical ballot/turn rationales across distinct voters collapse to ONE voice so the 9B's homogeneity (audit H-4: 163 echo pairs) cannot fake independence)
+- agents/memory/beliefs.py (the pre-vote INFORM: a single observation-backed witness moves every living listener's view of the subject by +0.05 PRE-VOTE — REUSE the 9.8 accusation unit, NO new constant — deduped once per meeting per subject; a baseline listener at 0.50 + inform = 0.55 stays UNDER the 0.60 gate (informs, never ejects alone); a listener at ≥0.55 prior crosses (corroboration). The teammate guard applies. The pre-vote inform REPLACES that subject-meeting's post-vote single-accuser bump — never double-counts)
+- meetings/manager.py (apply the inform in the existing pre-vote fold half alongside the two-witness fold; vote prompts render AFTER, so §4.6 reads post-inform values; the EQUAL tally + tie→SKIP is UNCHANGED)
+- tests/meetings/test_transcript.py + tests/agents/test_beliefs.py + tests/meetings/test_manager.py
+- (no eval change required; the gp-7 metrics already read post-fold rendered values)
+
+**Files NOT in scope:**
+- the TALLY (NO reweight — equal votes + tie→SKIP stay frozen; V3 skip-halfweight is explicitly NOT implemented per the owner decision)
+- the §4.6 render/threshold, the 9.8 constants (the +0.05 unit is reused, not re-tuned; decay untouched)
+- the two-witness fold's existing behavior (the inform is ADDITIVE below it — single-voice was previously post-vote-only)
+- the impostor toolkit, engine/orchestrator, replays/samples/**
+
+**Definition of done:**
+- [ ] Single-witness inform pin: one observation-backed relevance-passing witness moves every living listener +0.05 pre-vote, once; a BASELINE listener (0.50 prior) does NOT cross 0.60 on the inform alone (the anti-single-signal tripwire); a NEAR-GATE listener (≥0.55 prior) crosses.
+- [ ] Bare-accusation pin: a verbal accusation with NO first-hand observation backing folds NOTHING (the seed-30-class pile-on still converts nothing — the owner-principle tripwire).
+- [ ] Echo-dedup pin: N distinct voters emitting near-identical rationales collapse to ONE inform voice (audit's 163 echoes cannot manufacture independence).
+- [ ] 37-bloc yield: offline re-derivation against the committed W1 bytes — count how many of the 37 over-gate-lost-plurality meetings the single-witness inform lifts a plurality of listeners over 0.60 in, converting WITHOUT any tally change (the deliverable number for the 10.17 expectation).
+- [ ] Frozen-tally regression: the equal tally + tie→SKIP path is byte-unchanged; threshold_inversions stays 0 (the render reads post-inform values but the gate rule is untouched — a freshly-informed MUST-vote ballot is NOT an inversion).
+- [ ] Determinism + full `bash scripts/check.sh` pass.
+
+**Public types introduced:**
+- WITNESS_INFORM_REASON (or equivalent — the single-witness inform marker; name in the PR)
+
+**Implementation hint:**
+
+Reuse the 10.7 fold machinery and the 10.6 relevance predicate verbatim (one home) — the inform is
+the single-witness extension of the two-witness fold, at the same +0.05, applied in the same pre-vote
+half. The echo-dedup is the new guard and the H-4 fix; key it on normalized rationale text across
+distinct speakers. The audit's per-voter rendered graphs (in the facts) show exactly which of the 37
+meetings have near-gate listeners the inform would lift — that is the yield-pin oracle.
+
+**Integration risk:**
+
+Cascade is the risk this design exists to prevent; the +0.05 inform being strictly less than the
+0.10 gate-distance from baseline is the structural guarantee that a single witness INFORMS but never
+EJECTS a baseline listener — the baseline-listener pin is the tripwire wired to the owner principle.
+The render-reads-post-fold seam must keep threshold_inversions at 0. Recording-side only.
+
+**Ready-to-paste prompt:** `agent_prompts/task-10-15-crew-belief-spread-lever.md`
+
+### Wave-2 Stages 4-5 (SKETCH — authored after the Stage-3 source merges)
 - **10.16 Wave-2 metrics + gate spec (gp-4 gate).** conversion-per-meeting (NOT meeting count — the
   pacing inversion persists, all 4 impostor wins in 3-4-meeting games), the effective-deflection
   subcount (5-9), indistinguishability (wait-share, do_task emission, idler fingerprint),
@@ -943,8 +1051,9 @@ the next record), the unsure guard is recording-side and offline-checkable now.
   stacked HARD gate + Wave-2 gates + close audit → Phase 10 closes.
 
 Parked / explicit non-goals for the phase: tie-break + accused-self-vote semantics (gp-8,
-owner-parked — ties stay SKIPPED). The SKIP-PLURALITY tally / crew-conversion question is NO LONGER
-parked — it is the Wave-2 10.15 lever (belief-spread preferred, V3 skip-halfweight fallback; the
-audit sized it as the single biggest conversion input). Still frozen: the §4.6 gate render +
-threshold, turn/vote token caps, the 9.8 accumulator constants (re-tunable only by an explicit owner
-decision at 10.15-authoring time), the MANIFEST provenance convention (affirmed).
+owner-parked — ties stay SKIPPED). The crew-conversion question was answered by an OWNER DECISION
+(2026-06-14): 10.15 is BELIEF-SPREAD (single-witness inform), NOT a tally reweight — V3 skip-halfweight
+is explicitly OFF (the lab re-run showed it degraded to +4/+2 on honest W1 bytes, no longer free).
+The EQUAL tally + tie→SKIP therefore STAYS FROZEN through Wave 2. Still frozen: the §4.6 gate render +
+threshold, the tally, turn/vote token caps, the 9.8 accumulator constants (the +0.05 unit is reused
+by 10.15's inform, not re-tuned), the MANIFEST provenance convention (affirmed).
