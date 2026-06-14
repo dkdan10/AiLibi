@@ -235,6 +235,14 @@ _DEFAULTED_TURN_RE: Final[re.Pattern[str]] = re.compile(
     r"[^;]*;\s*(?P<speaker>\S+) submitted no turn"
 )
 _DEFAULTED_VOTE_PREFIX: Final[str] = "vote defaulted"
+# The defaulted-VOTE row names its voter the same way; capture it so the
+# persisted §4.6 verdict max (``FailedCallReplayEntry.rendered_vote_max``, Task
+# 10.12) can be joined back to the defaulted SKIP ballot it belongs to. The
+# voter is the run of non-"; " characters so a trailing " [error: ...]" suffix
+# (a REAL provider's parse failure appended to the message) is excluded.
+_DEFAULTED_VOTE_RE: Final[re.Pattern[str]] = re.compile(
+    r"vote defaulted[^;]*;\s*(?P<voter>\S+) submitted no ballot"
+)
 
 
 def _parse_suspicion_graph(prompt: str) -> dict[PlayerId, float]:
@@ -792,19 +800,27 @@ class DefaultedBallotReport(BaseModel):
       ``missed_skip_ballots`` entry -- :func:`compute_conversion_report`
       diverts it out of the decision census entirely, because a degraded
       SKIP miscounted as an inversion would poison the §4.6 0-inversion
-      HARD line.
+      HARD line. Before Task 10.12 this bucket was 0 BY CONSTRUCTION: a
+      defaulted ballot's vote call fails before the recording client logs
+      its prompt, so the rendered max was unrecoverable and EVERY defaulted
+      ballot fell to ``defaulted_without_render`` (audit 2026-06-13-1816
+      H-H-2). The manager now persists the rendered §4.6 max onto the
+      ``deadline_default`` failed-call row
+      (:attr:`~orchestrator.replay.FailedCallReplayEntry.rendered_vote_max`),
+      so a defaulted ballot recorded under the field's era is classified
+      here -- including a CREWMATE default under a real MUST-vote, the
+      missed-eject this census exists to surface.
     * ``defaulted_under_must_skip`` -- the rendered max was below the
       threshold, so the degraded SKIP coincides with the correct decision:
       it stays a ``correct_skip_ballots`` entry in the decision census and
       appears here as telemetry only (the one deliberate overlap between
       the two surfaces).
     * ``defaulted_without_render`` -- no rendered gate line was recovered
-      for the voter. This is the common REAL-provider shape: a provider
-      that validates internally raises before the recording client can
-      log the vote call, so the prompt (and its rendered verdict) never
-      reaches ``llm_calls`` -- the marker is then the only witness, which
-      is why the bucket is keyed on it rather than left to drown in
-      ``unclassified_skip_ballots``.
+      for the voter, from ``llm_calls`` OR the persisted
+      ``rendered_vote_max`` failed-call field. Post-10.12 this is only a
+      committed single-era replay (recorded before the field existed); the
+      marker is then the only witness, which is why the bucket is keyed on
+      it rather than left to drown in ``unclassified_skip_ballots``.
 
     Like the Task 10.6 gate-spec metrics this does NOT join
     :class:`TournamentEvalReport` yet: the committed sample reports stay
@@ -874,6 +890,25 @@ def compute_defaulted_ballots(
     without_render = 0
 
     for game in games:
+        # Persisted §4.6 verdict for each DEFAULTED vote (Task 10.12; audit
+        # 2026-06-13-1816 H-H-2). The defaulted ballot's own vote call failed
+        # before the recording client logged its prompt, so the rendered max is
+        # absent from ``llm_calls``; the manager stamped it onto the
+        # ``deadline_default`` failed-call row instead. Keyed (meeting_id,
+        # voter). Absent (``None``) for committed single-era replays, which
+        # predate the field -- those still read ``defaulted_without_render``.
+        rendered_from_failed: dict[tuple[str, PlayerId], float] = {}
+        for failed_call in game.failed_calls:
+            if (
+                failed_call.error_type != "deadline_default"
+                or failed_call.rendered_vote_max is None
+            ):
+                continue
+            match = _DEFAULTED_VOTE_RE.match(failed_call.error_message)
+            if match is not None:
+                rendered_from_failed[(failed_call.meeting_id, match.group("voter"))] = (
+                    failed_call.rendered_vote_max
+                )
         for meeting in game.meetings:
             rendered_max_by_voter: dict[PlayerId, float] = {}
             for call in meeting.llm_calls:
@@ -889,6 +924,10 @@ def compute_defaulted_ballots(
                     continue
                 defaulted += 1
                 rendered_max = rendered_max_by_voter.get(ballot.voter)
+                if rendered_max is None:
+                    rendered_max = rendered_from_failed.get(
+                        (meeting.meeting_id, ballot.voter)
+                    )
                 if rendered_max is None:
                     without_render += 1
                 elif rendered_max >= SKIP_SUSPICION_THRESHOLD:

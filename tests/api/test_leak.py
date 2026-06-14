@@ -253,6 +253,14 @@ FORBIDDEN_EVAL_ENGINE_FIELDS: Final[frozenset[str]] = frozenset(
 # (covered end-to-end in ``test_eval_routes.py``); this structural snapshot is
 # over the report TYPE, which still carries them, so they are listed.
 #
+# ``rendered_vote_max`` (Task 10.12) is the rendered §4.6 max suspicion a
+# DEFAULTED vote prompt computed over the voter's living ejection candidates,
+# persisted onto ``FailedCallReplayEntry`` so a defaulted ballot's MUST-vote /
+# MUST-skip verdict is classifiable (audit H-H-2). It is a single quantized
+# float with no role / player-id / transcript content — the same rendered
+# suspicion magnitude the report already surfaces elsewhere — so it exposes no
+# engine/role state and stays out of ``FORBIDDEN_EVAL_ENGINE_FIELDS``.
+#
 # The Phase 7 W0.3 meeting-rate fields (``meeting_rate``, ``meetings_total``,
 # ``games_total``, ``games_with_meeting``, ``body_report_meetings``,
 # ``emergency_meetings``) come from ``eval.meeting_quality.MeetingRateReport``.
@@ -423,6 +431,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "reason",
         "replay_ref",
         "reply_to",
+        "rendered_vote_max",
         "report",
         "response_text",
         "roles",

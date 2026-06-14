@@ -194,6 +194,18 @@ class FailedCallReplayEntry(BaseModel):
     cost_usd: float
     error_type: str
     error_message: str
+    # The rendered §4.6 max suspicion of a DEFAULTED VOTE (Task 10.12; audit
+    # 2026-06-13-1816 H-H-2). A defaulted ballot's vote call fails before the
+    # recording client can log its prompt, so the offline §4.6 verdict
+    # reconstruction (which reads the rendered max off successful meeting
+    # ``llm_calls`` only) had no way to classify the defaulted ballot's true
+    # MUST-vote / MUST-skip verdict -- it always read ``no-render``. The
+    # manager now stamps the rendered max onto the ``deadline_default`` vote
+    # row here. ADDITIVE and OPTIONAL: ``None`` for every non-vote failed call
+    # and for every committed single-era replay (which predates the field), so
+    # the reader tolerates its absence and existing bytes reconstruct
+    # unchanged.
+    rendered_vote_max: float | None = None
 
 
 ReplayLogEntry: TypeAlias = Annotated[
@@ -347,6 +359,7 @@ class ReplayLog:
         cost_usd: float,
         error_type: str,
         error_message: str,
+        rendered_vote_max: float | None = None,
     ) -> None:
         """Persist a meeting-aborting failed LLM call (DESIGN.md §11.4; Task 3.19).
 
@@ -385,6 +398,7 @@ class ReplayLog:
             cost_usd=cost_usd,
             error_type=error_type,
             error_message=error_message,
+            rendered_vote_max=rendered_vote_max,
         )
         if entry in self._recorded_failed_calls:
             return

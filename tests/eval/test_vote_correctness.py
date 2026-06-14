@@ -67,7 +67,7 @@ from meetings.schemas import (
     SawPlayerObservation,
     VoteBallot,
 )
-from orchestrator.replay import LLMCallRecord
+from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord
 
 # Default roster: p-3 is the impostor, the rest crewmates.
 _ROLES: Mapping[PlayerId, Role] = {
@@ -1288,6 +1288,159 @@ def test_defaulted_skip_without_render_is_censused_not_unclassified() -> None:
     defaulted = compute_defaulted_ballots(_one_meeting_report(meeting))
     assert defaulted.defaulted_skip_ballots == 1
     assert defaulted.defaulted_without_render == 1
+
+
+def _defaulted_vote_failed_call(
+    *,
+    voter: PlayerId,
+    rendered_vote_max: float | None,
+    meeting_id: str = "m-0",
+    trigger: str = "validation",
+) -> FailedCallReplayEntry:
+    """A ``deadline_default`` vote failed-call row carrying the §4.6 verdict.
+
+    Mirrors what ``orchestrator.game._record_deadline_defaults`` writes for a
+    defaulted ballot (Task 10.12): the voter is named in ``error_message`` and
+    the rendered max rides ``rendered_vote_max``.
+    """
+
+    return FailedCallReplayEntry(
+        game_id="g-0",
+        meeting_id=meeting_id,
+        tick=40,
+        model="(deadline_default)",
+        prompt_length=0,
+        raw_response="",
+        input_tokens=0,
+        output_tokens=0,
+        cost_usd=0.0,
+        error_type="deadline_default",
+        error_message=f"vote defaulted ({trigger}); {voter} submitted no ballot",
+        rendered_vote_max=rendered_vote_max,
+    )
+
+
+def _report_with_failed_calls(
+    meeting: MeetingReport,
+    failed_calls: tuple[FailedCallReplayEntry, ...],
+) -> TournamentReport:
+    return _tournament(
+        GameReport(
+            game_id="g-0",
+            seed=1,
+            winner=None,
+            reason="fixture",
+            final_tick=100,
+            roles=_ROLES,
+            replay_ref="replay-seed-1.jsonl",
+            meetings=(meeting,),
+            failed_calls=failed_calls,
+            prompt_versions={},
+            cost=GameCostSummary(
+                total_cost_usd=0.0,
+                total_input_tokens=0,
+                total_output_tokens=0,
+                by_model={},
+            ),
+        )
+    )
+
+
+def test_defaulted_under_must_vote_recovered_from_persisted_failed_call() -> None:
+    """The H-H-2 fix: a defaulted ballot's MUST-vote verdict is no longer hidden.
+
+    The defaulted ballot's own vote call failed before its prompt was logged,
+    so the rendered max is absent from ``llm_calls`` — pre-10.12 this forced
+    ``defaulted_without_render`` and made ``defaulted_under_must_vote`` 0 BY
+    CONSTRUCTION. With the rendered §4.6 max persisted onto the
+    ``deadline_default`` failed-call row, the same ballot is classified
+    MUST-vote — the missed-eject blind spot is now visible.
+    """
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter="p-0",
+                reason_id=None,
+                rationale_text=_DEFAULTED_RATIONALE,
+            ),
+        ),
+        llm_calls=(),  # the vote call failed: no logged prompt
+    )
+    report = _report_with_failed_calls(
+        meeting,
+        (_defaulted_vote_failed_call(voter="p-0", rendered_vote_max=0.65),),
+    )
+
+    defaulted = compute_defaulted_ballots(report)
+
+    assert defaulted.defaulted_skip_ballots == 1
+    assert defaulted.defaulted_under_must_vote == 1
+    assert defaulted.defaulted_under_must_skip == 0
+    assert defaulted.defaulted_without_render == 0
+
+
+def test_defaulted_persisted_must_skip_classifies_under_must_skip() -> None:
+    """A persisted sub-threshold max routes the defaulted ballot to MUST-skip."""
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter="p-0",
+                reason_id=None,
+                rationale_text=_DEFAULTED_RATIONALE,
+            ),
+        ),
+        llm_calls=(),
+    )
+    report = _report_with_failed_calls(
+        meeting,
+        (_defaulted_vote_failed_call(voter="p-0", rendered_vote_max=0.55),),
+    )
+
+    defaulted = compute_defaulted_ballots(report)
+
+    assert defaulted.defaulted_under_must_skip == 1
+    assert defaulted.defaulted_under_must_vote == 0
+    assert defaulted.defaulted_without_render == 0
+
+
+def test_defaulted_without_persisted_field_stays_without_render() -> None:
+    """A committed single-era replay carries no field — the ballot stays unrendered.
+
+    Backward-compat pin: a ``deadline_default`` row whose ``rendered_vote_max``
+    is ``None`` (every pre-10.12 committed replay) must not invent a verdict;
+    the ballot still lands in ``defaulted_without_render``.
+    """
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter="p-0",
+                reason_id=None,
+                rationale_text=_DEFAULTED_RATIONALE,
+            ),
+        ),
+        llm_calls=(),
+    )
+    report = _report_with_failed_calls(
+        meeting,
+        (_defaulted_vote_failed_call(voter="p-0", rendered_vote_max=None),),
+    )
+
+    defaulted = compute_defaulted_ballots(report)
+
+    assert defaulted.defaulted_without_render == 1
+    assert defaulted.defaulted_under_must_vote == 0
 
 
 def test_defaulted_census_ignores_non_skip_and_unmarked_ballots() -> None:
