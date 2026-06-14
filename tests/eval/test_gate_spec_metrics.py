@@ -624,6 +624,7 @@ class TestComputeMultiSignalConversion:
                 conversions_with_body_proximity=0,
                 conversions_with_vent_witness=0,
                 conversions_with_prior_meeting_carry=0,
+                conversions_with_single_witness_inform=0,
                 multi_signal_rate=0.5,
             )
 
@@ -638,6 +639,7 @@ class TestComputeMultiSignalConversion:
                 conversions_with_body_proximity=0,
                 conversions_with_vent_witness=0,
                 conversions_with_prior_meeting_carry=0,
+                conversions_with_single_witness_inform=0,
                 multi_signal_rate=0.0,
             )
 
@@ -942,7 +944,7 @@ class TestCommittedW1GateSpecPins:
         # the W1 bytes by the re-record (its rows are pinned in the next test).
         report = build_report(_COMMITTED_9P2I_DIR)
         rederived = serialize_corrected_baseline(
-            corrected_baseline_from_report(report, sample_dir_name="9p2i")
+            corrected_baseline_from_report(report, sample_dir=_COMMITTED_9P2I_DIR)
         )
         assert rederived == _W1_BASELINE_FIXTURE.read_text(encoding="utf-8")
 

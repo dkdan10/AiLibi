@@ -119,14 +119,16 @@ module, never re-derived here.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from agents.memory.beliefs import (
     ACCUSATION_SUSPICION_DELTA,
+    BODY_PROXIMITY_SUSPICION_DELTA,
     VENTING_SUSPICION_DELTA,
+    WITNESS_INFORM_REASON,
     BeliefState,
     apply_contradiction_rule,
 )
@@ -156,8 +158,9 @@ from meetings.manager import (
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
+    derive_belief_evidence,
 )
-from meetings.schemas import AccusationClaim, PlayerId
+from meetings.schemas import AccusationClaim, ContradictionRef, PlayerId
 from meetings.transcript import detect_contradictions, is_weak_contradiction
 
 # The literal prefixes (the marker text minus the ``{target!r}`` placeholder)
@@ -1379,6 +1382,17 @@ CHANNEL_CONTRADICTION_FLAG: Final[str] = "contradiction_flag"
 CHANNEL_BODY_PROXIMITY: Final[str] = "body_proximity"
 CHANNEL_VENT_WITNESS: Final[str] = "vent_witness"
 CHANNEL_PRIOR_MEETING_CARRY: Final[str] = "prior_meeting_carry"
+# The Task 10.16 fifth channel, the crew belief-spread lever's signature
+# (audit 2026-06-13-1816 C-C-1; the owner belief-spread-first decision
+# 2026-06-14). Keyed on the 10.15 marker itself
+# (:data:`agents.memory.beliefs.WITNESS_INFORM_REASON`) so the channel name
+# IS the 10.15 band name and the attribution cannot drift from the lever it
+# credits. See :func:`decompose_ejection_channels` for why it is
+# MASS-attributed (visible-quantum), not band-presence-attributed: the
+# single-witness inform is a recording-time fold (Task 10.15), so on the
+# pre-inform committed W1 bytes its +0.05 was never applied and is absent
+# from every rendered row — the channel correctly credits 0 there.
+CHANNEL_SINGLE_WITNESS_INFORM: Final[str] = WITNESS_INFORM_REASON
 
 # Float guard for lattice arithmetic on 2-decimal rendered values.
 _CHANNEL_EPS: Final[float] = 1e-9
@@ -1391,7 +1405,7 @@ def decompose_ejection_channels(
 
     Returns ``None`` unless ``game.meetings[meeting_index]`` is a
     well-formed ``EJECTED`` meeting whose ejected player is a true
-    impostor; otherwise the subset of the four ``CHANNEL_*`` constants the
+    impostor; otherwise the subset of the five ``CHANNEL_*`` constants the
     ejection's rendered pre-vote verdict decomposes into over the
     quantized §6.3 rule lattice. Pure and deterministic — a fold over
     recorded artifacts plus the one-home belief math:
@@ -1415,11 +1429,38 @@ def decompose_ejection_channels(
     * ``vent_witness`` — ``P >=`` the Rule-4 delta: on the lattice no
       other single channel reaches +0.5 (the Wave-0 census: the only 1.0
       is the vent-witnessed impostor).
-    * ``body_proximity`` — mass remains after subtracting the vent delta
-      and the carry ceiling (``ACCUSATION_SUSPICION_DELTA`` x prior
-      accused meetings, floored at the remainder): decayed carry can only
-      shrink below its ceiling, so a positive remainder cannot be carry
-      and the only §6.3 channel left is Rule 1.
+    * ``single_witness_inform`` (Task 10.16; the 10.15 belief-spread
+      lever, keyed on :data:`agents.memory.beliefs.WITNESS_INFORM_REASON`)
+      — the ejected subject re-derives into THIS meeting's single-witness
+      inform band (``derive_belief_evidence(...).pre_vote_informed``, one
+      home with the live fold) AND its +0.05 quantum is VISIBLE in the
+      persistent mass: after the vent and carry quanta the residue is a
+      whole number of body-proximity quanta plus exactly one
+      ``ACCUSATION_SUSPICION_DELTA``. Unlike ``prior_meeting_carry``, the
+      inform is MASS-attributed, not band-presence-attributed, and the
+      reason is era-correctness: the band is re-derivable from any era's
+      transcript, but the inform fold is recording-time (Task 10.15), so on
+      the pre-inform committed W1 bytes the +0.05 was never applied and is
+      absent from every rendered row — the channel credits 0 there
+      (a band-presence rule would instead mis-credit the W1 ejections whose
+      lift was body-proximity / accumulator driven) and the four prior
+      channels stay byte-identical (the inform branch only fires, and only
+      consumes its quantum, when that quantum is present, which never
+      happens on the inform-inactive W1 set). On the 10.17 re-record, where
+      the inform is freshly applied in the conversion meeting (pre-decay,
+      lattice-clean), the +0.05 is aligned and the channel separates
+      crew-lever conversions from toolkit effects. The conservative edge: an
+      inform stacked on an already-DECAYED body quantum (a non-0.20-aligned
+      residue) reads as body proximity, not inform — the 10.17 operator
+      validates the inform-conversion count against the offline 37-bloc
+      prediction (Task 10.15 DoD) rather than relying on this attribution
+      alone for the headline.
+    * ``body_proximity`` — mass remains after subtracting the vent delta,
+      the carry ceiling (``ACCUSATION_SUSPICION_DELTA`` x prior accused
+      meetings, floored at the remainder), and a visible single-witness
+      inform quantum: decayed carry can only shrink below its ceiling, so a
+      positive remainder cannot be carry and the only §6.3 channel left is
+      Rule 1.
 
     **The 1.0 clamp is a special case.** A row at the rendered ceiling may
     have absorbed any amount of over-mass, so subtracting ``F`` from it is
@@ -1455,11 +1496,8 @@ def decompose_ejection_channels(
     channels: set[str] = set()
 
     roster = frozenset(ballot.voter for ballot in meeting.ballots)
-    naming_flags = [
-        flag
-        for flag in detect_contradictions(meeting.transcript, roster=roster)
-        if ejected in flag.subjects
-    ]
+    all_flags = detect_contradictions(meeting.transcript, roster=roster)
+    naming_flags = [flag for flag in all_flags if ejected in flag.subjects]
     flag_mass = 0.0
     if naming_flags:
         beliefs = BeliefState()
@@ -1509,9 +1547,60 @@ def decompose_ejection_channels(
         remaining = round(remaining - VENTING_SUSPICION_DELTA, 4)
     carry_ceiling = ACCUSATION_SUSPICION_DELTA * prior_accused_meetings
     remaining = round(remaining - min(remaining, carry_ceiling), 4)
+    # Single-witness inform (Task 10.16; the 10.15 crew belief-spread lever).
+    # The ejected subject re-derives into THIS meeting's single-witness inform
+    # band AND its +0.05 quantum is VISIBLE in the persistent mass: after the
+    # vent and prior-meeting-carry quanta, the residue is a whole number of
+    # body-proximity quanta (0.20) plus exactly one ACCUSATION_SUSPICION_DELTA.
+    # The mass test is load-bearing, not the band alone: the band is
+    # re-derivable from ANY era's transcript, but the inform fold is
+    # recording-time (Task 10.15), so on the pre-inform committed W1 bytes the
+    # +0.05 was never applied and is absent from every rendered row — a
+    # band-presence rule would mis-credit the W1 ejections whose conversion was
+    # body-proximity / accumulator driven, whereas this visible-quantum rule
+    # credits 0 there and the existing channels stay byte-identical (the
+    # consume below only runs when the quantum is present, which never happens
+    # on W1). It consumes the 0.05 so a bare inform reads as the inform channel
+    # alone, not a spurious sub-quantum body proximity.
+    if _ejected_in_inform_band(meeting, ejected, roster, all_flags):
+        remainder_hundredths = round(remaining * 100)
+        inform_hundredths = round(ACCUSATION_SUSPICION_DELTA * 100)
+        body_hundredths = round(BODY_PROXIMITY_SUSPICION_DELTA * 100)
+        if (
+            remainder_hundredths >= inform_hundredths
+            and (remainder_hundredths - inform_hundredths) % body_hundredths == 0
+        ):
+            channels.add(CHANNEL_SINGLE_WITNESS_INFORM)
+            remaining = round(remaining - ACCUSATION_SUSPICION_DELTA, 4)
     if remaining > _CHANNEL_EPS:
         channels.add(CHANNEL_BODY_PROXIMITY)
     return frozenset(channels)
+
+
+def _ejected_in_inform_band(
+    meeting: MeetingReport,
+    ejected: PlayerId,
+    roster: frozenset[PlayerId],
+    flags: Sequence[ContradictionRef],
+) -> bool:
+    """Whether ``ejected`` re-derives into this meeting's single-witness inform band.
+
+    One home: the band is exactly ``derive_belief_evidence(...).pre_vote_informed``
+    (:func:`meetings.manager.derive_belief_evidence` over the recorded transcript,
+    the SAME producer the live pre-vote fold uses), never a parallel
+    re-implementation of the voice count. ``flags`` is the caller's already-derived
+    contradiction set under the ballot-voter roster (matching the recording-time
+    scope); it feeds the §6.3 Rule-5 ``contradicted`` exemption only and never the
+    voice count, so passing it threaded keeps the detector re-run single.
+    """
+
+    evidence = derive_belief_evidence(
+        meeting.transcript,
+        contradictions=flags,
+        roster=roster,
+        trigger_kind=meeting.trigger,
+    )
+    return ejected in evidence.pre_vote_informed
 
 
 class MultiSignalConversionReport(BaseModel):
@@ -1538,6 +1627,12 @@ class MultiSignalConversionReport(BaseModel):
       to chase.
     * ``conversions_with_*`` — per-channel presence counts (an ejection
       counts in every channel it decomposes into).
+      ``conversions_with_single_witness_inform`` (Task 10.16) is the fifth
+      channel; it is 0 on the inform-inactive committed W1 bytes and only
+      moves once the 10.17 re-record applies the 10.15 belief-spread lever
+      (see :func:`decompose_ejection_channels`). It is a PRESENCE count like
+      the others, NOT a partition bucket, so it does not enter the
+      multi/single/unattributed sum.
     * ``multi_signal_rate`` — ``multi_signal_conversions /
       impostor_ejections``; ``None`` (undefined, not 0.0) with no
       impostor ejections, the module's rate convention.
@@ -1556,6 +1651,7 @@ class MultiSignalConversionReport(BaseModel):
     conversions_with_body_proximity: int
     conversions_with_vent_witness: int
     conversions_with_prior_meeting_carry: int
+    conversions_with_single_witness_inform: int
     multi_signal_rate: float | None
 
     @model_validator(mode="after")
@@ -1569,6 +1665,7 @@ class MultiSignalConversionReport(BaseModel):
             self.conversions_with_body_proximity,
             self.conversions_with_vent_witness,
             self.conversions_with_prior_meeting_carry,
+            self.conversions_with_single_witness_inform,
         )
         if any(count < 0 for count in counts):
             raise ValueError("multi-signal counts must be non-negative")
@@ -1626,6 +1723,7 @@ def compute_multi_signal_conversion(
         CHANNEL_BODY_PROXIMITY: 0,
         CHANNEL_VENT_WITNESS: 0,
         CHANNEL_PRIOR_MEETING_CARRY: 0,
+        CHANNEL_SINGLE_WITNESS_INFORM: 0,
     }
     for game in games:
         for meeting_index in range(len(game.meetings)):
@@ -1652,6 +1750,9 @@ def compute_multi_signal_conversion(
         conversions_with_body_proximity=with_channel[CHANNEL_BODY_PROXIMITY],
         conversions_with_vent_witness=with_channel[CHANNEL_VENT_WITNESS],
         conversions_with_prior_meeting_carry=with_channel[CHANNEL_PRIOR_MEETING_CARRY],
+        conversions_with_single_witness_inform=with_channel[
+            CHANNEL_SINGLE_WITNESS_INFORM
+        ],
         multi_signal_rate=rate,
     )
 
@@ -1877,6 +1978,512 @@ def _rendered_suspicion_by_target_per_voter(
     return rendered
 
 
+# ---------------------------------------------------------------------------
+# Task 10.16 Wave-2 metrics + gate spec (DESIGN.md §9, §11; audit
+# 2026-06-13-1816 B-B-2 pacing inversion / C-C-1 conversion / D-D-1 toolkit /
+# D-D-2 active-deflection; experiments/lab/report-deception-battery*.md). The
+# gate the 10.17 re-record is judged on.
+#
+# The Wave-2 re-record measures TWO adversarial changes at once (the impostor
+# toolkit AND the crew belief-spread lever) in ONE record, so the outcome win
+# split is CONFOUNDED and is a GUARDRAIL, not a signal: the gate reads
+# attribution-decomposed conversion + indistinguishability, never the split.
+# Like the gp-7 companions these ship STANDALONE off the frozen
+# TournamentEvalReport wrapper until the 10.17 re-record turns the era over;
+# the metric CODE is independent of the source tasks — it reads whatever the
+# bytes carry (do_task impostor = 0 on the committed W1 bytes, > 0 after the
+# toolkit; inform conversions = 0 on W1 bytes, > 0 after the crew lever).
+# ---------------------------------------------------------------------------
+
+WAVE2_GATE_SPEC: Final[str] = """\
+Wave-2 (10.17) gate spec — the THREE tiers are read SEPARATELY (audit
+2026-06-13-1816; tasks/phase-10.md Stage 5). Two adversarial changes ride one
+re-record (impostor toolkit + crew belief-spread), so the outcome win split is
+confounded: it is a GUARDRAIL, never a directional signal.
+
+HARD lines (validity — any red STOPS the re-record, nothing frozen is touched
+to chase a number): game_over 50/50 on BOTH committed sets; friendly-fire 0;
+betrayal 0 (the §7.12 teammate firewall holds); byte-identical reconstruction;
+threshold_inversions 0 over every ballot (the §4.6 gate render + threshold are
+frozen — a freshly-informed MUST-vote ballot is NOT an inversion); no
+emergency-no-body fail-loud crash.
+
+Wave-2 DIRECTIONAL gates (the attribution-decomposed signal, read against the
+W1 baseline this module pins): impostor do_task > 0 and impostor wait-share
+moving toward crew levels (IndistinguishabilityReport — the D-D-1 "never-tasks"
+fingerprint the toolkit must erase, W1 baseline impostor do_task 0 / wait-share
+~0.52 vs crew ~0.10); effective_deflection UP vs the ~5-9 W1 baseline
+(EffectiveDeflectionReport — the active-deflection subcount, NOT the raw 27
+counter-accused, which is dominated by SKIP-saved survivals, audit D-D-2);
+conversion_per_meeting UP (ConversionPerMeetingReport — the pacing-inversion-
+proof KPI, since raw meeting COUNT correlates with impostor wins, audit B-B-2);
+the 10.15 single-witness inform conversions REALIZED vs the offline 37-bloc
+prediction (decompose_ejection_channels' single_witness_inform channel — 0 on
+W1 by construction, the crew-lever credit legible from the toolkit's effects);
+the anti-railroad condition holds (wrong-ejection games do not rise even as
+meetings lengthen).
+
+Balance GUARDRAIL (reported, explicitly NOT a hard gate): impostor win rate in
+a sane band. The split is a constant of the race structure with the W1
+adversarial changes confounded into one record, so a single number cannot be
+read as a Wave-2 signal — it is published with a NON-GATE label and bounds
+sanity only. An A/B that lengthens games without raising conversion_per_meeting
+REGRESSES the split (B-B-2); that is caught by the directional gates, not the
+guardrail.
+"""
+
+
+class ConversionPerMeetingReport(BaseModel):
+    """Impostor ejections per resolved meeting (Task 10.16; audit B-B-2/C-C-1).
+
+    Frozen value object publishing the pacing-inversion-proof conversion KPI.
+    The W1 close audit re-derived the pacing inversion (B-B-2): every impostor
+    win sat in a 3-or-4-meeting game and ``corr(meetings, kills) = 0.73``, so a
+    raw impostor-ejection COUNT rewards games that simply ran more meetings —
+    exactly the games the impostor tends to win. Normalising by the resolved
+    meeting count removes that confound: a Wave-2 A/B that lengthens games
+    without converting more impostors per meeting does not move this number up,
+    and the audit's sizing rule is to gate Wave-2 on it rather than on meeting
+    count.
+
+    * ``impostor_ejections`` — well-formed ``EJECTED`` meetings whose ejected
+      player is a true impostor (mirrored from the owning
+      :func:`eval.vote_correctness.compute_vote_correctness`, never re-derived).
+    * ``resolved_meetings`` — every recorded meeting: a ``MeetingReport`` exists
+      only once a meeting reached a vote and tallied a binary
+      ``EJECTED``/``SKIPPED`` outcome (a meeting that aborted before resolving
+      is a ``failed_call``, never a ``MeetingReport``), so each one is resolved.
+    * ``conversion_per_meeting`` — ``impostor_ejections / resolved_meetings``;
+      ``None`` (undefined, not 0.0) with no resolved meetings, the module's
+      rate convention.
+
+    **Leak-safety.** Two integers and a rate; no roles, transcripts, or
+    engine-owned types.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    impostor_ejections: int
+    resolved_meetings: int
+    conversion_per_meeting: float | None
+
+    @model_validator(mode="after")
+    def _validate(self) -> ConversionPerMeetingReport:
+        if self.impostor_ejections < 0 or self.resolved_meetings < 0:
+            raise ValueError("conversion-per-meeting counts must be non-negative")
+        if self.impostor_ejections > self.resolved_meetings:
+            raise ValueError(
+                "impostor_ejections cannot exceed resolved_meetings (a meeting "
+                f"ejects at most one player): {self.impostor_ejections} > "
+                f"{self.resolved_meetings}"
+            )
+        if self.resolved_meetings == 0:
+            if self.conversion_per_meeting is not None:
+                raise ValueError(
+                    "conversion_per_meeting must be None with no resolved "
+                    "meetings: the rate is undefined, not 0.0"
+                )
+        else:
+            if self.conversion_per_meeting is None:
+                raise ValueError(
+                    "conversion_per_meeting must be set when resolved_meetings > 0"
+                )
+            if not 0.0 <= self.conversion_per_meeting <= 1.0:
+                raise ValueError(
+                    "conversion_per_meeting must be in [0.0, 1.0]: "
+                    f"{self.conversion_per_meeting}"
+                )
+        return self
+
+
+def compute_conversion_per_meeting(
+    report: TournamentReport | Sequence[GameReport],
+    *,
+    vote_correctness: VoteCorrectnessReport | None = None,
+) -> ConversionPerMeetingReport:
+    """Fold a tournament report into the conversion-per-meeting KPI (Task 10.16).
+
+    Accepts either a :class:`~eval.report_schema.TournamentReport` or a bare
+    sequence of :class:`~eval.report_schema.GameReport`. Pure: no I/O. The
+    numerator is mirrored from the owning
+    :func:`eval.vote_correctness.compute_vote_correctness` (threaded in by the
+    report builder so it is folded once, computed here otherwise); the
+    denominator counts every recorded meeting, each of which resolved by
+    construction.
+    """
+
+    games = report.games if isinstance(report, TournamentReport) else tuple(report)
+    if vote_correctness is None:
+        vote_correctness = compute_vote_correctness(games)
+    resolved_meetings = sum(len(game.meetings) for game in games)
+    rate = (
+        vote_correctness.impostor_ejections / resolved_meetings
+        if resolved_meetings > 0
+        else None
+    )
+    return ConversionPerMeetingReport(
+        impostor_ejections=vote_correctness.impostor_ejections,
+        resolved_meetings=resolved_meetings,
+        conversion_per_meeting=rate,
+    )
+
+
+def _strict_eject_plurality(meeting: MeetingReport) -> PlayerId | None:
+    """The UNIQUE most-voted non-SKIP eject target, or ``None``.
+
+    Returns ``None`` when no ballot named a player (every voter SKIPped) or
+    when the top eject-vote count is tied — a tie resolves to SKIP under the
+    frozen §5.2 tally (ties stay SKIPPED, the gp-8 owner decision), so it
+    moved the plurality nowhere. Pure over the recorded ballots.
+    """
+
+    counts: dict[PlayerId, int] = {}
+    for ballot in meeting.ballots:
+        target = ballot.target
+        if target == "SKIP":
+            continue
+        counts[target] = counts.get(target, 0) + 1
+    if not counts:
+        return None
+    top = max(counts.values())
+    leaders = [pid for pid, count in counts.items() if count == top]
+    if len(leaders) != 1:
+        return None
+    return leaders[0]
+
+
+class EffectiveDeflectionReport(BaseModel):
+    """The active-deflection subcount, not the raw counter-accused (Task 10.16).
+
+    Frozen value object isolating the impostor's actual deception SKILL from
+    SKIP-saved survival (audit 2026-06-13-1816 D-D-2). Of the accused impostors
+    who survived, many "counter-accused" (active) yet were saved only because
+    the SKIP bloc won the plurality — survival, not deflection. The Wave-2 A/B
+    must anchor to the subcount where the impostor's counter-accusation
+    actually MOVED the eject-plurality OFF itself, NOT the raw active count
+    (the audit's ~5-9 of 59, not the raw 27).
+
+    The denominator chain (the audit's 68 / 59 / 27 on the committed W1 bytes):
+
+    * ``accused_impostor_events`` — (meeting, living true impostor verbally
+      accused by ANOTHER speaker) pairs; self-accusations excluded, the D-D-2
+      convention shared with :class:`GateMetricsReport`.
+    * ``accused_impostor_survivals`` — the subset the meeting did NOT eject.
+    * ``active_survivals`` — survivals where the impostor COUNTER-ACCUSED
+      (emitted at least one :class:`~meetings.schemas.AccusationClaim` against
+      a player other than itself this meeting); the rest are passive.
+
+    The active partition (``effective_deflections + skip_saved_active_survivals
+    == active_survivals``):
+
+    * ``effective_deflections`` — active survivals with a UNIQUE eject-vote
+      plurality (:func:`_strict_eject_plurality`) on a player OTHER than the
+      impostor: the plurality genuinely moved off. Splits exactly into
+      ``named_target_deflections`` (the plurality landed on a player the
+      impostor counter-accused — the counter-accusation steered the table) and
+      ``third_party_deflections`` (it landed on a non-named third party). THIS
+      is the gate subcount (~5-9 on W1: 5 named + 4 third-party).
+    * ``skip_saved_active_survivals`` — the remainder: the eject-plurality
+      still pointed at the impostor, or there was no unique plurality (a tie or
+      an all-SKIP table). Saved by SKIP, lens-C territory, never deflection.
+
+    **Leak-safety.** Seven integers; no roles, transcripts, or engine-owned
+    types.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    accused_impostor_events: int
+    accused_impostor_survivals: int
+    active_survivals: int
+    effective_deflections: int
+    named_target_deflections: int
+    third_party_deflections: int
+    skip_saved_active_survivals: int
+
+    @model_validator(mode="after")
+    def _validate(self) -> EffectiveDeflectionReport:
+        counts = (
+            self.accused_impostor_events,
+            self.accused_impostor_survivals,
+            self.active_survivals,
+            self.effective_deflections,
+            self.named_target_deflections,
+            self.third_party_deflections,
+            self.skip_saved_active_survivals,
+        )
+        if any(count < 0 for count in counts):
+            raise ValueError("effective-deflection counts must be non-negative")
+        if self.accused_impostor_survivals > self.accused_impostor_events:
+            raise ValueError(
+                "accused_impostor_survivals cannot exceed accused_impostor_events: "
+                f"{self.accused_impostor_survivals} > {self.accused_impostor_events}"
+            )
+        if self.active_survivals > self.accused_impostor_survivals:
+            raise ValueError(
+                "active_survivals cannot exceed accused_impostor_survivals: "
+                f"{self.active_survivals} > {self.accused_impostor_survivals}"
+            )
+        if (
+            self.named_target_deflections + self.third_party_deflections
+            != self.effective_deflections
+        ):
+            raise ValueError(
+                "named + third-party deflections must equal effective_deflections: "
+                f"{self.named_target_deflections} + {self.third_party_deflections} "
+                f"!= {self.effective_deflections}"
+            )
+        if (
+            self.effective_deflections + self.skip_saved_active_survivals
+            != self.active_survivals
+        ):
+            raise ValueError(
+                "effective + skip-saved must equal active_survivals: "
+                f"{self.effective_deflections} + "
+                f"{self.skip_saved_active_survivals} != {self.active_survivals}"
+            )
+        return self
+
+
+def compute_effective_deflection(
+    report: TournamentReport | Sequence[GameReport],
+) -> EffectiveDeflectionReport:
+    """Fold a tournament report into the effective-deflection split (Task 10.16).
+
+    Accepts either a :class:`~eval.report_schema.TournamentReport` or a bare
+    sequence of :class:`~eval.report_schema.GameReport`. Pure: no I/O. The
+    accused-impostor population reuses the D-D-2 convention (living true
+    impostors verbally accused by ANOTHER speaker; ``roles`` subscripts fail
+    loud like the recall lead); the eject-plurality is the frozen-tally-aware
+    unique-non-tie :func:`_strict_eject_plurality`.
+    """
+
+    games = report.games if isinstance(report, TournamentReport) else tuple(report)
+
+    events = 0
+    survivals = 0
+    active = 0
+    named = 0
+    third = 0
+    skip_saved = 0
+
+    for game in games:
+        for meeting in game.meetings:
+            accused_impostors = sorted(
+                {
+                    claim.against
+                    for turn in meeting.transcript.turns
+                    for claim in turn.claims
+                    if isinstance(claim, AccusationClaim)
+                    and claim.against != turn.speaker
+                    and game.roles[claim.against] == "IMPOSTOR"
+                }
+            )
+            if not accused_impostors:
+                continue
+            plurality = _strict_eject_plurality(meeting)
+            for impostor in accused_impostors:
+                events += 1
+                if (
+                    meeting.outcome == "EJECTED"
+                    and meeting.ejected_player_id == impostor
+                ):
+                    continue
+                survivals += 1
+                # ACTIVE: the impostor counter-accused another player this
+                # meeting (a self-accusation is the ineffective D-D-6 class,
+                # excluded — it names no deflection target).
+                named_targets = {
+                    claim.against
+                    for turn in meeting.transcript.turns
+                    if turn.speaker == impostor
+                    for claim in turn.claims
+                    if isinstance(claim, AccusationClaim) and claim.against != impostor
+                }
+                if not named_targets:
+                    continue
+                active += 1
+                if plurality is None or plurality == impostor:
+                    skip_saved += 1
+                elif plurality in named_targets:
+                    named += 1
+                else:
+                    third += 1
+
+    return EffectiveDeflectionReport(
+        accused_impostor_events=events,
+        accused_impostor_survivals=survivals,
+        active_survivals=active,
+        effective_deflections=named + third,
+        named_target_deflections=named,
+        third_party_deflections=third,
+        skip_saved_active_survivals=skip_saved,
+    )
+
+
+class ActionRoleTally(BaseModel):
+    """The per-tick action-by-role ingest output (Task 10.16; audit D-D-1).
+
+    Frozen carrier between the replay-walk ingest
+    (:func:`eval.action_ingest.tally_actions_by_role`, the one path that reads
+    the tick action stream the meeting-only eval model does not carry) and the
+    pure :func:`compute_indistinguishability` fold. The seam is documented
+    there; roles are re-derived from the seeder
+    (:attr:`~eval.report_schema.GameReport.roles`, filled by the loader from
+    the seeded setup), NEVER inferred from behaviour — the whole point is to
+    measure whether behaviour BETRAYS the seeded role.
+
+    * ``crewmate_action_counts`` / ``impostor_action_counts`` — set-wide
+      counts of every recorded action type (``"wait"``, ``"do_task"``,
+      ``"move"``, ``"kill"``, ...) keyed by the actor's seeded role. An action
+      type absent for a role reads 0 (``do_task`` for impostors on W1).
+    * ``per_game_player_wait_counts`` — for each game, the per-player count of
+      ``"wait"`` actions, role-blind (for the top-idler concentration gauge,
+      which is a per-game property: a player id repeats across games as a
+      different agent, so concentration is never pooled cross-game).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    crewmate_action_counts: Mapping[str, int]
+    impostor_action_counts: Mapping[str, int]
+    per_game_player_wait_counts: tuple[tuple[int, ...], ...]
+
+
+class IndistinguishabilityReport(BaseModel):
+    """The "never-tasks" impostor fingerprint (Task 10.16; audit D-D-1).
+
+    Frozen value object publishing how distinguishable an impostor is from a
+    crewmate by tactical behaviour alone. On the committed W1 bytes the
+    impostor ``do_task`` path is policy-unreachable (0 emissions) and impostors
+    wait ~52% of their actions vs crew ~10% — a perfect fingerprint. The 10.17
+    toolkit (Task 10.14) seeds pretend-task instances to fire the dormant
+    ``do_task`` branch; this report is the baseline it must move (do_task > 0,
+    wait-share toward crew).
+
+    * ``crewmate_do_task`` / ``impostor_do_task`` — ``do_task`` emission counts
+      by seeded role (impostor 0 on W1 — the dormant branch).
+    * ``crewmate_wait`` / ``impostor_wait`` — ``wait`` emission counts by role.
+    * ``crewmate_actions_total`` / ``impostor_actions_total`` — all recorded
+      actions by role (the wait-share denominators).
+    * ``crewmate_wait_share`` / ``impostor_wait_share`` — ``wait / total`` by
+      role; ``None`` (undefined, not 0.0) when a role emitted no actions.
+    * ``top_idler_wait_share`` — the share of a game's ``wait`` actions emitted
+      by its single most-idle player, averaged over games with any waits: a
+      concentration gauge (low = idle spread across seats; high = a few seats
+      carry the idle). ``None`` when no game recorded a wait. D-D-1's idle is
+      spread across slots, NOT a degenerate 2-player concentration, so this is
+      a context gauge, not a hard gate.
+
+    **Leak-safety.** Counts, rates, and one concentration share; no roles
+    leak (the role split is the ground-truth axis being measured, never an
+    agent-visible field), no transcripts, no engine-owned types.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    crewmate_do_task: int
+    impostor_do_task: int
+    crewmate_wait: int
+    impostor_wait: int
+    crewmate_actions_total: int
+    impostor_actions_total: int
+    crewmate_wait_share: float | None
+    impostor_wait_share: float | None
+    top_idler_wait_share: float | None
+
+    @model_validator(mode="after")
+    def _validate(self) -> IndistinguishabilityReport:
+        counts = (
+            self.crewmate_do_task,
+            self.impostor_do_task,
+            self.crewmate_wait,
+            self.impostor_wait,
+            self.crewmate_actions_total,
+            self.impostor_actions_total,
+        )
+        if any(count < 0 for count in counts):
+            raise ValueError("indistinguishability counts must be non-negative")
+        for label, part, total in (
+            ("crewmate_do_task", self.crewmate_do_task, self.crewmate_actions_total),
+            ("impostor_do_task", self.impostor_do_task, self.impostor_actions_total),
+            ("crewmate_wait", self.crewmate_wait, self.crewmate_actions_total),
+            ("impostor_wait", self.impostor_wait, self.impostor_actions_total),
+        ):
+            if part > total:
+                raise ValueError(f"{label} cannot exceed its role action total")
+        for label, share, total in (
+            (
+                "crewmate_wait_share",
+                self.crewmate_wait_share,
+                self.crewmate_actions_total,
+            ),
+            (
+                "impostor_wait_share",
+                self.impostor_wait_share,
+                self.impostor_actions_total,
+            ),
+        ):
+            if total == 0:
+                if share is not None:
+                    raise ValueError(
+                        f"{label} must be None when its role emitted no actions: "
+                        "the share is undefined, not 0.0"
+                    )
+            elif share is None:
+                raise ValueError(f"{label} must be set when its role acted")
+            elif not 0.0 <= share <= 1.0:
+                raise ValueError(f"{label} must be in [0.0, 1.0]: {share}")
+        if self.top_idler_wait_share is not None and not (
+            0.0 <= self.top_idler_wait_share <= 1.0
+        ):
+            raise ValueError(
+                "top_idler_wait_share must be in [0.0, 1.0] or None: "
+                f"{self.top_idler_wait_share}"
+            )
+        return self
+
+
+def compute_indistinguishability(tally: ActionRoleTally) -> IndistinguishabilityReport:
+    """Fold an action-by-role tally into the fingerprint report (Task 10.16).
+
+    Pure over the tally (the I/O happened in
+    :func:`eval.action_ingest.tally_actions_by_role`). Wait-share is per-role
+    ``wait / total``; the top-idler concentration is the mean over games of the
+    single most-idle player's share of that game's waits, computed only over
+    games that recorded a wait (a zero-wait game has no top idler and is
+    excluded rather than counted as 0).
+    """
+
+    crew = tally.crewmate_action_counts
+    impostor = tally.impostor_action_counts
+    crew_total = sum(crew.values())
+    impostor_total = sum(impostor.values())
+
+    per_game_shares = [
+        max(waits) / sum(waits)
+        for waits in tally.per_game_player_wait_counts
+        if sum(waits) > 0
+    ]
+    top_idler = sum(per_game_shares) / len(per_game_shares) if per_game_shares else None
+
+    return IndistinguishabilityReport(
+        crewmate_do_task=crew.get("do_task", 0),
+        impostor_do_task=impostor.get("do_task", 0),
+        crewmate_wait=crew.get("wait", 0),
+        impostor_wait=impostor.get("wait", 0),
+        crewmate_actions_total=crew_total,
+        impostor_actions_total=impostor_total,
+        crewmate_wait_share=(
+            crew.get("wait", 0) / crew_total if crew_total > 0 else None
+        ),
+        impostor_wait_share=(
+            impostor.get("wait", 0) / impostor_total if impostor_total > 0 else None
+        ),
+        top_idler_wait_share=top_idler,
+    )
+
+
 class TournamentEvalReport(BaseModel):
     """A tournament report bundled with its Phase 5 / W0.3 metric results.
 
@@ -1948,20 +2555,29 @@ __all__ = [
     "CHANNEL_BODY_PROXIMITY",
     "CHANNEL_CONTRADICTION_FLAG",
     "CHANNEL_PRIOR_MEETING_CARRY",
+    "CHANNEL_SINGLE_WITNESS_INFORM",
     "CHANNEL_VENT_WITNESS",
+    "WAVE2_GATE_SPEC",
+    "ActionRoleTally",
     "BallotTargetRedirectReport",
+    "ConversionPerMeetingReport",
     "ConversionReport",
     "DefaultedBallotReport",
+    "EffectiveDeflectionReport",
     "GateMetricsReport",
+    "IndistinguishabilityReport",
     "MeetingRateReport",
     "MultiSignalConversionReport",
     "SupplyGaugesReport",
     "TournamentEvalReport",
     "build_tournament_eval_report",
     "compute_ballot_target_redirects",
+    "compute_conversion_per_meeting",
     "compute_conversion_report",
     "compute_defaulted_ballots",
+    "compute_effective_deflection",
     "compute_gate_metrics",
+    "compute_indistinguishability",
     "compute_meeting_rate",
     "compute_multi_signal_conversion",
     "compute_supply_gauges",

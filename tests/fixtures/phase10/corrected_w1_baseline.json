@@ -1,4 +1,18 @@
 {
+  "conversion_per_meeting": {
+    "conversion_per_meeting": 0.125,
+    "impostor_ejections": 11,
+    "resolved_meetings": 88
+  },
+  "effective_deflection": {
+    "accused_impostor_events": 68,
+    "accused_impostor_survivals": 59,
+    "active_survivals": 27,
+    "effective_deflections": 9,
+    "named_target_deflections": 5,
+    "skip_saved_active_survivals": 18,
+    "third_party_deflections": 4
+  },
   "genuine_class_conversion": {
     "conversion_rate": 0.25,
     "converted": 2,
@@ -54,10 +68,22 @@
       "prior_meeting_carry"
     ]
   },
+  "indistinguishability": {
+    "crewmate_actions_total": 6333,
+    "crewmate_do_task": 3673,
+    "crewmate_wait": 607,
+    "crewmate_wait_share": 0.09584714984999211,
+    "impostor_actions_total": 2144,
+    "impostor_do_task": 0,
+    "impostor_wait": 1110,
+    "impostor_wait_share": 0.5177238805970149,
+    "top_idler_wait_share": 0.3842318119981958
+  },
   "multi_signal_conversion": {
     "conversions_with_body_proximity": 9,
     "conversions_with_contradiction_flag": 7,
     "conversions_with_prior_meeting_carry": 8,
+    "conversions_with_single_witness_inform": 0,
     "conversions_with_vent_witness": 1,
     "impostor_ejections": 11,
     "multi_signal_conversions": 11,
