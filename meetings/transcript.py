@@ -108,6 +108,15 @@ from meetings.schemas import (
 
 _ContradictionKind = Literal["alibi_conflict", "alibi_vs_sighting"]
 
+# Why a meeting opened (DESIGN.md §5.1). The orchestrator derives this from the
+# engine's MeetingTriggeredEvent (Task 10.8). Threaded into the Rule-3 relevance
+# gate (Task 10.11; audit-2026-06-13-1816 B-B-1) so an EMERGENCY meeting -- which
+# by design has NO kill scene -- never trusts a (fabricated) opening `found_body`
+# to widen its exclusion zone. ``None`` preserves the pre-10.11 behaviour (read
+# the opening body off the transcript) for callers/tests that do not carry the
+# kind.
+MeetingTriggerKind = Literal["report", "emergency"]
+
 # Deterministic termination reasons for the reactive chain (DESIGN.md §5.2
 # PHASE 2). Surfaced by :func:`next_chain_step` / :func:`walk_chain` so the
 # replay-walk can assert *why* a recorded chain stopped, not just that it did.
@@ -651,8 +660,12 @@ def is_relevant_sighting(
     return True
 
 
-def triggering_body_rooms(transcript: MeetingTranscript) -> frozenset[str]:
-    """Canonical rooms of the meeting's triggering body (Task 10.6).
+def triggering_body_rooms(
+    transcript: MeetingTranscript,
+    *,
+    trigger_kind: MeetingTriggerKind | None = None,
+) -> frozenset[str]:
+    """Canonical rooms of the meeting's triggering body (Task 10.6, 10.11).
 
     The kill-scene input to :func:`is_relevant_sighting`: the canonical
     room set of every ``found_body`` observation on the OPENING turn
@@ -664,8 +677,22 @@ def triggering_body_rooms(transcript: MeetingTranscript) -> frozenset[str]:
     ignored: the TRIGGERING body is the opening reporter's, and an echo
     of it adds nothing while a hallucinated late "body" must not widen
     the exclusion zone.
+
+    Task 10.11 (audit-2026-06-13-1816 B-B-1) -- the emergency gate, the
+    defense-in-depth half of the no-fabricated-body fix. An EMERGENCY
+    meeting has NO kill scene by design (§5.2 PHASE 1: the opener pressed
+    the button on suspicion, no body was reported), so ``trigger_kind ==
+    "emergency"`` returns ``frozenset()`` UNCONDITIONALLY -- even when the
+    opening turn carries a (model-fabricated) ``found_body``. This is the
+    half the engine owns: the v7 prompt stops the fabrication at the
+    source, but the relevance gate must never trust an emergency opening's
+    body to widen the §6.3 Rule-3 exclusion zone. ``trigger_kind`` left as
+    ``None`` (or ``"report"``) keeps the pre-10.11 behaviour: read the
+    opening body off the transcript.
     """
 
+    if trigger_kind == "emergency":
+        return frozenset()
     turns = transcript.turns
     if not turns:
         return frozenset()
@@ -807,6 +834,7 @@ def detect_corroborations(
     transcript: MeetingTranscript,
     *,
     roster: frozenset[PlayerId] | None = None,
+    trigger_kind: MeetingTriggerKind | None = None,
 ) -> tuple[DetectedCorroboration, ...]:
     """Containment-consistent (alibi, sighting) pairs (Task 10.1; §6.3 Rule 3).
 
@@ -860,7 +888,7 @@ def detect_corroborations(
         for indexed in _iter_sightings(transcript)
         if _subject_in_roster(indexed.observation.subject, effective_roster)
     )
-    body_rooms = triggering_body_rooms(transcript)
+    body_rooms = triggering_body_rooms(transcript, trigger_kind=trigger_kind)
 
     corroborations: list[DetectedCorroboration] = []
     for alibi in alibis:
@@ -906,6 +934,7 @@ def independent_voices(
     transcript: MeetingTranscript,
     *,
     roster: frozenset[PlayerId] | None = None,
+    trigger_kind: MeetingTriggerKind | None = None,
 ) -> Mapping[PlayerId, tuple[PlayerId, ...]]:
     """The INDEPENDENT VOICES against each accused subject (Task 10.7).
 
@@ -967,7 +996,7 @@ def independent_voices(
     """
 
     effective_roster = _NO_ROSTER if roster is None else roster
-    body_rooms = triggering_body_rooms(transcript)
+    body_rooms = triggering_body_rooms(transcript, trigger_kind=trigger_kind)
 
     # Transcript-wide accuser index: subject -> speakers with a recorded
     # accusation against them (never the subject accusing themselves).

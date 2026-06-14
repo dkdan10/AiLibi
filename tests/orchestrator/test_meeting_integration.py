@@ -51,6 +51,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    ObservationClaim,
     SawPlayerObservation,
     TurnKind,
     VoteBallot,
@@ -63,6 +64,7 @@ from orchestrator.game import (
     HeadlessGame,
     MeetingArtifacts,
     TacticalAgent,
+    _assert_no_emergency_opening_body,  # noqa: PLC2701
     _build_participants,  # noqa: PLC2701
     apply_meeting_result,
     build_default_agent_factory,
@@ -2293,18 +2295,20 @@ class TestEmergencySuspicionMeetingEndToEnd:
                 isinstance(obs, FoundBodyObservation) for obs in turn.observations
             )
 
-        # A fresh replay records the v6 template revision (DoD version pin).
-        assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v6"
+        # A fresh replay records the v7 template revision (DoD version pin).
+        assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v7"
 
         # The opening prompt rendered through the REAL crewmate template
-        # carries the emergency trigger description and the v6
+        # carries the emergency trigger description and the v7
         # called-on-suspicion frame — the orchestrator phrase and the
-        # template branch met end-to-end.
+        # template branch met end-to-end. Task 10.11: the frame now forbids
+        # a found_body observation.
         opening_call = meeting.llm_calls[0]
         assert opening_call.call_kind == "meeting"
         assert "called an emergency meeting" in opening_call.prompt
         assert "YOU called this emergency meeting" in opening_call.prompt
         assert "no body was reported" in opening_call.prompt
+        assert "do NOT emit a `found_body` observation" in opening_call.prompt
 
     def test_eval_readers_run_clean_on_emergency_meeting_replay(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -2377,3 +2381,92 @@ class TestEmergencySuspicionMeetingEndToEnd:
         _run_emergency_game(replay_path=second_path, vote_target="SKIP")
 
         assert first_path.read_bytes() == second_path.read_bytes()
+
+
+def _emergency_opening_result(
+    *,
+    observations: tuple[ObservationClaim, ...],
+    meeting_id: str = "g-1:meeting-0",
+) -> MeetingResult:
+    """A resolved emergency meeting whose opening carries ``observations``."""
+
+    opening = MeetingTurn(
+        turn_id=f"{meeting_id}:turn-0",
+        turn_index=0,
+        speaker="p-1",
+        turn_kind="opening",
+        reply_to=None,
+        observations=observations,
+        free_text="I called this on suspicion (unsure).",
+    )
+    return MeetingResult(
+        meeting_id=meeting_id,
+        triggered_by="p-1",
+        trigger_tick=3,
+        outcome="SKIPPED",
+        ejected_player_id=None,
+        ballots=(),
+        contradictions=(),
+        transcript=MeetingTranscript(turns=(opening,)),
+    )
+
+
+class TestEmergencyOpeningNoBodySelfCheck:
+    """Task 10.11 fail-loud self-check (audit-2026-06-13-1816 B-B-1).
+
+    The 10.8 self-check ("engine body_id is None") was TRUE yet masked the
+    transcript-level fabrication. This one reads the OPENING TURN, so a model
+    that ignores the v7 prompt and re-narrates a stale corpse as a found_body
+    on an emergency opening is caught at the source.
+    """
+
+    def test_emergency_opening_with_fabricated_body_fails_loud(self) -> None:
+        result = _emergency_opening_result(
+            observations=(
+                FoundBodyObservation(
+                    type="found_body", tick=8, body_of="p-2", room="REACTOR"
+                ),
+            )
+        )
+        with pytest.raises(RuntimeError, match="emergency meeting"):
+            _assert_no_emergency_opening_body(trigger_kind="emergency", result=result)
+
+    def test_emergency_opening_without_body_passes(self) -> None:
+        result = _emergency_opening_result(
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player",
+                    tick=2,
+                    subject="p-3",
+                    room="WEST_HALL",
+                    co_present=(),
+                ),
+            )
+        )
+        # No raise: a suspicion-led opening is the v7 contract.
+        _assert_no_emergency_opening_body(trigger_kind="emergency", result=result)
+
+    def test_report_meeting_with_a_body_is_a_no_op(self) -> None:
+        # The body-report opening LEADS with the found_body; the check must
+        # never fire for a report-triggered meeting.
+        result = _emergency_opening_result(
+            observations=(
+                FoundBodyObservation(
+                    type="found_body", tick=8, body_of="p-2", room="REACTOR"
+                ),
+            )
+        )
+        _assert_no_emergency_opening_body(trigger_kind="report", result=result)
+
+    def test_empty_transcript_is_a_no_op(self) -> None:
+        result = MeetingResult(
+            meeting_id="g-1:meeting-0",
+            triggered_by="p-1",
+            trigger_tick=3,
+            outcome="SKIPPED",
+            ejected_player_id=None,
+            ballots=(),
+            contradictions=(),
+            transcript=MeetingTranscript(),
+        )
+        _assert_no_emergency_opening_body(trigger_kind="emergency", result=result)

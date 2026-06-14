@@ -112,6 +112,7 @@ from meetings.schemas import (
     VoteBallot,
 )
 from meetings.transcript import (
+    MeetingTriggerKind,
     accusation_target,
     detect_contradictions,
     detect_corroborations,
@@ -2324,6 +2325,7 @@ def derive_belief_evidence(
     *,
     contradictions: Sequence[ContradictionRef],
     roster: frozenset[PlayerId],
+    trigger_kind: MeetingTriggerKind | None = None,
 ) -> MeetingBeliefEvidence:
     """Derive a meeting's public belief evidence (Tasks 9.8, 10.7).
 
@@ -2362,7 +2364,7 @@ def derive_belief_evidence(
     # set can never trip the kill-scene prong; the spawn-window prong is
     # the operative one (a tick-0/1 "I can vouch" is the
     # everyone-spawned-together shape that confirms nothing).
-    body_rooms = triggering_body_rooms(transcript)
+    body_rooms = triggering_body_rooms(transcript, trigger_kind=trigger_kind)
     for turn in transcript.turns:
         for claim in turn.claims:
             if isinstance(claim, AccusationClaim):
@@ -2383,7 +2385,9 @@ def derive_belief_evidence(
     # explicitly-empty roster indexes nothing).
     corroborated.update(
         corroboration.subject
-        for corroboration in detect_corroborations(transcript, roster=roster)
+        for corroboration in detect_corroborations(
+            transcript, roster=roster, trigger_kind=trigger_kind
+        )
     )
     contradicted = {
         subject
@@ -2395,7 +2399,7 @@ def derive_belief_evidence(
     # subjects are accusation targets by construction, so the folded set
     # is a subset of ``accused`` (the invariant the belief-side phase
     # routing validates).
-    voices = independent_voices(transcript, roster=roster)
+    voices = independent_voices(transcript, roster=roster, trigger_kind=trigger_kind)
     pre_vote_folded = tuple(
         sorted(
             subject
@@ -2411,7 +2415,11 @@ def derive_belief_evidence(
     )
 
 
-def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
+def extract_belief_evidence(
+    result: MeetingResult,
+    *,
+    trigger_kind: MeetingTriggerKind | None = None,
+) -> MeetingBeliefEvidence:
     """Reduce a resolved meeting to its public belief evidence (Task 9.8).
 
     The post-meeting / replay entry point: delegates to
@@ -2421,12 +2429,21 @@ def extract_belief_evidence(result: MeetingResult) -> MeetingBeliefEvidence:
     included), so the ballot voters ARE the living-participant roster
     the meeting ran with; a hand-built result with no ballots therefore
     derives no detector-sourced corroborations and no voices.
+
+    ``trigger_kind`` (Task 10.11; audit-2026-06-13-1816 B-B-1) is the
+    engine-authoritative reason the meeting opened, threaded from the
+    orchestrator (:func:`orchestrator.game._absorb_meeting_beliefs`). It
+    flows to the §6.3 Rule-3 relevance gate so an EMERGENCY meeting never
+    trusts a fabricated opening ``found_body`` to widen its exclusion
+    zone. ``None`` preserves the pre-10.11 read-the-opening behaviour for
+    callers without the kind in hand.
     """
 
     return derive_belief_evidence(
         result.transcript,
         contradictions=result.contradictions,
         roster=frozenset(ballot.voter for ballot in result.ballots),
+        trigger_kind=trigger_kind,
     )
 
 

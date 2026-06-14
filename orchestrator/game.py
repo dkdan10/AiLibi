@@ -70,8 +70,10 @@ from meetings.manager import (
     extract_belief_evidence,
 )
 from meetings.schemas import (
+    FoundBodyObservation,
     MeetingResult,
 )
+from meetings.transcript import MeetingTriggerKind
 from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
@@ -193,8 +195,21 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # Wave 0 and recorded by 10.5; no Wave-1 task touches the template in
 # parallel (10.7 is prompts-frozen). The committed sample bytes still record
 # v5 and are re-recorded in Task 10.9, not here.
+#
+# Task 10.11 (DESIGN.md §3.2, §5.2, §5.4; audit-2026-06-13-1816 B-B-1) bumps
+# crewmate_report alone v6 -> v7: the emergency-opening branch must NOT present
+# a `found_body` observation. On the close baseline every emergency opening
+# re-narrated a real-but-stale corpse as a fresh discovery and voters anchored
+# ejections on the fabrication; v7's emergency job paragraph leads with the
+# suspicion that crossed the line and forbids a `found_body`. The body-report
+# branch is byte-identical to v6 apart from this version marker (golden-pinned);
+# only the emergency job paragraph changed. The engine half is the
+# trigger-kind-gated relevance zone (:func:`meetings.transcript.triggering_body_rooms`)
+# plus the emergency-opening self-check below. The committed sample bytes still
+# record their as-recorded versions and are NOT re-recorded here (recording-side
+# only; replays/samples out of scope).
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
-    "crewmate_report": "crewmate_report.v6",
+    "crewmate_report": "crewmate_report.v7",
     "impostor_report": "impostor_report_v4",
     "accusation_round": "accusation_round.v7",
     "vote_ballot": "vote_ballot/v5",
@@ -1153,6 +1168,17 @@ class HeadlessGame:
             triggering_body_id=triggering_body_id,
         )
         state_hash_after = _state_hash(next_state)
+        # Task 10.11 self-check (audit-2026-06-13-1816 B-B-1): an EMERGENCY
+        # meeting has NO kill scene by design (§5.2 PHASE 1) -- the caller
+        # pressed the button on suspicion, no body was reported. The 10.8
+        # check ("engine body_id is None") was TRUE yet MASKED a transcript
+        # fabrication: every emergency opening re-narrated a stale corpse as a
+        # fresh `found_body`. Fail loud on any emergency opening that still
+        # carries one, so a model that ignores the v7 prompt is caught at the
+        # source rather than silently anchoring votes on a non-existent body.
+        _assert_no_emergency_opening_body(
+            trigger_kind=trigger_kind, result=artifacts.result
+        )
         replay.record_meeting(
             meeting_id=meeting_id,
             result=artifacts.result,
@@ -1184,7 +1210,10 @@ class HeadlessGame:
         # (the replay re-walk re-applies recorded results through that pure
         # function with no agents in hand -- engine bytes stay untouched).
         _absorb_meeting_beliefs(
-            result=artifacts.result, state=next_state, agents=agents
+            result=artifacts.result,
+            state=next_state,
+            agents=agents,
+            trigger_kind=trigger_kind,
         )
         # Meeting-end pacing notification (Task 10.8). Runs AFTER the belief
         # fold so the emergency tracker's post-meeting over-gate baseline
@@ -1412,6 +1441,7 @@ def _absorb_meeting_beliefs(
     result: MeetingResult,
     state: WorldState,
     agents: Mapping[PlayerId, AgentInterface],
+    trigger_kind: MeetingTriggerKind,
 ) -> None:
     """Fold a resolved meeting's evidence into living agents' beliefs (Task 9.8).
 
@@ -1429,9 +1459,15 @@ def _absorb_meeting_beliefs(
     :class:`BeliefPersistingAgent` capability (scripted test agents with
     no belief store) are skipped -- see the protocol docstring for why
     that is a capability gate, not a silent fallback.
+
+    Task 10.11 (audit-2026-06-13-1816 B-B-1): the engine-authoritative
+    ``trigger_kind`` is threaded into the evidence reduction so the §6.3
+    Rule-3 relevance gate treats an EMERGENCY meeting as having no kill
+    scene -- a (fabricated) opening ``found_body`` can never widen the
+    exclusion zone that the persisted corroborations / voices fold through.
     """
 
-    evidence = extract_belief_evidence(result)
+    evidence = extract_belief_evidence(result, trigger_kind=trigger_kind)
     for player_id in sorted(state.players):
         if not state.players[player_id].alive:
             continue
@@ -1442,6 +1478,50 @@ def _absorb_meeting_beliefs(
                 corroborated=evidence.corroborated,
                 contradicted=evidence.contradicted,
             )
+
+
+def _assert_no_emergency_opening_body(
+    *,
+    trigger_kind: MeetingTriggerKind,
+    result: MeetingResult,
+) -> None:
+    """Fail loud if an emergency opening fabricates a body (Task 10.11).
+
+    DESIGN.md §5.2 PHASE 1: an EMERGENCY meeting has no body -- the caller
+    pressed the button on suspicion, no corpse was reported. The 10.8
+    self-check ("engine ``body_id is None``") was true yet MASKED a
+    transcript-level fabrication: on the close baseline every emergency
+    opening re-narrated a real-but-stale corpse as a fresh ``found_body``
+    (audit-2026-06-13-1816 B-B-1), and voters anchored ejections on it.
+    This check looks at the OPENING TURN's observations, not the engine
+    field, so a model that ignores the v7 prompt and still emits a
+    ``found_body`` on an emergency opening is caught at the source instead
+    of silently widening the §6.3 Rule-3 exclusion zone. Non-emergency
+    meetings and empty transcripts are no-ops.
+    """
+
+    if trigger_kind != "emergency":
+        return
+    turns = result.transcript.turns
+    if not turns:
+        return
+    fabricated = [
+        observation
+        for observation in turns[0].observations
+        if isinstance(observation, FoundBodyObservation)
+    ]
+    if fabricated:
+        bodies = ", ".join(
+            f"{observation.body_of} in {observation.room}@t{observation.tick}"
+            for observation in fabricated
+        )
+        raise RuntimeError(
+            "Task 10.11 invariant violated: emergency meeting "
+            f"{result.meeting_id!r} opening turn carries a fabricated "
+            f"found_body observation ({bodies}). An emergency meeting reports "
+            "no body (DESIGN.md §5.2 PHASE 1); the crewmate_report v7 emergency "
+            "branch forbids a found_body observation."
+        )
 
 
 def _notify_meeting_concluded(

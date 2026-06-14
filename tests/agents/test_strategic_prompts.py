@@ -153,10 +153,10 @@ class TestCrewmateReportTemplate:
 
     def test_rendered_output_contains_version_marker(self) -> None:
         # The crewmate opening template carries a visible version marker
-        # (bumped to v6 in Task 10.8: the emergency-opening branch for the
-        # body-less, called-on-suspicion meeting) plus the role framing the
-        # LLM plays. A regression that swaps this for the impostor framing,
-        # or fails to bump the marker in lockstep, must fail the test.
+        # (bumped to v7 in Task 10.11: the emergency-opening branch must not
+        # present a fabricated found_body) plus the role framing the LLM
+        # plays. A regression that swaps this for the impostor framing, or
+        # fails to bump the marker in lockstep, must fail the test.
         prompt = crewmate_report_prompt(
             agent_id="p-3",
             current_tick=412,
@@ -165,7 +165,7 @@ class TestCrewmateReportTemplate:
             public_transcript="",
         )
 
-        assert "crewmate_report.v6" in prompt
+        assert "crewmate_report.v7" in prompt
         assert "**crewmate**" in prompt
         assert "opening speaker" in prompt
 
@@ -510,14 +510,25 @@ _EMERGENCY_JOB_PARAGRAPH = (
     "Your job in this opening turn: state why you called the meeting and commit to\n"
     "your single best suspect. You spent the crew's one emergency call on this -- a\n"
     "decisive, grounded accusation makes it count; a non-answer wastes it. Lead with\n"
-    "the first-hand observations that drove you to the button: a player whose\n"
-    "movements do not add up, a suspicious co-presence, a contradiction in someone's\n"
-    "account. That is enough to name them."
+    "the suspicion that crossed the line: the first-hand observations that drove you\n"
+    "to the button -- a player whose movements do not add up, a suspicious\n"
+    "co-presence, a contradiction in someone's account. That is enough to name them.\n"
+    "No body was found in this meeting -- do NOT emit a `found_body` observation. Your\n"
+    "`observations` are the sightings, co-presences, and contradictions behind your\n"
+    "suspicion, never a body discovery."
 )
 
 
 class TestCrewmateReportEmergencyBranch:
-    """Task 10.8 golden pins: v6 emergency branch + v5 body-branch stability."""
+    """Task 10.8/10.11 golden pins: emergency branch + body-branch stability.
+
+    Task 10.11 (audit-2026-06-13-1816 B-B-1) bumped v6 -> v7 with a single
+    emergency-branch change -- the emergency job paragraph now leads with the
+    suspicion that crossed the line and FORBIDS a found_body observation. The
+    body-report branch stays byte-identical to v5/v6 apart from the version
+    marker, and the emergency render is still exactly the two-paragraph swap
+    (intro + job) off the body render.
+    """
 
     @staticmethod
     def _render(meeting_trigger: str) -> str:
@@ -541,7 +552,7 @@ class TestCrewmateReportEmergencyBranch:
 
         expected = _CREWMATE_V5_BODY_GOLDEN.replace(
             "Prompt: crewmate_report.v5 (DESIGN.md §5.2 PHASE 1)",
-            "Prompt: crewmate_report.v6 (DESIGN.md §5.2 PHASE 1)",
+            "Prompt: crewmate_report.v7 (DESIGN.md §5.2 PHASE 1)",
         )
         assert prompt == expected
 
@@ -573,9 +584,23 @@ class TestCrewmateReportEmergencyBranch:
         assert "no body was reported" in prompt
         assert "State who you suspect and the first-hand" in prompt
         assert '"unsure" in `free_text`' in prompt
+        # Task 10.11: the emergency opening must NOT present a found_body --
+        # lead with the suspicion that crossed the line.
+        assert "Lead with\nthe suspicion that crossed the line" in prompt
+        assert "do NOT emit a `found_body` observation" in prompt
+        assert "never a body discovery" in prompt
         # The accuse-or-unsure hard rule and roster constraints stay shared.
         assert "must EITHER include one `accusation` claim OR say" in prompt
         assert "You may ONLY accuse a player on the LIVING list below" in prompt
+
+    def test_body_branch_never_carries_the_no_found_body_directive(self) -> None:
+        # The found_body suppression is emergency-only: a body-report opening
+        # leads WITH the found_body, so the directive must never leak into the
+        # body branch (the byte-stable contract, asserted positively).
+        prompt = self._render(_GOLDEN_BODY_TRIGGER)
+
+        assert "do NOT emit a `found_body` observation" not in prompt
+        assert "If you discovered the body, lead with the" in prompt
 
     def test_body_trigger_never_selects_emergency_frame(self) -> None:
         # A report-shaped description — and any ad-hoc trigger string that
