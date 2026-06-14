@@ -6,19 +6,23 @@
    D-D-1/D-D-2/D-D-7; experiments/lab/report-deception-battery-2.md P1/P3:
    ANTICIPATORY COVER. On a body-report opening (the trigger does NOT contain
    "called an emergency meeting"), the template adds a perform-from-a-goal
-   directive: a body has been found, so FIX a cover account that does NOT place
-   you at the death room/tick. The lab found the 9B does not need a verbatim
+   directive: a body has been found, so DECIDE on a cover account that does NOT
+   place you at the death room/tick. The lab found the 9B does not need a verbatim
    script -- handed only the GOAL ("prepare an account away from your scene") it
    generates its own sheltered lie 8/12, surviving a true witness sighting at
    weak-only 7/12 (battery-2 P3). The cover room/window is PINNED: the directive
-   tells the model to reuse the SAME sheltered room + tick-window from the
-   rendered memory every turn, because target persistence holds but the
-   justification drifts when regenerated (battery-2 P1: justification-stable only
-   7/12) -- and the impostor's COVER + blending policy has already placed it in a
-   real sheltered task room AFTER the kill, so the pinned alibi is a place it
-   genuinely passed through, not an invention. The emergency branch (impostors
-   gain no button this wave) keeps the v4 frame. Accuse-or-unsure, anti-repetition,
-   the roster block, and the 7.12 teammate firewall are byte-unchanged from v4.)
+   tells the model to commit to ONE sheltered room + tick-window and reuse it
+   every turn, because target persistence holds but the justification drifts when
+   regenerated (battery-2 P1: justification-stable only 7/12). The directive
+   leans on the rendered memory where it already puts the impostor somewhere
+   sheltered (a room it saw another player in), but does NOT require it: the
+   renderer does not expose the impostor's own room history and the v5 completion
+   gate (agents/memory/store.py) keeps fake-task movement out of memory, so the
+   model fabricates the quiet spot from the goal -- exactly battery-2 P3's
+   invent-from-a-goal finding (Codex review, PR #155). The emergency branch
+   (impostors gain no button this wave) keeps the v4 frame. Accuse-or-unsure,
+   anti-repetition, the roster block, and the 7.12 teammate firewall are
+   byte-unchanged from v4.)
   (v4, Task 10.3 -- DESIGN.md §5.1, §5.2; audit gp-9 H-H-1, H-H-2, H-H-3,
    D-D-8: three terse nudges for residual qwen3.5:9b artifacts. (1) The
    §5.2 accuse-or-declare-unsure choice is a HARD requirement -- an opening
@@ -110,15 +114,15 @@ Hard rule: your opening must EITHER include one `accusation` claim OR say
 
 ## Prepare your cover (a body was found)
 A body has been reported, so the table will try to pin down where everyone was
-when it happened. Before you compose your turn, FIX your account: from the
-rendered memory below, choose the ONE room and the ONE tick-window it shows you
-were in AWAY from where the body was found, and make that your alibi. Reuse that
-SAME room and window every time you are asked this meeting -- an account that
-drifts to a different room or tick is exactly what exposes an impostor. Do NOT
-place yourself in the body's room or around the tick it happened. Build the alibi
-only from somewhere the rendered memory actually shows you were: a sheltered spot
-you genuinely passed through holds up; an invented one is flagged as a
-contradiction.
+when it happened. Before you compose your turn, DECIDE on the account your
+`alibi` will give: ONE room and tick-window AWAY from the body's room and the
+tick it happened, and commit to it. Where the rendered memory already puts you
+somewhere sheltered -- a room you saw another player in, well clear of the body
+-- lean on that; otherwise give a plausible quiet spot. State the SAME room and
+window every time you are asked this meeting; an account that drifts to a
+different room or tick is what exposes an impostor. Never place yourself in the
+body's room or around its tick, and do not volunteer having seen the victim
+there.
 {% endif %}
 {% if fellow_impostor_ids is defined and fellow_impostor_ids %}
 

@@ -806,15 +806,15 @@ class TestImpostorReportTemplate:
 _IMPOSTOR_V5_COVER_BLOCK = (
     "## Prepare your cover (a body was found)\n"
     "A body has been reported, so the table will try to pin down where everyone was\n"
-    "when it happened. Before you compose your turn, FIX your account: from the\n"
-    "rendered memory below, choose the ONE room and the ONE tick-window it shows you\n"
-    "were in AWAY from where the body was found, and make that your alibi. Reuse that\n"
-    "SAME room and window every time you are asked this meeting -- an account that\n"
-    "drifts to a different room or tick is exactly what exposes an impostor. Do NOT\n"
-    "place yourself in the body's room or around the tick it happened. Build the alibi\n"
-    "only from somewhere the rendered memory actually shows you were: a sheltered spot\n"
-    "you genuinely passed through holds up; an invented one is flagged as a\n"
-    "contradiction.\n\n"
+    "when it happened. Before you compose your turn, DECIDE on the account your\n"
+    "`alibi` will give: ONE room and tick-window AWAY from the body's room and the\n"
+    "tick it happened, and commit to it. Where the rendered memory already puts you\n"
+    "somewhere sheltered -- a room you saw another player in, well clear of the body\n"
+    "-- lean on that; otherwise give a plausible quiet spot. State the SAME room and\n"
+    "window every time you are asked this meeting; an account that drifts to a\n"
+    "different room or tick is what exposes an impostor. Never place yourself in the\n"
+    "body's room or around its tick, and do not volunteer having seen the victim\n"
+    "there.\n\n"
 )
 
 _IMPOSTOR_COVER_BODY_TRIGGER = "p-3 reported body body-p-2-7 at tick 410"
@@ -848,16 +848,17 @@ class TestImpostorReportV5AnticipatoryCover:
         prompt = self._render(_IMPOSTOR_COVER_BODY_TRIGGER)
 
         assert "## Prepare your cover (a body was found)" in prompt
-        # Perform-from-a-goal (battery-2 P3): build an account away from the scene.
-        assert "FIX your account" in prompt
-        assert "AWAY from where the body was found" in prompt
-        assert "Do NOT\nplace yourself in the body's room" in prompt
-        # PINNED cover (battery-2 P1): reuse the SAME room/window, do not drift.
-        assert "Reuse that\nSAME room and window every time you are asked" in prompt
-        assert "drifts to a different room or tick is exactly what exposes" in prompt
-        # The cover is grounded in the policy-placed sheltered location, not an
-        # invention (the COVER + blending policy really put it there).
-        assert "a sheltered spot\nyou genuinely passed through holds up" in prompt
+        # Perform-from-a-goal (battery-2 P3): decide on an account away from the
+        # scene -- leaning on memory where it helps, otherwise inventing a quiet
+        # spot (the renderer does not expose the impostor's own room history).
+        assert "DECIDE on the account your" in prompt
+        assert "ONE room and tick-window AWAY from the body's room" in prompt
+        assert "otherwise give a plausible quiet spot." in prompt
+        assert "do not volunteer having seen the victim" in prompt
+        # PINNED cover (battery-2 P1): commit to ONE room/window, do not drift.
+        assert "commit to it." in prompt
+        assert "every time you are asked this meeting" in prompt
+        assert "different room or tick is what exposes an impostor" in prompt
         # The v4 invariants stay intact under the new branch.
         assert "impostor_report_v5" in prompt
         assert "must EITHER include one `accusation` claim OR say" in prompt
@@ -869,7 +870,7 @@ class TestImpostorReportV5AnticipatoryCover:
         prompt = self._render(_IMPOSTOR_COVER_EMERGENCY_TRIGGER)
 
         assert "Prepare your cover" not in prompt
-        assert "AWAY from where the body was found" not in prompt
+        assert "AWAY from the body's room" not in prompt
         assert "impostor_report_v5" in prompt
         assert "must EITHER include one `accusation` claim OR say" in prompt
 
@@ -892,11 +893,9 @@ class TestImpostorReportV5AnticipatoryCover:
         prompt = self._render(_IMPOSTOR_COVER_BODY_TRIGGER)
 
         # The teammate id appears ONLY inside the dedicated "never betray them"
-        # block, never inside the cover frame.
-        cover_start = prompt.index("## Prepare your cover")
-        cover_end = prompt.index("contradiction.") + len("contradiction.")
-        cover_text = prompt[cover_start:cover_end]
-        assert "p-7" not in cover_text
+        # block, never inside the cover frame (the exact block, pinned above).
+        assert "p-7" not in _IMPOSTOR_V5_COVER_BLOCK
+        assert _IMPOSTOR_V5_COVER_BLOCK in prompt
         assert "never accuse" in prompt.lower()
 
 
