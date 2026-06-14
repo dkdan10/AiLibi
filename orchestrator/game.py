@@ -208,9 +208,20 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # plus the emergency-opening self-check below. The committed sample bytes still
 # record their as-recorded versions and are NOT re-recorded here (recording-side
 # only; replays/samples out of scope).
+#
+# Task 10.14 (DESIGN.md §3.4, §4.5, §5.3; audit-2026-06-13-1816 D-D-1/D-D-2/D-D-7;
+# experiments/lab/report-deception-battery-2.md) bumps impostor_report alone
+# v4 -> v5: the impostor opening gains an ANTICIPATORY-COVER branch on a
+# body-report trigger (the perform-from-a-goal directive that makes the 9B build
+# its own sheltered alibi away from the kill scene and PIN the cover room/window
+# so the justification does not drift). The emergency branch keeps the v4 frame
+# (impostors gain no button this wave). It is the prompt half of the impostor
+# toolkit (blending + kill discipline land in agents/tactical + observation). The
+# committed sample bytes still record impostor_report_v4 and are re-recorded at
+# 10.17, not here (recording-side only; replays/samples out of scope).
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "crewmate_report": "crewmate_report.v7",
-    "impostor_report": "impostor_report_v4",
+    "impostor_report": "impostor_report_v5",
     "accusation_round": "accusation_round.v7",
     "vote_ballot": "vote_ballot/v5",
 }

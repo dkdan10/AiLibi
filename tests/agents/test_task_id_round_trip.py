@@ -21,6 +21,7 @@ Tests legitimately import from ``engine/`` (the import-linter firewall constrain
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 from agents.memory.episodic import MemoryStore
@@ -32,7 +33,7 @@ from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
 from observation.action_intent import DoTaskIntent
-from observation.service import ObservationService
+from observation.service import ObservationService, impostor_pretend_task_id
 from orchestrator.boundary import (
     public_map_from_engine_map,
     translate_action_intent,
@@ -73,9 +74,14 @@ def _own_instance(owner: str) -> TaskState:
 
 
 def _round_trip_world(*, seed: int = 99) -> WorldState:
-    """Two crewmates and one impostor, all in ADMIN, each owning an INSTANCE of the
-    same map task ``swipe_card``. The impostor is on cooldown so its policy idles
-    into the pretend-task path rather than attempting a kill.
+    """Two crewmates and one impostor, all in ADMIN. The two crewmates each own an
+    INSTANCE of the same map task ``swipe_card``; the impostor co-owns one too --
+    a deliberately artificial instance (production seeds tasks to crewmates only)
+    kept ONLY to prove the crewmate isolation case (a crew do_task never touches a
+    co-owner's instance, impostor included). The impostor is on cooldown so its
+    policy idles into the BLENDING pretend-task path (Task 10.14) rather than
+    attempting a kill -- and that pretend id is a DIFFERENT map task than
+    ``swipe_card`` (impostors own no real instance), so its do_task is rejected.
     """
 
     game_map = load_canonical_map()
@@ -137,20 +143,40 @@ def test_crewmate_do_task_round_trip_advances_only_own_instance(
     assert next_state.tasks["p-3:swipe_card"].progress == 0
 
 
-def test_impostor_do_task_round_trip_advances_only_own_instance(
+def test_impostor_pretend_do_task_round_trip_advances_no_instance(
     tmp_path: Path,
 ) -> None:
+    # Task 10.14 BLENDING round-trip: the impostor's pending_task_id is a PRETEND
+    # map id (impostors own no instance), DIFFERENT from the swipe_card it co-owns
+    # in this artificial fixture. The full observation -> perception -> policy ->
+    # engine round-trip emits a do_task on the pretend id, which the engine
+    # REJECTS (no owned instance): no instance advances -- not even the swipe_card
+    # the impostor happens to co-own, because the engine resolves the PRETEND id,
+    # which the impostor owns none of -- and no pretend instance is minted, so the
+    # crew win denominator never moves. The integrity invariant, end-to-end.
     game_map = load_canonical_map()
-    state = _round_trip_world()
+    base = _round_trip_world()
+    pretend = impostor_pretend_task_id(
+        game_map=game_map,
+        agent_id="p-3",
+        impostor_ids=["p-3"],
+        tick=base.tick,
+    )
+    assert pretend is not None
+    assert pretend != _MAP_TASK_ID  # a DIFFERENT map task than the co-owned one
+    pretend_room = game_map.tasks[pretend].room
+    # Place the impostor in the pretend task's room so its idle policy PERFORMS it
+    # (rather than routing toward it), exercising the do_task leg end-to-end.
+    players = dict(base.players)
+    players["p-3"] = _player("p-3", "IMPOSTOR", pretend_room)
+    state = dataclasses.replace(base, players=players)
     public_map = public_map_from_engine_map(game_map)
     service = ObservationService(
         game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
     )
 
-    # The impostor's packet carries its OWN pretend-task map id; on cooldown it
-    # idles into the pretend-task path instead of killing.
     packet = service.build_packet(world_state=state, agent_id="p-3", engine_events=[])
-    assert packet.self_state.pending_task_id == _MAP_TASK_ID
+    assert packet.self_state.pending_task_id == pretend
     assert packet.cooldown == 5
 
     memory = MemoryStore()
@@ -158,15 +184,27 @@ def test_impostor_do_task_round_trip_advances_only_own_instance(
 
     intent = ImpostorPolicy(agent_id="p-3").decide(memory, public_map)
     assert isinstance(intent, DoTaskIntent)
-    assert intent.payload.task_id == _MAP_TASK_ID
+    assert intent.payload.task_id == pretend
 
-    # (actor=p-3, swipe_card) resolves to the impostor's OWN instance; the two
-    # crewmate co-owners of the same map task are untouched.
+    tasks_before = len(state.tasks)
     action = translate_action_intent(intent)
-    next_state, _ = advance_tick(state, [action], game_map=game_map)
-    assert next_state.tasks["p-3:swipe_card"].progress == 1
+    next_state, events = advance_tick(state, [action], game_map=game_map)
+
+    # The fake do_task is REJECTED for owning no instance -- no progress anywhere.
+    assert any(
+        event.type == "ActionRejected"
+        and event.actor == "p-3"
+        and "owns no task instance" in event.reason
+        for event in events
+    )
+    # Not even the swipe_card the impostor co-owns advances (it acted on the
+    # pretend id, which it does not own), and the crew co-owners are untouched.
+    assert next_state.tasks["p-3:swipe_card"].progress == 0
     assert next_state.tasks["p-1:swipe_card"].progress == 0
     assert next_state.tasks["p-2:swipe_card"].progress == 0
+    # No pretend instance was minted: the win denominator did not move.
+    assert len(next_state.tasks) == tasks_before
+    assert f"p-3:{pretend}" not in next_state.tasks
 
 
 def test_co_owners_advance_independently_over_the_round_trip(

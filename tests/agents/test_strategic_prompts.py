@@ -635,9 +635,9 @@ class TestImpostorReportTemplate:
 
     def test_rendered_output_contains_version_marker(self) -> None:
         # The impostor opening template carries its visible version marker
-        # (bumped to v4 in Task 10.3: accuse-or-declare-unsure hard rule,
-        # the anti-repetition line, and the gated living/DEAD roster block)
-        # and the explicit role line.
+        # (bumped to v5 in Task 10.14: the anticipatory-cover branch; v4 added
+        # the accuse-or-declare-unsure hard rule, the anti-repetition line, and
+        # the gated living/DEAD roster block) and the explicit role line.
         prompt = impostor_report_prompt(
             agent_id="p-3",
             current_tick=412,
@@ -646,7 +646,7 @@ class TestImpostorReportTemplate:
             public_transcript="",
         )
 
-        assert "impostor_report_v4" in prompt
+        assert "impostor_report_v5" in prompt
         assert "Your role for this match is IMPOSTOR" in prompt
 
     def test_renders_memory_into_prompt(self) -> None:
@@ -788,6 +788,115 @@ class TestImpostorReportTemplate:
 
         parsed = MeetingTurn.model_validate_json(response.text)
         assert isinstance(parsed, MeetingTurn)
+
+
+# ---------------------------------------------------------------------------
+# Task 10.14 -- the impostor_report v5 anticipatory-cover branch (DESIGN.md
+# §3.4, §4.5, §5.3; audit-2026-06-13-1816 D-D-1/D-D-7;
+# experiments/lab/report-deception-battery-2.md P1/P3). Golden pins for the
+# cover frame and the body-vs-emergency branch structure.
+# ---------------------------------------------------------------------------
+
+# The exact anticipatory-cover block the v5 body-report opening inserts. It is
+# the ONLY difference between the body and emergency branches (the trigger string
+# itself is not rendered into the impostor opening), so removing it from a body
+# render must reproduce the emergency render byte-for-byte. Pinned here against
+# the template and re-derivable from orchestrator.game._build_meeting_trigger's
+# "called an emergency meeting" branch substring.
+_IMPOSTOR_V5_COVER_BLOCK = (
+    "## Prepare your cover (a body was found)\n"
+    "A body has been reported, so the table will try to pin down where everyone was\n"
+    "when it happened. Before you compose your turn, DECIDE on the account your\n"
+    "`alibi` will give: ONE room and tick-window AWAY from the body's room and the\n"
+    "tick it happened, and commit to it. Where the rendered memory already puts you\n"
+    "somewhere sheltered -- a room you saw another player in, well clear of the body\n"
+    "-- lean on that; otherwise give a plausible quiet spot. State the SAME room and\n"
+    "window every time you are asked this meeting; an account that drifts to a\n"
+    "different room or tick is what exposes an impostor. Never place yourself in the\n"
+    "body's room or around its tick, and do not volunteer having seen the victim\n"
+    "there.\n\n"
+)
+
+_IMPOSTOR_COVER_BODY_TRIGGER = "p-3 reported body body-p-2-7 at tick 410"
+_IMPOSTOR_COVER_EMERGENCY_TRIGGER = "p-3 called an emergency meeting at tick 320"
+
+
+class TestImpostorReportV5AnticipatoryCover:
+    """The v5 anticipatory-cover branch (Task 10.14). On a body-report opening
+    the impostor opening renders the perform-from-a-goal cover directive
+    (battery-2 P3) and PINS the cover room/window (battery-2 P1); the emergency
+    branch -- impostors gain no button this wave -- keeps the v4 frame.
+    """
+
+    @staticmethod
+    def _render(meeting_trigger: str) -> str:
+        return impostor_report_prompt(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger=meeting_trigger,
+            rendered_memory=_STUB_IMPOSTOR_MEMORY,
+            public_transcript="",
+            fellow_impostor_ids=("p-7",),
+            living_ids=("p-1", "p-5"),
+            dead_ids=("p-2",),
+        )
+
+    def test_body_report_opening_renders_the_cover_frame(self) -> None:
+        # Given a recent kill (a body report is on the table), the opening frames
+        # "prepare an account that does NOT place you at the kill room/tick" --
+        # the lab's perform-from-a-goal directive, not a verbatim script.
+        prompt = self._render(_IMPOSTOR_COVER_BODY_TRIGGER)
+
+        assert "## Prepare your cover (a body was found)" in prompt
+        # Perform-from-a-goal (battery-2 P3): decide on an account away from the
+        # scene -- leaning on memory where it helps, otherwise inventing a quiet
+        # spot (the renderer does not expose the impostor's own room history).
+        assert "DECIDE on the account your" in prompt
+        assert "ONE room and tick-window AWAY from the body's room" in prompt
+        assert "otherwise give a plausible quiet spot." in prompt
+        assert "do not volunteer having seen the victim" in prompt
+        # PINNED cover (battery-2 P1): commit to ONE room/window, do not drift.
+        assert "commit to it." in prompt
+        assert "every time you are asked this meeting" in prompt
+        assert "different room or tick is what exposes an impostor" in prompt
+        # The v4 invariants stay intact under the new branch.
+        assert "impostor_report_v5" in prompt
+        assert "must EITHER include one `accusation` claim OR say" in prompt
+
+    def test_emergency_opening_skips_the_cover_frame(self) -> None:
+        # An emergency trigger (no body) renders no body-cover directive -- the
+        # impostor opening keeps the v4 frame. Impostors gain no button this wave,
+        # so this branch is defensive, but the firewall/roster invariants hold.
+        prompt = self._render(_IMPOSTOR_COVER_EMERGENCY_TRIGGER)
+
+        assert "Prepare your cover" not in prompt
+        assert "AWAY from the body's room" not in prompt
+        assert "impostor_report_v5" in prompt
+        assert "must EITHER include one `accusation` claim OR say" in prompt
+
+    def test_cover_block_is_the_only_branch_difference(self) -> None:
+        # The structural golden: the cover block is the ENTIRE difference between
+        # the two branches (the trigger string is not rendered into the impostor
+        # opening). Removing it from the body render reproduces the emergency
+        # render byte-for-byte -- any other drift breaks the equality.
+        body = self._render(_IMPOSTOR_COVER_BODY_TRIGGER)
+        emergency = self._render(_IMPOSTOR_COVER_EMERGENCY_TRIGGER)
+
+        assert _IMPOSTOR_V5_COVER_BLOCK in body
+        assert _IMPOSTOR_V5_COVER_BLOCK not in emergency
+        assert body.replace(_IMPOSTOR_V5_COVER_BLOCK, "", 1) == emergency
+
+    def test_cover_frame_never_names_a_teammate(self) -> None:
+        # Firewall (DESIGN.md §4.7; battery-2 P5): the cover directive is generic
+        # -- it never instructs naming or implicating a teammate, and the 7.12
+        # teammate block stays the deterministic backstop.
+        prompt = self._render(_IMPOSTOR_COVER_BODY_TRIGGER)
+
+        # The teammate id appears ONLY inside the dedicated "never betray them"
+        # block, never inside the cover frame (the exact block, pinned above).
+        assert "p-7" not in _IMPOSTOR_V5_COVER_BLOCK
+        assert _IMPOSTOR_V5_COVER_BLOCK in prompt
+        assert "never accuse" in prompt.lower()
 
 
 class TestAccusationRoundTemplate:

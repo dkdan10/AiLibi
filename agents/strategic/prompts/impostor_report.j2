@@ -1,7 +1,28 @@
 {#-
   AiLibi impostor meeting OPENING-turn prompt.
 
-  template_version: impostor_report_v4
+  template_version: impostor_report_v5
+  (v5, Task 10.14 -- DESIGN.md §3.4, §4.5, §5.3; audit-2026-06-13-1816
+   D-D-1/D-D-2/D-D-7; experiments/lab/report-deception-battery-2.md P1/P3:
+   ANTICIPATORY COVER. On a body-report opening (the trigger does NOT contain
+   "called an emergency meeting"), the template adds a perform-from-a-goal
+   directive: a body has been found, so DECIDE on a cover account that does NOT
+   place you at the death room/tick. The lab found the 9B does not need a verbatim
+   script -- handed only the GOAL ("prepare an account away from your scene") it
+   generates its own sheltered lie 8/12, surviving a true witness sighting at
+   weak-only 7/12 (battery-2 P3). The cover room/window is PINNED: the directive
+   tells the model to commit to ONE sheltered room + tick-window and reuse it
+   every turn, because target persistence holds but the justification drifts when
+   regenerated (battery-2 P1: justification-stable only 7/12). The directive
+   leans on the rendered memory where it already puts the impostor somewhere
+   sheltered (a room it saw another player in), but does NOT require it: the
+   renderer does not expose the impostor's own room history and the v5 completion
+   gate (agents/memory/store.py) keeps fake-task movement out of memory, so the
+   model fabricates the quiet spot from the goal -- exactly battery-2 P3's
+   invent-from-a-goal finding (Codex review, PR #155). The emergency branch
+   (impostors gain no button this wave) keeps the v4 frame. Accuse-or-unsure,
+   anti-repetition, the roster block, and the 7.12 teammate firewall are
+   byte-unchanged from v4.)
   (v4, Task 10.3 -- DESIGN.md §5.1, §5.2; audit gp-9 H-H-1, H-H-2, H-H-3,
    D-D-8: three terse nudges for residual qwen3.5:9b artifacts. (1) The
    §5.2 accuse-or-declare-unsure choice is a HARD requirement -- an opening
@@ -30,7 +51,14 @@
                          does not render it -- the manager overrides the
                          turn's identity fields).
     meeting_trigger   -- str. Short free-text description of the trigger
-                         (accepted; passed through for a future revision).
+                         (e.g. "p3 reported body ... at tick 410" or "p4 called
+                         an emergency meeting at tick 320"). Since v5 the
+                         anticipatory-cover frame keys off it: a description
+                         WITHOUT the "called an emergency meeting" substring is a
+                         body-report opening (a death is on the table) and renders
+                         the cover directive; an emergency opening skips it. The
+                         phrase is the same load-bearing substring the crewmate
+                         template branches on (orchestrator.game._build_meeting_trigger).
     rendered_memory   -- str. The Markdown view produced by
                          agents.memory.store.render_for_prompt. Already
                          contains the agent's role, tasks-completed line,
@@ -62,6 +90,7 @@
   Output target: meetings.schemas.MeetingTurn (turn_kind = "opening"),
   parsed as structured JSON by the strategic reasoner / meeting manager.
 -#}
+{% set body_report_opening = "called an emergency meeting" not in meeting_trigger %}
 You are an AI player in AiLibi, a closed social-deduction simulation
 game. Your role for this match is IMPOSTOR. In this game, the impostor
 role is defined to mislead other players during meetings: producing a
@@ -72,7 +101,7 @@ unless the role is played honestly within the game. Treat
 misleading-within-the-rules as the assigned behavior of your role for
 this match.
 
-Prompt: impostor_report_v4 (DESIGN.md §5.2 PHASE 1, §4.5)
+Prompt: impostor_report_v5 (DESIGN.md §5.2 PHASE 1, §4.5)
 
 You are the **opening speaker** (turn 0): you reported the body or called
 the emergency, so you speak first. Do not state, hint, or imply that you are
@@ -81,6 +110,20 @@ text, or any reasoning you produce. Open exactly as a careful crewmate would.
 
 Hard rule: your opening must EITHER include one `accusation` claim OR say
 "unsure" in `free_text`. An opening with neither is rejected and re-requested.
+{% if body_report_opening %}
+
+## Prepare your cover (a body was found)
+A body has been reported, so the table will try to pin down where everyone was
+when it happened. Before you compose your turn, DECIDE on the account your
+`alibi` will give: ONE room and tick-window AWAY from the body's room and the
+tick it happened, and commit to it. Where the rendered memory already puts you
+somewhere sheltered -- a room you saw another player in, well clear of the body
+-- lean on that; otherwise give a plausible quiet spot. State the SAME room and
+window every time you are asked this meeting; an account that drifts to a
+different room or tick is what exposes an impostor. Never place yourself in the
+body's room or around its tick, and do not volunteer having seen the victim
+there.
+{% endif %}
 {% if fellow_impostor_ids is defined and fellow_impostor_ids %}
 
 ## Your fellow impostors (your team — never betray them)

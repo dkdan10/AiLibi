@@ -426,16 +426,27 @@ def _build_observations(
             pending_raw = event.payload.get("pending_task_id")
             pending = pending_raw if isinstance(pending_raw, str) else None
             room = event.payload.get("room")
-            # ``pending_task_id`` is the agent's lexicographically-first owned,
-            # UNFINISHED map task (observation/service.py). Its owned set only ever
-            # shrinks -- a task completes; none is added mid-game -- so the pending
-            # id changes if and only if the previous pending task completed, whether
-            # it clears to ``None`` (the final task) OR rolls to the next map id (an
-            # intermediate task in a multi-task 9p/2i loadout). Infer completion on
-            # ANY change away from a non-None pending task so an intermediate
-            # completion is not dropped from rendered memory (PR #109 review).
+            role = event.payload.get("role")
+            # For a CREWMATE, ``pending_task_id`` is the lexicographically-first
+            # owned, UNFINISHED map task (observation/service.py). Its owned set
+            # only ever shrinks -- a task completes; none is added mid-game -- so
+            # the pending id changes if and only if the previous pending task
+            # completed, whether it clears to ``None`` (the final task) OR rolls to
+            # the next map id (an intermediate task in a multi-task 9p/2i loadout).
+            # Infer completion on ANY change away from a non-None pending task so an
+            # intermediate completion is not dropped from rendered memory (PR #109).
+            #
+            # An IMPOSTOR's pending_task_id is a fabricated BLEND target (Task
+            # 10.14) that the engine always rejects and that never completes; it
+            # rotates through a per-seat set tick-to-tick. A change in it is NOT a
+            # completion, so the inference is GATED to crewmates -- otherwise the
+            # blend would mint fictitious "You completed ..." memory that could
+            # become a fabricated ``completed_task`` alibi and corrupt the
+            # meeting/eval evidence (Codex review, PR #155). The impostor's memory
+            # stays accurate; alibi fabrication is the LLM's job (DESIGN.md §4.7).
             if (
-                not first_self_state
+                role == "CREWMATE"
+                and not first_self_state
                 and isinstance(last_pending_task, str)
                 and pending != last_pending_task
             ):

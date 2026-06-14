@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 from engine.entities import PlayerId
 from engine.events import EngineEvent, KilledEvent, VentEnteredEvent, VentExitedEvent
@@ -17,6 +18,106 @@ from observation.packet import (
     PlayerView,
     SelfView,
 )
+
+# -- Impostor blending: the pretend-task channel (Task 10.14, DESIGN.md §3.4,
+# §4.5; audit-2026-06-13-1816 D-D-1) ----------------------------------------
+#
+# Impostors own no task instances (the seeder assigns tasks to crewmates only),
+# so ``_pending_task_id_for_agent``'s owner filter left every impostor packet
+# with ``pending_task_id=None`` and the dormant ``ImpostorPolicy._idle`` do_task
+# branch never fired: impostors waited ~51% of ticks vs the crew's ~12% — the
+# "never-tasks" fingerprint. The blending lever surfaces a PRETEND map task id
+# on the impostor's privileged self channel so that branch fires and the
+# impostor moves to / "performs" a real task like a crewmate would.
+#
+# The fake-task SENTINEL is structural, not a string marker: the pretend id is a
+# bare MAP task id drawn from ``game_map.tasks`` and surfaced ONLY on
+# ``SelfView`` — it is NEVER minted as a ``WorldState.tasks`` instance. So the
+# crew-side integrity invariant holds by construction: ``GlobalView`` counts
+# ``len(world_state.tasks)`` (the win denominator), which never sees a pretend
+# id, and when the impostor emits ``do_task`` against it the engine's
+# ``_resolve_owned_task_instance`` finds no owned instance and rejects the action
+# (no progress, no instance) — a fake task can never advance the real counter or
+# help the crew win (verified offline in tests/observation). The pretend id is
+# the contract's ``PRETEND_TASK_MARKER`` (named ``impostor_pretend_task_id`` per
+# "or equivalent"); downstream eval (10.17) imports it to identify pretend tasks.
+#
+# The blend roams a small per-impostor SET (the contract's "small per-impostor
+# pretend-task set"): each seat draws a disjoint window of the sorted map tasks
+# and rotates through it by ``tick // dwell``, so the impostor moves room-to-room
+# like a crewmate working its task list rather than camping one room. Camping a
+# single fixed room is BOTH a weaker blend and, empirically, a degenerate balance
+# shift (a systematic ambush in the same rooms every game), so the roam is kept.
+#
+# The rotation is reconciled with the memory renderer (Codex review, PR #155).
+# ``agents/memory/store.py`` infers a "You completed {task}" observation on ANY
+# change of ``pending_task_id`` away from a non-None value — correct for a
+# crewmate (its owned set only shrinks, so a change IS a completion) but a lie for
+# the impostor, whose pretend tasks never complete. Rather than freeze the blend
+# (which costs the roam AND balance), the renderer's completion inference is
+# role-GATED to crewmates, so a rotating impostor pretend id mints NO fictitious
+# completed-task memory and cannot become a fabricated ``completed_task`` alibi —
+# the impostor's memory stays accurate; the alibi fabrication is the LLM's job at
+# the meeting (DESIGN.md §4.7). Seats are taken over ALL role==IMPOSTOR players
+# (alive or dead — ejection marks ``alive=False`` but never removes the player),
+# so a seat never shifts mid-game when a teammate is ejected.
+IMPOSTOR_PRETEND_TASK_SET_SIZE: Final[int] = 3
+# How many ticks the impostor dwells on one pretend task before the deterministic
+# rotation advances to the next in its per-seat set. Anchored above the map
+# diameter and the kill cooldown so the impostor reaches and "performs" a task
+# within a window (no per-tick re-route oscillation), then roams to the next.
+# Re-derived at 10.17 against the toolkit-shifted kill cadence.
+IMPOSTOR_PRETEND_TASK_DWELL_TICKS: Final[int] = 6
+
+
+def impostor_pretend_task_id(
+    *,
+    game_map: Map,
+    agent_id: PlayerId,
+    impostor_ids: Sequence[PlayerId],
+    tick: int,
+) -> TaskId | None:
+    """Deterministically select an impostor's current PRETEND map task id.
+
+    The blending sentinel (Task 10.14). Returns a bare ``game_map.tasks`` map
+    task id — never a ``WorldState.tasks`` instance id and never an owned
+    instance (impostors own none) — so the engine rejects the resulting
+    ``do_task`` and the win denominator never counts it (see the module note).
+
+    Determinism / replay safety: each seat (the agent's index in the sorted
+    impostor roster) draws a stable, disjoint per-impostor window of the sorted
+    map tasks and rotates through it purely by ``tick // dwell``. No RNG, no
+    module state — the same ``(game_map, agent_id, impostor_ids, tick)`` always
+    yields the same id, keeping replay reconstruction byte-identical. The
+    rotation is safe for the renderer because its completion inference is
+    role-gated to crewmates (see the module note). Returns ``None`` only for a
+    task-less map.
+
+    Fail-loud (AGENTS.md no silent fallbacks): ``agent_id`` MUST be a member of
+    ``impostor_ids``. A non-member is a caller wiring error (a filtered or stale
+    roster) — it raises rather than silently reusing seat 0's window and masking
+    the bug (Codex review, PR #155).
+    """
+
+    map_task_ids = sorted(game_map.tasks)
+    n = len(map_task_ids)
+    if n == 0:
+        return None
+    sorted_impostors = sorted(impostor_ids)
+    if agent_id not in sorted_impostors:
+        raise ValueError(
+            f"impostor_pretend_task_id called for {agent_id!r}, which is not in "
+            f"impostor_ids {tuple(sorted_impostors)!r} (caller wiring error)"
+        )
+    seat = sorted_impostors.index(agent_id)
+    offset = (seat * IMPOSTOR_PRETEND_TASK_SET_SIZE) % n
+    pretend_set: list[TaskId] = []
+    for i in range(min(IMPOSTOR_PRETEND_TASK_SET_SIZE, n)):
+        candidate = map_task_ids[(offset + i) % n]
+        if candidate not in pretend_set:
+            pretend_set.append(candidate)
+    index = (tick // IMPOSTOR_PRETEND_TASK_DWELL_TICKS) % len(pretend_set)
+    return pretend_set[index]
 
 
 @dataclass(frozen=True)
@@ -278,13 +379,37 @@ class ObservationService:
         ``task.map_task_id`` -- never the composite instance id, which would both
         miss the map-keyed ``task_locations`` lookup and leak the owner prefix.
 
-        The result is owner-scoped by construction: the ``task.owner == agent_id``
-        filter means a recipient only ever sees its OWN pending task, never another
-        player's task or any ownership (the §1.3 observation firewall). Selection is
-        deterministic -- the lexicographically-first owned, unfinished map task id.
-        The owner prefix is constant within one agent, so ordering by map id is
-        identical to the prior instance-id ordering.
+        For a CREWMATE the result is owner-scoped by construction: the
+        ``task.owner == agent_id`` filter means a recipient only ever sees its OWN
+        pending task, never another player's task or any ownership (the §1.3
+        observation firewall). Selection is deterministic -- the
+        lexicographically-first owned, unfinished map task id. The owner prefix is
+        constant within one agent, so ordering by map id is identical to the prior
+        instance-id ordering.
+
+        For an IMPOSTOR the result is a PRETEND map task id (Task 10.14, audit
+        D-D-1): impostors own no instances, so the owner filter would surface
+        ``None`` forever and the dormant ``ImpostorPolicy._idle`` do_task branch
+        could never fire (the "never-tasks" fingerprint). ``impostor_pretend_task_id``
+        supplies a map task id on the privileged self channel so the impostor
+        blends; it never mints a ``WorldState.tasks`` instance, so the win
+        denominator and the engine's owned-instance resolution never see it (see
+        the module-level note for the integrity invariant).
         """
+
+        player = world_state.players.get(agent_id)
+        if player is not None and player.role == "IMPOSTOR":
+            impostor_ids = [
+                other_id
+                for other_id, other in world_state.players.items()
+                if other.role == "IMPOSTOR"
+            ]
+            return impostor_pretend_task_id(
+                game_map=self._game_map,
+                agent_id=agent_id,
+                impostor_ids=impostor_ids,
+                tick=world_state.tick,
+            )
 
         owned_unfinished_map_ids = [
             task.map_task_id

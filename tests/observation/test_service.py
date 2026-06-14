@@ -14,7 +14,7 @@ from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
 from observation.packet import PlayerView
-from observation.service import ObservationService
+from observation.service import ObservationService, impostor_pretend_task_id
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -707,20 +707,22 @@ def test_multi_impostor_packets_carry_no_foreign_task_ownership(
     # crewmate-recipient packet must carry ONLY that crewmate's own map task and an
     # empty fellow-impostor team. A misroute of another player's task (its map id,
     # instance id, or ownership) into a crew packet would surface here, where the
-    # flat single-impostor scripted fixtures cannot reach. Each player owns a
+    # flat single-impostor scripted fixtures cannot reach. Each crewmate owns a
     # DISTINCT map task so an owner-scope leak is unambiguous.
-    own_map_id = {
+    #
+    # The two IMPOSTORS (p-2, p-4) own NO task instance -- production seeds tasks
+    # to crewmates only -- so they carry a deterministic PRETEND map id (Task
+    # 10.14 blending). The pretend id is map-derived and surfaced only on the
+    # impostor's own self channel: it is never a WorldState.tasks instance (the
+    # win-denominator integrity invariant) and never leaks into a crew packet.
+    crew_map_id = {
         "p-1": "swipe_card",
-        "p-2": "empty_trash",  # impostor pretend-task
         "p-3": "submit_scan",
-        "p-4": "align_engine_output",  # impostor pretend-task
         "p-5": "fuel_reserves",
     }
     task_room = {
         "swipe_card": "ADMIN",
-        "empty_trash": "CAFETERIA",
         "submit_scan": "MEDBAY",
-        "align_engine_output": "ENGINEERING",
         "fuel_reserves": "STORAGE",
     }
     state = dataclasses.replace(
@@ -728,10 +730,12 @@ def test_multi_impostor_packets_carry_no_foreign_task_ownership(
         tasks=_tasks(
             *(
                 _task_instance(owner=owner, map_task_id=map_id, room=task_room[map_id])
-                for owner, map_id in own_map_id.items()
+                for owner, map_id in crew_map_id.items()
             )
         ),
     )
+    game_map = load_canonical_map()
+    impostor_ids = ["p-2", "p-4"]
     service = _observation_service(tmp_path)
 
     packets = {
@@ -741,26 +745,192 @@ def test_multi_impostor_packets_carry_no_foreign_task_ownership(
         for player_id in state.players
     }
 
+    # Each impostor's deterministic pretend map id (own-seat blend target). The
+    # canonical map is non-empty, so the selector never returns None here.
+    impostor_pretend: dict[str, str] = {}
+    for imp_id in impostor_ids:
+        pretend_id = impostor_pretend_task_id(
+            game_map=game_map,
+            agent_id=imp_id,
+            impostor_ids=impostor_ids,
+            tick=state.tick,
+        )
+        assert pretend_id is not None
+        impostor_pretend[imp_id] = pretend_id
+
     for crew_id in ("p-1", "p-3", "p-5"):
         packet = packets[crew_id]
         assert packet.self_state.role == "CREWMATE"
         # Own task only -- the exact map id, never the composite instance id.
-        assert packet.self_state.pending_task_id == own_map_id[crew_id]
+        assert packet.self_state.pending_task_id == crew_map_id[crew_id]
         assert ":" not in (packet.self_state.pending_task_id or "")
         # The crew-empty fellow-impostor invariant still holds with tasks present.
         assert packet.self_state.fellow_impostor_ids == ()
-        # No OTHER player's map task id appears anywhere in the crew packet.
+        # No OTHER player's task -- crew map id OR an impostor's pretend id --
+        # appears anywhere in the crew packet (the firewall both ways).
         dumped = json.dumps(packet.model_dump(mode="json"))
-        for other_id, other_map_id in own_map_id.items():
-            if other_id == crew_id:
-                continue
-            assert other_map_id not in dumped, (
-                f"{crew_id} packet leaked {other_id}'s task {other_map_id!r}"
+        foreign_ids = {
+            other_map_id
+            for other_id, other_map_id in crew_map_id.items()
+            if other_id != crew_id
+        } | set(impostor_pretend.values())
+        for foreign in foreign_ids:
+            assert foreign not in dumped, (
+                f"{crew_id} packet leaked foreign task {foreign!r}"
             )
 
-    # Each impostor still round-trips on its OWN pretend-task map id (own-task
-    # only), and continues to see exactly its fellow impostor.
-    assert packets["p-2"].self_state.pending_task_id == "empty_trash"
-    assert packets["p-4"].self_state.pending_task_id == "align_engine_output"
+    # Each impostor carries its OWN pretend map id (a bare map id, never the
+    # composite), continues to see exactly its fellow impostor, and -- the
+    # integrity invariant -- that pretend id was NEVER minted as a
+    # WorldState.tasks instance, so it cannot move the crew win denominator.
+    for imp_id in impostor_ids:
+        packet = packets[imp_id]
+        assert packet.self_state.role == "IMPOSTOR"
+        assert packet.self_state.pending_task_id == impostor_pretend[imp_id]
+        assert ":" not in (packet.self_state.pending_task_id or "")
+        assert f"{imp_id}:{impostor_pretend[imp_id]}" not in state.tasks
     assert packets["p-2"].self_state.fellow_impostor_ids == ("p-4",)
     assert packets["p-4"].self_state.fellow_impostor_ids == ("p-2",)
+
+
+class TestImpostorPretendTaskSelector:
+    """The pretend-task selector contract (Task 10.14; Codex review, PR #155)."""
+
+    def test_pretend_set_is_disjoint_across_seats_and_deterministic(self) -> None:
+        # Disjoint per-seat windows so two impostors never pretend the SAME task in
+        # lockstep, and a pure function of (map, seat, tick) -- deterministic /
+        # replay-safe.
+        game_map = load_canonical_map()
+        impostor_ids = ["p-2", "p-4"]
+        a = impostor_pretend_task_id(
+            game_map=game_map, agent_id="p-2", impostor_ids=impostor_ids, tick=0
+        )
+        b = impostor_pretend_task_id(
+            game_map=game_map, agent_id="p-4", impostor_ids=impostor_ids, tick=0
+        )
+        assert a is not None and b is not None
+        assert a != b
+        # Same inputs -> same id (no RNG, no module state).
+        assert (
+            impostor_pretend_task_id(
+                game_map=game_map, agent_id="p-2", impostor_ids=impostor_ids, tick=0
+            )
+            == a
+        )
+
+    def test_pretend_task_rotates_through_a_per_seat_set(self) -> None:
+        # The blend roams: across dwell boundaries the pretend id advances through
+        # the seat's set (so the impostor moves room-to-room, not camps one).
+        game_map = load_canonical_map()
+        seen = {
+            impostor_pretend_task_id(
+                game_map=game_map,
+                agent_id="p-2",
+                impostor_ids=["p-2", "p-4"],
+                tick=t,
+            )
+            for t in range(0, 6 * 3, 6)  # one tick per dwell window
+        }
+        assert len(seen) > 1  # more than one distinct task over the rotation
+
+    def test_pretend_task_raises_for_non_member_agent(self) -> None:
+        # Fail-loud (no silent fallback): a non-member agent id is a caller wiring
+        # error, not a seat-0 default.
+        game_map = load_canonical_map()
+        with pytest.raises(ValueError, match="not in impostor_ids"):
+            impostor_pretend_task_id(
+                game_map=game_map,
+                agent_id="p-9",
+                impostor_ids=["p-2", "p-4"],
+                tick=0,
+            )
+
+
+class TestImpostorPretendTaskIntegrity:
+    """The blending pretend-task never advances the real task counter (Task
+    10.14, DESIGN.md §3.4/§3.5; audit-2026-06-13-1816 D-D-1). The fake
+    ``do_task`` renders as a do_task action and consumes the tick, but the engine
+    rejects it (the impostor owns no instance), so it advances no instance and
+    cannot move the CREWMATE_TASKS win denominator -- a fake task can never help
+    the crew win. The inviolable invariant of the toolkit, pinned end-to-end.
+    """
+
+    def test_fake_do_task_rejected_advances_no_instance_no_denominator(
+        self, tmp_path: Path
+    ) -> None:
+        game_map = load_canonical_map()
+        base = _multi_impostor_world_state()
+        impostor_ids = ["p-2", "p-4"]
+        # The impostor's deterministic pretend task at this tick.
+        pretend = impostor_pretend_task_id(
+            game_map=game_map,
+            agent_id="p-4",
+            impostor_ids=impostor_ids,
+            tick=base.tick,
+        )
+        assert pretend is not None
+        pretend_room = game_map.tasks[pretend].room
+        # The sharpest integrity case: a CREWMATE (p-1) owns an instance of the
+        # SAME map task the impostor will pretend, co-located in the same room.
+        # The impostor's fake do_task must not advance p-1's instance -- the
+        # engine resolves (actor, map_task_id) to the ACTOR's own instance, and
+        # the impostor owns none.
+        crew_instance = _task_instance(
+            owner="p-1",
+            map_task_id=pretend,
+            room=pretend_room,
+            progress=0,
+            required_ticks=3,
+        )
+        players = dict(base.players)
+        players["p-4"] = dataclasses.replace(base.players["p-4"], room=pretend_room)
+        players["p-1"] = dataclasses.replace(base.players["p-1"], room=pretend_room)
+        state = dataclasses.replace(
+            base,
+            players=players,
+            tasks=_tasks(crew_instance),
+            # Cooldown up so the impostor cannot kill the co-located crewmate and
+            # the tick exercises only the do_task path.
+            cooldowns={"p-2": 4, "p-4": 4},
+        )
+        tasks_total_before = len(state.tasks)
+
+        actions = [
+            _action(
+                {"type": "do_task", "actor": "p-4", "payload": {"task_id": pretend}}
+            ),
+            # The crew owner waits so its own instance does not progress via the
+            # continuing-task path -- isolating the impostor's fake do_task.
+            _action({"type": "wait", "actor": "p-1", "payload": {}}),
+        ]
+        next_state, events = advance_tick(state, actions, game_map=game_map)
+
+        # The fake do_task RENDERS as a do_task action but is REJECTED for owning
+        # no instance -- it consumed the tick and made no progress.
+        rejections = [
+            event
+            for event in events
+            if event.type == "ActionRejected" and event.actor == "p-4"
+        ]
+        assert len(rejections) == 1
+        assert rejections[0].action == "do_task"
+        assert "owns no task instance" in rejections[0].reason
+        # No TaskProgressed/TaskCompleted event names the impostor.
+        assert not [
+            event
+            for event in events
+            if event.type in {"TaskProgressed", "TaskCompleted"}
+            and getattr(event, "actor", None) == "p-4"
+        ]
+        # The crew owner's real instance is UNTOUCHED (the impostor is not owner).
+        assert next_state.tasks[crew_instance.id].progress == 0
+        assert next_state.tasks[crew_instance.id].completed is False
+        # The win denominator did not move: no pretend instance was minted.
+        assert len(next_state.tasks) == tasks_total_before
+        assert f"p-4:{pretend}" not in next_state.tasks
+        # The agent-visible global denominator is likewise unchanged.
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=next_state, agent_id="p-1", engine_events=[]
+        )
+        assert packet.global_state.tasks_total == tasks_total_before
+        assert packet.global_state.tasks_completed == 0
