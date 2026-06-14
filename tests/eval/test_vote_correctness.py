@@ -1443,6 +1443,81 @@ def test_defaulted_without_persisted_field_stays_without_render() -> None:
     assert defaulted.defaulted_under_must_vote == 0
 
 
+def test_persisted_must_skip_counts_correct_skip_in_decision_census() -> None:
+    """The two surfaces agree: a persisted MUST-skip default is a correct skip.
+
+    ``DefaultedBallotReport.defaulted_under_must_skip`` is documented to ALSO
+    stay a ``correct_skip_ballots`` entry in the decision census (the one
+    deliberate overlap). Pre-fix, the decision census only read ``llm_calls``,
+    so a defaulted ballot whose prompt never logged was diverted instead of
+    counted — the two surfaces disagreed. The persisted failed-call fallback
+    restores the overlap for the failed-call path.
+    """
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter="p-0",
+                reason_id=None,
+                rationale_text=_DEFAULTED_RATIONALE,
+            ),
+        ),
+        llm_calls=(),
+    )
+    report = _report_with_failed_calls(
+        meeting,
+        (_defaulted_vote_failed_call(voter="p-0", rendered_vote_max=0.55),),
+    )
+
+    result = compute_conversion_report(report)
+
+    assert result.skip_ballots == 1
+    assert result.correct_skip_ballots == 1
+    assert result.missed_skip_ballots == 0
+    assert result.threshold_inversions == 0
+    # The telemetry census agrees on the verdict (no surface disagreement).
+    assert compute_defaulted_ballots(report).defaulted_under_must_skip == 1
+
+
+def test_persisted_must_vote_default_stays_diverted_from_decision_census() -> None:
+    """A persisted MUST-vote default is still diverted — never a missed/inversion.
+
+    The §4.6 0-inversion HARD line must hold: a degraded SKIP under a MUST-vote
+    verdict is the fail-soft net, not the voter's decision, so the decision
+    census diverts it (the divert condition now fires off the recovered max)
+    and only the telemetry census records it.
+    """
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter="p-0",
+                reason_id=None,
+                rationale_text=_DEFAULTED_RATIONALE,
+            ),
+        ),
+        llm_calls=(),
+    )
+    report = _report_with_failed_calls(
+        meeting,
+        (_defaulted_vote_failed_call(voter="p-0", rendered_vote_max=0.65),),
+    )
+
+    result = compute_conversion_report(report)
+
+    assert result.skip_ballots == 0
+    assert result.missed_skip_ballots == 0
+    assert result.threshold_inversions == 0
+    assert result.unclassified_skip_ballots == 0
+    assert compute_defaulted_ballots(report).defaulted_under_must_vote == 1
+
+
 def test_defaulted_census_ignores_non_skip_and_unmarked_ballots() -> None:
     """Only marker-bearing SKIPs are DEFAULTED; everything else is invisible."""
 
