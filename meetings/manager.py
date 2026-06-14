@@ -1396,13 +1396,25 @@ class MeetingManager:
         # the surfaced default below (Task 10.12, audit H-H-2) so a defaulted
         # ballot -- whose vote call fails before the recording client logs this
         # prompt -- carries its true verdict into the failed_call row.
-        rendered_vote_max = max(
-            (
-                entry.suspicion
-                for entry in suspicion_graph
-                if entry.player_id in candidate_targets
-            ),
-            default=0.0,
+        #
+        # Rounded to the SAME 2-decimal precision the ``vote_ballot.j2`` §4.6
+        # line renders (``"%.2f"|format``) and that
+        # ``eval._suspicion_parse.parse_rendered_max_suspicion`` recovers off a
+        # SUCCESSFUL call: a near-threshold raw max (e.g. 0.596 renders/parses
+        # as ``**0.60**``) must classify IDENTICALLY whether recovered from the
+        # persisted field or a logged prompt, or the two telemetry surfaces
+        # would split a defaulted ballot's verdict at the rounding boundary
+        # (0.596 -> MUST-vote off the rendered 0.60, not raw-0.596 -> MUST-skip).
+        rendered_vote_max = float(
+            "%.2f"
+            % max(
+                (
+                    entry.suspicion
+                    for entry in suspicion_graph
+                    if entry.player_id in candidate_targets
+                ),
+                default=0.0,
+            )
         )
         # ``response`` must survive into the ValidationError handler below:
         # when the manager-side parse of a returned payload fails, the

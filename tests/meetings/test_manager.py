@@ -2940,6 +2940,51 @@ class TestDefaultsSurfacedAndOpeningRetry:
         assert all(v.turn_index is None for v in votes)
         assert sorted(v.agent_id for v in votes) == ["p-1", "p-2", "p-3", "p-4"]
 
+    def test_defaulted_vote_rendered_max_is_rounded_to_prompt_precision(self) -> None:
+        # Task 10.12 (audit H-H-2): the persisted §4.6 max must match the
+        # 2-decimal precision the vote_ballot.j2 line renders and
+        # parse_rendered_max_suspicion recovers, so a defaulted ballot near the
+        # gate classifies IDENTICALLY whether read from the persisted field or a
+        # logged prompt. A raw 0.596 renders as **0.60** (-> MUST-vote); the
+        # persisted value must be 0.60, not the raw 0.596 (which would read
+        # MUST-skip and split the two telemetry surfaces).
+        participants = (
+            _participant(
+                "p-1",
+                suspicion_graph=(
+                    SuspicionEntry(player_id="p-2", suspicion=0.596, trust=0.5),
+                ),
+            ),
+            _participant("p-2"),
+            _participant("p-3"),
+            _participant("p-4"),
+        )
+        manager = _make_manager(
+            llm_client=_SleepOnPhaseClient(sleep_phase="PHASE=VOTE"),
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=0.01),
+        )
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=participants,
+            )
+        )
+
+        p1_vote = next(
+            v
+            for v in manager.defaulted_calls
+            if v.phase == "vote" and v.agent_id == "p-1"
+        )
+        assert p1_vote.rendered_vote_max == 0.60
+        # The other voters hold no row over a candidate -> rendered max 0.00.
+        p2_vote = next(
+            v
+            for v in manager.defaulted_calls
+            if v.phase == "vote" and v.agent_id == "p-2"
+        )
+        assert p2_vote.rendered_vote_max == 0.0
+
     def test_defaulted_calls_reset_between_runs(self) -> None:
         # The manager is reused across a game's meetings, so its default ledger
         # must reset each run. ``invalid_opening_attempts=2`` makes run 1's
