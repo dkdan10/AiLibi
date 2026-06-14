@@ -13,6 +13,7 @@ from agents.memory.beliefs import (
     MEETING_SUSPICION_DECAY_RATE,
     TESTIMONY_INDEPENDENCE_BAR,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
+    WITNESS_INFORM_REASON,
     BeliefState,
     PlayerBelief,
     VENTING_SUSPICION_DELTA,
@@ -1306,6 +1307,214 @@ class TestMeetingFoldPhases:
 
         assert _snapshot(beliefs) == before
         assert _snapshot(first) == _snapshot(second)
+
+
+class TestSingleWitnessInform:
+    """The Task 10.15 single-witness inform (audit 2026-06-13 C-C-1 + H-4).
+
+    A single observation-backed witness spreads the same +0.05 pre-vote as
+    the two-witness fold, via the ``pre_vote_informed`` band. The owner
+    principle is the load-bearing pin: the inform INFORMS (lifts near-gate
+    priors) but never EJECTS a baseline listener alone -- +0.05 is strictly
+    less than the 0.10 gate-distance from baseline. The double-fold guard
+    holds on the new channel exactly as on the fold.
+    """
+
+    def test_witness_inform_reason_is_a_named_marker(self) -> None:
+        # The public symbol downstream (Wave-2 attribution) imports; a string
+        # channel marker, NOT a new magnitude (the +0.05 unit is reused).
+        assert WITNESS_INFORM_REASON == "single-witness inform"
+
+    def test_pre_vote_bumps_informed_subjects(self) -> None:
+        # The single-witness inform: an informed subject takes the +0.05
+        # pre-vote, exactly like a folded subject.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+            phase="pre_vote",
+            pre_vote_informed=frozenset({"p-5"}),
+        )
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        # The un-voiced accused subject stays invisible pre-vote.
+        assert "p-2" not in updated.known_players()
+
+    def test_baseline_listener_does_not_cross_on_inform_alone(self) -> None:
+        # THE anti-single-signal tripwire (the owner principle): a baseline
+        # 0.50 listener lands at 0.55 on the inform -- UNDER the 0.60 gate.
+        # +0.05 < the 0.10 gate-distance is the structural guarantee.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_informed=frozenset({"p-5"}),
+        )
+
+        crossed = updated.view("p-5").suspicion
+        assert crossed == pytest.approx(0.55)
+        assert crossed < 0.60
+
+    def test_near_gate_listener_crosses_on_inform(self) -> None:
+        # A listener already at >= 0.55 from their OWN prior
+        # (accumulate-across-rounds) crosses 0.60 on the witness's inform
+        # (corroborate-within-round) -- prior PLUS inform, never the inform
+        # alone.
+        beliefs = BeliefState()
+        beliefs.seed_player("p-5", suspicion=0.55, trust=0.5)
+
+        updated = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_informed=frozenset({"p-5"}),
+        )
+
+        assert updated.view("p-5").suspicion == pytest.approx(0.60)
+        assert updated.view("p-5").suspicion >= 0.60
+
+    def test_post_vote_skips_the_informed_subjects_bump(self) -> None:
+        # The pre-vote inform REPLACES the post-vote single-accuser bump for
+        # that subject-meeting -- the post-vote half skips it.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+            phase="post_vote",
+            pre_vote_informed=frozenset({"p-5"}),
+        )
+
+        assert updated.view("p-2").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert "p-5" not in updated.known_players()
+
+    def test_informed_subject_per_meeting_total_equals_unfolded(self) -> None:
+        # THE double-fold pin on the inform channel: the two-phase protocol
+        # with the subject INFORMED equals the composed call with it
+        # unfolded -- a single +0.05 persists either way (never doubled).
+        evidence: Mapping[str, Sequence[str]] = {"accused": ["p-5"]}
+
+        informed_pre = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=evidence["accused"],
+            phase="pre_vote",
+            pre_vote_informed=frozenset({"p-5"}),
+        )
+        informed_total = apply_meeting_evidence_rules(
+            informed_pre,
+            own_id="observer",
+            accused=evidence["accused"],
+            phase="post_vote",
+            pre_vote_informed=frozenset({"p-5"}),
+        )
+        unfolded_total = _absorb_meetings(BeliefState(), [evidence])
+
+        assert informed_total.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert _snapshot(informed_total) == _snapshot(unfolded_total)
+
+    def test_phases_compose_with_informed_subjects(self) -> None:
+        # pre_vote then post_vote over the same evidence (one folded, one
+        # informed, one bare) equals the composed default call -- each
+        # accused subject is bumped exactly once whichever half carried it.
+        evidence: Mapping[str, Sequence[str]] = {
+            "accused": ["p-2", "p-5", "p-8"],
+            "corroborated": ["p-3"],
+        }
+        composed = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=evidence["accused"],
+            corroborated=evidence["corroborated"],
+        )
+        pre = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=evidence["accused"],
+            corroborated=evidence["corroborated"],
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+            pre_vote_informed=frozenset({"p-8"}),
+        )
+        split = apply_meeting_evidence_rules(
+            pre,
+            own_id="observer",
+            accused=evidence["accused"],
+            corroborated=evidence["corroborated"],
+            phase="post_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+            pre_vote_informed=frozenset({"p-8"}),
+        )
+
+        assert _snapshot(split) == _snapshot(composed)
+
+    def test_fold_and_inform_apply_together_pre_vote(self) -> None:
+        # The fold (two-witness) and the inform (single-witness) share the
+        # pre-vote half: both bands move +0.05 in one call, a bare accused
+        # subject does not.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5", "p-8"),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+            pre_vote_informed=frozenset({"p-8"}),
+        )
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert updated.view("p-8").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert "p-2" not in updated.known_players()
+
+    def test_teammate_guard_holds_on_the_inform_channel(self) -> None:
+        # DESIGN.md §4.7 firewall on the new channel: an impostor listener
+        # never takes a pre-vote inform against a fellow impostor.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+            fellow_impostor_ids=("p-2",),
+            phase="pre_vote",
+            pre_vote_informed=frozenset({"p-2", "p-5"}),
+        )
+
+        assert "p-2" not in updated.known_players()
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+
+    def test_informed_subject_nobody_accused_fails_loud(self) -> None:
+        with pytest.raises(ValueError, match="pre_vote_informed"):
+            apply_meeting_evidence_rules(
+                BeliefState(),
+                own_id="observer",
+                accused=("p-2",),
+                phase="pre_vote",
+                pre_vote_informed=frozenset({"p-5"}),
+            )
+
+    def test_folded_and_informed_must_be_disjoint(self) -> None:
+        # A subject cannot be in both bands (two voices is the fold, one the
+        # inform) -- caller drift, never silently merged.
+        with pytest.raises(ValueError, match="disjoint"):
+            apply_meeting_evidence_rules(
+                BeliefState(),
+                own_id="observer",
+                accused=("p-5",),
+                phase="pre_vote",
+                pre_vote_folded=frozenset({"p-5"}),
+                pre_vote_informed=frozenset({"p-5"}),
+            )
 
 
 # ---------------------------------------------------------------------------

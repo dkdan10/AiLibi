@@ -37,6 +37,7 @@ from pydantic import BaseModel, ValidationError
 from agents.memory.beliefs import (
     ACCUSATION_SUSPICION_DELTA,
     CORROBORATION_SUSPICION_DELTA,
+    TESTIMONY_INDEPENDENCE_BAR,
     BeliefState,
     apply_meeting_evidence_rules,
 )
@@ -366,6 +367,7 @@ def _make_responder(
     claims_by: dict[str, tuple[Claim, ...]] | None = None,
     vote_targets: dict[str, str] | None = None,
     vote_reason_ids: dict[str, str] | None = None,
+    free_text: dict[str, str] | None = None,
 ) -> Callable[[str, type[BaseModel] | None], str]:
     """Build a responder that dispatches by phase markers in the prompt.
 
@@ -382,6 +384,7 @@ def _make_responder(
     claims_by = claims_by or {}
     vote_targets = vote_targets or {}
     vote_reason_ids = vote_reason_ids or {}
+    free_text = free_text or {}
 
     def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
         if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
@@ -391,6 +394,7 @@ def _make_responder(
                 accuses=accusations.get(speaker),
                 observations=observations.get(speaker, ()),
                 claims=claims_by.get(speaker, ()),
+                free_text=free_text.get(speaker),
             )
         if "PHASE=VOTE" in prompt:
             voter = _extract_marker(prompt, "voter=")
@@ -4580,12 +4584,17 @@ class TestDeriveBeliefEvidenceFolded:
         )
 
         assert evidence.pre_vote_folded == ("p-2",)
+        # Two voices is the fold band, not the single-witness inform band.
+        assert evidence.pre_vote_informed == ()
         assert evidence.accused == ("p-2",)
         # The corroboration moves in the same evidence -- the symmetric
         # defended-subject channel.
         assert evidence.corroborated == ("p-1",)
 
-    def test_single_voice_subject_is_not_marked(self) -> None:
+    def test_single_voice_subject_is_marked_informed(self) -> None:
+        # Task 10.15: one observation-backed voice is below the fold bar but
+        # is the single-witness INFORM band -- marked ``pre_vote_informed``,
+        # never ``pre_vote_folded``.
         opening, _ = self._two_voice_turns()
         evidence = derive_belief_evidence(
             MeetingTranscript(turns=(opening,)),
@@ -4594,6 +4603,7 @@ class TestDeriveBeliefEvidenceFolded:
         )
 
         assert evidence.pre_vote_folded == ()
+        assert evidence.pre_vote_informed == ("p-2",)
         assert evidence.accused == ("p-2",)
 
     def test_extract_delegates_to_the_one_derivation(self) -> None:
@@ -4684,24 +4694,40 @@ class TestPreVoteFoldOnProductionPath:
         )
         assert folded_view.suspicion == single_view.suspicion
 
-    def test_single_voice_meeting_is_byte_identical_to_pre_change(self) -> None:
-        # The single-voice regression: one observation-backed accuser is
-        # below the independence bar, so the vote-prompt path takes the
-        # unchanged fast path (the rendered graphs ARE the snapshots)
-        # and the persistent post-meeting state is the standing
-        # post-vote math, value-pinned.
+    def test_single_voice_inform_moves_every_living_listener_once(self) -> None:
+        # Task 10.15 single-witness inform (audit 2026-06-13 C-C-1): one
+        # observation-backed accuser is below the two-witness bar but is an
+        # INFORM voice -- it spreads +0.05 to every living listener's view of
+        # p-2 PRE-VOTE, on the same quantized lattice as the fold. The pin is
+        # wired to the owner principle:
+        #   * p-3 is a BASELINE listener (no prior row, 0.50): the inform
+        #     materialises 0.55, which STAYS UNDER the 0.60 gate -- informs,
+        #     never ejects a baseline listener alone (the anti-single-signal
+        #     tripwire);
+        #   * p-4 is a NEAR-GATE listener (0.55 prior): the inform CROSSES it
+        #     to 0.60 (its own prior PLUS the witness's inform);
+        #   * p-1's 0.75 eyewitness prior reads 0.80.
+        # The single-voice responder vouches for nobody, so there is no
+        # corroboration: p-1's rows are unmoved.
         result, client = _run_meeting(
             _single_voice_responder(), participants=_fold_participants()
         )
 
-        assert extract_belief_evidence(result).pre_vote_folded == ()
-        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.75/0.50"
+        evidence = extract_belief_evidence(result)
+        assert evidence.pre_vote_folded == ()
+        assert evidence.pre_vote_informed == ("p-2",)
+        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.80/0.50"
+        assert _stub_vote_graph(client, voter="p-3") == "suspicion=p-2:0.55/0.50"
         assert (
             _stub_vote_graph(client, voter="p-4")
-            == "suspicion=p-1:0.50/0.50,p-2:0.55/0.50"
+            == "suspicion=p-1:0.50/0.50,p-2:0.60/0.50"
         )
+
+        # The pre-vote inform REPLACES the post-vote single-accuser bump, so
+        # the persistent per-meeting total stays a single +0.05 -- the inform
+        # changes WHEN the listener sees the bump (pre-vote), never how much
+        # persists (the double-fold guard on the new channel).
         memory = _voter_memory("p-4", sightings=("p-1", "p-2", "p-3"))
-        evidence = extract_belief_evidence(result)
         absorb_meeting_evidence(
             memory,
             accused=evidence.accused,
@@ -4713,10 +4739,13 @@ class TestPreVoteFoldOnProductionPath:
         )
 
     def test_bare_verbal_pile_on_folds_nothing(self) -> None:
-        # Any number of bare verbal accusers stays below the bar: a
-        # three-accuser chain whose only located content sits at the
-        # kill scene derives no voices, renders unchanged snapshots, and
-        # keeps the standing post-vote accumulator math.
+        # THE bare-accusation pin (Task 10.15 owner-principle tripwire): any
+        # number of bare verbal accusers with NO first-hand observation
+        # backing stays below BOTH bands -- a three-accuser chain whose only
+        # located content sits at the kill scene derives no voices, so the
+        # single-witness inform folds NOTHING (the seed-30-class pile-on
+        # still converts nothing), renders unchanged snapshots, and keeps
+        # the standing post-vote accumulator math.
         responder = _make_responder(
             accusations={"p-1": "p-2", "p-2": "p-3", "p-3": "p-1"},
             observations={
@@ -4728,10 +4757,66 @@ class TestPreVoteFoldOnProductionPath:
         evidence = extract_belief_evidence(result)
         assert evidence.accused == ("p-1", "p-2", "p-3")
         assert evidence.pre_vote_folded == ()
+        assert evidence.pre_vote_informed == ()
         assert (
             _stub_vote_graph(client, voter="p-4")
             == "suspicion=p-1:0.50/0.50,p-2:0.55/0.50"
         )
+
+    def test_echoed_accusers_inform_not_fold_on_production_path(self) -> None:
+        # The H-4 fix end-to-end: two distinct observation-backed accusers
+        # of p-2 whose free-text rationales are verbatim copies collapse to
+        # ONE voice -- so p-2 takes the single-witness INFORM (one +0.05
+        # pre-vote spread), NOT the two-witness fold the copied independence
+        # would otherwise manufacture.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-2": "p-3"},
+            observations={
+                "p-1": _backed_observations(seen=(("p-2", "ADMIN", 402),)),
+                "p-3": (
+                    SawPlayerObservation(
+                        type="saw_player", tick=402, subject="p-2", room="ADMIN"
+                    ),
+                ),
+            },
+            free_text={
+                "p-1": "p-2 left the scene without helping.",
+                "p-3": "p-2 left the scene without helping.",
+            },
+        )
+        result, client = _run_meeting(responder, participants=_fold_participants())
+
+        evidence = extract_belief_evidence(result)
+        assert evidence.pre_vote_folded == ()
+        assert evidence.pre_vote_informed == ("p-2",)
+        # The inform still spreads exactly one +0.05: p-4's near-gate 0.55
+        # crosses to 0.60, never to 0.65 (no doubled fold from the echo).
+        assert (
+            _stub_vote_graph(client, voter="p-4")
+            == "suspicion=p-1:0.50/0.50,p-2:0.60/0.50"
+        )
+
+    def test_inform_leaves_the_equal_tally_and_tie_skip_frozen(self) -> None:
+        # Frozen-tally regression (Task 10.15 DoD): the inform is
+        # belief-spread, NOT a tally reweight. p-2 is informed (one
+        # observation-backed voice) and the listeners' rendered suspicion
+        # moves, but the tally still counts equal votes and resolves a
+        # 2-eject / 2-SKIP tie to SKIP -- byte-unchanged from the frozen
+        # rule. A freshly-informed listener crossing the gate is the
+        # listener's MUST-vote, never a tally-side reweight.
+        responder = _make_responder(
+            accusations={"p-1": "p-2", "p-2": None},
+            observations={
+                "p-1": _backed_observations(seen=(("p-2", "ADMIN", 402),)),
+            },
+            vote_targets={"p-1": "p-2", "p-4": "p-2", "p-2": "SKIP", "p-3": "SKIP"},
+        )
+        result, _ = _run_meeting(responder, participants=_fold_participants())
+
+        assert extract_belief_evidence(result).pre_vote_informed == ("p-2",)
+        # Two eject-p-2 vs two SKIP: the frozen tie -> SKIP rule holds.
+        assert result.outcome == "SKIPPED"
+        assert result.ejected_player_id is None
 
     def test_no_fold_evidence_keeps_the_snapshot_object(self) -> None:
         # The fast-path identity: evidence that folds nothing (no
@@ -5738,3 +5823,195 @@ class TestBallotTargetGuardOnProductionPath:
         ballot = next(b for b in result.ballots if b.voter == "p-2")
         assert ballot.target == "p-3"
         assert ballot.rationale_text == "stub-vote-p-2-p-3"
+
+
+# ---------------------------------------------------------------------------
+# Task 10.15: the single-witness inform yield, re-derived offline against the
+# committed W1 bytes (audit 2026-06-13-1816 C-C-1). No re-record: the recorded
+# replays are reconstructed, and the inform's conversions are COUNTERFACTUAL
+# (recording-side belief-spread the next re-record (10.17) measures live). The
+# methodology is self-validating -- it reproduces the audit's own 59 / 37
+# partition exactly from the recorded vote-prompt graphs -- before counting the
+# inform yield on top. Reuses _COMMITTED_9P2I_DIR / _SUSPICION_GRAPH_* and the
+# replay loader from the committed-bytes section above.
+# ---------------------------------------------------------------------------
+
+# A voter's own role line in a recorded prompt (the rendered memory leads with
+# "## Your role: CREWMATE|IMPOSTOR"), the engine-authoritative role channel for
+# identifying which living players are impostors without a separate role map.
+_ROLE_LINE_RE = re.compile(r"## Your role:\s*(CREWMATE|IMPOSTOR)")
+
+
+def _voter_rendered_suspicion(vote_prompt: str, *, of: str) -> float | None:
+    """The suspicion the committed vote prompt rendered for ``of`` to ONE voter.
+
+    The §6.6 graph lists only players the voter holds a non-default belief
+    about, so an absent subject returns ``None`` (its default 0.50 prior, which
+    the inform lifts only to 0.55 -- under the gate, never a crossing).
+    """
+
+    if _SUSPICION_GRAPH_HEADER not in vote_prompt:
+        return None
+    block = vote_prompt.split(_SUSPICION_GRAPH_HEADER, 1)[1].split("## ", 1)[0]
+    for match in _SUSPICION_GRAPH_ROW_RE.finditer(block):
+        if match.group("pid") == of:
+            return float(match.group("sus"))
+    return None
+
+
+@dataclass(frozen=True)
+class _InformYield:
+    accused_not_ejected: int  # the audit's "59" denominator
+    over_gate_lost_plurality: int  # the audit's "37" bucket (c)
+    informed_candidates: int  # of the 37, the single-witness (1-voice) subset
+    conversions: tuple[tuple[int, str, str], ...]  # (seed, meeting_id, impostor)
+
+
+def _derive_inform_yield() -> _InformYield:
+    """Re-derive the single-witness inform yield over the committed W1 bytes.
+
+    For every meeting, for every living-and-accused impostor S the recorded
+    ballots did not eject:
+
+    * count it in the ``59`` denominator;
+    * if at least one living voter rendered S over the §4.6 gate, count it in
+      the ``37`` over-gate-lost-plurality bucket (the audit's lens-C);
+    * if S carries exactly one independent voice (the single-witness INFORM
+      band, below ``TESTIMONY_INDEPENDENCE_BAR``, under the echo-deduped
+      :func:`independent_voices`), it is an inform candidate. Apply the +0.05
+      inform: a CREW voter who SKIPPED and rendered S in
+      ``[gate - inform, gate)`` crosses the gate and flips to eject-S (a
+      baseline below that band cannot cross on the inform alone -- the owner
+      principle). Re-tally with the frozen equal-votes + tie->SKIP rule; S
+      CONVERTS when it becomes the strict plurality. The flip set is
+      deliberately conservative (only recorded SKIP voters), so the count is a
+      floor.
+    """
+
+    gate = 0.60
+    inform = ACCUSATION_SUSPICION_DELTA  # the reused 9.8 +0.05 unit
+    accused_not_ejected = 0
+    over_gate = 0
+    informed = 0
+    conversions: list[tuple[int, str, str]] = []
+
+    seeds = sorted(
+        int(path.stem.split("-")[-1])
+        for path in _COMMITTED_9P2I_DIR.glob("replay-seed-*.jsonl")
+    )
+    for seed in seeds:
+        entries = [
+            entry
+            for entry in read_all_entries(
+                _COMMITTED_9P2I_DIR / f"replay-seed-{seed}.jsonl"
+            )
+            if isinstance(entry, MeetingReplayEntry)
+        ]
+        impostors = {
+            call.agent_id
+            for entry in entries
+            for call in entry.llm_calls
+            if call.agent_id is not None
+            and (match := _ROLE_LINE_RE.search(call.prompt)) is not None
+            and match.group(1) == "IMPOSTOR"
+        }
+        for entry in entries:
+            voters = [ballot.voter for ballot in entry.ballots]
+            roster = frozenset(voters)
+            living_impostors = sorted(impostors & roster)
+            if not living_impostors:
+                continue
+            accused = {
+                claim.against
+                for turn in entry.transcript.turns
+                for claim in turn.claims
+                if isinstance(claim, AccusationClaim) and claim.against != turn.speaker
+            }
+            vote_prompts = {
+                call.agent_id: call.prompt
+                for call in entry.llm_calls
+                if "maximum suspicion among the living ejection targets" in call.prompt
+            }
+            ballot_target = {ballot.voter: ballot.target for ballot in entry.ballots}
+            voices = independent_voices(entry.transcript, roster=roster)
+            for subject in living_impostors:
+                if subject not in accused or entry.ejected_player_id == subject:
+                    continue
+                accused_not_ejected += 1
+                rendered = {
+                    voter: _voter_rendered_suspicion(vote_prompts[voter], of=subject)
+                    for voter in voters
+                    if voter in vote_prompts
+                }
+                if not any(v is not None and v >= gate for v in rendered.values()):
+                    continue
+                over_gate += 1
+                if not 0 < len(voices.get(subject, ())) < TESTIMONY_INDEPENDENCE_BAR:
+                    continue  # folded (>= bar) or bare (0) -- not the inform band
+                informed += 1
+                flips = [
+                    voter
+                    for voter in voters
+                    if voter not in living_impostors
+                    and ballot_target.get(voter) == "SKIP"
+                    and (value := rendered.get(voter)) is not None
+                    and gate - inform <= value < gate
+                ]
+                if not flips:
+                    continue
+                tally: dict[str, int] = {}
+                for target in ballot_target.values():
+                    tally[target] = tally.get(target, 0) + 1
+                tally["SKIP"] = tally.get("SKIP", 0) - len(flips)
+                tally[subject] = tally.get(subject, 0) + len(flips)
+                best = max(tally.values())
+                winners = [target for target, count in tally.items() if count == best]
+                if winners == [subject]:
+                    conversions.append((seed, entry.meeting_id, subject))
+
+    return _InformYield(
+        accused_not_ejected=accused_not_ejected,
+        over_gate_lost_plurality=over_gate,
+        informed_candidates=informed,
+        conversions=tuple(sorted(conversions)),
+    )
+
+
+class TestSingleWitnessInformYieldOnCommittedBytes:
+    """The Task 10.15 37-bloc yield, walked offline (no re-record).
+
+    The deliverable number for the 10.17 expectation. The derivation first
+    reproduces the audit-2026-06-13-1816 §4(3) partition EXACTLY (59 accused
+    living-impostor meeting-subjects the ballots did not eject; 37 of them
+    rendered over the §4.6 gate yet lost plurality), which validates the
+    offline oracle, then counts how many the single-witness inform converts
+    WITHOUT any tally change.
+    """
+
+    def test_methodology_reproduces_the_audit_partition(self) -> None:
+        result = _derive_inform_yield()
+
+        # The audit's own §4(3) numbers, re-derived from the committed bytes.
+        assert result.accused_not_ejected == 59
+        assert result.over_gate_lost_plurality == 37
+
+    def test_single_witness_inform_converts_six_of_the_thirty_seven(self) -> None:
+        result = _derive_inform_yield()
+
+        # 21 of the 37 are single-witness-informed (one observation-backed
+        # voice under echo-dedup); the inform lifts a plurality of listeners
+        # over 0.60 in 6 of them, flipping a SKIP-plurality to an
+        # impostor-eject with the frozen equal-votes + tie->SKIP tally.
+        assert result.informed_candidates == 21
+        assert len(result.conversions) == 6
+        assert result.conversions == (
+            (2, "headless-seed-2:meeting-1", "p-7"),
+            (28, "headless-seed-28:meeting-0", "p-8"),
+            (34, "headless-seed-34:meeting-0", "p-4"),
+            (39, "headless-seed-39:meeting-0", "p-6"),
+            (43, "headless-seed-43:meeting-0", "p-7"),
+            (43, "headless-seed-43:meeting-1", "p-7"),
+        )
+
+    def test_derivation_is_deterministic(self) -> None:
+        assert _derive_inform_yield() == _derive_inform_yield()

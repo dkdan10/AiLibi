@@ -135,6 +135,41 @@ two-witness point converts at 3:1 meeting-level yield/cost; the
 seed-30 m1 three-accuser pile-on is the tripwire a bare witness COUNT
 cannot filter and the voice definition does."""
 
+WITNESS_INFORM_REASON: Final[str] = "single-witness inform"
+"""The single-witness inform channel marker (Task 10.15; audit
+2026-06-13-1816 C-C-1 + H-4; the owner belief-spread-first decision
+2026-06-14; [[project_ejection_suspicion_principle]]).
+
+Names the crew belief-spread lever: a SINGLE observation-backed,
+relevance-passing witness -- one independent voice, below the two-witness
+:data:`TESTIMONY_INDEPENDENCE_BAR`
+(:func:`meetings.transcript.independent_voices`) -- spreads the same
+``ACCUSATION_SUSPICION_DELTA`` (+0.05) to every living listener's view of the
+subject PRE-VOTE (``pre_vote_informed`` in
+:func:`apply_meeting_evidence_rules`). The dominant Wave-1 residual was the
+SKIP-plurality bloc (37/59 over-gate-lost-plurality meetings): the impostor
+rendered over the gate for ONE witness while the listeners stayed under it, so
+the equal tally's SKIP bloc won. The inform SPREADS that one witness's
+first-hand testimony to the listeners so enough near-gate priors cross the
+§4.6 gate and the EQUAL tally convicts on its own -- no tally reweight (the
+V3 skip-halfweight was rejected by the owner decision).
+
+It INFORMS but never EJECTS alone -- the structural owner-principle guarantee:
+the +0.05 inform is strictly less than the 0.10 gate-distance from the 0.50
+baseline, so a baseline listener lands at 0.55, still UNDER the 0.60 gate.
+Only a listener already at >= 0.55 from their own prior
+(accumulate-across-rounds) crosses on the witness's inform
+(corroborate-within-round) -- never a single signal, never a bare-verbal
+cascade. A bare verbal accusation carries no voice and folds nothing.
+
+No magnitude is added (the 9.8 +0.05 unit is reused, not re-tuned): this is a
+human-readable channel marker, exported so the Wave-2 attribution
+(Tasks 10.16/10.17) can name the single-witness-inform channel distinctly from
+the Task 10.7 two-witness fold, and read by the disjointness guard in
+:func:`apply_meeting_evidence_rules`. The inform REPLACES the subject-meeting's
+post-vote single-accuser bump (the phase routing below), so the per-meeting
+total stays +0.05 -- never double-counted."""
+
 CORROBORATION_SUSPICION_DELTA: Final[float] = 0.05
 """DESIGN.md §6.3 Rule 3 magnitude: suspicion REMOVED when a subject is
 publicly corroborated in a meeting (Task 9.8).
@@ -567,8 +602,9 @@ def apply_meeting_evidence_rules(
     roster: AbstractSet[PlayerId] | None = None,
     phase: MeetingFoldPhase | None = None,
     pre_vote_folded: AbstractSet[PlayerId] = frozenset(),
+    pre_vote_informed: AbstractSet[PlayerId] = frozenset(),
 ) -> BeliefState:
-    """Fold one meeting's public evidence into persistent beliefs (Tasks 9.8, 10.7).
+    """Fold one meeting's public evidence into persistent beliefs (Tasks 9.8, 10.7, 10.15).
 
     Pure: returns a new :class:`BeliefState`; ``beliefs`` is not mutated.
     Runs on every living agent's stored beliefs (DESIGN.md §4.4 step 4's
@@ -582,10 +618,12 @@ def apply_meeting_evidence_rules(
       players named by an accusation claim in the meeting -- gains the
       small delta once. The caller deduplicates per meeting, so a
       pile-on of accusers is one meeting-level "was accused" event. A
-      subject below the two-witness independence bar takes the bump in
-      the post-vote half, where one round can never eject through it;
-      a ``pre_vote_folded`` subject takes the identical bump in the
-      pre-vote half instead (see *Fold phases* below).
+      subject with NO independent voice (a bare verbal accusation) takes
+      the bump in the post-vote half, where one round can never eject
+      through it; a ``pre_vote_folded`` (two-witness) OR
+      ``pre_vote_informed`` (single-witness, Task 10.15) subject takes
+      the identical bump in the pre-vote half instead (see *Fold phases*
+      below).
     * **Rule 3 corroboration** (``CORROBORATION_SUSPICION_DELTA``):
       every subject in ``corroborated`` loses the mirror delta --
       a public vouch is the collective clear. The set arrives
@@ -645,44 +683,53 @@ def apply_meeting_evidence_rules(
     **Fold phases (Task 10.7; audit gp-2 C-C-1/C-C-2).** One fold
     function, a ``phase`` argument, called twice per meeting -- never
     duplicated logic. ``pre_vote_folded`` names the subjects with
-    :data:`TESTIMONY_INDEPENDENCE_BAR`+ independent voices
-    (:func:`meetings.transcript.independent_voices`, derived by
-    ``meetings.manager.derive_belief_evidence`` and carried on the
-    meeting context -- this store never knows about phases beyond the
-    routing below) and must be a subset of ``accused`` (fail-loud
-    otherwise: a folded subject nobody accused is caller drift):
+    :data:`TESTIMONY_INDEPENDENCE_BAR`+ independent voices and
+    ``pre_vote_informed`` the subjects with exactly one
+    (:data:`WITNESS_INFORM_REASON`, Task 10.15 -- the single-witness
+    inform), both from :func:`meetings.transcript.independent_voices`,
+    derived by ``meetings.manager.derive_belief_evidence`` and carried on
+    the meeting context (this store never knows about phases beyond the
+    routing below). Each must be a subset of ``accused`` and the two must
+    be DISJOINT (fail-loud otherwise: a folded/informed subject nobody
+    accused, or a subject in both bands, is caller drift). The two bands
+    take the IDENTICAL pre-vote bump -- the inform is the single-witness
+    extension of the fold, at the same +0.05, in the same pre-vote half
+    (audit 2026-06-13 C-C-1: belief-spread, not a tally reweight):
 
     * ``phase="pre_vote"`` -- the half the meeting manager applies to
       every living listener BEFORE ballots: the accusation bump for
-      ``pre_vote_folded`` subjects only, plus ALL of this meeting's
-      relevance-gated corroborations (same-phase movement, both
-      directions symmetric -- a defended subject is cleared before
+      ``pre_vote_folded`` AND ``pre_vote_informed`` subjects, plus ALL of
+      this meeting's relevance-gated corroborations (same-phase movement,
+      both directions symmetric -- a defended subject is cleared before
       ballots). Never decays: Rule 5 is the post-vote half's.
     * ``phase="post_vote"`` -- the half that runs after resolution,
       exactly the pre-10.7 path for everything it touches: the
-      accusation bump for every accused subject NOT in
-      ``pre_vote_folded`` (the pre-vote fold REPLACES the post-vote
-      bump for a folded subject-meeting -- the double-fold guard), no
-      corroboration deltas (they moved pre-vote), and Rule-5 decay.
-      The decay exemption still reads the FULL evidence -- a folded or
-      corroborated subject got new evidence this meeting and must not
-      decay -- so ``accused`` / ``corroborated`` are passed whole to
-      both phases, never pre-partitioned by the caller.
+      accusation bump for every accused subject in NEITHER pre-vote band
+      (the pre-vote fold/inform REPLACES the post-vote bump for that
+      subject-meeting -- the double-fold guard), no corroboration deltas
+      (they moved pre-vote), and Rule-5 decay. The decay exemption still
+      reads the FULL evidence -- a folded, informed, or corroborated
+      subject got new evidence this meeting and must not decay -- so
+      ``accused`` / ``corroborated`` are passed whole to both phases,
+      never pre-partitioned by the caller.
     * ``phase=None`` (default) -- both halves composed in one call: the
       pre-10.7 behaviour, byte-for-byte, and the call shape of the
       standing post-meeting absorb
       (:func:`agents.memory.store.absorb_meeting_evidence`). Because
       the composition bumps each accused subject exactly once, the
-      persistent per-meeting total for a folded subject equals the
-      unfolded total by construction. (At a clamp boundary the
+      persistent per-meeting total for a folded/informed subject equals
+      the unfolded total by construction -- the inform changes WHEN the
+      listener sees the +0.05 (pre-vote, so it can recruit a plurality
+      this round), never how much persists. (At a clamp boundary the
       composed call keeps the pre-10.7 bump-then-corroborate order;
       the split phases order a single-voice bump after the pre-vote
       corroborations -- interior values are order-independent.)
 
-    The impostor teammate guard applies to the new channel exactly as
-    to the old: ``pre_vote_folded`` is intersected with the
-    teammate-and-self-filtered bump set, so an impostor listener never
-    takes a pre-vote bump against a fellow impostor.
+    The impostor teammate guard applies to both new channels exactly as
+    to the old: ``pre_vote_folded`` and ``pre_vote_informed`` are
+    intersected with the teammate-and-self-filtered bump set, so an
+    impostor listener never takes a pre-vote bump against a fellow
+    impostor.
 
     All subject sets are processed in sorted order; the result is a
     deterministic function of its arguments (replay-stable).
@@ -693,6 +740,19 @@ def apply_meeting_evidence_rules(
         raise ValueError(
             "pre_vote_folded must be a subset of accused; "
             f"unknown folded subjects: {sorted(unknown_folded)}"
+        )
+    unknown_informed = set(pre_vote_informed) - set(accused)
+    if unknown_informed:
+        raise ValueError(
+            "pre_vote_informed must be a subset of accused; "
+            f"unknown informed subjects: {sorted(unknown_informed)}"
+        )
+    both_bands = set(pre_vote_folded) & set(pre_vote_informed)
+    if both_bands:
+        raise ValueError(
+            "pre_vote_folded and pre_vote_informed must be disjoint "
+            f"(the fold is the two-witness band, {WITNESS_INFORM_REASON!r} the "
+            f"single-witness one); subjects in both: {sorted(both_bands)}"
         )
     if roster is not None:
         accused = [subject for subject in accused if subject in roster]
@@ -712,16 +772,19 @@ def apply_meeting_evidence_rules(
             if subject != own_id and subject not in teammates
         }
     )
-    # Phase routing (Task 10.7). The teammate / own-id / roster guards
-    # above already shaped ``bumped``, so intersecting the folded set
-    # with it applies every guard to the testimony channel for free.
-    folded = bumped & set(pre_vote_folded)
+    # Phase routing (Tasks 10.7, 10.15). The teammate / own-id / roster
+    # guards above already shaped ``bumped``, so intersecting the
+    # folded/informed sets with it applies every guard to both testimony
+    # channels for free. The two-witness fold and the single-witness inform
+    # share the pre-vote half (same +0.05); together they REPLACE the
+    # post-vote bump for their subjects (the double-fold guard).
+    pre_vote_bumped = bumped & (set(pre_vote_folded) | set(pre_vote_informed))
     if phase == "pre_vote":
-        bump_now = folded
+        bump_now = pre_vote_bumped
         lower_now = lowered
         decay_now = False
     elif phase == "post_vote":
-        bump_now = bumped - folded
+        bump_now = bumped - pre_vote_bumped
         lower_now = set()
         decay_now = True
     else:
@@ -758,6 +821,7 @@ __all__ = [
     "TESTIMONY_INDEPENDENCE_BAR",
     "VENTING_SUSPICION_DELTA",
     "WEAK_CONTRADICTION_SUSPICION_DELTA",
+    "WITNESS_INFORM_REASON",
     "AlibiClaim",
     "BeliefState",
     "ContradictionRef",
