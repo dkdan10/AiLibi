@@ -1,7 +1,21 @@
-{# prompt_version: crewmate_report.v6
+{# prompt_version: crewmate_report.v7
 
    Crewmate-side OPENING-turn prompt for the reactive accusation chain
    (DESIGN.md §5.1, §5.2 PHASE 1, §5.3, §6.6).
+
+   Task 10.11 (DESIGN.md §3.2, §5.2, §5.4; audit-2026-06-13-1816 B-B-1) bumps
+   v6 -> v7 with a SINGLE emergency-branch change: the emergency opening must
+   NOT present a `found_body` observation. On the close baseline every
+   emergency opening re-narrated a real-but-stale corpse as a fresh body
+   discovery to justify the suspicion-triggered meeting, and voters anchored
+   ejections on that fabrication (seed-27 m1 5/5 cite it). An emergency
+   meeting has NO kill scene by design (§5.2 PHASE 1), so the emergency
+   job paragraph now tells the model to lead with the SUSPICION that crossed
+   the line -- the sightings, co-presences, and contradictions behind the
+   button press -- and to emit no `found_body`. The body-report branch is
+   byte-identical to v6 (golden-pinned in
+   tests/agents/test_strategic_prompts.py); only the emergency job paragraph
+   and the version-marker line change.
 
    Task 10.8 (DESIGN.md §3.2, §5.2; audit gp-3 B-B-1..B-B-9) bumped v5 -> v6
    with an emergency-opening branch ONLY: now that the crewmate tactical
@@ -116,15 +130,18 @@ anyone -- and if so, you MUST write the word "unsure" in your `free_text`.
 Hard rule: your opening must EITHER include one `accusation` claim OR say
 "unsure" in `free_text`. An opening with neither is rejected and re-requested.
 
-Prompt: crewmate_report.v6 (DESIGN.md §5.2 PHASE 1)
+Prompt: crewmate_report.v7 (DESIGN.md §5.2 PHASE 1)
 
 {% if emergency_opening %}
 Your job in this opening turn: state why you called the meeting and commit to
 your single best suspect. You spent the crew's one emergency call on this -- a
 decisive, grounded accusation makes it count; a non-answer wastes it. Lead with
-the first-hand observations that drove you to the button: a player whose
-movements do not add up, a suspicious co-presence, a contradiction in someone's
-account. That is enough to name them.
+the suspicion that crossed the line: the first-hand observations that drove you
+to the button -- a player whose movements do not add up, a suspicious
+co-presence, a contradiction in someone's account. That is enough to name them.
+No body was found in this meeting -- do NOT emit a `found_body` observation. Your
+`observations` are the sightings, co-presences, and contradictions behind your
+suspicion, never a body discovery.
 {% else %}
 Your job in this opening turn: surface your observations AND commit to your single
 best suspect. You are the crew's first mover — a decisive, grounded accusation

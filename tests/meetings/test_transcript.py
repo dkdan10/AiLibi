@@ -2405,6 +2405,41 @@ class TestTriggeringBodyRooms:
         )
         assert triggering_body_rooms(transcript) == frozenset()
 
+    def test_emergency_trigger_ignores_a_fabricated_opening_body(self) -> None:
+        # Task 10.11 (audit-2026-06-13-1816 B-B-1): an emergency meeting has
+        # no kill scene by design (§5.2 PHASE 1). Even when the opening turn
+        # carries a (model-fabricated) found_body -- the exact close-baseline
+        # shape -- gating on trigger_kind="emergency" yields the empty set, so
+        # the fabrication cannot widen the §6.3 Rule-3 exclusion zone.
+        transcript = MeetingTranscript(
+            turns=(
+                _body_report_turn(
+                    turn_index=0, speaker="p-3", body_of="p-2", tick=8, room="REACTOR"
+                ),
+            )
+        )
+        # The default / report path still trusts the opening body...
+        assert triggering_body_rooms(transcript) == frozenset({"REACTOR"})
+        assert triggering_body_rooms(transcript, trigger_kind="report") == frozenset(
+            {"REACTOR"}
+        )
+        # ...but an emergency meeting never does.
+        assert (
+            triggering_body_rooms(transcript, trigger_kind="emergency") == frozenset()
+        )
+
+    def test_emergency_trigger_on_a_bodyless_opening_is_still_empty(self) -> None:
+        transcript = MeetingTranscript(
+            turns=(
+                _sighting_turn(
+                    turn_index=0, speaker="p-3", subject="p-6", tick=5, room="MEDBAY"
+                ),
+            )
+        )
+        assert (
+            triggering_body_rooms(transcript, trigger_kind="emergency") == frozenset()
+        )
+
 
 class TestDetectCorroborationsRelevanceGate:
     """Audit C-C-3: evidentially-empty vouches no longer corroborate."""
