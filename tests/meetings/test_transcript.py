@@ -2263,6 +2263,75 @@ class TestProxyIntraTurnGuard:
             f.model_dump_json() for f in second
         ]
 
+    def test_same_author_10_6_retarget_folds_under_one_lift_key(self) -> None:
+        # Codex PR #152 review, P1 #2: one turn where p-5 gives two
+        # conflicting p-4 alibis PLUS a p-4 sighting (also by p-5) that p-4's
+        # OWN account confirms. The conflict re-targets via 10.10; the two
+        # alibi_vs_sighting flags re-target via the 10.6 subject-account rule
+        # (WEAK_REASON_RETARGETED_PROXY). All three are one narrator's single
+        # turn, so they must fold to ONE weak lift key on p-5 -- otherwise the
+        # per-claim 10.6 keys stack with the 10.10 key (0.5 + 0.08*3 = 0.74)
+        # and the single-turn artifact crosses the gate on the proxy speaker.
+        from agents.memory.beliefs import BeliefState, apply_contradiction_rule
+
+        transcript = MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m-1:turn-1",
+                    turn_index=1,
+                    speaker="p-5",
+                    turn_kind="reply",
+                    reply_to=None,
+                    claims=(
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-4",
+                            from_tick=1,
+                            to_tick=6,
+                            room="EAST_HALL",
+                        ),
+                        AlibiClaim(
+                            type="alibi",
+                            subject="p-4",
+                            from_tick=1,
+                            to_tick=6,
+                            room="ENGINEERING",
+                        ),
+                    ),
+                    observations=(
+                        SawPlayerObservation(
+                            type="saw_player", tick=3, subject="p-4", room="STORAGE"
+                        ),
+                    ),
+                    free_text="turn 1",
+                ),
+                _alibi_turn(
+                    turn_index=2,
+                    speaker="p-4",
+                    subject="p-4",
+                    from_tick=2,
+                    to_tick=4,
+                    room="STORAGE",
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        p5_flags = [flag for flag in flags if flag.subjects == ("p-5",)]
+        # The 10.6 + 10.10 re-targets all land on p-5 under ONE fold key.
+        assert len(p5_flags) >= 2
+        assert {contradiction_lift_key(flag) for flag in p5_flags} == {
+            "proxy-intra-turn"
+        }
+        assert all(
+            WEAK_REASON_PROXY_INTRA_TURN in flag.description for flag in p5_flags
+        )
+
+        beliefs = BeliefState()
+        beliefs.seed_player("p-5", suspicion=0.5, trust=0.5)
+        lifted = apply_contradiction_rule(beliefs, p5_flags)
+        assert lifted.view("p-5").suspicion == pytest.approx(0.58)
+        assert lifted.view("p-5").suspicion < 0.60
+
 
 class TestIsRelevantSighting:
     """The named pure Rule-3 relevance predicate (audit C-C-3; 10.7 reuses it)."""

@@ -1582,19 +1582,29 @@ def _apply_proxy_intra_turn_guard(
     """Re-target same-speaker proxy contradictions WEAK at the speaker.
 
     Task 10.10 (audit-2026-06-13-1816 C-C-2, C-C-3). For each flag whose
-    BOTH events resolve to the SAME speaker AND whose subjects do not
-    include that speaker, the flag is one narrator's two proxy-claims
-    about a third party in mutual conflict -- a flag-stacking artifact,
-    not evidence against the subject. Such a flag is rebuilt WEAK against
-    the speaker (:func:`_retarget_proxy_intra_turn`); every other flag --
-    self-contradictions (speaker IS the subject) and all cross-speaker
-    pairings (two-witness disagreements, the impostor-frames-innocent
-    deception frame) -- passes through untouched. Runs AFTER the weak
+    BOTH events resolve to the SAME speaker, the flag is one narrator's
+    single unreliable turn about a third party -- a flag-stacking
+    artifact, not independent evidence. Two sub-cases:
+
+    * the flag still names the third-party subject -> rebuild it WEAK
+      against the speaker (:func:`_retarget_proxy_intra_turn`); and
+    * the flag was ALREADY re-targeted at this same speaker by the 10.6
+      cross-speaker proxy rule (its sighting happened to be self-authored,
+      so ``subjects`` is already the speaker and it carries
+      :data:`WEAK_REASON_RETARGETED_PROXY`) -> fold it under the same
+      proxy-intra-turn lift key (:func:`_fold_proxy_intra_turn`). Without
+      this, a 10.6 + 10.10 pair on one speaker's turn keeps distinct
+      per-claim keys and stacks across the §4.6 gate (0.5 + 0.08*n).
+
+    Every other flag -- a self-pair / self-stated contradiction (the
+    speaker IS the genuine subject) and all cross-speaker pairings
+    (two-witness disagreements, the impostor-frames-innocent deception
+    frame) -- passes through untouched. Runs AFTER the weak
     classification, so an already-weak flag stays weak.
 
     Order-preserving and pure: the result is re-sorted by
-    ``contradiction_id`` upstream, and the re-target does not change the
-    ``contradiction_id`` (kind + event-id pair are unchanged), so the
+    ``contradiction_id`` upstream, and neither re-target nor fold changes
+    the ``contradiction_id`` (kind + event-id pair are unchanged), so the
     detector stays byte-identical across runs.
     """
 
@@ -1602,13 +1612,21 @@ def _apply_proxy_intra_turn_guard(
     for flag in flags:
         speaker_a = event_speakers.get(flag.event_a_id)
         speaker_b = event_speakers.get(flag.event_b_id)
-        if (
-            speaker_a is not None
-            and speaker_a == speaker_b
-            and speaker_a not in flag.subjects
-        ):
+        if speaker_a is None or speaker_a != speaker_b:
+            # Cross-speaker or an event the index does not know: the
+            # legitimate two-witness / deception frames pass through.
+            guarded.append(flag)
+        elif speaker_a not in flag.subjects:
+            # Single author, flag aimed at a third party: re-target WEAK.
             guarded.append(_retarget_proxy_intra_turn(flag, speaker=speaker_a))
+        elif WEAK_REASON_RETARGETED_PROXY in flag.description:
+            # Single author already re-targeted at themselves by 10.6:
+            # fold under the proxy-intra-turn key so it cannot stack with
+            # this turn's 10.10 re-target on the same speaker.
+            guarded.append(_fold_proxy_intra_turn(flag))
         else:
+            # Single author who IS the genuine subject -- a self-pair /
+            # self-stated contradiction, the weak band's own business.
             guarded.append(flag)
     return guarded
 
@@ -1637,6 +1655,29 @@ def _retarget_proxy_intra_turn(
         event_a_id=flag.event_a_id,
         event_b_id=flag.event_b_id,
         subjects=(speaker,),
+        description=description,
+    )
+
+
+def _fold_proxy_intra_turn(flag: ContradictionRef) -> ContradictionRef:
+    # A flag the 10.6 rule already re-targeted at the single author who
+    # authored BOTH its events: keep its subject and its
+    # WEAK_REASON_RETARGETED_PROXY reason, but append the proxy-intra-turn
+    # reason so :func:`contradiction_lift_key` returns the shared fold key
+    # and belief Rule 2 collapses it with this turn's other same-author
+    # re-targets (the gp-1 over-stack the 10.6+10.10 interaction would
+    # otherwise re-open). Subject and event ids are unchanged, so the
+    # ``contradiction_id`` is stable.
+    base, reasons = _split_weak_marker(flag.description)
+    if WEAK_REASON_PROXY_INTRA_TURN in reasons:
+        return flag
+    reasons = (*reasons, WEAK_REASON_PROXY_INTRA_TURN)
+    description = f"{base} {WEAK_CONTRADICTION_MARKER_PREFIX}{'; '.join(reasons)}]"
+    return _build_contradiction(
+        kind=flag.kind,
+        event_a_id=flag.event_a_id,
+        event_b_id=flag.event_b_id,
+        subjects=flag.subjects,
         description=description,
     )
 
