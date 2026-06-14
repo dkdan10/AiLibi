@@ -348,6 +348,43 @@ OPENING_UNSURE_DEGRADE_MARKER: Final[str] = (
     "[opening degraded to unsure after failed validation] "
 )
 
+# Emergency-opening no-body backstop (Task 10.11.1; audit-2026-06-13-1816
+# B-B-1). The phrase that marks an EMERGENCY meeting's ``MeetingTrigger``
+# description -- the ONE home shared with
+# ``orchestrator.game._build_meeting_trigger`` (the producer) and, as a
+# documented JINJA-literal lockstep (a template cannot import), the
+# ``crewmate_report.j2`` emergency branch. DESIGN.md keeps no structured trigger
+# kind on the meeting layer -- the description IS the trigger surface -- so the
+# manager detects an emergency the same way the renderer does.
+EMERGENCY_TRIGGER_PHRASE: Final[str] = "called an emergency meeting"
+
+# Retry feedback appended to an EMERGENCY opening that fabricated a found_body
+# (Task 10.11.1). The crewmate_report v7 emergency branch already asks for no
+# body, but the 9B can ignore it (flat seed 11 m0 re-narrated a stale corpse as
+# a fresh find); the single opening retry re-asks WITH this explicit no-body
+# reason before the deterministic strip fires. Appended to the rendered base
+# prompt, never spliced into it (the §4.6 render stays frozen); pinned literal so
+# tests and prompt audits match it exactly.
+EMERGENCY_NO_BODY_RETRY_FEEDBACK: Final[str] = (
+    "\n\n## Retry feedback\n\nYour previous opening was INVALID: this is an "
+    "EMERGENCY meeting -- you pressed the button on SUSPICION, so there is NO "
+    "body to report (DESIGN.md §5.2 PHASE 1). Do NOT include a found_body "
+    "observation. State who you suspect and your first-hand reason, or write "
+    '"unsure".'
+)
+
+# Audit-trail marker prefixed to an EMERGENCY opening's ``free_text`` when a
+# fabricated found_body is DETERMINISTICALLY stripped (Task 10.11.1). The v7
+# prompt and the single retry are best-effort; this strip is the layered-defense
+# backstop that makes ``orchestrator.game._assert_no_emergency_opening_body``
+# unreachable (the recorded opening never carries a body), so the fail-loud
+# guard can never abort a re-record on a stubborn 9B. Body-report openings keep
+# their found_body untouched -- the strip is gated on the emergency opening only.
+# Pin the literal exactly.
+EMERGENCY_BODY_STRIP_MARKER: Final[str] = (
+    "[emergency opening: fabricated found_body stripped] "
+)
+
 # Bound on the quoted-original inside every per-claim drop marker (Task
 # 10.6; audit gp-6 H-H-4). The markers quote the invalid value verbatim
 # for the audit trail; seed 35 m1's opener hallucinated a 3499-char
@@ -484,6 +521,20 @@ class MeetingTrigger:
     triggered_by: PlayerId
     trigger_tick: int
     description: str
+
+
+def _trigger_is_emergency(trigger: MeetingTrigger) -> bool:
+    """True iff ``trigger`` opened an EMERGENCY meeting (Task 10.11.1).
+
+    The meeting layer carries no structured trigger kind by design -- the
+    description IS the trigger surface (``orchestrator.game._build_meeting_trigger``
+    builds it from :data:`EMERGENCY_TRIGGER_PHRASE`, the same substring the
+    ``crewmate_report.j2`` emergency branch keys on). Detecting it here off the
+    same phrase keeps the no-body strip in lockstep with the prompt the model
+    actually saw.
+    """
+
+    return EMERGENCY_TRIGGER_PHRASE in trigger.description
 
 
 @dataclass(frozen=True)
@@ -1162,6 +1213,42 @@ class MeetingManager:
             validated_claims, drop_markers = _drop_non_roster_claims(
                 guarded_claims, living_ids=living_ids
             )
+            # Emergency-opening no-body backstop (Task 10.11.1;
+            # audit-2026-06-13-1816 B-B-1). An EMERGENCY meeting reports no
+            # corpse (DESIGN.md §5.2 PHASE 1) -- the caller pressed the button on
+            # suspicion. The v7 crewmate_report emergency branch asks for this,
+            # but the 9B can ignore it (flat seed 11 m0 re-narrated a stale body
+            # as a fresh find), and the orchestrator's fail-loud
+            # ``_assert_no_emergency_opening_body`` then aborts the whole
+            # re-record. This DETERMINISTIC strip is the layered-defense backstop
+            # that makes the guard unreachable: re-ask ONCE for a clean opening
+            # (the stale body can anchor the model's free_text) before stripping,
+            # so a compliant retry keeps a richer opening and a stubborn one
+            # still records body-free. Gated on the OPENING of an EMERGENCY
+            # meeting, so every body-report opening -- and every reply / opt-in
+            # turn -- stays byte-identical (the guard checks the opening only).
+            if (
+                turn_kind == "opening"
+                and _trigger_is_emergency(trigger)
+                and any(
+                    isinstance(observation, FoundBodyObservation)
+                    for observation in parsed.observations
+                )
+            ):
+                if _attempt < retries:
+                    trigger_kind = "validation"
+                    prompt = base_prompt + EMERGENCY_NO_BODY_RETRY_FEEDBACK
+                    continue
+                parsed = parsed.model_copy(
+                    update={
+                        "observations": tuple(
+                            observation
+                            for observation in parsed.observations
+                            if not isinstance(observation, FoundBodyObservation)
+                        )
+                    }
+                )
+                drop_markers = (EMERGENCY_BODY_STRIP_MARKER, *drop_markers)
             # Opening content validation (Task 10.3, audit gp-9 H-H-1): the
             # opener must accuse or explicitly declare "unsure" (DESIGN.md
             # §5.2 PHASE 1). Checked AFTER the guards, against the claims as
@@ -2659,6 +2746,9 @@ __all__ = [
     "DEFAULT_VOTE_MAX_TOKENS",
     "DEFAULT_VOTE_RATIONALE",
     "DEFAULT_VOTE_TEMPERATURE",
+    "EMERGENCY_BODY_STRIP_MARKER",
+    "EMERGENCY_NO_BODY_RETRY_FEEDBACK",
+    "EMERGENCY_TRIGGER_PHRASE",
     "INVALID_ACCUSATION_TARGET_MARKER",
     "INVALID_ALIBI_SUBJECT_MARKER",
     "INVALID_CORROBORATION_SUPPORTS_MARKER",

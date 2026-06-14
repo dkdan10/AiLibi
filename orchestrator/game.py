@@ -57,6 +57,7 @@ from llm.client import LLMClient, LLMResponse
 from llm.client import CallKind as _LLMCallKind
 from llm.provider import LLMCallFailure, build_default_client, extract_parse_failure
 from meetings.manager import (
+    EMERGENCY_TRIGGER_PHRASE,
     DefaultedCall,
     MeetingConfig,
     MeetingDeadlines,
@@ -1636,7 +1637,7 @@ def _build_meeting_trigger(
     else:
         body_id = None
         description = (
-            f"{trigger_event.actor} called an emergency meeting at tick "
+            f"{trigger_event.actor} {EMERGENCY_TRIGGER_PHRASE} at tick "
             f"{trigger_event.tick}"
         )
     trigger = MeetingTrigger(
