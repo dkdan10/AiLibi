@@ -60,6 +60,7 @@ from meetings.manager import (
     OPENING_RETRY_FEEDBACK_NO_POSITION,
     OPENING_UNSURE_DEGRADE_MARKER,
     OPENING_UNSURE_MARKER,
+    OPENING_UNSURE_MAX_FREE_TEXT_CHARS,
     TEAMMATE_VOTE_TARGET_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
     LLMProviderError,
@@ -71,6 +72,7 @@ from meetings.manager import (
     MeetingTrigger,
     SuspicionEntry,
     _drop_non_roster_claims,  # noqa: PLC2701
+    _opening_takes_position,  # noqa: PLC2701
     _normalize_self_alibi_subjects,  # noqa: PLC2701
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
@@ -2312,6 +2314,92 @@ class TestInvalidAccusationTargetDropped:
         assert not opening.free_text.startswith("[invalid accusation target")
 
 
+class TestOpeningUnsureGuard:
+    """``_opening_takes_position`` gates the unsure marker on free_text STRUCTURE.
+
+    Task 10.12 (audit 2026-06-13-1816 H-H-1): the bare substring match accepted
+    a 5266-char reasoning-relocation husk (claims=[] observations=[],
+    incidentally containing "unsure") as a deliberate position, so the 10.3
+    retry never fired (seed-30 m1, all 7 ballots SKIP). The structural guard
+    rejects only the hollow relocation SHAPE; a short genuine "unsure", or one
+    carrying observations / claims, still passes.
+    """
+
+    _OBSERVATION = SawPlayerObservation(
+        type="saw_player", tick=10, subject="p-3", room="CAFETERIA"
+    )
+
+    def test_short_unsure_opening_passes(self) -> None:
+        assert _opening_takes_position(
+            claims=(),
+            observations=(),
+            free_text="I'm genuinely unsure who to accuse this round.",
+        )
+
+    def test_hollow_relocation_husk_with_unsure_is_rejected(self) -> None:
+        # The seed-30 m1 shape: free_text far above the p95 with empty claims
+        # AND empty observations, incidentally containing "unsure".
+        husk = "chain of thought ... " * 300 + " ... unsure ... "
+        assert len(husk) > OPENING_UNSURE_MAX_FREE_TEXT_CHARS
+        assert not _opening_takes_position(
+            claims=(),
+            observations=(),
+            free_text=husk,
+        )
+
+    def test_seed30_5266_char_hollow_opening_no_longer_passes(self) -> None:
+        # The byte-verified seed-30 m1 tail: 5266 chars, claims=[] observations=[],
+        # containing "unsure". Must route to the retry, not a silent valid-unsure.
+        free_text = "x" * 5000 + " unsure " + "y" * 258
+        assert len(free_text) == 5266
+        assert not _opening_takes_position(
+            claims=(), observations=(), free_text=free_text
+        )
+
+    def test_long_unsure_opening_with_observations_still_passes(self) -> None:
+        # Far above the bound, but it carries observations -- a real body report
+        # that declined to accuse, NOT a hollow relocation.
+        long_text = "Here is my detailed account ... " * 50 + " unsure"
+        assert len(long_text) > OPENING_UNSURE_MAX_FREE_TEXT_CHARS
+        assert _opening_takes_position(
+            claims=(),
+            observations=(self._OBSERVATION,),
+            free_text=long_text,
+        )
+
+    def test_long_unsure_opening_with_surviving_claims_still_passes(self) -> None:
+        long_text = "Here is my detailed account ... " * 50 + " unsure"
+        claims: tuple[Claim, ...] = (
+            CorroborationClaim(
+                type="corroboration", supports="p-2", on_tick=5, reason="r"
+            ),
+        )
+        assert _opening_takes_position(
+            claims=claims,
+            observations=(),
+            free_text=long_text,
+        )
+
+    def test_accusation_passes_regardless_of_length_or_marker(self) -> None:
+        claims: tuple[Claim, ...] = (
+            AccusationClaim(
+                type="accusation", against="p-3", confidence=0.6, reason="r"
+            ),
+        )
+        assert _opening_takes_position(
+            claims=claims,
+            observations=(),
+            free_text="x" * (OPENING_UNSURE_MAX_FREE_TEXT_CHARS + 1),
+        )
+
+    def test_no_marker_and_no_accusation_is_no_position(self) -> None:
+        assert not _opening_takes_position(
+            claims=(),
+            observations=(),
+            free_text="Just narrating what I saw, no commitment.",
+        )
+
+
 # --- primary_reason_id integrity (DESIGN.md §5.5; audit gp-3) ----------------
 
 
@@ -2853,6 +2941,51 @@ class TestDefaultsSurfacedAndOpeningRetry:
         assert all(v.trigger == "deadline" for v in votes)
         assert all(v.turn_index is None for v in votes)
         assert sorted(v.agent_id for v in votes) == ["p-1", "p-2", "p-3", "p-4"]
+
+    def test_defaulted_vote_rendered_max_is_rounded_to_prompt_precision(self) -> None:
+        # Task 10.12 (audit H-H-2): the persisted §4.6 max must match the
+        # 2-decimal precision the vote_ballot.j2 line renders and
+        # parse_rendered_max_suspicion recovers, so a defaulted ballot near the
+        # gate classifies IDENTICALLY whether read from the persisted field or a
+        # logged prompt. A raw 0.596 renders as **0.60** (-> MUST-vote); the
+        # persisted value must be 0.60, not the raw 0.596 (which would read
+        # MUST-skip and split the two telemetry surfaces).
+        participants = (
+            _participant(
+                "p-1",
+                suspicion_graph=(
+                    SuspicionEntry(player_id="p-2", suspicion=0.596, trust=0.5),
+                ),
+            ),
+            _participant("p-2"),
+            _participant("p-3"),
+            _participant("p-4"),
+        )
+        manager = _make_manager(
+            llm_client=_SleepOnPhaseClient(sleep_phase="PHASE=VOTE"),
+            deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=0.01),
+        )
+        _run(
+            manager.run(
+                meeting_id="m-1",
+                trigger=_default_trigger(),
+                participants=participants,
+            )
+        )
+
+        p1_vote = next(
+            v
+            for v in manager.defaulted_calls
+            if v.phase == "vote" and v.agent_id == "p-1"
+        )
+        assert p1_vote.rendered_vote_max == 0.60
+        # The other voters hold no row over a candidate -> rendered max 0.00.
+        p2_vote = next(
+            v
+            for v in manager.defaulted_calls
+            if v.phase == "vote" and v.agent_id == "p-2"
+        )
+        assert p2_vote.rendered_vote_max == 0.0
 
     def test_defaulted_calls_reset_between_runs(self) -> None:
         # The manager is reused across a game's meetings, so its default ledger

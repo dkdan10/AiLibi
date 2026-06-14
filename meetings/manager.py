@@ -288,6 +288,23 @@ INVALID_CORROBORATION_SUPPORTS_MARKER: Final[str] = (
 # word; pin the literal.
 OPENING_UNSURE_MARKER: Final[str] = "unsure"
 
+# Structural bound on a bare "unsure" declaration (Task 10.12; audit
+# 2026-06-13-1816 H-H-1). The 10.3 guard accepted ANY opening whose free_text
+# contained the marker substring, so a reasoning-relocation husk -- the whole
+# chain-of-thought dumped into free_text, incidentally containing "unsure",
+# with empty claims AND empty observations -- self-certified as a deliberate
+# position and skipped the retry (seed-30 m1: free_text 5266 chars, claims=[]
+# observations=[], all 7 ballots SKIP). A GENUINE unsure declaration is either
+# SHORT or carries observations / surviving claims; only the hollow relocation
+# shape -- free_text FAR above the ~225-char free-text p95 (the audited 9p2i
+# medians: opening 235 / reply 227 / opt_in 196) AND no claims AND no
+# observations -- is rejected back to the retry. The bound is ~4.4x the p95 and
+# ~2x the 514-char longest GENUINE opening on the audited set, so it clears
+# every real opening and trips only the 5266-char husk; it is NOT the frozen
+# 2048/1024 token cap (this is a free_text CHARACTER count on an already-parsed
+# turn, not a generation cap -- the cap stays frozen).
+OPENING_UNSURE_MAX_FREE_TEXT_CHARS: Final[int] = 1000
+
 # Opening retry feedback (Task 10.6; audit gp-5 H-H-1/H-H-2). The single
 # opening retry previously re-sent the byte-identical prompt, and at
 # temp 0.4 the model returned the byte-identical failure -- 0/3 recovered
@@ -562,6 +579,19 @@ class DefaultedCall:
     turn_index: int | None = None
     parse_failures: tuple[LLMCallFailure, ...] = ()
     degraded: bool = False
+    # The rendered §4.6 max suspicion the defaulted VOTE prompt computed over
+    # this voter's living ejection candidates (Task 10.12; audit
+    # 2026-06-13-1816 H-H-2). A defaulted ballot's vote call fails BEFORE the
+    # recording client logs its prompt, so the offline verdict reconstruction
+    # (which reads the "maximum suspicion ... is **X**" line off successful
+    # ``llm_calls`` only) always read ``no-render`` and routed the ballot to
+    # ``skip_unclassified`` before the verdict check --
+    # ``defaulted_under_must_vote`` was 0 BY CONSTRUCTION. Persisted onto the
+    # orchestrator's failed_call row so a defaulted ballot's true MUST-vote /
+    # MUST-skip verdict is classifiable. ``None`` for a turn default (no §4.6
+    # verdict) and for a vote default recorded before this field existed (the
+    # reader tolerates its absence; the committed single-era sets carry none).
+    rendered_vote_max: float | None = None
 
 
 @runtime_checkable
@@ -1146,7 +1176,9 @@ class MeetingManager:
             # -- then the fail-soft fires (the unsure-degrade, since this
             # attempt parsed).
             if turn_kind == "opening" and not _opening_takes_position(
-                claims=validated_claims, free_text=parsed.free_text
+                claims=validated_claims,
+                observations=parsed.observations,
+                free_text=parsed.free_text,
             ):
                 trigger_kind = "validation"
                 positionless_opening = _PositionlessOpening(
@@ -1357,6 +1389,33 @@ class MeetingManager:
             skip_confidence_threshold=self._config.skip_confidence_threshold,
             fellow_impostor_ids=participant.fellow_impostor_ids,
         )
+        # The in-prompt §4.6 verdict max, recomputed bit-for-bit from the SAME
+        # graph + candidate set the template rendered (max suspicion over the
+        # living ejection targets, default 0.0 -- the identical derivation
+        # :func:`guard_ballot_target_graph` and ``vote_ballot.j2`` apply). Rides
+        # the surfaced default below (Task 10.12, audit H-H-2) so a defaulted
+        # ballot -- whose vote call fails before the recording client logs this
+        # prompt -- carries its true verdict into the failed_call row.
+        #
+        # Rounded to the SAME 2-decimal precision the ``vote_ballot.j2`` §4.6
+        # line renders (``"%.2f"|format``) and that
+        # ``eval._suspicion_parse.parse_rendered_max_suspicion`` recovers off a
+        # SUCCESSFUL call: a near-threshold raw max (e.g. 0.596 renders/parses
+        # as ``**0.60**``) must classify IDENTICALLY whether recovered from the
+        # persisted field or a logged prompt, or the two telemetry surfaces
+        # would split a defaulted ballot's verdict at the rounding boundary
+        # (0.596 -> MUST-vote off the rendered 0.60, not raw-0.596 -> MUST-skip).
+        rendered_vote_max = float(
+            "%.2f"
+            % max(
+                (
+                    entry.suspicion
+                    for entry in suspicion_graph
+                    if entry.player_id in candidate_targets
+                ),
+                default=0.0,
+            )
+        )
         # ``response`` must survive into the ValidationError handler below:
         # when the manager-side parse of a returned payload fails, the
         # unparseable bytes are ``response.text``; when ``complete()`` itself
@@ -1390,6 +1449,7 @@ class MeetingManager:
                     phase="vote",
                     agent_id=participant.agent_id,
                     trigger="deadline",
+                    rendered_vote_max=rendered_vote_max,
                 )
             )
             return _default_vote(voter=participant.agent_id)
@@ -1418,6 +1478,7 @@ class MeetingManager:
                     agent_id=participant.agent_id,
                     trigger="validation",
                     parse_failures=() if failure is None else (failure,),
+                    rendered_vote_max=rendered_vote_max,
                 )
             )
             unparseable = (
@@ -1898,6 +1959,7 @@ def _bounded_original(value: str) -> str:
 def _opening_takes_position(
     *,
     claims: tuple[Claim, ...],
+    observations: tuple[ObservationClaim, ...],
     free_text: str,
 ) -> bool:
     """True iff an opening turn commits to a position (DESIGN.md §5.2 PHASE 1).
@@ -1917,11 +1979,32 @@ def _opening_takes_position(
       :data:`OPENING_UNSURE_MARKER` substring is matched
       case-insensitively, per the opening templates' instruction to write
       the word "unsure".
+
+    The unsure declaration is gated on free_text STRUCTURE (Task 10.12, audit
+    2026-06-13-1816 H-H-1): a bare substring match accepted a 5266-char
+    reasoning-relocation husk (claims=[] observations=[], incidentally
+    containing "unsure") as a deliberate position, so the 10.3 retry never
+    fired (seed-30 m1). A declaration in the hollow relocation SHAPE --
+    free_text far above the p95 (:data:`OPENING_UNSURE_MAX_FREE_TEXT_CHARS`)
+    AND no surviving claims AND no observations -- is treated as no position
+    and routed back through the retry / fail-soft; a SHORT genuine "unsure",
+    or one carrying observations / claims, still passes.
     """
 
     if any(isinstance(claim, AccusationClaim) for claim in claims):
         return True
-    return OPENING_UNSURE_MARKER in free_text.lower()
+    if OPENING_UNSURE_MARKER not in free_text.lower():
+        return False
+    # An "unsure" buried in a reasoning-relocation husk is not a deliberate
+    # declaration: reject the hollow shape (long free_text with nothing else)
+    # to the retry. Any observations or surviving claims, or a short opening,
+    # keep the declaration valid.
+    is_hollow_relocation = (
+        len(free_text) > OPENING_UNSURE_MAX_FREE_TEXT_CHARS
+        and not claims
+        and not observations
+    )
+    return not is_hollow_relocation
 
 
 def _normalize_ballot_target(
@@ -2544,6 +2627,7 @@ __all__ = [
     "OPENING_RETRY_FEEDBACK_NO_POSITION",
     "OPENING_UNSURE_DEGRADE_MARKER",
     "OPENING_UNSURE_MARKER",
+    "OPENING_UNSURE_MAX_FREE_TEXT_CHARS",
     "TEAMMATE_VOTE_TARGET_MARKER",
     "VOTE_PARSE_DEFAULT_MARKER",
     "DefaultTrigger",

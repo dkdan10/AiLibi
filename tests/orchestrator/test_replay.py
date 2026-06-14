@@ -165,6 +165,55 @@ class TestFailedCallRecording:
         assert entry.cost_usd == 0.018
         assert entry.error_type == "ValidationError"
         assert entry.error_message == "1 validation error for ReportDocument"
+        # A non-vote failed call carries no §4.6 verdict (Task 10.12).
+        assert entry.rendered_vote_max is None
+
+    def test_defaulted_vote_persists_rendered_max(self, tmp_path: Path) -> None:
+        # Task 10.12 (audit H-H-2): a defaulted VOTE row carries the rendered
+        # §4.6 max so the offline verdict reconstruction can classify it.
+        path = tmp_path / "failed.jsonl"
+        log = ReplayLog(path, game_id="g-5")
+
+        log.record_failed_call(
+            meeting_id="g-5:meeting-2",
+            tick=80,
+            model="(deadline_default)",
+            prompt_length=0,
+            raw_response="",
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            error_type="deadline_default",
+            error_message="vote defaulted (validation); p-1 submitted no ballot",
+            rendered_vote_max=0.65,
+        )
+
+        entry = read_failed_call_entries(path)[0]
+        assert entry.rendered_vote_max == 0.65
+
+    def test_legacy_failed_call_without_field_tolerates_absence(self) -> None:
+        # Backward-compat pin (Task 10.12): every committed single-era replay
+        # predates ``rendered_vote_max``, so a row WITHOUT the key must still
+        # load (default ``None``) -- the reader tolerates its absence and the
+        # bytes reconstruct unchanged.
+        legacy = {
+            "kind": "failed_call",
+            "game_id": "g-9",
+            "meeting_id": "g-9:meeting-0",
+            "tick": 40,
+            "model": "(deadline_default)",
+            "prompt_length": 0,
+            "raw_response": "",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": 0.0,
+            "error_type": "deadline_default",
+            "error_message": "vote defaulted (validation); p-1 submitted no ballot",
+        }
+
+        entry = FailedCallReplayEntry.model_validate(legacy)
+
+        assert entry.rendered_vote_max is None
 
     def test_compute_cost_usd_folds_in_failed_call_cost(self, tmp_path: Path) -> None:
         # The crashing call's spend must not be silently dropped from the

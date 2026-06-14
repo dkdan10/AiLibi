@@ -180,6 +180,13 @@ _DEFAULTED_TURN_RE: re.Pattern[str] = re.compile(
     r"(?P<kind>opening|reply|opt_in) turn \(turn (?P<index>\d+)\) defaulted"
     r"[^;]*;\s*(?P<speaker>\S+) submitted no turn"
 )
+# A defaulted-VOTE row names its voter; capture it so the persisted §4.6
+# verdict max (FailedCallReplayEntry.rendered_vote_max, Task 10.12 / audit
+# H-H-2) joins back to the defaulted SKIP ballot. The voter is the run of
+# non-"; " chars, excluding any trailing " [error: ...]" provider suffix.
+_DEFAULTED_VOTE_RE: re.Pattern[str] = re.compile(
+    r"vote defaulted[^;]*;\s*(?P<voter>\S+) submitted no ballot"
+)
 
 # Full invalid-accusation-target marker, including the quoted id it wraps, so the
 # whole "[invalid accusation target 'imp-2' dropped] " span can be stripped out
@@ -467,6 +474,7 @@ def _analyze_meeting(
     living_ids: frozenset[str],
     findings: list[dict[str, Any]],
     invariant_failures: list[str],
+    defaulted_vote_rendered_max: Mapping[str, float],
 ) -> dict[str, Any]:
     """Per-meeting chain facts + chain-protocol mechanical checks (v2).
 
@@ -997,7 +1005,15 @@ def _analyze_meeting(
         # ---- 10.9.1 DEFAULTED ballot (VOTE_PARSE_DEFAULT_MARKER is the WHOLE
         # rationale_text) ----
         if _VOTE_PARSE_DEFAULT_MARKER_PREFIX in rationale:
+            # The defaulted ballot's own vote call failed before the recording
+            # client logged its prompt, so the rendered max is absent from
+            # llm_calls. Task 10.12 (audit H-H-2): fall back to the §4.6 max the
+            # manager persisted onto the deadline_default failed-call row
+            # (rendered_vote_max), so a defaulted ballot's true MUST-vote /
+            # MUST-skip verdict is classifiable instead of always "no-render".
             v_rendered = rendered_max_by_voter.get(b.voter)
+            if v_rendered is None:
+                v_rendered = defaulted_vote_rendered_max.get(b.voter)
             if v_rendered is None:
                 verdict = "no-render"
             elif v_rendered >= SKIP_SUSPICION_THRESHOLD:
@@ -1013,6 +1029,16 @@ def _analyze_meeting(
                     "target": b.target,
                     "rendered_verdict": verdict,
                     "rendered_max": v_rendered,
+                    # An IMPOSTOR voter's SKIP under a MUST-vote verdict is the
+                    # §7.12 teammate firewall by design (the same exclusion the
+                    # shipped decision census applies via
+                    # missed_skip_impostor_voters), NOT a missed eject. seed-8 is
+                    # this case: a defaulted impostor ballot whose verdict was
+                    # MUST-vote -- firewall-correct-SKIP-under-MUST-VOTE, not the
+                    # "correct-skip under MUST-skip" the briefed framing claimed.
+                    # A CREWMATE MUST-vote default would be a genuine missed eject.
+                    "firewall_correct": voter_role == "IMPOSTOR"
+                    and verdict == "MUST-vote",
                 }
             )
 
@@ -1703,12 +1729,24 @@ def main() -> int:
         # a default, NOT a recovery (their waste is attributed to the default
         # bucket below, never double-counted as a recovery).
         opening_defaulted_meeting_ids: set[str] = set()
+        # Persisted §4.6 verdict max for each DEFAULTED vote (Task 10.12, audit
+        # H-H-2): {meeting_id: {voter: rendered_max}}. A defaulted ballot's vote
+        # call failed before the recording client logged its prompt, so the
+        # rendered max is recoverable only from the failed-call row the manager
+        # stamped it onto -- absent for committed single-era replays (no field).
+        defaulted_vote_rendered_max_by_meeting: dict[str, dict[str, float]] = {}
         for fc in failed_call_entries:
             if fc.error_type != "deadline_default":
                 continue
             m = _DEFAULTED_TURN_RE.search(fc.error_message)
             if m is not None and m.group("kind") == "opening":
                 opening_defaulted_meeting_ids.add(fc.meeting_id)
+            if fc.rendered_vote_max is not None:
+                vote_match = _DEFAULTED_VOTE_RE.match(fc.error_message)
+                if vote_match is not None:
+                    defaulted_vote_rendered_max_by_meeting.setdefault(
+                        fc.meeting_id, {}
+                    )[vote_match.group("voter")] = fc.rendered_vote_max
 
         kills: list[dict[str, Any]] = []
         deaths: set[str] = set()
@@ -1883,6 +1921,9 @@ def main() -> int:
                 living_ids=living_ids,
                 findings=findings,
                 invariant_failures=invariant_failures,
+                defaulted_vote_rendered_max=defaulted_vote_rendered_max_by_meeting.get(
+                    meeting_entry.meeting_id, {}
+                ),
             )
             meetings_out.append(m_facts)
             total_meetings += 1
@@ -3308,8 +3349,19 @@ def main() -> int:
                 "note": (
                     "Every ballot carrying VOTE_PARSE_DEFAULT_MARKER (the whole "
                     "rationale_text). rendered_verdict is the voter's rendered "
-                    "§4.6 read (MUST-vote / MUST-skip / no-render). The game "
-                    "still reaching game_over is the 10.9.1 DoD."
+                    "§4.6 read (MUST-vote / MUST-skip / no-render), recovered "
+                    "from successful llm_calls OR -- when the vote call itself "
+                    "failed before its prompt was logged -- the persisted "
+                    "rendered_vote_max on the deadline_default failed-call row "
+                    "(Task 10.12 / audit H-H-2). firewall_correct flags an "
+                    "IMPOSTOR voter's MUST-vote SKIP (the §7.12 teammate "
+                    "firewall by design, not a missed eject). On THIS committed "
+                    "single-era set the field is absent, so the one defaulted "
+                    "ballot (seed-8 m2, p-1 IMPOSTOR) reads no-render here; the "
+                    "audit byte-verified its truncated rationale as MUST-vote "
+                    "-- it is a firewall-correct-SKIP-under-MUST-VOTE, NOT the "
+                    "correct-skip-under-MUST-SKIP the prior framing claimed. The "
+                    "game still reaching game_over is the 10.9.1 DoD."
                 ),
                 "records": defaulted_ballot_records_all,
             },
@@ -3430,9 +3482,16 @@ def main() -> int:
             "unparsed": defaulted_turn_unparsed,
             "by_turn_kind": dict(Counter(d["turn_kind"] for d in defaulted_turns)),
             "note": (
-                "count includes byte-identical duplicate failed_call rows "
-                "(seeds 8/36/39 emit the same defaulted-turn row twice); "
-                "distinct is the de-duplicated turn count."
+                "count is defaulted TURN rows (opening / reply / opt_in); "
+                "distinct de-duplicates on (seed, meeting, turn_index, "
+                "speaker). Defaulted VOTES are not turns and are excluded "
+                "(censused under defaulted_ballots). The 9.10 writer dedup "
+                "drops byte-identical duplicate failed_call rows at the write "
+                "chokepoint, so on this set duplicate_failed_call_rows.count is "
+                "0 -- the prior note naming seeds 8/36/39 as emitting a "
+                "duplicate turn row was stale (seed-8's only failed_call is a "
+                "VOTE default; seeds 36/39 have 0 failed_calls). See "
+                "duplicate_failed_call_rows for the live dup census."
             ),
             "records": defaulted_turns,
         },

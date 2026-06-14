@@ -1350,6 +1350,10 @@ def _record_deadline_defaults(
     """
 
     for default in defaulted_calls:
+        # The rendered §4.6 verdict max rides ONLY a defaulted vote (Task 10.12,
+        # audit H-H-2): it is the sole telemetry that recovers a defaulted
+        # ballot's MUST-vote / MUST-skip verdict, lost when the vote call failed
+        # before the recording client logged its prompt. ``None`` for turns.
         if default.parse_failures:
             for failure in default.parse_failures:
                 replay.record_failed_call(
@@ -1363,6 +1367,7 @@ def _record_deadline_defaults(
                     cost_usd=failure.cost_usd,
                     error_type="deadline_default",
                     error_message=_deadline_default_message(default, failure),
+                    rendered_vote_max=default.rendered_vote_max,
                 )
             continue
         replay.record_failed_call(
@@ -1376,6 +1381,7 @@ def _record_deadline_defaults(
             cost_usd=0.0,
             error_type="deadline_default",
             error_message=_deadline_default_message(default),
+            rendered_vote_max=default.rendered_vote_max,
         )
 
 
