@@ -53,7 +53,7 @@ from eval.leak_test import (
     _assert_no_recursive_hidden_fields,
     _assert_no_role_bearing_values,
 )
-from observation.service import ObservationService
+from observation.service import ObservationService, impostor_pretend_task_id
 from tests.engine.test_tick_properties import _unique_actions_per_actor
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
@@ -246,6 +246,11 @@ def test_observation_packets_never_leak_hidden_information(
         state, events = advance_tick(
             state, _unique_actions_per_actor(batch), game_map=game_map
         )
+        # The living + dead impostor roster the service derives its pretend-task
+        # seat ordering from (role-filtered, never visibility-filtered).
+        impostor_ids_now = [
+            pid for pid, p in state.players.items() if p.role == "IMPOSTOR"
+        ]
         for player_id, player in state.players.items():
             if not player.alive:
                 continue
@@ -258,13 +263,26 @@ def test_observation_packets_never_leak_hidden_information(
             _assert_no_recursive_hidden_fields(packet_dump)
             _assert_no_role_bearing_values(packet_dump)
             # Own-task-only firewall (DESIGN.md §1.3, §3.2): under the per-player
-            # ``"{owner}:{map_task_id}"`` keyspace, ``pending_task_id`` is the
-            # recipient's OWN map id -- never the composite instance id, never
-            # another owner's task. Each agent owns exactly one uncompleted
-            # instance and the sweep issues no ``do_task``, so the value is
-            # deterministic across roles; a dropped ``owner`` filter in
+            # ``"{owner}:{map_task_id}"`` keyspace, a CREWMATE's
+            # ``pending_task_id`` is its OWN map id -- never the composite instance
+            # id, never another owner's task. A dropped ``owner`` filter in
             # ``_pending_task_id_for_agent`` would surface a FOREIGN map id here.
-            assert packet.self_state.pending_task_id == task_assignment[player_id]
+            # An IMPOSTOR owns no instance, so it carries the deterministic PRETEND
+            # map id instead (Task 10.14): still a bare map id (no owner prefix to
+            # leak), the impostor's own per-seat blend target, never a dropped-filter
+            # foreign min. The pretend selection is a pure function of map + seat +
+            # tick, so the swept value stays deterministic and replay-safe.
+            if packet.self_state.role == "IMPOSTOR":
+                expected_pending = impostor_pretend_task_id(
+                    game_map=game_map,
+                    agent_id=player_id,
+                    impostor_ids=impostor_ids_now,
+                    tick=state.tick,
+                )
+            else:
+                expected_pending = task_assignment[player_id]
+            assert packet.self_state.pending_task_id == expected_pending
+            assert ":" not in (packet.self_state.pending_task_id or "")
             if packet.self_state.role == "CREWMATE":
                 assert packet.self_state.fellow_impostor_ids == ()
                 # No OTHER owner's task id appears anywhere in a crew packet

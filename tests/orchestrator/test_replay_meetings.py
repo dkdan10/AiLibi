@@ -399,12 +399,14 @@ class TestReplayRecordsMeetingArtifacts:
         # crewmate_report v5 and impostor_report v4 (accuse-or-declare-unsure
         # openings). Task 10.8 bumped crewmate_report alone to v6 (the
         # emergency-opening called-on-suspicion branch), and Task 10.11 to v7
-        # (the emergency opening forbids a fabricated found_body). A fresh
-        # replay entry must carry the live version strings end-to-end; the
-        # committed sample bytes still record their as-recorded versions.
+        # (the emergency opening forbids a fabricated found_body). Task 10.14
+        # bumped impostor_report alone to v5 (the anticipatory-cover branch). A
+        # fresh replay entry must carry the live version strings end-to-end; the
+        # committed sample bytes still record their as-recorded versions
+        # (impostor_report_v4 until the 10.17 re-record).
         assert meeting.prompt_versions["accusation_round"] == "accusation_round.v7"
         assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v7"
-        assert meeting.prompt_versions["impostor_report"] == "impostor_report_v4"
+        assert meeting.prompt_versions["impostor_report"] == "impostor_report_v5"
         # LLM cost metadata recorded per call. The chain protocol:
         #   turns: 1 opening + 1 reply = 2 calls
         #   ballots: 4 living voters = 4 calls

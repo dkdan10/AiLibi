@@ -878,3 +878,89 @@ class TestImpostorStaleAndDeadTargetPruning:
 
         with pytest.raises(ValueError, match="victim_id"):
             ImpostorPolicy._confirmed_dead_from_bodies((malformed,))
+
+
+class TestImpostorToolkit1014:
+    """The 10.14 toolkit, pinned cohesively (DESIGN.md §3.4, §4.5;
+    audit-2026-06-13-1816 D-D-1/D-D-7, MECH-B-1).
+
+    BLENDING: the dormant ``_idle`` do_task branch fires once the observation
+    service surfaces a pretend ``pending_task_id`` (impostors own no real
+    instance). The impostor now ROUTES TO / PERFORMS a task during idle ticks --
+    including the post-kill cooldown window -- instead of waiting, collapsing the
+    ~51% "never-tasks" wait-share toward crew levels.
+
+    KILL DISCIPLINE: the producer gate emits a kill ONLY against a target
+    co-located THIS tick, so a cross-room candidate degrades to move-toward
+    (never a cross-room ActionRejected no-op), and a kill during cooldown is
+    suppressed. Producer cross-room / cooldown kill emissions are 0 by
+    construction; the residual engine ``same room`` rejections are the §3.4
+    canonical intra-tick dodge, not a producer defect.
+    """
+
+    def test_blending_fills_post_kill_cooldown_idle_with_movement(self) -> None:
+        # The wait-share reducer: on cooldown (the post-kill window) with no
+        # target, a pretend task in another room makes the impostor STALK toward
+        # it (blend) rather than wait -- this is the bulk of the reclaimed idle.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA", pending_task_id="swipe_card"),
+            _cooldown_event(tick=10, cooldown=3),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "ADMIN"
+
+    def test_blending_performs_fake_do_task_when_in_task_room(self) -> None:
+        # In the pretend task's room, the idle impostor EMITS a do_task -- a fake
+        # task that renders as do_task and consumes the tick. (The engine rejects
+        # it for owning no instance, so it makes no progress; that integrity
+        # invariant is pinned engine-side in tests/observation/test_service.py.)
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id="swipe_card"),
+            _cooldown_event(tick=10, cooldown=3),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, DoTaskIntent)
+        assert intent.payload.task_id == "swipe_card"
+
+    def test_kill_discipline_cross_room_candidate_degrades_to_move(self) -> None:
+        # MECH-B-1: a kill candidate whose freshest sighting is a DIFFERENT room
+        # never produces a cross-room kill emission -- the producer degrades to a
+        # move-toward (stalk). Cooldown is 0, so this isolates the room gate.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="ELECTRICAL"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, KillIntent)
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "ELECTRICAL"
+
+    def test_kill_discipline_suppresses_kill_during_cooldown_and_blends(
+        self,
+    ) -> None:
+        # D-D-7: a co-located target during cooldown yields NO kill emission. With
+        # a pretend task the impostor blends in place (do_task) instead of leaking
+        # a doomed kill intent that the engine would reject for cooldown.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id="swipe_card"),
+            _cooldown_event(tick=10, cooldown=2),
+            _saw_player_event(tick=10, player_id="victim", room="ADMIN"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, KillIntent)
+        assert isinstance(intent, DoTaskIntent)
+        assert intent.payload.task_id == "swipe_card"

@@ -52,12 +52,18 @@ Teammate-awareness (Phase 7 Task 7.9, audit gp-1/gp-3, DESIGN.md §3.4):
   emission seam by ``_target_colocated_now`` against the current-tick
   events the policy already holds — not trusted from the scoring
   snapshot — so a stale lead never queues a kill (audit gp-3; tightened
-  per the 2026-06-07 audit gp-5 / MECH-B-1). Stale sightings stay valid
+  per the 2026-06-07 audit gp-5 / MECH-B-1, re-confirmed by the
+  2026-06-13-1816 audit MECH-B-1 / D-D-7: the producer emits a kill ONLY
+  against a target co-located this tick, so producer cross-room kill
+  emissions are 0 by construction and a kill during cooldown is suppressed
+  by the ``cooldown == 0`` gate below). Stale sightings stay valid
   for stalking and navigation below; only the kill emission tightens.
   Intra-tick simultaneity is canonically id-ordered (DESIGN.md §3.4): a
   co-located lower-id target's same-tick move legitimately escapes a
-  queued kill, so the engine same-room guard stays the backstop — this
-  is producer-side waste removal, not the enforcement.
+  queued kill, so the engine same-room guard stays the backstop for that
+  canonical residual (the ``kill requires same room`` rejections that
+  remain are this dodge, NOT a producer defect) — this is producer-side
+  waste removal, not the enforcement.
 * Coordination: when a fellow impostor is co-located in the same room on
   the same tick and would also reach a kill, only the lower-id impostor
   emits the kill and the higher-id defers (a pure ``min(actor_id,
@@ -69,13 +75,23 @@ Teammate-awareness (Phase 7 Task 7.9, audit gp-1/gp-3, DESIGN.md §3.4):
   A* step toward that room.
 * ``IDLE`` -- nothing else applies (cooldown > 0, no usable
   sightings, etc.). If the impostor has a pending pretend-task and
-  knows its room, route there or perform it; otherwise wait.
+  knows its room, route there or perform it; otherwise wait. This is
+  the BLENDING branch (Task 10.14, audit-2026-06-13-1816 D-D-1): the
+  pretend-task id is surfaced on the impostor's self channel by
+  ``observation.service.impostor_pretend_task_id`` (impostors own no real
+  instance), so the branch -- dormant while that id was always ``None`` --
+  now fires and the impostor moves to / "performs" a task like a crewmate
+  instead of waiting, collapsing the ~51% "never-tasks" wait-share toward
+  crew levels. The fake ``do_task`` renders as a do_task action and consumes
+  the tick but the engine rejects it (no owned instance), so it advances no
+  real task and never moves the crew win denominator.
 
 Conventions consumed from perception (DESIGN.md §4.2 / §6.2):
 
 * ``self_state`` events carry the impostor's current room, (optional)
-  pending pretend-task id, and ``fellow_impostor_ids`` (the impostor's
-  teammates; ``()`` for a sole impostor or when the field is absent).
+  pending pretend-task id (a real map task id the impostor does not own,
+  Task 10.14), and ``fellow_impostor_ids`` (the impostor's teammates;
+  ``()`` for a sole impostor or when the field is absent).
 * ``cooldown_status`` events carry the impostor's kill cooldown for the
   observation tick.
 * ``saw_player`` events at any tick are candidate-target sightings.
