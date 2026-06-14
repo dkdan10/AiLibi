@@ -1726,24 +1726,27 @@ def _suspicion_graph_with_contradictions(
     prior before the delta). The voter never accrues suspicion about
     themselves.
 
-    Pre-vote fold (Task 10.7; audit gp-2). When ``evidence`` names
-    ``pre_vote_folded`` subjects or ``corroborated`` subjects, the same
-    reconstructed state takes
+    Pre-vote fold (Tasks 10.7, 10.15; audit gp-2 and 2026-06-13 C-C-1).
+    When ``evidence`` names ``pre_vote_folded`` (two-witness),
+    ``pre_vote_informed`` (single-witness inform,
+    :data:`agents.memory.beliefs.WITNESS_INFORM_REASON`), or
+    ``corroborated`` subjects, the same reconstructed state takes
     :func:`agents.memory.beliefs.apply_meeting_evidence_rules` with
-    ``phase="pre_vote"`` AFTER the Rule-2 lift: the two-witness +0.05
-    testimony bumps and this meeting's relevance-gated -0.05
-    corroborations land on the graph the ballot prompt renders -- and
-    because the frozen vote template computes the §4.6 verdict from
-    that same rendered graph, the graph and the verdict read ONE
-    post-fold state source by construction (the render-after-fold
-    consistency pin). The fold is the recording-time twin of the
-    post-meeting persistent absorb: the identical +0.05/-0.05 deltas
-    persist at the meeting boundary through
-    ``orchestrator.game._absorb_meeting_beliefs``, so what the voter
-    saw pre-vote is exactly what carries forward. When the evidence
-    folds nothing (no two-voice subject, no relevance-gated
-    corroboration), this path is byte-identical to the pre-10.7
-    behaviour -- the channel is invisible until independence is met.
+    ``phase="pre_vote"`` AFTER the Rule-2 lift: the +0.05 testimony bumps
+    (two-witness fold and single-witness inform alike) and this meeting's
+    relevance-gated -0.05 corroborations land on the graph the ballot
+    prompt renders -- and because the frozen vote template computes the
+    §4.6 verdict from that same rendered graph, the graph and the verdict
+    read ONE post-fold state source by construction (the render-after-fold
+    consistency pin; a freshly-informed MUST-vote ballot is therefore NOT
+    a threshold inversion -- the gate rule is untouched, only the rendered
+    prior moved). The fold is the recording-time twin of the post-meeting
+    persistent absorb: the identical +0.05/-0.05 deltas persist at the
+    meeting boundary through ``orchestrator.game._absorb_meeting_beliefs``,
+    so what the voter saw pre-vote is exactly what carries forward. When
+    the evidence folds nothing (no voiced subject, no relevance-gated
+    corroboration), this path is byte-identical to the pre-10.7 behaviour
+    -- the channel is invisible until a witness speaks.
 
     Team-internal firewall (Task 9.3, DESIGN.md §4.7), the deterministic
     voter-side backstop that mirrors the 7.12 ballot coercion on the input
@@ -1763,7 +1766,7 @@ def _suspicion_graph_with_contradictions(
 
     teammates = frozenset(fellow_impostor_ids)
     folds = evidence is not None and bool(
-        evidence.pre_vote_folded or evidence.corroborated
+        evidence.pre_vote_folded or evidence.pre_vote_informed or evidence.corroborated
     )
 
     if not contradictions and not folds:
@@ -1789,6 +1792,7 @@ def _suspicion_graph_with_contradictions(
             fellow_impostor_ids=fellow_impostor_ids,
             phase="pre_vote",
             pre_vote_folded=frozenset(evidence.pre_vote_folded),
+            pre_vote_informed=frozenset(evidence.pre_vote_informed),
         )
 
     entries: list[SuspicionEntry] = []
@@ -2387,20 +2391,31 @@ class MeetingBeliefEvidence:
       :data:`agents.memory.beliefs.TESTIMONY_INDEPENDENCE_BAR` distinct
       independent voices behind the accusation
       (:func:`meetings.transcript.independent_voices` -- observation
-      backing, the §6.3 relevance predicate, and the opt-in
-      corroboration-alignment rule are the three guards). These subjects
-      take the +0.05 accused-bump in the PRE-VOTE half; the post-vote
-      half skips them (the phase routing in
+      backing, the §6.3 relevance predicate, the opt-in
+      corroboration-alignment rule, and the Task 10.15 echo-dedup are the
+      guards). These subjects take the +0.05 accused-bump in the PRE-VOTE
+      half; the post-vote half skips them (the phase routing in
       :func:`agents.memory.beliefs.apply_meeting_evidence_rules`), so
       the bump lands exactly once per meeting. Always a subset of
       ``accused``. The folded mark lives here, on the meeting context --
       never in the belief store.
+    * ``pre_vote_informed`` -- the Task 10.15 single-witness subjects
+      (:data:`agents.memory.beliefs.WITNESS_INFORM_REASON`): accused
+      subjects with EXACTLY one independent voice (below the fold bar).
+      They take the IDENTICAL +0.05 accused-bump in the PRE-VOTE half --
+      the inform spreads one observation-backed witness's testimony to
+      the listeners so near-gate priors can cross the §4.6 gate within
+      the round (audit 2026-06-13 C-C-1: the 37/59 over-gate-lost-
+      plurality bloc). Disjoint from ``pre_vote_folded`` (one voice vs
+      two+) and likewise always a subset of ``accused``; the post-vote
+      half skips it too, so the per-meeting total stays +0.05.
     """
 
     accused: tuple[PlayerId, ...]
     corroborated: tuple[PlayerId, ...]
     contradicted: tuple[PlayerId, ...]
     pre_vote_folded: tuple[PlayerId, ...] = ()
+    pre_vote_informed: tuple[PlayerId, ...] = ()
 
 
 def derive_belief_evidence(
@@ -2477,11 +2492,15 @@ def derive_belief_evidence(
         for contradiction in contradictions
         for subject in contradiction.subjects
     }
-    # The two-witness derivation (Task 10.7; audit gp-2 C-C-2): subjects
-    # whose independent-voice count meets the bar fold pre-vote. Voice
-    # subjects are accusation targets by construction, so the folded set
-    # is a subset of ``accused`` (the invariant the belief-side phase
-    # routing validates).
+    # The testimony derivation (Tasks 10.7, 10.15; audit gp-2 C-C-2 and
+    # 2026-06-13 C-C-1): one independent-voices count, partitioned by the
+    # fold bar. Subjects with TESTIMONY_INDEPENDENCE_BAR+ voices FOLD
+    # pre-vote (10.7 two-witness); subjects with exactly one voice INFORM
+    # pre-vote (10.15 single-witness belief-spread) -- the same +0.05, the
+    # same pre-vote half, distinguished only so the bands stay nameable for
+    # Wave-2 attribution. The two are disjoint by construction and both are
+    # subsets of ``accused`` (voice subjects are accusation targets), the
+    # invariants the belief-side phase routing validates.
     voices = independent_voices(transcript, roster=roster, trigger_kind=trigger_kind)
     pre_vote_folded = tuple(
         sorted(
@@ -2490,11 +2509,19 @@ def derive_belief_evidence(
             if len(speakers) >= TESTIMONY_INDEPENDENCE_BAR
         )
     )
+    pre_vote_informed = tuple(
+        sorted(
+            subject
+            for subject, speakers in voices.items()
+            if len(speakers) < TESTIMONY_INDEPENDENCE_BAR
+        )
+    )
     return MeetingBeliefEvidence(
         accused=tuple(sorted(accused)),
         corroborated=tuple(sorted(corroborated)),
         contradicted=tuple(sorted(contradicted)),
         pre_vote_folded=pre_vote_folded,
+        pre_vote_informed=pre_vote_informed,
     )
 
 

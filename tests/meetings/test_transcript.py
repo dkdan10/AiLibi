@@ -2796,6 +2796,7 @@ def _voice_turn(
     supports: tuple[str, ...] = (),
     sightings: tuple[tuple[str, str, int], ...] = (),
     body: tuple[str, str, int] | None = None,
+    free_text: str | None = None,
 ) -> MeetingTurn:
     """One turn for the voices tests: ``sightings`` are (subject, room, tick),
     ``body`` is (body_of, room, tick)."""
@@ -2841,7 +2842,7 @@ def _voice_turn(
         reply_to=None,
         observations=tuple(observations),
         claims=tuple(claims),
-        free_text=f"turn {turn_index}",
+        free_text=f"turn {turn_index}" if free_text is None else free_text,
     )
 
 
@@ -3164,6 +3165,157 @@ class TestIndependentVoices:
         assert first == second
         assert all(speakers == tuple(sorted(speakers)) for speakers in first.values())
         assert list(first) == sorted(first)
+
+
+class TestVoiceEchoDedup:
+    """Echo-dedup: copied rationales cannot manufacture independence.
+
+    Task 10.15 (audit 2026-06-13 H-4): distinct speakers whose voice-minting
+    turns carry the SAME rationale (after :func:`_normalize_rationale`'s
+    case/punctuation/whitespace normalisation) collapse to ONE voice -- the
+    9B's verbatim rationale copying (163 within-meeting echo pairs) is copied
+    reasoning, not independent corroboration.
+    """
+
+    _BODY = ("p-9", "MEDBAY", 10)
+
+    def _two_accusers(self, *, free_text_a: str, free_text_b: str) -> MeetingTranscript:
+        # Two distinct observation-backed accusers of p-2 (an opening and a
+        # chain reply). Their voice count is two UNLESS their rationales echo.
+        return MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    body=self._BODY,
+                    free_text=free_text_a,
+                ),
+                _voice_turn(
+                    turn_index=1,
+                    speaker="p-3",
+                    turn_kind="reply",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    free_text=free_text_b,
+                ),
+            )
+        )
+
+    def test_verbatim_echo_collapses_a_would_be_fold_to_one_voice(self) -> None:
+        # Two backed accusers would be a two-witness FOLD; verbatim-copied
+        # rationales drop them to ONE voice (the inform band), so 163 echoes
+        # cannot manufacture the fold's independence.
+        transcript = self._two_accusers(
+            free_text_a="p-2 left the body without helping.",
+            free_text_b="p-2 left the body without helping.",
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-1",)}
+
+    def test_case_and_punctuation_variant_is_an_echo(self) -> None:
+        # "near-identical" is normalisation-identical: case, punctuation, and
+        # whitespace differences are erased, so a trivially reworded copy
+        # still collapses.
+        transcript = self._two_accusers(
+            free_text_a="p-2 left the body without helping.",
+            free_text_b="  P-2  LEFT the BODY, without helping!!  ",
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-1",)}
+
+    def test_distinct_rationales_stay_two_independent_voices(self) -> None:
+        # The over-collapse guard: genuinely distinct reasoning is two voices
+        # (the fold survives) -- echo-dedup only collapses copies.
+        transcript = self._two_accusers(
+            free_text_a="p-2 was in ADMIN when the kill happened.",
+            free_text_b="p-2's timeline does not add up against mine.",
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-1", "p-3")}
+
+    def test_empty_rationales_never_echo_collapse(self) -> None:
+        # An empty / punctuation-only rationale stakes no reasoning to copy,
+        # so two backed witnesses who wrote nothing in free-text stay TWO
+        # voices -- emptiness is not an echo.
+        transcript = self._two_accusers(free_text_a="", free_text_b="...")
+
+        assert independent_voices(transcript) == {"p-2": ("p-1", "p-3")}
+
+    def test_first_speaker_in_canonical_order_keeps_the_voice(self) -> None:
+        # Deterministic tie-break: the FIRST speaker (lowest turn index) to
+        # stake a rationale keeps the voice; later copies drop, regardless of
+        # transcript ordering.
+        forward = self._two_accusers(free_text_a="same words", free_text_b="same words")
+        reversed_turns = MeetingTranscript(turns=tuple(reversed(forward.turns)))
+
+        assert independent_voices(forward) == {"p-2": ("p-1",)}
+        assert independent_voices(reversed_turns) == {"p-2": ("p-1",)}
+
+    def test_opt_in_corroboration_echo_collapses(self) -> None:
+        # The second-voice channel echoes too: an opt-in corroboration whose
+        # rationale copies the accuser's opening is not an independent voice.
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    body=self._BODY,
+                    free_text="p-2 fled the scene.",
+                ),
+                _voice_turn(turn_index=1, speaker="p-2", turn_kind="reply"),
+                _voice_turn(
+                    turn_index=2,
+                    speaker="p-3",
+                    turn_kind="opt_in",
+                    supports=("p-1",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    free_text="p-2 fled the scene.",
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-1",)}
+
+    def test_three_echoing_voters_collapse_to_one(self) -> None:
+        # The audit's homogeneity at scale: three distinct backed accusers
+        # all copying one rationale are ONE voice, not a deep fold.
+        transcript = MeetingTranscript(
+            turns=(
+                _voice_turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    body=self._BODY,
+                    free_text="vote p-2 they are the impostor",
+                ),
+                _voice_turn(
+                    turn_index=1,
+                    speaker="p-3",
+                    turn_kind="reply",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    free_text="vote p-2 they are the impostor",
+                ),
+                _voice_turn(
+                    turn_index=2,
+                    speaker="p-4",
+                    turn_kind="reply",
+                    accuses=("p-2",),
+                    sightings=(("p-2", "ADMIN", 8),),
+                    free_text="vote p-2 they are the impostor",
+                ),
+            )
+        )
+
+        assert independent_voices(transcript) == {"p-2": ("p-1",)}
 
 
 class TestCommittedBytes107VoicePins:
