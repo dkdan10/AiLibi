@@ -2578,8 +2578,12 @@ class TestCommittedBytes1010Pins:
     def test_seed40_m0_p4_below_gate_and_not_redirect_argmax(self) -> None:
         # C-C-2: p-4's re-derived max drops below the §4.6 gate, so the
         # 10.9.2 redirect -- which only ever targets an over-gate candidate
-        # -- can no longer launder an ungrounded ballot onto p-4. Walked
-        # from the 0.5 prior, the seed-28 pin's offline convention.
+        # -- can no longer launder an ungrounded ballot onto p-4. AND the
+        # re-target does not just move the artifact: p-5 (the proxy speaker)
+        # also stays below the gate, because the two same-turn proxy flags
+        # share the proxy-intra-turn lift key and fold to ONE weak delta
+        # (0.5 + 0.08 = 0.58), so the single turn's artifact crosses the gate
+        # on NO ONE. Walked from the 0.5 prior, the seed-28 pin's convention.
         from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 
         entry = _committed_meetings(40)[0]
@@ -2597,11 +2601,17 @@ class TestCommittedBytes1010Pins:
             )
 
         assert lifted_max("p-4") < 0.60
+        # The proxy speaker absorbs the re-target but the stack folds to one
+        # weak delta -- 0.58, still below the gate (the P1-review tripwire).
+        assert lifted_max("p-5") == pytest.approx(0.58)
+        assert lifted_max("p-5") < 0.60
         # The redirect argmax is the highest over-gate candidate (ties to
-        # the lowest id); with p-4 below the gate the argmax cannot be p-4.
+        # the lowest id); no proxy artifact row is over-gate, so p-4 (and
+        # p-5) can never be that argmax.
         graph = {player: lifted_max(player) for player in sorted(_living_roster(entry))}
         over_gate = {p: s for p, s in graph.items() if s >= 0.60}
         assert "p-4" not in over_gate
+        assert "p-5" not in over_gate
         if over_gate:
             argmax = min(over_gate, key=lambda p: (-over_gate[p], p))
             assert argmax != "p-4"

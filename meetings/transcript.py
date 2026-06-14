@@ -558,6 +558,17 @@ def is_weak_contradiction(flag: ContradictionRef) -> bool:
 # parser below can never drift from the id format.
 _CLAIM_EVENT_SEGMENT: Final[str] = ":claim:"
 
+# Task 10.10: the constant lift key shared by every proxy-intra-turn
+# re-target. A re-targeted flag's sole subject is the speaker, so belief
+# Rule 2's ``(subject, lift_key)`` dedup folds ALL of one speaker's
+# same-turn proxy artifacts (the seed-40 shape: an ``alibi_conflict`` and
+# an ``alibi_vs_sighting`` sharing the pivot claim, on distinct event-id
+# pairs) into ONE weak delta -- so a single narrator's contradictory turn
+# can never cross the §4.6 gate by itself (audit C-C-2: "one bad claim
+# cannot mint two stacking deltas"). Distinct from a real event-id pair
+# so it can never collide with a non-retarget key.
+_PROXY_INTRA_TURN_LIFT_KEY: Final[str] = "proxy-intra-turn"
+
 
 def contradiction_lift_key(flag: ContradictionRef) -> str:
     """The per-claim dedup key for belief Rule 2's lift (Task 10.1).
@@ -576,8 +587,18 @@ def contradiction_lift_key(flag: ContradictionRef) -> str:
     evidence). A flag built outside the detector whose event ids carry no
     claim segment falls back to its full event-id pair -- one key per
     flag, the pre-10.1 behaviour.
+
+    Task 10.10: a proxy-intra-turn re-target keys on the constant
+    :data:`_PROXY_INTRA_TURN_LIFT_KEY` instead, so the seed-40 stack
+    (two same-speaker flags on distinct claim pairs) folds to ONE weak
+    delta on the speaker rather than 0.08 + 0.08 crossing the gate
+    (audit C-C-2). The re-target's sole subject is the speaker, so the
+    ``(subject, key)`` dedup collapses these per speaker; every other
+    flag class is unaffected.
     """
 
+    if WEAK_REASON_PROXY_INTRA_TURN in flag.description:
+        return _PROXY_INTRA_TURN_LIFT_KEY
     claim_ids = [
         event_id
         for event_id in (flag.event_a_id, flag.event_b_id)
