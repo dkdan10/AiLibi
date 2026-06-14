@@ -39,6 +39,37 @@ v3 (Phase-10 W0+ baseline, 2026-06-11 @ 9p2i post-10.5):
   and 10.3 OPENING-RETRY telemetry (recovered single-retries from duplicate
   opening-slot llm_calls; defaults from the deadline_default rows).
 
+v4 (Phase-10 Wave-2 CRATER baseline, 2026-06-14 @ 9p2i post-10.16): the
+point-6e Wave-2 aggregates the close lenses need, plus the 10.11.1
+emergency-strip telemetry on the existing emergency aggregate. Every
+classification still IMPORTS its one-home source (no era-frozen replica):
+
+* ACTIONS BY ROLE (the blending census) via the imported
+  ``eval.action_ingest.tally_actions_by_role`` -> ``compute_indistinguishability``
+  over the SAME shipped report games, plus a do_task INTEGRITY check folded
+  from the per-tick walk: the engine ALWAYS rejects an impostor's pretend
+  ``do_task`` (a non-owned map task id, Task 10.14 — ``_resolve_owned_task_
+  instance`` returns None -> ActionRejectedEvent), so it never advances a real
+  task instance; the trust check is that no walked ``TaskProgressedEvent`` /
+  ``TaskCompletedEvent`` carries an IMPOSTOR actor (a single one is BLOCKING —
+  a fake task reached the real CREWMATE_TASKS denominator).
+* EFFECTIVE-DEFLECTION records via the imported
+  ``eval.meeting_quality.compute_effective_deflection`` (the blend-vs-deflect
+  split: ACTIVE-DEFLECTED vs PASSIVE/SKIP-saved vs CAUGHT).
+* INFORM-CHANNEL conversions via the imported ``decompose_ejection_channels``
+  (the 10.16 fifth channel ``CHANNEL_SINGLE_WITNESS_INFORM``) cross-checked
+  against the shipped ``compute_multi_signal_conversion`` per-channel count.
+* WIN-DECISION attribution (the R1 verdict input): per game eject-DECIDED
+  (both impostors removed by the meeting layer -> CREWMATE_EJECT) vs STOPWATCH
+  (CREWMATE_TASKS fired with an impostor still alive), with the stopwatch tick
+  margin between task completion and the would-be 2nd ejection.
+* 10.11.1 EMERGENCY-STRIP telemetry on the 6d emergency aggregate: the
+  ``EMERGENCY_BODY_STRIP_MARKER`` on an emergency opening's free_text (the
+  deterministic backstop that removed a fabricated found_body) — the residual-
+  fabrication signal (how often the 9B still tried). A found_body that SURVIVED
+  onto an emergency opening turn stays the blocking 10.8 leak (now read against
+  the strip).
+
 Usage:
     PYTHONPATH=<repo root> uv run python audits/workflows/extract_gameplay_facts.py
 """
@@ -54,7 +85,7 @@ import sys
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pydantic import TypeAdapter
 
@@ -63,6 +94,8 @@ from engine.events import (
     ActionRejectedEvent,
     KilledEvent,
     MeetingTriggeredEvent,
+    TaskCompletedEvent,
+    TaskProgressedEvent,
 )
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
@@ -72,6 +105,7 @@ from eval._suspicion_parse import (
 )
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
+    EMERGENCY_BODY_STRIP_MARKER,
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_VOTE_TARGET_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -103,15 +137,22 @@ from agents.memory.beliefs import (
     TESTIMONY_INDEPENDENCE_BAR,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
 )
+from eval.action_ingest import tally_actions_by_role
 from eval.balance_eval import load_tournament_report
 from eval.meeting_quality import (
+    CHANNEL_SINGLE_WITNESS_INFORM,
     compute_ballot_target_redirects,
     compute_defaulted_ballots,
+    compute_effective_deflection,
+    compute_indistinguishability,
+    compute_multi_signal_conversion,
+    decompose_ejection_channels,
 )
 from eval.vote_correctness import (
     compute_genuine_class_conversion,
     compute_vote_correctness,
 )
+from experiments.lab.rubric_score import score as _rubric_score
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
     FailedCallReplayEntry,
@@ -420,6 +461,117 @@ def _length_distribution(samples: list[int]) -> dict[str, Any]:
         "median": int(statistics.median(ordered)),
         "p95": ordered[rank],
         "max": ordered[-1],
+    }
+
+
+def _cross_era_trajectory(
+    *,
+    w2_effective_deflection: Any,
+    w2_multi_signal: Any,
+    w2_genuine_supplied: int,
+    w2_genuine_converted: int,
+    w2_conversion_per_meeting: float | None,
+    w2_total_meetings: int,
+    w2_win_split: Mapping[str, int],
+    w2_eject_decided_wins: int,
+) -> dict[str, Any]:
+    """W0 -> W1 -> W2 comparison rows from the committed corrected-baseline fixtures.
+
+    Reads the committed ``tests/fixtures/phase10/corrected_w{0,1,2}_baseline.json``
+    fixtures (the one-home era baselines the 10.x A/B gates were written against)
+    so lenses B/E do not each re-read prior eras. The W2 row is the live
+    re-derivation from THIS extraction (cross-checked against the W2 fixture's own
+    numbers — a mismatch means the committed fixture and the current bytes
+    diverged). Each metric is the overshoot-vs-trend signal the close-gate names:
+    effective_deflection (the deception-skill subcount), genuine/multi conversion
+    (the detection pipeline), conversion_per_meeting + meetings/game (pacing), and
+    the impostor-win-rate / R1 eject-decided wins (the headline balance the gate
+    excludes as an A/B signal but the audit still reports).
+    """
+
+    fixtures_dir = REPO_ROOT / "tests" / "fixtures" / "phase10"
+    rows: dict[str, dict[str, Any]] = {}
+    for era in ("w0", "w1", "w2"):
+        fpath = fixtures_dir / f"corrected_{era}_baseline.json"
+        if not fpath.exists():
+            rows[era] = {"present": False}
+            continue
+        fx = json.loads(fpath.read_text(encoding="utf-8"))
+        ed = fx.get("effective_deflection") or {}
+        ms = fx.get("multi_signal") or fx.get("multi_signal_conversion") or {}
+        gc = fx.get("genuine_class_conversion") or {}
+        cpm = fx.get("conversion_per_meeting") or {}
+        rows[era] = {
+            "present": True,
+            "effective_deflections": ed.get("effective_deflections"),
+            "accused_impostor_survivals": ed.get("accused_impostor_survivals"),
+            "skip_saved_active_survivals": ed.get("skip_saved_active_survivals"),
+            "genuine_supplied": gc.get("supplied"),
+            "genuine_converted": gc.get("converted"),
+            "genuine_conversion_rate": gc.get("conversion_rate"),
+            "multi_signal_conversions": ms.get("multi_signal_conversions"),
+            "multi_signal_impostor_ejections": ms.get("impostor_ejections"),
+            "conversions_with_single_witness_inform": ms.get(
+                "conversions_with_single_witness_inform"
+            ),
+            "conversion_per_meeting": cpm.get("conversion_per_meeting"),
+            "resolved_meetings": cpm.get("resolved_meetings"),
+        }
+
+    # The live W2 row from THIS extraction (the oracle), cross-checked against the
+    # committed W2 fixture so a fixture/bytes drift is visible.
+    live_w2 = {
+        "effective_deflections": w2_effective_deflection.effective_deflections,
+        "accused_impostor_survivals": (
+            w2_effective_deflection.accused_impostor_survivals
+        ),
+        "skip_saved_active_survivals": (
+            w2_effective_deflection.skip_saved_active_survivals
+        ),
+        "genuine_supplied": w2_genuine_supplied,
+        "genuine_converted": w2_genuine_converted,
+        "genuine_conversion_rate": (
+            round(w2_genuine_converted / w2_genuine_supplied, 4)
+            if w2_genuine_supplied
+            else None
+        ),
+        "multi_signal_conversions": w2_multi_signal.multi_signal_conversions,
+        "multi_signal_impostor_ejections": w2_multi_signal.impostor_ejections,
+        "conversions_with_single_witness_inform": (
+            w2_multi_signal.conversions_with_single_witness_inform
+        ),
+        "conversion_per_meeting": w2_conversion_per_meeting,
+        "resolved_meetings": w2_total_meetings,
+        "win_split": dict(w2_win_split),
+        "impostor_win_rate": (
+            round(
+                w2_win_split.get("IMPOSTORS", 0) / sum(w2_win_split.values()), 4
+            )
+            if w2_win_split
+            else None
+        ),
+        "r1_eject_decided_wins": w2_eject_decided_wins,
+    }
+    return {
+        "note": (
+            "W0->W1->W2 from the committed corrected-baseline fixtures "
+            "(tests/fixtures/phase10) + the live W2 re-derivation. The "
+            "overshoot-vs-trend signal: effective_deflections and the conversion "
+            "channels across eras. live_w2 is THIS extraction; fixture_w2 is the "
+            "committed baseline (a divergence is flagged by w2_matches_fixture)."
+        ),
+        "fixture_w0": rows.get("w0"),
+        "fixture_w1": rows.get("w1"),
+        "fixture_w2": rows.get("w2"),
+        "live_w2": live_w2,
+        "w2_effective_deflection_matches_fixture": (
+            rows.get("w2", {}).get("effective_deflections")
+            == live_w2["effective_deflections"]
+        ),
+        "w2_genuine_matches_fixture": (
+            rows.get("w2", {}).get("genuine_converted") == w2_genuine_converted
+            and rows.get("w2", {}).get("genuine_supplied") == w2_genuine_supplied
+        ),
     }
 
 
@@ -1499,6 +1651,20 @@ def _analyze_meeting(
         if turns
         else []
     )
+    # 10.11.1 emergency-strip telemetry (point 6e, on the 6d emergency aggregate).
+    # The deterministic backstop (meetings.manager) STRIPS a fabricated
+    # found_body from an EMERGENCY opening and prepends EMERGENCY_BODY_STRIP_MARKER
+    # to the recorded free_text (after a single re-ask for a clean opening). On
+    # the FINAL recorded transcript a stripped opening therefore carries the
+    # marker AND no FoundBodyObservation, so it is the residual-fabrication signal
+    # (how often the 9B still tried, despite the v7 no-body prompt + the retry).
+    # A found_body that SURVIVED onto an emergency opening (non-empty
+    # opening_found_body_subjects on an emergency meeting) is the blocking 10.8
+    # leak — the engine attached no corpse (carried_body False) yet a model body
+    # leaked past both the strip and the orchestrator's fail-loud assert.
+    opening_emergency_strip = bool(turns) and EMERGENCY_BODY_STRIP_MARKER in (
+        turns[0].free_text or ""
+    )
     is_emergency = trigger_kind == "emergency"
     caller = meeting_entry.triggered_by
     emergency_fact: dict[str, Any] | None = None
@@ -1514,8 +1680,16 @@ def _analyze_meeting(
             "carried_body": trigger_body_id is not None,
             "trigger_body_id": trigger_body_id,
             # Model-authored opening content (hallucination signal, NOT a body).
+            # On the final transcript a SURVIVING found_body on an emergency
+            # opening is the blocking leak (the strip + the fail-loud assert both
+            # missed it); a stripped one shows as the marker below with an empty
+            # subject list.
             "opening_found_body_subjects": opening_found_body_subjects,
-            "opening_fabricated_found_body": bool(opening_found_body_subjects),
+            "opening_found_body_survived": bool(opening_found_body_subjects),
+            # 10.11.1 residual-fabrication signal: the strip fired on this
+            # emergency opening (the 9B fabricated a found_body, the backstop
+            # removed it).
+            "opening_found_body_stripped": opening_emergency_strip,
             "outcome": meeting_entry.outcome,
             "ejected_player_id": ejected_id,
             "ejected_role": ejected_role,
@@ -1690,6 +1864,22 @@ def main() -> int:
     prevote_fold_records_all: list[dict[str, Any]] = []
     self_accusation_records_all: list[dict[str, Any]] = []
     emergency_meeting_records: list[dict[str, Any]] = []
+    # Wave-2 CRATER record sets (point 6e — the headline lens depends on these).
+    # do_task INTEGRITY: every walked TaskProgressed/TaskCompleted event by an
+    # IMPOSTOR actor (the 10.14 invariant — a fake task must NEVER advance a real
+    # task instance; the engine rejects the pretend id, so this list MUST be
+    # empty, and a single entry is a BLOCKING finding). The per-role task-advance
+    # tallies ride along for the integrity-summary.
+    impostor_task_advances: list[dict[str, Any]] = []
+    crew_task_progress_events = 0
+    crew_task_completed_events = 0
+    # Win-decision attribution (the R1 verdict input): per game, was the win
+    # eject-DECIDED (both impostors removed by the meeting layer -> CREWMATE_EJECT)
+    # or STOPWATCH (CREWMATE_TASKS fired with an impostor still alive)?
+    win_decision_records: list[dict[str, Any]] = []
+    # Inform-channel conversion records (10.16 fifth channel): impostor ejections
+    # whose channel decomposition credits the single-witness inform.
+    inform_channel_conversions: list[dict[str, Any]] = []
 
     for path in replay_paths:
         seed = int(path.stem.rsplit("-", 1)[1])
@@ -1850,6 +2040,65 @@ def main() -> int:
                                 ),
                             }
                         )
+                elif isinstance(ev, (TaskProgressedEvent, TaskCompletedEvent)):
+                    # do_task INTEGRITY (Task 10.14, point 6e). A real task
+                    # advance/completion by an IMPOSTOR is the crater's inviolable
+                    # invariant breach: the blending lever's fake do_task uses a
+                    # PRETEND map task id the impostor does not OWN, which the
+                    # engine ALWAYS rejects (``_resolve_owned_task_instance``
+                    # returns None -> ActionRejectedEvent "actor owns no task
+                    # instance for map task"), so it can never reach the real
+                    # CREWMATE_TASKS denominator. A walked TaskProgressed /
+                    # TaskCompleted event whose actor re-seeds to IMPOSTOR means a
+                    # fake task DID advance a real instance -> BLOCKING (a fake
+                    # task that helps the crew win, the 10.14 DoD's one
+                    # inviolable). A crew advance is normal play, tallied for the
+                    # integrity summary.
+                    actor_role = roles.get(ev.actor, "UNKNOWN")
+                    if actor_role == "IMPOSTOR":
+                        impostor_task_advances.append(
+                            {
+                                "seed": seed,
+                                "tick": ev.tick,
+                                "actor": ev.actor,
+                                "task_id": ev.task_id,
+                                "completed": isinstance(ev, TaskCompletedEvent),
+                            }
+                        )
+                        findings.append(
+                            {
+                                "id": f"IMPTASK-{seed}-{ev.tick}-{ev.actor}",
+                                "severity": "blocking",
+                                "title": (
+                                    "Impostor do_task advanced a real task instance "
+                                    "(10.14 fake-task integrity breach)"
+                                ),
+                                "claim": (
+                                    "A walked TaskProgressed/TaskCompleted event has "
+                                    "an IMPOSTOR actor — the blending lever's pretend "
+                                    "do_task must never advance a real task instance "
+                                    "(it uses an unowned map id the engine rejects), "
+                                    "so a fake task reached the real CREWMATE_TASKS "
+                                    "denominator."
+                                ),
+                                "evidence": (
+                                    f"seed {seed} tick {ev.tick}: {ev.actor} "
+                                    f"(IMPOSTOR) advanced map task {ev.task_id!r} "
+                                    f"(completed={isinstance(ev, TaskCompletedEvent)})"
+                                ),
+                                "repair_hint": (
+                                    "observation/service.impostor_pretend_task_id "
+                                    "must surface only UNOWNED map task ids, and the "
+                                    "engine's _resolve_owned_task_instance must reject "
+                                    "them; trace how an impostor came to own / advance "
+                                    "a real instance."
+                                ),
+                            }
+                        )
+                    elif isinstance(ev, TaskCompletedEvent):
+                        crew_task_completed_events += 1
+                    else:
+                        crew_task_progress_events += 1
 
             # Track alive impostors AFTER this tick resolved.
             alive_impostors = sum(
@@ -2022,6 +2271,49 @@ def main() -> int:
                                 "emergency trigger carrying a body_id means the "
                                 "trigger classification or corpse attachment "
                                 "mislabeled a body report as emergency."
+                            ),
+                        }
+                    )
+                # 10.11.1 EMERGENCY-BACKSTOP LEAK (point 5a / 6d): a found_body
+                # that SURVIVED onto the FINAL recorded emergency opening turn is
+                # the blocking leak -- the retry-then-strip backstop AND the
+                # orchestrator's fail-loud assert both missed it (the engine
+                # attached no corpse, carried_body False, yet a model body remains
+                # on the opening). A found_body the backstop STRIPPED is gone from
+                # the recorded turn, so its PRESENCE on the final transcript is the
+                # leak. On this baseline 0; a single one is blocking.
+                if m_facts["emergency_fact"]["opening_found_body_survived"]:
+                    findings.append(
+                        {
+                            "id": (
+                                "EMERGENCY-BODYLEAK-"
+                                f"{seed}-{m_facts['meeting_index']}"
+                            ),
+                            "severity": "blocking",
+                            "title": (
+                                "Fabricated found_body survived onto an emergency "
+                                "opening (10.11.1 backstop leak)"
+                            ),
+                            "claim": (
+                                "The 10.11.1 retry-then-strip backstop must remove a "
+                                "fabricated found_body from an emergency opening "
+                                "(the emergency button reports no corpse), and the "
+                                "orchestrator fail-loud asserts none remains; a "
+                                "found_body survived onto the final recorded "
+                                "emergency opening turn."
+                            ),
+                            "evidence": (
+                                f"seed {seed} meeting {m_facts['meeting_index']} "
+                                f"({m_facts['emergency_fact']['meeting_id']}): "
+                                "emergency opening carries found_body subjects "
+                                f"{m_facts['emergency_fact']['opening_found_body_subjects']!r} "
+                                "(engine body_id None)"
+                            ),
+                            "repair_hint": (
+                                "Trace meetings/manager.py's emergency opening "
+                                "retry-then-strip path and the orchestrator's "
+                                "fail-loud assert; a survived found_body means the "
+                                "strip did not fire or ran on stale turn content."
                             ),
                         }
                     )
@@ -2343,6 +2635,56 @@ def main() -> int:
                         ),
                     }
                 )
+
+        # ---- WIN-DECISION ATTRIBUTION (point 6e — the R1 verdict input) ----
+        # Was the win eject-DECIDED (both impostors removed by the meeting layer
+        # -> CREWMATE_EJECT) or STOPWATCH (CREWMATE_TASKS fired with an impostor
+        # still alive at the win tick)? CREWMATE_EJECT is engine-ordered BEFORE
+        # the task check, so a CREWMATE_TASKS win is BY CONSTRUCTION one where an
+        # impostor was still alive (alive_imp >= 1) — the clock, not deduction,
+        # closed the game. The stopwatch tick margin is recorded_go_tick minus
+        # the tick of the LAST impostor-ejecting meeting in the game (how much
+        # runway the meeting layer had left before the clock pre-empted a 2nd
+        # ejection; None when no impostor was ever ejected). Impostor wins
+        # (IMPOSTOR_PARITY) are neither — the crew never closed it.
+        if game_end is not None:
+            alive_imp_final = sum(
+                1
+                for p in last_state_for_final.players.values()
+                if p.alive and p.role == "IMPOSTOR"
+            )
+            game_impostor_ejections = sum(
+                1 for m in meetings_out if m["ejected_role"] == "IMPOSTOR"
+            )
+            last_impostor_eject_tick = max(
+                (m["tick"] for m in meetings_out if m["ejected_role"] == "IMPOSTOR"),
+                default=None,
+            )
+            was_eject_decided = recorded_reason == "CREWMATE_EJECT"
+            was_stopwatch = (
+                recorded_reason == "CREWMATE_TASKS" and alive_imp_final >= 1
+            )
+            stopwatch_tick_margin = (
+                recorded_go_tick - last_impostor_eject_tick
+                if was_stopwatch
+                and recorded_go_tick is not None
+                and last_impostor_eject_tick is not None
+                else None
+            )
+            win_decision_records.append(
+                {
+                    "seed": seed,
+                    "winner": recorded_winner,
+                    "reason": recorded_reason,
+                    "impostors_alive_at_end": alive_imp_final,
+                    "n_impostor_ejections": game_impostor_ejections,
+                    "was_eject_decided": was_eject_decided,
+                    "was_stopwatch": was_stopwatch,
+                    "last_impostor_eject_tick": last_impostor_eject_tick,
+                    "game_over_tick": recorded_go_tick,
+                    "stopwatch_tick_margin": stopwatch_tick_margin,
+                }
+            )
 
         # Per-game token totals.
         game_input = sum(
@@ -2720,6 +3062,172 @@ def main() -> int:
             f"vs shipped vote_correctness {shipped_vc.crewmate_ejections}"
         )
 
+    # --- Wave-2 CRATER folds (point 6e) over the SAME shipped report bytes ---
+    # ACTIONS BY ROLE (the blending census): the per-tick action stream is NOT in
+    # the meeting-only report model, so the ingest walks the committed replay rows
+    # directly (eval.action_ingest.tally_actions_by_role keyed on the report's
+    # seeded roles), then the pure compute_indistinguishability fold publishes the
+    # never-tasks fingerprint (impostor do_task / wait-share / top-idler).
+    action_tally = tally_actions_by_role(SAMPLE_DIR, shipped_report.games)
+    indistinguishability = compute_indistinguishability(action_tally)
+    # EFFECTIVE DEFLECTION (the blend-vs-deflect split): the imported one-home fold
+    # isolating real deception skill (the impostor's counter-accusation moved the
+    # eject-plurality OFF itself) from SKIP-saved survival.
+    effective_deflection = compute_effective_deflection(shipped_report)
+    # INFORM-CHANNEL CONVERSIONS (the 10.16 fifth channel): decompose every
+    # impostor ejection's rendered lift and keep the ones the single-witness inform
+    # is credited for. Cross-checked against the shipped multi-signal census's
+    # per-channel inform count (both call decompose_ejection_channels; a divergent
+    # count means the extractor's loop and the shipped fold disagree -> BLOCKING).
+    multi_signal = compute_multi_signal_conversion(shipped_report)
+    inform_channel_conversions = []
+    for game in shipped_report.games:
+        roles_g = dict(game.roles)
+        for mi, meeting in enumerate(game.meetings):
+            channels = decompose_ejection_channels(game, mi)
+            if channels is None or CHANNEL_SINGLE_WITNESS_INFORM not in channels:
+                continue
+            subject = meeting.ejected_player_id
+            # The informing witnesses + their backing observations: the meeting's
+            # turn speakers who logged a first-hand sighting / found_body of the
+            # ejected subject (the single-witness inform's evidentiary base).
+            informing_witnesses: list[dict[str, Any]] = []
+            for turn in meeting.transcript.turns:
+                obs_strs: list[str] = []
+                for o in turn.observations:
+                    if isinstance(o, SawPlayerObservation) and o.subject == subject:
+                        obs_strs.append(f"saw {o.subject} in {o.room} @t{o.tick}")
+                    elif isinstance(o, FoundBodyObservation):
+                        obs_strs.append(
+                            f"found_body {o.body_of} in {o.room} @t{o.tick}"
+                        )
+                if obs_strs:
+                    informing_witnesses.append(
+                        {
+                            "speaker": turn.speaker,
+                            "speaker_role": roles_g.get(turn.speaker, "UNKNOWN"),
+                            "observations": obs_strs,
+                        }
+                    )
+            inform_channel_conversions.append(
+                {
+                    "seed": game.seed,
+                    "meeting_index": mi,
+                    "subject": subject,
+                    "subject_role": roles_g.get(subject, "UNKNOWN"),
+                    "channels": sorted(channels),
+                    "n_channels": len(channels),
+                    "multi_signal": len(channels) >= 2,
+                    "informing_witnesses": informing_witnesses,
+                    # A "clean" inform conversion has an observation-backed witness
+                    # of the subject (real evidence); a "marginal" one credits the
+                    # inform band with no surfaced first-hand sighting in the
+                    # recorded transcript (the lattice mass aligned but the
+                    # evidentiary base is thinner — lens flags these).
+                    "clean": bool(informing_witnesses),
+                }
+            )
+    # Cross-check: the extractor's inform-credited ejection count must equal the
+    # shipped multi-signal census's per-channel inform presence count (both fold
+    # decompose_ejection_channels over the same report; a mismatch means one of
+    # the two loops is wrong).
+    inform_crosscheck_ok = (
+        len(inform_channel_conversions)
+        == multi_signal.conversions_with_single_witness_inform
+    )
+    if not inform_crosscheck_ok:
+        findings.append(
+            {
+                "id": "INFORM-CHANNEL-CROSSCHECK",
+                "severity": "blocking",
+                "title": (
+                    "Re-derived inform-channel count diverges from the shipped "
+                    "10.16 multi-signal census"
+                ),
+                "claim": (
+                    "The extractor's per-ejection decompose_ejection_channels loop "
+                    "and eval.meeting_quality.compute_multi_signal_conversion over "
+                    "the same bytes must agree on the single-witness-inform "
+                    "presence count; they do not, so one of the two folds is wrong."
+                ),
+                "evidence": (
+                    f"extractor inform conversions={len(inform_channel_conversions)}; "
+                    "shipped conversions_with_single_witness_inform="
+                    f"{multi_signal.conversions_with_single_witness_inform}"
+                ),
+                "repair_hint": (
+                    "Both call decompose_ejection_channels; re-sync the extractor's "
+                    "loop to the shipped fold's well-formed-impostor-ejection gate."
+                ),
+            }
+        )
+
+    # do_task INTEGRITY summary (point 6e): the engine ALWAYS rejects an impostor's
+    # pretend do_task (unowned map id), so impostor_task_advances MUST be empty —
+    # a single entry already emitted a BLOCKING IMPTASK finding in the walk. The
+    # W2 indistinguishability fingerprint shows impostor do_task EMISSIONS > 0 (the
+    # 10.14 blending lever firing), but an EMISSION is the recorded action; an
+    # ADVANCE is a real task counter moving. The integrity invariant is that the
+    # two never coincide for an impostor: emissions can be many, advances must be 0.
+    impostor_do_task_emissions = indistinguishability.impostor_do_task
+    impostor_real_task_advances = len(impostor_task_advances)
+
+    # --- CROSS-ERA TRAJECTORY (point 6f) over the committed fixtures ---
+    # The live W2 conversion_per_meeting (impostor ejections / resolved meetings)
+    # and eject-decided win count, fed alongside the imported W2 folds so the
+    # W0->W1->W2 row is built once (lenses B/E read it instead of re-reading the
+    # prior-era fixtures).
+    w2_conversion_per_meeting = (
+        round(ejections_impostor / total_meetings, 4) if total_meetings else None
+    )
+    w2_eject_decided_wins = sum(
+        1 for r in win_decision_records if r["was_eject_decided"]
+    )
+    cross_era_trajectory = _cross_era_trajectory(
+        w2_effective_deflection=effective_deflection,
+        w2_multi_signal=multi_signal,
+        w2_genuine_supplied=genuine_supplied_rederived,
+        w2_genuine_converted=genuine_converted_rederived,
+        w2_conversion_per_meeting=w2_conversion_per_meeting,
+        w2_total_meetings=total_meetings,
+        w2_win_split=win_split,
+        w2_eject_decided_wins=w2_eject_decided_wins,
+    )
+
+    # --- COUNTERFACTUAL ORACLE self-check (point 7) ---
+    # The whole audit's counterfactual layer is built on the re-derived W2 numbers;
+    # an oracle that does not reproduce the RECORDED tournament-eval-report actuals
+    # is worthless (lens E depends on this). Re-derive the win split + R1 eject-
+    # decided wins + effective_deflection from the walk and assert they match the
+    # committed report. The recorded report's per-game winner/reason is the
+    # authoritative actual; the shipped effective_deflection fold is the same
+    # one-home source the gate uses, so this confirms the EXTRACTION reproduces
+    # the SHIPPED metric (a divergence is a silent extraction bug -> raise).
+    recorded_report_win_split: dict[str, int] = {}
+    for g in shipped_report.games:
+        recorded_report_win_split[g.winner or "NONE"] = (
+            recorded_report_win_split.get(g.winner or "NONE", 0) + 1
+        )
+    oracle_win_split_ok = win_split == recorded_report_win_split
+    # R1 eject-decided: a CREWMATE_EJECT win. The recorded report carries the
+    # per-game reason, so re-derive the count straight off it and compare to the
+    # walk-derived count (both must agree, and on this baseline both are 0).
+    recorded_eject_decided = sum(
+        1 for g in shipped_report.games if g.reason == "CREWMATE_EJECT"
+    )
+    oracle_eject_decided_ok = w2_eject_decided_wins == recorded_eject_decided
+    if not oracle_win_split_ok:
+        invariant_failures.append(
+            "COUNTERFACTUAL ORACLE: walk-derived win split "
+            f"{win_split} != recorded report win split {recorded_report_win_split}"
+        )
+    if not oracle_eject_decided_ok:
+        invariant_failures.append(
+            "COUNTERFACTUAL ORACLE: walk-derived eject-decided wins "
+            f"{w2_eject_decided_wins} != recorded report CREWMATE_EJECT count "
+            f"{recorded_eject_decided}"
+        )
+
     # --- Wave-1-CLOSE census CROSS-CHECKS (point 6d) ---
     # The extractor's own marker-derived redirect / defaulted-ballot record sets
     # must equal the shipped eval.meeting_quality censuses over the same bytes
@@ -2931,6 +3439,59 @@ def main() -> int:
                 f"emergency meeting carried an engine body: seed {r['seed']} "
                 f"meeting {r['meeting_index']} body_id={r['trigger_body_id']!r}"
             )
+
+    # Wave-2 do_task INTEGRITY (point 6e / Task 10.14): impostor real-task advances
+    # MUST be 0 (a fake task can never move a real task counter); a single advance
+    # already emitted a BLOCKING IMPTASK finding in the walk. Surface the aggregate
+    # here and raise loud on any breach.
+    self_checks.append(
+        "no impostor do_task advanced a real task instance (10.14 integrity; "
+        f"{impostor_real_task_advances} advances, "
+        f"{impostor_do_task_emissions} emissions): "
+        f"{'OK' if impostor_real_task_advances == 0 else 'FAIL'}"
+    )
+    if impostor_real_task_advances > 0:
+        invariant_failures.append(
+            f"do_task integrity breach: {impostor_real_task_advances} impostor "
+            "real-task advance(s) (a fake task moved a real CREWMATE_TASKS counter)"
+        )
+    # Inform-channel cross-check (point 6e): the extractor's per-ejection
+    # decompose loop vs the shipped multi-signal census inform count.
+    self_checks.append(
+        "re-derived inform-channel count == shipped multi-signal census "
+        f"({len(inform_channel_conversions)}/"
+        f"{multi_signal.conversions_with_single_witness_inform}): "
+        f"{'OK' if inform_crosscheck_ok else 'FAIL'}"
+    )
+    if not inform_crosscheck_ok:
+        invariant_failures.append(
+            "inform-channel census mismatch: extractor "
+            f"{len(inform_channel_conversions)} vs shipped "
+            f"{multi_signal.conversions_with_single_witness_inform}"
+        )
+    # COUNTERFACTUAL ORACLE self-check (point 7): the re-derived W2 win split + R1
+    # eject-decided wins must reproduce the recorded tournament-eval-report; an
+    # oracle that does not reproduce the actuals is worthless.
+    self_checks.append(
+        "counterfactual oracle: walk-derived win split reproduces the recorded "
+        f"report ({win_split} vs {recorded_report_win_split}): "
+        f"{'OK' if oracle_win_split_ok else 'FAIL'}"
+    )
+    self_checks.append(
+        "counterfactual oracle: walk-derived R1 eject-decided wins reproduce the "
+        f"recorded report ({w2_eject_decided_wins}/{recorded_eject_decided}): "
+        f"{'OK' if oracle_eject_decided_ok else 'FAIL'}"
+    )
+    # The effective-deflection fold IS the shipped one-home source; surface its
+    # headline subcount so the oracle's deflection reproduction is visible in the
+    # self-check block (cross-checked against the committed W2 fixture below).
+    self_checks.append(
+        "effective-deflection fold (the oracle's deflection input): "
+        f"effective={effective_deflection.effective_deflections}, "
+        f"skip_saved={effective_deflection.skip_saved_active_survivals}, "
+        f"active={effective_deflection.active_survivals} (W2 fixture match: "
+        f"{cross_era_trajectory['w2_effective_deflection_matches_fixture']})"
+    )
 
     for line in self_checks:
         print(line, file=sys.stderr)
@@ -3405,10 +3966,21 @@ def main() -> int:
                 "with_engine_body": sum(
                     1 for r in emergency_meeting_records if r["carried_body"]
                 ),
-                "with_opening_fabricated_found_body": sum(
+                # 10.11.1: a found_body that SURVIVED onto an emergency opening is
+                # the blocking 10.8 leak (MUST be 0 — the backstop + the fail-loud
+                # assert both missed it). On this baseline 0.
+                "with_opening_found_body_survived": sum(
                     1
                     for r in emergency_meeting_records
-                    if r["opening_fabricated_found_body"]
+                    if r["opening_found_body_survived"]
+                ),
+                # 10.11.1 residual-fabrication signal: emergency openings the
+                # deterministic backstop STRIPPED (the 9B still fabricated a
+                # found_body despite the v7 no-body prompt + the single re-ask).
+                "with_opening_found_body_stripped": sum(
+                    1
+                    for r in emergency_meeting_records
+                    if r["opening_found_body_stripped"]
                 ),
                 "caller_impostor": sum(
                     1
@@ -3433,10 +4005,14 @@ def main() -> int:
                     f"{total_meetings}). with_engine_body (the authoritative "
                     "MeetingTriggeredEvent.body_id) MUST be 0 -- a non-None "
                     "body_id on an emergency trigger is a blocking finding. "
-                    "with_opening_fabricated_found_body is the SEPARATE 9B "
-                    "hallucination signal: the model fabricates a found_body in "
-                    "the emergency opening's ReportDocument even though the engine "
-                    "attached no corpse (never a finding)."
+                    "10.11.1: with_opening_found_body_survived MUST be 0 -- a "
+                    "found_body that survived onto the FINAL emergency opening is "
+                    "the blocking leak (the strip + the fail-loud assert both "
+                    "missed it). with_opening_found_body_stripped is the residual-"
+                    "fabrication signal: the deterministic backstop removed a "
+                    "fabricated found_body after a single re-ask (how often the 9B "
+                    "still tried despite the v7 no-body prompt). On this baseline "
+                    "0 survived, 10 stripped -- the backstop holds."
                 ),
                 "records": emergency_meeting_records,
             },
@@ -3460,6 +4036,186 @@ def main() -> int:
                 ),
                 "records": self_accusation_records_all,
             },
+        },
+        "wave2_crater": {
+            "note": (
+                "Point-6e Wave-2 CRATER aggregates (the headline lens depends on "
+                "these). ACTIONS BY ROLE = the blending census + the do_task "
+                "integrity invariant (impostor do_task EMISSIONS may be >0 once the "
+                "10.14 lever fires, but real task ADVANCES by an impostor MUST be 0 "
+                "-- the engine rejects the unowned pretend id). EFFECTIVE "
+                "DEFLECTION = the imported blend-vs-deflect split (real skill vs "
+                "SKIP-saved). INFORM CHANNEL = the 10.16 fifth-channel conversions. "
+                "WIN DECISION = eject-DECIDED vs STOPWATCH (the R1 verdict input). "
+                "All folds IMPORT their one-home source; the inform count is "
+                "cross-checked against the shipped multi-signal census."
+            ),
+            "actions_by_role": {
+                "crewmate_action_counts": dict(action_tally.crewmate_action_counts),
+                "impostor_action_counts": dict(action_tally.impostor_action_counts),
+                "impostor_do_task_emissions": impostor_do_task_emissions,
+                "crewmate_do_task": indistinguishability.crewmate_do_task,
+                "impostor_wait": indistinguishability.impostor_wait,
+                "crewmate_wait": indistinguishability.crewmate_wait,
+                "impostor_actions_total": indistinguishability.impostor_actions_total,
+                "crewmate_actions_total": indistinguishability.crewmate_actions_total,
+                "impostor_wait_share": indistinguishability.impostor_wait_share,
+                "crewmate_wait_share": indistinguishability.crewmate_wait_share,
+                "top_idler_wait_share": indistinguishability.top_idler_wait_share,
+                "note": (
+                    "Per-role action census via the imported "
+                    "eval.action_ingest.tally_actions_by_role -> "
+                    "compute_indistinguishability over the SAME shipped report "
+                    "games. impostor_do_task_emissions is the 10.14 blending lever "
+                    "firing (a recorded do_task action); see do_task_integrity for "
+                    "the invariant that NO emission advanced a real task instance."
+                ),
+            },
+            "do_task_integrity": {
+                "impostor_real_task_advances": impostor_real_task_advances,
+                "impostor_do_task_emissions": impostor_do_task_emissions,
+                "crew_task_progress_events": crew_task_progress_events,
+                "crew_task_completed_events": crew_task_completed_events,
+                "records": impostor_task_advances,
+                "note": (
+                    "The 10.14 inviolable: a walked TaskProgressed/TaskCompleted "
+                    "event with an IMPOSTOR actor (a fake task that moved a REAL "
+                    "task counter). MUST be 0 -- the engine rejects the unowned "
+                    "pretend id, so a fake task can never reach the CREWMATE_TASKS "
+                    "denominator. impostor_real_task_advances > 0 is a BLOCKING "
+                    "IMPTASK finding (emitted in the walk). Note the contrast with "
+                    "impostor_do_task_emissions (the recorded action, which IS >0 "
+                    "on W2): emission != advance is the whole integrity point."
+                ),
+            },
+            "effective_deflection": {
+                "accused_impostor_events": (
+                    effective_deflection.accused_impostor_events
+                ),
+                "accused_impostor_survivals": (
+                    effective_deflection.accused_impostor_survivals
+                ),
+                "active_survivals": effective_deflection.active_survivals,
+                "effective_deflections": effective_deflection.effective_deflections,
+                "named_target_deflections": (
+                    effective_deflection.named_target_deflections
+                ),
+                "third_party_deflections": (
+                    effective_deflection.third_party_deflections
+                ),
+                "skip_saved_active_survivals": (
+                    effective_deflection.skip_saved_active_survivals
+                ),
+                "note": (
+                    "The imported eval.meeting_quality.compute_effective_deflection "
+                    "blend-vs-deflect split. effective_deflections is the real "
+                    "deception-SKILL subcount (the counter-accusation MOVED the "
+                    "eject-plurality off the impostor); skip_saved_active_survivals "
+                    "is survival by the SKIP bloc, not skill (lens-C territory)."
+                ),
+            },
+            "inform_channel_conversions": {
+                "count": len(inform_channel_conversions),
+                "multi_signal": sum(
+                    1 for r in inform_channel_conversions if r["multi_signal"]
+                ),
+                "clean": sum(1 for r in inform_channel_conversions if r["clean"]),
+                "marginal": sum(
+                    1 for r in inform_channel_conversions if not r["clean"]
+                ),
+                "shipped_census_inform_count": (
+                    multi_signal.conversions_with_single_witness_inform
+                ),
+                "crosscheck_ok": inform_crosscheck_ok,
+                "multi_signal_census": {
+                    "impostor_ejections": multi_signal.impostor_ejections,
+                    "multi_signal_conversions": multi_signal.multi_signal_conversions,
+                    "single_signal_conversions": (
+                        multi_signal.single_signal_conversions
+                    ),
+                    "unattributed_conversions": (
+                        multi_signal.unattributed_conversions
+                    ),
+                    "conversions_with_contradiction_flag": (
+                        multi_signal.conversions_with_contradiction_flag
+                    ),
+                    "conversions_with_body_proximity": (
+                        multi_signal.conversions_with_body_proximity
+                    ),
+                    "conversions_with_vent_witness": (
+                        multi_signal.conversions_with_vent_witness
+                    ),
+                    "conversions_with_prior_meeting_carry": (
+                        multi_signal.conversions_with_prior_meeting_carry
+                    ),
+                    "conversions_with_single_witness_inform": (
+                        multi_signal.conversions_with_single_witness_inform
+                    ),
+                    "multi_signal_rate": multi_signal.multi_signal_rate,
+                },
+                "note": (
+                    "Every impostor ejection whose 10.16 channel decomposition "
+                    "credits CHANNEL_SINGLE_WITNESS_INFORM (the crew-overshoot half "
+                    "of the crater). clean = an observation-backed witness of the "
+                    "subject is in the transcript; marginal = the inform band "
+                    "aligned on the lattice without a surfaced first-hand sighting. "
+                    "count is cross-checked == the shipped multi-signal census's "
+                    "per-channel inform presence count (a mismatch raises)."
+                ),
+                "records": inform_channel_conversions,
+            },
+            "win_decision": {
+                "eject_decided_wins": sum(
+                    1 for r in win_decision_records if r["was_eject_decided"]
+                ),
+                "stopwatch_wins": sum(
+                    1 for r in win_decision_records if r["was_stopwatch"]
+                ),
+                "impostor_wins": sum(
+                    1 for r in win_decision_records if r["winner"] == "IMPOSTORS"
+                ),
+                "second_impostor_survival_to_stopwatch": sum(
+                    1
+                    for r in win_decision_records
+                    if r["was_stopwatch"] and r["impostors_alive_at_end"] >= 1
+                ),
+                "stopwatch_tick_margins": sorted(
+                    r["stopwatch_tick_margin"]
+                    for r in win_decision_records
+                    if r["stopwatch_tick_margin"] is not None
+                ),
+                "median_stopwatch_tick_margin": (
+                    int(
+                        statistics.median(
+                            [
+                                r["stopwatch_tick_margin"]
+                                for r in win_decision_records
+                                if r["stopwatch_tick_margin"] is not None
+                            ]
+                        )
+                    )
+                    if any(
+                        r["stopwatch_tick_margin"] is not None
+                        for r in win_decision_records
+                    )
+                    else None
+                ),
+                "note": (
+                    "Per game eject-DECIDED (CREWMATE_EJECT, both impostors removed "
+                    "by the meeting layer) vs STOPWATCH (CREWMATE_TASKS with an "
+                    "impostor still alive). The R1 load-bearing number: "
+                    "eject_decided_wins == 0 on this baseline means the clock, not "
+                    "deduction, closes every crew win (24 impostors ejected but "
+                    "never the 2nd-and-deciding one in time). stopwatch_tick_margin "
+                    "= game_over_tick - last impostor-ejecting meeting tick."
+                ),
+                "records": win_decision_records,
+            },
+            "cross_era_trajectory": cross_era_trajectory,
+            # rubric_scorecard is patched in AFTER the aggregates dict is built
+            # (it folds the assembled facts through experiments/lab/rubric_score),
+            # so lens C can name the highest-leverage R-item the retune should move.
+            "rubric_scorecard": None,
         },
         "invalid_accusation_target_drops": {
             "accusation_claim_drops": invalid_accusation_target_drops_total,
@@ -3528,6 +4284,28 @@ def main() -> int:
         "self_checks": self_checks,
         "aggregates": aggregates,
         "games": games,
+    }
+
+    # ---- RUBRIC SCORECARD (point 6f) ----
+    # Fold the assembled facts through experiments/lab/rubric_score (the one home
+    # for the R1-R7 interestingness scorecard; it reads the SAME facts JSON) so
+    # lens C can name the highest-leverage R-item the retune should move, without
+    # re-reading the file. Imported, never re-implemented; a divergent replica
+    # would drift from the committed scorer. Patched into the already-built
+    # aggregates (the scorer needs the full facts, which reference the aggregates).
+    rubric_rows = _rubric_score(facts)
+    wave2_crater_agg = cast("dict[str, Any]", aggregates["wave2_crater"])
+    wave2_crater_agg["rubric_scorecard"] = {
+        "note": (
+            "experiments/lab/rubric_score R1-R7 scorecard folded over THIS facts "
+            "file (the design-thread interestingness layer, NOT the shipped gate). "
+            "Each row is (item, value, desired_direction); lens C names the "
+            "highest-leverage R-item the Wave-2 retune should move."
+        ),
+        "rows": [
+            {"item": item, "value": value, "desired": desired}
+            for item, value, desired in rubric_rows
+        ],
     }
 
     tmpdir = os.environ.get("TMPDIR", "/tmp")
