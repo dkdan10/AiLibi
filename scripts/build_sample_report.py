@@ -57,11 +57,15 @@ from api import replay_loader  # noqa: E402
 from engine.entities import PlayerId, Role  # noqa: E402
 from engine.world import load_canonical_map  # noqa: E402
 from eval.balance_eval import load_tournament_report  # noqa: E402
+from eval.action_ingest import tally_actions_by_role  # noqa: E402
 from eval.meeting_quality import (  # noqa: E402
     TournamentEvalReport,
     build_tournament_eval_report,
     compute_ballot_target_redirects,
+    compute_conversion_per_meeting,
     compute_defaulted_ballots,
+    compute_effective_deflection,
+    compute_indistinguishability,
     compute_multi_signal_conversion,
     compute_supply_gauges,
     decompose_ejection_channels,
@@ -171,7 +175,7 @@ def _serialize(report: TournamentEvalReport) -> str:
     return json_text + "\n"
 
 
-def _summary(report: TournamentEvalReport) -> str:
+def _summary(report: TournamentEvalReport, sample_dir: Path) -> str:
     games = report.report.games
     crew = sum(1 for game in games if game.winner == "CREWMATES")
     impostor = sum(1 for game in games if game.winner == "IMPOSTORS")
@@ -216,6 +220,37 @@ def _summary(report: TournamentEvalReport) -> str:
         if gauges.over_gate_listeners_per_accused_impostor_meeting is not None
         else "n/a"
     )
+    # The Task 10.16 Wave-2 gate-spec metrics (standalone, off the frozen
+    # committed report exactly like the gp-7 companions): the pacing-proof
+    # conversion KPI, the active-deflection subcount, the inform-channel
+    # attribution, and the "never-tasks" indistinguishability fingerprint. The
+    # impostor win RATE prints with an explicit GUARDRAIL label (the Wave-2
+    # outcome split is confounded — see eval.meeting_quality.WAVE2_GATE_SPEC).
+    cpm = compute_conversion_per_meeting(games)
+    deflection = compute_effective_deflection(games)
+    tally = tally_actions_by_role(sample_dir, games)
+    indist = compute_indistinguishability(tally)
+    cpm_str = (
+        f"{cpm.conversion_per_meeting:.3f}"
+        if cpm.conversion_per_meeting is not None
+        else "n/a"
+    )
+    imp_wait = (
+        f"{indist.impostor_wait_share:.2f}"
+        if indist.impostor_wait_share is not None
+        else "n/a"
+    )
+    crew_wait = (
+        f"{indist.crewmate_wait_share:.2f}"
+        if indist.crewmate_wait_share is not None
+        else "n/a"
+    )
+    top_idler = (
+        f"{indist.top_idler_wait_share:.2f}"
+        if indist.top_idler_wait_share is not None
+        else "n/a"
+    )
+    imp_win_rate = f"{impostor / len(games):.2f}" if games else "n/a"
     return (
         f"{len(games)} games | win split (non-gate) "
         f"CREW {crew} / IMP {impostor} / budget {budget} | "
@@ -239,7 +274,16 @@ def _summary(report: TournamentEvalReport) -> str:
         f"zero_contra {gauges.zero_contradiction_meetings}/{gauges.meetings_total} | "
         f"genuine_subject_meetings {gauges.genuine_subject_meetings} | "
         f"flag_roles {gauges.flag_subjects_crew}c/{gauges.flag_subjects_impostor}i | "
-        f"over_gate_listeners/meeting {over_gate}"
+        f"over_gate_listeners/meeting {over_gate} | "
+        f"[W2] conv/meeting {cpm_str} "
+        f"({cpm.impostor_ejections}/{cpm.resolved_meetings}) | "
+        f"effective_deflection {deflection.effective_deflections}/"
+        f"{deflection.active_survivals}active "
+        f"(survivals {deflection.accused_impostor_survivals}) | "
+        f"inform_conversions {multi.conversions_with_single_witness_inform} | "
+        f"imp_do_task {indist.impostor_do_task} (crew {indist.crewmate_do_task}) | "
+        f"wait_share imp {imp_wait}/crew {crew_wait} | top_idler {top_idler} | "
+        f"impostor_win_rate (GUARDRAIL, non-gate) {imp_win_rate}"
     )
 
 
@@ -252,24 +296,33 @@ def write_report(sample_dir: Path) -> TournamentEvalReport:
 
 
 def corrected_baseline_from_report(
-    report: TournamentEvalReport, *, sample_dir_name: str
+    report: TournamentEvalReport, *, sample_dir: Path
 ) -> dict[str, object]:
-    """Derive the corrected Wave-0 baseline table from a rebuilt report (10.6).
+    """Derive the corrected baseline table from a rebuilt report (10.6, 10.16).
 
-    The 10.9 A/B baseline: the 10.4 re-deriver (the eval analyzers, which
-    re-run the one-home repaired detector per meeting) plus the Task 10.6
-    gate-spec metrics, folded over the committed replays WITHOUT touching
-    the committed report. Three blocks, every number produced by its
-    owning ``compute_*`` analyzer (the flag census and role split live on
-    the supply gauges), plus the per-ejection channel decomposition keyed
-    ``"seed-{seed}:m{index}"``. Pure and deterministic: re-running over
-    the same bytes is byte-identical, which the fixture test pins.
+    The A/B baseline (read by 10.9 for the W0 anchor, by 10.17 for the W1
+    set): the 10.4 re-deriver (the eval analyzers, which re-run the one-home
+    repaired detector per meeting) plus the Task 10.6 gate-spec metrics AND
+    the Task 10.16 Wave-2 metrics, folded over the committed replays WITHOUT
+    touching the committed report. Every number is produced by its owning
+    ``compute_*`` analyzer (the flag census and role split live on the supply
+    gauges; the indistinguishability tally reads the per-tick action stream
+    via :func:`eval.action_ingest.tally_actions_by_role`, roles from the
+    seeder), plus the per-ejection channel decomposition keyed
+    ``"seed-{seed}:m{index}"``. Pure and deterministic over a fixed sample
+    dir: re-running over the same bytes is byte-identical, which the fixture
+    test pins.
     """
 
     games = report.report.games
     genuine = report.gate_metrics.genuine_class_conversion
     multi = compute_multi_signal_conversion(games)
     gauges = compute_supply_gauges(games)
+    conversion_per_meeting = compute_conversion_per_meeting(games)
+    effective_deflection = compute_effective_deflection(games)
+    indistinguishability = compute_indistinguishability(
+        tally_actions_by_role(sample_dir, games)
+    )
     ejection_channels = {
         f"seed-{game.seed}:m{meeting_index}": sorted(channels)
         for game in games
@@ -277,10 +330,13 @@ def corrected_baseline_from_report(
         if (channels := decompose_ejection_channels(game, meeting_index)) is not None
     }
     return {
-        "sample_dir": sample_dir_name,
+        "sample_dir": sample_dir.name,
         "genuine_class_conversion": genuine.model_dump(mode="json"),
         "multi_signal_conversion": multi.model_dump(mode="json"),
         "supply_gauges": gauges.model_dump(mode="json"),
+        "conversion_per_meeting": conversion_per_meeting.model_dump(mode="json"),
+        "effective_deflection": effective_deflection.model_dump(mode="json"),
+        "indistinguishability": indistinguishability.model_dump(mode="json"),
         "impostor_ejection_channels": ejection_channels,
     }
 
@@ -344,18 +400,16 @@ def main() -> int:
         return check_report(sample_dir)
     if args.baseline_out is not None:
         report = build_report(sample_dir)
-        baseline = corrected_baseline_from_report(
-            report, sample_dir_name=sample_dir.name
-        )
+        baseline = corrected_baseline_from_report(report, sample_dir=sample_dir)
         baseline_out: Path = args.baseline_out
         baseline_out.parent.mkdir(parents=True, exist_ok=True)
         baseline_out.write_text(
             serialize_corrected_baseline(baseline), encoding="utf-8"
         )
-        print(f"Wrote {baseline_out}: {_summary(report)}")
+        print(f"Wrote {baseline_out}: {_summary(report, sample_dir)}")
         return 0
     report = write_report(sample_dir)
-    print(f"Wrote {sample_dir / _REPORT_FILENAME}: {_summary(report)}")
+    print(f"Wrote {sample_dir / _REPORT_FILENAME}: {_summary(report, sample_dir)}")
     return 0
 
 
