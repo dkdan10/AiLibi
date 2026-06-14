@@ -50,6 +50,8 @@ from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_TURN_FREE_TEXT,
     DEFAULT_VOTE_RATIONALE,
+    EMERGENCY_BODY_STRIP_MARKER,
+    EMERGENCY_NO_BODY_RETRY_FEEDBACK,
     INVALID_ACCUSATION_TARGET_MARKER,
     INVALID_ALIBI_SUBJECT_MARKER,
     INVALID_CORROBORATION_SUPPORTS_MARKER,
@@ -76,6 +78,7 @@ from meetings.manager import (
     _opening_takes_position,  # noqa: PLC2701
     _normalize_self_alibi_subjects,  # noqa: PLC2701
     _suspicion_graph_with_contradictions,  # noqa: PLC2701
+    _trigger_is_emergency,  # noqa: PLC2701
     coerce_teammate_ballot_to_skip,
     derive_belief_evidence,
     drop_teammate_statement_target,
@@ -6015,3 +6018,194 @@ class TestSingleWitnessInformYieldOnCommittedBytes:
 
     def test_derivation_is_deterministic(self) -> None:
         assert _derive_inform_yield() == _derive_inform_yield()
+
+
+class TestEmergencyOpeningNoBody:
+    """Task 10.11.1: an EMERGENCY opening never RECORDS a found_body.
+
+    The crewmate_report v7 emergency branch asks the model not to report a
+    body, but the 9B can ignore it (flat seed 11 m0 re-narrated a stale
+    corpse, which the orchestrator fail-loud guard aborted the re-record on).
+    The manager re-asks ONCE, then DETERMINISTICALLY strips any
+    FoundBodyObservation from the emergency opening so
+    ``orchestrator.game._assert_no_emergency_opening_body`` is unreachable.
+    Body-report openings keep their body untouched (the strip is gated on the
+    emergency opening alone).
+    """
+
+    @staticmethod
+    def _emergency_trigger() -> MeetingTrigger:
+        return MeetingTrigger(
+            triggered_by="p-1",
+            trigger_tick=410,
+            description="p-1 called an emergency meeting at tick 410",
+        )
+
+    @staticmethod
+    def _body() -> FoundBodyObservation:
+        return FoundBodyObservation(
+            type="found_body", tick=406, body_of="p-9", room="STORAGE"
+        )
+
+    def test_detection_keys_off_the_trigger_description(self) -> None:
+        # The meeting layer carries no structured trigger kind; the manager
+        # detects an emergency off the same description phrase the renderer does.
+        assert _trigger_is_emergency(self._emergency_trigger())
+        assert not _trigger_is_emergency(_default_trigger())
+
+    def test_stubborn_body_is_stripped_after_one_retry(self) -> None:
+        # The opener fabricates a stale body on BOTH the opening AND the retry
+        # (the stubborn-9B case): the body is stripped, the strip is audited on
+        # free_text, the real accusation keeps the opening a position, and the
+        # orchestrator guard the recording runs is now unreachable.
+        from orchestrator.game import (  # noqa: PLC0415
+            _assert_no_emergency_opening_body,
+        )
+
+        body = self._body()
+
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
+                speaker = _extract_marker(prompt, "agent_id=")
+                # p-1 always re-narrates the stale body next to a real accusation.
+                return _turn_json(
+                    speaker=speaker,
+                    accuses="p-2" if speaker == "p-1" else None,
+                    observations=(body,) if speaker == "p-1" else (),
+                )
+            if "PHASE=VOTE" in prompt:
+                return _vote_json(
+                    voter=_extract_marker(prompt, "voter="), target="SKIP"
+                )
+            raise AssertionError(f"unrecognised prompt: {prompt!r}")
+
+        result, client = _run_meeting(_responder, trigger=self._emergency_trigger())
+        opening = result.transcript.turns[0]
+
+        assert not any(
+            isinstance(o, FoundBodyObservation) for o in opening.observations
+        )
+        assert opening.free_text.startswith(EMERGENCY_BODY_STRIP_MARKER)
+        assert any(
+            isinstance(c, AccusationClaim) and c.against == "p-2"
+            for c in opening.claims
+        )
+        opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
+        assert len(opening_calls) == 2  # one retry before the strip
+        assert EMERGENCY_NO_BODY_RETRY_FEEDBACK in opening_calls[1].prompt
+        # The exact condition the orchestrator guard checks now holds.
+        _assert_no_emergency_opening_body(trigger_kind="emergency", result=result)
+
+    def test_retry_recovers_a_clean_opening_without_stripping(self) -> None:
+        # When the retry COMPLIES (a body-free, suspicion-framed opening) the
+        # richer model opening is kept and NO strip marker is recorded.
+        body = self._body()
+
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
+                speaker = _extract_marker(prompt, "agent_id=")
+                if speaker == "p-1":
+                    if EMERGENCY_NO_BODY_RETRY_FEEDBACK in prompt:
+                        return _turn_json(speaker=speaker, accuses="p-2")
+                    return _turn_json(
+                        speaker=speaker, accuses="p-2", observations=(body,)
+                    )
+                return _turn_json(speaker=speaker)
+            if "PHASE=VOTE" in prompt:
+                return _vote_json(
+                    voter=_extract_marker(prompt, "voter="), target="SKIP"
+                )
+            raise AssertionError(f"unrecognised prompt: {prompt!r}")
+
+        result, client = _run_meeting(_responder, trigger=self._emergency_trigger())
+        opening = result.transcript.turns[0]
+
+        assert not any(
+            isinstance(o, FoundBodyObservation) for o in opening.observations
+        )
+        assert EMERGENCY_BODY_STRIP_MARKER not in opening.free_text
+        opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
+        assert len(opening_calls) == 2
+
+    def test_body_report_opening_keeps_found_body(self) -> None:
+        # Byte-stable: the strip is gated on the emergency opening, so a body
+        # report's found_body is preserved exactly as before (the guard is a
+        # no-op for body reports).
+        body = self._body()
+        result, _ = _run_meeting(
+            _make_responder(observations={"p-1": (body,)}, accusations={"p-1": "p-2"}),
+            trigger=_default_trigger(),
+        )
+        opening = result.transcript.turns[0]
+
+        assert body in opening.observations
+        assert EMERGENCY_BODY_STRIP_MARKER not in opening.free_text
+
+    def test_body_only_emergency_opening_degrades_to_unsure_after_strip(self) -> None:
+        # When the body was the opening's ONLY content, the post-strip opening
+        # is position-less and degrades to unsure: both markers appear and the
+        # meeting still reaches its ballots (no body survives).
+        body = self._body()
+
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
+                speaker = _extract_marker(prompt, "agent_id=")
+                if speaker == "p-1":
+                    return _turn_json(
+                        speaker=speaker,
+                        observations=(body,),
+                        free_text="found a body",
+                    )
+                return _turn_json(speaker=speaker)
+            if "PHASE=VOTE" in prompt:
+                return _vote_json(
+                    voter=_extract_marker(prompt, "voter="), target="SKIP"
+                )
+            raise AssertionError(f"unrecognised prompt: {prompt!r}")
+
+        result, _ = _run_meeting(_responder, trigger=self._emergency_trigger())
+        opening = result.transcript.turns[0]
+
+        assert not any(
+            isinstance(o, FoundBodyObservation) for o in opening.observations
+        )
+        assert OPENING_UNSURE_DEGRADE_MARKER in opening.free_text
+        assert EMERGENCY_BODY_STRIP_MARKER in opening.free_text
+
+    def test_emergency_opening_without_a_body_is_unchanged(self) -> None:
+        # The desired case: a suspicion-framed emergency opening with no body
+        # passes straight through -- no retry, no marker.
+        result, client = _run_meeting(
+            _make_responder(accusations={"p-1": "p-2"}),
+            trigger=self._emergency_trigger(),
+        )
+        opening = result.transcript.turns[0]
+
+        assert opening.observations == ()
+        assert EMERGENCY_BODY_STRIP_MARKER not in opening.free_text
+        opening_calls = [c for c in client.calls if "PHASE=OPENING" in c.prompt]
+        assert len(opening_calls) == 1
+
+    def test_strip_is_deterministic(self) -> None:
+        body = self._body()
+
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
+                speaker = _extract_marker(prompt, "agent_id=")
+                return _turn_json(
+                    speaker=speaker,
+                    accuses="p-2" if speaker == "p-1" else None,
+                    observations=(body,) if speaker == "p-1" else (),
+                )
+            if "PHASE=VOTE" in prompt:
+                return _vote_json(
+                    voter=_extract_marker(prompt, "voter="), target="SKIP"
+                )
+            raise AssertionError(f"unrecognised prompt: {prompt!r}")
+
+        first, _ = _run_meeting(_responder, trigger=self._emergency_trigger())
+        second, _ = _run_meeting(_responder, trigger=self._emergency_trigger())
+        assert (
+            first.transcript.turns[0].model_dump_json()
+            == second.transcript.turns[0].model_dump_json()
+        )
