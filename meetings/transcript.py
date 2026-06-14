@@ -90,6 +90,7 @@ can).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Final, Literal
@@ -936,16 +937,30 @@ def independent_voices(
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
 ) -> Mapping[PlayerId, tuple[PlayerId, ...]]:
-    """The INDEPENDENT VOICES against each accused subject (Task 10.7).
+    """The INDEPENDENT VOICES against each accused subject (Tasks 10.7, 10.15).
 
-    The pure transcript half of the pre-vote two-witness testimony fold
-    (audit gp-2 C-C-1/C-C-2; the corroborate-within-round owner
-    principle): a subject folds pre-vote only when at least
-    :data:`agents.memory.beliefs.TESTIMONY_INDEPENDENCE_BAR` distinct
-    voices stand behind the accusation. Returns
-    ``{subject: sorted distinct voice speakers}`` for every subject with
-    at least one voice; subjects accused only by voiceless turns are
-    absent. A voice is one of:
+    The pure transcript half of the pre-vote testimony fold (audit gp-2
+    C-C-1/C-C-2 and the 2026-06-13 audit C-C-1/H-4; the
+    corroborate-within-round owner principle and the belief-spread-first
+    owner decision 2026-06-14). The voice COUNT a subject carries drives
+    two pre-vote channels off ONE derivation:
+
+    * **two-witness fold** (Task 10.7) -- at least
+      :data:`agents.memory.beliefs.TESTIMONY_INDEPENDENCE_BAR` distinct
+      voices; the subject takes the +0.05 accused-bump pre-vote;
+    * **single-witness inform** (Task 10.15;
+      :data:`agents.memory.beliefs.WITNESS_INFORM_REASON`) -- exactly ONE
+      voice (below the fold bar); the subject takes the SAME +0.05
+      pre-vote, spreading one witness's first-hand testimony to the
+      listeners so near-gate priors can cross the §4.6 gate within the
+      round (it informs, it cannot eject a baseline listener alone).
+
+    Returns ``{subject: sorted distinct voice speakers}`` for every
+    subject with at least one voice; subjects accused only by voiceless
+    turns are absent. The fold-vs-inform split is the caller's
+    (:func:`meetings.manager.derive_belief_evidence` thresholds on
+    ``len(speakers)``); this helper just counts independent voices. A
+    voice is one of:
 
     * **A chain/opening turn accusing the subject** (``turn_kind`` in
       ``opening`` / ``reply``) that carries OBSERVATION BACKING -- at
@@ -982,9 +997,18 @@ def independent_voices(
 
     Voices are distinct speakers and never the subject (a
     self-accusation or a subject's own vouch for their accuser adds
-    nothing). "An accuser of the subject" means any speaker with a
-    recorded :class:`AccusationClaim` against the subject, any turn
-    kind -- an opt-in accusation is as public as a chain one. The
+    nothing). ECHO-DEDUP (Task 10.15; audit 2026-06-13 H-4): distinct
+    speakers whose voice-minting turns carry the SAME rationale text
+    (normalised by :func:`_normalize_rationale`) collapse to ONE voice --
+    the 9B's verbatim rationale copying (163 within-meeting echo pairs)
+    is copied reasoning, not independent corroboration, and cannot
+    manufacture the independence the fold/inform read off the count. The
+    first speaker (in canonical turn order) to stake a rationale keeps
+    the voice; later copies of it are echoes. A rationale that normalises
+    to empty stakes no reasoning and never echo-matches. "An accuser of
+    the subject" means any speaker with a recorded
+    :class:`AccusationClaim` against the subject, any turn kind -- an
+    opt-in accusation is as public as a chain one. The
     roster filter mirrors :func:`detect_contradictions`: ``roster=None``
     indexes every subject (unit-test behaviour); an explicit roster --
     the live path passes the living participants, the replay path the
@@ -1011,7 +1035,13 @@ def independent_voices(
                 accusers.setdefault(claim.against, set()).add(turn.speaker)
 
     voices: dict[PlayerId, set[PlayerId]] = {}
-    for turn in transcript.turns:
+    # Echo-dedup state (Task 10.15; audit H-4): per subject, the normalised
+    # non-empty rationales already counted as a voice. Turns are walked in
+    # canonical order so the FIRST speaker to stake a rationale keeps the
+    # voice and later copies of it drop -- deterministic regardless of how an
+    # external producer ordered the transcript.
+    seen_rationales: dict[PlayerId, set[str]] = {}
+    for turn in sort_turns_canonically(transcript.turns):
         if not _carries_relevant_observation(turn, triggering_body_rooms=body_rooms):
             continue
         if turn.turn_kind in ("opening", "reply"):
@@ -1023,7 +1053,12 @@ def independent_voices(
                     continue
                 if not _subject_in_roster(subject, effective_roster):
                     continue
-                voices.setdefault(subject, set()).add(turn.speaker)
+                _register_voice(
+                    subject=subject,
+                    turn=turn,
+                    voices=voices,
+                    seen_rationales=seen_rationales,
+                )
         elif turn.turn_kind == "opt_in":
             for claim in turn.claims:
                 if not isinstance(claim, CorroborationClaim):
@@ -1033,7 +1068,12 @@ def independent_voices(
                         continue
                     if subject == turn.speaker:
                         continue
-                    voices.setdefault(subject, set()).add(turn.speaker)
+                    _register_voice(
+                        subject=subject,
+                        turn=turn,
+                        voices=voices,
+                        seen_rationales=seen_rationales,
+                    )
 
     return {
         subject: tuple(sorted(speakers)) for subject, speakers in sorted(voices.items())
@@ -1066,6 +1106,63 @@ def _carries_relevant_observation(
         ):
             return True
     return False
+
+
+# Task 10.15 (audit 2026-06-13 H-4): the echo-dedup key. A turn's free-text
+# rationale reduced to its lower-cased alphanumeric word tokens, so case,
+# punctuation, and whitespace differences are erased and only a word-level
+# rewrite survives. Two distinct voices that match after this normalisation are
+# the 9B verbatim-copy class (the audit measured 163 within-meeting rationale
+# echoes, 60-212 chars) -- copied reasoning, not independent corroboration.
+_RATIONALE_ECHO_TOKEN: Final[re.Pattern[str]] = re.compile(r"[0-9a-z]+")
+
+
+def _normalize_rationale(free_text: str) -> str:
+    """Normalise a turn's rationale to its echo-dedup key (Task 10.15; H-4).
+
+    Reduces ``free_text`` to space-joined lower-cased alphanumeric tokens.
+    An empty / punctuation-only rationale normalises to ``""`` and is never
+    treated as an echo (it stakes no reasoning to copy), so a genuine second
+    witness who wrote nothing in free-text is never collapsed away.
+    """
+
+    return " ".join(_RATIONALE_ECHO_TOKEN.findall(free_text.casefold()))
+
+
+def _register_voice(
+    *,
+    subject: PlayerId,
+    turn: MeetingTurn,
+    voices: dict[PlayerId, set[PlayerId]],
+    seen_rationales: dict[PlayerId, set[str]],
+) -> None:
+    """Count ``turn.speaker`` as an independent voice against ``subject``.
+
+    Two guards drop a non-independent voice (Tasks 10.7, 10.15):
+
+    * **speaker dedup** -- a speaker already counted for the subject adds
+      nothing however many claims or turns they stake (Task 10.7);
+    * **echo dedup** -- a distinct speaker whose turn repeats a rationale
+      already counted for the subject is an echo of it, not a new voice
+      (Task 10.15; audit H-4). The repeated rationale is still recorded
+      against the subject when the speaker is already counted, so a later
+      copy of that speaker's other turns is caught too.
+    """
+
+    speakers = voices.setdefault(subject, set())
+    rationale = _normalize_rationale(turn.free_text)
+    seen = seen_rationales.setdefault(subject, set())
+    if turn.speaker in speakers:
+        # Already a voice; still register this rationale so a later distinct
+        # speaker copying it is recognised as an echo.
+        if rationale:
+            seen.add(rationale)
+        return
+    if rationale and rationale in seen:
+        return
+    speakers.add(turn.speaker)
+    if rationale:
+        seen.add(rationale)
 
 
 def _subject_in_roster(subject: PlayerId, roster: frozenset[PlayerId]) -> bool:
