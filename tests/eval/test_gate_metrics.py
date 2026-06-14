@@ -821,16 +821,16 @@ def _load_committed(path: Path) -> TournamentEvalReport:
 def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     """The shipped 9p/2i report carries the recorded gp-7 gate values exactly.
 
-    These pin the Task 10.9 Wave-1 combined re-record and are NOT immutable —
+    These pin the Task 10.17 Wave-2 combined re-record and are NOT immutable —
     the next re-record regenerates the report and updates these pins, the
     standard re-record pattern.
 
-    Recorded values: genuine-class 2 converted / 8 supplied (supply in seeds
-    9/18/28/34/38/39, the two conversions at seeds 38/39); lost openings 2
-    (seeds 30/42) against 3 cap-defaulted turns — the opening-retry + fail-soft
-    mix; accused-impostor survival 59/68 with the partition 37 rendered-met
-    (under-conversion, NOT deception) + 4 sheltered (seeds 10/13/28/30) + 18
-    unevidenced.
+    Recorded values: genuine-class 7 converted / 8 supplied (supply in seeds
+    0/2/4/5/9/40/42/46, the seven conversions everywhere but seed 9); lost
+    openings 5 (seeds 13/25/42/46/48) against 5 cap-defaulted turns — the
+    opening-retry + fail-soft mix; accused-impostor survival 58/81 with the
+    partition 43 rendered-met (under-conversion, NOT deception) + 1 sheltered
+    (seed 24) + 14 unevidenced.
     """
 
     report = _load_committed(_COMMITTED_9P2I_REPORT)
@@ -838,54 +838,53 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     genuine = gate.genuine_class_conversion
 
     assert genuine.supplied == 8
-    assert genuine.converted == 2
-    assert genuine.conversion_rate == pytest.approx(2 / 8)
+    assert genuine.converted == 7
+    assert genuine.conversion_rate == pytest.approx(7 / 8)
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
-    assert gate.lost_opening_accusations == 2
-    assert gate.cap_defaulted_turns == 3
+    assert gate.lost_opening_accusations == 5
+    assert gate.cap_defaulted_turns == 5
 
-    assert gate.accused_impostor_events == 68
-    assert gate.accused_impostor_survivals == 59
-    assert gate.survivals_rendered_met == 37
-    assert gate.survivals_sheltered_sub_gate == 4
-    assert gate.survivals_unevidenced == 18
+    assert gate.accused_impostor_events == 81
+    assert gate.accused_impostor_survivals == 58
+    assert gate.survivals_rendered_met == 43
+    assert gate.survivals_sheltered_sub_gate == 1
+    assert gate.survivals_unevidenced == 14
 
     # Per-seed identities re-derived from the same committed games: the
-    # genuine-class supply, the lost openings (= the three validation
-    # defaults), and the sheltered survivals sit exactly where documented
-    # above.
+    # genuine-class supply, the lost openings, and the sheltered survivals sit
+    # exactly where documented above.
     supplied_seeds = {
         game.seed
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).supplied > 0
     }
-    assert supplied_seeds == {9, 18, 28, 34, 38, 39}
+    assert supplied_seeds == {0, 2, 4, 5, 9, 40, 42, 46}
     converted_seeds = {
         game.seed
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).converted > 0
     }
-    assert converted_seeds == {38, 39}
+    assert converted_seeds == {0, 2, 4, 5, 40, 42, 46}
     lost_opening_seeds = {
         game.seed
         for game in report.report.games
         if compute_gate_metrics((game,)).lost_opening_accusations > 0
     }
-    assert lost_opening_seeds == {30, 42}
+    assert lost_opening_seeds == {13, 25, 42, 46, 48}
     sheltered_seeds = {
         game.seed
         for game in report.report.games
         if compute_gate_metrics((game,)).survivals_sheltered_sub_gate > 0
     }
-    assert sheltered_seeds == {10, 13, 28, 30}
+    assert sheltered_seeds == {24}
 
     # JSON-level guard: the committed file itself serves the gate surface and
     # the era-invalidity note (a reader pulling the raw report sees the
     # PRIMARY gate and the warning, the gp-7 ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
     assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 8
-    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 2
+    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 7
     assert (
         "ejection_accuracy" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     )
@@ -893,28 +892,29 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
 
 
 def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
-    """The flat 4p/1i set's gate block, pinned at the Task 10.9 re-record.
+    """The flat 4p/1i set's gate block, pinned at the Task 10.17 re-record.
 
     NOT immutable — the next re-record regenerates and updates these. The set
-    supplies 1 genuine-class flag (seed 26) and CONVERTS it (rate 1.0), loses
-    no openings and defaults no turns, and its 7 accused-impostor survivals
-    split 2 rendered-met / 1 sheltered (seed 22) / 4 unevidenced.
+    supplies 2 genuine-class flags (seeds 20/39) and CONVERTS one (seed 20,
+    rate 0.5), loses no openings and defaults no turns, and its 7
+    accused-impostor survivals split 6 rendered-met / 0 sheltered / 1
+    unevidenced.
     """
 
     report = _load_committed(_COMMITTED_FLAT_REPORT)
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 1
+    assert genuine.supplied == 2
     assert genuine.converted == 1
-    assert genuine.conversion_rate == 1.0
+    assert genuine.conversion_rate == pytest.approx(0.5)
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
     assert gate.lost_opening_accusations == 0
     assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 8
+    assert gate.accused_impostor_events == 11
     assert gate.accused_impostor_survivals == 7
-    assert gate.survivals_rendered_met == 2
-    assert gate.survivals_sheltered_sub_gate == 1
-    assert gate.survivals_unevidenced == 4
+    assert gate.survivals_rendered_met == 6
+    assert gate.survivals_sheltered_sub_gate == 0
+    assert gate.survivals_unevidenced == 1

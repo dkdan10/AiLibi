@@ -98,12 +98,18 @@ _COMMITTED_9P2I_REPORT = _COMMITTED_9P2I_DIR / "tournament-eval-report.json"
 _BASELINE_FIXTURE = (
     _REPO_ROOT / "tests" / "fixtures" / "phase10" / "corrected_w0_baseline.json"
 )
-# The Wave-1 (10.9) re-record's corrected baseline, the current-era pin produced
-# by the same operator command over the committed 9p2i bytes. corrected_w0_*
-# stays frozen as the 10.9 A/B anchor (its headline rows are pinned below); this
-# W1 file is what the committed bytes now re-derive to.
+# The Wave-1 (10.9) re-record's corrected baseline — now the FROZEN prior-era
+# A/B anchor that the Task 10.17 Wave-2 re-record measured against (its headline
+# rows are pinned below), alongside the still-frozen corrected_w0_* anchor.
 _W1_BASELINE_FIXTURE = (
     _REPO_ROOT / "tests" / "fixtures" / "phase10" / "corrected_w1_baseline.json"
+)
+# The Wave-2 (10.17) re-record's corrected baseline, the current-era pin produced
+# by the same operator command over the committed 9p2i bytes. This W2 file is what
+# the committed bytes now re-derive to; corrected_w0_* / corrected_w1_* stay frozen
+# as the prior-era A/B anchors.
+_W2_BASELINE_FIXTURE = (
+    _REPO_ROOT / "tests" / "fixtures" / "phase10" / "corrected_w2_baseline.json"
 )
 
 
@@ -869,21 +875,22 @@ def _load_committed_9p2i() -> TournamentEvalReport:
     )
 
 
-class TestCommittedW1GateSpecPins:
-    """The gp-7 pins over the committed Wave-1 bytes (the 10.9 re-record).
+class TestCommittedW2GateSpecPins:
+    """The gp-7 pins over the committed Wave-2 bytes (the 10.17 re-record).
 
-    These re-derive from the committed 9p2i bytes, which moved from W0 to W1 in
-    Task 10.9; the values updated with the bytes (each move named in the PR
-    Decisions). The frozen W0 A/B anchor (corrected_w0_baseline.json) is pinned
-    separately by ``test_w0_baseline_fixture_carries_the_anchor_rows`` below.
+    These re-derive from the committed 9p2i bytes, which moved from W1 to W2 in
+    Task 10.17; the values updated with the bytes (each move named in the PR
+    Decisions). The frozen prior-era A/B anchors (corrected_w0_baseline.json and
+    corrected_w1_baseline.json) are pinned separately by the two
+    ``test_w*_baseline_fixture_carries_the_anchor_rows`` tests below.
     """
 
-    def test_committed_ejections_decompose_as_the_w1_baseline(self) -> None:
-        # W1: 11 impostor ejections (was the W0 audit's 5). Sourced from the
-        # committed W1 baseline fixture rather than transcribed, so the pin is the
+    def test_committed_ejections_decompose_as_the_w2_baseline(self) -> None:
+        # W2: 24 impostor ejections (was the W1 11). Sourced from the committed
+        # W2 baseline fixture rather than transcribed, so the pin is the
         # rederived-channels == committed-baseline equality the operator command
-        # produced. The W0 audit's 5-ejection map remains pinned in
-        # corrected_w0_baseline.json (test below).
+        # produced. The W1 11-ejection map remains pinned in
+        # corrected_w1_baseline.json (anchor test below).
         report = _load_committed_9p2i()
         channels_by_site = {
             f"seed-{game.seed}:m{index}": sorted(channels)
@@ -891,67 +898,65 @@ class TestCommittedW1GateSpecPins:
             for index in range(len(game.meetings))
             if (channels := decompose_ejection_channels(game, index)) is not None
         }
-        expected = json.loads(_W1_BASELINE_FIXTURE.read_text(encoding="utf-8"))[
+        expected = json.loads(_W2_BASELINE_FIXTURE.read_text(encoding="utf-8"))[
             "impostor_ejection_channels"
         ]
         assert channels_by_site == expected
 
-    def test_multi_signal_conversion_reads_11_of_11(self) -> None:
-        # W1: all 11 impostor ejections are multi-signal (W0 was 4 of 5). No
-        # single-signal or unattributed conversions — the gp-7 channel attribution
-        # is total on this record.
+    def test_multi_signal_conversion_reads_20_of_24(self) -> None:
+        # W2: 20 of the 24 impostor ejections are multi-signal (W1 was 11 of 11);
+        # the inform channel going live (Task 10.15) plus the larger ejection
+        # count surface 4 single-signal conversions. No unattributed conversions —
+        # the gp-7 channel attribution is still total on this record.
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
-        assert result.impostor_ejections == 11
-        assert result.multi_signal_conversions == 11
-        assert result.single_signal_conversions == 0
+        assert result.impostor_ejections == 24
+        assert result.multi_signal_conversions == 20
+        assert result.single_signal_conversions == 4
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(1.0)
+        assert result.multi_signal_rate == pytest.approx(0.8333333333333334)
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
-        # The W1 supply row (10.9 re-record): 85 flags (84w/1s), meetings up to
-        # 88 with the emergency channel live (W0 78), zero-contradiction share
-        # down to 46/88 (W0 49/78), genuine supply at 13 meetings (W0 8),
-        # over-gate listener rows 102 — 1.62 per accused-impostor meeting (W0 76
-        # / 1.41). Role split 43 CREW / 42 IMP: the Task 10.10 same-speaker
-        # guard re-derives seed-2 m0's proxy flag off crew p-8 onto its actual
-        # speaker, impostor p-7 (was 44/41 pre-guard) — the corrected
-        # instrument now credits the unreliable narrator, not the innocent.
+        # The W2 supply row (10.17 re-record): 55 flags (54w/1s), meetings up to
+        # 96 (W1 88), zero-contradiction share 56/96 (W1 46/88), genuine supply
+        # at 10 meetings (W1 13), over-gate listener rows 199 — 2.55 per
+        # accused-impostor meeting (W1 102 / 1.62). Role split 20 CREW / 35 IMP
+        # (W1 43/42): the Wave-2 toolkit drives impostor-subject flags up.
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
-        assert gauges.meetings_total == 88
-        assert gauges.total_flags == 85
-        assert gauges.weak_flags == 84
+        assert gauges.meetings_total == 96
+        assert gauges.total_flags == 55
+        assert gauges.weak_flags == 54
         assert gauges.strong_flags == 1
-        assert gauges.zero_contradiction_meetings == 46
-        assert gauges.genuine_subject_meetings == 13
-        assert gauges.flag_subjects_crew == 43
-        assert gauges.flag_subjects_impostor == 42
-        assert gauges.accused_impostor_meetings == 63
-        assert gauges.over_gate_listener_rows == 102
+        assert gauges.zero_contradiction_meetings == 56
+        assert gauges.genuine_subject_meetings == 10
+        assert gauges.flag_subjects_crew == 20
+        assert gauges.flag_subjects_impostor == 35
+        assert gauges.accused_impostor_meetings == 78
+        assert gauges.over_gate_listener_rows == 199
 
-    def test_corrected_w1_baseline_matches_a_rederivation(self) -> None:
-        # ONE home: corrected_w1_baseline.json IS the current-era baseline,
+    def test_corrected_w2_baseline_matches_a_rederivation(self) -> None:
+        # ONE home: corrected_w2_baseline.json IS the current-era baseline,
         # produced by the operator command
         #   scripts/build_sample_report.py --sample-dir replays/samples/9p2i
-        #     --baseline-out tests/fixtures/phase10/corrected_w1_baseline.json
-        # A byte-identical re-derivation here proves (a) the committed W1 fixture
+        #     --baseline-out tests/fixtures/phase10/corrected_w2_baseline.json
+        # A byte-identical re-derivation here proves (a) the committed W2 fixture
         # has not drifted from the committed bytes and (b) the whole derivation
         # chain — detector, predicate, metrics — is deterministic end to end.
-        # corrected_w0_baseline.json is the frozen 10.9 A/B anchor, decoupled from
-        # the W1 bytes by the re-record (its rows are pinned in the next test).
+        # corrected_w0/w1_baseline.json are the frozen prior-era A/B anchors,
+        # decoupled from the W2 bytes by the re-record (rows pinned below).
         report = build_report(_COMMITTED_9P2I_DIR)
         rederived = serialize_corrected_baseline(
             corrected_baseline_from_report(report, sample_dir=_COMMITTED_9P2I_DIR)
         )
-        assert rederived == _W1_BASELINE_FIXTURE.read_text(encoding="utf-8")
+        assert rederived == _W2_BASELINE_FIXTURE.read_text(encoding="utf-8")
 
     def test_w0_baseline_fixture_carries_the_anchor_rows(self) -> None:
         # The frozen 10.9 A/B anchor: corrected_w0_baseline.json keeps the W0
-        # rows the re-record measures against (never re-derived in 10.9). Pinned
-        # by content so the anchor cannot silently drift to the W1 era.
+        # rows the re-record measures against (never re-derived since 10.9).
+        # Pinned by content so the anchor cannot silently drift to a later era.
         baseline = json.loads(_BASELINE_FIXTURE.read_text(encoding="utf-8"))
         assert baseline["sample_dir"] == "9p2i"
         assert baseline["genuine_class_conversion"]["supplied"] == 7
@@ -967,4 +972,32 @@ class TestCommittedW1GateSpecPins:
             "seed-26:m1",
             "seed-39:m1",
             "seed-8:m2",
+        ]
+
+    def test_w1_baseline_fixture_carries_the_anchor_rows(self) -> None:
+        # The frozen 10.17 A/B anchor: corrected_w1_baseline.json keeps the W1
+        # rows the Wave-2 re-record measures against (never re-derived in 10.17).
+        # Pinned by content so the anchor cannot silently drift to the W2 era —
+        # mirrors the W0 anchor test exactly.
+        baseline = json.loads(_W1_BASELINE_FIXTURE.read_text(encoding="utf-8"))
+        assert baseline["sample_dir"] == "9p2i"
+        assert baseline["genuine_class_conversion"]["supplied"] == 8
+        assert baseline["genuine_class_conversion"]["converted"] == 2
+        assert baseline["multi_signal_conversion"]["multi_signal_conversions"] == 11
+        assert baseline["multi_signal_conversion"]["impostor_ejections"] == 11
+        assert baseline["supply_gauges"]["total_flags"] == 85
+        assert baseline["supply_gauges"]["weak_flags"] == 84
+        assert baseline["supply_gauges"]["strong_flags"] == 1
+        assert sorted(baseline["impostor_ejection_channels"]) == [
+            "seed-16:m1",
+            "seed-16:m2",
+            "seed-25:m2",
+            "seed-27:m1",
+            "seed-29:m1",
+            "seed-2:m2",
+            "seed-38:m0",
+            "seed-39:m2",
+            "seed-43:m2",
+            "seed-44:m1",
+            "seed-45:m1",
         ]

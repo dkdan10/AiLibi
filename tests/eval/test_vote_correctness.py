@@ -1856,18 +1856,18 @@ _COMMITTED_9P2I_REPORT = (
 def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     """The shipped 9p/2i report carries the recorded gp-2 values exactly.
 
-    These pin the Task 10.9 Wave-1 combined re-record and are NOT immutable —
+    These pin the Task 10.17 Wave-2 combined re-record and are NOT immutable —
     the next re-record regenerates them, the standard re-record pattern.
-    ejection_accuracy 11/19 = 0.5789, impostor-accused conversion 10/63 =
-    0.1587, missed_skip 34 = 32 impostor-voter (in-character declines) + 2
-    invalid-target + 0 genuine. Raw comparisons to the 0.629 (artifact-era)
-    and 0.476 (mixed-era) accuracy numbers are provenance-noted history, not
-    gates: those eras' conversions rode the repaired artifact classes (the
-    audit's railroads), so the gate frame is genuine_class_conversion
-    (tests/eval/test_gate_metrics.py pins).
+    ejection_accuracy 24/27 = 0.8889, impostor-accused conversion 24/78 =
+    0.3077, missed_skip 25 = 19 impostor-voter (in-character declines) + 6
+    invalid-target + 1 teammate-coerced + 0 genuine. Raw comparisons to the
+    0.629 (artifact-era) and 0.476 (mixed-era) accuracy numbers are
+    provenance-noted history, not gates: those eras' conversions rode the
+    repaired artifact classes (the audit's railroads), so the gate frame is
+    genuine_class_conversion (tests/eval/test_gate_metrics.py pins).
 
-    The sentinel reads the recorded truth: 9 of the 11 impostor ejections are
-    transcript-evidence-backed (vote_correctness_rate 9/11 = 0.818); the two
+    The sentinel reads the recorded truth: 20 of the 24 impostor ejections are
+    transcript-evidence-backed (vote_correctness_rate 20/24 = 0.833); the four
     unbacked ejections converted on accumulated/carried suspicion that
     ``_has_real_evidence`` deliberately does not consult.
     """
@@ -1877,31 +1877,31 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     )
     conversion = report.conversion
 
-    assert conversion.total_ejections == 19
-    assert conversion.impostor_ejections == 11
-    assert conversion.ejection_accuracy == pytest.approx(11 / 19)
-    assert conversion.impostor_accused_meetings == 63
-    assert conversion.impostor_accused_conversions == 10
-    assert conversion.impostor_accused_conversion_rate == pytest.approx(10 / 63)
-    assert conversion.skip_ballots == 409
-    assert conversion.correct_skip_ballots == 375
-    assert conversion.missed_skip_ballots == 34
+    assert conversion.total_ejections == 27
+    assert conversion.impostor_ejections == 24
+    assert conversion.ejection_accuracy == pytest.approx(24 / 27)
+    assert conversion.impostor_accused_meetings == 78
+    assert conversion.impostor_accused_conversions == 24
+    assert conversion.impostor_accused_conversion_rate == pytest.approx(24 / 78)
+    assert conversion.skip_ballots == 394
+    assert conversion.correct_skip_ballots == 369
+    assert conversion.missed_skip_ballots == 25
     assert conversion.unclassified_skip_ballots == 0
-    assert conversion.missed_skip_impostor_voters == 32
-    assert conversion.missed_skip_teammate_coerced == 0
-    assert conversion.missed_skip_invalid_target == 2
+    assert conversion.missed_skip_impostor_voters == 19
+    assert conversion.missed_skip_teammate_coerced == 1
+    assert conversion.missed_skip_invalid_target == 6
     assert conversion.threshold_inversions == 0
 
-    # The sentinel reads the recorded truth: 9 of the 11 impostor ejections are
+    # The sentinel reads the recorded truth: 20 of the 24 impostor ejections are
     # transcript-evidence-backed (see docstring).
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(9 / 11)
-    assert report.vote_correctness.evidence_backed_impostor_ejections == 9
-    assert report.vote_correctness.impostor_ejections == 11
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(20 / 24)
+    assert report.vote_correctness.evidence_backed_impostor_ejections == 20
+    assert report.vote_correctness.impostor_ejections == 24
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
     assert conversion.ejection_accuracy == report.vote_correctness.ejection_accuracy
 
     # JSON-level guard: the committed file itself serves both leads (a reader
     # pulling the raw report sees the published metric surface, gp-2's ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.5789, abs=1e-4)
-    assert raw["conversion"]["missed_skip_ballots"] == 34
+    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.8889, abs=1e-4)
+    assert raw["conversion"]["missed_skip_ballots"] == 25
