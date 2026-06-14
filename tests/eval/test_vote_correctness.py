@@ -52,6 +52,7 @@ from eval.vote_correctness import (
 )
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
+    DEFAULT_VOTE_RATIONALE,
     INVALID_VOTE_TARGET_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -1516,6 +1517,49 @@ def test_persisted_must_vote_default_stays_diverted_from_decision_census() -> No
     assert result.threshold_inversions == 0
     assert result.unclassified_skip_ballots == 0
     assert compute_defaulted_ballots(report).defaulted_under_must_vote == 1
+
+
+def test_unmarked_deadline_default_skip_is_not_poisoned_by_persisted_max() -> None:
+    """An UNMARKED deadline default must never become a false threshold inversion.
+
+    An interactive ``vote_seconds`` miss records a ``phase="vote"`` default
+    carrying ``rendered_vote_max`` but returns the plain (UNMARKED)
+    ``DEFAULT_VOTE_RATIONALE`` ballot, not the parse-default marker. The
+    persisted fallback is marker-gated, so this unmarked SKIP keeps
+    ``rendered_max is None`` and stays ``unclassified`` — it must NOT borrow the
+    persisted ≥0.60 max and get scored as a missed skip / threshold inversion
+    (which the marker-gated divert could not catch).
+    """
+
+    meeting = _meeting(
+        outcome="SKIPPED",
+        ejected=None,
+        ballots=(
+            _ballot(
+                target="SKIP",
+                voter="p-0",  # CREWMATE: would be a threshold inversion if scored
+                reason_id=None,
+                rationale_text=DEFAULT_VOTE_RATIONALE,
+            ),
+        ),
+        llm_calls=(),
+    )
+    report = _report_with_failed_calls(
+        meeting,
+        (
+            _defaulted_vote_failed_call(
+                voter="p-0", rendered_vote_max=0.80, trigger="deadline"
+            ),
+        ),
+    )
+
+    result = compute_conversion_report(report)
+
+    assert result.threshold_inversions == 0
+    assert result.missed_skip_ballots == 0
+    assert result.unclassified_skip_ballots == 1
+    # And it is NOT in the marker-keyed defaulted census either.
+    assert compute_defaulted_ballots(report).defaulted_skip_ballots == 0
 
 
 def test_defaulted_census_ignores_non_skip_and_unmarked_ballots() -> None:

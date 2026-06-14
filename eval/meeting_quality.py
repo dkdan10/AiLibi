@@ -761,9 +761,21 @@ def compute_conversion_report(
                 if ballot.target != "SKIP":
                     continue
                 rendered_max = rendered_max_by_voter.get(ballot.voter)
-                if rendered_max is None:
-                    # A defaulted vote logged no prompt; recover its rendered
-                    # §4.6 max from the persisted failed-call field (Task 10.12).
+                is_marked_default = (
+                    _VOTE_PARSE_DEFAULT_MARKER_PREFIX in ballot.rationale_text
+                )
+                if rendered_max is None and is_marked_default:
+                    # A parse-defaulted vote logged no prompt; recover its
+                    # rendered §4.6 max from the persisted failed-call field
+                    # (Task 10.12). Gated on the marker: an UNMARKED deadline
+                    # default (interactive vote_seconds miss -- plain
+                    # ``DEFAULT_VOTE_RATIONALE``, no marker) also stamps a
+                    # ``rendered_vote_max`` on its failed-call row, but the
+                    # divert below is marker-gated and cannot catch it, so
+                    # lending it a rendered max would falsely score it as a
+                    # missed skip / threshold inversion. Unmarked defaults keep
+                    # ``rendered_max is None`` and stay ``unclassified``, exactly
+                    # as before this field existed.
                     rendered_max = rendered_from_failed.get(
                         (meeting.meeting_id, ballot.voter)
                     )
@@ -781,7 +793,7 @@ def compute_conversion_report(
                 # degraded SKIP miscounted as a genuine inversion would
                 # poison the §4.6 0-inversion HARD line on the very
                 # re-record the fail-soft exists to unblock.
-                if _VOTE_PARSE_DEFAULT_MARKER_PREFIX in ballot.rationale_text and (
+                if is_marked_default and (
                     rendered_max is None or rendered_max >= SKIP_SUSPICION_THRESHOLD
                 ):
                     continue
