@@ -230,6 +230,120 @@ def score(facts: dict[str, Any]) -> list[tuple[str, str, str]]:
     return rows
 
 
+def _win_shape(reason: str, ejected_imps: int, n_mtg: int) -> str:
+    """Coarse per-game win SHAPE for R5 diversity (decouples 'interesting' from W/L)."""
+    if reason == "CREWMATE_EJECT":
+        return "eject-decided"
+    if reason.startswith("IMPOSTOR"):
+        return "impostor-win"
+    if reason == "CREWMATE_TASKS":
+        if n_mtg == 0:
+            return "stopwatch-no-meeting"
+        return "stopwatch-some-eject" if ejected_imps else "stopwatch-no-eject"
+    return reason or "other"
+
+
+def _game_interestingness(g: dict[str, Any]) -> dict[str, Any]:
+    """Per-game interestingness from the per-game-computable rubric items (R1/R2/R3/R7).
+
+    The score is deliberately INDEPENDENT of who won the binary game — the lab
+    proved the win split is "purchasable wholesale", so 'interesting' is scored
+    from whether DEDUCTION decided (R1), DECEPTION worked (R2), suspicion built
+    across meetings (R3), and the story was legible (R7). R5 (win-shape diversity)
+    is a set-level property, summarized in :func:`interestingness`.
+    """
+    roles = g["roles"]
+    meetings = g["meetings"]
+    n_mtg = len(meetings)
+    reason = g.get("reason") or ""
+    impostor_win = reason.startswith("IMPOSTOR")
+
+    ejected_imp_mtgs = sum(1 for m in meetings if m.get("ejected_role") == "IMPOSTOR")
+    ejected_ever = {
+        m["ejected_player_id"] for m in meetings if m.get("ejected_player_id")
+    }
+    gone = set(g.get("deaths", [])) | ejected_ever
+    accused_imps = {
+        a["accused"]
+        for m in meetings
+        for a in m["accusations"]
+        if roles.get(a["accused"]) == "IMPOSTOR" and a["accused"] != a["speaker"]
+    }
+    survived_accused = {p for p in accused_imps if p not in gone}
+
+    # R1 decisiveness: did ejection (deduction) decide the board, not the clock?
+    if reason == "CREWMATE_EJECT":
+        r1 = 1.0
+    elif ejected_imp_mtgs >= 1:
+        r1 = 0.5  # caught some, but the task clock decided
+    else:
+        r1 = 0.0  # pure stopwatch / kill-gifted — deduction was inert
+
+    # R2 deception: did the impostor deceive effectively (and was it even tested)?
+    if impostor_win and accused_imps and survived_accused:
+        r2 = 1.0  # won DESPITE being accused — peak deception
+    elif impostor_win:
+        r2 = 0.4  # won via the parity/kill race, little meeting drama
+    elif accused_imps and survived_accused:
+        r2 = 0.6  # survived an accusation; crew still won
+    elif accused_imps:
+        r2 = 0.2  # accused and caught — some drama
+    else:
+        r2 = 0.0  # deception never tested
+
+    # R3 arcs: suspicion building across >=2 meetings + a carry-driven conviction
+    carry_eject = any(
+        m.get("ejected_player_id")
+        and m["ejected_player_id"] not in (m.get("contradictions_by_subject") or {})
+        for m in meetings
+    )
+    r3 = (0.5 + (0.5 if carry_eject else 0.0)) if n_mtg >= 2 else 0.0
+
+    # R7 legibility: share of this game's meetings carrying structured evidence
+    evid = sum(1 for m in meetings if m.get("n_contradictions", 0) > 0)
+    r7 = (evid / n_mtg) if n_mtg else 0.0
+
+    score = 100 * (0.35 * r1 + 0.25 * r2 + 0.20 * r3 + 0.20 * r7)
+    return {
+        "seed": g.get("seed"),
+        "reason": reason,
+        "n_meetings": n_mtg,
+        "win_shape": _win_shape(reason, ejected_imp_mtgs, n_mtg),
+        "ejected_impostors": ejected_imp_mtgs,
+        "accused_impostors": len(accused_imps),
+        "survived_accused": len(survived_accused),
+        "r1_decisive": round(r1, 2),
+        "r2_deception": round(r2, 2),
+        "r3_arcs": round(r3, 2),
+        "r7_legible": round(r7, 2),
+        "score": round(score, 1),
+    }
+
+
+def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
+    """Per-game interestingness scores + the set-level R5 win-shape diversity."""
+    games = facts["games"]
+    per = sorted(
+        (_game_interestingness(g) for g in games),
+        key=lambda x: x["score"],
+        reverse=True,
+    )
+    n = len(per) or 1
+    shapes: dict[str, int] = {}
+    for p in per:
+        shapes[p["win_shape"]] = shapes.get(p["win_shape"], 0) + 1
+    return {
+        "mean_score": round(sum(p["score"] for p in per) / n, 1),
+        "median_score": round(sorted(p["score"] for p in per)[len(per) // 2], 1)
+        if per
+        else 0.0,
+        "n_games": len(per),
+        "win_shapes": dict(sorted(shapes.items(), key=lambda kv: -kv[1])),
+        "r5_shapes_over_10pct": sum(1 for c in shapes.values() if c / n >= 0.10),
+        "per_game": per,
+    }
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: rubric_score.py FACTS_JSON", file=sys.stderr)
@@ -244,10 +358,34 @@ def main() -> int:
     width = max(len(r[0]) for r in rows)
     for item, value, desired in rows:
         print(f"{item:<{width}}  {value:<46}  desired: {desired}")
+
+    # ---- per-game interestingness score (Phase 11 Wave 0) ----
+    inter = interestingness(facts)
+    print(
+        f"\n=== Interestingness score (per-game; decoupled from W/L) — "
+        f"mean {inter['mean_score']} / median {inter['median_score']} over "
+        f"{inter['n_games']} games ==="
+    )
+    print(f"R5 win shapes (>=10% share count = {inter['r5_shapes_over_10pct']}): "
+          f"{json.dumps(inter['win_shapes'])}")
+    per = inter["per_game"]
+    print("\n  rank  seed  score  shape                  mtg  R1   R2   R3   R7")
+    for i, p in enumerate(per):
+        if len(per) > 16 and 8 <= i < len(per) - 8:
+            if i == 8:
+                print("  ...")
+            continue
+        print(
+            f"  {i + 1:>4}  {p['seed']!s:>4}  {p['score']:>5}  {p['win_shape']:<21}  "
+            f"{p['n_meetings']:>3}  {p['r1_decisive']:<4} {p['r2_deception']:<4} "
+            f"{p['r3_arcs']:<4} {p['r7_legible']:<4}"
+        )
+
     out = {
         "seedset": label,
         "git_head": facts.get("git_head"),
         "rows": [{"item": i, "value": v, "desired": d} for i, v, d in rows],
+        "interestingness": inter,
     }
     Path("experiments/lab/results-rubric-score.json").write_text(
         json.dumps(out, indent=2)
