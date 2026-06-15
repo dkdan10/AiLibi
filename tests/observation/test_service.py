@@ -282,6 +282,30 @@ def test_vented_player_is_hidden_without_same_tick_event(tmp_path: Path) -> None
     assert "p-4" not in {player.id for player in packet.visible_players}
 
 
+def test_self_view_carries_in_vent_only_for_the_recipient(tmp_path: Path) -> None:
+    # Task 11.1 (DESIGN.md §1.3, §3.4): ``SelfView.in_vent`` mirrors the
+    # recipient's OWN ``PlayerState.in_vent``. A vented impostor sees ``in_vent``
+    # True on its own packet; every other agent's packet carries its own value
+    # (False here). The field rides only the privileged self channel -- a vented
+    # player is hidden from others' ``visible_players`` -- so it never leaks onto
+    # the crew-visible channel (asserted by the leak-property sweep).
+    state = _base_world_state()
+    players = dict(state.players)
+    players["p-4"] = dataclasses.replace(players["p-4"], in_vent=True)
+    state = dataclasses.replace(state, players=players)
+    service = _observation_service(tmp_path)
+
+    impostor_packet = service.build_packet(
+        world_state=state, agent_id="p-4", engine_events=[]
+    )
+    crew_packet = service.build_packet(
+        world_state=state, agent_id="p-1", engine_events=[]
+    )
+
+    assert impostor_packet.self_state.in_vent is True
+    assert crew_packet.self_state.in_vent is False
+
+
 def test_crewmate_cooldown_is_never_exposed(tmp_path: Path) -> None:
     state = _base_world_state()
     state_with_bad_cooldown = WorldState(

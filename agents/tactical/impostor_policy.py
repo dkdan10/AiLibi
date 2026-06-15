@@ -25,10 +25,29 @@ under ``agents/`` imports from ``engine/``.
 
 State derivation each tick (highest priority first):
 
-* ``COVER`` -- a body is visible in the impostor's current room. Move
-  one step to the alphabetically-first neighbor to vacate the scene.
-  This is the FSM ``KILL -> COVER`` edge: after the kill the body is
-  in the room and the impostor must not file a report.
+* ``VENT_EXIT`` -- the impostor is already inside a vent (its own
+  ``SelfView.in_vent`` is set, Task 11.1, DESIGN.md §3.4). This is the
+  highest-priority branch so a vented impostor always has an exit: emit a
+  :class:`VentIntent` to a connected vent whose room holds no visible body,
+  preferring the room toward the current best isolated target
+  (``_scored_targets``) and otherwise the alphabetically-first connected
+  vent. If no connected vent is body-free the impostor still exits (to the
+  alphabetically-first connected vent) and if the current vent has no
+  connection at all it exits in place -- it is never left stuck in a vent.
+  Once repositioned (``in_vent`` clears next tick) normal stalking resumes.
+* ``COVER`` -- a body is visible in the impostor's current room. This is
+  the FSM ``KILL -> COVER`` edge: after the kill the body is in the room and
+  the impostor must not file a report. When a vent sits in that room, the
+  impostor is not already vented, and NO non-teammate witness is co-present
+  this tick, the impostor VENTS (emits :class:`VentIntent`) to hide the
+  post-kill sighting trail (Task 11.1, experiments/lab/report-vent-escape-
+  lab.md) instead of walking away. A co-present non-teammate witness (a
+  fellow impostor never counts) makes a vent and a walk equal exposure, so
+  the branch falls back to the move-away: one step to the alphabetically-
+  first neighbor to vacate the scene. ``heard_vent_use`` stays observable, so
+  a vent next to a witness would be a new catchable tell -- the witness guard
+  is the only suppression, deliberately leaving the careless-vent tell in
+  place (rubric R2, "deception sometimes fails").
 * ``KILL`` -- ``cooldown == 0`` AND the best-scoring target was seen
   in our current room at the latest tick with no co-present
   witnesses. Emit :class:`KillIntent` against the target. A fellow
@@ -90,8 +109,10 @@ Conventions consumed from perception (DESIGN.md §4.2 / §6.2):
 
 * ``self_state`` events carry the impostor's current room, (optional)
   pending pretend-task id (a real map task id the impostor does not own,
-  Task 10.14), and ``fellow_impostor_ids`` (the impostor's teammates;
-  ``()`` for a sole impostor or when the field is absent).
+  Task 10.14), ``fellow_impostor_ids`` (the impostor's teammates;
+  ``()`` for a sole impostor or when the field is absent), and ``in_vent``
+  (whether the impostor is currently inside a vent, Task 11.1; ``False``
+  when the field is absent).
 * ``cooldown_status`` events carry the impostor's kill cooldown for the
   observation tick.
 * ``saw_player`` events at any tick are candidate-target sightings.
@@ -119,9 +140,10 @@ from observation.action_intent import (
     KillIntent,
     MoveIntent,
     PlayerId,
+    VentIntent,
     WaitIntent,
 )
-from observation.public_map import PublicMapView, RoomId
+from observation.public_map import PublicMapView, RoomId, VentId
 
 # Stale sightings (a `saw_player` event older than this threshold) are
 # dropped from `_scored_targets`. The audit's seed-0 reproduction had
@@ -186,6 +208,7 @@ class ImpostorPolicy:
         own_room = self._room_from_self_state(self_state)
         pending_task_id = self._pending_task_from_self_state(self_state)
         fellow_impostor_ids = self._fellow_impostor_ids_from_self_state(self_state)
+        in_vent = self._in_vent_from_self_state(self_state)
 
         cooldown = self._latest_cooldown(latest_events)
         if cooldown is None:
@@ -194,9 +217,6 @@ class ImpostorPolicy:
             )
 
         body_rooms = self._body_visible_rooms(latest_events)
-        if own_room in body_rooms:
-            return self._cover(public_map=public_map, own_room=own_room)
-
         confirmed_dead = self._confirmed_dead_from_bodies(events)
         targets = self._scored_targets(
             events,
@@ -205,6 +225,28 @@ class ImpostorPolicy:
             confirmed_dead=confirmed_dead,
             fellow_impostor_ids=fellow_impostor_ids,
         )
+
+        # VENT_EXIT (Task 11.1): an already-vented impostor takes the highest-
+        # priority branch so it is never left stuck inside a vent. It exits
+        # toward an isolated / non-body room before any body or kill logic.
+        if in_vent:
+            return self._vent_exit(
+                public_map=public_map,
+                own_room=own_room,
+                body_rooms=body_rooms,
+                targets=targets,
+            )
+
+        # COVER-or-vent (Task 11.1): a body in the impostor's own room. Vent to
+        # hide the post-kill sighting trail when a vent is here and no
+        # non-teammate witness is co-present; otherwise walk away.
+        if own_room in body_rooms:
+            return self._cover_or_vent(
+                public_map=public_map,
+                own_room=own_room,
+                latest_events=latest_events,
+                fellow_impostor_ids=fellow_impostor_ids,
+            )
 
         if cooldown == 0 and targets:
             best = targets[0]
@@ -316,6 +358,28 @@ class ImpostorPolicy:
                 )
             fellows.add(fellow_id)
         return frozenset(fellows)
+
+    @staticmethod
+    def _in_vent_from_self_state(event: EpisodicEvent) -> bool:
+        """Read the impostor's own ``in_vent`` flag from the self_state payload.
+
+        ``in_vent`` rides the privileged self channel (Task 11.1,
+        ``observation/service.py`` populates it from ``PlayerState.in_vent``) and
+        is serialized by ``agents.perception._self_state_payload``. It is absent
+        on pre-11.1 / engine-only self_state events, which maps to ``False`` (not
+        in a vent) -- the correct meaning, not a silent fallback, mirroring the
+        absent-``fellow_impostor_ids`` handling above. A present-but-non-bool
+        value is a boundary-contract violation and raises.
+        """
+
+        raw = event.payload.get("in_vent")
+        if raw is None:
+            return False
+        if not isinstance(raw, bool):
+            raise ValueError(
+                f"self_state event has non-bool in_vent: {event.payload!r}"
+            )
+        return raw
 
     @staticmethod
     def _latest_cooldown(latest_events: tuple[EpisodicEvent, ...]) -> int | None:
@@ -470,6 +534,60 @@ class ImpostorPolicy:
         return False
 
     @staticmethod
+    def _non_teammate_witness_present(
+        latest_events: tuple[EpisodicEvent, ...],
+        *,
+        own_room: RoomId,
+        fellow_impostor_ids: frozenset[PlayerId],
+    ) -> bool:
+        """Return ``True`` iff a non-teammate is co-present in ``own_room`` now.
+
+        The vent-enter witness guard (Task 11.1). It reuses the same current-tick
+        ``saw_player`` scan the kill gate runs on ``latest_events`` so "no
+        witness" means the same thing for a kill and for a vent: a fellow
+        impostor (in ``fellow_impostor_ids``) is never a witness, exactly as it
+        is never a co-present witness in the kill score. A ``saw_player`` event
+        missing its ``player_id`` / ``room`` is a boundary-contract violation and
+        raises (no silent guess), mirroring the other ``saw_player`` scanners.
+        """
+
+        for event in latest_events:
+            if event.type != EVENT_SAW_PLAYER:
+                continue
+            player_id = event.payload.get("player_id")
+            if not isinstance(player_id, str):
+                raise ValueError(
+                    f"saw_player event missing string 'player_id': {event.payload!r}"
+                )
+            if player_id in fellow_impostor_ids:
+                continue
+            room = event.payload.get("room")
+            if not isinstance(room, str):
+                raise ValueError(
+                    f"saw_player event missing string 'room': {event.payload!r}"
+                )
+            if room == own_room:
+                return True
+        return False
+
+    @staticmethod
+    def _vent_in_room(public_map: PublicMapView, room: RoomId) -> VentId | None:
+        """Return the (deterministic) vent id sitting in ``room``, or ``None``.
+
+        ``PublicMapView.vent_rooms`` maps each vent id to its room; this inverts
+        it. The canonical map has at most one vent per room, but the lookup is
+        defensive: if several vents ever shared a room the alphabetically-first
+        vent id is chosen so the decision stays replay-stable with no RNG.
+        """
+
+        vent_ids = sorted(
+            vent_id
+            for vent_id, vent_room in public_map.vent_rooms.items()
+            if vent_room == room
+        )
+        return vent_ids[0] if vent_ids else None
+
+    @staticmethod
     def _scored_targets(
         events: tuple[EpisodicEvent, ...],
         *,
@@ -544,6 +662,37 @@ class ImpostorPolicy:
         scored.sort(key=lambda target: (-target.score, target.player_id))
         return tuple(scored)
 
+    def _cover_or_vent(
+        self,
+        *,
+        public_map: PublicMapView,
+        own_room: RoomId,
+        latest_events: tuple[EpisodicEvent, ...],
+        fellow_impostor_ids: frozenset[PlayerId],
+    ) -> ActionIntent:
+        """COVER the body: vent if it is safe, otherwise walk away (Task 11.1).
+
+        A vent hides the post-kill sighting trail that the offline lab proved is
+        ~91% of the structured evidence against impostors
+        (experiments/lab/report-vent-escape-lab.md). The impostor vents only when
+        a vent sits in this room AND no non-teammate witness is co-present this
+        tick -- the same witness notion the kill gate uses. The caller already
+        guarantees the impostor is not already in a vent (the VENT_EXIT branch
+        runs first). When a witness is present a vent and a walk are equal
+        exposure (the witness saw the impostor regardless), so the simpler
+        move-away fallback is kept; ``heard_vent_use`` would otherwise add a NEW
+        catchable tell with no upside.
+        """
+
+        vent_id = self._vent_in_room(public_map, own_room)
+        if vent_id is not None and not self._non_teammate_witness_present(
+            latest_events,
+            own_room=own_room,
+            fellow_impostor_ids=fellow_impostor_ids,
+        ):
+            return self._vent(vent_id=vent_id)
+        return self._cover(public_map=public_map, own_room=own_room)
+
     def _cover(
         self,
         *,
@@ -560,6 +709,106 @@ class ImpostorPolicy:
                 "payload": {"to_room": neighbors[0]},
             }
         )
+
+    def _vent_exit(
+        self,
+        *,
+        public_map: PublicMapView,
+        own_room: RoomId,
+        body_rooms: frozenset[RoomId],
+        targets: tuple[_ScoredTarget, ...],
+    ) -> ActionIntent:
+        """Exit the vent toward an isolated / non-body room (Task 11.1).
+
+        Highest-priority branch for an ``in_vent`` impostor, so it can never be
+        left stuck in a vent. The impostor's current room is its current vent's
+        room. Candidate destinations are the connected vents
+        (``vent_graph``); among those whose room holds no visible body, the one
+        nearest the best isolated target's room is chosen (A* hop count over the
+        public topology, vent-id tie-break -- deterministic, no RNG), else the
+        alphabetically-first such vent. If every connected vent's room holds a
+        body the impostor still exits (alphabetically-first connected vent), and
+        if the current vent has no connection at all it exits in place. All
+        tie-breaks are id/room-sorted so replays stay byte-identical.
+        """
+
+        current_vent = self._vent_in_room(public_map, own_room)
+        if current_vent is None:
+            raise ValueError(
+                f"impostor is in_vent but no vent maps to its room: {own_room!r}"
+            )
+        connected = tuple(
+            vent_id
+            for vent_id in sorted(public_map.vent_graph.get(current_vent, ()))
+            if vent_id in public_map.vent_rooms
+        )
+        if not connected:
+            # No connected vent: exit in place via the current vent so the
+            # impostor is never pathologically stuck inside the vent.
+            return self._vent(vent_id=current_vent)
+        body_free = tuple(
+            vent_id
+            for vent_id in connected
+            if public_map.vent_rooms[vent_id] not in body_rooms
+        )
+        pool = body_free if body_free else connected
+        chosen = self._choose_exit_vent(
+            public_map=public_map, pool=pool, targets=targets
+        )
+        return self._vent(vent_id=chosen)
+
+    def _choose_exit_vent(
+        self,
+        *,
+        public_map: PublicMapView,
+        pool: tuple[VentId, ...],
+        targets: tuple[_ScoredTarget, ...],
+    ) -> VentId:
+        """Pick the exit vent toward the best target, else alphabetically first.
+
+        ``pool`` is a non-empty, already-filtered tuple of candidate vent ids.
+        When there is a scored target, the vent whose room is fewest A* hops from
+        the best target's room wins, with the vent id as a deterministic
+        tie-break; otherwise the alphabetically-first vent id is chosen. Both
+        paths are pure functions of the public map and the memory, so the choice
+        is replay-stable.
+        """
+
+        if targets:
+            target_room = targets[0].room
+            return min(
+                pool,
+                key=lambda vent_id: (
+                    self._vent_distance(
+                        public_map=public_map,
+                        room=public_map.vent_rooms[vent_id],
+                        target_room=target_room,
+                    ),
+                    vent_id,
+                ),
+            )
+        return min(pool)
+
+    @staticmethod
+    def _vent_distance(
+        *,
+        public_map: PublicMapView,
+        room: RoomId,
+        target_room: RoomId,
+    ) -> int:
+        """A* hop count from ``room`` to ``target_room`` (unreachable = sentinel).
+
+        Unreachable or unknown rooms sort last via a sentinel one larger than any
+        possible path length, keeping the ``_choose_exit_vent`` ordering total and
+        deterministic without raising on a disconnected topology.
+        """
+
+        try:
+            return (
+                len(find_path(public_map=public_map, start=room, goal=target_room)) - 1
+            )
+        except ValueError:
+            return len(public_map.room_ids) + 1
 
     def _move_toward(
         self,
@@ -584,6 +833,15 @@ class ImpostorPolicy:
                 "type": "kill",
                 "actor": self._agent_id,
                 "payload": {"target": target_id},
+            }
+        )
+
+    def _vent(self, *, vent_id: VentId) -> ActionIntent:
+        return VentIntent.model_validate(
+            {
+                "type": "vent",
+                "actor": self._agent_id,
+                "payload": {"vent_id": vent_id},
             }
         )
 

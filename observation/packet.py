@@ -33,6 +33,14 @@ class SelfView(_FrozenModel):
     # never mirrored into the crew-visible ``PlayerView`` channel, so the
     # DESIGN.md §1.3 observation firewall holds. Sorted for replay stability.
     fellow_impostor_ids: tuple[PlayerId, ...] = ()
+    # Whether the recipient is currently inside a vent (DESIGN.md §3.4). This is
+    # a non-role-bearing self-state bool: a player always knows its own position,
+    # and a vented player is HIDDEN from every other agent's ``visible_players``
+    # (engine/visibility.py), so this never appears on the crew-visible channel
+    # and the §1.3 firewall holds. The impostor policy reads it to drive the
+    # in-vent vent-exit branch (Task 11.1). Defaults ``False`` for crewmates and
+    # for any player not in a vent.
+    in_vent: bool = False
 
 
 class PlayerView(_FrozenModel):

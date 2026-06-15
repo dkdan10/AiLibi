@@ -127,6 +127,7 @@ class TestIngestPacketSelfAndGlobal:
             "role": "IMPOSTOR",
             "pending_task_id": None,
             "fellow_impostor_ids": (),
+            "in_vent": False,
         }
 
     def test_self_state_payload_carries_fellow_impostor_ids(self) -> None:

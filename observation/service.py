@@ -226,6 +226,7 @@ class ObservationService:
                 role=player.role,
                 pending_task_id=pending_task_id,
                 fellow_impostor_ids=fellow_impostor_ids,
+                in_vent=player.in_vent,
             ),
             visible_players=visible_players,
             visible_bodies=visible_bodies,

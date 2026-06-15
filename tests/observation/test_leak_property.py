@@ -52,6 +52,7 @@ from eval.leak_test import (
     JsonValue,
     _assert_no_recursive_hidden_fields,
     _assert_no_role_bearing_values,
+    _walk_json,
 )
 from observation.service import ObservationService, impostor_pretend_task_id
 from tests.engine.test_tick_properties import _unique_actions_per_actor
@@ -262,6 +263,17 @@ def test_observation_packets_never_leak_hidden_information(
             packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
             _assert_no_recursive_hidden_fields(packet_dump)
             _assert_no_role_bearing_values(packet_dump)
+            # ``SelfView.in_vent`` firewall (Task 11.1, DESIGN.md §1.3, §3.4): the
+            # self-position bool rides ONLY the privileged self channel. A vented
+            # player is hidden from every other agent's ``visible_players``, so
+            # ``in_vent`` must appear at exactly one path -- the recipient's own
+            # ``self_state`` -- and never on the crew-visible channel.
+            in_vent_paths = [
+                path
+                for path, _ in _walk_json(packet_dump)
+                if path and path[-1] == "in_vent"
+            ]
+            assert in_vent_paths == [("self_state", "in_vent")]
             # Own-task-only firewall (DESIGN.md §1.3, §3.2): under the per-player
             # ``"{owner}:{map_task_id}"`` keyspace, a CREWMATE's
             # ``pending_task_id`` is its OWN map id -- never the composite instance
