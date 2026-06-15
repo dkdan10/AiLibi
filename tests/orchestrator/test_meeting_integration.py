@@ -943,6 +943,7 @@ def _stub_statement_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    is_impostor: bool = False,
 ) -> str:
     return f"STATEMENT_PROMPT agent_id={agent_id} kind={turn_kind}"
 

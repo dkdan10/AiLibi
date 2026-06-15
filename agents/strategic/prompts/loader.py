@@ -169,6 +169,7 @@ def accusation_round_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    is_impostor: bool = False,
 ) -> str:
     """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
@@ -207,6 +208,15 @@ def accusation_round_prompt(
     ``dead_ids`` (Task 10.3, audit gp-9) is the dead / ejected negative
     list, rendered as an explicit do-not-accuse line under the living
     roster. Guarded the same way: the default ``()`` omits the line.
+
+    ``is_impostor`` (Task 11.2) gates the cover-consistency directive on
+    the reply branch -- the impostor commits to ONE sheltered room +
+    tick-window away from the body and reuses it every turn (DESIGN.md
+    §5.2; experiments/lab/report-vent-escape-lab.md, the residual
+    self-pair alibi_conflict drift). It is an explicit bool rather than a
+    reuse of ``fellow_impostor_ids`` because a SOLE impostor has empty
+    fellows but must still get the directive. The default ``False`` keeps
+    the crewmate (and ad-hoc) render byte-unchanged.
     """
 
     return _ENV.get_template(ACCUSATION_ROUND_TEMPLATE).render(
@@ -219,6 +229,7 @@ def accusation_round_prompt(
         fellow_impostor_ids=fellow_impostor_ids,
         living_ids=living_ids,
         dead_ids=dead_ids,
+        is_impostor=is_impostor,
     )
 
 

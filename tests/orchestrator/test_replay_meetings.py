@@ -196,6 +196,7 @@ def _statement_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    is_impostor: bool = False,
 ) -> str:
     return f"ST:{agent_id}:{turn_kind}:{len(transcript.turns)}"
 
@@ -400,11 +401,13 @@ class TestReplayRecordsMeetingArtifacts:
         # openings). Task 10.8 bumped crewmate_report alone to v6 (the
         # emergency-opening called-on-suspicion branch), and Task 10.11 to v7
         # (the emergency opening forbids a fabricated found_body). Task 10.14
-        # bumped impostor_report alone to v5 (the anticipatory-cover branch). A
-        # fresh replay entry must carry the live version strings end-to-end; the
+        # bumped impostor_report alone to v5 (the anticipatory-cover branch), and
+        # Task 11.2 bumped accusation_round alone to v8 (the impostor
+        # cover-consistency directive ported onto the reply branch). A fresh
+        # replay entry must carry the live version strings end-to-end; the
         # committed sample bytes still record their as-recorded versions
-        # (impostor_report_v4 until the 10.17 re-record).
-        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v7"
+        # (accusation_round.v7 until the 11.4 re-record).
+        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v8"
         assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v7"
         assert meeting.prompt_versions["impostor_report"] == "impostor_report_v5"
         # LLM cost metadata recorded per call. The chain protocol:

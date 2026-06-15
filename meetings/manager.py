@@ -715,6 +715,13 @@ class StatementPromptRenderer(Protocol):
     ejected negative list rendered as an explicit do-not-accuse line
     under the living roster (17/18 hallucinated targets were dead real
     players). ``()`` (ad-hoc renders) omits the line.
+
+    ``is_impostor`` (Task 11.2) gates the cover-consistency directive on
+    the reply branch (commit to ONE sheltered room + tick-window away from
+    the body and reuse it every turn). It is an explicit bool rather than a
+    reuse of ``fellow_impostor_ids`` because a SOLE impostor has empty
+    fellows but must still get the directive. The default ``False`` keeps
+    the crewmate (and ad-hoc) render byte-unchanged.
     """
 
     def __call__(
@@ -729,6 +736,7 @@ class StatementPromptRenderer(Protocol):
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
         living_ids: tuple[PlayerId, ...] = (),
         dead_ids: tuple[PlayerId, ...] = (),
+        is_impostor: bool = False,
     ) -> str: ...
 
 
@@ -1399,6 +1407,12 @@ class MeetingManager:
             fellow_impostor_ids=participant.fellow_impostor_ids,
             living_ids=accusation_targets,
             dead_ids=dead_ids,
+            # Task 11.2 (DESIGN.md §5.2): the cover-consistency directive on
+            # the reply branch fires for the impostor role. An explicit bool
+            # rather than `fellow_impostor_ids` because a SOLE impostor has
+            # empty fellows but must still get the directive; the template
+            # scopes it to the reply branch (the opt-in turn is terminal).
+            is_impostor=(participant.role == "IMPOSTOR"),
         )
 
     # -- Voting -----------------------------------------------------------

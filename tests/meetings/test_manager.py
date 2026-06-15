@@ -200,10 +200,12 @@ def _statement_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    is_impostor: bool = False,
 ) -> str:
     prior = prior_turn.speaker if prior_turn is not None else "none"
     return (
-        f"PHASE=TURN turn_kind={turn_kind} agent_id={agent_id} prior={prior}\n"
+        f"PHASE=TURN turn_kind={turn_kind} agent_id={agent_id} prior={prior}"
+        f" is_impostor={is_impostor}\n"
         f"{_fellow_impostors_line(fellow_impostor_ids)}"
         f"{_living_ids_line(living_ids)}"
         f"{_dead_ids_line(dead_ids)}"
