@@ -15,6 +15,7 @@ from observation.packet import (
     BodyView,
     GlobalView,
     ObservationPacket,
+    OwnKillView,
     PlayerView,
     SelfView,
 )
@@ -184,6 +185,10 @@ class ObservationService:
             agent_id=agent_id,
             engine_events=engine_events,
         )
+        own_kill = self._own_kill_for_agent(
+            agent_id=agent_id,
+            engine_events=engine_events,
+        )
         visible_players = self._visible_players(
             world_state=world_state,
             visibility=visibility,
@@ -227,6 +232,7 @@ class ObservationService:
                 pending_task_id=pending_task_id,
                 fellow_impostor_ids=fellow_impostor_ids,
                 in_vent=player.in_vent,
+                own_kill=own_kill,
             ),
             visible_players=visible_players,
             visible_bodies=visible_bodies,
@@ -318,6 +324,29 @@ class ObservationService:
                 if vent_observation is not None:
                     observed_actions[event.actor] = vent_observation
         return observed_actions
+
+    def _own_kill_for_agent(
+        self,
+        *,
+        agent_id: PlayerId,
+        engine_events: Sequence[EngineEvent],
+    ) -> OwnKillView | None:
+        """The kill ``agent_id`` itself committed this tick, or ``None``.
+
+        Privileged self channel (Task 11.3, DESIGN.md §1.3, §6.2). Unlike the
+        witness-gated ``_observed_actions_for_agent`` scan, this fires precisely
+        when ``event.actor == agent_id`` and WITHOUT a witness check: the engine
+        excludes a killer from its own kill's witnesses (``engine/rules.py``), so
+        the killer would otherwise never learn the act through any channel. By
+        construction it is never another agent's kill, so it can never land in a
+        crewmate or fellow-impostor packet -- it lives only on the actor's own
+        ``SelfView``, never on the crew-visible ``PlayerView``.
+        """
+
+        for event in engine_events:
+            if isinstance(event, KilledEvent) and event.actor == agent_id:
+                return OwnKillView(victim_id=event.target, room=event.room)
+        return None
 
     def _vent_observation_for_agent(
         self,

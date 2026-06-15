@@ -43,6 +43,11 @@ _CHARS_PER_TOKEN: Final[int] = 4
 # in DESIGN.md §6.2: body discoveries, kills, vent observations,
 # sightings, task completions, routine status.
 _SALIENCE_FOUND_BODY: Final[int] = 100
+# The recipient's OWN kill (Task 11.3, DESIGN.md §6.2): legibility-only -- it
+# states the act the impostor committed, which is otherwise invisible to its own
+# memory (the engine excludes a killer from its own kill's witnesses). Ranked
+# above the witnessed-kill line per the task contract.
+_SALIENCE_OWN_KILL: Final[int] = 96
 _SALIENCE_KILL_WITNESSED: Final[int] = 95
 _SALIENCE_VENT_WITNESSED: Final[int] = 85
 _SALIENCE_VENT_HEARD: Final[int] = 75
@@ -57,6 +62,7 @@ _EVENT_SAW_PLAYER: Final[str] = "saw_player"
 _EVENT_HEARD_VENT_USE: Final[str] = "heard_vent_use"
 _EVENT_HEARD_SABOTAGE_ALARM: Final[str] = "heard_sabotage_alarm"
 _EVENT_SELF_STATE: Final[str] = "self_state"
+_EVENT_OWN_KILL: Final[str] = "own_kill"
 _EVENT_GLOBAL_STATUS: Final[str] = "global_status"
 _EVENT_COOLDOWN_STATUS: Final[str] = "cooldown_status"
 
@@ -368,6 +374,27 @@ def _collect_body_sightings(episodic: MemoryStore) -> tuple[tuple[str, int], ...
     return tuple(sightings)
 
 
+def _collect_own_kill_victims(episodic: MemoryStore) -> frozenset[str]:
+    """Victim ids the recipient itself killed (Task 11.3, DESIGN.md §6.2).
+
+    Collected up front -- like ``_collect_body_sightings`` -- because the
+    self-victim ``saw_body`` row (the body the killer made, surfaced through the
+    ordinary sighting channel) can be appended after the ``own_kill`` event for
+    the same tick, and the renderer must suppress that "discovered body" line for
+    the killer's own victim regardless of append order so the kill is narrated
+    once, as a kill, not as a discovery.
+    """
+
+    victims: set[str] = set()
+    for event in episodic.recent(since_tick=0):
+        if event.type != _EVENT_OWN_KILL:
+            continue
+        victim_id = event.payload.get("victim_id")
+        if isinstance(victim_id, str):
+            victims.add(victim_id)
+    return frozenset(victims)
+
+
 def _is_kill_window_sighting(
     *,
     room: str,
@@ -420,6 +447,7 @@ def _build_observations(
     last_pending_task_room: str | None = None
     first_self_state = True
     body_sightings = _collect_body_sightings(episodic)
+    own_kill_victims = _collect_own_kill_victims(episodic)
 
     for event in episodic.recent(since_tick=0):
         if event.type == _EVENT_SELF_STATE:
@@ -471,6 +499,23 @@ def _build_observations(
             first_self_state = False
             continue
 
+        if event.type == _EVENT_OWN_KILL:
+            victim_id = event.payload.get("victim_id")
+            room = event.payload.get("room")
+            if not isinstance(victim_id, str) or not isinstance(room, str):
+                continue
+            observations.append(
+                _Observation(
+                    salience=_SALIENCE_OWN_KILL,
+                    tick=event.tick,
+                    line=(
+                        f"[tick {event.tick}] You (IMPOSTOR) killed "
+                        f"{victim_id} in {room}."
+                    ),
+                )
+            )
+            continue
+
         if event.type == _EVENT_SAW_BODY:
             body_id = event.payload.get("body_id")
             if not isinstance(body_id, str):
@@ -483,6 +528,15 @@ def _build_observations(
                 # Don't mark the body as seen yet -- a later well-formed
                 # event for the same body_id should still surface its
                 # discovery.
+                continue
+            if victim_id in own_kill_victims:
+                # The killer's own victim (Task 11.3, DESIGN.md §6.2): the body
+                # it made surfaces through the ordinary ``saw_body`` channel, but
+                # the kill is already narrated by the ``own_kill`` line above, so
+                # suppress the "You discovered ... body" render for it. Other
+                # bodies render normally. Mark it seen so a later duplicate
+                # sighting of the same body stays suppressed too.
+                seen_body_ids.add(body_id)
                 continue
             seen_body_ids.add(body_id)
             observations.append(

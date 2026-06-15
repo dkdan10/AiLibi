@@ -15,6 +15,30 @@ class _FrozenModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+class OwnKillView(_FrozenModel):
+    """A kill the recipient itself committed this tick (DESIGN.md §1.3, §6.2).
+
+    This rides the privileged self channel where ``role`` and
+    ``fellow_impostor_ids`` live (Task 11.3): the engine excludes a killer from
+    its own kill's witnesses (``engine/rules.py``), so the kill is never logged
+    through the witness-gated ``visible_players`` channel and the body the
+    killer made surfaces only as an ordinary ``saw_body`` sighting -- the killer
+    narrating finding the body it created. Surfacing the kill here (legibility
+    only -- the memory-fix probe FALSIFIED it as a survival lever,
+    ``experiments/lab/report-memory-fix-probe.md``) lets the §6.2 renderer state
+    the act plainly and suppress the self-victim "discovered body" line.
+
+    It is populated ONLY for the killer (the entitled recipient) and is NEVER
+    mirrored into the crew-visible ``PlayerView`` channel: a ``PlayerView`` kill
+    action would fail the leak test, which requires every visible kill to be
+    witness-permitted (``eval/leak_test.py``). ``victim_id`` is leak-allowed per
+    the ``BodyView`` precedent; the field names carry no role information.
+    """
+
+    victim_id: PlayerId = Field(min_length=1)
+    room: RoomId
+
+
 class SelfView(_FrozenModel):
     room: RoomId
     role: Role
@@ -41,6 +65,14 @@ class SelfView(_FrozenModel):
     # in-vent vent-exit branch (Task 11.1). Defaults ``False`` for crewmates and
     # for any player not in a vent.
     in_vent: bool = False
+    # The kill the recipient itself committed this tick, or ``None`` (Task
+    # 11.3). Like ``role`` / ``fellow_impostor_ids``, it rides the privileged
+    # self channel and is populated ONLY for the actor: the engine excludes a
+    # killer from its own kill's witnesses, so this is by construction never in
+    # any other agent's packet (crewmate AND fellow impostor get ``None``) and
+    # the §1.3 firewall holds. It is never mirrored into ``PlayerView``. Carries
+    # no role-bearing field names; ``victim_id`` is leak-allowed per BodyView.
+    own_kill: OwnKillView | None = None
 
 
 class PlayerView(_FrozenModel):

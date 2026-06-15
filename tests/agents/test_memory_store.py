@@ -450,3 +450,101 @@ class TestImpostorPretendTaskCompletionGate:
         view = render_for_prompt(memory)
 
         assert "You completed swipe_card" in view
+
+
+def _own_kill_event(*, tick: int, victim_id: str, room: str) -> EpisodicEvent:
+    return EpisodicEvent(
+        tick=tick,
+        type="own_kill",
+        payload={"victim_id": victim_id, "room": room},
+        provenance="observed",
+    )
+
+
+def _saw_body_event(
+    *, tick: int, body_id: str, victim_id: str, room: str
+) -> EpisodicEvent:
+    return EpisodicEvent(
+        tick=tick,
+        type="saw_body",
+        payload={"body_id": body_id, "victim_id": victim_id, "room": room},
+        provenance="observed",
+    )
+
+
+class TestOwnKillRender:
+    """The killer's own kill renders as a privileged self-channel line and
+    suppresses the self-victim "discovered body" line (Task 11.3, DESIGN.md
+    §1.3, §6.2; experiments/lab/report-memory-fix-probe.md). The engine excludes
+    a killer from its own kill's witnesses, so the body it made would otherwise
+    surface only through the ordinary ``saw_body`` channel as a discovery -- the
+    killer narrating finding the body it created. Legibility only: the
+    memory-fix probe falsified this as a survival/deflection lever.
+    """
+
+    def test_killer_memory_shows_kill_line_not_self_victim_body(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", role="IMPOSTOR")
+        )
+        # The kill the impostor committed this tick (privileged self channel).
+        memory.episodic.append(_own_kill_event(tick=4, victim_id="p-2", room="REACTOR"))
+        # The body it made surfaces through the ordinary saw_body channel -- it
+        # must be suppressed in favour of the kill line above.
+        memory.episodic.append(
+            _saw_body_event(
+                tick=4, body_id="body-p-2-4", victim_id="p-2", room="REACTOR"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 4] You (IMPOSTOR) killed p-2 in REACTOR." in view
+        assert "You discovered p-2's body" not in view
+
+    def test_other_bodies_still_render_for_the_killer(self) -> None:
+        # Only the killer's OWN victim is suppressed; a body it genuinely
+        # stumbles on (made by someone else) renders normally.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", role="IMPOSTOR")
+        )
+        memory.episodic.append(_own_kill_event(tick=4, victim_id="p-2", room="REACTOR"))
+        memory.episodic.append(
+            _saw_body_event(
+                tick=4, body_id="body-p-2-4", victim_id="p-2", room="REACTOR"
+            )
+        )
+        memory.episodic.append(
+            _saw_body_event(
+                tick=6, body_id="body-p-9-6", victim_id="p-9", room="STORAGE"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You (IMPOSTOR) killed p-2 in REACTOR." in view
+        assert "You discovered p-2's body" not in view
+        assert "[tick 6] You discovered p-9's body in STORAGE." in view
+
+    def test_self_victim_suppression_survives_body_appended_before_kill(
+        self,
+    ) -> None:
+        # Append order independence (the up-front victim collection): even when
+        # the self-victim saw_body row precedes the own_kill row, the discovery
+        # line is suppressed and the kill line renders.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", role="IMPOSTOR")
+        )
+        memory.episodic.append(
+            _saw_body_event(
+                tick=4, body_id="body-p-2-4", victim_id="p-2", room="REACTOR"
+            )
+        )
+        memory.episodic.append(_own_kill_event(tick=4, victim_id="p-2", room="REACTOR"))
+
+        view = render_for_prompt(memory)
+
+        assert "You (IMPOSTOR) killed p-2 in REACTOR." in view
+        assert "You discovered p-2's body" not in view
