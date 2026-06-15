@@ -1756,27 +1756,32 @@ class TestCommittedBytesSeedPins:
     @pytest.mark.parametrize(
         ("seed", "subject", "interior_tick", "expect_weak"),
         [
-            (4, "p-2", 6, True),
-            (7, "p-2", 6, True),
+            (1, "p-6", 5, True),
+            (13, "p-4", 7, True),
             (15, "p-3", 5, True),
-            (40, "p-9", 6, True),
+            (23, "p-7", 7, True),
+            (29, "p-4", 6, True),
             (42, "p-4", 5, True),
-            (45, "p-8", 5, True),
         ],
     )
     def test_genuine_canon_interior_impostor_flag_survives(
         self, seed: int, subject: str, interior_tick: int, expect_weak: bool
     ) -> None:
         # THE survival pin, re-pointed at the phase-11 Wave-1 re-record's genuine
-        # supply (10.4's definition: alibi_vs_sighting without the endpoint band,
-        # subject a true impostor — the supply grew with the re-record; one
-        # representative interior-tick flag per supplied (meeting-0, impostor)
-        # pair is pinned here). Each re-derives byte-identically from the
-        # recorded transcript. All are weak self-stated by construction (a
-        # fabricated alibi is self-stated) — and post-vent the WHOLE set is weak
-        # (0 strong flags), so the genuine class survives entirely in the weak
-        # band; the lone surviving alibi_conflict (seed-31 m1, impostor p-7) is a
-        # different KIND and is itself weak now (pinned by
+        # supply (10.4's definition: alibi_vs_sighting WITHOUT the endpoint band,
+        # subject a true impostor — one representative interior-tick flag per
+        # supplied (meeting-0, impostor) pair is pinned here). The interior_tick
+        # sits strictly INSIDE the alibi window (never a from_tick/to_tick
+        # boundary), so the flag carries neither the endpoint-tick nor the
+        # boundary-overlap weak reason — the test now asserts that explicitly, so
+        # it cannot drift onto an endpoint-band flag (a different class, covered
+        # by test_surviving_endpoint_flags_are_weak_banded) while the real
+        # interior genuine supply disappears. Each re-derives byte-identically.
+        # All are weak self-stated by construction (a fabricated alibi is
+        # self-stated) — and post-vent the WHOLE set is weak (0 strong flags), so
+        # the genuine class survives entirely in the weak band; the lone
+        # surviving alibi_conflict (seed-31 m1, impostor p-7) is a different KIND
+        # and is itself weak now (pinned by
         # test_recorded_conflict_flags_sit_in_the_weak_band).
         entry = _committed_meetings(seed)[0]
         recorded = [
@@ -1787,10 +1792,18 @@ class TestCommittedBytesSeedPins:
             and f"at tick {interior_tick}." in flag.description
         ]
         assert len(recorded) == 1
+        flag = recorded[0]
+        # The pin is an INTERIOR genuine flag, not an endpoint-band one: the
+        # sighting tick sits strictly inside the alibi window, so the genuine
+        # class the gate counts (which EXCLUDES the endpoint band) actually
+        # carries it. Without this guard a re-anchor could silently land on an
+        # endpoint-tick flag and pass while the interior supply drifted away.
+        assert WEAK_REASON_ENDPOINT_TICK not in flag.description
+        assert WEAK_REASON_BOUNDARY_OVERLAP not in flag.description
         rederived = _rederive(entry)
 
-        assert recorded[0] in rederived
-        assert is_weak_contradiction(recorded[0]) == expect_weak
+        assert flag in rederived
+        assert is_weak_contradiction(flag) == expect_weak
 
 
 # ---------------------------------------------------------------------------
