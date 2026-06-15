@@ -220,10 +220,22 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # toolkit (blending + kill discipline land in agents/tactical + observation). The
 # committed sample bytes still record impostor_report_v4 and are re-recorded at
 # 10.17, not here (recording-side only; replays/samples out of scope).
+#
+# Task 11.2 (2026-06-15; DESIGN.md §5.2; experiments/lab/report-vent-escape-lab.md)
+# bumps accusation_round alone v7 -> v8: the impostor cover-consistency directive
+# (commit to ONE sheltered room + tick-window away from the body and reuse it
+# every turn) was stranded on the impostor_report body-report OPENING that
+# impostors never take, so on the REPLY turn -- the only turn an impostor ever
+# speaks -- its account drifted across turns (the residual self-pair alibi_conflict
+# flags the vent fix cannot remove). The directive is ported verbatim into the
+# accusation_round reply branch, gated on the new `is_impostor` bool; crewmate
+# replies and opt-in turns are byte-unchanged. The committed sample bytes still
+# record accusation_round.v7 and are re-recorded at 11.4, not here (recording-side
+# only; replays/samples + the prompt-regression baseline out of scope).
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "crewmate_report": "crewmate_report.v7",
     "impostor_report": "impostor_report_v5",
-    "accusation_round": "accusation_round.v7",
+    "accusation_round": "accusation_round.v8",
     "vote_ballot": "vote_ballot/v5",
 }
 

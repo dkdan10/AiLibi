@@ -715,6 +715,20 @@ class StatementPromptRenderer(Protocol):
     ejected negative list rendered as an explicit do-not-accuse line
     under the living roster (17/18 hallucinated targets were dead real
     players). ``()`` (ad-hoc renders) omits the line.
+
+    ``is_impostor`` (Task 11.2) gates the cover-consistency directive on
+    the reply branch (commit to ONE sheltered room + tick-window away from
+    the body and reuse it every turn). It is an explicit bool rather than a
+    reuse of ``fellow_impostor_ids`` because a SOLE impostor has empty
+    fellows but must still get the directive. The default ``False`` keeps
+    the crewmate (and ad-hoc) render byte-unchanged.
+
+    ``is_body_report`` (Task 11.2; PR #159 review) is the second gate on the
+    cover directive: it speaks of "the body's room and the tick it happened",
+    so -- mirroring ``impostor_report.j2``'s ``body_report_opening`` gate -- it
+    must fire only when a body is on the table, never on a body-less emergency
+    reply. The default ``False`` keeps the block off unless the caller marks the
+    meeting a body report.
     """
 
     def __call__(
@@ -729,6 +743,8 @@ class StatementPromptRenderer(Protocol):
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
         living_ids: tuple[PlayerId, ...] = (),
         dead_ids: tuple[PlayerId, ...] = (),
+        is_impostor: bool = False,
+        is_body_report: bool = False,
     ) -> str: ...
 
 
@@ -1399,6 +1415,19 @@ class MeetingManager:
             fellow_impostor_ids=participant.fellow_impostor_ids,
             living_ids=accusation_targets,
             dead_ids=dead_ids,
+            # Task 11.2 (DESIGN.md §5.2): the cover-consistency directive on
+            # the reply branch fires for the impostor role. An explicit bool
+            # rather than `fellow_impostor_ids` because a SOLE impostor has
+            # empty fellows but must still get the directive; the template
+            # scopes it to the reply branch (the opt-in turn is terminal).
+            is_impostor=(participant.role == "IMPOSTOR"),
+            # PR #159 review: the cover directive talks about "the body's room
+            # and the tick it happened", so it must fire only on a body-report
+            # meeting -- never on a body-less emergency reply, which would inject
+            # contradictory "a body was found" copy. Derived from the trigger
+            # via the same load-bearing substring the opening templates branch
+            # on (mirrors impostor_report.j2's `body_report_opening` gate).
+            is_body_report=(EMERGENCY_TRIGGER_PHRASE not in trigger.description),
         )
 
     # -- Voting -----------------------------------------------------------
