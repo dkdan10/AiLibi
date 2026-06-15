@@ -233,12 +233,18 @@ def _self_state_payload(
     # that already carries ``role`` (Task 7.2): the impostor policy/prompt layer
     # reads its teammates from here in Wave 2 (J-5). It is ``()`` for crewmates
     # and serializes to a list in the prompt JSON, like other tuple fields.
+    #
+    # ``in_vent`` rides the same privileged self-state payload (Task 11.1): the
+    # impostor tactical policy reads it to drive the in-vent vent-exit branch. It
+    # is a plain self-position bool (a vented player is hidden from every other
+    # agent), so it carries no role information and never leaves the self channel.
     return {
         "agent_id": agent_id,
         "room": self_state.room,
         "role": self_state.role,
         "pending_task_id": self_state.pending_task_id,
         "fellow_impostor_ids": self_state.fellow_impostor_ids,
+        "in_vent": self_state.in_vent,
     }
 
 

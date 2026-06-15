@@ -18,9 +18,26 @@ from observation.action_intent import (
     DoTaskIntent,
     KillIntent,
     MoveIntent,
+    VentIntent,
     WaitIntent,
 )
 from observation.public_map import PublicMapView, RoomId
+
+
+# Vents (Task 11.1). Three vents -- in ADMIN, ELECTRICAL, MEDBAY -- all mutually
+# connected; CAFETERIA deliberately has NO vent so the move-away cover fallback
+# and the every-other-branch tests (which use CAFETERIA) are unaffected by the
+# vent wiring. The graph is symmetric, mirroring the canonical map's vent layout.
+_DEFAULT_VENT_ROOMS: Mapping[str, RoomId] = {
+    "ADMIN_VENT": "ADMIN",
+    "ELECTRICAL_VENT": "ELECTRICAL",
+    "MEDBAY_VENT": "MEDBAY",
+}
+_DEFAULT_VENT_GRAPH: Mapping[str, tuple[str, ...]] = {
+    "ADMIN_VENT": ("ELECTRICAL_VENT", "MEDBAY_VENT"),
+    "ELECTRICAL_VENT": ("ADMIN_VENT", "MEDBAY_VENT"),
+    "MEDBAY_VENT": ("ADMIN_VENT", "ELECTRICAL_VENT"),
+}
 
 
 def _public_map(
@@ -28,6 +45,8 @@ def _public_map(
     rooms: tuple[RoomId, ...] = ("ADMIN", "CAFETERIA", "ELECTRICAL", "MEDBAY"),
     neighbors: Mapping[RoomId, tuple[RoomId, ...]] | None = None,
     task_locations: Mapping[str, RoomId] | None = None,
+    vent_graph: Mapping[str, tuple[str, ...]] | None = None,
+    vent_rooms: Mapping[str, RoomId] | None = None,
     emergency_button_room: RoomId = "CAFETERIA",
     meeting_room: RoomId = "CAFETERIA",
     spawn_room: RoomId = "CAFETERIA",
@@ -45,8 +64,8 @@ def _public_map(
         map_id="test_map",
         room_ids=rooms,
         room_neighbors=neighbors,
-        vent_graph={},
-        vent_rooms={},
+        vent_graph=_DEFAULT_VENT_GRAPH if vent_graph is None else vent_graph,
+        vent_rooms=_DEFAULT_VENT_ROOMS if vent_rooms is None else vent_rooms,
         task_locations=task_locations,
         spawn_room=spawn_room,
         meeting_room=meeting_room,
@@ -61,12 +80,14 @@ def _self_state_event(
     pending_task_id: str | None = None,
     role: str = "IMPOSTOR",
     fellow_impostor_ids: tuple[str, ...] = (),
+    in_vent: bool = False,
 ) -> EpisodicEvent:
     payload: dict[str, Any] = {
         "room": room,
         "role": role,
         "pending_task_id": pending_task_id,
         "fellow_impostor_ids": fellow_impostor_ids,
+        "in_vent": in_vent,
     }
     return EpisodicEvent(
         tick=tick,
@@ -878,6 +899,201 @@ class TestImpostorStaleAndDeadTargetPruning:
 
         with pytest.raises(ValueError, match="victim_id"):
             ImpostorPolicy._confirmed_dead_from_bodies((malformed,))
+
+
+class TestImpostorVentCover:
+    """Task 11.1 (DESIGN.md §1.3, §3.4; report-vent-escape-lab.md).
+
+    POST-KILL VENT-ENTER: the COVER branch vents to hide the post-kill sighting
+    trail when a vent sits in the body's room and no non-teammate witness is
+    co-present this tick; otherwise it keeps the move-away fallback. ``MEDBAY``,
+    ``ADMIN`` and ``ELECTRICAL`` carry vents in ``_public_map``; ``CAFETERIA``
+    deliberately does not.
+    """
+
+    def test_vent_enter_fires_when_alone_with_body_in_vent_room(self) -> None:
+        # Body in MEDBAY (a vent room), impostor alone: VENT to hide the trail
+        # instead of walking away.
+        store = _store_with(
+            _self_state_event(tick=10, room="MEDBAY"),
+            _cooldown_event(tick=10, cooldown=8),
+            _saw_body_event(tick=10, body_id="body-v-10", room="MEDBAY", victim_id="v"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, VentIntent)
+        assert intent.payload.vent_id == "MEDBAY_VENT"
+        assert intent.actor == "imp"
+
+    def test_vent_enter_suppressed_when_witness_co_present(self) -> None:
+        # A non-teammate witness shares the body room: a vent and a walk are equal
+        # exposure (and a vent would add a heard_vent_use tell), so the impostor
+        # falls back to the move-away. MEDBAY's only neighbor is CAFETERIA.
+        store = _store_with(
+            _self_state_event(tick=10, room="MEDBAY"),
+            _cooldown_event(tick=10, cooldown=8),
+            _saw_player_event(tick=10, player_id="witness", room="MEDBAY"),
+            _saw_body_event(tick=10, body_id="body-v-10", room="MEDBAY", victim_id="v"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "CAFETERIA"
+
+    def test_vent_enter_skipped_when_no_vent_in_room(self) -> None:
+        # The body sits in CAFETERIA, which has no vent: the impostor keeps the
+        # plain move-away (alphabetically-first neighbor ADMIN).
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=8),
+            _saw_body_event(
+                tick=10, body_id="body-v-10", room="CAFETERIA", victim_id="v"
+            ),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "ADMIN"
+
+    def test_fellow_impostor_does_not_count_as_vent_witness(self) -> None:
+        # A co-located fellow impostor is no witness, exactly as in the kill
+        # gate: the impostor still vents away from the body.
+        store = _store_with(
+            _self_state_event(tick=10, room="MEDBAY", fellow_impostor_ids=("p-2",)),
+            _cooldown_event(tick=10, cooldown=8),
+            _saw_player_event(tick=10, player_id="p-2", room="MEDBAY"),
+            _saw_body_event(tick=10, body_id="body-v-10", room="MEDBAY", victim_id="v"),
+        )
+        policy = ImpostorPolicy(agent_id="p-1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, VentIntent)
+        assert intent.payload.vent_id == "MEDBAY_VENT"
+
+    def test_non_teammate_witness_present_raises_on_missing_player_id(self) -> None:
+        # Boundary contract (no silent guess), mirroring the other saw_player
+        # scanners: a current-tick saw_player missing its player_id is rejected.
+        malformed = EpisodicEvent(
+            tick=10,
+            type=EVENT_SAW_PLAYER,
+            payload={"room": "MEDBAY", "action": None},
+            provenance=PROVENANCE_OBSERVED,
+        )
+
+        with pytest.raises(ValueError, match="player_id"):
+            ImpostorPolicy._non_teammate_witness_present(
+                (malformed,), own_room="MEDBAY", fellow_impostor_ids=frozenset()
+            )
+
+
+class TestImpostorVentExit:
+    """Task 11.1 (DESIGN.md §1.3, §3.4): the in-vent vent-exit branch.
+
+    An ``in_vent`` impostor takes the highest-priority branch and exits toward an
+    isolated / non-body room. All tie-breaks are id/room-sorted and replay-stable,
+    and an in-vent impostor always has an exit (never pathologically stuck).
+    """
+
+    def test_in_vent_exits_toward_best_isolated_target(self) -> None:
+        # In ADMIN's vent with the best isolated target last seen in MEDBAY: of
+        # the connected vents (ELECTRICAL_VENT, MEDBAY_VENT), MEDBAY_VENT is the
+        # one whose room is the target's, so it is the closest.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", in_vent=True),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="MEDBAY"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, VentIntent)
+        assert intent.payload.vent_id == "MEDBAY_VENT"
+
+    def test_in_vent_exit_avoids_a_body_room(self) -> None:
+        # The target is in MEDBAY but a body is there too: MEDBAY_VENT is dropped
+        # as a body room and the impostor exits via the next body-free connected
+        # vent (ELECTRICAL_VENT) instead of surfacing onto the corpse.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", in_vent=True),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="MEDBAY"),
+            _saw_body_event(tick=10, body_id="body-x-10", room="MEDBAY", victim_id="x"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, VentIntent)
+        assert intent.payload.vent_id == "ELECTRICAL_VENT"
+
+    def test_in_vent_exit_is_alphabetical_when_no_target(self) -> None:
+        # No sightings: deterministic fall-back to the alphabetically-first
+        # connected vent (ELECTRICAL_VENT < MEDBAY_VENT).
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", in_vent=True),
+            _cooldown_event(tick=10, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, VentIntent)
+        assert intent.payload.vent_id == "ELECTRICAL_VENT"
+
+    def test_in_vent_with_no_connected_vents_exits_in_place(self) -> None:
+        # Stuck-guard: a current vent with no connections still yields an exit
+        # (in place via the current vent), so the impostor is never trapped.
+        public_map = _public_map(
+            vent_rooms={"ADMIN_VENT": "ADMIN"},
+            vent_graph={"ADMIN_VENT": ()},
+        )
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", in_vent=True),
+            _cooldown_event(tick=10, cooldown=0),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, public_map)
+
+        assert isinstance(intent, VentIntent)
+        assert intent.payload.vent_id == "ADMIN_VENT"
+
+    def test_in_vent_exit_takes_priority_over_kill(self) -> None:
+        # A co-located, killable target does NOT pre-empt the exit: the in_vent
+        # branch runs before the kill logic so the impostor first repositions.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", in_vent=True),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="ADMIN"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, VentIntent)
+
+    def test_in_vent_exit_is_deterministic(self) -> None:
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", in_vent=True),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="MEDBAY"),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+        public_map = _public_map()
+
+        intents = [policy.decide(store, public_map) for _ in range(5)]
+
+        for intent in intents:
+            assert isinstance(intent, VentIntent)
+            assert intent.payload.vent_id == "MEDBAY_VENT"
 
 
 class TestImpostorToolkit1014:
