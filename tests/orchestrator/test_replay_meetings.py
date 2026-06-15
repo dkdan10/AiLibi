@@ -197,6 +197,7 @@ def _statement_prompt(
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
     is_impostor: bool = False,
+    is_body_report: bool = False,
 ) -> str:
     return f"ST:{agent_id}:{turn_kind}:{len(transcript.turns)}"
 

@@ -16,7 +16,12 @@
     (mirroring how impostor_report fires for sole impostors). The block is scoped
     to the reply branch only -- the lab residual is opening<->reply drift and the
     opt-in turn is terminal -- so crewmate replies and every opt-in turn are
-    byte-unchanged.)
+    byte-unchanged. The block is ALSO gated on a body-report meeting (the
+    `is_body_report` bool, PR #159 review): the directive speaks of "the body's
+    room and the tick it happened", so -- exactly as impostor_report gates its
+    cover block on `body_report_opening` -- it must not fire on a body-less
+    emergency reply, which would otherwise inject contradictory "a body was found"
+    copy.)
    (v7, Task 10.3 -- DESIGN.md §5.1, §5.2; audit gp-9 H-H-2, H-H-3, D-D-8:
     two terse nudges for residual qwen3.5:9b artifacts; the reply / opt-in
     framing is otherwise unchanged. (1) An anti-repetition line ("list each
@@ -89,6 +94,17 @@
                         empty fellows but must still get the directive. Guarded on
                         `is defined and is_impostor`, so omitting it (or passing
                         the default False) renders without the block.
+     is_body_report  -- optional bool (Task 11.2; PR #159 review): the cover
+                        directive talks about "the body's room and the tick it
+                        happened", so -- mirroring impostor_report.j2's
+                        `body_report_opening` gate -- it must fire ONLY when a
+                        body is actually on the table. An emergency meeting has no
+                        body, so an emergency reply would otherwise render
+                        contradictory "a body was found" copy. The manager derives
+                        it from the meeting trigger (the same "called an emergency
+                        meeting" substring the opening templates branch on).
+                        Guarded on `is defined and is_body_report`, so omitting it
+                        (or passing the default False) renders without the block.
 
    These inputs are exhaustive: the template references nothing else, so no
    hidden engine state can reach the LLM through this prompt.
@@ -116,7 +132,7 @@ The accusation against you: {{ claim.reason }} (confidence {{ "%.2f" | format(cl
 {%- endif %}
 {%- endfor %}
 {%- endif %}
-{% if is_impostor is defined and is_impostor %}
+{% if is_impostor is defined and is_impostor and is_body_report is defined and is_body_report %}
 
 ## Prepare your cover (a body was found)
 A body has been reported, so the table will try to pin down where everyone was

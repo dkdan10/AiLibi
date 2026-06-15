@@ -1172,9 +1172,11 @@ _ACCUSATION_V8_COVER_BLOCK = (
 class TestAccusationRoundCoverDirective:
     """The v8 cover-consistency directive (Task 11.2; DESIGN.md §5.2;
     experiments/lab/report-vent-escape-lab.md). On the REPLY turn -- the only
-    turn an impostor ever speaks -- an impostor reply renders the
-    cover-consistency directive ported verbatim from impostor_report's body-report
-    opening; crewmate replies and every opt-in turn render it nowhere.
+    turn an impostor ever speaks -- an impostor reply in a BODY-REPORT meeting
+    renders the cover-consistency directive ported verbatim from impostor_report's
+    body-report opening; crewmate replies, every opt-in turn, and body-less
+    emergency replies render it nowhere (PR #159 review: the directive speaks of
+    "the body's room", so it is gated on the body-report meeting too).
     """
 
     def test_impostor_reply_renders_the_cover_block(self) -> None:
@@ -1186,6 +1188,7 @@ class TestAccusationRoundCoverDirective:
             prior_turn=_opening_turn(),
             turn_kind="reply",
             is_impostor=True,
+            is_body_report=True,
         )
 
         # The directive is present verbatim and pins the single sheltered
@@ -1233,9 +1236,31 @@ class TestAccusationRoundCoverDirective:
             prior_turn=None,
             turn_kind="opt_in",
             is_impostor=True,
+            is_body_report=True,
         )
 
         assert "Prepare your cover" not in prompt
+        assert _ACCUSATION_V8_COVER_BLOCK not in prompt
+
+    def test_impostor_emergency_reply_omits_the_cover_block(self) -> None:
+        # PR #159 review: an emergency meeting has no body, so an impostor reply
+        # there must NOT render the "a body was found" cover copy (which would
+        # inject contradictory context and could push the model to fabricate
+        # body/tick details). is_body_report defaults False -> the block is gated
+        # off even for an impostor reply.
+        prompt = accusation_round_prompt(
+            agent_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradictions=(),
+            prior_turn=_opening_turn(),
+            turn_kind="reply",
+            is_impostor=True,
+            is_body_report=False,
+        )
+
+        assert "Prepare your cover" not in prompt
+        assert "a body was found" not in prompt
         assert _ACCUSATION_V8_COVER_BLOCK not in prompt
 
     def test_cover_block_is_the_only_impostor_reply_difference(self) -> None:
@@ -1250,6 +1275,7 @@ class TestAccusationRoundCoverDirective:
             prior_turn=_opening_turn(),
             turn_kind="reply",
             is_impostor=True,
+            is_body_report=True,
         )
         crewmate = accusation_round_prompt(
             agent_id="p-3",

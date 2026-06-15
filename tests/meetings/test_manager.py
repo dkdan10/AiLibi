@@ -201,11 +201,12 @@ def _statement_prompt(
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
     is_impostor: bool = False,
+    is_body_report: bool = False,
 ) -> str:
     prior = prior_turn.speaker if prior_turn is not None else "none"
     return (
         f"PHASE=TURN turn_kind={turn_kind} agent_id={agent_id} prior={prior}"
-        f" is_impostor={is_impostor}\n"
+        f" is_impostor={is_impostor} is_body_report={is_body_report}\n"
         f"{_fellow_impostors_line(fellow_impostor_ids)}"
         f"{_living_ids_line(living_ids)}"
         f"{_dead_ids_line(dead_ids)}"
@@ -3242,6 +3243,100 @@ class TestOpeningAccuseOrUnsureValidation:
         assert reply.free_text == "I deny that completely."
         turn_calls = [c for c in client.calls if "PHASE=TURN" in c.prompt]
         assert len(turn_calls) == 1
+
+
+class TestCoverDirectiveThreading:
+    """Task 11.2 (PR #159 review): the reply path threads BOTH ``is_impostor``
+    and ``is_body_report`` into the statement renderer, so the cover directive
+    fires only for an impostor reply in a body-report meeting -- never for a
+    crewmate, and never on a body-less emergency reply.
+    """
+
+    @staticmethod
+    def _impostor_reply_responder(prompt: str, schema: type[BaseModel] | None) -> str:
+        # The opening (p-1, crewmate) accuses p-3, so the floor passes to the
+        # impostor p-3 for a reply turn.
+        if "PHASE=OPENING" in prompt:
+            return _turn_json(speaker="p-1", accuses="p-3")
+        if "PHASE=TURN" in prompt:
+            return _turn_json(
+                speaker=_extract_marker(prompt, "agent_id="),
+                free_text="I deny that.",
+            )
+        return _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+
+    @staticmethod
+    def _participants() -> tuple[MeetingParticipant, ...]:
+        return (
+            _participant("p-1"),
+            _participant("p-2"),
+            _participant("p-3", role="IMPOSTOR"),
+            _participant("p-4"),
+        )
+
+    def test_impostor_reply_in_body_meeting_threads_both_flags(self) -> None:
+        result, client = _run_meeting(
+            self._impostor_reply_responder, participants=self._participants()
+        )
+
+        assert result.transcript.turns[1].turn_kind == "reply"
+        p3_reply = next(
+            c
+            for c in client.calls
+            if "PHASE=TURN" in c.prompt and "agent_id=p-3" in c.prompt
+        )
+        assert "is_impostor=True" in p3_reply.prompt
+        assert "is_body_report=True" in p3_reply.prompt
+
+    def test_impostor_reply_in_emergency_meeting_gates_off_body_report(
+        self,
+    ) -> None:
+        emergency_trigger = MeetingTrigger(
+            triggered_by="p-1",
+            trigger_tick=410,
+            description="p-1 called an emergency meeting at tick 410",
+        )
+        result, client = _run_meeting(
+            self._impostor_reply_responder,
+            participants=self._participants(),
+            trigger=emergency_trigger,
+        )
+
+        assert result.transcript.turns[1].turn_kind == "reply"
+        p3_reply = next(
+            c
+            for c in client.calls
+            if "PHASE=TURN" in c.prompt and "agent_id=p-3" in c.prompt
+        )
+        # The impostor still gets is_impostor=True, but the body-report gate is
+        # off (no body), so the cover block never renders the "a body was found"
+        # copy in an emergency reply.
+        assert "is_impostor=True" in p3_reply.prompt
+        assert "is_body_report=False" in p3_reply.prompt
+
+    def test_crewmate_reply_in_body_meeting_is_not_impostor(self) -> None:
+        # A crewmate reply (opening accuses crewmate p-2) carries is_impostor
+        # False even though the body-report gate is True -- the role gate keeps
+        # the cover directive impostor-only.
+        def _responder(prompt: str, schema: type[BaseModel] | None) -> str:
+            if "PHASE=OPENING" in prompt:
+                return _turn_json(speaker="p-1", accuses="p-2")
+            if "PHASE=TURN" in prompt:
+                return _turn_json(
+                    speaker=_extract_marker(prompt, "agent_id="),
+                    free_text="Not me.",
+                )
+            return _vote_json(voter=_extract_marker(prompt, "voter="), target="SKIP")
+
+        _result, client = _run_meeting(_responder, participants=self._participants())
+
+        p2_reply = next(
+            c
+            for c in client.calls
+            if "PHASE=TURN" in c.prompt and "agent_id=p-2" in c.prompt
+        )
+        assert "is_impostor=False" in p2_reply.prompt
+        assert "is_body_report=True" in p2_reply.prompt
 
 
 # --- Unknown role rejected -------------------------------------------------

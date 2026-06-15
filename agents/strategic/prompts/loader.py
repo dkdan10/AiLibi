@@ -170,6 +170,7 @@ def accusation_round_prompt(
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
     is_impostor: bool = False,
+    is_body_report: bool = False,
 ) -> str:
     """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
@@ -217,6 +218,13 @@ def accusation_round_prompt(
     reuse of ``fellow_impostor_ids`` because a SOLE impostor has empty
     fellows but must still get the directive. The default ``False`` keeps
     the crewmate (and ad-hoc) render byte-unchanged.
+
+    ``is_body_report`` (Task 11.2; PR #159 review) is the second gate on the
+    cover directive: the wording speaks of "the body's room and the tick it
+    happened", so -- mirroring ``impostor_report.j2``'s ``body_report_opening``
+    gate -- the block must fire only when a body is on the table, never on a
+    body-less emergency reply. The default ``False`` keeps the block off unless
+    the caller explicitly marks the meeting a body report.
     """
 
     return _ENV.get_template(ACCUSATION_ROUND_TEMPLATE).render(
@@ -230,6 +238,7 @@ def accusation_round_prompt(
         living_ids=living_ids,
         dead_ids=dead_ids,
         is_impostor=is_impostor,
+        is_body_report=is_body_report,
     )
 
 
