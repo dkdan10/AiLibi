@@ -32,6 +32,7 @@ from observation.packet import (
     BodyView,
     GlobalView,
     ObservationPacket,
+    OwnKillView,
     PlayerId,
     PlayerView,
     RoomId,
@@ -42,6 +43,7 @@ PROVENANCE_OBSERVED: Final[str] = "observed"
 PROVENANCE_INFERRED: Final[str] = "inferred"
 
 EVENT_SELF_STATE: Final[str] = "self_state"
+EVENT_OWN_KILL: Final[str] = "own_kill"
 EVENT_COOLDOWN_STATUS: Final[str] = "cooldown_status"
 EVENT_SAW_PLAYER: Final[str] = "saw_player"
 EVENT_SAW_BODY: Final[str] = "saw_body"
@@ -66,11 +68,12 @@ def ingest_packet(
     Order of appended events at ``packet.tick``:
 
     1. ``self_state`` (own room, role, pending task)
-    2. ``cooldown_status`` (impostor only — skipped when ``cooldown`` is None)
-    3. ``saw_player`` for each entry in ``visible_players`` (packet order)
-    4. ``saw_body`` for each entry in ``visible_bodies`` (packet order)
-    5. one ``heard_*`` per ``audible_events`` entry (packet order)
-    6. ``global_status`` (inferred system-wide aggregate)
+    2. ``own_kill`` (the recipient's OWN kill this tick — skipped when None)
+    3. ``cooldown_status`` (impostor only — skipped when ``cooldown`` is None)
+    4. ``saw_player`` for each entry in ``visible_players`` (packet order)
+    5. ``saw_body`` for each entry in ``visible_bodies`` (packet order)
+    6. one ``heard_*`` per ``audible_events`` entry (packet order)
+    7. ``global_status`` (inferred system-wide aggregate)
 
     When ``beliefs`` is supplied, the agent's DESIGN.md §6.3 rule-based belief
     updates (Rules 1 and 4) run after the episodic append: the proximity and
@@ -90,6 +93,17 @@ def ingest_packet(
             provenance=PROVENANCE_OBSERVED,
         )
     )
+
+    own_kill = packet.self_state.own_kill
+    if own_kill is not None:
+        memory.append(
+            EpisodicEvent(
+                tick=tick,
+                type=EVENT_OWN_KILL,
+                payload=_own_kill_payload(own_kill),
+                provenance=PROVENANCE_OBSERVED,
+            )
+        )
 
     if packet.cooldown is not None:
         memory.append(
@@ -248,6 +262,17 @@ def _self_state_payload(
     }
 
 
+def _own_kill_payload(own_kill: OwnKillView) -> Mapping[str, Any]:
+    # The recipient's OWN kill this tick (Task 11.3, DESIGN.md §1.3, §6.2). It
+    # rides the privileged self channel like ``role``; the §6.2 renderer reads
+    # ``victim_id`` to state the act ("You (IMPOSTOR) killed ...") and to
+    # suppress the self-victim "discovered body" line.
+    return {
+        "victim_id": own_kill.victim_id,
+        "room": own_kill.room,
+    }
+
+
 def _visible_player_payload(player: PlayerView) -> Mapping[str, Any]:
     return {
         "player_id": player.id,
@@ -297,6 +322,7 @@ __all__ = [
     "EVENT_GLOBAL_STATUS",
     "EVENT_HEARD_SABOTAGE_ALARM",
     "EVENT_HEARD_VENT_USE",
+    "EVENT_OWN_KILL",
     "EVENT_SAW_BODY",
     "EVENT_SAW_PLAYER",
     "EVENT_SELF_STATE",

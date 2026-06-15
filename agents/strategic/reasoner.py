@@ -195,6 +195,21 @@ _ROLE_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(
 _ROLE_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^## Your role: (.+)$", re.MULTILINE
 )
+# The privileged own-kill self-channel line (Task 11.3,
+# ``agents.memory.store``): ``[tick N] You (IMPOSTOR) killed {victim} in
+# {room}.``. Like ``## Your role: X``, it carries the role token "IMPOSTOR"
+# only as the agent's SELF-reference (an impostor is entitled to know its own
+# role and its own kill) -- it reveals no OTHER player's role; ``{victim}`` is a
+# leak-allowed id (the BodyView precedent). We map it onto the allow-listed
+# ``self_state`` path by stripping it before the leak scan, exactly as the role
+# header is stripped, so an impostor's own-kill memory can still drive a
+# strategic call. The pattern is the renderer's exact format, so ordinary
+# free text cannot match it; ALL occurrences are stripped because an impostor
+# may have killed more than once. The renderer prefixes observation lines with
+# a ``"- "`` markdown bullet, so the pattern matches that list form.
+_OWN_KILL_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^- \[tick \d+\] You \(IMPOSTOR\) killed .+$\n?", re.MULTILINE
+)
 
 
 def _scan_prompt_inputs(
@@ -273,6 +288,15 @@ def _scan_prompt_inputs(
     role_match = _ROLE_VALUE_PATTERN.search(rendered_memory)
     role = role_match.group(1) if role_match else ""
     body = _ROLE_LINE_PATTERN.sub("", rendered_memory, count=1)
+    # Strip the privileged own-kill self-channel line(s) (Task 11.3) the same
+    # way as the role header: the "(IMPOSTOR)" token is the agent's own role,
+    # already allow-listed on ``self_state.role``, so it must not trip the
+    # role-bearing-value scanner on the rendered body. Role-gated to an impostor
+    # prompt (like the ``fellow_impostor_ids`` guard below): only an impostor's
+    # memory legitimately carries an own-kill line, so on a crewmate prompt the
+    # allowance is withheld and a smuggled look-alike still trips the scanner.
+    if role.strip().upper() == "IMPOSTOR":
+        body = _OWN_KILL_LINE_PATTERN.sub("", body)
     # Task 7.12 firewall: teammate ids may only ride an impostor's own
     # prompt. A non-impostor prompt carrying any fellow_impostor_id is a
     # crew-misroute leak (mirrors the 7.2 crew-empty invariant); fail

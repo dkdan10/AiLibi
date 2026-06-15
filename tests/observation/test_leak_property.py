@@ -45,6 +45,7 @@ from pydantic import TypeAdapter
 
 from engine.actions import Action
 from engine.entities import PlayerId, PlayerState, TaskId, TaskState
+from engine.events import KilledEvent
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
@@ -274,6 +275,34 @@ def test_observation_packets_never_leak_hidden_information(
                 if path and path[-1] == "in_vent"
             ]
             assert in_vent_paths == [("self_state", "in_vent")]
+            # ``SelfView.own_kill`` firewall (Task 11.3, DESIGN.md §1.3, §6.2):
+            # the killer's own kill rides ONLY the privileged self channel. The
+            # engine excludes a killer from its own kill's witnesses, so a
+            # ``PlayerView`` kill action would fail the leak test -- ``own_kill``
+            # must appear at exactly one path, the recipient's own
+            # ``self_state``, and never on the crew-visible channel. The nested
+            # ``victim_id`` / ``room`` carry no role string (the value scanner
+            # above already guards that), so the kill verb "(IMPOSTOR) killed"
+            # exists only in the store render, never in packet JSON.
+            own_kill_paths = [
+                path
+                for path, _ in _walk_json(packet_dump)
+                if path and path[-1] == "own_kill"
+            ]
+            assert own_kill_paths == [("self_state", "own_kill")]
+            # When populated, it is by construction the recipient's OWN kill:
+            # the service writes it only when ``event.actor == player_id``, so a
+            # populated ``own_kill`` must correspond to a KilledEvent this agent
+            # committed this tick -- never a crewmate's or a fellow impostor's.
+            own_kill = packet.self_state.own_kill
+            if own_kill is not None:
+                assert any(
+                    isinstance(event, KilledEvent)
+                    and event.actor == player_id
+                    and event.target == own_kill.victim_id
+                    and event.room == own_kill.room
+                    for event in events
+                )
             # Own-task-only firewall (DESIGN.md §1.3, §3.2): under the per-player
             # ``"{owner}:{map_task_id}"`` keyspace, a CREWMATE's
             # ``pending_task_id`` is its OWN map id -- never the composite instance
@@ -297,6 +326,9 @@ def test_observation_packets_never_leak_hidden_information(
             assert ":" not in (packet.self_state.pending_task_id or "")
             if packet.self_state.role == "CREWMATE":
                 assert packet.self_state.fellow_impostor_ids == ()
+                # A crewmate never kills, so it never carries an ``own_kill`` --
+                # the privileged self-channel field is impostor-act only.
+                assert packet.self_state.own_kill is None
                 # No OTHER owner's task id appears anywhere in a crew packet
                 # (distinct ids make the owner-scope leak unambiguous). The only
                 # task id a packet legitimately carries is the recipient's own
