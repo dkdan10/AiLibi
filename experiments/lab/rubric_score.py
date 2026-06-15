@@ -366,8 +366,10 @@ def main() -> int:
         f"mean {inter['mean_score']} / median {inter['median_score']} over "
         f"{inter['n_games']} games ==="
     )
-    print(f"R5 win shapes (>=10% share count = {inter['r5_shapes_over_10pct']}): "
-          f"{json.dumps(inter['win_shapes'])}")
+    print(
+        f"R5 win shapes (>=10% share count = {inter['r5_shapes_over_10pct']}): "
+        f"{json.dumps(inter['win_shapes'])}"
+    )
     per = inter["per_game"]
     print("\n  rank  seed  score  shape                  mtg  R1   R2   R3   R7")
     for i, p in enumerate(per):

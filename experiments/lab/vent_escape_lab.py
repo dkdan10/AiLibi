@@ -98,7 +98,9 @@ def main() -> None:
             if kt is not None:
                 hide[imp] = kt
 
-        for m in (e for e in read_all_entries(path) if isinstance(e, MeetingReplayEntry)):
+        for m in (
+            e for e in read_all_entries(path) if isinstance(e, MeetingReplayEntry)
+        ):
             n_meetings += 1
             rf = frozenset(b.voter for b in m.ballots)
             tv, removed = _vent_transcript(m.transcript, hide)
@@ -124,19 +126,27 @@ def main() -> None:
                 cleaned += int(b and not v)
 
     tot_b, tot_v = sum(base_imp.values()), sum(vent_imp.values())
-    print(f"meetings: {n_meetings} | impostor-meeting instances (alive): {imp_meetings}")
+    print(
+        f"meetings: {n_meetings} | impostor-meeting instances (alive): {imp_meetings}"
+    )
     print(f"post-kill impostor SawPlayer obs removed (vent-hidden): {removed_total}\n")
     pct = 100 * (tot_b - tot_v) / tot_b if tot_b else 0
-    print(f"IMPOSTOR flags: baseline {tot_b} -> vent {tot_v} (eliminated {tot_b - tot_v}, {pct:.0f}%)")
+    print(
+        f"IMPOSTOR flags: baseline {tot_b} -> vent {tot_v} (eliminated {tot_b - tot_v}, {pct:.0f}%)"
+    )
     for key in sorted(set(base_imp) | set(vent_imp)):
         print(f"    {key[0]:18} {key[1]:6}  {base_imp[key]:3} -> {vent_imp[key]:3}")
     print(f"\nCREW flags (sanity, ~unchanged): {base_crew} -> {vent_crew}\n")
     fb = 100 * base_flagged / imp_meetings if imp_meetings else 0
     fv = 100 * vent_flagged / imp_meetings if imp_meetings else 0
     cl = 100 * cleaned / base_flagged if base_flagged else 0
-    print(f"impostor-meetings FLAGGED: baseline {base_flagged}/{imp_meetings} ({fb:.0f}%) "
-          f"-> vent {vent_flagged}/{imp_meetings} ({fv:.0f}%)")
-    print(f"  ... {cleaned}/{base_flagged} baseline-flagged go FLAG-CLEAN under vent ({cl:.0f}%)")
+    print(
+        f"impostor-meetings FLAGGED: baseline {base_flagged}/{imp_meetings} ({fb:.0f}%) "
+        f"-> vent {vent_flagged}/{imp_meetings} ({fv:.0f}%)"
+    )
+    print(
+        f"  ... {cleaned}/{base_flagged} baseline-flagged go FLAG-CLEAN under vent ({cl:.0f}%)"
+    )
 
 
 if __name__ == "__main__":

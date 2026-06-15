@@ -89,9 +89,7 @@ def _grade(
     alibi_in_body_room = body_room is not None and any(
         a.room == body_room for a in alibis
     )
-    found_body_text = "found" in text and (
-        "body" in text or "corpse" in text
-    )
+    found_body_text = "found" in text and ("body" in text or "corpse" in text)
     self_co_locates = alibi_in_body_room or found_body_text
     # self-flag: does appending this reply mint a detector contradiction on the
     # speaker (the 27/71 self-incrimination class)?
@@ -133,9 +131,7 @@ def _grade(
     }
 
 
-def _kill_explicit_memory(
-    mem: str, own_kills: list[tuple[str, str, int]]
-) -> str:
+def _kill_explicit_memory(mem: str, own_kills: list[tuple[str, str, int]]) -> str:
     """Rewrite the impostor's memory so its OWN kills read 'You killed X' instead
     of the misleading 'You discovered X's body'. Simulates the proposed firewalled
     self-channel kill line. own_kills = [(victim, room, tick), ...]."""
@@ -182,7 +178,9 @@ async def run_memory_fix(
         cover = _cover_directive(body_room, body_tick or 0) if body_room else ""
         mems = {
             "A_cover_current_mem": ctx.rendered_memory + cover,
-            "B_cover_kill_explicit": _kill_explicit_memory(ctx.rendered_memory, own_kills)
+            "B_cover_kill_explicit": _kill_explicit_memory(
+                ctx.rendered_memory, own_kills
+            )
             + cover,
         }
         results: dict[str, dict[str, Any]] = {}
@@ -287,10 +285,14 @@ def main() -> int:
     parser.add_argument("--sample-dir", type=Path, required=True)
     parser.add_argument("--cap", type=int, default=24)
     parser.add_argument(
-        "--mode", choices=["cover", "memory-fix"], default="cover",
+        "--mode",
+        choices=["cover", "memory-fix"],
+        default="cover",
         help="cover = baseline vs cover-on-reply; memory-fix = cover on current vs kill-explicit memory",
     )
-    parser.add_argument("--facts", type=Path, help="extractor facts JSON (memory-fix mode)")
+    parser.add_argument(
+        "--facts", type=Path, help="extractor facts JSON (memory-fix mode)"
+    )
     args = parser.parse_args()
     preflight((MODEL,))
     ctxs = build_reply_contexts(args.sample_dir, args.cap)

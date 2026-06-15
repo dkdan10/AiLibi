@@ -544,9 +544,7 @@ def _cross_era_trajectory(
         "resolved_meetings": w2_total_meetings,
         "win_split": dict(w2_win_split),
         "impostor_win_rate": (
-            round(
-                w2_win_split.get("IMPOSTORS", 0) / sum(w2_win_split.values()), 4
-            )
+            round(w2_win_split.get("IMPOSTORS", 0) / sum(w2_win_split.values()), 4)
             if w2_win_split
             else None
         ),
@@ -2286,8 +2284,7 @@ def main() -> int:
                     findings.append(
                         {
                             "id": (
-                                "EMERGENCY-BODYLEAK-"
-                                f"{seed}-{m_facts['meeting_index']}"
+                                f"EMERGENCY-BODYLEAK-{seed}-{m_facts['meeting_index']}"
                             ),
                             "severity": "blocking",
                             "title": (
@@ -2661,9 +2658,7 @@ def main() -> int:
                 default=None,
             )
             was_eject_decided = recorded_reason == "CREWMATE_EJECT"
-            was_stopwatch = (
-                recorded_reason == "CREWMATE_TASKS" and alive_imp_final >= 1
-            )
+            was_stopwatch = recorded_reason == "CREWMATE_TASKS" and alive_imp_final >= 1
             stopwatch_tick_margin = (
                 recorded_go_tick - last_impostor_eject_tick
                 if was_stopwatch
@@ -4133,9 +4128,7 @@ def main() -> int:
                     "single_signal_conversions": (
                         multi_signal.single_signal_conversions
                     ),
-                    "unattributed_conversions": (
-                        multi_signal.unattributed_conversions
-                    ),
+                    "unattributed_conversions": (multi_signal.unattributed_conversions),
                     "conversions_with_contradiction_flag": (
                         multi_signal.conversions_with_contradiction_flag
                     ),

@@ -104,7 +104,9 @@ async def _call_ollama(
     )
     lat = time.perf_counter() - started
     try:
-        turn = MeetingTurn.model_validate_json(_extract_json_block(raw.text, MeetingTurn))
+        turn = MeetingTurn.model_validate_json(
+            _extract_json_block(raw.text, MeetingTurn)
+        )
         return turn, raw.text, lat
     except ValidationError:
         return None, raw.text, lat
@@ -136,7 +138,10 @@ def do_run_ollama(
                     rec.update(_grade(turn, ctx, br, bt))
                 sink.write(json.dumps(rec) + "\n")
                 sink.flush()
-                print(f"  {tag} {n + 1}/{len(ctxs)} (parsed={turn is not None})", flush=True)
+                print(
+                    f"  {tag} {n + 1}/{len(ctxs)} (parsed={turn is not None})",
+                    flush=True,
+                )
 
     asyncio.run(_run())
     print(f"wrote {out}")
@@ -156,11 +161,28 @@ def do_grade_frontier(turns_path: Path, tag: str) -> None:
             br, bt = _body(ctx)
             payload = raw_turn if isinstance(raw_turn, str) else json.dumps(raw_turn)
             try:
-                turn = MeetingTurn.model_validate_json(_extract_json_block(payload, MeetingTurn))
+                turn = MeetingTurn.model_validate_json(
+                    _extract_json_block(payload, MeetingTurn)
+                )
             except ValidationError as exc:
-                sink.write(json.dumps({"item": item_id, "tag": tag, "parsed_ok": False, "err": str(exc)[:160]}) + "\n")
+                sink.write(
+                    json.dumps(
+                        {
+                            "item": item_id,
+                            "tag": tag,
+                            "parsed_ok": False,
+                            "err": str(exc)[:160],
+                        }
+                    )
+                    + "\n"
+                )
                 continue
-            rec = {"item": item_id, "tag": tag, "parsed_ok": True, **_grade(turn, ctx, br, bt)}
+            rec = {
+                "item": item_id,
+                "tag": tag,
+                "parsed_ok": True,
+                **_grade(turn, ctx, br, bt),
+            }
             sink.write(json.dumps(rec) + "\n")
     print(f"wrote {out}")
 
