@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
@@ -132,6 +133,90 @@ def _grade(
     }
 
 
+def _kill_explicit_memory(
+    mem: str, own_kills: list[tuple[str, str, int]]
+) -> str:
+    """Rewrite the impostor's memory so its OWN kills read 'You killed X' instead
+    of the misleading 'You discovered X's body'. Simulates the proposed firewalled
+    self-channel kill line. own_kills = [(victim, room, tick), ...]."""
+    by_victim = {v: (room, tick) for v, room, tick in own_kills}
+    seen: set[str] = set()
+    out_lines: list[str] = []
+    for line in mem.splitlines():
+        replaced = False
+        for victim, (room, tick) in by_victim.items():
+            if f"discovered {victim}'s body" in line:
+                out_lines.append(
+                    f"- [tick {tick}] You (IMPOSTOR) killed {victim} in {room}."
+                )
+                seen.add(victim)
+                replaced = True
+                break
+        if not replaced:
+            out_lines.append(line)
+    # victims the impostor never re-saw as a body still get an explicit kill line
+    extra = [
+        f"- [tick {tick}] You (IMPOSTOR) killed {victim} in {room}."
+        for victim, (room, tick) in by_victim.items()
+        if victim not in seen
+    ]
+    return "\n".join(out_lines + extra)
+
+
+async def run_memory_fix(
+    ctxs: list[ReplyContext],
+    kills_by_seed: dict[int, list[tuple[str, str, str, int]]],
+    *,
+    sink: Any,
+) -> None:
+    """A/B isolating the kill-memory fix ON TOP of the gp-1 cover directive:
+    A = cover on the CURRENT 'discovered body' memory (the backfire condition),
+    B = cover on a KILL-EXPLICIT memory. Headline: does new_self_flag DROP in B?"""
+    for n, ctx in enumerate(ctxs):
+        body_room, body_tick = _body(ctx)
+        own_kills = [
+            (v, room, tick)
+            for (killer, v, room, tick) in kills_by_seed.get(ctx.seed, [])
+            if killer == ctx.speaker
+        ]
+        cover = _cover_directive(body_room, body_tick or 0) if body_room else ""
+        mems = {
+            "A_cover_current_mem": ctx.rendered_memory + cover,
+            "B_cover_kill_explicit": _kill_explicit_memory(ctx.rendered_memory, own_kills)
+            + cover,
+        }
+        results: dict[str, dict[str, Any]] = {}
+        for arm, mem in mems.items():
+            prompt = accusation_round_prompt(
+                agent_id=ctx.speaker,
+                rendered_memory=mem,
+                transcript=ctx.transcript,
+                contradictions=ctx.contradictions,
+                prior_turn=ctx.prior_turn,
+                turn_kind="reply",
+                fellow_impostor_ids=ctx.fellow_living,
+                living_ids=tuple(p for p in ctx.living if p != ctx.speaker),
+                dead_ids=tuple(ctx.dead),
+            )
+            turn, _raw, _lat = await _call(prompt)
+            results[arm] = (
+                {"parsed_ok": False}
+                if turn is None
+                else {"parsed_ok": True, **_grade(turn, ctx, body_room, body_tick)}
+            )
+        _emit(
+            sink,
+            {
+                "item": ctx.item_id,
+                "body_room": body_room,
+                "own_kills": own_kills,
+                "A": results["A_cover_current_mem"],
+                "B": results["B_cover_kill_explicit"],
+            },
+        )
+        print(f"  {n + 1}/{len(ctxs)}", flush=True)
+
+
 async def run(ctxs: list[ReplyContext], *, sink: Any) -> None:
     for n, ctx in enumerate(ctxs):
         body_room, body_tick = _body(ctx)
@@ -185,17 +270,42 @@ async def run(ctxs: list[ReplyContext], *, sink: Any) -> None:
         print(f"  {n + 1}/{len(ctxs)}", flush=True)
 
 
+def _kills_by_seed(facts_path: Path) -> dict[int, list[tuple[str, str, str, int]]]:
+    facts = json.loads(facts_path.read_text())
+    out: dict[int, list[tuple[str, str, str, int]]] = {}
+    for g in facts["games"]:
+        out[g["seed"]] = [
+            (k["killer"], k["victim"], k["room"], k["tick"])
+            for k in g["kills"]
+            if k.get("room") is not None
+        ]
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sample-dir", type=Path, required=True)
     parser.add_argument("--cap", type=int, default=24)
+    parser.add_argument(
+        "--mode", choices=["cover", "memory-fix"], default="cover",
+        help="cover = baseline vs cover-on-reply; memory-fix = cover on current vs kill-explicit memory",
+    )
+    parser.add_argument("--facts", type=Path, help="extractor facts JSON (memory-fix mode)")
     args = parser.parse_args()
     preflight((MODEL,))
     ctxs = build_reply_contexts(args.sample_dir, args.cap)
     print(f"impostor reply contexts: {len(ctxs)} (within-impostor A/B)", flush=True)
-    out_path = RESULTS / "results-deflection-probe.jsonl"
-    with out_path.open("w", encoding="utf-8") as sink:
-        asyncio.run(run(ctxs, sink=sink))
+    if args.mode == "memory-fix":
+        if args.facts is None:
+            raise SystemExit("memory-fix mode requires --facts")
+        kills = _kills_by_seed(args.facts)
+        out_path = RESULTS / "results-memory-fix-probe.jsonl"
+        with out_path.open("w", encoding="utf-8") as sink:
+            asyncio.run(run_memory_fix(ctxs, kills, sink=sink))
+    else:
+        out_path = RESULTS / "results-deflection-probe.jsonl"
+        with out_path.open("w", encoding="utf-8") as sink:
+            asyncio.run(run(ctxs, sink=sink))
     print(f"wrote {out_path}")
     return 0
 
