@@ -5040,12 +5040,17 @@ class TestCommittedBytes107FoldPins:
 
     The two-witness fold, replayed over the recorded per-voter rendered
     suspicion graphs, lifts additional listeners over the §4.6 gate on the
-    converting meetings (seed 15 m0 on the W2 re-record), and the lone
-    W2 bare pile-on (seed 16 m0, p-5: two accusers, no observation-backed
-    voice) still folds nothing and converts nothing (the STOP-pin tripwire
-    holds). Re-anchored from the W1 coordinates (seed 30 m1 / seed 38 m0 /
-    seed 3 m0) on the 10.17 re-record: those exact shapes moved with the
-    bytes, so each pin points at the W2 meeting now exhibiting it.
+    converting meetings (seed 27 m1 on the phase-11 Wave-1 re-record), and the
+    lone bare pile-on (seed 20 m1, p-2: two accusers, no observation-backed
+    voice) still folds nothing -- the fold leaves p-2 byte-unchanged, so the
+    voiceless pile-on drives no conversion (the STOP-pin tripwire holds; the
+    owner principle was re-verified set-wide -- no voiceless subject is folded
+    in any committed meeting). Re-anchored from the W1 coordinates (seed 30 m1 /
+    seed 38 m0 / seed 3 m0), kept as stable identifiers, to the meeting now
+    exhibiting each shape: vents thinned the bare pile-ons to one, and it now
+    sits on an impostor (p-2) already carrying over-gate suspicion, so the
+    'under-gate everywhere / zero votes' extras of the prior pin give way to the
+    mechanism-level invariant the tripwire actually guards.
     """
 
     @staticmethod
@@ -5101,76 +5106,76 @@ class TestCommittedBytes107FoldPins:
         return evidence, recorded, folded
 
     def test_seed30_m1_pile_on_stop_pin(self) -> None:
-        # THE owner-principle tripwire, re-anchored to the W2 re-record. The
-        # W1 seed-30 m1 p-7 pile-on dissolved with the bytes; the lone bare
-        # pile-on left on the W2 set is seed 16 m0, subject p-5: TWO accusers
-        # (p-1, p-6), NEITHER an observation-backed voice -- so independent
-        # voices counts ZERO for p-5 and the rule must fold nothing. The
-        # owner principle scoped to the pile-on subject p-5: NO pre-vote fold
-        # and no corroboration for p-5; the fold leaves p-5's rendered value
-        # byte-unchanged for every voter and lifts NO listener over the §4.6
-        # gate ON p-5 (p-5 carries no near-gate prior anywhere -- the bare
-        # accusations never propagated); and the meeting stays its recorded
-        # SKIP with p-5 drawing ZERO votes. (Other subjects in this meeting,
-        # p-1/p-6, do cross the gate on their OWN observation-backed suspicion
-        # -- unrelated to the pile-on, so the tripwire is scoped to p-5, not a
-        # blanket "nothing crosses" as on the quieter W1 seed-30 m1.) A
-        # qualifying second VOICE folding p-5 here is the STOP-and-escalate
-        # condition of the task contract.
-        entry = _committed_meeting(16, 0)
+        # THE owner-principle tripwire, re-anchored to the phase-11 Wave-1
+        # re-record. The prior bare pile-on (W2 seed 16 m0) dissolved with the
+        # bytes; the lone bare pile-on left is seed 20 m1, subject p-2: TWO
+        # accusers (p-6, p-9), NEITHER an observation-backed voice -- so
+        # independent voices counts ZERO for p-2 and the rule must fold nothing.
+        # The owner principle scoped to p-2: NO pre-vote fold and no
+        # corroboration for p-2, and the fold leaves p-2's rendered value
+        # BYTE-UNCHANGED for every voter -- the voiceless pile-on adds nothing
+        # through the fold, so it creates no new gate-crossing. Unlike the prior
+        # clean pin, p-2 is an IMPOSTOR already carrying over-gate suspicion from
+        # earlier meetings (rendered 1.0/0.7/1.0 for p-1/p-6/p-9), so it draws
+        # those three carried-suspicion votes -- but a 3-3 split ties to SKIP and
+        # p-2 is NOT ejected: the bare pile-on still converts nothing. (The
+        # owner-principle invariant was re-verified set-wide: no voiceless
+        # subject is folded in any committed meeting.) A qualifying second VOICE
+        # folding p-2 here is the STOP-and-escalate condition of the task
+        # contract.
+        entry = _committed_meeting(20, 1)
         roster = frozenset(ballot.voter for ballot in entry.ballots)
         rederived_flags = detect_contradictions(entry.transcript, roster=roster)
         evidence = derive_belief_evidence(
             entry.transcript, contradictions=rederived_flags, roster=roster
         )
-        # p-5 is a bona-fide bare pile-on: two distinct accusers, zero voices.
+        # p-2 is a bona-fide bare pile-on: two distinct accusers, zero voices.
         accusers = sorted(
             {
                 turn.speaker
                 for turn in entry.transcript.turns
                 for claim in turn.claims
                 if isinstance(claim, AccusationClaim)
-                and claim.against == "p-5"
-                and turn.speaker != "p-5"
+                and claim.against == "p-2"
+                and turn.speaker != "p-2"
             }
         )
-        assert accusers == ["p-1", "p-6"]
+        assert accusers == ["p-6", "p-9"]
         voices = independent_voices(entry.transcript, roster=roster)
-        assert voices.get("p-5", ()) == ()
+        assert voices.get("p-2", ()) == ()
 
         _, recorded, folded = self._replay_pre_vote_fold(entry)
-        assert "p-5" not in evidence.pre_vote_folded
-        assert "p-5" not in evidence.corroborated
+        assert "p-2" not in evidence.pre_vote_folded
+        assert "p-2" not in evidence.corroborated
         assert recorded and folded
         for voter, graph in folded.items():
-            if "p-5" in recorded[voter]:
-                assert graph["p-5"] == pytest.approx(recorded[voter]["p-5"])
-            assert graph.get("p-5", 0.0) < 0.60, (
-                f"{voter} crossed the gate on p-5 -- the pile-on converted"
-            )
-        # The recorded meeting ejected nobody and p-5 drew zero votes: the
-        # bare pile-on converted nothing.
+            if "p-2" in recorded[voter]:
+                # The fold leaves p-2 byte-unchanged: any over-gate value is
+                # carried suspicion, not the voiceless pile-on, and the fold
+                # creates no NEW gate-crossing on p-2.
+                assert graph["p-2"] == pytest.approx(recorded[voter]["p-2"])
+                assert (graph["p-2"] >= 0.60) == (recorded[voter]["p-2"] >= 0.60)
+        # The recorded meeting ejected nobody: the bare pile-on converted nothing
+        # (p-2's sub-plurality votes ride carried suspicion, not the pile-on).
         assert entry.ejected_player_id is None
-        assert all(ballot.target != "p-5" for ballot in entry.ballots)
 
     def test_seed38_m0_fold_lifts_listeners_over_gate_and_converts(self) -> None:
-        # The two-witness fold's conversion on the W2 re-record. NOTE: the fold
-        # is LIVE at record time, so the recorded vote graphs are ALREADY
-        # post-fold -- read them directly (replaying the fold over them would
-        # double-apply). The W1 seed-38 m0 row moved with the bytes; its W2
-        # analog is seed 15 m0, structurally identical: a three-voice fold on
-        # impostor p-3 (voices p-7/p-8/p-9) lifts the four LISTENERS
-        # p-1/p-2/p-5/p-6 to 0.63 -- over the §4.6 gate -- in the recorded
-        # graphs; all four MUST-vote and target p-3, and p-3 is ejected. The
-        # §6.3 fold conversion, end to end on real bytes.
-        entry = _committed_meeting(15, 0)
-        assert entry.ejected_player_id == "p-3"
+        # The two-witness fold's conversion on the phase-11 Wave-1 re-record.
+        # NOTE: the fold is LIVE at record time, so the recorded vote graphs are
+        # ALREADY post-fold -- read them directly (replaying the fold over them
+        # would double-apply). The W1 seed-38 m0 row moved with the bytes; its
+        # analog here is seed 27 m1: a two-voice fold on impostor p-4 (voices
+        # p-3/p-8) lifts the three LISTENERS p-1/p-2/p-9 over the §4.6 gate in
+        # the recorded graphs; all three MUST-vote and target p-4, and p-4 is
+        # ejected. The §6.3 fold conversion, end to end on real bytes.
+        entry = _committed_meeting(27, 1)
+        assert entry.ejected_player_id == "p-4"
         _, recorded, _ = self._replay_pre_vote_fold(entry)
         voices = set(
             independent_voices(
                 entry.transcript,
                 roster=frozenset(ballot.voter for ballot in entry.ballots),
-            ).get("p-3", ())
+            ).get("p-4", ())
         )
         assert len(voices) >= 2  # the two-witness fold drove the conversion
         ballots = {ballot.voter: ballot.target for ballot in entry.ballots}
@@ -5178,25 +5183,24 @@ class TestCommittedBytes107FoldPins:
             voter
             for voter, graph in recorded.items()
             if voter not in voices
-            and graph.get("p-3", 0.0) >= 0.60
-            and ballots.get(voter) == "p-3"
+            and graph.get("p-4", 0.0) >= 0.60
+            and ballots.get(voter) == "p-4"
         )
-        assert listeners_over_gate == ["p-1", "p-2", "p-5", "p-6"]
+        assert listeners_over_gate == ["p-1", "p-2", "p-9"]
 
     def test_seed3_m0_defended_subject_corroborated_not_folded(self) -> None:
-        # Same-phase symmetry (re-anchored to the W2 re-record): a defended
-        # subject's vouches are ingested as a CORROBORATION (which lowers its
-        # suspicion same-phase), never as a pile-on fold. The W1 seed-3 m0 row
-        # moved with the bytes; its W2 analog is seed 8 m0, structurally
-        # identical: the corroborated subject p-5 -> p-7 (a crewmate, with
-        # ZERO accusation voices, so it can only reach the corroboration
-        # channel) is never folded, while a separate impostor (p-2 -> p-3)
-        # takes the two-witness fold. The audited suspicion-math (a
+        # Same-phase symmetry (re-anchored to the phase-11 Wave-1 re-record): a
+        # defended subject's vouches are ingested as a CORROBORATION (which
+        # lowers its suspicion same-phase), never as a pile-on fold. The W1
+        # seed-3 m0 row moved with the bytes; its analog here is seed 3 m1: the
+        # corroborated subject p-1 (a crewmate, with ZERO accusation voices, so
+        # it can only reach the corroboration channel) is never folded, while a
+        # separate impostor p-2 takes the fold. The audited suspicion-math (a
         # corroboration drops the defended subject below the §4.6 gate) is
         # covered by the synthetic corroboration-delta tests; here we pin that
-        # the W2 bytes route the defended subject to the corroboration channel,
-        # not the fold.
-        entry = _committed_meeting(8, 0)
+        # the bytes route the defended subject to the corroboration channel, not
+        # the fold.
+        entry = _committed_meeting(3, 1)
         roster = frozenset(ballot.voter for ballot in entry.ballots)
         rederived_flags = detect_contradictions(entry.transcript, roster=roster)
         evidence = derive_belief_evidence(
@@ -5205,10 +5209,10 @@ class TestCommittedBytes107FoldPins:
 
         # The defended subject reaches the corroboration channel with no
         # accusation voice of its own, so the fold could never have claimed it.
-        assert independent_voices(entry.transcript, roster=roster).get("p-7", ()) == ()
-        assert "p-7" in evidence.corroborated
-        assert "p-7" not in evidence.pre_vote_folded
-        assert evidence.pre_vote_folded == ("p-3",)
+        assert independent_voices(entry.transcript, roster=roster).get("p-1", ()) == ()
+        assert "p-1" in evidence.corroborated
+        assert "p-1" not in evidence.pre_vote_folded
+        assert evidence.pre_vote_folded == ("p-2",)
 
 
 # ---------------------------------------------------------------------------
@@ -5969,11 +5973,11 @@ class TestBallotTargetGuardOnProductionPath:
 
 # ---------------------------------------------------------------------------
 # Task 10.15: the single-witness inform yield, re-derived offline against the
-# committed bytes (audit 2026-06-13-1816 C-C-1; re-anchored to the 10.17 W2
-# re-record). The inform is now LIVE at record time, so the conversions are the
-# measured recording-side belief-spread (W1 read them counterfactually). The
-# methodology is self-validating -- it reproduces the §4(3) partition exactly
-# from the recorded vote-prompt graphs (W2: 58 / 43; W1: 59 / 37) -- before
+# committed bytes (audit 2026-06-13-1816 C-C-1; re-anchored to the phase-11
+# Wave-1 re-record). The inform is now LIVE at record time, so the conversions
+# are the measured recording-side belief-spread (W1 read them counterfactually).
+# The methodology is self-validating -- it reproduces the §4(3) partition exactly
+# from the recorded vote-prompt graphs (W2: 75 / 64; W1: 59 / 37) -- before
 # counting the inform yield on top. Reuses _COMMITTED_9P2I_DIR /
 # _SUSPICION_GRAPH_* and the replay loader from the committed-bytes section
 # above.
@@ -6004,8 +6008,8 @@ def _voter_rendered_suspicion(vote_prompt: str, *, of: str) -> float | None:
 
 @dataclass(frozen=True)
 class _InformYield:
-    accused_not_ejected: int  # the §4(3) denominator (W2: 58, W1: 59)
-    over_gate_lost_plurality: int  # the lens-C bucket (c) (W2: 43, W1: 37)
+    accused_not_ejected: int  # the §4(3) denominator (W2: 75, W1: 59)
+    over_gate_lost_plurality: int  # the lens-C bucket (c) (W2: 64, W1: 37)
     informed_candidates: int  # of the bucket, the single-witness (1-voice) subset
     conversions: tuple[tuple[int, str, str], ...]  # (seed, meeting_id, impostor)
 
@@ -6013,13 +6017,13 @@ class _InformYield:
 def _derive_inform_yield() -> _InformYield:
     """Re-derive the single-witness inform yield over the committed bytes.
 
-    Pure function of whatever 9p2i bytes are committed (W2 after the 10.17
-    re-record). For every meeting, for every living-and-accused impostor S
-    the recorded ballots did not eject:
+    Pure function of whatever 9p2i bytes are committed (W2 after the phase-11
+    Wave-1 re-record). For every meeting, for every living-and-accused impostor
+    S the recorded ballots did not eject:
 
-    * count it in the accused-not-ejected denominator (W2: 58, W1: 59);
+    * count it in the accused-not-ejected denominator (W2: 75, W1: 59);
     * if at least one living voter rendered S over the §4.6 gate, count it in
-      the over-gate-lost-plurality bucket (the audit's lens-C; W2: 43,
+      the over-gate-lost-plurality bucket (the audit's lens-C; W2: 64,
       W1: 37);
     * if S carries exactly one independent voice (the single-witness INFORM
       band, below ``TESTIMONY_INDEPENDENCE_BAR``, under the echo-deduped
@@ -6125,56 +6129,53 @@ def _derive_inform_yield() -> _InformYield:
 class TestSingleWitnessInformYieldOnCommittedBytes:
     """The Task 10.15 inform-yield bloc, walked offline over the W2 bytes.
 
-    The deliverable number for the 10.17 expectation, re-anchored to the
-    10.17 re-record. The derivation first reproduces the §4(3) partition
-    EXACTLY off the committed bytes (W2: 58 accused living-impostor
-    meeting-subjects the ballots did not eject; 43 of them rendered over the
-    §4.6 gate yet lost plurality -- the W1 audit-2026-06-13-1816 read 59 /
-    37), which validates the offline oracle, then counts how many the
-    single-witness inform converts WITHOUT any tally change.
+    The deliverable number, re-anchored to the phase-11 Wave-1 re-record. The
+    derivation first reproduces the §4(3) partition EXACTLY off the committed
+    bytes (W2: 75 accused living-impostor meeting-subjects the ballots did not
+    eject; 64 of them rendered over the §4.6 gate yet lost plurality -- the W1
+    audit-2026-06-13-1816 read 59 / 37), which validates the offline oracle,
+    then counts how many the single-witness inform converts WITHOUT any tally
+    change.
     """
 
     def test_methodology_reproduces_the_audit_partition(self) -> None:
         result = _derive_inform_yield()
 
-        # The §4(3) partition, re-derived from the W2 (10.17) committed bytes.
-        # The W1 audit read 59 accused-not-ejected / 37 over-gate-lost-plurality;
-        # the re-record moved both (58 / 43) -- a legitimate era move (the
-        # denominator and the lens-C bucket are pure functions of the bytes,
-        # re-derived by the SAME offline oracle, no methodology change).
-        assert result.accused_not_ejected == 58
-        assert result.over_gate_lost_plurality == 43
+        # The §4(3) partition, re-derived from the phase-11 Wave-1 committed
+        # bytes. The W1 audit read 59 accused-not-ejected /
+        # 37 over-gate-lost-plurality; the re-record moved both (75 / 64) -- a
+        # legitimate era move (the denominator and the lens-C bucket are pure
+        # functions of the bytes, re-derived by the SAME offline oracle, no
+        # methodology change). The accused-not-ejected 75 cross-checks the
+        # effective-deflection survivals (test_wave2_metrics) exactly.
+        assert result.accused_not_ejected == 75
+        assert result.over_gate_lost_plurality == 64
 
-    def test_single_witness_inform_converts_fourteen_of_the_forty_three(self) -> None:
+    def test_single_witness_inform_converts_eight_of_the_sixty_four(self) -> None:
         result = _derive_inform_yield()
 
-        # 21 of the 43 over-gate-lost-plurality subjects are
+        # 27 of the 64 over-gate-lost-plurality subjects are
         # single-witness-informed (one observation-backed voice under
         # echo-dedup); the inform lifts a plurality of listeners over 0.60 in
-        # 14 of them on the W2 re-record (W1: 6 of 37), flipping a
-        # SKIP-plurality to an impostor-eject with the frozen equal-votes +
-        # tie->SKIP tally. The flip set is still the conservative one (only
-        # recorded SKIP voters whose rendered value sits in [gate - inform,
-        # gate) -- a baseline below that band still cannot cross on the inform
-        # alone, the owner principle); the larger count is the re-record's
-        # richer near-gate population, not a rule change.
-        assert result.informed_candidates == 21
-        assert len(result.conversions) == 14
+        # 8 of them on the phase-11 Wave-1 re-record (prior W2: 14 of 21),
+        # flipping a SKIP-plurality to an impostor-eject with the frozen
+        # equal-votes + tie->SKIP tally. The flip set is still the conservative
+        # one (only recorded SKIP voters whose rendered value sits in
+        # [gate - inform, gate) -- a baseline below that band still cannot cross
+        # on the inform alone, the owner principle); the yield FALLING despite
+        # more candidates is the vent signature -- vents thinned the near-gate
+        # SKIP-voter band, not a rule change.
+        assert result.informed_candidates == 27
+        assert len(result.conversions) == 8
         assert result.conversions == (
-            (4, "headless-seed-4:meeting-1", "p-3"),
-            (6, "headless-seed-6:meeting-0", "p-6"),
-            (11, "headless-seed-11:meeting-0", "p-3"),
-            (16, "headless-seed-16:meeting-0", "p-1"),
-            (18, "headless-seed-18:meeting-0", "p-5"),
+            (9, "headless-seed-9:meeting-1", "p-4"),
+            (15, "headless-seed-15:meeting-0", "p-3"),
+            (17, "headless-seed-17:meeting-1", "p-2"),
             (19, "headless-seed-19:meeting-0", "p-6"),
-            (20, "headless-seed-20:meeting-0", "p-2"),
-            (24, "headless-seed-24:meeting-0", "p-1"),
-            (26, "headless-seed-26:meeting-1", "p-3"),
-            (31, "headless-seed-31:meeting-1", "p-3"),
-            (33, "headless-seed-33:meeting-0", "p-1"),
-            (34, "headless-seed-34:meeting-0", "p-3"),
-            (38, "headless-seed-38:meeting-0", "p-4"),
-            (49, "headless-seed-49:meeting-1", "p-9"),
+            (22, "headless-seed-22:meeting-0", "p-6"),
+            (31, "headless-seed-31:meeting-0", "p-3"),
+            (35, "headless-seed-35:meeting-1", "p-5"),
+            (41, "headless-seed-41:meeting-0", "p-1"),
         )
 
     def test_derivation_is_deterministic(self) -> None:

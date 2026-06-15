@@ -85,8 +85,11 @@ def test_meetings_dry_run_uses_real_manifest() -> None:
     proc = _run("--meetings", "--dry-run")
     assert proc.returncode == 0
     # Meeting-bearing seeds derived from the committed flat MANIFEST.md after the
-    # Task 10.17 Wave-2 re-record.
-    assert "[dry-run] seeds: 3,4,11,13,16,20,21,22,24,26,39" in proc.stdout
+    # phase-11 Wave-1 re-record (vents/cover-on-reply/kill-memory): the re-record
+    # shifted which flat 4p/1i seeds carry a meeting.
+    assert (
+        "[dry-run] seeds: 2,3,4,11,13,16,19,20,21,22,24,26,29,32,39,41" in proc.stdout
+    )
 
 
 def test_meetings_dry_run_derives_from_manifest(tmp_path: Path) -> None:

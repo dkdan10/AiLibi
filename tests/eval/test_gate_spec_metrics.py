@@ -876,21 +876,25 @@ def _load_committed_9p2i() -> TournamentEvalReport:
 
 
 class TestCommittedW2GateSpecPins:
-    """The gp-7 pins over the committed Wave-2 bytes (the 10.17 re-record).
+    """The gp-7 pins over the committed Wave-2 bytes (re-recorded in phase 11).
 
-    These re-derive from the committed 9p2i bytes, which moved from W1 to W2 in
-    Task 10.17; the values updated with the bytes (each move named in the PR
-    Decisions). The frozen prior-era A/B anchors (corrected_w0_baseline.json and
-    corrected_w1_baseline.json) are pinned separately by the two
-    ``test_w*_baseline_fixture_carries_the_anchor_rows`` tests below.
+    These re-derive from the committed 9p2i bytes. W2 first landed in Task 10.17
+    (W1 -> W2); the phase-11 Wave-1 re-record (vents/cover-on-reply/kill-memory)
+    refreshed the W2 bytes again, moving the sample-derived values (each move
+    explained by Wave-1 behavior — the headline being 0 strong flags as vents
+    hide the post-kill sighting trail). The frozen prior-era A/B anchors
+    (corrected_w0_baseline.json and corrected_w1_baseline.json) are pinned
+    separately by the two ``test_w*_baseline_fixture_carries_the_anchor_rows``
+    tests below.
     """
 
     def test_committed_ejections_decompose_as_the_w2_baseline(self) -> None:
-        # W2: 24 impostor ejections (was the W1 11). Sourced from the committed
-        # W2 baseline fixture rather than transcribed, so the pin is the
-        # rederived-channels == committed-baseline equality the operator command
-        # produced. The W1 11-ejection map remains pinned in
-        # corrected_w1_baseline.json (anchor test below).
+        # W2: 34 impostor ejections (the phase-11 Wave-1 re-record; the prior W2
+        # read 24, the W1 anchor 11). Sourced from the committed W2 baseline
+        # fixture rather than transcribed, so the pin is the rederived-channels
+        # == committed-baseline equality the operator command produced. The W1
+        # 11-ejection map remains pinned in corrected_w1_baseline.json (anchor
+        # test below).
         report = _load_committed_9p2i()
         channels_by_site = {
             f"seed-{game.seed}:m{index}": sorted(channels)
@@ -903,39 +907,44 @@ class TestCommittedW2GateSpecPins:
         ]
         assert channels_by_site == expected
 
-    def test_multi_signal_conversion_reads_20_of_24(self) -> None:
-        # W2: 20 of the 24 impostor ejections are multi-signal (W1 was 11 of 11);
-        # the inform channel going live (Task 10.15) plus the larger ejection
-        # count surface 4 single-signal conversions. No unattributed conversions —
-        # the gp-7 channel attribution is still total on this record.
+    def test_multi_signal_conversion_reads_28_of_34(self) -> None:
+        # W2 (phase-11 Wave-1 re-record): 28 of the 34 impostor ejections are
+        # multi-signal (prior W2 was 20 of 24, W1 11 of 11); the vent_witness
+        # channel going live (Task 11.1) alongside the inform channel surfaces 6
+        # single-signal conversions over the larger ejection count. No
+        # unattributed conversions — the gp-7 channel attribution is still total
+        # on this record.
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
-        assert result.impostor_ejections == 24
-        assert result.multi_signal_conversions == 20
-        assert result.single_signal_conversions == 4
+        assert result.impostor_ejections == 34
+        assert result.multi_signal_conversions == 28
+        assert result.single_signal_conversions == 6
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(0.8333333333333334)
+        assert result.multi_signal_rate == pytest.approx(0.8235294117647058)
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
-        # The W2 supply row (10.17 re-record): 55 flags (54w/1s), meetings up to
-        # 96 (W1 88), zero-contradiction share 56/96 (W1 46/88), genuine supply
-        # at 10 meetings (W1 13), over-gate listener rows 199 — 2.55 per
-        # accused-impostor meeting (W1 102 / 1.62). Role split 20 CREW / 35 IMP
-        # (W1 43/42): the Wave-2 toolkit drives impostor-subject flags up.
+        # The W2 supply row (phase-11 Wave-1 re-record): 95 flags (95w/0s — the
+        # headline: vents hide the post-kill sighting trail, so the single strong
+        # flag the prior W2 carried evaporates), meetings up to 112 (prior W2 96),
+        # zero-contradiction share 58/112, genuine supply at 24 meetings (prior
+        # W2 10), over-gate listener rows 268 — 2.68 per accused-impostor meeting
+        # (prior W2 199 / 2.55). Role split 21 CREW / 74 IMP (prior W2 20/35): the
+        # live vent_witness channel plus the richer meeting count drive
+        # impostor-subject weak flags up.
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
-        assert gauges.meetings_total == 96
-        assert gauges.total_flags == 55
-        assert gauges.weak_flags == 54
-        assert gauges.strong_flags == 1
-        assert gauges.zero_contradiction_meetings == 56
-        assert gauges.genuine_subject_meetings == 10
-        assert gauges.flag_subjects_crew == 20
-        assert gauges.flag_subjects_impostor == 35
-        assert gauges.accused_impostor_meetings == 78
-        assert gauges.over_gate_listener_rows == 199
+        assert gauges.meetings_total == 112
+        assert gauges.total_flags == 95
+        assert gauges.weak_flags == 95
+        assert gauges.strong_flags == 0
+        assert gauges.zero_contradiction_meetings == 58
+        assert gauges.genuine_subject_meetings == 24
+        assert gauges.flag_subjects_crew == 21
+        assert gauges.flag_subjects_impostor == 74
+        assert gauges.accused_impostor_meetings == 100
+        assert gauges.over_gate_listener_rows == 268
 
     def test_corrected_w2_baseline_matches_a_rederivation(self) -> None:
         # ONE home: corrected_w2_baseline.json IS the current-era baseline,

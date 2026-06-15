@@ -243,12 +243,12 @@ class TestConversionPerMeeting:
                 conversion_per_meeting=1.5,
             )
 
-    def test_committed_w2_reads_24_of_96(self) -> None:
+    def test_committed_w2_reads_34_of_112(self) -> None:
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_conversion_per_meeting(report.report.games)
-        assert result.impostor_ejections == 24
-        assert result.resolved_meetings == 96
-        assert result.conversion_per_meeting == pytest.approx(0.25)
+        assert result.impostor_ejections == 34
+        assert result.resolved_meetings == 112
+        assert result.conversion_per_meeting == pytest.approx(34 / 112)
 
 
 # ---------------------------------------------------------------------------
@@ -381,19 +381,19 @@ class TestEffectiveDeflection:
             )
 
     def test_committed_w2_reproduces_the_audit_subcount(self) -> None:
-        # W2 (10.17 re-record): 81 accused / 58 survived / 31 active; effective
-        # 6 = 1 named + 5 third (the gate subcount), NOT the raw 31. The active
-        # split is now mostly SKIP-saved (25) — the toolkit's deflection is
-        # rarely the lever that lands plurality off the impostor.
+        # W2 (phase-11 Wave-1 re-record): 102 accused / 75 survived / 33 active;
+        # effective 9 = 1 named + 8 third (the gate subcount), NOT the raw 33.
+        # The active split is still mostly SKIP-saved (24) — the toolkit's
+        # deflection is rarely the lever that lands plurality off the impostor.
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_effective_deflection(report.report.games)
-        assert result.accused_impostor_events == 81
-        assert result.accused_impostor_survivals == 58
-        assert result.active_survivals == 31
+        assert result.accused_impostor_events == 102
+        assert result.accused_impostor_survivals == 75
+        assert result.active_survivals == 33
         assert result.named_target_deflections == 1
-        assert result.third_party_deflections == 5
-        assert result.effective_deflections == 6
-        assert result.skip_saved_active_survivals == 25
+        assert result.third_party_deflections == 8
+        assert result.effective_deflections == 9
+        assert result.skip_saved_active_survivals == 24
 
 
 # ---------------------------------------------------------------------------
@@ -448,19 +448,20 @@ class TestIndistinguishability:
             )
 
     def test_committed_w2_tasks_fingerprint_closed(self) -> None:
-        # W2 (10.17 re-record): the toolkit closed the D-D-1 fingerprint. Impostor
-        # do_task 371 (was 0 on W1) vs crew 3497, and the impostor wait-share is
-        # now ~0.088 — BELOW crew's ~0.098 (W1 was the inverted ~0.52 vs ~0.10).
-        # Impostors no longer idle their way to a fingerprint.
+        # W2 (phase-11 Wave-1 re-record): the toolkit keeps the D-D-1 fingerprint
+        # closed. Impostor do_task 378 vs crew 3492, and the impostor wait-share
+        # ~0.087 now sits at crew's ~0.087 — the two roles idle at a comparable
+        # rate (W1 was the inverted ~0.52 vs ~0.10). Impostors no longer idle
+        # their way to a fingerprint.
         report = build_report(_COMMITTED_9P2I_DIR)
         tally = tally_actions_by_role(_COMMITTED_9P2I_DIR, report.report.games)
         result = compute_indistinguishability(tally)
-        assert result.impostor_do_task == 371
-        assert result.crewmate_do_task == 3497
+        assert result.impostor_do_task == 378
+        assert result.crewmate_do_task == 3492
         assert result.impostor_wait_share is not None
         assert result.crewmate_wait_share is not None
-        assert result.impostor_wait_share == pytest.approx(0.0878, abs=1e-3)
-        assert result.crewmate_wait_share == pytest.approx(0.0985, abs=1e-3)
+        assert result.impostor_wait_share == pytest.approx(0.0866, abs=1e-3)
+        assert result.crewmate_wait_share == pytest.approx(0.0868, abs=1e-3)
         # The fingerprint is gone: impostor wait-share no longer dwarfs crew's —
         # the two roles now idle at a comparable rate.
         assert result.impostor_wait_share < 2 * result.crewmate_wait_share
@@ -557,14 +558,15 @@ class TestSingleWitnessInformChannel:
             {CHANNEL_BODY_PROXIMITY}
         )
 
-    def test_committed_w2_credits_fourteen_inform(self) -> None:
+    def test_committed_w2_credits_ten_inform(self) -> None:
         # The inform fold is recording-time (Task 10.15); the committed W2 bytes
-        # are the first re-record with it LIVE, so rendered rows now carry the
-        # +0.05 and the channel credits 14 conversions (W1, recorded pre-fold,
+        # carry it LIVE, so rendered rows carry the +0.05 and the channel credits
+        # 10 conversions (the prior W2 credited 14; vents hide more single-witness
+        # sightings, so fewer inform folds land — W1, recorded pre-fold,
         # credited 0).
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_multi_signal_conversion(report.report.games)
-        assert result.conversions_with_single_witness_inform == 14
+        assert result.conversions_with_single_witness_inform == 10
 
 
 def test_gate_spec_states_the_three_tiers_separately() -> None:
