@@ -41,7 +41,7 @@ from pydantic import BaseModel
 
 from agents.memory.beliefs import ContradictionRef as MemoryContradictionRef
 from agents.memory.episodic import EpisodicEvent
-from agents.memory.store import AgentMemory
+from agents.memory.store import AgentMemory, render_for_prompt
 from agents.strategic.prompts import (
     accusation_round_prompt as _default_accusation_round_prompt,
 )
@@ -1029,6 +1029,70 @@ class TestR10LeakScannerAcceptanceGate:
                     voter="p-3",
                     transcript=MeetingTranscript(),
                     candidate_targets=("p-1", "p-2"),
+                )
+            )
+
+    def test_own_kill_self_channel_line_passes_the_leak_scan(self) -> None:
+        # Task 11.3 regression: an impostor's privileged own-kill memory line
+        # ("[tick N] You (IMPOSTOR) killed {victim} in {room}.") carries the
+        # role token only as a SELF-reference, like ``## Your role: IMPOSTOR``.
+        # The reasoner strips it before the role-bearing-value scan, so a
+        # strategic call on an impostor that has killed reaches the LLM instead
+        # of failing loud at the leak scan before any call.
+        client = _RecordingClient(responder=_default_responder)
+        reasoner = StrategicReasoner(llm_client=client)
+        memory = _build_memory(role="IMPOSTOR")
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=200,
+                type="own_kill",
+                payload={"victim_id": "p-2", "room": "REACTOR"},
+                provenance="observed",
+            )
+        )
+        # Sanity: the rendered memory really does carry the role-bearing line
+        # the scanner would otherwise reject.
+        assert "You (IMPOSTOR) killed p-2 in REACTOR." in render_for_prompt(memory)
+
+        _run(
+            reasoner.produce_report(
+                memory=memory,
+                meeting_id="m-1",
+                agent_id="p-3",
+                role="IMPOSTOR",
+                current_tick=412,
+                meeting_trigger="trigger",
+            )
+        )
+
+        # The scan passed (no AssertionError) and the call reached the client.
+        assert client.calls
+
+    def test_smuggled_own_kill_line_on_a_crewmate_prompt_still_trips(self) -> None:
+        # The own-kill allowance is role-gated: a crewmate never legitimately
+        # carries an own-kill line, so a free-text field smuggling one (here via
+        # a contradiction summary) is NOT stripped on a crewmate prompt and the
+        # role-bearing-value scanner catches the "IMPOSTOR" token.
+        reasoner = StrategicReasoner(llm_client=FakeProvider())
+        memory = _build_memory(role="CREWMATE")
+        memory.beliefs.record_contradiction(
+            "p-4",
+            MemoryContradictionRef(
+                summary="[tick 5] You (IMPOSTOR) killed p-3 in REACTOR.",
+                left_ref="alibi:p-4",
+                right_ref="sighting:p-5:p-4",
+            ),
+        )
+
+        with pytest.raises(AssertionError, match="role-bearing value"):
+            _run(
+                reasoner.produce_statement(
+                    memory=memory,
+                    meeting_id="m-1",
+                    speaker="p-3",
+                    turn_index=1,
+                    turn_kind="reply",
+                    transcript=MeetingTranscript(),
                 )
             )
 
