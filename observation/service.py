@@ -8,7 +8,7 @@ from typing import Final
 from engine.entities import PlayerId
 from engine.events import EngineEvent, KilledEvent, VentEnteredEvent, VentExitedEvent
 from engine.visibility import VisibilityResult, compute_visibility_for_player
-from engine.world import Map, TaskId, WorldState
+from engine.world import Map, RoomId, TaskId, WorldState
 from observation.audit import ObservationAuditLog
 from observation.packet import (
     AudibleEvent,
@@ -383,16 +383,31 @@ class ObservationService:
             (tasks_completed / tasks_total) if tasks_total > 0 else 0.0
         )
 
+        # Public, role-blind repair channel (DESIGN.md §8.3, Task 11.5). Surface
+        # the active sabotage's repair rooms + gating flag from the MAP definition
+        # so the crew (11.6) can route without ``agents/``->``engine/`` coupling.
+        # Populated ONLY while a sabotage is active; identical across every role
+        # (leak-clean) and empty/false otherwise.
+        sabotage_active = (
+            world_state.sabotage is not None and world_state.sabotage.active
+        )
+        sabotage_repair_rooms: tuple[RoomId, ...] = ()
+        sabotage_is_gating = False
+        if sabotage_active and world_state.sabotage is not None:
+            definition = self._game_map.sabotages[world_state.sabotage.kind]
+            sabotage_repair_rooms = definition.repair_rooms
+            sabotage_is_gating = definition.gates_tasks
+
         return GlobalView(
             tasks_completed=tasks_completed,
             tasks_total=tasks_total,
             task_completion_percent=task_completion_percent,
-            sabotage_active=(
-                world_state.sabotage is not None and world_state.sabotage.active
-            ),
+            sabotage_active=sabotage_active,
             sabotage_kind=world_state.sabotage.kind
             if world_state.sabotage is not None
             else None,
+            sabotage_repair_rooms=sabotage_repair_rooms,
+            sabotage_is_gating=sabotage_is_gating,
         )
 
     def _pending_task_id_for_agent(

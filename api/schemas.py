@@ -177,12 +177,13 @@ class ReportBodyEventView(_FrozenView):
 
 
 class SabotageEventView(_FrozenView):
-    """Projects ``engine.events.SabotageStartedEvent`` (DESIGN.md §8.3 MVP
-    scope: lights only)."""
+    """Projects ``engine.events.SabotageStartedEvent`` (DESIGN.md §8.3): the
+    visibility-degrading ``lights`` and the task-gating ``reactor`` (Task 11.5),
+    so the contestable-clock win shape is observable on the public timeline."""
 
     type: Literal["sabotage"]
     tick: int
-    kind: Literal["lights"]
+    kind: Literal["lights", "reactor"]
     room_id: str | None
     actor_id: str
 

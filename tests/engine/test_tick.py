@@ -648,6 +648,237 @@ def test_unrepaired_sabotage_timeout_still_wins() -> None:
     assert event_to_dict(events[0])["reason"] == "IMPOSTOR_SABOTAGE"
 
 
+def _active_reactor_state(
+    *, remaining_ticks: int = 5, repair_progress: dict[str, int] | None = None
+) -> WorldState:
+    # The task-gating reactor sabotage (Task 11.5, DESIGN.md §3.1, §8.3): its map
+    # ``SabotageDefinition.gates_tasks`` is true, so an active instance halts the
+    # crew task race through both ``_apply_do_task`` and ``_advance_tasks``.
+    return replace(
+        _state(),
+        sabotage=SabotageState(
+            kind="reactor",
+            remaining_ticks=remaining_ticks,
+            affected_rooms=("REACTOR", "ENGINEERING"),
+            active=True,
+            repair_progress=repair_progress or {},
+        ),
+    )
+
+
+def test_gating_sabotage_rejects_do_task_initiation() -> None:
+    # Initiation path (DESIGN.md §3.1, §8.3): a fresh ``do_task`` is rejected while
+    # a gating sabotage is active -- no progress, no ``TaskProgressed`` event.
+    game_map = load_canonical_map()
+
+    next_state, events = advance_tick(
+        _active_reactor_state(),
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert events[0].type == "ActionRejected"
+    assert "sabotage" in event_to_dict(events[0])["reason"]
+    assert next_state.tasks["p-2:swipe_card"].progress == 0
+    assert not any(event.type == "TaskProgressed" for event in events)
+
+
+def test_gating_sabotage_suppresses_task_continuation() -> None:
+    # Continuation path (DESIGN.md §3.1, §8.3): a task accepted before the sabotage
+    # stops accruing progress while the gate is active -- ``_advance_tasks`` skips
+    # the increment and emits no ``TaskProgressed`` event.
+    game_map = load_canonical_map()
+    started_state, _ = advance_tick(
+        _long_task_state(),
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    assert started_state.tasks["p-2:swipe_card"].progress == 1
+
+    gated_state = replace(
+        started_state,
+        sabotage=SabotageState(
+            kind="reactor",
+            remaining_ticks=5,
+            affected_rooms=("REACTOR", "ENGINEERING"),
+            active=True,
+        ),
+    )
+
+    next_state, events = advance_tick(gated_state, [], game_map=game_map)
+
+    assert next_state.tasks["p-2:swipe_card"].progress == 1
+    assert not any(event.type == "TaskProgressed" for event in events)
+
+
+def test_non_gating_lights_does_not_gate_task_progress() -> None:
+    # The non-gating ``lights`` sabotage leaves the task race byte-identical to
+    # today: a ``do_task`` still advances and completes (DESIGN.md §8.3).
+    game_map = load_canonical_map()
+
+    next_state, events = advance_tick(
+        _active_lights_state(),
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-2",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert next_state.tasks["p-2:swipe_card"].completed
+    assert any(event.type == "TaskCompleted" for event in events)
+
+
+def test_repair_clears_task_gate() -> None:
+    # Repairing the gating sabotage clears the gate: the same ``do_task`` that was
+    # rejected while active resumes progressing once the sabotage is inactive.
+    game_map = load_canonical_map()
+    players = dict(_state().players)
+    players["p-2"] = replace(players["p-2"], room="ENGINEERING")
+    state = replace(
+        _state(),
+        players=players,
+        tasks={
+            "p-2:align_engine_output": _task(
+                "align_engine_output", "p-2", "ENGINEERING", required_ticks=2
+            )
+        },
+        sabotage=SabotageState(
+            kind="reactor",
+            remaining_ticks=5,
+            affected_rooms=("REACTOR", "ENGINEERING"),
+            active=True,
+            repair_progress={"ENGINEERING": 2},
+        ),
+    )
+
+    gated_state, gated_events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-2",
+                    "payload": {"task_id": "align_engine_output"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    assert gated_events[0].type == "ActionRejected"
+    assert gated_state.tasks["p-2:align_engine_output"].progress == 0
+
+    repaired_state, repaired_events = advance_tick(
+        gated_state,
+        [
+            _action(
+                {
+                    "type": "repair_sabotage",
+                    "actor": "p-2",
+                    "payload": {"kind": "reactor"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    assert repaired_events[0].type == "SabotageRepaired"
+    assert repaired_state.sabotage is not None
+    assert not repaired_state.sabotage.active
+
+    done_state, done_events = advance_tick(
+        repaired_state,
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-2",
+                    "payload": {"task_id": "align_engine_output"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+    assert done_state.tasks["p-2:align_engine_output"].progress == 1
+    assert any(event.type == "TaskProgressed" for event in done_events)
+
+
+def test_reactor_timeout_yields_impostor_sabotage_win() -> None:
+    # The dormant §3.5 IMPOSTOR_SABOTAGE win fires end-to-end under the short
+    # reactor timer: left to ``remaining_ticks==0`` with ``active`` true, the
+    # crew loses (engine/win_conditions.py:30-35 -- no win-condition edit needed).
+    game_map = load_canonical_map()
+
+    next_state, events = advance_tick(
+        _active_reactor_state(remaining_ticks=1),
+        [],
+        game_map=game_map,
+    )
+
+    assert next_state.phase == "GAME_OVER"
+    assert events[0].type == "GameOver"
+    assert event_to_dict(events[0])["winner"] == "IMPOSTORS"
+    assert event_to_dict(events[0])["reason"] == "IMPOSTOR_SABOTAGE"
+
+
+def test_reactor_same_tick_repair_saves_crew() -> None:
+    # A repair completing on the timer-expiry tick still saves the crew: the
+    # repair sets ``active=False`` in step 1, so the §3.5 sabotage win never fires.
+    game_map = load_canonical_map()
+    players = dict(_state().players)
+    players["p-2"] = replace(players["p-2"], room="ENGINEERING")
+    state = replace(
+        _state(),
+        players=players,
+        sabotage=SabotageState(
+            kind="reactor",
+            remaining_ticks=1,
+            affected_rooms=("REACTOR", "ENGINEERING"),
+            active=True,
+            repair_progress={"ENGINEERING": 2},
+        ),
+    )
+
+    next_state, events = advance_tick(
+        state,
+        [
+            _action(
+                {
+                    "type": "repair_sabotage",
+                    "actor": "p-2",
+                    "payload": {"kind": "reactor"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert events[0].type == "SabotageRepaired"
+    assert next_state.sabotage is not None
+    assert not next_state.sabotage.active
+    assert not any(event.type == "GameOver" for event in events)
+
+
 @pytest.mark.parametrize(
     ("state", "action_actor", "kind", "match"),
     (

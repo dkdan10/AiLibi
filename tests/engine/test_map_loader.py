@@ -207,8 +207,33 @@ def test_load_canonical_map_counts() -> None:
     assert len(game_map.edges) == 11
     assert len(game_map.vents) == 6
     assert len(game_map.tasks) == 12
-    assert len(game_map.sabotages) == 1
+    assert len(game_map.sabotages) == 2
     assert game_map.sabotages["lights"].repair_ticks == 3
+
+
+def test_reactor_sabotage_loads_with_gating_flag() -> None:
+    # Task 11.5 (DESIGN.md §8.3): the task-gating ``reactor`` kind loads from data
+    # with ``gates_tasks`` true, two repair rooms, and base (non-degrading)
+    # visibility -- it contests the task clock, not sightlines.
+    game_map = load_canonical_map()
+
+    reactor = game_map.sabotages["reactor"]
+    assert reactor.gates_tasks is True
+    assert reactor.affected_visibility == "same_room_and_adjacent"
+    assert reactor.repair_rooms == ("REACTOR", "ENGINEERING")
+    # Geometry-anchored timer: CAFETERIA->REACTOR hop count (3) + repair_ticks (3)
+    # + 1 for the start-tick decrement (the sabotage is decremented on its start
+    # tick, so the full reach-a-panel-and-hold-it window needs the extra tick).
+    assert reactor.duration_ticks == 7
+    assert reactor.repair_ticks == 3
+
+
+def test_gates_tasks_defaults_false_for_lights() -> None:
+    # The ``gates_tasks`` field is optional and defaults False, so ``lights``
+    # (and every existing map-loader pin) stays byte-stable (Task 11.5).
+    game_map = load_canonical_map()
+
+    assert game_map.sabotages["lights"].gates_tasks is False
 
 
 def test_map_graph_helpers_return_sorted_neighbors() -> None:
