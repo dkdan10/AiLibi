@@ -54,15 +54,20 @@ State derivation each tick (highest priority first):
   in-vent exit and COVER-or-vent branches but above the kill/stalk block, the
   impostor emits :class:`SabotageIntent` for the task-gating ``reactor`` kind
   (Task 11.5) to convert a near-certain crew task-win into a forced repair
-  scramble + a hard loss timer. The trigger is a conservative, pure function of
-  the freshest public ``global_status`` -- ``_active_sabotage`` is False AND
-  ``_crew_near_task_win`` (the crew has completed ``_IMMINENT_CREW_WIN_COMPLETION``
-  -- ~6/7 -- of the task instances) -- so it never fires when one is already active and
-  never spams a sabotage every cooldown tick (which would starve kills, a
-  degenerate low-interest loop). An AVAILABLE kill this tick still
-  out-prioritizes the lever (``_kill_available_now``): the impostor keeps
-  hunting and the lever only pre-empts a stalk/idle. No RNG and no module state,
-  so replays stay byte-identical.
+  scramble + a hard loss timer. The trigger is a conservative, pure,
+  EDGE-triggered function of the freshest public ``global_status``:
+  ``_active_sabotage`` is False AND ``_crew_near_task_win`` (completion has
+  reached ``_IMMINENT_CREW_WIN_COMPLETION`` -- ~6/7 -- of the task instances)
+  AND ``_crew_made_task_progress`` (the crew just completed an instance THIS
+  tick). The progress edge stops the sabotage -> repair -> sabotage loop: a
+  gating reactor freezes the task count, so a repaired-but-still-near-win state
+  shows no fresh progress and does not re-arm the lever -- the impostor re-fires
+  only on a genuinely new completion, never when one is already active and never
+  as a sabotage every cooldown tick (which would starve kills, a degenerate
+  low-interest loop). An AVAILABLE kill this tick still out-prioritizes the
+  lever (``_kill_available_now``): the impostor keeps hunting and the lever only
+  pre-empts a stalk/idle. No RNG and no module state, so replays stay
+  byte-identical.
 * ``KILL`` -- ``cooldown == 0`` AND the best-scoring target was seen
   in our current room at the latest tick with no co-present
   witnesses. Emit :class:`KillIntent` against the target. A fellow
@@ -199,9 +204,20 @@ _REACTOR_SABOTAGE_KIND: Final[str] = "reactor"
 # A fraction (not a fixed count) also keeps small rosters sane: the flat 4p/1i
 # determinism reference (3 or 6 instances) can never reach >=6/7 without already
 # being complete, so the lever is a counterplay for the canonical eval roster,
-# not the reference set. It is a sabotage TRIGGER parameter, NOT the frozen task
-# clock; re-tuned (with the reactor timer) at the 11.8 re-record if R5 win-shape
-# diversity does not rise.
+# not the reference set.
+#
+# Same-tick race (known boundary, owned by the 11.8 tuning): actions resolve in
+# actor-id order (orchestrator/action_ordering.py) and the impostor reacts to the
+# previous tick's count, so the 6/7 floor guarantees only ONE completion of
+# same-tick margin -- a burst of >=2 concurrent FINAL completions by lower-id
+# crewmates can still reach the win before the sabotage gates it ("deception
+# sometimes fails", R2). A larger margin is not taken here because it requires
+# firing below 6/7, which would also fire inside the tiny flat 4p/1i reference
+# rosters (6 instances); widening it is squarely the 11.8 threshold/timer
+# re-anchor, not a 11.7 change.
+#
+# It is a sabotage TRIGGER parameter, NOT the frozen task clock; re-tuned (with
+# the reactor timer) at the 11.8 re-record if R5 win-shape diversity does not rise.
 _IMMINENT_CREW_WIN_COMPLETION: Final[tuple[int, int]] = (6, 7)
 
 
@@ -303,14 +319,20 @@ class ImpostorPolicy:
         # exit and COVER-or-vent branches but above the kill/stalk block -- yet an
         # AVAILABLE kill this tick still out-prioritizes the lever (the impostor
         # keeps hunting; the lever only pre-empts a stalk/idle). Conservative,
-        # pure trigger: no sabotage active AND the crew has completed
-        # ``_IMMINENT_CREW_WIN_COMPLETION`` (~6/7) of its task instances, both
-        # read from the freshest public ``global_status``, so it converts a
-        # near-certain task-win into a forced repair scramble + a hard loss timer
-        # (the Task 11.5 ``reactor`` kind) without ever spamming a sabotage per
-        # cooldown tick. No RNG / module state -> replays stay byte-identical.
+        # pure, EDGE-triggered: fire only when the crew has completed
+        # ``_IMMINENT_CREW_WIN_COMPLETION`` (~6/7) of its task instances
+        # (``_crew_near_task_win``) AND just completed one THIS tick
+        # (``_crew_made_task_progress``) AND no sabotage is active -- all from the
+        # freshest public ``global_status``. The progress edge is what stops the
+        # sabotage -> repair -> sabotage loop: a repaired reactor leaves the
+        # (frozen) task count unchanged, so the impostor re-arms only on a
+        # genuinely fresh completion, never on a static repaired-but-near-win
+        # state. Converts a near-certain task-win into a forced repair scramble +
+        # a hard loss timer (the Task 11.5 ``reactor`` kind) without spamming a
+        # sabotage per cooldown tick. No RNG / module state -> byte-identical.
         if (
             self._crew_near_task_win(events)
+            and self._crew_made_task_progress(events)
             and not self._active_sabotage(events)
             and not self._kill_available_now(
                 latest_events=latest_events,
@@ -513,10 +535,29 @@ class ImpostorPolicy:
         return active
 
     @staticmethod
+    def _task_counts_of(status: EpisodicEvent) -> tuple[int, int] | None:
+        """Return ``(tasks_completed, tasks_total)`` from a ``global_status`` event.
+
+        ``None`` when either count key is absent (a hand-built event without the
+        aggregate -- no signal to act on); a present-but-non-int count is a
+        boundary-contract violation and raises, mirroring the other scanners.
+        """
+
+        completed = status.payload.get("tasks_completed")
+        total = status.payload.get("tasks_total")
+        if completed is None or total is None:
+            return None
+        if not isinstance(completed, int) or not isinstance(total, int):
+            raise ValueError(
+                f"global_status event has non-int task counts: {status.payload!r}"
+            )
+        return completed, total
+
+    @staticmethod
     def _crew_near_task_win(events: tuple[EpisodicEvent, ...]) -> bool:
         """Return ``True`` iff the crew has crossed the imminent-win threshold.
 
-        The SABOTAGE trigger predicate (Task 11.7, DESIGN.md §3.4/§4.4): a pure
+        The SABOTAGE near-win predicate (Task 11.7, DESIGN.md §3.4/§4.4): a pure
         function of the freshest public ``global_status`` -- ``tasks_completed``
         / ``tasks_total`` (per-player task INSTANCES, the engine win
         denominator, DESIGN.md §3.2). ``True`` when at least one instance still
@@ -527,24 +568,50 @@ class ImpostorPolicy:
         exact and byte-identical across replays -- no float, no RNG, no module
         state. An absent global_status event (or absent task counts) maps to
         ``False`` -- no observed near-win, so do not sabotage -- while
-        present-but-non-int counts are a boundary-contract violation and raise.
+        present-but-non-int counts raise (see :meth:`_task_counts_of`).
         """
 
         status = ImpostorPolicy._latest_global_status(events)
         if status is None:
             return False
-        completed = status.payload.get("tasks_completed")
-        total = status.payload.get("tasks_total")
-        if completed is None or total is None:
+        counts = ImpostorPolicy._task_counts_of(status)
+        if counts is None:
             return False
-        if not isinstance(completed, int) or not isinstance(total, int):
-            raise ValueError(
-                f"global_status event has non-int task counts: {status.payload!r}"
-            )
+        completed, total = counts
         if total <= 0 or completed >= total:
             return False
         numerator, denominator = _IMMINENT_CREW_WIN_COMPLETION
         return completed * denominator >= total * numerator
+
+    @staticmethod
+    def _crew_made_task_progress(events: tuple[EpisodicEvent, ...]) -> bool:
+        """Return ``True`` iff the crew's observed task count rose at this tick.
+
+        The SABOTAGE edge-trigger (Task 11.7): the lever fires only on a FRESH
+        crew completion, never on a static near-win state -- which is what breaks
+        the sabotage -> repair -> sabotage loop. A gating ``reactor`` sabotage
+        freezes ``tasks_completed`` while active (Task 11.5), so a repaired-but-
+        still-near-win state shows the same count as the gated ticks and this
+        returns ``False``; the impostor re-arms only when the crew genuinely
+        completes another instance. Compares the two most recent ``global_status``
+        task counts (perception appends one per observed tick); with fewer than
+        two there is no edge to measure -> ``False``. A pure function of memory --
+        no RNG, no module state, so replays stay byte-identical.
+        """
+
+        recent: list[EpisodicEvent] = []
+        for event in reversed(events):
+            if event.type == EVENT_GLOBAL_STATUS:
+                recent.append(event)
+                if len(recent) == 2:
+                    break
+        if len(recent) < 2:
+            return False
+        latest = ImpostorPolicy._task_counts_of(recent[0])
+        previous = ImpostorPolicy._task_counts_of(recent[1])
+        if latest is None or previous is None:
+            return False
+        return latest[0] > previous[0]
 
     @staticmethod
     def _body_visible_rooms(
