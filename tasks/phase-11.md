@@ -257,5 +257,235 @@ Spend is $0 (ollama); smoke 3 seeds before the multi-hour full run.
 - 11.4 is the sole re-record: both sets byte-reconstruct, the HARD substrate gate is green, and the
   interestingness score's R2 component rises off the W2 baseline (deception now works — accused impostors
   survive via vents) without R4 regressions (no railroads; firewall intact).
-- The close audit re-run confirms the baseline stays VALID; its findings + the new R2 number set up Wave 2
-  (the task-clock retune, gated on the interestingness R1 / eject-decided share, not the win split).
+- The close audit re-run confirms the baseline stays VALID; its findings + the new R2 number set up Wave 3
+  below. (Wave 1 over-delivered — eject-decided 0→6/50 and R5 hit 3 shapes — so the owner promoted the
+  structural sabotage wave ahead of the now-deferred, held-in-reserve task-clock retune.)
+
+## Wave 3 — Structural counterplay: task-gating sabotage
+
+The sabotage subsystem is ~fully built (resolve_sabotage / resolve_repair_sabotage, the `IMPOSTOR_SABOTAGE`
+win condition that fires on `active && remaining_ticks==0` in the §3.5 order, and the PUBLIC alarm +
+`GlobalView.sabotage_active/kind` broadcast — all wired and tested). Two links are missing: no policy emits
+`SabotageIntent`, and no sabotage gates the task race (`lights` only degrades visibility; `_apply_do_task` /
+`_advance_tasks` never read `state.sabotage`). Wave 3 adds a new `reactor` task-gating sabotage + the
+impostor emitter + crew repair, so the dormant impostor win becomes a live, contestable clock lever —
+balance that emerges from PLAY. Gate: rubric **R1 + R5 (≥3 win shapes)**, NOT the win split. FROZEN: §4.6
+render/threshold, tally + tie→SKIP, 2048/1024 caps, §6.3 constants, AND the task clock (the reactor timer is
+a sabotage parameter, explicitly NOT `tasks_per_crewmate`/task durations). Sequencing (file-scope validator):
+11.5 (root) → {11.6 crew ∥ 11.7 impostor} (file-disjoint policies, both depend on 11.5's public channel) →
+11.8 re-record.
+
+### Task 11.5 — Task-gating sabotage: engine gate + reactor kind + public repair channel
+**Branch:** `phase-11-task-gating-sabotage`
+**Depends on:** none (wave root)
+**Section refs:** DESIGN.md §3.1 (tick loop), §3.5 (win order), §8.3 (sabotage); engine/win_conditions.py:30-35 (the dormant IMPOSTOR_SABOTAGE)
+**Complexity:** Integration
+
+Make a sabotage able to STALL the task race and surface its repair location publicly. ADD A NEW KIND
+`reactor` (do NOT repurpose `lights`, which is load-bearing for the visibility system) declared in
+`engine/maps/canonical_1.yaml` under `sabotages:` with a short fix-or-impostors-win `duration_ticks` (anchor
+it to the map diameter — CAFETERIA→REACTOR hop count + `repair_ticks` — the way
+`IMPOSTOR_PRETEND_TASK_DWELL_TICKS` is diameter-anchored; document the anchor in a YAML comment; it is NOT
+the frozen task clock), `affected_visibility: same_room_and_adjacent` (base mode — reactor contests the
+clock, not sightlines), two `repair_rooms` (e.g. REACTOR + ENGINEERING), and a new optional defaulted field
+`gates_tasks: bool = False` on `SabotageDefinition` (so gating is declared in data, not by string-matching
+`kind`, which the codebase deliberately avoids). Add `_tasks_gated(state, game_map)` returning
+`sab.active and game_map.sabotages[sab.kind].gates_tasks`, and gate BOTH task paths: `_apply_do_task`
+(reject with an `ActionRejectedError` when gated) and `_advance_tasks` (skip the progress increment / no
+`TaskProgressed` event when gated). Thread `game_map` into both (the other appliers already receive it from
+`_apply_action`/`advance_tick`). **No `engine/win_conditions.py` change** — `IMPOSTOR_SABOTAGE` already
+fires on `active && remaining_ticks==0`; it becomes live purely through emission (11.7) + the short timer +
+the gate. Surface the active sabotage's repair rooms + gating flag on the PUBLIC, role-blind `GlobalView`
+so the crew (11.6) can route without `agents/`→`engine/` coupling.
+
+**Files in scope:**
+- engine/world.py (add `gates_tasks: bool = False` to `SabotageDefinition`; default keeps the loader contract byte-stable)
+- engine/maps/canonical_1.yaml (add the `reactor` entry under `sabotages:`; do NOT touch the `tasks:` block / clock or the `lights` entry)
+- engine/tick.py (the `_tasks_gated` helper; thread `game_map` into `_apply_do_task` + `_advance_tasks`; gate both the initiation and continuation paths; leave `_apply_sabotage`/`_advance_sabotage`/the win check unchanged)
+- observation/packet.py (add `sabotage_repair_rooms: tuple[RoomId, ...] = ()` and `sabotage_is_gating: bool = False` to `GlobalView` — public, role-blind)
+- observation/service.py (`_global_view`: populate the two new fields from `game_map.sabotages[kind]` when a sabotage is active)
+- agents/perception.py (carry the two new fields through the `global_status` payload)
+- tests/engine/test_tick.py (a `do_task` is rejected while a gating sabotage is active via BOTH paths; non-gating `lights` does NOT gate; repair clears the gate; IMPOSTOR_SABOTAGE fires end-to-end under a short reactor timer; same-tick repair still saves the crew)
+- tests/engine/test_map_loader.py (the `reactor` kind loads; `gates_tasks` defaults False for `lights`)
+- tests/observation/test_service.py (the new GlobalView fields populate only when a sabotage is active; default empty/false otherwise)
+
+**Files NOT in scope:**
+- agents/tactical/** (11.6/11.7 own the policies)
+- engine/win_conditions.py (already correct — IMPOSTOR_SABOTAGE fires on active && remaining==0; no edit)
+- engine/visibility.py (reactor uses base visibility — no visibility change)
+- replays/samples/**, tests/fixtures/** (re-record is 11.8)
+- the FROZEN list (§4.6 gate/threshold, tally/tie→SKIP, 2048/1024 caps, §6.3 constants, the task clock)
+
+**Definition of done:**
+- A gating sabotage halts task progress through BOTH `_apply_do_task` (rejection) and `_advance_tasks` (no progress event) while active; `lights` (non-gating) leaves task progress byte-identical to today.
+- A reactor sabotage left to `remaining_ticks==0` with `active` true yields `IMPOSTOR_SABOTAGE`; a repair completing on the timer-expiry tick still saves the crew (the existing same-tick test still passes).
+- `GlobalView.sabotage_repair_rooms`/`sabotage_is_gating` populate only when active and are identical across roles (leak-clean).
+- `bash scripts/check.sh` green; firewall + leak-property sweeps pass.
+
+**Public types introduced:**
+- `observation.packet.GlobalView.sabotage_repair_rooms`
+- `observation.packet.GlobalView.sabotage_is_gating`
+
+**Implementation hint:**
+Make `_tasks_gated` the single source of truth so the two task paths cannot drift. Thread `game_map` as a
+pure pass-through (the other appliers already get it). Anchor reactor `duration_ticks` to map geometry and
+document it; it is a sabotage timer, not the frozen task clock. Keep `gates_tasks` defaulted so `lights` and
+every existing map-loader pin stay byte-stable.
+
+**Integration risk:**
+The `game_map` signature change touches the hottest engine path — keep it a pure pass-through and confirm
+the hand-scripted determinism/firewall fixtures (action-driven) still recompute identically (they are NOT
+re-recorded; only policy-driven samples change, handled at 11.8). A reactor timer set too low is unwinnable
+for crew, too high is unreachable — derive from geometry and validate at the 11.8 smoke; do NOT tune the
+frozen task clock to compensate.
+
+**Ready-to-paste prompt:** `agent_prompts/task-11-5-task-gating-sabotage.md`
+
+### Task 11.6 — Crew repair behavior in the crewmate policy
+**Branch:** `phase-11-crew-repair`
+**Depends on:** 11.5 (consumes the new public GlobalView repair-rooms / gating channel)
+**Section refs:** DESIGN.md §1.3 (firewall), §4.4 (crewmate FSM)
+**Complexity:** Integration
+
+Give the crew a reason to respond to a gating sabotage. The crewmate FSM (`crewmate_policy.py`) is a
+priority cascade; add a REPAIR_SABOTAGE interrupt BELOW the body/kill interrupts (a meeting ends the round
+anyway) but ABOVE the suspicion-walk and task routing (an unrepaired gating sabotage is a hard loss timer).
+Detect via the freshest `global_status` (`sabotage_active`, `sabotage_kind`, and the new public
+`sabotage_repair_rooms`/`sabotage_is_gating`) — reuse the existing memory-accessor pattern; the policy is
+engine-free, so it reads repair rooms ONLY from the public `GlobalView` channel, never importing from
+`engine/` and never hardcoding room names. When an active GATING sabotage exists: take one deterministic A*
+step toward the nearest surfaced repair room (sorted-id tie-break), and emit `RepairSabotageIntent(kind)`
+once in a repair room. Scope the diversion to `sabotage_is_gating` so `lights`-only games stay byte-identical.
+
+**Files in scope:**
+- agents/tactical/crewmate_policy.py (the REPAIR_SABOTAGE interrupt; an `_active_gating_sabotage(events)` accessor over the freshest `global_status`; a `_repair(kind)` intent builder mirroring `_do_task`; deterministic nearest-repair-room A* routing; docstring update; add `RepairSabotageIntent` to the action-intent import)
+- tests/agents/test_crewmate_policy.py (the crewmate diverts + emits `RepairSabotageIntent` only for an active gating sabotage; ignores non-gating `lights`; deterministic room choice; body/kill interrupts still pre-empt repair)
+- tests/observation/test_leak_property.py (the new GlobalView sabotage fields never differ by role; never carry role-bearing substrings)
+- tests/api/test_leak.py (same role-invariance assertion through the packet API)
+
+**Files NOT in scope:**
+- engine/**, observation/** (11.5 owns the engine + the public channel)
+- agents/tactical/impostor_policy.py (11.7)
+- replays/samples/**, tests/fixtures/** (11.8)
+- the FROZEN list
+
+**Definition of done:**
+- A crewmate observing an active gating sabotage walks one A* step/tick toward the nearest surfaced repair room and emits `RepairSabotageIntent(kind)` once there; the choice is deterministic and replay-stable.
+- A non-gating sabotage (`lights`) does NOT trigger the diversion (lights-era crew behavior byte-identical).
+- BODY_VISIBLE and KILL_WITNESSED interrupts still out-prioritize repair; the policy stays a pure function of memory + `PublicMapView` + `GlobalView`.
+- `bash scripts/check.sh` green; the leak sweep confirms the new fields are role-invariant.
+
+**Implementation hint:**
+Mirror the existing accessor/interrupt structure and the deterministic min-hop tie-break used in
+`ImpostorPolicy._choose_exit_vent`. Read repair rooms from the public `GlobalView` only. No cross-tick
+tracker is needed — re-read the active-sabotage signal fresh each tick.
+
+**Integration risk:**
+Changes recorded bytes for policy-driven samples (11.8), not the hand-scripted fixtures. Watch for a
+crewmate ping-ponging between equidistant repair rooms — the sorted tie-break must make the choice stable
+across ticks. Keep the diversion gated on `sabotage_is_gating` so lights-only games stay byte-identical and
+R5 attribution stays clean.
+
+**Ready-to-paste prompt:** `agent_prompts/task-11-6-crew-repair.md`
+
+### Task 11.7 — Impostor SabotageIntent emission in the impostor policy
+**Branch:** `phase-11-impostor-sabotage`
+**Depends on:** 11.5 (needs the working gating target + reads the public GlobalView task/sabotage fields)
+**Section refs:** DESIGN.md §3.4 (impostor actions), §4.4 (impostor FSM); experiments/lab/report-vent-escape-lab.md (the 11.1 vent-wiring precedent)
+**Complexity:** Integration
+
+Make the impostor USE the lever. Mirror the 11.1 vent wiring: a new SABOTAGE branch in the `decide` cascade,
+placed BELOW the in-vent-exit and COVER-or-vent branches but ABOVE the kill/stalk block, with a
+`_sabotage(kind)` intent builder mirroring `_kill`/`_vent` and the FSM docstring updated. Trigger
+deterministically from already-observed signals: emit `SabotageIntent("reactor")` when no sabotage is
+active (guard via the public `global_status`) AND the crew is near a task win (read `tasks_completed`/
+`tasks_total` from `global_status`, threshold anchored to "imminent crew win") — the strongest structural
+use: it converts a near-certain task-win into a forced crew scramble + a hard loss timer. Keep it
+conservative (do NOT sabotage every cooldown tick — that starves kills and is a degenerate low-interest
+pattern); the impostor still hunts. The predicate MUST be a pure function of observed `global_status`/
+`cooldown_status` (no RNG, no module state) so replays stay byte-identical.
+
+**Files in scope:**
+- agents/tactical/impostor_policy.py (the SABOTAGE branch; an `_active_sabotage(events)` guard; a `_sabotage(kind)` intent builder mirroring `_kill`/`_vent`; the deterministic trigger predicate over `global_status`; FSM docstring update; add `SabotageIntent` to the action-intent import)
+- tests/agents/test_impostor_policy.py (emits `SabotageIntent("reactor")` when the crew is near a task win and no sabotage is active; does NOT emit when one is already active; the predicate is a pure function of observed `global_status`; in-vent/COVER/kill still pre-empt sabotage; sole- and multi-impostor cases)
+
+**Files NOT in scope:**
+- engine/**, observation/** (11.5)
+- agents/tactical/crewmate_policy.py (11.6)
+- agents/strategic/prompts/**, meetings/** (no meeting-layer change this wave)
+- replays/samples/**, tests/fixtures/** (11.8)
+- the FROZEN list
+
+**Definition of done:**
+- The impostor emits `SabotageIntent("reactor")` strategically (primary: deny an imminent crew task win; the predicate is deterministic + documented), never when a sabotage is already active, and never as per-tick spam that starves kills.
+- In-vent exit, COVER-or-vent, and an available kill all out-prioritize sabotage; the decision stays a pure function of memory + `PublicMapView`.
+- `bash scripts/check.sh` green.
+
+**Implementation hint:**
+Mirror the 11.1 vent wiring (a new cascade branch + an intent builder + a docstring rewrite), reading only
+memory/`PublicMapView`, all tie-breaks deterministic, no RNG. Anchor the task-completion threshold to
+"imminent crew win" and document the anchor. Avoid the degenerate "sabotage every cooldown tick" loop.
+
+**Integration risk:**
+Shares no file with 11.6, so they parallelize after 11.5. The danger is a low-interestingness degenerate
+loop (sabotage-spam or sabotage-then-camp) — keep the predicate conservative and verify at 11.8 that R5
+diversity RISES (a new IMPOSTOR_SABOTAGE shape appears) rather than collapsing into a farmed pattern.
+Changes recorded bytes (11.8), not the hand-scripted fixtures.
+
+**Ready-to-paste prompt:** `agent_prompts/task-11-7-impostor-sabotage.md`
+
+### Task 11.8 — Wave-3 combined re-record, era-pin re-anchor, and rubric gate
+**Branch:** `phase-11-wave3-rerecord`
+**Depends on:** 11.4, 11.5, 11.6, 11.7
+**Section refs:** tasks/phase-11.md Task 11.4 (the Wave-1 re-record + 39-test re-anchor protocol, commits 853a601/9753a4b); experiments/lab/report-rubric-interestingness.md
+**Complexity:** Integration
+
+After 11.5/11.6/11.7 merge, ONE combined re-record of both sample sets (flat 4p/1i + 9p2i) on qwen3.5:9b,
+smoke-first, then re-anchor the committed-bytes era-pin tests to the new baseline (the 11.4 cadence) and
+gate on the interestingness score (R1 + R5), not the win split.
+
+**Files in scope:**
+- replays/samples/** (both sets re-recorded; each MANIFEST + tournament-eval-report.json rebuilt)
+- tests/eval/test_balance_eval.py, tests/eval/test_win_condition_selfcheck.py, tests/eval/test_gate_metrics.py, tests/eval/test_gate_spec_metrics.py, tests/eval/test_wave2_metrics.py (era-pin re-anchor to the new baseline)
+- tests/meetings/test_transcript.py, tests/meetings/test_manager.py, tests/agents/test_beliefs.py (committed-bytes detector/fold pins re-anchored)
+- tests/scripts/test_manifest_writer.py, tests/scripts/test_refresh_samples.py, tests/api/test_eval.py (manifest/version + meetings-seed-list pins re-anchored)
+- any committed observation/memory golden whose GlobalView shape changed (regenerate if 11.5's two new fields appear in a pinned packet fixture)
+
+**Files NOT in scope:**
+- all production source (frozen at the merge of 11.5/11.6/11.7 — a re-record changes data, not code)
+- the §4.6 gate / tally / caps / §6.3 constants / the task clock (FROZEN)
+
+**Definition of done:**
+- Smoke-first: 3 meeting-bearing 9p2i seeds dry-run→live; confirm a sabotage actually fires (`grep SabotageStarted` > 0), the crew diverts to repair (`grep SabotageRepair` present), and at least one game ends `IMPOSTOR_SABOTAGE` or a gated task race flips an eject-decided/parity outcome — before the full run (STOP-and-escalate if a sabotage loops or none ever fires).
+- Full re-record of both sets; `scripts/verify_samples.sh` byte-reconstructs both; the firewall/leak sweeps + win-condition selfcheck stay green.
+- HARD substrate gate (the 11.4 standard): game_over 100%, friendly-fire 0, betrayal 0, byte-identical ×2, inversions 0.
+- `uv run python experiments/lab/rubric_score.py` on the fresh facts shows **R1 holds/rises (eject-decided share) AND R5 ≥ 3 win shapes** with a new gating-attributable win shape; the win split is a sentinel, not a gate.
+- Re-run the close audit on the new 9p2i set; verdict stays substrate-VALID with no sabotage-spam degeneracy.
+
+**Implementation hint:**
+Mirror the 11.4 protocol exactly: smoke STOP-for-go, then `scripts/refresh_samples.sh --full` for flat and
+the `AILIBI_SAMPLE_DIR=replays/samples/9p2i ...` env for the 2i set, `AILIBI_LLM_PROVIDER=ollama` ($0).
+Re-anchor the era-pin tests in a single deliberate commit after a byte-clean baseline (as 9753a4b followed
+853a601) — update the expected hashes/versions to the new baseline; do NOT weaken the assertions.
+
+**Integration risk:**
+The only task that rewrites committed bytes; a determinism break means upstream non-determinism slipped in
+(a sabotage tie-break RNG, unsorted repair-room iteration, or a `_tasks_gated` read depending on dict
+order) — bisect against 11.5's helper and 11.6/11.7's sort keys. Spend is $0 (ollama); smoke 3 seeds before
+the multi-hour full run. If R5 does not reach 3 shapes, the lever fires too rarely/degenerately — escalate
+to re-anchor the reactor timer or the impostor trigger threshold (still NOT the frozen task clock), then
+re-smoke.
+
+**Ready-to-paste prompt:** `agent_prompts/task-11-8-wave3-rerecord.md`
+
+## Merge Criteria (Phase 11 Wave 3 — structural counterplay)
+
+- 11.5/11.6/11.7 each merge with `bash scripts/check.sh` green + the firewall/leak-property sweeps passing;
+  no production change touches the FROZEN list (§4.6 render/threshold, tally + tie→SKIP, 2048/1024 caps,
+  §6.3 constants, the task clock — the reactor timer is a sabotage parameter, not the clock).
+- 11.8 is the sole re-record: both sets byte-reconstruct, the HARD substrate gate is green, and the
+  interestingness score shows **R5 ≥ 3 win shapes with a new gating-attributable shape and R1 holding/rising**
+  — without R4 regressions (no railroads; firewall intact; sabotage is role-blind public).
+- The close audit re-run confirms the baseline stays VALID with no sabotage-spam degeneracy. With Wave 3
+  landed, the task-clock retune remains a held-in-reserve final wave — applied only if the owner wants to
+  push balance further, gated on the rubric, never on the win split.
