@@ -221,10 +221,11 @@ def test_reactor_sabotage_loads_with_gating_flag() -> None:
     assert reactor.gates_tasks is True
     assert reactor.affected_visibility == "same_room_and_adjacent"
     assert reactor.repair_rooms == ("REACTOR", "ENGINEERING")
-    # Geometry-anchored timer: CAFETERIA->REACTOR hop count (3) + repair_ticks (3)
-    # + 1 for the start-tick decrement (the sabotage is decremented on its start
-    # tick, so the full reach-a-panel-and-hold-it window needs the extra tick).
-    assert reactor.duration_ticks == 7
+    # Sabotage STALL with repair urgency (owner intent 2026-06-16): the 11.8
+    # fake-run sweep showed 0 IMPOSTOR_SABOTAGE wins down to 5 (4 crosses to ~10%);
+    # owner set 6 -- one tick of margin above the 5-edge, still 0 wins (pure stall)
+    # but real repair urgency vs the comfortable 7-tick window.
+    assert reactor.duration_ticks == 6
     assert reactor.repair_ticks == 3
 
 
