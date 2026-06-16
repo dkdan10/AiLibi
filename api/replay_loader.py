@@ -747,16 +747,28 @@ class ReplayLoader:
                     )
                 )
             elif isinstance(event, SabotageStartedEvent):
+                # Project both sabotage kinds (DESIGN.md §8.3, Task 11.5): the
+                # visibility ``lights`` and the task-gating ``reactor``, so the
+                # contestable-clock win shape surfaces on the public timeline.
+                # Narrowed explicitly (event.kind is ``str``) to keep the
+                # SabotageEventView ``kind`` Literal mypy-clean and fail-loud on
+                # an unknown kind.
+                sabotage_view_kind: Literal["lights", "reactor"] | None = None
                 if event.kind == "lights":
-                    views.append(
-                        SabotageEventView(
-                            type="sabotage",
-                            tick=event.tick,
-                            kind="lights",
-                            room_id=None,
-                            actor_id=event.actor,
-                        )
+                    sabotage_view_kind = "lights"
+                elif event.kind == "reactor":
+                    sabotage_view_kind = "reactor"
+                else:
+                    raise ValueError(f"unprojectable sabotage kind: {event.kind}")
+                views.append(
+                    SabotageEventView(
+                        type="sabotage",
+                        tick=event.tick,
+                        kind=sabotage_view_kind,
+                        room_id=None,
+                        actor_id=event.actor,
                     )
+                )
             elif isinstance(event, MeetingTriggeredEvent):
                 if meeting_id is None:
                     raise RuntimeError(

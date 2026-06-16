@@ -392,11 +392,15 @@ sabotages:
     # IMPOSTOR_PRETEND_TASK_DWELL_TICKS is diameter-anchored). Anchor = the
     # CAFETERIA->REACTOR hop count (CAFETERIA -> EAST_HALL -> ENGINEERING ->
     # REACTOR = 3 hops, the spawn-hub-to-farthest-dead-end diameter proxy) PLUS
-    # repair_ticks (3): a crew member must reach a repair panel AND hold it for
-    # the repair. 3 + 3 = 6. Too low is unwinnable for crew, too high is
-    # unreachable for the impostor lever; the live balance is validated at the
-    # 11.8 smoke (do NOT compensate by tuning the frozen task clock).
-    duration_ticks: 6
+    # repair_ticks (3) = 6 ticks of crew action budget, PLUS 1 for the
+    # start-tick decrement: a freshly-started sabotage is decremented on the SAME
+    # advance_tick that applies the SabotageAction (engine/tick.py step 2, the way
+    # lights 90 becomes 89 immediately), so one tick is consumed before the crew
+    # can react. 3 + 3 + 1 = 7 preserves the full reach-a-panel-AND-hold-it
+    # window. Too low is unwinnable for crew, too high is unreachable for the
+    # impostor lever; the live balance is validated at the 11.8 smoke (do NOT
+    # compensate by tuning the frozen task clock).
+    duration_ticks: 7
     repair_ticks: 3
     gates_tasks: true
 

@@ -221,8 +221,10 @@ def test_reactor_sabotage_loads_with_gating_flag() -> None:
     assert reactor.gates_tasks is True
     assert reactor.affected_visibility == "same_room_and_adjacent"
     assert reactor.repair_rooms == ("REACTOR", "ENGINEERING")
-    # Geometry-anchored timer: CAFETERIA->REACTOR hop count (3) + repair_ticks (3).
-    assert reactor.duration_ticks == 6
+    # Geometry-anchored timer: CAFETERIA->REACTOR hop count (3) + repair_ticks (3)
+    # + 1 for the start-tick decrement (the sabotage is decremented on its start
+    # tick, so the full reach-a-panel-and-hold-it window needs the extra tick).
+    assert reactor.duration_ticks == 7
     assert reactor.repair_ticks == 3
 
 
