@@ -1,6 +1,6 @@
 {
   "seedset": "9p2i",
-  "git_head": "ba42cf77652ac6277702092935294600f53de5fe",
+  "git_head": "d8cb869c0bea65fdb0b1864b5d89f1249a58c5ed",
   "rows": [
     {
       "item": "R1 ejection-driven win share",
@@ -9,7 +9,7 @@
     },
     {
       "item": "R1 task-stopwatch win share",
-      "value": "40/50 (80%)",
+      "value": "37/50 (74%)",
       "desired": "DOWN"
     },
     {
@@ -19,7 +19,7 @@
     },
     {
       "item": "R2 accused-impostor survival",
-      "value": "43/74 (58%)",
+      "value": "44/74 (59%)",
       "desired": "DOWN as deception gets catchable; effective-deflection subcount = 10.16"
     },
     {
@@ -29,7 +29,7 @@
     },
     {
       "item": "R3 carry-driven ejections (zero-contradiction)",
-      "value": "14/38 (37%)",
+      "value": "15/39 (38%)",
       "desired": "present (arcs land), reconstructed in the close audit"
     },
     {
@@ -39,7 +39,7 @@
     },
     {
       "item": "R4 wrong-ejection games",
-      "value": "4",
+      "value": "6",
       "desired": "not RISING; all graph-consistent (close audit verifies)"
     },
     {
@@ -49,22 +49,22 @@
     },
     {
       "item": "R5 win-reason distribution",
-      "value": "{\"CREWMATE_TASKS\": 40, \"CREWMATE_EJECT\": 6, \"IMPOSTOR_PARITY\": 4}",
+      "value": "{\"CREWMATE_TASKS\": 37, \"CREWMATE_EJECT\": 6, \"IMPOSTOR_PARITY\": 7}",
       "desired": ">=3 shapes each >=10% (aspirational)"
     },
     {
       "item": "R5 ejections/game histogram",
-      "value": "{\"0\": 21, \"1\": 22, \"2\": 5, \"3\": 2}",
+      "value": "{\"0\": 20, \"1\": 23, \"2\": 5, \"3\": 2}",
       "desired": "spread up from 0-2"
     },
     {
       "item": "R5 meetings/game histogram",
-      "value": "{\"1\": 7, \"2\": 26, \"3\": 15, \"4\": 2}",
+      "value": "{\"1\": 7, \"2\": 25, \"3\": 15, \"4\": 3}",
       "desired": "median up; runway for arcs"
     },
     {
       "item": "R6 self-accusations (emergence class)",
-      "value": "10",
+      "value": "11",
       "desired": "tracked; game-deciding per the audit"
     },
     {
@@ -74,36 +74,36 @@
     },
     {
       "item": "R6 emergency meetings",
-      "value": "23",
+      "value": "20",
       "desired": ">0 (10.8 channel live)"
     },
     {
       "item": "R7 evidence-bearing meeting share",
-      "value": "54/112 (48%)",
+      "value": "54/114 (47%)",
       "desired": "UP (stories have evidence)"
     },
     {
       "item": "R7 free_text medians (open/reply/optin)",
-      "value": "218/222/184 (max 419)",
+      "value": "218/223/186 (max 426)",
       "desired": "stable ~225; no catastrophic tail"
     },
     {
       "item": "R7 ballot-follows-chain",
-      "value": "76/346 (22%)",
+      "value": "78/349 (22%)",
       "desired": "UP (votes cite the chain)"
     }
   ],
   "interestingness": {
-    "mean_score": 44.8,
+    "mean_score": 45.1,
     "median_score": 42.5,
     "n_games": 50,
     "win_shapes": {
-      "stopwatch-some-eject": 22,
-      "stopwatch-no-eject": 18,
-      "eject-decided": 6,
-      "impostor-win": 4
+      "stopwatch-some-eject": 21,
+      "stopwatch-no-eject": 16,
+      "impostor-win": 7,
+      "eject-decided": 6
     },
-    "r5_shapes_over_10pct": 3,
+    "r5_shapes_over_10pct": 4,
     "per_game": [
       {
         "seed": 5,
@@ -274,9 +274,23 @@
         "score": 55.8
       },
       {
+        "seed": 49,
+        "reason": "IMPOSTOR_PARITY",
+        "n_meetings": 3,
+        "win_shape": "impostor-win",
+        "ejected_impostors": 0,
+        "accused_impostors": 2,
+        "survived_accused": 2,
+        "r1_decisive": 0.0,
+        "r2_deception": 1.0,
+        "r3_arcs": 0.5,
+        "r7_legible": 1.0,
+        "score": 55.0
+      },
+      {
         "seed": 0,
         "reason": "CREWMATE_TASKS",
-        "n_meetings": 3,
+        "n_meetings": 4,
         "win_shape": "stopwatch-some-eject",
         "ejected_impostors": 1,
         "accused_impostors": 2,
@@ -400,7 +414,7 @@
         "score": 45.0
       },
       {
-        "seed": 31,
+        "seed": 15,
         "reason": "CREWMATE_TASKS",
         "n_meetings": 2,
         "win_shape": "stopwatch-no-eject",
@@ -409,18 +423,18 @@
         "survived_accused": 1,
         "r1_decisive": 0.0,
         "r2_deception": 0.6,
-        "r3_arcs": 0.5,
-        "r7_legible": 1.0,
+        "r3_arcs": 1.0,
+        "r7_legible": 0.5,
         "score": 45.0
       },
       {
-        "seed": 49,
+        "seed": 31,
         "reason": "CREWMATE_TASKS",
-        "n_meetings": 3,
+        "n_meetings": 2,
         "win_shape": "stopwatch-no-eject",
         "ejected_impostors": 0,
-        "accused_impostors": 2,
-        "survived_accused": 2,
+        "accused_impostors": 1,
+        "survived_accused": 1,
         "r1_decisive": 0.0,
         "r2_deception": 0.6,
         "r3_arcs": 0.5,
@@ -457,20 +471,6 @@
       },
       {
         "seed": 10,
-        "reason": "CREWMATE_TASKS",
-        "n_meetings": 2,
-        "win_shape": "stopwatch-some-eject",
-        "ejected_impostors": 1,
-        "accused_impostors": 1,
-        "survived_accused": 0,
-        "r1_decisive": 0.5,
-        "r2_deception": 0.2,
-        "r3_arcs": 0.5,
-        "r7_legible": 0.5,
-        "score": 42.5
-      },
-      {
-        "seed": 19,
         "reason": "CREWMATE_TASKS",
         "n_meetings": 2,
         "win_shape": "stopwatch-some-eject",
@@ -540,6 +540,20 @@
         "score": 42.5
       },
       {
+        "seed": 39,
+        "reason": "IMPOSTOR_PARITY",
+        "n_meetings": 3,
+        "win_shape": "impostor-win",
+        "ejected_impostors": 0,
+        "accused_impostors": 2,
+        "survived_accused": 2,
+        "r1_decisive": 0.0,
+        "r2_deception": 1.0,
+        "r3_arcs": 0.5,
+        "r7_legible": 0.33,
+        "score": 41.7
+      },
+      {
         "seed": 48,
         "reason": "IMPOSTOR_PARITY",
         "n_meetings": 4,
@@ -596,27 +610,13 @@
         "score": 35.0
       },
       {
-        "seed": 15,
-        "reason": "CREWMATE_TASKS",
-        "n_meetings": 1,
-        "win_shape": "stopwatch-no-eject",
-        "ejected_impostors": 0,
-        "accused_impostors": 1,
-        "survived_accused": 1,
-        "r1_decisive": 0.0,
-        "r2_deception": 0.6,
-        "r3_arcs": 0.0,
-        "r7_legible": 1.0,
-        "score": 35.0
-      },
-      {
         "seed": 17,
         "reason": "IMPOSTOR_PARITY",
         "n_meetings": 2,
         "win_shape": "impostor-win",
         "ejected_impostors": 0,
-        "accused_impostors": 1,
-        "survived_accused": 1,
+        "accused_impostors": 2,
+        "survived_accused": 2,
         "r1_decisive": 0.0,
         "r2_deception": 1.0,
         "r3_arcs": 0.5,
@@ -652,20 +652,6 @@
         "score": 35.0
       },
       {
-        "seed": 39,
-        "reason": "CREWMATE_TASKS",
-        "n_meetings": 2,
-        "win_shape": "stopwatch-no-eject",
-        "ejected_impostors": 0,
-        "accused_impostors": 2,
-        "survived_accused": 2,
-        "r1_decisive": 0.0,
-        "r2_deception": 0.6,
-        "r3_arcs": 0.5,
-        "r7_legible": 0.5,
-        "score": 35.0
-      },
-      {
         "seed": 46,
         "reason": "CREWMATE_TASKS",
         "n_meetings": 1,
@@ -694,18 +680,18 @@
         "score": 31.7
       },
       {
-        "seed": 3,
-        "reason": "CREWMATE_TASKS",
+        "seed": 12,
+        "reason": "IMPOSTOR_PARITY",
         "n_meetings": 2,
-        "win_shape": "stopwatch-no-eject",
+        "win_shape": "impostor-win",
         "ejected_impostors": 0,
-        "accused_impostors": 2,
-        "survived_accused": 2,
+        "accused_impostors": 0,
+        "survived_accused": 0,
         "r1_decisive": 0.0,
-        "r2_deception": 0.6,
+        "r2_deception": 0.4,
         "r3_arcs": 0.5,
-        "r7_legible": 0.0,
-        "score": 25.0
+        "r7_legible": 0.5,
+        "score": 30.0
       },
       {
         "seed": 8,
@@ -764,6 +750,34 @@
         "score": 25.0
       },
       {
+        "seed": 3,
+        "reason": "CREWMATE_TASKS",
+        "n_meetings": 1,
+        "win_shape": "stopwatch-no-eject",
+        "ejected_impostors": 0,
+        "accused_impostors": 1,
+        "survived_accused": 1,
+        "r1_decisive": 0.0,
+        "r2_deception": 0.6,
+        "r3_arcs": 0.0,
+        "r7_legible": 0.0,
+        "score": 15.0
+      },
+      {
+        "seed": 19,
+        "reason": "CREWMATE_TASKS",
+        "n_meetings": 1,
+        "win_shape": "stopwatch-no-eject",
+        "ejected_impostors": 0,
+        "accused_impostors": 1,
+        "survived_accused": 1,
+        "r1_decisive": 0.0,
+        "r2_deception": 0.6,
+        "r3_arcs": 0.0,
+        "r7_legible": 0.0,
+        "score": 15.0
+      },
+      {
         "seed": 37,
         "reason": "CREWMATE_TASKS",
         "n_meetings": 1,
@@ -790,20 +804,6 @@
         "r3_arcs": 0.0,
         "r7_legible": 0.0,
         "score": 15.0
-      },
-      {
-        "seed": 12,
-        "reason": "CREWMATE_TASKS",
-        "n_meetings": 1,
-        "win_shape": "stopwatch-no-eject",
-        "ejected_impostors": 0,
-        "accused_impostors": 0,
-        "survived_accused": 0,
-        "r1_decisive": 0.0,
-        "r2_deception": 0.0,
-        "r3_arcs": 0.0,
-        "r7_legible": 0.0,
-        "score": 0.0
       }
     ]
   }
