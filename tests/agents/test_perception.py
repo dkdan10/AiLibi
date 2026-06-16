@@ -170,6 +170,9 @@ class TestIngestPacketSelfAndGlobal:
             "task_completion_percent": pytest.approx(0.4),
             "sabotage_active": True,
             "sabotage_kind": "reactor",
+            # Public repair channel (Task 11.5) -- defaulted on the test helper.
+            "sabotage_repair_rooms": (),
+            "sabotage_is_gating": False,
         }
 
     def test_every_event_uses_packet_tick(self) -> None:

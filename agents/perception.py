@@ -308,12 +308,18 @@ def _audible_event_payload(event: AudibleEvent) -> Mapping[str, Any]:
 
 
 def _global_state_payload(global_state: GlobalView) -> Mapping[str, Any]:
+    # ``sabotage_repair_rooms`` / ``sabotage_is_gating`` ride the public,
+    # role-blind global aggregate (Task 11.5, DESIGN.md §8.3): the crew policy
+    # (11.6) reads the repair routing target from here, never from ``engine/``.
+    # Both are empty/false unless a sabotage is active.
     return {
         "tasks_completed": global_state.tasks_completed,
         "tasks_total": global_state.tasks_total,
         "task_completion_percent": global_state.task_completion_percent,
         "sabotage_active": global_state.sabotage_active,
         "sabotage_kind": global_state.sabotage_kind,
+        "sabotage_repair_rooms": global_state.sabotage_repair_rooms,
+        "sabotage_is_gating": global_state.sabotage_is_gating,
     }
 
 

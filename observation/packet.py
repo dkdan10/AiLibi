@@ -112,6 +112,15 @@ class GlobalView(_FrozenModel):
     task_completion_percent: float
     sabotage_active: bool
     sabotage_kind: str | None
+    # Public, role-blind repair channel for the active sabotage (DESIGN.md §8.3,
+    # Task 11.5). Populated ONLY while a sabotage is active, from the map's
+    # ``SabotageDefinition`` — identical across every role (leak-clean) so the
+    # crew policy (11.6) can route to a repair room without ``agents/``->``engine/``
+    # coupling. Default empty/false keeps non-sabotage and lights-era packets
+    # byte-stable; ``sabotage_is_gating`` distinguishes a task-gating kind
+    # (``reactor``) from a non-gating one (``lights``).
+    sabotage_repair_rooms: tuple[RoomId, ...] = ()
+    sabotage_is_gating: bool = False
 
 
 class ObservationPacket(_FrozenModel):

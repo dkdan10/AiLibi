@@ -9,7 +9,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from engine.actions import Action
-from engine.entities import BodyState, PlayerState, TaskState
+from engine.entities import BodyState, PlayerState, SabotageState, TaskState
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
@@ -958,3 +958,79 @@ class TestImpostorPretendTaskIntegrity:
         )
         assert packet.global_state.tasks_total == tasks_total_before
         assert packet.global_state.tasks_completed == 0
+
+
+class TestGlobalViewSabotageRepairChannel:
+    """The public, role-blind repair channel (Task 11.5, DESIGN.md §8.3): the two
+    new ``GlobalView`` fields populate only while a sabotage is active, read from
+    the map definition, and are identical across every role (leak-clean)."""
+
+    def _sabotage(self, kind: str, *, active: bool = True) -> SabotageState:
+        return SabotageState(
+            kind=kind,
+            remaining_ticks=5,
+            affected_rooms=(),
+            active=active,
+        )
+
+    def test_fields_default_empty_when_no_sabotage(self, tmp_path: Path) -> None:
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=_base_world_state(), agent_id="p-1", engine_events=[]
+        )
+        assert packet.global_state.sabotage_active is False
+        assert packet.global_state.sabotage_repair_rooms == ()
+        assert packet.global_state.sabotage_is_gating is False
+
+    def test_gating_reactor_populates_repair_rooms_and_flag(
+        self, tmp_path: Path
+    ) -> None:
+        state = dataclasses.replace(
+            _base_world_state(), sabotage=self._sabotage("reactor")
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+        assert packet.global_state.sabotage_active is True
+        assert packet.global_state.sabotage_repair_rooms == ("REACTOR", "ENGINEERING")
+        assert packet.global_state.sabotage_is_gating is True
+
+    def test_non_gating_lights_surfaces_repair_rooms_without_gating(
+        self, tmp_path: Path
+    ) -> None:
+        state = dataclasses.replace(
+            _base_world_state(), sabotage=self._sabotage("lights")
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+        assert packet.global_state.sabotage_repair_rooms == ("ADMIN",)
+        assert packet.global_state.sabotage_is_gating is False
+
+    def test_inactive_sabotage_leaves_fields_default(self, tmp_path: Path) -> None:
+        state = dataclasses.replace(
+            _base_world_state(),
+            sabotage=self._sabotage("reactor", active=False),
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=[]
+        )
+        assert packet.global_state.sabotage_active is False
+        assert packet.global_state.sabotage_repair_rooms == ()
+        assert packet.global_state.sabotage_is_gating is False
+
+    def test_repair_channel_is_role_invariant(self, tmp_path: Path) -> None:
+        # Identical across crew and impostor recipients -- the channel is public.
+        state = dataclasses.replace(
+            _multi_impostor_world_state(), sabotage=self._sabotage("reactor")
+        )
+        service = _observation_service(tmp_path)
+        views = [
+            service.build_packet(
+                world_state=state, agent_id=player_id, engine_events=[]
+            ).global_state
+            for player_id in state.players
+        ]
+        assert all(
+            view.sabotage_repair_rooms == ("REACTOR", "ENGINEERING") for view in views
+        )
+        assert all(view.sabotage_is_gating is True for view in views)

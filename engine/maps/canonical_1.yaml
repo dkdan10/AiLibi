@@ -365,7 +365,12 @@ tasks:
 # ---------------------------------------------------------------------------
 # SABOTAGES
 # ---------------------------------------------------------------------------
-# MVP scope (DESIGN.md §8.3): lights only.
+# DESIGN.md §8.3. Two kinds:
+#   - `lights`  degrades visibility (load-bearing for the visibility system);
+#               does NOT gate the task race.
+#   - `reactor` contests the task CLOCK (gates_tasks: true) rather than
+#               sightlines; left unrepaired to remaining_ticks==0 it fires the
+#               §3.5 IMPOSTOR_SABOTAGE win.
 
 sabotages:
   lights:
@@ -374,6 +379,26 @@ sabotages:
       - ADMIN
     duration_ticks: 90
     repair_ticks: 3
+
+  reactor:
+    # Base visibility — reactor contests the task clock, not sightlines.
+    affected_visibility: same_room_and_adjacent
+    # Two repair panels so the crew can scramble from either wing approach.
+    repair_rooms:
+      - REACTOR
+      - ENGINEERING
+    # Short fix-or-impostors-win timer, anchored to map GEOMETRY (NOT the frozen
+    # task clock — this is a sabotage parameter, the way
+    # IMPOSTOR_PRETEND_TASK_DWELL_TICKS is diameter-anchored). Anchor = the
+    # CAFETERIA->REACTOR hop count (CAFETERIA -> EAST_HALL -> ENGINEERING ->
+    # REACTOR = 3 hops, the spawn-hub-to-farthest-dead-end diameter proxy) PLUS
+    # repair_ticks (3): a crew member must reach a repair panel AND hold it for
+    # the repair. 3 + 3 = 6. Too low is unwinnable for crew, too high is
+    # unreachable for the impostor lever; the live balance is validated at the
+    # 11.8 smoke (do NOT compensate by tuning the frozen task clock).
+    duration_ticks: 6
+    repair_ticks: 3
+    gates_tasks: true
 
 
 # ---------------------------------------------------------------------------

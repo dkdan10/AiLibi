@@ -196,6 +196,13 @@ class SabotageDefinition(_FrozenModel):
     repair_rooms: tuple[RoomId, ...]
     duration_ticks: int
     repair_ticks: int = 3
+    # Whether an active instance of this sabotage HALTS the crew task race
+    # (DESIGN.md §3.1 tick loop, §8.3 sabotage). Declared in data so the engine
+    # gates on a flag, not by string-matching ``kind`` (the codebase deliberately
+    # avoids kind string-matching). Defaulted ``False`` so ``lights`` and every
+    # existing map-loader pin stay byte-stable; only a gating kind (``reactor``)
+    # sets it true.
+    gates_tasks: bool = False
 
     @model_validator(mode="after")
     def validate_sabotage(self) -> SabotageDefinition:

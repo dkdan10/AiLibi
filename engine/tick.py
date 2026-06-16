@@ -71,6 +71,24 @@ def _advance_sabotage(sabotage: SabotageState | None) -> SabotageState | None:
     return replace(sabotage, remaining_ticks=max(0, sabotage.remaining_ticks - 1))
 
 
+def _tasks_gated(state: WorldState, game_map: Map) -> bool:
+    """Whether an active sabotage HALTS the crew task race (DESIGN.md §3.1, §8.3).
+
+    The single source of truth for both task paths (``_apply_do_task`` initiation
+    and ``_advance_tasks`` continuation) so they cannot drift. Gating is read from
+    the map's ``SabotageDefinition.gates_tasks`` flag, NOT by string-matching the
+    sabotage ``kind`` (the codebase deliberately avoids kind string-matching). A
+    non-gating sabotage (e.g. ``lights``) leaves the task race byte-identical.
+    """
+
+    sabotage = state.sabotage
+    return (
+        sabotage is not None
+        and sabotage.active
+        and game_map.sabotages[sabotage.kind].gates_tasks
+    )
+
+
 def _task_progress_event(
     *, tick: int, actor: PlayerId, task: TaskState
 ) -> TaskProgressedEvent | TaskCompletedEvent:
@@ -122,12 +140,19 @@ def _resolve_owned_task_instance(
 
 def _advance_tasks(
     state: WorldState,
+    game_map: Map,
     *,
     tick: int,
     submitted_actors: set[PlayerId],
 ) -> tuple[dict[str, TaskState], list[TaskProgressedEvent | TaskCompletedEvent]]:
     tasks = dict(state.tasks)
     events: list[TaskProgressedEvent | TaskCompletedEvent] = []
+
+    # A gating sabotage halts the task race: skip every continuation increment so
+    # no progress accrues and no ``TaskProgressed`` event is emitted while active
+    # (DESIGN.md §3.1, §8.3). Mirrors the ``_apply_do_task`` initiation gate.
+    if _tasks_gated(state, game_map):
+        return tasks, events
 
     for player_id in sorted(state.players):
         if player_id in submitted_actors:
@@ -244,8 +269,13 @@ def _apply_move(
 
 
 def _apply_do_task(
-    state: WorldState, action: DoTaskAction
+    state: WorldState, game_map: Map, action: DoTaskAction
 ) -> tuple[WorldState, TaskProgressedEvent | TaskCompletedEvent]:
+    # A gating sabotage halts the task race: reject task initiation while active
+    # (DESIGN.md §3.1, §8.3). Mirrors the ``_advance_tasks`` continuation gate so
+    # the two paths cannot drift (``_tasks_gated`` is the single source of truth).
+    if _tasks_gated(state, game_map):
+        raise ActionRejectedError("cannot do task while a sabotage gates tasks")
     actor = _get_live_player(state, action.actor)
     if actor.in_vent:
         raise ActionRejectedError("cannot do task while in vent")
@@ -446,7 +476,7 @@ def _apply_action(
     if isinstance(action, MoveAction):
         return _apply_move(state, game_map, action)
     if isinstance(action, DoTaskAction):
-        return _apply_do_task(state, action)
+        return _apply_do_task(state, game_map, action)
     if isinstance(action, KillAction):
         return _apply_kill(state, game_map, action)
     if isinstance(action, VentAction):
@@ -500,6 +530,7 @@ def advance_tick(
     sabotage = _advance_sabotage(working_state.sabotage)
     tasks, task_events = _advance_tasks(
         working_state,
+        game_map,
         tick=state.tick,
         submitted_actors=submitted_actors,
     )
