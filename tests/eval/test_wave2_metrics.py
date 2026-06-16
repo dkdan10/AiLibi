@@ -243,12 +243,12 @@ class TestConversionPerMeeting:
                 conversion_per_meeting=1.5,
             )
 
-    def test_committed_w2_reads_34_of_112(self) -> None:
+    def test_committed_w2_reads_33_of_114(self) -> None:
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_conversion_per_meeting(report.report.games)
-        assert result.impostor_ejections == 34
-        assert result.resolved_meetings == 112
-        assert result.conversion_per_meeting == pytest.approx(34 / 112)
+        assert result.impostor_ejections == 33
+        assert result.resolved_meetings == 114
+        assert result.conversion_per_meeting == pytest.approx(33 / 114)
 
 
 # ---------------------------------------------------------------------------
@@ -381,18 +381,18 @@ class TestEffectiveDeflection:
             )
 
     def test_committed_w2_reproduces_the_audit_subcount(self) -> None:
-        # W2 (phase-11 Wave-1 re-record): 102 accused / 75 survived / 33 active;
-        # effective 9 = 1 named + 8 third (the gate subcount), NOT the raw 33.
+        # W2 (phase-11 Wave-3 re-record): 101 accused / 75 survived / 34 active;
+        # effective 10 = 1 named + 9 third (the gate subcount), NOT the raw 34.
         # The active split is still mostly SKIP-saved (24) — the toolkit's
         # deflection is rarely the lever that lands plurality off the impostor.
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_effective_deflection(report.report.games)
-        assert result.accused_impostor_events == 102
+        assert result.accused_impostor_events == 101
         assert result.accused_impostor_survivals == 75
-        assert result.active_survivals == 33
+        assert result.active_survivals == 34
         assert result.named_target_deflections == 1
-        assert result.third_party_deflections == 8
-        assert result.effective_deflections == 9
+        assert result.third_party_deflections == 9
+        assert result.effective_deflections == 10
         assert result.skip_saved_active_survivals == 24
 
 
@@ -448,20 +448,20 @@ class TestIndistinguishability:
             )
 
     def test_committed_w2_tasks_fingerprint_closed(self) -> None:
-        # W2 (phase-11 Wave-1 re-record): the toolkit keeps the D-D-1 fingerprint
-        # closed. Impostor do_task 378 vs crew 3492, and the impostor wait-share
-        # ~0.087 now sits at crew's ~0.087 — the two roles idle at a comparable
+        # W2 (phase-11 Wave-3 re-record): the toolkit keeps the D-D-1 fingerprint
+        # closed. Impostor do_task 380 vs crew 3465, and the impostor wait-share
+        # ~0.083 sits near crew's ~0.072 — the two roles idle at a comparable
         # rate (W1 was the inverted ~0.52 vs ~0.10). Impostors no longer idle
         # their way to a fingerprint.
         report = build_report(_COMMITTED_9P2I_DIR)
         tally = tally_actions_by_role(_COMMITTED_9P2I_DIR, report.report.games)
         result = compute_indistinguishability(tally)
-        assert result.impostor_do_task == 378
-        assert result.crewmate_do_task == 3492
+        assert result.impostor_do_task == 380
+        assert result.crewmate_do_task == 3465
         assert result.impostor_wait_share is not None
         assert result.crewmate_wait_share is not None
-        assert result.impostor_wait_share == pytest.approx(0.0866, abs=1e-3)
-        assert result.crewmate_wait_share == pytest.approx(0.0868, abs=1e-3)
+        assert result.impostor_wait_share == pytest.approx(0.0828, abs=1e-3)
+        assert result.crewmate_wait_share == pytest.approx(0.0725, abs=1e-3)
         # The fingerprint is gone: impostor wait-share no longer dwarfs crew's —
         # the two roles now idle at a comparable rate.
         assert result.impostor_wait_share < 2 * result.crewmate_wait_share

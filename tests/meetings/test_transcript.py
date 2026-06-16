@@ -1706,14 +1706,15 @@ class TestCommittedBytesSeedPins:
     """
 
     def test_artifact_input_classes_still_occur_and_mint_nothing(self) -> None:
-        # The 9B still emits compound-label and non-spatial rooms (1 and
-        # 3 claim rooms respectively on the W2 re-record; was 8 and 6 on
-        # W1) — the artifact INPUT classes the W0 era's containment +
-        # placeholder flags rode. Under the Task 10.6 allowlist a
-        # non-spatial side mints no flag at all and a compound side pairs
-        # only through canonical-set logic; this census falling to ZERO on a
-        # future re-record means the model stopped emitting the class, not
-        # that the repair regressed.
+        # The 9B still emits compound-label and non-spatial rooms (2 and
+        # 5 claim rooms respectively on the phase-11 Wave-3 re-record; the prior
+        # re-record read 1 and 3) — the artifact INPUT classes the W0 era's
+        # containment + placeholder flags rode. The sabotage stall's longer games
+        # give the model more turns, so more of the class surfaces. Under the
+        # Task 10.6 allowlist a non-spatial side mints no flag at all and a
+        # compound side pairs only through canonical-set logic; this census
+        # falling to ZERO on a future re-record means the model stopped emitting
+        # the class, not that the repair regressed.
         compound_claim_rooms = 0
         placeholder_claim_rooms = 0
         for seed in range(50):
@@ -1728,8 +1729,8 @@ class TestCommittedBytesSeedPins:
                             compound_claim_rooms += 1
                         elif not canon:
                             placeholder_claim_rooms += 1
-        assert compound_claim_rooms == 1
-        assert placeholder_claim_rooms == 3
+        assert compound_claim_rooms == 2
+        assert placeholder_claim_rooms == 5
 
     def test_recorded_conflict_flags_sit_in_the_weak_band(self) -> None:
         # The phase-11 Wave-1 re-record records exactly ONE alibi_conflict flag:
@@ -2604,15 +2605,16 @@ class TestCommittedBytes106Pins:
     def test_no_strong_flag_survives_post_vent(self) -> None:
         # The prior W2 carried a single STRONG (full-weight) contradiction — a
         # cross-speaker alibi_conflict on impostor p-7 at seed-12 m0, the genuine
-        # deception surface the weak band must not swallow. The phase-11 Wave-1
-        # re-record (vents) hides the post-kill sighting trail that fed it, so
-        # that strong flag evaporates: the committed set now carries ZERO strong
-        # flags (the headline; the offline vent-escape lab predicted this
-        # catchability collapse). The weak-banding channel stays ALIVE — all 95
-        # recorded contradictions are weak — so the band did not over-suppress;
-        # the strong surface simply has no input. (The lone surviving
-        # alibi_conflict is seed-31 m1, impostor p-7, WEAK — pinned by
-        # test_recorded_conflict_flags_sit_in_the_weak_band; this is the
+        # deception surface the weak band must not swallow. The vent re-record
+        # (phase-11 Wave-1 onward, now Wave-3) hides the post-kill sighting trail
+        # that fed it, so that strong flag evaporates: the committed set still
+        # carries ZERO strong flags (the headline; the offline vent-escape lab
+        # predicted this catchability collapse). The weak-banding channel stays
+        # ALIVE — all 112 recorded contradictions are weak, up from 95 as the
+        # Wave-3 sabotage stall's longer meetings mint more weak flags — so the
+        # band did not over-suppress; the strong surface simply has no input.
+        # (The lone surviving alibi_conflict is seed-31 m1, impostor p-7, WEAK —
+        # pinned by test_recorded_conflict_flags_sit_in_the_weak_band; this is the
         # set-wide strong-collapse tripwire.)
         weak = strong = 0
         for seed in range(50):
@@ -2623,7 +2625,7 @@ class TestCommittedBytes106Pins:
                     else:
                         strong += 1
         assert strong == 0
-        assert weak == 95  # the weak band is alive (gated, not killed)
+        assert weak == 112  # the weak band is alive (gated, not killed)
 
     def test_seed8_m0_surviving_corroborations_are_interior_tick(self) -> None:
         # Audit C-C-3: at W0 a kill-scene sighting at seed 6 m1 was relevance-
@@ -2668,11 +2670,11 @@ class TestCommittedBytes106Pins:
                         f"spawn-window corroboration survived: seed {seed}, "
                         f"{pair.sighting_event_id}"
                     )
-        # 59 pairs survive the gate on the phase-11 Wave-1 re-record (prior W2
-        # 41) -- the over-suppression tripwire: a future change driving this
+        # 61 pairs survive the gate on the phase-11 Wave-3 re-record (Wave-1 read
+        # 59) -- the over-suppression tripwire: a future change driving this
         # to 0 means the channel died, which the audit ranks as bad as the
         # artifacts. Well above zero: the channel is gated, not killed.
-        assert surviving == 59
+        assert surviving == 61
 
 
 class TestCommittedBytes1010Pins:

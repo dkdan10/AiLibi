@@ -1858,8 +1858,8 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
 
     These pin the phase-11 Wave-1 combined re-record (vents/cover-on-reply/
     kill-memory) and are NOT immutable — the next re-record regenerates them,
-    the standard re-record pattern. ejection_accuracy 34/38 = 0.8947,
-    impostor-accused conversion 33/100 = 0.3300, missed_skip 22 (18
+    the standard re-record pattern. ejection_accuracy 33/39 = 0.8462,
+    impostor-accused conversion 32/99 = 0.3232, missed_skip 22 (18
     impostor-voter in-character declines, 4 invalid-target, 2 teammate-coerced,
     0 genuine). Raw comparisons to the 0.629 (artifact-era) and 0.476
     (mixed-era) accuracy numbers are provenance-noted history, not gates: those
@@ -1868,8 +1868,8 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     (tests/eval/test_gate_metrics.py pins). threshold_inversions stays 0 — the
     monotonicity invariant survives the re-record.
 
-    The sentinel reads the recorded truth: 23 of the 34 impostor ejections are
-    transcript-evidence-backed (vote_correctness_rate 23/34 = 0.676); the 11
+    The sentinel reads the recorded truth: 22 of the 33 impostor ejections are
+    transcript-evidence-backed (vote_correctness_rate 22/33 = 0.667); the 11
     unbacked ejections converted on accumulated/carried suspicion that
     ``_has_real_evidence`` deliberately does not consult — that unbacked share
     rising from 4 of 24 is the vent signature (no fresh sighting evidence).
@@ -1880,14 +1880,14 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     )
     conversion = report.conversion
 
-    assert conversion.total_ejections == 38
-    assert conversion.impostor_ejections == 34
-    assert conversion.ejection_accuracy == pytest.approx(34 / 38)
-    assert conversion.impostor_accused_meetings == 100
-    assert conversion.impostor_accused_conversions == 33
-    assert conversion.impostor_accused_conversion_rate == pytest.approx(33 / 100)
-    assert conversion.skip_ballots == 405
-    assert conversion.correct_skip_ballots == 383
+    assert conversion.total_ejections == 39
+    assert conversion.impostor_ejections == 33
+    assert conversion.ejection_accuracy == pytest.approx(33 / 39)
+    assert conversion.impostor_accused_meetings == 99
+    assert conversion.impostor_accused_conversions == 32
+    assert conversion.impostor_accused_conversion_rate == pytest.approx(32 / 99)
+    assert conversion.skip_ballots == 410
+    assert conversion.correct_skip_ballots == 388
     assert conversion.missed_skip_ballots == 22
     assert conversion.unclassified_skip_ballots == 0
     assert conversion.missed_skip_impostor_voters == 18
@@ -1895,16 +1895,16 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     assert conversion.missed_skip_invalid_target == 4
     assert conversion.threshold_inversions == 0
 
-    # The sentinel reads the recorded truth: 23 of the 34 impostor ejections are
+    # The sentinel reads the recorded truth: 22 of the 33 impostor ejections are
     # transcript-evidence-backed (see docstring).
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(23 / 34)
-    assert report.vote_correctness.evidence_backed_impostor_ejections == 23
-    assert report.vote_correctness.impostor_ejections == 34
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(22 / 33)
+    assert report.vote_correctness.evidence_backed_impostor_ejections == 22
+    assert report.vote_correctness.impostor_ejections == 33
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
     assert conversion.ejection_accuracy == report.vote_correctness.ejection_accuracy
 
     # JSON-level guard: the committed file itself serves both leads (a reader
     # pulling the raw report sees the published metric surface, gp-2's ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.8947, abs=1e-4)
+    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.8462, abs=1e-4)
     assert raw["conversion"]["missed_skip_ballots"] == 22

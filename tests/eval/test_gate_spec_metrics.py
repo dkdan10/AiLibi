@@ -907,44 +907,45 @@ class TestCommittedW2GateSpecPins:
         ]
         assert channels_by_site == expected
 
-    def test_multi_signal_conversion_reads_28_of_34(self) -> None:
-        # W2 (phase-11 Wave-1 re-record): 28 of the 34 impostor ejections are
-        # multi-signal (prior W2 was 20 of 24, W1 11 of 11); the vent_witness
-        # channel going live (Task 11.1) alongside the inform channel surfaces 6
-        # single-signal conversions over the larger ejection count. No
+    def test_multi_signal_conversion_reads_27_of_33(self) -> None:
+        # W2 (phase-11 Wave-3 re-record): 27 of the 33 impostor ejections are
+        # multi-signal (prior W2 was 20 of 24, W1 11 of 11); the sabotage stall
+        # drops one impostor ejection (impostors run the clock to parity instead),
+        # leaving 6 single-signal conversions over the smaller ejection count. No
         # unattributed conversions — the gp-7 channel attribution is still total
         # on this record.
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
-        assert result.impostor_ejections == 34
-        assert result.multi_signal_conversions == 28
+        assert result.impostor_ejections == 33
+        assert result.multi_signal_conversions == 27
         assert result.single_signal_conversions == 6
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(0.8235294117647058)
+        assert result.multi_signal_rate == pytest.approx(0.8181818181818182)
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
-        # The W2 supply row (phase-11 Wave-1 re-record): 95 flags (95w/0s — the
-        # headline: vents hide the post-kill sighting trail, so the single strong
-        # flag the prior W2 carried evaporates), meetings up to 112 (prior W2 96),
-        # zero-contradiction share 58/112, genuine supply at 24 meetings (prior
-        # W2 10), over-gate listener rows 268 — 2.68 per accused-impostor meeting
-        # (prior W2 199 / 2.55). Role split 21 CREW / 74 IMP (prior W2 20/35): the
-        # live vent_witness channel plus the richer meeting count drive
-        # impostor-subject weak flags up.
+        # The W2 supply row (phase-11 Wave-3 re-record): 112 flags (112w/0s — the
+        # headline holds: vents hide the post-kill sighting trail, so strong flags
+        # stay at 0), meetings up to 114 (prior W2 96), zero-contradiction share
+        # 60/114, genuine supply at 25 meetings (prior W2 10), over-gate listener
+        # rows 261 — 2.64 per accused-impostor meeting (prior W2 199 / 2.55). Role
+        # split 39 CREW / 73 IMP (prior W2 20/35): the sabotage stall's longer
+        # games accrue more weak cross-crew flags (crew co-locate on reactor
+        # repairs), driving crew-subject weak flags up (21->39) while
+        # impostor-subject flags hold (74->73).
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
-        assert gauges.meetings_total == 112
-        assert gauges.total_flags == 95
-        assert gauges.weak_flags == 95
+        assert gauges.meetings_total == 114
+        assert gauges.total_flags == 112
+        assert gauges.weak_flags == 112
         assert gauges.strong_flags == 0
-        assert gauges.zero_contradiction_meetings == 58
-        assert gauges.genuine_subject_meetings == 24
-        assert gauges.flag_subjects_crew == 21
-        assert gauges.flag_subjects_impostor == 74
-        assert gauges.accused_impostor_meetings == 100
-        assert gauges.over_gate_listener_rows == 268
+        assert gauges.zero_contradiction_meetings == 60
+        assert gauges.genuine_subject_meetings == 25
+        assert gauges.flag_subjects_crew == 39
+        assert gauges.flag_subjects_impostor == 73
+        assert gauges.accused_impostor_meetings == 99
+        assert gauges.over_gate_listener_rows == 261
 
     def test_corrected_w2_baseline_matches_a_rederivation(self) -> None:
         # ONE home: corrected_w2_baseline.json IS the current-era baseline,

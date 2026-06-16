@@ -1,17 +1,17 @@
 {
   "conversion_per_meeting": {
-    "conversion_per_meeting": 0.30357142857142855,
-    "impostor_ejections": 34,
-    "resolved_meetings": 112
+    "conversion_per_meeting": 0.2894736842105263,
+    "impostor_ejections": 33,
+    "resolved_meetings": 114
   },
   "effective_deflection": {
-    "accused_impostor_events": 102,
+    "accused_impostor_events": 101,
     "accused_impostor_survivals": 75,
-    "active_survivals": 33,
-    "effective_deflections": 9,
+    "active_survivals": 34,
+    "effective_deflections": 10,
     "named_target_deflections": 1,
     "skip_saved_active_survivals": 24,
-    "third_party_deflections": 8
+    "third_party_deflections": 9
   },
   "genuine_class_conversion": {
     "conversion_rate": 0.45,
@@ -38,11 +38,6 @@
     ],
     "seed-18:m1": [
       "body_proximity",
-      "prior_meeting_carry"
-    ],
-    "seed-19:m1": [
-      "body_proximity",
-      "contradiction_flag",
       "prior_meeting_carry"
     ],
     "seed-1:m0": [
@@ -166,42 +161,42 @@
     ]
   },
   "indistinguishability": {
-    "crewmate_actions_total": 6175,
-    "crewmate_do_task": 3492,
-    "crewmate_wait": 536,
-    "crewmate_wait_share": 0.08680161943319838,
-    "impostor_actions_total": 1987,
-    "impostor_do_task": 378,
-    "impostor_wait": 172,
-    "impostor_wait_share": 0.08656265727226975,
-    "top_idler_wait_share": 0.5261231194523172
+    "crewmate_actions_total": 6418,
+    "crewmate_do_task": 3465,
+    "crewmate_wait": 465,
+    "crewmate_wait_share": 0.07245247740729199,
+    "impostor_actions_total": 2066,
+    "impostor_do_task": 380,
+    "impostor_wait": 171,
+    "impostor_wait_share": 0.08276863504356244,
+    "top_idler_wait_share": 0.525517252413297
   },
   "multi_signal_conversion": {
-    "conversions_with_body_proximity": 21,
-    "conversions_with_contradiction_flag": 21,
-    "conversions_with_prior_meeting_carry": 14,
+    "conversions_with_body_proximity": 20,
+    "conversions_with_contradiction_flag": 20,
+    "conversions_with_prior_meeting_carry": 13,
     "conversions_with_single_witness_inform": 10,
     "conversions_with_vent_witness": 10,
-    "impostor_ejections": 34,
-    "multi_signal_conversions": 28,
-    "multi_signal_rate": 0.8235294117647058,
+    "impostor_ejections": 33,
+    "multi_signal_conversions": 27,
+    "multi_signal_rate": 0.8181818181818182,
     "single_signal_conversions": 6,
     "unattributed_conversions": 0
   },
   "sample_dir": "9p2i",
   "supply_gauges": {
-    "accused_impostor_meetings": 100,
-    "flag_subjects_crew": 21,
-    "flag_subjects_impostor": 74,
-    "genuine_subject_meetings": 24,
-    "genuine_subject_share": 0.21428571428571427,
-    "meetings_total": 112,
-    "over_gate_listener_rows": 268,
-    "over_gate_listeners_per_accused_impostor_meeting": 2.68,
+    "accused_impostor_meetings": 99,
+    "flag_subjects_crew": 39,
+    "flag_subjects_impostor": 73,
+    "genuine_subject_meetings": 25,
+    "genuine_subject_share": 0.21929824561403508,
+    "meetings_total": 114,
+    "over_gate_listener_rows": 261,
+    "over_gate_listeners_per_accused_impostor_meeting": 2.6363636363636362,
     "strong_flags": 0,
-    "total_flags": 95,
-    "weak_flags": 95,
-    "zero_contradiction_meetings": 58,
-    "zero_contradiction_share": 0.5178571428571429
+    "total_flags": 112,
+    "weak_flags": 112,
+    "zero_contradiction_meetings": 60,
+    "zero_contradiction_share": 0.5263157894736842
   }
 }

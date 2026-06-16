@@ -5189,18 +5189,19 @@ class TestCommittedBytes107FoldPins:
         assert listeners_over_gate == ["p-1", "p-2", "p-9"]
 
     def test_seed3_m0_defended_subject_corroborated_not_folded(self) -> None:
-        # Same-phase symmetry (re-anchored to the phase-11 Wave-1 re-record): a
+        # Same-phase symmetry (re-anchored to the phase-11 Wave-3 re-record): a
         # defended subject's vouches are ingested as a CORROBORATION (which
         # lowers its suspicion same-phase), never as a pile-on fold. The W1
-        # seed-3 m0 row moved with the bytes; its analog here is seed 3 m1: the
-        # corroborated subject p-1 (a crewmate, with ZERO accusation voices, so
-        # it can only reach the corroboration channel) is never folded, while a
-        # separate impostor p-2 takes the fold. The audited suspicion-math (a
-        # corroboration drops the defended subject below the §4.6 gate) is
-        # covered by the synthetic corroboration-delta tests; here we pin that
-        # the bytes route the defended subject to the corroboration channel, not
-        # the fold.
-        entry = _committed_meeting(3, 1)
+        # seed-3 m0 row moved with the bytes (seed 3 collapsed to a single
+        # meeting under the sabotage stall, dropping the shape off the seed); its
+        # analog here is seed 16 m0: the corroborated subject p-4 (a crewmate,
+        # with ZERO accusation voices, so it can only reach the corroboration
+        # channel) is never folded, while a separate impostor p-1 takes the fold.
+        # The audited suspicion-math (a corroboration drops the defended subject
+        # below the §4.6 gate) is covered by the synthetic corroboration-delta
+        # tests; here we pin that the bytes route the defended subject to the
+        # corroboration channel, not the fold.
+        entry = _committed_meeting(16, 0)
         roster = frozenset(ballot.voter for ballot in entry.ballots)
         rederived_flags = detect_contradictions(entry.transcript, roster=roster)
         evidence = derive_belief_evidence(
@@ -5209,10 +5210,10 @@ class TestCommittedBytes107FoldPins:
 
         # The defended subject reaches the corroboration channel with no
         # accusation voice of its own, so the fold could never have claimed it.
-        assert independent_voices(entry.transcript, roster=roster).get("p-1", ()) == ()
-        assert "p-1" in evidence.corroborated
-        assert "p-1" not in evidence.pre_vote_folded
-        assert evidence.pre_vote_folded == ("p-2",)
+        assert independent_voices(entry.transcript, roster=roster).get("p-4", ()) == ()
+        assert "p-4" in evidence.corroborated
+        assert "p-4" not in evidence.pre_vote_folded
+        assert evidence.pre_vote_folded == ("p-1",)
 
 
 # ---------------------------------------------------------------------------
@@ -6009,7 +6010,7 @@ def _voter_rendered_suspicion(vote_prompt: str, *, of: str) -> float | None:
 @dataclass(frozen=True)
 class _InformYield:
     accused_not_ejected: int  # the §4(3) denominator (W2: 75, W1: 59)
-    over_gate_lost_plurality: int  # the lens-C bucket (c) (W2: 64, W1: 37)
+    over_gate_lost_plurality: int  # the lens-C bucket (c) (W2: 63, W1: 37)
     informed_candidates: int  # of the bucket, the single-witness (1-voice) subset
     conversions: tuple[tuple[int, str, str], ...]  # (seed, meeting_id, impostor)
 
@@ -6023,7 +6024,7 @@ def _derive_inform_yield() -> _InformYield:
 
     * count it in the accused-not-ejected denominator (W2: 75, W1: 59);
     * if at least one living voter rendered S over the §4.6 gate, count it in
-      the over-gate-lost-plurality bucket (the audit's lens-C; W2: 64,
+      the over-gate-lost-plurality bucket (the audit's lens-C; W2: 63,
       W1: 37);
     * if S carries exactly one independent voice (the single-witness INFORM
       band, below ``TESTIMONY_INDEPENDENCE_BAR``, under the echo-deduped
@@ -6129,10 +6130,10 @@ def _derive_inform_yield() -> _InformYield:
 class TestSingleWitnessInformYieldOnCommittedBytes:
     """The Task 10.15 inform-yield bloc, walked offline over the W2 bytes.
 
-    The deliverable number, re-anchored to the phase-11 Wave-1 re-record. The
+    The deliverable number, re-anchored to the phase-11 Wave-3 re-record. The
     derivation first reproduces the §4(3) partition EXACTLY off the committed
     bytes (W2: 75 accused living-impostor meeting-subjects the ballots did not
-    eject; 64 of them rendered over the §4.6 gate yet lost plurality -- the W1
+    eject; 63 of them rendered over the §4.6 gate yet lost plurality -- the W1
     audit-2026-06-13-1816 read 59 / 37), which validates the offline oracle,
     then counts how many the single-witness inform converts WITHOUT any tally
     change.
@@ -6141,36 +6142,35 @@ class TestSingleWitnessInformYieldOnCommittedBytes:
     def test_methodology_reproduces_the_audit_partition(self) -> None:
         result = _derive_inform_yield()
 
-        # The §4(3) partition, re-derived from the phase-11 Wave-1 committed
+        # The §4(3) partition, re-derived from the phase-11 Wave-3 committed
         # bytes. The W1 audit read 59 accused-not-ejected /
-        # 37 over-gate-lost-plurality; the re-record moved both (75 / 64) -- a
+        # 37 over-gate-lost-plurality; the re-record moved both (75 / 63) -- a
         # legitimate era move (the denominator and the lens-C bucket are pure
         # functions of the bytes, re-derived by the SAME offline oracle, no
         # methodology change). The accused-not-ejected 75 cross-checks the
         # effective-deflection survivals (test_wave2_metrics) exactly.
         assert result.accused_not_ejected == 75
-        assert result.over_gate_lost_plurality == 64
+        assert result.over_gate_lost_plurality == 63
 
-    def test_single_witness_inform_converts_eight_of_the_sixty_four(self) -> None:
+    def test_single_witness_inform_converts_seven_of_the_sixty_three(self) -> None:
         result = _derive_inform_yield()
 
-        # 27 of the 64 over-gate-lost-plurality subjects are
+        # 27 of the 63 over-gate-lost-plurality subjects are
         # single-witness-informed (one observation-backed voice under
         # echo-dedup); the inform lifts a plurality of listeners over 0.60 in
-        # 8 of them on the phase-11 Wave-1 re-record (prior W2: 14 of 21),
+        # 7 of them on the phase-11 Wave-3 re-record (prior W2: 14 of 21),
         # flipping a SKIP-plurality to an impostor-eject with the frozen
         # equal-votes + tie->SKIP tally. The flip set is still the conservative
         # one (only recorded SKIP voters whose rendered value sits in
         # [gate - inform, gate) -- a baseline below that band still cannot cross
         # on the inform alone, the owner principle); the yield FALLING despite
-        # more candidates is the vent signature -- vents thinned the near-gate
-        # SKIP-voter band, not a rule change.
+        # the same candidate count (the sabotage stall dropped seed-17:m1 out of
+        # the over-gate bucket) is data-drift, not a rule change.
         assert result.informed_candidates == 27
-        assert len(result.conversions) == 8
+        assert len(result.conversions) == 7
         assert result.conversions == (
             (9, "headless-seed-9:meeting-1", "p-4"),
             (15, "headless-seed-15:meeting-0", "p-3"),
-            (17, "headless-seed-17:meeting-1", "p-2"),
             (19, "headless-seed-19:meeting-0", "p-6"),
             (22, "headless-seed-22:meeting-0", "p-6"),
             (31, "headless-seed-31:meeting-0", "p-3"),

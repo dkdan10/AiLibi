@@ -830,8 +830,8 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     0.45 (prior W2 0.875), the Wave-1 deception signature: genuine flags reach
     meetings but deflect short of the gate; lost openings 3 (seeds 18/41/42)
     against 3 cap-defaulted turns — the opening-retry + fail-soft mix;
-    accused-impostor survival 75/102 with the partition 64 rendered-met
-    (under-conversion, NOT deception) + 4 sheltered (seeds 13/16/24/29) + 7
+    accused-impostor survival 75/101 with the partition 63 rendered-met
+    (under-conversion, NOT deception) + 4 sheltered (seeds 13/16/24/29) + 8
     unevidenced.
     """
 
@@ -847,11 +847,11 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     assert gate.lost_opening_accusations == 3
     assert gate.cap_defaulted_turns == 3
 
-    assert gate.accused_impostor_events == 102
+    assert gate.accused_impostor_events == 101
     assert gate.accused_impostor_survivals == 75
-    assert gate.survivals_rendered_met == 64
+    assert gate.survivals_rendered_met == 63
     assert gate.survivals_sheltered_sub_gate == 4
-    assert gate.survivals_unevidenced == 7
+    assert gate.survivals_unevidenced == 8
 
     # Per-seed identities re-derived from the same committed games: the
     # genuine-class supply, the lost openings, and the sheltered survivals sit
