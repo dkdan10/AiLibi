@@ -26,14 +26,21 @@ positives.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import inspect
 import re
-from typing import Final
+from pathlib import Path
+from typing import Final, cast
 
 import pydantic
 
 import api.schemas
+from engine.entities import SabotageState
+from engine.world import load_canonical_map
+from eval.leak_test import JsonValue, _assert_no_role_bearing_values
 from eval.meeting_quality import TournamentEvalReport
+from observation.service import ObservationService
+from tests._helpers.world_state import scripted_initial_world_state
 
 # The concrete spectator DTOs. Adding or removing a DTO must update BOTH this
 # set AND ``api.schemas.__all__`` AND the "Public types introduced" section of
@@ -535,3 +542,55 @@ def test_eval_report_field_set_snapshot() -> None:
         "EXPECTED_EVAL_REPORT_FIELDS (and FORBIDDEN_EVAL_ENGINE_FIELDS if it is "
         "engine-internal). This tripwire is the durable value (D-D-2)."
     )
+
+
+# ---------------------------------------------------------------------------
+# Packet-API role-invariance (Task 11.6, DESIGN.md §1.3, §8.3)
+# ---------------------------------------------------------------------------
+#
+# The structural guards above pin the spectator DTO surface. This complements
+# them on the agent-facing packet API: ``ObservationService.build_packet`` must
+# project the public GlobalView repair channel (``sabotage_repair_rooms`` /
+# ``sabotage_is_gating``, Task 11.5) identically for every role, so the crew
+# repair routing (Task 11.6) reads a role-blind target with no engine coupling.
+
+
+def test_global_view_repair_channel_is_role_invariant_through_packet_api(
+    tmp_path: Path,
+) -> None:
+    # Build packets for the crewmates AND the impostor on the SAME sabotage-active
+    # world state (the scripted roster is 3 crew + 1 impostor); the two new
+    # GlobalView fields must be byte-identical across roles (public / role-blind)
+    # and carry no role-bearing substring.
+    game_map = load_canonical_map()
+    state = dataclasses.replace(
+        scripted_initial_world_state(seed=11),
+        sabotage=SabotageState(
+            kind="reactor", remaining_ticks=5, affected_rooms=(), active=True
+        ),
+    )
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+
+    channels: set[tuple[tuple[str, ...], bool]] = set()
+    roles_seen: set[str] = set()
+    for player_id, player in state.players.items():
+        if not player.alive:
+            continue
+        packet = service.build_packet(
+            world_state=state, agent_id=player_id, engine_events=[]
+        )
+        _assert_no_role_bearing_values(cast(JsonValue, packet.model_dump(mode="json")))
+        roles_seen.add(packet.self_state.role)
+        channels.add(
+            (
+                packet.global_state.sabotage_repair_rooms,
+                packet.global_state.sabotage_is_gating,
+            )
+        )
+    service.close()
+
+    # Both roles were exercised, and they share one identical repair channel.
+    assert roles_seen == {"CREWMATE", "IMPOSTOR"}
+    assert channels == {(("REACTOR", "ENGINEERING"), True)}
