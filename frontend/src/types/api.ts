@@ -109,7 +109,11 @@ export interface ReportBodyEventView {
 export interface SabotageEventView {
   type: "sabotage";
   tick: number;
-  kind: "lights";
+  // Mirrors api/schemas.py SabotageEventView.kind (DESIGN.md §8.3): the
+  // visibility "lights" and the task-gating "reactor" (Task 11.5). Kept in
+  // sync with the backend Literal so the contestable-clock win shape is a
+  // representable replay event.
+  kind: "lights" | "reactor";
   room_id: string | null;
   actor_id: string;
 }
