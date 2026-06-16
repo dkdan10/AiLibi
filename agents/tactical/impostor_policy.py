@@ -57,15 +57,18 @@ State derivation each tick (highest priority first):
   scramble + a hard loss timer. The trigger is a conservative, pure function of
   the freshest public ``global_status``: ``_crew_near_task_win`` (completion has
   reached ``_IMMINENT_CREW_WIN_COMPLETION`` -- ~6/7 -- of the task instances) AND
-  ``_active_sabotage`` is False AND ``_sabotage_window_open`` (this completion
-  level has not been sabotaged yet). The window gate stops the sabotage ->
-  repair -> sabotage loop: a gating reactor freezes the task count, so a
-  repaired-but-still-near-win state never exceeds the level it was sabotaged at
-  and does not re-arm -- the impostor re-fires only once the crew completes a
-  genuinely higher level, never as a sabotage every cooldown tick (which would
-  starve kills, a degenerate low-interest loop). The same gate keeps the window
-  OPEN across a busy tick, so a higher-priority kill/COVER/vent on the
-  completion tick does not permanently forfeit the lever. An AVAILABLE kill this
+  ``_active_sabotage`` is False AND ``_sabotage_window_open`` (the crew is
+  strictly closer to a win -- fewer ``remaining`` instances -- than at any tick a
+  GATING sabotage already ran). The window gate stops the sabotage -> repair ->
+  sabotage loop: a gating reactor freezes the task count, so a repaired-but-
+  still-near-win state has the same ``remaining`` and does not re-arm -- the
+  impostor never spams a sabotage every cooldown tick (which would starve kills,
+  a degenerate low-interest loop). Keying on ``remaining`` (not ``completed``)
+  also re-arms when a crew death drops ``tasks_total`` and brings the crew closer
+  (DESIGN.md §3.5), and counting only GATING sabotages keeps a repaired ``lights``
+  from consuming the reactor window. The same gate keeps the window OPEN across a
+  busy tick, so a higher-priority kill/COVER/vent on the completion tick does not
+  permanently forfeit the lever. An AVAILABLE kill this
   tick (one this actor will actually emit -- not a kill it defers to a co-located
   lower-id fellow) still out-prioritizes the lever (``_kill_available_now``):
   the impostor keeps hunting and the lever only pre-empts a stalk/idle. No RNG
@@ -533,6 +536,28 @@ class ImpostorPolicy:
         return active
 
     @staticmethod
+    def _sabotage_is_gating_of(status: EpisodicEvent) -> bool:
+        """Read ``sabotage_is_gating`` from a ``global_status`` event (Task 11.7).
+
+        The public, role-blind flag (Task 11.5) distinguishing a task-gating
+        sabotage (``reactor`` -- freezes the task race and denies the win) from a
+        non-gating one (``lights`` -- visibility only). The re-arm gate keys off
+        this so only gating sabotages close the reactor window. An absent key maps
+        to ``False`` (non-gating / no aggregate); a present-but-non-bool value is a
+        boundary-contract violation and raises.
+        """
+
+        gating = status.payload.get("sabotage_is_gating")
+        if gating is None:
+            return False
+        if not isinstance(gating, bool):
+            raise ValueError(
+                "global_status event has non-bool sabotage_is_gating: "
+                f"{status.payload!r}"
+            )
+        return gating
+
+    @staticmethod
     def _active_sabotage(events: tuple[EpisodicEvent, ...]) -> bool:
         """Return ``True`` iff a sabotage is currently active (Task 11.7).
 
@@ -598,14 +623,23 @@ class ImpostorPolicy:
         return completed * denominator >= total * numerator
 
     @staticmethod
-    def _max_completed_under_sabotage(
+    def _min_remaining_under_gating_sabotage(
         events: tuple[EpisodicEvent, ...],
     ) -> int | None:
-        """Highest ``tasks_completed`` observed while a sabotage was active.
+        """Fewest remaining instances observed while a GATING sabotage was active.
 
-        ``None`` if no active sabotage has ever been observed. Reads the public
-        ``global_status`` history; the basis of the :meth:`_sabotage_window_open`
-        re-arm gate (Task 11.7).
+        ``remaining = tasks_total - tasks_completed`` over the public
+        ``global_status`` history, counting only ticks where a sabotage was both
+        active AND gating (``_sabotage_is_gating_of`` -- ``reactor``, not
+        ``lights``). ``None`` if no gating sabotage has ever been observed. The
+        basis of the :meth:`_sabotage_window_open` re-arm gate (Task 11.7).
+
+        Keyed on REMAINING, not ``tasks_completed``, so a denominator drop (a
+        crewmate dying with an incomplete task removes that instance from
+        ``tasks_total``, DESIGN.md §3.5) that brings the crew closer to a win
+        re-arms the lever even without a completion (Codex review). Only gating
+        sabotages count because only they freeze the task race / deny the win; a
+        repaired ``lights`` must not consume the reactor window (Codex review).
         """
 
         best: int | None = None
@@ -614,35 +648,38 @@ class ImpostorPolicy:
                 continue
             if not ImpostorPolicy._sabotage_active_of(event):
                 continue
+            if not ImpostorPolicy._sabotage_is_gating_of(event):
+                continue
             counts = ImpostorPolicy._task_counts_of(event)
             if counts is None:
                 continue
-            completed = counts[0]
-            if best is None or completed > best:
-                best = completed
+            completed, total = counts
+            remaining = total - completed
+            if best is None or remaining < best:
+                best = remaining
         return best
 
     @staticmethod
     def _sabotage_window_open(events: tuple[EpisodicEvent, ...]) -> bool:
-        """Return ``True`` iff this near-win level has not been sabotaged yet.
+        """Return ``True`` iff this near-win level has not been reactor-gated yet.
 
-        The SABOTAGE re-arm gate (Task 11.7). The lever may fire for the crew's
-        current completion level only if that level has not already had a sabotage
-        running -- i.e. ``tasks_completed`` now exceeds the highest count ever
-        observed under an active sabotage (:meth:`_max_completed_under_sabotage`),
-        or no sabotage has ever been observed. ``tasks_completed`` is monotonic
-        non-decreasing (completed instances are never un-counted, DESIGN.md §3.5),
-        so "beyond the highest sabotaged level" means "a genuinely fresh level".
+        The SABOTAGE re-arm gate (Task 11.7). The lever may fire only if the crew
+        is strictly CLOSER to a win than at any tick a gating sabotage was already
+        observed running -- i.e. current ``remaining`` (``tasks_total -
+        tasks_completed``) is below :meth:`_min_remaining_under_gating_sabotage`,
+        or no gating sabotage has ever run. ``remaining`` is monotonic
+        non-increasing (completed instances are never un-counted and
+        ``tasks_total`` only drops on a death, DESIGN.md §3.5), so "fewer
+        remaining than the last gated level" means "a genuinely fresher, more
+        imminent level".
 
-        This is the loop fix that also keeps the window OPEN across a busy tick
-        (Codex review): a gating ``reactor`` freezes the task count, so a
-        repaired-but-still-near-win state never exceeds the level it was sabotaged
-        at and does NOT re-arm (closing the sabotage -> repair -> sabotage loop);
-        but if a higher-priority branch (kill/COVER/vent) ran on the completion
-        tick, the count has still advanced beyond the last sabotaged level, so a
-        later free tick can STILL fire -- the window is not forfeited just because
-        progress was not made this exact tick. Pure function of the observed
-        ``global_status`` history; deterministic, byte-identical replays.
+        This closes the sabotage -> repair -> sabotage loop (a repaired reactor
+        froze the count, so ``remaining`` is unchanged and the window stays shut)
+        while still: (a) re-arming on a real completion OR a denominator drop that
+        brings the crew closer, and (b) keeping the window OPEN across a busy tick
+        (a kill/COVER/vent on the completion tick does not forfeit the lever --
+        ``remaining`` has still fallen below the last gated level). Pure function of
+        the observed ``global_status`` history; deterministic, byte-identical.
         """
 
         latest = ImpostorPolicy._latest_global_status(events)
@@ -651,11 +688,12 @@ class ImpostorPolicy:
         counts = ImpostorPolicy._task_counts_of(latest)
         if counts is None:
             return False
-        latest_completed = counts[0]
-        max_sabotaged = ImpostorPolicy._max_completed_under_sabotage(events)
-        if max_sabotaged is None:
+        completed, total = counts
+        current_remaining = total - completed
+        min_remaining = ImpostorPolicy._min_remaining_under_gating_sabotage(events)
+        if min_remaining is None:
             return True
-        return latest_completed > max_sabotaged
+        return current_remaining < min_remaining
 
     @staticmethod
     def _body_visible_rooms(

@@ -1304,6 +1304,7 @@ class TestImpostorSabotage:
                 tasks_total=14,
                 sabotage_active=True,
                 sabotage_kind="reactor",
+                sabotage_is_gating=True,
             ),
         )
         policy = ImpostorPolicy(agent_id="imp")
@@ -1536,6 +1537,7 @@ class TestImpostorSabotage:
                 tasks_total=14,
                 sabotage_active=True,
                 sabotage_kind="reactor",
+                sabotage_is_gating=True,
             ),
             _self_state_event(tick=10, room="CAFETERIA"),
             _cooldown_event(tick=10, cooldown=0),
@@ -1560,6 +1562,7 @@ class TestImpostorSabotage:
                 tasks_total=14,
                 sabotage_active=True,
                 sabotage_kind="reactor",
+                sabotage_is_gating=True,
             ),
             _self_state_event(tick=10, room="CAFETERIA"),
             _cooldown_event(tick=10, cooldown=0),
@@ -1612,8 +1615,76 @@ class TestImpostorSabotage:
         assert isinstance(intent, SabotageIntent)
         assert intent.payload.kind == "reactor"
 
+    def test_re_arms_when_a_crew_death_drops_the_task_total(self) -> None:
+        # Codex P2 (denominator drop): the impostor reactor-gated at 12/14, then a
+        # crewmate died with an incomplete task -- removing that instance drops the
+        # total to 13 (DESIGN.md §3.5), so the repaired state is 12/13: the crew is
+        # now ONE task from a win with no completion. Keying the re-arm on
+        # REMAINING (not completed) re-opens the window so the lever fires again.
+        store = _store_with(
+            _global_status_event(
+                tick=9,
+                tasks_completed=12,
+                tasks_total=14,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_is_gating=True,
+            ),
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(tick=10, tasks_completed=12, tasks_total=13),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, SabotageIntent)
+        assert intent.payload.kind == "reactor"
+
+    def test_non_gating_lights_does_not_close_the_reactor_window(self) -> None:
+        # Codex P2 (non-gating in the re-arm gate): a lights sabotage (non-gating
+        # -- it does not freeze the task race or deny the win) ran at 12/14 and was
+        # repaired. It must NOT consume the reactor's window: with the crew still
+        # at 12/14 and no GATING sabotage ever run, the impostor still fires.
+        store = _store_with(
+            _global_status_event(
+                tick=9,
+                tasks_completed=12,
+                tasks_total=14,
+                sabotage_active=True,
+                sabotage_kind="lights",
+                sabotage_is_gating=False,
+            ),
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(tick=10, tasks_completed=12, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, SabotageIntent)
+        assert intent.payload.kind == "reactor"
+
     def test_sabotage_window_open_when_never_sabotaged(self) -> None:
         events = (_global_status_event(tick=10, tasks_completed=13, tasks_total=14),)
+
+        assert ImpostorPolicy._sabotage_window_open(events) is True
+
+    def test_sabotage_window_open_ignores_a_non_gating_sabotage(self) -> None:
+        # Only GATING sabotages close the window: an active lights observation does
+        # not register, so the window stays open at the same count.
+        events = (
+            _global_status_event(
+                tick=9,
+                tasks_completed=12,
+                tasks_total=14,
+                sabotage_active=True,
+                sabotage_kind="lights",
+                sabotage_is_gating=False,
+            ),
+            _global_status_event(tick=10, tasks_completed=12, tasks_total=14),
+        )
 
         assert ImpostorPolicy._sabotage_window_open(events) is True
 
@@ -1627,6 +1698,7 @@ class TestImpostorSabotage:
                 tasks_total=14,
                 sabotage_active=True,
                 sabotage_kind="reactor",
+                sabotage_is_gating=True,
             ),
             _global_status_event(tick=10, tasks_completed=12, tasks_total=14),
         )
@@ -1643,6 +1715,7 @@ class TestImpostorSabotage:
                 tasks_total=14,
                 sabotage_active=True,
                 sabotage_kind="reactor",
+                sabotage_is_gating=True,
             ),
             _global_status_event(tick=10, tasks_completed=13, tasks_total=14),
         )
