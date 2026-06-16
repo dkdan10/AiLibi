@@ -35,6 +35,7 @@ the whole multi-impostor roster -- the events that populate ``visible_players``
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from typing import cast
@@ -44,7 +45,7 @@ from hypothesis import strategies as st
 from pydantic import TypeAdapter
 
 from engine.actions import Action
-from engine.entities import PlayerId, PlayerState, TaskId, TaskState
+from engine.entities import PlayerId, PlayerState, SabotageState, TaskId, TaskState
 from engine.events import KilledEvent
 from engine.rng import EngineRng
 from engine.tick import advance_tick
@@ -343,4 +344,71 @@ def test_observation_packets_never_leak_hidden_information(
         if state.phase != "PLAY":
             break
 
+    service.close()
+
+
+@given(
+    seed=st.integers(min_value=0, max_value=2**31 - 1),
+    num_impostors=st.sampled_from(_VALID_IMPOSTOR_COUNTS),
+    sabotage_kind=st.sampled_from(("reactor", "lights")),
+)
+@settings(
+    max_examples=50,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+def test_global_view_sabotage_fields_are_role_invariant(
+    seed: int,
+    num_impostors: int,
+    sabotage_kind: str,
+    tmp_path: Path,
+) -> None:
+    """The public repair channel (Task 11.5 / 11.6) never differs by role.
+
+    ``GlobalView.sabotage_repair_rooms`` / ``sabotage_is_gating`` are read from
+    the map's ``SabotageDefinition`` independent of the recipient, so every living
+    agent -- crewmate AND impostor, across 2/3-impostor rosters -- must see an
+    IDENTICAL repair channel while a sabotage is active (DESIGN.md §1.3, §8.3).
+    The kill/vent/report/wait sweep above never starts a sabotage, so this injects
+    an active one into the initial state and asserts the two new fields are
+    byte-identical across roles and carry no role-bearing substring (the repair
+    rooms are bare room ids -- the imported value scanner trips on any
+    ``impostor`` / ``crewmate`` / ``crew`` leak).
+    """
+
+    game_map = load_canonical_map()
+    state = dataclasses.replace(
+        _roster_initial_state(
+            seed=seed, num_impostors=num_impostors, game_map=game_map
+        ),
+        sabotage=SabotageState(
+            kind=sabotage_kind,
+            remaining_ticks=5,
+            affected_rooms=(),
+            active=True,
+        ),
+    )
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+
+    expected = game_map.sabotages[sabotage_kind]
+    channels: set[tuple[tuple[str, ...], bool]] = set()
+    for player_id, player in state.players.items():
+        if not player.alive:
+            continue
+        packet = service.build_packet(
+            world_state=state, agent_id=player_id, engine_events=[]
+        )
+        packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
+        _assert_no_role_bearing_values(packet_dump)
+        global_view = packet.global_state
+        assert global_view.sabotage_active is True
+        channels.add(
+            (global_view.sabotage_repair_rooms, global_view.sabotage_is_gating)
+        )
+
+    # One distinct channel across every role recipient (public / role-blind), and
+    # it matches the map definition the service projected.
+    assert channels == {(expected.repair_rooms, expected.gates_tasks)}
     service.close()

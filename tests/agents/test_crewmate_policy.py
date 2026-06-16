@@ -10,9 +10,11 @@ from agents.memory.beliefs import BeliefState
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.perception import (
     EVENT_COOLDOWN_STATUS,
+    EVENT_GLOBAL_STATUS,
     EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
     EVENT_SELF_STATE,
+    PROVENANCE_INFERRED,
     PROVENANCE_OBSERVED,
 )
 from agents.tactical.crewmate_policy import (
@@ -30,6 +32,7 @@ from observation.action_intent import (
     DoTaskIntent,
     EmergencyMeetingIntent,
     MoveIntent,
+    RepairSabotageIntent,
     ReportBodyIntent,
     WaitIntent,
 )
@@ -117,6 +120,60 @@ def _saw_player_event(
         type=EVENT_SAW_PLAYER,
         payload={"player_id": player_id, "room": room, "action": action},
         provenance=PROVENANCE_OBSERVED,
+    )
+
+
+def _global_status_event(
+    *,
+    tick: int,
+    sabotage_active: bool,
+    sabotage_kind: str | None,
+    sabotage_repair_rooms: tuple[RoomId, ...] = (),
+    sabotage_is_gating: bool = False,
+) -> EpisodicEvent:
+    # Mirrors agents.perception._global_state_payload: the public, role-blind
+    # aggregate perception appends once per tick (Task 11.5). The task-progress
+    # counters are irrelevant to the REPAIR_SABOTAGE interrupt and held at zero.
+    payload: dict[str, Any] = {
+        "tasks_completed": 0,
+        "tasks_total": 0,
+        "task_completion_percent": 0.0,
+        "sabotage_active": sabotage_active,
+        "sabotage_kind": sabotage_kind,
+        "sabotage_repair_rooms": sabotage_repair_rooms,
+        "sabotage_is_gating": sabotage_is_gating,
+    }
+    return EpisodicEvent(
+        tick=tick,
+        type=EVENT_GLOBAL_STATUS,
+        payload=payload,
+        provenance=PROVENANCE_INFERRED,
+    )
+
+
+def _branch_map() -> PublicMapView:
+    """A symmetric two-branch map for the deterministic-repair-room tie-break.
+
+    HUB is the spawn / meeting / button hub; ALPHA and OMEGA are equidistant
+    repair rooms two hops away down the WEST and EAST branches respectively. The
+    first step toward each differs (WEST vs EAST), so the sorted-room-id tie-break
+    is observable in the emitted MoveIntent.
+    """
+
+    neighbors: Mapping[RoomId, tuple[RoomId, ...]] = {
+        "HUB": ("EAST", "WEST"),
+        "WEST": ("ALPHA", "HUB"),
+        "EAST": ("HUB", "OMEGA"),
+        "ALPHA": ("WEST",),
+        "OMEGA": ("EAST",),
+    }
+    return _public_map(
+        rooms=("ALPHA", "EAST", "HUB", "OMEGA", "WEST"),
+        neighbors=neighbors,
+        task_locations={},
+        emergency_button_room="HUB",
+        meeting_room="HUB",
+        spawn_room="HUB",
     )
 
 
@@ -1128,6 +1185,321 @@ class TestCrewmateSuspicionEmergencyTrigger:
         pressed = policy.decide(store, public_map, emergency=at_button)
         assert isinstance(pressed, EmergencyMeetingIntent)
         assert pressed.payload.reason == SUSPICION_ACCUMULATION_REASON
+
+
+# ---------------------------------------------------------------------------
+# Task 11.6 — REPAIR_SABOTAGE interrupt (DESIGN.md §1.3, §4.4): the crewmate
+# diverts to fix an active task-gating sabotage, reading repair rooms ONLY from
+# the public GlobalView channel. The interrupt sits below body/kill and above
+# the suspicion walk + task routing.
+# ---------------------------------------------------------------------------
+
+
+class TestCrewmateRepairSabotageInterrupt:
+    """Policy-side pins for the Task 11.6 REPAIR_SABOTAGE interrupt."""
+
+    def test_active_gating_sabotage_diverts_toward_nearest_repair_room(self) -> None:
+        # The agent sits IN its task room (would DO_TASK), but an active gating
+        # sabotage diverts it one A* step toward the surfaced repair room.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id="swipe_card"),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ELECTRICAL",),
+                sabotage_is_gating=True,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, MoveIntent)
+        # ADMIN -> CAFETERIA is the first A* step toward ELECTRICAL.
+        assert intent.payload.to_room == "CAFETERIA"
+        assert intent.actor == "p1"
+
+    def test_emits_repair_intent_when_in_a_repair_room(self) -> None:
+        store = _store_with(
+            _self_state_event(
+                tick=10, room="ELECTRICAL", pending_task_id="wires_electrical"
+            ),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ELECTRICAL",),
+                sabotage_is_gating=True,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, RepairSabotageIntent)
+        assert intent.payload.kind == "reactor"
+        assert intent.actor == "p1"
+
+    def test_non_gating_lights_does_not_divert(self) -> None:
+        # lights (non-gating) surfaces repair rooms but must NOT trigger the
+        # diversion: the agent runs the normal FSM byte-identically to pre-11.6.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id="swipe_card"),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="lights",
+                sabotage_repair_rooms=("ELECTRICAL",),
+                sabotage_is_gating=False,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _public_map())
+
+        # In its task room with the gate off -> DO_TASK, exactly as pre-11.6.
+        assert isinstance(intent, DoTaskIntent)
+        assert intent.payload.task_id == "swipe_card"
+
+    def test_inactive_sabotage_does_not_divert(self) -> None:
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id="swipe_card"),
+            _global_status_event(
+                tick=10,
+                sabotage_active=False,
+                sabotage_kind=None,
+                sabotage_repair_rooms=(),
+                sabotage_is_gating=False,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, DoTaskIntent)
+
+    def test_no_global_status_event_runs_normal_fsm(self) -> None:
+        # The pre-11.6 store shape (no global_status event) keeps the plain FSM:
+        # no global channel, no diversion.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id="swipe_card"),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, DoTaskIntent)
+
+    @pytest.mark.parametrize(
+        "repair_rooms",
+        [("ALPHA", "OMEGA"), ("OMEGA", "ALPHA")],
+        ids=["alpha-first", "omega-first"],
+    )
+    def test_equidistant_repair_room_choice_is_deterministic(
+        self, repair_rooms: tuple[str, ...]
+    ) -> None:
+        # ALPHA and OMEGA are equidistant from HUB; the sorted-room-id tie-break
+        # picks ALPHA regardless of the surfaced order, so the first step is WEST
+        # (the ALPHA branch), never EAST.
+        store = _store_with(
+            _self_state_event(tick=10, room="HUB", pending_task_id=None),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=repair_rooms,
+                sabotage_is_gating=True,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _branch_map())
+
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "WEST"
+
+    def test_repair_route_is_stable_across_ticks(self) -> None:
+        # No ping-pong (the integration risk): after stepping toward the chosen
+        # (lower-id) ALPHA, the next tick keeps heading to ALPHA, never switching
+        # to the equidistant-at-start OMEGA.
+        policy = CrewmatePolicy(agent_id="p1")
+        branch_map = _branch_map()
+        store = MemoryStore()
+
+        store.append(_self_state_event(tick=0, room="HUB", pending_task_id=None))
+        store.append(
+            _global_status_event(
+                tick=0,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ALPHA", "OMEGA"),
+                sabotage_is_gating=True,
+            )
+        )
+        first = policy.decide(store, branch_map)
+        assert isinstance(first, MoveIntent)
+        assert first.payload.to_room == "WEST"
+
+        # The agent moved one step to WEST; re-decide from there.
+        store.append(_self_state_event(tick=1, room="WEST", pending_task_id=None))
+        store.append(
+            _global_status_event(
+                tick=1,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ALPHA", "OMEGA"),
+                sabotage_is_gating=True,
+            )
+        )
+        second = policy.decide(store, branch_map)
+        assert isinstance(second, MoveIntent)
+        assert second.payload.to_room == "ALPHA"
+
+    def test_body_visible_outranks_repair(self) -> None:
+        # A body in the agent's room ends the round; it keeps priority above
+        # repair (repair would otherwise have moved toward ELECTRICAL).
+        store = _store_with(
+            _self_state_event(tick=10, room="MEDBAY", pending_task_id=None),
+            _saw_body_event(tick=10, body_id="p3-body", room="MEDBAY"),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ELECTRICAL",),
+                sabotage_is_gating=True,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, ReportBodyIntent)
+        assert intent.payload.body_id == "p3-body"
+
+    def test_witnessed_kill_outranks_repair(self) -> None:
+        # A witnessed kill (a meeting ends the round) keeps priority above repair.
+        # The agent is at the button room, so the kill interrupt presses the
+        # button; repair would instead have produced a MoveIntent toward ELECTRICAL.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA", pending_task_id=None),
+            _saw_player_event(
+                tick=10, player_id="p2", room="CAFETERIA", action=KILL_ACTION
+            ),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ELECTRICAL",),
+                sabotage_is_gating=True,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, EmergencyMeetingIntent)
+        assert intent.payload.reason == KILL_WITNESS_REASON
+
+    def test_repair_outranks_suspicion_trigger(self) -> None:
+        # Repair is above the discretionary suspicion walk: an eligible emergency
+        # snapshot does not pre-empt fixing an active gating sabotage. The agent is
+        # in a repair room, so repair is the distinctive RepairSabotageIntent while
+        # the suspicion walk would have been a button walk away from ELECTRICAL.
+        store = _store_with(
+            _self_state_event(tick=10, room="ELECTRICAL", pending_task_id=None),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ELECTRICAL",),
+                sabotage_is_gating=True,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _public_map(), emergency=_eligible_view())
+
+        assert isinstance(intent, RepairSabotageIntent)
+        assert intent.payload.kind == "reactor"
+
+    def test_repair_outranks_task_routing(self) -> None:
+        # Repair is above task routing: in a repair room that is also the agent's
+        # task room, the agent repairs instead of doing its task.
+        store = _store_with(
+            _self_state_event(
+                tick=10, room="ELECTRICAL", pending_task_id="wires_electrical"
+            ),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ELECTRICAL",),
+                sabotage_is_gating=True,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, RepairSabotageIntent)
+
+    def test_unreachable_repair_room_falls_back_to_wait(self) -> None:
+        # Degenerate map: the only repair room is unreachable from the agent's
+        # component, so the route degrades to WaitIntent instead of raising.
+        rooms = ("ADMIN", "CAFETERIA", "ELECTRICAL")
+        neighbors: Mapping[RoomId, tuple[RoomId, ...]] = {
+            "ADMIN": (),
+            "CAFETERIA": ("ELECTRICAL",),
+            "ELECTRICAL": ("CAFETERIA",),
+        }
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id=None),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ELECTRICAL",),
+                sabotage_is_gating=True,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+
+        intent = policy.decide(
+            store,
+            _public_map(
+                rooms=rooms,
+                neighbors=neighbors,
+                task_locations={},
+                emergency_button_room="CAFETERIA",
+                meeting_room="CAFETERIA",
+                spawn_room="ADMIN",
+            ),
+        )
+
+        assert isinstance(intent, WaitIntent)
+
+    def test_repair_decision_is_pure(self) -> None:
+        # Same inputs -> same intent, repeatedly: decide() stays a pure function
+        # of memory + PublicMapView + the GlobalView channel.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", pending_task_id="swipe_card"),
+            _global_status_event(
+                tick=10,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+                sabotage_repair_rooms=("ELECTRICAL",),
+                sabotage_is_gating=True,
+            ),
+        )
+        policy = CrewmatePolicy(agent_id="p1")
+        public_map = _public_map()
+
+        intents = [policy.decide(store, public_map) for _ in range(5)]
+
+        for intent in intents:
+            assert isinstance(intent, MoveIntent)
+            assert intent.payload.to_room == "CAFETERIA"
 
 
 class TestImpostorPolicyHasNoEmergencyBehavior:

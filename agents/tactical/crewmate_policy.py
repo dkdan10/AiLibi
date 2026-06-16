@@ -4,7 +4,7 @@ Implements the deterministic crewmate finite-state machine:
 
     IDLE -> MOVE_TO_TASK -> DO_TASK -> IDLE
 
-with three override interrupts:
+with four override interrupts (highest priority first):
 
 * ``BODY_VISIBLE -> REPORT`` -- a body is visible at the agent's most recent
   perception tick, so the agent files a :class:`ReportBodyIntent` for the
@@ -13,6 +13,20 @@ with three override interrupts:
   current room, so the agent moves one A* step toward
   ``public_map.emergency_button_room``; if it is already there, it raises an
   :class:`EmergencyMeetingIntent`.
+* ``REPAIR_SABOTAGE -> DIVERT_AND_REPAIR`` (Task 11.6, DESIGN.md §1.3, §4.4) --
+  an active task-gating sabotage (the ``reactor`` kind) is surfaced on the
+  freshest ``global_status``, so the agent diverts to fix it: one A* step per
+  tick toward the nearest surfaced repair room (``sabotage_repair_rooms``, with a
+  sorted-room-id tie-break so equidistant rooms never ping-pong the route), and a
+  :class:`RepairSabotageIntent` for the sabotage kind once it stands in a repair
+  room. An unrepaired gating sabotage is a hard loss timer (the dormant
+  ``IMPOSTOR_SABOTAGE`` win), so this OUTRANKS the discretionary suspicion walk
+  and task routing below it; a body or kill still ends the round and keeps
+  priority above it. The diversion is scoped to ``sabotage_is_gating`` so a
+  non-gating ``lights`` sabotage leaves crew behavior byte-identical to the
+  pre-11.6 FSM. Repair rooms are read ONLY from the public :class:`GlobalView`
+  channel -- the policy is engine-free, never importing from ``engine/`` and
+  never hardcoding room names.
 * ``SUSPICION_ACCUMULATED -> CALL_MEETING`` (Task 10.8, DESIGN.md §3.2, §5.2;
   audit gp-3 B-B-4) -- the agent's private max suspicion over presumed-living
   players has reached the §4.6 eject gate since the last meeting, so the agent
@@ -48,6 +62,10 @@ Conventions consumed from perception (DESIGN.md §4.2 / §6.2):
 * ``saw_player`` events at the latest tick whose payload ``action`` field
   equals ``"kill"`` and whose ``room`` matches the agent's own room indicate
   a kill in progress that the agent has witnessed.
+* ``global_status`` events carry the public, role-blind sabotage aggregate
+  (``sabotage_active`` / ``sabotage_kind`` / ``sabotage_repair_rooms`` /
+  ``sabotage_is_gating``, Task 11.5, DESIGN.md §8.3); the freshest one drives the
+  ``REPAIR_SABOTAGE`` interrupt above.
 """
 
 from __future__ import annotations
@@ -59,6 +77,7 @@ from typing import Final
 from agents.memory.beliefs import BeliefState
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.perception import (
+    EVENT_GLOBAL_STATUS,
     EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
     EVENT_SELF_STATE,
@@ -71,6 +90,7 @@ from observation.action_intent import (
     EmergencyMeetingIntent,
     MoveIntent,
     PlayerId,
+    RepairSabotageIntent,
     ReportBodyIntent,
     WaitIntent,
 )
@@ -290,6 +310,22 @@ def _seen_victim_ids(memory: MemoryStore) -> frozenset[PlayerId]:
     return frozenset(victims)
 
 
+@dataclass(frozen=True)
+class _GatingSabotage:
+    """The active task-gating sabotage surfaced on the freshest ``global_status``.
+
+    Built by :meth:`CrewmatePolicy._active_gating_sabotage` from the public,
+    role-blind :class:`observation.packet.GlobalView` channel (Task 11.5): ``kind``
+    stamps the emitted :class:`RepairSabotageIntent` and ``repair_rooms`` are the
+    surfaced repair targets the crew routes toward. Internal to this module --
+    a typed carrier so the REPAIR_SABOTAGE interrupt stays a pure function of the
+    public channel with no ``engine/`` coupling and no hardcoded room names.
+    """
+
+    kind: str
+    repair_rooms: tuple[RoomId, ...]
+
+
 class CrewmatePolicy:
     """Deterministic crewmate FSM (DESIGN.md §4.4).
 
@@ -348,6 +384,21 @@ class CrewmatePolicy:
                 public_map=public_map,
                 own_room=own_room,
                 reason=KILL_WITNESS_REASON,
+            )
+
+        # REPAIR_SABOTAGE (Task 11.6, DESIGN.md §1.3, §4.4): an active task-gating
+        # sabotage is a hard loss timer (the dormant IMPOSTOR_SABOTAGE win), so the
+        # crew diverts to fix it ABOVE the discretionary suspicion walk and task
+        # routing -- but BELOW the body/kill interrupts, which end the round anyway.
+        # The signal is re-read fresh each tick from the public GlobalView channel
+        # (no cross-tick tracker); a non-gating ``lights`` sabotage returns None
+        # here so lights-era crew behavior stays byte-identical.
+        gating_sabotage = self._active_gating_sabotage(events)
+        if gating_sabotage is not None:
+            return self._walk_to_repair(
+                public_map=public_map,
+                own_room=own_room,
+                sabotage=gating_sabotage,
             )
 
         if emergency is not None and emergency.is_eligible:
@@ -452,6 +503,65 @@ class CrewmatePolicy:
             return True
         return False
 
+    @staticmethod
+    def _active_gating_sabotage(
+        events: tuple[EpisodicEvent, ...],
+    ) -> _GatingSabotage | None:
+        """Return the active task-gating sabotage on the freshest ``global_status``.
+
+        Reads the most recent ``global_status`` event -- the public, role-blind
+        aggregate perception appends once per tick (Task 11.5, DESIGN.md §8.3) --
+        mirroring the ``_latest_self_state`` reversed scan, and returns the gating
+        sabotage's kind plus surfaced repair rooms ONLY when both
+        ``sabotage_active`` and ``sabotage_is_gating`` hold; otherwise ``None``
+        (no diversion). Scoping to ``sabotage_is_gating`` is what keeps a
+        non-gating ``lights`` sabotage byte-identical to the pre-11.6 FSM. There is
+        no cross-tick tracker -- the signal is re-read fresh each tick.
+
+        A missing ``global_status`` (or a falsy ``sabotage_active`` /
+        ``sabotage_is_gating``) means "no active gating sabotage" -- the correct
+        meaning, not a silent fallback, mirroring the absent-field handling in the
+        self_state accessors. Once committed to acting (active AND gating) a
+        missing / malformed ``sabotage_kind`` or ``sabotage_repair_rooms`` is a
+        boundary-contract violation and raises (no silent guess), as does an active
+        gating sabotage that surfaces no repair room to route toward.
+        """
+
+        for event in reversed(events):
+            if event.type != EVENT_GLOBAL_STATUS:
+                continue
+            payload = event.payload
+            if not payload.get("sabotage_active"):
+                return None
+            if not payload.get("sabotage_is_gating"):
+                return None
+            kind = payload.get("sabotage_kind")
+            if not isinstance(kind, str):
+                raise ValueError(
+                    "global_status event missing string 'sabotage_kind' for an "
+                    f"active gating sabotage: {payload!r}"
+                )
+            raw_rooms = payload.get("sabotage_repair_rooms")
+            if isinstance(raw_rooms, str) or not isinstance(raw_rooms, Iterable):
+                raise ValueError(
+                    "global_status event has non-iterable 'sabotage_repair_rooms': "
+                    f"{payload!r}"
+                )
+            repair_rooms: list[RoomId] = []
+            for room in raw_rooms:
+                if not isinstance(room, str):
+                    raise ValueError(
+                        f"global_status event has non-string repair room: {payload!r}"
+                    )
+                repair_rooms.append(room)
+            if not repair_rooms:
+                raise ValueError(
+                    "active gating sabotage surfaced no repair rooms to route "
+                    f"toward: {payload!r}"
+                )
+            return _GatingSabotage(kind=kind, repair_rooms=tuple(repair_rooms))
+        return None
+
     def _walk_to_button(
         self,
         *,
@@ -479,6 +589,80 @@ class CrewmatePolicy:
                 }
             )
         return self._move_toward(public_map=public_map, own_room=own_room, goal=target)
+
+    def _walk_to_repair(
+        self,
+        *,
+        public_map: PublicMapView,
+        own_room: RoomId,
+        sabotage: _GatingSabotage,
+    ) -> ActionIntent:
+        """Divert to fix an active task-gating sabotage (Task 11.6, DESIGN.md §4.4).
+
+        Once the agent stands in a surfaced repair room it emits
+        :class:`RepairSabotageIntent` for the sabotage kind; otherwise it takes one
+        A* step per tick toward the nearest repair room. The repair rooms come
+        ONLY from the public ``GlobalView`` channel (carried on ``sabotage``), so
+        the policy never imports from ``engine/`` and never hardcodes a room name.
+        A disconnected repair set degrades to a wait via :meth:`_move_toward`.
+        """
+
+        if own_room in sabotage.repair_rooms:
+            return self._repair(kind=sabotage.kind)
+        target = self._nearest_repair_room(
+            public_map=public_map,
+            own_room=own_room,
+            repair_rooms=sabotage.repair_rooms,
+        )
+        return self._move_toward(public_map=public_map, own_room=own_room, goal=target)
+
+    def _nearest_repair_room(
+        self,
+        *,
+        public_map: PublicMapView,
+        own_room: RoomId,
+        repair_rooms: tuple[RoomId, ...],
+    ) -> RoomId:
+        """Pick the repair room fewest A* hops away, sorted-room-id tie-break.
+
+        ``repair_rooms`` is the non-empty surfaced repair set. The room with the
+        smallest ``(hop_count, room_id)`` key wins -- a deterministic min that is
+        independent of the surfaced order (so equidistant rooms break by id, not by
+        payload ordering) and stable as the agent closes the distance: the chosen
+        room's hop count strictly decreases each tick while every other room's
+        changes by at most one, so the choice cannot oscillate across ticks (the
+        ping-pong integration risk). Mirrors
+        :meth:`agents.tactical.impostor_policy.ImpostorPolicy._choose_exit_vent`.
+        """
+
+        return min(
+            repair_rooms,
+            key=lambda room: (
+                self._repair_distance(public_map=public_map, start=own_room, goal=room),
+                room,
+            ),
+        )
+
+    @staticmethod
+    def _repair_distance(
+        *,
+        public_map: PublicMapView,
+        start: RoomId,
+        goal: RoomId,
+    ) -> int:
+        """A* hop count from ``start`` to ``goal`` (unreachable = sentinel).
+
+        Mirrors :meth:`ImpostorPolicy._vent_distance`: an unreachable or unknown
+        goal sorts last via a sentinel one larger than any possible path length,
+        keeping :meth:`_nearest_repair_room`'s ordering total and deterministic
+        without raising on a disconnected topology (the route then degrades to a
+        wait when :meth:`_move_toward` fails to path).
+        """
+
+        try:
+            return len(find_path(public_map=public_map, start=start, goal=goal)) - 1
+        except ValueError:
+            return len(public_map.room_ids) + 1
 
     def _return_to_hub(
         self,
@@ -530,6 +714,23 @@ class CrewmatePolicy:
                 "type": "do_task",
                 "actor": self._agent_id,
                 "payload": {"task_id": task_id},
+            }
+        )
+
+    def _repair(self, *, kind: str) -> ActionIntent:
+        """Build the :class:`RepairSabotageIntent`, mirroring :meth:`_do_task`.
+
+        Emitted once the agent stands in a surfaced repair room (Task 11.6); the
+        engine resolves the agent's repair contribution against the active
+        sabotage's repair rooms, so the policy submits only the public sabotage
+        ``kind`` it read from the ``GlobalView`` channel.
+        """
+
+        return RepairSabotageIntent.model_validate(
+            {
+                "type": "repair_sabotage",
+                "actor": self._agent_id,
+                "payload": {"kind": kind},
             }
         )
 
