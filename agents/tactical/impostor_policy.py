@@ -54,20 +54,22 @@ State derivation each tick (highest priority first):
   in-vent exit and COVER-or-vent branches but above the kill/stalk block, the
   impostor emits :class:`SabotageIntent` for the task-gating ``reactor`` kind
   (Task 11.5) to convert a near-certain crew task-win into a forced repair
-  scramble + a hard loss timer. The trigger is a conservative, pure,
-  EDGE-triggered function of the freshest public ``global_status``:
-  ``_active_sabotage`` is False AND ``_crew_near_task_win`` (completion has
-  reached ``_IMMINENT_CREW_WIN_COMPLETION`` -- ~6/7 -- of the task instances)
-  AND ``_crew_made_task_progress`` (the crew just completed an instance THIS
-  tick). The progress edge stops the sabotage -> repair -> sabotage loop: a
-  gating reactor freezes the task count, so a repaired-but-still-near-win state
-  shows no fresh progress and does not re-arm the lever -- the impostor re-fires
-  only on a genuinely new completion, never when one is already active and never
-  as a sabotage every cooldown tick (which would starve kills, a degenerate
-  low-interest loop). An AVAILABLE kill this tick still out-prioritizes the
-  lever (``_kill_available_now``): the impostor keeps hunting and the lever only
-  pre-empts a stalk/idle. No RNG and no module state, so replays stay
-  byte-identical.
+  scramble + a hard loss timer. The trigger is a conservative, pure function of
+  the freshest public ``global_status``: ``_crew_near_task_win`` (completion has
+  reached ``_IMMINENT_CREW_WIN_COMPLETION`` -- ~6/7 -- of the task instances) AND
+  ``_active_sabotage`` is False AND ``_sabotage_window_open`` (this completion
+  level has not been sabotaged yet). The window gate stops the sabotage ->
+  repair -> sabotage loop: a gating reactor freezes the task count, so a
+  repaired-but-still-near-win state never exceeds the level it was sabotaged at
+  and does not re-arm -- the impostor re-fires only once the crew completes a
+  genuinely higher level, never as a sabotage every cooldown tick (which would
+  starve kills, a degenerate low-interest loop). The same gate keeps the window
+  OPEN across a busy tick, so a higher-priority kill/COVER/vent on the
+  completion tick does not permanently forfeit the lever. An AVAILABLE kill this
+  tick (one this actor will actually emit -- not a kill it defers to a co-located
+  lower-id fellow) still out-prioritizes the lever (``_kill_available_now``):
+  the impostor keeps hunting and the lever only pre-empts a stalk/idle. No RNG
+  and no module state, so replays stay byte-identical.
 * ``KILL`` -- ``cooldown == 0`` AND the best-scoring target was seen
   in our current room at the latest tick with no co-present
   witnesses. Emit :class:`KillIntent` against the target. A fellow
@@ -319,26 +321,29 @@ class ImpostorPolicy:
         # exit and COVER-or-vent branches but above the kill/stalk block -- yet an
         # AVAILABLE kill this tick still out-prioritizes the lever (the impostor
         # keeps hunting; the lever only pre-empts a stalk/idle). Conservative,
-        # pure, EDGE-triggered: fire only when the crew has completed
-        # ``_IMMINENT_CREW_WIN_COMPLETION`` (~6/7) of its task instances
-        # (``_crew_near_task_win``) AND just completed one THIS tick
-        # (``_crew_made_task_progress``) AND no sabotage is active -- all from the
-        # freshest public ``global_status``. The progress edge is what stops the
-        # sabotage -> repair -> sabotage loop: a repaired reactor leaves the
-        # (frozen) task count unchanged, so the impostor re-arms only on a
-        # genuinely fresh completion, never on a static repaired-but-near-win
-        # state. Converts a near-certain task-win into a forced repair scramble +
-        # a hard loss timer (the Task 11.5 ``reactor`` kind) without spamming a
-        # sabotage per cooldown tick. No RNG / module state -> byte-identical.
+        # pure trigger over the freshest public ``global_status``: the crew has
+        # completed ``_IMMINENT_CREW_WIN_COMPLETION`` (~6/7) of its task instances
+        # (``_crew_near_task_win``), no sabotage is active (``_active_sabotage``),
+        # and this near-win level has not been sabotaged yet
+        # (``_sabotage_window_open``). The window gate is the loop fix: a repaired
+        # reactor froze the task count, so a repaired-but-still-near-win state
+        # never exceeds the level it was sabotaged at and does NOT re-arm (no
+        # sabotage -> repair -> sabotage loop); but it also keeps the window OPEN
+        # across a busy tick, so a kill/COVER/vent on the completion tick does not
+        # permanently forfeit the lever. Converts a near-certain task-win into a
+        # forced repair scramble + a hard loss timer (the Task 11.5 ``reactor``
+        # kind) without spamming a sabotage per cooldown tick. No RNG / module
+        # state -> byte-identical replays.
         if (
             self._crew_near_task_win(events)
-            and self._crew_made_task_progress(events)
+            and self._sabotage_window_open(events)
             and not self._active_sabotage(events)
             and not self._kill_available_now(
                 latest_events=latest_events,
                 cooldown=cooldown,
                 targets=targets,
                 own_room=own_room,
+                fellow_impostor_ids=fellow_impostor_ids,
             )
         ):
             return self._sabotage(kind=_REACTOR_SABOTAGE_KIND)
@@ -509,22 +514,15 @@ class ImpostorPolicy:
         return None
 
     @staticmethod
-    def _active_sabotage(events: tuple[EpisodicEvent, ...]) -> bool:
-        """Return ``True`` iff a sabotage is currently active (Task 11.7).
+    def _sabotage_active_of(status: EpisodicEvent) -> bool:
+        """Read ``sabotage_active`` from a ``global_status`` event (Task 11.7).
 
-        The SABOTAGE-branch guard (DESIGN.md §3.4): the impostor never emits a
-        second :class:`SabotageIntent` while one is already active. Reads
-        ``sabotage_active`` from the freshest ``global_status`` -- the public,
-        role-blind aggregate (Task 11.5). An absent global_status event (or an
-        absent ``sabotage_active`` key on a hand-built event) maps to ``False``
-        (no observed sabotage -- the correct meaning, not a silent fallback,
-        mirroring the absent-``in_vent`` handling); a present-but-non-bool
-        ``sabotage_active`` is a boundary-contract violation and raises.
+        An absent ``sabotage_active`` key (a hand-built event without the
+        aggregate) maps to ``False`` -- no observed sabotage, the correct meaning
+        (mirroring the absent-``in_vent`` handling), not a silent fallback -- while
+        a present-but-non-bool value is a boundary-contract violation and raises.
         """
 
-        status = ImpostorPolicy._latest_global_status(events)
-        if status is None:
-            return False
         active = status.payload.get("sabotage_active")
         if active is None:
             return False
@@ -533,6 +531,22 @@ class ImpostorPolicy:
                 f"global_status event has non-bool sabotage_active: {status.payload!r}"
             )
         return active
+
+    @staticmethod
+    def _active_sabotage(events: tuple[EpisodicEvent, ...]) -> bool:
+        """Return ``True`` iff a sabotage is currently active (Task 11.7).
+
+        The SABOTAGE-branch guard (DESIGN.md §3.4): the impostor never emits a
+        second :class:`SabotageIntent` while one is already active. Reads
+        ``sabotage_active`` from the freshest ``global_status`` -- the public,
+        role-blind aggregate (Task 11.5). An absent global_status event maps to
+        ``False`` (no observed sabotage).
+        """
+
+        status = ImpostorPolicy._latest_global_status(events)
+        if status is None:
+            return False
+        return ImpostorPolicy._sabotage_active_of(status)
 
     @staticmethod
     def _task_counts_of(status: EpisodicEvent) -> tuple[int, int] | None:
@@ -584,34 +598,64 @@ class ImpostorPolicy:
         return completed * denominator >= total * numerator
 
     @staticmethod
-    def _crew_made_task_progress(events: tuple[EpisodicEvent, ...]) -> bool:
-        """Return ``True`` iff the crew's observed task count rose at this tick.
+    def _max_completed_under_sabotage(
+        events: tuple[EpisodicEvent, ...],
+    ) -> int | None:
+        """Highest ``tasks_completed`` observed while a sabotage was active.
 
-        The SABOTAGE edge-trigger (Task 11.7): the lever fires only on a FRESH
-        crew completion, never on a static near-win state -- which is what breaks
-        the sabotage -> repair -> sabotage loop. A gating ``reactor`` sabotage
-        freezes ``tasks_completed`` while active (Task 11.5), so a repaired-but-
-        still-near-win state shows the same count as the gated ticks and this
-        returns ``False``; the impostor re-arms only when the crew genuinely
-        completes another instance. Compares the two most recent ``global_status``
-        task counts (perception appends one per observed tick); with fewer than
-        two there is no edge to measure -> ``False``. A pure function of memory --
-        no RNG, no module state, so replays stay byte-identical.
+        ``None`` if no active sabotage has ever been observed. Reads the public
+        ``global_status`` history; the basis of the :meth:`_sabotage_window_open`
+        re-arm gate (Task 11.7).
         """
 
-        recent: list[EpisodicEvent] = []
-        for event in reversed(events):
-            if event.type == EVENT_GLOBAL_STATUS:
-                recent.append(event)
-                if len(recent) == 2:
-                    break
-        if len(recent) < 2:
+        best: int | None = None
+        for event in events:
+            if event.type != EVENT_GLOBAL_STATUS:
+                continue
+            if not ImpostorPolicy._sabotage_active_of(event):
+                continue
+            counts = ImpostorPolicy._task_counts_of(event)
+            if counts is None:
+                continue
+            completed = counts[0]
+            if best is None or completed > best:
+                best = completed
+        return best
+
+    @staticmethod
+    def _sabotage_window_open(events: tuple[EpisodicEvent, ...]) -> bool:
+        """Return ``True`` iff this near-win level has not been sabotaged yet.
+
+        The SABOTAGE re-arm gate (Task 11.7). The lever may fire for the crew's
+        current completion level only if that level has not already had a sabotage
+        running -- i.e. ``tasks_completed`` now exceeds the highest count ever
+        observed under an active sabotage (:meth:`_max_completed_under_sabotage`),
+        or no sabotage has ever been observed. ``tasks_completed`` is monotonic
+        non-decreasing (completed instances are never un-counted, DESIGN.md §3.5),
+        so "beyond the highest sabotaged level" means "a genuinely fresh level".
+
+        This is the loop fix that also keeps the window OPEN across a busy tick
+        (Codex review): a gating ``reactor`` freezes the task count, so a
+        repaired-but-still-near-win state never exceeds the level it was sabotaged
+        at and does NOT re-arm (closing the sabotage -> repair -> sabotage loop);
+        but if a higher-priority branch (kill/COVER/vent) ran on the completion
+        tick, the count has still advanced beyond the last sabotaged level, so a
+        later free tick can STILL fire -- the window is not forfeited just because
+        progress was not made this exact tick. Pure function of the observed
+        ``global_status`` history; deterministic, byte-identical replays.
+        """
+
+        latest = ImpostorPolicy._latest_global_status(events)
+        if latest is None:
             return False
-        latest = ImpostorPolicy._task_counts_of(recent[0])
-        previous = ImpostorPolicy._task_counts_of(recent[1])
-        if latest is None or previous is None:
+        counts = ImpostorPolicy._task_counts_of(latest)
+        if counts is None:
             return False
-        return latest[0] > previous[0]
+        latest_completed = counts[0]
+        max_sabotaged = ImpostorPolicy._max_completed_under_sabotage(events)
+        if max_sabotaged is None:
+            return True
+        return latest_completed > max_sabotaged
 
     @staticmethod
     def _body_visible_rooms(
@@ -681,29 +725,35 @@ class ImpostorPolicy:
                 return True
         return False
 
-    @staticmethod
     def _kill_available_now(
+        self,
         *,
         latest_events: tuple[EpisodicEvent, ...],
         cooldown: int,
         targets: tuple[_ScoredTarget, ...],
         own_room: RoomId,
+        fellow_impostor_ids: frozenset[PlayerId],
     ) -> bool:
-        """Return ``True`` iff the kill/stalk block would EMIT a kill this tick.
+        """Return ``True`` iff THIS actor will EMIT a kill this tick.
 
         The SABOTAGE priority guard (Task 11.7): an available kill out-prioritizes
         sabotage so the impostor keeps hunting (definition of done). This is
-        exactly the kill block's emission condition -- ``cooldown == 0`` AND the
+        exactly the kill block's *emission* condition -- ``cooldown == 0`` AND the
         best-scoring target is co-located in our room THIS tick
         (:meth:`_target_colocated_now`, the same freshest-observation
         re-validation the kill seam uses) with no co-present non-teammate witness
-        (``co_present == 0``). It deliberately mirrors the "kill or
-        coordinate-defer" entry condition: when ``True`` a kill resolves in this
-        room this tick (by us, or by a co-located lower-id fellow we defer to),
-        so the impostor commits to the hunt and the lever stands aside. A
+        (``co_present == 0``) AND this actor does NOT defer to a co-located
+        lower-id fellow (:meth:`_defers_to_colocated_fellow`).
+
+        The deferral exclusion is the fix for the Codex review: cooldowns are
+        per-actor, so a deferred-to lower-id fellow may itself be on cooldown and
+        not kill either. Treating a deferral as "kill available" would suppress
+        the sabotage AND turn this actor's tick into a ``Wait`` (the kill block
+        defers) -- no kill, no reactor, at the near-win edge. Excluding it lets
+        the deferring actor pull the lever instead of wasting the tick. A
         witness-blocked opportunity (``co_present > 0``) or a different-room stalk
-        target is NOT an available kill, so the lever may still pre-empt that
-        stalk/wait. A pure function of memory -- no RNG, no module state.
+        target is likewise NOT an available kill, so the lever may still pre-empt
+        that stalk/wait. A pure function of memory -- no RNG, no module state.
         """
 
         if cooldown != 0 or not targets:
@@ -711,8 +761,14 @@ class ImpostorPolicy:
         best = targets[0]
         if best.co_present != 0:
             return False
-        return ImpostorPolicy._target_colocated_now(
+        if not self._target_colocated_now(
             latest_events, target_id=best.player_id, own_room=own_room
+        ):
+            return False
+        return not self._defers_to_colocated_fellow(
+            latest_events,
+            own_room=own_room,
+            fellow_impostor_ids=fellow_impostor_ids,
         )
 
     @staticmethod
