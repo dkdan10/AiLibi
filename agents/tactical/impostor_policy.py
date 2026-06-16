@@ -48,6 +48,21 @@ State derivation each tick (highest priority first):
   a vent next to a witness would be a new catchable tell -- the witness guard
   is the only suppression, deliberately leaving the careless-vent tell in
   place (rubric R2, "deception sometimes fails").
+* ``SABOTAGE`` -- the crew is near a task win and no sabotage is active (Task
+  11.7, DESIGN.md §3.4 impostor actions, §4.4 impostor FSM; mirrors the 11.1
+  vent-wiring precedent, experiments/lab/report-vent-escape-lab.md). Below the
+  in-vent exit and COVER-or-vent branches but above the kill/stalk block, the
+  impostor emits :class:`SabotageIntent` for the task-gating ``reactor`` kind
+  (Task 11.5) to convert a near-certain crew task-win into a forced repair
+  scramble + a hard loss timer. The trigger is a conservative, pure function of
+  the freshest public ``global_status`` -- ``_active_sabotage`` is False AND
+  ``_crew_near_task_win`` (the crew has completed ``_IMMINENT_CREW_WIN_COMPLETION``
+  -- ~6/7 -- of the task instances) -- so it never fires when one is already active and
+  never spams a sabotage every cooldown tick (which would starve kills, a
+  degenerate low-interest loop). An AVAILABLE kill this tick still
+  out-prioritizes the lever (``_kill_available_now``): the impostor keeps
+  hunting and the lever only pre-empts a stalk/idle. No RNG and no module state,
+  so replays stay byte-identical.
 * ``KILL`` -- ``cooldown == 0`` AND the best-scoring target was seen
   in our current room at the latest tick with no co-present
   witnesses. Emit :class:`KillIntent` against the target. A fellow
@@ -118,6 +133,10 @@ Conventions consumed from perception (DESIGN.md §4.2 / §6.2):
 * ``saw_player`` events at any tick are candidate-target sightings.
 * ``saw_body`` events at the latest tick whose ``room`` matches the
   impostor's current room trigger the ``COVER`` interrupt.
+* ``global_status`` events (the public, role-blind aggregate perception ingests
+  every tick, Task 11.5) carry ``tasks_completed`` / ``tasks_total`` and
+  ``sabotage_active``; the ``SABOTAGE`` branch reads the freshest one to fire the
+  ``reactor`` lever at an imminent crew task-win.
 """
 
 from __future__ import annotations
@@ -129,6 +148,7 @@ from typing import Final
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.perception import (
     EVENT_COOLDOWN_STATUS,
+    EVENT_GLOBAL_STATUS,
     EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
     EVENT_SELF_STATE,
@@ -140,6 +160,7 @@ from observation.action_intent import (
     KillIntent,
     MoveIntent,
     PlayerId,
+    SabotageIntent,
     VentIntent,
     WaitIntent,
 )
@@ -152,6 +173,36 @@ from observation.public_map import PublicMapView, RoomId, VentId
 # Thirty ticks is the documented default — wide enough to keep
 # legitimate stalk targets, tight enough to kill the perpetual loop.
 _STALENESS_THRESHOLD: Final[int] = 30
+
+# The task-gating sabotage the impostor emits (Task 11.5/11.7, DESIGN.md §3.4).
+# ``reactor`` is the only ``gates_tasks: true`` kind in the canonical map; it
+# stalls the task race and surfaces public repair rooms, so it is the lever that
+# turns an imminent crew task-win into a contestable clock. The string is the
+# map's ``sabotages`` key, round-tripped verbatim as the SabotageIntent payload.
+_REACTOR_SABOTAGE_KIND: Final[str] = "reactor"
+
+# The crew is "near a task win" when it has completed at least this FRACTION of
+# all per-player task INSTANCES (``tasks_completed / tasks_total``, both read
+# from the public ``global_status``; the denominator is the engine win total,
+# DESIGN.md §3.2). Stored as an exact ``(numerator, denominator)`` ratio so the
+# comparison is integer arithmetic -- no float drift, byte-identical replays.
+#
+# Anchored to "imminent crew win" (Task 11.7, DESIGN.md §3.4/§4.4) as a
+# ROSTER-ROBUST fraction rather than an absolute remaining-count: at the
+# canonical 9p/2i eval roster (14 instances) >=6/7 engages at 12/14 and 13/14 --
+# the crew's final one or two task-completions, exactly when denying the win is
+# strongest. Firing at 12/14 (not only the very last 13/14) is a deliberate
+# one-completion buffer so the impostor pulls the lever BEFORE the last task can
+# land on the sabotage tick. The conservative ~86% floor keeps the predicate
+# False for the whole game until the crew is on the brink, so the impostor never
+# sabotages every cooldown tick (a kill-starving, low-interest degenerate loop).
+# A fraction (not a fixed count) also keeps small rosters sane: the flat 4p/1i
+# determinism reference (3 or 6 instances) can never reach >=6/7 without already
+# being complete, so the lever is a counterplay for the canonical eval roster,
+# not the reference set. It is a sabotage TRIGGER parameter, NOT the frozen task
+# clock; re-tuned (with the reactor timer) at the 11.8 re-record if R5 win-shape
+# diversity does not rise.
+_IMMINENT_CREW_WIN_COMPLETION: Final[tuple[int, int]] = (6, 7)
 
 
 @dataclass(frozen=True)
@@ -247,6 +298,28 @@ class ImpostorPolicy:
                 latest_events=latest_events,
                 fellow_impostor_ids=fellow_impostor_ids,
             )
+
+        # SABOTAGE (Task 11.7): deny an imminent crew task win. Below the in-vent
+        # exit and COVER-or-vent branches but above the kill/stalk block -- yet an
+        # AVAILABLE kill this tick still out-prioritizes the lever (the impostor
+        # keeps hunting; the lever only pre-empts a stalk/idle). Conservative,
+        # pure trigger: no sabotage active AND the crew has completed
+        # ``_IMMINENT_CREW_WIN_COMPLETION`` (~6/7) of its task instances, both
+        # read from the freshest public ``global_status``, so it converts a
+        # near-certain task-win into a forced repair scramble + a hard loss timer
+        # (the Task 11.5 ``reactor`` kind) without ever spamming a sabotage per
+        # cooldown tick. No RNG / module state -> replays stay byte-identical.
+        if (
+            self._crew_near_task_win(events)
+            and not self._active_sabotage(events)
+            and not self._kill_available_now(
+                latest_events=latest_events,
+                cooldown=cooldown,
+                targets=targets,
+                own_room=own_room,
+            )
+        ):
+            return self._sabotage(kind=_REACTOR_SABOTAGE_KIND)
 
         if cooldown == 0 and targets:
             best = targets[0]
@@ -396,6 +469,84 @@ class ImpostorPolicy:
         return None
 
     @staticmethod
+    def _latest_global_status(
+        events: tuple[EpisodicEvent, ...],
+    ) -> EpisodicEvent | None:
+        """Return the most recent ``global_status`` event, or ``None`` if absent.
+
+        Perception appends exactly one ``global_status`` (the public, role-blind
+        aggregate, Task 11.5) per observation tick, so the last one in the log is
+        the freshest task / sabotage reading. Mirrors :meth:`_latest_self_state`.
+        Absent only on hand-built fixtures that omit the aggregate; the SABOTAGE
+        predicates below map that to "no observed signal" rather than guessing.
+        """
+
+        for event in reversed(events):
+            if event.type == EVENT_GLOBAL_STATUS:
+                return event
+        return None
+
+    @staticmethod
+    def _active_sabotage(events: tuple[EpisodicEvent, ...]) -> bool:
+        """Return ``True`` iff a sabotage is currently active (Task 11.7).
+
+        The SABOTAGE-branch guard (DESIGN.md §3.4): the impostor never emits a
+        second :class:`SabotageIntent` while one is already active. Reads
+        ``sabotage_active`` from the freshest ``global_status`` -- the public,
+        role-blind aggregate (Task 11.5). An absent global_status event (or an
+        absent ``sabotage_active`` key on a hand-built event) maps to ``False``
+        (no observed sabotage -- the correct meaning, not a silent fallback,
+        mirroring the absent-``in_vent`` handling); a present-but-non-bool
+        ``sabotage_active`` is a boundary-contract violation and raises.
+        """
+
+        status = ImpostorPolicy._latest_global_status(events)
+        if status is None:
+            return False
+        active = status.payload.get("sabotage_active")
+        if active is None:
+            return False
+        if not isinstance(active, bool):
+            raise ValueError(
+                f"global_status event has non-bool sabotage_active: {status.payload!r}"
+            )
+        return active
+
+    @staticmethod
+    def _crew_near_task_win(events: tuple[EpisodicEvent, ...]) -> bool:
+        """Return ``True`` iff the crew has crossed the imminent-win threshold.
+
+        The SABOTAGE trigger predicate (Task 11.7, DESIGN.md §3.4/§4.4): a pure
+        function of the freshest public ``global_status`` -- ``tasks_completed``
+        / ``tasks_total`` (per-player task INSTANCES, the engine win
+        denominator, DESIGN.md §3.2). ``True`` when at least one instance still
+        remains (``tasks_completed < tasks_total`` -- there is a win left to
+        deny) AND completion has reached ``_IMMINENT_CREW_WIN_COMPLETION`` of the
+        total (the imminent-win fraction; see that constant for the anchor). The
+        fraction is compared with integer cross-multiplication so the decision is
+        exact and byte-identical across replays -- no float, no RNG, no module
+        state. An absent global_status event (or absent task counts) maps to
+        ``False`` -- no observed near-win, so do not sabotage -- while
+        present-but-non-int counts are a boundary-contract violation and raise.
+        """
+
+        status = ImpostorPolicy._latest_global_status(events)
+        if status is None:
+            return False
+        completed = status.payload.get("tasks_completed")
+        total = status.payload.get("tasks_total")
+        if completed is None or total is None:
+            return False
+        if not isinstance(completed, int) or not isinstance(total, int):
+            raise ValueError(
+                f"global_status event has non-int task counts: {status.payload!r}"
+            )
+        if total <= 0 or completed >= total:
+            return False
+        numerator, denominator = _IMMINENT_CREW_WIN_COMPLETION
+        return completed * denominator >= total * numerator
+
+    @staticmethod
     def _body_visible_rooms(
         latest_events: tuple[EpisodicEvent, ...],
     ) -> frozenset[RoomId]:
@@ -462,6 +613,40 @@ class ImpostorPolicy:
             if room == own_room:
                 return True
         return False
+
+    @staticmethod
+    def _kill_available_now(
+        *,
+        latest_events: tuple[EpisodicEvent, ...],
+        cooldown: int,
+        targets: tuple[_ScoredTarget, ...],
+        own_room: RoomId,
+    ) -> bool:
+        """Return ``True`` iff the kill/stalk block would EMIT a kill this tick.
+
+        The SABOTAGE priority guard (Task 11.7): an available kill out-prioritizes
+        sabotage so the impostor keeps hunting (definition of done). This is
+        exactly the kill block's emission condition -- ``cooldown == 0`` AND the
+        best-scoring target is co-located in our room THIS tick
+        (:meth:`_target_colocated_now`, the same freshest-observation
+        re-validation the kill seam uses) with no co-present non-teammate witness
+        (``co_present == 0``). It deliberately mirrors the "kill or
+        coordinate-defer" entry condition: when ``True`` a kill resolves in this
+        room this tick (by us, or by a co-located lower-id fellow we defer to),
+        so the impostor commits to the hunt and the lever stands aside. A
+        witness-blocked opportunity (``co_present > 0``) or a different-room stalk
+        target is NOT an available kill, so the lever may still pre-empt that
+        stalk/wait. A pure function of memory -- no RNG, no module state.
+        """
+
+        if cooldown != 0 or not targets:
+            return False
+        best = targets[0]
+        if best.co_present != 0:
+            return False
+        return ImpostorPolicy._target_colocated_now(
+            latest_events, target_id=best.player_id, own_room=own_room
+        )
 
     @staticmethod
     def _confirmed_dead_from_bodies(
@@ -842,6 +1027,23 @@ class ImpostorPolicy:
                 "type": "vent",
                 "actor": self._agent_id,
                 "payload": {"vent_id": vent_id},
+            }
+        )
+
+    def _sabotage(self, *, kind: str) -> ActionIntent:
+        """Build a :class:`SabotageIntent` for ``kind`` (Task 11.7).
+
+        Mirrors :meth:`_kill` / :meth:`_vent`: stamps the impostor's own actor id
+        and round-trips the sabotage ``kind`` (a map ``sabotages`` key, e.g.
+        ``reactor``) verbatim. The orchestrator maps the intent to the
+        engine-owned sabotage action; the policy stays engine-free.
+        """
+
+        return SabotageIntent.model_validate(
+            {
+                "type": "sabotage",
+                "actor": self._agent_id,
+                "payload": {"kind": kind},
             }
         )
 

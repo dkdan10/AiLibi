@@ -8,9 +8,11 @@ import pytest
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.perception import (
     EVENT_COOLDOWN_STATUS,
+    EVENT_GLOBAL_STATUS,
     EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
     EVENT_SELF_STATE,
+    PROVENANCE_INFERRED,
     PROVENANCE_OBSERVED,
 )
 from agents.tactical.impostor_policy import ImpostorPolicy
@@ -18,6 +20,7 @@ from observation.action_intent import (
     DoTaskIntent,
     KillIntent,
     MoveIntent,
+    SabotageIntent,
     VentIntent,
     WaitIntent,
 )
@@ -133,6 +136,37 @@ def _saw_body_event(
         type=EVENT_SAW_BODY,
         payload={"body_id": body_id, "room": room, "victim_id": victim_id},
         provenance=PROVENANCE_OBSERVED,
+    )
+
+
+def _global_status_event(
+    *,
+    tick: int,
+    tasks_completed: int,
+    tasks_total: int,
+    sabotage_active: bool = False,
+    sabotage_kind: str | None = None,
+    sabotage_repair_rooms: tuple[RoomId, ...] = (),
+    sabotage_is_gating: bool = False,
+) -> EpisodicEvent:
+    # Mirrors agents.perception._global_state_payload so the SABOTAGE branch
+    # reads the same public, role-blind aggregate shape it sees in production
+    # (Task 11.5/11.7). Provenance is INFERRED, matching the perception ingest.
+    denominator = tasks_total if tasks_total else 1
+    payload: dict[str, Any] = {
+        "tasks_completed": tasks_completed,
+        "tasks_total": tasks_total,
+        "task_completion_percent": tasks_completed / denominator,
+        "sabotage_active": sabotage_active,
+        "sabotage_kind": sabotage_kind,
+        "sabotage_repair_rooms": sabotage_repair_rooms,
+        "sabotage_is_gating": sabotage_is_gating,
+    }
+    return EpisodicEvent(
+        tick=tick,
+        type=EVENT_GLOBAL_STATUS,
+        payload=payload,
+        provenance=PROVENANCE_INFERRED,
     )
 
 
@@ -1215,3 +1249,298 @@ class TestImpostorToolkit1014:
 
         assert isinstance(intent, DoTaskIntent)
         assert intent.payload.task_id == "swipe_card"
+
+
+class TestImpostorSabotage:
+    """Task 11.7 (DESIGN.md §3.4 impostor actions, §4.4 impostor FSM;
+    report-vent-escape-lab.md is the 11.1 vent-wiring precedent).
+
+    The impostor USES the task-gating lever: a new SABOTAGE branch below the
+    in-vent exit and COVER-or-vent branches but above the kill/stalk block. It
+    emits ``SabotageIntent("reactor")`` strategically -- only to deny an imminent
+    crew task win (``_crew_near_task_win``) and only while no sabotage is active
+    (``_active_sabotage``) -- never as per-tick spam that starves kills. An
+    available kill, the in-vent exit, and COVER all still out-prioritize it; the
+    decision is a pure, deterministic function of memory + ``PublicMapView``.
+
+    ``_IMMINENT_CREW_WIN_COMPLETION`` is ~6/7, so at 14 total instances (the
+    canonical 9p/2i roster) the lever arms at 12/14 and 13/14. The fraction
+    (not a fixed remaining-count) keeps tiny rosters sane -- 3 or 6 instances
+    never reach >=6/7 without already being complete, so the lever never fires
+    there.
+    """
+
+    def test_emits_reactor_sabotage_when_crew_near_win_and_no_sabotage_active(
+        self,
+    ) -> None:
+        # Sole impostor, no co-located target, cooldown free, and the crew is one
+        # task instance from victory: pull the reactor lever to deny the win.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(tick=10, tasks_completed=13, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, SabotageIntent)
+        assert intent.payload.kind == "reactor"
+        assert intent.actor == "imp"
+
+    def test_does_not_emit_when_sabotage_already_active(self) -> None:
+        # Identical near-win state but a sabotage is already active: the guard
+        # suppresses a second emission and the impostor falls through to idle.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(
+                tick=10,
+                tasks_completed=13,
+                tasks_total=14,
+                sabotage_active=True,
+                sabotage_kind="reactor",
+            ),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, SabotageIntent)
+        assert isinstance(intent, WaitIntent)
+
+    def test_does_not_emit_when_crew_not_near_win(self) -> None:
+        # Early game (2/14): far from a win, so the conservative predicate is
+        # False -- no per-tick sabotage spam, the impostor just idles.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(tick=10, tasks_completed=2, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, SabotageIntent)
+        assert isinstance(intent, WaitIntent)
+
+    def test_does_not_emit_when_no_task_instance_remains(self) -> None:
+        # Defensive: with every instance complete there is no win left to deny,
+        # so the predicate is False even though "remaining (0) <= threshold".
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(tick=10, tasks_completed=14, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert not isinstance(intent, SabotageIntent)
+        assert isinstance(intent, WaitIntent)
+
+    def test_threshold_arms_at_six_sevenths_completion(self) -> None:
+        # Pins the documented anchor (_IMMINENT_CREW_WIN_COMPLETION ~ 6/7): at 14
+        # instances the lever arms at 12/14 (>=6/7) but not at 11/14 (<6/7).
+        policy = ImpostorPolicy(agent_id="imp")
+
+        near = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(tick=10, tasks_completed=12, tasks_total=14),
+        )
+        far = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(tick=10, tasks_completed=11, tasks_total=14),
+        )
+
+        assert isinstance(policy.decide(near, _public_map()), SabotageIntent)
+        assert not isinstance(policy.decide(far, _public_map()), SabotageIntent)
+
+    def test_small_reference_rosters_never_arm_the_lever(self) -> None:
+        # Roster-robustness: the flat 4p/1i determinism reference (3 instances at
+        # tasks_per_crewmate=1, 6 at =2) can never reach >=6/7 without already
+        # being complete, so the impostor never sabotages there even at the last
+        # pre-win count. This is what keeps the short 4p/1i meeting/budget
+        # integration games byte-identical (the lever is a 9p/2i-eval counterplay).
+        policy = ImpostorPolicy(agent_id="imp")
+
+        for completed, total in ((2, 3), (5, 6)):
+            store = _store_with(
+                _self_state_event(tick=10, room="CAFETERIA"),
+                _cooldown_event(tick=10, cooldown=0),
+                _global_status_event(
+                    tick=10, tasks_completed=completed, tasks_total=total
+                ),
+            )
+
+            assert not isinstance(policy.decide(store, _public_map()), SabotageIntent)
+
+    def test_available_kill_pre_empts_sabotage(self) -> None:
+        # A clean, co-located kill this tick out-prioritizes the lever: the
+        # impostor keeps hunting even with the crew on the brink.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="CAFETERIA"),
+            _global_status_event(tick=10, tasks_completed=13, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, KillIntent)
+        assert intent.payload.target == "victim"
+
+    def test_stalk_does_not_pre_empt_sabotage(self) -> None:
+        # The only target is in another room (a STALK, not an available kill), so
+        # the lever pre-empts the stalk to deny the imminent win first. The
+        # impostor resumes hunting next tick (sabotage then active -> guarded).
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="MEDBAY"),
+            _global_status_event(tick=10, tasks_completed=13, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, SabotageIntent)
+        assert intent.payload.kind == "reactor"
+
+    def test_witness_blocked_kill_opportunity_still_sabotages(self) -> None:
+        # A co-located target with a co-present witness is NOT an available kill
+        # (the kill block would wait), so the lever may still fire near a win --
+        # strictly better than waiting while the crew finishes its tasks.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="victim", room="CAFETERIA"),
+            _saw_player_event(tick=10, player_id="witness", room="CAFETERIA"),
+            _global_status_event(tick=10, tasks_completed=13, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, SabotageIntent)
+        assert intent.payload.kind == "reactor"
+
+    def test_in_vent_exit_pre_empts_sabotage(self) -> None:
+        # The highest-priority in-vent exit runs first: a vented impostor
+        # repositions before it would ever consider the lever.
+        store = _store_with(
+            _self_state_event(tick=10, room="ADMIN", in_vent=True),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(tick=10, tasks_completed=13, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, VentIntent)
+        assert not isinstance(intent, SabotageIntent)
+
+    def test_cover_pre_empts_sabotage(self) -> None:
+        # A body in the impostor's own room takes the COVER branch (move-away
+        # from CAFETERIA, which has no vent) before the SABOTAGE branch.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=8),
+            _saw_body_event(
+                tick=10, body_id="body-v-10", room="CAFETERIA", victim_id="v"
+            ),
+            _global_status_event(tick=10, tasks_completed=13, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, MoveIntent)
+        assert intent.payload.to_room == "ADMIN"
+        assert not isinstance(intent, SabotageIntent)
+
+    def test_multi_impostor_sabotages_without_fellow_coordination(self) -> None:
+        # Multi-impostor: a co-located fellow is no witness and the sabotage
+        # trigger needs no coordination tie-break (unlike kill). p-1 still emits
+        # the lever; an engine-side dedup handles a same-tick second emission.
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA", fellow_impostor_ids=("p-2",)),
+            _cooldown_event(tick=10, cooldown=0),
+            _saw_player_event(tick=10, player_id="p-2", room="CAFETERIA"),
+            _global_status_event(tick=10, tasks_completed=13, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="p-1")
+
+        intent = policy.decide(store, _public_map())
+
+        assert isinstance(intent, SabotageIntent)
+        assert intent.payload.kind == "reactor"
+
+    def test_decision_tracks_only_global_status(self) -> None:
+        # Two stores identical except for the global_status aggregate: the
+        # near-win one sabotages, the far one idles -- the trigger is a pure
+        # function of the observed global_status.
+        policy = ImpostorPolicy(agent_id="imp")
+        base = (
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+        )
+        near = _store_with(
+            *base, _global_status_event(tick=10, tasks_completed=13, tasks_total=14)
+        )
+        far = _store_with(
+            *base, _global_status_event(tick=10, tasks_completed=3, tasks_total=14)
+        )
+
+        assert isinstance(policy.decide(near, _public_map()), SabotageIntent)
+        assert isinstance(policy.decide(far, _public_map()), WaitIntent)
+
+    def test_repeated_decide_calls_are_deterministic(self) -> None:
+        store = _store_with(
+            _self_state_event(tick=10, room="CAFETERIA"),
+            _cooldown_event(tick=10, cooldown=0),
+            _global_status_event(tick=10, tasks_completed=13, tasks_total=14),
+        )
+        policy = ImpostorPolicy(agent_id="imp")
+        public_map = _public_map()
+
+        intents = [policy.decide(store, public_map) for _ in range(5)]
+
+        for intent in intents:
+            assert isinstance(intent, SabotageIntent)
+            assert intent.payload.kind == "reactor"
+            assert intent.actor == "imp"
+
+    def test_active_sabotage_absent_global_status_is_false(self) -> None:
+        # No global_status row (the pre-11.5 hand-built shape used across the
+        # other suites): "no observed sabotage", not a raise.
+        events = (_cooldown_event(tick=10, cooldown=0),)
+
+        assert ImpostorPolicy._active_sabotage(events) is False
+
+    def test_active_sabotage_raises_on_non_bool(self) -> None:
+        # Boundary contract: a present-but-non-bool sabotage_active is rejected.
+        malformed = EpisodicEvent(
+            tick=10,
+            type=EVENT_GLOBAL_STATUS,
+            payload={"sabotage_active": "yes"},
+            provenance=PROVENANCE_INFERRED,
+        )
+
+        with pytest.raises(ValueError, match="sabotage_active"):
+            ImpostorPolicy._active_sabotage((malformed,))
+
+    def test_crew_near_task_win_raises_on_non_int_counts(self) -> None:
+        # Boundary contract: present-but-non-int task counts are rejected.
+        malformed = EpisodicEvent(
+            tick=10,
+            type=EVENT_GLOBAL_STATUS,
+            payload={"tasks_completed": "lots", "tasks_total": 14},
+            provenance=PROVENANCE_INFERRED,
+        )
+
+        with pytest.raises(ValueError, match="task counts"):
+            ImpostorPolicy._crew_near_task_win((malformed,))
