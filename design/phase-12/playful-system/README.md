@@ -14,7 +14,8 @@ every build session (web or local) has it WITHOUT the transient/authenticated Cl
   - `01-foundations.png` — tokens / ramps / identity palette / type / `tokens.ts` → **12.1** target.
   - `02-map.png` — the canonical_1 floorplan → **12.5**.
   - `03-two-truths.png` — Omniscient + As-agent fog → **12.5** (fog).
-  - `04-matrix-belief.png` + `04-matrix-error.png` — the 9×9 matrix, Belief and (toggled) **Error** layers → **12.6**.
+  - `04-matrix-belief.png` / `04-matrix-ground-truth.png` / `04-matrix-error.png` — the 9×9 matrix's three toggle
+    layers (Belief, Ground-truth, Error) → **12.6**.
   - `05-meeting.png` — accusation chain + ballots → **12.7**.
   Any state re-renders from the `.dc.html` (system Chrome, e.g. `uv run --with playwright …`) — a web build agent can do
   the same for verification.
