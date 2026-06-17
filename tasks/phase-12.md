@@ -140,7 +140,7 @@ When 0b lands, its token sheet seeds `tokens.ts` in **12.1**; the chosen Playful
 ### Task 12.1 — Foundation: design tokens, Storybook, CLAUDE.md, CI
 **Branch:** `phase-12-foundation`
 **Depends on:** none
-**Section refs:** design/phase-12/stage-1-design.md §6, §9, §9.5; design/phase-12/claude-design-brief.md; the accepted Playful 0b token sheet (the `tokensText()` block in the converge mockup)
+**Section refs:** design/phase-12/stage-1-design.md §6, §9, §9.5; design/phase-12/claude-design-brief.md; **the committed 0b token sheet `design/phase-12/tokens-seed.md`** (transcribe `tokens.ts` from it — it is the in-repo source of truth, NOT the Downloads mockup)
 **Complexity:** Integration
 **Files in scope:**
 - frontend/src/tokens.ts
@@ -182,7 +182,7 @@ Storybook runs and renders the Tokens sheet plus ≥ 1 component story; `fronten
 `ContradictionBadge` utilities live in `lib/`/`ui/` with imports updated and the tree still compiling; CI runs
 `npm run build` + `tsc --noEmit` for the frontend and passes.
 **Implementation hint:**
-transcribe `tokens.ts` directly from the 0b `tokensText()` block (already structured); keep the
+transcribe `tokens.ts` directly from the committed seed `design/phase-12/tokens-seed.md` (already structured); keep the
 hard-shadow / 2.5px-border tokens namespaced as `chrome` so dense components can opt into the 1px `data` treatment;
 prefer self-hosted fonts over a Google Fonts `<link>`.
 **Integration risk:**
@@ -203,6 +203,7 @@ chunk warning — record it, do not chase the code-split here (that is 12.11).
 - api/routes/eval.py
 - frontend/src/types/api.ts
 - scripts/gen_frontend_types.py
+- experiments/lab/rubric_score.py
 - tests/api/test_view_model.py
 **Files NOT in scope:**
 - frontend components and the Pixi render layer — Waves B and C
@@ -219,19 +220,26 @@ un-persisted `rendered_max` — the real rule is plurality + at least one leader
 vote-count majority); parsed `BallotView.rewrite_reasons[]` + `rationale_text_clean` (import the marker constants from
 `meetings/voting.py` + `meetings/manager.py`, never hardcode; special-case `VOTE_PARSE_DEFAULT` = the whole string);
 reactor `repair_progress` per room + `remaining_ticks`; a per-tick crew/impostor advantage series; and a per-set rubric
-surface (`/eval/rubric`) with a staleness guard (compare the rubric `git_head` to the served set's MANIFEST sha).
+surface (`/eval/rubric`) with a staleness guard (compare the rubric `git_head` to the served set's MANIFEST sha) PLUS
+its producer — a regen step that re-runs `experiments/lab/rubric_score.py`, stamps `git_head`, and co-locates
+`results-rubric-score.json` per served set, wired into the refresh/re-record path so the happy path stays fresh (not only
+banner-guarded when stale).
 Surface the already-in-DTO render-ready fields (`current_action`, `winner_reason`, task-clock totals, `failed_calls`,
 typed `conversion`/`gate_metrics`). Document why `SuspicionGraphView` stays dead (beliefs are timeless). Identity-palette
 alignment, the one backend touch: replace `api/replay_loader.py::_COLOR_PALETTE` — today a 12-colour rainbow (`#e6194b`
 red / `#ffe119` yellow / `#4363d8` blue / `#f58231` orange …) that collides with the reserved channels (red=kill,
-amber=suspicion, blue=trust) — with the Playful identity palette (`#5DA83A…#A94FC6`) so `PlayerView.color` matches
-`tokens.ts.identity` and DTO ↔ design never drift. Colours are derived at load, so this is a loader-only change with NO
+amber=suspicion, blue=trust) — with the Playful identity palette from the committed
+`design/phase-12/tokens-seed.md` (the SAME `identity[]` list 12.1 transcribes into `tokens.ts`, so the two parallel tasks
+cannot drift on it) so `PlayerView.color` matches it and DTO ↔ design never drift. Colours are derived at load, so this is a loader-only change with NO
 replay re-record; keep it firewall-clean (identity never encodes guilt).
 **Definition of done:** the served payload carries `viewModelVersion`; `frontend/src/types/api.ts` is generated from the
 Pydantic schemas (no hand-mirror); every new surface is served, cached, and covered by a test; the §4.6 gate is
 per-meeting and `rendered_max` is gone; the rubric surface is per-set and staleness-guarded; `PlayerView.color` serves
-the Playful identity palette (no rainbow) with the leak/determinism tests still green and NO re-record; `scripts/check.sh`
-is green.
+the Playful identity palette (no rainbow) with the leak/determinism tests still green and NO re-record; the §4.6 gate has a CONSISTENCY test (the recomputed leader +
+`passed` matches each meeting's actual outcome / `ejected_player_id` across the committed 9p2i set — not just a formula
+unit test); the rubric has a regen step (re-run + `git_head` stamp, per-set), not only the staleness banner; a codegen
+FIDELITY gate round-trips a real served payload through the generated TS types (compiles + narrows the discriminated
+unions); `scripts/check.sh` is green.
 **Public types introduced:**
 - api.schemas.BeliefFrameView
 - api.schemas.VentEventView
@@ -240,7 +248,10 @@ do every projection inside the existing `_walk`/re-walk so nothing new is persis
 `is_weak_contradiction()` and the meeting marker constants by import; for the TS codegen prefer a small script over a
 heavy dependency, wired into `check.sh` so drift fails CI.
 **Integration risk:**
-the Pydantic→TS codegen pipeline is new (must be deterministic and run in CI); the
+the Pydantic→TS codegen pipeline is new — its riskiest spot is discriminated-union narrowing (`TickEventView` ⊃
+`VentEventView`/`KillEventView`/…), so a fidelity gate round-trips a real payload through the generated types, and if the
+bespoke script can't narrow reliably, fall back to `openapi-typescript` off FastAPI's OpenAPI schema; it must be
+deterministic and run in CI; the
 `_COLOR_PALETTE` change flows into `PlayerView.color`, so re-run the leak/determinism tests (it is colour-only and
 firewall-neutral); the §4.6 recompute must match the engine gate exactly (plurality + ≥ 0.6, tie → SKIP), not the
 mock's "majority".
