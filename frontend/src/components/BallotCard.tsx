@@ -3,7 +3,7 @@
 // rationale text.
 
 import type { BallotView, PlayerView } from "../types/api";
-import { PlayerChip } from "./ContradictionBadge";
+import { PlayerChip } from "../ui/PlayerChip";
 
 interface BallotCardProps {
   ballot: BallotView;
