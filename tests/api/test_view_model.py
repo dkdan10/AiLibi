@@ -125,10 +125,12 @@ def test_served_payload_carries_view_model_version(
 ) -> None:
     replay = meeting_loader.load_replay("headless-seed-1")
     assert replay.view_model_version == VIEW_MODEL_VERSION
-    # It rides the JSON the route serves, not just the in-memory model.
-    assert (
-        json.loads(replay.model_dump_json())["view_model_version"] == VIEW_MODEL_VERSION
-    )
+    # The served JSON (FastAPI dumps by_alias) carries the CONTRACT name
+    # ``viewModelVersion`` exactly, so downstream compatibility guards match —
+    # not the snake_case attribute name.
+    served = json.loads(replay.model_dump_json(by_alias=True))
+    assert served["viewModelVersion"] == VIEW_MODEL_VERSION
+    assert "view_model_version" not in served
 
 
 def test_player_color_serves_playful_identity_palette(
@@ -521,9 +523,10 @@ def test_generated_frontend_types_are_committed() -> None:
 
 def test_fidelity_fixture_round_trips_payload_and_narrows_unions() -> None:
     fidelity = gen_frontend_types._OUT_FIDELITY.read_text(encoding="utf-8")
-    # A real served payload assigned to the generated ReplayView type.
+    # A real served payload assigned to the generated ReplayView type, carrying
+    # the contract version under its served (aliased) key.
     assert "const _fidelityReplay: ReplayView = {" in fidelity
-    assert '"view_model_version"' in fidelity
+    assert '"viewModelVersion"' in fidelity
     # Exhaustive narrowing of each discriminated union (compiled by tsc:check).
     for union in ("TickEventView", "ObservationClaimView", "StatementClaimView"):
         assert f"_narrow_{union}(e: {union}): {union}" in fidelity

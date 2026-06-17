@@ -22,7 +22,7 @@ export type ContradictionKind = "alibi_conflict" | "alibi_vs_sighting";
 export type TurnKind = "opening" | "reply" | "opt_in";
 
 export interface ReplayView {
-  view_model_version: string;
+  viewModelVersion: string;
   metadata: ReplayMetadataView;
   map: MapLayoutView;
   players: PlayerView[];
@@ -354,7 +354,7 @@ export interface SuspicionEntryView {
 }
 
 export interface RubricView {
-  view_model_version: string;
+  viewModelVersion: string;
   seedset: string;
   git_head: string | null;
   manifest_sha: string | null;

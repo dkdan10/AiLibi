@@ -223,7 +223,11 @@ class _Generator:
     def render_interface(self, model: type[BaseModel]) -> str:
         lines = [f"export interface {model.__name__} {{"]
         for name, field in model.model_fields.items():
-            lines.append(f"  {name}: {self._ts_type(field.annotation)};")
+            # FastAPI serializes responses by_alias, so the wire key is the
+            # serialization_alias when set (e.g. view_model_version ->
+            # viewModelVersion, the contract name); fall back to the field name.
+            wire_name = field.serialization_alias or name
+            lines.append(f"  {wire_name}: {self._ts_type(field.annotation)};")
         lines.append("}")
         return "\n".join(lines)
 
@@ -357,7 +361,9 @@ def _real_replay_payload() -> str:
         log.record_game_end(winner="CREWMATES", reason="all_tasks_complete", tick=2)
         loader = ReplayLoader(path.parent)
         replay = loader.load_replay("headless-seed-0")
-    payload = replay.model_dump(mode="json")
+    # by_alias mirrors FastAPI's response serialization (so the fixture key is
+    # ``viewModelVersion``, matching the generated interface).
+    payload = replay.model_dump(mode="json", by_alias=True)
     # ``created_at`` is the replay file's mtime (env/clock-dependent) — normalize
     # it so the fidelity fixture is byte-deterministic across regenerations (the
     # drift gate compares the committed file to a fresh render). The field is

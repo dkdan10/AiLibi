@@ -502,3 +502,27 @@ echo "Total spend: \$$total (recorded in $MANIFEST)."
 # provider call; set -e makes a build failure fail the refresh loudly.
 echo "Rebuilding eval report from the refreshed replays ..."
 uv run python "$REPO_ROOT/scripts/build_sample_report.py" --sample-dir "$SAMPLE_DIR"
+
+# Regenerate the per-set interestingness rubric (Task 12.2; DESIGN.md §3.1, §7)
+# so /eval/rubric stays FRESH after a re-record instead of only banner-guarded
+# when stale. The gameplay-facts extractor is pinned to the canonical 9p2i set
+# (it reads replays/samples/9p2i + writes facts to a predictable temp path), so
+# this runs only when the refresh target IS that set; for any other set the
+# producer is a no-op here (the flat 4p1i baseline ships no rubric by design).
+# $0, no provider call. Non-fatal: a rubric-regen hiccup must never discard a
+# successful (paid) replay refresh, so it warns rather than aborting.
+if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
+  echo "Regenerating the per-set interestingness rubric (9p2i) ..."
+  # The extractor reads its hardcoded 9p2i set + writes facts to this predictable
+  # path; it has no sys.path bootstrap, so run it with the repo root on
+  # PYTHONPATH. The producer then scores those facts and co-locates the rubric.
+  _facts_path="${TMPDIR:-/tmp}/ailibi-gameplay-facts-9p2i.json"
+  if PYTHONPATH="$REPO_ROOT" uv run python \
+      "$REPO_ROOT/audits/workflows/extract_gameplay_facts.py" >/dev/null \
+    && uv run python "$REPO_ROOT/experiments/lab/rubric_score.py" "$_facts_path" \
+      --set-dir "$SAMPLE_DIR"; then
+    echo "  rubric refreshed: $SAMPLE_DIR/results-rubric-score.json"
+  else
+    echo "  WARNING: rubric regen failed (non-fatal); /eval/rubric may be stale." >&2
+  fi
+fi

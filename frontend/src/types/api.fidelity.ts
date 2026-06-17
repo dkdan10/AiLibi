@@ -500,7 +500,7 @@ export const _fidelityReplay: ReplayView = {
       "tick": 2
     }
   ],
-  "view_model_version": "1"
+  "viewModelVersion": "1"
 };
 void _fidelityReplay;
 

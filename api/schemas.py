@@ -768,10 +768,15 @@ class ReplayView(_FrozenView):
 
     ``view_model_version`` stamps the versioned contract (:data:`VIEW_MODEL_VERSION`)
     on the primary served payload so the frontend can fail loud on an
-    incompatible shape.
+    incompatible shape. It serializes as ``viewModelVersion`` (the contract name
+    in DESIGN.md §7 / the task) via a ``serialization_alias`` — the lone
+    camelCase key, kept exactly as the contract spells it so downstream
+    compatibility guards match; the Python attribute stays snake_case.
     """
 
-    view_model_version: str = VIEW_MODEL_VERSION
+    view_model_version: str = Field(
+        default=VIEW_MODEL_VERSION, serialization_alias="viewModelVersion"
+    )
     metadata: ReplayMetadataView
     map: MapLayoutView
     players: tuple[PlayerView, ...]
@@ -832,7 +837,9 @@ class RubricView(_FrozenView):
     best-first by the scorer, so the Highlights reel renders it directly.
     """
 
-    view_model_version: str = VIEW_MODEL_VERSION
+    view_model_version: str = Field(
+        default=VIEW_MODEL_VERSION, serialization_alias="viewModelVersion"
+    )
     seedset: str
     git_head: str | None
     manifest_sha: str | None
