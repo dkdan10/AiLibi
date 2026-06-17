@@ -143,12 +143,96 @@ class PlayerView(_FrozenView):
 # ---------------------------------------------------------------------------
 
 
+class VisiblePlayerView(_FrozenView):
+    """One other player inside an agent's firewall-filtered field of view at a
+    tick (Task 12.3; DESIGN.md §3.2 fog, §1.3 firewall).
+
+    Shadows the AGENT-facing ``observation.packet.PlayerView`` — ``id`` / ``room``
+    / ``action`` only — NOT the privileged spectator :class:`PlayerView` (which
+    carries ``role`` / ``color``). That is the whole point of the As-agent
+    perspective: it *simulates* the firewall, so a sighting never leaks role,
+    kill attribution, or identity colour. ``action`` is a witnessed kill / vent
+    (the engine's witness gate is what permits it — ``eval/leak_test.py``) and is
+    ``None`` for an ordinary co-located sighting.
+    """
+
+    id: str
+    room: str
+    action: str | None
+
+
+class VisibleBodyView(_FrozenView):
+    """One body inside an agent's field of view at a tick (Task 12.3; DESIGN.md
+    §3.2 fog, §1.3 firewall).
+
+    Shadows the AGENT-facing ``observation.packet.BodyView`` — ``id`` / ``room``
+    / ``victim_id`` only. The privileged kill attribution (``killed_by``, carried
+    by the spectator :class:`BodyView`) is deliberately ABSENT: the As-agent view
+    must never expose who killed whom — only that a body is visible and whose it
+    is (the UI leak test in ``tests/api/test_leak.py`` pins this).
+    """
+
+    id: str
+    room: str
+    victim_id: str
+
+
+class AudibleEventView(_FrozenView):
+    """One audio cue inside an agent's field of view at a tick (Task 12.3;
+    DESIGN.md §3.2, §4.2).
+
+    Shadows ``observation.packet.AudibleEvent`` — the SEPARATE audio firewall
+    channel (``observation.service.ObservationService._audible_events``), distinct
+    from the visual field: ``vent_use_heard`` (an impostor vent heard from the
+    source / destination room) or ``sabotage_alarm`` (the global alarm, ``room``
+    is ``None``).
+    """
+
+    kind: Literal["vent_use_heard", "sabotage_alarm"]
+    room: str | None
+
+
+class AgentVisibilityView(_FrozenView):
+    """One living agent's per-tick field of view — the As-agent fog projection
+    (Task 12.3; DESIGN.md §3.2 fog, §7 visibility row, §1.3 firewall).
+
+    Captured from the agent's already-firewall-filtered ``ObservationPacket``
+    (``observation.service.ObservationService.build_packet``) re-built during the
+    loader's engine re-walk — the SAME pipeline ``eval/leak_test.py`` validates —
+    so the As-agent perspective *simulates* the firewall rather than the renderer
+    hiding data client-side. It carries only what the agent could perceive at this
+    tick: the visual field (``visible_players`` / ``visible_bodies``, graph- and
+    lights-dependent, from ``engine.visibility.compute_visibility_for_player``)
+    and the audio field (``audible_events``). It is the ONE genuinely-expensive
+    per-tick projection (a visibility solve per living agent per tick, stage-0
+    §0.5), so it is derived once inside the LRU-cached re-walk, never per request.
+
+    Attached to ``AgentTickStateView.visibility``; ``None`` there for a dead agent
+    (a dead agent has no field of view — there is no As-agent fog to simulate).
+    The privileged self channel (``role`` / ``fellow_impostor_ids`` / ``cooldown``
+    / ``own_kill`` / ``pending_task_id``) is intentionally NOT projected here:
+    those are exactly the fields the As-agent view must hide.
+    """
+
+    visible_players: tuple[VisiblePlayerView, ...]
+    visible_bodies: tuple[VisibleBodyView, ...]
+    audible_events: tuple[AudibleEventView, ...]
+
+
 class AgentTickStateView(_FrozenView):
     """The dynamic slice of one agent's ``engine.entities.PlayerState`` at one
     tick.
 
     ``is_venting`` is impostor-only state, exposed because the spectator is
     privileged. ``task_progress`` is ``None`` for impostors.
+
+    ``visibility`` is the agent's per-tick field of view — the As-agent fog
+    projection (Task 12.3; DESIGN.md §3.2, §7). It is ``None`` for a dead agent
+    (no field of view) and populated for every living agent. This is the one
+    genuinely-expensive per-tick projection, derived from the firewall-filtered
+    observation packet inside the cached re-walk (see :class:`AgentVisibilityView`).
+    It defaults to ``None`` so hand-constructed instances and the (visibility-free)
+    meeting-memory re-walk stay valid; the served replay path always sets it.
 
     Excludes: ``target_room``, ``planned_path``, ``kill_cooldown_ticks``,
     ``vent_cooldown_ticks`` — engine-internal tactical state.
@@ -162,6 +246,7 @@ class AgentTickStateView(_FrozenView):
     current_action: Literal[
         "IDLE", "MOVING", "TASK", "KILL", "VENT", "REPORT", "SABOTAGE"
     ]
+    visibility: AgentVisibilityView | None = None
 
 
 class KillEventView(_FrozenView):
@@ -862,7 +947,9 @@ __all__ = [
     "AdvantageView",
     "AgentMemoryView",
     "AgentTickStateView",
+    "AgentVisibilityView",
     "AlibiClaimView",
+    "AudibleEventView",
     "BallotView",
     "BeliefEntryView",
     "BeliefErrorView",
@@ -901,4 +988,6 @@ __all__ = [
     "TurnView",
     "VentEventView",
     "VentView",
+    "VisibleBodyView",
+    "VisiblePlayerView",
 ]

@@ -314,7 +314,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-2",
@@ -322,7 +343,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-3",
@@ -330,7 +372,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": null
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-4",
@@ -338,7 +401,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         }
       ],
       "bodies": [],
@@ -364,7 +448,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-2",
@@ -372,7 +477,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-3",
@@ -380,7 +506,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": null
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-4",
@@ -388,7 +535,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         }
       ],
       "bodies": [],
@@ -414,7 +582,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-2",
@@ -422,7 +611,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-3",
@@ -430,7 +640,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": null
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-4",
@@ -438,7 +669,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         }
       ],
       "bodies": [],
@@ -464,7 +716,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-2",
@@ -472,7 +745,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-3",
@@ -480,7 +774,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": null
+          "task_progress": null,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-4",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         },
         {
           "agent_id": "p-4",
@@ -488,7 +803,28 @@ export const _fidelityReplay: ReplayView = {
           "is_alive": true,
           "is_venting": false,
           "room_id": "CAFETERIA",
-          "task_progress": 0.0
+          "task_progress": 0.0,
+          "visibility": {
+            "audible_events": [],
+            "visible_bodies": [],
+            "visible_players": [
+              {
+                "action": null,
+                "id": "p-1",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-2",
+                "room": "CAFETERIA"
+              },
+              {
+                "action": null,
+                "id": "p-3",
+                "room": "CAFETERIA"
+              }
+            ]
+          }
         }
       ],
       "bodies": [],

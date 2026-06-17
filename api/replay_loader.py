@@ -53,7 +53,9 @@ from api.schemas import (
     AdvantageView,
     AgentMemoryView,
     AgentTickStateView,
+    AgentVisibilityView,
     AlibiClaimView,
+    AudibleEventView,
     BallotView,
     BeliefEntryView,
     BeliefErrorView,
@@ -90,6 +92,8 @@ from api.schemas import (
     TurnView,
     VentEventView,
     VentView,
+    VisibleBodyView,
+    VisiblePlayerView,
 )
 from engine.actions import Action
 from engine.events import (
@@ -128,6 +132,7 @@ from meetings.schemas import (
 )
 from meetings.transcript import is_weak_contradiction
 from meetings.voting import INVALID_VOTE_TARGET_MARKER, SKIP_TARGET
+from observation.packet import ObservationPacket
 from observation.service import ObservationService
 from orchestrator.game import (
     DEFAULT_NUM_IMPOSTORS,
@@ -545,7 +550,13 @@ class ReplayLoader:
         # a cache miss and is never served stale (the roster is re-read in
         # ``_walk``). Resolution + seed parsing already happened in
         # ``load_replay`` (via ``_resolve``).
-        walk = self._walk(path, seed, collect_memory=False)
+        #
+        # ``collect_visibility=True`` runs the per-tick per-living-agent fog
+        # projection (Task 12.3; DESIGN.md §3.2, §7) — the one genuinely-expensive
+        # new compute (a visibility solve per living agent per tick, stage-0 §0.5).
+        # It is paid once here and memoized by this LRU, so the served payload is
+        # never recomputed per request.
+        walk = self._walk(path, seed, collect_memory=False, collect_visibility=True)
         return ReplayView(
             metadata=self._metadata_view(path, seed),
             map=self._map_view,
@@ -575,14 +586,25 @@ class ReplayLoader:
 
     # -- engine playback --------------------------------------------------
 
-    def _walk(self, path: Path, seed: int, *, collect_memory: bool) -> _WalkResult:
+    def _walk(
+        self,
+        path: Path,
+        seed: int,
+        *,
+        collect_memory: bool,
+        collect_visibility: bool = False,
+    ) -> _WalkResult:
         """Re-seed and re-apply the recorded action stream through the engine.
 
         Mirrors :meth:`orchestrator.game.HeadlessGame.run`'s tick loop. When
         ``collect_memory`` is set, the agent observation+perception pipeline is
         re-run in lockstep so per-agent memory can be re-rendered at meeting
         boundaries (the observation audit log is routed to a throwaway temp
-        file). Verifies every reconstructed ``state_hash`` against the record.
+        file). When ``collect_visibility`` is set, each living agent's
+        firewall-filtered field of view is captured per tick from the same
+        observation pipeline and attached to its tick state — the As-agent fog
+        projection (Task 12.3; DESIGN.md §3.2, §7). Verifies every reconstructed
+        ``state_hash`` against the record.
         """
 
         game_id = _game_id_for_seed(seed)
@@ -628,12 +650,18 @@ class ReplayLoader:
         memories: dict[str, AgentMemory] = {}
         service: ObservationService | None = None
         audit_dir: tempfile.TemporaryDirectory[str] | None = None
-        if collect_memory:
+        # The observation pipeline is re-run when EITHER the meeting-memory walk
+        # (``collect_memory``) or the per-tick fog projection (``collect_visibility``,
+        # Task 12.3) needs it; either way its audit log is routed to a throwaway
+        # temp file. ``memories`` is only allocated for the memory walk — the
+        # visibility walk reads the packet and discards it (no episodic ingest).
+        if collect_memory or collect_visibility:
             audit_dir = tempfile.TemporaryDirectory(prefix="ailibi-replay-audit-")
             service = ObservationService(
                 game_map=self._game_map,
                 audit_log_path=Path(audit_dir.name) / "audit.jsonl",
             )
+        if collect_memory:
             memories = {pid: AgentMemory() for pid in initial_state.players}
 
         # Finding 1 (DESIGN.md §3.1, §11.4): ReplayLog.record_tick snapshots
@@ -644,7 +672,20 @@ class ReplayLoader:
         # spectator's first frame is the intuitive initial state, not agents
         # already mid-motion. Read-side only: it is not written back to JSONL
         # and never touches a state hash.
-        ticks: list[TickView] = [self._tick_view(-1, initial_state, (), None)]
+        # The per-tick fog projection (Task 12.3, DESIGN.md §3.2/§7): each LIVING
+        # agent's firewall-filtered field of view, captured from the observation
+        # packet the pipeline already builds (no second visibility solve). It is
+        # built from the POST-advance state below so it matches the frame the
+        # spectator scrubs to; the Start frame uses the seeded initial state with
+        # no prior events.
+        start_visibility = (
+            self._agent_visibility_map(service, initial_state, ())
+            if collect_visibility and service is not None
+            else None
+        )
+        ticks: list[TickView] = [
+            self._tick_view(-1, initial_state, (), None, start_visibility)
+        ]
         trigger_kind_by_meeting_id: dict[str, _TriggerKind] = {}
         memory_views: dict[tuple[str, str], AgentMemoryView] = {}
         last_events: tuple[EngineEvent, ...] = ()
@@ -652,7 +693,7 @@ class ReplayLoader:
 
         try:
             for entry in replay_entries:
-                if service is not None:
+                if collect_memory and service is not None:
                     self._ingest_tick(service, memories, state, last_events)
 
                 actions = _deserialize_actions(entry.actions)
@@ -680,7 +721,20 @@ class ReplayLoader:
                     )
                     trigger_kind_by_meeting_id[meeting_id] = trigger_kind
 
-                ticks.append(self._tick_view(entry.tick, state, events, meeting_id))
+                # Capture each living agent's field of view from the POST-advance
+                # state + this tick's events — the frame the spectator sees at
+                # ``entry.tick`` (Task 12.3). Computed once here; LRU-cached by
+                # ``_load_replay`` so it is never recomputed per request.
+                tick_visibility = (
+                    self._agent_visibility_map(service, state, events)
+                    if collect_visibility and service is not None
+                    else None
+                )
+                ticks.append(
+                    self._tick_view(
+                        entry.tick, state, events, meeting_id, tick_visibility
+                    )
+                )
 
                 if state.phase != "MEETING":
                     if state.phase == "GAME_OVER":
@@ -810,6 +864,40 @@ class ReplayLoader:
                 beliefs=memories[pid].beliefs,
             )
 
+    def _agent_visibility_map(
+        self,
+        service: ObservationService,
+        state: WorldState,
+        events: Sequence[EngineEvent],
+    ) -> dict[str, AgentVisibilityView]:
+        """Build each LIVING agent's firewall-filtered field of view for one tick.
+
+        The one genuinely-expensive per-tick projection (Task 12.3; DESIGN.md §3.2
+        fog, §7; stage-0 §0.5): a visibility solve per living agent per tick. Each
+        view is captured from the agent's own ``ObservationPacket`` — the SAME
+        pipeline output ``observation/service.py`` already assembles per tick
+        (``engine.visibility.compute_visibility_for_player`` for the visual field,
+        ``ObservationService._audible_events`` for the audio field) — so the
+        As-agent perspective *simulates* the firewall and can never expose an
+        unseen entity (the UI leak test in ``tests/api/test_leak.py`` pins this).
+
+        Visibility is NOT re-solved here: ``build_packet`` runs the solve once and
+        this reads its already-firewall-filtered result, honouring the cost
+        budget (the implementation hint's "do NOT re-solve a second time"). Dead
+        agents are skipped — a dead agent has no field of view — so the per-agent
+        map holds only living agents and the dead get ``visibility=None``.
+        """
+
+        visibility: dict[str, AgentVisibilityView] = {}
+        for pid in sorted(state.players):
+            if not state.players[pid].alive:
+                continue
+            packet = service.build_packet(
+                world_state=state, agent_id=pid, engine_events=events
+            )
+            visibility[pid] = _agent_visibility_view(packet)
+        return visibility
+
     # -- DTO builders -----------------------------------------------------
 
     def _tick_view(
@@ -818,9 +906,11 @@ class ReplayLoader:
         state: WorldState,
         events: Sequence[EngineEvent],
         meeting_id: str | None,
+        visibility_by_agent: Mapping[str, AgentVisibilityView] | None = None,
     ) -> TickView:
         agent_states = tuple(
-            self._agent_tick_state(state, pid) for pid in sorted(state.players)
+            self._agent_tick_state(state, pid, visibility_by_agent)
+            for pid in sorted(state.players)
         )
         sabotage = state.sabotage
         sabotage_active = (
@@ -850,8 +940,21 @@ class ReplayLoader:
             ),
         )
 
-    def _agent_tick_state(self, state: WorldState, pid: str) -> AgentTickStateView:
+    def _agent_tick_state(
+        self,
+        state: WorldState,
+        pid: str,
+        visibility_by_agent: Mapping[str, AgentVisibilityView] | None = None,
+    ) -> AgentTickStateView:
         player = state.players[pid]
+        # ``visibility_by_agent`` only holds LIVING agents (the As-agent fog
+        # projection, Task 12.3), so ``.get`` yields ``None`` for a dead agent —
+        # which has no field of view to simulate. When the walk did not collect
+        # visibility (the meeting-memory re-walk), the map is ``None`` and every
+        # agent state carries ``visibility=None``.
+        visibility = (
+            visibility_by_agent.get(pid) if visibility_by_agent is not None else None
+        )
         return AgentTickStateView(
             agent_id=pid,
             room_id=player.room if player.alive else None,
@@ -859,6 +962,7 @@ class ReplayLoader:
             is_venting=player.in_vent,
             task_progress=self._task_progress(state, pid, player.role),
             current_action=_current_action(player.last_action),
+            visibility=visibility,
         )
 
     def _task_progress(self, state: WorldState, pid: str, role: str) -> float | None:
@@ -1671,6 +1775,35 @@ def _belief_entry_view(memory: AgentMemory, subject: str, tick: int) -> BeliefEn
 # already-re-walked engine state / persisted meeting records — nothing new is
 # persisted and no replay is re-recorded.
 # ---------------------------------------------------------------------------
+
+
+def _agent_visibility_view(packet: ObservationPacket) -> AgentVisibilityView:
+    """Project a firewall-filtered ``ObservationPacket`` into the As-agent fog DTO.
+
+    Task 12.3 (DESIGN.md §3.2 fog, §1.3 firewall). Carries only the visual field
+    (``visible_players`` / ``visible_bodies``) and the audio field
+    (``audible_events``) the packet already exposes — NEVER the privileged self
+    channel (``self_state.role`` / ``fellow_impostor_ids`` / ``pending_task_id`` /
+    ``own_kill``, or ``cooldown``), which are exactly the fields the As-agent view
+    must hide. The agent-facing ``observation.packet.BodyView`` carries no
+    ``killed_by`` (only the privileged spectator :class:`BodyView` does), so the
+    kill attribution cannot leak through this projection by construction.
+    """
+
+    return AgentVisibilityView(
+        visible_players=tuple(
+            VisiblePlayerView(id=player.id, room=player.room, action=player.action)
+            for player in packet.visible_players
+        ),
+        visible_bodies=tuple(
+            VisibleBodyView(id=body.id, room=body.room, victim_id=body.victim_id)
+            for body in packet.visible_bodies
+        ),
+        audible_events=tuple(
+            AudibleEventView(kind=event.kind, room=event.room)
+            for event in packet.audible_events
+        ),
+    )
 
 
 def _bodies_view(state: WorldState) -> tuple[BodyView, ...]:
