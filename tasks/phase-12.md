@@ -277,36 +277,132 @@ firewall-neutral); the §4.6 recompute must match the engine gate exactly (plura
 mock's "majority".
 **Ready-to-paste prompt:** `agent_prompts/task-12-2-viewmodel-contract.md`
 
-#### Task 12.3 — Per-tick visibility projection + UI leak test
+### Task 12.3 — Per-tick visibility projection + UI leak test
 **Branch:** `phase-12-visibility-projection`
 **Depends on:** 12.2
-**Complexity:** Integration (backend/loader) — the expensive one, isolated on purpose
-**Stage-1 ref:** §3.2, §7, slice 1b — **Hand-coded (no Claude Design).**
+**Section refs:** design/phase-12/stage-1-design.md §3.2 (fog), §7 (the visibility row of the view-model table), slice 1b; design/phase-12/stage-0-understand.md §0.5 (fog is the one genuinely-expensive projection); the firewall rules in design/phase-12/claude-design-brief.md
+**Complexity:** Integration
+**Files in scope:**
+- api/replay_loader.py
+- api/schemas.py
+- frontend/src/types/api.ts
+- tests/api/test_leak.py
+- tests/api/test_view_model.py
+**Files NOT in scope:**
+- the map render layer + fog *rendering* — Task 12.5 consumes this projection
+- engine/ and observation/ — read `compute_visibility_for_player` / the `ObservationPacket`; never change them; no re-record
+- the per-meeting belief / contradiction / §4.6 projections — already shipped in 12.2
 
-Derive each agent's `visible_players` / `visible_bodies` / `audible_events` per tick from the `ObservationPacket` during
-the `collect_memory` re-walk and **persist them into the view-model** (today the packet is built into a temp dir and
-discarded; visibility is graph/lights-dependent via `compute_visibility_for_player` — a naive same-room dim is wrong AND
-a leak). Cost it honestly; cache. Ship a **UI leak test** mirroring `eval/leak_test.py` that asserts the As-agent
-filtered view never exposes a field the agent could not have seen.
-**Acceptance:** per-tick per-agent visibility in the view-model; UI leak test green; fog renders correctly in 12.5.
+A hand-coded backend/loader projection (no Claude Design), deliberately isolated as the one genuinely-expensive compute so
+it does not block the cheap 12.2 contract. Persist each living agent's per-tick **field of view** into the view-model so
+the As-agent perspective can *simulate* the firewall rather than inherit it. Today `ReplayLoader._walk(collect_memory=True)` runs the full observation pipeline but
+routes its audit to a throwaway `tempfile.TemporaryDirectory` and **discards the visibility** — only an `is_venting` bool
+survived per tick (see the VentEventView note in `api/schemas.py` that explicitly reserves this for Task 12.3). Capture,
+per tick per living agent, each agent's already-firewall-filtered observation packet — `visible_players` / `visible_bodies` (the visual field, from
+`engine/visibility.py::compute_visibility_for_player`, graph- and lights-dependent; a naive same-room dim is both wrong
+AND a leak) plus `audible_events` (a *separate* audio path, `ObservationService._audible_events` — vent-use-heard /
+sabotage-alarm) — all of which `observation/service.py` already assembles per tick, and surface it as a per-tick
+`AgentVisibilityView` attached to the agent's tick state. This is **the one genuinely-expensive new compute** (a visibility solve per living agent per tick):
+reuse the pipeline output already produced inside the re-walk instead of re-solving, cost it honestly, and cache through
+the existing LRU (window it like the other per-tick frames if it inflates the single payload). Ship a **UI leak test** in
+`tests/api/test_leak.py` mirroring `eval/leak_test.py`'s recursive hidden-field walk: build the As-agent–filtered view for
+a chosen agent across a committed 9p2i game and assert it never exposes a player, body, event, or field that agent could
+not have seen at that tick (other-room presence, role, `fellow_impostor_ids`, kill attribution). The projection is a pure
+function of the recorded actions — keep it byte-deterministic.
+**Definition of done:** per-tick per-living-agent `visible_players` / `visible_bodies` / `audible_events` in the served
+view-model, derived from `compute_visibility_for_player` (not same-room shorthand); a **UI leak test** mirroring
+`eval/leak_test.py` asserts the As-agent filtered view leaks no unseen field across a committed 9p2i game; the projection
+is cached + cost-bounded (no per-request recompute) and documented as the expensive one; the existing leak + determinism
+tests stay green; NO re-record; `scripts/check.sh` is green.
+**Public types introduced:**
+- api.schemas.AgentVisibilityView
+**Implementation hint:**
+capture the packet the observation pipeline already builds inside the `collect_memory=True` re-walk — read its
+`visible_players` / `visible_bodies` / `audible_events` instead of letting the temp-dir audit drop them; do NOT re-solve
+visibility a second time. The As-agent view is a server-side projection (compute once, cache), never a client-side hide;
+window the per-tick payload as the existing per-tick frames are windowed if it grows.
+**Integration risk:**
+this is the cost hotspot — a visibility solve per living agent per tick across a whole game; measure and cache or it
+regresses load time. The leak surface is the entire point: the test must mirror `eval/leak_test.py`'s recursive
+hidden-field walk (role, `fellow_impostor_ids`, kill attribution, cross-room presence) or a subtle leak ships. Reading the
+engine visibility / observation modules must not perturb the engine walk — the existing leak + determinism tests must stay
+green and the replays are not re-recorded.
+**Ready-to-paste prompt:** `agent_prompts/task-12-3-visibility-projection.md`
 
-#### Task 12.4 — Playback backbone
+### Task 12.4 — Playback backbone
 **Branch:** `phase-12-playback`
 **Depends on:** 12.2
-**Complexity:** Integration (frontend state)
-**Stage-1 ref:** §4, slice 2 — **Hand-coded (no Claude Design).**
+**Section refs:** design/phase-12/stage-1-design.md §4 (the time model), §2.3 (workspace layout), slice 2; design/phase-12/stage-0-understand.md §0.5
+**Complexity:** Integration
+**Files in scope:**
+- frontend/src/store/replayStore.ts
+- frontend/src/hooks/usePlayback.ts
+- frontend/src/lib/playback.ts
+- frontend/src/components/ReplayControls.tsx
+- frontend/src/App.tsx
+**Files NOT in scope:**
+- the map / belief / meeting / inspector surfaces — Waves B/C mount into the shell slots + read the transport
+- api/ and the loader — the advantage series + per-tick events already ship from 12.2
+- frontend/src/tokens.ts and the design system — 12.1
 
-Lift playback into the store / a `usePlayback` hook (out of `ReplayControls`). Source of truth = engine tick via **one
-derived selector** (kill the index/tick off-by-one re-derived in 3 places; treat `tick=-1` as a real pre-game value).
-Transport (scrub / play-pause / speed / step±N / jump prev-next event / jump prev-next meeting / next-key-moment); the
-**advantage graph as a clickable second scrubber**; a shared hover **crosshair**; the event-timeline lanes; URL sync
-(`set/game_id/tick/perspective/beliefView/selectedAgent/selectedMeeting`). Keep windowing + lazy meeting bodies + the
-async-ordering guards. Meetings are time spans (stage morphs when `tick ∈ meeting.span`); auto-follow is interruptible.
-**Acceptance:** everything derives from one tick; URL-restorable; no off-by-one; interruptible auto-follow.
+A hand-coded frontend-state task (no Claude Design — the handoff bundle cannot carry state/interaction). Lift playback out
+of `ReplayControls.tsx` into the store plus a `usePlayback` hook so every surface derives from **one source of truth — the
+engine tick**. Today the tick↔array-index mapping is re-derived in several spots (the
+`ReplayControls` comment already flags "compare against the engine tick NUMBER, not the array index"); collapse it into
+**one derived selector** and treat the loader-injected `tick = -1` Start as a real pre-game value, not a sentinel. Build
+the full transport: scrub · play/pause · speed (0.5–4×, the existing `PlaybackSpeed`) · **step ±N** · **jump prev/next
+event** (kill / meeting / vent / sabotage, from the per-tick `events`) · **jump prev/next meeting** · **next key
+moment**. Add the **advantage graph as a clickable second scrubber** from the 12.2 `AdvantageView` per-tick series
+(crew-vs-impostor, kills/meetings/ejections as inflection points; click to seek) and a shared hover **crosshair** across
+the advantage graph + the event-timeline lanes (one lane per agent). **"Next key moment"** seeks to the next
+advantage-graph **inflection** — the next tick carrying a kill, a body-report / meeting, an ejection, or a sabotage start
+(the drama beats), ranked kill → meeting → ejection — distinct from the raw step / jump-event controls. Stand up the
+**app shell** with pre-declared mount points at **two** levels so *every* Wave-B surface plugs in **without ever editing
+`App.tsx`**: **(a)** a top-level view container (view state in the store, URL-synced; no router dependency) for
+**Replays** + **Highlights** (→ 12.9), **Tournament** (→ 12.10), and the **Replay Workspace**; and **(b)** within the
+workspace, named slots per stage-1 §2.3 — perspective banner, roster rail, **stage** (map↔meeting morph → 12.5 / 12.7),
+**mind** panel (→ 12.8), a **belief-panel** mount (overlay / full-screen toggle → 12.6), the **advantage graph**, the
+**event-timeline** lanes, and the **transport**. Confirm with a slot↔surface checklist that all of 12.5–12.10 (+
+transport / advantage / timeline) have a mount; the slots ship as empty placeholders the Wave-B PRs fill (each owns its
+component, never the shell). Add **URL sync** of
+`set / game_id / tick / perspective / beliefView / selectedAgent / selectedMeeting` via `history.replaceState` +
+`URLSearchParams` (there is no router today) so every moment is shareable + reload-stable — which means adding
+`perspective` + `beliefView` to the store now (consumed later by 12.5 / 12.6). Meetings are **time spans**: the stage
+morphs to the meeting table when `tick ∈ meeting.span`, and **auto-follow** (pan to the next event) is **interruptible**
+(never yank the camera). Keep the existing payload windowing, lazy meeting bodies, and async-ordering guards intact.
+**Definition of done:** all playback state lives in `replayStore` + a `usePlayback` hook (not in `ReplayControls`); the
+tick↔index mapping is one derived selector with `tick = -1` handled and no off-by-one; the transport supports scrub /
+play / speed / step ±N / jump-event / jump-meeting / next-key-moment; the advantage graph seeks on click and shares the
+crosshair; the URL round-trips all seven keys (reload restores the exact moment); auto-follow is interruptible; the
+shell exposes a pre-declared mount (slot or route) for **every** one of 12.5–12.10 plus transport / advantage / timeline,
+verified by a slot↔surface checklist, so no Wave-B PR needs to touch `App.tsx`; windowing + lazy bodies + async-ordering
+guards are preserved;
+`npm run tsc:check` + `npm run build` pass and `scripts/check.sh` is green.
+**Implementation hint:**
+the store already holds `currentTick` / `isPlaying` / `playbackSpeed` / `selectedMeetingId` / `selectedAgentId` — extend
+it with `perspective` / `beliefView` plus the single derived tick selector rather than starting fresh, and move the
+auto-advance timer out of `ReplayControls` into `usePlayback`. Drive jump-event / jump-meeting off the per-tick `events`
+list and the meetings list, comparing engine tick numbers, never array indices. Do the URL sync with `replaceState` +
+`URLSearchParams` (no router dependency) and debounce it so scrubbing does not thrash history.
+**Integration risk:**
+the off-by-one is the trap — the current index/tick conflation is re-derived in multiple places; the single selector must
+treat `tick = -1` as real and stay consistent across transport, events, meetings, and the advantage scrubber, or
+surfaces disagree. The shell-slot layout is load-bearing for Wave 3: define stable mount points now so the parallel
+chrome PRs do not collide in `App.tsx`. Preserve the store's async-ordering guards + payload windowing — a naive rewrite
+reintroduces the race and the payload inflation they already fixed. Finally, 12.3 regenerates
+`frontend/src/types/api.ts` in parallel (it adds `AgentVisibilityView`); 12.4 only *reads* `AdvantageView` and never
+writes that file, so there is no scope conflict — but whichever of 12.3 / 12.4 merges second should rebase and recompile
+against the regenerated types.
+**Ready-to-paste prompt:** `agent_prompts/task-12-4-playback.md`
 
 ---
 
 ## Wave B — Surfaces (chrome via Claude Design; logic hand-coded)
+
+> **Mount discipline (parallel-dispatch guarantee):** every Wave-B surface mounts into a slot or route that **12.4
+> pre-declares**, and **none lists `App.tsx` in scope.** If a surface needs a mount 12.4 didn't provide, fix 12.4 — a
+> per-surface `App.tsx` edit reintroduces the collision the shell slots exist to prevent. (Enforce when elaborating each
+> contract: no `App.tsx` in Files-in-scope.)
 
 #### Task 12.5 — Map stage (vector Pixi + SVG assets + fog)
 **Branch:** `phase-12-map-stage`
