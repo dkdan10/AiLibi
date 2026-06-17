@@ -332,6 +332,7 @@ export interface BeliefErrorView {
   confidence: number;
   subject_is_impostor: boolean;
   error: number;
+  has_belief: boolean;
 }
 
 export interface EvalCostSummaryView {

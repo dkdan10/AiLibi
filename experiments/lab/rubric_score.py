@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -350,19 +349,41 @@ def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _git_head() -> str | None:
-    """Current ``git rev-parse HEAD``, or ``None`` when git is unavailable."""
+# The ``MANIFEST.md`` git_sha column index once the leading empty cell (from the
+# leading ``|``) is included — kept in lockstep with
+# ``api.replay_loader._MANIFEST_GIT_SHA_COLUMN`` so the producer stamps the exact
+# sha the loader's staleness guard reads back.
+_MANIFEST_GIT_SHA_COLUMN = 5
+
+
+def _set_manifest_sha(set_dir: Path) -> str | None:
+    """The single distinct git sha across a set's ``MANIFEST.md`` data rows.
+
+    Mirrors ``api.replay_loader._manifest_git_sha``: the rubric stamps the
+    version of the replay SET it was scored from (read here, cwd-independent via
+    the absolute ``set_dir``), so the loader's freshness comparison is
+    "do the served replays still match what the rubric was scored against",
+    NOT "what code commit happened to run the scorer". Returns ``None`` when the
+    manifest is absent or carries more than one distinct sha.
+    """
 
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
+        text = (set_dir / "MANIFEST.md").read_text(encoding="utf-8")
+    except OSError:
         return None
-    return result.stdout.strip() or None
+    shas: set[str] = set()
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.split("|")]
+        if len(cells) <= _MANIFEST_GIT_SHA_COLUMN:
+            continue
+        if not cells[1].lstrip("-").isdigit():
+            continue  # header / separator row
+        sha = cells[_MANIFEST_GIT_SHA_COLUMN]
+        if sha:
+            shas.add(sha)
+    return next(iter(shas)) if len(shas) == 1 else None
 
 
 def regen_for_set(
@@ -373,19 +394,29 @@ def regen_for_set(
     The per-set rubric PRODUCER (Task 12.2; DESIGN.md §3.1, §7). Scores ``facts``
     (the gameplay-facts extractor's output) into the served interestingness
     surface and writes it into ``set_dir`` so ``/eval/rubric`` can serve it.
-    The result is stamped with ``git_head`` — current ``HEAD`` by default — so
-    the loader's staleness guard compares the rubric's scoring commit to the
-    set's ``MANIFEST.md`` git sha (a fresh re-record + regen at one commit reads
-    as fresh; a regen against drifted replays reads as stale).
+
+    The result is stamped with the version of the replay SET it was scored from
+    — the set's ``MANIFEST.md`` git sha — NOT the scoring code commit. That makes
+    the loader's staleness guard meaningful: it reads FRESH while the on-disk
+    replays match what the rubric scored, and STALE only once the set is
+    re-recorded (manifest sha bumped) without a re-score. (An explicit
+    ``git_head`` overrides — used by tests; ``facts['git_head']`` is the last
+    fallback when the set ships no manifest.) Stamping the scoring ``HEAD`` here
+    instead would false-positive as stale whenever scoring ran at a later commit
+    than recording, and would depend on the caller's cwd — both avoided.
 
     Writes the SERVED subset (``seedset`` / ``git_head`` / ``interestingness``);
     the human-readable R1–R7 ``rows`` table stays the lab-local artifact
-    :func:`main` writes. Wire this into the refresh / re-record path (run after
-    ``scripts/refresh_samples.sh`` re-records a set) so the happy path stays
-    fresh rather than only banner-guarded when stale.
+    :func:`main` writes. Wired into the refresh / re-record path
+    (``scripts/refresh_samples.sh``) so the happy path stays fresh rather than
+    only banner-guarded when stale.
     """
 
-    head = git_head if git_head is not None else (_git_head() or facts.get("git_head"))
+    head = (
+        git_head
+        if git_head is not None
+        else (_set_manifest_sha(set_dir) or facts.get("git_head"))
+    )
     out = {
         "seedset": facts.get("seedset"),
         "git_head": head,

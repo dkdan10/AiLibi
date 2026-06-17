@@ -625,6 +625,15 @@ class BeliefErrorView(_FrozenView):
     thresholds (so the suspicion buckets stay single-sourced in ``tokens.ts``).
     The firewall (identity ≠ guilt; ground-truth suppressed in fog) is enforced
     by the renderer, not this privileged contract.
+
+    ``has_belief`` is ``False`` for a cell the observer holds NO belief about yet
+    (the subject is absent from its sparse belief store): the frame is the FULL
+    observer×subject grid, so the 9×9 matrix can render an explicit "NO BELIEF
+    YET" cell that is distinct from a genuine neutral/low suspicion ("no belief
+    yet" ≠ 0, a binding honesty rule). For a no-belief cell ``suspicion`` is the
+    neutral 0.5 prior (``confidence`` 0.0), present only to keep the
+    ``error == suspicion - truth`` invariant total; the renderer keys on
+    ``has_belief``, not the placeholder magnitude.
     """
 
     observer: str
@@ -633,6 +642,7 @@ class BeliefErrorView(_FrozenView):
     confidence: float
     subject_is_impostor: bool
     error: float
+    has_belief: bool
 
 
 class BeliefFrameView(_FrozenView):

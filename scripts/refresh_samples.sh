@@ -513,14 +513,20 @@ uv run python "$REPO_ROOT/scripts/build_sample_report.py" --sample-dir "$SAMPLE_
 # successful (paid) replay refresh, so it warns rather than aborting.
 if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
   echo "Regenerating the per-set interestingness rubric (9p2i) ..."
-  # The extractor reads its hardcoded 9p2i set + writes facts to this predictable
-  # path; it has no sys.path bootstrap, so run it with the repo root on
-  # PYTHONPATH. The producer then scores those facts and co-locates the rubric.
+  # Run from the repo root in a subshell: the extractor reads its hardcoded 9p2i
+  # set + writes facts to this predictable temp path (no sys.path bootstrap, so
+  # PYTHONPATH=repo root), and rubric_score's lab-artifact write is repo-relative
+  # — a stray caller cwd would otherwise drop it or trip the warning. The rubric
+  # stamps the set's MANIFEST sha (not git HEAD), so its freshness is independent
+  # of cwd/git. The producer then scores those facts and co-locates the rubric.
   _facts_path="${TMPDIR:-/tmp}/ailibi-gameplay-facts-9p2i.json"
-  if PYTHONPATH="$REPO_ROOT" uv run python \
-      "$REPO_ROOT/audits/workflows/extract_gameplay_facts.py" >/dev/null \
-    && uv run python "$REPO_ROOT/experiments/lab/rubric_score.py" "$_facts_path" \
-      --set-dir "$SAMPLE_DIR"; then
+  if (
+    cd "$REPO_ROOT" \
+      && PYTHONPATH="$REPO_ROOT" uv run python \
+        audits/workflows/extract_gameplay_facts.py >/dev/null \
+      && uv run python experiments/lab/rubric_score.py "$_facts_path" \
+        --set-dir "$SAMPLE_DIR"
+  ); then
     echo "  rubric refreshed: $SAMPLE_DIR/results-rubric-score.json"
   else
     echo "  WARNING: rubric regen failed (non-fatal); /eval/rubric may be stale." >&2

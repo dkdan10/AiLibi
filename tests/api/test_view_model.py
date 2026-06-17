@@ -373,13 +373,27 @@ def test_advantage_in_bounds_on_real_set(nine_p_two_i_loader: ReplayLoader) -> N
 def test_belief_frames_served_with_error_projection(
     meeting_loader: ReplayLoader,
 ) -> None:
+    replay = meeting_loader.load_replay("headless-seed-1")
+    n_players = len(replay.players)
     frames = meeting_loader.belief_frames("headless-seed-1")
     assert frames, "the meeting fixture has one meeting -> one belief frame"
     for frame in frames:
+        # The FULL observer×subject grid (self excluded): N×(N-1) cells, so the
+        # 9×9 matrix can render explicit no-belief cells, not a sparse subset.
+        assert len(frame.entries) == n_players * (n_players - 1)
+        pairs = {(c.observer, c.subject) for c in frame.entries}
+        assert len(pairs) == len(frame.entries)  # no dupes; full grid
         for cell in frame.entries:
+            assert cell.observer != cell.subject  # no self-suspicion diagonal
             # error is the signed Belief - Truth projection vs PlayerView.role.
             truth = 1.0 if cell.subject_is_impostor else 0.0
             assert cell.error == pytest.approx(cell.suspicion - truth)
+            # "NO BELIEF YET" ≠ 0: a no-belief cell is the neutral prior, flagged.
+            if not cell.has_belief:
+                assert cell.suspicion == pytest.approx(0.5)
+                assert cell.confidence == pytest.approx(0.0)
+    # Early frames have agents who have formed no belief about some peers.
+    assert any(not c.has_belief for f in frames for c in f.entries)
     # A zero-meeting game yields no frames (first-class empty state).
     assert meeting_loader.belief_frames("headless-seed-0") == ()
 
@@ -497,6 +511,36 @@ def test_rubric_regen_producer_and_staleness(tmp_path: Path) -> None:
     # A rubric scored at a different commit reads STALE.
     _rubric_score.regen_for_set(_facts(), tmp_path, git_head="deadbeefdeadbeef")
     assert ReplayLoader(replay_dir=tmp_path).rubric().stale is True
+
+
+def test_rubric_regen_defaults_to_set_manifest_sha(tmp_path: Path) -> None:
+    # With no explicit git_head, the producer stamps the SET's MANIFEST sha (the
+    # replay version it scored), so a co-located rubric is fresh-by-construction
+    # and the stamp is independent of cwd / git HEAD (review fixes for the
+    # refresh-path + committed-artifact staleness).
+    _write_manifest(tmp_path, "1e48c40")
+    _rubric_score.regen_for_set(_facts(), tmp_path)
+    view = ReplayLoader(replay_dir=tmp_path).rubric()
+    assert view.git_head == "1e48c40"
+    assert view.stale is False
+
+
+def test_rubric_rejects_present_but_malformed_file(tmp_path: Path) -> None:
+    # A PRESENT-but-malformed rubric must fail loud, not masquerade as an empty
+    # "no highlights" state (the 404 path is reserved for an ABSENT rubric).
+    rubric_path = tmp_path / "results-rubric-score.json"
+    loader = ReplayLoader(replay_dir=tmp_path)
+
+    rubric_path.write_text(json.dumps({"seedset": "9p2i"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="interestingness"):
+        loader.rubric()
+
+    rubric_path.write_text(
+        json.dumps({"seedset": "9p2i", "interestingness": {"per_game": "nope"}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="per_game"):
+        loader.rubric()
 
 
 # ---------------------------------------------------------------------------

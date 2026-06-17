@@ -493,8 +493,21 @@ class ReplayLoader:
         git_head = raw.get("git_head")
         if git_head is not None and not isinstance(git_head, str):
             raise ValueError(f"invalid rubric file {path}: invalid 'git_head'")
+        # A PRESENT-but-malformed rubric fails loud (AGENTS.md "no silent
+        # fallbacks"): the 404/empty state is reserved for an ABSENT rubric (the
+        # FileNotFoundError above), so a producer that wrote a file missing its
+        # ``interestingness.per_game`` must not masquerade as a legitimate
+        # "no highlights" surface.
         inter = raw.get("interestingness")
-        per_game_raw = inter.get("per_game", []) if isinstance(inter, dict) else []
+        if not isinstance(inter, dict):
+            raise ValueError(
+                f"invalid rubric file {path}: 'interestingness' must be an object"
+            )
+        per_game_raw = inter.get("per_game")
+        if not isinstance(per_game_raw, list):
+            raise ValueError(
+                f"invalid rubric file {path}: 'interestingness.per_game' must be a list"
+            )
         per_game = tuple(RubricGameView.model_validate(g) for g in per_game_raw)
         manifest_sha = _manifest_git_sha(self._replay_dir)
         return RubricView(
@@ -1796,21 +1809,36 @@ def _parse_rewrite_reasons(rationale_text: str) -> tuple[tuple[str, ...], str]:
     return tuple(reasons), text
 
 
+# Neutral suspicion prior for a NO-BELIEF cell — mirrors the belief store's
+# ``_DEFAULT_SUSPICION`` (agents.memory.beliefs) so a never-observed subject is
+# the same 0.5 "no lean" the engine would use. Placeholder only: a no-belief
+# cell is flagged ``has_belief=False`` and rendered as "NO BELIEF YET", never as
+# this magnitude.
+_NO_BELIEF_SUSPICION: Final[float] = 0.5
+
+
 def _belief_frames_from_memories(
     memories: Mapping[tuple[str, str], AgentMemoryView],
 ) -> tuple[BeliefFrameView, ...]:
     """Reshape per-(meeting, agent) memory snapshots into per-meeting belief
     matrices with the Error projection vs ground-truth role (DESIGN.md §3.3).
 
-    Each agent's ``role`` is static, so any snapshot of an agent carries its
-    true role; the subject's role drives ``subject_is_impostor`` and the signed
-    ``error`` (``suspicion - truth``). One frame per meeting, deterministically
-    ordered (meeting id, then observer id; beliefs already arrive subject-sorted).
+    Each frame is the FULL observer×subject grid over the roster (every player
+    snapshotted at the meeting, self excluded), so the hero 9×9 matrix can draw
+    an explicit "NO BELIEF YET" cell — ``has_belief=False`` — for a subject the
+    observer holds no stored belief about, distinct from a genuine neutral/low
+    suspicion ("no belief yet" ≠ 0). A no-belief cell carries the neutral 0.5
+    prior so the ``error == suspicion - truth`` invariant stays total. Each
+    agent's ``role`` is static, so any snapshot carries its true role; the
+    subject's role drives ``subject_is_impostor`` and the signed ``error``. One
+    frame per meeting, deterministically ordered (meeting id, observer id,
+    subject id).
     """
 
     role_by_agent: dict[str, str] = {
         agent_id: view.role for (_, agent_id), view in memories.items()
     }
+    roster = sorted(role_by_agent)
     by_meeting: dict[str, list[AgentMemoryView]] = {}
     meeting_tick: dict[str, int] = {}
     for (meeting_id, _), view in memories.items():
@@ -1821,16 +1849,31 @@ def _belief_frames_from_memories(
     for meeting_id in sorted(by_meeting):
         entries: list[BeliefErrorView] = []
         for view in sorted(by_meeting[meeting_id], key=lambda v: v.agent_id):
-            for belief in view.beliefs:
-                subject_is_impostor = role_by_agent.get(belief.subject) == "IMPOSTOR"
+            held = {belief.subject: belief for belief in view.beliefs}
+            for subject in roster:
+                if subject == view.agent_id:
+                    continue  # no self-suspicion cell (the matrix diagonal)
+                subject_is_impostor = role_by_agent.get(subject) == "IMPOSTOR"
+                truth = 1.0 if subject_is_impostor else 0.0
+                belief = held.get(subject)
+                if belief is not None:
+                    suspicion, confidence, has_belief = (
+                        belief.suspicion,
+                        belief.confidence,
+                        True,
+                    )
+                else:
+                    # No stored belief -> the neutral prior, flagged NO BELIEF YET.
+                    suspicion, confidence, has_belief = _NO_BELIEF_SUSPICION, 0.0, False
                 entries.append(
                     BeliefErrorView(
                         observer=view.agent_id,
-                        subject=belief.subject,
-                        suspicion=belief.suspicion,
-                        confidence=belief.confidence,
+                        subject=subject,
+                        suspicion=suspicion,
+                        confidence=confidence,
                         subject_is_impostor=subject_is_impostor,
-                        error=belief.suspicion - (1.0 if subject_is_impostor else 0.0),
+                        error=suspicion - truth,
+                        has_belief=has_belief,
                     )
                 )
         frames.append(

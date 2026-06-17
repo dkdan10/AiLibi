@@ -383,14 +383,18 @@ def _belief_frame_view() -> BeliefFrameView:
                 confidence=0.6,
                 subject_is_impostor=True,
                 error=0.8 - 1.0,
+                has_belief=True,
             ),
+            # A NO-BELIEF cell: neutral 0.5 prior, has_belief False ("no belief
+            # yet" ≠ 0, rendered as a hatch, not a low-suspicion belief).
             BeliefErrorView(
                 observer="p1",
                 subject="p3",
-                suspicion=0.2,
-                confidence=0.6,
+                suspicion=0.5,
+                confidence=0.0,
                 subject_is_impostor=False,
-                error=0.2,
+                error=0.5,
+                has_belief=False,
             ),
         ),
     )
