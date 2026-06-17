@@ -721,6 +721,24 @@ class ReplayLoader:
                         expected=meeting_entry.state_hash_after,
                         actual=after,
                     )
+                # The meeting TickView was appended from the PRE-resolution state
+                # (its agent_states / events represent the meeting itself), but
+                # the advantage frame is the win-progress trajectory, so it must
+                # carry the meeting's OUTCOME — recompute it from the post-result
+                # state so an ejection shows as the decisive inflection (otherwise
+                # an eject that ends the game leaves the last frame reporting the
+                # ejected impostor still alive). Keep the tick's task totals so
+                # ``advantage.tasks_*`` stays aligned with ``tasks_*_total``.
+                meeting_view_tick = ticks[-1]
+                ticks[-1] = meeting_view_tick.model_copy(
+                    update={
+                        "advantage": _advantage_view(
+                            state,
+                            tasks_completed=meeting_view_tick.tasks_completed_total,
+                            tasks_required=meeting_view_tick.tasks_required_total,
+                        )
+                    }
+                )
                 if collect_memory:
                     # Mirror the live loop's post-meeting belief fold (Task
                     # 9.8, orchestrator.game._absorb_meeting_beliefs): the
@@ -1823,16 +1841,18 @@ def _belief_frames_from_memories(
     """Reshape per-(meeting, agent) memory snapshots into per-meeting belief
     matrices with the Error projection vs ground-truth role (DESIGN.md §3.3).
 
-    Each frame is the FULL observer×subject grid over the roster (every player
-    snapshotted at the meeting, self excluded), so the hero 9×9 matrix can draw
-    an explicit "NO BELIEF YET" cell — ``has_belief=False`` — for a subject the
-    observer holds no stored belief about, distinct from a genuine neutral/low
-    suspicion ("no belief yet" ≠ 0). A no-belief cell carries the neutral 0.5
-    prior so the ``error == suspicion - truth`` invariant stays total. Each
-    agent's ``role`` is static, so any snapshot carries its true role; the
-    subject's role drives ``subject_is_impostor`` and the signed ``error``. One
-    frame per meeting, deterministically ordered (meeting id, observer id,
-    subject id).
+    Each frame is the FULL N×N observer×subject grid over the roster (every
+    player snapshotted at the meeting), so the hero 9×9 matrix renders as a
+    stable square with no client-side synthesis. Two ``has_belief=False`` cases
+    are distinct by ``observer == subject``: the **diagonal** self cell (N/A — an
+    agent holds no belief about itself) and a **NO BELIEF YET** off-diagonal cell
+    (the subject is absent from the observer's sparse belief store) — the latter
+    kept explicit so it reads distinct from a genuine neutral/low suspicion
+    ("no belief yet" ≠ 0). Both carry the neutral 0.5 prior so the
+    ``error == suspicion - truth`` invariant stays total. Each agent's ``role``
+    is static, so any snapshot carries its true role; the subject's role drives
+    ``subject_is_impostor`` and the signed ``error``. One frame per meeting,
+    deterministically ordered (meeting id, observer id, subject id).
     """
 
     role_by_agent: dict[str, str] = {
@@ -1851,19 +1871,19 @@ def _belief_frames_from_memories(
         for view in sorted(by_meeting[meeting_id], key=lambda v: v.agent_id):
             held = {belief.subject: belief for belief in view.beliefs}
             for subject in roster:
-                if subject == view.agent_id:
-                    continue  # no self-suspicion cell (the matrix diagonal)
                 subject_is_impostor = role_by_agent.get(subject) == "IMPOSTOR"
                 truth = 1.0 if subject_is_impostor else 0.0
                 belief = held.get(subject)
-                if belief is not None:
+                if subject != view.agent_id and belief is not None:
                     suspicion, confidence, has_belief = (
                         belief.suspicion,
                         belief.confidence,
                         True,
                     )
                 else:
-                    # No stored belief -> the neutral prior, flagged NO BELIEF YET.
+                    # Diagonal (self, N/A) or no stored belief -> the neutral
+                    # prior, flagged has_belief=False. The diagonal is the
+                    # ``observer == subject`` cell; NO BELIEF YET is the rest.
                     suspicion, confidence, has_belief = _NO_BELIEF_SUSPICION, 0.0, False
                 entries.append(
                     BeliefErrorView(

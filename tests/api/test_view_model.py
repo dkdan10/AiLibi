@@ -358,11 +358,41 @@ def test_advantage_view_formula() -> None:
 
 def test_advantage_in_bounds_on_real_set(nine_p_two_i_loader: ReplayLoader) -> None:
     replay = nine_p_two_i_loader.load_replay("headless-seed-12")
+    # Ejection meeting ticks carry POST-resolution advantage (the ejected player
+    # is gone) while their agent_states are PRE-resolution, so the strict
+    # advantage==alive equality holds only off those ticks.
+    ejection_ticks = {m.tick for m in replay.meetings if m.outcome == "EJECTED"}
     for tick in replay.ticks:
         adv = tick.advantage
         assert -1.0 <= adv.advantage <= 1.0
         alive = sum(1 for a in tick.agent_states if a.is_alive)
-        assert adv.crew_alive + adv.impostors_alive == alive
+        if tick.tick in ejection_ticks:
+            assert adv.crew_alive + adv.impostors_alive == alive - 1
+        else:
+            assert adv.crew_alive + adv.impostors_alive == alive
+
+
+def test_advantage_reflects_post_meeting_ejection(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    # The advantage graph must show the ejection inflection: at an EJECTED
+    # meeting tick the advantage frame is recomputed from the POST-resolution
+    # state, so the ejected player is not counted even though the tick's
+    # agent_states (the meeting roster) still show them alive.
+    replay = nine_p_two_i_loader.load_replay("headless-seed-12")
+    ejection = next(m for m in replay.meetings if m.outcome == "EJECTED")
+    tick = next(t for t in replay.ticks if t.tick == ejection.tick)
+    ejected_still_in_states = any(
+        a.is_alive and a.agent_id == ejection.ejected_player_id
+        for a in tick.agent_states
+    )
+    assert ejected_still_in_states, "agent_states are the pre-resolution roster"
+    expected_alive = sum(
+        1
+        for a in tick.agent_states
+        if a.is_alive and a.agent_id != ejection.ejected_player_id
+    )
+    assert tick.advantage.crew_alive + tick.advantage.impostors_alive == expected_alive
 
 
 # ---------------------------------------------------------------------------
@@ -378,22 +408,28 @@ def test_belief_frames_served_with_error_projection(
     frames = meeting_loader.belief_frames("headless-seed-1")
     assert frames, "the meeting fixture has one meeting -> one belief frame"
     for frame in frames:
-        # The FULL observer×subject grid (self excluded): N×(N-1) cells, so the
-        # 9×9 matrix can render explicit no-belief cells, not a sparse subset.
-        assert len(frame.entries) == n_players * (n_players - 1)
+        # The FULL N×N observer×subject grid (diagonal included) — a stable
+        # square the 9×9 matrix renders without synthesizing the diagonal.
+        assert len(frame.entries) == n_players * n_players
         pairs = {(c.observer, c.subject) for c in frame.entries}
         assert len(pairs) == len(frame.entries)  # no dupes; full grid
+        diagonal = [c for c in frame.entries if c.observer == c.subject]
+        assert len(diagonal) == n_players  # one self/N-A cell per player
         for cell in frame.entries:
-            assert cell.observer != cell.subject  # no self-suspicion diagonal
             # error is the signed Belief - Truth projection vs PlayerView.role.
             truth = 1.0 if cell.subject_is_impostor else 0.0
             assert cell.error == pytest.approx(cell.suspicion - truth)
-            # "NO BELIEF YET" ≠ 0: a no-belief cell is the neutral prior, flagged.
+            # A self cell is never a held belief (N/A diagonal).
+            if cell.observer == cell.subject:
+                assert cell.has_belief is False
+            # "NO BELIEF YET"/self ≠ 0: a no-belief cell is the neutral prior.
             if not cell.has_belief:
                 assert cell.suspicion == pytest.approx(0.5)
                 assert cell.confidence == pytest.approx(0.0)
     # Early frames have agents who have formed no belief about some peers.
-    assert any(not c.has_belief for f in frames for c in f.entries)
+    assert any(
+        not c.has_belief and c.observer != c.subject for f in frames for c in f.entries
+    )
     # A zero-meeting game yields no frames (first-class empty state).
     assert meeting_loader.belief_frames("headless-seed-0") == ()
 

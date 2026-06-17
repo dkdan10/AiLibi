@@ -509,8 +509,10 @@ uv run python "$REPO_ROOT/scripts/build_sample_report.py" --sample-dir "$SAMPLE_
 # (it reads replays/samples/9p2i + writes facts to a predictable temp path), so
 # this runs only when the refresh target IS that set; for any other set the
 # producer is a no-op here (the flat 4p1i baseline ships no rubric by design).
-# $0, no provider call. Non-fatal: a rubric-regen hiccup must never discard a
-# successful (paid) replay refresh, so it warns rather than aborting.
+# $0, no provider call. The paid replay JSONL + MANIFEST + eval report are
+# already written above (preserved on disk), but a regen FAILURE exits non-zero:
+# the refresh is not "complete" — and must not be committed — while the rubric
+# is stale, so the operator re-runs it rather than shipping a drifted surface.
 if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
   echo "Regenerating the per-set interestingness rubric (9p2i) ..."
   # Run from the repo root in a subshell: the extractor reads its hardcoded 9p2i
@@ -529,6 +531,13 @@ if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
   ); then
     echo "  rubric refreshed: $SAMPLE_DIR/results-rubric-score.json"
   else
-    echo "  WARNING: rubric regen failed (non-fatal); /eval/rubric may be stale." >&2
+    echo "ERROR: rubric regen failed. The re-recorded replays + MANIFEST +" >&2
+    echo "  eval report are preserved on disk, but /eval/rubric is now STALE." >&2
+    echo "  Re-run the rubric step before committing the refreshed set:" >&2
+    echo "    PYTHONPATH=$REPO_ROOT uv run python \\" >&2
+    echo "      audits/workflows/extract_gameplay_facts.py >/dev/null \\" >&2
+    echo "      && uv run python experiments/lab/rubric_score.py \\" >&2
+    echo "        $_facts_path --set-dir $SAMPLE_DIR" >&2
+    exit 1
   fi
 fi
