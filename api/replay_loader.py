@@ -510,11 +510,19 @@ class ReplayLoader:
             )
         per_game = tuple(RubricGameView.model_validate(g) for g in per_game_raw)
         manifest_sha = _manifest_git_sha(self._replay_dir)
+        # Staleness is BOTH a sha mismatch (rubric scored vs replays recorded)
+        # AND a SET mismatch (DESIGN.md §7: "fail-loud/banner on set or sha
+        # mismatch") — so a rubric from a different set co-located here (e.g. a
+        # 4p1i rubric dropped into the 9p2i dir) whose git_head happens to match
+        # is still flagged rather than served as fresh, wrong-set highlights.
+        expected_seedset = _expected_seedset(self._replay_dir)
+        sha_stale = _rubric_is_stale(git_head, manifest_sha)
+        set_stale = expected_seedset is not None and seedset != expected_seedset
         return RubricView(
             seedset=seedset,
             git_head=git_head,
             manifest_sha=manifest_sha,
-            stale=_rubric_is_stale(git_head, manifest_sha),
+            stale=sha_stale or set_stale,
             per_game=per_game,
         )
 
@@ -1782,13 +1790,31 @@ _BALLOT_PREFIX_MARKERS: Final[tuple[tuple[str, str], ...]] = (
 )
 _VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
 
+# Every audit marker interpolates its payload with ``{x!r}`` — i.e. a Python
+# ``repr`` of a string, which is always quoted (single, or double when the value
+# contains a single quote) with backslash escapes. Matching the payload as a
+# quoted literal (rather than scanning for the static tail) makes the parse
+# robust when the ORIGINAL invalid value itself contains the marker's tail text
+# (e.g. a hallucinated target ``"x normalized to SKIP] y"``): the quote-matching
+# consumes the whole value first, so the strip stops at the REAL marker end, not
+# inside the payload.
+_MARKER_REPR_VALUE: Final[str] = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
 
-def _split_marker(marker: str) -> tuple[str, str]:
-    """Static ``(head, tail)`` of a ``.format()`` marker, around its ``{...}``."""
+
+def _marker_pattern(marker: str) -> re.Pattern[str]:
+    """Anchored regex matching one whole ``.format()`` marker (head + repr + tail)."""
 
     head, _, rest = marker.partition("{")
     _, _, tail = rest.partition("}")
-    return head, tail
+    return re.compile("^" + re.escape(head) + _MARKER_REPR_VALUE + re.escape(tail))
+
+
+# Precompiled prefix-marker patterns + the parse-default head (its whole-string
+# special case only needs the static head).
+_BALLOT_PREFIX_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = tuple(
+    (label, _marker_pattern(marker)) for label, marker in _BALLOT_PREFIX_MARKERS
+)
+_VOTE_PARSE_DEFAULT_HEAD: Final[str] = VOTE_PARSE_DEFAULT_MARKER.partition("{")[0]
 
 
 def _parse_rewrite_reasons(rationale_text: str) -> tuple[tuple[str, ...], str]:
@@ -1799,13 +1825,13 @@ def _parse_rewrite_reasons(rationale_text: str) -> tuple[tuple[str, ...], str]:
     (the manager's vote fail-soft authored no model text) and is special-cased:
     the entire string is consumed and the clean remainder is empty. The other
     markers are prepended prefixes (possibly stacked, e.g. an invalid target
-    plus a nulled reason id) and are stripped front-to-back, leaving the
-    model-authored text. Markers are matched on their imported constants' static
-    head/tail, never on a hard-coded literal.
+    plus a nulled reason id) and are stripped front-to-back via their
+    repr-aware patterns (see :data:`_MARKER_REPR_VALUE`), leaving the
+    model-authored text. Patterns are built from the imported constants, never a
+    hard-coded literal.
     """
 
-    parse_default_head, _ = _split_marker(VOTE_PARSE_DEFAULT_MARKER)
-    if rationale_text.startswith(parse_default_head):
+    if rationale_text.startswith(_VOTE_PARSE_DEFAULT_HEAD):
         return (_VOTE_PARSE_DEFAULT_LABEL,), ""
 
     reasons: list[str] = []
@@ -1813,15 +1839,12 @@ def _parse_rewrite_reasons(rationale_text: str) -> tuple[tuple[str, ...], str]:
     stripped = True
     while stripped:
         stripped = False
-        for label, marker in _BALLOT_PREFIX_MARKERS:
-            head, tail = _split_marker(marker)
-            if not text.startswith(head):
-                continue
-            end = text.find(tail, len(head))
-            if end == -1:
+        for label, pattern in _BALLOT_PREFIX_PATTERNS:
+            match = pattern.match(text)
+            if match is None:
                 continue
             reasons.append(label)
-            text = text[end + len(tail) :]
+            text = text[match.end() :]
             stripped = True
             break
     return tuple(reasons), text
@@ -1947,6 +1970,23 @@ def _rubric_is_stale(git_head: str | None, manifest_sha: str | None) -> bool:
     if git_head is None or manifest_sha is None:
         return True
     return not (git_head.startswith(manifest_sha) or manifest_sha.startswith(git_head))
+
+
+def _expected_seedset(replay_dir: Path) -> str | None:
+    """The served set's identity (``"{players}p{impostors}i"``) from its roster.
+
+    Read from the set's ``roster.json`` (the authoritative per-set descriptor),
+    so it is cwd/name-independent: the canonical 9p2i set resolves to ``"9p2i"``.
+    Returns ``None`` for the flat default (no ``roster.json``), which ships no
+    rubric — there the seedset check is moot and only the sha guard applies.
+    Used to flag a co-located rubric whose ``seedset`` does not match the set it
+    is being served for (DESIGN.md §7 "set mismatch").
+    """
+
+    roster = _load_roster_config(replay_dir)
+    if roster is None:
+        return None
+    return f"{roster.num_players}p{roster.num_impostors}i"
 
 
 def get_replay_loader(request: Request) -> ReplayLoader:

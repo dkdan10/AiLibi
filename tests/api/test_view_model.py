@@ -267,6 +267,15 @@ def test_parse_rewrite_reasons_uses_imported_markers() -> None:
     parse_default = VOTE_PARSE_DEFAULT_MARKER.format(head="<<garbage>>")
     assert _parse_rewrite_reasons(parse_default) == (("parse_default",), "")
 
+    # The invalid VALUE itself contains the marker's tail text: the repr-quoted
+    # payload is consumed whole, so the strip stops at the REAL marker end, not
+    # inside the quoted value (P3 edge case).
+    nasty = (
+        INVALID_VOTE_TARGET_MARKER.format(target="x normalized to SKIP] y")
+        + "real rationale"
+    )
+    assert _parse_rewrite_reasons(nasty) == (("invalid_target",), "real rationale")
+
 
 def test_ballot_markers_parse_on_the_real_9p2i_set(
     nine_p_two_i_loader: ReplayLoader,
@@ -577,6 +586,27 @@ def test_rubric_rejects_present_but_malformed_file(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="per_game"):
         loader.rubric()
+
+
+def test_rubric_set_mismatch_is_stale(tmp_path: Path) -> None:
+    # A rubric from a DIFFERENT set co-located here (seedset 4p1i) with a
+    # matching git_head must still read STALE — the set identity (from the set's
+    # roster.json) is part of the guard (DESIGN.md §7 "set or sha mismatch"), so
+    # wrong-set highlights are never served as fresh.
+    (tmp_path / "roster.json").write_text(
+        json.dumps({"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2}),
+        encoding="utf-8",
+    )
+    _write_manifest(tmp_path, "1e48c40")
+    facts = {**_facts(), "seedset": "4p1i"}
+    _rubric_score.regen_for_set(facts, tmp_path, git_head="1e48c40")
+    view = ReplayLoader(replay_dir=tmp_path).rubric()
+    assert view.seedset == "4p1i"
+    assert view.stale is True  # set mismatch, despite the matching sha
+
+    # The right-set rubric (seedset 9p2i) over the same roster reads FRESH.
+    _rubric_score.regen_for_set(_facts(), tmp_path, git_head="1e48c40")
+    assert ReplayLoader(replay_dir=tmp_path).rubric().stale is False
 
 
 # ---------------------------------------------------------------------------
