@@ -208,3 +208,13 @@ and train the impostor tactical policy against it (real-LLM gate for selection);
 evolution on top of that faithful fitness; keep the binary/crew outcome on the real-LLM gate
 until a learned binary calibrator clears a bar. The feasibility question is answered **yes for
 the impostor-tactical half**; the open work is co-evolution engineering, not feasibility.
+
+## Phase-C emergence probes (FO-7/8/9) — the pre-commit blindspots (RAN)
+
+| Probe | Question | Result |
+|---|---|---|
+| **FO-7 sabotage lever** | Can ES learn to *time* sabotage to win or create kills? | **NO at timer=6** — 0 IMPOSTOR_SABOTAGE wins for FSM, always-sabotage, AND learned timing; always-sabotage craters kills (37→8) and hits the tick cap; the ES learns to *avoid* sabotage (it cuts kills without winning) and converges to ~FSM. Sabotage is **dominated**; an emergent sabotage win needs the **owner-gated timer retune**, not a better learner — consistent with Phase-11's "stall not win" design. |
+| **FO-8 crew buddy** | Does a *non-degenerate* buddy system emerge under task pressure? | **YES (modest)** — a learned buddy/task gate hits **11/12** crew wins vs FSM **10/12**, while **always-buddy = 1/12** confirms the task pressure bites (no FO-2 degeneracy). The crew learns to buddy *selectively* (deny a kill) and still finish tasks. Headroom is small (the FSM/LLM crew already wins most), so the signal is +1 game — directionally real, not large. |
+| **FO-9 diversity** | Do independent ES runs collapse to a monoculture? | **NO — natural diversity** — 4 independent ES champions reach similar fitness (16-20 kills) via **different** movement (move-distribution cosine: mean 0.36, min 0.10). Single-population ES does *not* collapse to one behavior. Caveat: similar fitness via different behavior may partly mean kills-fitness is under-constrained. |
+
+**Synthesis (refines the emergence picture):** (1) **sabotage emergence is timer-gated** (the frozen clock), not learner-limited — ML can't unlock it without an owner balance change; (2) **crew physical emergence (buddy system) is real but headroom-limited** by the already-strong FSM/LLM baseline; (3) **monoculture is a CO-EVOLUTION risk (FO-2), not a single-population one (FO-9)** — so quality-diversity (Phase D) matters most as a *co-evolution stabilizer*, which is exactly where FO-2 collapsed. Net: nothing here blocks Phase C; the emergence ceiling is the frozen LLM social layer (analyzed separately) plus the frozen clock for sabotage, and the realistic ML payoff remains emergent *tactics* that set up better situations for the LLM to dramatize.
