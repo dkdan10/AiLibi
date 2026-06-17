@@ -1,39 +1,60 @@
-// Hand-authored TypeScript mirror of the Phase 4.1 spectator DTOs defined in
-// `api/schemas.py`. The Pydantic models are the source of truth; every type
-// here shadows one of them one-for-one. See `## Decisions` in the task PR for
-// why these are hand-authored rather than generated via `openapi-typescript`.
+// GENERATED FILE — do not edit by hand.
 //
-// Pydantic serializes `tuple[X, ...]` as JSON arrays, so collections are typed
-// as `X[]`. `X | None` Pydantic fields become `X | null` here (required, but
-// nullable). Discriminated unions mirror the `Field(discriminator="type")`
-// aliases in the source.
+// Regenerate with:  uv run python scripts/gen_frontend_types.py
+//
+// Source of truth: the Pydantic view-model DTOs in `api/schemas.py` (plus the
+// served eval report `eval.meeting_quality.TournamentEvalReport`). The
+// versioned view-model contract (DESIGN.md §7) ends the hand-mirror drift:
+// `scripts/check.sh` regenerates this file and fails CI on any difference, so
+// the TS types cannot drift from the Python contract.
+//
+// Pydantic serializes `tuple[X, ...]` as JSON arrays (typed `X[]`) and
+// `X | None` as `X | null` (a required-but-nullable field, matching
+// tsconfig `exactOptionalPropertyTypes`). Discriminated unions carry the
+// literal `type` discriminant so a `switch (e.type)` narrows to the member.
 
 export type PlayerRole = "CREWMATE" | "IMPOSTOR";
-
-export type AgentAction =
-  | "IDLE"
-  | "MOVING"
-  | "TASK"
-  | "KILL"
-  | "VENT"
-  | "REPORT"
-  | "SABOTAGE";
-
+export type AgentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT" | "SABOTAGE";
 export type Winner = "CREWMATES" | "IMPOSTORS";
-
 export type TriggerKind = "body" | "emergency";
-
 export type MeetingOutcome = "EJECTED" | "SKIPPED";
-
 export type ContradictionKind = "alibi_conflict" | "alibi_vs_sighting";
-
-// The three turn roles in the reactive accusation chain (DESIGN.md §5.2),
-// mirroring `meetings.schemas.TurnKind`.
 export type TurnKind = "opening" | "reply" | "opt_in";
 
-// ---------------------------------------------------------------------------
-// Map + roster DTOs
-// ---------------------------------------------------------------------------
+export interface ReplayView {
+  viewModelVersion: string;
+  metadata: ReplayMetadataView;
+  map: MapLayoutView;
+  players: PlayerView[];
+  ticks: TickView[];
+  meetings: MeetingView[];
+  failed_calls: FailedCallView[];
+}
+
+export interface ReplayMetadataView {
+  game_id: string;
+  seed: number;
+  total_ticks: number;
+  winner: Winner | null;
+  winner_reason: string | null;
+  meeting_count: number;
+  total_cost_usd: number;
+  prompt_versions: Record<string, string>;
+  created_at: string | null;
+}
+
+export interface MapLayoutView {
+  rooms: RoomView[];
+  vents: VentView[];
+  edges: EdgeView[];
+}
+
+export interface RoomView {
+  id: string;
+  name: string;
+  position: PositionView;
+  size: SizeView;
+}
 
 export interface PositionView {
   x: number;
@@ -43,13 +64,6 @@ export interface PositionView {
 export interface SizeView {
   width: number;
   height: number;
-}
-
-export interface RoomView {
-  id: string;
-  name: string;
-  position: PositionView;
-  size: SizeView;
 }
 
 export interface VentView {
@@ -64,12 +78,6 @@ export interface EdgeView {
   is_door: boolean;
 }
 
-export interface MapLayoutView {
-  rooms: RoomView[];
-  vents: VentView[];
-  edges: EdgeView[];
-}
-
 export interface PlayerView {
   agent_id: string;
   display_name: string;
@@ -77,9 +85,17 @@ export interface PlayerView {
   color: string;
 }
 
-// ---------------------------------------------------------------------------
-// Per-tick state DTOs
-// ---------------------------------------------------------------------------
+export interface TickView {
+  tick: number;
+  agent_states: AgentTickStateView[];
+  events: TickEventView[];
+  sabotage_active: string[];
+  tasks_completed_total: number;
+  tasks_required_total: number;
+  bodies: BodyView[];
+  sabotage: SabotageDetailView | null;
+  advantage: AdvantageView;
+}
 
 export interface AgentTickStateView {
   agent_id: string;
@@ -109,10 +125,6 @@ export interface ReportBodyEventView {
 export interface SabotageEventView {
   type: "sabotage";
   tick: number;
-  // Mirrors api/schemas.py SabotageEventView.kind (DESIGN.md §8.3): the
-  // visibility "lights" and the task-gating "reactor" (Task 11.5). Kept in
-  // sync with the backend Literal so the contestable-clock win shape is a
-  // representable replay event.
   kind: "lights" | "reactor";
   room_id: string | null;
   actor_id: string;
@@ -134,29 +146,64 @@ export interface MeetingTriggeredEventView {
   trigger_kind: TriggerKind;
 }
 
-export type TickEventView =
-  | KillEventView
-  | ReportBodyEventView
-  | SabotageEventView
-  | TaskCompletedEventView
-  | MeetingTriggeredEventView;
-
-export interface TickView {
+export interface VentEventView {
+  type: "vent";
   tick: number;
-  agent_states: AgentTickStateView[];
-  events: TickEventView[];
-  sabotage_active: string[];
-  // Completed vs. total per-player task *instances* across all players
-  // (DESIGN.md §3.2): the denominator is the live instance count, NOT bounded
-  // by the map's task pool (14 instances at the canonical 9p/2i over the 12 map
-  // tasks). Stay `number` (mirrors the Pydantic `int`).
-  tasks_completed_total: number;
-  tasks_required_total: number;
+  actor_id: string;
+  phase: "enter" | "exit";
+  from_room_id: string;
+  to_room_id: string;
+  traversal_ticks: number;
 }
 
-// ---------------------------------------------------------------------------
-// Meeting DTOs
-// ---------------------------------------------------------------------------
+export interface BodyView {
+  body_id: string;
+  victim_id: string;
+  room_id: string;
+  killed_by: string;
+}
+
+export interface SabotageDetailView {
+  kind: "lights" | "reactor";
+  remaining_ticks: number;
+  affected_rooms: string[];
+  repair_progress: Record<string, number>;
+}
+
+export interface AdvantageView {
+  crew_alive: number;
+  impostors_alive: number;
+  tasks_completed: number;
+  tasks_required: number;
+  advantage: number;
+}
+
+export interface MeetingView {
+  meeting_id: string;
+  tick: number;
+  triggered_by: string;
+  trigger_kind: TriggerKind;
+  outcome: MeetingOutcome;
+  ejected_player_id: string | null;
+  turns: TurnView[];
+  ballots: BallotView[];
+  contradictions: ContradictionView[];
+  llm_calls: LLMCallView[];
+  prompt_versions: Record<string, string>;
+  total_cost_usd: number;
+  gate: GateView;
+}
+
+export interface TurnView {
+  turn_id: string;
+  turn_index: number;
+  speaker: string;
+  turn_kind: TurnKind;
+  reply_to: string | null;
+  observations: ObservationClaimView[];
+  claims: StatementClaimView[];
+  free_text: string;
+}
 
 export interface SawPlayerView {
   type: "saw_player";
@@ -179,11 +226,6 @@ export interface FoundBodyObsView {
   body_of: string;
   room: string;
 }
-
-export type ObservationClaimView =
-  | SawPlayerView
-  | CompletedTaskObsView
-  | FoundBodyObsView;
 
 export interface AlibiClaimView {
   type: "alibi";
@@ -208,24 +250,15 @@ export interface CorroborationClaimView {
   reason: string;
 }
 
-export type StatementClaimView =
-  | AlibiClaimView
-  | AccusationClaimView
-  | CorroborationClaimView;
-
-// Mirrors `api.schemas.TurnView` (which shadows `meetings.schemas.MeetingTurn`).
-// One turn of the reactive accusation chain: the opening turn carries the
-// reporter's observations, every turn carries its claims. `reply_to` is the
-// `turn_id` this turn answers (set on a `reply`; null on `opening` / `opt_in`).
-export interface TurnView {
-  turn_id: string;
-  turn_index: number;
-  speaker: string;
-  turn_kind: TurnKind;
-  reply_to: string | null;
-  observations: ObservationClaimView[];
-  claims: StatementClaimView[];
-  free_text: string;
+export interface BallotView {
+  voter: string;
+  target: string;
+  confidence: number;
+  primary_reason_id: string | null;
+  considered_alternatives: string[];
+  rationale_text: string;
+  rewrite_reasons: string[];
+  rationale_text_clean: string;
 }
 
 export interface ContradictionView {
@@ -235,15 +268,8 @@ export interface ContradictionView {
   event_b_id: string;
   subjects: string[];
   description: string;
-}
-
-export interface BallotView {
-  voter: string;
-  target: string;
-  confidence: number;
-  primary_reason_id: string | null;
-  considered_alternatives: string[];
-  rationale_text: string;
+  weak: boolean;
+  severity: "weak" | "strong";
 }
 
 export interface LLMCallView {
@@ -258,74 +284,11 @@ export interface LLMCallView {
   agent_id: string | null;
 }
 
-export interface MeetingView {
-  meeting_id: string;
-  tick: number;
-  triggered_by: string;
-  trigger_kind: TriggerKind;
-  outcome: MeetingOutcome;
-  ejected_player_id: string | null;
-  // The single ordered transcript of the accusation chain (DESIGN.md §5.2),
-  // in `turn_index` order — replaces the old `reports` / `statements` pair.
-  turns: TurnView[];
-  ballots: BallotView[];
-  contradictions: ContradictionView[];
-  llm_calls: LLMCallView[];
-  prompt_versions: Record<string, string>;
-  total_cost_usd: number;
-}
-
-// ---------------------------------------------------------------------------
-// Memory + suspicion DTOs (meeting-boundary only for MVP)
-// ---------------------------------------------------------------------------
-
-export interface BeliefEntryView {
-  subject: string;
-  suspicion: number;
-  confidence: number;
-  snapshot_tick: number;
-}
-
-export interface AgentMemoryView {
-  agent_id: string;
-  tick: number;
-  role: PlayerRole;
-  // This agent's OWN completed vs. owned task *instances* — its per-player deal,
-  // owner-scoped under the per-player keyspace (DESIGN.md §3.2), never another
-  // player's. Stay `number` (mirrors `int`).
-  tasks_completed: number;
-  tasks_assigned: number;
-  observations: ObservationClaimView[];
-  beliefs: BeliefEntryView[];
-  open_contradictions: ContradictionView[];
-  rendered_memory_text: string;
-}
-
-export interface SuspicionEntryView {
-  observer: string;
-  subject: string;
-  suspicion: number;
-}
-
-export interface SuspicionGraphView {
-  tick: number;
-  entries: SuspicionEntryView[];
-}
-
-// ---------------------------------------------------------------------------
-// Replay-level DTOs
-// ---------------------------------------------------------------------------
-
-export interface ReplayMetadataView {
-  game_id: string;
-  seed: number;
-  total_ticks: number;
-  winner: Winner | null;
-  winner_reason: string | null;
-  meeting_count: number;
-  total_cost_usd: number;
-  prompt_versions: Record<string, string>;
-  created_at: string | null;
+export interface GateView {
+  leader: string | null;
+  leader_max_confidence: number;
+  threshold: number;
+  passed: boolean;
 }
 
 export interface FailedCallView {
@@ -337,18 +300,40 @@ export interface FailedCallView {
   error_message: string;
 }
 
-export interface ReplayView {
-  metadata: ReplayMetadataView;
-  map: MapLayoutView;
-  players: PlayerView[];
-  ticks: TickView[];
-  meetings: MeetingView[];
-  failed_calls: FailedCallView[];
+export interface AgentMemoryView {
+  agent_id: string;
+  tick: number;
+  role: PlayerRole;
+  tasks_completed: number;
+  tasks_assigned: number;
+  observations: ObservationClaimView[];
+  beliefs: BeliefEntryView[];
+  open_contradictions: ContradictionView[];
+  rendered_memory_text: string;
 }
 
-// ---------------------------------------------------------------------------
-// Eval DTO
-// ---------------------------------------------------------------------------
+export interface BeliefEntryView {
+  subject: string;
+  suspicion: number;
+  confidence: number;
+  snapshot_tick: number;
+}
+
+export interface BeliefFrameView {
+  meeting_id: string;
+  tick: number;
+  entries: BeliefErrorView[];
+}
+
+export interface BeliefErrorView {
+  observer: string;
+  subject: string;
+  suspicion: number;
+  confidence: number;
+  subject_is_impostor: boolean;
+  error: number;
+  has_belief: boolean;
+}
 
 export interface EvalCostSummaryView {
   total_replays: number;
@@ -358,60 +343,52 @@ export interface EvalCostSummaryView {
   decisive_split: Record<string, number>;
 }
 
-// ---------------------------------------------------------------------------
-// Tournament eval report (Task 5.7, DESIGN.md §11.3)
-//
-// Hand-mirrored from the frozen Pydantic models the `/eval/tournament-report`
-// endpoint serves directly: `eval.meeting_quality.TournamentEvalReport` plus
-// its four nested metric models (`eval.vote_correctness`,
-// `eval.accusation_calibration`, `eval.alibi_fabrication`,
-// `eval.cost_dashboard`) and the `eval.report_schema.TournamentReport` fields
-// the dashboard reads. Keep the nullable fields faithful — `number | null`
-// where the Pydantic model is `float | None` — or the dashboard silently
-// renders `undefined` (see `## Decisions`: TypeScript/Pydantic drift).
-// ---------------------------------------------------------------------------
-
-// `eval.report_schema.GameCostSummary` — per-game cost roll-up. Carried on each
-// GameReport; the dashboard reads the pre-aggregated `CostDashboard` instead,
-// but the shape is mirrored for faithfulness.
-export interface GameCostSummary {
-  total_cost_usd: number;
-  total_input_tokens: number;
-  total_output_tokens: number;
-  by_model: Record<string, number>;
+export interface SuspicionGraphView {
+  tick: number;
+  entries: SuspicionEntryView[];
 }
 
-// `eval.report_schema.GameReport` — the dashboard reads only the per-game
-// outcome (`winner`, and `seed`/`final_tick`/`reason` for the per-game detail
-// table). The source model also carries `roles`, `replay_ref`, `meetings`,
-// `failed_calls`, `prompt_versions`, and `cost`; those feed the Python metric
-// analyzers (already pre-aggregated into the metric blocks below) and are not
-// read by the dashboard, so they are intentionally omitted from this mirror to
-// avoid mirroring the entire meeting-transcript graph (`## Decisions`).
-export interface GameReport {
-  game_id: string;
+export interface SuspicionEntryView {
+  observer: string;
+  subject: string;
+  suspicion: number;
+}
+
+export interface RubricView {
+  viewModelVersion: string;
+  seedset: string;
+  git_head: string | null;
+  manifest_sha: string | null;
+  stale: boolean;
+  per_game: RubricGameView[];
+}
+
+export interface RubricGameView {
   seed: number;
-  winner: Winner | null;
+  score: number;
   reason: string;
-  final_tick: number | null;
+  n_meetings: number;
+  win_shape: string;
+  ejected_impostors: number;
+  accused_impostors: number;
+  survived_accused: number;
+  r1_decisive: number;
+  r2_deception: number;
+  r3_arcs: number;
+  r7_legible: number;
 }
 
-// `eval.report_schema.TournamentReport` — the top-level artifact. `winner ===
-// null` is the non-decisive tick-budget bucket (mirrors `WinnerSide | None`).
-export interface TournamentReport {
-  format_version: number;
-  games: GameReport[];
-  seeds_used: number[];
+export interface TournamentEvalReport {
+  report: TournamentReport;
+  vote_correctness: VoteCorrectnessReport;
+  accusation_calibration: AccusationCalibrationReport;
+  alibi_fabrication: AlibiFabricationReport;
+  cost_dashboard: CostDashboard;
+  meeting_rate: MeetingRateReport;
+  conversion: ConversionReport;
+  gate_metrics: GateMetricsReport;
 }
 
-// `eval.vote_correctness.VoteCorrectnessReport`. `vote_correctness_rate` is
-// `null` (undefined, not 0.0) when there were no impostor ejections; it is the
-// evidence-backed share over the impostor-ejection denominator ONLY, so pair it
-// with `ejection_accuracy` (impostor_ejections / total_ejections, the full
-// denominator — `null` when there were no ejections at all) for honest accuracy.
-// `vote_correctness_small_n` flags an under-powered rate (few impostor
-// ejections); `contradictions_flagged_but_ignored` counts SKIPPED meetings that
-// carried a contradiction yet ejected no one (audit C-C-4 / F-F-2 / gp-7).
 export interface VoteCorrectnessReport {
   total_ejections: number;
   impostor_ejections: number;
@@ -423,25 +400,6 @@ export interface VoteCorrectnessReport {
   contradictions_flagged_but_ignored: number;
 }
 
-// `eval.accusation_calibration.CalibrationBin`. `actual_impostor_rate` and
-// `mean_confidence` are `null` (not 0.0, not NaN) for an empty bin.
-export interface CalibrationBin {
-  bin_index: number;
-  lo: number;
-  hi: number;
-  midpoint: number;
-  count: number;
-  impostor_hits: number;
-  actual_impostor_rate: number | null;
-  mean_confidence: number | null;
-}
-
-// `eval.accusation_calibration.AccusationCalibrationReport` — claim and ballot
-// curves reported separately, never pooled. Each `*_ece` is `null` when the
-// curve binned no accusations. Each `*_populated_bins` counts how many bins held
-// a sample and `*_low_power` is `true` when that count is below the power
-// threshold — an ECE from a near-degenerate (clustered) distribution is
-// statistically weak (audit F-F-3 / gp-7).
 export interface AccusationCalibrationReport {
   n_bins: number;
   accusation_claim_bins: CalibrationBin[];
@@ -456,26 +414,23 @@ export interface AccusationCalibrationReport {
   vote_ballot_low_power: boolean;
 }
 
-// `eval.alibi_fabrication.AlibiFabricationReport`. `survival_rate` is `0.0`
-// (vacuous, division-safe) when there are no impostor alibis; gate
-// interpretation on `total_impostor_alibis > 0`.
+export interface CalibrationBin {
+  bin_index: number;
+  lo: number;
+  hi: number;
+  midpoint: number;
+  count: number;
+  impostor_hits: number;
+  actual_impostor_rate: number | null;
+  mean_confidence: number | null;
+}
+
 export interface AlibiFabricationReport {
   total_impostor_alibis: number;
   survived: number;
   survival_rate: number;
 }
 
-// `eval.cost_dashboard.PromptVersionCost`. The per-version totals OVERLAP (the
-// full game cost is attributed once per template the game ran), so they do not
-// sum to the tournament total — see the source module docstring.
-export interface PromptVersionCost {
-  template_name: string;
-  version: string;
-  total_cost_usd: number;
-  game_count: number;
-}
-
-// `eval.cost_dashboard.CostDashboard`.
 export interface CostDashboard {
   total_cost_usd: number;
   total_input_tokens: number;
@@ -486,17 +441,13 @@ export interface CostDashboard {
   per_prompt_version: PromptVersionCost[];
 }
 
-// `eval.meeting_quality.MeetingRateReport` — Phase 7 W0.3 enablement-gate
-// metric. `meeting_rate` is `null` (undefined, not 0.0) when there were no
-// games; keep it `number | null` faithful to `float | None` or the dashboard
-// silently renders `undefined` (see the header `## Decisions` note). The
-// trigger breakdown partitions exactly: `body_report_meetings +
-// emergency_meetings === meetings_total`. `emergency_meetings` is a catch-all
-// (derived, not a positively-identified emergency-button count) — see the
-// Python `MeetingRateReport` docstring. The OUTCOME breakdown
-// (`skipped_meetings` + `ejected_meetings === meetings_total`) pairs with
-// `meeting_rate` so "reached a meeting" is not mistaken for "the meeting
-// resolved anything" — most meetings skip (audit F-F-5 / gp-7).
+export interface PromptVersionCost {
+  template_name: string;
+  version: string;
+  total_cost_usd: number;
+  game_count: number;
+}
+
 export interface MeetingRateReport {
   games_total: number;
   games_with_meeting: number;
@@ -508,12 +459,55 @@ export interface MeetingRateReport {
   ejected_meetings: number;
 }
 
-// `eval.meeting_quality.TournamentEvalReport` — the wrapper the endpoint serves.
-export interface TournamentEvalReport {
-  report: TournamentReport;
-  vote_correctness: VoteCorrectnessReport;
-  accusation_calibration: AccusationCalibrationReport;
-  alibi_fabrication: AlibiFabricationReport;
-  cost_dashboard: CostDashboard;
-  meeting_rate: MeetingRateReport;
+export interface ConversionReport {
+  total_ejections: number;
+  impostor_ejections: number;
+  ejection_accuracy: number | null;
+  impostor_accused_meetings: number;
+  impostor_accused_conversions: number;
+  impostor_accused_conversion_rate: number | null;
+  skip_ballots: number;
+  correct_skip_ballots: number;
+  missed_skip_ballots: number;
+  unclassified_skip_ballots: number;
+  missed_skip_impostor_voters: number;
+  missed_skip_teammate_coerced: number;
+  missed_skip_invalid_target: number;
+  threshold_inversions: number;
+}
+
+export interface GateMetricsReport {
+  genuine_class_conversion: GenuineClassConversionReport;
+  lost_opening_accusations: number;
+  cap_defaulted_turns: number;
+  accused_impostor_events: number;
+  accused_impostor_survivals: number;
+  survivals_rendered_met: number;
+  survivals_sheltered_sub_gate: number;
+  survivals_unevidenced: number;
+}
+
+export interface GenuineClassConversionReport {
+  supplied: number;
+  converted: number;
+  conversion_rate: number | null;
+  note: string;
+}
+
+export type TickEventView = KillEventView | ReportBodyEventView | SabotageEventView | TaskCompletedEventView | MeetingTriggeredEventView | VentEventView;
+export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView;
+export type StatementClaimView = AlibiClaimView | AccusationClaimView | CorroborationClaimView;
+
+export interface GameReport {
+  game_id: string;
+  seed: number;
+  winner: Winner | null;
+  reason: string;
+  final_tick: number | null;
+}
+
+export interface TournamentReport {
+  format_version: number;
+  games: GameReport[];
+  seeds_used: number[];
 }

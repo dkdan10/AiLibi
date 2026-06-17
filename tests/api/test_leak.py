@@ -64,6 +64,11 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "SabotageEventView",
         "TaskCompletedEventView",
         "MeetingTriggeredEventView",
+        # Phase-12 (Task 12.2) additive per-tick projections (DESIGN.md §7):
+        "VentEventView",
+        "BodyView",
+        "SabotageDetailView",
+        "AdvantageView",
         "TickView",
         "SawPlayerView",
         "CompletedTaskObsView",
@@ -75,8 +80,13 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "ContradictionView",
         "BallotView",
         "LLMCallView",
+        # Phase-12 per-meeting §4.6 gate verdict (DESIGN.md §3.4, §4.6):
+        "GateView",
         "MeetingView",
         "BeliefEntryView",
+        # Phase-12 per-meeting belief × truth hero surface (DESIGN.md §3.3):
+        "BeliefErrorView",
+        "BeliefFrameView",
         "AgentMemoryView",
         "SuspicionEntryView",
         "SuspicionGraphView",
@@ -85,6 +95,9 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "FailedCallEvalView",
         "ReplayView",
         "EvalCostSummaryView",
+        # Phase-12 per-set rubric surface (DESIGN.md §3.1, §7):
+        "RubricGameView",
+        "RubricView",
     }
 )
 

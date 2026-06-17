@@ -21,10 +21,15 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
+
+# Filename the per-set rubric is co-located under, inside a served replay set
+# dir, so ``api.replay_loader.ReplayLoader.rubric`` can serve it (Task 12.2;
+# DESIGN.md §3.1, §7). Kept identical to ``api.replay_loader._RUBRIC_FILENAME``.
+RUBRIC_RESULTS_FILENAME = "results-rubric-score.json"
 
 
 def _pct(n: int, d: int) -> str:
@@ -344,11 +349,100 @@ def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# The ``MANIFEST.md`` git_sha column index once the leading empty cell (from the
+# leading ``|``) is included — kept in lockstep with
+# ``api.replay_loader._MANIFEST_GIT_SHA_COLUMN`` so the producer stamps the exact
+# sha the loader's staleness guard reads back.
+_MANIFEST_GIT_SHA_COLUMN = 5
+
+
+def _set_manifest_sha(set_dir: Path) -> str | None:
+    """The single distinct git sha across a set's ``MANIFEST.md`` data rows.
+
+    Mirrors ``api.replay_loader._manifest_git_sha``: the rubric stamps the
+    version of the replay SET it was scored from (read here, cwd-independent via
+    the absolute ``set_dir``), so the loader's freshness comparison is
+    "do the served replays still match what the rubric was scored against",
+    NOT "what code commit happened to run the scorer". Returns ``None`` when the
+    manifest is absent or carries more than one distinct sha.
+    """
+
+    try:
+        text = (set_dir / "MANIFEST.md").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    shas: set[str] = set()
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.split("|")]
+        if len(cells) <= _MANIFEST_GIT_SHA_COLUMN:
+            continue
+        if not cells[1].lstrip("-").isdigit():
+            continue  # header / separator row
+        sha = cells[_MANIFEST_GIT_SHA_COLUMN]
+        if sha:
+            shas.add(sha)
+    return next(iter(shas)) if len(shas) == 1 else None
+
+
+def regen_for_set(
+    facts: dict[str, Any], set_dir: Path, *, git_head: str | None = None
+) -> Path:
+    """Re-run the scorer and co-locate ``results-rubric-score.json`` into a set.
+
+    The per-set rubric PRODUCER (Task 12.2; DESIGN.md §3.1, §7). Scores ``facts``
+    (the gameplay-facts extractor's output) into the served interestingness
+    surface and writes it into ``set_dir`` so ``/eval/rubric`` can serve it.
+
+    The result is stamped with the version of the replay SET it was scored from
+    — the set's ``MANIFEST.md`` git sha — NOT the scoring code commit. That makes
+    the loader's staleness guard meaningful: it reads FRESH while the on-disk
+    replays match what the rubric scored, and STALE only once the set is
+    re-recorded (manifest sha bumped) without a re-score. (An explicit
+    ``git_head`` overrides — used by tests; ``facts['git_head']`` is the last
+    fallback when the set ships no manifest.) Stamping the scoring ``HEAD`` here
+    instead would false-positive as stale whenever scoring ran at a later commit
+    than recording, and would depend on the caller's cwd — both avoided.
+
+    Writes the SERVED subset (``seedset`` / ``git_head`` / ``interestingness``);
+    the human-readable R1–R7 ``rows`` table stays the lab-local artifact
+    :func:`main` writes. Wired into the refresh / re-record path
+    (``scripts/refresh_samples.sh``) so the happy path stays fresh rather than
+    only banner-guarded when stale.
+    """
+
+    head = (
+        git_head
+        if git_head is not None
+        else (_set_manifest_sha(set_dir) or facts.get("git_head"))
+    )
+    out = {
+        "seedset": facts.get("seedset"),
+        "git_head": head,
+        "interestingness": interestingness(facts),
+    }
+    dest = Path(set_dir) / RUBRIC_RESULTS_FILENAME
+    dest.write_text(json.dumps(out, indent=2))
+    return dest
+
+
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("usage: rubric_score.py FACTS_JSON", file=sys.stderr)
-        return 2
-    facts = json.loads(Path(sys.argv[1]).read_text())
+    parser = argparse.ArgumentParser(
+        description="Score rubric R1-R7 over a facts JSON."
+    )
+    parser.add_argument("facts_json", help="gameplay-facts extractor output")
+    parser.add_argument(
+        "--set-dir",
+        default=None,
+        help=(
+            "also co-locate results-rubric-score.json into this served replay "
+            "set dir, stamped with git HEAD (the per-set regen producer for "
+            "/eval/rubric)"
+        ),
+    )
+    args = parser.parse_args()
+    facts = json.loads(Path(args.facts_json).read_text())
     label = facts.get("seedset", "?")
     head = facts.get("git_head", "?")[:12]
     print(
@@ -393,6 +487,10 @@ def main() -> int:
         json.dumps(out, indent=2)
     )
     print("\nwrote experiments/lab/results-rubric-score.json")
+
+    if args.set_dir is not None:
+        dest = regen_for_set(facts, Path(args.set_dir))
+        print(f"co-located per-set rubric (git_head stamped): {dest}")
     return 0
 
 
