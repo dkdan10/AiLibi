@@ -181,10 +181,12 @@ non-templated visual choices.
 Storybook runs and renders the Tokens sheet plus ≥ 1 component story; `frontend/CLAUDE.md` is the installed brief; the
 `ContradictionBadge` utilities live in `lib/`/`ui/` with imports updated and the tree still compiling; CI runs
 `npm run build` + `tsc --noEmit` for the frontend and passes.
-**Implementation hint:** transcribe `tokens.ts` directly from the 0b `tokensText()` block (already structured); keep the
+**Implementation hint:**
+transcribe `tokens.ts` directly from the 0b `tokensText()` block (already structured); keep the
 hard-shadow / 2.5px-border tokens namespaced as `chrome` so dense components can opt into the 1px `data` treatment;
 prefer self-hosted fonts over a Google Fonts `<link>`.
-**Integration risk:** Tailwind v4 `@theme` ↔ `tokens.ts` wiring is new; the `ContradictionBadge` split touches files
+**Integration risk:**
+Tailwind v4 `@theme` ↔ `tokens.ts` wiring is new; the `ContradictionBadge` split touches files
 other components import from (keep the tree compiling); the new frontend CI job will surface the pre-existing > 500 kB
 chunk warning — record it, do not chase the code-split here (that is 12.11).
 **Ready-to-paste prompt:** `agent_prompts/task-12-1-foundation.md`
@@ -233,10 +235,12 @@ is green.
 **Public types introduced:**
 - api.schemas.BeliefFrameView
 - api.schemas.VentEventView
-**Implementation hint:** do every projection inside the existing `_walk`/re-walk so nothing new is persisted; reuse
+**Implementation hint:**
+do every projection inside the existing `_walk`/re-walk so nothing new is persisted; reuse
 `is_weak_contradiction()` and the meeting marker constants by import; for the TS codegen prefer a small script over a
 heavy dependency, wired into `check.sh` so drift fails CI.
-**Integration risk:** the Pydantic→TS codegen pipeline is new (must be deterministic and run in CI); the
+**Integration risk:**
+the Pydantic→TS codegen pipeline is new (must be deterministic and run in CI); the
 `_COLOR_PALETTE` change flows into `PlayerView.color`, so re-run the leak/determinism tests (it is colour-only and
 firewall-neutral); the §4.6 recompute must match the engine gate exactly (plurality + ≥ 0.6, tie → SKIP), not the
 mock's "majority".

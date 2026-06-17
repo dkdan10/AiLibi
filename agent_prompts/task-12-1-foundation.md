@@ -55,6 +55,16 @@ Storybook runs and renders the Tokens sheet plus ≥ 1 component story; `fronten
 `ContradictionBadge` utilities live in `lib/`/`ui/` with imports updated and the tree still compiling; CI runs
 `npm run build` + `tsc --noEmit` for the frontend and passes.
 
+## Implementation hint
+transcribe `tokens.ts` directly from the 0b `tokensText()` block (already structured); keep the
+hard-shadow / 2.5px-border tokens namespaced as `chrome` so dense components can opt into the 1px `data` treatment;
+prefer self-hosted fonts over a Google Fonts `<link>`.
+
+## Integration risk
+Tailwind v4 `@theme` ↔ `tokens.ts` wiring is new; the `ContradictionBadge` split touches files
+other components import from (keep the tree compiling); the new frontend CI job will surface the pre-existing > 500 kB
+chunk warning — record it, do not chase the code-split here (that is 12.11).
+
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
 - Inspect the current implementation before editing.

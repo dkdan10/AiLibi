@@ -52,11 +52,22 @@ per-meeting and `rendered_max` is gone; the rubric surface is per-set and stalen
 the Playful identity palette (no rainbow) with the leak/determinism tests still green and NO re-record; `scripts/check.sh`
 is green.
 
+## Implementation hint
+do every projection inside the existing `_walk`/re-walk so nothing new is persisted; reuse
+`is_weak_contradiction()` and the meeting marker constants by import; for the TS codegen prefer a small script over a
+heavy dependency, wired into `check.sh` so drift fails CI.
+
 ## Public types this task introduces
 - `api.schemas.BeliefFrameView`
 - `api.schemas.VentEventView`
 
 These are the symbols downstream tasks will import. Keep their signatures stable.
+
+## Integration risk
+the Pydantic→TS codegen pipeline is new (must be deterministic and run in CI); the
+`_COLOR_PALETTE` change flows into `PlayerView.color`, so re-run the leak/determinism tests (it is colour-only and
+firewall-neutral); the §4.6 recompute must match the engine gate exactly (plurality + ≥ 0.6, tie → SKIP), not the
+mock's "majority".
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
