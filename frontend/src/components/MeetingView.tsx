@@ -15,8 +15,9 @@ import type {
   PlayerView,
   TurnView,
 } from "../types/api";
+import { PlayerChip } from "../ui/PlayerChip";
 import { BallotCard } from "./BallotCard";
-import { ContradictionBadge, PlayerChip } from "./ContradictionBadge";
+import { ContradictionBadge } from "./ContradictionBadge";
 import { TurnCard } from "./TurnCard";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

@@ -7,9 +7,14 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "tsc:check": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen:tokens": "node --experimental-strip-types scripts/gen-tokens-css.ts",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@fontsource/fredoka": "^5.2.10",
+    "@fontsource/space-mono": "^5.2.9",
     "@pixi/react": "^8.0.5",
     "pixi.js": "^8.18.1",
     "react": "^19.2.6",
@@ -17,10 +22,12 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@storybook/react-vite": "^10.4.6",
     "@tailwindcss/vite": "^4.3.0",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.3.1",
+    "storybook": "^10.4.6",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.9.3",
     "vite": "^8.0.14"

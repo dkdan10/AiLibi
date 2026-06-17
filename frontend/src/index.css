@@ -1,5 +1,132 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
+/* Self-hosted fonts: woff2 ships in the @fontsource npm packages, so there is
+   no render-blocking fetch to Google Fonts. Fredoka = display/body, Space Mono
+   = ticks/IDs/JSON (design/phase-12/claude-design-brief.md). */
+@import "@fontsource/fredoka/400.css";
+@import "@fontsource/fredoka/600.css";
+@import "@fontsource/space-mono/400.css";
+
+/* Playful design tokens. The block between the markers below is GENERATED from
+   src/tokens.ts (the single source) — run `npm run gen:tokens` to refresh it;
+   do not hand-edit between the markers. */
+@theme {
+/* tokens:start — generated from src/tokens.ts via `npm run gen:tokens`; do not edit by hand */
+  /* paper & ink neutral ramp */
+  --color-paper-0: #FFFDF8;
+  --color-paper-1: #FBF4E6;
+  --color-paper-2: #F4EAD6;
+  --color-paper-3: #EBDFC8;
+  --color-ink-100: #E2D8C3;
+  --color-ink-200: #C9BFA8;
+  --color-ink-300: #A89E8A;
+  --color-ink-400: #8A8170;
+  --color-ink-500: #6E6556;
+  --color-ink-700: #443D34;
+  --color-ink-900: #1B1814;
+
+  /* reserved meaning channels — never cross-used (firewall) */
+  --color-suspicion-1: #FBE6AE;
+  --color-suspicion-2: #F6C75A;
+  --color-suspicion-3: #EF9D33;
+  --color-suspicion-4: #DE6A24;
+  --color-suspicion-5: #C24A16;
+  --color-trust-strong: #2563D9;
+  --color-trust-soft: #5B8CE8;
+  --color-distrust-strong: #E07A1E;
+  --color-distrust-soft: #EFA24E;
+  --color-kill: #E23B2F;
+  --color-contradiction: #D6249E;
+
+  /* status colours (components always pair these with a shape/glyph) */
+  --color-dead: #6E6556;
+  --color-contradiction-weak: #A89E8A;
+  --color-contradiction-strong: #D6249E;
+
+  /* identity palette — identity ONLY (p-0 … p-8) */
+  --color-identity-0: #5DA83A;
+  --color-identity-1: #2BA45E;
+  --color-identity-2: #14A06E;
+  --color-identity-3: #0E9C93;
+  --color-identity-4: #128F9E;
+  --color-identity-5: #6C5CE0;
+  --color-identity-6: #8350D6;
+  --color-identity-7: #9A4FCB;
+  --color-identity-8: #A94FC6;
+
+  /* radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* spacing scale (px) */
+  --space-0: 4px;
+  --space-1: 8px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+  --space-6: 48px;
+
+  /* elevation — hard offset shadow = CHROME only; data = 1px hairline */
+  --shadow-chrome-1: 3px 3px 0 #1B1814;
+  --shadow-chrome-2: 6px 6px 0 #1B1814;
+  --shadow-data: 0 0 0 1px #C9BFA8;
+
+  /* motion — purposeful only */
+  --motion-quick: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 360ms;
+  --ease-chrome: cubic-bezier(.34,1.4,.64,1);
+  --ease-data: ease-out;
+
+  /* two-truth grammar */
+  --truth-belief-opacity: 0.5;
+  --truth-ground-outline: solid 2px #1B1814;
+
+  /* type */
+  --font-display: "Fredoka", system-ui, sans-serif;
+  --font-body: "Fredoka", system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+  /* tokens:end */
+}
+
+/* Cream/ink Playful base (replaces the old `color-scheme: dark`). */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body {
+    margin: 0;
+    background-color: var(--color-paper-1);
+    color: var(--color-ink-900);
+  }
+
+  body {
+    font-family: var(--font-body);
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    font-weight: 600;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+  }
 }

@@ -7,17 +7,17 @@
 // StatementCard split — the chain has exactly one turn type, carrying both
 // observations and claims (Task 8.7/8.10).
 
-import type { ContradictionView, PlayerView, TurnView } from "../types/api";
 import {
-  ClaimLine,
-  ContradictionBadge,
   dedupeContradictions,
   findContradictions,
-  ObservationLine,
-  PlayerChip,
   turnClaimEventId,
   turnObsEventId,
-} from "./ContradictionBadge";
+} from "../lib/contradictions";
+import type { ContradictionView, PlayerView, TurnView } from "../types/api";
+import { ClaimLine } from "../ui/ClaimLine";
+import { ObservationLine } from "../ui/ObservationLine";
+import { PlayerChip } from "../ui/PlayerChip";
+import { ContradictionBadge } from "./ContradictionBadge";
 
 interface TurnCardProps {
   turn: TurnView;
