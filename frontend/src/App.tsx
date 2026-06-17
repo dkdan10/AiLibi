@@ -1,103 +1,300 @@
-import { useEffect, useState } from "react";
+// The app shell (Task 12.4; design/phase-12/stage-1-design.md §2.1, §2.3, §4).
+// Two levels of PRE-DECLARED mount points so every Wave-B surface plugs in
+// WITHOUT ever editing this file (the parallel-dispatch guarantee):
+//
+//   (a) a top-level view container — `view` lives in the store and is URL-synced
+//       (no router) — for Replays + Highlights (→ 12.9), Tournament (→ 12.10),
+//       and the Replay Workspace.
+//   (b) within the workspace, named slots per §2.3. Each slot mounts an existing
+//       component at its STABLE path; the Wave-B PR that owns a surface rewrites
+//       that component (its own scope) and the shell picks it up automatically.
+//
+// SLOT ↔ SURFACE CHECKLIST (every 12.5–12.10 + transport/advantage/timeline has
+// a mount; none requires an App.tsx edit):
+//   • Replays route          → <ReplayPicker/>        (12.9 — browser)
+//   • Highlights route        → <ReplayPicker/>        (12.9 — view-aware reel)
+//   • Tournament route        → <TournamentDashboard/> (12.10)
+//   • Workspace · perspective → <PerspectiveBanner/>   (12.4 shell; 12.5 switcher
+//                                                        lands inside its stage)
+//   • Workspace · roster      → <RosterRail/>          (12.4 shell, hand-coded)
+//   • Workspace · stage(map)  → <MapView/>             (12.5)
+//   • Workspace · stage(meet) → <MeetingView/>         (12.7 — map↔meeting morph)
+//   • Workspace · mind        → <ThoughtStream/>       (12.8)
+//   • Workspace · belief      → <BeliefMatrix/>        (12.6 — overlay/full toggle)
+//   • Workspace · advantage   → <AdvantageGraph/>      (12.4)
+//   • Workspace · timeline    → <EventTimeline/>       (12.4)
+//   • Workspace · transport   → <ReplayControls/>      (12.4)
+//
+// `currentTick` stays the array index (the frozen store contract every mounted
+// surface reads); the index↔engine-tick mapping lives once in `lib/playback`.
+
+import { useEffect } from "react";
 
 import { BeliefMatrix } from "./components/BeliefMatrix";
 import { MapView } from "./components/MapView";
 import { MeetingPill } from "./components/MeetingPill";
 import { MeetingView } from "./components/MeetingView";
-import { ReplayControls } from "./components/ReplayControls";
+import {
+  AdvantageGraph,
+  EventTimeline,
+  ReplayControls,
+} from "./components/ReplayControls";
 import { ReplayPicker } from "./components/ReplayPicker";
 import { ThoughtStream } from "./components/ThoughtStream";
 import { TournamentDashboard } from "./components/TournamentDashboard";
+import { usePlayback, usePlaybackEngine } from "./hooks/usePlayback";
+import { OMNISCIENT, type ViewId } from "./lib/playback";
 import { useReplayStore } from "./store/replayStore";
 
-// Phase 4.4 vertical slice (DESIGN.md §7): pick a replay, see the map, step
-// through ticks and watch agents move. Top: ReplayPicker. Middle: the PixiJS
-// MapView canvas. A MeetingPill surfaces at meeting ticks. Phase 4.11
-// (DESIGN.md §11.4) adds ReplayControls — the primary playback bar (scrubber,
-// speed, play/pause, snap-to-meeting) pinned to the bottom of the viewport;
-// it subsumes the 4.4 TickStepper. Phase 4.6 (DESIGN.md §5) adds the
-// MeetingView transcript overlay, mounted at the app root above all other
-// content. Phase 4.8 (DESIGN.md §6) adds the ThoughtStream right rail, which
-// mounts alongside an open meeting. Phase 4.10 (DESIGN.md §6.3) adds the
-// BeliefMatrix who-suspects-whom heatmap as a left rail above the MeetingView
-// modal, also gated on a selected meeting.
-//
-// Phase 5.7 (DESIGN.md §11.3) adds a SECOND top-level view — the Tournament
-// Dashboard — reached by tab navigation (tabs, not a router: the app is
-// single-page and a router is dead weight for two views). One view renders at
-// a time; the dashboard is backed by its own `useTournamentStore`, independent
-// of the frozen Phase 4 replay store.
+// The single side-effecting playback driver (timer + auto-follow + URL sync),
+// isolated in a render-null leaf so its store subscriptions don't re-render the
+// whole shell on every tick.
+function PlaybackEngine() {
+  usePlaybackEngine();
+  return null;
+}
 
-type TabId = "replay" | "dashboard";
-
-const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
-  { id: "replay", label: "Replay Viewer" },
-  { id: "dashboard", label: "Tournament Dashboard" },
+const TABS: ReadonlyArray<{ id: Exclude<ViewId, "workspace">; label: string }> = [
+  { id: "replays", label: "Replays" },
+  { id: "highlights", label: "Highlights" },
+  { id: "tournament", label: "Tournament" },
 ];
+
+function TopNav() {
+  const view = useReplayStore((s) => s.view);
+  const setView = useReplayStore((s) => s.setView);
+  // The workspace is reached by selecting a replay, so it keeps the Replays tab
+  // lit as its parent route.
+  const active: ViewId = view === "workspace" ? "replays" : view;
+  return (
+    <nav className="flex gap-2" aria-label="Spectator views">
+      {TABS.map((tab) => {
+        const isActive = tab.id === active;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            aria-current={isActive ? "page" : undefined}
+            onClick={() => {
+              setView(tab.id);
+            }}
+            className={
+              "rounded-md border-2 border-ink-900 px-4 py-2 text-sm font-semibold transition-colors " +
+              (isActive
+                ? "bg-ink-900 text-paper-0 shadow-chrome-1"
+                : "bg-paper-0 text-ink-900 hover:bg-paper-2")
+            }
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+// Dominant mode banner (§2.3): seed/roster context + the persistent perspective
+// indicator. The basic Omniscient/As-agent picker here keeps `perspective`
+// exercisable and URL-round-trippable now; 12.5 lands the richer switcher inside
+// the stage's map toolbar (this banner is the shell-level mode indicator).
+function PerspectiveBanner() {
+  const replay = useReplayStore((s) => s.currentReplay);
+  const perspective = useReplayStore((s) => s.perspective);
+  const setPerspective = useReplayStore((s) => s.setPerspective);
+  const setView = useReplayStore((s) => s.setView);
+
+  const meta = replay?.metadata ?? null;
+  const value = perspective.mode === "omniscient" ? "omniscient" : perspective.agentId;
+
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-ink-900 bg-paper-0 px-4 py-3 shadow-chrome-1">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            setView("replays");
+          }}
+          className="rounded-md border-2 border-ink-900 bg-paper-0 px-2.5 py-1 text-sm font-medium text-ink-900 hover:bg-paper-2"
+        >
+          ‹ Replays
+        </button>
+        <span className="font-mono text-sm text-ink-700">
+          {meta === null
+            ? "No replay selected"
+            : `seed ${meta.seed} · ${replay?.players.length ?? 0}p · ${meta.winner ?? "—"}`}
+        </span>
+      </div>
+      <label className="flex items-center gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wide text-ink-500">
+          Perspective
+        </span>
+        <select
+          value={value}
+          disabled={replay === null}
+          onChange={(event) => {
+            const next = event.currentTarget.value;
+            setPerspective(next === "omniscient" ? OMNISCIENT : { mode: "agent", agentId: next });
+          }}
+          className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-sm text-ink-900 disabled:opacity-40"
+        >
+          <option value="omniscient">Omniscient</option>
+          {(replay?.players ?? []).map((player) => (
+            <option key={player.agent_id} value={player.agent_id}>
+              As {player.agent_id}
+            </option>
+          ))}
+        </select>
+      </label>
+    </header>
+  );
+}
+
+// Hand-coded roster rail (12.4) with the §2.3 advantage bar. Role badge is shown
+// in Omniscient only — hidden under the As-agent fog (the firewall, simulated in
+// the UI). Alive/dead comes from the current frame.
+function RosterRail() {
+  const replay = useReplayStore((s) => s.currentReplay);
+  const perspective = useReplayStore((s) => s.perspective);
+  const { frame } = usePlayback();
+
+  if (replay === null) {
+    return null;
+  }
+
+  const aliveById = new Map<string, boolean>();
+  for (const state of frame?.agent_states ?? []) {
+    aliveById.set(state.agent_id, state.is_alive);
+  }
+  const adv = frame?.advantage ?? null;
+  const showRole = perspective.mode === "omniscient";
+  const taskPct =
+    adv !== null && adv.tasks_required > 0
+      ? Math.round((adv.tasks_completed / adv.tasks_required) * 100)
+      : 0;
+
+  return (
+    <aside className="w-60 shrink-0 rounded-lg border-2 border-ink-900 bg-paper-0 p-3 shadow-chrome-1">
+      <h2 className="mb-2 text-lg">Roster</h2>
+      {adv !== null && (
+        <div className="mb-3 rounded-md border border-ink-200 p-2 font-mono text-[11px] text-ink-700">
+          <div className="flex justify-between">
+            <span>crew {adv.crew_alive}</span>
+            <span>imp {adv.impostors_alive}</span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-pill bg-paper-3">
+            <div className="h-full bg-trust-strong" style={{ width: `${taskPct}%` }} />
+          </div>
+          <div className="mt-1 text-ink-500">
+            tasks {adv.tasks_completed}/{adv.tasks_required}
+          </div>
+        </div>
+      )}
+      <ul className="flex flex-col gap-1">
+        {replay.players.map((player) => {
+          const alive = aliveById.get(player.agent_id) ?? true;
+          return (
+            <li
+              key={player.agent_id}
+              className="flex items-center gap-2 rounded-md border border-ink-100 px-2 py-1"
+            >
+              <span
+                aria-hidden
+                className="inline-block h-3 w-3 shrink-0 rounded-full ring-1 ring-ink-900/40"
+                style={{ backgroundColor: player.color }}
+              />
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-900">
+                {player.agent_id}
+              </span>
+              {showRole && (
+                <span className="rounded-sm border border-ink-300 px-1 text-[9px] uppercase tracking-wide text-ink-500">
+                  {player.role}
+                </span>
+              )}
+              <span
+                className={
+                  "rounded-sm px-1 text-[9px] font-semibold uppercase " +
+                  (alive ? "text-ink-500" : "bg-dead text-paper-0")
+                }
+              >
+                {alive ? "alive" : "dead"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </aside>
+  );
+}
+
+// The Replay Workspace (§2.3). The fixed overlays (MeetingView modal, Belief /
+// ThoughtStream rails) self-position; the bottom transport region is fixed above
+// them so playback stays reachable while a meeting is open.
+function Workspace() {
+  return (
+    <>
+      <section className="flex flex-col gap-4 pb-[24rem]">
+        <PerspectiveBanner />
+        <div className="flex flex-wrap gap-4">
+          <RosterRail />
+          {/* Stage slot — the map (12.5). The meeting morph (12.7) is the
+              MeetingView overlay below. */}
+          <div className="min-w-0 flex-1">
+            <div className="flex justify-center">
+              <MapView />
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <MeetingPill />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Self-positioned slots: meeting morph (12.7), belief panel (12.6), mind
+          panel (12.8). Each renders null until its selection gate opens. */}
+      <MeetingView />
+      <BeliefMatrix />
+      <ThoughtStream />
+
+      {/* Bottom transport region: advantage graph · event timeline · transport.
+          Fixed above the overlays (z-70 > the meeting modal) so playback stays
+          reachable. */}
+      <div className="fixed inset-x-0 bottom-0 z-[70] border-t-2 border-ink-900 bg-paper-1/95 backdrop-blur">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-2 p-3">
+          <AdvantageGraph />
+          <div className="max-h-40 overflow-y-auto pr-1">
+            <EventTimeline />
+          </div>
+          <ReplayControls />
+        </div>
+      </div>
+    </>
+  );
+}
 
 export default function App() {
   const loadReplayList = useReplayStore((s) => s.loadReplayList);
-  const [activeTab, setActiveTab] = useState<TabId>("replay");
+  const view = useReplayStore((s) => s.view);
 
   useEffect(() => {
     void loadReplayList();
   }, [loadReplayList]);
 
   return (
-    <div className="min-h-screen bg-slate-900 p-6 text-slate-100">
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold">AiLibi</h1>
-        <nav
-          className="mt-3 flex gap-2"
-          role="tablist"
-          aria-label="Spectator views"
-        >
-          {TABS.map((tab) => {
-            const isActive = tab.id === activeTab;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                }}
-                className={
-                  "rounded-t border-b-2 px-4 py-2 text-sm font-medium transition-colors " +
-                  (isActive
-                    ? "border-emerald-500 text-emerald-100"
-                    : "border-transparent text-slate-400 hover:text-slate-200")
-                }
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
+    <div className="min-h-screen bg-paper-1 p-6 text-ink-900">
+      <PlaybackEngine />
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl">AiLibi</h1>
+        <TopNav />
       </header>
 
-      {activeTab === "replay" ? (
-        <>
-          {/* Bottom padding clears the fixed ReplayControls bar so the last row
-              stays visible when scrolled to the end. */}
-          <main className="flex flex-col gap-4 pb-28">
-            <ReplayPicker />
-            <div className="flex justify-center">
-              <MapView />
-            </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <MeetingPill />
-            </div>
-          </main>
-
-          <MeetingView />
-          <BeliefMatrix />
-          <ThoughtStream />
-          <ReplayControls />
-        </>
-      ) : (
+      {view === "tournament" ? (
         <TournamentDashboard />
+      ) : view === "workspace" ? (
+        <Workspace />
+      ) : (
+        // Replays + Highlights routes both mount the browser; 12.9 makes it
+        // view-aware (it reads `view` from the store) and surfaces the reel.
+        <ReplayPicker />
       )}
     </div>
   );

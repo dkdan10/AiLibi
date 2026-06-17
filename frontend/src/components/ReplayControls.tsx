@@ -1,157 +1,472 @@
-// The primary playback control surface (DESIGN.md §7, §11.4). Subsumes the
-// minimal 4.4 TickStepper: a scrubber for arbitrary seek, a discrete speed
-// selector, play/pause auto-advance, ±1-tick step buttons, and snap-to-meeting
-// navigation. Every control drives the Zustand store; the rest of the UI
-// re-renders against it. Mounts as a fixed bottom bar above every overlay
-// (MeetingView z-50, BeliefMatrix z-[55], ThoughtStream z-[60]) so playback
-// stays reachable while a meeting is open.
+// The playback transport region (Task 12.4; design/phase-12/stage-1-design.md §4,
+// §2.3). Three stacked, hand-coded-from-tokens surfaces the workspace shell
+// composes into its bottom bar:
+//
+//   • `AdvantageGraph` — the clickable second scrubber (crew-vs-impostor over
+//     ticks, key-moment inflections; click to seek),
+//   • `EventTimeline`  — one lane per agent with kill/meeting/vent/sabotage
+//     markers,
+//   • `ReplayControls` — the transport proper: scrub · play/pause · speed · step
+//     ±N · jump prev/next event · jump prev/next meeting · next key moment.
+//
+// The advantage graph and timeline share a hover CROSSHAIR via `hoverTick` in the
+// store (the engine tick under the cursor), so the two surfaces line up. All
+// three derive position from the ONE engine-tick source of truth through
+// `usePlayback` + `lib/playback`; there is no local index↔tick re-derivation.
 
-import { useEffect } from "react";
+import { Fragment, useMemo, useRef } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 
+import { usePlayback } from "../hooks/usePlayback";
+import {
+  type KeyMomentKind,
+  type TimelineKind,
+  advantageSeries,
+  frameIndexForTick,
+  keyMoments,
+  tickNumberAt,
+  timelineMarkers,
+} from "../lib/playback";
 import { useReplayStore } from "../store/replayStore";
 import type { PlaybackSpeed } from "../store/replayStore";
-import type { MeetingView } from "../types/api";
-
-const BASE_TICK_INTERVAL_MS = 500;
 
 const SPEEDS: readonly PlaybackSpeed[] = [0.5, 1, 2, 4];
 
-// Meeting lookups compare against the engine tick NUMBER, not the array index
-// (see the currentTickNumber note in the component below).
-function findNextMeeting(
-  meetings: readonly MeetingView[],
-  currentTickNumber: number,
-): MeetingView | null {
-  return meetings.find((m) => m.tick > currentTickNumber) ?? null;
-}
+// Chunky-sticker chrome (the Playful elevation tokens are CHROME-only — the
+// transport is chrome). Disabled controls drop the shadow + dim.
+const BUTTON =
+  "inline-flex items-center justify-center gap-1 rounded-md border-2 border-ink-900 " +
+  "bg-paper-0 px-2.5 py-1.5 text-sm font-medium text-ink-900 shadow-chrome-1 " +
+  "transition-[transform,box-shadow] hover:-translate-y-px active:translate-y-0.5 " +
+  "active:shadow-none disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none " +
+  "disabled:hover:translate-y-0";
 
-function findPrevMeeting(
-  meetings: readonly MeetingView[],
-  currentTickNumber: number,
-): MeetingView | null {
-  for (let i = meetings.length - 1; i >= 0; i--) {
-    const meeting = meetings[i];
-    if (meeting !== undefined && meeting.tick < currentTickNumber) {
-      return meeting;
-    }
+// Per-kind glyph + chip: a letter (text) AND a colour (hue) — never hue-only,
+// per the firewall rules. Colours stay on the reserved meaning channels.
+const KEY_MOMENT_STYLE: Record<KeyMomentKind, { letter: string; chip: string }> = {
+  kill: { letter: "K", chip: "bg-kill text-paper-0" },
+  meeting: { letter: "M", chip: "bg-ink-700 text-paper-0" },
+  ejection: { letter: "E", chip: "bg-contradiction text-paper-0" },
+  sabotage: { letter: "S", chip: "bg-suspicion-4 text-ink-900" },
+};
+
+const TIMELINE_STYLE: Record<
+  TimelineKind,
+  { letter: string; chip: string; label: string }
+> = {
+  kill: { letter: "K", chip: "bg-kill text-paper-0", label: "kill" },
+  meeting: { letter: "M", chip: "bg-ink-700 text-paper-0", label: "meeting" },
+  vent: { letter: "V", chip: "bg-ink-400 text-paper-0", label: "vent" },
+  sabotage: { letter: "S", chip: "bg-suspicion-4 text-ink-900", label: "sabotage" },
+};
+
+// Clamp a pointer's clientX to a [0,1] fraction within an element's box.
+function pointerFraction(clientX: number, rect: DOMRect): number {
+  if (rect.width === 0) {
+    return 0;
   }
-  return null;
+  return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
 }
 
-const buttonClass =
-  "rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm transition-colors " +
-  "hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40";
+function fractionToIndex(fraction: number, lastIndex: number): number {
+  return Math.round(fraction * lastIndex);
+}
 
-export function ReplayControls() {
-  const replay = useReplayStore((s) => s.currentReplay);
-  const currentTick = useReplayStore((s) => s.currentTick);
-  const isPlaying = useReplayStore((s) => s.isPlaying);
-  const playbackSpeed = useReplayStore((s) => s.playbackSpeed);
-  const setCurrentTick = useReplayStore((s) => s.setCurrentTick);
-  const setIsPlaying = useReplayStore((s) => s.setIsPlaying);
-  const setPlaybackSpeed = useReplayStore((s) => s.setPlaybackSpeed);
-  const selectMeeting = useReplayStore((s) => s.selectMeeting);
-
-  // Auto-advance: while playing, step one tick every BASE/speed ms. currentTick
-  // is read fresh from the store inside the interval (not closed over) so the
-  // effect needn't depend on it — depending on currentTick would tear down and
-  // re-register the interval every tick, causing drift / compound intervals.
-  useEffect(() => {
-    if (!isPlaying || replay === null) {
-      return;
-    }
-    const intervalMs = BASE_TICK_INTERVAL_MS / playbackSpeed;
-    const lastTick = replay.ticks.length - 1;
-    const id = setInterval(() => {
-      const nextTick = useReplayStore.getState().currentTick + 1;
-      if (nextTick > lastTick) {
-        setIsPlaying(false);
-      } else {
-        setCurrentTick(nextTick);
+// A vertical crosshair / playhead line positioned by fraction across a relative
+// parent. `now` is the solid playhead; `hover` is the dashed shared crosshair.
+function Crosshair({ fraction, kind }: { fraction: number; kind: "now" | "hover" }) {
+  return (
+    <div
+      aria-hidden
+      className={
+        "pointer-events-none absolute bottom-0 top-0 w-0 " +
+        (kind === "now"
+          ? "border-l-2 border-ink-900"
+          : "border-l border-dashed border-ink-400")
       }
-    }, intervalMs);
-    return () => {
-      clearInterval(id);
-    };
-  }, [isPlaying, playbackSpeed, replay, setCurrentTick, setIsPlaying]);
+      style={{ left: `${(fraction * 100).toFixed(2)}%` }}
+    />
+  );
+}
 
-  if (replay === null || replay.ticks.length === 0) {
-    return null;
+// A small letter+colour chip used as a key-moment dot / timeline marker.
+function MarkerChip({
+  letter,
+  chip,
+  title,
+  fraction,
+  onSeek,
+}: {
+  letter: string;
+  chip: string;
+  title: string;
+  fraction: number;
+  onSeek: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSeek();
+      }}
+      className={
+        "absolute top-1/2 z-10 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 " +
+        "items-center justify-center rounded-sm border border-ink-900 font-mono " +
+        "text-[9px] font-bold leading-none " +
+        chip
+      }
+      style={{ left: `${(fraction * 100).toFixed(2)}%` }}
+    >
+      {letter}
+    </button>
+  );
+}
+
+function BarShell({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-28 shrink-0 font-mono text-[10px] uppercase tracking-wide text-ink-500">
+        {title}
+      </span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+function PlaceholderBar({ title }: { title: string }) {
+  return (
+    <BarShell title={title}>
+      <div className="flex h-10 items-center rounded-md border border-dashed border-ink-200 px-3 text-sm italic text-ink-400">
+        Select a replay.
+      </div>
+    </BarShell>
+  );
+}
+
+// ── Advantage graph — clickable second scrubber (DESIGN.md §4) ───────────────
+export function AdvantageGraph() {
+  const replay = useReplayStore((s) => s.currentReplay);
+  const hoverTick = useReplayStore((s) => s.hoverTick);
+  const setHoverTick = useReplayStore((s) => s.setHoverTick);
+  const { frameIndex, lastIndex, seekToIndex, seekToTick } = usePlayback();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const series = useMemo(() => advantageSeries(replay?.ticks ?? []), [replay]);
+  const moments = useMemo(
+    () => keyMoments(replay?.ticks ?? [], replay?.meetings ?? []),
+    [replay],
+  );
+
+  if (replay === null || series.length === 0) {
+    return <PlaceholderBar title="Advantage" />;
   }
 
-  // Bound to a const so the snapTo closure below sees a non-null ticks array
-  // (TypeScript drops the `replay !== null` narrowing inside nested functions).
   const ticks = replay.ticks;
-  const lastTick = ticks.length - 1;
-  // currentTick is an INDEX into replay.ticks (the store contract, see
-  // tasks/phase-4.md). ticks[0] is the synthesized tick=-1 "Start" frame, so an
-  // index and its engine tick NUMBER differ by one. Derive the number for any
-  // tick-number-keyed logic (label text, meeting matching) instead of reusing
-  // the index, which would be off by one.
-  const currentTickNumber = ticks[currentTick]?.tick ?? -1;
-  const lastTickNumber = ticks[lastTick]?.tick ?? lastTick;
-  const isStart = currentTickNumber === -1;
-  const canStepBack = currentTick > 0;
-  const canStepForward = currentTick < lastTick;
-  const isAtMeeting = replay.meetings.some((m) => m.tick === currentTickNumber);
+  const points = series
+    .map((point) => {
+      const x = lastIndex > 0 ? (point.index / lastIndex) * 1000 : 0;
+      // advantage +1 → top (y 0), -1 → bottom (y 100); 0 → midline (y 50).
+      const y = (0.5 - point.advantage / 2) * 100;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const nowFraction = lastIndex > 0 ? frameIndex / lastIndex : 0;
+  const hoverFraction =
+    hoverTick === null
+      ? null
+      : lastIndex > 0
+        ? frameIndexForTick(ticks, hoverTick) / lastIndex
+        : 0;
 
-  const nextMeeting = findNextMeeting(replay.meetings, currentTickNumber);
-  const prevMeeting = findPrevMeeting(replay.meetings, currentTickNumber);
-
-  function snapTo(meeting: MeetingView | null): void {
-    if (meeting === null) {
+  const move = (event: ReactMouseEvent<HTMLDivElement>): void => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect === undefined) {
       return;
     }
-    // Map the meeting's engine tick number to its index in the Start-prepended
-    // ticks array so the map lands on the meeting tick, not one frame off.
-    const index = ticks.findIndex((t) => t.tick === meeting.tick);
-    if (index === -1) {
+    const fraction = pointerFraction(event.clientX, rect);
+    setHoverTick(tickNumberAt(ticks, fractionToIndex(fraction, lastIndex)));
+  };
+  const click = (event: ReactMouseEvent<HTMLDivElement>): void => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect === undefined) {
       return;
     }
-    setCurrentTick(index);
-    selectMeeting(meeting.meeting_id);
+    seekToIndex(fractionToIndex(pointerFraction(event.clientX, rect), lastIndex));
+  };
+
+  return (
+    <BarShell title="Advantage ▲crew ▼imp">
+      <div
+        ref={containerRef}
+        onMouseMove={move}
+        onMouseLeave={() => {
+          setHoverTick(null);
+        }}
+        onClick={click}
+        role="slider"
+        aria-label="Advantage graph — click to seek"
+        aria-valuemin={0}
+        aria-valuemax={lastIndex}
+        aria-valuenow={frameIndex}
+        tabIndex={0}
+        className="relative h-16 cursor-pointer rounded-md border border-ink-200 bg-paper-0"
+      >
+        <svg
+          viewBox="0 0 1000 100"
+          preserveAspectRatio="none"
+          className="absolute inset-0 h-full w-full"
+          aria-hidden
+        >
+          <rect x={0} y={0} width={1000} height={50} className="fill-trust-soft/10" />
+          <rect x={0} y={50} width={1000} height={50} className="fill-distrust-soft/10" />
+          <line
+            x1={0}
+            y1={50}
+            x2={1000}
+            y2={50}
+            className="stroke-ink-300"
+            strokeWidth={1}
+            strokeDasharray="6 6"
+            vectorEffect="non-scaling-stroke"
+          />
+          <polyline
+            points={points}
+            className="fill-none stroke-ink-700"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        {moments.map((moment) => {
+          const style = KEY_MOMENT_STYLE[moment.kind];
+          const fraction =
+            lastIndex > 0 ? frameIndexForTick(ticks, moment.tick) / lastIndex : 0;
+          return (
+            <MarkerChip
+              key={`${moment.tick}:${moment.kind}`}
+              letter={style.letter}
+              chip={style.chip}
+              title={`${moment.kind} @ tick ${moment.tick}`}
+              fraction={fraction}
+              onSeek={() => {
+                seekToTick(moment.tick);
+              }}
+            />
+          );
+        })}
+        {hoverFraction !== null && <Crosshair fraction={hoverFraction} kind="hover" />}
+        <Crosshair fraction={nowFraction} kind="now" />
+      </div>
+    </BarShell>
+  );
+}
+
+// ── Event timeline — one lane per agent (DESIGN.md §2.3) ─────────────────────
+export function EventTimeline() {
+  const replay = useReplayStore((s) => s.currentReplay);
+  const hoverTick = useReplayStore((s) => s.hoverTick);
+  const setHoverTick = useReplayStore((s) => s.setHoverTick);
+  const { frameIndex, lastIndex, seekToIndex, seekToTick } = usePlayback();
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  const markersByAgent = useMemo(() => {
+    const grouped = new Map<string, ReturnType<typeof timelineMarkers>>();
+    for (const marker of timelineMarkers(replay?.ticks ?? [])) {
+      const lane = grouped.get(marker.agentId) ?? [];
+      lane.push(marker);
+      grouped.set(marker.agentId, lane);
+    }
+    return grouped;
+  }, [replay]);
+
+  if (replay === null) {
+    return <PlaceholderBar title="Timeline" />;
   }
+
+  const ticks = replay.ticks;
+  const players = replay.players;
+  const nowFraction = lastIndex > 0 ? frameIndex / lastIndex : 0;
+  const hoverFraction =
+    hoverTick === null
+      ? null
+      : lastIndex > 0
+        ? frameIndexForTick(ticks, hoverTick) / lastIndex
+        : 0;
+
+  const fractionFromEvent = (event: ReactMouseEvent<HTMLDivElement>): number | null => {
+    const rect = overlayRef.current?.getBoundingClientRect();
+    if (rect === undefined) {
+      return null;
+    }
+    return pointerFraction(event.clientX, rect);
+  };
+
+  return (
+    <BarShell title="Event timeline">
+      <div
+        className="grid items-center gap-x-2 gap-y-0.5"
+        style={{ gridTemplateColumns: "max-content 1fr" }}
+        onMouseMove={(event) => {
+          const fraction = fractionFromEvent(event);
+          if (fraction !== null) {
+            setHoverTick(tickNumberAt(ticks, fractionToIndex(fraction, lastIndex)));
+          }
+        }}
+        onMouseLeave={() => {
+          setHoverTick(null);
+        }}
+        onClick={(event) => {
+          const fraction = fractionFromEvent(event);
+          if (fraction !== null) {
+            seekToIndex(fractionToIndex(fraction, lastIndex));
+          }
+        }}
+      >
+        {players.map((player, row) => (
+          <Fragment key={player.agent_id}>
+            <div
+              className="flex items-center gap-1.5 font-mono text-[10px] text-ink-700"
+              style={{ gridColumn: 1, gridRow: row + 1 }}
+            >
+              <span
+                aria-hidden
+                className="inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-ink-900/40"
+                style={{ backgroundColor: player.color }}
+              />
+              {player.agent_id}
+            </div>
+            <div
+              className="relative h-4 rounded-sm bg-paper-2/60"
+              style={{ gridColumn: 2, gridRow: row + 1 }}
+            >
+              {(markersByAgent.get(player.agent_id) ?? []).map((marker) => {
+                const style = TIMELINE_STYLE[marker.kind];
+                const fraction =
+                  lastIndex > 0 ? frameIndexForTick(ticks, marker.tick) / lastIndex : 0;
+                return (
+                  <MarkerChip
+                    key={marker.key}
+                    letter={style.letter}
+                    chip={style.chip}
+                    title={`${player.agent_id} — ${style.label} @ tick ${marker.tick}`}
+                    fraction={fraction}
+                    onSeek={() => {
+                      seekToTick(marker.tick);
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </Fragment>
+        ))}
+        {/* Crosshair overlay spanning the track column across every lane. */}
+        <div
+          ref={overlayRef}
+          className="pointer-events-none relative"
+          style={{ gridColumn: 2, gridRow: `1 / ${players.length + 1}` }}
+        >
+          {hoverFraction !== null && <Crosshair fraction={hoverFraction} kind="hover" />}
+          <Crosshair fraction={nowFraction} kind="now" />
+        </div>
+      </div>
+    </BarShell>
+  );
+}
+
+// ── Transport — the control surface (DESIGN.md §4) ───────────────────────────
+export function ReplayControls() {
+  const autoFollow = useReplayStore((s) => s.autoFollow);
+  const setAutoFollow = useReplayStore((s) => s.setAutoFollow);
+  const {
+    hasReplay,
+    frameIndex,
+    lastIndex,
+    tickNumber,
+    lastTickNumber,
+    isPlaying,
+    isAtStart,
+    canStepBack,
+    canStepForward,
+    meetingAtTick,
+    speed,
+    setSpeed,
+    seekToIndex,
+    stepBy,
+    togglePlay,
+    jumpToEvent,
+    jumpToMeeting,
+    nextKeyMoment,
+  } = usePlayback();
 
   return (
     <section
-      aria-label="Replay controls"
-      className="fixed bottom-0 left-0 right-0 z-[65] flex flex-wrap items-center gap-3 border-t border-slate-700 bg-slate-900/95 px-4 py-3 backdrop-blur"
+      aria-label="Replay transport"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2"
     >
-      {/* Transport: snap / step / play-pause / step / snap. */}
-      <div className="flex items-center gap-2">
+      {/* Jump / step / play cluster. */}
+      <div className="flex items-center gap-1">
         <button
           type="button"
-          disabled={prevMeeting === null}
+          disabled={!hasReplay}
           onClick={() => {
-            snapTo(prevMeeting);
+            jumpToMeeting(-1);
           }}
-          title="Snap to previous meeting"
-          aria-label="Snap to previous meeting"
-          className={buttonClass}
+          title="Previous meeting"
+          aria-label="Previous meeting"
+          className={BUTTON}
         >
-          ⏮ Meeting
+          «M
+        </button>
+        <button
+          type="button"
+          disabled={!hasReplay}
+          onClick={() => {
+            jumpToEvent(-1);
+          }}
+          title="Previous event (kill / meeting / vent / sabotage)"
+          aria-label="Previous event"
+          className={BUTTON}
+        >
+          ‹e
         </button>
         <button
           type="button"
           disabled={!canStepBack}
           onClick={() => {
-            setCurrentTick(Math.max(0, currentTick - 1));
+            stepBy(-10);
           }}
-          title="Step back one tick"
-          aria-label="Step back one tick"
-          className={buttonClass}
+          title="Step back 10 ticks"
+          aria-label="Step back 10 ticks"
+          className={BUTTON}
+        >
+          −10
+        </button>
+        <button
+          type="button"
+          disabled={!canStepBack}
+          onClick={() => {
+            stepBy(-1);
+          }}
+          title="Step back 1 tick"
+          aria-label="Step back 1 tick"
+          className={BUTTON}
         >
           −1
         </button>
         <button
           type="button"
-          disabled={!canStepForward}
-          onClick={() => {
-            setIsPlaying(!isPlaying);
-          }}
-          className={
-            buttonClass + " min-w-[5.5rem] font-semibold"
-          }
+          disabled={!hasReplay || (!canStepForward && !isPlaying)}
+          onClick={togglePlay}
+          className={BUTTON + " min-w-[5rem] font-semibold"}
         >
           {isPlaying ? "⏸ Pause" : "▶ Play"}
         </button>
@@ -159,81 +474,141 @@ export function ReplayControls() {
           type="button"
           disabled={!canStepForward}
           onClick={() => {
-            setCurrentTick(Math.min(lastTick, currentTick + 1));
+            stepBy(1);
           }}
-          title="Step forward one tick"
-          aria-label="Step forward one tick"
-          className={buttonClass}
+          title="Step forward 1 tick"
+          aria-label="Step forward 1 tick"
+          className={BUTTON}
         >
           +1
         </button>
         <button
           type="button"
-          disabled={nextMeeting === null}
+          disabled={!canStepForward}
           onClick={() => {
-            snapTo(nextMeeting);
+            stepBy(10);
           }}
-          title="Snap to next meeting"
-          aria-label="Snap to next meeting"
-          className={buttonClass}
+          title="Step forward 10 ticks"
+          aria-label="Step forward 10 ticks"
+          className={BUTTON}
         >
-          Meeting ⏭
+          +10
+        </button>
+        <button
+          type="button"
+          disabled={!hasReplay}
+          onClick={() => {
+            jumpToEvent(1);
+          }}
+          title="Next event (kill / meeting / vent / sabotage)"
+          aria-label="Next event"
+          className={BUTTON}
+        >
+          e›
+        </button>
+        <button
+          type="button"
+          disabled={!hasReplay}
+          onClick={() => {
+            jumpToMeeting(1);
+          }}
+          title="Next meeting"
+          aria-label="Next meeting"
+          className={BUTTON}
+        >
+          M»
         </button>
       </div>
 
-      {/* Scrubber + tick label. Grows to fill the row; wraps on narrow. */}
+      {/* Scrubber + tick label. `value` is the array index; the label reads the
+          engine tick number through the one selector. */}
       <div className="flex min-w-[12rem] flex-1 items-center gap-3">
         <input
           type="range"
           min={0}
-          max={lastTick}
-          value={currentTick}
+          max={Math.max(0, lastIndex)}
+          value={frameIndex}
+          disabled={!hasReplay}
           aria-label="Seek tick"
-          onInput={(e) => {
-            setCurrentTick(Number(e.currentTarget.value));
+          onInput={(event) => {
+            seekToIndex(Number(event.currentTarget.value));
           }}
-          onChange={(e) => {
-            setCurrentTick(Number(e.currentTarget.value));
+          onChange={(event) => {
+            seekToIndex(Number(event.currentTarget.value));
           }}
-          className="w-full cursor-pointer accent-emerald-500"
+          className="w-full cursor-pointer accent-ink-700 disabled:cursor-not-allowed"
         />
-        <span className="whitespace-nowrap font-mono text-sm text-slate-200">
-          {isStart ? "Start" : `Tick ${currentTickNumber} / ${lastTickNumber}`}
-          {isAtMeeting && (
-            <span className="ml-2 rounded-full border border-amber-500 bg-amber-900/40 px-2 py-0.5 text-xs font-semibold text-amber-100">
+        <span className="whitespace-nowrap font-mono text-sm text-ink-900">
+          {!hasReplay
+            ? "—"
+            : isAtStart
+              ? "Start"
+              : `t${tickNumber} / ${lastTickNumber}`}
+          {meetingAtTick !== null && (
+            <span className="ml-2 rounded-pill border-2 border-ink-900 bg-suspicion-2 px-2 py-0.5 text-xs font-semibold text-ink-900">
               meeting
             </span>
           )}
         </span>
       </div>
 
-      {/* Discrete speed selector. */}
+      {/* Next key moment — distinct from raw step / jump-event. */}
+      <button
+        type="button"
+        disabled={!hasReplay}
+        onClick={nextKeyMoment}
+        title="Seek to the next key moment (kill / meeting / ejection / sabotage)"
+        aria-label="Next key moment"
+        className={BUTTON}
+      >
+        ★ Next key moment
+      </button>
+
+      {/* Speed selector. */}
       <div className="flex items-center gap-1">
-        <span className="mr-1 text-xs uppercase tracking-wide text-slate-400">
+        <span className="mr-1 font-mono text-[10px] uppercase tracking-wide text-ink-500">
           Speed
         </span>
-        {SPEEDS.map((speed) => {
-          const isActive = playbackSpeed === speed;
+        {SPEEDS.map((value) => {
+          const isActive = speed === value;
           return (
             <button
-              key={speed}
+              key={value}
               type="button"
+              disabled={!hasReplay}
               aria-pressed={isActive}
               onClick={() => {
-                setPlaybackSpeed(speed);
+                setSpeed(value);
               }}
               className={
-                "rounded border px-3 py-2 text-sm font-mono transition-colors " +
+                "rounded-md border-2 border-ink-900 px-2.5 py-1.5 font-mono text-sm transition-colors " +
+                "disabled:cursor-not-allowed disabled:opacity-40 " +
                 (isActive
-                  ? "border-emerald-500 bg-emerald-900 text-emerald-100"
-                  : "border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700")
+                  ? "bg-ink-900 text-paper-0"
+                  : "bg-paper-0 text-ink-900 hover:bg-paper-2")
               }
             >
-              {speed}×
+              {value}×
             </button>
           );
         })}
       </div>
+
+      {/* Auto-follow toggle (interruptible meeting follow). */}
+      <button
+        type="button"
+        aria-pressed={autoFollow}
+        onClick={() => {
+          setAutoFollow(!autoFollow);
+        }}
+        title="Auto-follow meetings while playing"
+        className={
+          "rounded-md border-2 border-ink-900 px-2.5 py-1.5 text-sm transition-colors " +
+          (autoFollow ? "bg-ink-900 text-paper-0" : "bg-paper-0 text-ink-900 hover:bg-paper-2")
+        }
+      >
+        Auto-follow {autoFollow ? "on" : "off"}
+      </button>
     </section>
   );
 }
