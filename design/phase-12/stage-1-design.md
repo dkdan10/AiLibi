@@ -1,7 +1,7 @@
 # Phase 12 — Stage 1: DESIGN
 
 **Status:** FINAL (Stage 1 complete). Authored from the Stage-0 artifact + owner decisions, then revised against (1) an analogous-product survey and (2) an adversarial blind-spot critique that **broke the draft's per-tick-belief hero** (see §0 *What changed*). Ready for owner review → BUILD.
-**Inputs:** `design/phase-12/stage-0-understand.md`; owner 2026-06-17 → **art = vector/geometric**, **scope = spectator replay viewer only**; analogous-product survey; adversarial critique (both archived in this thread).
+**Inputs:** `design/phase-12/stage-0-understand.md`; owner 2026-06-17 → art OPENED for Wave-0 exploration → **Playful chosen** (cream/ink; see §5 + `tokens-seed.md`), **scope = spectator replay viewer only**; analogous-product survey; adversarial critique (both archived in this thread).
 **Audience:** Claude Design (chrome/tokens) + the BUILD threads (per-slice PRs).
 **Closest prior art to study first:** *"Observer, Not Player"* (Theory-of-Mind in LLMs), arXiv 2512.19210 — an observer's probabilistic belief over hidden roles, explicitly diffed against ground truth. Almost exactly our centerpiece.
 
@@ -115,7 +115,17 @@ Keep the metrics; add: **typed `conversion` + `gate_metrics`** (sent on the wire
 - **Everything derives from `currentTick`**; meetings are **time spans** (stage morphs to the table when `tick ∈ meeting.span`). **Auto-follow** (pan to next event) is **interruptible** (anti-pattern: don't yank the camera).
 - **Playback in the store / `usePlayback` hook** (not buried in a control). **Keep** the existing payload windowing + lazy meeting bodies + async-ordering guards. Per-tick visibility/advantage frames are modest, but they're the one thing that inflates the single-payload model → fetch/window them per-tick if needed (the dead `/ticks/{t}` endpoint is the hook).
 
-## 5. Art direction — vector / geometric, dark "observatory"
+## 5. Art direction — **Playful** (cream / ink) · ⚠️ section below superseded by Wave 0
+
+> **Wave-0 update (2026-06-17):** the art direction was OPENED for exploration (see the brief) and Wave 0 chose
+> **DIRECTION 03 — Playful** (cream `#FBF4E6` + ink chunky-sticker; Fredoka / Space Mono) — **not** the dark "observatory"
+> described below (that became the *rejected* Direction-01). **Authoritative palette + mood = `design/phase-12/tokens-seed.md`
+> + `design/phase-12/playful-system/` (the rendered converge).** The text below is kept only for its still-valid
+> STRUCTURE — the firewall color *system* (identity ≠ guilt, suspicion heat, trust↔distrust blue↔orange, status+shape),
+> the two-truth grammar, and the motion list all carried into Playful — so read every "dark / near-black / observatory"
+> cue as "cream / ink Playful."
+
+*(original, superseded direction:)* vector / geometric, dark "observatory"
 - **Mood:** calm, precise control-room for a reasoning testbed; schematic top-down map, thin strokes, generous negative space, dense-but-quiet. Dark-mode rules: near-black (not pure black) canvas, medium weight (thin halates), **mono for ticks/IDs/JSON/prompts**, restrained semantic accents.
 - **Two-truth grammar (signature):** ground truth = solid; belief/inference/what-was-seen = ghosted + attributed. Bound to the perspective/overlay, applied everywhere (map fog, belief Error cells, claim cross-highlight).
 - **Color (firewall-critical):** **identity** = existing deterministic per-player palette (never role/guilt); **truth reveal** = a *separate* channel — a real impostor is an explicit **icon/badge** in Omniscient, never a hue, and the **ground-truth ring is suppressed in fog**; **suspicion** = a sequential heat ramp distinct from identity; **trust↔distrust** = **blue↔orange** (colorblind-safe, avoids kill-red); **status** = semantic tokens, each paired with shape/text.
@@ -168,7 +178,7 @@ leak correctness** — the handoff bundle provably cannot carry these.
 set; even Opus 4.7 underperforms on vector-art benchmarks), as standalone asset files loaded into the hand-coded Pixi
 layer. No raster path (a third-party image MCP only if ever required).
 **Workflow (best practice).** Design-system-first → **one durable workspace brief** (`design/phase-12/claude-design-brief.md`,
-installed as `frontend/CLAUDE.md` in task 12.0) → **per-component focused prompts** → per-slice **Share → Handoff to Claude
+installed as `frontend/CLAUDE.md` in task 12.1) → **per-component focused prompts** → per-slice **Share → Handoff to Claude
 Code** → integrate (compose from tokens, no hardcoded hex) → **screenshot-verify** (`claude --chrome` / Playwright, isolated
 + composed) → small PR → fresh-context review → next. **Anti-patterns:** one mega-prompt for all components; bulk
 integration; wholesale regeneration over files holding hand-written logic.

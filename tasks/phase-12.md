@@ -1,8 +1,10 @@
-# Phase 12 — Front-end rework (spectator replay viewer, vector/observatory)
+# Phase 12 — Front-end rework (spectator replay viewer · Playful cream/ink)
 
 Goal: rebuild `frontend/` into the most *legible* hidden-information replay viewer — show what each agent knew/believed
 vs ground truth — on the existing React 19 + PixiJS + Zustand + FastAPI-loader substrate. Owner decisions (2026-06-17):
-art = vector/geometric; scope = spectator replay viewer only (no live, no human player).
+art = **Playful** (cream + ink chunky-sticker, Fredoka/Space Mono; vector-rendered — the Wave-0 pick, see
+`design/phase-12/tokens-seed.md` + `design/phase-12/playful-system/`); scope = spectator replay viewer only (no live, no
+human player). (The earlier "vector/observatory" framing was the *rejected* dark Direction-01 — superseded by Playful.)
 
 Anchors (read before any dispatch): `design/phase-12/stage-0-understand.md` (data dictionary + renderable-surface map +
 teardown, incl. §0.5 corrections), `design/phase-12/stage-1-design.md` (the design + §9.5 Claude Design integration),
@@ -32,6 +34,15 @@ library UP to Claude Design so it composes with our real components) runs **afte
 component library exist; a pre-12.1 sync was **deferred 2026-06-17** (the current `frontend/` is a `private` app with no
 design system → the converter would fail / import the components we're replacing).
 
+**Design coverage (what Wave-0's converge already designed vs what still needs Claude Design).** The 0b converge designed
+the *hero replay-view* surfaces — tokens (→ 12.1), the map + perspective switcher + fog (→ 12.5 / 12.3), the 9×9
+Belief/Truth/Error matrix (→ 12.6), and the meeting view (→ 12.7); their rendered targets live in
+`design/phase-12/playful-system/screens/`. The remaining chrome — **12.8 mind inspector · 12.9 replay-browser/highlights
+· 12.10 dashboard** — was deliberately NOT in the converge and each still needs **its own owner-run Claude Design pass at
+its dispatch**, composing with the synced component library (post-12.1 `/design-sync`), per the per-slice prompts in those
+tasks. The workspace shell + transport / advantage graph / event-timeline / roster rail (12.4) and 12.11's first-run
+overlay are **hand-coded from tokens** — no Claude Design pass.
+
 Sequencing: **Wave 0 (art-direction exploration, owner-run) precedes 12.1** — its chosen direction seeds the tokens.
 Then 12.1 (foundation) and 12.2 (contract) have no deps and run first/in parallel; 12.3 depends on 12.2; 12.4
 depends on 12.2; **12.5–12.10 depend on 12.1 + 12.2** (chrome needs tokens; data needs the contract); 12.3 feeds the
@@ -54,6 +65,11 @@ derive tokens).
 03 Playful) were firewall-compliant + map-faithful; **Playful** picked as most structurally readable + on-theme. Two
 converge fixes required (identity-palette re-spacing off the semantic hues + density tuning) — baked into the 0b
 converge prompt below.
+
+**0b DONE 2026-06-17 — converge delivered + vendored in-repo. Wave 0 is CLOSED.** Token sheet →
+`design/phase-12/tokens-seed.md` (the 12.1 seed); the renderable converge (`.dc.html` + `support.js`) + 8 rendered
+screenshots → `design/phase-12/playful-system/`. The exploration + converge prompts below are retained as provenance only
+— nothing remains to run in Claude Design until the per-slice chrome passes (12.5–12.10).
 
 Steps:
 1. Create the workspace, link this repo, paste `frontend/CLAUDE.md` (= the brief) so Claude Design grounds on the GOAL +
@@ -136,7 +152,8 @@ generic dashboard; a colorful/cartoony winner is fine as long as it still obeys 
 > Keep the firewall rules, the fog default, **'NO BELIEF YET' (≠ 0)**, and the **FABRICATED (omniscient) vs UNVERIFIED
 > (fog)** distinction. **Output the token sheet explicitly — it becomes our `tokens.ts`.""
 
-When 0b lands, its token sheet seeds `tokens.ts` in **12.1**; the chosen Playful system then governs every chrome slice.
+0b landed (see the DONE note above): its token sheet seeds `tokens.ts` in **12.1**, and the chosen Playful system governs
+every chrome slice.
 
 ## Wave A — Foundation & data (no Claude Design chrome; gates everything)
 
