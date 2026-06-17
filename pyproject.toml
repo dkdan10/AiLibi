@@ -30,8 +30,9 @@ mypy_path = "scripts"
 # Throwaway ML-feasibility-spike scripts (experiments/lab/ml_spike/) are explicitly
 # exploratory (see experiments/lab/ml-spike-charter.md) and use a sys.path bootstrap
 # mypy can't follow; exclude them from the strict gate. The maintained top-level lab
-# tools (experiments/lab/*.py) stay type-checked.
-exclude = "^experiments/lab/ml_spike/"
+# tools (experiments/lab/*.py) stay type-checked. design/ holds one-off design-artifact
+# generators (e.g. phase-12/gen_map_reference.py), not production code — excluded too.
+exclude = "^(experiments/lab/ml_spike/|design/)"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
