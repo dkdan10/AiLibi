@@ -32,7 +32,7 @@ import logging
 import re
 import tempfile
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -725,8 +725,14 @@ class ReplayLoader:
                 # state + this tick's events — the frame the spectator sees at
                 # ``entry.tick`` (Task 12.3). Computed once here; LRU-cached by
                 # ``_load_replay`` so it is never recomputed per request.
+                # ``reopened_body_id`` keeps a just-reported body in the fog on its
+                # meeting frame (``_apply_report`` already flagged it discovered);
+                # ``body_id`` is the trigger body for a body report, ``None`` for a
+                # play tick or an emergency meeting.
                 tick_visibility = (
-                    self._agent_visibility_map(service, state, events)
+                    self._agent_visibility_map(
+                        service, state, events, reopened_body_id=body_id
+                    )
                     if collect_visibility and service is not None
                     else None
                 )
@@ -869,6 +875,8 @@ class ReplayLoader:
         service: ObservationService,
         state: WorldState,
         events: Sequence[EngineEvent],
+        *,
+        reopened_body_id: str | None = None,
     ) -> dict[str, AgentVisibilityView]:
         """Build each LIVING agent's firewall-filtered field of view for one tick.
 
@@ -886,14 +894,32 @@ class ReplayLoader:
         budget (the implementation hint's "do NOT re-solve a second time"). Dead
         agents are skipped — a dead agent has no field of view — so the per-agent
         map holds only living agents and the dead get ``visibility=None``.
+
+        ``reopened_body_id`` keeps a JUST-reported body in the fog on its meeting
+        frame: on a body-report tick ``engine.tick._apply_report`` has already
+        marked the trigger body ``discovered_by``, and ``compute_visibility_for_player``
+        excludes discovered bodies — so without this the reporter (and every
+        co-located agent) would lose the body from their field of view on the
+        exact frame they could see it (it still shows in ``tick.bodies`` + the
+        report event). The fog is solved against a state with that one body
+        re-opened so the view matches what the agents saw; pure read-side — the
+        engine ``state``, its hash, and ``tick.bodies`` are untouched.
         """
 
+        fog_state = state
+        if reopened_body_id is not None and reopened_body_id in state.bodies:
+            body = state.bodies[reopened_body_id]
+            if body.discovered_by is not None:
+                bodies = dict(state.bodies)
+                bodies[reopened_body_id] = replace(body, discovered_by=None)
+                fog_state = replace(state, bodies=bodies)
+
         visibility: dict[str, AgentVisibilityView] = {}
-        for pid in sorted(state.players):
-            if not state.players[pid].alive:
+        for pid in sorted(fog_state.players):
+            if not fog_state.players[pid].alive:
                 continue
             packet = service.build_packet(
-                world_state=state, agent_id=pid, engine_events=events
+                world_state=fog_state, agent_id=pid, engine_events=events
             )
             visibility[pid] = _agent_visibility_view(packet)
         return visibility

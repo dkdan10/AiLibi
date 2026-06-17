@@ -553,6 +553,42 @@ def test_agent_visibility_matches_observation_pipeline(
     assert served == expected
 
 
+def test_report_tick_fog_keeps_the_reported_body(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    """On a body-report frame the reporter still sees the body they just found.
+
+    ``engine.tick._apply_report`` marks the trigger body discovered before the
+    post-advance fog solve, and ``compute_visibility_for_player`` excludes
+    discovered bodies — so the loader re-opens the trigger body for that frame
+    (``_agent_visibility_map(reopened_body_id=...)``). This pins that the
+    reporter's field of view includes the reported body (which also shows in
+    ``tick.bodies`` + the report event), i.e. the As-agent view matches what the
+    agent could see at the meeting frame rather than dropping it.
+    """
+
+    saw_report = False
+    for meta in nine_p_two_i_loader.list_replays():
+        replay = nine_p_two_i_loader.load_replay(meta.game_id)
+        for tick in replay.ticks:
+            for event in tick.events:
+                if event.type != "report_body":
+                    continue
+                saw_report = True
+                reporter = next(
+                    a for a in tick.agent_states if a.agent_id == event.reporter_id
+                )
+                assert reporter.visibility is not None
+                seen_victims = {
+                    body.victim_id for body in reporter.visibility.visible_bodies
+                }
+                assert event.body_of in seen_victims, (
+                    f"{event.reporter_id} does not see the body it reported "
+                    f"({event.body_of}) at tick {tick.tick} of {meta.game_id}"
+                )
+    assert saw_report, "expected at least one body-report meeting in the 9p2i set"
+
+
 # ---------------------------------------------------------------------------
 # Endpoints: /replays/{id}/beliefs and /eval/rubric
 # ---------------------------------------------------------------------------
