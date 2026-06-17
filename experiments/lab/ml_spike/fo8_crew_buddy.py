@@ -17,11 +17,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, "experiments/lab")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml_spike import core  # noqa: E402
 from observation.action_intent import MoveIntent  # noqa: E402
 
-TMP = Path(os.environ["CLAUDE_JOB_DIR"]) / "tmp" / "fo8"
+TMP = core.tmp("fo8")
 K = list(range(12))
 GLEN = core.ENC_DIM + 1
 

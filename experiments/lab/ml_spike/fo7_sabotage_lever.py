@@ -18,11 +18,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, "experiments/lab")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml_spike import core  # noqa: E402
 from observation.action_intent import SabotageIntent  # noqa: E402
 
-TMP = Path(os.environ["CLAUDE_JOB_DIR"]) / "tmp" / "fo7"
+TMP = core.tmp("fo7")
 K = list(range(8))
 GLEN = core.ENC_DIM + 1  # linear gate: w . encode + b
 FIRE_BAR = 2.5  # high bar: sabotage is a RARE strategic action, not every tick
@@ -103,11 +103,9 @@ def profile(gate, mode, tag):
     sab_wins = kills = 0
     reasons: Counter[str] = Counter()
     for s in K:
-        rows = core.replay_rows(out / f"replay-seed-{s}.jsonl")
-        kills += sum(
-            1 for r in rows for a in r.get("actions", []) if a.get("type") == "kill"
-        )
-        for r in rows:
+        path = out / f"replay-seed-{s}.jsonl"
+        kills += core.count_kills(path)  # resolved kills (Comment 3)
+        for r in core.replay_rows(path):
             if "reason" in r:
                 reasons[r["reason"]] += 1
                 if r["reason"] == "IMPOSTOR_SABOTAGE":

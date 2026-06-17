@@ -16,11 +16,11 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "experiments/lab")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml_spike import core  # noqa: E402
 from observation.action_intent import MoveIntent, WaitIntent  # noqa: E402
 
-TMP = Path(os.environ["CLAUDE_JOB_DIR"]) / "tmp" / "fo1"
+TMP = core.tmp("fo1")
 KWIN = 6
 K = list(range(8))
 HOLD = list(range(100, 108))

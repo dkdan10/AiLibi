@@ -18,29 +18,28 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, "experiments/lab")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml_spike import core  # noqa: E402
 
-TMP = Path(os.environ["CLAUDE_JOB_DIR"]) / "tmp" / "fo3"
+TMP = core.tmp("fo3")
 SEEDS = list(range(12))
 
 
 def profile(genome, tag):
     os.environ["AILIBI_LLM_PROVIDER"] = "fake"
     core.run_games(SEEDS, TMP / tag, genome=genome)
-    kills = reasons = mtgs = evid_mtgs = ejections = 0
-    reasons = Counter()
+    kills = mtgs = evid_mtgs = ejections = 0
+    reasons: Counter[str] = Counter()
     for s in SEEDS:
-        for row in core.replay_rows(TMP / tag / f"replay-seed-{s}.jsonl"):
+        path = TMP / tag / f"replay-seed-{s}.jsonl"
+        kills += core.count_kills(path)  # resolved kills (Comment 3)
+        for row in core.replay_rows(path):
             if row.get("kind") == "meeting":
                 mtgs += 1
                 if row.get("contradictions"):
                     evid_mtgs += 1
                 if row.get("ejected_player_id"):
                     ejections += 1
-            for a in row.get("actions", []):
-                if a.get("type") == "kill":
-                    kills += 1
             if "reason" in row:
                 reasons[row["reason"]] += 1
     return dict(

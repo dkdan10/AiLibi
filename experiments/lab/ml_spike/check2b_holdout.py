@@ -8,14 +8,13 @@ learnability climb is real; if it collapses toward random, it was seed-overfit.
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "experiments/lab")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml_spike import core  # noqa: E402
 
-TMP = Path(os.environ["CLAUDE_JOB_DIR"]) / "tmp" / "check2b"
+TMP = core.tmp("check2b")
 TRAIN = list(range(8))
 HOLD = list(range(100, 108))  # disjoint
 

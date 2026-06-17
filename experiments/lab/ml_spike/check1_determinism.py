@@ -8,14 +8,13 @@ is not the trivial "the MLP changed nothing".
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "experiments/lab")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml_spike import core  # noqa: E402
 
-TMP = Path(os.environ["CLAUDE_JOB_DIR"]) / "tmp" / "check1"
+TMP = core.tmp("check1")
 SEEDS = list(range(8))
 
 

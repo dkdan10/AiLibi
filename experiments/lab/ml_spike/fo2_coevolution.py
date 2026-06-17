@@ -15,10 +15,12 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "experiments/lab")
+sys.path.insert(
+    0, str(Path(__file__).resolve().parents[1])
+)  # experiments/lab (Comment 4)
 from ml_spike import core  # noqa: E402
 
-TMP = Path(os.environ["CLAUDE_JOB_DIR"]) / "tmp" / "fo2"
+TMP = core.tmp("fo2")
 K = list(range(6))
 
 
@@ -57,8 +59,10 @@ def kills2(gi, gc, tag) -> int:
     return sum(core.count_kills(out / f"replay-seed-{s}.jsonl") for s in K)
 
 
-def evolve(fixed_other, *, side, champ, lam=4, gen_tag):
-    """One ES generation. side='I' maximizes kills, 'C' minimizes."""
+def evolve(fixed_other, *, side, champ, seed_base, lam=4, gen_tag):
+    """One ES generation. side='I' maximizes kills, 'C' minimizes. ``seed_base`` is
+    a deterministic integer (Comment 2: Python's hash() on strings is per-process
+    salted, so hash-derived mutation seeds made the probe non-reproducible)."""
     best_g = champ
     best_f = (
         kills2(champ, fixed_other, f"{gen_tag}_base")
@@ -66,7 +70,7 @@ def evolve(fixed_other, *, side, champ, lam=4, gen_tag):
         else kills2(fixed_other, champ, f"{gen_tag}_base")
     )
     for m in range(lam):
-        cand = core.mutate(champ, seed=hash((gen_tag, m)) % 10**6, sigma=0.15)
+        cand = core.mutate(champ, seed=seed_base + m, sigma=0.15)
         f = (
             kills2(cand, fixed_other, f"{gen_tag}_m{m}")
             if side == "I"
@@ -88,8 +92,20 @@ def main() -> int:
     print("round | coevo(I vs C) | BENCH impostor vs FSM-crew | BENCH FSM-imp vs crew")
     bench_i_hist, bench_c_hist = [], []
     for r in range(5):
-        champ_i = evolve(champ_c, side="I", champ=champ_i, gen_tag=f"r{r}_I")
-        champ_c = evolve(champ_i, side="C", champ=champ_c, gen_tag=f"r{r}_C")
+        champ_i = evolve(
+            champ_c,
+            side="I",
+            champ=champ_i,
+            seed_base=10000 * r + 1000,
+            gen_tag=f"r{r}_I",
+        )
+        champ_c = evolve(
+            champ_i,
+            side="C",
+            champ=champ_c,
+            seed_base=10000 * r + 2000,
+            gen_tag=f"r{r}_C",
+        )
         coevo = kills2(champ_i, champ_c, f"r{r}_coevo")
         bench_i = kills2(champ_i, None, f"r{r}_bi")  # impostor-champ vs FIXED FSM crew
         bench_c = kills2(None, champ_c, f"r{r}_bc")  # FIXED FSM impostor vs crew-champ

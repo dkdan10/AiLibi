@@ -23,14 +23,22 @@ import glob
 import json
 import math
 import random
+import sys
 from collections import defaultdict
 from pathlib import Path
 
-from engine.world import load_canonical_map
+if str(Path(__file__).resolve().parents[3]) not in sys.path:
+    sys.path.insert(
+        0, str(Path(__file__).resolve().parents[3])
+    )  # repo root (Comment 4)
+
+from engine.world import load_canonical_map  # noqa: E402
 
 _M = load_canonical_map()
-SPAWN = _M.spawn
-MEET_ROOM = _M.meeting
+# .room: _M.spawn / _M.meeting are Spawn/Meeting CONFIG objects, not room-id strings
+# (Comment 1) -- using the config object corrupts the reconstructed positions.
+SPAWN = _M.spawn.room
+MEET_ROOM = _M.meeting.room
 VENT_ROOM = {vid: v.room for vid, v in _M.vents.items()}
 PLAYERS = [f"p-{i}" for i in range(1, 10)]  # 9p roster is 1-indexed (p-1..p-9)
 FILES = sorted(glob.glob("replays/samples/9p2i/replay-seed-*.jsonl"))

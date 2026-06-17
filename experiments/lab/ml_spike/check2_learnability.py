@@ -12,15 +12,14 @@ stalk, so the gap is real and the lever is the move decision).
 from __future__ import annotations
 
 import math
-import os
 import random
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "experiments/lab")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml_spike import core  # noqa: E402
 
-TMP = Path(os.environ["CLAUDE_JOB_DIR"]) / "tmp" / "check2"
+TMP = core.tmp("check2")
 K = list(range(8))  # fitness seeds
 ENC, HID, OUT = core.ENC_DIM, core.HID, core.OUT
 O1, O2, O3 = ENC * HID, ENC * HID + HID, ENC * HID + HID + HID * OUT

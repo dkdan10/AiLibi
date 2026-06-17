@@ -20,16 +20,32 @@ import json
 import math
 import os
 import random
+import sys
+import tempfile
 from pathlib import Path
 
-from agents.tactical.crewmate_policy import CrewmatePolicy
-from agents.tactical.impostor_policy import ImpostorPolicy
-from eval.balance_eval import run_tournament_eval
-from observation.action_intent import MoveIntent, WaitIntent
-from orchestrator.game import TacticalAgent
+# Make `engine`/`eval`/... importable even when a check is run as a bare script from
+# any CWD, without requiring PYTHONPATH=. or the Claude env (Comment 4).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+
+def tmp(name: str) -> Path:
+    """Per-probe scratch dir. Uses CLAUDE_JOB_DIR when set, else the system temp dir
+    so the committed experiments run from a normal checkout (Comment 4)."""
+    base = os.environ.get("CLAUDE_JOB_DIR") or tempfile.gettempdir()
+    return Path(base) / "ailibi_ml_spike" / name
+
+
+from agents.tactical.crewmate_policy import CrewmatePolicy  # noqa: E402
+from agents.tactical.impostor_policy import ImpostorPolicy  # noqa: E402
+from eval.balance_eval import run_tournament_eval  # noqa: E402
+from observation.action_intent import MoveIntent, WaitIntent  # noqa: E402
+from orchestrator.game import TacticalAgent  # noqa: E402
 
 # --- fixed topology (canonical_1): sorted for a stable id->index encoding -------
-from engine.world import load_canonical_map
+from engine.world import load_canonical_map  # noqa: E402
 
 _MAP = load_canonical_map()
 ROOMS: tuple[str, ...] = tuple(sorted(_MAP.rooms.keys()))
@@ -199,12 +215,26 @@ def replay_rows(path: Path):
 
 
 def count_kills(path: Path) -> int:
-    n = 0
-    for row in replay_rows(path):
-        for a in row.get("actions", []):
-            if a.get("type") == "kill":
-                n += 1
-    return n
+    """RESOLVED kills only (Comment 3). Replay tick rows record SUBMITTED kill
+    intents even when ``advance_tick`` rejects them (e.g. the target moved earlier
+    the same tick), so scanning raw ``kill`` actions overcounts and rewards failed
+    attempts. A resolved kill removes its victim, who then never acts again — count
+    distinct kill-targets whose last recorded action is at/before the kill tick."""
+    rows = replay_rows(path)
+    last_act: dict[str, int] = {}
+    for row in rows:
+        if row.get("kind") == "tick":
+            for a in row.get("actions", []):
+                last_act[a["actor"]] = row["tick"]
+    killed: set[str] = set()
+    for row in rows:
+        if row.get("kind") == "tick":
+            for a in row.get("actions", []):
+                if a.get("type") == "kill":
+                    tgt = a["payload"]["target"]
+                    if last_act.get(tgt, -1) <= row["tick"]:
+                        killed.add(tgt)
+    return len(killed)
 
 
 def state_hashes(path: Path) -> list[str]:

@@ -12,22 +12,70 @@ Three things the spike's Check 1 did NOT cover:
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import struct
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "experiments/lab")
+sys.path.insert(
+    0, str(Path(__file__).resolve().parents[1])
+)  # experiments/lab (Comment 4)
 from ml_spike import core  # noqa: E402
 
-TMP = Path(os.environ["CLAUDE_JOB_DIR"]) / "tmp" / "fo4"
+TMP = core.tmp("fo4")
 SEEDS = list(range(6))
+
+# Augmented MLP: ENC_DIM + 1 inputs so the memory feature actually drives the
+# action (Comment 5), not just the logged hash.
+AUG_ENC = core.ENC_DIM + 1
+AUG_LEN = AUG_ENC * core.HID + core.HID + core.HID * core.OUT + core.OUT
 
 
 def _logit_hash(vec, logits) -> str:
     b = b"".join(struct.pack("<d", x) for x in vec) + b"|"
     b += b"".join(struct.pack("<d", x) for x in logits)
     return hashlib.sha256(b).hexdigest()[:16]
+
+
+def _aug_forward(genome, x):
+    """tanh-hidden MLP over AUG_ENC inputs (mirrors core.mlp_forward, +1 input)."""
+    o1 = AUG_ENC * core.HID
+    o2 = o1 + core.HID
+    o3 = o2 + core.HID * core.OUT
+    hidden = [0.0] * core.HID
+    for j in range(core.HID):
+        s = genome[o1 + j]
+        base = j * AUG_ENC
+        for i in range(AUG_ENC):
+            s += genome[base + i] * x[i]
+        hidden[j] = math.tanh(s)
+    out = [0.0] * core.OUT
+    for k in range(core.OUT):
+        s = genome[o3 + k]
+        base = o2 + k * core.HID
+        for j in range(core.HID):
+            s += genome[base + j] * hidden[j]
+        out[k] = s
+    return out
+
+
+def _aug_vec(packet, visited_frac):
+    return core.encode(packet) + [visited_frac]
+
+
+def _aug_pick(genome, packet, visited_frac):
+    room = packet.self_state.room
+    cands = core._legal_rooms(room)
+    if len(cands) == 1:
+        return room
+    out = _aug_forward(genome, _aug_vec(packet, visited_frac))
+    best, best_key = room, None
+    for c in sorted(cands):
+        key = (out[core._ROOM_IX[c]], c)
+        if best_key is None or key > best_key:
+            best_key, best = key, c
+    return best
 
 
 class StatefulAgent(core.SpikeAgent):
@@ -46,10 +94,12 @@ class StatefulAgent(core.SpikeAgent):
         from observation.action_intent import MoveIntent, WaitIntent
 
         if isinstance(action, (MoveIntent, WaitIntent)) and self._genome is not None:
-            vec = core.encode(packet) + [len(self._visited) / float(core.R)]
-            logits = core.mlp_forward(self._genome, vec[: core.ENC_DIM])
+            visited_frac = len(self._visited) / float(core.R)
+            vec = _aug_vec(packet, visited_frac)
+            logits = _aug_forward(self._genome, vec)
             self._sink.append(_logit_hash(vec, logits))
-            room = core.mlp_pick_room(self._genome, packet)
+            # the memory feature drives the ACTION, not just the hash (Comment 5)
+            room = _aug_pick(self._genome, packet, visited_frac)
             if room == packet.self_state.room:
                 return WaitIntent(actor=self._aid, type="wait")
             return MoveIntent(actor=self._aid, type="move", payload={"to_room": room})
@@ -88,14 +138,18 @@ def run_stateful(seeds, out, genome, sink):
 
 
 def main() -> int:
-    g = core.random_genome(7)
+    import random
+
+    # augmented genome (memory feature in the action loop) for the stateful test
+    g_aug = [random.Random(7).gauss(0.0, 0.5) for _ in range(AUG_LEN)]
+    g = core.random_genome(7)  # core (memoryless) genome for the numpy backend leg
     print("=== FO-4 — determinism at scale ===")
 
     # (1)+(2) stateful encoder, two runs, compare replay bytes AND per-decision hashes
     sa: list[str] = []
     sb: list[str] = []
-    run_stateful(SEEDS, TMP / "sa", g, sa)
-    run_stateful(SEEDS, TMP / "sb", g, sb)
+    run_stateful(SEEDS, TMP / "sa", g_aug, sa)
+    run_stateful(SEEDS, TMP / "sb", g_aug, sb)
     byte_ok = all(
         (TMP / "sa" / f"replay-seed-{s}.jsonl").read_bytes()
         == (TMP / "sb" / f"replay-seed-{s}.jsonl").read_bytes()
@@ -110,10 +164,13 @@ def main() -> int:
     try:
         import numpy as np
     except ModuleNotFoundError:
+        # SKIP is not a PASS (Comment 6): exit non-zero so a numpy-less rerun cannot
+        # look green while omitting the numpy determinism leg the report cites.
         print(
-            "numpy not importable in this interpreter — rerun with `uv run --with numpy`"
+            "SKIPPED numpy backend leg — numpy not installed. Rerun with "
+            "`uv run --with numpy python experiments/lab/ml_spike/fo4_determinism_scale.py`"
         )
-        return 0
+        return 2
 
     o1 = core.ENC_DIM * core.HID
     o2 = o1 + core.HID
