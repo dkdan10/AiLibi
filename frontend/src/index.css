@@ -61,7 +61,8 @@
   --radius-xl: 20px;
   --radius-pill: 999px;
 
-  /* spacing scale (px) */
+  /* spacing — base unit drives Tailwind's numeric scale; --space-* = exact-px stops */
+  --spacing: 0.25rem;
   --space-0: 4px;
   --space-1: 8px;
   --space-2: 12px;

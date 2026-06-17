@@ -71,7 +71,19 @@ function buildThemeBody(): string {
   }
   push();
 
-  push("  /* spacing scale (px) */");
+  // Tailwind v4 derives every numeric spacing/sizing utility (`p-4`, `gap-2`,
+  // `w-8`, …) from the base `--spacing`, so emit it from the token unit
+  // (`space[0]`) — that is what makes the scale token-driven rather than the
+  // framework default. Expressed in rem (÷16) to keep Tailwind's rem semantics
+  // (respects user zoom); the seed's px stops [4,8,12,16,24,32,48] then land on
+  // p-1/2/3/4/6/8/12. The named `--space-*` px vars stay for exact `var()` /
+  // Pixi use (the canvas needs px numbers).
+  const firstSpace = tokens.space[0];
+  if (firstSpace === undefined) {
+    throw new Error("gen-tokens-css: tokens.space is empty");
+  }
+  push("  /* spacing — base unit drives Tailwind's numeric scale; --space-* = exact-px stops */");
+  push(`  --spacing: ${firstSpace / 16}rem;`);
   tokens.space.forEach((value, i) => push(`  --space-${i}: ${value}px;`));
   push();
 
