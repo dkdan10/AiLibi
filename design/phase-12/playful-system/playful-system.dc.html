@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;}
+body{margin:0;background:#FBF4E6;}
+@keyframes killpulse{0%,100%{opacity:.25}50%{opacity:.95}}
+@keyframes ventflow{to{stroke-dashoffset:-150}}
+@media (prefers-reduced-motion: reduce){*{animation:none !important}}
+</style>
+</helmet>
+
+<div style="padding:46px 40px 100px;font-family:'Fredoka',sans-serif;color:#1B1814;max-width:1400px;margin:0 auto;">
+
+  <!-- ============ MASTHEAD ============ -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:30px;flex-wrap:wrap;margin-bottom:14px;">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:17px;height:17px;border-radius:5px;background:#16AEC2;border:2.5px solid #1B1814;"></div>
+        <span style="font:700 11px/1 'Space Mono',monospace;letter-spacing:0.18em;color:#6E6556;">AILIBI · DESIGN SYSTEM</span>
+        <span style="font:700 10px/1 'Space Mono',monospace;letter-spacing:0.06em;color:#FBF4E6;background:#1B1814;padding:5px 9px;border-radius:6px;">v0.1 SEED</span>
+      </div>
+      <h1 style="font:600 38px/1.05 'Fredoka',sans-serif;margin:0 0 8px;letter-spacing:-0.01em;">Direction 03 — Playful <span style="color:#3FA66B;">·</span> <span style="font-size:24px;color:#6E6556;">locked</span></h1>
+      <p style="font:400 15px/1.5 'Fredoka',sans-serif;color:#443D34;max-width:620px;margin:0;">Cream + ink chunky-sticker chrome over restrained data surfaces. Fredoka for voice, Space&nbsp;Mono for every tick, id &amp; number. One scene throughout: the tick-315 meeting where p-3 accuses p-5.</p>
+    </div>
+    <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:14px;box-shadow:5px 5px 0 #1B1814;padding:15px 17px;max-width:340px;">
+      <div style="font:700 10px/1 'Space Mono',monospace;letter-spacing:0.1em;color:#6E6556;margin-bottom:9px;">THE TWO-TRUTH GRAMMAR</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:9px;"><span style="width:18px;height:18px;border-radius:50%;background:#6C5CE0;border:2px solid #1B1814;flex:none;"></span><span style="font:400 12.5px/1.25 'Fredoka',sans-serif;"><b>Ground truth</b> — solid fill, ink outline, authoritative.</span></div>
+        <div style="display:flex;align-items:center;gap:9px;"><span style="width:18px;height:18px;border-radius:50%;background:none;border:2px dashed #8350D6;flex:none;"></span><span style="font:400 12.5px/1.25 'Fredoka',sans-serif;"><b>Belief</b> — ghosted, dashed, always attributed (“p-3 believes…”).</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SECTION: FOUNDATIONS ============ -->
+  <div style="display:flex;align-items:center;gap:12px;margin:40px 0 16px;">
+    <span style="font:700 12px/1 'Space Mono',monospace;letter-spacing:0.16em;color:#1B1814;background:#FFD98A;border:2px solid #1B1814;border-radius:7px;padding:6px 10px;">01 · FOUNDATIONS</span>
+    <div style="flex:1;height:2px;background:#E2D8C3;"></div>
+  </div>
+
+  <!-- COLOR: neutrals -->
+  <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:16px;box-shadow:5px 5px 0 #1B1814;overflow:hidden;margin-bottom:22px;">
+    <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;font:600 15px/1 'Fredoka',sans-serif;">Paper &amp; ink — neutral ramp</div>
+    <div style="padding:18px;display:flex;flex-wrap:wrap;gap:14px;">
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <div style="display:flex;border:1.5px solid #C9BFA8;border-radius:8px;overflow:hidden;">
+          <div style="width:74px;height:54px;background:#FFFDF8;"></div><div style="width:74px;height:54px;background:#FBF4E6;"></div><div style="width:74px;height:54px;background:#F4EAD6;"></div><div style="width:74px;height:54px;background:#EBDFC8;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font:400 9px/1 'Space Mono',monospace;color:#6E6556;"><span>paper-0</span><span>1</span><span>2</span><span>3</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <div style="display:flex;border:1.5px solid #C9BFA8;border-radius:8px;overflow:hidden;">
+          <div style="width:60px;height:54px;background:#1B1814;"></div><div style="width:60px;height:54px;background:#443D34;"></div><div style="width:60px;height:54px;background:#6E6556;"></div><div style="width:60px;height:54px;background:#8A8170;"></div><div style="width:60px;height:54px;background:#A89E8A;"></div><div style="width:60px;height:54px;background:#C9BFA8;"></div><div style="width:60px;height:54px;background:#E2D8C3;"></div>
+        </div>
+        <div style="font:400 9px/1 'Space Mono',monospace;color:#6E6556;">ink 900 · 700 · 500 · 400 · 300 · 200 · 100</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLOR: semantic channels -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-bottom:22px;">
+    <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:16px;box-shadow:5px 5px 0 #1B1814;overflow:hidden;">
+      <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;font:600 15px/1 'Fredoka',sans-serif;">Reserved meaning channels</div>
+      <div style="padding:18px;display:flex;flex-direction:column;gap:16px;">
+        <div>
+          <div style="font:700 10px/1 'Space Mono',monospace;letter-spacing:0.08em;color:#6E6556;margin-bottom:7px;">SUSPICION — sequential heat · amber only</div>
+          <div style="display:flex;align-items:center;gap:10px;"><div style="display:flex;border:1.5px solid #1B1814;border-radius:7px;overflow:hidden;flex:1;"><div style="flex:1;height:30px;background:#FBE6AE;"></div><div style="flex:1;height:30px;background:#F6C75A;"></div><div style="flex:1;height:30px;background:#EF9D33;"></div><div style="flex:1;height:30px;background:#DE6A24;"></div><div style="flex:1;height:30px;background:#C24A16;"></div></div></div>
+          <div style="display:flex;gap:6px;margin-top:6px;"><span style="font:700 9px/1 'Space Mono',monospace;color:#1B1814;background:#F6C75A;border:1.5px solid #1B1814;border-radius:5px;padding:3px 6px;">LOW ≤35</span><span style="font:700 9px/1 'Space Mono',monospace;color:#1B1814;background:#EF9D33;border:1.5px solid #1B1814;border-radius:5px;padding:3px 6px;">MED 35–72</span><span style="font:700 9px/1 'Space Mono',monospace;color:#FFFDF8;background:#DE6A24;border:1.5px solid #1B1814;border-radius:5px;padding:3px 6px;">HIGH &gt;72</span></div>
+        </div>
+        <div>
+          <div style="font:700 10px/1 'Space Mono',monospace;letter-spacing:0.08em;color:#6E6556;margin-bottom:7px;">TRUST ↔ DISTRUST — diverging</div>
+          <div style="display:flex;align-items:center;gap:8px;"><span style="font:700 10px/1 'Space Mono',monospace;color:#2563D9;">trust</span><div style="flex:1;height:18px;border:1.5px solid #1B1814;border-radius:5px;background:linear-gradient(90deg,#2563D9,#5B8CE8 38%,#C9BFA8 50%,#EFA24E 62%,#E07A1E);"></div><span style="font:700 10px/1 'Space Mono',monospace;color:#E07A1E;">distrust</span></div>
+          <div style="font:400 10px/1.3 'Space Mono',monospace;color:#8A8170;margin-top:5px;">#2563D9 ←→ #E07A1E · colorblind-safe · never red/green</div>
+        </div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;">
+          <div><div style="font:700 10px/1 'Space Mono',monospace;color:#6E6556;margin-bottom:6px;">KILL — red, reserved</div><div style="display:flex;align-items:center;gap:7px;"><span style="width:20px;height:20px;border-radius:5px;background:#E23B2F;border:2px solid #1B1814;"></span><span style="font:400 11px 'Space Mono',monospace;color:#443D34;">#E23B2F · only ever death</span></div></div>
+          <div><div style="font:700 10px/1 'Space Mono',monospace;color:#6E6556;margin-bottom:6px;">CONTRADICTION / ERROR — fuchsia</div><div style="display:flex;align-items:center;gap:7px;"><span style="width:20px;height:20px;border-radius:5px;background:#D6249E;border:2px solid #1B1814;"></span><span style="font:400 11px 'Space Mono',monospace;color:#443D34;">#D6249E · lie / mismatch</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATUS + TRUTH PAIR -->
+    <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:16px;box-shadow:5px 5px 0 #1B1814;overflow:hidden;">
+      <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;font:600 15px/1 'Fredoka',sans-serif;">Status — never hue-only</div>
+      <div style="padding:18px;display:flex;flex-direction:column;gap:11px;">
+        {{ statusRow }}
+      </div>
+    </div>
+  </div>
+
+  <!-- IDENTITY palette -->
+  <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:16px;box-shadow:5px 5px 0 #1B1814;overflow:hidden;margin-bottom:22px;">
+    <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font:600 15px/1 'Fredoka',sans-serif;">Identity palette — identity <i>only</i></span>
+      <span style="font:400 11px/1.3 'Space Mono',monospace;color:#8A8170;">greens · teals · purples — disjoint from amber / blue / red / fuchsia</span>
+    </div>
+    <div style="padding:18px;">
+      <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:12px;">{{ identityChips }}</div>
+      <div style="margin-top:13px;font:400 11.5px/1.4 'Fredoka',sans-serif;color:#6E6556;">Hue never encodes role or guilt. Every token also carries its <span style="font-family:'Space Mono',monospace;">p-#</span> label, so identity is legible in greyscale and for colourblind viewers.</div>
+    </div>
+  </div>
+
+  <!-- TYPE + SPACE/RADII/ELEV + MOTION -->
+  <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:22px;margin-bottom:22px;">
+    <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:16px;box-shadow:5px 5px 0 #1B1814;overflow:hidden;">
+      <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;font:600 15px/1 'Fredoka',sans-serif;">Type scale</div>
+      <div style="padding:18px;display:flex;flex-direction:column;gap:13px;">
+        <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid #EBDFC8;padding-bottom:11px;"><span style="font:600 34px/1 'Fredoka',sans-serif;">Display</span><span style="font:400 10px 'Space Mono',monospace;color:#8A8170;">Fredoka 600 · 34/1.1</span></div>
+        <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid #EBDFC8;padding-bottom:11px;"><span style="font:600 20px/1 'Fredoka',sans-serif;">Title — meeting at tick 315</span><span style="font:400 10px 'Space Mono',monospace;color:#8A8170;">Fredoka 600 · 20</span></div>
+        <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid #EBDFC8;padding-bottom:11px;"><span style="font:400 14px/1 'Fredoka',sans-serif;">Body — “I saw p-5 head toward Reactor.”</span><span style="font:400 10px 'Space Mono',monospace;color:#8A8170;">Fredoka 400 · 14/1.45</span></div>
+        <div style="display:flex;align-items:baseline;gap:14px;"><span style="font:700 13px/1 'Space Mono',monospace;">p-5 · t312 · susp .78 · 0x4F</span><span style="font:400 10px 'Space Mono',monospace;color:#8A8170;">Space Mono · ticks / ids / numbers</span></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:22px;">
+      <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:16px;box-shadow:5px 5px 0 #1B1814;overflow:hidden;">
+        <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;font:600 15px/1 'Fredoka',sans-serif;">Spacing · radii · elevation</div>
+        <div style="padding:16px 18px;display:flex;flex-direction:column;gap:13px;">
+          <div style="display:flex;align-items:flex-end;gap:6px;">{{ spacingBars }}</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:34px;height:34px;background:#EBDFC8;border:1.5px solid #1B1814;border-radius:6px;"></div>
+            <div style="width:34px;height:34px;background:#EBDFC8;border:1.5px solid #1B1814;border-radius:10px;"></div>
+            <div style="width:34px;height:34px;background:#EBDFC8;border:1.5px solid #1B1814;border-radius:14px;"></div>
+            <div style="width:34px;height:34px;background:#EBDFC8;border:1.5px solid #1B1814;border-radius:20px;"></div>
+            <span style="font:400 10px 'Space Mono',monospace;color:#8A8170;">r 6·10·14·20 / pill</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;">
+            <div style="width:44px;height:30px;background:#FFFDF8;border:2px solid #1B1814;border-radius:8px;box-shadow:3px 3px 0 #1B1814;"></div>
+            <span style="font:400 10px/1.4 'Space Mono',monospace;color:#6E6556;">chrome only:<br>3px / 6px hard ink</span>
+            <div style="width:44px;height:30px;background:#FFFDF8;border:1px solid #C9BFA8;border-radius:6px;"></div>
+            <span style="font:400 10px/1.4 'Space Mono',monospace;color:#6E6556;">data:<br>1px hairline</span>
+          </div>
+        </div>
+      </div>
+      <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:16px;box-shadow:5px 5px 0 #1B1814;overflow:hidden;">
+        <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;font:600 15px/1 'Fredoka',sans-serif;">Motion — purposeful only</div>
+        <div style="padding:14px 18px;font:400 11.5px/1.7 'Space Mono',monospace;color:#443D34;">quick 120 · base 200 · slow 360<br>chrome: cubic-bezier(.34,1.4,.64,1)<br>data: ease-out, no bounce<br><span style="color:#8A8170;">token-move · vent-dive · kill-flash · link-draw · ✦ reduced-motion disables all</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- tokens.ts panel -->
+  <div style="background:#1B1814;border:2.5px solid #1B1814;border-radius:16px;box-shadow:5px 5px 0 #443D34;overflow:hidden;margin-bottom:8px;">
+    <div style="padding:11px 18px;border-bottom:1px solid #443D34;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font:700 11px/1 'Space Mono',monospace;letter-spacing:0.1em;color:#FFD98A;">tokens.ts</span>
+      <span style="font:400 10px/1 'Space Mono',monospace;color:#8A8170;">copy-ready semantic tokens</span>
+    </div>
+    <pre style="margin:0;padding:18px;overflow-x:auto;font:400 11.5px/1.65 'Space Mono',monospace;color:#E2D8C3;">{{ tokensTs }}</pre>
+  </div>
+
+  <!-- ============ SECTION: MAP ============ -->
+  <div style="display:flex;align-items:center;gap:12px;margin:42px 0 16px;">
+    <span style="font:700 12px/1 'Space Mono',monospace;letter-spacing:0.16em;color:#1B1814;background:#FFD98A;border:2px solid #1B1814;border-radius:7px;padding:6px 10px;">02 · MAP — canonical_1</span>
+    <div style="flex:1;height:2px;background:#E2D8C3;"></div>
+  </div>
+  <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:18px;box-shadow:6px 6px 0 #1B1814;overflow:hidden;margin-bottom:22px;">
+    <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font:600 15px/1 'Fredoka',sans-serif;">Restyled floorplan — 10 rooms · 11 corridors · 6-vent ring</span>
+      <span style="font:700 11px/1 'Space Mono',monospace;color:#E23B2F;">● kill @ Reactor t312 · vent → Storage</span>
+    </div>
+    <div style="padding:20px 22px 14px;">{{ mapHero }}</div>
+  </div>
+
+  <!-- ============ SECTION: TWO-TRUTH ============ -->
+  <div style="display:flex;align-items:center;gap:12px;margin:42px 0 16px;">
+    <span style="font:700 12px/1 'Space Mono',monospace;letter-spacing:0.16em;color:#1B1814;background:#FFD98A;border:2px solid #1B1814;border-radius:7px;padding:6px 10px;">03 · TWO TRUTHS</span>
+    <div style="flex:1;height:2px;background:#E2D8C3;"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-bottom:22px;">
+    <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:18px;box-shadow:6px 6px 0 #1B1814;overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:2px solid #1B1814;background:#D7F0F4;display:flex;align-items:center;gap:9px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1814" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        <div><div style="font:600 14px/1 'Fredoka',sans-serif;">Omniscient</div><div style="font:400 11px/1 'Space Mono',monospace;color:#6E6556;">spectator sees everything</div></div>
+      </div>
+      <div style="padding:14px 14px 6px;">{{ mapOmni }}</div>
+      <div style="padding:4px 16px 15px;font:400 12px/1.45 'Fredoka',sans-serif;color:#443D34;">Vents drawn, p-5’s dive shown, <b>impostor daggers</b> on p-2 &amp; p-5, the body marked, kill-flash live. p-5’s alibi is stamped <span style="font:700 9px 'Space Mono',monospace;color:#fff;background:#E23B2F;border:1.5px solid #1B1814;padding:2px 5px;border-radius:4px;">FABRICATED</span>.</div>
+    </div>
+    <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:18px;box-shadow:6px 6px 0 #1B1814;overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:2px solid #1B1814;background:#FFF1D6;display:flex;align-items:center;gap:9px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B1814" stroke-width="2"><path d="M17.94 17.94A10 10 0 0 1 12 20C5 20 1 13 1 13a18 18 0 0 1 5.06-5.94M9.9 4.24A9 9 0 0 1 12 4c7 0 11 7 11 7a18 18 0 0 1-2.16 3.19M1 1l22 22"/></svg>
+        <div><div style="font:600 14px/1 'Fredoka',sans-serif;">As-agent — p-3</div><div style="font:400 11px/1 'Space Mono',monospace;color:#6E6556;">fog of war · default</div></div>
+      </div>
+      <div style="padding:14px 14px 6px;">{{ mapFog }}</div>
+      <div style="padding:4px 16px 15px;font:400 12px/1.45 'Fredoka',sans-serif;color:#443D34;">Unseen rooms fog over, the vent ring &amp; daggers vanish. p-5 shows as a <b>ghosted belief</b> (last seen → Reactor); the alibi reads <span style="font:700 9px 'Space Mono',monospace;color:#6E6556;border:1.5px dashed #A89E8A;padding:2px 5px;border-radius:4px;">UNVERIFIED</span>, not fabricated.</div>
+    </div>
+  </div>
+
+  <!-- ============ SECTION: MATRIX ============ -->
+  <div style="display:flex;align-items:center;gap:12px;margin:42px 0 16px;">
+    <span style="font:700 12px/1 'Space Mono',monospace;letter-spacing:0.16em;color:#1B1814;background:#FFD98A;border:2px solid #1B1814;border-radius:7px;padding:6px 10px;">04 · BELIEF × TRUTH</span>
+    <div style="flex:1;height:2px;background:#E2D8C3;"></div>
+  </div>
+  <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:18px;box-shadow:6px 6px 0 #1B1814;overflow:hidden;margin-bottom:22px;">
+    <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;">
+      <div><div style="font:600 15px/1 'Fredoka',sans-serif;">9×9 suspicion matrix</div><div style="font:400 11px/1.3 'Space Mono',monospace;color:#6E6556;margin-top:3px;">rows = believer · columns = subject</div></div>
+      {{ matrixToggle }}
+    </div>
+    <div style="padding:20px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
+      <div>{{ matrix }}</div>
+      <div style="flex:1;min-width:220px;max-width:300px;">{{ matrixLegend }}</div>
+    </div>
+  </div>
+
+  <!-- ============ SECTION: MEETING ============ -->
+  <div style="display:flex;align-items:center;gap:12px;margin:42px 0 16px;">
+    <span style="font:700 12px/1 'Space Mono',monospace;letter-spacing:0.16em;color:#1B1814;background:#FFD98A;border:2px solid #1B1814;border-radius:7px;padding:6px 10px;">05 · MEETING · t315</span>
+    <div style="flex:1;height:2px;background:#E2D8C3;"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:22px;">
+    <!-- transcript + accusation chain + contradictions -->
+    <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:18px;box-shadow:6px 6px 0 #1B1814;overflow:hidden;">
+      <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;font:600 15px/1 'Fredoka',sans-serif;">Accusation chain &amp; transcript</div>
+      <div style="padding:16px 18px;">{{ accusationChain }}</div>
+      <div style="padding:2px 18px 18px;display:flex;flex-direction:column;gap:1px;">{{ transcript }}</div>
+    </div>
+    <!-- ballots + verdict -->
+    <div style="display:flex;flex-direction:column;gap:22px;">
+      <div style="background:#FFFDF8;border:2.5px solid #1B1814;border-radius:18px;box-shadow:6px 6px 0 #1B1814;overflow:hidden;">
+        <div style="padding:13px 18px;border-bottom:2px solid #1B1814;background:#FFF1D6;font:600 15px/1 'Fredoka',sans-serif;">Ballots</div>
+        <div style="padding:14px 18px;">{{ ballots }}</div>
+      </div>
+      {{ verdict }}
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1480,&quot;height&quot;:4200},&quot;impostorReveal&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;motionEnabled&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { matrixLayer: 'belief' };
+
+  // ---- canonical_1 geometry (fixed) ----
+  ROOMS = [
+    { id:'cafeteria',  name:'Cafeteria',    sub:'meeting · hub',    x:560, y:56,  w:224, h:140, kind:'hub'  },
+    { id:'upper',      name:'Upper Hall',   sub:'hallway',          x:588, y:224, w:168, h:56,  kind:'hall' },
+    { id:'admin',      name:'Admin',        sub:'task',             x:560, y:308, w:224, h:112, kind:'task' },
+    { id:'easthall',   name:'East Hallway', sub:'',                 x:840, y:168, w:56,  h:196, kind:'hall', vert:true },
+    { id:'engineering',name:'Engineering',  sub:'task',             x:952, y:196, w:196, h:140, kind:'task' },
+    { id:'reactor',    name:'Reactor',      sub:'task · dead-end',  x:1204,y:224, w:140, h:112, kind:'task' },
+    { id:'storage',    name:'Storage',      sub:'utility',          x:952, y:364, w:196, h:84,  kind:'util' },
+    { id:'westhall',   name:'West Hallway', sub:'',                 x:476, y:168, w:56,  h:196, kind:'hall', vert:true },
+    { id:'medbay',     name:'MedBay',       sub:'task',             x:252, y:196, w:196, h:140, kind:'task' },
+    { id:'labs',       name:'Labs',         sub:'task · dead-end',  x:56,  y:224, w:140, h:112, kind:'task' }
+  ];
+  CORR = [[672,126,672,252],[672,252,672,364],[672,126,868,266],[868,266,1050,266],[672,364,868,266],[1050,266,1274,280],[1050,266,1050,406],[672,126,504,266],[504,266,350,266],[672,364,504,266],[350,266,126,280]];
+  VENTS = [[672,364,350,266],[672,364,1274,280],[1050,266,126,280],[1050,266,1050,406],[126,280,350,266],[1274,280,1050,406]];
+  PLAYERS = [
+    { id:'p-0', roomId:'cafeteria',   alive:true,  impostor:false },
+    { id:'p-1', roomId:'medbay',      alive:true,  impostor:false },
+    { id:'p-2', roomId:'engineering', alive:true,  impostor:true  },
+    { id:'p-3', roomId:'easthall',    alive:true,  impostor:false },
+    { id:'p-4', roomId:'admin',       alive:true,  impostor:false },
+    { id:'p-5', roomId:'storage',     alive:true,  impostor:true, beliefRoom:'reactor' },
+    { id:'p-6', roomId:'cafeteria',   alive:true,  impostor:false },
+    { id:'p-7', roomId:'reactor',     alive:false, impostor:false },
+    { id:'p-8', roomId:'labs',        alive:true,  impostor:false }
+  ];
+  // identity palette — greens / teals / purples (disjoint from amber/blue/red/fuchsia)
+  ID = ['#5DA83A','#2BA45E','#14A06E','#0E9C93','#128F9E','#6C5CE0','#8350D6','#9A4FCB','#A94FC6'];
+  IMP = new Set([2,5]);
+
+  E(tag, p, ...k){ return React.createElement(tag, p, ...k.flat().filter(x => x !== false && x != null && x !== '')); }
+
+  // ---------- MAP ----------
+  renderMap(mode, big) {
+    const E = this.E.bind(this);
+    const mot = (this.props.motionEnabled ?? true);
+    const by = Object.fromEntries(this.ROOMS.map(r => [r.id, r]));
+    const agent = mode === 'agent';
+    const vis = new Set(['easthall','cafeteria','engineering','admin']);
+    const isVis = id => !agent || vis.has(id);
+    const cx = r => r.x + r.w/2, cy = r => r.y + r.h/2;
+    const INK='#1B1814', SUB='#857c6a';
+    const els = [];
+    els.push(E('defs', { key:'d' },
+      E('pattern', { id:'fog'+(big?'B':'S'), width:9, height:9, patternUnits:'userSpaceOnUse', patternTransform:'rotate(45)' },
+        E('rect',{width:9,height:9,fill:'#EFE7D6'}), E('line',{x1:0,y1:0,x2:0,y2:9,stroke:'#CFC4AD',strokeWidth:1.4}))));
+    this.CORR.forEach((c,i)=>els.push(E('line',{key:'c'+i,x1:c[0],y1:c[1],x2:c[2],y2:c[3],stroke:INK,strokeWidth:7,strokeLinecap:'round'})));
+    if(!agent) this.VENTS.forEach((v,i)=>els.push(E('line',{key:'v'+i,x1:v[0],y1:v[1],x2:v[2],y2:v[3],stroke:'#6E6556',strokeWidth:2.4,strokeDasharray:'2 9',strokeLinecap:'round'})));
+    this.ROOMS.forEach(r=>{
+      const v=isVis(r.id);
+      els.push(E('g',{key:'r'+r.id},
+        E('rect',{x:r.x,y:r.y,width:r.w,height:r.h,rx:14,fill:v?(r.kind==='hub'?'#FFF1D6':r.kind==='hall'?'#FBF4E6':'#FFFDF8'):('url(#fog'+(big?'B':'S')+')'),stroke:v?INK:'#A89E8A',strokeWidth:v?(r.kind==='hub'?2.6:2.2):2}),
+        v&&r.vert?E('text',{x:cx(r),y:cy(r),fill:INK,fontSize:13,fontWeight:600,fontFamily:"'Fredoka',sans-serif",textAnchor:'middle',dominantBaseline:'central',transform:`rotate(-90 ${cx(r)} ${cy(r)})`},r.name):null,
+        v&&!r.vert?E('text',{x:cx(r),y:r.y+25,fill:INK,fontSize:15,fontWeight:600,fontFamily:"'Fredoka',sans-serif",textAnchor:'middle'},r.name):null,
+        v&&!r.vert&&r.sub?E('text',{x:cx(r),y:r.y+41,fill:SUB,fontSize:10,fontFamily:"'Space Mono',monospace",textAnchor:'middle'},r.sub):null,
+        !v?E('text',{x:cx(r),y:cy(r)+4,fill:'#A89E8A',fontSize:11,fontFamily:"'Space Mono',monospace",textAnchor:'middle',letterSpacing:'0.12em'},'FOG'):null));
+    });
+    const reactor=by['reactor'], storage=by['storage'];
+    if(!agent){
+      els.push(E('rect',{key:'kf',x:reactor.x-4,y:reactor.y-4,width:reactor.w+8,height:reactor.h+8,rx:17,fill:'none',stroke:'#E23B2F',strokeWidth:2.8,opacity:.85,style:mot?{animation:'killpulse 2.6s ease-in-out infinite'}:{}}));
+      els.push(E('line',{key:'dv',x1:cx(reactor),y1:cy(reactor),x2:cx(storage),y2:cy(storage),stroke:'#6E6556',strokeWidth:3,strokeDasharray:'2 11',strokeLinecap:'round',style:mot?{animation:'ventflow 1.7s linear infinite'}:{}}));
+    }
+    const off={'p-0':[-26,0],'p-6':[26,0]};
+    const shown=[];
+    this.PLAYERS.forEach(p=>{
+      const rv=isVis(p.roomId);
+      if(agent&&!rv){
+        if(p.id==='p-5') shown.push({p,px:cx(reactor)-20,py:cy(reactor),ghost:true,belief:true});
+        else if(p.id==='p-7') shown.push({p,px:cx(reactor)+20,py:cy(reactor),ghost:true,body:true});
+        return;
+      }
+      const r=by[p.roomId],o=off[p.id]||[0,0];
+      shown.push({p,px:cx(r)+o[0],py:cy(r)+o[1],ghost:false});
+    });
+    shown.forEach(({p,px,py,ghost,belief,body})=>{
+      const idx=+p.id.split('-')[1], col=this.ID[idx], dead=p.alive===false, k=[];
+      if(dead){
+        k.push(E('circle',{cx:px,cy:py,r:15,fill:'#E7DFCF',stroke:'#443D34',strokeWidth:2,strokeDasharray:ghost?'4 3':'',opacity:ghost?.6:1}));
+        k.push(E('path',{d:`M ${px-5} ${py-5} L ${px+5} ${py+5} M ${px+5} ${py-5} L ${px-5} ${py+5}`,stroke:'#443D34',strokeWidth:2.2,strokeLinecap:'round',opacity:ghost?.6:1}));
+        k.push(E('text',{x:px,y:py+30,fill:SUB,fontSize:9,fontFamily:"'Space Mono',monospace",fontWeight:700,textAnchor:'middle',letterSpacing:'0.08em'},body?'BODY · p-7':'p-7'));
+      } else {
+        k.push(E('circle',{cx:px,cy:py,r:15,fill:ghost?'none':col,stroke:ghost?col:INK,strokeWidth:2.2,strokeDasharray:ghost?'4 4':'',opacity:ghost?.9:1}));
+        k.push(E('text',{x:px,y:py+4,fill:ghost?col:'#FFFDF8',fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",textAnchor:'middle'},ghost?p.id+'?':p.id));
+        if(belief) k.push(E('text',{x:px,y:py+30,fill:SUB,fontSize:9,fontFamily:"'Space Mono',monospace",textAnchor:'middle'},'last seen → here'));
+      }
+      const reveal=(this.props.impostorReveal ?? true)&&!agent;
+      if(reveal&&p.impostor){
+        const bx=px+13,by2=py-13;
+        k.push(E('circle',{cx:bx,cy:by2,r:7.5,fill:INK,stroke:'#FFFDF8',strokeWidth:1.6}));
+        k.push(E('path',{d:`M ${bx} ${by2-4.4} L ${bx+1.5} ${by2-1} L ${bx+1.5} ${by2+1.4} L ${bx+3.1} ${by2+1.4} L ${bx} ${by2+4.8} L ${bx-3.1} ${by2+1.4} L ${bx-1.5} ${by2+1.4} L ${bx-1.5} ${by2-1} Z`,fill:'#FFFDF8'}));
+      }
+      els.push(E('g',{key:'pl'+p.id},k));
+    });
+    return E('svg',{viewBox:'0 44 1400 420',style:{width:'100%',height:'auto',display:'block',overflow:'visible'}},els);
+  }
+
+  // ---------- MATRIX ----------
+  genMatrix(){
+    if(this._M) return this._M;
+    const base=[0.15,0.20,0.26,0.10,0.40,0.78,0.33,0.00,0.28];
+    const ov={'3-5':0.93,'3-2':0.34,'5-8':0.62,'5-3':0.41,'5-0':0.30,'2-8':0.58,'2-5':0.55,'2-4':0.30,'4-3':0.70,'6-2':0.06,'0-5':0.66,'1-5':0.58,'6-5':0.72,'8-5':0.60,'8-2':0.12};
+    const noBelief=new Set(['1-8','8-1','0-6','6-0','1-4','4-1','8-4']);
+    const M=[];
+    for(let i=0;i<9;i++){ M[i]=[]; for(let j=0;j<9;j++){
+      if(i===j){M[i][j]={kind:'self'};continue;}
+      if(i===7||j===7){M[i][j]={kind:'dead'};continue;}
+      if(noBelief.has(i+'-'+j)){M[i][j]={kind:'none'};continue;}
+      const key=i+'-'+j;
+      let s = (ov[key]!=null)? ov[key] : Math.max(0,Math.min(1, base[j] + (((i*7+j*3)%5)-2)*0.04));
+      let c = (ov[key]!=null)? 0.86 : (0.4 + ((i*5+j)%6)*0.09);
+      M[i][j]={kind:'val',s,c};
+    }}
+    this._M=M; return M;
+  }
+  heat(s){ if(s<0.15) return '#F4EAD6'; if(s<0.35) return '#FBE6AE'; if(s<0.55) return '#F6C75A'; if(s<0.72) return '#EF9D33'; if(s<0.85) return '#DE6A24'; return '#C24A16'; }
+  heatText(s){ return s<0.55?'#1B1814':'#FFFDF8'; }
+
+  renderMatrix(layer){
+    const E=this.E.bind(this); const M=this.genMatrix(); const ids=this.PLAYERS.map(p=>p.id);
+    const CS=38, INK='#1B1814';
+    const dagger=(x,y,c)=>E('path',{d:`M ${x} ${y-4} L ${x+1.4} ${y-0.8} L ${x+1.4} ${y+1.3} L ${x+2.9} ${y+1.3} L ${x} ${y+4.4} L ${x-2.9} ${y+1.3} L ${x-1.4} ${y+1.3} L ${x-1.4} ${y-0.8} Z`,fill:c});
+    const cellBase={width:CS,height:CS,border:'1px solid #D8CFBC',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',fontFamily:"'Space Mono',monospace"};
+    const rows=[];
+    // header row
+    const hdr=[E('div',{key:'corner',style:{width:34,height:CS}},'')];
+    ids.forEach((id,j)=>{
+      const imp=this.IMP.has(j)&&layer!=='belief';
+      hdr.push(E('div',{key:'h'+j,style:{width:CS,height:CS,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',gap:2,paddingBottom:3}},
+        imp?E('svg',{width:13,height:13,viewBox:'-7 -7 14 14'},E('circle',{cx:0,cy:0,r:6.4,fill:INK}),dagger(0,0,'#FFFDF8')):null,
+        E('span',{style:{font:"700 10px/1 'Space Mono',monospace",color:j===7?'#A89E8A':INK}},id)));
+    });
+    rows.push(E('div',{key:'hdr',style:{display:'flex'}},hdr));
+    // body rows
+    ids.forEach((rid,i)=>{
+      const cells=[E('div',{key:'rh'+i,style:{width:34,height:CS,display:'flex',alignItems:'center',justifyContent:'flex-end',paddingRight:6,font:"700 10px/1 'Space Mono',monospace",color:i===7?'#A89E8A':INK}},rid)];
+      ids.forEach((cid,j)=>{
+        const v=M[i][j]; let bg='#FFFDF8',content=null,extra={};
+        if(v.kind==='self'){ bg='#F4EAD6'; content=E('span',{style:{color:'#A89E8A',fontSize:11}},'•'); }
+        else if(v.kind==='dead'){ bg='repeating-linear-gradient(45deg,#F4EAD6,#F4EAD6 3px,#EBDFC8 3px,#EBDFC8 6px)'; content=null; }
+        else if(v.kind==='none'){ bg='repeating-linear-gradient(45deg,#FFFDF8,#FFFDF8 3px,#F2E9D6 3px,#F2E9D6 6px)'; content=E('span',{style:{color:'#C9BFA8',fontSize:11}},'·'); }
+        else {
+          if(layer==='belief'){
+            bg=this.heat(v.s);
+            content=E('span',{style:{font:(v.s>=0.72?'700':'400')+" 10px/1 'Space Mono',monospace",color:this.heatText(v.s)}},Math.round(v.s*100));
+          } else if(layer==='truth'){
+            bg=this.IMP.has(j)?'repeating-linear-gradient(45deg,#FFFDF8,#FFFDF8 4px,#F0E9DA 4px,#F0E9DA 8px)':'#FFFDF8';
+            const sight=(i===3&&j===5);
+            content= sight? E('svg',{width:15,height:15,viewBox:'0 0 24 24',fill:'none',stroke:'#0E9C93',strokeWidth:2.4},E('path',{d:'M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z'}),E('circle',{cx:12,cy:12,r:3})) : null;
+          } else { // error
+            const isImp=this.IMP.has(j);
+            const err=isImp?(1-v.s):v.s;
+            const loud=err>=0.6&&v.c>=0.7;
+            if(err<0.32){ bg='#FFFDF8'; content=E('span',{style:{color:'#C9BFA8',fontSize:11}},'·'); }
+            else {
+              const a=Math.min(0.92,0.18+err*0.9);
+              bg='rgba(214,36,158,'+a.toFixed(2)+')';
+              const glyph=isImp?'◆':'✕';
+              content=E('span',{style:{font:(loud?'700':'400')+' 12px/1 '+(loud?"'Space Mono',monospace":"'Space Mono',monospace"),color:err>0.5?'#FFFDF8':'#7A2A5E'}},glyph);
+              if(loud) extra={boxShadow:'inset 0 0 0 2px #D6249E'};
+            }
+          }
+        }
+        cells.push(E('div',{key:'c'+i+'-'+j,style:{...cellBase,background:bg,...extra}},content));
+      });
+      rows.push(E('div',{key:'row'+i,style:{display:'flex'}},cells));
+    });
+    return E('div',{style:{display:'inline-block',border:'1.5px solid #1B1814',borderRadius:10,overflow:'hidden',background:'#FFFDF8'}},
+      E('div',{style:{padding:'4px 0 0 0'}},rows),
+      E('div',{style:{borderTop:'1px solid #D8CFBC',padding:'7px 10px',display:'flex',justifyContent:'space-between',font:"400 9px/1 'Space Mono',monospace",color:'#8A8170'}},
+        E('span',{},'↓ believer'),E('span',{},'subject →')));
+  }
+
+  matrixLegendEl(layer){
+    const E=this.E.bind(this);
+    const row=(sw,label,desc)=>E('div',{style:{display:'flex',alignItems:'flex-start',gap:9,marginBottom:9}},sw,E('div',{},E('div',{style:{font:"600 12px/1.2 'Fredoka',sans-serif",color:'#1B1814'}},label),desc?E('div',{style:{font:"400 11px/1.35 'Fredoka',sans-serif",color:'#6E6556',marginTop:2}},desc):null));
+    const chip=(bg,extra)=>E('span',{style:{width:20,height:20,borderRadius:5,background:bg,border:'1px solid #C9BFA8',flex:'none',...(extra||{})}});
+    const head=E('div',{style:{font:"700 10px/1 'Space Mono',monospace",letterSpacing:'0.08em',color:'#6E6556',marginBottom:12}},
+      layer==='belief'?'READING: BELIEF':layer==='truth'?'READING: GROUND TRUTH':'READING: ERROR');
+    let body;
+    if(layer==='belief') body=[
+      row(chip('linear-gradient(90deg,#FBE6AE,#DE6A24)'),'Suspicion heat','Cell = believer’s suspicion of subject, 0–100 (mono). Bucketed Low / Med / High.'),
+      row(chip('repeating-linear-gradient(45deg,#FFFDF8,#FFFDF8 3px,#F2E9D6 3px,#F2E9D6 6px)'),'No belief yet','Hatched — the agent has formed no view. This is not 0%.'),
+      row(chip('#F4EAD6'),'Self','Diagonal; an agent holds no suspicion file on itself.')
+    ];
+    else if(layer==='truth') body=[
+      row(E('span',{style:{width:20,height:20,borderRadius:5,background:'#1B1814',display:'inline-flex',alignItems:'center',justifyContent:'center',flex:'none'}},E('svg',{width:11,height:11,viewBox:'-7 -7 14 14'},E('path',{d:'M 0 -4 L 1.4 -0.8 L 1.4 1.3 L 2.9 1.3 L 0 4.4 L -2.9 1.3 L -1.4 1.3 L -1.4 -0.8 Z',fill:'#FFFDF8'}))),'Impostor — true','Dagger badge marks real impostors (p-2, p-5). A badge, never a hue — and hidden in fog.'),
+      row(E('span',{style:{width:20,height:20,borderRadius:5,flex:'none',display:'inline-flex',alignItems:'center',justifyContent:'center'}},E('svg',{width:14,height:14,viewBox:'0 0 24 24',fill:'none',stroke:'#0E9C93',strokeWidth:2.4},E('path',{d:'M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z'}),E('circle',{cx:12,cy:12,r:3}))),'Witnessed','A recorded sighting (p-3 → p-5). Verifiable fact, role-neutral.'),
+      row(chip('repeating-linear-gradient(45deg,#F4EAD6,#F4EAD6 3px,#EBDFC8 3px,#EBDFC8 6px)'),'Dead','p-7 — frozen row & column.')
+    ];
+    else body=[
+      row(chip('rgba(214,36,158,0.88)',{boxShadow:'inset 0 0 0 2px #D6249E'}),'Confidently wrong','LOUD fuchsia + ring: a high-confidence belief that disagrees with truth.'),
+      row(E('span',{style:{width:20,height:20,borderRadius:5,background:'rgba(214,36,158,0.55)',border:'1px solid #C9BFA8',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#fff',font:"700 11px 'Space Mono'",flex:'none'}},'✕'),'False accusation','Suspicion aimed at a real crewmate.'),
+      row(E('span',{style:{width:20,height:20,borderRadius:5,background:'rgba(214,36,158,0.55)',border:'1px solid #C9BFA8',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#fff',font:"700 11px 'Space Mono'",flex:'none'}},'◆'),'Missed impostor','Trust extended to a true impostor (p-2 / p-5).'),
+      row(chip('#FFFDF8'),'Aligned','Belief matches truth — kept calm and pale.')
+    ];
+    return E('div',{},head,...body);
+  }
+
+  // ---------- TOGGLE ----------
+  seg(active){ return {padding:'6px 13px',borderRadius:7,font:"600 12px/1 'Space Mono',monospace",cursor:'pointer',border:'2px solid #1B1814',background:active?'#1B1814':'transparent',color:active?'#FFFDF8':'#6E6556'}; }
+  toggleEl(){
+    const E=this.E.bind(this); const L=this.state.matrixLayer;
+    const b=(key,label)=>E('button',{key:key+(L===key),style:this.seg(L===key),onClick:()=>this.setState({matrixLayer:key})},label);
+    return E('div',{key:'mt'+L,style:{display:'flex',gap:6,background:'#FBF4E6',padding:4,borderRadius:10,border:'2px solid #1B1814'}},
+      b('belief','Belief'),b('truth','Ground-truth'),b('error','Error'));
+  }
+
+  // ---------- TOKENS.TS ----------
+  tokensText(){
+    return `export const tokens = {
+  paper: { 0:'#FFFDF8', 1:'#FBF4E6', 2:'#F4EAD6', 3:'#EBDFC8' },
+  ink:   { 900:'#1B1814', 700:'#443D34', 500:'#6E6556',
+           400:'#8A8170', 300:'#A89E8A', 200:'#C9BFA8', 100:'#E2D8C3' },
+
+  // ── reserved meaning channels (never cross-used) ──
+  suspicion: ['#FBE6AE','#F6C75A','#EF9D33','#DE6A24','#C24A16'], // sequential, amber only
+  suspicionBucket: { low:0.35, high:0.72 },                       // Low ≤ .35 < Med ≤ .72 < High
+  trust:    { strong:'#2563D9', soft:'#5B8CE8' },                 // blue — trust only
+  distrust: { strong:'#E07A1E', soft:'#EFA24E' },                 // orange — distrust only
+  kill:     '#E23B2F',                                            // red — death only
+  contradiction: '#D6249E',                                       // fuchsia — lie / mismatch / error
+
+  status: {
+    alive:        { fill:'identity',  shape:'disc' },
+    dead:         { fill:ink[500],    glyph:'✕',  note:'role-neutral' },
+    sabotage:     { pattern:'hazard', glyph:'⚡', note:'ink stripes, no reserved hue' },
+    contradictionWeak:   { stroke:ink[300], dash:'4 4', weight:1.5 },
+    contradictionStrong: { stroke:'#D6249E', dash:'none', weight:3 }
+  },
+
+  // identity — identity ONLY (greens / teals / purples). disjoint from every channel.
+  identity: ['#5DA83A','#2BA45E','#14A06E','#0E9C93','#128F9E',
+             '#6C5CE0','#8350D6','#9A4FCB','#A94FC6'],
+
+  truth: {
+    ground: { opacity:1,   outline:'solid 2px ink900' },          // authoritative
+    belief: { opacity:0.5, outline:'dashed 2px',  attributed:true },
+    noBelief:{ pattern:'hatch', note:'≠ 0%' }
+  },
+
+  radius:  { sm:6, md:10, lg:14, xl:20, pill:999 },
+  space:   [4,8,12,16,24,32,48],
+  elevation: { chrome1:'3px 3px 0 #1B1814', chrome2:'6px 6px 0 #1B1814',
+               data:'0 0 0 1px #C9BFA8' },                        // hard shadow = chrome only
+  motion:  { quick:120, base:200, slow:360,
+             chromeEase:'cubic-bezier(.34,1.4,.64,1)', dataEase:'ease-out',
+             reducedMotion:'disable all' },
+  type:    { display:"600 'Fredoka'", body:"400 'Fredoka'", mono:"'Space Mono'" }
+};`;
+  }
+
+  // ---------- FOUNDATION FRAGMENTS ----------
+  statusRowEl(){
+    const E=this.E.bind(this);
+    const item=(sw,label,desc)=>E('div',{style:{display:'flex',alignItems:'center',gap:11}},sw,
+      E('div',{},E('div',{style:{font:"600 13px/1.1 'Fredoka',sans-serif"}},label),E('div',{style:{font:"400 11px/1.2 'Space Mono',monospace",color:'#8A8170',marginTop:2}},desc)));
+    const disc=(fill,extra)=>E('span',{style:{width:24,height:24,borderRadius:'50%',background:fill,border:'2px solid #1B1814',flex:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',...(extra||{})}});
+    return E('div',{style:{display:'flex',flexDirection:'column',gap:11}},
+      item(disc('#6C5CE0'),'Alive','identity disc + p-# label'),
+      item(E('span',{style:{width:24,height:24,borderRadius:'50%',background:'#E7DFCF',border:'2px solid #443D34',flex:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',font:"700 12px 'Space Mono',monospace",color:'#443D34'}},'✕'),'Dead','grey + ✕ glyph · role-neutral'),
+      item(E('span',{style:{width:24,height:24,borderRadius:6,background:'repeating-linear-gradient(45deg,#1B1814,#1B1814 4px,#FFD98A 4px,#FFD98A 8px)',border:'2px solid #1B1814',flex:'none',display:'inline-flex',alignItems:'center',justifyContent:'center'}},E('span',{style:{font:'700 11px sans-serif',color:'#fff'}},'⚡')),'Sabotage','hazard stripes + bolt · no reserved hue'),
+      item(E('span',{style:{width:34,height:20,flex:'none',display:'inline-flex',alignItems:'center'}},E('svg',{width:34,height:14},E('line',{x1:2,y1:7,x2:32,y2:7,stroke:'#A89E8A',strokeWidth:1.5,strokeDasharray:'4 4'}))),'Contradiction · weak','thin dashed ink'),
+      item(E('span',{style:{width:34,height:20,flex:'none',display:'inline-flex',alignItems:'center'}},E('svg',{width:34,height:14},E('line',{x1:2,y1:7,x2:32,y2:7,stroke:'#D6249E',strokeWidth:3}))),'Contradiction · strong','bold fuchsia'),
+      E('div',{style:{borderTop:'1px solid #EBDFC8',paddingTop:11,marginTop:1,display:'flex',gap:18}},
+        E('div',{style:{display:'flex',alignItems:'center',gap:9}},disc('#8350D6'),E('div',{},E('div',{style:{font:"600 12px 'Fredoka'"}},'Ground'),E('div',{style:{font:"400 10px 'Space Mono'",color:'#8A8170'}},'solid · ink'))),
+        E('div',{style:{display:'flex',alignItems:'center',gap:9}},E('span',{style:{width:24,height:24,borderRadius:'50%',background:'none',border:'2px dashed #8350D6',flex:'none'}}),E('div',{},E('div',{style:{font:"600 12px 'Fredoka'"}},'Belief'),E('div',{style:{font:"400 10px 'Space Mono'",color:'#8A8170'}},'ghost · dashed'))),
+        E('div',{style:{display:'flex',alignItems:'center',gap:9}},E('span',{style:{width:24,height:24,borderRadius:'50%',background:'repeating-linear-gradient(45deg,#FFFDF8,#FFFDF8 3px,#EBDFC8 3px,#EBDFC8 6px)',border:'2px dashed #A89E8A',flex:'none'}}),E('div',{},E('div',{style:{font:"600 12px 'Fredoka'"}},'No belief'),E('div',{style:{font:"400 10px 'Space Mono'",color:'#8A8170'}},'≠ 0%')))));
+  }
+  identityChipsEl(){
+    const E=this.E.bind(this);
+    return this.ID.map((c,i)=>E('div',{key:i,style:{display:'flex',flexDirection:'column',alignItems:'center',gap:6}},
+      E('div',{style:{width:'100%',aspectRatio:'1',borderRadius:12,background:c,border:'2.5px solid #1B1814',display:'flex',alignItems:'center',justifyContent:'center'}},E('span',{style:{font:"700 13px 'Space Mono',monospace",color:'#FFFDF8'}},'p-'+i)),
+      E('span',{style:{font:"400 9px 'Space Mono',monospace",color:'#8A8170'}},c)));
+  }
+  spacingBarsEl(){
+    const E=this.E.bind(this);
+    return [4,8,12,16,24,32,48].map(n=>E('div',{key:n,style:{display:'flex',flexDirection:'column',alignItems:'center',gap:4}},
+      E('div',{style:{width:n,height:n,background:'#EF9D33',border:'1px solid #1B1814',borderRadius:2}}),
+      E('span',{style:{font:"400 8px 'Space Mono',monospace",color:'#8A8170'}},n)));
+  }
+
+  // ---------- MEETING ----------
+  accusationChainEl(){
+    const E=this.E.bind(this);
+    const chip=(idx,label)=>E('div',{style:{display:'flex',flexDirection:'column',alignItems:'center',gap:4}},
+      E('div',{style:{width:38,height:38,borderRadius:'50%',background:this.ID[idx],border:'2.5px solid #1B1814',display:'flex',alignItems:'center',justifyContent:'center'}},E('span',{style:{font:"700 12px 'Space Mono',monospace",color:'#FFFDF8'}},'p-'+idx)),
+      label?E('span',{style:{font:"400 9px 'Space Mono',monospace",color:'#8A8170'}},label):null);
+    const arrow=(label)=>E('div',{style:{display:'flex',flexDirection:'column',alignItems:'center',gap:2,minWidth:60}},
+      E('span',{style:{font:"700 9px 'Space Mono',monospace",color:'#E07A1E'}},label),
+      E('svg',{width:54,height:14},E('line',{x1:2,y1:7,x2:46,y2:7,stroke:'#E07A1E',strokeWidth:2.5}),E('path',{d:'M46 2 L52 7 L46 12 Z',fill:'#E07A1E'})));
+    return E('div',{style:{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',padding:'4px 0 14px',borderBottom:'1px solid #EBDFC8',marginBottom:12}},
+      chip(3,'witness'),arrow('accuses'),chip(5,'accused'),
+      E('div',{style:{width:18}}),
+      chip(2,'deflects'),arrow('redirects'),chip(8,'—'),
+      E('div',{style:{marginLeft:'auto',font:"400 11px/1.4 'Fredoka',sans-serif",color:'#6E6556',maxWidth:150}},'Accusation edges use ',E('span',{style:{color:'#E07A1E',fontWeight:600}},'distrust orange'),' — direction = who points at whom.'));
+  }
+  transcriptEl(){
+    const E=this.E.bind(this);
+    const line=(idx,tag,text,opts={})=>{
+      const o=opts;
+      return E('div',{style:{padding:'11px 13px',borderRadius:11,background:'#FBF4E6',border:'1px solid #E2D8C3',borderLeft:(o.contradiction?'4px solid #D6249E':'4px solid '+this.ID[idx]),marginBottom:8}},
+        E('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}},
+          E('div',{style:{display:'flex',alignItems:'center',gap:7}},
+            E('span',{style:{width:18,height:18,borderRadius:'50%',background:this.ID[idx],border:'1.5px solid #1B1814',display:'inline-flex',alignItems:'center',justifyContent:'center',font:"700 9px 'Space Mono'",color:'#FFFDF8'}},idx),
+            E('span',{style:{font:"700 11px 'Space Mono',monospace",color:'#1B1814'}},'p-'+idx),
+            tag?E('span',{style:{font:"400 9px 'Space Mono',monospace",color:'#8A8170'}},tag):null),
+          o.rewrite?E('span',{style:{font:"700 8px 'Space Mono',monospace",letterSpacing:'0.04em',color:'#6E6556',background:'#EBDFC8',border:'1px solid #C9BFA8',borderRadius:5,padding:'3px 6px'}},'↻ '+o.rewrite):null),
+        E('div',{style:{font:"400 13px/1.4 'Fredoka',sans-serif",color:'#3a352c'}},text),
+        o.badge);
+    };
+    const fabricated=E('div',{style:{marginTop:7,display:'inline-flex',alignItems:'center',gap:5,font:"700 9px 'Space Mono',monospace",color:'#fff',background:'#E23B2F',border:'1.5px solid #1B1814',padding:'3px 7px',borderRadius:5}},'⚠ FABRICATED (omniscient)');
+    return E('div',{},
+      line(3,'t315 · witness','“I saw p-5 head toward Reactor around tick 312.”'),
+      E('div',{style:{display:'flex',alignItems:'center',gap:6,padding:'2px 0 9px 6px'}},E('svg',{width:14,height:14,viewBox:'0 0 24 24',fill:'none',stroke:'#D6249E',strokeWidth:2.6},E('path',{d:'M18 6 6 18M6 6l12 12'})),E('span',{style:{font:"700 10px 'Space Mono',monospace",color:'#D6249E'}},'STRONG CONTRADICTION · location')),
+      line(5,'t315 · claim','“Nope — I was on reactor repair in Engineering the whole time.”',{contradiction:true,badge:fabricated}),
+      line(2,'t316 · redirect','“Could’ve been p-8 — they were near Labs.”',{rewrite:'no new evidence'}),
+      E('div',{style:{display:'flex',alignItems:'center',gap:6,padding:'2px 0 9px 6px'}},E('svg',{width:14,height:14},E('line',{x1:2,y1:7,x2:14,y2:7,stroke:'#A89E8A',strokeWidth:1.6,strokeDasharray:'3 3'})),E('span',{style:{font:"700 10px 'Space Mono',monospace",color:'#8A8170'}},'WEAK CONTRADICTION · unsupported')),
+      line(8,'t316','“I was in Labs alone — no one to vouch. But I didn’t move.”'),
+      line(4,'t317','“Body was in Reactor. That lines up with p-3, not p-5.”',{rewrite:'alibi broken'}));
+  }
+  ballotsEl(){
+    const E=this.E.bind(this);
+    const votes={'p-0':'p-5','p-1':'skip','p-2':'p-8','p-3':'p-5','p-4':'p-5','p-5':'p-8','p-6':'p-5','p-7':'—','p-8':'p-5'};
+    const rowEl=(id)=>{
+      const v=votes[id]; const idx=+id.split('-')[1]; const dead=id==='p-7';
+      return E('div',{style:{display:'flex',alignItems:'center',gap:9,padding:'5px 0'}},
+        E('span',{style:{width:18,height:18,borderRadius:'50%',background:dead?'#E7DFCF':this.ID[idx],border:'1.5px solid #1B1814',display:'inline-flex',alignItems:'center',justifyContent:'center',font:"700 9px 'Space Mono'",color:dead?'#443D34':'#FFFDF8',flex:'none'}},dead?'✕':idx),
+        E('span',{style:{font:"700 11px 'Space Mono',monospace",width:34}},id),
+        E('span',{style:{font:"400 10px 'Space Mono',monospace",color:'#8A8170'}},'votes'),
+        E('span',{style:{marginLeft:'auto',font:"700 11px 'Space Mono',monospace",color:v==='skip'?'#8A8170':v==='—'?'#C9BFA8':'#1B1814',background:v==='p-5'?'#F4EAD6':'transparent',border:v==='p-5'?'1px solid #C9BFA8':'1px solid transparent',borderRadius:5,padding:'3px 7px'}},v));
+    };
+    return E('div',{},Object.keys(votes).map(id=>E('div',{key:id},rowEl(id))));
+  }
+  verdictEl(){
+    const E=this.E.bind(this);
+    return E('div',{style:{background:'#1B1814',border:'2.5px solid #1B1814',borderRadius:18,boxShadow:'6px 6px 0 #443D34',overflow:'hidden'}},
+      E('div',{style:{padding:'12px 18px',borderBottom:'1px solid #443D34',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+        E('span',{style:{font:"600 14px 'Fredoka',sans-serif",color:'#FFFDF8'}},'Resolution'),
+        E('span',{style:{font:"700 10px 'Space Mono',monospace",color:'#FFD98A'}},'§4.6')),
+      E('div',{style:{padding:18}},
+        E('div',{style:{display:'flex',alignItems:'baseline',gap:10,marginBottom:10}},
+          E('span',{style:{font:"400 11px 'Space Mono',monospace",color:'#A89E8A'}},'tally'),
+          E('span',{style:{font:"700 13px 'Space Mono',monospace",color:'#E2D8C3'}},'p-5 ×5 · p-8 ×2 · skip ×1')),
+        E('div',{style:{font:"400 11px/1.5 'Space Mono',monospace",color:'#8A8170',marginBottom:13}},'§4.6 — simple majority of living voters (5 of 8 ⇒ ≥5). Threshold met.'),
+        E('div',{style:{display:'flex',alignItems:'center',gap:11,background:'#2A2620',border:'2px solid #443D34',borderRadius:10,padding:'11px 13px'}},
+          E('span',{style:{width:26,height:26,borderRadius:'50%',background:'#6E6556',border:'2px solid #A89E8A',display:'inline-flex',alignItems:'center',justifyContent:'center',font:"700 11px 'Space Mono'",color:'#FFFDF8',flex:'none'}},'⏏'),
+          E('div',{},E('div',{style:{font:"600 14px 'Fredoka',sans-serif",color:'#FFFDF8'}},'Ejected — p-5'),
+            E('div',{style:{font:"400 10px 'Space Mono',monospace",color:'#A89E8A',marginTop:2}},'outcome is role-neutral · guilt is never coloured in'))),
+        E('div',{style:{marginTop:12,display:'flex',gap:7,flexWrap:'wrap'}},
+          E('span',{style:{font:"700 9px 'Space Mono',monospace",color:'#1B1814',background:'#FFD98A',borderRadius:5,padding:'4px 7px'}},'↻ p-4: alibi broken'),
+          E('span',{style:{font:"700 9px 'Space Mono',monospace",color:'#1B1814',background:'#FFD98A',borderRadius:5,padding:'4px 7px'}},'↻ p-2: no new evidence'),
+          E('span',{style:{font:"700 9px 'Space Mono',monospace",color:'#E2D8C3',background:'#2A2620',border:'1px solid #443D34',borderRadius:5,padding:'4px 7px'}},'post-hoc: p-5 ⌖ was impostor'))));
+  }
+
+  renderVals(){
+    return {
+      statusRow: this.statusRowEl(),
+      identityChips: this.identityChipsEl(),
+      spacingBars: this.spacingBarsEl(),
+      tokensTs: this.tokensText(),
+      mapHero: this.renderMap('omni', true),
+      mapOmni: this.renderMap('omni', false),
+      mapFog: this.renderMap('agent', false),
+      matrix: this.renderMatrix(this.state.matrixLayer),
+      matrixLegend: this.matrixLegendEl(this.state.matrixLayer),
+      matrixToggle: this.toggleEl(),
+      accusationChain: this.accusationChainEl(),
+      transcript: this.transcriptEl(),
+      ballots: this.ballotsEl(),
+      verdict: this.verdictEl()
+    };
+  }
+}
+</script>
+</body>
+</html>

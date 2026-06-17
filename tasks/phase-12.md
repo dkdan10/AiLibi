@@ -6,7 +6,10 @@ art = vector/geometric; scope = spectator replay viewer only (no live, no human 
 
 Anchors (read before any dispatch): `design/phase-12/stage-0-understand.md` (data dictionary + renderable-surface map +
 teardown, incl. §0.5 corrections), `design/phase-12/stage-1-design.md` (the design + §9.5 Claude Design integration),
-`design/phase-12/claude-design-brief.md` (the workspace brief → installed as `frontend/CLAUDE.md` in 12.1).
+`design/phase-12/claude-design-brief.md` (the workspace brief → installed as `frontend/CLAUDE.md` in 12.1);
+`design/phase-12/tokens-seed.md` (the committed token seed 12.1/12.2 read); and `design/phase-12/playful-system/` (the
+in-repo Playful design reference: the renderable 0b converge `.dc.html`, `playful-render.png` visual target, design chat
+— chrome slices 12.5–12.7 read the component code there). Do NOT point build agents at the Claude Design share URL.
 
 Locked decisions:
 - **9p2i is the target set.** The default-served 4p1i set (34/50 zero-meeting, no rubric) gets graceful empty states, not
@@ -140,7 +143,7 @@ When 0b lands, its token sheet seeds `tokens.ts` in **12.1**; the chosen Playful
 ### Task 12.1 — Foundation: design tokens, Storybook, CLAUDE.md, CI
 **Branch:** `phase-12-foundation`
 **Depends on:** none
-**Section refs:** design/phase-12/stage-1-design.md §6, §9, §9.5; design/phase-12/claude-design-brief.md; **the committed 0b token sheet `design/phase-12/tokens-seed.md`** (transcribe `tokens.ts` from it — it is the in-repo source of truth, NOT the Downloads mockup)
+**Section refs:** design/phase-12/stage-1-design.md §6, §9, §9.5; design/phase-12/claude-design-brief.md; **the committed 0b token sheet `design/phase-12/tokens-seed.md`** (transcribe `tokens.ts` from it — it is the in-repo source of truth, NOT the Downloads mockup); the Playful visual reference `design/phase-12/playful-system/playful-render.png` (Storybook + the cream theme should match it)
 **Complexity:** Integration
 **Files in scope:**
 - frontend/src/tokens.ts
