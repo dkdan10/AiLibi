@@ -166,7 +166,12 @@ function RosterRail() {
     aliveById.set(state.agent_id, state.is_alive);
   }
   const adv = frame?.advantage ?? null;
-  const showRole = perspective.mode === "omniscient";
+  // Firewall, simulated in the UI: in As-agent fog an agent does NOT know hidden
+  // deaths, the living-crew count, or the impostor count — only the GLOBAL task
+  // counter (DESIGN.md §1.2 broadcasts that to every agent). So gate the
+  // omniscient-only facts (crew/impostor counts, per-player alive/dead, role) to
+  // Omniscient; the task progress is agent-visible and shows in both modes.
+  const omniscient = perspective.mode === "omniscient";
   const taskPct =
     adv !== null && adv.tasks_required > 0
       ? Math.round((adv.tasks_completed / adv.tasks_required) * 100)
@@ -177,11 +182,13 @@ function RosterRail() {
       <h2 className="mb-2 text-lg">Roster</h2>
       {adv !== null && (
         <div className="mb-3 rounded-md border border-ink-200 p-2 font-mono text-[11px] text-ink-700">
-          <div className="flex justify-between">
-            <span>crew {adv.crew_alive}</span>
-            <span>imp {adv.impostors_alive}</span>
-          </div>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-pill bg-paper-3">
+          {omniscient && (
+            <div className="mb-1.5 flex justify-between">
+              <span>crew {adv.crew_alive}</span>
+              <span>imp {adv.impostors_alive}</span>
+            </div>
+          )}
+          <div className="h-1.5 overflow-hidden rounded-pill bg-paper-3">
             <div className="h-full bg-trust-strong" style={{ width: `${taskPct}%` }} />
           </div>
           <div className="mt-1 text-ink-500">
@@ -205,19 +212,21 @@ function RosterRail() {
               <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-900">
                 {player.agent_id}
               </span>
-              {showRole && (
+              {omniscient && (
                 <span className="rounded-sm border border-ink-300 px-1 text-[9px] uppercase tracking-wide text-ink-500">
                   {player.role}
                 </span>
               )}
-              <span
-                className={
-                  "rounded-sm px-1 text-[9px] font-semibold uppercase " +
-                  (alive ? "text-ink-500" : "bg-dead text-paper-0")
-                }
-              >
-                {alive ? "alive" : "dead"}
-              </span>
+              {omniscient && (
+                <span
+                  className={
+                    "rounded-sm px-1 text-[9px] font-semibold uppercase " +
+                    (alive ? "text-ink-500" : "bg-dead text-paper-0")
+                  }
+                >
+                  {alive ? "alive" : "dead"}
+                </span>
+              )}
             </li>
           );
         })}

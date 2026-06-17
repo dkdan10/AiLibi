@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef } from "react";
 import {
   type BeliefViewMode,
   type Perspective,
+  type ViewId,
   eventTickNumbers,
   frameIndexForTick,
   keyMomentTicks,
@@ -243,6 +244,10 @@ interface PendingHydration {
   readonly beliefView: BeliefViewMode;
   readonly selectedAgent: string | null;
   readonly selectedMeeting: string | null;
+  // selectReplay forces view=workspace, so the parsed top-level view is restored
+  // here too — otherwise a shared `game_id=…&view=tournament` URL would snap back
+  // to the workspace on reload.
+  readonly view: ViewId | null;
 }
 
 /**
@@ -290,15 +295,20 @@ export function usePlaybackEngine(): void {
   }, [isPlaying, speed, replay]);
 
   // ── 2. Interruptible auto-follow ─────────────────────────────────────────
-  // When the current tick changes to a meeting tick, select that meeting so the
-  // stage morphs to the table (DESIGN.md §4: meetings are time spans). The
-  // per-tick ref gate is what makes it interruptible: it fires once per tick
-  // change, so a user dismissing the meeting (or toggling auto-follow off) is
-  // NOT undone until playback actually moves — the camera is never yanked back.
+  // While ON, the meeting selection TRACKS the current tick — select the meeting
+  // when its tick is reached, and CLEAR it on leaving the span so the stage
+  // morphs back to the map (DESIGN.md §4: show the meeting only while
+  // tick ∈ meeting.span). Two refs keep it from yanking the user:
+  //   • lastFollowedTickRef fires the logic once per tick change, so a manual
+  //     dismissal at a meeting tick sticks until playback moves.
+  //   • autoSelectedRef remembers the meeting auto-follow ITSELF opened, so on
+  //     leaving we clear only that — never a user- or URL-restored selection.
   const lastFollowedTickRef = useRef<number | null>(null);
+  const autoSelectedRef = useRef<string | null>(null);
   useEffect(() => {
     if (replay === null) {
       lastFollowedTickRef.current = null;
+      autoSelectedRef.current = null;
       return;
     }
     const tickNumber = tickNumberAt(replay.ticks, frameIndex);
@@ -309,9 +319,24 @@ export function usePlaybackEngine(): void {
     if (!autoFollow) {
       return;
     }
-    const meeting = replay.meetings.find((m) => m.tick === tickNumber);
-    if (meeting !== undefined) {
-      useReplayStore.getState().selectMeeting(meeting.meeting_id);
+    const store = useReplayStore.getState();
+    const meeting = replay.meetings.find((m) => m.tick === tickNumber) ?? null;
+    if (meeting !== null) {
+      // Entered a meeting span: follow it (the stage morphs to the table).
+      if (store.selectedMeetingId !== meeting.meeting_id) {
+        store.selectMeeting(meeting.meeting_id);
+      }
+      autoSelectedRef.current = meeting.meeting_id;
+    } else if (
+      autoSelectedRef.current !== null &&
+      store.selectedMeetingId === autoSelectedRef.current
+    ) {
+      // Left the span and the open meeting is the one we opened: morph back.
+      store.selectMeeting(null);
+      autoSelectedRef.current = null;
+    } else {
+      // The selection is the user's / URL's (or already changed): leave it.
+      autoSelectedRef.current = null;
     }
   }, [replay, frameIndex, autoFollow]);
 
@@ -342,6 +367,7 @@ export function usePlaybackEngine(): void {
         beliefView: parsed.beliefView,
         selectedAgent: parsed.selectedAgent,
         selectedMeeting: parsed.selectedMeeting,
+        view: parsed.view,
       };
       void store.selectReplay(parsed.gameId);
     } else {
@@ -369,6 +395,11 @@ export function usePlaybackEngine(): void {
     }
     if (pending.selectedAgent !== null) {
       store.selectAgent(pending.selectedAgent);
+    }
+    // Restore the parsed top-level view AFTER selectReplay's workspace default,
+    // so a shared non-workspace view round-trips even with a replay loaded.
+    if (pending.view !== null) {
+      store.setView(pending.view);
     }
     pendingRef.current = null;
   }, [replay]);
