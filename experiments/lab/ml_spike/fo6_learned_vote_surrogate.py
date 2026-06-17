@@ -27,79 +27,55 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-if str(Path(__file__).resolve().parents[3]) not in sys.path:
-    sys.path.insert(
-        0, str(Path(__file__).resolve().parents[3])
-    )  # repo root (Comment 4)
+sys.path.insert(
+    0, str(Path(__file__).resolve().parents[1])
+)  # experiments/lab (Comment 4)
+from ml_spike import core  # noqa: E402
 
-from engine.world import load_canonical_map  # noqa: E402
-
-_M = load_canonical_map()
-# .room: _M.spawn / _M.meeting are Spawn/Meeting CONFIG objects, not room-id strings
-# (Comment 1) -- using the config object corrupts the reconstructed positions.
-SPAWN = _M.spawn.room
-MEET_ROOM = _M.meeting.room
-VENT_ROOM = {vid: v.room for vid, v in _M.vents.items()}
-PLAYERS = [f"p-{i}" for i in range(1, 10)]  # 9p roster is 1-indexed (p-1..p-9)
 FILES = sorted(glob.glob("replays/samples/9p2i/replay-seed-*.jsonl"))
 
 
 def parse_game(path: Path):
-    """One pass: reconstruct rooms/sightings/kills, snapshot per-meeting candidate
-    features (flag + physical) + the ejected label."""
-    room: dict[str, str] = defaultdict(lambda: SPAWN)
-    alive = set(PLAYERS)
-    # window accumulators (reset each meeting)
+    """Snapshot per-meeting candidate features (flag + physical) + the ejected label,
+    using `core.reconstruct` for engine-faithful positions/sightings — it resolves
+    kills in engine order (excludes rejected same-tick kills, round-2 Comment 1/3) and
+    hides vented players from sightings (round-2 Comment 7)."""
+    rows = [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
     witnessed: dict[str, int] = defaultdict(int)
     isolation: dict[str, int] = defaultdict(int)
     seen_at_kill: dict[str, int] = defaultdict(int)
     carry: dict[str, float] = defaultdict(float)
-    pending_kills: list[tuple[int, str, str]] = []  # (tick, victim, body_room)
+    pending_kills: list[tuple[int, str]] = []  # (tick, body_room) -- resolved only
     meetings = []
     midx = 0
 
-    for row in (json.loads(x) for x in path.read_text().splitlines() if x.strip()):
-        k = row.get("kind")
-        if k == "tick":
-            tick = row["tick"]
-            for a in row.get("actions", []):
-                act, who = a.get("type"), a.get("actor")
-                if act == "move":
-                    room[who] = a["payload"]["to_room"]
-                elif act == "vent":
-                    room[who] = VENT_ROOM.get(a["payload"]["vent_id"], room[who])
-                elif act == "kill":
-                    v = a["payload"]["target"]
-                    pending_kills.append((tick, v, room[who]))
-                    alive.discard(v)
-            # sightings this tick: co-location among alive
-            byroom: dict[str, list[str]] = {}
-            for p in alive:
-                byroom.setdefault(room[p], []).append(p)
-            for grp in byroom.values():
-                if len(grp) >= 2:
-                    for p in grp:
+    for st in core.reconstruct(rows):
+        if "tick" in st:
+            tick = st["tick"]
+            for players in st["visible"].values():  # vent-excluded, co-location groups
+                if len(players) >= 2:
+                    for p in players:
                         witnessed[p] += 1
                 else:
-                    isolation[grp[0]] += 1
-            # seen-at-kill: a killer/witness present at a body room while others watch
-            for ktick, _v, broom in pending_kills:
+                    isolation[players[0]] += 1
+            for _killer, _victim, broom in st["kills"]:  # resolved kills only
+                pending_kills.append((tick, broom))
+            for ktick, broom in pending_kills:
                 if 0 <= tick - ktick <= 2:
-                    here = byroom.get(broom, [])
+                    here = st["visible"].get(broom, [])
                     if len(here) >= 2:
                         for p in here:
                             seen_at_kill[p] = 1
-        elif k == "meeting":
-            cons = row.get("contradictions") or []
+        else:  # meeting
+            row, ejected, alive = st["meeting"], st["ejected"], st["alive"]
             weak: dict[str, int] = defaultdict(int)
             strong: dict[str, int] = defaultdict(int)
-            for c in cons:
+            for c in row.get("contradictions") or []:
                 is_weak = "[weak signal" in (c.get("description") or "")
                 for s in c.get("subjects") or []:
                     (weak if is_weak else strong)[s] += 1
                     carry[s] += 0.08 if is_weak else 0.30
             reporter = row.get("triggered_by")
-            ejected = row.get("ejected_player_id")
             cands = []
             for p in sorted(alive):
                 flag_feat = [
@@ -120,13 +96,9 @@ def parse_game(path: Path):
                 ]
                 cands.append((p, flag_feat, phys_feat, 1 if p == ejected else 0))
             meetings.append({"cands": cands, "ejected": ejected})
-            # reset window, apply ejection, regroup at meeting room
-            alive.discard(ejected)
             witnessed = defaultdict(int)
             isolation = defaultdict(int)
             seen_at_kill = defaultdict(int)
-            for p in alive:
-                room[p] = MEET_ROOM
             pending_kills = []
             midx += 1
     return meetings

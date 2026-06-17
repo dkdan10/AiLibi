@@ -140,8 +140,12 @@ def run_stateful(seeds, out, genome, sink):
 def main() -> int:
     import random
 
-    # augmented genome (memory feature in the action loop) for the stateful test
-    g_aug = [random.Random(7).gauss(0.0, 0.5) for _ in range(AUG_LEN)]
+    # augmented genome (memory feature in the action loop) for the stateful test.
+    # ONE RNG instance, not a fresh Random(7) per weight (round-2 Comment 2: a fresh
+    # seed per weight made every parameter identical -> all logits tie -> the pick fell
+    # to the lexical tie-break and the memory feature never affected the action).
+    _rng = random.Random(7)
+    g_aug = [_rng.gauss(0.0, 0.5) for _ in range(AUG_LEN)]
     g = core.random_genome(7)  # core (memoryless) genome for the numpy backend leg
     print("=== FO-4 — determinism at scale ===")
 
@@ -184,19 +188,30 @@ def main() -> int:
         h = np.tanh(W1 @ np.array(x, dtype=np.float64) + b1)
         return (W2 @ h + b2).tolist()
 
-    # harvest real encoded states from one FSM game
+    # harvest real encoded states (+ current room) from one FSM game
     sink: list = []
     core.run_games([0], TMP / "harv", record_sink=sink)
-    vecs = [x for (x, _c, _cur) in sink]
-    np_det = all(np_forward(v) == np_forward(v) for v in vecs)
+    samples = [(x, cur) for (x, _c, cur) in sink]
+    np_det = all(np_forward(x) == np_forward(x) for x, _cur in samples)
+
+    def masked_pick(out: list[float], cur: str) -> str:
+        # the recorded action masks to {current} ∪ adjacent rooms (round-2 Comment 4):
+        # compare the LEGAL-masked pick, not the full-vector argmax, else an agreed
+        # illegal global winner hides a real divergence in the legal candidates.
+        best, best_key = cur, None
+        for c in sorted(core._legal_rooms(cur)):
+            key = (out[core._ROOM_IX[c]], c)
+            if best_key is None or key > best_key:
+                best_key, best = key, c
+        return best
+
     disagree = 0
-    for v in vecs:
-        pa = max(range(core.OUT), key=lambda k: (core.mlp_forward(g, v)[k], k))
-        pn = max(range(core.OUT), key=lambda k: (np_forward(v)[k], k))
-        disagree += pa != pn
+    for x, cur in samples:
+        if masked_pick(core.mlp_forward(g, x), cur) != masked_pick(np_forward(x), cur):
+            disagree += 1
     print(
         f"numpy backend: same-input bit-identical = {np_det}; "
-        f"argmax disagrees w/ pure-Python on {disagree}/{len(vecs)} real states"
+        f"MASKED-legal pick disagrees w/ pure-Python on {disagree}/{len(samples)} real states"
     )
     print(
         "  (cross-MACHINE determinism remains untestable on one box; "

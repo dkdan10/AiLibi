@@ -52,6 +52,11 @@ ROOMS: tuple[str, ...] = tuple(sorted(_MAP.rooms.keys()))
 R = len(ROOMS)
 _ROOM_IX = {r: i for i, r in enumerate(ROOMS)}
 
+# engine-faithful reconstruction constants
+SPAWN_ROOM = _MAP.spawn.room
+MEETING_ROOM = _MAP.meeting.room
+VENT_ROOM = {vid: v.room for vid, v in _MAP.vents.items()}
+
 ENC_DIM = 3 * R + 4  # room onehot + players/room + bodies/room + 4 scalars
 HID = 16
 OUT = R
@@ -214,27 +219,78 @@ def replay_rows(path: Path):
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def count_kills(path: Path) -> int:
-    """RESOLVED kills only (Comment 3). Replay tick rows record SUBMITTED kill
-    intents even when ``advance_tick`` rejects them (e.g. the target moved earlier
-    the same tick), so scanning raw ``kill`` actions overcounts and rewards failed
-    attempts. A resolved kill removes its victim, who then never acts again — count
-    distinct kill-targets whose last recorded action is at/before the kill tick."""
-    rows = replay_rows(path)
-    last_act: dict[str, int] = {}
+def reconstruct(rows: list[dict]) -> list[dict]:
+    """Engine-faithful reconstruction from a replay's SUBMITTED actions (round-2
+    Codex). The replay records every submitted action, including ones ``advance_tick``
+    rejects, so raw scans overcount. ``advance_tick`` applies a tick's actions
+    SEQUENTIALLY in engine order (sorted by actor id, which is unique per tick), so a
+    victim who moves before the killer in id-order escapes the kill. This replays that
+    order, applies moves/vents, and resolves a kill only when killer+victim are alive,
+    co-located and neither is vented. Yields per-tick states with `kills` (resolved
+    (killer, victim, room) triples) and `visible` (room->[alive non-vented players],
+    excluding vented players who are hidden from sightings)."""
+    roster = sorted(
+        {
+            a["actor"]
+            for r in rows
+            if r.get("kind") == "tick"
+            for a in r.get("actions", [])
+        }
+    )
+    room = dict.fromkeys(roster, SPAWN_ROOM)
+    in_vent = dict.fromkeys(roster, False)
+    alive = set(roster)
+    states: list[dict] = []
     for row in rows:
-        if row.get("kind") == "tick":
-            for a in row.get("actions", []):
-                last_act[a["actor"]] = row["tick"]
-    killed: set[str] = set()
-    for row in rows:
-        if row.get("kind") == "tick":
-            for a in row.get("actions", []):
-                if a.get("type") == "kill":
+        kind = row.get("kind")
+        if kind == "tick":
+            kills: list[tuple[str, str, str]] = []
+            for a in sorted(row.get("actions", []), key=lambda x: x["actor"]):
+                who, typ = a["actor"], a.get("type")
+                if who not in alive:
+                    continue
+                if typ == "move":
+                    room[who], in_vent[who] = a["payload"]["to_room"], False
+                elif typ == "vent":
+                    room[who] = VENT_ROOM.get(a["payload"]["vent_id"], room[who])
+                    in_vent[who] = not in_vent[who]
+                elif typ == "kill":
                     tgt = a["payload"]["target"]
-                    if last_act.get(tgt, -1) <= row["tick"]:
-                        killed.add(tgt)
-    return len(killed)
+                    if (
+                        tgt in alive
+                        and not in_vent[who]
+                        and not in_vent.get(tgt, False)
+                        and room.get(tgt) == room[who]
+                    ):
+                        alive.discard(tgt)
+                        kills.append((who, tgt, room[who]))
+            visible: dict[str, list[str]] = {}
+            for p in alive:
+                if not in_vent[
+                    p
+                ]:  # vented players are hidden from sightings (Comment 7)
+                    visible.setdefault(room[p], []).append(p)
+            states.append(
+                {
+                    "tick": row["tick"],
+                    "kills": kills,
+                    "visible": visible,
+                    "alive": set(alive),
+                }
+            )
+        elif kind == "meeting":
+            ejected = row.get("ejected_player_id")
+            # snapshot alive BEFORE the ejection (the meeting's candidate set)
+            states.append({"meeting": row, "ejected": ejected, "alive": set(alive)})
+            alive.discard(ejected)
+            for p in alive:
+                room[p], in_vent[p] = MEETING_ROOM, False
+    return states
+
+
+def count_kills(path: Path) -> int:
+    """RESOLVED kills only — see :func:`reconstruct` (engine-order kill resolution)."""
+    return sum(len(s.get("kills", ())) for s in reconstruct(replay_rows(path)))
 
 
 def state_hashes(path: Path) -> list[str]:

@@ -18,7 +18,10 @@ import json
 from collections import defaultdict
 
 FILES = sorted(glob.glob("replays/samples/9p2i/replay-seed-*.jsonl"))
-WEAK, STRONG, GATE = 0.08, 0.30, 0.60
+# weak/strong are suspicion DELTAS from the 0.5 prior (agents/memory/beliefs.py:33,54);
+# the §4.6 gate is an ABSOLUTE suspicion of 0.60, so eject iff 0.5 + Σdelta >= 0.60
+# (round-2 Comment 6: comparing Σdelta >= 0.60 wrongly forced one-strong / two-weak to SKIP).
+PRIOR, WEAK, STRONG, GATE = 0.5, 0.08, 0.30, 0.60
 
 
 def _weights(contradictions):
@@ -32,7 +35,9 @@ def _weights(contradictions):
 
 def _gate_pred(weights):
     top = max(weights.items(), key=lambda kv: (kv[1], kv[0]), default=None)
-    if top and top[1] >= GATE:
+    # suspicion = prior + accumulated delta, clamped to 1.0; eject the top subject if
+    # it clears the absolute 0.60 gate (round-2 Comment 6)
+    if top and min(1.0, PRIOR + top[1]) >= GATE:
         return top[0]
     return "SKIP"
 

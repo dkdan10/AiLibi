@@ -9,8 +9,8 @@
 | Check | Result | Verdict |
 |---|---|---|
 | **1 — Determinism** (cornerstone) | 8/8 byte-identical replays + state-hash chains across two runs of a frozen genome; 8/8 load-bearing (genome ≠ FSM) | **PASS** |
-| **2 — Learnability** | ES climbs kills **14 → 22** in-sample; held-out edge **+5** survives (champ 12 vs random 7, FSM 31) — generalizes | **PASS** |
-| **2 — Bootstrap** | behavior-clone of the FSM: 60% move-parity, 15 kills (< FSM 31) — but the interpretation is confounded (see gaps) | **PARTIAL / inconclusive** |
+| **2 — Learnability** | ES climbs kills **12 → 20** in-sample; held-out edge **+4** survives (champ 11 vs random 7, FSM 27) — generalizes (partial) | **PASS** |
+| **2 — Bootstrap** | behavior-clone of the FSM: 60% move-parity, 13 kills (< FSM 27) — but the interpretation is confounded (see gaps) | **PARTIAL / inconclusive** |
 | **3 — Surrogate fidelity** | detector tally predicts the ejection **56%** unconditional, **71% (22/31)** when a flag exists; 8/39 ejections have NO flag (testimony-driven) | **BELOW BAR** as a naive rule; the faithful pipeline was not graded |
 
 **Overall: GO on the SUBSTRATE; the ML BET is NOT yet de-risked.** A two-skeptic
@@ -24,43 +24,44 @@ questions the spike deferred: **sparse-lever learnability (kill/vent/sabotage), 
 evolution stability, and a climbable Goodhart-resistant rubric fitness.** See the gap
 table; four cheap follow-on experiments should run BEFORE committing Phase C.
 
-> **Numbers below were corrected after the Codex review (PR #167) — see "Codex review
-> corrections". Two real bugs were fixed and every affected probe re-run; ALL conclusions
-> held, the magnitudes shifted (notably the FO-6 linchpin is now top-1 64% / top-2 73%, was
-> 55% / 82%).**
+> **Numbers below reflect the FINAL corrections after TWO Codex review rounds (PR #167) — see
+> "Codex review corrections". Every flagged bug was fixed and every affected probe re-run;
+> ALL conclusions held across both rounds, only magnitudes moved. Final linchpin: FO-6 LLM-free
+> physical surrogate top-1 64% / top-2 82%.**
 
-## Codex review corrections (PR #167)
+## Codex review corrections (PR #167, two rounds)
 
-Two correctness bugs Codex flagged were fixed and every affected probe re-run. **All
-conclusions held; the numbers shifted:**
+Both rounds flagged the same theme — the replay records *submitted* actions, not engine-*resolved*
+state, so any reconstruction off the raw action stream needs to replay the engine's acceptance
+logic. Round 2 replaced the heuristics with one **engine-faithful reconstruction** (`core.reconstruct`):
+it applies each tick's actions in engine order (sorted by actor id, unique per tick), so a kill is
+resolved only when killer+victim are alive, co-located and un-vented (rejected same-tick kills
+excluded), and vented players are hidden from sightings. `count_kills` and the FO-6 features both use
+it. The FO-4 augmented-genome and FO-5 prior bugs (below) were also round-2 fixes.
 
-1. **FO-6 reconstructed positions used config objects, not room-id strings** — `_M.spawn` /
-   `_M.meeting` are `SpawnConfig` / `MeetingConfig`, so players who hadn't moved (at spawn or
-   just after a meeting) were bucketed under the config object instead of `"CAFETERIA"`,
-   corrupting co-location/sighting features. Fixed to `.room`.
-2. **`count_kills` counted submitted kill *intents*, not resolved kills** — replay tick rows
-   keep rejected actions (e.g. the target moved earlier the same tick), overcounting by ~20%
-   and rewarding failed attempts. Fixed to count resolved kills (victim removed → no later
-   action). This changes the *fitness*, so the ES trajectories were genuinely re-run.
+**All conclusions held both rounds; final numbers:**
 
-| Probe | was | now (corrected) | conclusion |
+| Probe | original (buggy) | FINAL (corrected) | conclusion |
 |---|---|---|---|
-| Check 2 ES | 17→32 (FSM 37) | **14→22** (FSM 31) | climbs ✓ |
-| Check 2b held-out edge | +13 | **+5** (champ 12 / rand 7 / FSM 31) | generalizes ✓ |
-| **FO-6 physical (LLM-free)** | top-1 55% / top-2 82% | **top-1 64% / top-2 73%** | viable ✓ |
-| FO-6 flag features | 73% / 82% | 73% / 82% (unchanged) | — |
-| FO-4 | 216 hashes, memoryless | **248 hashes, memory now drives the action** | byte-identical ✓ |
-| FO-7 always-sabotage | 37→8 kills | **31→6**, 0 sab wins | dominated ✓ |
-| FO-3 kill swing | 2.4× | **2.2×**, rubric flat | mismatch ✓ |
-| FO-2 coevo benchmark | 19 | **11**, coevo 0 | collapse ✓ |
-| FO-9 move-dist cosine | mean 0.36 | **mean 0.58** (still < 0.7) | diversity ✓ |
-| FO-1, FO-8 | — | unchanged (no `count_kills` dependency) | — |
+| Check 2 ES | 17→32 (FSM 37) | **12→20** (FSM 27) | climbs ✓ |
+| Check 2b held-out edge | +13 | **+4** (champ 11 / rand 7); partial — some seed-overfit | generalizes ✓ |
+| **FO-6 physical (LLM-free)** | top-1 55% / top-2 82% | **top-1 64% / top-2 82%** | viable ✓ |
+| FO-6 flag features | 73% / 82% | top-1 73% / top-2 73% | — |
+| **FO-5 faithful gate recall** | 5% (missing 0.5 prior) | **single 21% / accumulated 28%** | below the 56% bar ✓ |
+| FO-4 | "memoryless", degenerate genome | **memory feature genuinely drives a byte-identical action; masked-numpy 0/46** | byte-identical ✓ |
+| FO-7 always-sabotage | 37→8 kills | **27→6**, 0 sab wins | dominated ✓ |
+| FO-3 kill swing | 2.4× | **2.1×**, rubric flat | mismatch ✓ |
+| FO-2 coevo benchmark | 19 | **10**, coevo 0 | collapse ✓ |
+| FO-8 always-buddy | 1/12 (report/repair suppressed) | **6/12** (gate only overrides movement); learned 11/12 | buddy emerges ✓ |
+| FO-9 move-dist cosine | mean 0.36 | **mean 0.45** (< 0.7) | diversity ✓ |
 
-Four P2 reproducibility fixes also landed: deterministic FO-2 mutation seeds (Python `hash()`
-is per-process salted); the FO-4 memory feature now drives the *action* (an augmented MLP),
-not just the logged hash, and the numpy-skip leg returns non-zero so a numpy-less rerun can't
-look green; a repo-root + temp-dir bootstrap so the scripts run from a normal checkout. The
-throwaway `ml_spike/` scripts are excluded from the strict mypy gate (charter: exploratory).
+Round-2 fixes by comment: engine-faithful kill resolution (kill-counter + FO-6); vented players
+excluded from FO-6 sightings; FO-4 augmented genome seeded once (was identical per weight → all
+logits tied → memory feature never affected the action) + masked-legal numpy comparison; FO-8 gate
+only overrides Move/Wait (not report/repair interrupts); FO-5 gate applies the 0.5 suspicion prior
+(`0.5 + Σdelta ≥ 0.60`, was `Σdelta ≥ 0.60`). Round-1 fixes: `.room` not config objects;
+resolved-not-submitted kills; deterministic FO-2 seeds; numpy-skip returns non-zero; repo-root +
+temp-dir bootstrap. The throwaway `ml_spike/` scripts are excluded from the strict mypy gate.
 
 ## What ran
 
@@ -70,7 +71,7 @@ throwaway `ml_spike/` scripts are excluded from the strict mypy gate (charter: e
   (kills, vents, cover, do_task, and the whole meeting protocol) delegates to the inner
   agent unchanged. Injected through the existing `agent_factory` param — no engine edits.
 - **Fitness:** total *resolved* impostor kills over 8 seeds (random moves wreck the FSM
-  stalk: FSM 31 vs random 14 over 8 seeds → a real gap to climb, non-degenerate).
+  stalk: FSM 27 vs random 12 over 8 seeds → a real gap to climb, non-degenerate).
 - **Speed:** ~0.06 s/game with `AILIBI_LLM_PROVIDER=fake` (the ~900-game Check-2 run is
   ~60 s, single core), confirming the training-throughput assumption. $0.
 
@@ -91,11 +92,11 @@ discrete action is authoritative); only live re-record is exposed, and the mitig
 ## Check 2 — Learnability + bootstrap (PASS / PARTIAL)
 
 `check2_learnability.py`, 8 fitness seeds (resolved kills):
-- **ES (learnability): 14 → 22** over 12 generations (a simple (1+9)-ES, Gaussian mutation
-  σ=0.15). Monotonic climb to **22/31 = 71% of the hand-tuned FSM ceiling** from a random
+- **ES (learnability): 12 → 20** over 12 generations (a simple (1+9)-ES, Gaussian mutation
+  σ=0.15). Monotonic climb to **20/27 = 74% of the hand-tuned FSM ceiling** from a random
   start. Learning works on the real harness.
-- **Bootstrap (BC): 389 impostor move-decisions, 60% held-out top-1 move-parity, 15 kills.**
-  Better than random (14) but short of FSM (31) — **does not reach parity.**
+- **Bootstrap (BC): 389 impostor move-decisions, 60% held-out top-1 move-parity, 13 kills.**
+  Better than random (12) but short of FSM (27) — **does not reach parity.**
 
 **The informative bit:** ES (22, optimizing the *outcome*) BEAT BC (15, cloning the FSM
 from a single-tick encoding). The FSM's move policy is *history-dependent* (it stalks on
@@ -104,7 +105,7 @@ it, so the clone caps out — exactly the "visible-subset → full-roster recons
 recurrence/memory" point from the obs audit, now empirical. Phase C's encoder must carry
 memory features (the existing `MemoryStore` already accumulates them); BC-init then
 becomes viable. It also confirms blindspot #2 the hard way: from-scratch underperforms the
-hand-tuned FSM (71% of its kills), so BC-init matters — but only with memory.
+hand-tuned FSM (74% of its kills), so BC-init matters — but only with memory.
 
 ## Check 3 — Surrogate fidelity (BELOW BAR — a real finding)
 
@@ -140,7 +141,7 @@ Confirmed solid (tried to break, could not): the injection seam + zero engine ed
 RNG-shift confound does NOT exist (engine draws one int/tick, discarded; policies use no
 RNG); the BC backprop is numerically correct (finite-diff 2.2e-10); fake meetings never
 eject (kill fitness is clean); `count_kills` is correct; the ES climb GENERALIZES held-out
-(edge +6 in-sample → +5 on disjoint seeds, resolved kills). So the *plumbing* is real.
+(edge +9 in-sample → +4 on disjoint seeds, resolved kills — partial generalization). So the *plumbing* is real.
 
 But the verdict's weight must match what was tested. The spike de-risked the EASY parts
 (dense decision, frozen opponent, dense proxy fitness) and deferred the three structural
@@ -157,7 +158,7 @@ questions Phase C is DEFINED by:
 | 7 | **Firewall untested w/ a custom agent** | MINOR | Holds by construction (inner agent has no engine ref; encoder reads only packet), but leak tests never run an `agent_factory` | Extend `test_leak_property` to accept a factory; run the spike/Phase-C factory through it once |
 
 Corrections folded in from the pressure-test: the ES headline is in-sample (held-out edge
-+5, real but smaller); the "ES beat BC ⇒ memoryless" inference is **confounded** (train/test
++4, real but smaller); the "ES beat BC ⇒ memoryless" inference is **confounded** (train/test
 leak + objective mismatch + the encoder discards target IDENTITY, not just history — `core.py`
 stores per-room counts only, but the FSM stalks specific targets), so BC's verdict should be
 held-out move-parity, not kills; Check 3's 56% is floored by 8 zero-flag (testimony-driven)
@@ -177,7 +178,7 @@ phase.
 |---|---|---|---|
 | **FO-4 determinism at scale** | 4, 6 | stateful/memory encoder byte-identical (2 runs); **216 per-decision logit hashes bit-identical** (a sub-argmax divergence can't hide); numpy backend agrees w/ pure-Python on 0/46 real states | **YES** (same-machine); only cross-MACHINE residual → quantize+lexical-tie-break |
 | **FO-1 sparse lever** | 1 | move lever gated to post-kill only (~13 dec/game): ES drove exposure 117→66 (**below FSM 105** in-sample), **23% below random held-out** | **MOSTLY** — sparse-gated positional learning climbs; the pure binary take-vs-hold gate still not isolated |
-| **FO-3 rubric fitness** | 3 | kills swing 2.2× (21→46 resolved) but R1/R7 **flat at 0** under fake meetings — tactical play can't move the rubric without the meeting layer | confirms the **mismatch**: rubric-fitness REQUIRES a real/surrogate meeting layer in the loop |
+| **FO-3 rubric fitness** | 3 | kills swing 2.1× (19→40 resolved) but R1/R7 **flat at 0** under fake meetings — tactical play can't move the rubric without the meeting layer | confirms the **mismatch**: rubric-fitness REQUIRES a real/surrogate meeting layer in the loop |
 | **FO-5 faithful surrogate** | 5 | naive tally over-predicts (56% recall / 41% prec); faithful 0.60 gate under-predicts (**5% recall / ~100% prec / 100% SKIP**) — LLM ejections are testimony/plurality-driven, beyond the deterministic layer | **NO** — a rule-based surrogate can't predict ejections; needs a **learned vote-surrogate** (BC the ballots) or real-LLM gate |
 | **FO-2 co-evolution** | 2 | naive 2-pop opposing-fitness ES **collapsed to a degenerate equilibrium in round 0** — crew trivially denies all kills (coevo 0 every round; evolved crew zeroes even the FSM impostor), impostor gets **zero gradient** (disengagement) | **NO** — co-evolution is unstable in the naive setup; needs balanced objectives + rubric-referee + Hall-of-Fame + a fuller-than-move policy |
 
@@ -205,19 +206,20 @@ reconstructed from the action stream → sightings, proximity-to-kill, reporter.
 
 | Learned surrogate | RANK top-1 (vs naive 56%) | RANK top-2 | binary eject/SKIP |
 |---|---|---|---|
-| flag features (needs the LLM) | **73%** (beats the 56% tally) | 82% | collapses to SKIP |
-| **physical features (LLM-FREE)** | **64%** (beats the LLM-flag tally 56%) | **73%** | collapses to SKIP |
+| flag features (needs the LLM) | **73%** (beats the 56% tally) | 73% | collapses to SKIP |
+| **physical features (LLM-FREE)** | **64%** (beats the LLM-flag tally 56%) | **82%** | collapses to SKIP |
 
 **Findings:** (1) learning beats hand-tallying on the flag signal (73% vs 56%); (2) crucially,
-the **LLM-FREE physical surrogate ranks the ejected player top-1 64% / top-2 73% of the time** —
-*beating* the LLM-flag tally on top-1 and crushing FO-5's 5% rule-based gate. The "who is
-suspicious" signal IS recoverable deterministically from reconstructed sightings. (3) The only
+the **LLM-FREE physical surrogate ranks the ejected player top-1 64% / top-2 82% of the time** —
+*beating* the LLM-flag tally on top-1 and well above FO-5's faithful rule-based gate (21–28% ejection
+recall). The "who is suspicious" signal IS recoverable deterministically from reconstructed
+sightings. (3) The only
 collapse is the **binary eject-vs-SKIP** calibration (both surrogates predict SKIP under an
 accuracy-tuned threshold) — that decision is testimony/plurality-driven and not in the physical
 state.
 
 **What this changes:** the surrogate is **viable for the impostor side** — but as a **continuous
-LLM-free suspicion-RANK** (top-1 64% / top-2 73%), not a binary ejection predictor. That is exactly the
+LLM-free suspicion-RANK** (top-1 64% / top-2 82%), not a binary ejection predictor. That is exactly the
 Phase-11 information-economy thesis as a trainable fitness: *the impostor's objective = minimize
 its own learned physical-suspicion rank*, $0 with no LLM in the inner loop. The binary meeting
 OUTCOME (and the crew-side "eject correctly" fitness) is the part that still wants a real-LLM
@@ -233,7 +235,7 @@ design problem.**
   a stateful encoder + numpy (Check 1, FO-4); dense AND sparse-gated decisions learn + generalize
   (Check 2, FO-1); $0 ~20 games/s.
 - **Linchpin (surrogate) — viable as a continuous LLM-free suspicion-rank fitness** (FO-6, top-1
-  64% / top-2 73%). The impostor side — the primary Phase-11 lever — is trainable cheaply offline;
+  64% / top-2 82%). The impostor side — the primary Phase-11 lever — is trainable cheaply offline;
   use a real-LLM gate only for the binary outcome / crew side.
 - **Still open — co-evolution stability** (FO-2 collapsed naively). Now THE remaining Phase-C
   design problem, but it has a faithful continuous fitness (FO-6) to build on, with balanced
@@ -251,8 +253,8 @@ the impostor-tactical half**; the open work is co-evolution engineering, not fea
 
 | Probe | Question | Result |
 |---|---|---|
-| **FO-7 sabotage lever** | Can ES learn to *time* sabotage to win or create kills? | **NO at timer=6** — 0 IMPOSTOR_SABOTAGE wins for FSM, always-sabotage, AND learned timing; always-sabotage craters kills (31→6) and hits the tick cap; the ES learns to *avoid* sabotage (it cuts kills without winning) and converges to ~FSM. Sabotage is **dominated**; an emergent sabotage win needs the **owner-gated timer retune**, not a better learner — consistent with Phase-11's "stall not win" design. |
-| **FO-8 crew buddy** | Does a *non-degenerate* buddy system emerge under task pressure? | **YES (modest)** — a learned buddy/task gate hits **11/12** crew wins vs FSM **10/12**, while **always-buddy = 1/12** confirms the task pressure bites (no FO-2 degeneracy). The crew learns to buddy *selectively* (deny a kill) and still finish tasks. Headroom is small (the FSM/LLM crew already wins most), so the signal is +1 game — directionally real, not large. |
-| **FO-9 diversity** | Do independent ES runs collapse to a monoculture? | **NO — natural diversity** — 4 independent ES champions reach comparable fitness (4-13 resolved kills) via **different** movement (move-distribution cosine: mean 0.58, min 0.48 — below the 0.7 convergence bar, though closer than the raw-kill run). Single-population ES does *not* collapse to one behavior. |
+| **FO-7 sabotage lever** | Can ES learn to *time* sabotage to win or create kills? | **NO at timer=6** — 0 IMPOSTOR_SABOTAGE wins for FSM, always-sabotage, AND learned timing; always-sabotage craters kills (27→6) and hits the tick cap; the ES learns to *avoid* sabotage (it cuts kills without winning) and converges to ~FSM. Sabotage is **dominated**; an emergent sabotage win needs the **owner-gated timer retune**, not a better learner — consistent with Phase-11's "stall not win" design. |
+| **FO-8 crew buddy** | Does a *non-degenerate* buddy system emerge under task pressure? | **YES (modest)** — a learned buddy/task gate hits **11/12** crew wins vs FSM **10/12**, while **always-buddy = 6/12** confirms buddying-always still costs tasks (the gate only overrides movement, not report/repair interrupts). The crew learns to buddy *selectively* and still finish tasks. Headroom is small (the FSM/LLM crew already wins most), so the signal is +1 game — directionally real, not large. |
+| **FO-9 diversity** | Do independent ES runs collapse to a monoculture? | **NO — natural diversity** — 4 independent ES champions reach comparable fitness (7-13 resolved kills) via **different** movement (move-distribution cosine: mean 0.45, min 0.19 — below the 0.7 convergence bar). Single-population ES does *not* collapse to one behavior. |
 
 **Synthesis (refines the emergence picture):** (1) **sabotage emergence is timer-gated** (the frozen clock), not learner-limited — ML can't unlock it without an owner balance change; (2) **crew physical emergence (buddy system) is real but headroom-limited** by the already-strong FSM/LLM baseline; (3) **monoculture is a CO-EVOLUTION risk (FO-2), not a single-population one (FO-9)** — so quality-diversity (Phase D) matters most as a *co-evolution stabilizer*, which is exactly where FO-2 collapsed. Net: nothing here blocks Phase C; the emergence ceiling is the frozen LLM social layer (analyzed separately) plus the frozen clock for sabotage, and the realistic ML payoff remains emergent *tactics* that set up better situations for the LLM to dramatize.
