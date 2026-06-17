@@ -40,7 +40,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from api.replay_loader import ReplayLoader, get_replay_loader
-from api.schemas import EvalCostSummaryView, FailedCallEvalView
+from api.schemas import EvalCostSummaryView, FailedCallEvalView, RubricView
 from engine.entities import Role
 from eval.accusation_calibration import AccusationCalibrationReport
 from eval.alibi_fabrication import AlibiFabricationReport
@@ -176,6 +176,21 @@ def _redact_failed_calls(report: TournamentEvalReport) -> _TournamentEvalReportV
 @router.get("/cost-summary", response_model=EvalCostSummaryView)
 def get_cost_summary(loader: _LoaderDep) -> EvalCostSummaryView:
     return loader.cost_summary()
+
+
+@router.get("/rubric", response_model=RubricView)
+def get_rubric(loader: _LoaderDep) -> RubricView:
+    # Per-set interestingness rubric, staleness-guarded against the set's
+    # MANIFEST git sha (DESIGN.md §3.1, §7). A set with no co-located
+    # ``results-rubric-score.json`` (the 4p1i default) → 404, which the
+    # frontend renders as a first-class empty/zero-rubric state.
+    try:
+        return loader.rubric()
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="no results-rubric-score.json in the configured eval dir",
+        )
 
 
 @router.get("/tournament-report", response_model=_TournamentEvalReportView)

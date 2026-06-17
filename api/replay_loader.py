@@ -50,11 +50,15 @@ from agents.memory.store import (
 from agents.perception import EVENT_SAW_BODY, EVENT_SAW_PLAYER, ingest_packet
 from api.schemas import (
     AccusationClaimView,
+    AdvantageView,
     AgentMemoryView,
     AgentTickStateView,
     AlibiClaimView,
     BallotView,
     BeliefEntryView,
+    BeliefErrorView,
+    BeliefFrameView,
+    BodyView,
     CompletedTaskObsView,
     ContradictionView,
     CorroborationClaimView,
@@ -62,6 +66,7 @@ from api.schemas import (
     EvalCostSummaryView,
     FailedCallView,
     FoundBodyObsView,
+    GateView,
     KillEventView,
     LLMCallView,
     MapLayoutView,
@@ -73,6 +78,9 @@ from api.schemas import (
     ReplayView,
     ReportBodyEventView,
     RoomView,
+    RubricGameView,
+    RubricView,
+    SabotageDetailView,
     SabotageEventView,
     SawPlayerView,
     SizeView,
@@ -80,6 +88,7 @@ from api.schemas import (
     TickEventView,
     TickView,
     TurnView,
+    VentEventView,
     VentView,
 )
 from engine.actions import Action
@@ -89,11 +98,20 @@ from engine.events import (
     MeetingTriggeredEvent,
     SabotageStartedEvent,
     TaskCompletedEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
 )
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from eval.meeting_quality import TournamentEvalReport
-from meetings.manager import extract_belief_evidence
+from meetings.manager import (
+    BALLOT_TARGET_REDIRECT_MARKER,
+    DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
+    INVALID_REASON_ID_MARKER,
+    TEAMMATE_VOTE_TARGET_MARKER,
+    VOTE_PARSE_DEFAULT_MARKER,
+    extract_belief_evidence,
+)
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -108,6 +126,8 @@ from meetings.schemas import (
     SawPlayerObservation,
     VoteBallot,
 )
+from meetings.transcript import is_weak_contradiction
+from meetings.voting import INVALID_VOTE_TARGET_MARKER, SKIP_TARGET
 from observation.service import ObservationService
 from orchestrator.game import (
     DEFAULT_NUM_IMPOSTORS,
@@ -142,6 +162,19 @@ _DEFAULT_METADATA_CACHE_SIZE: Final[int] = 1024
 # the same configured replay/eval directory it scans for replays (Task 5.7).
 _TOURNAMENT_REPORT_FILENAME: Final[str] = "tournament-eval-report.json"
 
+# Per-set rubric surface (Task 12.2; DESIGN.md §3.1, §7). The interestingness
+# scorer (``experiments/lab/rubric_score.py``) co-locates its
+# ``results-rubric-score.json`` into a served set's dir; the loader serves it
+# read-only and staleness-guards it against the set's ``MANIFEST.md`` git sha.
+_RUBRIC_FILENAME: Final[str] = "results-rubric-score.json"
+_MANIFEST_FILENAME: Final[str] = "MANIFEST.md"
+
+# The ``MANIFEST.md`` table row shape (``scripts/_manifest_writer.py``):
+# ``| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd |
+# winner |``. The git sha is column index 5 once the leading empty cell (from
+# the leading ``|``) is included; a data row's first cell is the integer seed.
+_MANIFEST_GIT_SHA_COLUMN: Final[int] = 5
+
 # Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
 # that is NOT the MVP-default flat 4p/1i set ships this sidecar so the loader can
 # re-seed it with the right roles + task pool (``num_impostors`` /
@@ -158,19 +191,28 @@ _PLAYER_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"p-(\d+)")
 # the spectator UI gets stable, visually distinct colors without persisting a
 # color in the engine. Index past the palette wraps; non-``p-N`` ids fall back
 # to a hash-derived color.
+#
+# This is the Playful **identity palette** transcribed verbatim from the
+# committed token seed ``design/phase-12/tokens-seed.md`` — the SAME nine-colour
+# ``identity[]`` list Task 12.1 transcribes into ``frontend/src/tokens.ts``, so
+# the two parallel tasks cannot drift on it. It replaces the former 12-colour
+# rainbow, whose red/amber/blue/orange collided with the reserved firewall
+# channels (red=kill, amber=suspicion, blue=trust). The identity hues live in
+# greens/teals/purples, disjoint from every semantic channel, so a player's
+# colour never encodes role or guilt (DESIGN.md §1.3; claude-design-brief.md
+# "FIREWALL COLOR RULES"). Nine colours cover the canonical 9p roster (``p-1``
+# … ``p-9``); the index wrap is unchanged. Colours are derived at load — no
+# replay re-record, byte-identical reconstruction.
 _COLOR_PALETTE: Final[tuple[str, ...]] = (
-    "#e6194b",
-    "#3cb44b",
-    "#ffe119",
-    "#4363d8",
-    "#f58231",
-    "#911eb4",
-    "#46f0f0",
-    "#f032e6",
-    "#bcf60c",
-    "#fabebe",
-    "#008080",
-    "#9a6324",
+    "#5DA83A",
+    "#2BA45E",
+    "#14A06E",
+    "#0E9C93",
+    "#128F9E",
+    "#6C5CE0",
+    "#8350D6",
+    "#9A4FCB",
+    "#A94FC6",
 )
 
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
@@ -282,6 +324,9 @@ class ReplayLoader:
         self._cached_load = lru_cache(maxsize=cache_size)(self._load_replay)
         self._cached_memories = lru_cache(maxsize=cache_size)(
             self._reconstruct_meeting_memories
+        )
+        self._cached_belief_frames = lru_cache(maxsize=cache_size)(
+            self._compute_belief_frames
         )
         self._cached_summary = lru_cache(maxsize=metadata_cache_size)(
             self._read_summary
@@ -405,11 +450,67 @@ class ReplayLoader:
             raise KeyError(f"agent not found at meeting {meeting_id}: {agent_id}")
         return memories[key]
 
+    def belief_frames(self, game_id: str) -> tuple[BeliefFrameView, ...]:
+        """Return the per-MEETING belief × truth snapshots for a replay.
+
+        Reuses the (cached, expensive) meeting-memory re-walk and reshapes its
+        per-(meeting, agent) belief snapshots into the directed observer→subject
+        matrix with the Error projection vs ground-truth role (DESIGN.md §3.3,
+        §7). Beliefs are timeless/per-meeting (see :class:`BeliefFrameView`), so
+        there is one frame per meeting boundary. Cached per ``game_id``.
+        """
+
+        path, seed = self._resolve(game_id)
+        return self._cached_belief_frames(
+            seed, path, _mtime_ns(path), self._roster_mtime()
+        )
+
+    def rubric(self) -> RubricView:
+        """Load + staleness-guard the per-set rubric from the configured dir.
+
+        Reads ``<replay_dir>/results-rubric-score.json`` (co-located by
+        ``experiments/lab/rubric_score.py``) and serves its
+        ``interestingness.per_game[]`` rows, comparing the rubric's ``git_head``
+        to the set's ``MANIFEST.md`` git sha to flag staleness (DESIGN.md §3.1,
+        §7). Raises :class:`FileNotFoundError` when the set ships no rubric (the
+        4p1i default → the eval route maps that to a 404 / empty state). A
+        malformed rubric fails loud rather than being silently coerced (AGENTS.md
+        "no silent fallbacks").
+        """
+
+        path = self._replay_dir / _RUBRIC_FILENAME
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        raw: Any = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"invalid rubric file {path}: expected a JSON object, got "
+                f"{type(raw).__name__}"
+            )
+        seedset = raw.get("seedset")
+        if not isinstance(seedset, str):
+            raise ValueError(f"invalid rubric file {path}: missing/invalid 'seedset'")
+        git_head = raw.get("git_head")
+        if git_head is not None and not isinstance(git_head, str):
+            raise ValueError(f"invalid rubric file {path}: invalid 'git_head'")
+        inter = raw.get("interestingness")
+        per_game_raw = inter.get("per_game", []) if isinstance(inter, dict) else []
+        per_game = tuple(RubricGameView.model_validate(g) for g in per_game_raw)
+        manifest_sha = _manifest_git_sha(self._replay_dir)
+        return RubricView(
+            seedset=seedset,
+            git_head=git_head,
+            manifest_sha=manifest_sha,
+            stale=_rubric_is_stale(git_head, manifest_sha),
+            per_game=per_game,
+        )
+
     def clear_cache(self) -> None:
         """Drop the per-process caches (engine playback, memory walk, summary)."""
 
         self._cached_load.cache_clear()
         self._cached_memories.cache_clear()
+        self._cached_belief_frames.cache_clear()
         self._cached_summary.cache_clear()
 
     # -- cached implementations ------------------------------------------
@@ -442,6 +543,14 @@ class ReplayLoader:
         # ``_mtime_key`` / ``_roster_mtime_key`` key the cache only (Audit H-H-2);
         # see ``_load_replay``.
         return self._walk(path, seed, collect_memory=True).memories
+
+    def _compute_belief_frames(
+        self, seed: int, path: Path, _mtime_key: int, _roster_mtime_key: int
+    ) -> tuple[BeliefFrameView, ...]:
+        # Reshapes the (separately cached) meeting-memory walk; no second walk.
+        # ``_mtime_key`` / ``_roster_mtime_key`` key the cache only (Audit H-H-2).
+        memories = self._cached_memories(seed, path, _mtime_key, _roster_mtime_key)
+        return _belief_frames_from_memories(memories)
 
     # -- engine playback --------------------------------------------------
 
@@ -678,6 +787,8 @@ class ReplayLoader:
         sabotage_active = (
             (sabotage.kind,) if sabotage is not None and sabotage.active else ()
         )
+        tasks_completed_total = sum(1 for t in state.tasks.values() if t.completed)
+        tasks_required_total = len(state.tasks)
         return TickView(
             tick=tick,
             agent_states=agent_states,
@@ -688,8 +799,16 @@ class ReplayLoader:
             # so the total is the live instance count and is NOT bounded by the
             # map's task pool (14 instances at the canonical 9p/2i,
             # ``tasks_per_crewmate=2``, vs. the 12 map tasks).
-            tasks_completed_total=sum(1 for t in state.tasks.values() if t.completed),
-            tasks_required_total=len(state.tasks),
+            tasks_completed_total=tasks_completed_total,
+            tasks_required_total=tasks_required_total,
+            # Additive Phase-12 projections from the same re-walked state (§7):
+            bodies=_bodies_view(state),
+            sabotage=_sabotage_detail_view(state),
+            advantage=_advantage_view(
+                state,
+                tasks_completed=tasks_completed_total,
+                tasks_required=tasks_required_total,
+            ),
         )
 
     def _agent_tick_state(self, state: WorldState, pid: str) -> AgentTickStateView:
@@ -744,6 +863,25 @@ class ReplayLoader:
                         agent_id=event.actor,
                         task_id=event.task_id,
                         room_id=self._game_map.tasks[event.task_id].room,
+                    )
+                )
+            elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):
+                # Project the Phase-11 vent lever (DESIGN.md §3.2, §7): the
+                # engine emits both endpoints with source/destination rooms +
+                # traversal so the map can animate dive→travel→emerge. The
+                # per-vent witness sets are the agent-facing firewall channel
+                # (Task 12.3), deliberately not on the spectator timeline.
+                views.append(
+                    VentEventView(
+                        type="vent",
+                        tick=event.tick,
+                        actor_id=event.actor,
+                        phase=(
+                            "enter" if isinstance(event, VentEnteredEvent) else "exit"
+                        ),
+                        from_room_id=event.source_room,
+                        to_room_id=event.destination_room,
+                        traversal_ticks=event.traversal_ticks,
                     )
                 )
             elif isinstance(event, SabotageStartedEvent):
@@ -820,6 +958,7 @@ class ReplayLoader:
             ),
             prompt_versions=dict(entry.prompt_versions),
             total_cost_usd=sum((call.cost_usd for call in entry.llm_calls), 0.0),
+            gate=_gate_view(entry.ballots),
         )
 
     def _agent_memory_view(
@@ -1387,6 +1526,10 @@ def _turn_view(turn: MeetingTurn) -> TurnView:
 
 
 def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
+    # Lift the weak/strong class out of the free-text ``description`` marker via
+    # the canonical predicate (imported, never re-implemented) so the meeting
+    # view can draw weak=dashed / strong=solid without re-parsing client-side.
+    weak = is_weak_contradiction(contradiction)
     return ContradictionView(
         contradiction_id=contradiction.contradiction_id,
         kind=contradiction.kind,
@@ -1394,10 +1537,13 @@ def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
         event_b_id=contradiction.event_b_id,
         subjects=tuple(contradiction.subjects),
         description=contradiction.description,
+        weak=weak,
+        severity="weak" if weak else "strong",
     )
 
 
 def _ballot_view(ballot: VoteBallot) -> BallotView:
+    reasons, clean = _parse_rewrite_reasons(ballot.rationale_text)
     return BallotView(
         voter=ballot.voter,
         target=ballot.target,
@@ -1405,6 +1551,8 @@ def _ballot_view(ballot: VoteBallot) -> BallotView:
         primary_reason_id=ballot.primary_reason_id,
         considered_alternatives=tuple(ballot.considered_alternatives),
         rationale_text=ballot.rationale_text,
+        rewrite_reasons=reasons,
+        rationale_text_clean=clean,
     )
 
 
@@ -1477,6 +1625,265 @@ def _belief_entry_view(memory: AgentMemory, subject: str, tick: int) -> BeliefEn
         confidence=min(1.0, abs(belief.suspicion - 0.5) * 2.0),
         snapshot_tick=tick,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase-12 additive projections (Task 12.2; DESIGN.md §7). All derive from the
+# already-re-walked engine state / persisted meeting records — nothing new is
+# persisted and no replay is re-recorded.
+# ---------------------------------------------------------------------------
+
+
+def _bodies_view(state: WorldState) -> tuple[BodyView, ...]:
+    """Project every body on the floor this tick (persistent ``killed_by``)."""
+
+    return tuple(
+        BodyView(
+            body_id=body.id,
+            victim_id=body.player_id,
+            room_id=body.room,
+            killed_by=body.killed_by,
+        )
+        for body in sorted(state.bodies.values(), key=lambda b: b.id)
+    )
+
+
+def _sabotage_detail_view(state: WorldState) -> SabotageDetailView | None:
+    """Project the active sabotage's repair race + countdown, or ``None``."""
+
+    sabotage = state.sabotage
+    if sabotage is None or not sabotage.active:
+        return None
+    # Narrow the engine's ``str`` kind to the projected Literal, fail-loud on an
+    # unknown kind (mirrors ``_tick_events``' SabotageStarted handling).
+    kind: Literal["lights", "reactor"]
+    if sabotage.kind == "lights":
+        kind = "lights"
+    elif sabotage.kind == "reactor":
+        kind = "reactor"
+    else:
+        raise ValueError(f"unprojectable sabotage kind: {sabotage.kind}")
+    return SabotageDetailView(
+        kind=kind,
+        remaining_ticks=sabotage.remaining_ticks,
+        affected_rooms=tuple(sabotage.affected_rooms),
+        repair_progress=dict(sabotage.repair_progress),
+    )
+
+
+def _advantage_view(
+    state: WorldState, *, tasks_completed: int, tasks_required: int
+) -> AdvantageView:
+    """Project the per-tick crew/impostor advantage frame (DESIGN.md §4, §7).
+
+    The four counts are authoritative; ``advantage`` is a single signed render
+    heuristic in ``[-1, 1]`` (positive favours the crew): the crew task clock
+    (``tasks_completed / tasks_required``) minus impostor parity pressure
+    (``impostors_alive / max(crew_alive, 1)``, → 1.0 at parity), clamped. It
+    starts mildly negative (impostors hold the initiative), rises as the crew
+    completes tasks, and falls as kills approach parity.
+    """
+
+    crew_alive = sum(
+        1 for p in state.players.values() if p.alive and p.role == "CREWMATE"
+    )
+    impostors_alive = sum(
+        1 for p in state.players.values() if p.alive and p.role == "IMPOSTOR"
+    )
+    task_progress = (tasks_completed / tasks_required) if tasks_required > 0 else 0.0
+    impostor_pressure = impostors_alive / crew_alive if crew_alive > 0 else 1.0
+    advantage = max(-1.0, min(1.0, task_progress - impostor_pressure))
+    return AdvantageView(
+        crew_alive=crew_alive,
+        impostors_alive=impostors_alive,
+        tasks_completed=tasks_completed,
+        tasks_required=tasks_required,
+        advantage=advantage,
+    )
+
+
+def _gate_view(ballots: Sequence[VoteBallot]) -> GateView:
+    """Recompute the per-meeting §4.6 verdict from the persisted ballots.
+
+    Mirrors :func:`meetings.voting.tally_ballots` exactly — plurality + at least
+    one leader ballot ``confidence >= threshold`` (0.6); a SKIP plurality or a
+    tie of non-SKIP targets → no leader / not passed — so ``passed`` matches the
+    recorded outcome and ``leader`` the recorded ``ejected_player_id``. The
+    template-time ``rendered_max`` is intentionally dropped (it is transient and
+    only persisted on failed calls).
+    """
+
+    threshold = DEFAULT_SKIP_CONFIDENCE_THRESHOLD
+    tallies: dict[str, int] = {}
+    for ballot in ballots:
+        tallies[ballot.target] = tallies.get(ballot.target, 0) + 1
+    if not tallies:
+        return GateView(
+            leader=None, leader_max_confidence=0.0, threshold=threshold, passed=False
+        )
+    max_votes = max(tallies.values())
+    leaders = sorted(target for target, count in tallies.items() if count == max_votes)
+    if SKIP_TARGET in leaders or len(leaders) > 1:
+        return GateView(
+            leader=None, leader_max_confidence=0.0, threshold=threshold, passed=False
+        )
+    leader = leaders[0]
+    leader_max_confidence = max(b.confidence for b in ballots if b.target == leader)
+    return GateView(
+        leader=leader,
+        leader_max_confidence=leader_max_confidence,
+        threshold=threshold,
+        passed=leader_max_confidence >= threshold,
+    )
+
+
+# (label, marker) for the audit markers the meeting layer prepends to a ballot's
+# ``rationale_text``. Imported from ``meetings.voting`` / ``meetings.manager`` —
+# never hard-coded, since the markers are ``.format()``-interpolated and a
+# rename must break loudly here. The label is the stable, frontend-renderable
+# chip id. ``VOTE_PARSE_DEFAULT`` is handled separately: it is the WHOLE
+# rationale, not a prefix.
+_BALLOT_PREFIX_MARKERS: Final[tuple[tuple[str, str], ...]] = (
+    ("invalid_target", INVALID_VOTE_TARGET_MARKER),
+    ("teammate_coerced", TEAMMATE_VOTE_TARGET_MARKER),
+    ("under_gate_redirect", BALLOT_TARGET_REDIRECT_MARKER),
+    ("invalid_reason_id", INVALID_REASON_ID_MARKER),
+)
+_VOTE_PARSE_DEFAULT_LABEL: Final[str] = "parse_default"
+
+
+def _split_marker(marker: str) -> tuple[str, str]:
+    """Static ``(head, tail)`` of a ``.format()`` marker, around its ``{...}``."""
+
+    head, _, rest = marker.partition("{")
+    _, _, tail = rest.partition("}")
+    return head, tail
+
+
+def _parse_rewrite_reasons(rationale_text: str) -> tuple[tuple[str, ...], str]:
+    """Parse the firewall/parse audit markers off a ballot's ``rationale_text``.
+
+    Returns ``(rewrite_reasons, rationale_text_clean)``.
+    :data:`~meetings.manager.VOTE_PARSE_DEFAULT_MARKER` is the WHOLE rationale
+    (the manager's vote fail-soft authored no model text) and is special-cased:
+    the entire string is consumed and the clean remainder is empty. The other
+    markers are prepended prefixes (possibly stacked, e.g. an invalid target
+    plus a nulled reason id) and are stripped front-to-back, leaving the
+    model-authored text. Markers are matched on their imported constants' static
+    head/tail, never on a hard-coded literal.
+    """
+
+    parse_default_head, _ = _split_marker(VOTE_PARSE_DEFAULT_MARKER)
+    if rationale_text.startswith(parse_default_head):
+        return (_VOTE_PARSE_DEFAULT_LABEL,), ""
+
+    reasons: list[str] = []
+    text = rationale_text
+    stripped = True
+    while stripped:
+        stripped = False
+        for label, marker in _BALLOT_PREFIX_MARKERS:
+            head, tail = _split_marker(marker)
+            if not text.startswith(head):
+                continue
+            end = text.find(tail, len(head))
+            if end == -1:
+                continue
+            reasons.append(label)
+            text = text[end + len(tail) :]
+            stripped = True
+            break
+    return tuple(reasons), text
+
+
+def _belief_frames_from_memories(
+    memories: Mapping[tuple[str, str], AgentMemoryView],
+) -> tuple[BeliefFrameView, ...]:
+    """Reshape per-(meeting, agent) memory snapshots into per-meeting belief
+    matrices with the Error projection vs ground-truth role (DESIGN.md §3.3).
+
+    Each agent's ``role`` is static, so any snapshot of an agent carries its
+    true role; the subject's role drives ``subject_is_impostor`` and the signed
+    ``error`` (``suspicion - truth``). One frame per meeting, deterministically
+    ordered (meeting id, then observer id; beliefs already arrive subject-sorted).
+    """
+
+    role_by_agent: dict[str, str] = {
+        agent_id: view.role for (_, agent_id), view in memories.items()
+    }
+    by_meeting: dict[str, list[AgentMemoryView]] = {}
+    meeting_tick: dict[str, int] = {}
+    for (meeting_id, _), view in memories.items():
+        by_meeting.setdefault(meeting_id, []).append(view)
+        meeting_tick[meeting_id] = view.tick
+
+    frames: list[BeliefFrameView] = []
+    for meeting_id in sorted(by_meeting):
+        entries: list[BeliefErrorView] = []
+        for view in sorted(by_meeting[meeting_id], key=lambda v: v.agent_id):
+            for belief in view.beliefs:
+                subject_is_impostor = role_by_agent.get(belief.subject) == "IMPOSTOR"
+                entries.append(
+                    BeliefErrorView(
+                        observer=view.agent_id,
+                        subject=belief.subject,
+                        suspicion=belief.suspicion,
+                        confidence=belief.confidence,
+                        subject_is_impostor=subject_is_impostor,
+                        error=belief.suspicion - (1.0 if subject_is_impostor else 0.0),
+                    )
+                )
+        frames.append(
+            BeliefFrameView(
+                meeting_id=meeting_id,
+                tick=meeting_tick[meeting_id],
+                entries=tuple(entries),
+            )
+        )
+    return tuple(frames)
+
+
+def _manifest_git_sha(replay_dir: Path) -> str | None:
+    """The single distinct git sha across the set's ``MANIFEST.md`` data rows.
+
+    Returns ``None`` when the manifest is absent, carries no data rows, or holds
+    more than one distinct sha (a piecemeal-refreshed set) — any of which makes a
+    clean freshness comparison impossible, so :func:`_rubric_is_stale` reports
+    the rubric stale rather than silently fresh.
+    """
+
+    try:
+        text = (replay_dir / _MANIFEST_FILENAME).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    shas: set[str] = set()
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.split("|")]
+        if len(cells) <= _MANIFEST_GIT_SHA_COLUMN:
+            continue
+        # cells[0] is the empty leading cell; cells[1] is the seed (data rows
+        # only — the header/separator rows fail the integer check).
+        if not cells[1].lstrip("-").isdigit():
+            continue
+        sha = cells[_MANIFEST_GIT_SHA_COLUMN]
+        if sha:
+            shas.add(sha)
+    return next(iter(shas)) if len(shas) == 1 else None
+
+
+def _rubric_is_stale(git_head: str | None, manifest_sha: str | None) -> bool:
+    """Whether the rubric's scoring commit disagrees with the set's record commit.
+
+    Fresh iff both shas are present and one is a prefix of the other (the
+    manifest stores a SHORT sha; the rubric a full ``git rev-parse HEAD``). Any
+    missing sha → stale (the banner shows rather than a false "fresh").
+    """
+
+    if git_head is None or manifest_sha is None:
+        return True
+    return not (git_head.startswith(manifest_sha) or manifest_sha.startswith(git_head))
 
 
 def get_replay_loader(request: Request) -> ReplayLoader:

@@ -21,10 +21,16 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
-import sys
+import subprocess
 from pathlib import Path
 from typing import Any
+
+# Filename the per-set rubric is co-located under, inside a served replay set
+# dir, so ``api.replay_loader.ReplayLoader.rubric`` can serve it (Task 12.2;
+# DESIGN.md §3.1, §7). Kept identical to ``api.replay_loader._RUBRIC_FILENAME``.
+RUBRIC_RESULTS_FILENAME = "results-rubric-score.json"
 
 
 def _pct(n: int, d: int) -> str:
@@ -344,11 +350,68 @@ def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _git_head() -> str | None:
+    """Current ``git rev-parse HEAD``, or ``None`` when git is unavailable."""
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
+
+
+def regen_for_set(
+    facts: dict[str, Any], set_dir: Path, *, git_head: str | None = None
+) -> Path:
+    """Re-run the scorer and co-locate ``results-rubric-score.json`` into a set.
+
+    The per-set rubric PRODUCER (Task 12.2; DESIGN.md §3.1, §7). Scores ``facts``
+    (the gameplay-facts extractor's output) into the served interestingness
+    surface and writes it into ``set_dir`` so ``/eval/rubric`` can serve it.
+    The result is stamped with ``git_head`` — current ``HEAD`` by default — so
+    the loader's staleness guard compares the rubric's scoring commit to the
+    set's ``MANIFEST.md`` git sha (a fresh re-record + regen at one commit reads
+    as fresh; a regen against drifted replays reads as stale).
+
+    Writes the SERVED subset (``seedset`` / ``git_head`` / ``interestingness``);
+    the human-readable R1–R7 ``rows`` table stays the lab-local artifact
+    :func:`main` writes. Wire this into the refresh / re-record path (run after
+    ``scripts/refresh_samples.sh`` re-records a set) so the happy path stays
+    fresh rather than only banner-guarded when stale.
+    """
+
+    head = git_head if git_head is not None else (_git_head() or facts.get("git_head"))
+    out = {
+        "seedset": facts.get("seedset"),
+        "git_head": head,
+        "interestingness": interestingness(facts),
+    }
+    dest = Path(set_dir) / RUBRIC_RESULTS_FILENAME
+    dest.write_text(json.dumps(out, indent=2))
+    return dest
+
+
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("usage: rubric_score.py FACTS_JSON", file=sys.stderr)
-        return 2
-    facts = json.loads(Path(sys.argv[1]).read_text())
+    parser = argparse.ArgumentParser(
+        description="Score rubric R1-R7 over a facts JSON."
+    )
+    parser.add_argument("facts_json", help="gameplay-facts extractor output")
+    parser.add_argument(
+        "--set-dir",
+        default=None,
+        help=(
+            "also co-locate results-rubric-score.json into this served replay "
+            "set dir, stamped with git HEAD (the per-set regen producer for "
+            "/eval/rubric)"
+        ),
+    )
+    args = parser.parse_args()
+    facts = json.loads(Path(args.facts_json).read_text())
     label = facts.get("seedset", "?")
     head = facts.get("git_head", "?")[:12]
     print(
@@ -393,6 +456,10 @@ def main() -> int:
         json.dumps(out, indent=2)
     )
     print("\nwrote experiments/lab/results-rubric-score.json")
+
+    if args.set_dir is not None:
+        dest = regen_for_set(facts, Path(args.set_dir))
+        print(f"co-located per-set rubric (git_head stamped): {dest}")
     return 0
 
 

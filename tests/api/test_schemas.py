@@ -14,11 +14,15 @@ import pytest
 
 from api.schemas import (
     AccusationClaimView,
+    AdvantageView,
     AgentMemoryView,
     AgentTickStateView,
     AlibiClaimView,
     BallotView,
     BeliefEntryView,
+    BeliefErrorView,
+    BeliefFrameView,
+    BodyView,
     CompletedTaskObsView,
     ContradictionView,
     CorroborationClaimView,
@@ -26,6 +30,7 @@ from api.schemas import (
     EvalCostSummaryView,
     FailedCallView,
     FoundBodyObsView,
+    GateView,
     KillEventView,
     LLMCallView,
     MapLayoutView,
@@ -38,6 +43,9 @@ from api.schemas import (
     ReplayView,
     ReportBodyEventView,
     RoomView,
+    RubricGameView,
+    RubricView,
+    SabotageDetailView,
     SabotageEventView,
     SawPlayerView,
     SizeView,
@@ -47,6 +55,7 @@ from api.schemas import (
     TaskCompletedEventView,
     TickView,
     TurnView,
+    VentEventView,
     VentView,
 )
 
@@ -122,6 +131,8 @@ def _contradiction() -> ContradictionView:
         event_b_id="b1",
         subjects=("p2",),
         description="p2 claims storage but was seen in cafeteria",
+        weak=False,
+        severity="strong",
     )
 
 
@@ -182,6 +193,15 @@ def _tick_view() -> TickView:
                 triggered_by="p1",
                 trigger_kind="body",
             ),
+            VentEventView(
+                type="vent",
+                tick=10,
+                actor_id="p2",
+                phase="enter",
+                from_room_id="ELECTRICAL",
+                to_room_id="MEDBAY",
+                traversal_ticks=2,
+            ),
         ),
         sabotage_active=("lights",),
         # Per-player task instances (DESIGN.md §3.2/§3.5): the canonical 9p/2i
@@ -189,6 +209,25 @@ def _tick_view() -> TickView:
         # map tasks, so the spectator total exceeds the old map-task pool.
         tasks_completed_total=9,
         tasks_required_total=14,
+        # Phase-12 additive projections (DESIGN.md §7).
+        bodies=(
+            BodyView(
+                body_id="body-p4-7", victim_id="p4", room_id="STORAGE", killed_by="p2"
+            ),
+        ),
+        sabotage=SabotageDetailView(
+            kind="lights",
+            remaining_ticks=42,
+            affected_rooms=("ADMIN",),
+            repair_progress={"ADMIN": 3},
+        ),
+        advantage=AdvantageView(
+            crew_alive=6,
+            impostors_alive=1,
+            tasks_completed=9,
+            tasks_required=14,
+            advantage=0.47,
+        ),
     )
 
 
@@ -209,6 +248,8 @@ def _meeting_view() -> MeetingView:
                 primary_reason_id="m1:turn-1",
                 considered_alternatives=("SKIP",),
                 rationale_text="p2 vented",
+                rewrite_reasons=(),
+                rationale_text_clean="p2 vented",
             ),
             BallotView(
                 voter="p3",
@@ -216,7 +257,9 @@ def _meeting_view() -> MeetingView:
                 confidence=0.4,
                 primary_reason_id=None,
                 considered_alternatives=(),
-                rationale_text="not enough info",
+                rationale_text="[teammate target 'p2' coerced to SKIP] cover",
+                rewrite_reasons=("teammate_coerced",),
+                rationale_text_clean="cover",
             ),
         ),
         contradictions=(_contradiction(),),
@@ -235,6 +278,9 @@ def _meeting_view() -> MeetingView:
         ),
         prompt_versions={"crewmate_report": "v1", "vote_ballot": "v2"},
         total_cost_usd=0.0,
+        gate=GateView(
+            leader="p2", leader_max_confidence=0.9, threshold=0.6, passed=True
+        ),
     )
 
 
@@ -322,6 +368,59 @@ def _replay_view() -> ReplayView:
     )
 
 
+def _belief_frame_view() -> BeliefFrameView:
+    # A per-meeting belief × truth snapshot: one observer→subject cell whose
+    # error is the signed Belief − Truth (suspicion 0.8 of a real impostor →
+    # error −0.2, "nearly got it"), and one cell over a crewmate.
+    return BeliefFrameView(
+        meeting_id="m1",
+        tick=10,
+        entries=(
+            BeliefErrorView(
+                observer="p1",
+                subject="p2",
+                suspicion=0.8,
+                confidence=0.6,
+                subject_is_impostor=True,
+                error=0.8 - 1.0,
+            ),
+            BeliefErrorView(
+                observer="p1",
+                subject="p3",
+                suspicion=0.2,
+                confidence=0.6,
+                subject_is_impostor=False,
+                error=0.2,
+            ),
+        ),
+    )
+
+
+def _rubric_view() -> RubricView:
+    return RubricView(
+        seedset="9p2i",
+        git_head="d8cb869c0bea65fdb0b1864b5d89f1249a58c5ed",
+        manifest_sha="1e48c40",
+        stale=True,
+        per_game=(
+            RubricGameView(
+                seed=5,
+                score=80.0,
+                reason="CREWMATE_EJECT",
+                n_meetings=3,
+                win_shape="eject-decided",
+                ejected_impostors=1,
+                accused_impostors=2,
+                survived_accused=0,
+                r1_decisive=1.0,
+                r2_deception=0.6,
+                r3_arcs=1.0,
+                r7_legible=1.0,
+            ),
+        ),
+    )
+
+
 def _suspicion_graph_view() -> SuspicionGraphView:
     return SuspicionGraphView(
         tick=10,
@@ -350,6 +449,8 @@ _TOP_LEVEL_FIXTURES: tuple[pydantic.BaseModel, ...] = (
     _eval_cost_summary_view(),
     _replay_metadata_view(),
     _suspicion_graph_view(),
+    _belief_frame_view(),
+    _rubric_view(),
 )
 
 
@@ -382,6 +483,7 @@ def test_tick_events_cover_every_variant_and_round_trip() -> None:
         "sabotage",
         "task_completed",
         "meeting_triggered",
+        "vent",
     }
     assert TickView.model_validate_json(tick.model_dump_json()) == tick
 

@@ -32,9 +32,18 @@ concrete models.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Annotated, Literal, TypeAlias
+from typing import Annotated, Final, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# Versioned view-model contract (Phase 12, Task 12.2; DESIGN.md §7). The served
+# payload carries this so the frontend can fail loud on an incompatible
+# contract rather than silently mis-rendering a drifted shape. Bumped only on a
+# breaking shape change; additive projections do NOT bump it. Kept a plain
+# string (not semver) so a future minor revision ("1.1") is representable
+# without retyping the field. ``frontend/src/types/api.ts`` is generated from
+# these models (no hand-mirror), so DTO ↔ TS cannot drift.
+VIEW_MODEL_VERSION: Final[str] = "1"
 
 
 class _FrozenView(BaseModel):
@@ -208,14 +217,95 @@ class MeetingTriggeredEventView(_FrozenView):
     trigger_kind: Literal["body", "emergency"]
 
 
+class VentEventView(_FrozenView):
+    """Projects ``engine.events.VentEnteredEvent`` / ``VentExitedEvent`` — the
+    Phase-11 impostor deception lever made observable (DESIGN.md §3.2, §7).
+
+    The engine already emits both endpoints with the source/destination rooms
+    and ``traversal_ticks``, but only an ``is_venting`` bool survived into the
+    per-tick DTO, so the map renderer could only blink the token in/out. This
+    projection carries the full dive→travel→emerge so the map stage (Task 12.5)
+    can animate the route along ``MapLayoutView.vents``. ``phase`` is ``enter``
+    (dive) for ``VentEntered`` and ``exit`` (emerge) for ``VentExited``;
+    ``from_room_id`` / ``to_room_id`` are the engine's ``source_room`` /
+    ``destination_room``. The per-vent witness sets are intentionally NOT
+    projected here — vent witnessing is the agent-facing firewall channel and
+    is reconstructed by the Task 12.3 per-tick visibility projection, not the
+    spectator timeline.
+    """
+
+    type: Literal["vent"]
+    tick: int
+    actor_id: str
+    phase: Literal["enter", "exit"]
+    from_room_id: str
+    to_room_id: str
+    traversal_ticks: int
+
+
 TickEventView: TypeAlias = Annotated[
     KillEventView
     | ReportBodyEventView
     | SabotageEventView
     | TaskCompletedEventView
-    | MeetingTriggeredEventView,
+    | MeetingTriggeredEventView
+    | VentEventView,
     Field(discriminator="type"),
 ]
+
+
+class BodyView(_FrozenView):
+    """Persistent body marker projected from ``engine.world.WorldState.bodies``
+    (DESIGN.md §3.2, §7).
+
+    ``KillEventView`` carries the kill attribution at the instant of the kill;
+    this projection re-states a body on the floor at EVERY tick it persists, so
+    the map can keep the marker (and its attribution) until the body is reported.
+    ``killed_by`` is the privileged SPECTATOR attribution (the killer's id),
+    which the agent-facing ``BodyView`` in ``observation/`` deliberately omits —
+    the spectator surface is privileged, so it is re-exposed here.
+    """
+
+    body_id: str
+    victim_id: str
+    room_id: str
+    killed_by: str
+
+
+class SabotageDetailView(_FrozenView):
+    """The active sabotage's per-room repair race + countdown, projected from the
+    re-walked ``engine.entities.SabotageState`` (DESIGN.md §3.2, §8.3, §7).
+
+    ``remaining_ticks`` is the gating-reactor countdown (SPECTATOR-privileged;
+    firewalled from agents). ``repair_progress`` maps each repair room to ticks
+    of repair already applied, so the map can render the genuine multi-room
+    repair race the ``lights``/``reactor`` sabotages drive — none of which was
+    in any DTO before (only the kind survived, via ``TickView.sabotage_active``).
+    """
+
+    kind: Literal["lights", "reactor"]
+    remaining_ticks: int
+    affected_rooms: tuple[str, ...]
+    repair_progress: Mapping[str, int]
+
+
+class AdvantageView(_FrozenView):
+    """Per-tick crew-vs-impostor advantage, derived from re-walked state
+    (DESIGN.md §4, §7) — the data behind the advantage graph / second scrubber.
+
+    The component counts are authoritative; ``advantage`` is a single rendering
+    heuristic in ``[-1, 1]`` (positive favours the crew). It blends the crew
+    task clock (``tasks_completed / tasks_required``) against impostor parity
+    pressure (``impostors_alive / max(crew_alive, 1)``) and is clamped — see
+    ``api.replay_loader._advantage_view`` for the exact formula. Consumers that
+    want a different curve re-derive it from the four counts.
+    """
+
+    crew_alive: int
+    impostors_alive: int
+    tasks_completed: int
+    tasks_required: int
+    advantage: float
 
 
 class TickView(_FrozenView):
@@ -237,6 +327,14 @@ class TickView(_FrozenView):
     sabotage_active: tuple[str, ...]
     tasks_completed_total: int
     tasks_required_total: int
+    # Additive Phase-12 projections, all from already-re-walked state (DESIGN.md
+    # §7). ``bodies`` re-states every body on the floor this tick (persistent
+    # attribution); ``sabotage`` is the active sabotage's repair race + countdown
+    # (``None`` when no sabotage is active); ``advantage`` is the crew/impostor
+    # advantage frame for the §4 advantage graph.
+    bodies: tuple[BodyView, ...]
+    sabotage: SabotageDetailView | None
+    advantage: AdvantageView
 
 
 # ---------------------------------------------------------------------------
@@ -342,7 +440,18 @@ class TurnView(_FrozenView):
 
 
 class ContradictionView(_FrozenView):
-    """Shadows ``meetings.schemas.ContradictionRef`` (a flagged contradiction)."""
+    """Shadows ``meetings.schemas.ContradictionRef`` (a flagged contradiction).
+
+    ``weak`` / ``severity`` lift the detector's weak-vs-strong classification out
+    of the free-text ``description`` marker into a structured field (DESIGN.md
+    §3.4, §7). Weakness is a substring marker in ``description``
+    (``meetings.transcript.WEAK_CONTRADICTION_MARKER_PREFIX``); the loader
+    re-derives the class at load via ``meetings.transcript.is_weak_contradiction``
+    (imported, never re-implemented) so the meeting view can draw weak=dashed /
+    strong=solid links without re-parsing the string client-side. Belief Rule 2
+    keys its graduated down-weight on the same predicate, so the two cannot
+    drift.
+    """
 
     contradiction_id: str
     kind: Literal["alibi_conflict", "alibi_vs_sighting"]
@@ -350,6 +459,8 @@ class ContradictionView(_FrozenView):
     event_b_id: str
     subjects: tuple[str, ...]
     description: str
+    weak: bool
+    severity: Literal["weak", "strong"]
 
 
 class BallotView(_FrozenView):
@@ -357,6 +468,16 @@ class BallotView(_FrozenView):
 
     ``target`` flattens ``str | Literal["SKIP"]`` to a plain ``str`` ("SKIP"
     or a player id) for JSON simplicity.
+
+    ``rewrite_reasons`` / ``rationale_text_clean`` parse the firewall/parse
+    audit markers the meeting layer prepends to ``rationale_text`` (DESIGN.md
+    §3.4, §7) into structured chips + the model-authored remainder. The loader
+    matches the markers by IMPORTING the constants from ``meetings.voting`` and
+    ``meetings.manager`` (never hard-coding the literals, which are
+    ``.format()``-interpolated), so a marker rename cannot silently break the
+    parse. ``VOTE_PARSE_DEFAULT`` is special-cased: it is the WHOLE
+    ``rationale_text`` (the model authored nothing), so ``rationale_text_clean``
+    is empty for it. See ``api.replay_loader._parse_rewrite_reasons``.
     """
 
     voter: str
@@ -365,6 +486,8 @@ class BallotView(_FrozenView):
     primary_reason_id: str | None
     considered_alternatives: tuple[str, ...]
     rationale_text: str
+    rewrite_reasons: tuple[str, ...]
+    rationale_text_clean: str
 
 
 class LLMCallView(_FrozenView):
@@ -387,12 +510,37 @@ class LLMCallView(_FrozenView):
     agent_id: str | None
 
 
+class GateView(_FrozenView):
+    """The per-meeting §4.6 verdict, recomputed from the persisted ballots
+    (DESIGN.md §3.4, §4.6, §7).
+
+    The real rule (``meetings.voting.tally_ballots``) is **plurality + at least
+    one leader ballot with ``confidence >= threshold`` (0.6), tie or
+    SKIP-plurality → SKIPPED** — NOT a vote-count majority, and NOT the
+    template-time ``rendered_max`` (which is transient and only persisted on
+    failed calls, so it is intentionally dropped). ``leader`` is the sole
+    non-SKIP plurality leader (the ejection candidate) or ``None`` when SKIP
+    won, the leaders tied, or there were no ballots; ``leader_max_confidence`` is
+    that leader's strongest ballot (``0.0`` when there is no leader); ``passed``
+    is ``True`` iff the gate ejects (``leader is not None`` and
+    ``leader_max_confidence >= threshold``). ``passed`` therefore mirrors the
+    meeting's recorded outcome and ``leader`` its ``ejected_player_id`` — pinned
+    by the consistency test in ``tests/api/test_view_model.py``.
+    """
+
+    leader: str | None
+    leader_max_confidence: float
+    threshold: float
+    passed: bool
+
+
 class MeetingView(_FrozenView):
     """Shadows ``orchestrator.replay.MeetingReplayEntry``.
 
     ``trigger_kind`` is derived from the source meeting trigger. ``outcome``
     and ``ejected_player_id`` are coupled (EJECTED <=> non-null id).
-    ``total_cost_usd`` is the sum of ``llm_calls[*].cost_usd``.
+    ``total_cost_usd`` is the sum of ``llm_calls[*].cost_usd``. ``gate`` is the
+    per-meeting §4.6 verdict recomputed from ``ballots`` (see :class:`GateView`).
 
     ``turns`` is the single ordered transcript of the reactive accusation
     chain (DESIGN.md §5.2): opening turn, then the reactive ``reply`` chain,
@@ -414,6 +562,7 @@ class MeetingView(_FrozenView):
     llm_calls: tuple[LLMCallView, ...]
     prompt_versions: Mapping[str, str]
     total_cost_usd: float
+    gate: GateView
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +608,52 @@ class AgentMemoryView(_FrozenView):
     rendered_memory_text: str
 
 
+class BeliefErrorView(_FrozenView):
+    """One directed observer→subject belief cell at a meeting boundary, with its
+    error vs ground truth (DESIGN.md §3.3, §7) — the Belief × Truth hero datum.
+
+    ``suspicion`` / ``confidence`` are the observer's belief about the subject
+    (from the reconstructed ``agents.memory`` belief state). ``subject_is_impostor``
+    is the privileged SPECTATOR ground truth (the subject's ``PlayerView.role``),
+    and ``error`` is the signed Belief − Truth projection: ``suspicion - (1.0 if
+    subject_is_impostor else 0.0)``. A crewmate strongly suspecting the real
+    impostor → ``error`` near +1 against an impostor subject ("got it"); a cool
+    column on a real impostor → ``error`` near −1 ("getting away with it"); a hot
+    column on a crewmate → ``error`` near +1 against a crew subject ("confidently
+    wrong"). The Error view buckets/renders these LOUD client-side with its own
+    tokens — the projection here is pure arithmetic vs role, baking in no
+    thresholds (so the suspicion buckets stay single-sourced in ``tokens.ts``).
+    The firewall (identity ≠ guilt; ground-truth suppressed in fog) is enforced
+    by the renderer, not this privileged contract.
+    """
+
+    observer: str
+    subject: str
+    suspicion: float
+    confidence: float
+    subject_is_impostor: bool
+    error: float
+
+
+class BeliefFrameView(_FrozenView):
+    """A per-MEETING snapshot of the full belief × truth matrix (DESIGN.md §3.3,
+    §7).
+
+    Beliefs are "timeless" (per-meeting, not per-tick) by the Phase-4 decision
+    (see :class:`BeliefEntryView` and stage-0 §0.5): between meetings only belief
+    Rules 1/4 fire and the vote-time Rule-2 lift is never persisted, so a
+    per-tick belief frame would be noise *and* disagree with the ballot. This
+    frame is therefore meeting-granular: ``tick`` is the meeting boundary, and
+    ``entries`` is the directed observer→subject matrix with the error vs ground
+    truth. The frontend steps before→after across the game's (median 2, max 4)
+    meetings — small-multiples, not animation.
+    """
+
+    meeting_id: str
+    tick: int
+    entries: tuple[BeliefErrorView, ...]
+
+
 class SuspicionEntryView(_FrozenView):
     """One directed observer -> subject suspicion edge, derived from per-agent
     ``agents.memory`` belief state."""
@@ -470,7 +665,20 @@ class SuspicionEntryView(_FrozenView):
 
 class SuspicionGraphView(_FrozenView):
     """The suspicion graph at one tick, derived from every agent's
-    ``agents.memory`` belief state."""
+    ``agents.memory`` belief state.
+
+    **Intentionally dead — kept, not revived (DESIGN.md §7; stage-0 §0.5).** This
+    per-TICK shape has no route and no producer, and Phase 12 deliberately does
+    NOT add one: beliefs are "timeless" (per-meeting). Between meetings only
+    belief Rules 1 & 4 fire (flat except isolated body/vent bumps), the
+    contradiction lift the agent votes on is computed on a throwaway copy at vote
+    time and never persisted, and games hold a median of 2 meetings — so a
+    reconstructed per-tick suspicion frame would be noise that DISAGREES with the
+    recorded ballot. The Belief × Truth surface is the per-meeting
+    :class:`BeliefFrameView` instead. This type is retained (importable,
+    inventoried) only so the documented decision and its rationale stay visible
+    in the contract rather than being silently deleted and re-proposed later.
+    """
 
     tick: int
     entries: tuple[SuspicionEntryView, ...]
@@ -557,8 +765,13 @@ class ReplayView(_FrozenView):
 
     Excludes: per-tick agent memory (only available via the separate
     meeting-boundary endpoint), state hashes, and raw replay entries.
+
+    ``view_model_version`` stamps the versioned contract (:data:`VIEW_MODEL_VERSION`)
+    on the primary served payload so the frontend can fail loud on an
+    incompatible shape.
     """
 
+    view_model_version: str = VIEW_MODEL_VERSION
     metadata: ReplayMetadataView
     map: MapLayoutView
     players: tuple[PlayerView, ...]
@@ -583,13 +796,61 @@ class EvalCostSummaryView(_FrozenView):
     decisive_split: dict[str, float]
 
 
+class RubricGameView(_FrozenView):
+    """One per-game interestingness row from ``results-rubric-score.json``
+    (DESIGN.md §3.1, §7; ``experiments/lab/rubric_score.py``).
+
+    Mirrors the ``interestingness.per_game[]`` entry the rubric scorer emits:
+    the 0–100 ``score`` (decoupled from who won), the ``win_shape`` tag, the
+    drama counts, and the four sub-scores (R1/R2/R3/R7). Joined to a playable
+    replay via ``seed`` → ``game_id = headless-seed-{seed}``.
+    """
+
+    seed: int
+    score: float
+    reason: str
+    n_meetings: int
+    win_shape: str
+    ejected_impostors: int
+    accused_impostors: int
+    survived_accused: int
+    r1_decisive: float
+    r2_deception: float
+    r3_arcs: float
+    r7_legible: float
+
+
+class RubricView(_FrozenView):
+    """The per-set rubric surface served at ``/eval/rubric`` (DESIGN.md §3.1, §7).
+
+    The rubric is **per-set** (the 9p2i target set carries one; the default 4p1i
+    set has none → 404 / empty state) and **staleness-guarded**: ``git_head`` is
+    the commit the rubric was scored at, ``manifest_sha`` is the commit the
+    served set's replays were recorded at (read from its ``MANIFEST.md``), and
+    ``stale`` is ``True`` when they disagree (the rubric was scored against a
+    different code/replay version than the set on disk). ``per_game`` is sorted
+    best-first by the scorer, so the Highlights reel renders it directly.
+    """
+
+    view_model_version: str = VIEW_MODEL_VERSION
+    seedset: str
+    git_head: str | None
+    manifest_sha: str | None
+    stale: bool
+    per_game: tuple[RubricGameView, ...]
+
+
 __all__ = [
     "AccusationClaimView",
+    "AdvantageView",
     "AgentMemoryView",
     "AgentTickStateView",
     "AlibiClaimView",
     "BallotView",
     "BeliefEntryView",
+    "BeliefErrorView",
+    "BeliefFrameView",
+    "BodyView",
     "CompletedTaskObsView",
     "ContradictionView",
     "CorroborationClaimView",
@@ -598,6 +859,7 @@ __all__ = [
     "FailedCallEvalView",
     "FailedCallView",
     "FoundBodyObsView",
+    "GateView",
     "KillEventView",
     "LLMCallView",
     "MapLayoutView",
@@ -609,6 +871,9 @@ __all__ = [
     "ReplayView",
     "ReportBodyEventView",
     "RoomView",
+    "RubricGameView",
+    "RubricView",
+    "SabotageDetailView",
     "SabotageEventView",
     "SawPlayerView",
     "SizeView",
@@ -617,5 +882,6 @@ __all__ = [
     "TaskCompletedEventView",
     "TickView",
     "TurnView",
+    "VentEventView",
     "VentView",
 ]

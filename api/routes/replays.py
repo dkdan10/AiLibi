@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from api.replay_loader import ReplayLoader, get_replay_loader
 from api.schemas import (
     AgentMemoryView,
+    BeliefFrameView,
     MeetingView,
     ReplayMetadataView,
     ReplayView,
@@ -61,6 +62,17 @@ def get_tick(game_id: str, tick: int, loader: _LoaderDep) -> TickView:
     raise HTTPException(
         status_code=404, detail=f"tick out of range for {game_id}: {tick}"
     )
+
+
+@router.get("/{game_id}/beliefs", response_model=list[BeliefFrameView])
+def get_belief_frames(game_id: str, loader: _LoaderDep) -> list[BeliefFrameView]:
+    # Per-MEETING belief × truth snapshots (DESIGN.md §3.3, §7). Reuses the
+    # cached meeting-memory re-walk; an empty list is a valid response for a
+    # zero-meeting game (the frontend renders a first-class empty state).
+    try:
+        return list(loader.belief_frames(game_id))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"replay not found: {game_id}")
 
 
 @router.get("/{game_id}/meetings/{meeting_id}", response_model=MeetingView)
