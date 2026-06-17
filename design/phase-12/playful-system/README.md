@@ -8,16 +8,19 @@ every build session (web or local) has it WITHOUT the transient/authenticated Cl
   render it live; the component code inside (`renderMap` / `renderMatrix` / accusation-chain / ballots / `verdict`) is the
   reference for slices **12.5 (map), 12.6 (belief×truth), 12.7 (meeting)**. (`support.js` = the Claude Design runtime;
   needed only to render the HTML.)
-- **`playful-render.png`** — a rendered screenshot of the Playful (cream) skin = the **visual target** (screenshot-diff
-  reference; **12.1's Storybook + cream theme should match it**). It's the 0a composite render; the fuller system is the
-  `.dc.html`.
-- **`design-chat.md`** — the design-session transcript (rationale / prompts; provenance).
+- **`screens/`** — rendered screenshots of the 0b deliverable = the **visual targets** for screenshot-diff verification,
+  captured from the `.dc.html`:
+  - `00-overview.png` — the whole deliverable.
+  - `01-foundations.png` — tokens / ramps / identity palette / type / `tokens.ts` → **12.1** target.
+  - `02-map.png` — the canonical_1 floorplan → **12.5**.
+  - `03-two-truths.png` — Omniscient + As-agent fog → **12.5** (fog).
+  - `04-matrix-belief.png` + `04-matrix-error.png` — the 9×9 matrix, Belief and (toggled) **Error** layers → **12.6**.
+  - `05-meeting.png` — accusation chain + ballots → **12.7**.
+  Any state re-renders from the `.dc.html` (system Chrome, e.g. `uv run --with playwright …`) — a web build agent can do
+  the same for verification.
 
 The **actionable token extract is `../tokens-seed.md`** — what 12.1 transcribes into `frontend/src/tokens.ts`.
 
-Notes:
-- The rejected directions (Forensic/dark, Telemetry/light) are intentionally NOT vendored — they'd mislead the build
-  toward the wrong skin; they're recorded in `design-chat.md` + the stage docs.
-- Do NOT point build agents at the Claude Design share URL (`api.anthropic.com/v1/design/h/…`): it returns a gzip-tar of
-  the whole space in Claude Design's internal format. These committed files are the clean, pinned source — re-export from
-  Claude Design if the design changes.
+Do NOT point build agents at the Claude Design share URL (`api.anthropic.com/v1/design/h/…`): it returns a gzip-tar of
+the whole space in Claude Design's internal format. These committed files are the clean, pinned source — re-export from
+Claude Design if the design changes.
