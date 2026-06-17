@@ -6,7 +6,7 @@ art = vector/geometric; scope = spectator replay viewer only (no live, no human 
 
 Anchors (read before any dispatch): `design/phase-12/stage-0-understand.md` (data dictionary + renderable-surface map +
 teardown, incl. §0.5 corrections), `design/phase-12/stage-1-design.md` (the design + §9.5 Claude Design integration),
-`design/phase-12/claude-design-brief.md` (the workspace brief → installed as `frontend/CLAUDE.md` in 12.0).
+`design/phase-12/claude-design-brief.md` (the workspace brief → installed as `frontend/CLAUDE.md` in 12.1).
 
 Locked decisions:
 - **9p2i is the target set.** The default-served 4p1i set (34/50 zero-meeting, no rubric) gets graceful empty states, not
@@ -25,14 +25,14 @@ wholesale replace.** Each chrome task: focused Claude-Design prompt → Share→
 (compose from tokens/components, no hardcoded hex) → screenshot-verify isolated + composed → small PR → fresh-context
 review. Logic tasks are hand-coded (the handoff cannot carry data/state/interaction). Claude Design is owner-driven on
 `claude.ai/design`; it is **not** something the build agent invokes. **`/design-sync`** (push our built component
-library UP to Claude Design so it composes with our real components) runs **after 12.0** — once Storybook + the
-component library exist; a pre-12.0 sync was **deferred 2026-06-17** (the current `frontend/` is a `private` app with no
+library UP to Claude Design so it composes with our real components) runs **after 12.1** — once Storybook + the
+component library exist; a pre-12.1 sync was **deferred 2026-06-17** (the current `frontend/` is a `private` app with no
 design system → the converter would fail / import the components we're replacing).
 
-Sequencing: **Wave 0 (art-direction exploration, owner-run) precedes 12.0** — its chosen direction seeds the tokens.
-Then 12.0 (foundation) and 12.1 (contract) have no deps and run first/in parallel; 12.2 depends on 12.1; 12.3
-depends on 12.1; **12.4–12.9 depend on 12.0 + 12.1** (chrome needs tokens; data needs the contract); 12.2 feeds the
-fog in 12.4/12.7; 12.4 feeds the cross-highlight in 12.6; 12.10 is last. Slice ↔ Stage-1 §10 mapping noted per task.
+Sequencing: **Wave 0 (art-direction exploration, owner-run) precedes 12.1** — its chosen direction seeds the tokens.
+Then 12.1 (foundation) and 12.2 (contract) have no deps and run first/in parallel; 12.3 depends on 12.2; 12.4
+depends on 12.2; **12.5–12.10 depend on 12.1 + 12.2** (chrome needs tokens; data needs the contract); 12.3 feeds the
+fog in 12.5/12.8; 12.5 feeds the cross-highlight in 12.7; 12.11 is last. Slice ↔ Stage-1 §10 mapping noted per task.
 
 > Note: contracts below are at **plan altitude**. Per the project convention, a full ~250-line dispatch contract is
 > elaborated for each task immediately before its dispatch; the Claude-Design prompt + handoff/verify checklist here is
@@ -44,18 +44,33 @@ fog in 12.4/12.7; 12.4 feeds the cross-highlight in 12.6; 12.10 is last. Slice �
 
 The visual personality is OPEN (see `claude-design-brief.md` "Art direction — OPEN"): pick it from concrete renders
 before locking tokens. Owner-run on `claude.ai/design` (the build agent can't drive it). **Diverge → pick → converge
-into 12.0.** This flips the usual design-system-first order for the exploration phase only (explore → pick → *then*
+into 12.1.** This flips the usual design-system-first order for the exploration phase only (explore → pick → *then*
 derive tokens).
+
+**0a DONE 2026-06-17 — DIRECTION 03 "Playful" chosen.** All three explored directions (01 Forensic / 02 Telemetry /
+03 Playful) were firewall-compliant + map-faithful; **Playful** picked as most structurally readable + on-theme. Two
+converge fixes required (identity-palette re-spacing off the semantic hues + density tuning) — baked into the 0b
+converge prompt below.
 
 Steps:
 1. Create the workspace, link this repo, paste `frontend/CLAUDE.md` (= the brief) so Claude Design grounds on the GOAL +
    the binding constraints (legibility, firewall color rules, vector pipeline, token architecture, two-truth grammar).
-   (Note: `tokens.ts` doesn't exist yet pre-12.0, so it grounds on the brief + the existing `frontend/` code; the
+   (Note: `tokens.ts` doesn't exist yet pre-12.1, so it grounds on the brief + the existing `frontend/` code; the
    exploration's OUTPUT informs the tokens.)
-2. First render = the exploration prompt below — ~5 distinct STYLE DIRECTIONS on ONE representative composite screen,
-   low-fidelity, to conserve quota.
-3. Owner picks one (or mixes). The winner is folded back into `claude-design-brief.md` + becomes `tokens.ts` in 12.0;
-   then the per-slice loop runs.
+2. **Diverge (0a)** — paste the exploration prompt below: ~5 directions, **identical content**, each rendered as ONE
+   composite legibility screen (Omniscient mode: restyled map + belief×truth overlay + meeting snippet + transport)
+   **plus a small style tile** (palette incl. the firewall-semantic colors, type pairing, 3–4 component swatches).
+   Low-fidelity — the pick-enabler, not the product. (Quota is tight; do NOT lay out both modes × 5.)
+3. **Pick** one direction (or mix two).
+4. **Converge (0b)** — expand ONLY the chosen direction to the **12.1 seed**: a design-system / **token sheet** (full
+   ramp + the semantic tokens: identity set, suspicion heat ramp, trust/distrust blue–orange, status, truth
+   solid/ghosted; + type, spacing, radii, elevation, motion), the **map fully restyled**, and **both viewing modes**
+   (Omniscient + As-agent fog) laid out to prove the two-truth grammar + fog role-suppression — ideally plus the
+   **meeting view** (the densest text surface). This feeds `tokens.ts` (12.1) + the per-component handoffs; then the
+   per-slice loop runs.
+
+**Wave-0 deliverables:** 0a = 5 × (one composite screen + style tile), identical content, for the PICK · 0b = 1 ×
+(token sheet + restyled map + both modes + meeting view) as the 12.1 seed.
 
 **Map ground truth — attach `design/phase-12/canonical_1-map-reference.png` (or `.svg`) with the prompt.** A faithful
 schematic generated from `engine/maps/canonical_1.yaml` (regenerate via `uv run python design/phase-12/gen_map_reference.py`).
@@ -89,55 +104,147 @@ CAFETERIA–WEST_HALL–MEDBAY–LABS; ADMIN–WEST_HALL. Vent ring (6, impostor
 > must obey the binding rules: player identity color ≠ guilt; ground-truth impostor = an icon (never a hue); suspicion =
 > a heat ramp; trust↔distrust = blue↔orange; outcomes role-neutral; never hue-only; legibility first. For each, give one
 > line: the personality + how it serves legibility. Vary the *skin* (palette / type / illustration / density), never the
-> semantic color system."
+> semantic color system. Render each direction as ONE composite screen + a small style tile (palette · type · 3–4
+> component swatches), and use IDENTICAL content across all five — compare style, not content."
 
 Notes: keep it to one screen + ~5 directions (quota is tight); judge directions on the LEGIBILITY surfaces, not a
 generic dashboard; a colorful/cartoony winner is fine as long as it still obeys the firewall rules + the professional bar.
 
+**Converge prompt (0b — paste after picking Playful; attach the map reference):**
+> "Lock **DIRECTION 03 — Playful** (cream + ink chunky-sticker; Fredoka / Space Mono) as the chosen direction and produce
+> its **design-system seed**. Deliver: **(1)** a **token / design-system sheet** — full color ramp + type scale +
+> spacing / radii / elevation / motion, and the **semantic tokens**: a 9-color **identity palette**, the **suspicion**
+> heat ramp, **trust↔distrust** (blue↔orange), **status** (alive / dead / sabotage / contradiction-weak /
+> contradiction-strong), and the **truth pair** (solid = ground truth, ghosted = belief); **(2)** the **canonical_1 map**
+> fully restyled (same fixed layout); **(3) both viewing modes** side by side — **Omniscient** and **As-agent (p-3)
+> fog** — proving the two-truth grammar and that the impostor badge + vents hide in fog; **(4)** the **dense surfaces**: a
+> full **9×9 belief×truth matrix** with a **Belief / Ground-truth / Error** toggle (confidently-wrong cells rendered
+> LOUD), and a **full meeting view** (accusation chain + weak-vs-strong contradiction links + ballots with the §4.6
+> verdict + rewrite-reason chips).
+> **Two HARD requirements:**
+> **A — Fix the palette collisions.** In 0a the bright identity colors overlapped the meaning colors (identity gold ≈
+> suspicion-MED ≈ distrust; identity blue ≈ trust). Re-pick the 9 identity colors into a hue band **clearly disjoint**
+> from the semantic channels: reserve **amber/orange exclusively for suspicion, blue exclusively for trust, red
+> exclusively for kill**; place identity in **purples / teals / greens / magentas**. Pair every status with shape or text
+> (never hue-only).
+> **B — Survive density.** The 2.5px outlines + hard shadows were only tested on a sparse screen. On the 9×9 matrix and
+> the full transcript, **tune the weight down** so it stays calm and legible — keep the playful personality on chrome /
+> headers; dense cells / rows must not be noisy (borrow Telemetry's restraint for data panels).
+> Keep the firewall rules, the fog default, **'NO BELIEF YET' (≠ 0)**, and the **FABRICATED (omniscient) vs UNVERIFIED
+> (fog)** distinction. **Output the token sheet explicitly — it becomes our `tokens.ts`.""
+
+When 0b lands, its token sheet seeds `tokens.ts` in **12.1**; the chosen Playful system then governs every chrome slice.
+
 ## Wave A — Foundation & data (no Claude Design chrome; gates everything)
 
-### Task 12.0 — Foundation: tokens, Storybook, CLAUDE.md, CI, Claude Design workspace
+### Task 12.1 — Foundation: design tokens, Storybook, CLAUDE.md, CI
 **Branch:** `phase-12-foundation`
 **Depends on:** none
-**Complexity:** Setup
-**Stage-1 ref:** §6, §9, slice 0
+**Section refs:** design/phase-12/stage-1-design.md §6, §9, §9.5; design/phase-12/claude-design-brief.md; the accepted Playful 0b token sheet (the `tokensText()` block in the converge mockup)
+**Complexity:** Integration
+**Files in scope:**
+- frontend/src/tokens.ts
+- frontend/src/index.css
+- frontend/CLAUDE.md
+- frontend/package.json
+- frontend/.storybook/main.ts
+- frontend/.storybook/preview.ts
+- frontend/src/lib/contradictions.ts
+- frontend/src/ui/PlayerChip.tsx
+- frontend/src/stories/Tokens.stories.tsx
+- .github/workflows/ci.yml
+**Files NOT in scope:**
+- api/ and the loader — Task 12.2 owns the DTO/contract and the `_COLOR_PALETTE` change
+- frontend/src/components/MapView.tsx and the Pixi render layer — Task 12.5
+- any belief / meeting / dashboard component — Waves B and C
+- data/store wiring — no new fetches; the Zustand store is untouched here
 
-Establish the design system in the repo, then seed Claude Design from it. Deliver: `frontend/src/tokens.ts` (the tier'd
-token source — primitives → semantic → component — consumed by both Tailwind and the Pixi layer as hex→number, zero
-magic constants); Storybook wired with a story-per-component scaffold; **install `design/phase-12/claude-design-brief.md`
-verbatim as `frontend/CLAUDE.md`**; add a frontend `npm run build` + `tsc` typecheck step to CI (today CI never builds
-the frontend). Split the smuggled utils out of `ContradictionBadge.tsx` into `lib/`.
-**Claude Design setup (owner):** create the workspace on `claude.ai/design`, link this repo, paste `frontend/CLAUDE.md`;
-confirm it builds the design-system project from `tokens.ts` + the brief. (Auth note: paid plan; if using `DesignSync`,
-the first call prompts for design scopes / `/design-login` — optional, not the backbone.)
-**Acceptance:** `tokens.ts` is the single color/space/type source; Storybook renders the token sheet; CI builds + typechecks
-the frontend; `frontend/CLAUDE.md` present; Claude Design workspace seeded. Establishes the prerequisites for a later
-`/design-sync` (storybook shape): a per-component Storybook + a component-library build.
-**Follow-up (post-12.0, owner-run):** `/design-sync` to push the new library to Claude Design so chrome slices 4/5/7/8
-compose with our real components.
+Stand up the Playful design system in the repo so every later chrome slice composes from one source. Build
+`frontend/src/tokens.ts` as the single token source, transcribed from the accepted 0b token sheet: paper/ink ramps,
+`suspicion[]` + buckets (low ≤ .35 / high > .72), `trust`/`distrust` (blue↔orange), `kill` (#E23B2F), `contradiction`
+(#D6249E), `status` (alive / dead / sabotage + contradiction-weak dashed / contradiction-strong solid), the 9-colour
+`identity[]` (greens/teals/purples `#5DA83A…#A94FC6`), `truth` (ground solid / belief ghosted / noBelief hatch), plus
+`radius`/`space`/`elevation`/`motion`/`type`. Resolve the seed's pseudo-code self-references (`fill:'identity'`,
+`ink[500]`) into real TS. The SAME object feeds DOM and Pixi: emit Tailwind v4 `@theme` tokens (CSS custom properties)
+for the DOM layer and a `pixiHex(token)` number helper for the canvas — zero magic constants in either. Encode the
+density rule from the seed: the hard 2.5px-border / offset-shadow `elevation` is CHROME-only, data surfaces use a 1px
+hairline (`elevation.data`). Flip `index.css` from `color-scheme: dark` to the cream/ink Playful base and load Fredoka +
+Space Mono (self-hosted woff2 to avoid a render-blocking fetch). Install `design/phase-12/claude-design-brief.md`
+verbatim as `frontend/CLAUDE.md`. Stand up Storybook with a story-per-component scaffold and a Tokens story that renders
+the full sheet. Split the utilities smuggled into `ContradictionBadge.tsx` (`findContradictions`, `dedupeContradictions`,
+the `PlayerChip`/`ObservationLine`/`ClaimLine` primitives, the id helpers) into `frontend/src/lib/contradictions.ts` +
+`frontend/src/ui/`, updating imports. Add a frontend job to CI (`npm run build` + `tsc --noEmit`) — today CI builds only
+the Python side, so the 859 kB chunk and any TS error are invisible. Use the `frontend-design` skill for distinctive,
+non-templated visual choices.
+**Definition of done:** `tokens.ts` is the single colour/space/type source consumed by both Tailwind (`@theme`) and a
+`pixiHex` helper; `index.css` is the Playful cream/ink base with no `color-scheme: dark`; Fredoka + Space Mono load;
+Storybook runs and renders the Tokens sheet plus ≥ 1 component story; `frontend/CLAUDE.md` is the installed brief; the
+`ContradictionBadge` utilities live in `lib/`/`ui/` with imports updated and the tree still compiling; CI runs
+`npm run build` + `tsc --noEmit` for the frontend and passes.
+**Implementation hint:** transcribe `tokens.ts` directly from the 0b `tokensText()` block (already structured); keep the
+hard-shadow / 2.5px-border tokens namespaced as `chrome` so dense components can opt into the 1px `data` treatment;
+prefer self-hosted fonts over a Google Fonts `<link>`.
+**Integration risk:** Tailwind v4 `@theme` ↔ `tokens.ts` wiring is new; the `ContradictionBadge` split touches files
+other components import from (keep the tree compiling); the new frontend CI job will surface the pre-existing > 500 kB
+chunk warning — record it, do not chase the code-split here (that is 12.11).
+**Ready-to-paste prompt:** `agent_prompts/task-12-1-foundation.md`
 
-### Task 12.1 — View-model contract v1 + cheap projections
+### Task 12.2 — View-model contract v1 + cheap projections
 **Branch:** `phase-12-viewmodel-contract`
 **Depends on:** none
-**Complexity:** Integration (backend/loader)
-**Stage-1 ref:** §7, slice 1a — **Hand-coded (no Claude Design).** Blocks 12.4–12.9.
+**Section refs:** design/phase-12/stage-1-design.md §7, §9.5; design/phase-12/stage-0-understand.md §0.5, §3, §4; the firewall + identity rules in design/phase-12/claude-design-brief.md
+**Complexity:** Integration
+**Files in scope:**
+- api/schemas.py
+- api/replay_loader.py
+- api/routes/replays.py
+- api/routes/eval.py
+- frontend/src/types/api.ts
+- scripts/gen_frontend_types.py
+- tests/api/test_view_model.py
+**Files NOT in scope:**
+- frontend components and the Pixi render layer — Waves B and C
+- the per-tick per-agent visibility projection + UI leak test — Task 12.3
+- engine/ and the recorded replays — every change here is a load-time projection; NO re-record
 
-Introduce `viewModelVersion` and **generate the TS types from the Pydantic schemas** (kill the hand-mirror in
-`frontend/src/types/api.ts`). Add these additive loader projections from already-re-walked state: per-meeting belief
-snapshot + an `Error` projection vs `PlayerView.role`; `VentEventView` (enter/exit, from the engine's `VentEntered/Exited`)
-as a `TickEventView` member; `killed_by` from `state.bodies`; `ContradictionView.weak: bool` (+severity) via
-`is_weak_contradiction()`; the per-meeting §4.6 `gate{leader, leader_max_confidence, threshold, passed}` recomputed from
-persisted `ballots[].confidence` (drop `rendered_max`); parsed `BallotView.rewrite_reasons[]` + `rationale_text_clean`
-(import the marker constants server-side; special-case `VOTE_PARSE_DEFAULT` = whole string); reactor `repair_progress`
-per room + `remaining_ticks`; a per-tick crew/impostor advantage series; a **per-set** rubric endpoint/asset
-(`/eval/rubric`) with a staleness guard (compare rubric `git_head` to the served set's MANIFEST sha). Render-ready
-already in-DTO: `current_action`, `winner_reason`, task-clock totals, `failed_calls`, typed `conversion`/`gate_metrics`.
-Document why `SuspicionGraphView` stays dead (the timeless-belief reason).
-**Acceptance:** TS types codegen'd; each surface served + cached; rubric staleness-guarded; no `rendered_max` on ballots.
+Introduce a `viewModelVersion` on the served payload and generate `frontend/src/types/api.ts` from the Pydantic schemas
+(kill the hand-mirror and its documented drift). Add these additive projections, all from state the loader already
+re-walks: a per-meeting belief snapshot plus an `Error` projection vs `PlayerView.role`; a `VentEventView` (enter/exit)
+carried as a `TickEventView` member (from the engine's `VentEntered`/`VentExited`); `killed_by` from `state.bodies`;
+`ContradictionView.weak: bool` (+ severity) via `is_weak_contradiction()`; a per-meeting §4.6
+`gate{leader, leader_max_confidence, threshold, passed}` recomputed from persisted `ballots[].confidence` (drop the
+un-persisted `rendered_max` — the real rule is plurality + at least one leader ballot ≥ 0.6, tie → SKIP, NOT a
+vote-count majority); parsed `BallotView.rewrite_reasons[]` + `rationale_text_clean` (import the marker constants from
+`meetings/voting.py` + `meetings/manager.py`, never hardcode; special-case `VOTE_PARSE_DEFAULT` = the whole string);
+reactor `repair_progress` per room + `remaining_ticks`; a per-tick crew/impostor advantage series; and a per-set rubric
+surface (`/eval/rubric`) with a staleness guard (compare the rubric `git_head` to the served set's MANIFEST sha).
+Surface the already-in-DTO render-ready fields (`current_action`, `winner_reason`, task-clock totals, `failed_calls`,
+typed `conversion`/`gate_metrics`). Document why `SuspicionGraphView` stays dead (beliefs are timeless). Identity-palette
+alignment, the one backend touch: replace `api/replay_loader.py::_COLOR_PALETTE` — today a 12-colour rainbow (`#e6194b`
+red / `#ffe119` yellow / `#4363d8` blue / `#f58231` orange …) that collides with the reserved channels (red=kill,
+amber=suspicion, blue=trust) — with the Playful identity palette (`#5DA83A…#A94FC6`) so `PlayerView.color` matches
+`tokens.ts.identity` and DTO ↔ design never drift. Colours are derived at load, so this is a loader-only change with NO
+replay re-record; keep it firewall-clean (identity never encodes guilt).
+**Definition of done:** the served payload carries `viewModelVersion`; `frontend/src/types/api.ts` is generated from the
+Pydantic schemas (no hand-mirror); every new surface is served, cached, and covered by a test; the §4.6 gate is
+per-meeting and `rendered_max` is gone; the rubric surface is per-set and staleness-guarded; `PlayerView.color` serves
+the Playful identity palette (no rainbow) with the leak/determinism tests still green and NO re-record; `scripts/check.sh`
+is green.
+**Public types introduced:**
+- api.schemas.BeliefFrameView
+- api.schemas.VentEventView
+**Implementation hint:** do every projection inside the existing `_walk`/re-walk so nothing new is persisted; reuse
+`is_weak_contradiction()` and the meeting marker constants by import; for the TS codegen prefer a small script over a
+heavy dependency, wired into `check.sh` so drift fails CI.
+**Integration risk:** the Pydantic→TS codegen pipeline is new (must be deterministic and run in CI); the
+`_COLOR_PALETTE` change flows into `PlayerView.color`, so re-run the leak/determinism tests (it is colour-only and
+firewall-neutral); the §4.6 recompute must match the engine gate exactly (plurality + ≥ 0.6, tie → SKIP), not the
+mock's "majority".
+**Ready-to-paste prompt:** `agent_prompts/task-12-2-viewmodel-contract.md`
 
-### Task 12.2 — Per-tick visibility projection + UI leak test
+#### Task 12.3 — Per-tick visibility projection + UI leak test
 **Branch:** `phase-12-visibility-projection`
-**Depends on:** 12.1
+**Depends on:** 12.2
 **Complexity:** Integration (backend/loader) — the expensive one, isolated on purpose
 **Stage-1 ref:** §3.2, §7, slice 1b — **Hand-coded (no Claude Design).**
 
@@ -146,11 +253,11 @@ the `collect_memory` re-walk and **persist them into the view-model** (today the
 discarded; visibility is graph/lights-dependent via `compute_visibility_for_player` — a naive same-room dim is wrong AND
 a leak). Cost it honestly; cache. Ship a **UI leak test** mirroring `eval/leak_test.py` that asserts the As-agent
 filtered view never exposes a field the agent could not have seen.
-**Acceptance:** per-tick per-agent visibility in the view-model; UI leak test green; fog renders correctly in 12.4.
+**Acceptance:** per-tick per-agent visibility in the view-model; UI leak test green; fog renders correctly in 12.5.
 
-### Task 12.3 — Playback backbone
+#### Task 12.4 — Playback backbone
 **Branch:** `phase-12-playback`
-**Depends on:** 12.1
+**Depends on:** 12.2
 **Complexity:** Integration (frontend state)
 **Stage-1 ref:** §4, slice 2 — **Hand-coded (no Claude Design).**
 
@@ -166,9 +273,9 @@ async-ordering guards. Meetings are time spans (stage morphs when `tick ∈ meet
 
 ## Wave B — Surfaces (chrome via Claude Design; logic hand-coded)
 
-### Task 12.4 — Map stage (vector Pixi + SVG assets + fog)
+#### Task 12.5 — Map stage (vector Pixi + SVG assets + fog)
 **Branch:** `phase-12-map-stage`
-**Depends on:** 12.0, 12.1, 12.2, 12.3
+**Depends on:** 12.1, 12.2, 12.3, 12.4
 **Complexity:** Integration (Pixi hand-coded + SVG assets + chrome)
 **Stage-1 ref:** §3.2, §5, slice 3 — **Mixed.**
 
@@ -176,7 +283,7 @@ Hand-code the Pixi render layer: rooms from real `(x,y)`+size (from the `MapLayo
 10 rooms / 11 corridors / 6-vent ring; reference `design/phase-12/canonical_1-map-reference.svg`, not invented), agent tokens (identity color, action glyph from
 `current_action`, role badge **Omniscient-only**), bodies (`KillEventView` + `killed_by`), **vent-escape animation**
 (dive→travel `MapLayoutView.vents`→emerge), reactor tint + per-room repair race + countdown, lights tint, and **As-agent
-fog** from the 12.2 visibility projection. The map **SVG assets** (room outlines, action/vent/body icon set) are
+fog** from the 12.3 visibility projection. The map **SVG assets** (room outlines, action/vent/body icon set) are
 generated by **Claude Code with a locked style-spec** (not the Claude Design product) and loaded into Pixi.
 **Claude Design prompt (for the surrounding map chrome only — the perspective switcher + map toolbar, not the canvas):**
 "Using our design system + `frontend/CLAUDE.md`, design the **map toolbar + perspective switcher** (Omniscient ↔ As-agent
@@ -187,9 +294,9 @@ tokens + status tokens; geometric/line only; one viewBox convention; output one 
 **Handoff/verify:** README (stack/paths/token-source/"the canvas is hand-coded Pixi — only build the toolbar"/DoD) →
 Handoff → integrate → screenshot-verify the toolbar isolated + over the live map; assets pass a visual cohesion check.
 
-### Task 12.5 — Belief × Truth (the hero, per-meeting)
+#### Task 12.6 — Belief × Truth (the hero, per-meeting)
 **Branch:** `phase-12-belief-truth`
-**Depends on:** 12.0, 12.1, 12.3
+**Depends on:** 12.1, 12.2, 12.4
 **Complexity:** Integration (chrome + matrix logic)
 **Stage-1 ref:** §3.3, slice 4 — **Claude Design chrome + hand-coded data.**
 
@@ -207,9 +314,9 @@ Presentational only; tokens only."
 **Handoff/verify:** README (token source, the three toggle states, the hide-ground-truth requirement, DoD) → Handoff →
 wire to per-meeting belief snapshots → verify all three toggle states + empty state + fog-suppression.
 
-### Task 12.6 — Meeting view
+#### Task 12.7 — Meeting view
 **Branch:** `phase-12-meeting-view`
-**Depends on:** 12.0, 12.1, 12.3, 12.4
+**Depends on:** 12.1, 12.2, 12.4, 12.5
 **Complexity:** Integration (chrome + cross-highlight/link logic)
 **Stage-1 ref:** §3.4, slice 5 — **Claude Design chrome + hand-coded interactions.**
 
@@ -225,14 +332,14 @@ role-neutral (shape/label, not red/green). Presentational only; tokens only."
 **Handoff/verify:** README (interactions to preserve: cross-highlight + link drawing are hand-wired; DoD) → Handoff →
 wire cross-highlight to the map + links to turn ids → verify EJECTED/SKIPPED/weak/strong + chips + cross-highlight.
 
-### Task 12.7 — Mind inspector
+#### Task 12.8 — Mind inspector
 **Branch:** `phase-12-mind-inspector`
-**Depends on:** 12.0, 12.1, 12.2, 12.3
+**Depends on:** 12.1, 12.2, 12.3, 12.4
 **Complexity:** Integration (chrome + data)
 **Stage-1 ref:** §3.5, slice 6 — **Claude Design chrome + hand-coded data.**
 
 Tabbed per-agent panel: **Belief · Prompt · Response · Memory · Flags** + a Thought→Action→Observation trail + "show what
-they saw" (ties to the 12.2 fog). Impostor extras Omniscient-only (`fellow_impostor_ids`, cooldown, `own_kill` memory
+they saw" (ties to the 12.3 fog). Impostor extras Omniscient-only (`fellow_impostor_ids`, cooldown, `own_kill` memory
 line, cover-task marked **fabricated**).
 **Claude Design prompt:** "Design the **agent mind-inspector** (tabbed: Belief / Prompt / Response / Memory / Flags), with
 a reasoning trail and a 'what they saw' toggle. Mono for prompt/response/JSON. States: living / dead / impostor
@@ -241,9 +348,9 @@ a reasoning trail and a 'what they saw' toggle. Mono for prompt/response/JSON. S
 **Handoff/verify:** README (tabs, mono usage, Omniscient-gating, DoD) → Handoff → wire tabs to `AgentMemoryView` +
 LLM-call data → verify all tabs + the Omniscient/fog gating + fabricated-cover labeling.
 
-### Task 12.8 — Replay browser + Highlights reel
+#### Task 12.9 — Replay browser + Highlights reel
 **Branch:** `phase-12-browser-highlights`
-**Depends on:** 12.0, 12.1
+**Depends on:** 12.1, 12.2
 **Complexity:** Integration (chrome)
 **Stage-1 ref:** §3.1, slice 7 — **Claude Design chrome.**
 
@@ -256,9 +363,9 @@ loading / list / empty / error. Presentational only; tokens only."
 **Handoff/verify:** README (card fields, the empty-state requirement, DoD) → Handoff → wire to `/replays` + `/eval/rubric`
 → verify sorted reel + filters + empty/zero-meeting.
 
-### Task 12.9 — Dashboard refresh
+#### Task 12.10 — Dashboard refresh
 **Branch:** `phase-12-dashboard`
-**Depends on:** 12.0, 12.1
+**Depends on:** 12.1, 12.2
 **Complexity:** Integration (chrome)
 **Stage-1 ref:** §3.6, slice 8 — **Claude Design chrome.**
 
@@ -274,9 +381,9 @@ caveats render + histogram links to Highlights.
 
 ## Wave C — Polish
 
-### Task 12.10 — Accessibility, responsive, first-run, perf
+#### Task 12.11 — Accessibility, responsive, first-run, perf
 **Branch:** `phase-12-polish`
-**Depends on:** 12.4, 12.5, 12.6, 12.7, 12.8, 12.9
+**Depends on:** 12.5, 12.6, 12.7, 12.8, 12.9, 12.10
 **Complexity:** Integration — **Hand-coded.**
 **Stage-1 ref:** §8, §9, slice 9
 

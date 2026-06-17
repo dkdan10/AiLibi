@@ -23,9 +23,14 @@ ghosted + attributed** (e.g. "p-3 believes…").
 floorplan: 10 rooms at real grid positions, 11 corridors, and a 6-room impostor "vent" network. Cafeteria is the central
 hub; Reactor and Labs are dead-ends. 9 players (ids p-0…p-8) move room-to-room; some are secretly impostors.
 
-**Art direction is OPEN — you'll propose directions (this is Wave 0).** Personality may be dark *or* bright, serious *or*
-cartoony / light / fun. The only invariants: a **professional, cohesive, legibility-first** result, plus the binding rules
-below. "Vector/geometric" is the asset *pipeline* (SVG, no raster) — **not** a style verdict.
+**Art direction = PLAYFUL (chosen Wave-0a, 2026-06-17).** A cream + ink **chunky-sticker** style: bold ~2.5px ink
+outlines, rounded forms, **Fredoka** (headings/labels) + **Space Mono** (data / ticks / IDs), high contrast, bright
+accents, hard-offset shadows; defaults to **As-agent fog**. It tested as the most structurally readable + most on-theme.
+**TWO converge fixes are MANDATORY before tokens lock** (see `tasks/phase-12.md` Wave-0b): **(1) re-space the identity
+palette OFF the semantic channels** — reserve amber=suspicion, blue=trust, red=kill, and put identity in
+purples/teals/greens/magentas; **(2) tune the sticker weight for density** — it must stay calm/legible on the 9×9 belief
+matrix + full meeting view (borrow Telemetry-style restraint for dense panels). "Vector/geometric" remains the asset
+*pipeline* (SVG, no raster).
 
 **Steer these dimensions individually:**
 - **Typography:** direction-dependent — a technical grotesque for a serious direction, a rounded/characterful sans for a
