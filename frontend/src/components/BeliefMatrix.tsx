@@ -1,289 +1,183 @@
-// N×N "who suspects whom" heatmap (DESIGN.md §6.3, §7). Rows are observers,
-// columns are subjects; each cell is the row agent's suspicion of the column
-// agent at the selected meeting boundary. Derived entirely client-side from the
-// per-agent `AgentMemoryView` snapshots the store already caches — no backend
-// endpoint (see tasks/phase-4.md Task 4.10, "Why meeting-boundary-only").
+// BeliefMatrix — the CONNECTED Belief × Truth hero (Task 12.6;
+// design/phase-12/stage-1-design.md §3.3, slice 4). It mounts into the workspace
+// `belief` slot 12.4 pre-declares (App.tsx is untouched — Wave-B mount
+// discipline) and wires the presentational <BeliefPanel/> to:
+//   • the store's `beliefView` (the Belief / Ground-Truth / Error toggle, so the
+//     active layer round-trips through the URL) and `perspective` (Omniscient ↔
+//     As-agent fog → the firewall: ground-truth markers vanish in fog);
+//   • the per-meeting `BeliefFrameView[]` snapshots served at
+//     `GET /replays/{id}/beliefs` (12.2's projection — `BeliefErrorView.error` is
+//     the signed Belief − Truth, `has_belief` flags "no belief yet" ≠ 0).
 //
-// Like ThoughtStream it has meaning only while a meeting is selected, and it
-// mounts as a fixed rail (here: left) at a z-index above the MeetingView modal
-// (z-50). A matrix in normal document flow would be hidden behind that modal
-// for the entire time a meeting is selected — the only state in which it has
-// data — so the rail is what makes "visible when a meeting is selected" true.
+// The panel is an overlay/full-screen toggle (the slot's contract): a launcher
+// pill opens it on demand, so the hero never blocks the map and never forces the
+// MeetingView modal open (selecting a meeting does). The step control inside
+// walks the meetings locally.
+//
+// Data path note (scope): the store + api/client are NOT in this task's scope, so
+// the BeliefFrameView[] is fetched here directly (with the store's
+// in-flight-replay guard mirrored) rather than via a new store action — the shape
+// is exactly the served DTO, so a later store-backed fetch is a drop-in swap.
 
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 
 import { useReplayStore } from "../store/replayStore";
-import type { AgentMemoryView, BeliefEntryView, PlayerView } from "../types/api";
-import { BeliefCell } from "./BeliefCell";
+import type { BeliefFrameView } from "../types/api";
+import { BeliefPanel } from "./BeliefPanel";
 
-// Stable empty roster so the fetch effect doesn't re-fire while no replay is
-// loaded (a fresh `[]` literal would be a new dependency every render).
-const EMPTY_PLAYERS: readonly PlayerView[] = [];
-
-// Mirrors the store's private memory-cache key format (replayStore.ts).
-function memoryKey(meetingId: string, agentId: string): string {
-  return `${meetingId}:${agentId}`;
-}
-
-function lookupBelief(
-  memory: AgentMemoryView,
-  subjectId: string,
-): BeliefEntryView | undefined {
-  return memory.beliefs.find((belief) => belief.subject === subjectId);
-}
-
-// Which agents' fetches have resolved (success or error) for a given meeting.
-// The store leaves the cache key unset on a failed fetch, so "settled" — not
-// "present in cache" — is what tells us loading is done.
-interface SettledState {
-  meetingId: string;
-  agentIds: ReadonlySet<string>;
-}
-
-function Rail({ children }: { children: ReactNode }) {
-  return (
-    <aside
-      aria-label="BeliefMatrix — who suspects whom"
-      className="fixed left-0 top-0 z-[55] flex h-screen w-fit min-w-[320px] max-w-[24rem] flex-col overflow-auto border-r border-neutral-700 bg-neutral-900/95 p-4 text-neutral-100 shadow-2xl backdrop-blur"
-    >
-      <header className="mb-3">
-        <h2 className="text-lg font-bold">BeliefMatrix</h2>
-        <p className="text-xs text-neutral-400">
-          Who suspects whom at the selected meeting. Rows observe; columns are
-          suspected.
-        </p>
-      </header>
-      {children}
-    </aside>
-  );
-}
-
-function AxisLabel({
-  player,
-  errored = false,
-}: {
-  player: PlayerView;
-  errored?: boolean;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1 whitespace-nowrap">
-      <span
-        aria-hidden
-        className="inline-block h-3 w-3 shrink-0 rounded-full ring-1 ring-black/50"
-        style={{ backgroundColor: player.color }}
-      />
-      <span className="font-mono text-xs text-neutral-200">
-        {player.agent_id}
-      </span>
-      {errored && (
-        <span
-          title="memory failed to load"
-          className="rounded bg-red-900/70 px-1 text-[10px] font-semibold text-red-200 ring-1 ring-red-700/60"
-        >
-          err
-        </span>
-      )}
-    </span>
-  );
-}
-
-function HeatLegend() {
-  return (
-    <div className="mt-3 flex items-center gap-2 text-[10px] text-neutral-400">
-      <span>less suspicious</span>
-      <span
-        aria-hidden
-        className="h-2 w-24 rounded"
-        style={{
-          background:
-            "linear-gradient(to right, hsl(120, 70%, 40%), hsl(60, 70%, 40%), hsl(0, 70%, 40%))",
-        }}
-      />
-      <span>more suspicious</span>
-    </div>
-  );
-}
-
-function Loading() {
-  return (
-    <div className="flex items-center gap-2 py-2 text-sm text-neutral-400">
-      <span
-        aria-hidden
-        className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-600 border-t-neutral-200"
-      />
-      Loading agent memories…
-    </div>
-  );
+async function fetchBeliefFrames(gameId: string): Promise<BeliefFrameView[]> {
+  const res = await fetch(`/api/replays/${encodeURIComponent(gameId)}/beliefs`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`belief frames request failed (status ${res.status})`);
+  }
+  return (await res.json()) as BeliefFrameView[];
 }
 
 export function BeliefMatrix() {
-  const meetingId = useReplayStore((s) => s.selectedMeetingId);
   const replay = useReplayStore((s) => s.currentReplay);
-  const memoryCache = useReplayStore((s) => s.memoryCache);
-  const fetchMemoryView = useReplayStore((s) => s.fetchMemoryView);
+  const perspective = useReplayStore((s) => s.perspective);
+  const beliefView = useReplayStore((s) => s.beliefView);
+  const setBeliefView = useReplayStore((s) => s.setBeliefView);
 
-  const players = replay?.players ?? EMPTY_PLAYERS;
+  const [open, setOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [frames, setFrames] = useState<BeliefFrameView[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const [settled, setSettled] = useState<SettledState | null>(null);
+  const gameId = replay?.metadata.game_id ?? null;
 
-  // Fan out one memory fetch per player at the selected meeting. The store
-  // caches + dedupes, so this is cheap on re-selection. We mark each agent
-  // settled once its fetch resolves (success or error) so the matrix can leave
-  // the loading state even when some fetches failed.
+  // Reset the cached frames whenever the replay changes, so an open panel can't
+  // show the previous game's beliefs for a frame.
   useEffect(() => {
-    if (meetingId === null) {
-      setSettled(null);
+    setFrames(null);
+    setError(null);
+  }, [gameId]);
+
+  // Fetch the per-meeting frames lazily — only once the hero is opened. The
+  // cancellation + game-id guard mirrors the store's async-ordering discipline so
+  // a stale response can't land after the replay switches.
+  useEffect(() => {
+    if (!open || gameId === null) {
       return;
     }
     let cancelled = false;
-    setSettled({ meetingId, agentIds: new Set() });
-    for (const player of players) {
-      const agentId = player.agent_id;
-      void fetchMemoryView(meetingId, agentId).finally(() => {
-        if (cancelled) {
-          return;
+    setError(null);
+    fetchBeliefFrames(gameId)
+      .then((data) => {
+        if (!cancelled) {
+          setFrames(data);
         }
-        setSettled((prev) => {
-          if (prev === null || prev.meetingId !== meetingId) {
-            return prev;
-          }
-          if (prev.agentIds.has(agentId)) {
-            return prev;
-          }
-          const agentIds = new Set(prev.agentIds);
-          agentIds.add(agentId);
-          return { meetingId, agentIds };
-        });
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
       });
-    }
     return () => {
       cancelled = true;
     };
-  }, [meetingId, players, fetchMemoryView]);
+  }, [open, gameId]);
 
-  // Data-integrity hint (DESIGN.md §6.3): every belief in an AgentMemoryView is
-  // snapshotted at the meeting tick, so all snapshot_tick values across the
-  // matrix must agree. Warn (don't throw) if they ever diverge.
+  // Close the overlay on Escape (consistent with the MeetingView modal).
   useEffect(() => {
-    if (meetingId === null) {
+    if (!open) {
       return;
     }
-    const ticks: number[] = [];
-    for (const player of players) {
-      const memory = memoryCache[memoryKey(meetingId, player.agent_id)];
-      if (memory) {
-        for (const belief of memory.beliefs) {
-          ticks.push(belief.snapshot_tick);
-        }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
       }
-    }
-    if (new Set(ticks).size > 1) {
-      console.warn(
-        "BeliefMatrix: snapshot_tick values diverge across cells",
-        ticks,
-      );
-    }
-  }, [meetingId, players, memoryCache]);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
 
-  if (meetingId === null) {
+  if (replay === null) {
     return null;
   }
 
-  if (players.length === 0) {
+  // Firewall: the Belief × Truth matrix is an OMNISCIENT cross-agent overview — it
+  // aggregates EVERY observer's private belief state. Showing it in As-agent fog
+  // would leak suspicions the chosen agent never had, so the whole hero (launcher
+  // included) is hidden in fog; the per-agent belief view belongs to the mind
+  // inspector. (Hooks above always run; this gate is after them.)
+  if (perspective.mode === "agent") {
+    return null;
+  }
+
+  const meetingCount = replay.metadata.meeting_count;
+
+  if (!open) {
     return (
-      <Rail>
-        <p className="text-sm italic text-neutral-400">
-          No players in this replay.
-        </p>
-      </Rail>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(true);
+        }}
+        aria-label="Open the Belief × Truth matrix"
+        title="Belief × Truth — who suspects whom, vs ground truth"
+        className="fixed right-4 top-1/2 z-[60] flex -translate-y-1/2 items-center gap-2 rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-2 text-sm font-semibold text-ink-900 shadow-chrome-1 transition-colors hover:bg-paper-2"
+      >
+        <span aria-hidden className="font-mono text-base leading-none">⊞</span>
+        Belief × Truth
+        <span className="rounded-pill bg-paper-2 px-1.5 font-mono text-[10px] text-ink-500">
+          {meetingCount} mtg
+        </span>
+      </button>
     );
   }
 
-  const allSettled =
-    settled !== null &&
-    settled.meetingId === meetingId &&
-    players.every((player) => settled.agentIds.has(player.agent_id));
+  // Roster order matches the loader's `sorted(...)` so the matrix axes are stable.
+  const players = [...replay.players].sort((a, b) => a.agent_id.localeCompare(b.agent_id));
 
-  if (!allSettled) {
-    return (
-      <Rail>
-        <Loading />
-      </Rail>
-    );
-  }
-
-  // After all fetches settle, the meeting tick is the tick of any loaded
-  // snapshot (all equal by construction — see the integrity check above).
-  let footerTick: number | null = null;
-  for (const player of players) {
-    const memory = memoryCache[memoryKey(meetingId, player.agent_id)];
-    if (memory) {
-      footerTick = memory.tick;
-      break;
+  // Per-meeting liveness from the replay tick state — the /beliefs DTO snapshots
+  // dead players as observers too, so the panel can't infer liveness from rows
+  // (Codex review). For each frame's meeting tick, the agents alive at that tick;
+  // BeliefPanel freezes anyone absent here.
+  const aliveByMeeting: Record<string, string[]> = {};
+  for (const frame of frames ?? []) {
+    const tickFrame = replay.ticks.find((t) => t.tick === frame.tick);
+    if (tickFrame !== undefined) {
+      aliveByMeeting[frame.meeting_id] = tickFrame.agent_states
+        .filter((s) => s.is_alive)
+        .map((s) => s.agent_id);
     }
   }
 
   return (
-    <Rail>
-      <div className="overflow-auto">
-        <table className="border-separate border-spacing-1">
-          <caption className="sr-only">
-            Suspicion from each observer (row) toward each subject (column).
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col" className="p-1 text-left">
-                <span className="text-[10px] font-normal uppercase tracking-wide text-neutral-500">
-                  obs ↓ \ subj →
-                </span>
-              </th>
-              {players.map((subject) => (
-                <th key={subject.agent_id} scope="col" className="p-1">
-                  <AxisLabel player={subject} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {players.map((observer) => {
-              const memory =
-                memoryCache[memoryKey(meetingId, observer.agent_id)];
-              return (
-                <tr key={observer.agent_id}>
-                  <th scope="row" className="p-1 text-left">
-                    <AxisLabel
-                      player={observer}
-                      errored={memory === undefined}
-                    />
-                  </th>
-                  {players.map((subject) => (
-                    <td key={subject.agent_id} className="p-0">
-                      <BeliefCell
-                        observer={observer}
-                        subject={subject}
-                        belief={
-                          memory
-                            ? lookupBelief(memory, subject.agent_id)
-                            : undefined
-                        }
-                      />
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Belief × Truth matrix"
+      className="fixed inset-0 z-[80] flex items-center justify-center overflow-auto bg-ink-900/50 p-4"
+      onClick={() => {
+        setOpen(false);
+      }}
+    >
+      {/* Stop backdrop clicks from closing when interacting with the panel. */}
+      <div onClick={(event) => event.stopPropagation()} className="contents">
+        <BeliefPanel
+          players={players}
+          frames={frames ?? []}
+          layer={beliefView}
+          onLayerChange={setBeliefView}
+          omniscient
+          aliveByMeeting={aliveByMeeting}
+          loading={frames === null && error === null}
+          error={error}
+          onClose={() => {
+            setOpen(false);
+          }}
+          isFullscreen={fullscreen}
+          onToggleFullscreen={() => {
+            setFullscreen((value) => !value);
+          }}
+        />
       </div>
-
-      <HeatLegend />
-
-      <p className="mt-3 text-xs text-neutral-400">
-        {footerTick === null
-          ? "No agent memories loaded for this meeting."
-          : `All beliefs as of meeting tick ${footerTick}.`}
-      </p>
-    </Rail>
+    </div>
   );
 }
