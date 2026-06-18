@@ -33,10 +33,22 @@ interface RoomRectProps {
 // Aspect ratio at/above which a room reads as a corridor (subordinate). The
 // canonical halls are 3:1–3.5:1; the squarest task room is ~1.6:1, so 2.2 cleanly
 // separates them from the DTO size alone.
+// A corridor is a THIN elongated connector. The canonical halls are 4 grid units
+// thick; every task / utility room is ≥ 6 thick (Storage is 14×6 — elongated but
+// NOT thin), so gating on the short side first keeps Storage (a crime-scene room)
+// out of the muted hallway styling. The aspect check is a secondary guard so a
+// hypothetical thin-but-square cell isn't muted.
+const CORRIDOR_MAX_THICKNESS = 4;
 const CORRIDOR_ASPECT = 2.2;
 const ROOM_RADIUS = tokens.radius.lg; // 14 — the sticker corner radius
 const NAME_FONT_SIZE = 14;
 const NAME_TOP_PAD = 15; // screen px from the room's top edge to the name baseline
+// Pixi builds its own canvas font shorthand from fontWeight + fontSize +
+// fontFamily, so `fontFamily` must be the bare family — NOT the `tokens.type.*`
+// CSS shorthand (`600 'Fredoka'`), which would yield an invalid `14px 600
+// 'Fredoka'` and silently fall back. Strip the leading weight, keeping tokens.ts
+// as the single source of the family name.
+const DISPLAY_FAMILY = tokens.type.display.replace(/^\d+\s+/, "");
 
 // Resolved token colours (hex string → 0xRRGGBB once per module).
 const INK_900 = pixiHex(tokens.ink[900]);
@@ -52,7 +64,7 @@ function isCorridor(room: RoomView): boolean {
   const { width, height } = room.size;
   const long = Math.max(width, height);
   const short = Math.min(width, height);
-  return short > 0 && long / short >= CORRIDOR_ASPECT;
+  return short > 0 && short <= CORRIDOR_MAX_THICKNESS && long / short >= CORRIDOR_ASPECT;
 }
 
 // Append a 45° hatch clipped to the rect [x, x+w]×[y, y+h] — the fog texture for
@@ -156,7 +168,7 @@ export function RoomRect({ room, scale, offsetX, offsetY, visible }: RoomRectPro
         style={{
           fill: corridor ? INK_400 : INK_900,
           fontSize: rotated ? 12 : NAME_FONT_SIZE,
-          fontFamily: tokens.type.display,
+          fontFamily: DISPLAY_FAMILY,
           fontWeight: "600",
         }}
       />

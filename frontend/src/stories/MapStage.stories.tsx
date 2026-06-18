@@ -232,9 +232,10 @@ const START_TICK: TickView = {
   advantage: { crew_alive: 7, impostors_alive: 2, tasks_completed: 0, tasks_required: 14, advantage: 0.05 },
 };
 
-// Index 2 = TICK_ENTER (engine tick 314) — p-5 is mid-vent, so the escape route
-// REACTOR → STORAGE animates and the reactor body + sabotage persist.
-const PLAY_INDEX = 2;
+// Index 3 = TICK_EXIT (engine tick 315) — p-5 has just emerged, so the traveller
+// sits at STORAGE with the full REACTOR → STORAGE route trail (tick-anchored, so
+// the position matches replay time), and the reactor body + sabotage persist.
+const PLAY_INDEX = 3;
 
 const FIXTURE: ReplayView = {
   viewModelVersion: "story-fixture",
@@ -264,7 +265,7 @@ function MapStoryHarness({ perspective }: { perspective: Perspective }) {
     useReplayStore.setState({
       currentReplay: FIXTURE,
       currentReplayError: null,
-      currentTick: PLAY_INDEX, // the in-vent tick (engine tick 314)
+      currentTick: PLAY_INDEX, // the emergence tick (engine tick 315)
       isPlaying: false,
       perspective,
       view: "workspace",

@@ -40,7 +40,7 @@ import type {
   TickView,
   VentView,
 } from "../types/api";
-import { AgentToken } from "./AgentToken";
+import { AgentToken, TWEEN_DURATION_MS } from "./AgentToken";
 import { BodyMarker } from "./BodyMarker";
 import { MapToolbar } from "./MapToolbar";
 import { ROOM_PALETTE, RoomRect } from "./RoomRect";
@@ -54,7 +54,6 @@ const CANVAS_HEIGHT = 450;
 const CANVAS_PADDING = 44;
 const BACKGROUND_COLOR = ROOM_PALETTE.PAPER_1;
 const KILL = pixiHex(tokens.kill);
-const VENT_TRAVEL_MS = 900; // dive → travel → emerge, one-shot per escape
 
 interface MapTransform {
   scale: number;
@@ -80,6 +79,7 @@ interface BodySpec {
   victimId: string;
   roomId: string;
   isDiscovered: boolean;
+  killedBy: string | null; // spectator-only attribution; null under fog
 }
 
 const NO_BODIES: readonly BodySpec[] = [];
@@ -213,6 +213,10 @@ function buildVentSegments(ticks: readonly TickView[]): VentSegment[] {
 function buildBodyStatesByTick(ticks: readonly TickView[]): BodySpec[][] {
   const result: BodySpec[][] = new Array<BodySpec[]>(ticks.length);
   const killRoomByVictim = new Map<string, string>();
+  // The kill event carries the killer; persist it so the body keeps its
+  // attribution after the kill event scrolls off the current tick (the role the
+  // `killed_by` view-model field plays — re-derived here from the kill event).
+  const killerByVictim = new Map<string, string>();
   const discovered = new Set<string>();
   let current: BodySpec[] = [];
   for (let t = 0; t < ticks.length; t++) {
@@ -222,6 +226,7 @@ function buildBodyStatesByTick(ticks: readonly TickView[]): BodySpec[][] {
       for (const event of tick.events) {
         if (event.type === "kill") {
           killRoomByVictim.set(event.victim_id, event.room_id);
+          killerByVictim.set(event.victim_id, event.killer_id);
           changed = true;
         } else if (event.type === "report_body" && !discovered.has(event.body_of)) {
           discovered.add(event.body_of);
@@ -234,6 +239,7 @@ function buildBodyStatesByTick(ticks: readonly TickView[]): BodySpec[][] {
         victimId,
         roomId,
         isDiscovered: discovered.has(victimId),
+        killedBy: killerByVictim.get(victimId) ?? null,
       }));
     }
     result[t] = current;
@@ -241,17 +247,29 @@ function buildBodyStatesByTick(ticks: readonly TickView[]): BodySpec[][] {
   return result;
 }
 
-// ── one vent-escape traveller: a one-shot dive→travel→emerge along the route ──
+// ── one vent-escape traveller: a capsule gliding the dive→emerge route ──
+// Position is TICK-ANCHORED: `progress` is `(tick - enterTick)/(exitTick -
+// enterTick)` (0 at the dive room, 1 at the emerge room), so a paused/scrubbed
+// frame always shows the impostor where the replay actually places it — never a
+// future room. Within a single-tick step it tweens the rendered position toward
+// the target over TWEEN_DURATION_MS (mirroring AgentToken), so playback still
+// shows a smooth glide rather than a snap. Reduced-motion snaps instead.
 interface VentTravelerProps {
   fromRoom: RoomView;
   toRoom: RoomView;
   color: string;
   label: string;
   glyph: string;
+  progress: number;
+  animate: boolean;
   scale: number;
   offsetX: number;
   offsetY: number;
-  playKey: string;
+}
+
+interface XY {
+  x: number;
+  y: number;
 }
 
 function VentTraveler({
@@ -260,36 +278,58 @@ function VentTraveler({
   color,
   label,
   glyph,
+  progress,
+  animate,
   scale,
   offsetX,
   offsetY,
-  playKey,
 }: VentTravelerProps) {
-  const [progress, setProgress] = useState(prefersReducedMotion ? 1 : 0);
-  const elapsedRef = useRef(0);
-  useEffect(() => {
-    elapsedRef.current = 0;
-    setProgress(prefersReducedMotion ? 1 : 0);
-  }, [playKey]);
-  useTick((ticker: { deltaMS: number }) => {
-    if (prefersReducedMotion || elapsedRef.current >= VENT_TRAVEL_MS) return;
-    elapsedRef.current = Math.min(VENT_TRAVEL_MS, elapsedRef.current + ticker.deltaMS);
-    setProgress(elapsedRef.current / VENT_TRAVEL_MS);
-  });
-
   const fx = offsetX + (fromRoom.position.x + fromRoom.size.width / 2) * scale;
   const fy = offsetY + (fromRoom.position.y + fromRoom.size.height / 2) * scale;
   const tx = offsetX + (toRoom.position.x + toRoom.size.width / 2) * scale;
   const ty = offsetY + (toRoom.position.y + toRoom.size.height / 2) * scale;
+  const target: XY = { x: fx + (tx - fx) * progress, y: fy + (ty - fy) * progress };
 
-  // Three phases: dive (0–0.2, shrink into the source vent), travel (0.2–0.8,
-  // glide the route), emerge (0.8–1, pop out at the destination).
-  const travel = Math.min(1, Math.max(0, (progress - 0.2) / 0.6));
-  const x = fx + (tx - fx) * travel;
-  const y = fy + (ty - fy) * travel;
-  const capsuleScale =
-    progress < 0.2 ? 1 - (progress / 0.2) * 0.55 : progress > 0.8 ? 0.45 + ((progress - 0.8) / 0.2) * 0.55 : 0.45;
-  const tokenColor = pixiHex(color);
+  const [pos, setPos] = useState<XY>(target);
+  const posRef = useRef<XY>(target);
+  const fromRef = useRef<XY>(target);
+  const toRef = useRef<XY>(target);
+  const tweenRef = useRef<number>(1);
+
+  useEffect(() => {
+    if (animate && !prefersReducedMotion) {
+      fromRef.current = posRef.current;
+      toRef.current = target;
+      tweenRef.current = 0;
+    } else {
+      fromRef.current = target;
+      toRef.current = target;
+      posRef.current = target;
+      tweenRef.current = 1;
+      setPos(target);
+    }
+    // Re-tween when the tick-derived progress changes (or the snap/tween mode
+    // flips); `target` is a pure function of `progress` + the fixed transform.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress, animate]);
+
+  useTick((ticker: { deltaMS: number }) => {
+    if (tweenRef.current >= 1) return;
+    tweenRef.current = Math.min(1, tweenRef.current + ticker.deltaMS / TWEEN_DURATION_MS);
+    const f = fromRef.current;
+    const t = toRef.current;
+    const p = tweenRef.current;
+    const next: XY = { x: f.x + (t.x - f.x) * p, y: f.y + (t.y - f.y) * p };
+    posRef.current = next;
+    setPos(next);
+  });
+
+  // Capsule shrinks mid-route (in the vent) and is full size at both ends, keyed
+  // off how far along the route the RENDERED position sits — so it reads as
+  // dive→travel→emerge during the tween without drifting from replay time.
+  const routeLen = Math.hypot(tx - fx, ty - fy) || 1;
+  const travelled = Math.min(1, Math.max(0, Math.hypot(pos.x - fx, pos.y - fy) / routeLen));
+  const capsuleScale = 1 - 0.4 * Math.sin(travelled * Math.PI);
   const inkLine = pixiHex(tokens.ink[500]);
 
   return (
@@ -297,33 +337,30 @@ function VentTraveler({
       <pixiGraphics
         draw={(g: Graphics) => {
           g.clear();
-          // The dotted travel trail already covered.
-          const ux = tx - fx;
-          const uy = ty - fy;
-          const len = Math.hypot(ux, uy) || 1;
-          const nx = ux / len;
-          const ny = uy / len;
-          for (let d = 0; d < len * travel; d += 9) {
+          // Dotted trail from the dive room to the current position.
+          const nx = (tx - fx) / routeLen;
+          const ny = (ty - fy) / routeLen;
+          const drawn = routeLen * travelled;
+          for (let d = 0; d < drawn; d += 9) {
             g.moveTo(fx + nx * d, fy + ny * d);
-            g.lineTo(fx + nx * Math.min(d + 0.5, len * travel), fy + ny * Math.min(d + 0.5, len * travel));
+            g.lineTo(fx + nx * Math.min(d + 0.5, drawn), fy + ny * Math.min(d + 0.5, drawn));
           }
           g.stroke({ width: 2.4, color: inkLine, alpha: 0.85, cap: "round" });
-          // The capsule (ghosted identity disc, dashed-feel via alpha).
-          g.circle(x, y, 11 * capsuleScale);
-          g.fill({ color: tokenColor, alpha: 0.92 });
+          g.circle(pos.x, pos.y, 11 * capsuleScale);
+          g.fill({ color: pixiHex(color), alpha: 0.92 });
           g.stroke({ width: 2, color: pixiHex(tokens.ink[900]), alpha: 0.9 });
         }}
       />
       <pixiGraphics
         draw={(g: Graphics) =>
-          paintGlyph(g, glyph, x, y, 12 * capsuleScale, pixiHex(tokens.paper[0]), 0.95)
+          paintGlyph(g, glyph, pos.x, pos.y, 12 * capsuleScale, pixiHex(tokens.paper[0]), 0.95)
         }
       />
       <pixiText
         text={`${label} ⇡`}
         anchor={0.5}
-        x={x}
-        y={y - 18}
+        x={pos.x}
+        y={pos.y - 18}
         alpha={0.85}
         style={{ fill: inkLine, fontSize: 9, fontFamily: tokens.type.mono, fontWeight: "700" }}
       />
@@ -475,11 +512,14 @@ export function MapView() {
   const agentAware =
     visibility !== null && visibility.audible_events.some((e) => e.kind === "sabotage_alarm");
 
-  // Active vent escapes at this engine tick (Omniscient only).
+  // Active vent escapes at this engine tick (Omniscient only). The window is
+  // INCLUSIVE of the exit tick so the traveller renders the emergence frame
+  // (and the normal token is suppressed there — the traveller IS the emerged
+  // token at that tick), keeping position tied to replay time, never ahead of it.
   const activeVentByActor = new Map<string, VentSegment>();
   if (omniscient) {
     for (const seg of ventSegments) {
-      if (seg.enterTick <= tickNumber && tickNumber < seg.exitTick) {
+      if (seg.enterTick <= tickNumber && tickNumber <= seg.exitTick) {
         activeVentByActor.set(seg.actorId, seg);
       }
     }
@@ -570,6 +610,7 @@ export function MapView() {
           victimId: vb.victim_id,
           roomId: vb.room,
           isDiscovered: false, // fog: "a body the agent sees", not the global report state
+          killedBy: null, // firewall: the As-agent view never exposes the killer
         }));
 
   const bodyMarkers = bodySpecs.flatMap((body) => {
@@ -582,6 +623,7 @@ export function MapView() {
         placementIndex={playerIndexById.get(body.victimId) ?? 0}
         isDiscovered={body.isDiscovered}
         victimLabel={body.victimId}
+        killedBy={body.killedBy}
         glyph={GLYPH_SVG.body}
         scale={scale}
         offsetX={offsetX}
@@ -597,15 +639,19 @@ export function MapView() {
         const toRoom = roomsById.get(seg.toRoomId);
         const player = playerById.get(seg.actorId);
         if (fromRoom === undefined || toRoom === undefined || player === undefined) return [];
+        // Tick-anchored progress along the route (0 = dive room, 1 = emerge room).
+        const span = seg.exitTick - seg.enterTick;
+        const progress = span > 0 ? Math.min(1, Math.max(0, (tickNumber - seg.enterTick) / span)) : 1;
         return [
           <VentTraveler
             key={`${seg.actorId}:${seg.enterTick}`}
-            playKey={`${seg.actorId}:${seg.enterTick}`}
             fromRoom={fromRoom}
             toRoom={toRoom}
             color={player.color}
             label={seg.actorId}
             glyph={GLYPH_SVG.vent}
+            progress={progress}
+            animate={animate}
             scale={scale}
             offsetX={offsetX}
             offsetY={offsetY}

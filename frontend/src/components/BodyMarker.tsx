@@ -22,6 +22,10 @@ interface BodyMarkerProps {
   placementIndex: number;
   isDiscovered: boolean;
   victimLabel: string;
+  // The persisted spectator-only killer attribution (TickView.bodies[].killed_by),
+  // shown beneath the victim id. `null` under fog (the As-agent view must never
+  // expose who killed whom — VisibleBodyView carries no killed_by).
+  killedBy: string | null;
   glyph: string;
   scale: number;
   offsetX: number;
@@ -49,6 +53,7 @@ export function BodyMarker({
   placementIndex,
   isDiscovered,
   victimLabel,
+  killedBy,
   glyph,
   scale,
   offsetX,
@@ -103,6 +108,17 @@ export function BodyMarker({
           fontWeight: "700",
         }}
       />
+      {killedBy !== null && (
+        // Spectator-only kill attribution (dagger + killer id), persists with the
+        // body after the kill event scrolls off the current tick.
+        <pixiText
+          text={`† ${killedBy}`}
+          anchor={0.5}
+          x={x}
+          y={y + DISC_RADIUS + 20}
+          style={{ fill: INK_500, fontSize: 8, fontFamily: tokens.type.mono }}
+        />
+      )}
     </>
   );
 }
