@@ -280,22 +280,52 @@ function TranscriptPanel({
           ))}
         </div>
       )}
-      <ContradictionsSection contradictions={meeting.contradictions} />
+      <ContradictionsSection
+        contradictions={meeting.contradictions}
+        turns={meeting.turns}
+      />
     </Panel>
   );
 }
 
+const TURN_KIND_LABEL: Record<TurnView["turn_kind"], string> = {
+  opening: "opening",
+  reply: "reply",
+  opt_in: "opt-in",
+};
+
+// A contradiction event id is `turn:<turn_id>:claim:<i>` / `turn:<turn_id>:obs:<i>`
+// (mirrors meetings/transcript.py). Pull the turn id out so the link can name the
+// turn it references; greedy `.+` captures the whole id before the final suffix.
+function eventTurnId(eventId: string): string | null {
+  const match = /^turn:(.+):(?:claim|obs):\d+$/.exec(eventId);
+  return match ? match[1]! : null;
+}
+
 // Contradiction LINKS: weak = thin dashed ink / strong = bold solid fuchsia (from
 // `ContradictionView.weak` via `severity`), each paired with a label so it never
-// reads by hue alone (firewall). Role-neutral throughout.
+// reads by hue alone (firewall). The link is made explicit by resolving
+// `event_a_id` / `event_b_id` to the two TurnCards they connect (speaker + kind),
+// so the reader can tell WHICH turns the flag links; it falls back to `subjects`
+// when an endpoint can't be resolved. Role-neutral throughout.
 function ContradictionsSection({
   contradictions,
+  turns,
 }: {
   contradictions: readonly ContradictionView[];
+  turns: readonly TurnView[];
 }) {
   if (contradictions.length === 0) {
     return null;
   }
+  const turnById = new Map(turns.map((t) => [t.turn_id, t] as const));
+  const endpoint = (eventId: string): string | null => {
+    const turn = turnById.get(eventTurnId(eventId) ?? "");
+    return turn === undefined
+      ? null
+      : `${turn.speaker} (${TURN_KIND_LABEL[turn.turn_kind]})`;
+  };
+
   return (
     <div className="mt-4 border-t border-ink-100 pt-3">
       <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wide text-ink-500">
@@ -304,6 +334,15 @@ function ContradictionsSection({
       <ul className="space-y-2">
         {contradictions.map((c) => {
           const strong = c.severity === "strong";
+          const a = endpoint(c.event_a_id);
+          const b = endpoint(c.event_b_id);
+          // Prefer the resolved turn endpoints; fall back to the subject ids.
+          const link =
+            a !== null && b !== null
+              ? `${a} ↔ ${b}`
+              : c.subjects.length > 0
+                ? c.subjects.join(" ↔ ")
+                : null;
           return (
             <li key={c.contradiction_id} className="flex flex-wrap items-center gap-2 text-sm">
               <span
@@ -327,12 +366,10 @@ function ContradictionsSection({
                 </svg>
                 {strong ? "strong" : "weak"}
               </span>
-              <span className="min-w-0 break-words text-ink-900">{c.description}</span>
-              {c.subjects.length > 0 && (
-                <span className="font-mono text-[11px] text-ink-400">
-                  {c.subjects.join(" ↔ ")}
-                </span>
+              {link !== null && (
+                <span className="font-mono text-[11px] font-bold text-ink-700">{link}</span>
               )}
+              <span className="min-w-0 break-words text-ink-900">{c.description}</span>
             </li>
           );
         })}
@@ -431,13 +468,19 @@ export function MeetingView() {
   return (
     // A light scrim (not an opaque cover) so the map behind stays visible — the
     // claim↔map cross-highlight lights a room there as you hover a sighting. The
-    // panel drops below the bottom transport region (z-[70]) and reserves bottom
-    // padding so playback stays reachable while the meeting is open.
+    // panel reserves bottom padding so the bottom transport region (z-[70]) stays
+    // reachable while the meeting is open. Coexist with the rails that mount
+    // alongside an open meeting — the left BeliefMatrix (z-[55], ≤24rem) and the
+    // right ThoughtStream (z-[60], ≤20rem): at xl+ there is room for all three,
+    // so drop the overlay BELOW the rails (z-50) and reserve gutters wider than
+    // each so the centered panel lands in the gap and the rails stay clickable.
+    // Below xl that gap would squeeze the transcript, so lift the overlay above
+    // the rails (z-[61], still under the z-[65] ReplayControls) as a focus modal.
     <div
       role="dialog"
       aria-modal="true"
       aria-label={`Meeting at tick ${meeting.tick}`}
-      className="fixed inset-0 z-[61] overflow-auto bg-ink-900/25 p-4 pb-[22rem]"
+      className="fixed inset-0 z-[61] overflow-auto bg-ink-900/25 p-4 pb-[22rem] xl:z-50 xl:pl-[25rem] xl:pr-[21rem]"
       onClick={close}
     >
       <div

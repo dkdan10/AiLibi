@@ -368,20 +368,28 @@ function VentTraveler({
   );
 }
 
-// ── sighting highlight: an additive "look here" ring around the room a meeting
-// sighting NAMES (Task 12.7). Strictly additive — it only emphasises a room the
-// current perspective ALREADY renders (the caller passes a room only when it is
-// Omniscient-visible or lit under the selected agent's fog), so it never reveals
-// a fogged position. The ring is role-NEUTRAL (ink outline + a soft paper glow,
-// no reserved hue) so it cannot be read as identity / suspicion / trust. Static
-// (no pulse) — a focus cue, not a drama beat — so it needs no reduced-motion path.
+// ── sighting highlight: an additive "look here" cue lighting BOTH public
+// referents a meeting sighting NAMES — the room and the agent (Task 12.7).
+// Strictly additive — it only emphasises a room the current perspective ALREADY
+// renders (the caller passes a room only when it is Omniscient-visible or lit
+// under the selected agent's fog), so it never reveals a fogged position. The
+// agent is marked AT the named room from the PUBLIC claim — never the agent's
+// live tick position (that would be a ground-truth peek / leak): the badge
+// annotates "the sighting names p-5 here", it does not assert where p-5 is now.
+// The ring is role-NEUTRAL (ink outline + a soft paper glow); the agent badge
+// carries the player's identity colour (identity ≠ guilt — public + safe).
+// Static (no pulse) — a focus cue, not a drama beat — so no reduced-motion path.
 function SightingHighlight({
   room,
+  agentId,
+  agentColor,
   scale,
   offsetX,
   offsetY,
 }: {
   room: RoomView;
+  agentId: string;
+  agentColor: string | null;
   scale: number;
   offsetX: number;
   offsetY: number;
@@ -392,19 +400,38 @@ function SightingHighlight({
   const h = room.size.height * scale;
   const ink = pixiHex(tokens.ink[900]);
   const glow = pixiHex(tokens.paper[0]);
+  const paper = pixiHex(tokens.paper[0]);
+  const disc = agentColor === null ? pixiHex(tokens.ink[400]) : pixiHex(agentColor);
+  // The agent badge sits just above the room ring so it reads as a tag on the
+  // claim, distinct from the live tokens jittered inside the room.
+  const badgeX = x + w / 2;
+  const badgeY = y - 16;
   return (
-    <pixiGraphics
-      draw={(g: Graphics) => {
-        g.clear();
-        // Soft brighten over the named room (focus, channel-safe).
-        g.roundRect(x, y, w, h, tokens.radius.lg);
-        g.fill({ color: glow, alpha: 0.28 });
-        // A bold ink ring just outside the room outline so it pops against the
-        // existing 2.4px sticker stroke without recolouring it.
-        g.roundRect(x - 5, y - 5, w + 10, h + 10, tokens.radius.xl);
-        g.stroke({ width: 4, color: ink, alpha: 0.95 });
-      }}
-    />
+    <>
+      <pixiGraphics
+        draw={(g: Graphics) => {
+          g.clear();
+          // Soft brighten over the named room (focus, channel-safe).
+          g.roundRect(x, y, w, h, tokens.radius.lg);
+          g.fill({ color: glow, alpha: 0.28 });
+          // A bold ink ring just outside the room outline so it pops against the
+          // existing 2.4px sticker stroke without recolouring it.
+          g.roundRect(x - 5, y - 5, w + 10, h + 10, tokens.radius.xl);
+          g.stroke({ width: 4, color: ink, alpha: 0.95 });
+          // The named-agent badge: an identity disc on a cream sticker.
+          g.circle(badgeX, badgeY, 11);
+          g.fill(disc);
+          g.stroke({ width: 2, color: ink });
+        }}
+      />
+      <pixiText
+        text={agentId.replace(/^p-/, "")}
+        anchor={0.5}
+        x={badgeX}
+        y={badgeY}
+        style={{ fill: paper, fontSize: 10, fontFamily: tokens.type.mono, fontWeight: "700" }}
+      />
+    </>
   );
 }
 
@@ -782,9 +809,11 @@ export function MapView() {
               visible={omniscient || litRoomIds.has(room.id)}
             />
           ))}
-          {highlightRoom !== null && (
+          {highlightRoom !== null && highlightedSighting !== null && (
             <SightingHighlight
               room={highlightRoom}
+              agentId={highlightedSighting.agentId}
+              agentColor={playerById.get(highlightedSighting.agentId)?.color ?? null}
               scale={scale}
               offsetX={offsetX}
               offsetY={offsetY}

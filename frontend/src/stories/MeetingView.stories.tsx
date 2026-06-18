@@ -281,7 +281,19 @@ const SKIPPED_MEETING: MeetingViewDTO = {
     ballot("p-0", "p-3", 0.45, "Just a hunch."),
     ballot("p-1", "SKIP", 0.4, "No evidence."),
     ballot("p-2", "SKIP", 0.5, "Wait for more."),
-    ballot("p-4", "p-3", 0.4, "Following p-0."),
+    // A parse-default ballot: the loader empties `rationale_text_clean` and
+    // carries the reason on the rewrite chip — the card shows the empty-rationale
+    // state, never the raw audit marker.
+    {
+      voter: "p-4",
+      target: "p-3",
+      confidence: 0.4,
+      primary_reason_id: null,
+      considered_alternatives: [],
+      rationale_text: "[[VOTE_PARSE_DEFAULT]]",
+      rewrite_reasons: ["vote did not parse"],
+      rationale_text_clean: "",
+    },
   ],
   contradictions: [],
   llm_calls: [],

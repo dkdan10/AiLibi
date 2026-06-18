@@ -47,11 +47,12 @@ export function BallotCard({ ballot, players, omniscient }: BallotCardProps) {
   const isSkip = ballot.target === "SKIP";
   const confidence = Math.max(0, Math.min(1, ballot.confidence));
   const pct = Math.round(confidence * 100);
-  // Prefer the cleaned rationale (markers stripped); fall back to the raw text.
-  const rationale =
-    ballot.rationale_text_clean.trim() !== ""
-      ? ballot.rationale_text_clean
-      : ballot.rationale_text;
+  // The cleaned rationale (markers stripped by the loader). When a vote fails to
+  // parse, the loader intentionally leaves this empty because the raw
+  // `rationale_text` is only the internal audit marker (the rewrite chip carries
+  // the parse-default reason) — so do NOT fall back to the raw text here; show an
+  // explicit empty-rationale state instead.
+  const rationale = ballot.rationale_text_clean.trim();
 
   // Correctness (Omniscient only): a non-SKIP vote is "correct" iff its target
   // was actually an impostor. SKIP has no correctness.
@@ -115,9 +116,15 @@ export function BallotCard({ ballot, players, omniscient }: BallotCardProps) {
         </div>
       )}
 
-      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-900">
-        {rationale}
-      </p>
+      {rationale !== "" ? (
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-900">
+          {rationale}
+        </p>
+      ) : (
+        <p className="font-mono text-xs italic text-ink-400">
+          no rationale recorded
+        </p>
+      )}
     </article>
   );
 }
