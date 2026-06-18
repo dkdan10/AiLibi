@@ -268,14 +268,19 @@ export function usePlaybackEngine(): void {
   const beliefView = useReplayStore((s) => s.beliefView);
   const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
   const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
+  const currentReplayError = useReplayStore((s) => s.currentReplayError);
 
   // ── 1. Auto-advance timer ───────────────────────────────────────────────
   // `currentTick` is read fresh inside the interval (not closed over) so the
   // effect needn't depend on it — depending on it would tear down + re-register
   // the interval every tick, compounding drift (the original ReplayControls
   // note). Stepping is frame-based (index + 1) and stops at the last frame.
+  // Gated on the workspace view: off it (Replays/Highlights/Tournament) the
+  // transport is unmounted, so — like the old ReplayControls-owned timer that
+  // unmounted with the replay tab — playback freezes rather than silently
+  // advancing the tick/URL in the background, and resumes on returning.
   useEffect(() => {
-    if (!isPlaying || replay === null) {
+    if (!isPlaying || replay === null || view !== "workspace") {
       return;
     }
     const intervalMs = BASE_TICK_INTERVAL_MS / speed;
@@ -292,7 +297,7 @@ export function usePlaybackEngine(): void {
     return () => {
       window.clearInterval(id);
     };
-  }, [isPlaying, speed, replay]);
+  }, [isPlaying, speed, replay, view]);
 
   // ── 2. Interruptible auto-follow ─────────────────────────────────────────
   // While ON, the meeting selection TRACKS the current tick — select the meeting
@@ -376,12 +381,26 @@ export function usePlaybackEngine(): void {
   }, []);
 
   // ── 3b. Apply deferred moment once the URL's replay is loaded ─────────────
+  // Also drop the pending hydration if the deep-linked replay can never arrive —
+  // a load error (e.g. a 404 game_id) or a different replay superseding it —
+  // otherwise `pendingRef` would stay set and effect 3c's guard would disable
+  // URL sync for the rest of the session.
   useEffect(() => {
     const pending = pendingRef.current;
-    if (pending === null || replay === null) {
+    if (pending === null) {
+      return;
+    }
+    if (replay === null) {
+      // Still loading keeps pending; a surfaced load error clears it.
+      if (currentReplayError !== null) {
+        pendingRef.current = null;
+      }
       return;
     }
     if (replay.metadata.game_id !== pending.gameId) {
+      // A different replay superseded the deep-linked one: discard the stale
+      // moment so write-back resumes for the replay that actually loaded.
+      pendingRef.current = null;
       return;
     }
     const store = useReplayStore.getState();
@@ -402,7 +421,7 @@ export function usePlaybackEngine(): void {
       store.setView(pending.view);
     }
     pendingRef.current = null;
-  }, [replay]);
+  }, [replay, currentReplayError]);
 
   // ── 3c. Debounced URL write-back ─────────────────────────────────────────
   // Skip until initial hydration completes, and while a deferred apply is still

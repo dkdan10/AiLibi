@@ -104,7 +104,15 @@ function PerspectiveBanner() {
   const setView = useReplayStore((s) => s.setView);
 
   const meta = replay?.metadata ?? null;
-  const value = perspective.mode === "omniscient" ? "omniscient" : perspective.agentId;
+  // The interactive As-agent SWITCHER is 12.5's (it lands with the map fog +
+  // toolbar). 12.4 only stands up the mode INDICATOR + the `perspective` store
+  // field / URL round-trip. Crucially we do NOT expose a user-facing way to
+  // ENTER As-agent here: the meeting / mind / belief panels are still omniscient
+  // (they show every role + private memory), so switching into fog now would
+  // leak through them. A deep link can still set As-agent (so 12.5 can develop
+  // against it); for that case we offer a one-way "Exit fog" back to the safe,
+  // consistent Omniscient view.
+  const inFog = perspective.mode === "agent";
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-ink-900 bg-paper-0 px-4 py-3 shadow-chrome-1">
@@ -124,27 +132,29 @@ function PerspectiveBanner() {
             : `seed ${meta.seed} · ${replay?.players.length ?? 0}p · ${meta.winner ?? "—"}`}
         </span>
       </div>
-      <label className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <span className="font-mono text-[10px] uppercase tracking-wide text-ink-500">
           Perspective
         </span>
-        <select
-          value={value}
-          disabled={replay === null}
-          onChange={(event) => {
-            const next = event.currentTarget.value;
-            setPerspective(next === "omniscient" ? OMNISCIENT : { mode: "agent", agentId: next });
-          }}
-          className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-sm text-ink-900 disabled:opacity-40"
+        <span
+          aria-label={`Perspective: ${inFog ? `As ${perspective.agentId}` : "Omniscient"}`}
+          className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-sm text-ink-900"
         >
-          <option value="omniscient">Omniscient</option>
-          {(replay?.players ?? []).map((player) => (
-            <option key={player.agent_id} value={player.agent_id}>
-              As {player.agent_id}
-            </option>
-          ))}
-        </select>
-      </label>
+          {inFog ? `As ${perspective.agentId} · fog` : "Omniscient"}
+        </span>
+        {inFog && (
+          <button
+            type="button"
+            onClick={() => {
+              setPerspective(OMNISCIENT);
+            }}
+            title="Return to the Omniscient view (the As-agent switcher arrives with the map)"
+            className="rounded-md border-2 border-ink-900 bg-paper-0 px-2.5 py-1 text-sm font-medium text-ink-900 hover:bg-paper-2"
+          >
+            Exit fog
+          </button>
+        )}
+      </div>
     </header>
   );
 }
