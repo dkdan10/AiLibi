@@ -510,39 +510,120 @@ DTO flag. Beliefs are per-MEETING (timeless), not per-tick, so the step control 
 sparkline would disagree with the recorded ballot). Don't edit `App.tsx` (mount discipline).
 **Ready-to-paste prompt:** `agent_prompts/task-12-6-belief-truth.md`
 
-#### Task 12.7 — Meeting view
+### Task 12.7 — Meeting view
 **Branch:** `phase-12-meeting-view`
 **Depends on:** 12.1, 12.2, 12.4, 12.5
-**Complexity:** Integration (chrome + cross-highlight/link logic)
-**Stage-1 ref:** §3.4, slice 5 — **Claude Design chrome + hand-coded interactions.**
+**Section refs:** design/phase-12/stage-1-design.md §3.4, slice 5; the rendered target `design/phase-12/playful-system/screens/05-meeting.png` and the accusation-chain / ballots / `verdict` code in `playful-system/playful-system.dc.html`; the firewall (role-neutral outcome) + the REAL §4.6 rule in `design/phase-12/claude-design-brief.md`
+**Complexity:** Integration
+**Files in scope:**
+- frontend/src/components/MeetingView.tsx
+- frontend/src/components/TurnCard.tsx
+- frontend/src/components/BallotCard.tsx
+- frontend/src/components/MeetingPill.tsx
+- frontend/src/store/replayStore.ts
+- frontend/src/components/MapView.tsx
+- frontend/src/stories/MeetingView.stories.tsx
+**Files NOT in scope:**
+- frontend/src/App.tsx — the meeting already mounts in the existing overlay slot (`<MeetingView/>`); rebuild the component, don't edit the shell (Wave-B mount discipline)
+- api/ and the loader — `TurnView` / `BallotView` / `GateView` / `ContradictionView` (weak/strong + `rewrite_reasons`) already ship from 12.2; no DTO change, no re-record
+- the belief / mind surfaces — other Wave-B slices
 
-Accusation chain as a threaded **waterfall** (indent by `reply_to`); **claim↔map cross-highlight** (hover "saw Red in
-Electrical" → light Red + Electrical + sightline + truth match); contradiction **links** with **weak=dashed / strong=solid**;
-ballots with the per-meeting **§4.6 verdict** + **rewrite-marker chips** (from `rewrite_reasons`) + correctness by
-**shape/label, not hue**; role-neutral outcome banner.
-**Claude Design prompt:** "Design the **meeting transcript view**: a threaded accusation waterfall of TurnCards
-(speaker chip, structured claims/observations + free text toggle), a contradictions section (weak=dashed, strong=solid
-links), a ballots section (voter→target, confidence bar, rationale, marker chips, a §4.6 gate readout), and a
-role-neutral outcome banner. States: chain / single-turn / skipped / ejected. Firewall: outcome + correctness are
-role-neutral (shape/label, not red/green). Presentational only; tokens only."
-**Handoff/verify:** README (interactions to preserve: cross-highlight + link drawing are hand-wired; DoD) → Handoff →
-wire cross-highlight to the map + links to turn ids → verify EJECTED/SKIPPED/weak/strong + chips + cross-highlight.
+Rebuild the meeting surface the App.tsx overlay slot mounts (`<MeetingView/>`): the accusation chain as a threaded
+**waterfall** (TurnCards indented by `reply_to`, speaker chip + structured claims / observations + a free-text toggle);
+the **claim↔map cross-highlight** — hovering "saw Red in Electrical" lights the claim's PUBLIC referent — the room + agent NAMED in the transcript (public, safe in any perspective; the sightline and does-it-match-truth overlay are Omniscient-only, and in As-agent fog the highlight reveals no position the fog has hidden),
+the single best legibility device for the transcript; contradiction **links** drawn weak = dashed / strong = solid (from
+`ContradictionView.weak`); a ballots section (`BallotView`: voter→target, confidence bar, rationale, **rewrite-marker
+chips** from `rewrite_reasons`, vote correctness by **shape / label, not hue**); and a **role-neutral** outcome banner.
+The per-meeting **§4.6 verdict** renders from `GateView` — the REAL rule (plurality + at least one leader ballot ≥ 0.6,
+tie → SKIP). The converge mock's "simple majority of living voters" copy is WRONG — do NOT replicate it. The
+cross-highlight is hand-wired: a shared store field set on TurnCard hover, read by `MapView` to light the room + agent (an
+additive overlay — do not touch 12.5's fog / leak logic). The transcript chrome (TurnCard / ballot / banner layout) comes
+from a focused Claude-Design prompt: *"Design the meeting transcript view: a threaded accusation waterfall of TurnCards
+(speaker chip, structured claims + free-text toggle), a contradictions section (weak=dashed / strong=solid links), a
+ballots section (voter→target, confidence bar, rationale, marker chips, a §4.6 gate readout), and a role-neutral outcome
+banner; states chain / single-turn / skipped / ejected; firewall — outcome + correctness role-neutral (shape/label, not
+red/green); presentational only, tokens only"* → Share → Handoff to Claude Code → integrate.
+**Definition of done:** the threaded waterfall renders (indented by `reply_to`); the claim↔map cross-highlight works
+(hovering a sighting lights the claim's public referent — the named room + agent — with any sightline / truth-match overlay Omniscient-only and no fogged position revealed in As-agent); contradiction links render weak = dashed / strong = solid;
+ballots show voter→target + confidence + rationale + rewrite-marker chips + correctness by shape / label (not hue); the
+§4.6 readout comes from `GateView` (plurality + ≥ 0.6, tie → SKIP — NOT "majority"); the outcome banner is role-neutral;
+the result matches the committed `05-meeting` render; a Storybook story covers chain / single-turn / skipped / ejected;
+`npm run tsc:check` + `npm run build` pass and `scripts/check.sh` is green; `App.tsx` is untouched.
+**Implementation hint:**
+rebuild `MeetingView` + `TurnCard` / `BallotCard` in place. Add a shared highlight field to `replayStore` (e.g.
+`highlightedSighting: {agentId, roomId} | null`), set it on TurnCard hover, and read it in `MapView` to light the room +
+agent — an additive overlay that must not perturb 12.5's fog logic. Render the §4.6 readout from `GateView` (never the
+converge mock's "majority" text); draw contradiction weak / strong from `ContradictionView.weak`; the rewrite chips from
+`rewrite_reasons` + `rationale_text_clean`.
+**Integration risk:**
+the cross-highlight touches the already-merged `MapView` (12.5) — keep it strictly additive (a highlight overlay reading
+the store) so the fog + leak behaviour is unchanged. The highlight lights ONLY the claim's public referent (the named
+room / agent), never a ground-truth position the current As-agent perspective has fogged; the sightline / truth-match
+overlay is Omniscient-only — a hover handler that peeks at fogged ground truth is exactly the leak class this project
+guards. The §4.6 readout MUST use `GateView`'s real rule (plurality + ≥ 0.6,
+tie → SKIP); the converge mock literally renders the wrong "simple majority" copy, so do not copy its text. Outcome +
+vote-correctness must read by shape / label, never red-vs-green (role-neutral firewall). Don't edit `App.tsx` (mount
+discipline).
+**Ready-to-paste prompt:** `agent_prompts/task-12-7-meeting-view.md`
 
-#### Task 12.8 — Mind inspector
+### Task 12.8 — Mind inspector
 **Branch:** `phase-12-mind-inspector`
 **Depends on:** 12.1, 12.2, 12.3, 12.4
-**Complexity:** Integration (chrome + data)
-**Stage-1 ref:** §3.5, slice 6 — **Claude Design chrome + hand-coded data.**
+**Section refs:** design/phase-12/stage-1-design.md §3.5, slice 6; the firewall + Omniscient-gating rules in `design/phase-12/claude-design-brief.md`. NO converge screen exists for this surface — it needs a NEW Claude-Design pass (grounded on the brief + `tokens-seed`, via the §9.5 handoff; not a sync).
+**Complexity:** Integration
+**Files in scope:**
+- frontend/src/components/MindInspector.tsx
+- frontend/src/components/ThoughtStream.tsx
+- frontend/src/components/MemoryPanel.tsx
+- frontend/src/components/LLMCallCard.tsx
+- frontend/src/components/AgentSelector.tsx
+- frontend/src/stories/MindInspector.stories.tsx
+**Files NOT in scope:**
+- frontend/src/App.tsx — the mind slot already mounts `<ThoughtStream/>`; keep that export and render `MindInspector` inside it, don't edit the shell (Wave-B mount discipline)
+- api/ and the loader — `LLMCallView` (`prompt_text` / `response_text`), `AgentMemoryView`, `ContradictionView`, and the omniscient ground truth (`PlayerView.role`, `KillEventView`) already ship; no DTO change, no re-record
+- the map / meeting / belief surfaces — other Wave-B slices
 
-Tabbed per-agent panel: **Belief · Prompt · Response · Memory · Flags** + a Thought→Action→Observation trail + "show what
-they saw" (ties to the 12.3 fog). Impostor extras Omniscient-only (`fellow_impostor_ids`, cooldown, `own_kill` memory
-line, cover-task marked **fabricated**).
-**Claude Design prompt:** "Design the **agent mind-inspector** (tabbed: Belief / Prompt / Response / Memory / Flags), with
-a reasoning trail and a 'what they saw' toggle. Mono for prompt/response/JSON. States: living / dead / impostor
-(Omniscient) / no-agent-selected. Firewall: impostor-only fields appear **only in Omniscient**; cover-tasks labeled
-'fabricated'. Presentational only; tokens only."
-**Handoff/verify:** README (tabs, mono usage, Omniscient-gating, DoD) → Handoff → wire tabs to `AgentMemoryView` +
-LLM-call data → verify all tabs + the Omniscient/fog gating + fabricated-cover labeling.
+Rebuild the mind slot: keep the `ThoughtStream` export (the slot the App.tsx workspace mounts) and have it render a new
+`MindInspector` — a tabbed per-agent panel. **Belief** (this agent's suspicion / trust of each other player, with the
+meeting steps — the per-agent reasoning *detail*, complementary to 12.6's cross-agent matrix, NOT a duplicate) ·
+**Prompt** (`LLMCallView.prompt_text` — the exact text the LLM saw, mono) · **Response** (`LLMCallView.response_text`,
+mono) · **Memory** (`AgentMemoryView` episodic feed: saw_player / saw_body / heard_* / `own_kill`) · **Flags**
+(contradictions / markers affecting them, from `ContradictionView`) — plus a **Thought → Action → Observation** trail per
+decision. A **"show what they saw"** control drives the store (`setPerspective(agent)` + `selectAgent`) so the 12.5 map
+fogs to that agent — no map edit, the map already reacts. **Impostor extras** (`fellow_impostor_ids`, the `own_kill` memory line, and the cover-task marked **fabricated**) are
+gated **Omniscient OR when the perspective lens IS the inspected agent itself** — an impostor viewing its own mind is its
+own knowledge, not a leak, so "show what they saw" on an impostor (which flips to As-agent-self) correctly keeps its
+secrets visible. They are suppressed ONLY when inspecting an impostor through a DIFFERENT agent's eyes (a real leak). They
+derive from the omniscient ground truth already in the view-model (the roster's roles → fellow impostors; `KillEventView`
+→ own kills).
+Consolidate the existing `MemoryPanel` / `LLMCallCard` / `AgentSelector` into the tabs. This surface has no converge
+reference, so its chrome comes from a NEW focused Claude-Design pass: *"Design the agent mind-inspector (tabbed: Belief /
+Prompt / Response / Memory / Flags) with a reasoning trail and a 'what they saw' toggle; mono for prompt / response /
+JSON; states living / dead / impostor (Omniscient) / impostor-viewing-itself / no-agent-selected; firewall — impostor-only
+fields appear in Omniscient or when the lens is that impostor itself, cover-tasks labelled 'fabricated'; presentational
+only, tokens only"* → Share → Handoff to Claude Code →
+integrate.
+**Definition of done:** the tabbed Belief / Prompt / Response / Memory / Flags inspector renders via the existing
+`ThoughtStream` slot (App.tsx unchanged); Prompt / Response read `LLMCallView` (mono); Memory reads `AgentMemoryView`; the
+Thought → Action → Observation trail renders; "show what they saw" switches the map to that agent's fog (store-driven, no
+map edit); impostor extras appear in Omniscient OR when the perspective lens is the inspected impostor itself, and are
+suppressed only when inspecting an impostor through a different agent's perspective; cover-tasks are labelled fabricated; a Storybook story covers living / dead / impostor (Omniscient) / no-agent-selected; `npm run tsc:check` +
+`npm run build` pass and `scripts/check.sh` is green; `App.tsx` is untouched.
+**Implementation hint:**
+keep the `ThoughtStream` export (the slot) and have it render the new `MindInspector`; fold `MemoryPanel` / `LLMCallCard`
+/ `AgentSelector` into the tabs. Prompt / Response tabs read `LLMCallView.prompt_text` / `response_text` (mono, verbatim).
+"Show what they saw" is just `setPerspective(agent)` + `selectAgent` — the 12.5 map already fogs to the selected agent, so
+no map edit. Derive impostor extras from the omniscient ground truth (roles → fellow impostors; `KillEventView` → own
+kills) and gate every one of them on perspective = Omniscient.
+**Integration risk:**
+the firewall gate is Omniscient OR self-perspective — an impostor's secrets (`fellow_impostor_ids` / `own_kill` /
+fabricated-cover) show to Omniscient and to As-agent-of-that-same-impostor (the agent's own knowledge), but MUST disappear
+when inspecting an impostor through a DIFFERENT agent's eyes (the real leak). A blanket "suppress in all As-agent" is
+WRONG — it would hide an impostor's own team from its own perspective. Prompt / Response are the agent's actual LLM I/O — render them
+mono + verbatim. This is the per-agent belief *detail*; 12.6's matrix is the cross-agent overview — don't duplicate it.
+There is no converge screen, so verify the chrome against the brief's firewall rules, not a screenshot. Don't edit
+`App.tsx` (mount discipline).
+**Ready-to-paste prompt:** `agent_prompts/task-12-8-mind-inspector.md`
 
 #### Task 12.9 — Replay browser + Highlights reel
 **Branch:** `phase-12-browser-highlights`
