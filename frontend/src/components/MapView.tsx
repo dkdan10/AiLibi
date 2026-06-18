@@ -83,6 +83,15 @@ interface BodySpec {
 }
 
 const NO_BODIES: readonly BodySpec[] = [];
+
+// A meeting sighting's room label is model-authored, so its casing/spacing is not
+// guaranteed canonical (the committed replays carry values like `admin` /
+// `CAFEteria` / `west_hall` alongside `ADMIN`). Normalise both sides to an
+// alphanumeric upper key so the cross-highlight resolves against `RoomView.id`.
+function normalizeRoomKey(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 const prefersReducedMotion =
   typeof window !== "undefined" &&
   typeof window.matchMedia === "function" &&
@@ -370,12 +379,12 @@ function VentTraveler({
 
 // ── sighting highlight: an additive "look here" cue lighting BOTH public
 // referents a meeting sighting NAMES — the room and the agent (Task 12.7).
-// Strictly additive — it only emphasises a room the current perspective ALREADY
-// renders (the caller passes a room only when it is Omniscient-visible or lit
-// under the selected agent's fog), so it never reveals a fogged position. The
-// agent is marked AT the named room from the PUBLIC claim — never the agent's
+// Both are PUBLIC (the transcript names them), so it shows in ANY perspective.
+// The agent is marked AT the named room from the PUBLIC claim — never the agent's
 // live tick position (that would be a ground-truth peek / leak): the badge
 // annotates "the sighting names p-5 here", it does not assert where p-5 is now.
+// It draws no room name and no live occupants, so over a fogged room it reveals
+// nothing the fog hid; the live-position / truth-match overlay stays unbuilt.
 // The ring is role-NEUTRAL (ink outline + a soft paper glow); the agent badge
 // carries the player's identity colour (identity ≠ guilt — public + safe).
 // Static (no pulse) — a focus cue, not a drama beat — so no reduced-motion path.
@@ -516,6 +525,17 @@ export function MapView() {
     () => new Map((currentReplay?.map.rooms ?? []).map((r) => [r.id, r])),
     [currentReplay],
   );
+  // Normalised lookup (id + name aliases) so a model-authored sighting room label
+  // resolves to the canonical room regardless of casing/spacing. Id is written
+  // last so it wins over a name alias on any collision.
+  const roomsByNormalizedKey = useMemo<ReadonlyMap<string, RoomView>>(() => {
+    const map = new Map<string, RoomView>();
+    for (const room of currentReplay?.map.rooms ?? []) {
+      map.set(normalizeRoomKey(room.name), room);
+      map.set(normalizeRoomKey(room.id), room);
+    }
+    return map;
+  }, [currentReplay]);
   const playerById = useMemo<ReadonlyMap<string, PlayerView>>(
     () => new Map((currentReplay?.players ?? []).map((p) => [p.agent_id, p])),
     [currentReplay],
@@ -580,17 +600,22 @@ export function MapView() {
   const agentAware =
     visibility !== null && visibility.audible_events.some((e) => e.kind === "sabotage_alarm");
 
-  // ── Task 12.7 cross-highlight: light the room a meeting sighting NAMES, but
-  // ONLY when this perspective already renders it (Omniscient, or lit under the
-  // selected agent's fog). Gating on `litRoomIds` keeps the highlight from
-  // revealing a position the As-agent fog has hidden — a hover must never become
-  // a leak. Purely additive: it reads the store and adds a ring; the fog / token
-  // / body logic above is untouched.
+  // ── Task 12.7 cross-highlight: light the room + agent a meeting sighting
+  // NAMES. The room + agent are PUBLIC (the transcript states them in the clear),
+  // so the highlight is safe in ANY perspective — it annotates the claim, never a
+  // live/fogged position. We therefore resolve the named room from the canonical
+  // room set in both Omniscient AND As-agent fog (a past-meeting sighting usually
+  // names a room the selected agent can't currently see). What stays
+  // Omniscient-only is the live-position / truth-match overlay — which this does
+  // NOT draw: it never paints the agent's actual current room or whether the
+  // sighting matches ground truth. Purely additive: the fog / token / body logic
+  // above is untouched.
   const highlightRoom =
-    highlightedSighting !== null &&
-    (omniscient || litRoomIds.has(highlightedSighting.roomId))
-      ? (roomsById.get(highlightedSighting.roomId) ?? null)
-      : null;
+    highlightedSighting === null
+      ? null
+      : (roomsById.get(highlightedSighting.roomId) ??
+        roomsByNormalizedKey.get(normalizeRoomKey(highlightedSighting.roomId)) ??
+        null);
 
   // Active vent escapes at this engine tick (Omniscient only). The window is
   // INCLUSIVE of the exit tick so the traveller renders the emergence frame

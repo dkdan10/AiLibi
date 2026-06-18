@@ -445,8 +445,11 @@ export function MeetingView() {
     };
   }, [isOpen, selectMeeting]);
 
-  // When the overlay unmounts (or closes) drop the cross-highlight so a stale
-  // sighting ring can't persist on the map behind it.
+  // Drop the cross-highlight when the overlay closes/unmounts AND when the open
+  // meeting changes. Keying on `meetingId` matters: a meeting jump / auto-follow
+  // can swap the selection (unmounting the hovered TurnCard) without ever firing
+  // a mouseleave/blur, which would otherwise strand the previous meeting's
+  // sighting ring on the map for a turn no longer in the visible transcript.
   useEffect(() => {
     if (!isOpen) {
       setHighlightedSighting(null);
@@ -454,7 +457,7 @@ export function MeetingView() {
     return () => {
       setHighlightedSighting(null);
     };
-  }, [isOpen, setHighlightedSighting]);
+  }, [isOpen, meetingId, setHighlightedSighting]);
 
   if (!isOpen || meeting === undefined || replay === null) {
     return null;

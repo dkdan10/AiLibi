@@ -42,8 +42,9 @@ export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
 export interface HighlightedSighting {
   // The agent named as seen ("saw <agentId> …"); matches `PlayerView.agent_id`.
   agentId: string;
-  // The room named in the sighting; matches `RoomView.id` (the engine room id the
-  // loader carries verbatim into `SawPlayerView.room`).
+  // The room named in the sighting (`SawPlayerView.room`). This is a model-authored
+  // label, so its casing/spacing is not guaranteed canonical; `MapView`
+  // normalises it to resolve the canonical `RoomView`.
   roomId: string;
 }
 
