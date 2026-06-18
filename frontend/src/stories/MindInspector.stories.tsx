@@ -218,10 +218,11 @@ export const ImpostorViewingItself: Story = {
   },
 };
 
-// The leak guard: the same impostor inspected through a DIFFERENT agent's fog —
-// the role reveal, fellow impostors, own_kill, fabricated cover, and the raw
-// memory + verbatim prompt/response all VANISH (Memory feed reads as the cover
-// working; the body is no longer suppressed since the own-kill line is hidden).
+// The leak guard: the same agent inspected through a DIFFERENT agent's fog. The
+// whole private body (belief / prompt / response / memory / flags), the role,
+// AND the alive/dead chip are firewalled off — only identity + a "Show what they
+// saw" CTA remain, since none of this agent's private mind is knowable from
+// outside its own view. (Holds for crewmates too, not just impostors.)
 export const ImpostorThroughOtherFog: Story = {
   args: {
     selectedAgentId: "p-5",

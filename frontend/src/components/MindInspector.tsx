@@ -265,22 +265,6 @@ function TabHeading({ children }: { children: ReactNode }) {
   );
 }
 
-// Shown in place of the verbatim prompt / response when an impostor is inspected
-// through a different agent's fog — the raw LLM I/O embeds impostor secrets, so
-// it rides the same Omniscient-or-self gate as the other impostor extras.
-function RedactedVerbatim({ field }: { field: "prompt" | "response" }) {
-  return (
-    <p
-      className="rounded-md border-2 border-dashed border-ink-300 px-3 py-3 text-xs text-ink-500"
-      style={{ background: tokens.paper[2] }}
-    >
-      The raw {field} is hidden through another agent's fog — it is built from this
-      agent's private memory and would leak impostor-only fields. Switch to
-      Omniscient, or view this agent through its own lens, to read it.
-    </p>
-  );
-}
-
 function LLMCallList({
   calls,
   hasUnattributed,
@@ -365,6 +349,11 @@ export interface MindInspectorPanelProps {
   ownKills: KillEventView[];
   coverTasks: CompletedTaskObsView[];
   perspective: Perspective;
+  // Active tab — optionally controlled (the connected wrapper drives it so it can
+  // lazy-fetch the meeting bodies only when Prompt / Response is open). Storybook
+  // omits both and the panel falls back to its own state.
+  tab?: MindTab;
+  onTab?: (tab: MindTab) => void;
   onSelectAgent: (agentId: string) => void;
   onShowWhatTheySaw: (agentId: string) => void;
 }
@@ -379,10 +368,14 @@ export function MindInspectorPanel({
   ownKills,
   coverTasks,
   perspective,
+  tab: tabProp,
+  onTab: onTabProp,
   onSelectAgent,
   onShowWhatTheySaw,
 }: MindInspectorPanelProps) {
-  const [tab, setTab] = useState<MindTab>("belief");
+  const [tabState, setTabState] = useState<MindTab>("belief");
+  const tab = tabProp ?? tabState;
+  const onTab = onTabProp ?? setTabState;
 
   const inspected =
     selectedAgentId === null
@@ -413,7 +406,7 @@ export function MindInspectorPanel({
           coverTasks={coverTasks}
           perspective={perspective}
           tab={tab}
-          onTab={setTab}
+          onTab={onTab}
           onShowWhatTheySaw={onShowWhatTheySaw}
         />
       )}
@@ -463,11 +456,6 @@ function InspectedAgent({
   const calls = (meeting?.llm_calls ?? []).filter((c) => c.agent_id === agentId);
   const hasUnattributed = (meeting?.llm_calls ?? []).some((c) => c.agent_id === null);
   const trail = buildTrail(meeting, agentId);
-  // FIREWALL: an impostor's verbatim prompt / response / raw memory are built
-  // from its private memory and embed the role, fellow impostors, and the
-  // own-kill self-channel — so they would bypass the Omniscient-or-self gate if
-  // shown through a DIFFERENT agent's fog. Redact them in exactly that case.
-  const verbatimRedacted = isImpostor && !revealSecrets;
 
   return (
     <div className="flex flex-col gap-3">
@@ -480,7 +468,10 @@ function InspectedAgent({
         <span className="font-semibold text-ink-900">{inspected.display_name}</span>
         <span className="font-mono text-[10px] text-ink-400">{agentId}</span>
 
-        {!isAlive && (
+        {/* FIREWALL: alive/dead is ground truth — an agent may not know a hidden
+            death — so the chip rides the same Omniscient-or-self gate (matching
+            the fogged roster rail, which also hides per-player liveness). */}
+        {revealSecrets && !isAlive && (
           <span
             className="inline-flex items-center gap-1 rounded-pill border-2 border-ink-900 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide"
             style={{ background: tokens.paper[2], color: tokens.ink[500] }}
@@ -526,81 +517,128 @@ function InspectedAgent({
         </button>
       </header>
 
-      <div role="tablist" aria-label="Mind inspector tabs" className="flex flex-wrap gap-1">
-        {TABS.map(({ id, label }) => {
-          const active = id === tab;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => {
-                onTab(id);
-              }}
-              className={
-                "rounded-md border-2 px-2.5 py-1 text-xs font-semibold transition-colors " +
-                (active
-                  ? "border-ink-900 bg-ink-900 text-paper-0"
-                  : "border-ink-300 bg-paper-1 text-ink-700 hover:border-ink-900")
-              }
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      {/* FIREWALL (the single checkpoint). EVERYTHING below the header is the
+          selected agent's PRIVATE mind — beliefs / reasoning, the verbatim LLM
+          prompt + response (which embed its rendered memory and role block), the
+          episodic memory + task counts, and its flags. None of it is knowable
+          through a DIFFERENT agent's fog, so the whole body is revealed only in
+          Omniscient OR when the lens IS this agent (self). Otherwise we show a
+          notice pointing at "Show what they saw" — the firewall-safe way in. */}
+      {revealSecrets ? (
+        <>
+          <div
+            role="tablist"
+            aria-label="Mind inspector tabs"
+            className="flex flex-wrap gap-1"
+          >
+            {TABS.map(({ id, label }) => {
+              const active = id === tab;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => {
+                    onTab(id);
+                  }}
+                  className={
+                    "rounded-md border-2 px-2.5 py-1 text-xs font-semibold transition-colors " +
+                    (active
+                      ? "border-ink-900 bg-ink-900 text-paper-0"
+                      : "border-ink-300 bg-paper-1 text-ink-700 hover:border-ink-900")
+                  }
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
 
-      <div className="min-h-[6rem]">
-        {tab === "belief" && (
-          <MemoryGate memory={memory} memoryError={memoryError}>
-            {(m) => <BeliefTab memory={m} trail={trail} />}
-          </MemoryGate>
-        )}
+          <div className="min-h-[6rem]">
+            {tab === "belief" && (
+              <MemoryGate memory={memory} memoryError={memoryError}>
+                {(m) => <BeliefTab memory={m} trail={trail} />}
+              </MemoryGate>
+            )}
 
-        {tab === "prompt" &&
-          (verbatimRedacted ? (
-            <RedactedVerbatim field="prompt" />
-          ) : (
-            <LLMCallList
-              calls={calls}
-              hasUnattributed={hasUnattributed}
-              field="prompt"
-            />
-          ))}
-
-        {tab === "response" &&
-          (verbatimRedacted ? (
-            <RedactedVerbatim field="response" />
-          ) : (
-            <LLMCallList
-              calls={calls}
-              hasUnattributed={hasUnattributed}
-              field="response"
-            />
-          ))}
-
-        {tab === "memory" && (
-          <MemoryGate memory={memory} memoryError={memoryError}>
-            {(m) => (
-              <MemoryPanel
-                memory={m}
-                revealSecrets={revealSecrets}
-                isImpostor={isImpostor}
-                ownKills={ownKills}
-                coverTasks={coverTasks}
-                fellowImpostors={fellowImpostors}
+            {tab === "prompt" && (
+              <LLMCallList
+                calls={calls}
+                hasUnattributed={hasUnattributed}
+                field="prompt"
               />
             )}
-          </MemoryGate>
-        )}
 
-        {tab === "flags" && (
-          <MemoryGate memory={memory} memoryError={memoryError}>
-            {(m) => <FlagsTab memory={m} />}
-          </MemoryGate>
-        )}
-      </div>
+            {tab === "response" && (
+              <LLMCallList
+                calls={calls}
+                hasUnattributed={hasUnattributed}
+                field="response"
+              />
+            )}
+
+            {tab === "memory" && (
+              <MemoryGate memory={memory} memoryError={memoryError}>
+                {(m) => (
+                  <MemoryPanel
+                    memory={m}
+                    revealSecrets={revealSecrets}
+                    isImpostor={isImpostor}
+                    ownKills={ownKills}
+                    coverTasks={coverTasks}
+                    fellowImpostors={fellowImpostors}
+                  />
+                )}
+              </MemoryGate>
+            )}
+
+            {tab === "flags" && (
+              <MemoryGate memory={memory} memoryError={memoryError}>
+                {(m) => <FlagsTab memory={m} />}
+              </MemoryGate>
+            )}
+          </div>
+        </>
+      ) : (
+        <FoggedNotice
+          name={inspected.display_name}
+          onShowWhatTheySaw={() => {
+            onShowWhatTheySaw(agentId);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Shown when the inspected agent is viewed through a DIFFERENT agent's fog — its
+// private mind is firewalled off; the CTA flips the lens to this agent (self),
+// the firewall-safe way to read it (or the spectator can switch to Omniscient).
+function FoggedNotice({
+  name,
+  onShowWhatTheySaw,
+}: {
+  name: string;
+  onShowWhatTheySaw: () => void;
+}) {
+  return (
+    <div
+      className="rounded-md border-2 border-dashed border-ink-300 px-3 py-4 text-sm text-ink-500"
+      style={{ background: tokens.paper[2] }}
+    >
+      <p className="mb-2">
+        {name}'s belief, prompt, response, memory, and flags are hidden through
+        another agent's fog — none of it is knowable from outside this agent's own
+        view. Switch to Omniscient, or view it through {name}'s own lens:
+      </p>
+      <button
+        type="button"
+        onClick={onShowWhatTheySaw}
+        className="rounded-md border-2 border-ink-900 bg-paper-0 px-2.5 py-1 text-xs font-medium text-ink-900 hover:bg-paper-2"
+      >
+        Show what they saw
+      </button>
     </div>
   );
 }
@@ -668,18 +706,33 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
   const selectAgent = useReplayStore((s) => s.selectAgent);
   const setPerspective = useReplayStore((s) => s.setPerspective);
 
-  // Hydrate the un-windowed meeting (Task 6.7 strips the prompt/response bodies
-  // from the bulk payload) so the Prompt / Response tabs have verbatim text.
-  useEffect(() => {
-    void fetchMeeting(meetingId);
-  }, [meetingId, fetchMeeting]);
+  const [tab, setTab] = useState<MindTab>("belief");
 
-  // Hydrate the selected agent's meeting-boundary memory snapshot.
+  // FIREWALL gate (mirrors the panel): the private mind is revealable only in
+  // Omniscient OR when the lens IS the inspected agent. Gating the fetches on it
+  // too means we never pull another agent's private memory / bodies under fog.
+  const revealSecrets =
+    perspective.mode === "omniscient" ||
+    (perspective.mode === "agent" && perspective.agentId === selectedAgentId);
+
+  // Lazy-hydrate the un-windowed meeting (Task 6.7 strips the prompt/response
+  // bodies from the bulk payload, DESIGN.md §11.4) ONLY when the Prompt / Response
+  // tab is actually open AND revealable — so scrubbing / auto-following through
+  // meetings never eagerly pulls the large body payloads and the windowing holds.
+  const bodiesNeeded = revealSecrets && (tab === "prompt" || tab === "response");
   useEffect(() => {
-    if (selectedAgentId !== null) {
+    if (bodiesNeeded) {
+      void fetchMeeting(meetingId);
+    }
+  }, [bodiesNeeded, meetingId, fetchMeeting]);
+
+  // Hydrate the selected agent's meeting-boundary memory snapshot — only when it
+  // is revealable (we never show another agent's private memory through fog).
+  useEffect(() => {
+    if (selectedAgentId !== null && revealSecrets) {
       void fetchMemoryView(meetingId, selectedAgentId);
     }
-  }, [meetingId, selectedAgentId, fetchMemoryView]);
+  }, [meetingId, selectedAgentId, revealSecrets, fetchMemoryView]);
 
   if (replay === null) {
     return null;
@@ -736,6 +789,8 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
       ownKills={ownKills}
       coverTasks={coverTasks}
       perspective={perspective}
+      tab={tab}
+      onTab={setTab}
       onSelectAgent={selectAgent}
       onShowWhatTheySaw={onShowWhatTheySaw}
     />
