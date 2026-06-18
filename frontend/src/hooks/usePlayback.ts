@@ -327,11 +327,16 @@ export function usePlaybackEngine(): void {
     const store = useReplayStore.getState();
     const meeting = replay.meetings.find((m) => m.tick === tickNumber) ?? null;
     if (meeting !== null) {
-      // Entered a meeting span: follow it (the stage morphs to the table).
+      // Entered a meeting span. Claim ownership ONLY when auto-follow itself
+      // opens it: if the user (jumpToMeeting) or the URL already selected this
+      // meeting, leave autoSelectedRef clear so we never auto-close a selection
+      // the user explicitly made when they step / resume past the tick.
       if (store.selectedMeetingId !== meeting.meeting_id) {
         store.selectMeeting(meeting.meeting_id);
+        autoSelectedRef.current = meeting.meeting_id;
+      } else {
+        autoSelectedRef.current = null;
       }
-      autoSelectedRef.current = meeting.meeting_id;
     } else if (
       autoSelectedRef.current !== null &&
       store.selectedMeetingId === autoSelectedRef.current

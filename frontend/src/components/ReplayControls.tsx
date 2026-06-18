@@ -302,9 +302,13 @@ export function EventTimeline() {
         ? frameIndexForTick(ticks, hoverTick) / lastIndex
         : 0;
 
+  // Pointer → fraction within the TRACK column only. Returns null when the
+  // pointer is over the row labels (left of the tracks) so clicking a label
+  // doesn't clamp to 0 and seek to Start, and hovering one doesn't misplace the
+  // crosshair.
   const fractionFromEvent = (event: ReactMouseEvent<HTMLDivElement>): number | null => {
     const rect = overlayRef.current?.getBoundingClientRect();
-    if (rect === undefined) {
+    if (rect === undefined || event.clientX < rect.left || event.clientX > rect.right) {
       return null;
     }
     return pointerFraction(event.clientX, rect);
@@ -317,9 +321,11 @@ export function EventTimeline() {
         style={{ gridTemplateColumns: "max-content 1fr" }}
         onMouseMove={(event) => {
           const fraction = fractionFromEvent(event);
-          if (fraction !== null) {
-            setHoverTick(tickNumberAt(ticks, fractionToIndex(fraction, lastIndex)));
-          }
+          setHoverTick(
+            fraction === null
+              ? null
+              : tickNumberAt(ticks, fractionToIndex(fraction, lastIndex)),
+          );
         }}
         onMouseLeave={() => {
           setHoverTick(null);
@@ -368,10 +374,14 @@ export function EventTimeline() {
             </div>
           </Fragment>
         ))}
-        {/* Crosshair overlay spanning the track column across every lane. */}
+        {/* Crosshair overlay spanning the track column across every lane.
+            `self-stretch` overrides the grid's `items-center` so the overlay
+            fills its full grid-area height — otherwise its only (absolutely
+            positioned) children give it 0 height and the crosshair lines would
+            be invisible. */}
         <div
           ref={overlayRef}
-          className="pointer-events-none relative"
+          className="pointer-events-none relative self-stretch"
           style={{ gridColumn: 2, gridRow: `1 / ${players.length + 1}` }}
         >
           {hoverFraction !== null && <Crosshair fraction={hoverFraction} kind="hover" />}
