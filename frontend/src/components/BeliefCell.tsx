@@ -65,9 +65,10 @@ function heatTextColor(s: number): string {
   return s < 0.55 ? tokens.ink[900] : tokens.paper[0];
 }
 
-// Token hex ("#RRGGBB") → an `rgba()` string, so the Error fill ramps the
-// fuchsia `contradiction` token by opacity without a second hardcoded colour.
-function rgba(hex: string, alpha: number): string {
+// Token hex ("#RRGGBB") → an `rgba()` string, so the Error fill (and the legend
+// swatch) ramps the fuchsia `contradiction` token by opacity without a second
+// hardcoded colour. Exported so the legend swatch reads the same token.
+export function rgba(hex: string, alpha: number): string {
   const n = hex.replace(/^#/, "");
   const r = Number.parseInt(n.slice(0, 2), 16);
   const g = Number.parseInt(n.slice(2, 4), 16);
@@ -120,12 +121,17 @@ function truthValueLook(subjectIsImpostor: boolean): CellLook {
   };
 }
 
+// Error magnitude below which a cell reads "aligned" (a calm dot) rather than a
+// LOUD miss/false-accusation. Shared by the visual look AND the aria-label so the
+// screen-reader description never disagrees with what's drawn.
+const ERROR_ALIGNED_MAX = 0.32;
+
 function errorValueLook(model: BeliefCellModel): CellLook {
   // |error| is the badness magnitude: for an impostor subject it is how far the
   // belief UNDER-shoots the truth (trust extended to a true impostor → ◆), for a
   // crewmate subject how far it OVER-shoots (suspicion at a real crewmate → ✕).
   const mag = Math.abs(model.error);
-  if (mag < 0.32) {
+  if (mag < ERROR_ALIGNED_MAX) {
     // Aligned — belief matches truth; kept calm and pale.
     return { background: tokens.paper[0], content: "·", color: tokens.ink[200], bold: false, ring: false };
   }
@@ -226,8 +232,15 @@ function ariaLabel(model: BeliefCellModel, layer: BeliefViewMode, omniscient: bo
         return `${pair}: ${model.subjectIsImpostor ? "subject is the impostor" : "subject is a crewmate"}`;
       }
       if (omniscient && layer === "error") {
+        const signed = `${model.error >= 0 ? "+" : ""}${model.error.toFixed(2)}`;
+        // Key the description off the SAME magnitude bucket as the visual: a
+        // small |error| renders as the calm "aligned" dot, so say so — never call
+        // a correctly-suspected impostor a "missed impostor".
+        if (Math.abs(model.error) < ERROR_ALIGNED_MAX) {
+          return `${pair}: error ${signed} (aligned — belief matches truth)`;
+        }
         const kind = model.subjectIsImpostor ? "missed impostor" : "false accusation";
-        return `${pair}: error ${model.error >= 0 ? "+" : ""}${model.error.toFixed(2)} (${kind})`;
+        return `${pair}: error ${signed} (${kind})`;
       }
       return `${pair}: suspicion ${Math.round(model.suspicion * 100)} of 100, confidence ${model.confidence.toFixed(2)}`;
     }

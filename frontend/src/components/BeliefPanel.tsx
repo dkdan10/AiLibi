@@ -22,7 +22,7 @@ import { tokens } from "../tokens";
 import type { BeliefViewMode } from "../lib/playback";
 import type { BeliefErrorView, BeliefFrameView, PlayerView } from "../types/api";
 import { BeliefRow } from "./BeliefRow";
-import type { BeliefCellModel } from "./BeliefCell";
+import { rgba, type BeliefCellModel } from "./BeliefCell";
 
 // Matrix geometry (px) — shared so the header row, body rows, and the footer line
 // up. Kept calm/dense per the brief's density rule (borrow restraint for data).
@@ -205,7 +205,9 @@ export function BeliefPanel({
                     step={clampedStep}
                     selected={selected}
                     omniscient={omniscient}
+                    layer={effectiveLayer}
                     impostorIds={impostorIds}
+                    {...(aliveByMeeting ? { aliveByMeeting } : {})}
                     onClose={() => {
                       setSelected(null);
                     }}
@@ -574,7 +576,7 @@ function GlyphSwatch({ glyph }: { glyph: string }) {
   return (
     <span
       className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-ink-200 font-mono text-[11px] font-bold text-paper-0"
-      style={{ background: `rgba(214, 36, 158, 0.55)` }}
+      style={{ background: rgba(tokens.contradiction, 0.55) }}
     >
       {glyph}
     </span>
@@ -589,7 +591,9 @@ function CellDetail({
   step,
   selected,
   omniscient,
+  layer,
   impostorIds,
+  aliveByMeeting,
   onClose,
 }: {
   players: PlayerView[];
@@ -597,23 +601,38 @@ function CellDetail({
   step: number;
   selected: { observer: string; subject: string };
   omniscient: boolean;
+  layer: BeliefViewMode;
   impostorIds: Set<string>;
+  aliveByMeeting?: Readonly<Record<string, readonly string[]>>;
   onClose: () => void;
 }) {
   const observer = players.find((p) => p.agent_id === selected.observer);
   const subject = players.find((p) => p.agent_id === selected.subject);
   const subjImp = impostorIds.has(selected.subject);
+  // Ground truth (role) is shown only in the Truth/Error layers (the Belief layer
+  // hides it, like the matrix daggers); the signed error only in the Error layer.
+  const showTruth = omniscient && (layer === "truth" || layer === "error");
+  const showError = omniscient && layer === "error";
 
   // Per-meeting trajectory for this pair: absent (dead) / no belief / suspicion.
+  // Liveness is the per-meeting alive set (same source as the matrix), NOT entry
+  // presence — the /beliefs DTO returns a full roster grid every meeting, so a
+  // dead player still has a row; without this the diff would draw stale bars and
+  // a "rose/fell" delta instead of "absent".
   const series = frames.map((frame) => {
+    const aliveList = aliveByMeeting?.[frame.meeting_id];
+    const present =
+      aliveList === undefined
+        ? true
+        : aliveList.includes(selected.observer) && aliveList.includes(selected.subject);
     const entry = frame.entries.find(
       (e) => e.observer === selected.observer && e.subject === selected.subject,
     );
     return {
       meetingId: frame.meeting_id,
       tick: frame.tick,
-      present: entry !== undefined,
-      hasBelief: entry?.has_belief ?? false,
+      present,
+      hasBelief: present && (entry?.has_belief ?? false),
       suspicion: entry?.suspicion ?? 0.5,
       error: entry?.error,
     };
@@ -645,7 +664,7 @@ function CellDetail({
         <PairChip player={subject} fallback={selected.subject} />
       </div>
 
-      {omniscient && (
+      {showTruth && (
         <div className="mb-2 flex items-center gap-1.5">
           <span className="font-mono text-[10px] uppercase tracking-wide text-ink-500">subject</span>
           <span className="rounded border border-ink-300 px-1.5 py-0.5 font-mono text-[10px] text-ink-700">
@@ -676,9 +695,12 @@ function CellDetail({
       </div>
 
       <div className="mt-3 rounded-md border border-ink-200 bg-paper-0 p-2">
-        <div className="font-mono text-[10px] uppercase tracking-wide text-ink-500">what changed this meeting</div>
+        {/* The snapshot for meeting N is taken BEFORE applying meeting N's result
+            (api/replay_loader.py), so this delta is the change SINCE the previous
+            meeting boundary, not what meeting N itself decided — labelled as such. */}
+        <div className="font-mono text-[10px] uppercase tracking-wide text-ink-500">since previous meeting</div>
         <div className="mt-0.5 text-xs text-ink-900">{changed}</div>
-        {omniscient && current !== undefined && current.present && current.hasBelief && current.error !== undefined && (
+        {showError && current !== undefined && current.present && current.hasBelief && current.error !== undefined && (
           <div className="mt-1 font-mono text-[11px] text-ink-700">
             error {current.error >= 0 ? "+" : ""}
             {current.error.toFixed(2)} ({subjImp ? "vs impostor" : "vs crewmate"})
