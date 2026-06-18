@@ -104,6 +104,30 @@ export interface AgentTickStateView {
   is_venting: boolean;
   task_progress: number | null;
   current_action: AgentAction;
+  visibility: AgentVisibilityView | null;
+}
+
+export interface AgentVisibilityView {
+  visible_players: VisiblePlayerView[];
+  visible_bodies: VisibleBodyView[];
+  audible_events: AudibleEventView[];
+}
+
+export interface VisiblePlayerView {
+  id: string;
+  room: string;
+  action: string | null;
+}
+
+export interface VisibleBodyView {
+  id: string;
+  room: string;
+  victim_id: string;
+}
+
+export interface AudibleEventView {
+  kind: "vent_use_heard" | "sabotage_alarm";
+  room: string | null;
 }
 
 export interface KillEventView {

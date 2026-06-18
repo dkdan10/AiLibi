@@ -33,11 +33,18 @@ from pathlib import Path
 from typing import Final, cast
 
 import pydantic
+import pytest
 
 import api.schemas
+from api.replay_loader import ReplayLoader
 from engine.entities import SabotageState
-from engine.world import load_canonical_map
-from eval.leak_test import JsonValue, _assert_no_role_bearing_values
+from engine.world import Map, load_canonical_map
+from eval.leak_test import (
+    JsonValue,
+    _assert_no_role_bearing_values,
+    _format_json_path,
+    _walk_json,
+)
 from eval.meeting_quality import TournamentEvalReport
 from observation.service import ObservationService
 from tests._helpers.world_state import scripted_initial_world_state
@@ -59,6 +66,13 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "MapLayoutView",
         "PlayerView",
         "AgentTickStateView",
+        # Phase-12 (Task 12.3) per-tick As-agent fog projection (DESIGN.md §3.2,
+        # §7). The container plus its firewall-clean sub-views (the agent-facing
+        # shapes — no role / killed_by / colour):
+        "AgentVisibilityView",
+        "VisiblePlayerView",
+        "VisibleBodyView",
+        "AudibleEventView",
         "KillEventView",
         "ReportBodyEventView",
         "SabotageEventView",
@@ -607,3 +621,176 @@ def test_global_view_repair_channel_is_role_invariant_through_packet_api(
     # Both roles were exercised, and they share one identical repair channel.
     assert roles_seen == {"CREWMATE", "IMPOSTOR"}
     assert channels == {(("REACTOR", "ENGINEERING"), True)}
+
+
+# ---------------------------------------------------------------------------
+# As-agent fog projection leak test (Task 12.3; DESIGN.md §3.2 fog, §1.3, §7)
+# ---------------------------------------------------------------------------
+#
+# The per-tick per-living-agent visibility projection (``AgentVisibilityView``)
+# lets the spectator view the replay *As* one agent — simulating the firewall
+# rather than inheriting it. This mirrors ``eval/leak_test.py``'s recursive
+# hidden-field walk on the SERVED projection across the committed 9p2i set and,
+# additionally, cross-checks the served fog against the ground truth the same
+# payload carries (every agent's room per tick) so it can never expose a player,
+# body, or field the agent could not have perceived at that tick: other-room
+# presence, role, ``fellow_impostor_ids``, kill attribution.
+
+_NINE_P_TWO_I: Final[Path] = (
+    Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
+)
+
+# Field NAMES the As-agent fog must never carry (the recursive walk, mirroring
+# eval/leak_test.py). The visual/audio channels structurally exclude them, so a
+# hit means the projection regressed — e.g. re-exposed the privileged spectator
+# ``BodyView.killed_by`` or ``PlayerView.role`` / ``color``, or any self-channel
+# field. ``player_id`` is the engine body-state name the agent-facing BodyView
+# renames to ``victim_id``.
+_FOG_FORBIDDEN_FIELD_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "role",
+        "killed_by",
+        "kill_attribution",
+        "player_id",
+        "fellow_impostor_ids",
+        "color",
+        "cooldown",
+        "own_kill",
+        "pending_task_id",
+    }
+)
+
+
+def _assert_fog_hides_hidden_fields(dump: JsonValue) -> None:
+    """Recursive hidden-field-NAME walk over one fog frame (mirrors eval/leak_test)."""
+
+    for path, _ in _walk_json(dump):
+        if not path:
+            continue
+        field_name = path[-1]
+        if isinstance(field_name, str) and field_name in _FOG_FORBIDDEN_FIELD_NAMES:
+            raise AssertionError(
+                f"As-agent fog leaked hidden field {field_name!r} at "
+                f"{_format_json_path(path)}"
+            )
+
+
+def _seen_rooms(
+    observer_room: str, sabotage_kind: str | None, game_map: Map
+) -> set[str]:
+    """The rooms an observer in ``observer_room`` can see (the engine rule).
+
+    Mirrors ``engine.visibility.resolve_visibility_mode`` +
+    ``visible_rooms_for_player`` using the REAL map adjacency + sabotage config
+    (never a hardcoded topology), so the cross-room check cannot drift from the
+    map: a lights sabotage degrades to same-room-only; otherwise
+    same-room-and-adjacent.
+    """
+
+    mode = game_map.visibility_defaults.base
+    if sabotage_kind is not None:
+        mode = game_map.sabotages[sabotage_kind].affected_visibility
+    if mode == "same_room_only":
+        return {observer_room}
+    return {observer_room, *game_map.room_neighbors(observer_room)}
+
+
+def test_as_agent_fog_leaks_no_unseen_player_body_or_field() -> None:
+    """The As-agent fog never exposes an entity/field the agent could not perceive.
+
+    Mirrors ``eval/leak_test.py`` for the spectator's per-tick visibility
+    projection across the committed 9p2i set: a recursive hidden-field walk + the
+    role-bearing-value walk on every living agent's served field of view, plus a
+    cross-room presence check against the ground truth the same payload carries.
+    The visual field is held to strict co-location; witnessed kill/vent actions
+    and audio cues are the firewall's witness / audio channels (gated by
+    ``ObservationService.build_packet``, which ``eval/leak_test.py`` validates),
+    so they are field-hygiene-checked, not re-derived against co-location (a
+    witness may move the same tick). Coverage counters assert the run actually
+    exercised every channel — else the test proves nothing.
+    """
+
+    if not _NINE_P_TWO_I.is_dir():
+        pytest.skip("committed 9p2i sample set not present")
+
+    game_map = load_canonical_map()
+    loader = ReplayLoader(replay_dir=_NINE_P_TWO_I)
+    games = visual = witnessed = bodies = audibles = 0
+    for meta in loader.list_replays():
+        games += 1
+        replay = loader.load_replay(meta.game_id)
+        for tick in replay.ticks:
+            room_by_player = {a.agent_id: a.room_id for a in tick.agent_states}
+            alive = {a.agent_id for a in tick.agent_states if a.is_alive}
+            venting = {a.agent_id for a in tick.agent_states if a.is_venting}
+            sabotage_kind = tick.sabotage.kind if tick.sabotage is not None else None
+            for state in tick.agent_states:
+                fog = state.visibility
+                if fog is None:
+                    # Only a DEAD agent lacks a field of view.
+                    assert not state.is_alive, (
+                        f"living {state.agent_id} has no fog at tick {tick.tick}"
+                    )
+                    continue
+                assert state.is_alive
+                observer_room = room_by_player[state.agent_id]
+                assert observer_room is not None
+                seen = _seen_rooms(observer_room, sabotage_kind, game_map)
+
+                fog_dump = cast(JsonValue, fog.model_dump(mode="json"))
+                _assert_fog_hides_hidden_fields(fog_dump)
+                _assert_no_role_bearing_values(fog_dump)
+
+                served_ids: set[str] = set()
+                for vp in fog.visible_players:
+                    assert set(vp.model_dump().keys()) == {"id", "room", "action"}
+                    assert vp.id != state.agent_id  # never self
+                    served_ids.add(vp.id)
+                    if vp.action in ("kill", "vent"):
+                        # Witness channel: the agent saw the ACT (build_packet's
+                        # witness gate, validated by eval/leak_test.py), so it is
+                        # field-hygiene-checked only, not co-location-derived.
+                        witnessed += 1
+                        continue
+                    # Pure visual field: genuinely co-visible — in a seen room,
+                    # alive, not vented, at the room ground truth reports.
+                    visual += 1
+                    assert vp.room in seen, (
+                        f"fog shows {vp.id} in unseen {vp.room} to {state.agent_id}"
+                    )
+                    assert room_by_player[vp.id] == vp.room
+                    assert vp.id in alive
+                    assert vp.id not in venting
+
+                # No UNDER-report either: every co-visible peer is present (as a
+                # plain sighting or a co-located actor), so the fog is the agent's
+                # FULL field of view, not a leak-trimmed subset that masks a bug.
+                expected_visual = {
+                    pid
+                    for pid in alive
+                    if pid != state.agent_id
+                    and pid not in venting
+                    and room_by_player[pid] in seen
+                }
+                assert expected_visual <= served_ids
+
+                for vb in fog.visible_bodies:
+                    assert set(vb.model_dump().keys()) == {"id", "room", "victim_id"}
+                    # Bodies have no witness channel — they come purely from the
+                    # visibility solve, so a visible body's room is ALWAYS in seen.
+                    assert vb.room in seen, (
+                        f"fog shows a body in unseen {vb.room} to {state.agent_id}"
+                    )
+                    bodies += 1
+
+                for ae in fog.audible_events:
+                    assert set(ae.model_dump().keys()) == {"kind", "room"}
+                    assert ae.kind in ("vent_use_heard", "sabotage_alarm")
+                    audibles += 1
+
+    assert games > 0, "expected committed 9p2i replays"
+    # The run actually exercised every fog channel (else it proves nothing).
+    assert visual > 0 and witnessed > 0 and bodies > 0 and audibles > 0, (
+        f"under-covered: visual={visual} witnessed={witnessed} "
+        f"bodies={bodies} audibles={audibles}"
+    )

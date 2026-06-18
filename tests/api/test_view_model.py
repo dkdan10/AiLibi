@@ -21,7 +21,7 @@ from __future__ import annotations
 import importlib
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +42,9 @@ from api.replay_loader import (
     get_replay_loader,
 )
 from api.schemas import VIEW_MODEL_VERSION, BallotView, GateView
-from engine.world import load_canonical_map
+from engine.events import EngineEvent
+from engine.tick import advance_tick
+from engine.world import WorldState, load_canonical_map
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
@@ -53,6 +55,7 @@ from meetings.manager import (
 from meetings.schemas import ContradictionRef, VoteBallot
 from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
 from meetings.voting import INVALID_VOTE_TARGET_MARKER, SKIP_TARGET, tally_ballots
+from observation.service import ObservationService
 from orchestrator.seeder import seed_initial_state
 from tests.api.fixtures.sample_replay import write_meeting_replay, write_sample_replay
 
@@ -449,6 +452,141 @@ def test_belief_frames_are_cached(meeting_loader: ReplayLoader) -> None:
     second = meeting_loader.belief_frames("headless-seed-1")
     # Same cached object (the expensive memory re-walk runs once).
     assert first is second
+
+
+# ---------------------------------------------------------------------------
+# Per-tick As-agent visibility (fog) projection (Task 12.3, DESIGN.md §3.2, §7)
+# ---------------------------------------------------------------------------
+
+
+def test_agent_visibility_served_living_only_and_cached(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    """Every living agent carries a field of view; dead agents carry None; and the
+    projection is LRU-cached (the expensive solve runs once per game)."""
+
+    first = nine_p_two_i_loader.load_replay("headless-seed-12")
+    second = nine_p_two_i_loader.load_replay("headless-seed-12")
+    # Cost-bounded: the served payload is memoized, never recomputed per request.
+    assert first is second
+
+    living = dead = 0
+    for tick in first.ticks:
+        for agent in tick.agent_states:
+            if agent.is_alive:
+                assert agent.visibility is not None
+                living += 1
+            else:
+                # A dead agent has no field of view to simulate.
+                assert agent.visibility is None
+                dead += 1
+    # A real 9p2i game has deaths, so both branches are exercised (fog stops at
+    # death).
+    assert living > 0 and dead > 0
+
+
+def test_agent_visibility_matches_observation_pipeline(
+    meeting_loader: ReplayLoader, tmp_path: Path
+) -> None:
+    """The served fog is byte-identical to the firewall pipeline's own output.
+
+    Reconstructs the committed no-op game (seed 0, 4p1i) independently through
+    ``ObservationService.build_packet`` and asserts each living agent's served
+    ``visibility`` equals the packet's ``visible_players`` / ``visible_bodies`` /
+    ``audible_events`` — proving the projection REUSES the pipeline output (no
+    re-implemented, drift-prone visibility) and that the As-agent view simulates
+    the same firewall ``eval/leak_test.py`` validates.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=4, num_impostors=1
+    )
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+
+    def field_of_view(
+        world: WorldState, events: Sequence[EngineEvent]
+    ) -> dict[str, object]:
+        out: dict[str, object] = {}
+        for pid in sorted(world.players):
+            if not world.players[pid].alive:
+                continue
+            packet = service.build_packet(
+                world_state=world, agent_id=pid, engine_events=events
+            )
+            out[pid] = (
+                tuple((p.id, p.room, p.action) for p in packet.visible_players),
+                tuple((b.id, b.room, b.victim_id) for b in packet.visible_bodies),
+                tuple((e.kind, e.room) for e in packet.audible_events),
+            )
+        return out
+
+    # The loader synthesizes a Start frame (tick -1) from the seeded state, then a
+    # TickView per recorded entry built from the POST-advance state (Finding 1), so
+    # served tick ``k`` maps to the state after the (k+1)-th advance.
+    expected: dict[int, dict[str, object]] = {-1: field_of_view(state, [])}
+    for served_tick in range(3):  # write_sample_replay records 3 no-op ticks
+        state, events = advance_tick(state, [], game_map=game_map)
+        expected[served_tick] = field_of_view(state, events)
+    service.close()
+
+    replay = meeting_loader.load_replay("headless-seed-0")
+    served: dict[int, dict[str, object]] = {}
+    for tick in replay.ticks:
+        frame: dict[str, object] = {}
+        for agent in tick.agent_states:
+            if agent.visibility is None:
+                continue
+            frame[agent.agent_id] = (
+                tuple(
+                    (p.id, p.room, p.action) for p in agent.visibility.visible_players
+                ),
+                tuple(
+                    (b.id, b.room, b.victim_id) for b in agent.visibility.visible_bodies
+                ),
+                tuple((e.kind, e.room) for e in agent.visibility.audible_events),
+            )
+        served[tick.tick] = frame
+
+    assert served == expected
+
+
+def test_report_tick_fog_keeps_the_reported_body(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    """On a body-report frame the reporter still sees the body they just found.
+
+    ``engine.tick._apply_report`` marks the trigger body discovered before the
+    post-advance fog solve, and ``compute_visibility_for_player`` excludes
+    discovered bodies — so the loader re-opens the trigger body for that frame
+    (``_agent_visibility_map(reopened_body_id=...)``). This pins that the
+    reporter's field of view includes the reported body (which also shows in
+    ``tick.bodies`` + the report event), i.e. the As-agent view matches what the
+    agent could see at the meeting frame rather than dropping it.
+    """
+
+    saw_report = False
+    for meta in nine_p_two_i_loader.list_replays():
+        replay = nine_p_two_i_loader.load_replay(meta.game_id)
+        for tick in replay.ticks:
+            for event in tick.events:
+                if event.type != "report_body":
+                    continue
+                saw_report = True
+                reporter = next(
+                    a for a in tick.agent_states if a.agent_id == event.reporter_id
+                )
+                assert reporter.visibility is not None
+                seen_victims = {
+                    body.victim_id for body in reporter.visibility.visible_bodies
+                }
+                assert event.body_of in seen_victims, (
+                    f"{event.reporter_id} does not see the body it reported "
+                    f"({event.body_of}) at tick {tick.tick} of {meta.game_id}"
+                )
+    assert saw_report, "expected at least one body-report meeting in the 9p2i set"
 
 
 # ---------------------------------------------------------------------------
