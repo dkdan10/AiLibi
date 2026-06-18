@@ -17,6 +17,7 @@ import { tokens } from "../tokens";
 import type {
   AgentMemoryView,
   BallotView,
+  CompletedTaskObsView,
   ContradictionView,
   KillEventView,
   LLMCallView,
@@ -126,11 +127,12 @@ function memory(agentId: string): AgentMemoryView {
     agent_id: agentId,
     tick: 320,
     role: impostor ? "IMPOSTOR" : "CREWMATE",
-    tasks_completed: impostor ? 2 : 3,
+    tasks_completed: impostor ? 0 : 3,
     tasks_assigned: impostor ? 0 : 5,
+    // The episodic feed only ever carries saw_player / found_body (the loader's
+    // `_observations_from_memory`); cover tasks live in `coverTasks`, not here.
     observations: [
       { type: "saw_player", tick: 312, subject: "p-5", room: "Reactor", co_present: ["p-7"] },
-      { type: "completed_task", tick: 300, task_id: "wiring-3", room: "Electrical" },
       { type: "found_body", tick: 318, body_of: "p-7", room: "Reactor" },
     ],
     beliefs: [
@@ -147,6 +149,11 @@ const OWN_KILLS: KillEventView[] = [
   { type: "kill", tick: 316, killer_id: "p-5", victim_id: "p-7", room_id: "Reactor" },
 ];
 
+// p-5's fabricated cover-task alibi (its meeting `completed_task` turn obs).
+const COVER_TASKS: CompletedTaskObsView[] = [
+  { type: "completed_task", tick: 300, task_id: "wiring-3", room: "Electrical" },
+];
+
 const AS_P5: Perspective = { mode: "agent", agentId: "p-5" };
 const AS_P1: Perspective = { mode: "agent", agentId: "p-1" };
 
@@ -159,6 +166,7 @@ const meta: Meta<typeof MindInspectorPanel> = {
     meeting: MEETING,
     memoryError: null,
     ownKills: [],
+    coverTasks: [],
     perspective: OMNISCIENT,
     isAlive: true,
     onSelectAgent: () => {},
@@ -187,9 +195,15 @@ export const Dead: Story = {
 };
 
 // An impostor under Omniscient — the IMPOSTOR badge + fellow impostors + own_kill
-// + the fabricated cover-task label are all revealed.
+// + the fabricated cover-task label are all revealed. The found_body of its own
+// victim (p-7) is suppressed from the feed in favour of the own-kill line.
 export const ImpostorOmniscient: Story = {
-  args: { selectedAgentId: "p-5", memory: memory("p-5"), ownKills: OWN_KILLS },
+  args: {
+    selectedAgentId: "p-5",
+    memory: memory("p-5"),
+    ownKills: OWN_KILLS,
+    coverTasks: COVER_TASKS,
+  },
 };
 
 // The same impostor through ITS OWN lens (self-perspective) — its secrets are its
@@ -199,17 +213,21 @@ export const ImpostorViewingItself: Story = {
     selectedAgentId: "p-5",
     memory: memory("p-5"),
     ownKills: OWN_KILLS,
+    coverTasks: COVER_TASKS,
     perspective: AS_P5,
   },
 };
 
 // The leak guard: the same impostor inspected through a DIFFERENT agent's fog —
-// the role reveal, fellow impostors, own_kill, and fabricated label all VANISH.
+// the role reveal, fellow impostors, own_kill, fabricated cover, and the raw
+// memory + verbatim prompt/response all VANISH (Memory feed reads as the cover
+// working; the body is no longer suppressed since the own-kill line is hidden).
 export const ImpostorThroughOtherFog: Story = {
   args: {
     selectedAgentId: "p-5",
     memory: memory("p-5"),
     ownKills: OWN_KILLS,
+    coverTasks: COVER_TASKS,
     perspective: AS_P1,
   },
 };

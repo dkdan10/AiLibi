@@ -32,6 +32,7 @@ import { tokens, suspicionBucketOf, type SuspicionBucket } from "../tokens";
 import type {
   AgentMemoryView,
   BeliefEntryView,
+  CompletedTaskObsView,
   KillEventView,
   LLMCallView,
   MeetingView as MeetingViewDTO,
@@ -131,6 +132,29 @@ function buildTrail(
   steps.push({ kind: "observation", text: `Meeting ${meeting.outcome.toLowerCase()} — ${ejected}` });
 
   return steps;
+}
+
+// An impostor's fabricated cover tasks are the `completed_task` observations it
+// states in the meeting — its alibi (api/replay_loader `_observation_claim_view`
+// projects turn observations, the only place this type is reachable: episodic
+// memory never mints a `completed_task` for an impostor, `agents/memory/store`).
+// These are the "fake cover tasks" the brief asks us to label FABRICATED.
+function coverTasksOf(
+  meeting: MeetingViewDTO | undefined,
+  agentId: string,
+): CompletedTaskObsView[] {
+  const cover: CompletedTaskObsView[] = [];
+  for (const turn of meeting?.turns ?? []) {
+    if (turn.speaker !== agentId) {
+      continue;
+    }
+    for (const obs of turn.observations) {
+      if (obs.type === "completed_task") {
+        cover.push(obs);
+      }
+    }
+  }
+  return cover;
 }
 
 function ReasoningTrail({ steps }: { steps: TrailStep[] }) {
@@ -241,6 +265,22 @@ function TabHeading({ children }: { children: ReactNode }) {
   );
 }
 
+// Shown in place of the verbatim prompt / response when an impostor is inspected
+// through a different agent's fog — the raw LLM I/O embeds impostor secrets, so
+// it rides the same Omniscient-or-self gate as the other impostor extras.
+function RedactedVerbatim({ field }: { field: "prompt" | "response" }) {
+  return (
+    <p
+      className="rounded-md border-2 border-dashed border-ink-300 px-3 py-3 text-xs text-ink-500"
+      style={{ background: tokens.paper[2] }}
+    >
+      The raw {field} is hidden through another agent's fog — it is built from this
+      agent's private memory and would leak impostor-only fields. Switch to
+      Omniscient, or view this agent through its own lens, to read it.
+    </p>
+  );
+}
+
 function LLMCallList({
   calls,
   hasUnattributed,
@@ -323,6 +363,7 @@ export interface MindInspectorPanelProps {
   memoryError: string | null;
   isAlive: boolean;
   ownKills: KillEventView[];
+  coverTasks: CompletedTaskObsView[];
   perspective: Perspective;
   onSelectAgent: (agentId: string) => void;
   onShowWhatTheySaw: (agentId: string) => void;
@@ -336,6 +377,7 @@ export function MindInspectorPanel({
   memoryError,
   isAlive,
   ownKills,
+  coverTasks,
   perspective,
   onSelectAgent,
   onShowWhatTheySaw,
@@ -368,6 +410,7 @@ export function MindInspectorPanel({
           memoryError={memoryError}
           isAlive={isAlive}
           ownKills={ownKills}
+          coverTasks={coverTasks}
           perspective={perspective}
           tab={tab}
           onTab={setTab}
@@ -386,6 +429,7 @@ function InspectedAgent({
   memoryError,
   isAlive,
   ownKills,
+  coverTasks,
   perspective,
   tab,
   onTab,
@@ -398,6 +442,7 @@ function InspectedAgent({
   memoryError: string | null;
   isAlive: boolean;
   ownKills: KillEventView[];
+  coverTasks: CompletedTaskObsView[];
   perspective: Perspective;
   tab: MindTab;
   onTab: (tab: MindTab) => void;
@@ -418,6 +463,11 @@ function InspectedAgent({
   const calls = (meeting?.llm_calls ?? []).filter((c) => c.agent_id === agentId);
   const hasUnattributed = (meeting?.llm_calls ?? []).some((c) => c.agent_id === null);
   const trail = buildTrail(meeting, agentId);
+  // FIREWALL: an impostor's verbatim prompt / response / raw memory are built
+  // from its private memory and embed the role, fellow impostors, and the
+  // own-kill self-channel — so they would bypass the Omniscient-or-self gate if
+  // shown through a DIFFERENT agent's fog. Redact them in exactly that case.
+  const verbatimRedacted = isImpostor && !revealSecrets;
 
   return (
     <div className="flex flex-col gap-3">
@@ -508,17 +558,27 @@ function InspectedAgent({
           </MemoryGate>
         )}
 
-        {tab === "prompt" && (
-          <LLMCallList calls={calls} hasUnattributed={hasUnattributed} field="prompt" />
-        )}
+        {tab === "prompt" &&
+          (verbatimRedacted ? (
+            <RedactedVerbatim field="prompt" />
+          ) : (
+            <LLMCallList
+              calls={calls}
+              hasUnattributed={hasUnattributed}
+              field="prompt"
+            />
+          ))}
 
-        {tab === "response" && (
-          <LLMCallList
-            calls={calls}
-            hasUnattributed={hasUnattributed}
-            field="response"
-          />
-        )}
+        {tab === "response" &&
+          (verbatimRedacted ? (
+            <RedactedVerbatim field="response" />
+          ) : (
+            <LLMCallList
+              calls={calls}
+              hasUnattributed={hasUnattributed}
+              field="response"
+            />
+          ))}
 
         {tab === "memory" && (
           <MemoryGate memory={memory} memoryError={memoryError}>
@@ -528,6 +588,7 @@ function InspectedAgent({
                 revealSecrets={revealSecrets}
                 isImpostor={isImpostor}
                 ownKills={ownKills}
+                coverTasks={coverTasks}
                 fellowImpostors={fellowImpostors}
               />
             )}
@@ -570,15 +631,22 @@ function FlagsTab({ memory }: { memory: AgentMemoryView }) {
 
 // ── connected wrapper (mounted by ThoughtStream) ────────────────────────────
 
-// Scan the recorded ticks for this agent's kills (the omniscient ground truth
-// for the `own_kill` line). Always derived here; the panel only shows them under
-// the firewall gate.
+// Scan the recorded ticks for this agent's kills UP TO the meeting boundary (the
+// omniscient ground truth for the `own_kill` line). The rest of the inspector is
+// meeting-boundary data (`fetchMemoryView(meetingId, …)`), so scoping the scan to
+// `maxTick` keeps a kill from a LATER meeting out of an earlier meeting's tab — it
+// must reflect only what the agent had done by this meeting. Always derived here;
+// the panel only shows them under the firewall gate.
 function ownKillsOf(
-  ticks: { events: { type: string }[] }[],
+  ticks: readonly { tick: number; events: readonly { type: string }[] }[],
   agentId: string,
+  maxTick: number,
 ): KillEventView[] {
   const kills: KillEventView[] = [];
   for (const frame of ticks) {
+    if (frame.tick > maxTick) {
+      continue;
+    }
     for (const event of frame.events) {
       if (event.type === "kill" && (event as KillEventView).killer_id === agentId) {
         kills.push(event as KillEventView);
@@ -623,12 +691,21 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
     selectedAgentId === null
       ? undefined
       : memoryCache[`${meetingId}:${selectedAgentId}`];
-  const ownKills =
-    selectedAgentId === null ? [] : ownKillsOf(replay.ticks, selectedAgentId);
 
   // Liveness at the meeting tick (role-neutral "dead" chip). Defaults to alive
   // when the frame isn't found (e.g. a synthetic story meeting).
   const meetingTick = meeting?.tick ?? null;
+
+  // Own kills are scoped to this meeting's tick so a later kill never leaks back
+  // into an earlier meeting's tab. The memory snapshot's `tick` is the truest
+  // boundary; fall back to the meeting tick when memory hasn't loaded yet.
+  const killBoundary = memory?.tick ?? meetingTick;
+  const ownKills =
+    selectedAgentId === null || killBoundary === null
+      ? []
+      : ownKillsOf(replay.ticks, selectedAgentId, killBoundary);
+  const coverTasks =
+    selectedAgentId === null ? [] : coverTasksOf(meeting, selectedAgentId);
   const frame =
     meetingTick === null
       ? undefined
@@ -657,6 +734,7 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
       memoryError={memoryError}
       isAlive={isAlive}
       ownKills={ownKills}
+      coverTasks={coverTasks}
       perspective={perspective}
       onSelectAgent={selectAgent}
       onShowWhatTheySaw={onShowWhatTheySaw}

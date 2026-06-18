@@ -1,16 +1,24 @@
 // The mind inspector's MEMORY tab (Task 12.8; was the standalone memory snapshot
 // rail). Renders one agent's episodic feed from `AgentMemoryView` — the
-// observations the agent actually logged (saw_player / saw_body→found_body /
-// heard_* surface as the discriminated `ObservationClaimView`), the task tally,
-// and the raw rendered memory text the LLM was handed (mono, collapsible).
+// observations the agent actually logged (saw_player / saw_body→found_body
+// surface as the discriminated `ObservationClaimView`), the task tally, and the
+// raw rendered memory text the LLM was handed (mono, collapsible).
 //
-// Firewall (gated by the connected inspector, passed as `revealSecrets`):
-//   • an IMPOSTOR's completed_task observations are FABRICATED cover, labelled as
-//     such — but ONLY when the secret is revealable (Omniscient or self-lens);
-//     through a different agent's eyes the cover reads as a genuine task (the lie
-//     working), so no "fabricated" badge leaks the impostor's hand;
-//   • the `own_kill` lines and the fellow-impostor roster are impostor secrets,
-//     shown under the same Omniscient-OR-self gate and suppressed otherwise.
+// Firewall (gated by the connected inspector, passed as `revealSecrets`). The
+// impostor extras — fellow impostors, the `own_kill` lines, and the FABRICATED
+// cover tasks — show only when the secret is revealable (Omniscient OR the lens
+// IS this agent), and are suppressed when inspecting an impostor through a
+// different agent's eyes. Two leak guards beyond the obvious sections:
+//   • the killer's own victim is filtered OUT of the `found_body` feed when the
+//     own-kill line is shown (`render_for_prompt` suppresses that body in favour
+//     of the own-kill self-channel — the UI must not double-render the event);
+//   • the raw `rendered_memory_text` is the verbatim prompt memory and embeds the
+//     impostor role + own-kill lines, so it rides the SAME gate and is redacted
+//     for an impostor seen through another agent's fog.
+// Cover tasks are NOT in the episodic feed — episodic memory never mints a
+// `completed_task` for an impostor (`agents/memory/store`); they are the
+// fabricated alibi the impostor states in the meeting, projected from its turn
+// observations and passed in as `coverTasks`.
 // Presentational: the connected MindInspector owns the fetch + the gate.
 
 import type { ReactNode } from "react";
@@ -18,6 +26,7 @@ import type { ReactNode } from "react";
 import { tokens } from "../tokens";
 import type {
   AgentMemoryView,
+  CompletedTaskObsView,
   KillEventView,
   ObservationClaimView,
   PlayerView,
@@ -35,15 +44,7 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="text-xs italic text-ink-400">{children}</p>;
 }
 
-// A fabricated impostor cover-task is flagged here; every other observation
-// renders verbatim. `fabricated` is only ever true under the reveal gate.
-function ObservationLine({
-  obs,
-  fabricated,
-}: {
-  obs: ObservationClaimView;
-  fabricated: boolean;
-}) {
+function ObservationLine({ obs }: { obs: ObservationClaimView }) {
   switch (obs.type) {
     case "saw_player":
       return (
@@ -60,14 +61,6 @@ function ObservationLine({
         <span className="min-w-0 break-words text-ink-900">
           <span className="font-semibold">completed</span> {obs.task_id} in {obs.room}{" "}
           at tick {obs.tick}
-          {fabricated && (
-            <span
-              className="ml-1.5 inline-flex items-center rounded-pill border-2 border-ink-900 px-1.5 py-0 align-middle font-mono text-[9px] font-bold uppercase tracking-wide text-paper-0"
-              style={{ background: tokens.contradiction }}
-            >
-              fabricated
-            </span>
-          )}
         </span>
       );
     case "found_body":
@@ -87,6 +80,9 @@ interface MemoryPanelProps {
   revealSecrets: boolean;
   isImpostor: boolean;
   ownKills: KillEventView[];
+  // The impostor's fabricated cover-task alibis (its meeting `completed_task`
+  // turn observations), resolved by the connected inspector.
+  coverTasks: CompletedTaskObsView[];
   fellowImpostors: PlayerView[];
 }
 
@@ -95,11 +91,30 @@ export function MemoryPanel({
   revealSecrets,
   isImpostor,
   ownKills,
+  coverTasks,
   fellowImpostors,
 }: MemoryPanelProps) {
-  // The DTO arrives salience-ordered; show the episodic feed newest-first.
-  const observations = [...memory.observations].sort((a, b) => b.tick - a.tick);
   const showImpostorExtras = isImpostor && revealSecrets;
+
+  // When the own-kill line is shown, drop the killer's own victim from the body
+  // feed so the same event isn't rendered twice (killed p-X + found body p-X) —
+  // matching `render_for_prompt`, which suppresses that body for the own-kill.
+  const ownVictims = new Set(ownKills.map((k) => k.victim_id));
+  const observations = [...memory.observations]
+    .filter(
+      (obs) =>
+        !(
+          showImpostorExtras &&
+          obs.type === "found_body" &&
+          ownVictims.has(obs.body_of)
+        ),
+    )
+    // The DTO arrives salience-ordered; show the episodic feed newest-first.
+    .sort((a, b) => b.tick - a.tick);
+
+  // The raw prompt memory embeds impostor secrets — redact it under the same gate
+  // (an impostor seen through a different agent's fog) the other extras ride.
+  const rawMemoryRedacted = isImpostor && !revealSecrets;
 
   return (
     <div className="space-y-4">
@@ -159,6 +174,30 @@ export function MemoryPanel({
         </section>
       )}
 
+      {showImpostorExtras && coverTasks.length > 0 && (
+        <section>
+          <SectionHeading>Cover tasks (fabricated)</SectionHeading>
+          <ul className="space-y-1">
+            {coverTasks.map((task, index) => (
+              <li
+                key={`cover-${index}`}
+                className="flex flex-wrap items-center gap-2 text-sm text-ink-900"
+              >
+                <span className="min-w-0 break-words">
+                  {task.task_id} in {task.room} at tick {task.tick}
+                </span>
+                <span
+                  className="inline-flex items-center rounded-pill border-2 border-ink-900 px-1.5 py-0 font-mono text-[9px] font-bold uppercase tracking-wide text-paper-0"
+                  style={{ background: tokens.contradiction }}
+                >
+                  fabricated
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section>
         <SectionHeading>Observations ({observations.length})</SectionHeading>
         {observations.length === 0 ? (
@@ -173,24 +212,32 @@ export function MemoryPanel({
                 <span aria-hidden className="text-ink-300">
                   •
                 </span>
-                <ObservationLine
-                  obs={obs}
-                  fabricated={showImpostorExtras && obs.type === "completed_task"}
-                />
+                <ObservationLine obs={obs} />
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <details className="rounded-md border-2 border-ink-900 bg-paper-0">
-        <summary className="cursor-pointer select-none px-2.5 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-500">
-          Raw rendered memory (sent to LLM)
-        </summary>
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words border-t-2 border-ink-900 px-2.5 py-2 font-mono text-xs leading-relaxed text-ink-900">
-          {memory.rendered_memory_text}
-        </pre>
-      </details>
+      {rawMemoryRedacted ? (
+        <p
+          className="rounded-md border-2 border-dashed border-ink-300 px-3 py-3 text-xs text-ink-500"
+          style={{ background: tokens.paper[2] }}
+        >
+          Raw rendered memory is hidden through another agent's fog — it embeds
+          impostor-only fields. Switch to Omniscient, or view this agent through
+          its own lens, to read it.
+        </p>
+      ) : (
+        <details className="rounded-md border-2 border-ink-900 bg-paper-0">
+          <summary className="cursor-pointer select-none px-2.5 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+            Raw rendered memory (sent to LLM)
+          </summary>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words border-t-2 border-ink-900 px-2.5 py-2 font-mono text-xs leading-relaxed text-ink-900">
+            {memory.rendered_memory_text}
+          </pre>
+        </details>
+      )}
     </div>
   );
 }
