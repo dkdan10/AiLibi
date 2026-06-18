@@ -1,29 +1,38 @@
-// One agent: a PixiJS circle drawn at the center of its room, nudged by a
-// deterministic per-agent jitter so multiple agents in one room don't fully
-// overlap (DESIGN.md §7). The jitter offset is in screen pixels (not scaled),
-// so tokens stay readably spread regardless of the map fit-to-canvas scale.
-// Color is the agent's `PlayerView.color`. Dead / venting agents are filtered
-// out upstream in MapView and never reach this component.
+// One agent on the map, in the Playful chunky-sticker style (Task 12.5;
+// design/phase-12/stage-1-design.md §3.2, the 02-map render). A filled disc in
+// the agent's role-neutral IDENTITY colour (never guilt — firewall) with the
+// p-id in mono, a small `current_action` glyph chip (cream sticker + ink glyph),
+// and an OMNISCIENT-ONLY impostor role badge (ink disc + cream dagger). The
+// per-agent jitter spreads co-located tokens so they don't fully overlap.
 //
-// Movement between adjacent ticks is tweened: when `room` changes and `animate`
-// is true, the token slides from its current interpolated position to the new
-// room center over TWEEN_DURATION_MS (driven by PixiJS's Ticker via useTick).
-// The tween always starts from wherever the token currently sits, so a tick
-// change mid-tween interrupts cleanly and re-targets without desyncing. When
-// `animate` is false (multi-tick scrub / snap-to-meeting, or a fresh mount), the
-// token jumps straight to the target with no interpolation.
+// Movement between adjacent ticks is tweened (kept from Phase 4): when `room`
+// changes and `animate` is true, the token slides from its current interpolated
+// position to the new room centre over TWEEN_DURATION_MS via PixiJS's Ticker. The
+// tween always resumes from the live position, so a tick change mid-tween
+// re-targets cleanly. When `animate` is false (scrub / snap / fresh mount) it
+// jumps straight to the target.
+//
+// `actionGlyph` / `roleBadge` are pre-resolved Pixi textures threaded down by
+// MapView (which owns the glyph registry + the Omniscient gate). A `null` texture
+// simply draws no chip/badge — so IDLE tokens stay clean and fog suppresses the
+// role badge without this component knowing the firewall rules.
 
 import { useTick } from "@pixi/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Graphics, Ticker } from "pixi.js";
+import type { Graphics } from "pixi.js";
 
+import { paintGlyph } from "../assets/map/glyphs";
+import { pixiHex, tokens } from "../tokens";
 import type { RoomView } from "../types/api";
 
 interface AgentTokenProps {
   room: RoomView;
   jitterIndex: number;
   color: string;
+  label: string;
+  actionGlyph: string | null;
+  roleBadge: string | null;
   scale: number;
   offsetX: number;
   offsetY: number;
@@ -35,22 +44,26 @@ interface Point {
   y: number;
 }
 
-// Tween duration for a single-tick move. Exported so a future ReplayControls
-// (task 4.11) can coordinate interpolation with playback speed if needed.
+// Tween duration for a single-tick move (kept from Phase 4).
 export const TWEEN_DURATION_MS = 250;
 
-const TOKEN_RADIUS = 10;
-const BORDER_COLOR = 0x0f172a;
-const BORDER_WIDTH = 2;
+const TOKEN_RADIUS = 12;
+const INK_900 = pixiHex(tokens.ink[900]);
+const PAPER_0 = pixiHex(tokens.paper[0]);
 
-// Six deterministic offsets around a room center (screen pixels).
+const CHIP_RADIUS = 7.5;
+const CHIP_OFFSET = 12; // screen px from the token centre to the chip centre
+const GLYPH_SIZE = 11;
+
+// Six deterministic offsets around a room centre (screen pixels), so up to six
+// co-located tokens fan out instead of stacking.
 const JITTER_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
-  { dx: -20, dy: -20 },
-  { dx: 20, dy: -20 },
-  { dx: -20, dy: 20 },
-  { dx: 20, dy: 20 },
-  { dx: 0, dy: -30 },
-  { dx: 0, dy: 30 },
+  { dx: -22, dy: 0 },
+  { dx: 22, dy: 0 },
+  { dx: -22, dy: 24 },
+  { dx: 22, dy: 24 },
+  { dx: 0, dy: -26 },
+  { dx: 0, dy: 26 },
 ];
 
 function targetPoint(props: AgentTokenProps): Point {
@@ -65,20 +78,16 @@ function targetPoint(props: AgentTokenProps): Point {
 }
 
 export function AgentToken(props: AgentTokenProps) {
-  const { room, color, animate } = props;
+  const { room, color, label, actionGlyph, roleBadge, animate } = props;
   const target = targetPoint(props);
 
-  // Current interpolated position (ref mirrors state so the tween can resume
-  // from the live position when interrupted; state drives the redraw).
   const [pos, setPos] = useState<Point>(target);
   const posRef = useRef<Point>(target);
   const fromRef = useRef<Point>(target);
   const toRef = useRef<Point>(target);
-  // Start "complete" so a freshly-mounted token sits still at its target.
   const progressRef = useRef<number>(1);
 
-  // Re-target when the agent's room changes (start/continue a tween) or when
-  // the snap/tween mode flips (force an immediate snap on a multi-tick jump).
+  // Re-target when the room changes (tween) or the snap/tween mode flips (snap).
   useEffect(() => {
     if (animate) {
       fromRef.current = posRef.current;
@@ -91,14 +100,12 @@ export function AgentToken(props: AgentTokenProps) {
       progressRef.current = 1;
       setPos(target);
     }
-    // `target` is read from this render's closure — it's a pure function of
-    // `room.id` since jitter and the map transform are fixed. Re-run when the
-    // destination room changes OR when the snap/tween mode flips, so a
-    // multi-tick jump (animate=false) snaps immediately even when it lands in
-    // the room the token was already tweening toward.
+    // `target` is a pure function of `room.id` (jitter + transform are fixed), so
+    // re-run only when the destination room changes or the mode flips.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id, animate]);
 
-  const advance = useCallback((ticker: Ticker) => {
+  const advance = useCallback((ticker: { deltaMS: number }) => {
     if (progressRef.current >= 1) {
       return;
     }
@@ -119,14 +126,56 @@ export function AgentToken(props: AgentTokenProps) {
 
   useTick(advance);
 
+  const tokenColor = pixiHex(color);
+  const chipX = pos.x + CHIP_OFFSET;
+  const chipBottomY = pos.y + CHIP_OFFSET;
+  const badgeTopY = pos.y - CHIP_OFFSET;
+
   return (
-    <pixiGraphics
-      draw={(graphics: Graphics) => {
-        graphics.clear();
-        graphics.circle(pos.x, pos.y, TOKEN_RADIUS);
-        graphics.fill(color);
-        graphics.stroke({ width: BORDER_WIDTH, color: BORDER_COLOR });
-      }}
-    />
+    <>
+      <pixiGraphics
+        draw={(graphics: Graphics) => {
+          graphics.clear();
+          // Token disc.
+          graphics.circle(pos.x, pos.y, TOKEN_RADIUS);
+          graphics.fill(tokenColor);
+          graphics.stroke({ width: 2.2, color: INK_900 });
+          // Action chip background (cream sticker), only when there is a glyph.
+          if (actionGlyph !== null) {
+            graphics.circle(chipX, chipBottomY, CHIP_RADIUS);
+            graphics.fill(PAPER_0);
+            graphics.stroke({ width: 1.6, color: INK_900 });
+          }
+          // Role badge background (ink disc), Omniscient-only via the texture gate.
+          if (roleBadge !== null) {
+            graphics.circle(chipX, badgeTopY, CHIP_RADIUS);
+            graphics.fill(INK_900);
+            graphics.stroke({ width: 1.6, color: PAPER_0 });
+          }
+        }}
+      />
+      <pixiText
+        text={label}
+        anchor={0.5}
+        x={pos.x}
+        y={pos.y}
+        style={{
+          fill: PAPER_0,
+          fontSize: 10,
+          fontFamily: tokens.type.mono,
+          fontWeight: "700",
+        }}
+      />
+      {actionGlyph !== null && (
+        <pixiGraphics
+          draw={(g: Graphics) => paintGlyph(g, actionGlyph, chipX, chipBottomY, GLYPH_SIZE, INK_900)}
+        />
+      )}
+      {roleBadge !== null && (
+        <pixiGraphics
+          draw={(g: Graphics) => paintGlyph(g, roleBadge, chipX, badgeTopY, GLYPH_SIZE + 1, PAPER_0)}
+        />
+      )}
+    </>
   );
 }
