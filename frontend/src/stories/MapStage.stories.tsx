@@ -113,17 +113,19 @@ interface Spawn {
   action: AgentTickStateView["current_action"];
 }
 
-const SPAWNS: Spawn[] = [
+// The seven crewmates whose positions are stable across the demo window; the
+// impostor p-5 (the killer/venter) and victim p-7 vary by tick below.
+const STABLE: Spawn[] = [
   { id: "p-0", room: "CAFETERIA", alive: true, venting: false, action: "IDLE" },
   { id: "p-1", room: "MEDBAY", alive: true, venting: false, action: "TASK" },
   { id: "p-2", room: "ENGINEERING", alive: true, venting: false, action: "TASK" },
   { id: "p-3", room: "EAST_HALL", alive: true, venting: false, action: "MOVING" },
   { id: "p-4", room: "ADMIN", alive: true, venting: false, action: "TASK" },
-  { id: "p-5", room: null, alive: true, venting: true, action: "VENT" },
   { id: "p-6", room: "CAFETERIA", alive: true, venting: false, action: "IDLE" },
-  { id: "p-7", room: null, alive: false, venting: false, action: "IDLE" },
   { id: "p-8", room: "LABS", alive: true, venting: false, action: "TASK" },
 ];
+
+const P7_DEAD: Spawn = { id: "p-7", room: null, alive: false, venting: false, action: "IDLE" };
 
 function agentState(spawn: Spawn): AgentTickStateView {
   return {
@@ -137,17 +139,70 @@ function agentState(spawn: Spawn): AgentTickStateView {
   };
 }
 
-const PLAY_TICK: TickView = {
-  tick: 313,
-  agent_states: SPAWNS.map(agentState),
+const REACTOR_BODY = { body_id: "b-7", victim_id: "p-7", room_id: "REACTOR", killed_by: "p-5" };
+const REACTOR_SABOTAGE = {
+  kind: "reactor" as const,
+  remaining_ticks: 4,
+  affected_rooms: ["REACTOR", "ENGINEERING"],
+  repair_progress: { ENGINEERING: 2 },
+};
+
+function playStates(p5: Spawn): AgentTickStateView[] {
+  return [...STABLE, p5, P7_DEAD].map(agentState);
+}
+
+// The vent escape spans real engine events: a KILL (t313), then the dive
+// (VentEntered t314 — from == to, the dive room) and the emerge (VentExited t315
+// — REACTOR → STORAGE, the real cross-room travel). The map pairs enter+exit so
+// the animation glides the true route. The stories render the in-vent tick (t314).
+const T_KILL = 313;
+const T_ENTER = 314;
+const T_EXIT = 315;
+
+const TICK_KILL: TickView = {
+  tick: T_KILL,
+  agent_states: playStates({ id: "p-5", room: "REACTOR", alive: true, venting: false, action: "KILL" }),
+  events: [{ type: "kill", tick: T_KILL, killer_id: "p-5", victim_id: "p-7", room_id: "REACTOR" }],
+  sabotage_active: ["reactor"],
+  tasks_completed_total: 5,
+  tasks_required_total: 14,
+  bodies: [REACTOR_BODY],
+  sabotage: REACTOR_SABOTAGE,
+  advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, advantage: -0.12 },
+};
+
+const TICK_ENTER: TickView = {
+  tick: T_ENTER,
+  agent_states: playStates({ id: "p-5", room: null, alive: true, venting: true, action: "VENT" }),
   events: [
-    { type: "kill", tick: 313, killer_id: "p-5", victim_id: "p-7", room_id: "REACTOR" },
     {
       type: "vent",
-      tick: 313,
+      tick: T_ENTER,
       actor_id: "p-5",
       phase: "enter",
-      from_room_id: "REACTOR",
+      from_room_id: "REACTOR", // dive: from == to (the entered vent is in the room)
+      to_room_id: "REACTOR",
+      traversal_ticks: 1,
+    },
+  ],
+  sabotage_active: ["reactor"],
+  tasks_completed_total: 5,
+  tasks_required_total: 14,
+  bodies: [REACTOR_BODY],
+  sabotage: REACTOR_SABOTAGE,
+  advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, advantage: -0.12 },
+};
+
+const TICK_EXIT: TickView = {
+  tick: T_EXIT,
+  agent_states: playStates({ id: "p-5", room: "STORAGE", alive: true, venting: false, action: "IDLE" }),
+  events: [
+    {
+      type: "vent",
+      tick: T_EXIT,
+      actor_id: "p-5",
+      phase: "exit",
+      from_room_id: "REACTOR", // emerge: REACTOR → STORAGE, the real travel
       to_room_id: "STORAGE",
       traversal_ticks: 1,
     },
@@ -155,25 +210,19 @@ const PLAY_TICK: TickView = {
   sabotage_active: ["reactor"],
   tasks_completed_total: 5,
   tasks_required_total: 14,
-  bodies: [{ body_id: "b-7", victim_id: "p-7", room_id: "REACTOR", killed_by: "p-5" }],
-  sabotage: {
-    kind: "reactor",
-    remaining_ticks: 4,
-    affected_rooms: ["REACTOR", "ENGINEERING"],
-    repair_progress: { ENGINEERING: 2 },
-  },
-  advantage: {
-    crew_alive: 6,
-    impostors_alive: 2,
-    tasks_completed: 5,
-    tasks_required: 14,
-    advantage: -0.12,
-  },
+  bodies: [REACTOR_BODY],
+  sabotage: REACTOR_SABOTAGE,
+  advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, advantage: -0.12 },
 };
+
+// Everyone spawns alive in the Cafeteria (the loader's synthetic pre-game frame).
+const START_SPAWNS: Spawn[] = [...STABLE.map((s) => s.id), "p-5", "p-7"].map(
+  (id): Spawn => ({ id, room: "CAFETERIA", alive: true, venting: false, action: "IDLE" }),
+);
 
 const START_TICK: TickView = {
   tick: -1,
-  agent_states: SPAWNS.map((s) => agentState({ ...s, room: "CAFETERIA", alive: true, venting: false, action: "IDLE" })),
+  agent_states: START_SPAWNS.map(agentState),
   events: [],
   sabotage_active: [],
   tasks_completed_total: 0,
@@ -183,12 +232,16 @@ const START_TICK: TickView = {
   advantage: { crew_alive: 7, impostors_alive: 2, tasks_completed: 0, tasks_required: 14, advantage: 0.05 },
 };
 
+// Index 2 = TICK_ENTER (engine tick 314) — p-5 is mid-vent, so the escape route
+// REACTOR → STORAGE animates and the reactor body + sabotage persist.
+const PLAY_INDEX = 2;
+
 const FIXTURE: ReplayView = {
   viewModelVersion: "story-fixture",
   metadata: {
     game_id: "story-canonical_1",
     seed: 4242,
-    total_ticks: 313,
+    total_ticks: T_EXIT,
     winner: null,
     winner_reason: null,
     meeting_count: 0,
@@ -198,7 +251,7 @@ const FIXTURE: ReplayView = {
   },
   map: MAP,
   players: PLAYERS,
-  ticks: [START_TICK, PLAY_TICK],
+  ticks: [START_TICK, TICK_KILL, TICK_ENTER, TICK_EXIT],
   meetings: [],
   failed_calls: [],
 };
@@ -211,7 +264,7 @@ function MapStoryHarness({ perspective }: { perspective: Perspective }) {
     useReplayStore.setState({
       currentReplay: FIXTURE,
       currentReplayError: null,
-      currentTick: 1, // the play tick (engine tick 313)
+      currentTick: PLAY_INDEX, // the in-vent tick (engine tick 314)
       isPlaying: false,
       perspective,
       view: "workspace",

@@ -164,23 +164,45 @@ function buildVentEdges(
   return edges;
 }
 
-// Each `enter` (dive) vent event fully describes the escape (engine emits both
-// endpoints + traversal); pair it with `enter + traversal_ticks` as the emerge
-// tick so the map animates dive→travel→emerge (DESIGN.md §3.2).
+// The vent-escape route is split across two events: `enter` (dive) carries
+// from==to == the dive room (engine/rules.py: the entered vent must be IN the
+// actor's room), and the actual cross-room travel is only known at the matching
+// `exit` (its `to_room_id` is where the impostor emerges). Pair them per actor so
+// the animation shows the real dive→travel→emerge over the in-vent window, not an
+// in-place entry pulse. An unmatched dive (a meeting interrupted the vent before
+// emergence) degrades to a brief in-place pulse at the dive room.
 function buildVentSegments(ticks: readonly TickView[]): VentSegment[] {
   const segments: VentSegment[] = [];
+  const pendingDive = new Map<string, { enterTick: number; fromRoomId: string }>();
   for (const tick of ticks) {
     for (const event of tick.events) {
-      if (event.type === "vent" && event.phase === "enter") {
+      if (event.type !== "vent") continue;
+      if (event.phase === "enter") {
+        pendingDive.set(event.actor_id, {
+          enterTick: event.tick,
+          fromRoomId: event.from_room_id,
+        });
+      } else {
+        const dive = pendingDive.get(event.actor_id);
+        pendingDive.delete(event.actor_id);
         segments.push({
           actorId: event.actor_id,
-          enterTick: event.tick,
-          exitTick: event.tick + Math.max(1, event.traversal_ticks),
-          fromRoomId: event.from_room_id,
-          toRoomId: event.to_room_id,
+          enterTick: dive?.enterTick ?? event.tick - Math.max(1, event.traversal_ticks),
+          exitTick: event.tick,
+          fromRoomId: dive?.fromRoomId ?? event.from_room_id,
+          toRoomId: event.to_room_id, // the emerge room — the real destination
         });
       }
     }
+  }
+  for (const [actorId, dive] of pendingDive) {
+    segments.push({
+      actorId,
+      enterTick: dive.enterTick,
+      exitTick: dive.enterTick + 1,
+      fromRoomId: dive.fromRoomId,
+      toRoomId: dive.fromRoomId,
+    });
   }
   return segments;
 }
@@ -345,6 +367,22 @@ function KillFlash({
   );
 }
 
+// An agent's OWN action (uppercase AgentAction) → its glyph; IDLE shows none to
+// keep the map calm.
+function selfActionGlyph(action: AgentTickStateView["current_action"]): string | null {
+  return action === "IDLE" ? null : GLYPH_SVG[ACTION_GLYPH[action]];
+}
+
+// A witnessed action on an As-agent SIGHTING is the server's firewall-gated
+// `"kill"` / `"vent"` string (observation.packet.PlayerView.action), or null for
+// an ordinary co-location. Show the matching glyph so the fog view keeps the
+// kill / vent the selected agent actually saw — not just a plain sighting.
+function witnessedActionGlyph(action: string | null): string | null {
+  if (action === "kill") return GLYPH_SVG.kill;
+  if (action === "vent") return GLYPH_SVG.vent;
+  return null;
+}
+
 export function MapView() {
   const currentReplay = useReplayStore((s) => s.currentReplay);
   const currentTick = useReplayStore((s) => s.currentTick);
@@ -452,7 +490,7 @@ export function MapView() {
     id: string;
     room: RoomView;
     color: string;
-    action: AgentTickStateView["current_action"] | null;
+    actionGlyph: string | null;
     showRoleBadge: boolean;
   }> = [];
 
@@ -468,7 +506,7 @@ export function MapView() {
         id: state.agent_id,
         room,
         color: player.color,
-        action: state.current_action,
+        actionGlyph: selfActionGlyph(state.current_action),
         showRoleBadge: player.role === "IMPOSTOR",
       });
     }
@@ -482,12 +520,13 @@ export function MapView() {
           id: fogAgentId,
           room,
           color: player.color,
-          action: selfState.current_action,
+          actionGlyph: selfActionGlyph(selfState.current_action),
           showRoleBadge: false,
         });
       }
     }
-    // Other players ONLY where this agent saw them (the projection's room).
+    // Other players ONLY where this agent saw them (the projection's room), with
+    // the WITNESSED action it saw (a firewall-gated kill / vent) — never the role.
     for (const vp of visibility.visible_players) {
       const room = roomsById.get(vp.room);
       const player = playerById.get(vp.id);
@@ -496,17 +535,14 @@ export function MapView() {
         id: vp.id,
         room,
         color: player.color,
-        action: null, // witnessed-action glyphs stay omniscient; sighting only
+        actionGlyph: witnessedActionGlyph(vp.action),
         showRoleBadge: false,
       });
     }
   }
 
   const tokens_ = tokenSpecs.map((spec) => {
-    const actionGlyph =
-      spec.action !== null && spec.action !== "IDLE"
-        ? GLYPH_SVG[ACTION_GLYPH[spec.action]]
-        : null;
+    const actionGlyph = spec.actionGlyph;
     const roleBadge = spec.showRoleBadge ? GLYPH_SVG.impostor : null;
     return (
       <AgentToken
