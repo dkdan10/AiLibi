@@ -1,43 +1,48 @@
-// A dead agent's body: an X glyph at the kill room's center (DESIGN.md §7).
-// Bodies render directly from privileged `KillEventView`s (post-game spectator;
-// see the mid-phase DTO audit). The marker is offset from the room center by a
-// deterministic per-victim amount (the victim's roster index spread by the
-// golden angle) so it never sits on top of living tokens (which cluster within
-// AgentToken's jitter radius) and so multiple bodies in one room fan out
-// instead of overlapping. Once the body has been reported
-// (`ReportBodyEventView` for the same victim), the marker swaps to a
-// "discovered" style — a color shift plus an outline ring.
+// A dead agent's body on the map, in the Playful style (Task 12.5;
+// design/phase-12/stage-1-design.md §3.2, the 02-map / 03-two-truths renders). A
+// paper disc + the hand-authored `body` glyph (an X-in-circle from the locked SVG
+// set), placed on a fixed-radius ring off the room centre (golden-angle spread)
+// so it never sits under a living token and multiple bodies in a room fan out.
+//
+// Two states, by the truth grammar: an UNDISCOVERED body is GHOSTED (dashed disc,
+// muted ink tint) — present but not yet officially found; a DISCOVERED body is
+// SOLID (kill-tinted glyph + a kill ring) once a `report_body` has fired. The
+// victim id is shown (the agent who sees a body knows whose it is); the killer
+// (`killed_by`) is NEVER drawn here — kill attribution is privileged and, under
+// fog, MapView only ever feeds this component bodies the agent actually saw.
 
 import type { Graphics } from "pixi.js";
 
+import { paintGlyph } from "../assets/map/glyphs";
+import { pixiHex, tokens } from "../tokens";
 import type { RoomView } from "../types/api";
 
 interface BodyMarkerProps {
   room: RoomView;
   placementIndex: number;
   isDiscovered: boolean;
+  victimLabel: string;
+  // The persisted spectator-only killer attribution (TickView.bodies[].killed_by),
+  // shown beneath the victim id. `null` under fog (the As-agent view must never
+  // expose who killed whom — VisibleBodyView carries no killed_by).
+  killedBy: string | null;
+  glyph: string;
   scale: number;
   offsetX: number;
   offsetY: number;
 }
 
-const ARM = 9;
-const STROKE_WIDTH = 3;
-const UNDISCOVERED_COLOR = 0x991b1b;
-const DISCOVERED_COLOR = 0xfca5a5;
-const DISCOVERED_RING_COLOR = 0xfacc15;
-const DISCOVERED_RING_WIDTH = 2;
-// Bodies sit on a ring well outside AgentToken's ±30px jitter cluster so a
-// marker never overlaps a living token sharing the room.
-const RING_RADIUS = 46;
-// Golden angle: spacing successive placement indices by ~137.5° keeps every
-// pair of bodies in a room well separated (>=32° apart for a 5-7 player roster)
-// rather than clustering, which a plain string hash of sequential ids does not.
+const DISC_RADIUS = 13;
+const GLYPH_SIZE = 18;
+const RING_RADIUS = 46; // off the room centre, outside AgentToken's jitter cluster
 const GOLDEN_ANGLE_DEG = 137.50776405003785;
 
-// Deterministic per-victim placement: an angle on a fixed-radius ring derived
-// from the victim's roster index, so each body lands in a stable, separated
-// spot.
+const INK_700 = pixiHex(tokens.ink[700]);
+const INK_500 = pixiHex(tokens.ink[500]);
+const PAPER_2 = pixiHex(tokens.paper[2]);
+const PAPER_3 = pixiHex(tokens.paper[3]);
+const KILL = pixiHex(tokens.kill);
+
 function bodyOffset(placementIndex: number): { dx: number; dy: number } {
   const angle = (placementIndex * GOLDEN_ANGLE_DEG * Math.PI) / 180;
   return { dx: Math.cos(angle) * RING_RADIUS, dy: Math.sin(angle) * RING_RADIUS };
@@ -47,6 +52,9 @@ export function BodyMarker({
   room,
   placementIndex,
   isDiscovered,
+  victimLabel,
+  killedBy,
+  glyph,
   scale,
   offsetX,
   offsetY,
@@ -56,25 +64,61 @@ export function BodyMarker({
   const offset = bodyOffset(placementIndex);
   const x = centerX + offset.dx;
   const y = centerY + offset.dy;
-  const color = isDiscovered ? DISCOVERED_COLOR : UNDISCOVERED_COLOR;
+  const glyphTint = isDiscovered ? KILL : INK_500;
 
   return (
-    <pixiGraphics
-      draw={(graphics: Graphics) => {
-        graphics.clear();
-        graphics.moveTo(x - ARM, y - ARM);
-        graphics.lineTo(x + ARM, y + ARM);
-        graphics.moveTo(x + ARM, y - ARM);
-        graphics.lineTo(x - ARM, y + ARM);
-        graphics.stroke({ width: STROKE_WIDTH, color });
-        if (isDiscovered) {
-          graphics.circle(x, y, ARM + 4);
-          graphics.stroke({
-            width: DISCOVERED_RING_WIDTH,
-            color: DISCOVERED_RING_COLOR,
-          });
+    <>
+      <pixiGraphics
+        draw={(graphics: Graphics) => {
+          graphics.clear();
+          graphics.circle(x, y, DISC_RADIUS);
+          graphics.fill(isDiscovered ? PAPER_2 : PAPER_3);
+          if (isDiscovered) {
+            graphics.stroke({ width: 2.4, color: KILL });
+            // Outer kill ring marks a freshly reported body.
+            graphics.circle(x, y, DISC_RADIUS + 4);
+            graphics.stroke({ width: 1.6, color: KILL, alpha: 0.7 });
+          } else {
+            // Ghosted: a dotted ink-700 outline (present but not yet found).
+            for (let a = 0; a < Math.PI * 2; a += Math.PI / 9) {
+              graphics.moveTo(x + Math.cos(a) * DISC_RADIUS, y + Math.sin(a) * DISC_RADIUS);
+              graphics.lineTo(
+                x + Math.cos(a + Math.PI / 18) * DISC_RADIUS,
+                y + Math.sin(a + Math.PI / 18) * DISC_RADIUS,
+              );
+            }
+            graphics.stroke({ width: 2, color: INK_700, alpha: 0.8 });
+          }
+        }}
+      />
+      <pixiGraphics
+        draw={(g: Graphics) =>
+          paintGlyph(g, glyph, x, y, GLYPH_SIZE, glyphTint, isDiscovered ? 1 : 0.75)
         }
-      }}
-    />
+      />
+      <pixiText
+        text={victimLabel}
+        anchor={0.5}
+        x={x}
+        y={y + DISC_RADIUS + 9}
+        style={{
+          fill: isDiscovered ? KILL : INK_500,
+          fontSize: 9,
+          fontFamily: tokens.type.mono,
+          fontWeight: "700",
+        }}
+      />
+      {killedBy !== null && (
+        // Spectator-only kill attribution (dagger + killer id), persists with the
+        // body after the kill event scrolls off the current tick.
+        <pixiText
+          text={`† ${killedBy}`}
+          anchor={0.5}
+          x={x}
+          y={y + DISC_RADIUS + 20}
+          style={{ fill: INK_500, fontSize: 8, fontFamily: tokens.type.mono }}
+        />
+      )}
+    </>
   );
 }
