@@ -4,10 +4,25 @@
 // (4.4, 4.4.5, 4.5, 4.6, 4.7, 4.8). Task 6.7 additively extends it with a lazy
 // meeting cache to window the bulk payload (DESIGN.md §11.4); existing consumers
 // are unaffected because none read the new field.
+//
+// Task 12.4 (design/phase-12/stage-1-design.md §4, §2.3) additively extends it
+// again with the playback/shell backbone: the top-level `view`, the URL-synced
+// `seedSet` / `perspective` / `beliefView`, the shared `hoverTick` crosshair, and
+// `autoFollow`. `currentTick` stays the ARRAY INDEX into `currentReplay.ticks`
+// (the frozen contract every existing consumer reads); the index↔engine-tick
+// mapping lives once in `lib/playback.ts` and the `usePlayback` hook, so no
+// existing consumer changes. The store keeps its async-ordering guards + payload
+// windowing intact.
 
 import { create } from "zustand";
 
 import * as api from "../api/client";
+import type {
+  BeliefViewMode,
+  Perspective,
+  ViewId,
+} from "../lib/playback";
+import { OMNISCIENT } from "../lib/playback";
 import type {
   AgentMemoryView,
   MeetingView,
@@ -45,6 +60,34 @@ export interface ReplayStoreState {
   // LLM prompt/response bodies stripped from the bulk payload — fetched lazily
   // on demand (e.g. when an LLMCallCard is expanded), keyed by meeting id.
   meetingCache: Record<string, MeetingView>;
+
+  // ── Task 12.4: playback / shell backbone (DESIGN.md §4, §2.3) ──────────────
+
+  // Top-level view container (URL-synced; no router). Selecting a replay opens
+  // the workspace; replays/highlights/tournament are the other top-level routes.
+  view: ViewId;
+
+  // The served replay set id, carried only so the URL round-trips it (there is
+  // no set-switcher yet; consumed by a later browser slice). `null` = unknown.
+  seedSet: string | null;
+
+  // Map perspective overlay (Omniscient ↔ As-agent fog). Consumed by 12.5; added
+  // now so the URL + store contract is stable for the parallel chrome PRs. Never
+  // encodes role/guilt — it is a view selector, not identity.
+  perspective: Perspective;
+
+  // Belief-panel data toggle (Belief / Ground-Truth / Error). Consumed by 12.6.
+  beliefView: BeliefViewMode;
+
+  // Shared crosshair: the ENGINE TICK under the cursor on the advantage graph /
+  // event timeline, or `null` when not hovering. Ephemeral; drives the synced
+  // crosshair across those two surfaces (DESIGN.md §4).
+  hoverTick: number | null;
+
+  // Auto-follow: while playing, follow the action (select the meeting when a
+  // meeting tick is reached). Interruptible — a user override is respected (see
+  // `usePlaybackEngine`). Exposed as a transport toggle.
+  autoFollow: boolean;
 }
 
 export interface ReplayStoreActions {
@@ -58,6 +101,14 @@ export interface ReplayStoreActions {
   fetchMemoryView(meetingId: string, agentId: string): Promise<void>;
   fetchMeeting(meetingId: string): Promise<void>;
   clearError(): void;
+
+  // ── Task 12.4 actions ─────────────────────────────────────────────────────
+  setView(view: ViewId): void;
+  setSeedSet(seedSet: string | null): void;
+  setPerspective(perspective: Perspective): void;
+  setBeliefView(beliefView: BeliefViewMode): void;
+  setHoverTick(tick: number | null): void;
+  setAutoFollow(autoFollow: boolean): void;
 }
 
 function errorMessage(error: unknown): string {
@@ -115,6 +166,12 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       selectedAgentId: null,
       memoryCache: {},
       meetingCache: {},
+      view: "replays",
+      seedSet: null,
+      perspective: OMNISCIENT,
+      beliefView: "belief",
+      hoverTick: null,
+      autoFollow: true,
 
       async loadReplayList() {
         const requestToken = ++latestReplayListRequest;
@@ -139,6 +196,12 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           if (requestToken !== latestReplayRequest) {
             return;
           }
+          // Selecting a replay opens the workspace (DESIGN.md §2.1). Reset the
+          // replay-scoped overlays: perspective returns to Omniscient (a fresh
+          // game has different agents) and the crosshair clears. `beliefView`,
+          // `seedSet`, and `autoFollow` persist across replays (view modes, not
+          // replay-scoped). The URL-hydration path re-applies any shared moment
+          // AFTER this reset (see usePlaybackEngine), so a deep link still lands.
           set({
             currentReplay: windowReplay(replay),
             currentReplayError: null,
@@ -148,13 +211,17 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             selectedAgentId: null,
             memoryCache: {},
             meetingCache: {},
+            view: "workspace",
+            perspective: OMNISCIENT,
+            hoverTick: null,
           });
         } catch (error) {
           if (requestToken !== latestReplayRequest) {
             return;
           }
           // Reset all replay-scoped state too, so a failed selection can't
-          // leave stale playback/selection context alongside a null replay.
+          // leave stale playback/selection context alongside a null replay; drop
+          // back to the browser so the picker + error are visible.
           set({
             currentReplay: null,
             currentReplayError: errorMessage(error),
@@ -164,6 +231,9 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             selectedAgentId: null,
             memoryCache: {},
             meetingCache: {},
+            view: "replays",
+            perspective: OMNISCIENT,
+            hoverTick: null,
           });
         }
       },
@@ -250,6 +320,30 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       clearError() {
         set({ replayListError: null, currentReplayError: null });
+      },
+
+      setView(view) {
+        set({ view });
+      },
+
+      setSeedSet(seedSet) {
+        set({ seedSet });
+      },
+
+      setPerspective(perspective) {
+        set({ perspective });
+      },
+
+      setBeliefView(beliefView) {
+        set({ beliefView });
+      },
+
+      setHoverTick(tick) {
+        set({ hoverTick: tick });
+      },
+
+      setAutoFollow(autoFollow) {
+        set({ autoFollow });
       },
     };
   },
