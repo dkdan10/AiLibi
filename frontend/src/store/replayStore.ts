@@ -32,6 +32,21 @@ import type {
 
 export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
 
+// Task 12.7: the claim↔map cross-highlight. A meeting TurnCard sets this on hover
+// of a sighting ("saw p-5 in Reactor"); `MapView` reads it to light the claim's
+// PUBLIC referent — the NAMED room + agent, which the transcript already states
+// in the clear, so it is safe in any perspective. The highlight is strictly
+// additive: the map lights this room ONLY when the current perspective already
+// shows it (Omniscient, or lit under the selected agent's fog), so a hover never
+// reveals a position the As-agent fog has hidden (the firewall / leak class).
+export interface HighlightedSighting {
+  // The agent named as seen ("saw <agentId> …"); matches `PlayerView.agent_id`.
+  agentId: string;
+  // The room named in the sighting; matches `RoomView.id` (the engine room id the
+  // loader carries verbatim into `SawPlayerView.room`).
+  roomId: string;
+}
+
 export interface ReplayStoreState {
   // Available replays (loaded once via /replays on app mount).
   replayList: ReplayMetadataView[] | null;
@@ -88,6 +103,11 @@ export interface ReplayStoreState {
   // meeting tick is reached). Interruptible — a user override is respected (see
   // `usePlaybackEngine`). Exposed as a transport toggle.
   autoFollow: boolean;
+
+  // ── Task 12.7: meeting ↔ map cross-highlight (DESIGN.md §3.4, slice 5) ──────
+  // The sighting under the cursor in the open meeting transcript, or `null`.
+  // Ephemeral hover state (like `hoverTick`); drives the additive map highlight.
+  highlightedSighting: HighlightedSighting | null;
 }
 
 export interface ReplayStoreActions {
@@ -109,6 +129,9 @@ export interface ReplayStoreActions {
   setBeliefView(beliefView: BeliefViewMode): void;
   setHoverTick(tick: number | null): void;
   setAutoFollow(autoFollow: boolean): void;
+
+  // ── Task 12.7 action ───────────────────────────────────────────────────────
+  setHighlightedSighting(sighting: HighlightedSighting | null): void;
 }
 
 function errorMessage(error: unknown): string {
@@ -172,6 +195,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       beliefView: "belief",
       hoverTick: null,
       autoFollow: true,
+      highlightedSighting: null,
 
       async loadReplayList() {
         const requestToken = ++latestReplayListRequest;
@@ -214,6 +238,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             view: "workspace",
             perspective: OMNISCIENT,
             hoverTick: null,
+            highlightedSighting: null,
           });
         } catch (error) {
           if (requestToken !== latestReplayRequest) {
@@ -234,6 +259,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             view: "replays",
             perspective: OMNISCIENT,
             hoverTick: null,
+            highlightedSighting: null,
           });
         }
       },
@@ -344,6 +370,10 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       setAutoFollow(autoFollow) {
         set({ autoFollow });
+      },
+
+      setHighlightedSighting(sighting) {
+        set({ highlightedSighting: sighting });
       },
     };
   },

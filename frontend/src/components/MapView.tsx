@@ -368,6 +368,46 @@ function VentTraveler({
   );
 }
 
+// ── sighting highlight: an additive "look here" ring around the room a meeting
+// sighting NAMES (Task 12.7). Strictly additive — it only emphasises a room the
+// current perspective ALREADY renders (the caller passes a room only when it is
+// Omniscient-visible or lit under the selected agent's fog), so it never reveals
+// a fogged position. The ring is role-NEUTRAL (ink outline + a soft paper glow,
+// no reserved hue) so it cannot be read as identity / suspicion / trust. Static
+// (no pulse) — a focus cue, not a drama beat — so it needs no reduced-motion path.
+function SightingHighlight({
+  room,
+  scale,
+  offsetX,
+  offsetY,
+}: {
+  room: RoomView;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}) {
+  const x = offsetX + room.position.x * scale;
+  const y = offsetY + room.position.y * scale;
+  const w = room.size.width * scale;
+  const h = room.size.height * scale;
+  const ink = pixiHex(tokens.ink[900]);
+  const glow = pixiHex(tokens.paper[0]);
+  return (
+    <pixiGraphics
+      draw={(g: Graphics) => {
+        g.clear();
+        // Soft brighten over the named room (focus, channel-safe).
+        g.roundRect(x, y, w, h, tokens.radius.lg);
+        g.fill({ color: glow, alpha: 0.28 });
+        // A bold ink ring just outside the room outline so it pops against the
+        // existing 2.4px sticker stroke without recolouring it.
+        g.roundRect(x - 5, y - 5, w + 10, h + 10, tokens.radius.xl);
+        g.stroke({ width: 4, color: ink, alpha: 0.95 });
+      }}
+    />
+  );
+}
+
 // ── one kill flash: a pulsing kill ring around the kill room (Omniscient) ──
 function KillFlash({
   room,
@@ -424,6 +464,7 @@ export function MapView() {
   const currentReplay = useReplayStore((s) => s.currentReplay);
   const currentTick = useReplayStore((s) => s.currentTick);
   const perspective = useReplayStore((s) => s.perspective);
+  const highlightedSighting = useReplayStore((s) => s.highlightedSighting);
   const { tickNumber } = usePlayback();
   useFontNudge();
 
@@ -511,6 +552,18 @@ export function MapView() {
   }
   const agentAware =
     visibility !== null && visibility.audible_events.some((e) => e.kind === "sabotage_alarm");
+
+  // ── Task 12.7 cross-highlight: light the room a meeting sighting NAMES, but
+  // ONLY when this perspective already renders it (Omniscient, or lit under the
+  // selected agent's fog). Gating on `litRoomIds` keeps the highlight from
+  // revealing a position the As-agent fog has hidden — a hover must never become
+  // a leak. Purely additive: it reads the store and adds a ring; the fog / token
+  // / body logic above is untouched.
+  const highlightRoom =
+    highlightedSighting !== null &&
+    (omniscient || litRoomIds.has(highlightedSighting.roomId))
+      ? (roomsById.get(highlightedSighting.roomId) ?? null)
+      : null;
 
   // Active vent escapes at this engine tick (Omniscient only). The window is
   // INCLUSIVE of the exit tick so the traveller renders the emergence frame
@@ -729,6 +782,14 @@ export function MapView() {
               visible={omniscient || litRoomIds.has(room.id)}
             />
           ))}
+          {highlightRoom !== null && (
+            <SightingHighlight
+              room={highlightRoom}
+              scale={scale}
+              offsetX={offsetX}
+              offsetY={offsetY}
+            />
+          )}
           {bodyMarkers}
           {tokens_}
           {ventTravelers}
