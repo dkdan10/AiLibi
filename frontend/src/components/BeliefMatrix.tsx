@@ -100,9 +100,15 @@ export function BeliefMatrix() {
     return null;
   }
 
-  const omniscient = perspective.mode === "omniscient";
-  // Roster order matches the loader's `sorted(...)` so the matrix axes are stable.
-  const players = [...replay.players].sort((a, b) => a.agent_id.localeCompare(b.agent_id));
+  // Firewall: the Belief × Truth matrix is an OMNISCIENT cross-agent overview — it
+  // aggregates EVERY observer's private belief state. Showing it in As-agent fog
+  // would leak suspicions the chosen agent never had, so the whole hero (launcher
+  // included) is hidden in fog; the per-agent belief view belongs to the mind
+  // inspector. (Hooks above always run; this gate is after them.)
+  if (perspective.mode === "agent") {
+    return null;
+  }
+
   const meetingCount = replay.metadata.meeting_count;
 
   if (!open) {
@@ -125,6 +131,23 @@ export function BeliefMatrix() {
     );
   }
 
+  // Roster order matches the loader's `sorted(...)` so the matrix axes are stable.
+  const players = [...replay.players].sort((a, b) => a.agent_id.localeCompare(b.agent_id));
+
+  // Per-meeting liveness from the replay tick state — the /beliefs DTO snapshots
+  // dead players as observers too, so the panel can't infer liveness from rows
+  // (Codex review). For each frame's meeting tick, the agents alive at that tick;
+  // BeliefPanel freezes anyone absent here.
+  const aliveByMeeting: Record<string, string[]> = {};
+  for (const frame of frames ?? []) {
+    const tickFrame = replay.ticks.find((t) => t.tick === frame.tick);
+    if (tickFrame !== undefined) {
+      aliveByMeeting[frame.meeting_id] = tickFrame.agent_states
+        .filter((s) => s.is_alive)
+        .map((s) => s.agent_id);
+    }
+  }
+
   return (
     <div
       role="dialog"
@@ -142,7 +165,8 @@ export function BeliefMatrix() {
           frames={frames ?? []}
           layer={beliefView}
           onLayerChange={setBeliefView}
-          omniscient={omniscient}
+          omniscient
+          aliveByMeeting={aliveByMeeting}
           loading={frames === null && error === null}
           error={error}
           onClose={() => {

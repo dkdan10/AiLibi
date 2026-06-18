@@ -93,15 +93,19 @@ function MatrixRow({
   );
 }
 
-// Legacy single-belief bar (MemoryPanel). Restyled onto the amber suspicion ramp
-// + a confidence pill; the subject id stays mono per the data-surface grammar.
+// Legacy single-belief bar (MemoryPanel). MemoryPanel still renders inside the
+// dark ThoughtStream rail (`bg-neutral-900/95`), so the text/track/pill stay on
+// the original light-on-dark neutrals (cream `ink` text would be dark-on-dark and
+// unreadable there) until 12.8 rebuilds the inspector. The ONLY change vs the old
+// bar is the firewall fix: the fill is the amber suspicion ramp, not the old
+// green→red (green/red is reserved away from suspicion).
 function MemoBar({ belief }: { belief: BeliefEntryView }) {
   const suspicion = Math.max(0, Math.min(1, belief.suspicion));
   const pct = Math.round(suspicion * 100);
 
   return (
     <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 truncate font-mono text-xs text-ink-700">
+      <span className="w-16 shrink-0 truncate font-mono text-xs text-neutral-200">
         {belief.subject}
       </span>
       <div
@@ -110,16 +114,16 @@ function MemoBar({ belief }: { belief: BeliefEntryView }) {
         aria-valuemin={0}
         aria-valuemax={1}
         aria-label={`suspicion of ${belief.subject}`}
-        className="h-2 flex-1 overflow-hidden rounded-pill bg-paper-3"
+        className="h-2 flex-1 overflow-hidden rounded-pill bg-neutral-700"
       >
         <div className="h-full rounded-pill" style={{ width: `${pct}%`, background: heatColor(suspicion) }} />
       </div>
-      <span className="w-9 shrink-0 text-right font-mono text-xs text-ink-700">
+      <span className="w-9 shrink-0 text-right font-mono text-xs text-neutral-300">
         {belief.suspicion.toFixed(2)}
       </span>
       <span
         title={`confidence ${belief.confidence.toFixed(2)} · snapshot tick ${belief.snapshot_tick}`}
-        className="shrink-0 rounded-pill bg-paper-2 px-2 py-0.5 font-mono text-[10px] font-semibold text-ink-700"
+        className="shrink-0 rounded-pill bg-neutral-700/70 px-2 py-0.5 font-mono text-[10px] font-semibold text-neutral-300"
       >
         conf {belief.confidence.toFixed(2)}
       </span>

@@ -78,9 +78,12 @@ function beliefAt(m: number, obs: string, subj: string): Belief | null {
   return { suspicion: Math.max(0.02, 0.12 + jitter), confidence: 0.45 + m * 0.08 };
 }
 
-function makeFrame(meetingId: string, tick: number, m: number, present: string[]): BeliefFrameView {
+// Mirror the real /beliefs DTO: EVERY player is an observer at every meeting
+// (dead agents included — their beliefs frozen at death). Liveness/freezing is
+// driven separately by `aliveByMeeting`, not by row presence.
+function makeFrame(meetingId: string, tick: number, m: number): BeliefFrameView {
   const entries: BeliefErrorView[] = [];
-  for (const observer of present) {
+  for (const observer of ALL_IDS) {
     for (const subject of ALL_IDS) {
       const subjImp = IMPOSTORS.has(subject);
       const truth = subjImp ? 1 : 0;
@@ -109,12 +112,20 @@ function makeFrame(meetingId: string, tick: number, m: number, present: string[]
   return { meeting_id: meetingId, tick, entries };
 }
 
-// Three meetings; by the last one p-7 is dead → a frozen row & column.
+// Three meetings; by the last one p-7 is dead → a frozen row & column. The frames
+// still carry p-7 as an observer (as the real DTO does); `ALIVE_BY_MEETING` is
+// what freezes it — mirroring the replay tick state the connected BeliefMatrix
+// derives from `replay.ticks`.
 const FRAMES: BeliefFrameView[] = [
-  makeFrame("m-1", 118, 0, ALL_IDS),
-  makeFrame("m-2", 264, 1, ALL_IDS),
-  makeFrame("m-3", 391, 2, ALL_IDS.filter((id) => id !== "p-7")),
+  makeFrame("m-1", 118, 0),
+  makeFrame("m-2", 264, 1),
+  makeFrame("m-3", 391, 2),
 ];
+const ALIVE_BY_MEETING: Record<string, readonly string[]> = {
+  "m-1": ALL_IDS,
+  "m-2": ALL_IDS,
+  "m-3": ALL_IDS.filter((id) => id !== "p-7"),
+};
 
 // Wrap the controlled panel with local layer state so the toggle works live; in
 // fog the panel forces Belief (Truth/Error disabled), kept coherent here too.
@@ -143,6 +154,7 @@ const meta = {
     frames: FRAMES,
     layer: "belief",
     omniscient: true,
+    aliveByMeeting: ALIVE_BY_MEETING,
     onLayerChange: () => {},
   },
   render: (args) => <Interactive {...args} />,
@@ -162,8 +174,11 @@ export const GroundTruth: Story = { args: { layer: "truth" } };
 // on confidently-wrong cells; aligned cells stay pale.
 export const ErrorLayer: Story = { args: { layer: "error" } };
 
-// As-agent fog: the dagger reveal vanishes and Ground-truth / Error disable, so
-// no role leaks — only the agent-neutral Belief layer remains.
+// As-agent fog. The connected BeliefMatrix HIDES this omniscient cross-agent hero
+// in fog entirely (it would leak every agent's private beliefs — Codex review); this
+// story documents the panel's presentational defense-in-depth: if ever rendered
+// without `omniscient`, the dagger reveal vanishes and Ground-truth / Error
+// disable, leaving only the agent-neutral Belief layer.
 export const Fog: Story = { args: { omniscient: false, layer: "belief" } };
 
 // A zero-meeting game (the default-served 4p1i set is mostly zero-meeting): the

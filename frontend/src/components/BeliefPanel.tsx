@@ -42,6 +42,11 @@ interface BeliefPanelProps {
   layer: BeliefViewMode;
   onLayerChange: (layer: BeliefViewMode) => void;
   omniscient: boolean;
+  // Per-meeting liveness, keyed by meeting_id → alive agent ids, derived from the
+  // replay's tick state (NOT from belief-row presence: the /beliefs DTO snapshots
+  // every player as an observer at every meeting, dead included). Absent ⇒ treat
+  // all as alive (no freezing).
+  aliveByMeeting?: Readonly<Record<string, readonly string[]>>;
   // Overlay chrome (BeliefMatrix passes these; the isolated story omits them).
   loading?: boolean;
   error?: string | null;
@@ -56,6 +61,7 @@ export function BeliefPanel({
   layer,
   onLayerChange,
   omniscient,
+  aliveByMeeting,
   loading = false,
   error = null,
   onClose,
@@ -79,12 +85,20 @@ export function BeliefPanel({
     players.filter((p) => p.role === "IMPOSTOR").map((p) => p.agent_id),
   );
 
-  // Present (living) observers at this meeting = those with a row in the frame.
-  // A player absent here is dead → its whole row AND column freeze.
-  const present = new Set<string>();
+  // Liveness comes from the replay's per-meeting tick state (passed in), NOT from
+  // belief-row presence: the /beliefs DTO snapshots EVERY player as an observer at
+  // every meeting (a dead agent's beliefs are frozen at death), so row presence
+  // can't distinguish alive from dead. Without the tick-derived alive set a dead
+  // player's row/column would render active instead of the frozen state the legend
+  // advertises. Absent liveness ⇒ treat all as alive (degrade to no freezing).
+  const aliveList = activeFrame ? aliveByMeeting?.[activeFrame.meeting_id] : undefined;
+  const aliveSet =
+    aliveList !== undefined ? new Set(aliveList) : new Set(players.map((p) => p.agent_id));
+
+  // Cell VALUES come from the frame entries (living cells); the alive set above
+  // drives the frozen dead row/column.
   const lookup = new Map<string, Map<string, BeliefErrorView>>();
   for (const entry of activeFrame?.entries ?? []) {
-    present.add(entry.observer);
     let row = lookup.get(entry.observer);
     if (row === undefined) {
       row = new Map();
@@ -99,7 +113,7 @@ export function BeliefPanel({
     const subjImp = impostorIds.has(sId);
     const truth = subjImp ? 1 : 0;
     const base = { observer: oId, subject: sId, subjectIsImpostor: subjImp };
-    if (!present.has(oId) || !present.has(sId)) {
+    if (!aliveSet.has(oId) || !aliveSet.has(sId)) {
       return { ...base, kind: "dead", suspicion: 0.5, confidence: 0, error: 0.5 - truth };
     }
     if (oId === sId) {
@@ -168,7 +182,7 @@ export function BeliefPanel({
               <Matrix
                 players={players}
                 impostorIds={impostorIds}
-                present={present}
+                aliveSet={aliveSet}
                 layer={effectiveLayer}
                 omniscient={omniscient}
                 modelFor={modelFor}
@@ -364,7 +378,7 @@ function StepControl({
 function Matrix({
   players,
   impostorIds,
-  present,
+  aliveSet,
   layer,
   omniscient,
   modelFor,
@@ -373,7 +387,7 @@ function Matrix({
 }: {
   players: PlayerView[];
   impostorIds: Set<string>;
-  present: Set<string>;
+  aliveSet: Set<string>;
   layer: BeliefViewMode;
   omniscient: boolean;
   modelFor: (observer: PlayerView, subject: PlayerView) => BeliefCellModel;
@@ -393,7 +407,7 @@ function Matrix({
           <tr>
             <th style={{ width: ROW_HEADER_W, height: COL_HEADER_H }} className="bg-paper-0" />
             {players.map((subject) => {
-              const dead = !present.has(subject.agent_id);
+              const dead = !aliveSet.has(subject.agent_id);
               const isImp = showDaggers && impostorIds.has(subject.agent_id);
               return (
                 <th
@@ -421,7 +435,7 @@ function Matrix({
             <BeliefRow
               key={observer.agent_id}
               observer={observer}
-              rowDead={!present.has(observer.agent_id)}
+              rowDead={!aliveSet.has(observer.agent_id)}
               cells={players.map((subject) => ({ subject, model: modelFor(observer, subject) }))}
               layer={layer}
               omniscient={omniscient}
