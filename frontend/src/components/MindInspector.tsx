@@ -27,7 +27,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { useReplayStore } from "../store/replayStore";
-import { OMNISCIENT, type Perspective } from "../lib/playback";
+import type { Perspective } from "../lib/playback";
 import { tokens, suspicionBucketOf, type SuspicionBucket } from "../tokens";
 import type {
   AgentMemoryView,
@@ -517,129 +517,113 @@ function InspectedAgent({
         </button>
       </header>
 
-      {/* FIREWALL (the single checkpoint). EVERYTHING below the header is the
-          selected agent's PRIVATE mind — beliefs / reasoning, the verbatim LLM
-          prompt + response (which embed its rendered memory and role block), the
-          episodic memory + task counts, and its flags. None of it is knowable
-          through a DIFFERENT agent's fog, so the whole body is revealed only in
-          Omniscient OR when the lens IS this agent (self). Otherwise we show a
-          notice pointing at "Show what they saw" — the firewall-safe way in. */}
-      {revealSecrets ? (
-        <>
-          <div
-            role="tablist"
-            aria-label="Mind inspector tabs"
-            className="flex flex-wrap gap-1"
-          >
-            {TABS.map(({ id, label }) => {
-              const active = id === tab;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => {
-                    onTab(id);
-                  }}
-                  className={
-                    "rounded-md border-2 px-2.5 py-1 text-xs font-semibold transition-colors " +
-                    (active
-                      ? "border-ink-900 bg-ink-900 text-paper-0"
-                      : "border-ink-300 bg-paper-1 text-ink-700 hover:border-ink-900")
-                  }
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+      {/* FIREWALL — PER-FIELD, not whole-body (the inspector and the map lens are
+          separate controls; a spectator may inspect one agent's mind while the map
+          stays fogged to another for comparison). The task contract gates only the
+          ground-truth tells that leak alignment/secrets through a DIFFERENT agent's
+          fog: the role chip + dead chip (header), the impostor extras + the task
+          tally (Memory), and the VERBATIM prompt / response / raw rendered-memory
+          (which embed the `Your role` block + the impostor self-channel). The
+          PUBLIC / non-role-revealing tabs stay inspectable: Belief (suspicion +
+          the reasoning trail, both derived from meeting speech everyone heard),
+          the episodic observation feed, and Flags. */}
+      <div
+        role="tablist"
+        aria-label="Mind inspector tabs"
+        className="flex flex-wrap gap-1"
+      >
+        {TABS.map(({ id, label }) => {
+          const active = id === tab;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => {
+                onTab(id);
+              }}
+              className={
+                "rounded-md border-2 px-2.5 py-1 text-xs font-semibold transition-colors " +
+                (active
+                  ? "border-ink-900 bg-ink-900 text-paper-0"
+                  : "border-ink-300 bg-paper-1 text-ink-700 hover:border-ink-900")
+              }
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
 
-          <div className="min-h-[6rem]">
-            {tab === "belief" && (
-              <MemoryGate memory={memory} memoryError={memoryError}>
-                {(m) => <BeliefTab memory={m} trail={trail} />}
-              </MemoryGate>
-            )}
+      <div className="min-h-[6rem]">
+        {tab === "belief" && (
+          <MemoryGate memory={memory} memoryError={memoryError}>
+            {(m) => <BeliefTab memory={m} trail={trail} />}
+          </MemoryGate>
+        )}
 
-            {tab === "prompt" && (
-              <LLMCallList
-                calls={calls}
-                hasUnattributed={hasUnattributed}
-                field="prompt"
+        {tab === "prompt" &&
+          (revealSecrets ? (
+            <LLMCallList
+              calls={calls}
+              hasUnattributed={hasUnattributed}
+              field="prompt"
+            />
+          ) : (
+            <RedactedVerbatim field="prompt" />
+          ))}
+
+        {tab === "response" &&
+          (revealSecrets ? (
+            <LLMCallList
+              calls={calls}
+              hasUnattributed={hasUnattributed}
+              field="response"
+            />
+          ) : (
+            <RedactedVerbatim field="response" />
+          ))}
+
+        {tab === "memory" && (
+          <MemoryGate memory={memory} memoryError={memoryError}>
+            {(m) => (
+              <MemoryPanel
+                memory={m}
+                revealSecrets={revealSecrets}
+                isImpostor={isImpostor}
+                ownKills={ownKills}
+                coverTasks={coverTasks}
+                fellowImpostors={fellowImpostors}
               />
             )}
+          </MemoryGate>
+        )}
 
-            {tab === "response" && (
-              <LLMCallList
-                calls={calls}
-                hasUnattributed={hasUnattributed}
-                field="response"
-              />
-            )}
-
-            {tab === "memory" && (
-              <MemoryGate memory={memory} memoryError={memoryError}>
-                {(m) => (
-                  <MemoryPanel
-                    memory={m}
-                    revealSecrets={revealSecrets}
-                    isImpostor={isImpostor}
-                    ownKills={ownKills}
-                    coverTasks={coverTasks}
-                    fellowImpostors={fellowImpostors}
-                  />
-                )}
-              </MemoryGate>
-            )}
-
-            {tab === "flags" && (
-              <MemoryGate memory={memory} memoryError={memoryError}>
-                {(m) => <FlagsTab memory={m} />}
-              </MemoryGate>
-            )}
-          </div>
-        </>
-      ) : (
-        <FoggedNotice
-          name={inspected.display_name}
-          onShowWhatTheySaw={() => {
-            onShowWhatTheySaw(agentId);
-          }}
-        />
-      )}
+        {tab === "flags" && (
+          <MemoryGate memory={memory} memoryError={memoryError}>
+            {(m) => <FlagsTab memory={m} />}
+          </MemoryGate>
+        )}
+      </div>
     </div>
   );
 }
 
-// Shown when the inspected agent is viewed through a DIFFERENT agent's fog — its
-// private mind is firewalled off; the CTA flips the lens to this agent (self),
-// the firewall-safe way to read it (or the spectator can switch to Omniscient).
-function FoggedNotice({
-  name,
-  onShowWhatTheySaw,
-}: {
-  name: string;
-  onShowWhatTheySaw: () => void;
-}) {
+// Shown in place of the VERBATIM prompt / response when the inspected agent is
+// viewed through a DIFFERENT agent's fog. The raw LLM I/O carries the agent's
+// `Your role` memory block + (for an impostor) the fellow-impostor / own-kill
+// self-channel, so it rides the same Omniscient-or-self gate as the other tells.
+function RedactedVerbatim({ field }: { field: "prompt" | "response" }) {
   return (
-    <div
-      className="rounded-md border-2 border-dashed border-ink-300 px-3 py-4 text-sm text-ink-500"
+    <p
+      className="rounded-md border-2 border-dashed border-ink-300 px-3 py-3 text-xs text-ink-500"
       style={{ background: tokens.paper[2] }}
     >
-      <p className="mb-2">
-        {name}'s belief, prompt, response, memory, and flags are hidden through
-        another agent's fog — none of it is knowable from outside this agent's own
-        view. Switch to Omniscient, or view it through {name}'s own lens:
-      </p>
-      <button
-        type="button"
-        onClick={onShowWhatTheySaw}
-        className="rounded-md border-2 border-ink-900 bg-paper-0 px-2.5 py-1 text-xs font-medium text-ink-900 hover:bg-paper-2"
-      >
-        Show what they saw
-      </button>
-    </div>
+      The raw {field} is hidden through another agent's fog — it embeds this
+      agent's role and private rendered memory. Switch to Omniscient, or view this
+      agent through its own lens (“Show what they saw”), to read it verbatim.
+    </p>
   );
 }
 
@@ -708,9 +692,9 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
 
   const [tab, setTab] = useState<MindTab>("belief");
 
-  // FIREWALL gate (mirrors the panel): the private mind is revealable only in
-  // Omniscient OR when the lens IS the inspected agent. Gating the fetches on it
-  // too means we never pull another agent's private memory / bodies under fog.
+  // FIREWALL gate (mirrors the panel): the ground-truth tells + verbatim prompt
+  // memory are revealable only in Omniscient OR when the lens IS the inspected
+  // agent. Used here to gate the BODIES fetch (the verbatim text rides the gate).
   const revealSecrets =
     perspective.mode === "omniscient" ||
     (perspective.mode === "agent" && perspective.agentId === selectedAgentId);
@@ -726,13 +710,15 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
     }
   }, [bodiesNeeded, meetingId, fetchMeeting]);
 
-  // Hydrate the selected agent's meeting-boundary memory snapshot — only when it
-  // is revealable (we never show another agent's private memory through fog).
+  // Hydrate the selected agent's meeting-boundary memory snapshot whenever an
+  // agent is picked — the Belief / observation / Flags tabs render through fog
+  // too (they don't reveal the observer's own role), so memory is always needed.
+  // The memory snapshot is small; only the per-meeting LLM BODIES are windowed.
   useEffect(() => {
-    if (selectedAgentId !== null && revealSecrets) {
+    if (selectedAgentId !== null) {
       void fetchMemoryView(meetingId, selectedAgentId);
     }
-  }, [meetingId, selectedAgentId, revealSecrets, fetchMemoryView]);
+  }, [meetingId, selectedAgentId, fetchMemoryView]);
 
   if (replay === null) {
     return null;
@@ -769,13 +755,14 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
       : (frame?.agent_states.find((s) => s.agent_id === selectedAgentId)?.is_alive ??
         true);
 
-  // "Show what they saw": flip the map fog to this agent (or back to Omniscient
-  // when it is already their lens). selectAgent keeps the inspector + fog in sync.
+  // "Show what they saw" — the task contract's control: `selectAgent(agent)` +
+  // `setPerspective(agent)`. IDEMPOTENT — it always SETS this agent's lens (never
+  // toggles back to Omniscient), so re-clicking it in the already-self state is a
+  // no-op, matching its label. Exiting fog is the perspective banner / map
+  // toolbar's job, not this button's.
   const onShowWhatTheySaw = (agentId: string): void => {
     selectAgent(agentId);
-    const alreadySelf =
-      perspective.mode === "agent" && perspective.agentId === agentId;
-    setPerspective(alreadySelf ? OMNISCIENT : { mode: "agent", agentId });
+    setPerspective({ mode: "agent", agentId });
   };
 
   return (

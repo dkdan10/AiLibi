@@ -4,17 +4,19 @@
 // surface as the discriminated `ObservationClaimView`), the task tally, and the
 // raw rendered memory text the LLM was handed (mono, collapsible).
 //
-// Firewall (gated by the connected inspector, passed as `revealSecrets`). The
-// impostor extras — fellow impostors, the `own_kill` lines, and the FABRICATED
-// cover tasks — show only when the secret is revealable (Omniscient OR the lens
-// IS this agent), and are suppressed when inspecting an impostor through a
-// different agent's eyes. Two leak guards beyond the obvious sections:
-//   • the killer's own victim is filtered OUT of the `found_body` feed when the
-//     own-kill line is shown (`render_for_prompt` suppresses that body in favour
-//     of the own-kill self-channel — the UI must not double-render the event);
-//   • the raw `rendered_memory_text` is the verbatim prompt memory and embeds the
-//     impostor role + own-kill lines, so it rides the SAME gate and is redacted
-//     for an impostor seen through another agent's fog.
+// Firewall (PER-FIELD, gated by the connected inspector via `revealSecrets` =
+// Omniscient OR lens-is-this-agent). The ground-truth tells are suppressed when
+// inspecting through a DIFFERENT agent's fog; the episodic observation feed stays
+// visible (it does not reveal the observer's own role). Gated fields:
+//   • the impostor extras — fellow impostors, the `own_kill` lines, and the
+//     FABRICATED cover tasks (the task-contract firewall);
+//   • the task tally — impostors carry 0 assigned tasks, so it leaks alignment;
+//   • the raw `rendered_memory_text` — the verbatim prompt memory carries the
+//     `Your role` block + the own-kill self-channel, so it rides the gate for
+//     EVERY agent, not just impostors.
+// One display-correctness guard: the killer's own victim is filtered OUT of the
+// `found_body` feed when the own-kill line is shown (`render_for_prompt`
+// suppresses that body in favour of the own-kill self-channel — no double-render).
 // Cover tasks are NOT in the episodic feed — episodic memory never mints a
 // `completed_task` for an impostor (`agents/memory/store`); they are the
 // fabricated alibi the impostor states in the meeting, projected from its turn
@@ -112,18 +114,24 @@ export function MemoryPanel({
     // The DTO arrives salience-ordered; show the episodic feed newest-first.
     .sort((a, b) => b.tick - a.tick);
 
-  // The raw prompt memory embeds impostor secrets — redact it under the same gate
-  // (an impostor seen through a different agent's fog) the other extras ride.
-  const rawMemoryRedacted = isImpostor && !revealSecrets;
+  // The raw rendered memory IS the verbatim prompt memory — it carries the
+  // agent's `Your role` block + (for an impostor) the own-kill self-channel — so
+  // it rides the Omniscient-or-self gate for EVERY agent, not just impostors.
+  const rawMemoryRedacted = !revealSecrets;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-ink-700">
-        <span className="font-mono text-ink-500">tasks</span>
-        <span className="font-mono text-ink-900">
-          {memory.tasks_completed} / {memory.tasks_assigned}
-        </span>
-      </div>
+      {/* The task tally encodes alignment (impostors carry 0 assigned tasks,
+          crewmates carry several), so it is a ground-truth tell — shown only when
+          revealable, suppressed through a different agent's fog. */}
+      {revealSecrets && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-ink-700">
+          <span className="font-mono text-ink-500">tasks</span>
+          <span className="font-mono text-ink-900">
+            {memory.tasks_completed} / {memory.tasks_assigned}
+          </span>
+        </div>
+      )}
 
       {showImpostorExtras && fellowImpostors.length > 0 && (
         <section
@@ -225,8 +233,8 @@ export function MemoryPanel({
           style={{ background: tokens.paper[2] }}
         >
           Raw rendered memory is hidden through another agent's fog — it embeds
-          impostor-only fields. Switch to Omniscient, or view this agent through
-          its own lens, to read it.
+          this agent's role and private memory. Switch to Omniscient, or view this
+          agent through its own lens, to read it.
         </p>
       ) : (
         <details className="rounded-md border-2 border-ink-900 bg-paper-0">

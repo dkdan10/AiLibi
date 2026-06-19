@@ -219,10 +219,10 @@ export const ImpostorViewingItself: Story = {
 };
 
 // The leak guard: the same agent inspected through a DIFFERENT agent's fog. The
-// whole private body (belief / prompt / response / memory / flags), the role,
-// AND the alive/dead chip are firewalled off — only identity + a "Show what they
-// saw" CTA remain, since none of this agent's private mind is knowable from
-// outside its own view. (Holds for crewmates too, not just impostors.)
+// tabs stay USABLE (Belief / observations / Flags render — they don't reveal the
+// observer's own role), but the ground-truth tells are gated off: the role + dead
+// chips, the task tally, the impostor extras, and the verbatim prompt / response
+// + raw rendered-memory (which carry the role block) are all suppressed.
 export const ImpostorThroughOtherFog: Story = {
   args: {
     selectedAgentId: "p-5",
