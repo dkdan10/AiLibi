@@ -29,18 +29,17 @@ Claude Design workflow (per `stage-1-design.md` §9.5; division of labor below):
 wholesale replace.** Each chrome task: focused Claude-Design prompt → Share→Handoff to Claude Code → integrate
 (compose from tokens/components, no hardcoded hex) → screenshot-verify isolated + composed → small PR → fresh-context
 review. Logic tasks are hand-coded (the handoff cannot carry data/state/interaction). Claude Design is owner-driven on
-`claude.ai/design`; it is **not** something the build agent invokes. **`/design-sync`** (push our built component
-library UP to Claude Design so it composes with our real components) runs **after 12.1** — once Storybook + the
-component library exist; a pre-12.1 sync was **deferred 2026-06-17** (the current `frontend/` is a `private` app with no
-design system → the converter would fail / import the components we're replacing).
+`claude.ai/design`; it is **not** something the build agent invokes. (`/design-sync` was evaluated and **PARKED 2026-06-18** — it's the wrong
+tool for a bespoke single-surface viewer with ~1 reusable primitive; the per-slice **handoff** above is the path. Full
+verdict in memory / [[project-phase-12-frontend-rework]].)
 
 **Design coverage (what Wave-0's converge already designed vs what still needs Claude Design).** The 0b converge designed
 the *hero replay-view* surfaces — tokens (→ 12.1), the map + perspective switcher + fog (→ 12.5 / 12.3), the 9×9
 Belief/Truth/Error matrix (→ 12.6), and the meeting view (→ 12.7); their rendered targets live in
 `design/phase-12/playful-system/screens/`. The remaining chrome — **12.8 mind inspector · 12.9 replay-browser/highlights
 · 12.10 dashboard** — was deliberately NOT in the converge and each still needs **its own owner-run Claude Design pass at
-its dispatch**, composing with the synced component library (post-12.1 `/design-sync`), per the per-slice prompts in those
-tasks. The workspace shell + transport / advantage graph / event-timeline / roster rail (12.4) and 12.11's first-run
+its dispatch** — a focused prompt → Handoff to Claude Code, grounded on `CLAUDE.md` + `tokens-seed` (NOT a sync), per the
+per-slice prompts in those tasks. The workspace shell + transport / advantage graph / event-timeline / roster rail (12.4) and 12.11's first-run
 overlay are **hand-coded from tokens** — no Claude Design pass.
 
 Sequencing: **Wave 0 (art-direction exploration, owner-run) precedes 12.1** — its chosen direction seeds the tokens.
@@ -625,34 +624,100 @@ There is no converge screen, so verify the chrome against the brief's firewall r
 `App.tsx` (mount discipline).
 **Ready-to-paste prompt:** `agent_prompts/task-12-8-mind-inspector.md`
 
-#### Task 12.9 — Replay browser + Highlights reel
+### Task 12.9 — Replay browser + Highlights reel
 **Branch:** `phase-12-browser-highlights`
 **Depends on:** 12.1, 12.2
-**Complexity:** Integration (chrome)
-**Stage-1 ref:** §3.1, slice 7 — **Claude Design chrome.**
+**Section refs:** design/phase-12/stage-1-design.md §3.1, §2.1, slice 7; the firewall rules in `design/phase-12/claude-design-brief.md`. No converge screen exists for this top-level surface — it needs a NEW Claude-Design pass (a focused prompt → Handoff, grounded on the brief + `tokens-seed`).
+**Complexity:** Integration
+**Files in scope:**
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/HighlightCard.tsx
+- frontend/src/components/ReplayFilters.tsx
+- frontend/src/stories/ReplayBrowser.stories.tsx
+**Files NOT in scope:**
+- frontend/src/App.tsx — the Replays + Highlights routes already mount `<ReplayPicker/>`; rebuild the component, don't edit the shell (Wave-B mount discipline)
+- api/ and the loader — the `/replays` list + `/eval/rubric` (`RubricView` / `RubricGameView`) already ship from 12.2; no DTO change, no re-record
+- the map / belief / meeting / inspector surfaces — other slices
 
-Cards (score badge, win-shape tag, drama line, 4-spoke sub-score mini-bar) + filters (set/winner/win-shape/score/has-ejection);
-Highlights defaults to rubric `interestingness.per_game[]` (9p2i). **First-class empty/zero-meeting states** (4p1i and
-single-meeting games).
-**Claude Design prompt:** "Design the **replay browser + highlights reel**: a HighlightCard (0–100 score badge, win-shape
-tag, drama stats, a 4-spoke mini sub-score bar), a filter bar, and a prominent **empty/zero-meeting state**. States:
-loading / list / empty / error. Presentational only; tokens only."
-**Handoff/verify:** README (card fields, the empty-state requirement, DoD) → Handoff → wire to `/replays` + `/eval/rubric`
-→ verify sorted reel + filters + empty/zero-meeting.
+Rebuild the two top-level views the App.tsx routes mount through `<ReplayPicker/>`: the **Replays browser** and the
+**Highlights reel**. A **HighlightCard** (from `RubricGameView`): a 0–100 **score** badge (decoupled from who won), the
+**win-shape** tag, a **drama** line (n_meetings · accused / ejected impostors · survived-accused), and a 4-spoke mini
+**sub-score** bar (R1 / R2 / R3 / R7). The **Highlights** reel defaults to the rubric's `interestingness` `per_game[]`
+sorted best-first (**9p2i**). A **filter bar** that is **URL-driven** — it reads + syncs the shared query keys `set` · `winner` · `winShape` ·
+`scoreBucket` (low/med/high) · `hasEjection` (the same URLSearchParams pattern as 12.4, so a filtered reel is shareable +
+reload-stable and 12.10's histogram deep-links land on the right filter — 12.10 builds links with exactly these keys).
+**Clicking a card opens that replay** — it sets the 12.4 store's `game_id` (which loads the replay) and switches to the
+Replay Workspace at tick 0. And **first-class
+empty / zero-meeting states** — the default-served **4p1i** set has no rubric and is mostly zero-meeting, so an empty /
+zero-meeting card is the COMMON case there, not an edge: render a real state, never a broken panel. Firewall: identity ≠
+guilt, and outcomes stay role-neutral (the card keys on drama / score, never on who won). Data-bound — wire to `/replays`
+(the list) + `/eval/rubric` (`RubricView`, respecting its staleness guard). The chrome (HighlightCard, filter bar, empty
+state) comes from a NEW Claude-Design pass: *"Design the replay browser + highlights reel: a HighlightCard (0–100 score
+badge, win-shape tag, drama stats, a 4-spoke mini sub-score bar), a filter bar, and a prominent empty / zero-meeting
+state; states loading / list / empty / error; identity ≠ guilt, outcomes role-neutral; presentational only, tokens
+only"* → Share → Handoff to Claude Code → integrate.
+**Definition of done:** the Replays browser + Highlights reel render via the existing `ReplayPicker` slot; HighlightCards
+show score / win-shape / drama / 4-spoke sub-scores from `RubricGameView`; the reel sorts by `interestingness` (9p2i); the
+filter bar is URL-driven over the shared keys `set` / `winner` / `winShape` / `scoreBucket` / `hasEjection` (reads + syncs them — shareable / reload-stable); clicking a card opens that replay (sets the 12.4 store `game_id`, switches to the Workspace at tick 0); a first-class empty / zero-meeting state handles the
+4p1i + single-meeting cases; loading / list / empty / error states render; identity ≠ guilt and outcomes role-neutral; a
+Storybook story covers loading / list / empty / error; `npm run tsc:check` + `npm run build` pass and `scripts/check.sh`
+is green; `App.tsx` is untouched.
+**Implementation hint:**
+rebuild `ReplayPicker` in place; build `HighlightCard` from `RubricGameView` (`score`, `win_shape`, `n_meetings`, the
+four sub-scores). The reel is `RubricView.per_game` (already sorted best-first); the browser list is `/replays`. Respect
+the `RubricView` staleness guard (banner when `git_head` mismatches; never render stale scores as fresh), and build the
+zero-meeting / 4p1i empty state first — do not assume rubric data exists.
+**Integration risk:**
+the 4p1i default set has no rubric and is mostly zero-meeting, so the empty / zero-meeting state is the COMMON path there,
+not an afterthought. Score is decoupled from the winner — never colour a card by who won (outcomes are role-neutral, a
+firewall rule). `RubricView` can be stale (a `git_head` mismatch) — show the staleness banner rather than passing stale
+scores off as fresh. No converge screen — verify the chrome against the brief, not a screenshot. Don't edit `App.tsx`
+(mount discipline).
+**Ready-to-paste prompt:** `agent_prompts/task-12-9-browser-highlights.md`
 
-#### Task 12.10 — Dashboard refresh
+### Task 12.10 — Dashboard refresh
 **Branch:** `phase-12-dashboard`
 **Depends on:** 12.1, 12.2
-**Complexity:** Integration (chrome)
-**Stage-1 ref:** §3.6, slice 8 — **Claude Design chrome.**
+**Section refs:** design/phase-12/stage-1-design.md §3.6, slice 8; the honesty rules ("no false precision") in `design/phase-12/claude-design-brief.md`. No converge screen — a NEW Claude-Design pass (a focused prompt → Handoff, grounded on the brief + `tokens-seed`).
+**Complexity:** Integration
+**Files in scope:**
+- frontend/src/components/TournamentDashboard.tsx
+- frontend/src/components/StatTile.tsx
+- frontend/src/components/CalibrationCurve.tsx
+- frontend/src/components/MetricCaveat.tsx
+- frontend/src/stories/TournamentDashboard.stories.tsx
+**Files NOT in scope:**
+- frontend/src/App.tsx — the Tournament route already mounts `<TournamentDashboard/>`; rebuild the component, don't edit the shell (Wave-B mount discipline)
+- api/ and the loader — `/eval/tournament-report` (typed `conversion` + `gate_metrics`) + `/eval/rubric` already ship from 12.2; no DTO change, no re-record
+- the browser / map / belief / meeting / inspector surfaces — other slices
 
-Keep the metrics; add typed **`conversion` + `gate_metrics`**, **render the honesty caveats** (small-n / low-power /
-populated-bins), and an **interestingness distribution** linking into Highlights.
-**Claude Design prompt:** "Refresh the **tournament dashboard**: StatTiles, a calibration curve, a metric-caveat
-treatment (small-n / low-power badges), and an interestingness histogram. States: loading / loaded / no-report.
-Presentational only; tokens only."
-**Handoff/verify:** README (the caveat treatment, DoD) → Handoff → wire to `/eval/tournament-report` (typed) → verify
-caveats render + histogram links to Highlights.
+Refresh the tournament dashboard the App.tsx Tournament route mounts (`<TournamentDashboard/>`): keep the existing
+metrics; surface the **typed `conversion` + `gate_metrics`** (sent on the wire, typed by 12.2); **render the honesty
+caveats** — small-n / low-power / populated-bins badges (`vote_correctness_small_n`, `contradictions_flagged_but_ignored`,
+…) **attached to the metric each one qualifies** (never a bare metric — that is false precision, a binding honesty rule);
+**StatTiles** + a **calibration curve**; and an **interestingness histogram** (from `RubricView`) whose buckets **deep-link into the Highlights reel** by building a Highlights-view URL with the **shared filter keys 12.9
+reads** — `scoreBucket=<bucket>` (+ the current `set`), never an invented param. Data-bound — wire to `/eval/tournament-report` (typed) + `/eval/rubric`. The
+chrome comes from a NEW Claude-Design pass: *"Refresh the tournament dashboard: StatTiles, a calibration curve, a
+metric-caveat treatment (small-n / low-power badges), and an interestingness histogram; states loading / loaded /
+no-report; presentational only, tokens only"* → Share → Handoff to Claude Code → integrate.
+**Definition of done:** the dashboard renders via the existing `TournamentDashboard` slot; the typed `conversion` +
+`gate_metrics` render; the honesty caveats (small-n / low-power / populated-bins) render as badges attached to the metrics
+they qualify (no bare metric); a calibration curve + StatTiles render; an interestingness histogram links into the
+Highlights reel; loading / loaded / no-report states render; a Storybook story covers them; `npm run tsc:check` +
+`npm run build` pass and `scripts/check.sh` is green; `App.tsx` is untouched.
+**Implementation hint:**
+refresh `TournamentDashboard` in place; wire to `/eval/tournament-report` (the typed `conversion` / `gate_metrics`) +
+`/eval/rubric` (the histogram). Render each caveat badge ATTACHED to the metric it qualifies (the honesty rule — never a
+bare number). The histogram buckets deep-link to the Highlights view by building a URL with the shared filter keys 12.9 reads —
+`scoreBucket=<bucket>` + the current `set` (NOT an invented `?bucket=`); target the route (present since the 12.4 shell)
+so it works even if 12.9 lands second.
+**Integration risk:**
+the honesty caveats are binding — a metric shown without its small-n / low-power caveat is false precision; render them
+attached, not as a footnote. `conversion` / `gate_metrics` are already typed by 12.2 — consume, don't re-type. 12.9 + 12.10
+land in the same batch; the histogram→Highlights deep-link rides the SHARED query keys (`set` / `winner` / `winShape` /
+`scoreBucket` / `hasEjection`) that 12.9 reads — 12.10 must use those exact keys (not invent `?bucket=`) or the filter
+silently no-ops. The link targets the shell ROUTE (present since 12.4), so it degrades gracefully if 12.9 lands second. No converge screen — verify against the brief. Don't edit `App.tsx` (mount discipline).
+**Ready-to-paste prompt:** `agent_prompts/task-12-10-dashboard.md`
 
 ---
 
