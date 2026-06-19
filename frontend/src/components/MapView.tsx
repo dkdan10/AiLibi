@@ -811,7 +811,14 @@ export function MapView() {
     <div className="w-full max-w-[960px]">
       <MapToolbar />
       <div className="overflow-hidden rounded-b-xl rounded-tr-xl border-2 border-ink-900 shadow-chrome-1">
-        <Application width={CANVAS_WIDTH} height={CANVAS_HEIGHT} background={BACKGROUND_COLOR} antialias>
+        <Application
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          background={BACKGROUND_COLOR}
+          antialias
+          resolution={Math.min(window.devicePixelRatio || 1, 2)}
+          autoDensity
+        >
           {corridorLayer}
           {omniscient &&
             ventEdges.map((edge) => (
