@@ -32,9 +32,9 @@ export function MeetingPill() {
           onClick={() => {
             selectMeeting(meeting.meeting_id);
           }}
-          className="rounded-full border border-amber-500 bg-amber-900/40 px-4 py-2 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-800/60"
+          className="rounded-pill border-2 border-ink-900 bg-paper-0 px-4 py-2 font-mono text-sm font-semibold text-ink-900 shadow-chrome-1 transition-colors hover:bg-paper-2"
         >
-          Meeting @ tick {meeting.tick}
+          Meeting · t{meeting.tick}
         </button>
       ))}
     </>

@@ -83,6 +83,15 @@ interface BodySpec {
 }
 
 const NO_BODIES: readonly BodySpec[] = [];
+
+// A meeting sighting's room label is model-authored, so its casing/spacing is not
+// guaranteed canonical (the committed replays carry values like `admin` /
+// `CAFEteria` / `west_hall` alongside `ADMIN`). Normalise both sides to an
+// alphanumeric upper key so the cross-highlight resolves against `RoomView.id`.
+function normalizeRoomKey(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 const prefersReducedMotion =
   typeof window !== "undefined" &&
   typeof window.matchMedia === "function" &&
@@ -368,6 +377,73 @@ function VentTraveler({
   );
 }
 
+// ── sighting highlight: an additive "look here" cue lighting BOTH public
+// referents a meeting sighting NAMES — the room and the agent (Task 12.7).
+// Both are PUBLIC (the transcript names them), so it shows in ANY perspective.
+// The agent is marked AT the named room from the PUBLIC claim — never the agent's
+// live tick position (that would be a ground-truth peek / leak): the badge
+// annotates "the sighting names p-5 here", it does not assert where p-5 is now.
+// It draws no room name and no live occupants, so over a fogged room it reveals
+// nothing the fog hid; the live-position / truth-match overlay stays unbuilt.
+// The ring is role-NEUTRAL (ink outline + a soft paper glow); the agent badge
+// carries the player's identity colour (identity ≠ guilt — public + safe).
+// Static (no pulse) — a focus cue, not a drama beat — so no reduced-motion path.
+function SightingHighlight({
+  room,
+  agentId,
+  agentColor,
+  scale,
+  offsetX,
+  offsetY,
+}: {
+  room: RoomView;
+  agentId: string;
+  agentColor: string | null;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}) {
+  const x = offsetX + room.position.x * scale;
+  const y = offsetY + room.position.y * scale;
+  const w = room.size.width * scale;
+  const h = room.size.height * scale;
+  const ink = pixiHex(tokens.ink[900]);
+  const glow = pixiHex(tokens.paper[0]);
+  const paper = pixiHex(tokens.paper[0]);
+  const disc = agentColor === null ? pixiHex(tokens.ink[400]) : pixiHex(agentColor);
+  // The agent badge sits just above the room ring so it reads as a tag on the
+  // claim, distinct from the live tokens jittered inside the room.
+  const badgeX = x + w / 2;
+  const badgeY = y - 16;
+  return (
+    <>
+      <pixiGraphics
+        draw={(g: Graphics) => {
+          g.clear();
+          // Soft brighten over the named room (focus, channel-safe).
+          g.roundRect(x, y, w, h, tokens.radius.lg);
+          g.fill({ color: glow, alpha: 0.28 });
+          // A bold ink ring just outside the room outline so it pops against the
+          // existing 2.4px sticker stroke without recolouring it.
+          g.roundRect(x - 5, y - 5, w + 10, h + 10, tokens.radius.xl);
+          g.stroke({ width: 4, color: ink, alpha: 0.95 });
+          // The named-agent badge: an identity disc on a cream sticker.
+          g.circle(badgeX, badgeY, 11);
+          g.fill(disc);
+          g.stroke({ width: 2, color: ink });
+        }}
+      />
+      <pixiText
+        text={agentId.replace(/^p-/, "")}
+        anchor={0.5}
+        x={badgeX}
+        y={badgeY}
+        style={{ fill: paper, fontSize: 10, fontFamily: tokens.type.mono, fontWeight: "700" }}
+      />
+    </>
+  );
+}
+
 // ── one kill flash: a pulsing kill ring around the kill room (Omniscient) ──
 function KillFlash({
   room,
@@ -424,6 +500,7 @@ export function MapView() {
   const currentReplay = useReplayStore((s) => s.currentReplay);
   const currentTick = useReplayStore((s) => s.currentTick);
   const perspective = useReplayStore((s) => s.perspective);
+  const highlightedSighting = useReplayStore((s) => s.highlightedSighting);
   const { tickNumber } = usePlayback();
   useFontNudge();
 
@@ -448,6 +525,17 @@ export function MapView() {
     () => new Map((currentReplay?.map.rooms ?? []).map((r) => [r.id, r])),
     [currentReplay],
   );
+  // Normalised lookup (id + name aliases) so a model-authored sighting room label
+  // resolves to the canonical room regardless of casing/spacing. Id is written
+  // last so it wins over a name alias on any collision.
+  const roomsByNormalizedKey = useMemo<ReadonlyMap<string, RoomView>>(() => {
+    const map = new Map<string, RoomView>();
+    for (const room of currentReplay?.map.rooms ?? []) {
+      map.set(normalizeRoomKey(room.name), room);
+      map.set(normalizeRoomKey(room.id), room);
+    }
+    return map;
+  }, [currentReplay]);
   const playerById = useMemo<ReadonlyMap<string, PlayerView>>(
     () => new Map((currentReplay?.players ?? []).map((p) => [p.agent_id, p])),
     [currentReplay],
@@ -511,6 +599,23 @@ export function MapView() {
   }
   const agentAware =
     visibility !== null && visibility.audible_events.some((e) => e.kind === "sabotage_alarm");
+
+  // ── Task 12.7 cross-highlight: light the room + agent a meeting sighting
+  // NAMES. The room + agent are PUBLIC (the transcript states them in the clear),
+  // so the highlight is safe in ANY perspective — it annotates the claim, never a
+  // live/fogged position. We therefore resolve the named room from the canonical
+  // room set in both Omniscient AND As-agent fog (a past-meeting sighting usually
+  // names a room the selected agent can't currently see). What stays
+  // Omniscient-only is the live-position / truth-match overlay — which this does
+  // NOT draw: it never paints the agent's actual current room or whether the
+  // sighting matches ground truth. Purely additive: the fog / token / body logic
+  // above is untouched.
+  const highlightRoom =
+    highlightedSighting === null
+      ? null
+      : (roomsById.get(highlightedSighting.roomId) ??
+        roomsByNormalizedKey.get(normalizeRoomKey(highlightedSighting.roomId)) ??
+        null);
 
   // Active vent escapes at this engine tick (Omniscient only). The window is
   // INCLUSIVE of the exit tick so the traveller renders the emergence frame
@@ -729,6 +834,16 @@ export function MapView() {
               visible={omniscient || litRoomIds.has(room.id)}
             />
           ))}
+          {highlightRoom !== null && highlightedSighting !== null && (
+            <SightingHighlight
+              room={highlightRoom}
+              agentId={highlightedSighting.agentId}
+              agentColor={playerById.get(highlightedSighting.agentId)?.color ?? null}
+              scale={scale}
+              offsetX={offsetX}
+              offsetY={offsetY}
+            />
+          )}
           {bodyMarkers}
           {tokens_}
           {ventTravelers}
