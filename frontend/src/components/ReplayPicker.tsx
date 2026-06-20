@@ -1,75 +1,451 @@
-// Replay list + selection (DESIGN.md §7). Reads the store's `replayList` and
-// renders one button per replay; clicking selects it. The replay list itself is
-// loaded once on mount by App. Loading, empty, and error states all render
-// meaningfully so the spectator can tell whether the API connection works.
+// Replays browser + Highlights reel (Task 12.9; design/phase-12/stage-1-design.md
+// §3.1, §2.1, slice 7; the firewall rules in design/phase-12/claude-design-brief.md).
+//
+// The App.tsx Replays + Highlights routes both mount THIS component (Wave-B mount
+// discipline — App.tsx is untouched); it reads `view` from the store to render the
+// right surface:
+//   • Replays browser  — every recorded replay (`/replays`), enriched with rubric
+//                        data by seed when the set ships one.
+//   • Highlights reel  — the rubric's `interestingness.per_game[]` (already sorted
+//                        best-first), one HighlightCard each.
+//
+// A URL-driven filter bar (the same `URLSearchParams` pattern as 12.4) reads + syncs
+// the shared keys set · winner · winShape · scoreBucket · hasEjection, so a filtered
+// reel is shareable + reload-stable and 12.10's histogram deep-links land on the
+// right filter. Clicking a card sets the 12.4 store's game (loading the replay) and
+// switches to the workspace at tick 0.
+//
+// Firewall: identity ≠ guilt, outcomes role-neutral — the card keys on drama /
+// score, never on who won. The 4p1i default set ships no rubric and is mostly
+// zero-meeting, so the empty / zero-meeting state is a first-class path here.
+//
+// Split for Storybook (cf. MindInspector): the connected `ReplayPicker` owns the
+// store + fetch + URL wiring; the presentational `ReplayBrowserView` renders the
+// loading / list / empty / error states from props and is what the story drives.
 
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
+import { HighlightCard, type HighlightCardData } from "./HighlightCard";
+import {
+  EMPTY_FILTERS,
+  ReplayFilters,
+  type ReplayFilterState,
+  parseFilterParams,
+  scoreBucketOf,
+  writeFilterParams,
+} from "./ReplayFilters";
+
+import { ApiError, getRubric } from "../api/client";
 import { useReplayStore } from "../store/replayStore";
+import type {
+  ReplayMetadataView,
+  RubricGameView,
+  RubricView,
+} from "../types/api";
 
-export function ReplayPicker() {
-  const replayList = useReplayStore((s) => s.replayList);
-  const replayListError = useReplayStore((s) => s.replayListError);
-  const selectReplay = useReplayStore((s) => s.selectReplay);
-  const currentReplay = useReplayStore((s) => s.currentReplay);
-  const currentReplayError = useReplayStore((s) => s.currentReplayError);
+// Debounce the filter → URL write so rapid changes don't thrash history. Both
+// this writer and 12.4's transport writer re-read `location.search` at write time
+// and only touch their own keys, so the merge is order-independent (12.4 preserves
+// these filter keys; see usePlaybackEngine).
+const FILTER_URL_DEBOUNCE_MS = 150;
 
-  const selectedGameId = currentReplay?.metadata.game_id ?? null;
+type BrowserView = "replays" | "highlights";
+type BrowserStatus = "loading" | "error" | "ready";
+
+// ── pure data shaping ────────────────────────────────────────────────────────
+
+/** Whether a card passes the active filters. Rubric-derived filters exclude
+ *  unscored cards (you cannot match a score/shape/ejection a game has no rubric
+ *  for) — which is exactly why the 4p1i set lands in the empty state. */
+function matchesFilters(card: HighlightCardData, f: ReplayFilterState): boolean {
+  if (f.winner !== null && card.winner !== f.winner) {
+    return false;
+  }
+  const rubric = card.rubric;
+  if (f.winShape !== null && rubric?.win_shape !== f.winShape) {
+    return false;
+  }
+  if (
+    f.scoreBucket !== null &&
+    (rubric === null || scoreBucketOf(rubric.score) !== f.scoreBucket)
+  ) {
+    return false;
+  }
+  if (f.hasEjection && (rubric === null || rubric.ejected_impostors <= 0)) {
+    return false;
+  }
+  return true;
+}
+
+function rubricBySeed(rubric: RubricView | null): Map<number, RubricGameView> {
+  const map = new Map<number, RubricGameView>();
+  for (const game of rubric?.per_game ?? []) {
+    map.set(game.seed, game);
+  }
+  return map;
+}
+
+function metaBySeed(
+  list: readonly ReplayMetadataView[] | null,
+): Map<number, ReplayMetadataView> {
+  const map = new Map<number, ReplayMetadataView>();
+  for (const meta of list ?? []) {
+    map.set(meta.seed, meta);
+  }
+  return map;
+}
+
+/** Build the ordered card list for a view. Highlights = rubric order (best-first,
+ *  already sorted by the scorer); Replays = the loader's replay list, rubric-
+ *  enriched by seed. */
+function buildCards(
+  view: BrowserView,
+  rubric: RubricView | null,
+  replayList: readonly ReplayMetadataView[] | null,
+): HighlightCardData[] {
+  if (view === "highlights") {
+    const metas = metaBySeed(replayList);
+    return (rubric?.per_game ?? []).map((game) => {
+      const meta = metas.get(game.seed);
+      return {
+        key: `h-${game.seed}`,
+        gameId: meta?.game_id ?? `headless-seed-${game.seed}`,
+        seed: game.seed,
+        winner: meta?.winner ?? null,
+        totalTicks: meta?.total_ticks ?? null,
+        rubric: game,
+      };
+    });
+  }
+  const rubrics = rubricBySeed(rubric);
+  return (replayList ?? []).map((meta) => ({
+    key: `r-${meta.game_id}`,
+    gameId: meta.game_id,
+    seed: meta.seed,
+    winner: meta.winner,
+    totalTicks: meta.total_ticks,
+    rubric: rubrics.get(meta.seed) ?? null,
+  }));
+}
+
+function winShapeOptionsOf(rubric: RubricView | null): string[] {
+  const shapes = new Set<string>();
+  for (const game of rubric?.per_game ?? []) {
+    shapes.add(game.win_shape);
+  }
+  return [...shapes].sort();
+}
+
+// ── presentational view (storied) ────────────────────────────────────────────
+
+export interface ReplayBrowserViewProps {
+  view: BrowserView;
+  status: BrowserStatus;
+  error: string | null;
+  /** Filtered + ordered cards (the connected component does the filtering). */
+  cards: readonly HighlightCardData[];
+  /** Card count BEFORE filtering — distinguishes "no data" from "no matches". */
+  totalCount: number;
+  filters: ReplayFilterState;
+  onFiltersChange: (next: ReplayFilterState) => void;
+  winShapeOptions: readonly string[];
+  set: string | null;
+  /** Rubric staleness (git_head ≠ the set's recorded sha) → honesty banner. */
+  stale: boolean;
+  /** Highlights view, but the served set ships no rubric (the 4p1i case). */
+  rubricMissing: boolean;
+  onOpen: (gameId: string) => void;
+  onBrowseReplays: () => void;
+}
+
+function Banner({ tone, children }: { tone: "warn" | "info"; children: ReactNode }) {
+  const glyph = tone === "warn" ? "⚠" : "ℹ";
+  return (
+    <div className="flex items-start gap-2 rounded-md border-2 border-ink-900 bg-paper-2 px-3 py-2 font-mono text-xs text-ink-900">
+      <span aria-hidden className="font-semibold">
+        {glyph}
+      </span>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-ink-300 bg-paper-1 px-6 py-12 text-center">
+      <p className="font-display text-lg text-ink-900">{title}</p>
+      <p className="max-w-md font-mono text-xs text-ink-500">{body}</p>
+      {action}
+    </div>
+  );
+}
+
+export function ReplayBrowserView({
+  view,
+  status,
+  error,
+  cards,
+  totalCount,
+  filters,
+  onFiltersChange,
+  winShapeOptions,
+  set,
+  stale,
+  rubricMissing,
+  onOpen,
+  onBrowseReplays,
+}: ReplayBrowserViewProps) {
+  const isHighlights = view === "highlights";
 
   let body: ReactNode;
-  if (replayListError !== null) {
+  if (status === "loading") {
     body = (
-      <p className="rounded border border-red-700 bg-red-950 px-4 py-2 text-red-200">
-        Failed to load replays: {replayListError}
+      <p className="font-mono text-sm text-ink-500">
+        {isHighlights ? "Loading highlights…" : "Loading replays…"}
       </p>
     );
-  } else if (replayList === null) {
-    body = <p className="text-slate-400">Loading replays…</p>;
-  } else if (replayList.length === 0) {
+  } else if (status === "error") {
     body = (
-      <p className="text-slate-400">
-        No replays found in the configured replay directory.
-      </p>
+      <Banner tone="warn">
+        Failed to load {isHighlights ? "the rubric" : "replays"}:{" "}
+        {error ?? "unknown error"}
+      </Banner>
     );
+  } else if (isHighlights && rubricMissing) {
+    body = (
+      <EmptyState
+        title="No interestingness rubric for this set"
+        body={`The served set${set !== null ? ` (${set})` : ""} ships no rubric — expected for the default 4p1i set, which is mostly zero-meeting. A scored set (9p2i) populates the reel.`}
+        action={
+          <button
+            type="button"
+            onClick={onBrowseReplays}
+            className="mt-1 rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1.5 font-mono text-xs font-medium text-ink-900 hover:bg-paper-2"
+          >
+            Browse all replays
+          </button>
+        }
+      />
+    );
+  } else if (cards.length === 0) {
+    body =
+      totalCount === 0 ? (
+        <EmptyState
+          title={isHighlights ? "No scored games" : "No replays found"}
+          body={
+            isHighlights
+              ? "The rubric carries no per-game scores."
+              : "No replays in the configured replay directory."
+          }
+        />
+      ) : (
+        <EmptyState
+          title="No games match these filters"
+          body="Adjust or clear the filters to see more games."
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                onFiltersChange(EMPTY_FILTERS);
+              }}
+              className="mt-1 rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1.5 font-mono text-xs font-medium text-ink-900 hover:bg-paper-2"
+            >
+              Clear filters
+            </button>
+          }
+        />
+      );
   } else {
     body = (
-      <ul className="flex flex-wrap gap-2">
-        {replayList.map((replay) => {
-          const isSelected = replay.game_id === selectedGameId;
-          return (
-            <li key={replay.game_id}>
-              <button
-                type="button"
-                onClick={() => {
-                  void selectReplay(replay.game_id);
-                }}
-                aria-pressed={isSelected}
-                className={
-                  "rounded border px-4 py-2 font-mono text-sm transition-colors " +
-                  (isSelected
-                    ? "border-emerald-500 bg-emerald-900 text-emerald-100"
-                    : "border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700")
-                }
-              >
-                seed {replay.seed} — winner {replay.winner ?? "—"} — ticks{" "}
-                {replay.total_ticks}
-              </button>
-            </li>
-          );
-        })}
+      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {cards.map((card) => (
+          <li key={card.key}>
+            <HighlightCard data={card} onOpen={onOpen} />
+          </li>
+        ))}
       </ul>
     );
   }
 
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-lg font-semibold">Replays</h2>
-      {body}
-      {currentReplayError !== null && (
-        <p className="rounded border border-red-700 bg-red-950 px-4 py-2 text-red-200">
-          Failed to load replay: {currentReplayError}
+    <section className="flex flex-col gap-4">
+      <header className="flex flex-col gap-1">
+        <h2 className="font-display text-2xl text-ink-900">
+          {isHighlights ? "Highlights" : "Replays"}
+        </h2>
+        <p className="font-mono text-xs text-ink-500">
+          {isHighlights
+            ? "Games ranked by interestingness — deduction (R1), deception (R2), suspicion arcs (R3), legibility (R7). Best first."
+            : "Every recorded replay in the served set. Click a card to open it."}
         </p>
+      </header>
+
+      {stale && (
+        <Banner tone="warn">
+          Scores may be stale — the rubric was scored against a different commit
+          than these replays (git_head mismatch). Treat the numbers as indicative,
+          not fresh.
+        </Banner>
       )}
+
+      {/* The filter bar is always shown so its keys round-trip even while loading
+          / empty (a shared, reload-stable URL contract). */}
+      <ReplayFilters
+        filters={filters}
+        onChange={onFiltersChange}
+        winShapeOptions={winShapeOptions}
+        set={set}
+        resultCount={cards.length}
+        totalCount={totalCount}
+        disabled={status === "loading"}
+      />
+
+      {body}
     </section>
+  );
+}
+
+// ── connected container ──────────────────────────────────────────────────────
+
+export function ReplayPicker() {
+  const view = useReplayStore((s) => s.view);
+  const replayList = useReplayStore((s) => s.replayList);
+  const replayListError = useReplayStore((s) => s.replayListError);
+  const currentReplayError = useReplayStore((s) => s.currentReplayError);
+  const seedSet = useReplayStore((s) => s.seedSet);
+  const setSeedSet = useReplayStore((s) => s.setSeedSet);
+  const setView = useReplayStore((s) => s.setView);
+  const selectReplay = useReplayStore((s) => s.selectReplay);
+
+  // The workspace/tournament routes don't mount this component, so `view` is
+  // effectively replays | highlights here; narrow defensively.
+  const browserView: BrowserView = view === "highlights" ? "highlights" : "replays";
+
+  // Per-set rubric (the reel's data + the browser's enrichment). 404 → "absent"
+  // (the set ships none) is a first-class empty state, NOT an error.
+  const [rubric, setRubric] = useState<RubricView | null>(null);
+  const [rubricStatus, setRubricStatus] = useState<
+    "loading" | "absent" | "error" | "ready"
+  >("loading");
+  const [rubricError, setRubricError] = useState<string | null>(null);
+
+  // Filters hydrate from the URL at mount (reads), then sync back (the same
+  // URLSearchParams pattern as 12.4).
+  const [filters, setFilters] = useState<ReplayFilterState>(() =>
+    typeof window === "undefined"
+      ? EMPTY_FILTERS
+      : parseFilterParams(window.location.search),
+  );
+
+  // Load the rubric once. There is one served set per loader dir (no query
+  // param), so this is mount-only.
+  useEffect(() => {
+    let cancelled = false;
+    setRubricStatus("loading");
+    getRubric()
+      .then((loaded) => {
+        if (cancelled) return;
+        setRubric(loaded);
+        setRubricStatus("ready");
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setRubric(null);
+          setRubricStatus("absent");
+          return;
+        }
+        setRubricError(err instanceof Error ? err.message : String(err));
+        setRubricStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Round-trip `set` through the store so 12.4's URL sync carries it (the rubric
+  // knows the authoritative set id). Only when it actually differs, to avoid a
+  // render loop.
+  useEffect(() => {
+    if (rubric !== null && rubric.seedset !== seedSet) {
+      setSeedSet(rubric.seedset);
+    }
+  }, [rubric, seedSet, setSeedSet]);
+
+  // Sync filters → URL (debounced). Merges into the live query string so 12.4's
+  // keys (set / view / game_id / tick / …) survive; 12.4 likewise preserves these
+  // filter keys, so the round-trip is order-independent.
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      const search = writeFilterParams(window.location.search, filters);
+      const url = `${window.location.pathname}${search}${window.location.hash}`;
+      window.history.replaceState(null, "", url);
+    }, FILTER_URL_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(handle);
+    };
+  }, [filters]);
+
+  const allCards = useMemo(
+    () => buildCards(browserView, rubric, replayList),
+    [browserView, rubric, replayList],
+  );
+  const cards = useMemo(
+    () => allCards.filter((card) => matchesFilters(card, filters)),
+    [allCards, filters],
+  );
+  const winShapeOptions = useMemo(() => winShapeOptionsOf(rubric), [rubric]);
+
+  // Status: the reel is driven by the rubric; the browser by the replay list
+  // (rubric is best-effort enrichment there).
+  let status: BrowserStatus;
+  let error: string | null;
+  if (browserView === "highlights") {
+    status =
+      rubricStatus === "loading"
+        ? "loading"
+        : rubricStatus === "error"
+          ? "error"
+          : "ready";
+    error = rubricError;
+  } else {
+    status =
+      replayList === null && replayListError === null
+        ? "loading"
+        : replayListError !== null
+          ? "error"
+          : "ready";
+    error = replayListError;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {currentReplayError !== null && (
+        <Banner tone="warn">Failed to load replay: {currentReplayError}</Banner>
+      )}
+      <ReplayBrowserView
+        view={browserView}
+        status={status}
+        error={error}
+        cards={cards}
+        totalCount={allCards.length}
+        filters={filters}
+        onFiltersChange={setFilters}
+        winShapeOptions={winShapeOptions}
+        set={rubric?.seedset ?? seedSet}
+        stale={rubric?.stale ?? false}
+        rubricMissing={rubricStatus === "absent"}
+        onOpen={(gameId) => {
+          void selectReplay(gameId);
+        }}
+        onBrowseReplays={() => {
+          setView("replays");
+        }}
+      />
+    </div>
   );
 }

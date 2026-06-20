@@ -42,6 +42,37 @@ const BASE_TICK_INTERVAL_MS = 500;
 // Debounce the URL write so scrubbing does not thrash `history` (DESIGN.md §4).
 const URL_DEBOUNCE_MS = 250;
 
+// The query keys this transport owns (mirrors `serializePlaybackParams`). They
+// are listed so the write-back can clear+rewrite ONLY its own keys and PRESERVE
+// foreign ones — chiefly the Highlights filter keys (winner / winShape /
+// scoreBucket / hasEjection) that Task 12.9 round-trips through the same URL.
+// Without this, rebuilding the query string from scratch each write would drop
+// those keys, breaking the reel's shareable / reload-stable contract.
+const PLAYBACK_OWNED_PARAM_KEYS = [
+  "set",
+  "game_id",
+  "tick",
+  "perspective",
+  "beliefView",
+  "selectedAgent",
+  "selectedMeeting",
+  "view",
+] as const;
+
+// Merge the transport's own serialized keys onto the LIVE query string (read at
+// write time), preserving any foreign keys. Returns a `?…` string, or "" if empty.
+function mergePlaybackSearch(ownedSearch: string): string {
+  const merged = new URLSearchParams(window.location.search);
+  for (const key of PLAYBACK_OWNED_PARAM_KEYS) {
+    merged.delete(key);
+  }
+  for (const [key, value] of new URLSearchParams(ownedSearch)) {
+    merged.set(key, value);
+  }
+  const query = merged.toString();
+  return query === "" ? "" : `?${query}`;
+}
+
 const EMPTY_TICKS: readonly TickView[] = [];
 const EMPTY_MEETINGS: readonly MeetingView[] = [];
 
@@ -438,7 +469,7 @@ export function usePlaybackEngine(): void {
     const handle = window.setTimeout(() => {
       const gameId = replay?.metadata.game_id ?? null;
       const tick = replay === null ? null : tickNumberAt(replay.ticks, frameIndex);
-      const search = serializePlaybackParams({
+      const owned = serializePlaybackParams({
         set: seedSet,
         gameId,
         tick,
@@ -448,6 +479,9 @@ export function usePlaybackEngine(): void {
         selectedMeeting: selectedMeetingId,
         view,
       });
+      // Preserve foreign keys (e.g. Task 12.9's Highlights filters) rather than
+      // clobbering the whole query string with only the transport's keys.
+      const search = mergePlaybackSearch(owned);
       const url = `${window.location.pathname}${search}${window.location.hash}`;
       window.history.replaceState(null, "", url);
     }, URL_DEBOUNCE_MS);
