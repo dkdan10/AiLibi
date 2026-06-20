@@ -438,7 +438,9 @@ export function MeetingView() {
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      // Yield Escape to the guided tour when it is open over this meeting, so a
+      // single Escape closes only the tour — not the meeting hydrated behind it.
+      if (event.key === "Escape" && !useReplayStore.getState().guidedTourOpen) {
         selectMeeting(null);
       }
     };

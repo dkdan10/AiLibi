@@ -34,30 +34,33 @@ export function openGuidedTour(): void {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT));
 }
 
-// Module flag mirroring the tour's open state. Read synchronously by the global
-// KeyboardTransport (App.tsx) so its transport shortcuts don't drive the replay
-// behind the modal walkthrough — focus may rest on the dialog container, which is
-// neither a form control nor an activatable element the transport already skips.
-let tourOpenFlag = false;
-export function isGuidedTourOpen(): boolean {
-  return tourOpenFlag;
-}
-
 // Best-effort: pick the highest-interestingness 9p2i replay and open it. The
 // rubric `per_game` list is served sorted best-first (Task 12.2 / 12.9), so the
 // head is the most interesting game. Falls back to the first replay if the rubric
 // is absent, and to nothing (the legend still teaches the grammar) on any error.
+//
+// Cancellation (Task 12.11 review): `/sets` + `/replays` are async, so re-check
+// the live store right before the navigation and bail if the user moved on —
+// dismissed the tour, opened a replay, or switched the set — so a slow load can't
+// yank them back to the teaching seed and clobber their URL/workspace state.
 async function loadHighInterestSeed(): Promise<void> {
   const store = useReplayStore.getState();
+  const aborted = (set: string): boolean => {
+    const now = useReplayStore.getState();
+    return !now.guidedTourOpen || now.currentReplay !== null || now.seedSet !== set;
+  };
   try {
     const { sets, default: defaultSet } = await getSets();
     const set = sets.includes(TARGET_SET) ? TARGET_SET : defaultSet;
+    if (useReplayStore.getState().currentReplay !== null) {
+      return; // user already opened a replay before /sets resolved
+    }
     store.setSeedSet(set);
     const [list, rubric] = await Promise.all([
       listReplays(set),
       getRubric(set).catch(() => null),
     ]);
-    if (list.length === 0) {
+    if (list.length === 0 || aborted(set)) {
       return;
     }
     let gameId = list[0]!.game_id;
@@ -67,6 +70,9 @@ async function loadHighInterestSeed(): Promise<void> {
       if (match !== undefined) {
         gameId = match.game_id;
       }
+    }
+    if (aborted(set)) {
+      return;
     }
     await store.selectReplay(gameId);
   } catch {
@@ -252,14 +258,16 @@ export function GuidedTour() {
     }
   }, []);
 
-  // Keep the module open-flag in sync so the global transport shortcuts can be
-  // suppressed while the tour is up (see `isGuidedTourOpen`).
+  // Publish the open state to the store so the global transport shortcuts can be
+  // suppressed, and the meeting/belief overlays can yield Escape, while the tour
+  // is up. (Explicit store state — not a module-level flag — per AGENTS.md.)
+  const setGuidedTourOpen = useReplayStore((s) => s.setGuidedTourOpen);
   useEffect(() => {
-    tourOpenFlag = open;
+    setGuidedTourOpen(open);
     return () => {
-      tourOpenFlag = false;
+      setGuidedTourOpen(false);
     };
-  }, [open]);
+  }, [open, setGuidedTourOpen]);
 
   // Re-open on demand (header "Tour" button). Does NOT reload the replay — it
   // annotates whatever the user is already watching.
@@ -294,6 +302,10 @@ export function GuidedTour() {
     }
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
+        // The tour owns Escape while open; the meeting/belief overlays yield to
+        // it (they gate their own Escape on `guidedTourOpen`), so one Escape
+        // closes only the tour, not a meeting hydrated behind it.
+        event.preventDefault();
         finish();
         return;
       }

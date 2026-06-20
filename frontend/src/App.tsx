@@ -40,11 +40,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 
 import { BeliefMatrix } from "./components/BeliefMatrix";
-import {
-  GuidedTour,
-  isGuidedTourOpen,
-  openGuidedTour,
-} from "./components/GuidedTour";
+import { GuidedTour, openGuidedTour } from "./components/GuidedTour";
 import { MeetingPill } from "./components/MeetingPill";
 import { MeetingView } from "./components/MeetingView";
 import {
@@ -118,7 +114,7 @@ function KeyboardTransport() {
       // The guided-tour modal owns the keyboard while it is open — don't let the
       // transport shortcuts drive the replay behind it (focus may rest on the
       // dialog container, which the form/activatable checks below don't cover).
-      if (isGuidedTourOpen()) {
+      if (useReplayStore.getState().guidedTourOpen) {
         return;
       }
       const target = event.target as HTMLElement | null;
@@ -131,11 +127,13 @@ function KeyboardTransport() {
       ) {
         return;
       }
-      // Space (and Enter) NATIVELY activate a focused button / link / tab, so the
-      // global Space shortcut must not hijack it — a keyboard user pressing Space
-      // on Close / a roster-or-mind toggle / a transport step button must get that
-      // button's action, not play/pause. The other accelerators (arrows, , . [ ]
-      // n, Home/End) are inert on those controls, so they keep working there.
+      // Don't fire transport accelerators while focus is on an interactive widget
+      // OUTSIDE the transport: Space/Enter activate a button, and arrows are the
+      // navigation keys for a tablist (the Mind inspector tabs), so the global
+      // shortcuts must not seek/toggle underneath a focused control. The transport
+      // region is the exception — its own controls keep the accelerators live —
+      // except Space, which must still trigger a focused button's native action
+      // rather than double-firing play/pause.
       const role = target?.getAttribute("role");
       const isActivatable =
         tag === "BUTTON" ||
@@ -144,8 +142,11 @@ function KeyboardTransport() {
         role === "button" ||
         role === "tab" ||
         role === "link";
-      if (event.key === " " && isActivatable) {
-        return;
+      if (isActivatable) {
+        const inTransport = target?.closest("[data-transport-region]") != null;
+        if (!inTransport || event.key === " ") {
+          return;
+        }
       }
       const p = playbackRef.current;
       if (!p.hasReplay) {
@@ -501,6 +502,7 @@ function Workspace() {
           reachable; its measured height feeds `--transport-h`. */}
       <div
         ref={transportRef}
+        data-transport-region
         className="fixed inset-x-0 bottom-0 z-[70] border-t-2 border-ink-900 bg-paper-1/95 backdrop-blur"
       >
         <div className="mx-auto flex max-w-[1600px] flex-col gap-2 p-3">

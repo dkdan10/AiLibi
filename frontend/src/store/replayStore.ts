@@ -112,6 +112,13 @@ export interface ReplayStoreState {
   // `usePlaybackEngine`). Exposed as a transport toggle.
   autoFollow: boolean;
 
+  // Whether the first-run GuidedTour modal is open (Task 12.11). Held here — the
+  // explicit shared-state object — rather than a module-level flag (AGENTS.md: no
+  // module-level mutable state). The global keyboard transport reads it to
+  // suppress its shortcuts while the tour owns the keyboard, and the meeting /
+  // belief overlays read it to yield Escape to the tour.
+  guidedTourOpen: boolean;
+
   // ── Task 12.7: meeting ↔ map cross-highlight (DESIGN.md §3.4, slice 5) ──────
   // The sighting under the cursor in the open meeting transcript, or `null`.
   // Ephemeral hover state (like `hoverTick`); drives the additive map highlight.
@@ -138,6 +145,7 @@ export interface ReplayStoreActions {
   setBeliefView(beliefView: BeliefViewMode): void;
   setHoverTick(tick: number | null): void;
   setAutoFollow(autoFollow: boolean): void;
+  setGuidedTourOpen(open: boolean): void;
 
   // ── Task 12.7 action ───────────────────────────────────────────────────────
   setHighlightedSighting(sighting: HighlightedSighting | null): void;
@@ -207,6 +215,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       beliefView: "belief",
       hoverTick: null,
       autoFollow: true,
+      guidedTourOpen: false,
       highlightedSighting: null,
 
       async loadSets() {
@@ -469,6 +478,10 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       setAutoFollow(autoFollow) {
         set({ autoFollow });
+      },
+
+      setGuidedTourOpen(open) {
+        set({ guidedTourOpen: open });
       },
 
       setHighlightedSighting(sighting) {
