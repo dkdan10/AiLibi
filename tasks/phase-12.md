@@ -723,14 +723,157 @@ silently no-ops. The link targets the shell ROUTE (present since 12.4), so it de
 
 ## Wave C — Polish
 
-#### Task 12.11 — Accessibility, responsive, first-run, perf
+### Task 12.11 — Accessibility, responsive, first-run, perf
 **Branch:** `phase-12-polish`
-**Depends on:** 12.5, 12.6, 12.7, 12.8, 12.9, 12.10
-**Complexity:** Integration — **Hand-coded.**
-**Stage-1 ref:** §8, §9, slice 9
+**Depends on:** 12.5, 12.6, 12.7, 12.8, 12.9, 12.10, 12.12
+**Section refs:** design/phase-12/stage-1-design.md §8, §9, slice 9; the never-hue-only + reduced-motion a11y/firewall rules in `design/phase-12/claude-design-brief.md`; the holistic-visual-pass punch-list (in the body below).
+**Complexity:** Integration
+**Files in scope:**
+- frontend/src/App.tsx
+- frontend/vite.config.ts
+- frontend/src/components/MapView.tsx
+- frontend/src/components/MeetingView.tsx
+- frontend/src/components/BeliefMatrix.tsx
+- frontend/src/components/ThoughtStream.tsx
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/TournamentDashboard.tsx
+- frontend/src/components/GuidedTour.tsx
+- frontend/src/index.css
+- .github/workflows/ci.yml
+**Files NOT in scope:**
+- api/ and the loader — pure frontend polish; no DTO change, no re-record
+- the engine / recorded replays — no re-record
 
-Keyboard transport + focus + ARIA on data panels + reduced-motion + AA contrast + never-hue-only audit. Responsive
-rail→drawer collapse. A first-run **guided mode** on a high-interestingness seed teaching the perspective switcher + the
-two-truth grammar. Verify the code-split (Pixi vendor chunk + lazy Dashboard/Highlights) closed the 859 kB single chunk;
-optionally add a Playwright visual smoke to CI (needs the loader + a served 9p2i set — sequence after build/typecheck).
-**Acceptance:** a11y audit pass; responsive; guided mode; bundle split verified.
+The phase-close polish pass, hand-coded (no Claude Design). **This is the one task that legitimately edits `App.tsx`** —
+the shell-level responsive / first-run / code-split — and it runs sequentially after every surface, so the Wave-B mount
+discipline does not apply here. Scope:
+- **A11y:** keyboard-operable transport (scrub / step / play / jump), focus management + `:focus-visible`, ARIA on the
+  data panels (matrix, ballots, mind tabs, browser, dashboard, and 12.12's set selector), a **reduced-motion** variant (vent dive / kill flash /
+  contradiction link-draw / map↔meeting morph respect `prefers-reduced-motion`), AA contrast, and a **never-hue-only
+  audit** — every status / correctness / suspicion encoding must also read by shape or label (the firewall a11y rule).
+- **Responsive:** rails collapse to drawers on narrow widths; the map + transport are the irreducible core.
+- **First-run guided mode:** an annotated walkthrough on a high-interestingness 9p2i seed teaching the perspective switcher
+  + the two-truth grammar (a new `GuidedTour`).
+- **Perf / code-split:** `vite.config.ts` `manualChunks` (Pixi + react-dom vendor chunk) + `React.lazy` for Dashboard /
+  Highlights → close the **859 kB single chunk** (the build's > 500 kB warning gone).
+- **Holistic-pass visual nits:** (a) the **map token↔label overlap** — room-name labels (Admin / Storage / Reactor) sit
+  under their centered player tokens; reposition the label clear of the token. (b) the **map dead-end cluster density** —
+  at Reactor / Storage the kill ✕ + impostor dagger (†) + body marker + labels stack; de-conflict them. (c) the
+  **overlay-composition bug** (the owner-reported "meeting overlap", confirmed from screenshots — it shows only in the
+  *composed* app, not isolated stories). The MeetingView (`z-50`), BeliefMatrix (`z-55`), and MindInspector / ThoughtStream
+  (`z-60`) are independent *fixed* overlays that stack and collide: the Mind-inspector rail covers the Ballots panel, and
+  the background map / belief bleeds through the gaps. Coordinate them into one clean layout — an open meeting masks the
+  workspace, the inspector never overlaps the ballots, no background bleed. (d) the **map does not fill its stage** — it
+  renders small with large empty space; scale the canvas to fill the stage container, and fan out / de-overlap the
+  Cafeteria spawn cluster (all 9 tokens pile on the room label at tick 0).
+- Optional: a Playwright visual smoke in CI (needs the loader + a served 9p2i set; sequence after build / typecheck).
+**Definition of done:** keyboard transport + ARIA on data panels + reduced-motion + AA contrast + a passing
+never-hue-only audit; responsive rail→drawer; a first-run guided mode on a high-interestingness seed; the 859 kB chunk
+split (the > 500 kB build warning gone); the map token↔label overlap + dead-end cluster + Cafeteria spawn-cluster
+de-cluttered and the map fills its stage (no large empty space); the overlay-composition bug is fixed (the meeting /
+belief / mind overlays no longer collide — the inspector doesn't cover the ballots and no background bleeds through);
+every surface still renders correctly after the changes; `npm run tsc:check` +
+`npm run build` pass and `scripts/check.sh` is green.
+**Implementation hint:**
+this task owns the shell, so editing `App.tsx` is expected (responsive layout, the `GuidedTour` mount, `React.lazy`
+boundaries). Fix the map nits in `MapView` (offset the room label vs the centered token; de-conflict the Reactor /
+Storage markers). For the meeting overlap, run the spectator and open a meeting over the live workspace to reproduce
+before touching `MeetingView` — it is composition-level, not the isolated component. Code-split via `vite.config.ts`
+`manualChunks` + `React.lazy`.
+**Integration risk:**
+a11y + responsive touch every surface — regression-check each (map fog, matrix layers, meeting verdict, dashboard
+caveats) still renders after the reduced-motion / responsive / lazy changes. The never-hue-only audit is the firewall
+a11y rule — don't let a colour-only status slip through. The code-split must not break Pixi or the lazy-loaded routes.
+The overlay-composition bug is confirmed (owner screenshots) but shows only in the composed app — build + test it in the
+running spectator, not isolated stories. This task owns the all-surface a11y, so it edits `ReplayPicker` /
+`TournamentDashboard` (also 12.12's files) — that is why it `depends on 12.12` and runs sequentially after it; do not
+dispatch them in parallel.
+**Ready-to-paste prompt:** `agent_prompts/task-12-11-polish.md`
+
+---
+
+## Wave D — Multi-set viewer (feature)
+
+### Task 12.12 — Multi-set serving + set selector
+**Branch:** `phase-12-multi-set`
+**Depends on:** 12.2, 12.3, 12.4, 12.7, 12.9, 12.10
+**Section refs:** design/phase-12/stage-1-design.md §2.1 (top-level nav / the 9p2i-vs-4p1i set), §7; `scripts/run_spectator.sh` (`AILIBI_REPLAY_DIR=replays/samples`).
+**Complexity:** Integration
+**Files in scope:**
+- replays/samples/4p1i/
+- api/replay_loader.py
+- api/routes/replays.py
+- api/routes/eval.py
+- api/routes/sets.py
+- api/main.py
+- frontend/src/store/replayStore.ts
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/TournamentDashboard.tsx
+- tests/api/test_sets.py
+- scripts/_manifest_writer.py
+- scripts/_verify_samples.py
+- scripts/verify_samples.sh
+- scripts/refresh_samples.sh
+- scripts/build_sample_report.py
+- scripts/run_spectator.sh
+- tests/api/test_eval_routes.py
+- tests/api/test_replay_dir_fallthrough.py
+- tests/scripts/test_manifest_writer.py
+- tests/scripts/test_refresh_samples.py
+- tests/scripts/test_build_sample_report.py
+**Files NOT in scope:**
+- the engine / recorded game CONTENT — the 4p1i move is a `git mv` only; NO re-record
+- the chrome surfaces' internals (map / belief / meeting / mind) — only the set-fetch wiring in the browser + dashboard
+
+Let the spectator serve **all** recorded sets in one run, with a live **set selector** (no reload) that auto-grows as new
+sets are recorded. Three parts:
+- **Restructure (the foundation — bigger than it looks; it reaches the substrate sample tooling).** `replays/samples/` is
+  inconsistent today — **4p1i is flat at the root** (`replay-seed-*.jsonl` + `MANIFEST.md` + `tournament-eval-report.json`)
+  while **9p2i is already a subdir**. `git mv` the root 4p1i files into `replays/samples/4p1i/` so `replays/samples/`
+  becomes a uniform **parent of per-set subdirs** (`4p1i/`, `9p2i/`, + future) — no content change, no re-record. This
+  **collapses the flat-4p1i-baseline special-casing** several tools carry: `_manifest_writer.py`'s `is_default_sample_dir`
+  / `_DEFAULT_SAMPLE_DIR`, and `refresh_samples.sh`'s "refusing to refresh the flat 4p/1i baseline" guard, exist only
+  because 4p1i sits at the root where a misconfigured refresh lands. Once every set is a named subdir that footgun is gone,
+  so **remove** the special case (a simplification) rather than re-point it. Then update **every** root-layout reference —
+  grep the repo for `replays/samples`, `SAMPLE_DIR`, `_DEFAULT_SAMPLE_DIR` and fix each: the determinism gate
+  (`verify_samples.sh` / `_verify_samples.py`), the re-record workflow (`refresh_samples.sh`), the manifest writer + report
+  (`_manifest_writer.py`, `build_sample_report.py`), the loader default (`api/main.py::_resolve_replay_dir`, now resolving
+  to a set subdir such as `4p1i` rather than the flat root), and their tests.
+- **Backend (set-aware loader).** `AILIBI_REPLAY_DIR` (`replays/samples`) becomes the **parent**; `get_replay_loader`
+  takes a `set` (query param; sane default) → resolves `<parent>/<set>/` → a **per-set loader cached** (`lru_cache` keyed
+  by set, so each set's engine re-walk caches independently). Thread `set` through `/replays`, `/replays/{game_id}/*`,
+  `/eval/rubric`, `/eval/tournament-report`. Add **`GET /sets`** → list the parent's subdirs (the available sets),
+  skipping stray non-set files — this **auto-grows**: a newly-recorded `replays/samples/<set>/` appears with no code
+  change. Determinism + the leak guard run **per set**.
+- **Frontend (set selector).** The browser's existing **SET dropdown** (12.9) + the dashboard fetches become set-driven.
+  On load, fetch `/sets` → populate the selector + the store's `availableSets`; the active set rides the **existing `set`
+  URL key** that `usePlayback.ts` already syncs to the `seedSet` store field (see `usePlayback.ts:52,473`) — `seedSet` is
+  the store field name only, so **do not introduce a second URL key** or the existing deep-links / 12.9 filters break. The
+  selector just calls `setSeedSet` (already URL-synced). On change, re-fetch `/replays?set=` + `/eval/rubric?set=` +
+  `/eval/tournament-report?set=` — **switch live, no reload**. `run_spectator.sh` is unchanged (its `replays/samples` is
+  now the parent).
+**Definition of done:** `replays/samples/` is a uniform parent of per-set subdirs (`4p1i/` + `9p2i/`); the flat-4p1i
+special-casing is removed (no `is_default_sample_dir` / flat-baseline refuse-guard remains); every root-layout reference
+is updated (the determinism gate, the re-record workflow, the manifest writer + report, the loader default, and their
+tests) and `scripts/verify_samples.sh replays/samples/4p1i` passes; `GET /sets` lists the subdirs and auto-grows; `/replays`
++ `/eval/*` are set-parametrized over a per-set cached loader; the frontend set selector toggles sets **live (no reload)**
+via the existing `set` URL key, and a newly-recorded set appears with no code change; `run_spectator.sh` serves all sets in
+one run; determinism + leak tests pass **per set**; NO re-record (the 4p1i move is a `git mv`); `scripts/check.sh` is
+green.
+**Implementation hint:**
+do it in order: (1) `git mv` the root `replay-seed-*.jsonl` + `MANIFEST.md` + `tournament-eval-report.json` into `4p1i/`
+(no content edit); (2) grep the repo for `replays/samples` / `SAMPLE_DIR` / `_DEFAULT_SAMPLE_DIR` and fix every code
+reference, removing the flat-baseline special case rather than re-pointing it; (3) run `scripts/verify_samples.sh
+replays/samples/4p1i` to confirm byte-determinism survived the move; (4) make `get_replay_loader` resolve
+`<AILIBI_REPLAY_DIR>/<set>` and cache per-set (`lru_cache` by set), and add `GET /sets`; (5) wire the frontend selector to
+`/sets` + the per-set re-fetch, reusing the existing `set` URL key (do not add a new one).
+**Integration risk:**
+this reaches the **substrate sample tooling** — `verify_samples.sh` / `_verify_samples.py` is the byte-determinism gate
+the gameplay/ML cadence depends on, and `refresh_samples.sh` is the real-provider re-record workflow; update both with
+care and run `verify_samples.sh` after the move. The move + the loader/scripts/tests must land together — moving the files
+alone breaks the root-`glob`, the `is_default_sample_dir` logic, and every test asserting the flat root (and `check.sh`
+runs `pytest`, so those failures block green). The `set` param needs a sane default so existing deep-links + the dashboard
+still resolve; per-set loader caching must be bounded (LRU cap); `/sets` must skip stray non-set entries (a top-level
+README, etc.); determinism + leak tests run per-set. 12.11 depends on this task (it does the all-surface a11y including
+the set selector), so dispatch 12.12 first.
+**Ready-to-paste prompt:** `agent_prompts/task-12-12-multi-set.md`
