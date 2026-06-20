@@ -248,6 +248,20 @@ export function GuidedTour() {
     };
   }, []);
 
+  const lastStep = STEPS.length - 1;
+  const stepRef = useRef<HTMLDivElement>(null);
+
+  // Focus the dialog when it opens / steps.
+  useEffect(() => {
+    if (open) {
+      stepRef.current?.focus();
+    }
+  }, [open, step]);
+
+  // Escape closes; Tab is TRAPPED inside the dialog. `aria-modal` alone doesn't
+  // constrain focus, so without this a keyboard user could tab past Skip/Back/Next
+  // into the nav / replay browser / workspace controls sitting behind the tour and
+  // trigger background actions — cycle focus within the dialog instead.
   useEffect(() => {
     if (!open) {
       return;
@@ -255,6 +269,36 @@ export function GuidedTour() {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
         finish();
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const dialog = stepRef.current;
+      if (dialog === null) {
+        return;
+      }
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (active === first || active === dialog || !dialog.contains(active)) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !dialog.contains(active)) {
+        event.preventDefault();
+        first.focus();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -262,14 +306,6 @@ export function GuidedTour() {
       window.removeEventListener("keydown", onKey);
     };
   }, [open, finish]);
-
-  const lastStep = STEPS.length - 1;
-  const stepRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (open) {
-      stepRef.current?.focus();
-    }
-  }, [open, step]);
 
   if (!open) {
     return null;

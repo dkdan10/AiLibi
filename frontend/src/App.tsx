@@ -121,6 +121,22 @@ function KeyboardTransport() {
       ) {
         return;
       }
+      // Space (and Enter) NATIVELY activate a focused button / link / tab, so the
+      // global Space shortcut must not hijack it — a keyboard user pressing Space
+      // on Close / a roster-or-mind toggle / a transport step button must get that
+      // button's action, not play/pause. The other accelerators (arrows, , . [ ]
+      // n, Home/End) are inert on those controls, so they keep working there.
+      const role = target?.getAttribute("role");
+      const isActivatable =
+        tag === "BUTTON" ||
+        tag === "A" ||
+        tag === "SUMMARY" ||
+        role === "button" ||
+        role === "tab" ||
+        role === "link";
+      if (event.key === " " && isActivatable) {
+        return;
+      }
       const p = playbackRef.current;
       if (!p.hasReplay) {
         return;
