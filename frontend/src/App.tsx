@@ -40,7 +40,11 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 
 import { BeliefMatrix } from "./components/BeliefMatrix";
-import { GuidedTour, openGuidedTour } from "./components/GuidedTour";
+import {
+  GuidedTour,
+  isGuidedTourOpen,
+  openGuidedTour,
+} from "./components/GuidedTour";
 import { MeetingPill } from "./components/MeetingPill";
 import { MeetingView } from "./components/MeetingView";
 import {
@@ -109,6 +113,12 @@ function KeyboardTransport() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      // The guided-tour modal owns the keyboard while it is open — don't let the
+      // transport shortcuts drive the replay behind it (focus may rest on the
+      // dialog container, which the form/activatable checks below don't cover).
+      if (isGuidedTourOpen()) {
         return;
       }
       const target = event.target as HTMLElement | null;

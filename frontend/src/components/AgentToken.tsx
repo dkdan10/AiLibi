@@ -74,6 +74,10 @@ const JITTER_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
   { dx: 60, dy: 8 },
 ];
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 function targetPoint(props: AgentTokenProps): Point {
   const { room, jitterIndex, scale, offsetX, offsetY } = props;
   const centerX = offsetX + (room.position.x + room.size.width / 2) * scale;
@@ -82,7 +86,21 @@ function targetPoint(props: AgentTokenProps): Point {
     dx: 0,
     dy: 0,
   };
-  return { x: centerX + offset.dx, y: centerY + offset.dy };
+  // Clamp the jittered point INSIDE the room (Task 12.11 review): the wide ±60px
+  // slots fan the nine spawn tokens across the big Cafeteria, but applied per
+  // global index in a small dead-end (Reactor/Labs ≈110px) or a hallway they
+  // would draw a lone token outside its room and misreport its position. Clamp so
+  // the disc always stays inside — the fan simply tightens in small rooms. (chips
+  // may overhang a hair on the tiniest rooms; the disc, which reads as position,
+  // never does.)
+  const left = offsetX + room.position.x * scale;
+  const top = offsetY + room.position.y * scale;
+  const w = room.size.width * scale;
+  const h = room.size.height * scale;
+  const pad = TOKEN_RADIUS + 2;
+  const x = clamp(centerX + offset.dx, left + pad, Math.max(left + pad, left + w - pad));
+  const y = clamp(centerY + offset.dy, top + pad, Math.max(top + pad, top + h - pad));
+  return { x, y };
 }
 
 export function AgentToken(props: AgentTokenProps) {

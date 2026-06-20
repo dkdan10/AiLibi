@@ -34,6 +34,15 @@ export function openGuidedTour(): void {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT));
 }
 
+// Module flag mirroring the tour's open state. Read synchronously by the global
+// KeyboardTransport (App.tsx) so its transport shortcuts don't drive the replay
+// behind the modal walkthrough — focus may rest on the dialog container, which is
+// neither a form control nor an activatable element the transport already skips.
+let tourOpenFlag = false;
+export function isGuidedTourOpen(): boolean {
+  return tourOpenFlag;
+}
+
 // Best-effort: pick the highest-interestingness 9p2i replay and open it. The
 // rubric `per_game` list is served sorted best-first (Task 12.2 / 12.9), so the
 // head is the most interesting game. Falls back to the first replay if the rubric
@@ -229,11 +238,28 @@ export function GuidedTour() {
     }
     setStep(0);
     setOpen(true);
-    const hasDeepLink = new URLSearchParams(window.location.search).has("game_id");
-    if (!hasDeepLink) {
+    // Only auto-load the teaching seed on a truly EMPTY URL. ANY shared query
+    // state is an explicit destination the visitor opened — a deep-linked game
+    // (`game_id`/`tick`), OR a shared view/filter/set (`view`/`winner`/
+    // `scoreBucket`/`set`/…). `loadHighInterestSeed()` calls `selectReplay()`,
+    // which forces `view=workspace`, and the URL sync would then clobber that
+    // shared page/filter. Leave any such URL in place (its hydration owns it) and
+    // just open the tour to annotate it.
+    const hasUrlState =
+      [...new URLSearchParams(window.location.search).keys()].length > 0;
+    if (!hasUrlState) {
       void loadHighInterestSeed();
     }
   }, []);
+
+  // Keep the module open-flag in sync so the global transport shortcuts can be
+  // suppressed while the tour is up (see `isGuidedTourOpen`).
+  useEffect(() => {
+    tourOpenFlag = open;
+    return () => {
+      tourOpenFlag = false;
+    };
+  }, [open]);
 
   // Re-open on demand (header "Tour" button). Does NOT reload the replay — it
   // annotates whatever the user is already watching.
