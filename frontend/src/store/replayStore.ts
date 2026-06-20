@@ -144,6 +144,7 @@ export interface ReplayStoreActions {
   fetchMemoryView(meetingId: string, agentId: string): Promise<void>;
   fetchMeeting(meetingId: string): Promise<void>;
   clearError(): void;
+  clearReplayLoadError(): void;
 
   // ── Task 12.4 actions ─────────────────────────────────────────────────────
   setView(view: ViewId): void;
@@ -468,6 +469,14 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       clearError() {
         set({ replayListError: null, currentReplayError: null });
+      },
+
+      // Clear ONLY the replay-LOAD error (a failed selectReplay). The dismiss on
+      // that banner must not also wipe replayListError — doing so would drop a
+      // live /replays failure back into a permanent loading spinner with no retry
+      // (Task 12.13 review).
+      clearReplayLoadError() {
+        set({ currentReplayError: null });
       },
 
       setView(view) {

@@ -515,6 +515,7 @@ export function MapView() {
   const highlightedSighting = useReplayStore((s) => s.highlightedSighting);
   const selectAgent = useReplayStore((s) => s.selectAgent);
   const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
+  const setPerspective = useReplayStore((s) => s.setPerspective);
   const { tickNumber } = usePlayback();
   useFontNudge();
 
@@ -704,6 +705,17 @@ export function MapView() {
     }
   }
 
+  // Open an agent's mind on click. FIREWALL (Task 12.13 review): in As-agent fog,
+  // opening a DIFFERENT agent's mind would reveal private belief/memory the fogged
+  // agent never had — so re-aim the fog at the clicked agent (you always inspect
+  // whoever you are being). Omniscient already reveals all, so it stays put.
+  const openMind = (agentId: string): void => {
+    selectAgent(agentId);
+    if (perspective.mode === "agent" && perspective.agentId !== agentId) {
+      setPerspective({ mode: "agent", agentId });
+    }
+  };
+
   const tokens_ = tokenSpecs.map((spec) => {
     const actionGlyph = spec.actionGlyph;
     const roleBadge = spec.showRoleBadge ? GLYPH_SVG.impostor : null;
@@ -722,7 +734,7 @@ export function MapView() {
         animate={animate}
         selected={selectedAgentId === spec.id}
         onSelect={() => {
-          selectAgent(spec.id);
+          openMind(spec.id);
         }}
       />
     );

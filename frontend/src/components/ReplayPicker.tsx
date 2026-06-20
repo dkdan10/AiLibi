@@ -356,7 +356,7 @@ export function ReplayPicker() {
   const replayList = useReplayStore((s) => s.replayList);
   const replayListError = useReplayStore((s) => s.replayListError);
   const currentReplayError = useReplayStore((s) => s.currentReplayError);
-  const clearError = useReplayStore((s) => s.clearError);
+  const clearReplayLoadError = useReplayStore((s) => s.clearReplayLoadError);
   const seedSet = useReplayStore((s) => s.seedSet);
   const setSeedSet = useReplayStore((s) => s.setSeedSet);
   const availableSets = useReplayStore((s) => s.availableSets);
@@ -511,9 +511,10 @@ export function ReplayPicker() {
         <SetSelector sets={availableSets} value={seedSet} onChange={setSeedSet} />
       )}
       {currentReplayError !== null && (
-        // Dismissable (Task 12.13): clearError lets the user dismiss a stale
-        // load failure without leaving the browser.
-        <Banner tone="error" onDismiss={clearError}>
+        // Dismissable (Task 12.13): clears ONLY the replay-load error, so a
+        // concurrent /replays list failure stays visible (not hidden behind a
+        // spinner).
+        <Banner tone="error" onDismiss={clearReplayLoadError}>
           Failed to load replay: {currentReplayError}
         </Banner>
       )}

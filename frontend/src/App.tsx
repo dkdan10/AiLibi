@@ -366,10 +366,22 @@ function PerspectiveBanner() {
 function RosterRail() {
   const replay = useReplayStore((s) => s.currentReplay);
   const perspective = useReplayStore((s) => s.perspective);
+  const setPerspective = useReplayStore((s) => s.setPerspective);
   const selectAgent = useReplayStore((s) => s.selectAgent);
   const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
   const { frame } = usePlayback();
   const [open, setOpen] = useState(false);
+
+  // Open an agent's mind on click. FIREWALL (Task 12.13 review): in As-agent fog,
+  // opening a DIFFERENT agent's mind would leak private belief/memory the fogged
+  // agent never had — so re-aim the fog at the clicked agent (you inspect whoever
+  // you are being). Omniscient already reveals all, so it stays put.
+  const openMind = (agentId: string): void => {
+    selectAgent(agentId);
+    if (perspective.mode === "agent" && perspective.agentId !== agentId) {
+      setPerspective({ mode: "agent", agentId });
+    }
+  };
 
   if (replay === null) {
     return null;
@@ -447,7 +459,7 @@ function RosterRail() {
                 <button
                   type="button"
                   onClick={() => {
-                    selectAgent(player.agent_id);
+                    openMind(player.agent_id);
                   }}
                   aria-pressed={selected}
                   title={`Inspect ${player.agent_id}'s mind`}

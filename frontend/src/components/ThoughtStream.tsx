@@ -29,6 +29,7 @@ import { MindInspector } from "./MindInspector";
 export function ThoughtStream() {
   const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
   const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
+  const selectAgent = useReplayStore((s) => s.selectAgent);
   const replay = useReplayStore((s) => s.currentReplay);
   const { tickNumber } = usePlayback();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -91,6 +92,12 @@ export function ThoughtStream() {
   }
 
   const noMeetingYet = effectiveMeetingId === null;
+  // The rail is "standalone" when it is mounted only because an agent is
+  // selected (no open meeting). In that case the Close button must DISMISS it
+  // (clear the agent) and stay visible at xl+, where the meeting-mode Close /
+  // edge tab are hidden — otherwise a map/roster-opened inspector would be stuck
+  // over the workspace with no way out (Task 12.13 review).
+  const standalone = selectedMeetingId === null;
 
   // Closed on narrow (slide off-screen), always shown on xl+. Open → shown.
   const railTransform = mobileOpen
@@ -142,9 +149,18 @@ export function ThoughtStream() {
             type="button"
             onClick={() => {
               setMobileOpen(false);
+              // Standalone (no open meeting): fully dismiss by clearing the
+              // selected agent. In meeting mode this stays the narrow-drawer
+              // close (closing the meeting is the xl path).
+              if (standalone) {
+                selectAgent(null);
+              }
             }}
             aria-label="Close the mind inspector"
-            className="shrink-0 rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-0.5 text-xs font-semibold text-ink-900 hover:bg-paper-2 xl:hidden"
+            className={
+              "shrink-0 rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 text-xs font-semibold text-ink-900 hover:bg-paper-2 " +
+              (standalone ? "" : "xl:hidden")
+            }
           >
             Close
           </button>
