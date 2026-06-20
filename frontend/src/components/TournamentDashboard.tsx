@@ -530,7 +530,7 @@ function HistogramBars({ view }: { view: RubricView }) {
               <span className="text-sm font-semibold text-ink-900">
                 {BUCKET_LABEL[bucket]}
               </span>
-              <span className="font-mono text-[10px] text-ink-400">
+              <span className="font-mono text-3xs text-ink-500">
                 score {BUCKET_RANGE[bucket]}
               </span>
             </a>
@@ -699,7 +699,7 @@ export function TournamentDashboardView({
             <code className="font-mono text-xs">scripts/run_tournament.py</code> to
             produce one.
           </p>
-          <p className="mt-2 font-mono text-xs text-ink-400">{error}</p>
+          <p className="mt-2 font-mono text-xs text-ink-500">{error}</p>
         </div>
       )}
     </main>

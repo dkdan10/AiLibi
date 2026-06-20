@@ -60,6 +60,10 @@ const PAPER_0 = pixiHex(tokens.paper[0]);
 const CHIP_RADIUS = 7.5;
 const CHIP_OFFSET = 12; // screen px from the token centre to the chip centre
 const GLYPH_SIZE = 11;
+// The impostor role badge reads as a ground-truth REVEAL, so it is enlarged vs
+// the action chip (Task 12.13 map legibility) — bigger disc + glyph.
+const ROLE_BADGE_RADIUS = 9.5;
+const ROLE_GLYPH_SIZE = 15;
 
 // Nine deterministic offsets around a room centre (screen pixels), so all NINE
 // co-located tokens fan out instead of stacking (Task 12.11: the old six-slot
@@ -192,10 +196,11 @@ export function AgentToken(props: AgentTokenProps) {
             graphics.stroke({ width: 1.6, color: INK_900 });
           }
           // Role badge background (ink disc), Omniscient-only via the texture gate.
+          // Enlarged so the impostor reveal reads clearly (Task 12.13).
           if (roleBadge !== null) {
-            graphics.circle(chipX, badgeTopY, CHIP_RADIUS);
+            graphics.circle(chipX, badgeTopY, ROLE_BADGE_RADIUS);
             graphics.fill(INK_900);
-            graphics.stroke({ width: 1.6, color: PAPER_0 });
+            graphics.stroke({ width: 2, color: PAPER_0 });
           }
         }}
       />
@@ -218,7 +223,7 @@ export function AgentToken(props: AgentTokenProps) {
       )}
       {roleBadge !== null && (
         <pixiGraphics
-          draw={(g: Graphics) => paintGlyph(g, roleBadge, chipX, badgeTopY, GLYPH_SIZE + 1, PAPER_0)}
+          draw={(g: Graphics) => paintGlyph(g, roleBadge, chipX, badgeTopY, ROLE_GLYPH_SIZE, PAPER_0)}
         />
       )}
     </pixiContainer>

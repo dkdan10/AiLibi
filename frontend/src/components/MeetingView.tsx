@@ -51,7 +51,7 @@ function Panel({
   return (
     <section
       aria-label={title}
-      className="overflow-hidden rounded-2xl border-2 border-ink-900 bg-paper-0 shadow-chrome-1"
+      className="overflow-hidden rounded-lg border-2 border-ink-900 bg-paper-0 shadow-chrome-1"
     >
       <div className="flex items-center justify-between border-b-2 border-ink-900 bg-paper-2 px-4 py-3">
         <h3 className="text-base">{title}</h3>
@@ -213,7 +213,7 @@ function VerdictPanel({
       : (players.find((p) => p.agent_id === ejected)?.role ?? null);
 
   return (
-    <section className="overflow-hidden rounded-2xl border-2 border-ink-900 bg-ink-900 text-paper-0 shadow-chrome-1">
+    <section className="overflow-hidden rounded-lg border-2 border-ink-900 bg-ink-900 text-paper-0 shadow-chrome-1">
       <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
         <h3 className="text-base text-paper-0">Resolution</h3>
         <span className="font-mono text-3xs font-bold text-paper-2">§4.6</span>

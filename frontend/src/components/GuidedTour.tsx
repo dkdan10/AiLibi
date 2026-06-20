@@ -176,11 +176,23 @@ const STEPS: readonly Step[] = [
     title: "Belief × Truth — who suspected whom",
     body: (
       <p className="text-sm text-ink-700">
-        Open the <strong>Belief × Truth</strong> hero (right edge of the
-        workspace) for the suspicion matrix — a bucketed heat ramp (Low / Med /
-        High) you can flip to Ground-Truth or Error. Confidently-wrong cells are
-        drawn loud (fill + border + ✗), and “no belief yet” is a hatched cell,
-        never a 0.
+        Open the <strong>Belief × Truth</strong> hero from the perspective banner
+        (top, beside the perspective toggle) for the suspicion matrix — a bucketed
+        heat ramp (Low / Med / High) you can flip to Ground-Truth or Error.
+        Confidently-wrong cells are drawn loud (fill + border + ✗), and “no belief
+        yet” is a hatched cell, never a 0.
+      </p>
+    ),
+  },
+  {
+    title: "Open a mind",
+    body: (
+      <p className="text-sm text-ink-700">
+        Click any agent — on the <strong>map</strong> or in the{" "}
+        <strong>roster</strong> — to open the <strong>Mind inspector</strong>: its
+        belief, the exact prompt + response the LLM saw, its memory, and the flags
+        against it, snapped to that agent’s latest meeting. Before an agent’s first
+        meeting you’ll see an honest “no deliberation yet” — never invented data.
       </p>
     ),
   },
@@ -367,7 +379,7 @@ export function GuidedTour() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="guided-tour-title"
-        className="relative w-full max-w-lg rounded-2xl border-2 border-ink-900 bg-paper-0 p-5 shadow-chrome-2 outline-none"
+        className="relative w-full max-w-lg rounded-lg border-2 border-ink-900 bg-paper-0 p-5 shadow-chrome-2 outline-none"
         onClick={(event) => {
           event.stopPropagation();
         }}

@@ -67,6 +67,16 @@ export function MapToolbar() {
     return living?.agent_id ?? replay?.players[0]?.agent_id ?? null;
   }, [frame, replay]);
 
+  // Per-agent liveness at the current tick — a dead agent has no field of view,
+  // so the fog picker marks + disables them (Task 12.13).
+  const aliveById = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const state of frame?.agent_states ?? []) {
+      map.set(state.agent_id, state.is_alive);
+    }
+    return map;
+  }, [frame]);
+
   if (replay === null) {
     return (
       <div className="flex items-center justify-between gap-3 rounded-t-xl border-2 border-b-0 border-ink-900 bg-paper-0 px-4 py-3">
@@ -101,6 +111,23 @@ export function MapToolbar() {
         <span className="font-mono text-2xs text-ink-500">
           {replay.map.rooms.length} rooms · {replay.map.edges.length} corridors · {ring}-vent ring
         </span>
+        {/* Impostor-badge legend (Task 12.13) — Omniscient only (firewall: the
+            ground-truth reveal is hidden under fog). Mirrors the token's ink badge
+            + cream dagger. */}
+        {!inFog && (
+          <span
+            className="flex items-center gap-1 font-mono text-2xs text-ink-500"
+            title="An ink dagger badge marks a known impostor — shown in Omniscient only (hidden under fog)."
+          >
+            <span
+              aria-hidden
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-paper-0 bg-ink-900 text-4xs font-bold text-paper-0 ring-1 ring-ink-900"
+            >
+              †
+            </span>
+            = impostor
+          </span>
+        )}
       </div>
 
       {/* Perspective switcher (right) — the dominant two-truth mode cue */}
@@ -148,11 +175,21 @@ export function MapToolbar() {
               onChange={(e) => setPerspective({ mode: "agent", agentId: e.target.value })}
               className="rounded-md border border-ink-300 bg-paper-0 px-1.5 py-1 font-mono text-xs font-bold text-ink-900"
             >
-              {replay.players.map((player) => (
-                <option key={player.agent_id} value={player.agent_id}>
-                  {player.agent_id}
-                </option>
-              ))}
+              {replay.players.map((player) => {
+                // Default to alive when the frame hasn't loaded; a dead agent has
+                // no field of view, so mark + disable it as a fog subject.
+                const dead = aliveById.get(player.agent_id) === false;
+                return (
+                  <option
+                    key={player.agent_id}
+                    value={player.agent_id}
+                    disabled={dead}
+                  >
+                    {player.agent_id}
+                    {dead ? " (dead)" : ""}
+                  </option>
+                );
+              })}
             </select>
           </label>
         )}

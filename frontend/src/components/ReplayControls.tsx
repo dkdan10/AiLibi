@@ -110,6 +110,9 @@ function MarkerChip({
   onSeek: () => void;
 }) {
   return (
+    // ≥24px hit target (Task 12.13 a11y) centred on the fraction point: the
+    // transparent button is 24px while the visible 16px chip stays unchanged, so
+    // touch/click is comfortable without enlarging the marker.
     <button
       type="button"
       title={title}
@@ -118,15 +121,19 @@ function MarkerChip({
         event.stopPropagation();
         onSeek();
       }}
-      className={
-        "absolute top-1/2 z-10 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 " +
-        "items-center justify-center rounded-sm border border-ink-900 font-mono " +
-        "text-4xs font-bold leading-none " +
-        chip
-      }
+      className="absolute top-1/2 z-10 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
       style={{ left: `${(fraction * 100).toFixed(2)}%` }}
     >
-      {letter}
+      <span
+        aria-hidden
+        className={
+          "flex h-4 w-4 items-center justify-center rounded-sm border border-ink-900 " +
+          "font-mono text-4xs font-bold leading-none " +
+          chip
+        }
+      >
+        {letter}
+      </span>
     </button>
   );
 }
