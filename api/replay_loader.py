@@ -2220,6 +2220,24 @@ class SetLoaderRegistry:
                 names.append(child.name)
         return sorted(names)
 
+    def default_set(self) -> str:
+        """The set served when a request omits ``set``.
+
+        Prefers :data:`DEFAULT_SET` (the committed 4p1i baseline) when present, so
+        existing no-``set`` deep-links resolve to the historical default; otherwise
+        the first available set, so the advertised default ALWAYS resolves — the
+        ``/sets`` ``default`` and the route fallback share this one resolver, so
+        they cannot disagree on a non-4p1i parent. Falls back to :data:`DEFAULT_SET`
+        for an empty parent (every set request 404s there anyway).
+        """
+
+        sets = self.available_sets()
+        if DEFAULT_SET in sets:
+            return DEFAULT_SET
+        if sets:
+            return sets[0]
+        return DEFAULT_SET
+
     def get(self, set_name: str) -> ReplayLoader:
         """Return the per-set loader for ``set_name`` (LRU-cached).
 
@@ -2254,22 +2272,25 @@ def get_loader_registry(request: Request) -> SetLoaderRegistry:
 
 def get_replay_loader(
     request: Request,
-    set_: str = Query(default=DEFAULT_SET, alias="set"),
+    set_: str | None = Query(default=None, alias="set"),
 ) -> ReplayLoader:
     """FastAPI dependency: the per-set loader for the ``set`` query param.
 
     Every replay/eval route depends on this, so threading ``set`` here
     set-parametrizes ``/replays``, ``/replays/{game_id}/*``, ``/eval/rubric``, and
-    ``/eval/tournament-report`` at once over a per-set cached loader. ``set``
-    defaults to :data:`DEFAULT_SET` so existing deep-links (which omit it) still
-    resolve. An unknown or malformed set is a 404.
+    ``/eval/tournament-report`` at once over a per-set cached loader. An omitted (or
+    empty) ``set`` resolves to :meth:`SetLoaderRegistry.default_set` — the SAME
+    resolver ``GET /sets`` advertises, so the no-``set`` default and the advertised
+    default never disagree (e.g. on a parent that ships no 4p1i). An unknown or
+    malformed set is a 404.
     """
 
     registry = get_loader_registry(request)
+    resolved = set_ if set_ else registry.default_set()
     try:
-        return registry.get(set_)
+        return registry.get(resolved)
     except (FileNotFoundError, ValueError):
-        raise HTTPException(status_code=404, detail=f"unknown replay set: {set_!r}")
+        raise HTTPException(status_code=404, detail=f"unknown replay set: {resolved!r}")
 
 
 __all__ = [

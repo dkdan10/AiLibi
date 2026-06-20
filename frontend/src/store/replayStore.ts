@@ -339,21 +339,35 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           return;
         }
         const gameId = replay.metadata.game_id;
-        const activeSet = get().seedSet ?? undefined;
+        // Capture the SET too: the committed sets share seed-based game_ids, so a
+        // game_id-only guard would let a slow fetch from the previous set land in
+        // the new set's cache after a live set switch (Task 12.12) — compare both.
+        const activeSet = get().seedSet;
         try {
-          const memory = await api.getMemory(gameId, meetingId, agentId, activeSet);
-          // Drop the result if the selected replay changed while in flight, so
-          // a stale snapshot can't land in (and become a cache hit for)
-          // another replay's memoryCache.
-          if (get().currentReplay?.metadata.game_id !== gameId) {
+          const memory = await api.getMemory(
+            gameId,
+            meetingId,
+            agentId,
+            activeSet ?? undefined,
+          );
+          // Drop the result if the selected replay OR the active set changed while
+          // in flight, so a stale snapshot can't land in (and become a cache hit
+          // for) another replay/set's memoryCache.
+          if (
+            get().currentReplay?.metadata.game_id !== gameId ||
+            get().seedSet !== activeSet
+          ) {
             return;
           }
           set((state) => ({
             memoryCache: { ...state.memoryCache, [key]: memory },
           }));
         } catch (error) {
-          // Likewise, don't surface an error for a replay no longer selected.
-          if (get().currentReplay?.metadata.game_id !== gameId) {
+          // Likewise, don't surface an error for a replay/set no longer selected.
+          if (
+            get().currentReplay?.metadata.game_id !== gameId ||
+            get().seedSet !== activeSet
+          ) {
             return;
           }
           set({ currentReplayError: errorMessage(error) });
@@ -364,8 +378,8 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
         // Lazy-load a full meeting transcript (with the LLM bodies windowed out
         // of the bulk payload) on demand, e.g. when an LLMCallCard is expanded.
         // Cached by meeting id, so the first expand in a meeting hydrates every
-        // card in it. Mirrors fetchMemoryView's in-flight-game guard so a stale
-        // response can't land in another replay's cache.
+        // card in it. Mirrors fetchMemoryView's in-flight-game+set guard so a
+        // stale response can't land in another replay/set's cache.
         if (get().meetingCache[meetingId] !== undefined) {
           return;
         }
@@ -374,17 +388,29 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           return;
         }
         const gameId = replay.metadata.game_id;
-        const activeSet = get().seedSet ?? undefined;
+        // Capture the SET too (committed sets share seed-based game_ids; see
+        // fetchMemoryView), and compare both on completion.
+        const activeSet = get().seedSet;
         try {
-          const meeting = await api.getMeeting(gameId, meetingId, activeSet);
-          if (get().currentReplay?.metadata.game_id !== gameId) {
+          const meeting = await api.getMeeting(
+            gameId,
+            meetingId,
+            activeSet ?? undefined,
+          );
+          if (
+            get().currentReplay?.metadata.game_id !== gameId ||
+            get().seedSet !== activeSet
+          ) {
             return;
           }
           set((state) => ({
             meetingCache: { ...state.meetingCache, [meetingId]: meeting },
           }));
         } catch (error) {
-          if (get().currentReplay?.metadata.game_id !== gameId) {
+          if (
+            get().currentReplay?.metadata.game_id !== gameId ||
+            get().seedSet !== activeSet
+          ) {
             return;
           }
           set({ currentReplayError: errorMessage(error) });

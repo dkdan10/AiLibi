@@ -6,9 +6,10 @@ available sets the frontend set selector populates from. It AUTO-GROWS: a
 newly-recorded ``replays/samples/<set>/`` appears with no code change, and stray
 non-set entries (a top-level README, a loose file, a replay-less subdir) are
 skipped (:meth:`api.replay_loader.SetLoaderRegistry.available_sets`). ``default``
-is the set served when a request carries no ``set`` query param
-(:data:`api.replay_loader.DEFAULT_SET`), so the frontend can pick a sane initial
-selection that matches the backend's no-``set`` behaviour.
+is the set served when a request carries no ``set`` query param — resolved by
+:meth:`api.replay_loader.SetLoaderRegistry.default_set`, the SAME resolver
+``get_replay_loader`` uses for an omitted ``set``, so the advertised default and
+the routes' no-``set`` behaviour can never disagree.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 
-from api.replay_loader import DEFAULT_SET, SetLoaderRegistry, get_loader_registry
+from api.replay_loader import SetLoaderRegistry, get_loader_registry
 
 router = APIRouter()
 
@@ -36,14 +37,8 @@ class SetsView(BaseModel):
 
 @router.get("", response_model=SetsView)
 def list_sets(registry: _RegistryDep) -> SetsView:
-    sets = registry.available_sets()
-    # Prefer the configured default when present; otherwise the first available
-    # set, so the advertised default always resolves (falling back to the
-    # constant only for an empty parent, where every set request 404s anyway).
-    if DEFAULT_SET in sets:
-        default = DEFAULT_SET
-    elif sets:
-        default = sets[0]
-    else:
-        default = DEFAULT_SET
-    return SetsView(sets=tuple(sets), default=default)
+    # The advertised default is the SAME resolver routes use for an omitted ?set=
+    # (SetLoaderRegistry.default_set), so the two can never disagree.
+    return SetsView(
+        sets=tuple(registry.available_sets()), default=registry.default_set()
+    )

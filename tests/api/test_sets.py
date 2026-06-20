@@ -141,6 +141,37 @@ def test_sets_route_default_falls_back_to_first_when_default_absent(
     assert body["default"] == "7p2i"
 
 
+def test_default_set_prefers_4p1i_else_first(tmp_path: Path) -> None:
+    # With 4p1i present it is the default (the historical default-served set)...
+    _stamp_set(tmp_path, "9p2i")
+    _stamp_set(tmp_path, "4p1i")
+    assert SetLoaderRegistry(tmp_path).default_set() == "4p1i"
+    # ...without it, the first available set...
+    only = tmp_path / "only"
+    _stamp_set(only, "7p2i")
+    assert SetLoaderRegistry(only).default_set() == "7p2i"
+    # ...and the constant for an empty parent (every set request 404s there anyway).
+    assert SetLoaderRegistry(tmp_path / "nope").default_set() == DEFAULT_SET
+
+
+def test_omitted_set_resolves_advertised_default_on_non_4p1i_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regression (Codex P2): on a parent with no 4p1i, a no-`set` request must
+    # resolve the SAME default `/sets` advertises (the first set), not the absent
+    # hard-coded 4p1i — so it serves rather than 404s. The advertised default and
+    # the route fallback share one resolver (SetLoaderRegistry.default_set).
+    _stamp_set(tmp_path, "7p2i")
+    with _client(tmp_path, monkeypatch) as client:
+        assert client.get("/sets").json()["default"] == "7p2i"
+        no_set = client.get("/replays")
+        explicit = client.get("/replays", params={"set": "7p2i"})
+    assert no_set.status_code == 200
+    assert explicit.status_code == 200
+    # The no-`set` response is the advertised default's set, not an empty 404 body.
+    assert no_set.json() == explicit.json()
+
+
 # ── set-parametrized serving + per-set determinism ───────────────────────────
 
 
