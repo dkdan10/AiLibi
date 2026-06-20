@@ -96,23 +96,28 @@ function Crosshair({ fraction, kind }: { fraction: number; kind: "now" | "hover"
 }
 
 // A small letter+colour chip used as a key-moment dot / timeline marker.
+//
+// The hit target is enlarged past the 16px chip for touch (Task 12.13 a11y). In
+// the roomy advantage graph that's a 24px square; in the cramped 16px event-lane
+// rows (`compact`) the box is constrained to the lane HEIGHT (`inset-y-0`) so it
+// never spills into the neighbouring agent's row and steals its click — it stays
+// 24px WIDE for a comfortable horizontal target (Task 12.13 review).
 function MarkerChip({
   letter,
   chip,
   title,
   fraction,
   onSeek,
+  compact = false,
 }: {
   letter: string;
   chip: string;
   title: string;
   fraction: number;
   onSeek: () => void;
+  compact?: boolean;
 }) {
   return (
-    // ≥24px hit target (Task 12.13 a11y) centred on the fraction point: the
-    // transparent button is 24px while the visible 16px chip stays unchanged, so
-    // touch/click is comfortable without enlarging the marker.
     <button
       type="button"
       title={title}
@@ -121,7 +126,10 @@ function MarkerChip({
         event.stopPropagation();
         onSeek();
       }}
-      className="absolute top-1/2 z-10 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+      className={
+        "absolute z-10 flex w-6 -translate-x-1/2 items-center justify-center " +
+        (compact ? "inset-y-0" : "top-1/2 h-6 -translate-y-1/2")
+      }
       style={{ left: `${(fraction * 100).toFixed(2)}%` }}
     >
       <span
@@ -411,6 +419,7 @@ export function EventTimeline() {
                     onSeek={() => {
                       seekToTick(marker.tick);
                     }}
+                    compact
                   />
                 );
               })}

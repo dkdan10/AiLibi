@@ -527,7 +527,10 @@ export function ReplayPicker() {
         filters={filters}
         onFiltersChange={setFilters}
         winShapeOptions={winShapeOptions}
-        set={rubric?.seedset ?? seedSet}
+        // Prefer the ACTIVE set (updates immediately on switch) over the rubric's
+        // seedset, which lags behind the in-flight fetch — otherwise the loading
+        // cue reads "Loading <old set>…" while the new set loads (Task 12.13 review).
+        set={seedSet ?? rubric?.seedset ?? null}
         stale={rubric?.stale ?? false}
         rubricMissing={rubricStatus === "absent"}
         onOpen={(gameId) => {

@@ -378,7 +378,23 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       },
 
       selectAgent(agentId) {
-        set({ selectedAgentId: agentId });
+        // FIREWALL invariant (Task 12.13 review): while in As-agent fog the mind
+        // inspector may show ONLY the agent whose lens is active. Selecting a
+        // different agent therefore RE-AIMS the fog to that agent — you always
+        // inspect whoever you are *being* — so no entry point (map, roster, the
+        // inspector picker, or a deep link) can render another agent's private
+        // belief/memory through the fog. Omniscient inspection is unconstrained
+        // (it reveals all), and clearing the selection never changes the lens.
+        set((state) => {
+          if (
+            agentId !== null &&
+            state.perspective.mode === "agent" &&
+            state.perspective.agentId !== agentId
+          ) {
+            return { selectedAgentId: agentId, perspective: { mode: "agent", agentId } };
+          }
+          return { selectedAgentId: agentId };
+        });
       },
 
       setBeliefOpen(open) {
@@ -494,7 +510,22 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       },
 
       setPerspective(perspective) {
-        set({ perspective });
+        // FIREWALL invariant (mirror of selectAgent): changing the fog SUBJECT
+        // keeps an OPEN inspector pointed at the lens agent, so e.g. the map
+        // toolbar's fog picker can't leave the inspector showing the previously
+        // selected agent through the new lens. Entering fog with no inspector open
+        // does not open one; switching to Omniscient leaves the selection intact
+        // (omniscient may inspect anyone).
+        set((state) => {
+          if (
+            perspective.mode === "agent" &&
+            state.selectedAgentId !== null &&
+            state.selectedAgentId !== perspective.agentId
+          ) {
+            return { perspective, selectedAgentId: perspective.agentId };
+          }
+          return { perspective };
+        });
       },
 
       setBeliefView(beliefView) {

@@ -48,10 +48,9 @@ export const BODY_CAP = 3;
 
 const DISC_RADIUS = 12;
 const GLYPH_SIZE = 16;
-// Reserved bands (screen px): the room name sits at the cell TOP, the victim
-// label hangs below the disc, so keep the body grid clear of both.
+// Reserved title band (screen px): the room name sits at the cell TOP, so the
+// body grid starts below it.
 const TITLE_BAND = 16;
-const BOTTOM_PAD = 12;
 const MIN_STEP = 2 * DISC_RADIUS + 6;
 
 // Whether `count` bodies fit non-overlapping in this room's body band (the row
@@ -73,8 +72,11 @@ const PAPER_3 = pixiHex(tokens.paper[3]);
 const KILL = pixiHex(tokens.kill);
 
 // The screen-space anchor for a body slot: a centred horizontal row in the band
-// below the title, clamped into the cell so small dead-ends (Reactor/Labs) still
-// hold the row.
+// directly below the reserved title band. The y is pinned just under the title
+// (never clamped UPWARD into it) so a body never covers the room name even in a
+// shallow room — the old `Math.min` clamp let the bottom branch win in a 4-unit
+// room (e.g. UPPER_HALL) and pulled the disc over the label (Task 12.13 review).
+// The disc still fits the cell for every canonical room (min height 4 units).
 function slotAnchor(
   room: RoomView,
   scale: number,
@@ -86,12 +88,8 @@ function slotAnchor(
   const cellLeft = offsetX + room.position.x * scale;
   const cellTop = offsetY + room.position.y * scale;
   const w = room.size.width * scale;
-  const h = room.size.height * scale;
   const cx = cellLeft + w / 2;
-  const y = Math.min(
-    cellTop + TITLE_BAND + DISC_RADIUS,
-    cellTop + h - BOTTOM_PAD - DISC_RADIUS,
-  );
+  const y = cellTop + TITLE_BAND + DISC_RADIUS;
   const innerW = Math.max(0, w - 2 * (DISC_RADIUS + 4));
   const step = slotCount > 1 ? Math.min(MIN_STEP, innerW / (slotCount - 1)) : 0;
   const startX = cx - (step * (slotCount - 1)) / 2;

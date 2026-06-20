@@ -846,17 +846,6 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
     setPerspective({ mode: "agent", agentId });
   };
 
-  // FIREWALL (Task 12.13 review): the inspector's own agent picker must re-aim the
-  // fog like the map/roster `openMind` paths — otherwise a viewer in As-p-1 fog
-  // could pick p-2 here and read p-2's private belief/memory/flags through p-1's
-  // lens. In Omniscient it stays put (it already reveals all).
-  const onSelectAgent = (agentId: string): void => {
-    selectAgent(agentId);
-    if (perspective.mode === "agent" && perspective.agentId !== agentId) {
-      setPerspective({ mode: "agent", agentId });
-    }
-  };
-
   return (
     <MindInspectorPanel
       players={replay.players}
@@ -871,7 +860,9 @@ export function MindInspector({ meetingId }: { meetingId: string | null }) {
       noMeetingYet={noMeetingYet}
       tab={tab}
       onTab={setTab}
-      onSelectAgent={onSelectAgent}
+      // The store re-aims the fog when an agent is picked in As-agent mode
+      // (firewall invariant), so the picker can route straight to selectAgent.
+      onSelectAgent={selectAgent}
       onShowWhatTheySaw={onShowWhatTheySaw}
     />
   );
