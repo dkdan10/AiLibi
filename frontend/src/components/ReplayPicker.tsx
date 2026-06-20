@@ -306,6 +306,49 @@ export function ReplayBrowserView({
   );
 }
 
+// ── set selector (Task 12.12) ─────────────────────────────────────────────────
+
+// The live SET selector: switches the served set with NO reload. Options come
+// from `/sets` (auto-grows as new sets are recorded); selecting one calls
+// `setSeedSet`, which usePlayback syncs to the existing `set` URL key and which the
+// per-set re-fetches key off. Hidden until at least one set is known. Exported so
+// the Tournament dashboard reuses the exact control (Task 12.12).
+export function SetSelector({
+  sets,
+  value,
+  onChange,
+}: {
+  sets: readonly string[];
+  value: string | null;
+  onChange: (set: string) => void;
+}) {
+  if (sets.length === 0) {
+    return null;
+  }
+  return (
+    <label className="flex items-center gap-2">
+      <span className="font-mono text-[10px] uppercase tracking-wide text-ink-500">
+        Set
+      </span>
+      <select
+        className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-xs font-semibold text-ink-900"
+        value={value ?? ""}
+        onChange={(e) => {
+          onChange(e.target.value);
+        }}
+        aria-label="Served replay set"
+      >
+        {value === null && <option value="">…</option>}
+        {sets.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 // ── connected container ──────────────────────────────────────────────────────
 
 export function ReplayPicker() {
@@ -315,6 +358,9 @@ export function ReplayPicker() {
   const currentReplayError = useReplayStore((s) => s.currentReplayError);
   const seedSet = useReplayStore((s) => s.seedSet);
   const setSeedSet = useReplayStore((s) => s.setSeedSet);
+  const availableSets = useReplayStore((s) => s.availableSets);
+  const loadSets = useReplayStore((s) => s.loadSets);
+  const loadReplayList = useReplayStore((s) => s.loadReplayList);
   const setView = useReplayStore((s) => s.setView);
   const selectReplay = useReplayStore((s) => s.selectReplay);
 
@@ -338,12 +384,23 @@ export function ReplayPicker() {
       : parseFilterParams(window.location.search),
   );
 
-  // Load the rubric once. There is one served set per loader dir (no query
-  // param), so this is mount-only.
+  // Fetch the available sets on mount (Task 12.12). `loadSets` adopts the server
+  // default into `seedSet` when none is active yet, which then drives the per-set
+  // fetches below; a deep-linked `set` (already hydrated by usePlayback) is kept.
   useEffect(() => {
+    void loadSets();
+  }, [loadSets]);
+
+  // Re-fetch the rubric for the ACTIVE set, live, whenever the set changes — no
+  // reload. 404 → "absent" (the set ships none, e.g. 4p1i) is a first-class empty
+  // state, NOT an error. Skipped until a set is resolved (seedSet !== null).
+  useEffect(() => {
+    if (seedSet === null) {
+      return;
+    }
     let cancelled = false;
     setRubricStatus("loading");
-    getRubric()
+    getRubric(seedSet)
       .then((loaded) => {
         if (cancelled) return;
         setRubric(loaded);
@@ -362,16 +419,17 @@ export function ReplayPicker() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [seedSet]);
 
-  // Round-trip `set` through the store so 12.4's URL sync carries it (the rubric
-  // knows the authoritative set id). Only when it actually differs, to avoid a
-  // render loop.
+  // Re-fetch the replay list for the active set on change (the store reads the
+  // active `seedSet`), so switching sets refreshes the browser live. The initial
+  // (null-set) load is App.tsx's mount fetch; this owns every set switch after.
   useEffect(() => {
-    if (rubric !== null && rubric.seedset !== seedSet) {
-      setSeedSet(rubric.seedset);
+    if (seedSet === null) {
+      return;
     }
-  }, [rubric, seedSet, setSeedSet]);
+    void loadReplayList();
+  }, [seedSet, loadReplayList]);
 
   // Sync filters → URL (debounced). Merges into the live query string so 12.4's
   // keys (set / view / game_id / tick / …) survive; 12.4 likewise preserves these
@@ -424,6 +482,7 @@ export function ReplayPicker() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SetSelector sets={availableSets} value={seedSet} onChange={setSeedSet} />
       {currentReplayError !== null && (
         <Banner tone="warn">Failed to load replay: {currentReplayError}</Banner>
       )}

@@ -32,8 +32,9 @@ from eval.win_condition_selfcheck import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples"
-_SAMPLES_9P2I = _SAMPLES_4P1I / "9p2i"
+# Both committed sets are now per-set subdirs of replays/samples/ (Task 12.12).
+_SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples" / "4p1i"
+_SAMPLES_9P2I = _REPO_ROOT / "replays" / "samples" / "9p2i"
 
 # ---------------------------------------------------------------------------
 # Pure predicate

@@ -10,19 +10,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
-from api.replay_loader import ReplayLoader, ReplayStateMismatchError
+from api.replay_loader import ReplayStateMismatchError, SetLoaderRegistry
 from api.routes import eval as eval_routes
 from api.routes import replays as replays_routes
+from api.routes import sets as sets_routes
 
-# Env var (documented in .env.example) configuring where replay JSONL files are
-# scanned from. When unset, falls through to ``./replays/`` then
-# ``./replays/samples/`` — see ``_resolve_replay_dir`` below.
+# Env var (documented in .env.example) configuring the PARENT directory of the
+# per-set replay subdirs (Task 12.12; ``replays/samples/`` -> ``4p1i/``, ``9p2i/``,
+# + future). When unset, falls through to ``./replays/`` then ``./replays/samples/``
+# — see ``_resolve_replay_dir`` below. The per-set loader resolves
+# ``<parent>/<set>/`` (``api.replay_loader.SetLoaderRegistry``).
 ENV_REPLAY_DIR: Final[str] = "AILIBI_REPLAY_DIR"
 _FALLBACK_PATHS: Final[tuple[Path, ...]] = (
     Path("./replays"),
     Path("./replays/samples"),
 )
-_REPLAY_GLOB: Final[str] = "replay-seed-*.jsonl"
 
 # Optional comma-separated cross-origin allowlist (documented in
 # docs/deployment.md and .env.example). The spectator API is an
@@ -56,39 +58,57 @@ def root() -> ServiceInfoResponse:
     return ServiceInfoResponse(service="ailibi-api")
 
 
-def _announce(path: Path) -> Path:
-    count = sum(1 for _ in path.glob(_REPLAY_GLOB))
+def _announce(parent: Path, sets: list[str]) -> None:
+    listing = ", ".join(sets) if sets else "none"
     print(
-        f"Serving replays from {path} ({count} {_REPLAY_GLOB} found).",
+        f"Serving replay sets from {parent} ({len(sets)} set(s): {listing}).",
         file=sys.stderr,
     )
-    return path
+
+
+def _has_set_subdir(parent: Path) -> bool:
+    """True iff ``parent`` holds >=1 per-set subdir the registry would SERVE.
+
+    Delegates to :meth:`SetLoaderRegistry.available_sets` so the fallback resolver
+    uses the EXACT same definition of "a set" the registry serves — a subdir with a
+    valid set name AND >=1 ``replay-seed-*.jsonl``. Without this, an invalid-name
+    scratch dir (e.g. ``.tmp/replay-seed-0.jsonl``, which the registry skips) could
+    make ``_resolve_replay_dir`` stop at a parent whose ``/sets`` is then empty,
+    instead of falling through to a parent that actually has serveable sets (Task
+    12.12). The restructure made ``replays/samples/`` a PARENT of per-set subdirs,
+    so a valid parent no longer carries ``replay-seed-*.jsonl`` directly.
+    """
+
+    return bool(SetLoaderRegistry(parent).available_sets())
 
 
 def _resolve_replay_dir() -> Path:
-    """Resolve the replay directory by falling through three sources.
+    """Resolve the PARENT replay directory (a parent of per-set subdirs).
 
     Priority: explicit env var, then ``./replays/``, then ``./replays/samples/``.
-    The first slot that exists and contains at least one ``replay-seed-*.jsonl``
-    wins. The env-var slot is honored as-is — populated or not — so callers
-    setting it deliberately get a clear loader-level error if the path is wrong,
+    A fallback slot wins when it is a directory holding at least one per-set subdir
+    (Task 12.12). The env-var slot is honored as-is — populated or not — so callers
+    setting it deliberately get a clear registry-level error if the path is wrong,
     rather than silent fallthrough.
     """
 
     explicit = os.environ.get(ENV_REPLAY_DIR, "").strip()
     if explicit:
-        return _announce(Path(explicit))
+        return Path(explicit)
 
     for candidate in _FALLBACK_PATHS:
-        if candidate.is_dir() and any(candidate.glob(_REPLAY_GLOB)):
-            return _announce(candidate)
+        if _has_set_subdir(candidate):
+            return candidate
 
     raise RuntimeError(
-        f"No replays found. Tried: ${ENV_REPLAY_DIR}, "
-        f"{_FALLBACK_PATHS[0]}, {_FALLBACK_PATHS[1]}. "
-        "Run `bash scripts/run_spectator.sh` or "
-        "`uv run python scripts/run_game.py --seed 0 "
-        "--replay-path replays/replay-seed-0.jsonl`."
+        f"No replay sets found. Tried: ${ENV_REPLAY_DIR}, "
+        f"{_FALLBACK_PATHS[0]}, {_FALLBACK_PATHS[1]}. Each must be a parent of "
+        "per-set subdirs (e.g. replays/samples/4p1i/). "
+        "Run `bash scripts/run_spectator.sh` or record into a NAMED set subdir "
+        "with `uv run python scripts/run_game.py --seed 0 "
+        "--replay-path replays/local/replay-seed-0.jsonl` (a flat "
+        "replays/replay-seed-0.jsonl no longer resolves — the resolver needs a "
+        "set subdir)."
     )
 
 
@@ -148,14 +168,20 @@ def create_app() -> FastAPI:
             allow_methods=["GET"],
             allow_headers=["Content-Type"],
         )
-    # The loader is constructed once at startup and injected via the
-    # ``get_replay_loader`` dependency (which reads it back off app.state).
-    app.state.replay_loader = ReplayLoader(replay_dir=_resolve_replay_dir())
+    # The per-set registry is constructed once at startup and injected via the
+    # ``get_replay_loader`` / ``get_loader_registry`` dependencies (which read it
+    # back off app.state). It serves ALL recorded sets in one run; per-set loaders
+    # are built lazily on first request and cached (Task 12.12).
+    parent_dir = _resolve_replay_dir()
+    registry = SetLoaderRegistry(parent_dir)
+    _announce(parent_dir, registry.available_sets())
+    app.state.loader_registry = registry
     app.add_exception_handler(ReplayStateMismatchError, _handle_state_mismatch)
     app.add_api_route("/", root, methods=["GET"], response_model=ServiceInfoResponse)
     app.add_api_route("/health", health, methods=["GET"], response_model=HealthResponse)
     app.include_router(replays_routes.router, prefix="/replays", tags=["replays"])
     app.include_router(eval_routes.router, prefix="/eval", tags=["eval"])
+    app.include_router(sets_routes.router, prefix="/sets", tags=["sets"])
     return app
 
 

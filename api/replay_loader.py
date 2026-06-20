@@ -38,7 +38,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final, Literal
 
-from fastapi import Request
+from fastapi import HTTPException, Query, Request
 from pydantic import TypeAdapter
 
 from agents.memory.store import (
@@ -2148,25 +2148,196 @@ def _expected_seedset(replay_dir: Path) -> str | None:
     return f"{roster.num_players}p{roster.num_impostors}i"
 
 
-def get_replay_loader(request: Request) -> ReplayLoader:
-    """FastAPI dependency: the process-wide loader stored on ``app.state``.
+# Multi-set serving (Task 12.12; design/phase-12/stage-1-design.md §2.1, §7).
+# ``AILIBI_REPLAY_DIR`` is the PARENT of per-set subdirs (``replays/samples/`` ->
+# ``4p1i/``, ``9p2i/``, + future). ``get_replay_loader`` takes a ``set`` query
+# param resolving ``<parent>/<set>/`` to a per-set loader.
+_REPLAY_GLOB: Final[str] = "replay-seed-*.jsonl"
 
-    Scale boundary (Audit H-H-6, deferred): the loader is constructed once at
-    import time in :mod:`api.main` and its caches are per-process. A cross-worker
-    shared cache — and moving construction out of import time — is the scale-phase
-    fix and is intentionally NOT built here; it would pull in ``api.main`` and a
-    shared cache backend, both out of this task's scope.
+# The default set served when a request carries no ``set`` query param — the flat
+# 4p/1i baseline that was the pre-12.12 default-served set, so existing deep-links
+# (which omit ``set``) and the dashboard still resolve unchanged.
+DEFAULT_SET: Final[str] = "4p1i"
+
+# Bound the per-set loader cache (the integration-risk LRU cap): each set's
+# ReplayLoader carries its own per-game caches, so a stray/one-off set cannot
+# evict the canonical ones unboundedly. Per-process, not cross-worker — the same
+# scale boundary the single loader had (Audit H-H-6, deferred).
+_DEFAULT_SET_CACHE_SIZE: Final[int] = 8
+
+# A set name is a single safe path segment: it names a subdir under the parent and
+# is taken straight from an untrusted query param, so it must never contain a path
+# separator, ``..``, or a leading dot. Anchored so the WHOLE name matches.
+_SET_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def _validate_set_name(set_name: str) -> None:
+    """Reject a malformed / path-traversal set name (``..``, ``a/b``, ``/abs``)."""
+
+    if _SET_NAME_PATTERN.fullmatch(set_name) is None:
+        raise ValueError(f"invalid set name: {set_name!r}")
+
+
+def _dir_has_replays(path: Path) -> bool:
+    """True iff ``path`` holds >=1 regular file whose name PARSES to a seed.
+
+    Matches the loader's own definition of a replay (:func:`_parse_seed_from_filename`,
+    the ``replay-seed-<int>.jsonl`` pattern), not just the looser ``_REPLAY_GLOB`` —
+    so a non-parseable ``replay-seed-debug.jsonl`` (or a directory with that suffix)
+    does NOT make a dir look like a set the loader would then serve empty.
     """
 
-    loader = request.app.state.replay_loader
-    if not isinstance(loader, ReplayLoader):
-        raise RuntimeError("ReplayLoader is not configured on app.state")
-    return loader
+    if not path.is_dir():
+        return False
+    return any(
+        child.is_file() and _parse_seed_from_filename(child.name) is not None
+        for child in path.glob(_REPLAY_GLOB)
+    )
+
+
+def _is_set_dir(path: Path) -> bool:
+    """True iff ``path`` is an available set: a dir with parseable replays that is
+    a LEAF, not a parent-of-sets.
+
+    The single definition of "a set" shared by listing (:meth:`available_sets`)
+    AND resolution (:meth:`get`), so an explicit ``?set=<name>`` cannot serve a
+    name ``/sets`` omits — a stray / in-progress replay-less (or
+    non-parseable-replay) subdir is a 404, not an empty-but-200 list (which would
+    mask a typo'd set name). A dir that ALSO contains a replay-bearing subdir is a
+    PARENT/container, not a single set: a legacy flat ``replays/samples/`` holding
+    stray ``*.jsonl`` next to ``4p1i/`` + ``9p2i/`` must not be served as one set
+    named ``samples`` (it would shadow the real nested sets).
+    """
+
+    if not _dir_has_replays(path):
+        return False
+    return not any(
+        _dir_has_replays(child) for child in path.iterdir() if child.is_dir()
+    )
+
+
+class SetLoaderRegistry:
+    """Per-app registry of per-set :class:`ReplayLoader`\\ s over a parent dir.
+
+    ``AILIBI_REPLAY_DIR`` resolves to the PARENT of per-set subdirs
+    (``replays/samples/``); each set (``4p1i``, ``9p2i``, + future) is a subdir
+    served by its own :class:`ReplayLoader`. Loaders are built lazily and memoized
+    in a bounded per-process LRU keyed by set name, so each set's engine re-walk
+    caches independently and a stray set cannot evict the canonical ones
+    unboundedly. Mirrors the single-loader scale boundary (Audit H-H-6): the cache
+    is per-process, not cross-worker — that remains the deferred scale-phase fix.
+    """
+
+    def __init__(
+        self, parent_dir: Path, *, cache_size: int = _DEFAULT_SET_CACHE_SIZE
+    ) -> None:
+        self._parent_dir = parent_dir
+        self._cached_loader = lru_cache(maxsize=cache_size)(self._build_loader)
+
+    @property
+    def parent_dir(self) -> Path:
+        return self._parent_dir
+
+    def available_sets(self) -> list[str]:
+        """Sorted set names: parent subdirs holding >=1 ``replay-seed-*.jsonl``.
+
+        Skips stray non-set entries (a top-level README, a loose file, an empty or
+        replay-less subdir) so the list AUTO-GROWS: a newly-recorded
+        ``replays/samples/<set>/`` appears with no code change (Task 12.12 DoD).
+        """
+
+        if not self._parent_dir.is_dir():
+            return []
+        names: list[str] = []
+        for child in self._parent_dir.iterdir():
+            if _SET_NAME_PATTERN.fullmatch(child.name) is None:
+                continue
+            if _is_set_dir(child):
+                names.append(child.name)
+        return sorted(names)
+
+    def default_set(self) -> str:
+        """The set served when a request omits ``set``.
+
+        Prefers :data:`DEFAULT_SET` (the committed 4p1i baseline) when present, so
+        existing no-``set`` deep-links resolve to the historical default; otherwise
+        the first available set, so the advertised default ALWAYS resolves — the
+        ``/sets`` ``default`` and the route fallback share this one resolver, so
+        they cannot disagree on a non-4p1i parent. Falls back to :data:`DEFAULT_SET`
+        for an empty parent (every set request 404s there anyway).
+        """
+
+        sets = self.available_sets()
+        if DEFAULT_SET in sets:
+            return DEFAULT_SET
+        if sets:
+            return sets[0]
+        return DEFAULT_SET
+
+    def get(self, set_name: str) -> ReplayLoader:
+        """Return the per-set loader for ``set_name`` (LRU-cached).
+
+        Raises :class:`ValueError` for a malformed / path-traversal name and
+        :class:`FileNotFoundError` for an unknown set — no such subdir, OR a subdir
+        that ships no ``replay-seed-*.jsonl`` (a stray / in-progress dir ``/sets``
+        also omits); the route maps both to HTTP 404. Requiring replays here keeps
+        resolution consistent with listing, so a typo'd set 404s rather than
+        serving an empty-but-200 list.
+        """
+
+        _validate_set_name(set_name)
+        if not _is_set_dir(self._parent_dir / set_name):
+            raise FileNotFoundError(set_name)
+        return self._cached_loader(set_name)
+
+    def _build_loader(self, set_name: str) -> ReplayLoader:
+        return ReplayLoader(replay_dir=self._parent_dir / set_name)
+
+
+def get_loader_registry(request: Request) -> SetLoaderRegistry:
+    """FastAPI dependency: the process-wide per-set registry on ``app.state``.
+
+    Scale boundary (Audit H-H-6, deferred): the registry + its per-set loaders are
+    constructed once in :mod:`api.main` and their caches are per-process. A
+    cross-worker shared cache is the scale-phase fix and is intentionally NOT built
+    here.
+    """
+
+    registry = getattr(request.app.state, "loader_registry", None)
+    if not isinstance(registry, SetLoaderRegistry):
+        raise RuntimeError("SetLoaderRegistry is not configured on app.state")
+    return registry
+
+
+def get_replay_loader(
+    request: Request,
+    set_: str | None = Query(default=None, alias="set"),
+) -> ReplayLoader:
+    """FastAPI dependency: the per-set loader for the ``set`` query param.
+
+    Every replay/eval route depends on this, so threading ``set`` here
+    set-parametrizes ``/replays``, ``/replays/{game_id}/*``, ``/eval/rubric``, and
+    ``/eval/tournament-report`` at once over a per-set cached loader. An omitted (or
+    empty) ``set`` resolves to :meth:`SetLoaderRegistry.default_set` — the SAME
+    resolver ``GET /sets`` advertises, so the no-``set`` default and the advertised
+    default never disagree (e.g. on a parent that ships no 4p1i). An unknown or
+    malformed set is a 404.
+    """
+
+    registry = get_loader_registry(request)
+    resolved = set_ if set_ else registry.default_set()
+    try:
+        return registry.get(resolved)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(status_code=404, detail=f"unknown replay set: {resolved!r}")
 
 
 __all__ = [
+    "DEFAULT_SET",
     "ReplayLoader",
     "ReplayStateMismatchError",
     "RosterConfig",
+    "SetLoaderRegistry",
+    "get_loader_registry",
     "get_replay_loader",
 ]

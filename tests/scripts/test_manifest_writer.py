@@ -17,7 +17,8 @@ import pytest
 import _manifest_writer as mw
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_REAL_SAMPLES = _REPO_ROOT / "replays" / "samples"
+# The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
+_REAL_SAMPLES = _REPO_ROOT / "replays" / "samples" / "4p1i"
 _MEETING_SEED = 22
 _NO_MEETING_SEED = 0
 
@@ -477,31 +478,96 @@ def test_ensure_roster_written_sidecar_parses_via_loader(tmp_path: Path) -> None
     )
 
 
-def test_ensure_roster_flat_baseline_skips_sidecar(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The flat baseline DIR + 4p/1i roster is the ONLY descriptor-less case: the
-    # loader reconstructs it from its defaults, so no sidecar is written.
-    monkeypatch.setattr(mw, "_DEFAULT_SAMPLE_DIR", tmp_path)
+# Task 12.12 removed the flat-baseline-DIR special case (no `_DEFAULT_SAMPLE_DIR`,
+# no `_is_flat_baseline_dir`): every set is a named subdir, so EVERY refresh target
+# gets an explicit roster.json — including a 4p/1i set, which no longer skips the
+# sidecar. The committed flat 4p1i baseline stays descriptor-less only because it
+# is never re-recorded. `test_ensure_roster_subdir_always_writes_descriptor` below
+# (parametrized over the 4p/1i baseline roster) covers that always-write behaviour.
+
+
+def test_ensure_roster_4p1i_roster_now_writes_a_sidecar(tmp_path: Path) -> None:
+    # Post-12.12: a 4p/1i roster is no longer a special descriptor-less case —
+    # there is no privileged flat-root dir to detect, so a refresh writes the
+    # explicit sidecar like any other set.
     status = mw.ensure_roster_descriptor(
         tmp_path, num_players=4, num_impostors=1, tasks_per_crewmate=1
     )
-    assert "no sidecar" in status
-    assert not (tmp_path / "roster.json").exists()
+    assert "wrote roster descriptor" in status
+    assert json.loads((tmp_path / "roster.json").read_text()) == {
+        "num_players": 4,
+        "num_impostors": 1,
+        "tasks_per_crewmate": 1,
+    }
 
 
-def test_ensure_roster_flat_baseline_rejects_non_4p1i(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "roster",
+    [
+        {"num_players": 4, "num_impostors": 2, "tasks_per_crewmate": 1},  # impostors
+        {"num_players": 4, "num_impostors": 1, "tasks_per_crewmate": 2},  # tasks
+        {"num_players": 7, "num_impostors": 1, "tasks_per_crewmate": 1},  # players
+    ],
+)
+def test_ensure_roster_rejects_contradicting_descriptorless_set(
+    tmp_path: Path, roster: dict[str, int]
 ) -> None:
-    # A non-4p/1i roster pointed at the flat baseline dir (e.g. a 9p/2i refresh
-    # that forgot AILIBI_SAMPLE_DIR) must raise before any write — writing a
-    # sidecar there would break the committed 4p/1i baseline's reconstruction.
-    monkeypatch.setattr(mw, "_DEFAULT_SAMPLE_DIR", tmp_path)
+    # Regression (Codex P1): a dir with committed replays + no roster.json is a
+    # descriptor-less set; a refresh roster that contradicts the loader default
+    # (num_impostors/tasks_per_crewmate != 1) or the set name's player count would
+    # corrupt the untouched replays, so it is refused BEFORE any write — replacing
+    # the removed flat-root guard (e.g. a refresh that forgot AILIBI_SAMPLE_DIR and
+    # pointed AILIBI_NUM_IMPOSTORS=2 at the committed 4p1i set).
+    set_dir = tmp_path / "4p1i"
+    set_dir.mkdir()
+    (set_dir / "replay-seed-0.jsonl").write_bytes(
+        (_REAL_SAMPLES / "replay-seed-0.jsonl").read_bytes()
+    )
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(set_dir, **roster)
+    assert not (set_dir / "roster.json").exists()  # nothing written on rejection
+
+
+def test_ensure_roster_rejects_player_override_on_misnamed_descriptorless_set(
+    tmp_path: Path,
+) -> None:
+    # Regression (Codex round-4 P1): a descriptor-less set whose dir name does NOT
+    # match <P>p<I>i (e.g. a copied/misnamed 4p1i set) is still protected — the
+    # player count is inferred from the RECORDED REPLAYS, so a num_players override
+    # is rejected even without the name convention to lean on.
+    set_dir = tmp_path / "mygames"  # name does not parse as <P>p<I>i
+    set_dir.mkdir()
+    (set_dir / "replay-seed-0.jsonl").write_bytes(
+        (_REAL_SAMPLES / "replay-seed-0.jsonl").read_bytes()  # a 4-player replay
+    )
     with pytest.raises(ValueError):
         mw.ensure_roster_descriptor(
-            tmp_path, num_players=9, num_impostors=2, tasks_per_crewmate=2
+            set_dir, num_players=7, num_impostors=1, tasks_per_crewmate=1
         )
-    assert not (tmp_path / "roster.json").exists()
+    assert not (set_dir / "roster.json").exists()
+
+
+def test_ensure_roster_allows_matching_roster_on_descriptorless_set(
+    tmp_path: Path,
+) -> None:
+    # The legitimate in-place refresh: the default (4,1,1) is exactly what the
+    # descriptor-less 4p1i replays reconstruct at, so it is allowed and writes the
+    # sidecar (an empty/new dir is also allowed — the guard only gates dirs that
+    # ALREADY hold committed replays).
+    set_dir = tmp_path / "4p1i"
+    set_dir.mkdir()
+    (set_dir / "replay-seed-0.jsonl").write_bytes(
+        (_REAL_SAMPLES / "replay-seed-0.jsonl").read_bytes()
+    )
+    status = mw.ensure_roster_descriptor(
+        set_dir, num_players=4, num_impostors=1, tasks_per_crewmate=1
+    )
+    assert "wrote roster descriptor" in status
+    assert json.loads((set_dir / "roster.json").read_text()) == {
+        "num_players": 4,
+        "num_impostors": 1,
+        "tasks_per_crewmate": 1,
+    }
 
 
 def test_ensure_roster_is_idempotent_when_matching(tmp_path: Path) -> None:
@@ -575,10 +641,9 @@ def test_main_roster_writes_descriptor(
 def test_ensure_roster_subdir_always_writes_descriptor(
     tmp_path: Path, roster: dict[str, int]
 ) -> None:
-    # A per-set subdir target is never the flat baseline DIR, so it ALWAYS gets an
-    # explicit descriptor — even a 4p/1i subdir set (e.g. a refresh that forgot the
-    # roster env vars). "No descriptor" is reserved for the flat baseline, so a
-    # subdir is never left descriptor-less and silently treated as 4p/1i.
+    # Post-12.12 every set is a named subdir, so a refresh ALWAYS writes an explicit
+    # descriptor — including a 4p/1i set (e.g. a refresh that forgot the roster env
+    # vars) — and a refreshed set is never left descriptor-less.
     status = mw.ensure_roster_descriptor(tmp_path, **roster)
     assert "wrote roster descriptor" in status
     assert json.loads((tmp_path / "roster.json").read_text()) == roster

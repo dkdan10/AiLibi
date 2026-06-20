@@ -23,7 +23,9 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _REFRESH_SH = _REPO_ROOT / "scripts" / "refresh_samples.sh"
-_MANIFEST = _REPO_ROOT / "replays" / "samples" / "MANIFEST.md"
+# The flat 4p1i baseline (incl. its MANIFEST.md) now lives under
+# replays/samples/4p1i/ (Task 12.12); the default refresh target follows it.
+_MANIFEST = _REPO_ROOT / "replays" / "samples" / "4p1i" / "MANIFEST.md"
 
 # The canonical local model the ollama preflight checks for (mirrors
 # llm.ollama_client.DEFAULT_OLLAMA_MODEL / refresh_samples.sh's
@@ -251,7 +253,7 @@ def _clean_env() -> dict[str, str]:
 def test_dry_run_shows_default_roster() -> None:
     # With no roster overrides, the refresh threads the committed FLAT 4p/1i
     # baseline at ONE task/crewmate (NOT run_tournament.py's harness default of
-    # 2), so a default refresh re-records replays/samples/ byte-identically.
+    # 2), so a default refresh re-records replays/samples/4p1i/ byte-identically.
     proc = _run("--seeds", "22", "--dry-run", env=_clean_env())
     assert proc.returncode == 0
     assert (
@@ -266,25 +268,29 @@ def test_dry_run_threads_roster_flags_into_tournament_invocation() -> None:
     assert "--num-players 4 --num-impostors 1 --tasks-per-crewmate 1" in proc.stdout
 
 
-def test_dry_run_default_roster_writes_no_descriptor() -> None:
-    # The flat 4p/1i baseline dir needs no sidecar; the dry-run must say so.
+def test_dry_run_default_roster_previews_descriptor() -> None:
+    # Post-12.12 there is no privileged flat-root dir: the default 4p1i subdir gets
+    # an explicit roster.json like any other set, so the dry-run previews the write
+    # (4p/1i) rather than the old "no sidecar" path.
     proc = _run("--seeds", "22", "--dry-run", env=_clean_env())
     assert proc.returncode == 0
-    assert (
-        "[dry-run] roster descriptor: flat 4p/1i baseline — no sidecar written"
-        in proc.stdout
-    )
+    assert "would ensure" in proc.stdout
+    assert "replays/samples/4p1i/roster.json" in proc.stdout
+    assert "{num_players: 4, num_impostors: 1, tasks_per_crewmate: 1}" in proc.stdout
 
 
-def test_dry_run_flat_baseline_rejects_non_4p1i_roster() -> None:
-    # A non-4p/1i roster pointed at the flat baseline (e.g. forgot AILIBI_SAMPLE_DIR)
-    # must fail loud before any spend — it would otherwise corrupt the committed
-    # 4p/1i baseline by writing replays/samples/roster.json.
-    env = _clean_env()  # no AILIBI_SAMPLE_DIR -> the flat replays/samples baseline
+def test_dry_run_default_dir_has_no_flat_baseline_guard() -> None:
+    # The flat-baseline refuse-guard is REMOVED (Task 12.12): every set is a named
+    # subdir, so a non-4p/1i roster on the default dir is no longer a special-cased
+    # error — the dry-run just previews the descriptor it would write. (A real
+    # disagreement with an EXISTING committed descriptor still fails loud, at the
+    # _manifest_writer roster gate — not in the dry-run.)
+    env = _clean_env()  # no AILIBI_SAMPLE_DIR -> the default 4p1i subdir
     env["AILIBI_NUM_IMPOSTORS"] = "2"
     proc = _run("--seeds", "0", "--dry-run", env=env)
-    assert proc.returncode != 0
-    assert "refusing to refresh the flat 4p/1i baseline" in proc.stdout + proc.stderr
+    assert proc.returncode == 0
+    assert "refusing to refresh the flat" not in proc.stdout + proc.stderr
+    assert "{num_players: 4, num_impostors: 2, tasks_per_crewmate: 1}" in proc.stdout
 
 
 def test_dry_run_subdir_baseline_roster_previews_descriptor(tmp_path: Path) -> None:
@@ -349,17 +355,17 @@ def test_invalid_roster_env_fails_loud(bad: str) -> None:
     assert "must be a positive integer" in proc.stdout + proc.stderr
 
 
-def test_leading_zero_roster_env_does_not_bypass_flat_guard() -> None:
+def test_leading_zero_roster_env_canonicalizes_on_default_dir() -> None:
     # A leading-zero value (08 == 8) must canonicalize to base 10, not be parsed as
-    # octal — otherwise the arithmetic errors out and silently skips the
-    # flat-baseline guard. So AILIBI_NUM_IMPOSTORS=08 (a non-4p/1i roster) on the
-    # flat baseline must fail loud, with no "value too great for base" octal error.
-    env = _clean_env()  # no AILIBI_SAMPLE_DIR -> the flat replays/samples baseline
+    # octal (which would error "value too great for base"). Post-12.12 there is no
+    # flat-baseline guard, so on the default 4p1i subdir AILIBI_NUM_IMPOSTORS=08 just
+    # canonicalizes to 8 and the dry-run previews that roster cleanly.
+    env = _clean_env()  # no AILIBI_SAMPLE_DIR -> the default 4p1i subdir
     env["AILIBI_NUM_IMPOSTORS"] = "08"
     proc = _run("--seeds", "0", "--dry-run", env=env)
-    assert proc.returncode != 0
-    assert "refusing to refresh the flat 4p/1i baseline" in proc.stdout + proc.stderr
+    assert proc.returncode == 0
     assert "value too great for base" not in proc.stderr
+    assert "{num_players: 4, num_impostors: 8, tasks_per_crewmate: 1}" in proc.stdout
 
 
 def test_leading_zero_roster_env_normalized_for_subdir(tmp_path: Path) -> None:

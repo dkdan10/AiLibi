@@ -208,7 +208,7 @@ def test_committed_4p1i_report_loads_through_loader_with_meeting_rate() -> None:
     games reach a meeting, all body-reports, 0 emergency).
     """
 
-    loader = ReplayLoader(replay_dir=Path("replays/samples"))
+    loader = ReplayLoader(replay_dir=Path("replays/samples/4p1i"))
     report = loader.tournament_report()
 
     meeting_rate = report.meeting_rate

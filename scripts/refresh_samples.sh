@@ -25,16 +25,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Overridable for tests; default to the bundled sample set + its manifest.
-SAMPLE_DIR="${AILIBI_SAMPLE_DIR:-$REPO_ROOT/replays/samples}"
+# Overridable for tests; default to the flat 4p1i sample set + its manifest. Since
+# Task 12.12, replays/samples/ is a PARENT of per-set subdirs, so the default
+# targets the 4p1i subdir (the old flat-root default's new home) — never the
+# parent, which holds no replays directly.
+SAMPLE_DIR="${AILIBI_SAMPLE_DIR:-$REPO_ROOT/replays/samples/4p1i}"
 MANIFEST="${AILIBI_MANIFEST:-$SAMPLE_DIR/MANIFEST.md}"
 
 # Per-set roster (Task 7.4). Threaded into scripts/run_tournament.py so a refresh
 # records each set at its own roster. The defaults reproduce the committed FLAT
 # 4p/1i baseline at ONE task per crewmate — NOT run_tournament.py's harness
-# default of 2 — so a default refresh re-records replays/samples/ byte-identically
-# (the committed loader re-seeds the flat set at 1 task/crewmate). To record the
-# canonical 9p/2i eval set (DESIGN.md §3.5), set these alongside
+# default of 2 — so a default refresh re-records replays/samples/4p1i/
+# byte-identically (the committed loader re-seeds the flat set at 1 task/crewmate).
+# To record the canonical 9p/2i eval set (DESIGN.md §3.5), set these alongside
 # AILIBI_SAMPLE_DIR/AILIBI_MANIFEST:
 #   AILIBI_NUM_PLAYERS=9 AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2 \
 #   AILIBI_SAMPLE_DIR=replays/samples/9p2i AILIBI_MANIFEST=replays/samples/9p2i/MANIFEST.md
@@ -127,8 +130,8 @@ validate_seeds() {
 # crash mid-record. Pings the server's /api/tags endpoint for reachability and
 # confirms $2 is in the pulled-model list, printing an actionable remediation
 # ("ollama serve" / "ollama pull <model>") on failure. Uses python3 -- already a
-# hard dependency (see canon()) -- rather than curl, so the check is portable
-# across macOS/Linux without assuming curl is installed.
+# hard dependency (the manifest/roster helpers run under it) -- rather than curl,
+# so the check is portable across macOS/Linux without assuming curl is installed.
 ollama_preflight() {
   local host="$1" model="$2"
   python3 - "$host" "$model" <<'PY'
@@ -238,30 +241,12 @@ for _roster_var in NUM_PLAYERS NUM_IMPOSTORS TASKS_PER_CREWMATE; do
   printf -v "$_roster_var" '%s' "$_roster_val" # write the normalized value back
 done
 
-# The two-set contract reserves the descriptor-less default for EXACTLY the flat
-# 4p/1i baseline at $REPO_ROOT/replays/samples. Detect whether this refresh
-# targets it (canonicalized so a trailing slash / relative AILIBI_SAMPLE_DIR
-# still matches), and fail loud BEFORE any spend if a non-4p/1i roster is pointed
-# at it — e.g. a 9p/2i refresh that forgot AILIBI_SAMPLE_DIR would otherwise write
-# replays/samples/roster.json and break the committed baseline's reconstruction.
-#
-# Portable canonicalization: BSD/macOS `realpath` lacks GNU's `-m` (which resolves
-# a not-yet-created subdir without requiring it to exist), so use Python's
-# os.path.realpath — it normalizes ./../trailing-slash and resolves symlinks
-# without needing the path to exist, on both macOS and Linux.
-canon() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
-is_flat_baseline=0
-if [[ "$(canon "$SAMPLE_DIR")" == "$(canon "$REPO_ROOT/replays/samples")" ]]; then
-  is_flat_baseline=1
-fi
-if [[ "$is_flat_baseline" -eq 1 ]] &&
-  [[ "$NUM_PLAYERS" -ne 4 || "$NUM_IMPOSTORS" -ne 1 || "$TASKS_PER_CREWMATE" -ne 1 ]]; then
-  echo "Error: refusing to refresh the flat 4p/1i baseline ($SAMPLE_DIR) with a" \
-    "non-4p/1i roster (${NUM_PLAYERS}p/${NUM_IMPOSTORS}i/${TASKS_PER_CREWMATE}t)." \
-    "Point AILIBI_SAMPLE_DIR at a per-set subdir (e.g. replays/samples/9p2i) --" \
-    "did you forget it?" >&2
-  exit 1
-fi
+# Task 12.12 removed the flat-root special-casing: every set is now a named subdir
+# under replays/samples/, so there is no privileged root directory a misconfigured
+# refresh could clobber. The roster is governed by the target dir's roster.json
+# (written + validated below by _manifest_writer.py roster), not by the dir's name,
+# so a wrong-roster refresh fails loud at that gate (or, for an existing committed
+# set, on the descriptor-disagreement check) rather than needing a path guard here.
 
 # Resolve the LLM provider for this refresh (Task 7.7). Historically this script
 # FORCED anthropic, overriding the ambient AILIBI_LLM_PROVIDER entirely so a
@@ -299,14 +284,11 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
   echo "[dry-run] seeds: $seeds_csv"
   echo "[dry-run] roster: num_players=$NUM_PLAYERS num_impostors=$NUM_IMPOSTORS tasks_per_crewmate=$TASKS_PER_CREWMATE"
-  # Mirror _manifest_writer.ensure_roster_descriptor: only the flat 4p/1i baseline
-  # dir is descriptor-less; every per-set subdir gets an explicit sidecar (even a
-  # 4p/1i subdir set). (A non-4p/1i roster on the flat dir already exited above.)
-  if [[ "$is_flat_baseline" -eq 1 ]]; then
-    echo "[dry-run] roster descriptor: flat 4p/1i baseline — no sidecar written"
-  else
-    echo "[dry-run] roster descriptor: would ensure $SAMPLE_DIR/roster.json = {num_players: $NUM_PLAYERS, num_impostors: $NUM_IMPOSTORS, tasks_per_crewmate: $TASKS_PER_CREWMATE} (fails loud if an existing one disagrees)"
-  fi
+  # Every set is a named subdir (Task 12.12), so the refresh always writes an
+  # explicit roster.json for its target (mirrors _manifest_writer.ensure_roster_descriptor;
+  # fails loud if an existing one disagrees). The committed flat 4p1i baseline
+  # ships descriptor-less and is not re-recorded.
+  echo "[dry-run] roster descriptor: would ensure $SAMPLE_DIR/roster.json = {num_players: $NUM_PLAYERS, num_impostors: $NUM_IMPOSTORS, tasks_per_crewmate: $TASKS_PER_CREWMATE} (fails loud if an existing one disagrees)"
   echo "[dry-run] sample dir: $SAMPLE_DIR"
   # Provider + the preflight that WOULD run on the real path (Task 7.7). Honors
   # AILIBI_LLM_PROVIDER (anthropic|ollama, default anthropic); the dry-run only

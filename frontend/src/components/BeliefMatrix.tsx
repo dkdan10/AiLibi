@@ -25,8 +25,19 @@ import { useReplayStore } from "../store/replayStore";
 import type { BeliefFrameView } from "../types/api";
 import { BeliefPanel } from "./BeliefPanel";
 
-async function fetchBeliefFrames(gameId: string): Promise<BeliefFrameView[]> {
-  const res = await fetch(`/api/replays/${encodeURIComponent(gameId)}/beliefs`, {
+async function fetchBeliefFrames(
+  gameId: string,
+  set: string | null,
+): Promise<BeliefFrameView[]> {
+  // Thread the active set (Task 12.12): both committed sets reuse headless-seed-*
+  // ids, so omitting ?set= would resolve the server default (4p1i) and show the
+  // wrong set's belief frames (or an empty state) against, e.g., a 9p2i replay.
+  const base = `/api/replays/${encodeURIComponent(gameId)}/beliefs`;
+  const url =
+    set === null || set === ""
+      ? base
+      : `${base}?set=${encodeURIComponent(set)}`;
+  const res = await fetch(url, {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) {
@@ -40,6 +51,7 @@ export function BeliefMatrix() {
   const perspective = useReplayStore((s) => s.perspective);
   const beliefView = useReplayStore((s) => s.beliefView);
   const setBeliefView = useReplayStore((s) => s.setBeliefView);
+  const seedSet = useReplayStore((s) => s.seedSet);
 
   const [open, setOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -48,23 +60,23 @@ export function BeliefMatrix() {
 
   const gameId = replay?.metadata.game_id ?? null;
 
-  // Reset the cached frames whenever the replay changes, so an open panel can't
-  // show the previous game's beliefs for a frame.
+  // Reset the cached frames whenever the replay OR the active set changes, so an
+  // open panel can't show the previous game/set's beliefs for a frame.
   useEffect(() => {
     setFrames(null);
     setError(null);
-  }, [gameId]);
+  }, [gameId, seedSet]);
 
   // Fetch the per-meeting frames lazily — only once the hero is opened. The
-  // cancellation + game-id guard mirrors the store's async-ordering discipline so
-  // a stale response can't land after the replay switches.
+  // cancellation + game-id/set guard mirrors the store's async-ordering discipline
+  // so a stale response can't land after the replay or set switches.
   useEffect(() => {
     if (!open || gameId === null) {
       return;
     }
     let cancelled = false;
     setError(null);
-    fetchBeliefFrames(gameId)
+    fetchBeliefFrames(gameId, seedSet)
       .then((data) => {
         if (!cancelled) {
           setFrames(data);
@@ -78,7 +90,7 @@ export function BeliefMatrix() {
     return () => {
       cancelled = true;
     };
-  }, [open, gameId]);
+  }, [open, gameId, seedSet]);
 
   // Close the overlay on Escape (consistent with the MeetingView modal).
   useEffect(() => {

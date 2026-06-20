@@ -1,7 +1,8 @@
-"""Maintain ``replays/samples/MANIFEST.md`` (Task 4.17; DESIGN.md §9, §11.4).
+"""Maintain a sample set's ``MANIFEST.md`` (Task 4.17; DESIGN.md §9, §11.4).
 
-The manifest is a Markdown table recording the provenance of every sample
-replay under ``replays/samples/``: the model snapshot and prompt-template
+The manifest is a Markdown table recording the provenance of every sample replay
+under a per-set ``replays/samples/<set>/`` dir (Task 12.12): the model snapshot
+and prompt-template
 versions a sample was generated with, when it was refreshed, the git commit at
 refresh time, the LLM spend, and the decisive outcome. Phase 5 metric outputs
 can then be attributed to a specific prompt version + model snapshot.
@@ -33,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -49,26 +51,29 @@ if str(_REPO_ROOT) not in sys.path:
 
 from llm.provider import DEFAULT_MEETING_MODEL  # noqa: E402
 from orchestrator.replay import (  # noqa: E402
+    ReplayEntry,
     compute_cost_usd,
+    read_all_entries,
     read_game_outcome,
     read_meeting_entries,
 )
 
-_DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples"
 _FILENAME_PREFIX = "replay-seed-"
 _FILENAME_SUFFIX = ".jsonl"
 
-# Per-set roster sidecar (Task 7.4). Mirrors api.replay_loader: the flat MVP
-# baseline (4p/1i + 1 task) carries NO sidecar — the loader reconstructs it from
-# its defaults (num_impostors=1, tasks_per_crewmate=1, num_players inferred from
-# the action stream). EVERY other committed set carries an explicit roster.json
-# (also the deferred frontend browse track's metadata source), so a per-set
-# refresh must write + validate it BEFORE spending. Kept as literals (not an
-# orchestrator.game import) so this lightweight refresh helper stays cheap to load.
+# Per-set roster sidecar (Task 7.4 / 12.12). Mirrors api.replay_loader, which
+# reconstructs a set from its roster.json — or, ABSENT one, from the 4p/1i default
+# (num_impostors=1, tasks_per_crewmate=1, num_players inferred from the action
+# stream). The committed flat 4p1i baseline (now replays/samples/4p1i/, Task 12.12)
+# ships descriptor-less and is never re-recorded, so the default path keeps
+# reconstructing it byte-identically. A per-set REFRESH writes + validates an
+# explicit roster.json for the set it records (BEFORE spending), so the generated
+# set reconstructs from its own pinned roster. Now that every set is a named subdir
+# (Task 12.12 removed the flat-root special-casing), the refresh always writes a
+# sidecar — there is no privileged root directory left to guard. Kept as literals
+# (not an orchestrator.game import) so this lightweight helper stays cheap to load.
 _ROSTER_FILENAME = "roster.json"
 _ROSTER_FIELDS = ("num_players", "num_impostors", "tasks_per_crewmate")
-# (num_players, num_impostors, tasks_per_crewmate) of the descriptor-less baseline.
-_MVP_BASELINE_ROSTER = (4, 1, 1)
 
 # Sentinel for the prompt_versions column of a sample that had no meetings (no
 # LLM calls, hence no prompt templates in play). refresh_samples.sh keys its
@@ -434,18 +439,6 @@ def sum_cost(sample_dir: Path, seeds: Sequence[int]) -> float:
     return sum(compute_cost_usd(_sample_path(sample_dir, seed)) for seed in seeds)
 
 
-def _is_flat_baseline_dir(sample_dir: Path) -> bool:
-    """True iff ``sample_dir`` is the canonical flat baseline set directory.
-
-    The two-set contract reserves the descriptor-less default for exactly ONE
-    location — the committed flat 4p/1i baseline at :data:`_DEFAULT_SAMPLE_DIR`.
-    Every other (per-set subdir) target must carry an explicit ``roster.json``,
-    and only this directory may be refreshed with the baseline (4p/1i) roster.
-    """
-
-    return sample_dir.resolve() == _DEFAULT_SAMPLE_DIR.resolve()
-
-
 def _validated_roster(raw: object, *, source: str) -> dict[str, int]:
     """Validate a roster mapping with ``api.replay_loader``'s strict rules.
 
@@ -516,6 +509,90 @@ def _validate_roster_is_seedable(roster: dict[str, int]) -> None:
         raise ValueError(f"requested roster is invalid for the seeder: {exc}") from exc
 
 
+# A committed set's dir name follows the ``<players>p<impostors>i`` convention
+# (mirrors api.replay_loader._expected_seedset) — a fallback signal for the player
+# count when a descriptor-less set has no parseable recorded actions to infer from.
+_SET_NAME_ROSTER_RE = re.compile(r"(\d+)p(\d+)i")
+# Mirrors api.replay_loader._PLAYER_ID_PATTERN: the seeder names players p-1..p-N.
+_PLAYER_ID_RE = re.compile(r"p-(\d+)")
+
+
+def _infer_num_players_from_dir(sample_dir: Path) -> int | None:
+    """Infer a descriptor-less set's player count from its recorded actions.
+
+    Mirrors :func:`api.replay_loader._infer_num_players`: the seeder names players
+    ``p-1 .. p-N`` and every alive agent acts each tick, so the max ``p-N`` across
+    recorded actions is the player count. Reads just the first replay that carries
+    actions (cheap). Returns ``None`` when no parseable replay/action is found.
+    """
+
+    max_index = 0
+    for seed in discover_seeds(sample_dir):
+        for entry in read_all_entries(_sample_path(sample_dir, seed)):
+            if not isinstance(entry, ReplayEntry):
+                continue
+            for raw_action in entry.actions:
+                actor = raw_action.get("actor")
+                if isinstance(actor, str):
+                    match = _PLAYER_ID_RE.fullmatch(actor)
+                    if match is not None:
+                        max_index = max(max_index, int(match.group(1)))
+        if max_index > 0:
+            return max_index  # one replay with actions suffices
+    return max_index or None
+
+
+def _reject_roster_contradicting_descriptorless_set(
+    sample_dir: Path, expected: dict[str, int]
+) -> None:
+    """Refuse a roster that would corrupt an existing descriptor-less set.
+
+    A dir that already holds committed replays but NO ``roster.json`` is a
+    descriptor-less set: the loader reconstructs its replays at the DEFAULT
+    (``num_impostors=1``, ``tasks_per_crewmate=1``, ``num_players`` inferred).
+    Writing a sidecar that contradicts that default would re-seed the untouched
+    replays under the wrong roster and fail the per-tick state-hash check, so this
+    rejects it BEFORE any write/spend. ``num_impostors`` / ``tasks_per_crewmate``
+    are checked generically (a descriptor-less set is always 1/1); ``num_players``
+    is checked against the count INFERRED FROM THE REPLAYS themselves (authoritative,
+    so a copied / misnamed descriptor-less set is still protected), falling back to
+    the ``<P>p<I>i`` set-name convention only when no parseable action is found. The
+    remedy is to record a different-roster set into a NEW named subdir, not to
+    overwrite a committed set's roster.
+    """
+
+    problems: list[str] = []
+    if expected["num_impostors"] != 1:
+        problems.append(
+            f"num_impostors={expected['num_impostors']} (a descriptor-less set "
+            "reconstructs at 1)"
+        )
+    if expected["tasks_per_crewmate"] != 1:
+        problems.append(
+            f"tasks_per_crewmate={expected['tasks_per_crewmate']} (a descriptor-less "
+            "set reconstructs at 1)"
+        )
+    # Prefer the count inferred from the actual recorded replays (authoritative);
+    # fall back to the set-name convention only when inference finds no actions.
+    inferred_players = _infer_num_players_from_dir(sample_dir)
+    if inferred_players is None:
+        name_match = _SET_NAME_ROSTER_RE.fullmatch(sample_dir.name)
+        inferred_players = int(name_match.group(1)) if name_match is not None else None
+    if inferred_players is not None and expected["num_players"] != inferred_players:
+        problems.append(
+            f"num_players={expected['num_players']} but the existing replays were "
+            f"recorded with {inferred_players}"
+        )
+    if problems:
+        raise ValueError(
+            f"refusing to write {_ROSTER_FILENAME} into {sample_dir}: it already "
+            "holds committed descriptor-less replays that reconstruct at the loader "
+            "default (num_impostors=1, tasks_per_crewmate=1); the requested roster "
+            f"would corrupt them — {'; '.join(problems)}. Record a different-roster "
+            "set into a NEW named subdir and point AILIBI_SAMPLE_DIR at it."
+        )
+
+
 def ensure_roster_descriptor(
     sample_dir: Path,
     *,
@@ -526,28 +603,27 @@ def ensure_roster_descriptor(
     """Make ``<sample_dir>/roster.json`` consistent with the requested roster.
 
     Run by ``refresh_samples.sh`` BEFORE any real-provider spend so a per-set
-    refresh produces a set the loader can actually reconstruct, instead of
-    failing the per-tick state-hash check AFTER the money is spent (the sidecar
-    carries ``num_impostors``/``tasks_per_crewmate``, which are not recoverable
-    from the replay). The two-set contract is: "no descriptor" means EXACTLY the
-    flat 4p/1i baseline at :data:`_DEFAULT_SAMPLE_DIR`; every other (subdir)
-    target is a per-set committed set that always carries an explicit
-    ``roster.json``. So:
+    refresh produces a set the loader can actually reconstruct, instead of failing
+    the per-tick state-hash check AFTER the money is spent (the sidecar carries
+    ``num_impostors``/``tasks_per_crewmate``, which are not recoverable from the
+    replay). Since Task 12.12 made every set a named subdir (``replays/samples/
+    <set>/``), there is no privileged flat root to special-case: every refresh
+    target gets an explicit ``roster.json``. So:
 
-    * the REQUESTED roster is validated first — a mistyped / non-positive value,
-      or one the seeder rejects (bad parity, exhausted task pool), raises here
-      rather than being written into a malformed/poison sidecar;
-    * targeting the FLAT BASELINE dir with a non-4p/1i roster raises — that would
-      write a sidecar into (or overwrite) the committed 4p/1i baseline and break
-      its reconstruction (e.g. a 7p/2i refresh that forgot ``AILIBI_SAMPLE_DIR``);
-    * if a sidecar exists it is validated with the SAME strict rules and must
-      MATCH the requested roster, else raise — never silently overwrite a
+    * the REQUESTED roster is validated first — a mistyped / non-positive value, or
+      one the seeder rejects (bad parity, exhausted task pool), raises here rather
+      than being written into a malformed/poison sidecar;
+    * if a sidecar already exists it is validated with the SAME strict rules and
+      must MATCH the requested roster, else raise — never silently overwrite a
       committed set's descriptor, and never let a type-malformed sidecar (e.g.
       ``7.0`` or ``true``) slip past this gate only for the loader to reject it
       after spending; this also catches a refresh that forgot/mistyped the env;
-    * the flat baseline (4p/1i) is left descriptor-less; EVERY other target gets
-      an explicit ``roster.json`` written (even a 4p/1i subdir set), so a non-flat
-      directory is never left descriptor-less and silently treated as 4p/1i.
+    * otherwise the validated ``roster.json`` is written (every target, including a
+      4p/1i subdir set), so a refreshed set is never left descriptor-less.
+
+    The committed flat 4p1i baseline (``replays/samples/4p1i/``) ships
+    descriptor-less and is NOT re-recorded, so the loader keeps reconstructing it
+    from its 4p/1i default; this writer only runs on a deliberate refresh.
 
     Returns a one-line operator status. Idempotent: a matching sidecar is a no-op.
     The written JSON matches ``api.replay_loader.RosterConfig`` exactly (the three
@@ -566,21 +642,6 @@ def ensure_roster_descriptor(
     # pool) before writing anything, so a failed refresh leaves no poison sidecar.
     _validate_roster_is_seedable(expected)
 
-    is_flat_baseline = _is_flat_baseline_dir(sample_dir)
-    roster_is_baseline = (
-        num_players,
-        num_impostors,
-        tasks_per_crewmate,
-    ) == _MVP_BASELINE_ROSTER
-    if is_flat_baseline and not roster_is_baseline:
-        raise ValueError(
-            f"refusing to write a non-4p/1i roster "
-            f"({num_players}p/{num_impostors}i/{tasks_per_crewmate}t) into the flat "
-            f"baseline {sample_dir}: that directory is reserved for the "
-            "descriptor-less 4p/1i set. Point AILIBI_SAMPLE_DIR at a per-set subdir "
-            "(e.g. replays/samples/9p2i) — did you forget it?"
-        )
-
     path = sample_dir / _ROSTER_FILENAME
     if path.exists():
         try:
@@ -596,8 +657,17 @@ def ensure_roster_descriptor(
                 "AILIBI_TASKS_PER_CREWMATE for this set."
             )
         return f"roster descriptor already matches: {path}"
-    if is_flat_baseline:
-        return f"flat 4p/1i baseline — no sidecar needed in {sample_dir}"
+    # No descriptor yet. If the dir ALREADY holds committed replays it is a
+    # descriptor-less set: those replays were recorded descriptor-less, so the
+    # loader reconstructs them at its DEFAULTS (num_impostors=1, tasks_per_crewmate=1,
+    # num_players inferred / the set name's count). Writing a roster.json that
+    # contradicts those defaults would make the untouched replays fail the per-tick
+    # state-hash check and corrupt the whole set — e.g. a refresh that forgot
+    # AILIBI_SAMPLE_DIR and pointed a 4p/2i (or tasks=2, or 7p) roster at the
+    # committed flat 4p1i baseline. With the flat-root special case gone (Task
+    # 12.12), this generic guard replaces it.
+    if discover_seeds(sample_dir):
+        _reject_roster_contradicting_descriptorless_set(sample_dir, expected)
     _atomic_write_text(path, json.dumps(expected, sort_keys=True) + "\n")
     return f"wrote roster descriptor: {path}"
 
@@ -627,14 +697,14 @@ def _manifest_for(args: argparse.Namespace) -> Path:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Maintain replays/samples/MANIFEST.md (Task 4.17).",
+        description="Maintain a per-set replays/samples/<set>/MANIFEST.md (Task 4.17).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     rebuild = sub.add_parser(
         "rebuild", help="regenerate every row from samples on disk"
     )
-    rebuild.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
+    rebuild.add_argument("--sample-dir", type=Path, required=True)
     rebuild.add_argument("--manifest", type=Path, default=None)
 
     update = sub.add_parser(
@@ -648,13 +718,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="model the refresh ran with; used for seeds that recorded no calls",
     )
-    update.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
+    update.add_argument("--sample-dir", type=Path, required=True)
     update.add_argument("--manifest", type=Path, default=None)
 
     prune = sub.add_parser(
         "prune", help="drop manifest rows whose replay file no longer exists"
     )
-    prune.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
+    prune.add_argument("--sample-dir", type=Path, required=True)
     prune.add_argument("--manifest", type=Path, default=None)
 
     canonicalize = sub.add_parser(
@@ -670,14 +740,14 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="the canonical seed set the full refresh regenerated (e.g. 0..49)",
     )
-    canonicalize.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
+    canonicalize.add_argument("--sample-dir", type=Path, required=True)
     canonicalize.add_argument("--manifest", type=Path, default=None)
 
     sum_cost_parser = sub.add_parser(
         "sum-cost", help="print summed cost_usd across --seeds (stdout, one float)"
     )
     sum_cost_parser.add_argument("--seeds", type=_parse_seed_csv, required=True)
-    sum_cost_parser.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
+    sum_cost_parser.add_argument("--sample-dir", type=Path, required=True)
 
     roster = sub.add_parser(
         "roster",
@@ -686,7 +756,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "it for a non-default set, fail loud if an existing one disagrees)"
         ),
     )
-    roster.add_argument("--sample-dir", type=Path, default=_DEFAULT_SAMPLE_DIR)
+    roster.add_argument("--sample-dir", type=Path, required=True)
     roster.add_argument("--num-players", type=int, required=True)
     roster.add_argument("--num-impostors", type=int, required=True)
     roster.add_argument("--tasks-per-crewmate", type=int, required=True)

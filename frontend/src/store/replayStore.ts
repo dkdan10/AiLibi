@@ -83,9 +83,16 @@ export interface ReplayStoreState {
   // the workspace; replays/highlights/tournament are the other top-level routes.
   view: ViewId;
 
-  // The served replay set id, carried only so the URL round-trips it (there is
-  // no set-switcher yet; consumed by a later browser slice). `null` = unknown.
+  // The active replay set id (Task 12.12). URL-synced via `usePlayback` (the
+  // `set` key ↔ this field); the set selector drives it through `setSeedSet`, and
+  // the browser + dashboard re-fetch `/replays` + `/eval/*` for it. `null` =
+  // unknown (before `/sets` resolves a default).
   seedSet: string | null;
+
+  // The available recorded sets (`GET /sets`), populated on load; AUTO-GROWS as
+  // new sets are recorded. The set selector renders from this list.
+  availableSets: string[];
+  availableSetsError: string | null;
 
   // Map perspective overlay (Omniscient ↔ As-agent fog). Consumed by 12.5; added
   // now so the URL + store contract is stable for the parallel chrome PRs. Never
@@ -112,6 +119,7 @@ export interface ReplayStoreState {
 }
 
 export interface ReplayStoreActions {
+  loadSets(): Promise<void>;
   loadReplayList(): Promise<void>;
   selectReplay(gameId: string): Promise<void>;
   setCurrentTick(tick: number): void;
@@ -177,6 +185,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
     // distinct meetings/agents on one replay still coexist.
     let latestReplayRequest = 0;
     let latestReplayListRequest = 0;
+    let latestSetsRequest = 0;
 
     return {
       replayList: null,
@@ -192,16 +201,48 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       meetingCache: {},
       view: "replays",
       seedSet: null,
+      availableSets: [],
+      availableSetsError: null,
       perspective: OMNISCIENT,
       beliefView: "belief",
       hoverTick: null,
       autoFollow: true,
       highlightedSighting: null,
 
+      async loadSets() {
+        // Fetch the available sets (Task 12.12) and, when no set is active yet
+        // (no `set` URL key hydrated by usePlayback), adopt the server's default
+        // so the selector shows a selection and every fetch is explicit. A set
+        // already chosen (deep link / selector) is left untouched.
+        const requestToken = ++latestSetsRequest;
+        try {
+          const { sets, default: defaultSet } = await api.getSets();
+          if (requestToken !== latestSetsRequest) {
+            return;
+          }
+          const current = get().seedSet;
+          const next =
+            current !== null && sets.includes(current) ? current : defaultSet;
+          set({
+            availableSets: sets,
+            availableSetsError: null,
+            seedSet: next,
+          });
+        } catch (error) {
+          if (requestToken !== latestSetsRequest) {
+            return;
+          }
+          set({ availableSetsError: errorMessage(error) });
+        }
+      },
+
       async loadReplayList() {
         const requestToken = ++latestReplayListRequest;
+        // Read the active set at call time so a re-fetch after a set switch lists
+        // the new set's replays (the caller re-invokes on seedSet change).
+        const activeSet = get().seedSet ?? undefined;
         try {
-          const list = await api.listReplays();
+          const list = await api.listReplays(activeSet);
           if (requestToken !== latestReplayListRequest) {
             return;
           }
@@ -216,9 +257,21 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       async selectReplay(gameId) {
         const requestToken = ++latestReplayRequest;
+        // Pin the set this selection is for (both sets share seed-based ids).
+        // Changing the Set selector does NOT start a new selectReplay, so the
+        // token alone wouldn't catch a mid-flight set switch — without this the
+        // workspace could open the OLD set's replay under the new `seedSet`, and
+        // its memory/meeting fetches would then use the new set (a mismatch). A
+        // null activeSet is the UNRESOLVED case (a no-set deep link, before
+        // `/sets` lands): it resolves to the server default, so null -> default is
+        // not a switch and must not drop the deep-linked replay.
+        const activeSet = get().seedSet;
         try {
-          const replay = await api.getReplay(gameId);
-          if (requestToken !== latestReplayRequest) {
+          const replay = await api.getReplay(gameId, activeSet ?? undefined);
+          if (
+            requestToken !== latestReplayRequest ||
+            (activeSet !== null && get().seedSet !== activeSet)
+          ) {
             return;
           }
           // Selecting a replay opens the workspace (DESIGN.md §2.1). Reset the
@@ -243,6 +296,23 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           });
         } catch (error) {
           if (requestToken !== latestReplayRequest) {
+            return; // superseded by a newer selection
+          }
+          // A failed load carries no wrong-set DATA to leak, so the set-change
+          // decision here is only about WHICH stale failures to surface:
+          //   • LIVE switch away from a still-available set (the user picked
+          //     another valid set mid-load): suppress — the user moved on, and the
+          //     success branch likewise drops the analogous stale success.
+          //   • STALE/normalized request set (a no-set deep link, or a ?set=old
+          //     that loadSets normalized away — its set is null or no longer in
+          //     availableSets): SURFACE it. That is what lets usePlayback's pending
+          //     URL hydration clear (it keys off currentReplayError); dropping it
+          //     silently would hang hydration forever (URL sync off, no replay).
+          const setSwitchedToAvailable =
+            activeSet !== null &&
+            get().seedSet !== activeSet &&
+            get().availableSets.includes(activeSet);
+          if (setSwitchedToAvailable) {
             return;
           }
           // Reset all replay-scoped state too, so a failed selection can't
@@ -295,20 +365,35 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           return;
         }
         const gameId = replay.metadata.game_id;
+        // Capture the SET too: the committed sets share seed-based game_ids, so a
+        // game_id-only guard would let a slow fetch from the previous set land in
+        // the new set's cache after a live set switch (Task 12.12) — compare both.
+        const activeSet = get().seedSet;
         try {
-          const memory = await api.getMemory(gameId, meetingId, agentId);
-          // Drop the result if the selected replay changed while in flight, so
-          // a stale snapshot can't land in (and become a cache hit for)
-          // another replay's memoryCache.
-          if (get().currentReplay?.metadata.game_id !== gameId) {
+          const memory = await api.getMemory(
+            gameId,
+            meetingId,
+            agentId,
+            activeSet ?? undefined,
+          );
+          // Drop the result if the selected replay OR the active set changed while
+          // in flight, so a stale snapshot can't land in (and become a cache hit
+          // for) another replay/set's memoryCache.
+          if (
+            get().currentReplay?.metadata.game_id !== gameId ||
+            (activeSet !== null && get().seedSet !== activeSet)
+          ) {
             return;
           }
           set((state) => ({
             memoryCache: { ...state.memoryCache, [key]: memory },
           }));
         } catch (error) {
-          // Likewise, don't surface an error for a replay no longer selected.
-          if (get().currentReplay?.metadata.game_id !== gameId) {
+          // Likewise, don't surface an error for a replay/set no longer selected.
+          if (
+            get().currentReplay?.metadata.game_id !== gameId ||
+            (activeSet !== null && get().seedSet !== activeSet)
+          ) {
             return;
           }
           set({ currentReplayError: errorMessage(error) });
@@ -319,8 +404,8 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
         // Lazy-load a full meeting transcript (with the LLM bodies windowed out
         // of the bulk payload) on demand, e.g. when an LLMCallCard is expanded.
         // Cached by meeting id, so the first expand in a meeting hydrates every
-        // card in it. Mirrors fetchMemoryView's in-flight-game guard so a stale
-        // response can't land in another replay's cache.
+        // card in it. Mirrors fetchMemoryView's in-flight-game+set guard so a
+        // stale response can't land in another replay/set's cache.
         if (get().meetingCache[meetingId] !== undefined) {
           return;
         }
@@ -329,16 +414,29 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           return;
         }
         const gameId = replay.metadata.game_id;
+        // Capture the SET too (committed sets share seed-based game_ids; see
+        // fetchMemoryView), and compare both on completion.
+        const activeSet = get().seedSet;
         try {
-          const meeting = await api.getMeeting(gameId, meetingId);
-          if (get().currentReplay?.metadata.game_id !== gameId) {
+          const meeting = await api.getMeeting(
+            gameId,
+            meetingId,
+            activeSet ?? undefined,
+          );
+          if (
+            get().currentReplay?.metadata.game_id !== gameId ||
+            (activeSet !== null && get().seedSet !== activeSet)
+          ) {
             return;
           }
           set((state) => ({
             meetingCache: { ...state.meetingCache, [meetingId]: meeting },
           }));
         } catch (error) {
-          if (get().currentReplay?.metadata.game_id !== gameId) {
+          if (
+            get().currentReplay?.metadata.game_id !== gameId ||
+            (activeSet !== null && get().seedSet !== activeSet)
+          ) {
             return;
           }
           set({ currentReplayError: errorMessage(error) });
