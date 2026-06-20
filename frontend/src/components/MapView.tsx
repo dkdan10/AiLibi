@@ -41,7 +41,7 @@ import type {
   VentView,
 } from "../types/api";
 import { AgentToken, TWEEN_DURATION_MS } from "./AgentToken";
-import { BodyMarker } from "./BodyMarker";
+import { BODY_CAP, BodyMarker } from "./BodyMarker";
 import { MapToolbar } from "./MapToolbar";
 import { ROOM_PALETTE, RoomRect } from "./RoomRect";
 import { SabotageOverlay } from "./SabotageOverlay";
@@ -476,11 +476,16 @@ function KillFlash({
   });
   const x = offsetX + room.position.x * scale;
   const y = offsetY + room.position.y * scale;
+  const w = room.size.width * scale;
+  const h = room.size.height * scale;
   return (
     <pixiGraphics
       draw={(g: Graphics) => {
         g.clear();
-        g.roundRect(x - 4, y - 4, room.size.width * scale + 8, room.size.height * scale + 8, tokens.radius.xl);
+        // Cap the ring INSIDE the cell (Task 12.13): the old room+8px ring spilled
+        // over neighbours and clipped stacked body labels. Inset by 2px so it
+        // never reaches past the room it marks.
+        g.roundRect(x + 2, y + 2, Math.max(0, w - 4), Math.max(0, h - 4), tokens.radius.md);
         g.stroke({ width: 2.8, color: KILL, alpha });
       }}
     />
@@ -508,6 +513,8 @@ export function MapView() {
   const currentTick = useReplayStore((s) => s.currentTick);
   const perspective = useReplayStore((s) => s.perspective);
   const highlightedSighting = useReplayStore((s) => s.highlightedSighting);
+  const selectAgent = useReplayStore((s) => s.selectAgent);
+  const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
   const { tickNumber } = usePlayback();
   useFontNudge();
 
@@ -713,6 +720,10 @@ export function MapView() {
         offsetX={offsetX}
         offsetY={offsetY}
         animate={animate}
+        selected={selectedAgentId === spec.id}
+        onSelect={() => {
+          selectAgent(spec.id);
+        }}
       />
     );
   });
@@ -729,14 +740,48 @@ export function MapView() {
           killedBy: null, // firewall: the As-agent view never exposes the killer
         }));
 
-  const bodyMarkers = bodySpecs.flatMap((body) => {
-    const room = roomsById.get(body.roomId);
+  // Group bodies by room so multiple bodies in one room lay out in a per-room
+  // grid (Task 12.13 admin-cluster fix) rather than each scattering off a global
+  // index; a pile past BODY_CAP collapses to a single "✕ ×N" marker instead of
+  // garbling the room title.
+  const bodiesByRoom = new Map<string, BodySpec[]>();
+  for (const body of bodySpecs) {
+    const list = bodiesByRoom.get(body.roomId);
+    if (list === undefined) {
+      bodiesByRoom.set(body.roomId, [body]);
+    } else {
+      list.push(body);
+    }
+  }
+  const bodyMarkers = [...bodiesByRoom.entries()].flatMap(([roomId, list]) => {
+    const room = roomsById.get(roomId);
     if (room === undefined) return [];
-    return [
+    // Deterministic order so slot assignment is stable across renders.
+    const sorted = [...list].sort((a, b) => a.victimId.localeCompare(b.victimId));
+    if (sorted.length > BODY_CAP) {
+      return [
+        <BodyMarker
+          key={`bodies-${roomId}`}
+          room={room}
+          slotIndex={0}
+          slotCount={1}
+          collapsedCount={sorted.length}
+          isDiscovered={sorted.some((b) => b.isDiscovered)}
+          victimLabel=""
+          killedBy={null}
+          glyph={GLYPH_SVG.body}
+          scale={scale}
+          offsetX={offsetX}
+          offsetY={offsetY}
+        />,
+      ];
+    }
+    return sorted.map((body, i) => (
       <BodyMarker
         key={body.victimId}
         room={room}
-        placementIndex={playerIndexById.get(body.victimId) ?? 0}
+        slotIndex={i}
+        slotCount={sorted.length}
         isDiscovered={body.isDiscovered}
         victimLabel={body.victimId}
         killedBy={body.killedBy}
@@ -744,8 +789,8 @@ export function MapView() {
         scale={scale}
         offsetX={offsetX}
         offsetY={offsetY}
-      />,
-    ];
+      />
+    ));
   });
 
   // ── vent escapes + kill flashes (Omniscient only) ──

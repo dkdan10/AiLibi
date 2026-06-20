@@ -68,6 +68,12 @@ export interface ReplayStoreState {
   // Selected agent (for ThoughtStream).
   selectedAgentId: string | null;
 
+  // Whether the Belief × Truth hero panel is open (Task 12.13). Held here — the
+  // explicit shared-state object — so the launcher can be re-anchored into chrome
+  // (a tab beside the perspective toggle, off the map's room cells) while the
+  // panel itself lives in BeliefMatrix. Ephemeral UI state, not URL-synced.
+  beliefOpen: boolean;
+
   // Memory cache (sparse — only meeting-boundary snapshots),
   // keyed by `${meetingId}:${agentId}`.
   memoryCache: Record<string, AgentMemoryView>;
@@ -134,6 +140,7 @@ export interface ReplayStoreActions {
   setPlaybackSpeed(speed: PlaybackSpeed): void;
   selectMeeting(meetingId: string | null): void;
   selectAgent(agentId: string | null): void;
+  setBeliefOpen(open: boolean): void;
   fetchMemoryView(meetingId: string, agentId: string): Promise<void>;
   fetchMeeting(meetingId: string): Promise<void>;
   clearError(): void;
@@ -205,6 +212,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       playbackSpeed: 1,
       selectedMeetingId: null,
       selectedAgentId: null,
+      beliefOpen: false,
       memoryCache: {},
       meetingCache: {},
       view: "replays",
@@ -296,6 +304,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             isPlaying: false,
             selectedMeetingId: null,
             selectedAgentId: null,
+            beliefOpen: false,
             memoryCache: {},
             meetingCache: {},
             view: "workspace",
@@ -334,6 +343,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             isPlaying: false,
             selectedMeetingId: null,
             selectedAgentId: null,
+            beliefOpen: false,
             memoryCache: {},
             meetingCache: {},
             view: "replays",
@@ -362,6 +372,10 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       selectAgent(agentId) {
         set({ selectedAgentId: agentId });
+      },
+
+      setBeliefOpen(open) {
+        set({ beliefOpen: open });
       },
 
       async fetchMemoryView(meetingId, agentId) {

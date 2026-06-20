@@ -647,6 +647,13 @@ class ReplayLoader:
         )
         state = initial_state
 
+        # The FIXED display denominator for the roster task meter (Phase-12
+        # close-audit): the game-start task-instance count, snapshotted from the
+        # seeded state ONCE. ``state.tasks`` shrinks as crewmates die (their
+        # instances leave the pool), so the live per-tick total is a misleading
+        # meter denominator; this value never changes across the game.
+        fixed_tasks_required_total = len(initial_state.tasks)
+
         memories: dict[str, AgentMemory] = {}
         service: ObservationService | None = None
         audit_dir: tempfile.TemporaryDirectory[str] | None = None
@@ -684,7 +691,14 @@ class ReplayLoader:
             else None
         )
         ticks: list[TickView] = [
-            self._tick_view(-1, initial_state, (), None, start_visibility)
+            self._tick_view(
+                -1,
+                initial_state,
+                (),
+                None,
+                start_visibility,
+                fixed_tasks_required_total=fixed_tasks_required_total,
+            )
         ]
         trigger_kind_by_meeting_id: dict[str, _TriggerKind] = {}
         memory_views: dict[tuple[str, str], AgentMemoryView] = {}
@@ -738,7 +752,12 @@ class ReplayLoader:
                 )
                 ticks.append(
                     self._tick_view(
-                        entry.tick, state, events, meeting_id, tick_visibility
+                        entry.tick,
+                        state,
+                        events,
+                        meeting_id,
+                        tick_visibility,
+                        fixed_tasks_required_total=fixed_tasks_required_total,
                     )
                 )
 
@@ -804,6 +823,7 @@ class ReplayLoader:
                             state,
                             tasks_completed=meeting_view_tick.tasks_completed_total,
                             tasks_required=meeting_view_tick.tasks_required_total,
+                            tasks_required_total=fixed_tasks_required_total,
                         )
                     }
                 )
@@ -933,6 +953,8 @@ class ReplayLoader:
         events: Sequence[EngineEvent],
         meeting_id: str | None,
         visibility_by_agent: Mapping[str, AgentVisibilityView] | None = None,
+        *,
+        fixed_tasks_required_total: int,
     ) -> TickView:
         agent_states = tuple(
             self._agent_tick_state(state, pid, visibility_by_agent)
@@ -963,6 +985,10 @@ class ReplayLoader:
                 state,
                 tasks_completed=tasks_completed_total,
                 tasks_required=tasks_required_total,
+                # The DISPLAY denominator is the FIXED game-start instance count
+                # threaded from ``_walk`` — never this tick's shrinking
+                # ``len(state.tasks)`` (which stays the live win-condition value).
+                tasks_required_total=fixed_tasks_required_total,
             ),
         )
 
@@ -1870,16 +1896,26 @@ def _sabotage_detail_view(state: WorldState) -> SabotageDetailView | None:
 
 
 def _advantage_view(
-    state: WorldState, *, tasks_completed: int, tasks_required: int
+    state: WorldState,
+    *,
+    tasks_completed: int,
+    tasks_required: int,
+    tasks_required_total: int,
 ) -> AdvantageView:
     """Project the per-tick crew/impostor advantage frame (DESIGN.md §4, §7).
 
-    The four counts are authoritative; ``advantage`` is a single signed render
+    The counts are authoritative; ``advantage`` is a single signed render
     heuristic in ``[-1, 1]`` (positive favours the crew): the crew task clock
     (``tasks_completed / tasks_required``) minus impostor parity pressure
     (``impostors_alive / max(crew_alive, 1)``, → 1.0 at parity), clamped. It
     starts mildly negative (impostors hold the initiative), rises as the crew
     completes tasks, and falls as kills approach parity.
+
+    ``tasks_required`` is the LIVE win-condition denominator (``len(state.tasks)``
+    this tick) and drives the curve. ``tasks_required_total`` is the FIXED
+    game-start instance count threaded in from the caller — it never changes
+    across a game and is the stable DISPLAY denominator for the roster meter
+    (the live count shrinks as crewmates die; see ``AdvantageView``).
     """
 
     crew_alive = sum(
@@ -1896,6 +1932,7 @@ def _advantage_view(
         impostors_alive=impostors_alive,
         tasks_completed=tasks_completed,
         tasks_required=tasks_required,
+        tasks_required_total=tasks_required_total,
         advantage=advantage,
     )
 

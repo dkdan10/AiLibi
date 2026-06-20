@@ -118,6 +118,12 @@ export const tokens = {
     display: "600 'Fredoka'",
     body: "400 'Fredoka'",
     mono: "'Space Mono'",
+    // Sub-`xs` data type sizes in px. The dense numeric / label surfaces use
+    // sizes below Tailwind's 12px `text-xs` floor; naming them here (and emitting
+    // `--text-*` utilities in `index.css`) lets the ~88 ad-hoc `text-[9/10/11px]`
+    // usages map onto a named scale instead of magic px. Tailwind's `xs`+
+    // defaults are untouched — this only ADDS the smaller steps.
+    size: { "4xs": 9, "3xs": 10, "2xs": 11 },
   },
 } as const;
 

@@ -37,6 +37,12 @@ interface AgentTokenProps {
   offsetX: number;
   offsetY: number;
   animate: boolean;
+  // Task 12.13: a map token is now clickable → open this agent's mind. When set,
+  // the token becomes interactive (pointer cursor) and taps invoke this.
+  onSelect?: () => void;
+  // Whether this agent is the currently-selected one (draws a selection halo so
+  // the click result is visible on the map).
+  selected?: boolean;
 }
 
 interface Point {
@@ -104,7 +110,8 @@ function targetPoint(props: AgentTokenProps): Point {
 }
 
 export function AgentToken(props: AgentTokenProps) {
-  const { room, color, label, actionGlyph, roleBadge, animate } = props;
+  const { room, color, label, actionGlyph, roleBadge, animate, onSelect, selected } =
+    props;
   const target = targetPoint(props);
 
   const [pos, setPos] = useState<Point>(target);
@@ -158,10 +165,22 @@ export function AgentToken(props: AgentTokenProps) {
   const badgeTopY = pos.y - CHIP_OFFSET;
 
   return (
-    <>
+    <pixiContainer
+      eventMode={onSelect !== undefined ? "static" : "auto"}
+      cursor={onSelect !== undefined ? "pointer" : "default"}
+      onPointerTap={onSelect ?? null}
+    >
       <pixiGraphics
         draw={(graphics: Graphics) => {
           graphics.clear();
+          // Selection halo (Task 12.13): a cream gap + ink ring around the disc,
+          // firewall-safe (neutral chrome, never an identity/guilt hue).
+          if (selected) {
+            graphics.circle(pos.x, pos.y, TOKEN_RADIUS + 5);
+            graphics.stroke({ width: 2.5, color: INK_900 });
+            graphics.circle(pos.x, pos.y, TOKEN_RADIUS + 3);
+            graphics.stroke({ width: 2, color: PAPER_0 });
+          }
           // Token disc.
           graphics.circle(pos.x, pos.y, TOKEN_RADIUS);
           graphics.fill(tokenColor);
@@ -202,6 +221,6 @@ export function AgentToken(props: AgentTokenProps) {
           draw={(g: Graphics) => paintGlyph(g, roleBadge, chipX, badgeTopY, GLYPH_SIZE + 1, PAPER_0)}
         />
       )}
-    </>
+    </pixiContainer>
   );
 }

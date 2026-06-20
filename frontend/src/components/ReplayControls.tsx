@@ -47,7 +47,9 @@ const KEY_MOMENT_STYLE: Record<KeyMomentKind, { letter: string; chip: string }> 
   kill: { letter: "K", chip: "bg-kill text-paper-0" },
   meeting: { letter: "M", chip: "bg-ink-700 text-paper-0" },
   ejection: { letter: "E", chip: "bg-contradiction text-paper-0" },
-  sabotage: { letter: "S", chip: "bg-suspicion-4 text-ink-900" },
+  // Sabotage = the hazard treatment (Task 12.13): ink stripes + ⚡ glyph, OFF the
+  // reserved warm hue (it was colliding with distrust-orange + the kill red).
+  sabotage: { letter: "⚡", chip: "hazard-stripe text-paper-0" },
 };
 
 const TIMELINE_STYLE: Record<
@@ -57,7 +59,7 @@ const TIMELINE_STYLE: Record<
   kill: { letter: "K", chip: "bg-kill text-paper-0", label: "kill" },
   meeting: { letter: "M", chip: "bg-ink-700 text-paper-0", label: "meeting" },
   vent: { letter: "V", chip: "bg-ink-400 text-paper-0", label: "vent" },
-  sabotage: { letter: "S", chip: "bg-suspicion-4 text-ink-900", label: "sabotage" },
+  sabotage: { letter: "⚡", chip: "hazard-stripe text-paper-0", label: "sabotage" },
 };
 
 // Clamp a pointer's clientX to a [0,1] fraction within an element's box.

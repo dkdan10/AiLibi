@@ -305,7 +305,8 @@ export const _fidelityReplay: ReplayView = {
         "crew_alive": 3,
         "impostors_alive": 1,
         "tasks_completed": 0,
-        "tasks_required": 3
+        "tasks_required": 3,
+        "tasks_required_total": 3
       },
       "agent_states": [
         {
@@ -439,7 +440,8 @@ export const _fidelityReplay: ReplayView = {
         "crew_alive": 3,
         "impostors_alive": 1,
         "tasks_completed": 0,
-        "tasks_required": 3
+        "tasks_required": 3,
+        "tasks_required_total": 3
       },
       "agent_states": [
         {
@@ -573,7 +575,8 @@ export const _fidelityReplay: ReplayView = {
         "crew_alive": 3,
         "impostors_alive": 1,
         "tasks_completed": 0,
-        "tasks_required": 3
+        "tasks_required": 3,
+        "tasks_required_total": 3
       },
       "agent_states": [
         {
@@ -707,7 +710,8 @@ export const _fidelityReplay: ReplayView = {
         "crew_alive": 3,
         "impostors_alive": 1,
         "tasks_completed": 0,
-        "tasks_required": 3
+        "tasks_required": 3,
+        "tasks_required_total": 3
       },
       "agent_states": [
         {

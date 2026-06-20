@@ -3,10 +3,14 @@
 // (App.tsx mounts <ThoughtStream/>); the slot owns the right-rail chrome + the
 // meeting gate and renders the new <MindInspector/> inside it.
 //
-// The rail mounts iff a meeting is selected: the per-agent memory + LLM I/O the
-// inspector reads are meeting-boundary snapshots, so outside a meeting there is
-// no inspector context and the rail stays hidden rather than floating empty over
-// the map.
+// The rail mounts when a meeting is selected OR an agent is selected (Task
+// 12.13): agent inspection is now reachable straight from the map / roster (a
+// click → `selectAgent`), not only from inside a meeting. When the rail opens
+// for a selected agent it sources that agent's LATEST meeting snapshot at or
+// before the current tick; before the agent's first meeting it shows an honest
+// "no deliberation yet" empty state rather than fabricating between-meeting data.
+// With no meeting AND no agent selected it stays hidden rather than floating
+// empty over the map.
 //
 // Task 12.11 overlay coordination: the rail is part of ONE meeting-mode layout,
 // not a colliding `fixed` overlay. It sits at z-[55] (above the masked meeting at
@@ -16,15 +20,37 @@
 // never overlaps the Ballots column. Below xl there is no room beside the
 // transcript, so it collapses to a slide-in drawer toggled by an edge tab.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { usePlayback } from "../hooks/usePlayback";
 import { useReplayStore } from "../store/replayStore";
 import { MindInspector } from "./MindInspector";
 
 export function ThoughtStream() {
-  const meetingId = useReplayStore((s) => s.selectedMeetingId);
+  const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
+  const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
   const replay = useReplayStore((s) => s.currentReplay);
+  const { tickNumber } = usePlayback();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // The agent's LATEST meeting at or before the current tick (DESIGN.md §3.5;
+  // the inspector's per-agent data is meeting-boundary, so a map/roster click
+  // opens to the most recent deliberation ≤ tick). `null` before the first
+  // meeting → the inspector renders the honest "no deliberation yet" state.
+  const latestMeetingId = useMemo(() => {
+    let best: { tick: number; id: string } | null = null;
+    for (const meeting of replay?.meetings ?? []) {
+      if (meeting.tick <= tickNumber && (best === null || meeting.tick > best.tick)) {
+        best = { tick: meeting.tick, id: meeting.meeting_id };
+      }
+    }
+    return best?.id ?? null;
+  }, [replay, tickNumber]);
+
+  // An explicitly opened meeting wins (the user is reading that meeting); a bare
+  // agent selection from the map/roster resolves to the latest snapshot ≤ tick.
+  const effectiveMeetingId =
+    selectedMeetingId ?? (selectedAgentId !== null ? latestMeetingId : null);
   // Track the xl breakpoint (Tailwind default 80rem) so the closed drawer can be
   // made `inert` ONLY below xl — at xl+ the rail is a persistent, interactive
   // column and must never be inert.
@@ -49,11 +75,22 @@ export function ThoughtStream() {
   // to a new meeting doesn't leave a stale drawer open over the fresh transcript.
   useEffect(() => {
     setMobileOpen(false);
-  }, [meetingId]);
+  }, [selectedMeetingId]);
 
-  if (meetingId === null || replay === null) {
+  // Reveal the drawer on a fresh agent selection (Task 12.13): a map/roster click
+  // is the user asking to inspect, so the narrow-screen result must not stay
+  // hidden behind the edge tab.
+  useEffect(() => {
+    if (selectedAgentId !== null) {
+      setMobileOpen(true);
+    }
+  }, [selectedAgentId]);
+
+  if ((selectedMeetingId === null && selectedAgentId === null) || replay === null) {
     return null;
   }
+
+  const noMeetingYet = effectiveMeetingId === null;
 
   // Closed on narrow (slide off-screen), always shown on xl+. Open → shown.
   const railTransform = mobileOpen
@@ -96,8 +133,9 @@ export function ThoughtStream() {
               Mind inspector
             </h2>
             <p className="text-xs text-ink-500">
-              Per-agent belief, prompt, response, memory, and flags for the
-              selected meeting.
+              {noMeetingYet
+                ? "Per-agent belief, prompt, response, memory, and flags — populated after the agent's first meeting."
+                : "Per-agent belief, prompt, response, memory, and flags from the latest meeting at or before this tick."}
             </p>
           </div>
           <button
@@ -112,7 +150,7 @@ export function ThoughtStream() {
           </button>
         </header>
 
-        <MindInspector meetingId={meetingId} />
+        <MindInspector meetingId={effectiveMeetingId} />
       </aside>
     </>
   );

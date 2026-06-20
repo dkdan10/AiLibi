@@ -52,6 +52,7 @@ import { ThoughtStream } from "./components/ThoughtStream";
 import { usePlayback, usePlaybackEngine } from "./hooks/usePlayback";
 import { OMNISCIENT, type ViewId } from "./lib/playback";
 import { useReplayStore } from "./store/replayStore";
+import { PlayerSwatch } from "./ui/PlayerSwatch";
 
 // Route-level + Pixi-heavy surfaces are lazy-loaded (Task 12.11; design §9) so
 // the initial download is just the shell, not one 859 kB monolith. MapView pulls
@@ -257,8 +258,11 @@ function PerspectiveBanner() {
   const perspective = useReplayStore((s) => s.perspective);
   const setPerspective = useReplayStore((s) => s.setPerspective);
   const setView = useReplayStore((s) => s.setView);
+  const setBeliefOpen = useReplayStore((s) => s.setBeliefOpen);
+  const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
 
   const meta = replay?.metadata ?? null;
+  const meetingCount = meta?.meeting_count ?? 0;
   // This shell banner is the read-only PERSPECTIVE INDICATOR; the interactive
   // As-agent switcher lives in the stage's map toolbar (MapToolbar, 12.5). The
   // panels now gate every secret to Omniscient-or-self
@@ -276,7 +280,7 @@ function PerspectiveBanner() {
           onClick={() => {
             setView("replays");
           }}
-          className="rounded-md border-2 border-ink-900 bg-paper-0 px-2.5 py-1 text-sm font-medium text-ink-900 hover:bg-paper-2"
+          className="rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1 text-sm font-medium text-ink-900 hover:bg-paper-2"
         >
           ‹ Replays
         </button>
@@ -287,7 +291,7 @@ function PerspectiveBanner() {
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-wide text-ink-500">
+        <span className="font-mono text-3xs uppercase tracking-wide text-ink-500">
           Perspective
         </span>
         <span
@@ -303,10 +307,48 @@ function PerspectiveBanner() {
               setPerspective(OMNISCIENT);
             }}
             title="Return to the Omniscient view (enter As-agent from the map toolbar)"
-            className="rounded-md border-2 border-ink-900 bg-paper-0 px-2.5 py-1 text-sm font-medium text-ink-900 hover:bg-paper-2"
+            className="rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1 text-sm font-medium text-ink-900 hover:bg-paper-2"
           >
             Exit fog
           </button>
+        )}
+        {/* Belief × Truth launcher — re-anchored into chrome (Task 12.13): a tab
+            beside the perspective toggle, never floating over the Reactor cell.
+            Firewall: the matrix is an Omniscient cross-agent overview, so the
+            launcher hides in fog and while a meeting owns the screen (matching
+            BeliefMatrix's gates). Greyed with a tooltip when the game has no
+            meetings (nothing to compare). */}
+        {!inFog && selectedMeetingId === null && (
+          <>
+            <span aria-hidden className="mx-1 h-5 w-px bg-ink-200" />
+            <button
+              type="button"
+              disabled={meetingCount === 0}
+              onClick={() => {
+                setBeliefOpen(true);
+              }}
+              aria-label="Open the Belief × Truth matrix"
+              title={
+                meetingCount === 0
+                  ? "No meetings in this game — no beliefs to compare against ground truth"
+                  : "Belief × Truth — who suspects whom, vs ground truth"
+              }
+              className={
+                "flex items-center gap-2 rounded-md border-2 border-ink-900 px-3 py-1 text-sm font-semibold shadow-chrome-1 transition-colors " +
+                (meetingCount === 0
+                  ? "cursor-not-allowed bg-paper-2 text-ink-500 opacity-60"
+                  : "bg-paper-0 text-ink-900 hover:bg-paper-2")
+              }
+            >
+              <span aria-hidden className="font-mono text-base leading-none">
+                ⊞
+              </span>
+              Belief × Truth
+              <span className="rounded-pill bg-paper-2 px-1.5 font-mono text-3xs text-ink-500">
+                {meetingCount} mtg
+              </span>
+            </button>
+          </>
         )}
       </div>
     </header>
@@ -324,6 +366,8 @@ function PerspectiveBanner() {
 function RosterRail() {
   const replay = useReplayStore((s) => s.currentReplay);
   const perspective = useReplayStore((s) => s.perspective);
+  const selectAgent = useReplayStore((s) => s.selectAgent);
+  const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
   const { frame } = usePlayback();
   const [open, setOpen] = useState(false);
 
@@ -342,9 +386,12 @@ function RosterRail() {
   // omniscient-only facts (crew/impostor counts, per-player alive/dead, role) to
   // Omniscient; the task progress is agent-visible and shows in both modes.
   const omniscient = perspective.mode === "omniscient";
+  // Display denominator is the FIXED game-start task total (DESIGN.md §4;
+  // Phase-12 close-audit), NOT the live ``tasks_required`` which shrinks as
+  // crewmates die — so the meter + bar stay stable and monotonic.
   const taskPct =
-    adv !== null && adv.tasks_required > 0
-      ? Math.round((adv.tasks_completed / adv.tasks_required) * 100)
+    adv !== null && adv.tasks_required_total > 0
+      ? Math.round((adv.tasks_completed / adv.tasks_required_total) * 100)
       : 0;
 
   return (
@@ -358,16 +405,25 @@ function RosterRail() {
           }}
           aria-expanded={open}
           aria-controls="roster-body"
-          className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-0.5 text-xs font-semibold text-ink-900 hover:bg-paper-2 lg:hidden"
+          className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 text-xs font-semibold text-ink-900 hover:bg-paper-2 lg:hidden"
         >
           {open ? "Hide ▴" : "Show ▾"}
         </button>
       </div>
+      {/* Compact summary on the collapsed roster bar (Task 12.13 narrow-820): keep
+          the crew/imp/tasks facts visible when the rail is collapsed on narrow
+          screens. Firewall: crew/imp counts only in Omniscient; tasks always. */}
+      {adv !== null && !open && (
+        <div className="mt-1 font-mono text-3xs text-ink-500 lg:hidden">
+          {omniscient && `crew ${adv.crew_alive} · imp ${adv.impostors_alive} · `}
+          tasks {adv.tasks_completed}/{adv.tasks_required_total}
+        </div>
+      )}
       <div id="roster-body" className={open ? "mt-2 block" : "mt-2 hidden lg:block"}>
         {adv !== null && (
-          <div className="mb-3 rounded-md border border-ink-200 p-2 font-mono text-[11px] text-ink-700">
+          <div className="mb-3 rounded-md border border-ink-200 p-2 font-mono text-2xs text-ink-700">
             {omniscient && (
-              <div className="mb-1.5 flex justify-between">
+              <div className="mb-2 flex justify-between">
                 <span>crew {adv.crew_alive}</span>
                 <span>imp {adv.impostors_alive}</span>
               </div>
@@ -376,41 +432,52 @@ function RosterRail() {
               <div className="h-full bg-trust-strong" style={{ width: `${taskPct}%` }} />
             </div>
             <div className="mt-1 text-ink-500">
-              tasks {adv.tasks_completed}/{adv.tasks_required}
+              tasks {adv.tasks_completed}/{adv.tasks_required_total}
             </div>
           </div>
         )}
         <ul className="flex flex-col gap-1">
           {replay.players.map((player) => {
             const alive = aliveById.get(player.agent_id) ?? true;
+            const selected = selectedAgentId === player.agent_id;
             return (
-              <li
-                key={player.agent_id}
-                className="flex items-center gap-2 rounded-md border border-ink-100 px-2 py-1"
-              >
-                <span
-                  aria-hidden
-                  className="inline-block h-3 w-3 shrink-0 rounded-full ring-1 ring-ink-900/40"
-                  style={{ backgroundColor: player.color }}
-                />
-                <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-900">
-                  {player.agent_id}
-                </span>
-                {omniscient && (
-                  <span className="rounded-sm border border-ink-300 px-1 text-[9px] uppercase tracking-wide text-ink-500">
-                    {player.role}
+              <li key={player.agent_id}>
+                {/* Roster row → open this agent's mind (Task 12.13): inspection is
+                    reachable from the roster, not only inside a meeting. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectAgent(player.agent_id);
+                  }}
+                  aria-pressed={selected}
+                  title={`Inspect ${player.agent_id}'s mind`}
+                  className={
+                    "flex w-full items-center gap-2 rounded-md border px-2 py-1 text-left transition-colors " +
+                    (selected
+                      ? "border-ink-900 bg-paper-2"
+                      : "border-ink-100 hover:border-ink-900 hover:bg-paper-2")
+                  }
+                >
+                  <PlayerSwatch color={player.color} size="sm" />
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-900">
+                    {player.agent_id}
                   </span>
-                )}
-                {omniscient && (
-                  <span
-                    className={
-                      "rounded-sm px-1 text-[9px] font-semibold uppercase " +
-                      (alive ? "text-ink-500" : "bg-dead text-paper-0")
-                    }
-                  >
-                    {alive ? "alive" : "dead"}
-                  </span>
-                )}
+                  {omniscient && (
+                    <span className="rounded-sm border border-ink-300 px-1 text-4xs uppercase tracking-wide text-ink-500">
+                      {player.role}
+                    </span>
+                  )}
+                  {omniscient && (
+                    <span
+                      className={
+                        "rounded-sm px-1 text-4xs font-semibold uppercase " +
+                        (alive ? "text-ink-500" : "bg-dead text-paper-0")
+                      }
+                    >
+                      {alive ? "alive" : "dead"}
+                    </span>
+                  )}
+                </button>
               </li>
             );
           })}

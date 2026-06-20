@@ -226,6 +226,7 @@ def _tick_view() -> TickView:
             impostors_alive=1,
             tasks_completed=9,
             tasks_required=14,
+            tasks_required_total=14,
             advantage=0.47,
         ),
     )

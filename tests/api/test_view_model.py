@@ -355,17 +355,46 @@ def test_advantage_view_formula() -> None:
         seed=0, game_map=game_map, num_players=4, num_impostors=1
     )
     required = len(state.tasks)
-    view = _advantage_view(state, tasks_completed=0, tasks_required=required)
+    view = _advantage_view(
+        state,
+        tasks_completed=0,
+        tasks_required=required,
+        tasks_required_total=required,
+    )
     assert view.crew_alive == 3 and view.impostors_alive == 1
     # task_progress(0) - pressure(1/3) = -1/3, clamped into [-1, 1].
     assert view.advantage == pytest.approx(-1 / 3)
+    # The fixed display total threads through verbatim (here it equals the live
+    # denominator since no crewmate has died yet).
+    assert view.tasks_required_total == required
     # Full task completion + no impostors flips it positive.
     won = _advantage_view(
         seed_initial_state(seed=0, game_map=game_map, num_players=4, num_impostors=1),
         tasks_completed=required,
         tasks_required=required,
+        tasks_required_total=required,
     )
     assert -1.0 <= won.advantage <= 1.0
+
+
+def test_advantage_required_total_is_fixed_across_ticks(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    # The roster-meter denominator must be STABLE (Phase-12 close-audit): the
+    # fixed game-start total is identical on every tick, even as the live
+    # ``tasks_required`` shrinks when crewmates die. tasks_completed never
+    # exceeds the fixed total, so the displayed meter is monotonic + bounded.
+    replay = nine_p_two_i_loader.load_replay("headless-seed-12")
+    totals = {tick.advantage.tasks_required_total for tick in replay.ticks}
+    assert len(totals) == 1, "fixed display total drifted across ticks"
+    (fixed_total,) = totals
+    assert fixed_total > 0
+    for tick in replay.ticks:
+        adv = tick.advantage
+        assert adv.tasks_completed <= fixed_total
+        # The live win-condition denominator never exceeds the game-start total
+        # (instances only leave the pool), so the fixed meter never under-reads.
+        assert adv.tasks_required <= fixed_total
 
 
 def test_advantage_in_bounds_on_real_set(nine_p_two_i_loader: ReplayLoader) -> None:

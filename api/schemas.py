@@ -383,13 +383,24 @@ class AdvantageView(_FrozenView):
     task clock (``tasks_completed / tasks_required``) against impostor parity
     pressure (``impostors_alive / max(crew_alive, 1)``) and is clamped — see
     ``api.replay_loader._advantage_view`` for the exact formula. Consumers that
-    want a different curve re-derive it from the four counts.
+    want a different curve re-derive it from the counts.
+
+    Two task denominators, on purpose (DESIGN.md §4; Phase-12 close-audit):
+    ``tasks_required`` is the LIVE win-condition denominator — ``len(state.tasks)``
+    this tick, which shrinks as crewmates die and their task instances leave the
+    pool (a crewmate dying mid-game made the roster meter read "7/10" after
+    "0/14", a misleading shrink). ``tasks_required_total`` is the FIXED
+    game-start instance count (``len(initial_state.tasks)``), the SAME for every
+    tick of a game. The advantage curve keeps using the live ``tasks_required``;
+    the roster DISPLAY meter divides by the fixed ``tasks_required_total`` so its
+    denominator and bar are stable + monotonic.
     """
 
     crew_alive: int
     impostors_alive: int
     tasks_completed: int
     tasks_required: int
+    tasks_required_total: int
     advantage: float
 
 

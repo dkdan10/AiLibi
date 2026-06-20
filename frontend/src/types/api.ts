@@ -199,6 +199,7 @@ export interface AdvantageView {
   impostors_alive: number;
   tasks_completed: number;
   tasks_required: number;
+  tasks_required_total: number;
   advantage: number;
 }
 
