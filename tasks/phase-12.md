@@ -887,8 +887,10 @@ the set selector), so dispatch 12.12 first.
 **Complexity:** Integration
 **Files in scope:**
 - frontend/src/components/MapView.tsx
+- frontend/src/components/AgentToken.tsx
 - frontend/src/components/MeetingView.tsx
 - frontend/src/components/MindInspector.tsx
+- frontend/src/components/ThoughtStream.tsx
 - frontend/src/components/BeliefMatrix.tsx
 - frontend/src/components/BeliefPanel.tsx
 - frontend/src/components/ReplayControls.tsx
@@ -911,17 +913,24 @@ overlay / composition / data-populate bugs only show composed. Severity in brack
 
 Remaining P1s — each needs an owner decision or map-render iteration:
 - **[P1] Task-meter denominator drifts.** `App.tsx:379` shows `adv.tasks_completed`/`adv.tasks_required`; `tasks_required`
-  is recomputed per tick (living-crew), so "tasks 0/14 → 7/10" shrinks mid-game and reads as misleading progress. If the
-  per-tick living-crew total is intended, expose the FIXED game-start total as a loader projection (`api/replay_loader.py`
-  + `api/schemas.py`, e.g. `tasks_required_total`) and show that as the stable, monotonic denominator; otherwise relabel
-  so the shrinking total is legible. Make the arithmetic reconcile.
+  is recomputed per tick (living-crew), so "tasks 0/14 → 7/10" shrinks mid-game and reads as misleading progress. DECISION
+  (owner, baked): expose the FIXED game-start required-task total as a loader projection — add `tasks_required_total` to
+  the advantage DTO (`api/replay_loader.py` + `api/schemas.py`, then regenerate the TS types), computed once at game
+  start, and render the roster meter as `tasks_completed / tasks_required_total` (a stable, monotonic denominator + bar).
+  Keep the per-tick `tasks_required` as the internal win-condition value; the DISPLAY denominator is the fixed total.
 - **[P1] Agent inspection only reachable inside a meeting.** Map tokens (`MapView`/`AgentToken`) and roster rows
-  (`App.tsx` RosterRail) have no click → `selectAgent`. Wire a Pixi pointer handler + a roster-row onClick; since
-  prompt/response/memory are per-meeting, decide what the inspector shows BETWEEN meetings (latest snapshot / belief tab /
-  jump to next meeting) rather than nothing.
-- **[P1] Belief × Truth hides during a meeting and its launcher overlaps the Reactor room.** Let the hero coexist with an
-  open meeting (dock it in the meeting's reserved right gutter) or keep a discoverable launcher; re-anchor the launcher
-  into chrome (a tab by the perspective toggle / a roster entry) so it never overlaps a room cell or corridor.
+  (`App.tsx` RosterRail) have no click → `selectAgent`. Wire a Pixi pointer handler + a roster-row onClick. DECISION
+  (owner, baked): clicking an agent selects it and opens the mind inspector to that agent's LATEST meeting snapshot at or
+  before the current tick (belief / prompt / response / memory / flags from the most recent meeting ≤ tick); before the
+  first meeting, open to the belief tab with an honest "no deliberation yet" empty state — do NOT fabricate non-existent
+  between-meeting LLM data. This requires the mind rail to render outside an open meeting: lift `ThoughtStream`'s null-gate
+  (`ThoughtStream.tsx:54`, returns null when no meeting is selected) so it renders for a selected agent, sourcing the
+  latest snapshot.
+- **[P1] Belief × Truth launcher overlaps the Reactor room.** It floats at the map's lower-right over the Reactor cell +
+  its vent corridor. DECISION (owner, baked): RE-ANCHOR the launcher into chrome — a tab beside the Omniscient/As-agent
+  perspective toggle (or a roster-rail entry) — so it never overlaps a room cell or corridor. Letting the hero COEXIST
+  with an open meeting (it deliberately steps aside when `selectedMeetingId !== null` per 12.11's overlay coordination) is
+  OUT OF SCOPE — flag it as a follow-up so it is not reintroduced as a collision.
 - **[P1] Admin dead-body cluster collision** (`MapView`): multiple bodies in one room garble the room title and the
   oversized kill-flash ring clips stacked labels. Reserve the title band, lay bodies in a non-overlapping grid with bottom
   padding, cap the kill-flash ring to the cell, collapse to "✕ ×N" past capacity.
@@ -955,9 +964,10 @@ P2 polish — the bulk:
 - **[P2] Misc** — verify the dashboard "interestingness distribution" section populates (it shows an empty card below the
   fold); add a baseline/value to the Highlights R1/R2/R3/R7 mini-bars; mark/disable dead agents in the fog agent picker;
   add a tour step for opening a mind; delete the dead `BeliefRow` MemoBar branch (off-token neutral ramps).
-**Definition of done:** the five remaining P1s are addressed (task-meter denominator stable or relabelled per the owner
-decision; agent inspection reachable from the map + roster; the belief hero discoverable during a meeting with its
-launcher off the room cells; the Admin body-cluster and sabotage-marker fixed); the P2 backlog is worked through; every
+**Definition of done:** the five remaining P1s are addressed (task-meter shows a stable fixed-total denominator via
+`tasks_required_total`; agent inspection reachable from the map + roster, opening to the latest meeting snapshot; the
+belief launcher re-anchored into chrome off the room cells; the Admin body-cluster and sabotage-marker fixed in the map);
+the P2 backlog is worked through; every
 change verified in the composed running app; no firewall regression (the leak test still passes — fog suppresses roles,
 the matrix stays Omniscient-only); `npm run tsc:check` + `npm run build` pass and `scripts/check.sh` is green.
 **Implementation hint:**
