@@ -27,11 +27,20 @@
 //
 // `currentTick` stays the array index (the frozen store contract every mounted
 // surface reads); the index↔engine-tick mapping lives once in `lib/playback`.
+//
+// Task 12.11 (design §8, §9, slice 9) owns the shell-level polish — and is the
+// one task that legitimately edits App.tsx. It adds: lazy route boundaries for
+// the Pixi map / Dashboard / browser (the code-split that kills the 859 kB
+// chunk); a responsive layout where the rails collapse to drawers while the map
+// + transport stay the irreducible core; keyboard-operable transport shortcuts;
+// the first-run GuidedTour mount; and a measured `--transport-h` so the fixed
+// overlays reserve exactly the transport's height (no magic numbers, no bleed).
 
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 
 import { BeliefMatrix } from "./components/BeliefMatrix";
-import { MapView } from "./components/MapView";
+import { GuidedTour, openGuidedTour } from "./components/GuidedTour";
 import { MeetingPill } from "./components/MeetingPill";
 import { MeetingView } from "./components/MeetingView";
 import {
@@ -39,18 +48,152 @@ import {
   EventTimeline,
   ReplayControls,
 } from "./components/ReplayControls";
-import { ReplayPicker } from "./components/ReplayPicker";
 import { ThoughtStream } from "./components/ThoughtStream";
-import { TournamentDashboard } from "./components/TournamentDashboard";
 import { usePlayback, usePlaybackEngine } from "./hooks/usePlayback";
 import { OMNISCIENT, type ViewId } from "./lib/playback";
 import { useReplayStore } from "./store/replayStore";
+
+// Route-level + Pixi-heavy surfaces are lazy-loaded (Task 12.11; design §9) so
+// the initial download is just the shell, not one 859 kB monolith. MapView pulls
+// in ALL of Pixi, so deferring it keeps the canvas vendor off the critical path
+// until a replay opens; the Dashboard and the replay browser / Highlights reel
+// load on their own routes.
+const MapView = lazy(() =>
+  import("./components/MapView").then((m) => ({ default: m.MapView })),
+);
+const TournamentDashboard = lazy(() =>
+  import("./components/TournamentDashboard").then((m) => ({
+    default: m.TournamentDashboard,
+  })),
+);
+const ReplayPicker = lazy(() =>
+  import("./components/ReplayPicker").then((m) => ({ default: m.ReplayPicker })),
+);
 
 // The single side-effecting playback driver (timer + auto-follow + URL sync),
 // isolated in a render-null leaf so its store subscriptions don't re-render the
 // whole shell on every tick.
 function PlaybackEngine() {
   usePlaybackEngine();
+  return null;
+}
+
+// A calm route-transition placeholder for the lazy boundaries above.
+function RouteFallback() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center gap-3 rounded-lg border-2 border-ink-900 bg-paper-0 px-4 py-3 font-mono text-sm text-ink-700 shadow-chrome-1"
+    >
+      <span
+        aria-hidden
+        className="motion-safe:animate-spin inline-block h-4 w-4 rounded-full border-2 border-ink-200 border-t-ink-700"
+      />
+      Loading…
+    </div>
+  );
+}
+
+// Keyboard-operable transport (Task 12.11 a11y; design §8). Mounted only in the
+// workspace so the shortcuts are live where a replay is loaded. It reads the
+// `usePlayback` hook (stable actions + fresh state via a ref) WITHOUT editing the
+// hook or the transport component — the on-screen buttons remain the discoverable
+// surface; these are the keyboard accelerators (scrub / step / play / jump). A
+// form control (the scrubber, the set <select>) keeps its own key handling, and a
+// browser modifier chord is never hijacked.
+function KeyboardTransport() {
+  const playback = usePlayback();
+  const playbackRef = useRef(playback);
+  playbackRef.current = playback;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      // The guided-tour modal owns the keyboard while it is open — don't let the
+      // transport shortcuts drive the replay behind it (focus may rest on the
+      // dialog container, which the form/activatable checks below don't cover).
+      if (useReplayStore.getState().guidedTourOpen) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable === true
+      ) {
+        return;
+      }
+      // Don't fire transport accelerators while focus is on an interactive widget
+      // OUTSIDE the transport: Space/Enter activate a button, and arrows are the
+      // navigation keys for a tablist (the Mind inspector tabs), so the global
+      // shortcuts must not seek/toggle underneath a focused control. The transport
+      // region is the exception — its own controls keep the accelerators live —
+      // except Space, which must still trigger a focused button's native action
+      // rather than double-firing play/pause.
+      const role = target?.getAttribute("role");
+      const isActivatable =
+        tag === "BUTTON" ||
+        tag === "A" ||
+        tag === "SUMMARY" ||
+        role === "button" ||
+        role === "tab" ||
+        role === "link";
+      if (isActivatable) {
+        const inTransport = target?.closest("[data-transport-region]") != null;
+        if (!inTransport || event.key === " ") {
+          return;
+        }
+      }
+      const p = playbackRef.current;
+      if (!p.hasReplay) {
+        return;
+      }
+      switch (event.key) {
+        case " ":
+        case "k":
+          p.togglePlay();
+          break;
+        case "ArrowLeft":
+          p.stepBy(event.shiftKey ? -10 : -1);
+          break;
+        case "ArrowRight":
+          p.stepBy(event.shiftKey ? 10 : 1);
+          break;
+        case ",":
+          p.jumpToEvent(-1);
+          break;
+        case ".":
+          p.jumpToEvent(1);
+          break;
+        case "[":
+          p.jumpToMeeting(-1);
+          break;
+        case "]":
+          p.jumpToMeeting(1);
+          break;
+        case "n":
+          p.nextKeyMoment();
+          break;
+        case "Home":
+          p.seekToIndex(0);
+          break;
+        case "End":
+          p.seekToIndex(p.lastIndex);
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
   return null;
 }
 
@@ -67,7 +210,7 @@ function TopNav() {
   // lit as its parent route.
   const active: ViewId = view === "workspace" ? "replays" : view;
   return (
-    <nav className="flex gap-2" aria-label="Spectator views">
+    <nav className="flex flex-wrap items-center gap-2" aria-label="Spectator views">
       {TABS.map((tab) => {
         const isActive = tab.id === active;
         return (
@@ -89,6 +232,18 @@ function TopNav() {
           </button>
         );
       })}
+      {/* Re-open the first-run guided tour at will (design §8 first-run). */}
+      <button
+        type="button"
+        onClick={() => {
+          openGuidedTour();
+        }}
+        title="Guided tour — perspective switcher + the two-truth grammar"
+        aria-label="Open the guided tour"
+        className="rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-2 text-sm font-semibold text-ink-900 transition-colors hover:bg-paper-2"
+      >
+        <span aria-hidden>?</span> Tour
+      </button>
     </nav>
   );
 }
@@ -162,10 +317,16 @@ function PerspectiveBanner() {
 // Hand-coded roster rail (12.4) with the §2.3 advantage bar. Role badge is shown
 // in Omniscient only — hidden under the As-agent fog (the firewall, simulated in
 // the UI). Alive/dead comes from the current frame.
+//
+// Responsive (Task 12.11; design §8): the rail is a persistent column at lg+ and
+// collapses to a disclosure drawer below it, so the map + transport stay the
+// irreducible core on narrow screens. The role / liveness / alive-count facts
+// stay Omniscient-gated in both layouts.
 function RosterRail() {
   const replay = useReplayStore((s) => s.currentReplay);
   const perspective = useReplayStore((s) => s.perspective);
   const { frame } = usePlayback();
+  const [open, setOpen] = useState(false);
 
   if (replay === null) {
     return null;
@@ -188,79 +349,138 @@ function RosterRail() {
       : 0;
 
   return (
-    <aside className="w-60 shrink-0 rounded-lg border-2 border-ink-900 bg-paper-0 p-3 shadow-chrome-1">
-      <h2 className="mb-2 text-lg">Roster</h2>
-      {adv !== null && (
-        <div className="mb-3 rounded-md border border-ink-200 p-2 font-mono text-[11px] text-ink-700">
-          {omniscient && (
-            <div className="mb-1.5 flex justify-between">
-              <span>crew {adv.crew_alive}</span>
-              <span>imp {adv.impostors_alive}</span>
+    <aside className="w-full shrink-0 rounded-lg border-2 border-ink-900 bg-paper-0 p-3 shadow-chrome-1 lg:w-60">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg">Roster</h2>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen((value) => !value);
+          }}
+          aria-expanded={open}
+          aria-controls="roster-body"
+          className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-0.5 text-xs font-semibold text-ink-900 hover:bg-paper-2 lg:hidden"
+        >
+          {open ? "Hide ▴" : "Show ▾"}
+        </button>
+      </div>
+      <div id="roster-body" className={open ? "mt-2 block" : "mt-2 hidden lg:block"}>
+        {adv !== null && (
+          <div className="mb-3 rounded-md border border-ink-200 p-2 font-mono text-[11px] text-ink-700">
+            {omniscient && (
+              <div className="mb-1.5 flex justify-between">
+                <span>crew {adv.crew_alive}</span>
+                <span>imp {adv.impostors_alive}</span>
+              </div>
+            )}
+            <div className="h-1.5 overflow-hidden rounded-pill bg-paper-3">
+              <div className="h-full bg-trust-strong" style={{ width: `${taskPct}%` }} />
             </div>
-          )}
-          <div className="h-1.5 overflow-hidden rounded-pill bg-paper-3">
-            <div className="h-full bg-trust-strong" style={{ width: `${taskPct}%` }} />
+            <div className="mt-1 text-ink-500">
+              tasks {adv.tasks_completed}/{adv.tasks_required}
+            </div>
           </div>
-          <div className="mt-1 text-ink-500">
-            tasks {adv.tasks_completed}/{adv.tasks_required}
-          </div>
-        </div>
-      )}
-      <ul className="flex flex-col gap-1">
-        {replay.players.map((player) => {
-          const alive = aliveById.get(player.agent_id) ?? true;
-          return (
-            <li
-              key={player.agent_id}
-              className="flex items-center gap-2 rounded-md border border-ink-100 px-2 py-1"
-            >
-              <span
-                aria-hidden
-                className="inline-block h-3 w-3 shrink-0 rounded-full ring-1 ring-ink-900/40"
-                style={{ backgroundColor: player.color }}
-              />
-              <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-900">
-                {player.agent_id}
-              </span>
-              {omniscient && (
-                <span className="rounded-sm border border-ink-300 px-1 text-[9px] uppercase tracking-wide text-ink-500">
-                  {player.role}
-                </span>
-              )}
-              {omniscient && (
+        )}
+        <ul className="flex flex-col gap-1">
+          {replay.players.map((player) => {
+            const alive = aliveById.get(player.agent_id) ?? true;
+            return (
+              <li
+                key={player.agent_id}
+                className="flex items-center gap-2 rounded-md border border-ink-100 px-2 py-1"
+              >
                 <span
-                  className={
-                    "rounded-sm px-1 text-[9px] font-semibold uppercase " +
-                    (alive ? "text-ink-500" : "bg-dead text-paper-0")
-                  }
-                >
-                  {alive ? "alive" : "dead"}
+                  aria-hidden
+                  className="inline-block h-3 w-3 shrink-0 rounded-full ring-1 ring-ink-900/40"
+                  style={{ backgroundColor: player.color }}
+                />
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-900">
+                  {player.agent_id}
                 </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                {omniscient && (
+                  <span className="rounded-sm border border-ink-300 px-1 text-[9px] uppercase tracking-wide text-ink-500">
+                    {player.role}
+                  </span>
+                )}
+                {omniscient && (
+                  <span
+                    className={
+                      "rounded-sm px-1 text-[9px] font-semibold uppercase " +
+                      (alive ? "text-ink-500" : "bg-dead text-paper-0")
+                    }
+                  >
+                    {alive ? "alive" : "dead"}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </aside>
   );
 }
 
+// Measure the bottom transport region and publish its height as `--transport-h`
+// so the fixed overlays (meeting modal, mind rail) reserve EXACTLY that space —
+// no magic px constants, and it adapts as the timeline / controls reflow on
+// narrow widths. Reset to 0 when the workspace (and its transport) is unmounted.
+function useTransportHeight(): RefObject<HTMLDivElement | null> {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = ref.current;
+    const reset = (): void => {
+      document.documentElement.style.setProperty("--transport-h", "0px");
+    };
+    if (node === null) {
+      reset();
+      return reset;
+    }
+    const set = (height: number): void => {
+      document.documentElement.style.setProperty(
+        "--transport-h",
+        `${Math.ceil(height)}px`,
+      );
+    };
+    set(node.getBoundingClientRect().height);
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry !== undefined) {
+        set(entry.contentRect.height);
+      }
+    });
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      reset();
+    };
+  }, []);
+  return ref;
+}
+
 // The Replay Workspace (§2.3). The fixed overlays (MeetingView modal, Belief /
-// ThoughtStream rails) self-position; the bottom transport region is fixed above
-// them so playback stays reachable while a meeting is open.
+// ThoughtStream rails) self-position and reserve `--transport-h` at the bottom so
+// the transport region stays reachable; they no longer collide (Task 12.11):
+// an open meeting masks the workspace, the mind rail sits in its own reserved
+// gutter beside the ballots, and the belief hero steps aside while a meeting is
+// open (see those components).
 function Workspace() {
+  const transportRef = useTransportHeight();
   return (
     <>
-      <section className="flex flex-col gap-4 pb-[24rem]">
+      <section
+        className="flex flex-col gap-4"
+        style={{ paddingBottom: "var(--transport-h, 16rem)" }}
+      >
         <PerspectiveBanner />
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-col gap-4 lg:flex-row">
           <RosterRail />
           {/* Stage slot — the map (12.5). The meeting morph (12.7) is the
-              MeetingView overlay below. */}
+              MeetingView overlay below. The map fills the stage width. */}
           <div className="min-w-0 flex-1">
-            <div className="flex justify-center">
+            <Suspense fallback={<RouteFallback />}>
               <MapView />
-            </div>
+            </Suspense>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <MeetingPill />
             </div>
@@ -269,15 +489,22 @@ function Workspace() {
       </section>
 
       {/* Self-positioned slots: meeting morph (12.7), belief panel (12.6), mind
-          panel (12.8). Each renders null until its selection gate opens. */}
+          panel (12.8). Each renders null until its selection gate opens; Task
+          12.11 coordinates their z-order + gutters so they never collide. */}
       <MeetingView />
       <BeliefMatrix />
       <ThoughtStream />
 
+      <KeyboardTransport />
+
       {/* Bottom transport region: advantage graph · event timeline · transport.
           Fixed above the overlays (z-70 > the meeting modal) so playback stays
-          reachable. */}
-      <div className="fixed inset-x-0 bottom-0 z-[70] border-t-2 border-ink-900 bg-paper-1/95 backdrop-blur">
+          reachable; its measured height feeds `--transport-h`. */}
+      <div
+        ref={transportRef}
+        data-transport-region
+        className="fixed inset-x-0 bottom-0 z-[70] border-t-2 border-ink-900 bg-paper-1/95 backdrop-blur"
+      >
         <div className="mx-auto flex max-w-[1600px] flex-col gap-2 p-3">
           <AdvantageGraph />
           <div className="max-h-40 overflow-y-auto pr-1">
@@ -299,22 +526,25 @@ export default function App() {
   }, [loadReplayList]);
 
   return (
-    <div className="min-h-screen bg-paper-1 p-6 text-ink-900">
+    <div className="min-h-screen bg-paper-1 p-4 text-ink-900 sm:p-6">
       <PlaybackEngine />
+      <GuidedTour />
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl">AiLibi</h1>
         <TopNav />
       </header>
 
-      {view === "tournament" ? (
-        <TournamentDashboard />
-      ) : view === "workspace" ? (
-        <Workspace />
-      ) : (
-        // Replays + Highlights routes both mount the browser; 12.9 makes it
-        // view-aware (it reads `view` from the store) and surfaces the reel.
-        <ReplayPicker />
-      )}
+      <Suspense fallback={<RouteFallback />}>
+        {view === "tournament" ? (
+          <TournamentDashboard />
+        ) : view === "workspace" ? (
+          <Workspace />
+        ) : (
+          // Replays + Highlights routes both mount the browser; 12.9 makes it
+          // view-aware (it reads `view` from the store) and surfaces the reel.
+          <ReplayPicker />
+        )}
+      </Suspense>
     </div>
   );
 }

@@ -52,6 +52,7 @@ export function BeliefMatrix() {
   const beliefView = useReplayStore((s) => s.beliefView);
   const setBeliefView = useReplayStore((s) => s.setBeliefView);
   const seedSet = useReplayStore((s) => s.seedSet);
+  const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
 
   const [open, setOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -98,7 +99,8 @@ export function BeliefMatrix() {
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      // Yield Escape to the guided tour when it is open over the matrix.
+      if (event.key === "Escape" && !useReplayStore.getState().guidedTourOpen) {
         setOpen(false);
       }
     };
@@ -118,6 +120,15 @@ export function BeliefMatrix() {
   // included) is hidden in fog; the per-agent belief view belongs to the mind
   // inspector. (Hooks above always run; this gate is after them.)
   if (perspective.mode === "agent") {
+    return null;
+  }
+
+  // Task 12.11 overlay coordination: while a meeting is open the workspace is in
+  // "meeting mode" — the masked MeetingView (z-50) + the mind rail (z-55) own the
+  // screen. The Belief × Truth hero (its launcher at the right edge and, opened,
+  // its z-[80] modal) would collide with the rail and stack over the meeting, so
+  // it steps aside entirely; it is reachable again the moment the meeting closes.
+  if (selectedMeetingId !== null) {
     return null;
   }
 

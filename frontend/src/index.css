@@ -130,4 +130,49 @@
   samp {
     font-family: var(--font-mono);
   }
+
+  /* Keyboard focus (Task 12.11 a11y; design §8 — "focus, :focus-visible"). A
+     bold, high-contrast ring on KEYBOARD focus only (pointer clicks stay clean),
+     so every interactive control — transport buttons, tabs, the scrubber, the
+     set <select>, matrix cells — is reachable and clearly indicated. ink-900 on
+     the cream base clears AA against the focused control's own background. */
+  :focus-visible {
+    outline: 3px solid var(--color-ink-900);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Don't double up the browser default where focus-visible already draws one. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+/* Map fills its stage (Task 12.11). The Pixi canvas renders at a fixed
+   content-matched resolution; scale it to the stage width (preserving its aspect
+   from the width/height attributes) so there is no empty horizontal gutter. The
+   `!important` overrides the inline px sizing `autoDensity` writes on the canvas
+   while leaving the high-DPR backing store intact. */
+.map-canvas-fill canvas {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+}
+
+/* Reduced-motion (Task 12.11 a11y; design §8, claude-design-brief.md — "always a
+   reduced-motion variant"). The DOM-side blanket reset: when the user asks for
+   reduced motion, collapse every CSS transition / animation to instant so the
+   chunky-sticker hover lifts, the rail slide-in, the route spinner, and any
+   keyframe animation stop moving. The canvas (Pixi) honours the same preference
+   in JS — the vent dive, kill flash, contradiction link-draw and token tweens
+   read `prefers-reduced-motion` directly and snap instead of animating. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

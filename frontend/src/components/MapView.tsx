@@ -49,9 +49,16 @@ import { VentEdge } from "./VentEdge";
 
 extend({ Container, Graphics, Text });
 
-const CANVAS_WIDTH = 920;
-const CANVAS_HEIGHT = 450;
-const CANVAS_PADDING = 44;
+// Canvas resolution (Task 12.11 "the map fills its stage"). The old 920×450
+// (~2:1) left huge vertical dead space because canonical_1 is a wide, short
+// floorplan (bbox ≈ 92×28 ≈ 3.3:1). Match the canvas aspect to the content so
+// `computeTransform` fills both axes, and CSS-scale the canvas to the stage width
+// (see `.map-canvas-fill canvas` in index.css) so there is no empty gutter
+// either. PADDING is the in-canvas margin so labels / body rings near the edges
+// don't clip.
+const CANVAS_WIDTH = 1080;
+const CANVAS_HEIGHT = 370;
+const CANVAS_PADDING = 30;
 const BACKGROUND_COLOR = ROOM_PALETTE.PAPER_1;
 const KILL = pixiHex(tokens.kill);
 
@@ -559,11 +566,10 @@ export function MapView() {
 
   if (currentReplay === null) {
     return (
-      <div className="w-full max-w-[960px]">
+      <div className="w-full max-w-[1400px]">
         <MapToolbar />
         <div
-          className="flex items-center justify-center rounded-b-xl rounded-tr-xl border-2 border-ink-900 bg-paper-0 font-mono text-sm text-ink-400 shadow-chrome-1"
-          style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
+          className="flex aspect-[1080/370] w-full items-center justify-center rounded-b-xl rounded-tr-xl border-2 border-ink-900 bg-paper-0 font-mono text-sm text-ink-500 shadow-chrome-1"
         >
           Select a replay to view the map.
         </div>
@@ -577,7 +583,12 @@ export function MapView() {
   const bodyIndex = Math.min(currentTick, currentReplay.ticks.length - 1);
   const omniscientBodies = bodyStatesByTick[bodyIndex] ?? NO_BODIES;
   const agentStates = tick?.agent_states ?? [];
-  const animate = sameReplay && Math.abs(currentTick - prevTick) === 1;
+  // Reduced motion (Task 12.11 a11y; design §8): gate the single-step tween at
+  // the source so EVERY mover snaps — the agent tokens AND the vent-escape
+  // travellers (which both read this `animate`) — alongside the kill-flash /
+  // vent-dive paths that already check `prefers-reduced-motion` directly.
+  const animate =
+    sameReplay && Math.abs(currentTick - prevTick) === 1 && !prefersReducedMotion;
 
   const omniscient = perspective.mode === "omniscient";
   const fogAgentId = perspective.mode === "agent" ? perspective.agentId : null;
@@ -808,9 +819,11 @@ export function MapView() {
   );
 
   return (
-    <div className="w-full max-w-[960px]">
+    <div className="w-full max-w-[1400px]">
       <MapToolbar />
-      <div className="overflow-hidden rounded-b-xl rounded-tr-xl border-2 border-ink-900 shadow-chrome-1">
+      {/* `map-canvas-fill` (index.css) scales the fixed-resolution Pixi canvas to
+          the stage width so the map fills the stage with no empty gutter. */}
+      <div className="map-canvas-fill overflow-hidden rounded-b-xl rounded-tr-xl border-2 border-ink-900 shadow-chrome-1">
         <Application
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}

@@ -55,16 +55,28 @@ const CHIP_RADIUS = 7.5;
 const CHIP_OFFSET = 12; // screen px from the token centre to the chip centre
 const GLYPH_SIZE = 11;
 
-// Six deterministic offsets around a room centre (screen pixels), so up to six
-// co-located tokens fan out instead of stacking.
+// Nine deterministic offsets around a room centre (screen pixels), so all NINE
+// co-located tokens fan out instead of stacking (Task 12.11: the old six-slot
+// table piled p-6/7/8 onto p-0/1/2 at the Cafeteria spawn). Every offset is at or
+// BELOW the centre (`dy >= 8`) so a token never rides up onto the room-name label
+// (which sits at the room's TOP edge) — fixing the token↔label overlap from the
+// token side without touching the label. Ordered centre-out so a lone token in a
+// small dead-end gets a central slot; the two rows fan across the wide Cafeteria.
 const JITTER_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
-  { dx: -22, dy: 0 },
-  { dx: 22, dy: 0 },
-  { dx: -22, dy: 24 },
-  { dx: 22, dy: 24 },
-  { dx: 0, dy: -26 },
-  { dx: 0, dy: 26 },
+  { dx: 0, dy: 8 },
+  { dx: -30, dy: 8 },
+  { dx: 30, dy: 8 },
+  { dx: -15, dy: 34 },
+  { dx: 15, dy: 34 },
+  { dx: -45, dy: 34 },
+  { dx: 45, dy: 34 },
+  { dx: -60, dy: 8 },
+  { dx: 60, dy: 8 },
 ];
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
 
 function targetPoint(props: AgentTokenProps): Point {
   const { room, jitterIndex, scale, offsetX, offsetY } = props;
@@ -74,7 +86,21 @@ function targetPoint(props: AgentTokenProps): Point {
     dx: 0,
     dy: 0,
   };
-  return { x: centerX + offset.dx, y: centerY + offset.dy };
+  // Clamp the jittered point INSIDE the room (Task 12.11 review): the wide ±60px
+  // slots fan the nine spawn tokens across the big Cafeteria, but applied per
+  // global index in a small dead-end (Reactor/Labs ≈110px) or a hallway they
+  // would draw a lone token outside its room and misreport its position. Clamp so
+  // the disc always stays inside — the fan simply tightens in small rooms. (chips
+  // may overhang a hair on the tiniest rooms; the disc, which reads as position,
+  // never does.)
+  const left = offsetX + room.position.x * scale;
+  const top = offsetY + room.position.y * scale;
+  const w = room.size.width * scale;
+  const h = room.size.height * scale;
+  const pad = TOKEN_RADIUS + 2;
+  const x = clamp(centerX + offset.dx, left + pad, Math.max(left + pad, left + w - pad));
+  const y = clamp(centerY + offset.dy, top + pad, Math.max(top + pad, top + h - pad));
+  return { x, y };
 }
 
 export function AgentToken(props: AgentTokenProps) {

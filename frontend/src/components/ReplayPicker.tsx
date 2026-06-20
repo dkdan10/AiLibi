@@ -269,7 +269,10 @@ export function ReplayBrowserView({
   }
 
   return (
-    <section className="flex flex-col gap-4">
+    <section
+      aria-label={isHighlights ? "Highlights reel" : "Replay browser"}
+      className="flex flex-col gap-4"
+    >
       <header className="flex flex-col gap-1">
         <h2 className="font-display text-2xl text-ink-900">
           {isHighlights ? "Highlights" : "Replays"}

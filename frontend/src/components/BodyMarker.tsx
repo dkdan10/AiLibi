@@ -34,7 +34,6 @@ interface BodyMarkerProps {
 
 const DISC_RADIUS = 13;
 const GLYPH_SIZE = 18;
-const RING_RADIUS = 46; // off the room centre, outside AgentToken's jitter cluster
 const GOLDEN_ANGLE_DEG = 137.50776405003785;
 
 const INK_700 = pixiHex(tokens.ink[700]);
@@ -42,11 +41,6 @@ const INK_500 = pixiHex(tokens.ink[500]);
 const PAPER_2 = pixiHex(tokens.paper[2]);
 const PAPER_3 = pixiHex(tokens.paper[3]);
 const KILL = pixiHex(tokens.kill);
-
-function bodyOffset(placementIndex: number): { dx: number; dy: number } {
-  const angle = (placementIndex * GOLDEN_ANGLE_DEG * Math.PI) / 180;
-  return { dx: Math.cos(angle) * RING_RADIUS, dy: Math.sin(angle) * RING_RADIUS };
-}
 
 export function BodyMarker({
   room,
@@ -61,9 +55,17 @@ export function BodyMarker({
 }: BodyMarkerProps) {
   const centerX = offsetX + (room.position.x + room.size.width / 2) * scale;
   const centerY = offsetY + (room.position.y + room.size.height / 2) * scale;
-  const offset = bodyOffset(placementIndex);
-  const x = centerX + offset.dx;
-  const y = centerY + offset.dy;
+  const w = room.size.width * scale;
+  const h = room.size.height * scale;
+  // Task 12.11 dead-end de-clutter: the old fixed 46px ring threw bodies outside
+  // small rooms (Reactor / Storage) and onto their labels + the kill ✕. Scale the
+  // fan radius to the room and bias it UPWARD, so bodies sit in the upper area —
+  // clear of the agent tokens, which now cluster below the room centre — and the
+  // † / victim labels no longer stack on the kill flash + room name.
+  const radius = Math.min(40, Math.min(w, h) * 0.3);
+  const angle = (placementIndex * GOLDEN_ANGLE_DEG * Math.PI) / 180;
+  const x = centerX + Math.cos(angle) * radius;
+  const y = centerY + Math.sin(angle) * radius - h * 0.14;
   const glyphTint = isDiscovered ? KILL : INK_500;
 
   return (

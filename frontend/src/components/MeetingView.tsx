@@ -48,7 +48,10 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border-2 border-ink-900 bg-paper-0 shadow-chrome-1">
+    <section
+      aria-label={title}
+      className="overflow-hidden rounded-2xl border-2 border-ink-900 bg-paper-0 shadow-chrome-1"
+    >
       <div className="flex items-center justify-between border-b-2 border-ink-900 bg-paper-2 px-4 py-2.5">
         <h3 className="text-base">{title}</h3>
         {badge}
@@ -435,7 +438,9 @@ export function MeetingView() {
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      // Yield Escape to the guided tour when it is open over this meeting, so a
+      // single Escape closes only the tour — not the meeting hydrated behind it.
+      if (event.key === "Escape" && !useReplayStore.getState().guidedTourOpen) {
         selectMeeting(null);
       }
     };
@@ -469,21 +474,23 @@ export function MeetingView() {
   };
 
   return (
-    // A light scrim (not an opaque cover) so the map behind stays visible — the
-    // claim↔map cross-highlight lights a room there as you hover a sighting. The
-    // panel reserves bottom padding so the bottom transport region (z-[70]) stays
-    // reachable while the meeting is open. Coexist with the rails that mount
-    // alongside an open meeting — the left BeliefMatrix (z-[55], ≤24rem) and the
-    // right ThoughtStream (z-[60], ≤20rem): at xl+ there is room for all three,
-    // so drop the overlay BELOW the rails (z-50) and reserve gutters wider than
-    // each so the centered panel lands in the gap and the rails stay clickable.
-    // Below xl that gap would squeeze the transcript, so lift the overlay above
-    // the rails (z-[61], still under the z-[65] ReplayControls) as a focus modal.
+    // Task 12.11 overlay coordination: an open meeting MASKS the workspace (a
+    // heavy ink scrim — no readable background bleed) while the cross-highlight's
+    // bright room still glows through. It is one coordinated layout, not three
+    // colliding `fixed` overlays:
+    //   • the meeting sits at z-50 with NO phantom left gutter; at xl+ it reserves
+    //     a right gutter exactly matching the mind rail (24rem) so the inspector
+    //     never overlaps the Ballots column;
+    //   • the mind rail (ThoughtStream) sits at z-[55] in that reserved gutter;
+    //   • the BeliefMatrix hero steps aside entirely while a meeting is open.
+    // The bottom transport (z-70) stays reachable: every overlay reserves the
+    // MEASURED `--transport-h` instead of a magic px constant.
     <div
       role="dialog"
       aria-modal="true"
       aria-label={`Meeting at tick ${meeting.tick}`}
-      className="fixed inset-0 z-[61] overflow-auto bg-ink-900/25 p-4 pb-[22rem] xl:z-50 xl:pl-[25rem] xl:pr-[21rem]"
+      className="fixed inset-0 z-50 overflow-auto bg-ink-900/80 p-4 xl:pr-[26rem]"
+      style={{ paddingBottom: "var(--transport-h, 16rem)" }}
       onClick={close}
     >
       <div
