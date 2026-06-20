@@ -256,6 +256,12 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       async loadReplayList() {
         const requestToken = ++latestReplayListRequest;
+        // Drop the previous set's list while the new one loads (Task 12.13 review):
+        // otherwise a set switch keeps the stale `replayList` non-null, the browser
+        // status stays "ready", and the OLD cards show under the new selector
+        // instead of the "Loading <set>…" cue. Clearing here surfaces the in-flight
+        // state; the request token below still guards against out-of-order writes.
+        set({ replayList: null, replayListError: null });
         // Read the active set at call time so a re-fetch after a set switch lists
         // the new set's replays (the caller re-invokes on seedSet change).
         const activeSet = get().seedSet ?? undefined;

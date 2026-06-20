@@ -54,6 +54,18 @@ const TITLE_BAND = 16;
 const BOTTOM_PAD = 12;
 const MIN_STEP = 2 * DISC_RADIUS + 6;
 
+// Whether `count` bodies fit non-overlapping in this room's body band (the row
+// needs `(count-1) * MIN_STEP` of inner width). Narrow canonical rooms — the
+// 4-unit EAST_HALL/WEST_HALL — cannot, so MapView collapses those piles to a
+// single "✕ ×N" marker instead of letting the discs overlap (Task 12.13 review).
+export function bodiesFit(room: RoomView, scale: number, count: number): boolean {
+  if (count <= 1) {
+    return true;
+  }
+  const innerW = Math.max(0, room.size.width * scale - 2 * (DISC_RADIUS + 4));
+  return (count - 1) * MIN_STEP <= innerW;
+}
+
 const INK_700 = pixiHex(tokens.ink[700]);
 const INK_500 = pixiHex(tokens.ink[500]);
 const PAPER_2 = pixiHex(tokens.paper[2]);

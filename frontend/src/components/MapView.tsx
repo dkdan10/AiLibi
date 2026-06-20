@@ -41,7 +41,7 @@ import type {
   VentView,
 } from "../types/api";
 import { AgentToken, TWEEN_DURATION_MS } from "./AgentToken";
-import { BODY_CAP, BodyMarker } from "./BodyMarker";
+import { BODY_CAP, BodyMarker, bodiesFit } from "./BodyMarker";
 import { MapToolbar } from "./MapToolbar";
 import { ROOM_PALETTE, RoomRect } from "./RoomRect";
 import { SabotageOverlay } from "./SabotageOverlay";
@@ -770,7 +770,10 @@ export function MapView() {
     if (room === undefined) return [];
     // Deterministic order so slot assignment is stable across renders.
     const sorted = [...list].sort((a, b) => a.victimId.localeCompare(b.victimId));
-    if (sorted.length > BODY_CAP) {
+    // Collapse to one "✕ ×N" marker past capacity OR when the room is too narrow
+    // to lay the discs out non-overlapping (the 4-unit halls) — a single centred
+    // disc always fits (Task 12.13 review).
+    if (sorted.length > BODY_CAP || !bodiesFit(room, scale, sorted.length)) {
       return [
         <BodyMarker
           key={`bodies-${roomId}`}
