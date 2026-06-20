@@ -11,6 +11,7 @@ import type {
   MeetingView,
   ReplayMetadataView,
   ReplayView,
+  RubricView,
   TickView,
   TournamentEvalReport,
 } from "../types/api";
@@ -99,4 +100,13 @@ export function getEvalCostSummary(): Promise<EvalCostSummaryView> {
 // sibling methods.
 export function getTournamentReport(): Promise<TournamentEvalReport> {
   return getJson<TournamentEvalReport>("/eval/tournament-report");
+}
+
+// The per-set interestingness rubric served by the eval surface (Task 12.2,
+// DESIGN.md §3.1, §7). The rubric is per served set and staleness-guarded; a set
+// with no co-located `results-rubric-score.json` (the 4p1i default) yields a
+// 404, surfaced as `ApiError` with `status === 404` so the Highlights reel can
+// render its first-class "no rubric" empty state rather than an error.
+export function getRubric(): Promise<RubricView> {
+  return getJson<RubricView>("/eval/rubric");
 }
