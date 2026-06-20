@@ -649,7 +649,7 @@ export function TournamentDashboardView({
   rubric: RubricState;
 }) {
   return (
-    <main className="flex flex-col gap-4">
+    <main aria-label="Tournament dashboard" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-ink-500">
           The latest tournament eval report (DESIGN.md §11.3): balance outcome plus
@@ -683,7 +683,9 @@ export function TournamentDashboardView({
       ) : isLoading || error === null ? (
         // Loading: a fetch is in flight, or we are still initializing (no report,
         // no error yet) — never flash the no-report panel before the first fetch.
-        <p className="text-ink-500">Loading tournament report…</p>
+        <p role="status" aria-live="polite" className="text-ink-500">
+          Loading tournament report…
+        </p>
       ) : (
         // No-report state: a definitive failure with no report. A 404 means no
         // tournament-eval-report.json exists in the configured eval dir yet; the
