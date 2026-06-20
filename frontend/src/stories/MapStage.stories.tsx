@@ -168,7 +168,7 @@ const TICK_KILL: TickView = {
   tasks_required_total: 14,
   bodies: [REACTOR_BODY],
   sabotage: REACTOR_SABOTAGE,
-  advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, advantage: -0.12 },
+  advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, tasks_required_total: 14, advantage: -0.12 },
 };
 
 const TICK_ENTER: TickView = {
@@ -190,7 +190,7 @@ const TICK_ENTER: TickView = {
   tasks_required_total: 14,
   bodies: [REACTOR_BODY],
   sabotage: REACTOR_SABOTAGE,
-  advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, advantage: -0.12 },
+  advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, tasks_required_total: 14, advantage: -0.12 },
 };
 
 const TICK_EXIT: TickView = {
@@ -212,7 +212,7 @@ const TICK_EXIT: TickView = {
   tasks_required_total: 14,
   bodies: [REACTOR_BODY],
   sabotage: REACTOR_SABOTAGE,
-  advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, advantage: -0.12 },
+  advantage: { crew_alive: 6, impostors_alive: 2, tasks_completed: 5, tasks_required: 14, tasks_required_total: 14, advantage: -0.12 },
 };
 
 // Everyone spawns alive in the Cafeteria (the loader's synthetic pre-game frame).
@@ -229,7 +229,7 @@ const START_TICK: TickView = {
   tasks_required_total: 14,
   bodies: [],
   sabotage: null,
-  advantage: { crew_alive: 7, impostors_alive: 2, tasks_completed: 0, tasks_required: 14, advantage: 0.05 },
+  advantage: { crew_alive: 7, impostors_alive: 2, tasks_completed: 0, tasks_required: 14, tasks_required_total: 14, advantage: 0.05 },
 };
 
 // Index 3 = TICK_EXIT (engine tick 315) — p-5 has just emerged, so the traveller

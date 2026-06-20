@@ -91,6 +91,11 @@
   --font-display: "Fredoka", system-ui, sans-serif;
   --font-body: "Fredoka", system-ui, sans-serif;
   --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* sub-xs data type sizes — named steps for the dense <12px labels */
+  --text-4xs: 9px;
+  --text-3xs: 10px;
+  --text-2xs: 11px;
   /* tokens:end */
 }
 
@@ -157,6 +162,22 @@
   display: block;
   width: 100% !important;
   height: auto !important;
+}
+
+/* Hazard treatment for the sabotage marker (Task 12.13; tokens.ts
+   `status.sabotage` = "ink stripes, no reserved hue"). Diagonal ink stripes,
+   built from the generated ink CSS custom properties so it stays token-driven
+   (no hardcoded hex) — keeps sabotage OFF the reserved warm hue (it was
+   colliding with distrust-orange + the kill red) while pairing with the ⚡ glyph,
+   never hue-only. */
+.hazard-stripe {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--color-ink-900) 0,
+    var(--color-ink-900) 3px,
+    var(--color-ink-700) 3px,
+    var(--color-ink-700) 6px
+  );
 }
 
 /* Reduced-motion (Task 12.11 a11y; design §8, claude-design-brief.md — "always a

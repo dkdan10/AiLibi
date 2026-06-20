@@ -63,6 +63,26 @@ function dottedPath(
   }
 }
 
+// Radius of the vent-opening marker drawn at each end of an edge (the "endpoint"
+// the legend's "vent ring" promises). The DTO is room-level (no in-room vent
+// position), so the opening is placed a short way IN from the room centre along
+// the edge — clear of the token/body cluster while still reading as "a vent here,
+// heading that way".
+const ENDPOINT_RADIUS = 4;
+const ENDPOINT_INSET = 16;
+
+function drawEndpoint(
+  graphics: Graphics,
+  cx: number,
+  cy: number,
+  ux: number,
+  uy: number,
+): void {
+  const ex = cx + ux * ENDPOINT_INSET;
+  const ey = cy + uy * ENDPOINT_INSET;
+  graphics.circle(ex, ey, ENDPOINT_RADIUS);
+}
+
 export function VentEdge({
   fromRoom,
   toRoom,
@@ -74,6 +94,11 @@ export function VentEdge({
   const y1 = roomCenterY(fromRoom, scale, offsetY);
   const x2 = roomCenterX(toRoom, scale, offsetX);
   const y2 = roomCenterY(toRoom, scale, offsetY);
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy);
+  const ux = length === 0 ? 0 : dx / length;
+  const uy = length === 0 ? 0 : dy / length;
 
   return (
     <pixiGraphics
@@ -86,6 +111,11 @@ export function VentEdge({
           alpha: VENT_ALPHA,
           cap: "round",
         });
+        // Vent openings at each end (Task 12.13 map legibility): hollow ink rings
+        // so the ring's endpoints are visible, not just the connecting line.
+        drawEndpoint(graphics, x1, y1, ux, uy);
+        drawEndpoint(graphics, x2, y2, -ux, -uy);
+        graphics.stroke({ width: 2, color: VENT_COLOR, alpha: VENT_ALPHA });
       }}
     />
   );

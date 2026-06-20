@@ -112,6 +112,15 @@ function buildThemeBody(): string {
   push(
     `  --font-mono: "${familyOf(tokens.type.mono)}", ui-monospace, "SFMono-Regular", monospace;`,
   );
+  push();
+
+  // Sub-`xs` data type sizes — names for the <12px dense steps (Tailwind v4 turns
+  // each `--text-<name>` into a `text-<name>` utility). Tailwind's xs+ defaults
+  // are left intact; these only add the smaller steps.
+  push("  /* sub-xs data type sizes — named steps for the dense <12px labels */");
+  for (const [name, px] of Object.entries(tokens.type.size)) {
+    push(`  --text-${name}: ${px}px;`);
+  }
 
   return lines.join("\n");
 }

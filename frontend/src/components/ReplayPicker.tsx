@@ -43,6 +43,9 @@ import type {
   RubricGameView,
   RubricView,
 } from "../types/api";
+import { Banner } from "../ui/Banner";
+import { EmptyState } from "../ui/EmptyState";
+import { Loading } from "../ui/Loading";
 
 // Debounce the filter → URL write so rapid changes don't thrash history. Both
 // this writer and 12.4's transport writer re-read `location.search` at write time
@@ -159,28 +162,6 @@ export interface ReplayBrowserViewProps {
   onBrowseReplays: () => void;
 }
 
-function Banner({ tone, children }: { tone: "warn" | "info"; children: ReactNode }) {
-  const glyph = tone === "warn" ? "⚠" : "ℹ";
-  return (
-    <div className="flex items-start gap-2 rounded-md border-2 border-ink-900 bg-paper-2 px-3 py-2 font-mono text-xs text-ink-900">
-      <span aria-hidden className="font-semibold">
-        {glyph}
-      </span>
-      <span>{children}</span>
-    </div>
-  );
-}
-
-function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-ink-300 bg-paper-1 px-6 py-12 text-center">
-      <p className="font-display text-lg text-ink-900">{title}</p>
-      <p className="max-w-md font-mono text-xs text-ink-500">{body}</p>
-      {action}
-    </div>
-  );
-}
-
 export function ReplayBrowserView({
   view,
   status,
@@ -198,73 +179,89 @@ export function ReplayBrowserView({
 }: ReplayBrowserViewProps) {
   const isHighlights = view === "highlights";
 
+  const EMPTY_ACTION_BTN =
+    "mt-1 rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1.5 font-mono text-xs font-medium text-ink-900 hover:bg-paper-2";
+
   let body: ReactNode;
   if (status === "loading") {
+    // In-flight cue (Task 12.13): name the set so a set switch reads as
+    // "Loading <set>…", not a generic spinner.
     body = (
-      <p className="font-mono text-sm text-ink-500">
-        {isHighlights ? "Loading highlights…" : "Loading replays…"}
-      </p>
+      <Loading
+        label={
+          set !== null
+            ? `Loading ${set}…`
+            : isHighlights
+              ? "Loading highlights…"
+              : "Loading replays…"
+        }
+      />
     );
   } else if (status === "error") {
     body = (
-      <Banner tone="warn">
+      <Banner tone="error">
         Failed to load {isHighlights ? "the rubric" : "replays"}:{" "}
         {error ?? "unknown error"}
       </Banner>
     );
   } else if (isHighlights && rubricMissing) {
     body = (
-      <EmptyState
-        title="No interestingness rubric for this set"
-        body={`The served set${set !== null ? ` (${set})` : ""} ships no rubric — expected for the default 4p1i set, which is mostly zero-meeting. A scored set (9p2i) populates the reel.`}
-        action={
-          <button
-            type="button"
-            onClick={onBrowseReplays}
-            className="mt-1 rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1.5 font-mono text-xs font-medium text-ink-900 hover:bg-paper-2"
-          >
-            Browse all replays
-          </button>
-        }
-      />
+      <EmptyState title="No interestingness rubric for this set">
+        <p>
+          The served set{set !== null ? ` (${set})` : ""} ships no rubric —
+          expected for the default 4p1i set, which is mostly zero-meeting. A scored
+          set (9p2i) populates the reel.
+        </p>
+        <button type="button" onClick={onBrowseReplays} className={EMPTY_ACTION_BTN}>
+          Browse all replays
+        </button>
+      </EmptyState>
     );
   } else if (cards.length === 0) {
     body =
       totalCount === 0 ? (
-        <EmptyState
-          title={isHighlights ? "No scored games" : "No replays found"}
-          body={
-            isHighlights
-              ? "The rubric carries no per-game scores."
-              : "No replays in the configured replay directory."
-          }
-        />
+        <EmptyState title={isHighlights ? "No scored games" : "No replays found"}>
+          {isHighlights
+            ? "The rubric carries no per-game scores."
+            : "No replays in the configured replay directory."}
+        </EmptyState>
       ) : (
-        <EmptyState
-          title="No games match these filters"
-          body="Adjust or clear the filters to see more games."
-          action={
-            <button
-              type="button"
-              onClick={() => {
-                onFiltersChange(EMPTY_FILTERS);
-              }}
-              className="mt-1 rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1.5 font-mono text-xs font-medium text-ink-900 hover:bg-paper-2"
-            >
-              Clear filters
-            </button>
-          }
-        />
+        <EmptyState title="No games match these filters">
+          <p>Adjust or clear the filters to see more games.</p>
+          <button
+            type="button"
+            onClick={() => {
+              onFiltersChange(EMPTY_FILTERS);
+            }}
+            className={EMPTY_ACTION_BTN}
+          >
+            Clear filters
+          </button>
+        </EmptyState>
       );
   } else {
     body = (
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {cards.map((card) => (
-          <li key={card.key}>
-            <HighlightCard data={card} onOpen={onOpen} />
-          </li>
-        ))}
-      </ul>
+      <>
+        {/* One banner for an unscored set (Task 12.13): hoists the per-card "Not
+            scored" note (the 4p1i common case) up to a single line. */}
+        {!isHighlights && rubricMissing && (
+          <Banner tone="caveat">
+            This set{set !== null ? ` (${set})` : ""} ships no interestingness
+            rubric — its games are unscored.
+          </Banner>
+        )}
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {cards.map((card) => (
+            <li key={card.key}>
+              <HighlightCard
+                data={card}
+                onOpen={onOpen}
+                hideUnscoredNote={!isHighlights && rubricMissing}
+              />
+            </li>
+          ))}
+        </ul>
+      </>
     );
   }
 
@@ -285,7 +282,7 @@ export function ReplayBrowserView({
       </header>
 
       {stale && (
-        <Banner tone="warn">
+        <Banner tone="caveat">
           Scores may be stale — the rubric was scored against a different commit
           than these replays (git_head mismatch). Treat the numbers as indicative,
           not fresh.
@@ -330,7 +327,7 @@ export function SetSelector({
   }
   return (
     <label className="flex items-center gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-wide text-ink-500">
+      <span className="font-mono text-3xs uppercase tracking-wide text-ink-500">
         Set
       </span>
       <select
@@ -359,6 +356,7 @@ export function ReplayPicker() {
   const replayList = useReplayStore((s) => s.replayList);
   const replayListError = useReplayStore((s) => s.replayListError);
   const currentReplayError = useReplayStore((s) => s.currentReplayError);
+  const clearReplayLoadError = useReplayStore((s) => s.clearReplayLoadError);
   const seedSet = useReplayStore((s) => s.seedSet);
   const setSeedSet = useReplayStore((s) => s.setSeedSet);
   const availableSets = useReplayStore((s) => s.availableSets);
@@ -494,9 +492,31 @@ export function ReplayPicker() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SetSelector sets={availableSets} value={seedSet} onChange={setSeedSet} />
+      {/* The set selector, or — when /sets failed — an inline retry chip in its
+          place (Task 12.13), so a sets outage isn't a silent dead-end. */}
+      {availableSets.length === 0 && availableSetsError !== null ? (
+        <Banner tone="error">
+          Couldn’t load the set list: {availableSetsError}{" "}
+          <button
+            type="button"
+            onClick={() => {
+              void loadSets();
+            }}
+            className="ml-1 rounded-md border-2 border-current px-2 py-0.5 text-xs font-semibold"
+          >
+            Retry
+          </button>
+        </Banner>
+      ) : (
+        <SetSelector sets={availableSets} value={seedSet} onChange={setSeedSet} />
+      )}
       {currentReplayError !== null && (
-        <Banner tone="warn">Failed to load replay: {currentReplayError}</Banner>
+        // Dismissable (Task 12.13): clears ONLY the replay-load error, so a
+        // concurrent /replays list failure stays visible (not hidden behind a
+        // spinner).
+        <Banner tone="error" onDismiss={clearReplayLoadError}>
+          Failed to load replay: {currentReplayError}
+        </Banner>
       )}
       <ReplayBrowserView
         view={browserView}
@@ -507,7 +527,10 @@ export function ReplayPicker() {
         filters={filters}
         onFiltersChange={setFilters}
         winShapeOptions={winShapeOptions}
-        set={rubric?.seedset ?? seedSet}
+        // Prefer the ACTIVE set (updates immediately on switch) over the rubric's
+        // seedset, which lags behind the in-flight fetch — otherwise the loading
+        // cue reads "Loading <old set>…" while the new set loads (Task 12.13 review).
+        set={seedSet ?? rubric?.seedset ?? null}
         stale={rubric?.stale ?? false}
         rubricMissing={rubricStatus === "absent"}
         onOpen={(gameId) => {

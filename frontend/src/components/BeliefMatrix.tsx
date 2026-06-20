@@ -54,8 +54,12 @@ export function BeliefMatrix() {
   const setBeliefView = useReplayStore((s) => s.setBeliefView);
   const seedSet = useReplayStore((s) => s.seedSet);
   const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
+  // Open-state is store-owned (Task 12.13) so the launcher can sit in chrome
+  // (the perspective banner), off the map's room cells; this component owns only
+  // the opened panel + the lazy frame fetch.
+  const open = useReplayStore((s) => s.beliefOpen);
+  const setOpen = useReplayStore((s) => s.setBeliefOpen);
 
-  const [open, setOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [frames, setFrames] = useState<BeliefFrameView[] | null>(null);
@@ -131,33 +135,19 @@ export function BeliefMatrix() {
 
   // Task 12.11 overlay coordination: while a meeting is open the workspace is in
   // "meeting mode" — the masked MeetingView (z-50) + the mind rail (z-55) own the
-  // screen. The Belief × Truth hero (its launcher at the right edge and, opened,
-  // its z-[80] modal) would collide with the rail and stack over the meeting, so
-  // it steps aside entirely; it is reachable again the moment the meeting closes.
+  // screen. The Belief × Truth hero (opened, its z-[80] modal) would collide with
+  // the rail and stack over the meeting, so it steps aside entirely; it is
+  // reachable again the moment the meeting closes. (The launcher — re-anchored
+  // into the perspective banner in Task 12.13 — applies the same gate there.)
   if (selectedMeetingId !== null) {
     return null;
   }
 
-  const meetingCount = replay.metadata.meeting_count;
-
+  // The launcher now lives in the perspective banner (Task 12.13): off the map's
+  // room cells, beside the Omniscient/As-agent toggle. When closed, the hero
+  // renders nothing here — opening is driven by the banner's launcher.
   if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setOpen(true);
-        }}
-        aria-label="Open the Belief × Truth matrix"
-        title="Belief × Truth — who suspects whom, vs ground truth"
-        className="fixed right-4 top-1/2 z-[60] flex -translate-y-1/2 items-center gap-2 rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-2 text-sm font-semibold text-ink-900 shadow-chrome-1 transition-colors hover:bg-paper-2"
-      >
-        <span aria-hidden className="font-mono text-base leading-none">⊞</span>
-        Belief × Truth
-        <span className="rounded-pill bg-paper-2 px-1.5 font-mono text-[10px] text-ink-500">
-          {meetingCount} mtg
-        </span>
-      </button>
-    );
+    return null;
   }
 
   // Roster order matches the loader's `sorted(...)` so the matrix axes are stable.

@@ -23,12 +23,14 @@
 // inspecting an impostor through a DIFFERENT agent's eyes (the real leak). The
 // ground-truth ROLE reveal rides the same gate.
 
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import { useReplayStore } from "../store/replayStore";
 import type { Perspective } from "../lib/playback";
 import { tokens, suspicionBucketOf, type SuspicionBucket } from "../tokens";
+import { EmptyState } from "../ui/EmptyState";
+import { PlayerSwatch } from "../ui/PlayerSwatch";
 import type {
   AgentMemoryView,
   BeliefEntryView,
@@ -160,7 +162,7 @@ function coverTasksOf(
 function ReasoningTrail({ steps }: { steps: TrailStep[] }) {
   if (steps.length === 0) {
     return (
-      <p className="text-xs italic text-ink-400">
+      <p className="text-xs italic text-ink-500">
         No recorded decisions for this agent in this meeting.
       </p>
     );
@@ -172,7 +174,7 @@ function ReasoningTrail({ steps }: { steps: TrailStep[] }) {
         return (
           <li key={index} className="flex gap-2">
             <span
-              className="mt-0.5 inline-flex h-fit shrink-0 items-center rounded-pill border-2 border-ink-900 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wide text-paper-0"
+              className="mt-1 inline-flex h-fit shrink-0 items-center rounded-pill border-2 border-ink-900 px-2 py-1 font-mono text-4xs font-bold uppercase tracking-wide text-paper-0"
               style={{ background: style.color }}
             >
               {style.label}
@@ -211,12 +213,12 @@ function BeliefBar({ belief }: { belief: BeliefEntryView }) {
           style={{ width: `${pct}%`, background: heatColor(suspicion) }}
         />
       </div>
-      <span className="w-8 shrink-0 text-right font-mono text-[10px] font-semibold uppercase text-ink-500">
+      <span className="w-8 shrink-0 text-right font-mono text-3xs font-semibold uppercase text-ink-500">
         {BUCKET_LABEL[bucket]}
       </span>
       <span
         title={`confidence ${belief.confidence.toFixed(2)} · snapshot tick ${belief.snapshot_tick}`}
-        className="shrink-0 rounded-pill border border-ink-300 bg-paper-0 px-1.5 py-0.5 font-mono text-[10px] text-ink-700"
+        className="shrink-0 rounded-pill border border-ink-300 bg-paper-0 px-1.5 py-1 font-mono text-3xs text-ink-700"
       >
         conf {belief.confidence.toFixed(2)}
       </span>
@@ -236,11 +238,11 @@ function BeliefTab({
       <section>
         <TabHeading>Suspicion / trust ({memory.beliefs.length})</TabHeading>
         {memory.beliefs.length === 0 ? (
-          <p className="text-xs italic text-ink-400">
+          <p className="text-xs italic text-ink-500">
             No beliefs formed yet (not 0% — this agent simply holds no belief).
           </p>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {memory.beliefs.map((belief) => (
               <BeliefBar key={belief.subject} belief={belief} />
             ))}
@@ -259,7 +261,7 @@ function BeliefTab({
 
 function TabHeading({ children }: { children: ReactNode }) {
   return (
-    <h4 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+    <h4 className="mb-2 font-mono text-3xs font-semibold uppercase tracking-wide text-ink-500">
       {children}
     </h4>
   );
@@ -286,7 +288,7 @@ function LLMCallList({
       );
     }
     return (
-      <p className="text-xs italic text-ink-400">
+      <p className="text-xs italic text-ink-500">
         No LLM calls recorded for this agent in this meeting.
       </p>
     );
@@ -349,6 +351,9 @@ export interface MindInspectorPanelProps {
   ownKills: KillEventView[];
   coverTasks: CompletedTaskObsView[];
   perspective: Perspective;
+  // An agent is selected but has no meeting at or before the current tick: show
+  // the honest "no deliberation yet" state instead of empty/loading tabs (§3.5).
+  noMeetingYet?: boolean;
   // Active tab — optionally controlled (the connected wrapper drives it so it can
   // lazy-fetch the meeting bodies only when Prompt / Response is open). Storybook
   // omits both and the panel falls back to its own state.
@@ -368,6 +373,7 @@ export function MindInspectorPanel({
   ownKills,
   coverTasks,
   perspective,
+  noMeetingYet = false,
   tab: tabProp,
   onTab: onTabProp,
   onSelectAgent,
@@ -391,9 +397,11 @@ export function MindInspectorPanel({
       />
 
       {inspected === undefined ? (
-        <p className="mt-3 text-sm italic text-ink-500">
-          Pick an agent to inspect their belief, prompt, response, memory, and flags.
-        </p>
+        <EmptyState title="Open a mind" className="mt-1">
+          Pick an agent above — or click any token on the map or roster — to read
+          their belief, prompt, response, memory, and flags. Ground truth renders
+          solid; an agent's belief renders ghosted.
+        </EmptyState>
       ) : (
         <InspectedAgent
           inspected={inspected}
@@ -405,6 +413,7 @@ export function MindInspectorPanel({
           ownKills={ownKills}
           coverTasks={coverTasks}
           perspective={perspective}
+          noMeetingYet={noMeetingYet}
           tab={tab}
           onTab={onTab}
           onShowWhatTheySaw={onShowWhatTheySaw}
@@ -424,6 +433,7 @@ function InspectedAgent({
   ownKills,
   coverTasks,
   perspective,
+  noMeetingYet,
   tab,
   onTab,
   onShowWhatTheySaw,
@@ -437,6 +447,7 @@ function InspectedAgent({
   ownKills: KillEventView[];
   coverTasks: CompletedTaskObsView[];
   perspective: Perspective;
+  noMeetingYet: boolean;
   tab: MindTab;
   onTab: (tab: MindTab) => void;
   onShowWhatTheySaw: (agentId: string) => void;
@@ -457,23 +468,55 @@ function InspectedAgent({
   const hasUnattributed = (meeting?.llm_calls ?? []).some((c) => c.agent_id === null);
   const trail = buildTrail(meeting, agentId);
 
+  // Roving tabindex (Task 12.13 a11y; WAI-ARIA tabs pattern): only the active tab
+  // is in the tab order; Left/Right (and Up/Down) move + activate, Home/End jump
+  // to the ends. Activation follows focus, matching the click behaviour.
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const onTabKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ): void => {
+    const count = TABS.length;
+    let next = index;
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        next = (index + 1) % count;
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        next = (index - 1 + count) % count;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = count - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const target = TABS[next];
+    if (target !== undefined) {
+      onTab(target.id);
+      tabRefs.current[next]?.focus();
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <header className="flex flex-wrap items-center gap-2 rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-2 shadow-chrome-1">
-        <span
-          aria-hidden
-          className="inline-block h-4 w-4 shrink-0 rounded-full ring-2 ring-ink-900"
-          style={{ backgroundColor: inspected.color }}
-        />
+        <PlayerSwatch color={inspected.color} size="md" />
         <span className="font-semibold text-ink-900">{inspected.display_name}</span>
-        <span className="font-mono text-[10px] text-ink-400">{agentId}</span>
+        <span className="font-mono text-3xs text-ink-500">{agentId}</span>
 
         {/* FIREWALL: alive/dead is ground truth — an agent may not know a hidden
             death — so the chip rides the same Omniscient-or-self gate (matching
             the fogged roster rail, which also hides per-player liveness). */}
         {revealSecrets && !isAlive && (
           <span
-            className="inline-flex items-center gap-1 rounded-pill border-2 border-ink-900 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide"
+            className="inline-flex items-center gap-1 rounded-pill border-2 border-ink-900 px-2 py-1 font-mono text-3xs font-bold uppercase tracking-wide"
             style={{ background: tokens.paper[2], color: tokens.ink[500] }}
           >
             <span aria-hidden>✕</span> dead
@@ -482,7 +525,7 @@ function InspectedAgent({
 
         {revealSecrets ? (
           <span
-            className="inline-flex items-center rounded-pill border-2 border-ink-900 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide"
+            className="inline-flex items-center rounded-pill border-2 border-ink-900 px-2 py-1 font-mono text-3xs font-bold uppercase tracking-wide"
             style={
               isImpostor
                 ? { background: tokens.contradiction, color: tokens.paper[0] }
@@ -494,7 +537,7 @@ function InspectedAgent({
         ) : (
           <span
             title="Role is hidden through another agent's fog (firewall)."
-            className="inline-flex items-center rounded-pill border border-dashed border-ink-300 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-ink-400"
+            className="inline-flex items-center rounded-pill border border-dashed border-ink-300 px-2 py-1 font-mono text-3xs uppercase tracking-wide text-ink-500"
           >
             role hidden
           </span>
@@ -507,7 +550,7 @@ function InspectedAgent({
             onShowWhatTheySaw(agentId);
           }}
           className={
-            "ml-auto rounded-md border-2 border-ink-900 px-2.5 py-1 text-xs font-medium transition-colors " +
+            "ml-auto rounded-md border-2 border-ink-900 px-3 py-1 text-xs font-medium transition-colors " +
             (lensIsSelf
               ? "bg-ink-900 text-paper-0"
               : "bg-paper-0 text-ink-900 hover:bg-paper-2")
@@ -517,95 +560,123 @@ function InspectedAgent({
         </button>
       </header>
 
-      {/* FIREWALL — PER-FIELD, not whole-body (the inspector and the map lens are
-          separate controls; a spectator may inspect one agent's mind while the map
-          stays fogged to another for comparison). The task contract gates only the
-          ground-truth tells that leak alignment/secrets through a DIFFERENT agent's
-          fog: the role chip + dead chip (header), the impostor extras + the task
-          tally (Memory), and the VERBATIM prompt / response / raw rendered-memory
-          (which embed the `Your role` block + the impostor self-channel). The
-          PUBLIC / non-role-revealing tabs stay inspectable: Belief (suspicion +
-          the reasoning trail, both derived from meeting speech everyone heard),
-          the episodic observation feed, and Flags. */}
-      <div
-        role="tablist"
-        aria-label="Mind inspector tabs"
-        className="flex flex-wrap gap-1"
-      >
-        {TABS.map(({ id, label }) => {
-          const active = id === tab;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => {
-                onTab(id);
-              }}
-              className={
-                "rounded-md border-2 px-2.5 py-1 text-xs font-semibold transition-colors " +
-                (active
-                  ? "border-ink-900 bg-ink-900 text-paper-0"
-                  : "border-ink-300 bg-paper-1 text-ink-700 hover:border-ink-900")
-              }
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      {noMeetingYet ? (
+        // Agent selected from the map/roster, but no meeting at or before this
+        // tick. Honest empty state — never fabricate between-meeting LLM data.
+        <EmptyState title="No deliberation yet">
+          {inspected.display_name} hasn’t been in a meeting at or before this tick.
+          Belief, prompt, response, memory, and flags appear after their first
+          meeting — scrub forward to a meeting to read this mind.
+        </EmptyState>
+      ) : (
+        <>
+          {/* FIREWALL — PER-FIELD, not whole-body (the inspector and the map lens
+              are separate controls; a spectator may inspect one agent's mind while
+              the map stays fogged to another for comparison). The task contract
+              gates only the ground-truth tells that leak alignment/secrets through
+              a DIFFERENT agent's fog: the role chip + dead chip (header), the
+              impostor extras + the task tally (Memory), and the VERBATIM prompt /
+              response / raw rendered-memory (which embed the `Your role` block +
+              the impostor self-channel). The PUBLIC / non-role-revealing tabs stay
+              inspectable: Belief (suspicion + the reasoning trail, both derived
+              from meeting speech everyone heard), the episodic observation feed,
+              and Flags. */}
+          <div
+            role="tablist"
+            aria-label="Mind inspector tabs"
+            className="flex flex-wrap gap-1"
+          >
+            {TABS.map(({ id, label }, index) => {
+              const active = id === tab;
+              return (
+                <button
+                  key={id}
+                  ref={(el) => {
+                    tabRefs.current[index] = el;
+                  }}
+                  type="button"
+                  role="tab"
+                  id={`mind-tab-${id}`}
+                  aria-selected={active}
+                  aria-controls="mind-tabpanel"
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => {
+                    onTab(id);
+                  }}
+                  onKeyDown={(event) => {
+                    onTabKeyDown(event, index);
+                  }}
+                  className={
+                    "rounded-md border-2 px-3 py-1 text-xs font-semibold transition-colors " +
+                    (active
+                      ? "border-ink-900 bg-ink-900 text-paper-0"
+                      : "border-ink-300 bg-paper-1 text-ink-700 hover:border-ink-900")
+                  }
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
 
-      <div className="min-h-[6rem]">
-        {tab === "belief" && (
-          <MemoryGate memory={memory} memoryError={memoryError}>
-            {(m) => <BeliefTab memory={m} trail={trail} />}
-          </MemoryGate>
-        )}
-
-        {tab === "prompt" &&
-          (revealSecrets ? (
-            <LLMCallList
-              calls={calls}
-              hasUnattributed={hasUnattributed}
-              field="prompt"
-            />
-          ) : (
-            <RedactedVerbatim field="prompt" />
-          ))}
-
-        {tab === "response" &&
-          (revealSecrets ? (
-            <LLMCallList
-              calls={calls}
-              hasUnattributed={hasUnattributed}
-              field="response"
-            />
-          ) : (
-            <RedactedVerbatim field="response" />
-          ))}
-
-        {tab === "memory" && (
-          <MemoryGate memory={memory} memoryError={memoryError}>
-            {(m) => (
-              <MemoryPanel
-                memory={m}
-                revealSecrets={revealSecrets}
-                isImpostor={isImpostor}
-                ownKills={ownKills}
-                coverTasks={coverTasks}
-                fellowImpostors={fellowImpostors}
-              />
+          <div
+            role="tabpanel"
+            id="mind-tabpanel"
+            aria-labelledby={`mind-tab-${tab}`}
+            tabIndex={0}
+            className="min-h-[6rem] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink-900"
+          >
+            {tab === "belief" && (
+              <MemoryGate memory={memory} memoryError={memoryError}>
+                {(m) => <BeliefTab memory={m} trail={trail} />}
+              </MemoryGate>
             )}
-          </MemoryGate>
-        )}
 
-        {tab === "flags" && (
-          <MemoryGate memory={memory} memoryError={memoryError}>
-            {(m) => <FlagsTab memory={m} />}
-          </MemoryGate>
-        )}
-      </div>
+            {tab === "prompt" &&
+              (revealSecrets ? (
+                <LLMCallList
+                  calls={calls}
+                  hasUnattributed={hasUnattributed}
+                  field="prompt"
+                />
+              ) : (
+                <RedactedVerbatim field="prompt" />
+              ))}
+
+            {tab === "response" &&
+              (revealSecrets ? (
+                <LLMCallList
+                  calls={calls}
+                  hasUnattributed={hasUnattributed}
+                  field="response"
+                />
+              ) : (
+                <RedactedVerbatim field="response" />
+              ))}
+
+            {tab === "memory" && (
+              <MemoryGate memory={memory} memoryError={memoryError}>
+                {(m) => (
+                  <MemoryPanel
+                    memory={m}
+                    revealSecrets={revealSecrets}
+                    isImpostor={isImpostor}
+                    ownKills={ownKills}
+                    coverTasks={coverTasks}
+                    fellowImpostors={fellowImpostors}
+                  />
+                )}
+              </MemoryGate>
+            )}
+
+            {tab === "flags" && (
+              <MemoryGate memory={memory} memoryError={memoryError}>
+                {(m) => <FlagsTab memory={m} />}
+              </MemoryGate>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -633,7 +704,7 @@ function FlagsTab({ memory }: { memory: AgentMemoryView }) {
     <section>
       <TabHeading>Flags affecting this agent ({flags.length})</TabHeading>
       {flags.length === 0 ? (
-        <p className="text-xs italic text-ink-400">No contradictions or markers.</p>
+        <p className="text-xs italic text-ink-500">No contradictions or markers.</p>
       ) : (
         <ul className="space-y-2">
           {flags.map((flag) => (
@@ -678,7 +749,7 @@ function ownKillsOf(
   return kills;
 }
 
-export function MindInspector({ meetingId }: { meetingId: string }) {
+export function MindInspector({ meetingId }: { meetingId: string | null }) {
   const replay = useReplayStore((s) => s.currentReplay);
   const selectedAgentId = useReplayStore((s) => s.selectedAgentId);
   const memoryCache = useReplayStore((s) => s.memoryCache);
@@ -703,9 +774,10 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
   // bodies from the bulk payload, DESIGN.md §11.4) ONLY when the Prompt / Response
   // tab is actually open AND revealable — so scrubbing / auto-following through
   // meetings never eagerly pulls the large body payloads and the windowing holds.
-  const bodiesNeeded = revealSecrets && (tab === "prompt" || tab === "response");
+  const bodiesNeeded =
+    meetingId !== null && revealSecrets && (tab === "prompt" || tab === "response");
   useEffect(() => {
-    if (bodiesNeeded) {
+    if (bodiesNeeded && meetingId !== null) {
       void fetchMeeting(meetingId);
     }
   }, [bodiesNeeded, meetingId, fetchMeeting]);
@@ -714,8 +786,10 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
   // agent is picked — the Belief / observation / Flags tabs render through fog
   // too (they don't reveal the observer's own role), so memory is always needed.
   // The memory snapshot is small; only the per-meeting LLM BODIES are windowed.
+  // No fetch before the agent's first meeting (`meetingId === null`): there is no
+  // snapshot, and the panel shows the honest "no deliberation yet" state instead.
   useEffect(() => {
-    if (selectedAgentId !== null) {
+    if (selectedAgentId !== null && meetingId !== null) {
       void fetchMemoryView(meetingId, selectedAgentId);
     }
   }, [meetingId, selectedAgentId, fetchMemoryView]);
@@ -724,10 +798,17 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
     return null;
   }
 
+  // An agent is selected but has no meeting at or before the current tick — open
+  // to an honest empty state, never fabricated between-meeting LLM data (§3.5).
+  const noMeetingYet = selectedAgentId !== null && meetingId === null;
+
   const meeting =
-    meetingCache[meetingId] ?? replay.meetings.find((m) => m.meeting_id === meetingId);
+    meetingId === null
+      ? undefined
+      : (meetingCache[meetingId] ??
+        replay.meetings.find((m) => m.meeting_id === meetingId));
   const memory =
-    selectedAgentId === null
+    selectedAgentId === null || meetingId === null
       ? undefined
       : memoryCache[`${meetingId}:${selectedAgentId}`];
 
@@ -776,8 +857,11 @@ export function MindInspector({ meetingId }: { meetingId: string }) {
       ownKills={ownKills}
       coverTasks={coverTasks}
       perspective={perspective}
+      noMeetingYet={noMeetingYet}
       tab={tab}
       onTab={setTab}
+      // The store re-aims the fog when an agent is picked in As-agent mode
+      // (firewall invariant), so the picker can route straight to selectAgent.
       onSelectAgent={selectAgent}
       onShowWhatTheySaw={onShowWhatTheySaw}
     />

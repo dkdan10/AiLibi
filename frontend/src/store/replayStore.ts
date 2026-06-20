@@ -68,6 +68,12 @@ export interface ReplayStoreState {
   // Selected agent (for ThoughtStream).
   selectedAgentId: string | null;
 
+  // Whether the Belief × Truth hero panel is open (Task 12.13). Held here — the
+  // explicit shared-state object — so the launcher can be re-anchored into chrome
+  // (a tab beside the perspective toggle, off the map's room cells) while the
+  // panel itself lives in BeliefMatrix. Ephemeral UI state, not URL-synced.
+  beliefOpen: boolean;
+
   // Memory cache (sparse — only meeting-boundary snapshots),
   // keyed by `${meetingId}:${agentId}`.
   memoryCache: Record<string, AgentMemoryView>;
@@ -134,9 +140,11 @@ export interface ReplayStoreActions {
   setPlaybackSpeed(speed: PlaybackSpeed): void;
   selectMeeting(meetingId: string | null): void;
   selectAgent(agentId: string | null): void;
+  setBeliefOpen(open: boolean): void;
   fetchMemoryView(meetingId: string, agentId: string): Promise<void>;
   fetchMeeting(meetingId: string): Promise<void>;
   clearError(): void;
+  clearReplayLoadError(): void;
 
   // ── Task 12.4 actions ─────────────────────────────────────────────────────
   setView(view: ViewId): void;
@@ -205,6 +213,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       playbackSpeed: 1,
       selectedMeetingId: null,
       selectedAgentId: null,
+      beliefOpen: false,
       memoryCache: {},
       meetingCache: {},
       view: "replays",
@@ -247,6 +256,12 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       async loadReplayList() {
         const requestToken = ++latestReplayListRequest;
+        // Drop the previous set's list while the new one loads (Task 12.13 review):
+        // otherwise a set switch keeps the stale `replayList` non-null, the browser
+        // status stays "ready", and the OLD cards show under the new selector
+        // instead of the "Loading <set>…" cue. Clearing here surfaces the in-flight
+        // state; the request token below still guards against out-of-order writes.
+        set({ replayList: null, replayListError: null });
         // Read the active set at call time so a re-fetch after a set switch lists
         // the new set's replays (the caller re-invokes on seedSet change).
         const activeSet = get().seedSet ?? undefined;
@@ -296,6 +311,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             isPlaying: false,
             selectedMeetingId: null,
             selectedAgentId: null,
+            beliefOpen: false,
             memoryCache: {},
             meetingCache: {},
             view: "workspace",
@@ -334,6 +350,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             isPlaying: false,
             selectedMeetingId: null,
             selectedAgentId: null,
+            beliefOpen: false,
             memoryCache: {},
             meetingCache: {},
             view: "replays",
@@ -361,7 +378,27 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       },
 
       selectAgent(agentId) {
-        set({ selectedAgentId: agentId });
+        // FIREWALL invariant (Task 12.13 review): while in As-agent fog the mind
+        // inspector may show ONLY the agent whose lens is active. Selecting a
+        // different agent therefore RE-AIMS the fog to that agent — you always
+        // inspect whoever you are *being* — so no entry point (map, roster, the
+        // inspector picker, or a deep link) can render another agent's private
+        // belief/memory through the fog. Omniscient inspection is unconstrained
+        // (it reveals all), and clearing the selection never changes the lens.
+        set((state) => {
+          if (
+            agentId !== null &&
+            state.perspective.mode === "agent" &&
+            state.perspective.agentId !== agentId
+          ) {
+            return { selectedAgentId: agentId, perspective: { mode: "agent", agentId } };
+          }
+          return { selectedAgentId: agentId };
+        });
+      },
+
+      setBeliefOpen(open) {
+        set({ beliefOpen: open });
       },
 
       async fetchMemoryView(meetingId, agentId) {
@@ -456,6 +493,14 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
         set({ replayListError: null, currentReplayError: null });
       },
 
+      // Clear ONLY the replay-LOAD error (a failed selectReplay). The dismiss on
+      // that banner must not also wipe replayListError — doing so would drop a
+      // live /replays failure back into a permanent loading spinner with no retry
+      // (Task 12.13 review).
+      clearReplayLoadError() {
+        set({ currentReplayError: null });
+      },
+
       setView(view) {
         set({ view });
       },
@@ -465,7 +510,22 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
       },
 
       setPerspective(perspective) {
-        set({ perspective });
+        // FIREWALL invariant (mirror of selectAgent): changing the fog SUBJECT
+        // keeps an OPEN inspector pointed at the lens agent, so e.g. the map
+        // toolbar's fog picker can't leave the inspector showing the previously
+        // selected agent through the new lens. Entering fog with no inspector open
+        // does not open one; switching to Omniscient leaves the selection intact
+        // (omniscient may inspect anyone).
+        set((state) => {
+          if (
+            perspective.mode === "agent" &&
+            state.selectedAgentId !== null &&
+            state.selectedAgentId !== perspective.agentId
+          ) {
+            return { perspective, selectedAgentId: perspective.agentId };
+          }
+          return { perspective };
+        });
       },
 
       setBeliefView(beliefView) {

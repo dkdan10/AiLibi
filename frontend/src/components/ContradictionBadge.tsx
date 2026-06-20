@@ -1,8 +1,8 @@
 // ContradictionBadge — the role-neutral kind chip for a flagged contradiction
 // (DESIGN.md §5.3, §5.4). In task 12.1 the utilities this file used to smuggle
 // were split out (DESIGN.md §6): the matching/id helpers moved to
-// `lib/contradictions.ts` and the transcript-render primitives (`PlayerChip`,
-// `ObservationLine`, `ClaimLine`) to `ui/`. This file now holds only the badge.
+// `lib/contradictions.ts` and the transcript-render primitives (`ObservationLine`,
+// `ClaimLine`) to `ui/`. This file now holds only the badge.
 
 import type { ContradictionView } from "../types/api";
 
