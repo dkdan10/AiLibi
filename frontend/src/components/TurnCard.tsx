@@ -68,7 +68,7 @@ function SpeakerDisc({
   return (
     <span
       aria-hidden
-      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-ink-900 font-mono text-[9px] font-bold text-paper-0"
+      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-ink-900 font-mono text-4xs font-bold text-paper-0"
       style={{ backgroundColor: playerColor(agentId, players) }}
     >
       {agentId.replace(/^p-/, "")}
@@ -84,7 +84,7 @@ function SpeakerChip({
   players: PlayerView[];
 }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
+    <span className="inline-flex min-w-0 items-center gap-2">
       <SpeakerDisc agentId={agentId} players={players} />
       <span className="font-mono text-sm font-bold text-ink-900">{agentId}</span>
       <span className="min-w-0 truncate text-xs text-ink-500">
@@ -107,7 +107,7 @@ function ContradictionMarker({
     <span
       title={contradiction.description}
       className={
-        "inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide " +
+        "inline-flex items-center gap-2 rounded-md border px-1.5 py-1 font-mono text-3xs font-bold uppercase tracking-wide " +
         (strong
           ? "border-contradiction-strong text-contradiction-strong"
           : "border-ink-200 text-ink-500")
@@ -169,7 +169,7 @@ function SightingChip({
       onFocus={light}
       onBlur={clear}
       title="Hover to light this sighting on the map"
-      className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-paper-2 px-2 py-0.5 text-xs text-ink-700 transition-colors hover:border-ink-900 hover:bg-paper-3 focus:border-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900"
+      className="inline-flex items-center gap-2 rounded-md border border-ink-200 bg-paper-2 px-2 py-1 text-xs text-ink-700 transition-colors hover:border-ink-900 hover:bg-paper-3 focus:border-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900"
     >
       <span className="text-ink-500">
         <EyeGlyph />
@@ -177,7 +177,7 @@ function SightingChip({
       <span className="font-mono">
         saw <span className="font-bold text-ink-900">{sighting.subject}</span> in{" "}
         <span className="font-bold text-ink-900">{sighting.room}</span>
-        <span className="text-ink-400"> · t{sighting.tick}</span>
+        <span className="text-ink-500"> · t{sighting.tick}</span>
       </span>
     </button>
   );
@@ -224,24 +224,39 @@ export function TurnCard({
       style={{ marginLeft: indent, borderLeftColor: accent }}
       className="rounded-xl border border-ink-100 border-l-4 bg-paper-1 p-3 shadow-data"
     >
-      <header className="mb-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+      <header className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         <SpeakerChip agentId={turn.speaker} players={players} />
-        <span className="font-mono text-[10px] text-ink-400">
+        <span className="font-mono text-3xs text-ink-500">
           t{meetingTick} · {TURN_KIND_LABELS[turn.turn_kind]}
         </span>
+        {turn.fabricated_opening && (
+          // Role-neutral chip for an emergency opening whose fabricated found_body
+          // was stripped (the dev-jargon marker is dropped server-side). Ink/paper
+          // only — no reserved hue — paired with the label (firewall: not hue-only).
+          <span
+            title="This emergency opening fabricated a found body; it was stripped (DESIGN.md §5.2)."
+            className="inline-flex items-center rounded-md border border-ink-300 bg-paper-2 px-1.5 py-1 font-mono text-4xs font-bold uppercase tracking-wide text-ink-700"
+          >
+            fabricated
+          </span>
+        )}
         {target !== null && (
-          <span className="inline-flex items-center gap-1 font-mono text-[11px] text-distrust-strong">
-            <span aria-hidden>→</span>
+          // distrust-strong is the channel for the accusation EDGE (the arrow);
+          // the label text stays ink-900 for contrast (Task 12.13 contrast sweep).
+          <span className="inline-flex items-center gap-1 font-mono text-2xs text-ink-900">
+            <span aria-hidden className="text-distrust-strong">
+              →
+            </span>
             accuses
-            <span className="font-bold text-ink-900">{target}</span>
+            <span className="font-bold">{target}</span>
           </span>
         )}
         {turn.reply_to !== null && (
-          <span className="inline-flex items-center gap-1 font-mono text-[10px] text-ink-400">
+          <span className="inline-flex items-center gap-1 font-mono text-3xs text-ink-500">
             <span aria-hidden>↳</span> reply
           </span>
         )}
-        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+        <span className="ml-auto flex flex-wrap items-center gap-2">
           {flagged.map((c) => (
             <ContradictionMarker key={c.contradiction_id} contradiction={c} />
           ))}
@@ -253,7 +268,7 @@ export function TurnCard({
       </p>
 
       {sightings.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2 flex flex-wrap gap-2">
           {sightings.map((sighting, index) => (
             <SightingChip
               key={`sighting-${index}`}
@@ -266,7 +281,7 @@ export function TurnCard({
 
       {detailCount > 0 && (
         <details className="mt-2 text-sm text-ink-700">
-          <summary className="cursor-pointer select-none font-mono text-[11px] text-ink-500">
+          <summary className="cursor-pointer select-none font-mono text-2xs text-ink-500">
             structured detail ({observations.length} observation
             {observations.length === 1 ? "" : "s"}, {claims.length} claim
             {claims.length === 1 ? "" : "s"})
@@ -279,7 +294,7 @@ export function TurnCard({
                     key={`obs-${index}`}
                     className="flex flex-wrap items-center gap-2 text-ink-700"
                   >
-                    <span className="text-ink-400">•</span>
+                    <span className="text-ink-500">•</span>
                     <ObservationLine obs={obs} />
                     {contras.map((c) => (
                       <ContradictionMarker key={c.contradiction_id} contradiction={c} />
@@ -295,7 +310,7 @@ export function TurnCard({
                     key={`claim-${index}`}
                     className="flex flex-wrap items-center gap-2 text-ink-700"
                   >
-                    <span className="text-ink-400">•</span>
+                    <span className="text-ink-500">•</span>
                     <ClaimLine claim={claim} />
                     {contras.map((c) => (
                       <ContradictionMarker key={c.contradiction_id} contradiction={c} />

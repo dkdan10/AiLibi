@@ -64,6 +64,7 @@ function turn(partial: Partial<TurnView> & Pick<TurnView, "turn_id" | "speaker" 
     reply_to: null,
     observations: [],
     claims: [],
+    fabricated_opening: false,
     ...partial,
   };
 }

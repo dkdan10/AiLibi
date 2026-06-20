@@ -69,9 +69,9 @@ export function MapToolbar() {
 
   if (replay === null) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-t-xl border-2 border-b-0 border-ink-900 bg-paper-0 px-4 py-2.5">
+      <div className="flex items-center justify-between gap-3 rounded-t-xl border-2 border-b-0 border-ink-900 bg-paper-0 px-4 py-3">
         <span className="font-display text-sm font-semibold text-ink-900">Map</span>
-        <span className="font-mono text-xs text-ink-400">no replay — select one to view the map</span>
+        <span className="font-mono text-xs text-ink-500">no replay — select one to view the map</span>
       </div>
     );
   }
@@ -89,30 +89,30 @@ export function MapToolbar() {
   return (
     <div
       className={
-        "flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-2 border-b-0 border-ink-900 px-4 py-2.5 transition-colors " +
+        "flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-2 border-b-0 border-ink-900 px-4 py-3 transition-colors " +
         (inFog ? "bg-paper-3" : "bg-paper-0")
       }
     >
       {/* Legend (left) */}
       <div className="flex items-center gap-2.5">
-        <span className="rounded-md border-2 border-ink-900 bg-ink-900 px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-wider text-paper-0">
+        <span className="rounded-md border-2 border-ink-900 bg-ink-900 px-2 py-1 font-mono text-2xs font-bold uppercase tracking-wider text-paper-0">
           canonical_1
         </span>
-        <span className="font-mono text-[11px] text-ink-500">
+        <span className="font-mono text-2xs text-ink-500">
           {replay.map.rooms.length} rooms · {replay.map.edges.length} corridors · {ring}-vent ring
         </span>
       </div>
 
       {/* Perspective switcher (right) — the dominant two-truth mode cue */}
       <div className="flex items-center gap-2" role="group" aria-label="Map perspective">
-        <span className="font-mono text-[10px] uppercase tracking-wide text-ink-400">Perspective</span>
+        <span className="font-mono text-3xs uppercase tracking-wide text-ink-500">Perspective</span>
         <div className="flex overflow-hidden rounded-lg border-2 border-ink-900 shadow-chrome-1">
           <button
             type="button"
             aria-pressed={!inFog}
             onClick={() => setPerspective(OMNISCIENT)}
             className={
-              "flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold transition-colors " +
+              "flex items-center gap-2 px-3 py-1.5 text-sm font-semibold transition-colors " +
               (!inFog ? "bg-ink-900 text-paper-0" : "bg-paper-0 text-ink-700 hover:bg-paper-2")
             }
           >
@@ -125,7 +125,7 @@ export function MapToolbar() {
             onClick={enterFog}
             disabled={defaultAgentId === null}
             className={
-              "flex items-center gap-1.5 border-l-2 border-ink-900 px-3 py-1.5 text-sm font-semibold transition-colors " +
+              "flex items-center gap-2 border-l-2 border-ink-900 px-3 py-1.5 text-sm font-semibold transition-colors " +
               (inFog
                 ? "bg-ink-900 text-paper-0"
                 : "bg-paper-0 text-ink-700 hover:bg-paper-2 disabled:opacity-40")
@@ -138,15 +138,15 @@ export function MapToolbar() {
 
         {inFog && (
           <label
-            className="flex items-center gap-1.5 rounded-lg border-2 border-dashed border-ink-700 bg-paper-0 px-2 py-1"
+            className="flex items-center gap-2 rounded-lg border-2 border-dashed border-ink-700 bg-paper-0 px-2 py-1"
             title="Choose whose field of view to simulate (fog of war)"
           >
-            <span className="font-mono text-[9px] uppercase tracking-wide text-ink-500">fog of war · as</span>
+            <span className="font-mono text-4xs uppercase tracking-wide text-ink-500">fog of war · as</span>
             <select
               aria-label="Perspective agent"
               value={fogAgentId ?? ""}
               onChange={(e) => setPerspective({ mode: "agent", agentId: e.target.value })}
-              className="rounded-md border border-ink-300 bg-paper-0 px-1.5 py-0.5 font-mono text-xs font-bold text-ink-900"
+              className="rounded-md border border-ink-300 bg-paper-0 px-1.5 py-1 font-mono text-xs font-bold text-ink-900"
             >
               {replay.players.map((player) => (
                 <option key={player.agent_id} value={player.agent_id}>

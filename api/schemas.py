@@ -533,6 +533,11 @@ class TurnView(_FrozenView):
     observations: tuple[ObservationClaimView, ...]
     claims: tuple[StatementClaimView, ...]
     free_text: str
+    # True when this (emergency) opening had a fabricated found_body
+    # deterministically stripped (meetings.manager ``EMERGENCY_BODY_STRIP_MARKER``,
+    # parsed off ``free_text`` at load). The transcript renders a role-neutral
+    # "FABRICATED" chip instead of the raw dev-jargon marker (DESIGN.md §3.4, §5.5).
+    fabricated_opening: bool
 
 
 class ContradictionView(_FrozenView):

@@ -129,17 +129,22 @@ function SubScoreBar({ rubric }: { rubric: RubricGameView }) {
           <div
             key={meta.key}
             className="flex flex-1 flex-col items-center gap-1"
-            title={`${meta.key} ${meta.label}: ${value.toFixed(2)}`}
+            title={`${meta.key} ${meta.label}: ${value.toFixed(2)} (0–1)`}
           >
-            <div className="flex h-10 w-full items-end overflow-hidden rounded-sm bg-paper-3 shadow-data">
+            <div className="relative flex h-10 w-full items-end overflow-hidden rounded-sm bg-paper-3 shadow-data">
+              {/* Baseline reference at the 0.5 midpoint (Task 12.13): without it a
+                  bare bar gives no sense of where a value sits on its 0–1 scale. */}
               <div
-                className="w-full bg-ink-700"
-                style={{ height: `${pct}%` }}
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-ink-300"
               />
+              <div className="relative w-full bg-ink-700" style={{ height: `${pct}%` }} />
             </div>
             <span className="font-mono text-[9px] font-semibold text-ink-700">
               {meta.key}
             </span>
+            {/* The concrete value, not just a height (Task 12.13). */}
+            <span className="font-mono text-[9px] text-ink-500">{value.toFixed(2)}</span>
           </div>
         );
       })}
@@ -150,9 +155,12 @@ function SubScoreBar({ rubric }: { rubric: RubricGameView }) {
 interface HighlightCardProps {
   data: HighlightCardData;
   onOpen: (gameId: string) => void;
+  // When the WHOLE set is unscored, the "Not scored" note is hoisted to one
+  // banner above the grid (Task 12.13), so the per-card note is suppressed here.
+  hideUnscoredNote?: boolean;
 }
 
-export function HighlightCard({ data, onOpen }: HighlightCardProps) {
+export function HighlightCard({ data, onOpen, hideUnscoredNote }: HighlightCardProps) {
   const { rubric } = data;
   const scored = rubric !== null;
   const ariaLabel = scored
@@ -189,6 +197,14 @@ export function HighlightCard({ data, onOpen }: HighlightCardProps) {
           </div>
           <SubScoreBar rubric={rubric} />
         </>
+      ) : hideUnscoredNote ? (
+        // Whole set unscored: the note is hoisted to one banner above the grid
+        // (Task 12.13). Keep just the factual tick count per card.
+        data.totalTicks !== null && (
+          <span className="font-mono text-[11px] text-ink-500">
+            {data.totalTicks} ticks
+          </span>
+        )
       ) : (
         // Unscored: the set ships no rubric (the 4p1i common case). A real state,
         // never a broken score panel — show what we do know and say it plainly.

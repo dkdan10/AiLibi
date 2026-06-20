@@ -53,7 +53,7 @@ function Panel({
       aria-label={title}
       className="overflow-hidden rounded-2xl border-2 border-ink-900 bg-paper-0 shadow-chrome-1"
     >
-      <div className="flex items-center justify-between border-b-2 border-ink-900 bg-paper-2 px-4 py-2.5">
+      <div className="flex items-center justify-between border-b-2 border-ink-900 bg-paper-2 px-4 py-3">
         <h3 className="text-base">{title}</h3>
         {badge}
       </div>
@@ -63,7 +63,7 @@ function Panel({
 }
 
 function Empty({ children }: { children: ReactNode }) {
-  return <p className="font-mono text-xs italic text-ink-400">{children}</p>;
+  return <p className="font-mono text-xs italic text-ink-500">{children}</p>;
 }
 
 // Threading depth per turn, following the `reply_to` → `turn_id` chain. Cycle-
@@ -122,7 +122,7 @@ function AccusationChainSummary({
 
   const Disc = ({ agentId }: { agentId: string }) => (
     <span
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-ink-900 font-mono text-[10px] font-bold text-paper-0"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-ink-900 font-mono text-3xs font-bold text-paper-0"
       style={{ backgroundColor: playerColor(agentId, players) }}
     >
       {agentId}
@@ -135,7 +135,9 @@ function AccusationChainSummary({
         <span key={seg.key} className="flex items-center gap-3">
           <Disc agentId={seg.speaker} />
           <span className="flex flex-col items-center">
-            <span className="font-mono text-[9px] font-bold uppercase tracking-wide text-distrust-strong">
+            {/* Label TEXT is ink for contrast (Task 12.13 sweep); the orange
+                ARROW below stays the distrust channel. */}
+            <span className="font-mono text-4xs font-bold uppercase tracking-wide text-ink-900">
               {seg.verb}
             </span>
             <svg width="48" height="10" aria-hidden>
@@ -212,22 +214,22 @@ function VerdictPanel({
 
   return (
     <section className="overflow-hidden rounded-2xl border-2 border-ink-900 bg-ink-900 text-paper-0 shadow-chrome-1">
-      <div className="flex items-center justify-between border-b border-ink-700 px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-ink-700 px-4 py-3">
         <h3 className="text-base text-paper-0">Resolution</h3>
-        <span className="font-mono text-[10px] font-bold text-paper-2">§4.6</span>
+        <span className="font-mono text-3xs font-bold text-paper-2">§4.6</span>
       </div>
       <div className="space-y-3 p-4">
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-ink-300">tally</span>
+          <span className="font-mono text-3xs uppercase tracking-wide text-ink-300">tally</span>
           <span className="font-mono text-sm font-bold text-paper-1">{tally}</span>
         </div>
 
-        <p className="font-mono text-[11px] leading-relaxed text-ink-300">
+        <p className="font-mono text-2xs leading-relaxed text-ink-300">
           §4.6 — {gateReadout(meeting.gate)}
         </p>
 
         {/* Role-neutral outcome banner: never coloured by guilt. */}
-        <div className="flex items-center gap-3 rounded-lg border-2 border-ink-700 bg-ink-700/40 px-3 py-2.5">
+        <div className="flex items-center gap-3 rounded-lg border-2 border-ink-700 bg-ink-700/40 px-3 py-3">
           <span
             aria-hidden
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-ink-300 bg-ink-500 font-mono text-xs text-paper-0"
@@ -238,7 +240,7 @@ function VerdictPanel({
             <div className="text-base text-paper-0">
               {ejected !== null ? `Ejected — ${ejected}` : "Skipped — no ejection"}
             </div>
-            <div className="font-mono text-[10px] text-ink-300">
+            <div className="font-mono text-3xs text-ink-300">
               outcome is role-neutral · guilt is never coloured in
             </div>
           </div>
@@ -247,7 +249,7 @@ function VerdictPanel({
         {/* Post-hoc reveal is role ground truth → Omniscient only (an explicit,
             hideable badge — never a hue; suppressed under As-agent fog). */}
         {omniscient && ejected !== null && ejectedRole !== null && (
-          <div className="inline-flex items-center gap-1.5 rounded-md border border-ink-700 bg-ink-700/40 px-2 py-1 font-mono text-[10px] text-paper-2">
+          <div className="inline-flex items-center gap-2 rounded-md border border-ink-700 bg-ink-700/40 px-2 py-1 font-mono text-3xs text-paper-2">
             <span aria-hidden>⌖</span>
             post-hoc: {ejected} was {ejectedRole === "IMPOSTOR" ? "impostor" : "crewmate"}
           </div>
@@ -332,7 +334,7 @@ function ContradictionsSection({
 
   return (
     <div className="mt-4 border-t border-ink-100 pt-3">
-      <h4 className="mb-2 font-mono text-[11px] uppercase tracking-wide text-ink-500">
+      <h4 className="mb-2 font-mono text-2xs uppercase tracking-wide text-ink-500">
         Contradictions ({contradictions.length})
       </h4>
       <ul className="space-y-2">
@@ -351,7 +353,7 @@ function ContradictionsSection({
             <li key={c.contradiction_id} className="flex flex-wrap items-center gap-2 text-sm">
               <span
                 className={
-                  "inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide " +
+                  "inline-flex items-center gap-2 rounded-md border px-1.5 py-1 font-mono text-3xs font-bold uppercase tracking-wide " +
                   (strong
                     ? "border-contradiction-strong text-contradiction-strong"
                     : "border-ink-200 text-ink-500")
@@ -371,7 +373,7 @@ function ContradictionsSection({
                 {strong ? "strong" : "weak"}
               </span>
               {link !== null && (
-                <span className="font-mono text-[11px] font-bold text-ink-700">{link}</span>
+                <span className="font-mono text-2xs font-bold text-ink-700">{link}</span>
               )}
               <span className="min-w-0 break-words text-ink-900">{c.description}</span>
             </li>

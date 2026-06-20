@@ -67,6 +67,7 @@ function turn(speaker: string, freeText: string): TurnView {
       },
     ],
     free_text: freeText,
+    fabricated_opening: false,
   };
 }
 

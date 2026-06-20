@@ -245,18 +245,18 @@ function Header({
     <header className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-ink-900 bg-paper-1 px-4 py-3">
       <div>
         <h2 className="text-base leading-tight">{n}×{n} suspicion matrix</h2>
-        <p className="font-mono text-[11px] text-ink-500">rows = believer · columns = subject</p>
+        <p className="font-mono text-2xs text-ink-500">rows = believer · columns = subject</p>
       </div>
       <div className="flex items-center gap-3">
         {!omniscient && (
-          <span className="rounded-md border border-ink-300 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-ink-500">
+          <span className="rounded-md border border-ink-300 px-2 py-1 font-mono text-3xs uppercase tracking-wide text-ink-500">
             fog · ground-truth hidden
           </span>
         )}
         <div
           role="group"
           aria-label="Belief / Ground-truth / Error layer"
-          className="flex gap-1.5 rounded-md border-2 border-ink-900 bg-paper-1 p-1"
+          className="flex gap-2 rounded-md border-2 border-ink-900 bg-paper-1 p-1"
         >
           {LAYERS.map((opt) => {
             const active = opt.id === layer;
@@ -324,14 +324,14 @@ function StepControl({
   const active = frames[step];
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-wide text-ink-500">Meeting</span>
+      <span className="font-mono text-3xs uppercase tracking-wide text-ink-500">Meeting</span>
       <button
         type="button"
         disabled={step <= 0}
         onClick={() => {
           onStep(step - 1);
         }}
-        className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-0.5 font-mono text-xs text-ink-900 hover:bg-paper-2 disabled:cursor-not-allowed disabled:border-ink-200 disabled:text-ink-300"
+        className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-xs text-ink-900 hover:bg-paper-2 disabled:cursor-not-allowed disabled:border-ink-200 disabled:text-ink-300"
       >
         ‹ before
       </button>
@@ -346,7 +346,7 @@ function StepControl({
               onStep(i);
             }}
             className={
-              "h-6 w-6 rounded-md border-2 font-mono text-[10px] " +
+              "h-6 w-6 rounded-md border-2 font-mono text-3xs " +
               (i === step
                 ? "border-ink-900 bg-ink-900 text-paper-0"
                 : "border-ink-900 bg-paper-0 text-ink-700 hover:bg-paper-2")
@@ -362,12 +362,12 @@ function StepControl({
         onClick={() => {
           onStep(step + 1);
         }}
-        className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-0.5 font-mono text-xs text-ink-900 hover:bg-paper-2 disabled:cursor-not-allowed disabled:border-ink-200 disabled:text-ink-300"
+        className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-xs text-ink-900 hover:bg-paper-2 disabled:cursor-not-allowed disabled:border-ink-200 disabled:text-ink-300"
       >
         after ›
       </button>
       {active !== undefined && (
-        <span className="font-mono text-[11px] text-ink-500">
+        <span className="font-mono text-2xs text-ink-500">
           {step + 1} / {frames.length} · tick {active.tick}
         </span>
       )}
@@ -421,7 +421,7 @@ function Matrix({
                   <div className="flex flex-col items-center justify-end gap-0.5 pb-1">
                     {isImp ? <Dagger /> : null}
                     <span
-                      className="font-mono text-[10px] font-bold leading-none"
+                      className="font-mono text-3xs font-bold leading-none"
                       style={{ color: dead ? tokens.ink[300] : tokens.ink[900] }}
                     >
                       {subject.agent_id}
@@ -449,7 +449,7 @@ function Matrix({
           ))}
         </tbody>
       </table>
-      <div className="flex justify-between border-t border-ink-200 px-2.5 py-1.5 font-mono text-[9px] text-ink-400">
+      <div className="flex justify-between border-t border-ink-200 px-3 py-1.5 font-mono text-4xs text-ink-500">
         <span>↓ believer</span>
         <span>subject →</span>
       </div>
@@ -478,7 +478,7 @@ function Legend({ layer, omniscient }: { layer: BeliefViewMode; omniscient: bool
     layer === "belief" ? "READING: BELIEF" : layer === "truth" ? "READING: GROUND TRUTH" : "READING: ERROR";
   return (
     <div>
-      <div className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-ink-500">
+      <div className="mb-3 font-mono text-3xs font-bold uppercase tracking-[0.08em] text-ink-500">
         {heading}
       </div>
       {layer === "belief" && (
@@ -548,7 +548,7 @@ function Legend({ layer, omniscient }: { layer: BeliefViewMode; omniscient: bool
         </>
       )}
       {!omniscient && (
-        <p className="mt-3 font-mono text-[10px] leading-snug text-ink-500">
+        <p className="mt-3 font-mono text-3xs leading-snug text-ink-500">
           As-agent fog: ground truth & error are suppressed (they would reveal who the impostor is).
         </p>
       )}
@@ -562,7 +562,7 @@ function LegendRow({ swatch, label, desc }: { swatch: ReactNode; label: string; 
       {swatch}
       <div>
         <div className="text-xs font-semibold leading-tight text-ink-900">{label}</div>
-        <div className="mt-0.5 text-[11px] leading-snug text-ink-500">{desc}</div>
+        <div className="mt-1 text-2xs leading-snug text-ink-500">{desc}</div>
       </div>
     </div>
   );
@@ -575,7 +575,7 @@ function Swatch({ style }: { style: CSSProperties }) {
 function GlyphSwatch({ glyph }: { glyph: string }) {
   return (
     <span
-      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-ink-200 font-mono text-[11px] font-bold text-paper-0"
+      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-ink-200 font-mono text-2xs font-bold text-paper-0"
       style={{ background: rgba(tokens.contradiction, 0.55) }}
     >
       {glyph}
@@ -645,41 +645,41 @@ function CellDetail({
   return (
     <div className="rounded-md border-2 border-ink-900 bg-paper-1 p-3">
       <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-ink-500">
+        <div className="font-mono text-3xs font-bold uppercase tracking-[0.08em] text-ink-500">
           Cell detail
         </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Back to legend"
-          className="rounded border border-ink-300 px-1.5 font-mono text-[10px] text-ink-700 hover:bg-paper-2"
+          className="rounded border border-ink-300 px-1.5 font-mono text-3xs text-ink-700 hover:bg-paper-2"
         >
           ✕
         </button>
       </div>
 
-      <div className="mb-2 flex items-center gap-1.5 text-xs">
+      <div className="mb-2 flex items-center gap-2 text-xs">
         <PairChip player={observer} fallback={selected.observer} />
-        <span className="text-ink-400">→</span>
+        <span className="text-ink-500">→</span>
         <PairChip player={subject} fallback={selected.subject} />
       </div>
 
       {showTruth && (
-        <div className="mb-2 flex items-center gap-1.5">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-ink-500">subject</span>
-          <span className="rounded border border-ink-300 px-1.5 py-0.5 font-mono text-[10px] text-ink-700">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="font-mono text-3xs uppercase tracking-wide text-ink-500">subject</span>
+          <span className="rounded border border-ink-300 px-1.5 py-1 font-mono text-3xs text-ink-700">
             {subjImp ? "impostor (true)" : "crewmate (true)"}
           </span>
         </div>
       )}
 
-      <div className="mb-1 font-mono text-[10px] uppercase tracking-wide text-ink-500">
+      <div className="mb-1 font-mono text-3xs uppercase tracking-wide text-ink-500">
         suspicion across meetings
       </div>
       <div className="space-y-1">
         {series.map((point, i) => (
-          <div key={point.meetingId} className="flex items-center gap-1.5">
-            <span className={"w-5 shrink-0 font-mono text-[10px] " + (i === step ? "font-bold text-ink-900" : "text-ink-400")}>
+          <div key={point.meetingId} className="flex items-center gap-2">
+            <span className={"w-5 shrink-0 font-mono text-3xs " + (i === step ? "font-bold text-ink-900" : "text-ink-500")}>
               {i + 1}
             </span>
             <div className="h-2 flex-1 overflow-hidden rounded-pill bg-paper-3">
@@ -687,7 +687,7 @@ function CellDetail({
                 <div className="h-full rounded-pill bg-suspicion-4" style={{ width: `${Math.round(point.suspicion * 100)}%` }} />
               ) : null}
             </div>
-            <span className="w-12 shrink-0 text-right font-mono text-[10px] text-ink-700">
+            <span className="w-12 shrink-0 text-right font-mono text-3xs text-ink-700">
               {!point.present ? "absent" : !point.hasBelief ? "—" : Math.round(point.suspicion * 100)}
             </span>
           </div>
@@ -698,10 +698,10 @@ function CellDetail({
         {/* The snapshot for meeting N is taken BEFORE applying meeting N's result
             (api/replay_loader.py), so this delta is the change SINCE the previous
             meeting boundary, not what meeting N itself decided — labelled as such. */}
-        <div className="font-mono text-[10px] uppercase tracking-wide text-ink-500">since previous meeting</div>
-        <div className="mt-0.5 text-xs text-ink-900">{changed}</div>
+        <div className="font-mono text-3xs uppercase tracking-wide text-ink-500">since previous meeting</div>
+        <div className="mt-1 text-xs text-ink-900">{changed}</div>
         {showError && current !== undefined && current.present && current.hasBelief && current.error !== undefined && (
-          <div className="mt-1 font-mono text-[11px] text-ink-700">
+          <div className="mt-1 font-mono text-2xs text-ink-700">
             error {current.error >= 0 ? "+" : ""}
             {current.error.toFixed(2)} ({subjImp ? "vs impostor" : "vs crewmate"})
           </div>
@@ -737,7 +737,7 @@ function PairChip({ player, fallback }: { player: PlayerView | undefined; fallba
         className="inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-ink-900/40"
         style={{ backgroundColor: player?.color ?? tokens.ink[300] }}
       />
-      <span className="font-mono text-[11px] text-ink-900">{player?.agent_id ?? fallback}</span>
+      <span className="font-mono text-2xs text-ink-900">{player?.agent_id ?? fallback}</span>
     </span>
   );
 }

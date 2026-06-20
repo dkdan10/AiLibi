@@ -228,6 +228,7 @@ export interface TurnView {
   observations: ObservationClaimView[];
   claims: StatementClaimView[];
   free_text: string;
+  fabricated_opening: boolean;
 }
 
 export interface SawPlayerView {

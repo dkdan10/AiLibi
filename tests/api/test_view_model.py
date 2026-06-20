@@ -239,6 +239,28 @@ def test_gate_consistency_across_committed_9p2i_set(
     assert meetings_checked > 0, "expected meetings in the committed 9p2i set"
 
 
+def test_fabricated_emergency_opening_marker_stripped_and_flagged(
+    nine_p_two_i_loader: ReplayLoader,
+) -> None:
+    # The dev-jargon EMERGENCY_BODY_STRIP_MARKER (meetings.manager) must never
+    # reach the wire (DESIGN.md §3.4 — parsed server-side, not rendered raw); its
+    # presence is surfaced as the role-neutral ``fabricated_opening`` flag instead.
+    # The committed 9p2i set carries it, so at least one turn must be flagged.
+    from meetings.manager import EMERGENCY_BODY_STRIP_MARKER
+
+    flagged = 0
+    for meta in nine_p_two_i_loader.list_replays():
+        replay = nine_p_two_i_loader.load_replay(meta.game_id)
+        for meeting in replay.meetings:
+            for turn in meeting.turns:
+                assert EMERGENCY_BODY_STRIP_MARKER not in turn.free_text, turn.turn_id
+                if turn.fabricated_opening:
+                    flagged += 1
+                    # A flagged turn is always the (emergency) opening.
+                    assert turn.turn_kind == "opening", turn.turn_id
+    assert flagged > 0, "expected a stripped fabricated opening in the 9p2i set"
+
+
 # ---------------------------------------------------------------------------
 # Parsed ballot rewrite markers + clean rationale
 # ---------------------------------------------------------------------------

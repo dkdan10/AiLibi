@@ -162,7 +162,7 @@ function coverTasksOf(
 function ReasoningTrail({ steps }: { steps: TrailStep[] }) {
   if (steps.length === 0) {
     return (
-      <p className="text-xs italic text-ink-400">
+      <p className="text-xs italic text-ink-500">
         No recorded decisions for this agent in this meeting.
       </p>
     );
@@ -174,7 +174,7 @@ function ReasoningTrail({ steps }: { steps: TrailStep[] }) {
         return (
           <li key={index} className="flex gap-2">
             <span
-              className="mt-0.5 inline-flex h-fit shrink-0 items-center rounded-pill border-2 border-ink-900 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wide text-paper-0"
+              className="mt-1 inline-flex h-fit shrink-0 items-center rounded-pill border-2 border-ink-900 px-2 py-1 font-mono text-4xs font-bold uppercase tracking-wide text-paper-0"
               style={{ background: style.color }}
             >
               {style.label}
@@ -213,12 +213,12 @@ function BeliefBar({ belief }: { belief: BeliefEntryView }) {
           style={{ width: `${pct}%`, background: heatColor(suspicion) }}
         />
       </div>
-      <span className="w-8 shrink-0 text-right font-mono text-[10px] font-semibold uppercase text-ink-500">
+      <span className="w-8 shrink-0 text-right font-mono text-3xs font-semibold uppercase text-ink-500">
         {BUCKET_LABEL[bucket]}
       </span>
       <span
         title={`confidence ${belief.confidence.toFixed(2)} · snapshot tick ${belief.snapshot_tick}`}
-        className="shrink-0 rounded-pill border border-ink-300 bg-paper-0 px-1.5 py-0.5 font-mono text-[10px] text-ink-700"
+        className="shrink-0 rounded-pill border border-ink-300 bg-paper-0 px-1.5 py-1 font-mono text-3xs text-ink-700"
       >
         conf {belief.confidence.toFixed(2)}
       </span>
@@ -238,11 +238,11 @@ function BeliefTab({
       <section>
         <TabHeading>Suspicion / trust ({memory.beliefs.length})</TabHeading>
         {memory.beliefs.length === 0 ? (
-          <p className="text-xs italic text-ink-400">
+          <p className="text-xs italic text-ink-500">
             No beliefs formed yet (not 0% — this agent simply holds no belief).
           </p>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {memory.beliefs.map((belief) => (
               <BeliefBar key={belief.subject} belief={belief} />
             ))}
@@ -261,7 +261,7 @@ function BeliefTab({
 
 function TabHeading({ children }: { children: ReactNode }) {
   return (
-    <h4 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+    <h4 className="mb-2 font-mono text-3xs font-semibold uppercase tracking-wide text-ink-500">
       {children}
     </h4>
   );
@@ -288,7 +288,7 @@ function LLMCallList({
       );
     }
     return (
-      <p className="text-xs italic text-ink-400">
+      <p className="text-xs italic text-ink-500">
         No LLM calls recorded for this agent in this meeting.
       </p>
     );
@@ -516,7 +516,7 @@ function InspectedAgent({
             the fogged roster rail, which also hides per-player liveness). */}
         {revealSecrets && !isAlive && (
           <span
-            className="inline-flex items-center gap-1 rounded-pill border-2 border-ink-900 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide"
+            className="inline-flex items-center gap-1 rounded-pill border-2 border-ink-900 px-2 py-1 font-mono text-3xs font-bold uppercase tracking-wide"
             style={{ background: tokens.paper[2], color: tokens.ink[500] }}
           >
             <span aria-hidden>✕</span> dead
@@ -525,7 +525,7 @@ function InspectedAgent({
 
         {revealSecrets ? (
           <span
-            className="inline-flex items-center rounded-pill border-2 border-ink-900 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide"
+            className="inline-flex items-center rounded-pill border-2 border-ink-900 px-2 py-1 font-mono text-3xs font-bold uppercase tracking-wide"
             style={
               isImpostor
                 ? { background: tokens.contradiction, color: tokens.paper[0] }
@@ -537,7 +537,7 @@ function InspectedAgent({
         ) : (
           <span
             title="Role is hidden through another agent's fog (firewall)."
-            className="inline-flex items-center rounded-pill border border-dashed border-ink-300 px-2 py-0.5 font-mono text-3xs uppercase tracking-wide text-ink-500"
+            className="inline-flex items-center rounded-pill border border-dashed border-ink-300 px-2 py-1 font-mono text-3xs uppercase tracking-wide text-ink-500"
           >
             role hidden
           </span>
@@ -550,7 +550,7 @@ function InspectedAgent({
             onShowWhatTheySaw(agentId);
           }}
           className={
-            "ml-auto rounded-md border-2 border-ink-900 px-2.5 py-1 text-xs font-medium transition-colors " +
+            "ml-auto rounded-md border-2 border-ink-900 px-3 py-1 text-xs font-medium transition-colors " +
             (lensIsSelf
               ? "bg-ink-900 text-paper-0"
               : "bg-paper-0 text-ink-900 hover:bg-paper-2")
@@ -607,7 +607,7 @@ function InspectedAgent({
                     onTabKeyDown(event, index);
                   }}
                   className={
-                    "rounded-md border-2 px-2.5 py-1 text-xs font-semibold transition-colors " +
+                    "rounded-md border-2 px-3 py-1 text-xs font-semibold transition-colors " +
                     (active
                       ? "border-ink-900 bg-ink-900 text-paper-0"
                       : "border-ink-300 bg-paper-1 text-ink-700 hover:border-ink-900")
@@ -704,7 +704,7 @@ function FlagsTab({ memory }: { memory: AgentMemoryView }) {
     <section>
       <TabHeading>Flags affecting this agent ({flags.length})</TabHeading>
       {flags.length === 0 ? (
-        <p className="text-xs italic text-ink-400">No contradictions or markers.</p>
+        <p className="text-xs italic text-ink-500">No contradictions or markers.</p>
       ) : (
         <ul className="space-y-2">
           {flags.map((flag) => (

@@ -15,7 +15,11 @@
 // `usePlayback` + `lib/playback`; there is no local index↔tick re-derivation.
 
 import { Fragment, useMemo, useRef } from "react";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+} from "react";
 
 import { usePlayback } from "../hooks/usePlayback";
 import {
@@ -36,7 +40,7 @@ const SPEEDS: readonly PlaybackSpeed[] = [0.5, 1, 2, 4];
 // transport is chrome). Disabled controls drop the shadow + dim.
 const BUTTON =
   "inline-flex items-center justify-center gap-1 rounded-md border-2 border-ink-900 " +
-  "bg-paper-0 px-2.5 py-1.5 text-sm font-medium text-ink-900 shadow-chrome-1 " +
+  "bg-paper-0 px-3 py-1.5 text-sm font-medium text-ink-900 shadow-chrome-1 " +
   "transition-[transform,box-shadow] hover:-translate-y-px active:translate-y-0.5 " +
   "active:shadow-none disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none " +
   "disabled:hover:translate-y-0";
@@ -117,7 +121,7 @@ function MarkerChip({
       className={
         "absolute top-1/2 z-10 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 " +
         "items-center justify-center rounded-sm border border-ink-900 font-mono " +
-        "text-[9px] font-bold leading-none " +
+        "text-4xs font-bold leading-none " +
         chip
       }
       style={{ left: `${(fraction * 100).toFixed(2)}%` }}
@@ -136,7 +140,7 @@ function BarShell({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="w-28 shrink-0 font-mono text-[10px] uppercase tracking-wide text-ink-500">
+      <span className="w-28 shrink-0 font-mono text-3xs uppercase tracking-wide text-ink-500">
         {title}
       </span>
       <div className="min-w-0 flex-1">{children}</div>
@@ -147,7 +151,7 @@ function BarShell({
 function PlaceholderBar({ title }: { title: string }) {
   return (
     <BarShell title={title}>
-      <div className="flex h-10 items-center rounded-md border border-dashed border-ink-200 px-3 text-sm italic text-ink-400">
+      <div className="flex h-10 items-center rounded-md border border-dashed border-ink-200 px-3 text-sm italic text-ink-500">
         Select a replay.
       </div>
     </BarShell>
@@ -204,6 +208,35 @@ export function AdvantageGraph() {
     }
     seekToIndex(fractionToIndex(pointerFraction(event.clientX, rect), lastIndex));
   };
+  // The slider's OWN keyboard contract (Task 12.13 a11y): Arrow/Home/End seek.
+  // Stop propagation on the keys it handles so the global transport accelerator
+  // (App KeyboardTransport) doesn't also fire and double-step; other keys (space
+  // = play) fall through to it.
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    let handled = true;
+    switch (event.key) {
+      case "ArrowLeft":
+      case "ArrowDown":
+        seekToIndex(frameIndex - (event.shiftKey ? 10 : 1));
+        break;
+      case "ArrowRight":
+      case "ArrowUp":
+        seekToIndex(frameIndex + (event.shiftKey ? 10 : 1));
+        break;
+      case "Home":
+        seekToIndex(0);
+        break;
+      case "End":
+        seekToIndex(lastIndex);
+        break;
+      default:
+        handled = false;
+    }
+    if (handled) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
 
   return (
     <BarShell title="Advantage ▲crew ▼imp">
@@ -214,13 +247,14 @@ export function AdvantageGraph() {
           setHoverTick(null);
         }}
         onClick={click}
+        onKeyDown={onKeyDown}
         role="slider"
-        aria-label="Advantage graph — click to seek"
+        aria-label="Advantage graph — Arrow keys seek, click to jump"
         aria-valuemin={0}
         aria-valuemax={lastIndex}
         aria-valuenow={frameIndex}
         tabIndex={0}
-        className="relative h-16 cursor-pointer rounded-md border border-ink-200 bg-paper-0"
+        className="relative h-16 cursor-pointer rounded-md border border-ink-200 bg-paper-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink-900"
       >
         <svg
           viewBox="0 0 1000 100"
@@ -342,7 +376,7 @@ export function EventTimeline() {
         {players.map((player, row) => (
           <Fragment key={player.agent_id}>
             <div
-              className="flex items-center gap-1.5 font-mono text-[10px] text-ink-700"
+              className="flex items-center gap-2 font-mono text-3xs text-ink-700"
               style={{ gridColumn: 1, gridRow: row + 1 }}
             >
               <span
@@ -557,7 +591,7 @@ export function ReplayControls() {
               ? "Start"
               : `t${tickNumber} / ${lastTickNumber}`}
           {meetingAtTick !== null && (
-            <span className="ml-2 rounded-pill border-2 border-ink-900 bg-suspicion-2 px-2 py-0.5 text-xs font-semibold text-ink-900">
+            <span className="ml-2 rounded-pill border-2 border-ink-900 bg-suspicion-2 px-2 py-1 text-xs font-semibold text-ink-900">
               meeting
             </span>
           )}
@@ -578,7 +612,7 @@ export function ReplayControls() {
 
       {/* Speed selector. */}
       <div className="flex items-center gap-1">
-        <span className="mr-1 font-mono text-[10px] uppercase tracking-wide text-ink-500">
+        <span className="mr-1 font-mono text-3xs uppercase tracking-wide text-ink-500">
           Speed
         </span>
         {SPEEDS.map((value) => {
@@ -593,7 +627,7 @@ export function ReplayControls() {
                 setSpeed(value);
               }}
               className={
-                "rounded-md border-2 border-ink-900 px-2.5 py-1.5 font-mono text-sm transition-colors " +
+                "rounded-md border-2 border-ink-900 px-3 py-1.5 font-mono text-sm transition-colors " +
                 "disabled:cursor-not-allowed disabled:opacity-40 " +
                 (isActive
                   ? "bg-ink-900 text-paper-0"
@@ -615,7 +649,7 @@ export function ReplayControls() {
         }}
         title="Auto-follow meetings while playing"
         className={
-          "rounded-md border-2 border-ink-900 px-2.5 py-1.5 text-sm transition-colors " +
+          "rounded-md border-2 border-ink-900 px-3 py-1.5 text-sm transition-colors " +
           (autoFollow ? "bg-ink-900 text-paper-0" : "bg-paper-0 text-ink-900 hover:bg-paper-2")
         }
       >

@@ -109,6 +109,7 @@ def _turns() -> tuple[TurnView, ...]:
             observations=_all_observation_claims(),
             claims=_all_statement_claims(),
             free_text="I was doing wires; I found p4 in storage. p2 is sus.",
+            fabricated_opening=False,
         ),
         TurnView(
             turn_id="m1:turn-1",
@@ -119,6 +120,7 @@ def _turns() -> tuple[TurnView, ...]:
             observations=(),
             claims=_all_statement_claims(),
             free_text="It wasn't me — I was in electrical.",
+            fabricated_opening=False,
         ),
     )
 

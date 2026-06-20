@@ -111,6 +111,7 @@ from eval.meeting_quality import TournamentEvalReport
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
     DEFAULT_SKIP_CONFIDENCE_THRESHOLD,
+    EMERGENCY_BODY_STRIP_MARKER,
     INVALID_REASON_ID_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
@@ -1708,6 +1709,17 @@ def _statement_claim_view(
 
 
 def _turn_view(turn: MeetingTurn) -> TurnView:
+    # An emergency opening that fabricated a found_body carries the deterministic
+    # strip marker in its free_text (meetings.manager). Parse it server-side via
+    # the imported constant (DESIGN.md §3.4 — never hard-code a marker in TS): drop
+    # the dev-jargon string (it may sit among other audit markers, not only at the
+    # front) and surface a role-neutral ``fabricated_opening`` flag the transcript
+    # renders as a "FABRICATED" chip. The marker constant includes its trailing
+    # space, so removing it leaves no double space.
+    free_text = turn.free_text
+    fabricated_opening = EMERGENCY_BODY_STRIP_MARKER in free_text
+    if fabricated_opening:
+        free_text = free_text.replace(EMERGENCY_BODY_STRIP_MARKER, "")
     return TurnView(
         turn_id=turn.turn_id,
         turn_index=turn.turn_index,
@@ -1716,7 +1728,8 @@ def _turn_view(turn: MeetingTurn) -> TurnView:
         reply_to=turn.reply_to,
         observations=tuple(_observation_claim_view(o) for o in turn.observations),
         claims=tuple(_statement_claim_view(c) for c in turn.claims),
-        free_text=turn.free_text,
+        free_text=free_text,
+        fabricated_opening=fabricated_opening,
     )
 
 
