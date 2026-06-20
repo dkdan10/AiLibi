@@ -104,9 +104,11 @@ def _resolve_replay_dir() -> Path:
         f"No replay sets found. Tried: ${ENV_REPLAY_DIR}, "
         f"{_FALLBACK_PATHS[0]}, {_FALLBACK_PATHS[1]}. Each must be a parent of "
         "per-set subdirs (e.g. replays/samples/4p1i/). "
-        "Run `bash scripts/run_spectator.sh` or "
-        "`uv run python scripts/run_game.py --seed 0 "
-        "--replay-path replays/replay-seed-0.jsonl`."
+        "Run `bash scripts/run_spectator.sh` or record into a NAMED set subdir "
+        "with `uv run python scripts/run_game.py --seed 0 "
+        "--replay-path replays/local/replay-seed-0.jsonl` (a flat "
+        "replays/replay-seed-0.jsonl no longer resolves — the resolver needs a "
+        "set subdir)."
     )
 
 

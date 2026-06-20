@@ -99,10 +99,34 @@ def test_get_unknown_set_raises_file_not_found(tmp_path: Path) -> None:
         SetLoaderRegistry(tmp_path).get("missing")
 
 
+def test_get_rejects_replay_less_subdir(tmp_path: Path) -> None:
+    # Regression (Codex P2): a stray / in-progress subdir with no replays is NOT a
+    # set — `/sets` already omits it, and an explicit get() must 404 too (not serve
+    # an empty-but-200 list), so resolution and listing stay consistent.
+    _stamp_set(tmp_path, "real")
+    (tmp_path / "scratch").mkdir()  # exists, but ships no replay-seed-*.jsonl
+    registry = SetLoaderRegistry(tmp_path)
+    assert registry.available_sets() == ["real"]
+    with pytest.raises(FileNotFoundError):
+        registry.get("scratch")
+
+
 @pytest.mark.parametrize("bad", ["../9p2i", "a/b", "/abs", "..", ".", ""])
 def test_get_rejects_path_traversal_set_name(tmp_path: Path, bad: str) -> None:
     with pytest.raises(ValueError):
         SetLoaderRegistry(tmp_path).get(bad)
+
+
+def test_replay_less_subdir_is_404_on_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The same rule end-to-end: /replays?set=<replay-less subdir> is a 404, not an
+    # empty 200, so a typo'd set name fails loud instead of masquerading as a set.
+    _stamp_set(tmp_path, "real")
+    (tmp_path / "scratch").mkdir()
+    with _client(tmp_path, monkeypatch) as client:
+        assert "scratch" not in client.get("/sets").json()["sets"]
+        assert client.get("/replays", params={"set": "scratch"}).status_code == 404
 
 
 # ── GET /sets ────────────────────────────────────────────────────────────────

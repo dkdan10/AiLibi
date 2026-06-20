@@ -2178,6 +2178,18 @@ def _validate_set_name(set_name: str) -> None:
         raise ValueError(f"invalid set name: {set_name!r}")
 
 
+def _is_set_dir(path: Path) -> bool:
+    """True iff ``path`` is an available set: a dir holding >=1 ``replay-seed-*``.
+
+    The single definition of "a set" shared by listing (:meth:`available_sets`)
+    AND resolution (:meth:`get`), so an explicit ``?set=<name>`` cannot serve a
+    name ``/sets`` omits — a stray / in-progress replay-less subdir is a 404, not
+    an empty-but-200 list (which would mask a typo'd set name).
+    """
+
+    return path.is_dir() and any(path.glob(_REPLAY_GLOB))
+
+
 class SetLoaderRegistry:
     """Per-app registry of per-set :class:`ReplayLoader`\\ s over a parent dir.
 
@@ -2212,11 +2224,9 @@ class SetLoaderRegistry:
             return []
         names: list[str] = []
         for child in self._parent_dir.iterdir():
-            if not child.is_dir():
-                continue
             if _SET_NAME_PATTERN.fullmatch(child.name) is None:
                 continue
-            if any(child.glob(_REPLAY_GLOB)):
+            if _is_set_dir(child):
                 names.append(child.name)
         return sorted(names)
 
@@ -2242,12 +2252,15 @@ class SetLoaderRegistry:
         """Return the per-set loader for ``set_name`` (LRU-cached).
 
         Raises :class:`ValueError` for a malformed / path-traversal name and
-        :class:`FileNotFoundError` for an unknown set (no such subdir); the route
-        maps both to HTTP 404.
+        :class:`FileNotFoundError` for an unknown set — no such subdir, OR a subdir
+        that ships no ``replay-seed-*.jsonl`` (a stray / in-progress dir ``/sets``
+        also omits); the route maps both to HTTP 404. Requiring replays here keeps
+        resolution consistent with listing, so a typo'd set 404s rather than
+        serving an empty-but-200 list.
         """
 
         _validate_set_name(set_name)
-        if not (self._parent_dir / set_name).is_dir():
+        if not _is_set_dir(self._parent_dir / set_name):
             raise FileNotFoundError(set_name)
         return self._cached_loader(set_name)
 

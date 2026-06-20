@@ -257,12 +257,21 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
 
       async selectReplay(gameId) {
         const requestToken = ++latestReplayRequest;
-        // The active set pins which set's game_id is loaded (both sets share
-        // seed-based ids), so the workspace opens the replay for the set in view.
-        const activeSet = get().seedSet ?? undefined;
+        // Pin the set this selection is for (both sets share seed-based ids).
+        // Changing the Set selector does NOT start a new selectReplay, so the
+        // token alone wouldn't catch a mid-flight set switch — without this the
+        // workspace could open the OLD set's replay under the new `seedSet`, and
+        // its memory/meeting fetches would then use the new set (a mismatch). A
+        // null activeSet is the UNRESOLVED case (a no-set deep link, before
+        // `/sets` lands): it resolves to the server default, so null -> default is
+        // not a switch and must not drop the deep-linked replay.
+        const activeSet = get().seedSet;
         try {
-          const replay = await api.getReplay(gameId, activeSet);
-          if (requestToken !== latestReplayRequest) {
+          const replay = await api.getReplay(gameId, activeSet ?? undefined);
+          if (
+            requestToken !== latestReplayRequest ||
+            (activeSet !== null && get().seedSet !== activeSet)
+          ) {
             return;
           }
           // Selecting a replay opens the workspace (DESIGN.md §2.1). Reset the
@@ -286,7 +295,10 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             highlightedSighting: null,
           });
         } catch (error) {
-          if (requestToken !== latestReplayRequest) {
+          if (
+            requestToken !== latestReplayRequest ||
+            (activeSet !== null && get().seedSet !== activeSet)
+          ) {
             return;
           }
           // Reset all replay-scoped state too, so a failed selection can't
@@ -355,7 +367,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           // for) another replay/set's memoryCache.
           if (
             get().currentReplay?.metadata.game_id !== gameId ||
-            get().seedSet !== activeSet
+            (activeSet !== null && get().seedSet !== activeSet)
           ) {
             return;
           }
@@ -366,7 +378,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           // Likewise, don't surface an error for a replay/set no longer selected.
           if (
             get().currentReplay?.metadata.game_id !== gameId ||
-            get().seedSet !== activeSet
+            (activeSet !== null && get().seedSet !== activeSet)
           ) {
             return;
           }
@@ -399,7 +411,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
           );
           if (
             get().currentReplay?.metadata.game_id !== gameId ||
-            get().seedSet !== activeSet
+            (activeSet !== null && get().seedSet !== activeSet)
           ) {
             return;
           }
@@ -409,7 +421,7 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
         } catch (error) {
           if (
             get().currentReplay?.metadata.game_id !== gameId ||
-            get().seedSet !== activeSet
+            (activeSet !== null && get().seedSet !== activeSet)
           ) {
             return;
           }
