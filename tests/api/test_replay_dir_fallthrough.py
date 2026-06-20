@@ -95,6 +95,23 @@ def test_invalid_name_scratch_dir_does_not_shadow_valid_parent(
     assert _resolve_replay_dir() == Path("./replays/samples")
 
 
+def test_legacy_flat_samples_does_not_shadow_nested_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regression (Codex round-4 P2): stale flat replays left directly under
+    # ./replays/samples (pre-4p1i-move cruft) sit next to the real 4p1i/ subdir.
+    # ./replays must NOT win — its "samples" child is a CONTAINER (has a set-subdir),
+    # not a leaf set — so the resolver falls through to ./replays/samples.
+    monkeypatch.delenv(ENV_REPLAY_DIR, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    samples = tmp_path / "replays" / "samples"
+    _make_set(samples, "4p1i")  # ./replays/samples/4p1i/replay-seed-0.jsonl
+    (samples / "replay-seed-0.jsonl").write_text("{}\n")  # stale flat cruft
+
+    assert _resolve_replay_dir() == Path("./replays/samples")
+
+
 def test_raises_when_no_set_subdir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

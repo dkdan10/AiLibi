@@ -295,15 +295,24 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             highlightedSighting: null,
           });
         } catch (error) {
-          // Only the newest selection wins (token). We deliberately do NOT drop on
-          // a mid-flight set change here: a failed load carries no wrong-set DATA
-          // to leak, and surfacing it is what clears a pending URL hydration. A
-          // stale URL set (e.g. ?set=old that loadSets normalized away) 404s on the
-          // old set; if this were dropped silently, `currentReplay` and
-          // `currentReplayError` would both stay null and usePlayback's pending
-          // hydration would hang forever (URL sync disabled, no replay opened). The
-          // success branch still drops a wrong-set replay (that WOULD mislead).
           if (requestToken !== latestReplayRequest) {
+            return; // superseded by a newer selection
+          }
+          // A failed load carries no wrong-set DATA to leak, so the set-change
+          // decision here is only about WHICH stale failures to surface:
+          //   • LIVE switch away from a still-available set (the user picked
+          //     another valid set mid-load): suppress — the user moved on, and the
+          //     success branch likewise drops the analogous stale success.
+          //   • STALE/normalized request set (a no-set deep link, or a ?set=old
+          //     that loadSets normalized away — its set is null or no longer in
+          //     availableSets): SURFACE it. That is what lets usePlayback's pending
+          //     URL hydration clear (it keys off currentReplayError); dropping it
+          //     silently would hang hydration forever (URL sync off, no replay).
+          const setSwitchedToAvailable =
+            activeSet !== null &&
+            get().seedSet !== activeSet &&
+            get().availableSets.includes(activeSet);
+          if (setSwitchedToAvailable) {
             return;
           }
           // Reset all replay-scoped state too, so a failed selection can't

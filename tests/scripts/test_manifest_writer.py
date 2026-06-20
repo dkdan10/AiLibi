@@ -528,6 +528,25 @@ def test_ensure_roster_rejects_contradicting_descriptorless_set(
     assert not (set_dir / "roster.json").exists()  # nothing written on rejection
 
 
+def test_ensure_roster_rejects_player_override_on_misnamed_descriptorless_set(
+    tmp_path: Path,
+) -> None:
+    # Regression (Codex round-4 P1): a descriptor-less set whose dir name does NOT
+    # match <P>p<I>i (e.g. a copied/misnamed 4p1i set) is still protected — the
+    # player count is inferred from the RECORDED REPLAYS, so a num_players override
+    # is rejected even without the name convention to lean on.
+    set_dir = tmp_path / "mygames"  # name does not parse as <P>p<I>i
+    set_dir.mkdir()
+    (set_dir / "replay-seed-0.jsonl").write_bytes(
+        (_REAL_SAMPLES / "replay-seed-0.jsonl").read_bytes()  # a 4-player replay
+    )
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(
+            set_dir, num_players=7, num_impostors=1, tasks_per_crewmate=1
+        )
+    assert not (set_dir / "roster.json").exists()
+
+
 def test_ensure_roster_allows_matching_roster_on_descriptorless_set(
     tmp_path: Path,
 ) -> None:

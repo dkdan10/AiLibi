@@ -117,6 +117,36 @@ def test_get_rejects_path_traversal_set_name(tmp_path: Path, bad: str) -> None:
         SetLoaderRegistry(tmp_path).get(bad)
 
 
+def test_available_sets_skips_non_parseable_seed_dir(tmp_path: Path) -> None:
+    # Regression (Codex round-4 P2): a subdir whose only replay file has a
+    # NON-parseable seed (replay-seed-debug.jsonl) is not a set — the loader's own
+    # _replay_paths would find zero replays there — so available_sets omits it and
+    # get() 404s, matching the loader's definition of a replay.
+    _stamp_set(tmp_path, "4p1i")
+    (tmp_path / "scratch").mkdir()
+    (tmp_path / "scratch" / "replay-seed-debug.jsonl").write_text("{}\n")
+    registry = SetLoaderRegistry(tmp_path)
+    assert registry.available_sets() == ["4p1i"]
+    with pytest.raises(FileNotFoundError):
+        registry.get("scratch")
+
+
+def test_available_sets_skips_parent_of_sets_container(tmp_path: Path) -> None:
+    # Regression (Codex round-4 P2): a dir holding BOTH stray flat replays AND
+    # per-set subdirs is a container, not a set — it must not be served as one set
+    # (which would shadow the real nested sets). Here tmp_path/samples has a flat
+    # replay next to a 4p1i/ subdir, so it is excluded from the parent's listing.
+    container = tmp_path / "samples"
+    _stamp_set(container, "4p1i")
+    (container / "replay-seed-0.jsonl").write_bytes(
+        (_COMMITTED_4P1I / "replay-seed-0.jsonl").read_bytes()
+    )
+    registry = SetLoaderRegistry(tmp_path)
+    assert registry.available_sets() == []  # "samples" is a container, not a set
+    with pytest.raises(FileNotFoundError):
+        registry.get("samples")
+
+
 def test_replay_less_subdir_is_404_on_route(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

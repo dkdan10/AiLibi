@@ -2178,16 +2178,42 @@ def _validate_set_name(set_name: str) -> None:
         raise ValueError(f"invalid set name: {set_name!r}")
 
 
+def _dir_has_replays(path: Path) -> bool:
+    """True iff ``path`` holds >=1 regular file whose name PARSES to a seed.
+
+    Matches the loader's own definition of a replay (:func:`_parse_seed_from_filename`,
+    the ``replay-seed-<int>.jsonl`` pattern), not just the looser ``_REPLAY_GLOB`` —
+    so a non-parseable ``replay-seed-debug.jsonl`` (or a directory with that suffix)
+    does NOT make a dir look like a set the loader would then serve empty.
+    """
+
+    if not path.is_dir():
+        return False
+    return any(
+        child.is_file() and _parse_seed_from_filename(child.name) is not None
+        for child in path.glob(_REPLAY_GLOB)
+    )
+
+
 def _is_set_dir(path: Path) -> bool:
-    """True iff ``path`` is an available set: a dir holding >=1 ``replay-seed-*``.
+    """True iff ``path`` is an available set: a dir with parseable replays that is
+    a LEAF, not a parent-of-sets.
 
     The single definition of "a set" shared by listing (:meth:`available_sets`)
     AND resolution (:meth:`get`), so an explicit ``?set=<name>`` cannot serve a
-    name ``/sets`` omits — a stray / in-progress replay-less subdir is a 404, not
-    an empty-but-200 list (which would mask a typo'd set name).
+    name ``/sets`` omits — a stray / in-progress replay-less (or
+    non-parseable-replay) subdir is a 404, not an empty-but-200 list (which would
+    mask a typo'd set name). A dir that ALSO contains a replay-bearing subdir is a
+    PARENT/container, not a single set: a legacy flat ``replays/samples/`` holding
+    stray ``*.jsonl`` next to ``4p1i/`` + ``9p2i/`` must not be served as one set
+    named ``samples`` (it would shadow the real nested sets).
     """
 
-    return path.is_dir() and any(path.glob(_REPLAY_GLOB))
+    if not _dir_has_replays(path):
+        return False
+    return not any(
+        _dir_has_replays(child) for child in path.iterdir() if child.is_dir()
+    )
 
 
 class SetLoaderRegistry:

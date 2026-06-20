@@ -51,7 +51,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from llm.provider import DEFAULT_MEETING_MODEL  # noqa: E402
 from orchestrator.replay import (  # noqa: E402
+    ReplayEntry,
     compute_cost_usd,
+    read_all_entries,
     read_game_outcome,
     read_meeting_entries,
 )
@@ -508,9 +510,36 @@ def _validate_roster_is_seedable(roster: dict[str, int]) -> None:
 
 
 # A committed set's dir name follows the ``<players>p<impostors>i`` convention
-# (mirrors api.replay_loader._expected_seedset), so a descriptor-less set's player
-# + impostor counts can be read off its name without parsing a replay.
+# (mirrors api.replay_loader._expected_seedset) — a fallback signal for the player
+# count when a descriptor-less set has no parseable recorded actions to infer from.
 _SET_NAME_ROSTER_RE = re.compile(r"(\d+)p(\d+)i")
+# Mirrors api.replay_loader._PLAYER_ID_PATTERN: the seeder names players p-1..p-N.
+_PLAYER_ID_RE = re.compile(r"p-(\d+)")
+
+
+def _infer_num_players_from_dir(sample_dir: Path) -> int | None:
+    """Infer a descriptor-less set's player count from its recorded actions.
+
+    Mirrors :func:`api.replay_loader._infer_num_players`: the seeder names players
+    ``p-1 .. p-N`` and every alive agent acts each tick, so the max ``p-N`` across
+    recorded actions is the player count. Reads just the first replay that carries
+    actions (cheap). Returns ``None`` when no parseable replay/action is found.
+    """
+
+    max_index = 0
+    for seed in discover_seeds(sample_dir):
+        for entry in read_all_entries(_sample_path(sample_dir, seed)):
+            if not isinstance(entry, ReplayEntry):
+                continue
+            for raw_action in entry.actions:
+                actor = raw_action.get("actor")
+                if isinstance(actor, str):
+                    match = _PLAYER_ID_RE.fullmatch(actor)
+                    if match is not None:
+                        max_index = max(max_index, int(match.group(1)))
+        if max_index > 0:
+            return max_index  # one replay with actions suffices
+    return max_index or None
 
 
 def _reject_roster_contradicting_descriptorless_set(
@@ -525,10 +554,11 @@ def _reject_roster_contradicting_descriptorless_set(
     replays under the wrong roster and fail the per-tick state-hash check, so this
     rejects it BEFORE any write/spend. ``num_impostors`` / ``tasks_per_crewmate``
     are checked generically (a descriptor-less set is always 1/1); ``num_players``
-    is pinned from the set-name convention (``<P>p<I>i``) when it parses — which
-    covers the committed flat 4p1i baseline, the realistic footgun (a refresh that
-    forgot ``AILIBI_SAMPLE_DIR``). The remedy is to record a different-roster set
-    into a NEW named subdir, not to overwrite a committed set's roster.
+    is checked against the count INFERRED FROM THE REPLAYS themselves (authoritative,
+    so a copied / misnamed descriptor-less set is still protected), falling back to
+    the ``<P>p<I>i`` set-name convention only when no parseable action is found. The
+    remedy is to record a different-roster set into a NEW named subdir, not to
+    overwrite a committed set's roster.
     """
 
     problems: list[str] = []
@@ -542,11 +572,16 @@ def _reject_roster_contradicting_descriptorless_set(
             f"tasks_per_crewmate={expected['tasks_per_crewmate']} (a descriptor-less "
             "set reconstructs at 1)"
         )
-    name_match = _SET_NAME_ROSTER_RE.fullmatch(sample_dir.name)
-    if name_match is not None and expected["num_players"] != int(name_match.group(1)):
+    # Prefer the count inferred from the actual recorded replays (authoritative);
+    # fall back to the set-name convention only when inference finds no actions.
+    inferred_players = _infer_num_players_from_dir(sample_dir)
+    if inferred_players is None:
+        name_match = _SET_NAME_ROSTER_RE.fullmatch(sample_dir.name)
+        inferred_players = int(name_match.group(1)) if name_match is not None else None
+    if inferred_players is not None and expected["num_players"] != inferred_players:
         problems.append(
-            f"num_players={expected['num_players']} contradicts the set name "
-            f"{sample_dir.name!r} ({name_match.group(1)}p)"
+            f"num_players={expected['num_players']} but the existing replays were "
+            f"recorded with {inferred_players}"
         )
     if problems:
         raise ValueError(
