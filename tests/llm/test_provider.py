@@ -357,7 +357,8 @@ def _recorded_outputs() -> list[tuple[str, str, type[BaseModel]]]:
     """
 
     root = Path(__file__).resolve().parents[2]
-    samples = root / "replays" / "samples"
+    # The committed flat 4p1i set now lives under replays/samples/4p1i/ (Task 12.12).
+    samples = root / "replays" / "samples" / "4p1i"
     rows: list[tuple[str, str, type[BaseModel]]] = []
     for path in sorted(glob.glob(str(samples / "replay-seed-*.jsonl"))):
         name = Path(path).name

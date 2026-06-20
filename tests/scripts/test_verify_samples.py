@@ -20,7 +20,8 @@ import _verify_samples as vs
 from api.replay_loader import ReplayLoader
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_REAL_SAMPLES = _REPO_ROOT / "replays" / "samples"
+# The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
+_REAL_SAMPLES = _REPO_ROOT / "replays" / "samples" / "4p1i"
 _VERIFY_SH = _REPO_ROOT / "scripts" / "verify_samples.sh"
 _SEED = 0  # smallest committed sample: fast to reconstruct
 _MEETING_SEED = 22  # a committed sample that contains a meeting

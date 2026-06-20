@@ -59,24 +59,53 @@ function seg(value: string): string {
   return encodeURIComponent(value);
 }
 
-export function listReplays(): Promise<ReplayMetadataView[]> {
-  return getJson<ReplayMetadataView[]>("/replays");
+// Multi-set serving (Task 12.12; design/phase-12/stage-1-design.md §2.1, §7). The
+// backend serves all recorded sets in one run; the `set` query param selects which
+// (`<parent>/<set>/`), defaulting server-side to the flat 4p1i baseline so a call
+// that omits it still resolves. `set` is threaded through `/replays`,
+// `/replays/{game_id}/*`, `/eval/rubric`, and `/eval/tournament-report`.
+function withSet(path: string, set?: string): string {
+  if (set === undefined || set === "") {
+    return path;
+  }
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}set=${encodeURIComponent(set)}`;
 }
 
-export function getReplay(gameId: string): Promise<ReplayView> {
-  return getJson<ReplayView>(`/replays/${seg(gameId)}`);
+// The available recorded sets + the default-served one (`GET /sets`). Auto-grows:
+// a newly-recorded `replays/samples/<set>/` appears here with no code change.
+export interface SetsResponse {
+  sets: string[];
+  default: string;
 }
 
-export function getTick(gameId: string, tick: number): Promise<TickView> {
-  return getJson<TickView>(`/replays/${seg(gameId)}/ticks/${tick}`);
+export function getSets(): Promise<SetsResponse> {
+  return getJson<SetsResponse>("/sets");
+}
+
+export function listReplays(set?: string): Promise<ReplayMetadataView[]> {
+  return getJson<ReplayMetadataView[]>(withSet("/replays", set));
+}
+
+export function getReplay(gameId: string, set?: string): Promise<ReplayView> {
+  return getJson<ReplayView>(withSet(`/replays/${seg(gameId)}`, set));
+}
+
+export function getTick(
+  gameId: string,
+  tick: number,
+  set?: string,
+): Promise<TickView> {
+  return getJson<TickView>(withSet(`/replays/${seg(gameId)}/ticks/${tick}`, set));
 }
 
 export function getMeeting(
   gameId: string,
   meetingId: string,
+  set?: string,
 ): Promise<MeetingView> {
   return getJson<MeetingView>(
-    `/replays/${seg(gameId)}/meetings/${seg(meetingId)}`,
+    withSet(`/replays/${seg(gameId)}/meetings/${seg(meetingId)}`, set),
   );
 }
 
@@ -84,9 +113,13 @@ export function getMemory(
   gameId: string,
   meetingId: string,
   agentId: string,
+  set?: string,
 ): Promise<AgentMemoryView> {
   return getJson<AgentMemoryView>(
-    `/replays/${seg(gameId)}/meetings/${seg(meetingId)}/memory/${seg(agentId)}`,
+    withSet(
+      `/replays/${seg(gameId)}/meetings/${seg(meetingId)}/memory/${seg(agentId)}`,
+      set,
+    ),
   );
 }
 
@@ -95,11 +128,13 @@ export function getEvalCostSummary(): Promise<EvalCostSummaryView> {
 }
 
 // The latest tournament eval report served by the privileged eval surface
-// (Task 5.7). The eval router is mounted at `/eval`, so the path mirrors
-// `/eval/cost-summary`; raises `ApiError` (404 → no report present) like the
-// sibling methods.
-export function getTournamentReport(): Promise<TournamentEvalReport> {
-  return getJson<TournamentEvalReport>("/eval/tournament-report");
+// (Task 5.7), per served set (Task 12.12). The eval router is mounted at `/eval`,
+// so the path mirrors `/eval/cost-summary`; raises `ApiError` (404 → no report
+// present) like the sibling methods.
+export function getTournamentReport(
+  set?: string,
+): Promise<TournamentEvalReport> {
+  return getJson<TournamentEvalReport>(withSet("/eval/tournament-report", set));
 }
 
 // The per-set interestingness rubric served by the eval surface (Task 12.2,
@@ -107,6 +142,6 @@ export function getTournamentReport(): Promise<TournamentEvalReport> {
 // with no co-located `results-rubric-score.json` (the 4p1i default) yields a
 // 404, surfaced as `ApiError` with `status === 404` so the Highlights reel can
 // render its first-class "no rubric" empty state rather than an error.
-export function getRubric(): Promise<RubricView> {
-  return getJson<RubricView>("/eval/rubric");
+export function getRubric(set?: string): Promise<RubricView> {
+  return getJson<RubricView>(withSet("/eval/rubric", set));
 }

@@ -376,8 +376,8 @@ def main() -> int:
     parser.add_argument(
         "--sample-dir",
         type=Path,
-        default=_REPO_ROOT / "replays" / "samples",
-        help="Sample set directory (default: replays/samples, the flat 4p/1i set).",
+        default=_REPO_ROOT / "replays" / "samples" / "4p1i",
+        help="Sample set directory (default: replays/samples/4p1i, the flat 4p/1i set).",
     )
     parser.add_argument(
         "--check",

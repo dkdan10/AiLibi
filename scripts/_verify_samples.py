@@ -36,7 +36,11 @@ from orchestrator.replay import (  # noqa: E402
     read_all_entries,
 )
 
-_DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples"
+# Per-set sample dirs now live under ``replays/samples/<set>/`` (Task 12.12); the
+# verifier walks ONE set dir. Default to the flat 4p1i baseline's new home so a
+# bare ``scripts/verify_samples.sh`` still verifies a real set, and pass an
+# explicit dir (e.g. ``replays/samples/9p2i``) to verify another.
+_DEFAULT_SAMPLE_DIR = _REPO_ROOT / "replays" / "samples" / "4p1i"
 _FILENAME_PREFIX = "replay-seed-"
 _FILENAME_SUFFIX = ".jsonl"
 _MANIFEST_NAME = "MANIFEST.md"
@@ -273,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="?",
         type=Path,
         default=_DEFAULT_SAMPLE_DIR,
-        help="directory of replay-seed-*.jsonl files (default: replays/samples)",
+        help="directory of replay-seed-*.jsonl files (default: replays/samples/4p1i)",
     )
     args = parser.parse_args(argv)
     sample_dir: Path = args.sample_dir

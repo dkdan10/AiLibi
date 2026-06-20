@@ -810,7 +810,8 @@ def test_wrapper_packs_gate_metrics_from_the_owning_analyzers() -> None:
 # ---------------------------------------------------------------------------
 
 _SAMPLES_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples"
-_COMMITTED_FLAT_REPORT = _SAMPLES_DIR / "tournament-eval-report.json"
+# The flat 4p1i report now lives under replays/samples/4p1i/ (Task 12.12).
+_COMMITTED_FLAT_REPORT = _SAMPLES_DIR / "4p1i" / "tournament-eval-report.json"
 _COMMITTED_9P2I_REPORT = _SAMPLES_DIR / "9p2i" / "tournament-eval-report.json"
 
 

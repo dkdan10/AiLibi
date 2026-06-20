@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
+import { useReplayStore } from "../store/replayStore";
 import { useTournamentStore } from "../store/tournamentStore";
 import type {
   CostDashboard,
@@ -31,6 +32,7 @@ import type {
 } from "../types/api";
 import { CalibrationCurve } from "./CalibrationCurve";
 import { MetricCaveat } from "./MetricCaveat";
+import { SetSelector } from "./ReplayPicker";
 import { StatTile } from "./StatTile";
 
 // ---------------------------------------------------------------------------
@@ -708,22 +710,45 @@ export function TournamentDashboardView({
 
 const RUBRIC_ENDPOINT = "/api/eval/rubric";
 
+// Build the per-set rubric URL (Task 12.12): append `?set=` for the active set so
+// the histogram reflects the selection; omit it (server default) when unset.
+function rubricUrl(set: string | null): string {
+  return set === null || set === ""
+    ? RUBRIC_ENDPOINT
+    : `${RUBRIC_ENDPOINT}?set=${encodeURIComponent(set)}`;
+}
+
 export function TournamentDashboard() {
   const report = useTournamentStore((s) => s.report);
   const isLoading = useTournamentStore((s) => s.isLoading);
   const error = useTournamentStore((s) => s.error);
   const loadReport = useTournamentStore((s) => s.loadReport);
 
+  // The active set is shared via useReplayStore (Task 12.12): the dashboard's
+  // report + rubric fetches follow it, and its own selector drives it (live, no
+  // reload). `setSeedSet` is URL-synced by usePlayback (the existing `set` key).
+  const seedSet = useReplayStore((s) => s.seedSet);
+  const availableSets = useReplayStore((s) => s.availableSets);
+  const setSeedSet = useReplayStore((s) => s.setSeedSet);
+  const loadSets = useReplayStore((s) => s.loadSets);
+
   // The rubric is fetched here (not via the tournament store, which is frozen to
   // the report) — a load-time projection served per set, 404 when absent (the
-  // 4p1i default). `reloadNonce` re-triggers the fetch on Refresh.
+  // 4p1i default). `reloadNonce` re-triggers the fetch on Refresh; `seedSet`
+  // re-triggers it on a live set switch.
   const [rubric, setRubric] = useState<RubricState>({ status: "loading" });
   const [reloadNonce, setReloadNonce] = useState(0);
+
+  // Populate the set list so the selector works even when the dashboard is the
+  // first view visited; adopts the server default into `seedSet` when unset.
+  useEffect(() => {
+    void loadSets();
+  }, [loadSets]);
 
   useEffect(() => {
     let cancelled = false;
     setRubric({ status: "loading" });
-    fetch(RUBRIC_ENDPOINT, { headers: { Accept: "application/json" } })
+    fetch(rubricUrl(seedSet), { headers: { Accept: "application/json" } })
       .then(async (response) => {
         if (cancelled) {
           return;
@@ -753,26 +778,29 @@ export function TournamentDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [reloadNonce]);
+  }, [reloadNonce, seedSet]);
 
-  // Fetch on mount (i.e. when the dashboard tab is first selected, and on each
-  // re-mount) so the view reflects the latest report.
+  // Load the report for the active set on mount + on each live set switch, so the
+  // view always reflects the selected set's latest report.
   useEffect(() => {
-    void loadReport();
-  }, [loadReport]);
+    void loadReport(seedSet ?? undefined);
+  }, [loadReport, seedSet]);
 
   const handleRefresh = useCallback(() => {
-    void loadReport();
+    void loadReport(seedSet ?? undefined);
     setReloadNonce((n) => n + 1);
-  }, [loadReport]);
+  }, [loadReport, seedSet]);
 
   return (
-    <TournamentDashboardView
-      report={report}
-      isLoading={isLoading}
-      error={error}
-      onRefresh={handleRefresh}
-      rubric={rubric}
-    />
+    <div className="flex flex-col gap-4">
+      <SetSelector sets={availableSets} value={seedSet} onChange={setSeedSet} />
+      <TournamentDashboardView
+        report={report}
+        isLoading={isLoading}
+        error={error}
+        onRefresh={handleRefresh}
+        rubric={rubric}
+      />
+    </div>
   );
 }

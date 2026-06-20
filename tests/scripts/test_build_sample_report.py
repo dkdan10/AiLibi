@@ -21,7 +21,8 @@ import build_sample_report as bsr
 from eval.meeting_quality import TournamentEvalReport
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_FLAT_4P1I = _REPO_ROOT / "replays" / "samples"
+# The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
+_FLAT_4P1I = _REPO_ROOT / "replays" / "samples" / "4p1i"
 _COMMITTED_REPORT = _FLAT_4P1I / "tournament-eval-report.json"
 
 
@@ -44,7 +45,7 @@ def test_rebuild_matches_committed_flat_4p1i() -> None:
     assert rebuilt == committed, (
         "The committed flat 4p/1i tournament-eval-report.json is STALE — it does "
         "not match a rebuild from its own replays. Run `uv run python "
-        "scripts/build_sample_report.py --sample-dir replays/samples` and commit it."
+        "scripts/build_sample_report.py --sample-dir replays/samples/4p1i` and commit it."
     )
 
 

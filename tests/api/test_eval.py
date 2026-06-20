@@ -170,7 +170,10 @@ def test_tournament_report_absent_returns_404(tmp_path: Path) -> None:
 # runtime paths — the loader and the HTTP route — so a stale committed report
 # fails the suite here instead of only in production.
 
-_COMMITTED_SAMPLES_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples"
+# The committed flat 4p1i set now lives under replays/samples/4p1i/ (Task 12.12).
+_COMMITTED_SAMPLES_DIR = (
+    Path(__file__).resolve().parents[2] / "replays" / "samples" / "4p1i"
+)
 
 
 def test_committed_4p1i_report_validates_against_current_model() -> None:

@@ -21,7 +21,11 @@ export interface TournamentStoreState {
 }
 
 export interface TournamentStoreActions {
-  loadReport(): Promise<void>;
+  // `set` selects which recorded set's report to load (Task 12.12); the connected
+  // dashboard passes the active `seedSet` read from `useReplayStore`. Optional so
+  // a call that omits it resolves the server's default set. This store still never
+  // imports `useReplayStore` — the set arrives as an argument.
+  loadReport(set?: string): Promise<void>;
   clearError(): void;
 }
 
@@ -43,11 +47,11 @@ export const useTournamentStore = create<
     isLoading: false,
     error: null,
 
-    async loadReport() {
+    async loadReport(set_?: string) {
       const requestToken = ++latestReportRequest;
       set({ isLoading: true, error: null });
       try {
-        const report = await api.getTournamentReport();
+        const report = await api.getTournamentReport(set_);
         if (requestToken !== latestReportRequest) {
           return;
         }
