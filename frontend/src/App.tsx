@@ -259,14 +259,13 @@ function PerspectiveBanner() {
   const setView = useReplayStore((s) => s.setView);
 
   const meta = replay?.metadata ?? null;
-  // The interactive As-agent SWITCHER is 12.5's (it lands with the map fog +
-  // toolbar). 12.4 only stands up the mode INDICATOR + the `perspective` store
-  // field / URL round-trip. Crucially we do NOT expose a user-facing way to
-  // ENTER As-agent here: the meeting / mind / belief panels are still omniscient
-  // (they show every role + private memory), so switching into fog now would
-  // leak through them. A deep link can still set As-agent (so 12.5 can develop
-  // against it); for that case we offer a one-way "Exit fog" back to the safe,
-  // consistent Omniscient view.
+  // This shell banner is the read-only PERSPECTIVE INDICATOR; the interactive
+  // As-agent switcher lives in the stage's map toolbar (MapToolbar, 12.5). The
+  // panels now gate every secret to Omniscient-or-self
+  // (MindInspector / MeetingView / BeliefMatrix), so fog is safe to enter — the
+  // earlier "entering here would leak" rationale is obsolete. We keep a one-way
+  // "Exit fog" as a convenience so the shell always offers a quick return to
+  // Omniscient.
   const inFog = perspective.mode === "agent";
 
   return (
@@ -303,7 +302,7 @@ function PerspectiveBanner() {
             onClick={() => {
               setPerspective(OMNISCIENT);
             }}
-            title="Return to the Omniscient view (the As-agent switcher arrives with the map)"
+            title="Return to the Omniscient view (enter As-agent from the map toolbar)"
             className="rounded-md border-2 border-ink-900 bg-paper-0 px-2.5 py-1 text-sm font-medium text-ink-900 hover:bg-paper-2"
           >
             Exit fog
@@ -520,6 +519,11 @@ function Workspace() {
 export default function App() {
   const loadReplayList = useReplayStore((s) => s.loadReplayList);
   const view = useReplayStore((s) => s.view);
+  // Hide the shell header while a meeting overlay is open: the meeting scrim is
+  // translucent, so at 820px the nav bled through over the "triggered by" line.
+  // Hiding it covers all breakpoints AND keeps the nav out of the meeting's
+  // focus-trap; the meeting's own header (with Close) stands in.
+  const meetingOpen = useReplayStore((s) => s.selectedMeetingId !== null);
 
   useEffect(() => {
     void loadReplayList();
@@ -529,10 +533,12 @@ export default function App() {
     <div className="min-h-screen bg-paper-1 p-4 text-ink-900 sm:p-6">
       <PlaybackEngine />
       <GuidedTour />
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl">AiLibi</h1>
-        <TopNav />
-      </header>
+      {!meetingOpen && (
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl">AiLibi</h1>
+          <TopNav />
+        </header>
+      )}
 
       <Suspense fallback={<RouteFallback />}>
         {view === "tournament" ? (

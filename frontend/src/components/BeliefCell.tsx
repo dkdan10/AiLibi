@@ -60,9 +60,12 @@ export function heatColor(s: number): string {
   return tokens.suspicion[4];
 }
 
-// Legible ink on the pale half of the ramp, paper on the hot half.
+// Per-stop legibility (WCAG AA, 10px mono numerals on the amber ramp): ink-900
+// clears 4.5:1 on every stop up to and including #DE6A24; white only wins on the
+// darkest stop #C24A16 (s ≥ 0.85). The old single 0.55 cutover flipped to white
+// a stop too early (white-on-#EF9D33 = 2.17:1, white-on-#DE6A24 = 3.34:1, both fail).
 function heatTextColor(s: number): string {
-  return s < 0.55 ? tokens.ink[900] : tokens.paper[0];
+  return s < 0.85 ? tokens.ink[900] : tokens.paper[0];
 }
 
 // Token hex ("#RRGGBB") → an `rgba()` string, so the Error fill (and the legend
@@ -140,7 +143,9 @@ function errorValueLook(model: BeliefCellModel): CellLook {
   return {
     background: rgba(tokens.contradiction, alpha),
     content: model.subjectIsImpostor ? "◆" : "✕",
-    color: mag > 0.5 ? tokens.paper[0] : tokens.ink[900],
+    // ink-900 across the light/medium fuchsia fills (white failed AA there at the
+    // old 0.5 cutover: 2.91-3.13:1); white only once the fill is saturated enough.
+    color: mag > 0.7 ? tokens.paper[0] : tokens.ink[900],
     bold: loud,
     ring: loud,
   };

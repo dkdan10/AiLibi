@@ -877,3 +877,97 @@ still resolve; per-set loader caching must be bounded (LRU cap); `/sets` must sk
 README, etc.); determinism + leak tests run per-set. 12.11 depends on this task (it does the all-surface a11y including
 the set selector), so dispatch 12.12 first.
 **Ready-to-paste prompt:** `agent_prompts/task-12-12-multi-set.md`
+
+---
+
+### Task 12.13 — UX-polish (close-audit backlog)
+**Branch:** `phase-12-ux-polish`
+**Depends on:** 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9, 12.10, 12.11, 12.12
+**Section refs:** the Phase-12 UX close-audit (two multi-agent passes + a manual composed-app pass, 2026-06-20); design/phase-12/stage-1-design.md; design/phase-12/tokens-seed.md; `frontend/CLAUDE.md`.
+**Complexity:** Integration
+**Files in scope:**
+- frontend/src/components/MapView.tsx
+- frontend/src/components/MeetingView.tsx
+- frontend/src/components/MindInspector.tsx
+- frontend/src/components/BeliefMatrix.tsx
+- frontend/src/components/BeliefPanel.tsx
+- frontend/src/components/ReplayControls.tsx
+- frontend/src/components/ReplayPicker.tsx
+- frontend/src/components/TournamentDashboard.tsx
+- frontend/src/components/BeliefRow.tsx
+- frontend/src/App.tsx
+- frontend/src/tokens.ts
+- frontend/src/index.css
+- frontend/src/ui/
+- api/replay_loader.py
+- api/schemas.py
+**Files NOT in scope:**
+- the engine + recorded replays — no re-record (a `tasks_required_total` is a loader projection, not an engine change)
+- the six P1s ALREADY fixed pre-dispatch (palette restyle, BeliefCell contrast, perspective banner, focus-trap, highlights /sets dead-end, narrow meeting nav-bleed) — do NOT redo or revert them
+
+The Phase-12 UX close-audit backlog, hand-coded + design-system-first. Build and verify every change in the COMPOSED
+running app (`scripts/run_spectator.sh`), not isolated Storybook stories — the audit's recurring lesson is that the
+overlay / composition / data-populate bugs only show composed. Severity in brackets.
+
+Remaining P1s — each needs an owner decision or map-render iteration:
+- **[P1] Task-meter denominator drifts.** `App.tsx:379` shows `adv.tasks_completed`/`adv.tasks_required`; `tasks_required`
+  is recomputed per tick (living-crew), so "tasks 0/14 → 7/10" shrinks mid-game and reads as misleading progress. If the
+  per-tick living-crew total is intended, expose the FIXED game-start total as a loader projection (`api/replay_loader.py`
+  + `api/schemas.py`, e.g. `tasks_required_total`) and show that as the stable, monotonic denominator; otherwise relabel
+  so the shrinking total is legible. Make the arithmetic reconcile.
+- **[P1] Agent inspection only reachable inside a meeting.** Map tokens (`MapView`/`AgentToken`) and roster rows
+  (`App.tsx` RosterRail) have no click → `selectAgent`. Wire a Pixi pointer handler + a roster-row onClick; since
+  prompt/response/memory are per-meeting, decide what the inspector shows BETWEEN meetings (latest snapshot / belief tab /
+  jump to next meeting) rather than nothing.
+- **[P1] Belief × Truth hides during a meeting and its launcher overlaps the Reactor room.** Let the hero coexist with an
+  open meeting (dock it in the meeting's reserved right gutter) or keep a discoverable launcher; re-anchor the launcher
+  into chrome (a tab by the perspective toggle / a roster entry) so it never overlaps a room cell or corridor.
+- **[P1] Admin dead-body cluster collision** (`MapView`): multiple bodies in one room garble the room title and the
+  oversized kill-flash ring clips stacked labels. Reserve the title band, lay bodies in a non-overlapping grid with bottom
+  padding, cap the kill-flash ring to the cell, collapse to "✕ ×N" past capacity.
+- **[P1] Sabotage marker** renders as a solid warm-orange disc — make it the hazard treatment (ink/neutral fill + stripe +
+  ⚡ glyph) per `tokens.ts` `status.sabotage`, off the reserved warm hue (it currently collides with the red kill disc and
+  distrust-orange). `MapView` event markers.
+
+P2 polish — the bulk:
+- **[P2] Debug annotation leaks into the transcript** — `[emergency opening: fabricated found_body stripped]` renders
+  inline (`MeetingView`/`TurnCard`); render a role-neutral "FABRICATED" chip instead and drop the dev-jargon string.
+- **[P2] Muted-text + label contrast sweep** — `text-ink-400` (3.79:1) → `text-ink-500` for informational text, and
+  distrust-strong orange label TEXT → `ink-900` (keep the orange edge/arrow as the channel) across `TurnCard`,
+  `MeetingView`, `MindInspector`, `ReplayControls`, `BeliefPanel`, `MapToolbar` (matrix numerals + error glyph already fixed).
+- **[P2] Type + spacing scale** — add a `type.size` scale to `tokens.ts` (+ `--text-*` utilities), map the ~88 ad-hoc
+  `text-[9/10/11px]` onto named steps; round off-scale `px-2.5`/`py-2.5`/`gap-1.5`/`py-0.5` to `tokens.space` stops.
+- **[P2] Incomplete ARIA widgets** — `MindInspector` tablist (`aria-controls` + `role="tabpanel"`/`aria-labelledby` +
+  Left/Right roving-tabindex) and the `AdvantageGraph` slider (`ReplayControls`: its own Arrow/Home/End `onKeyDown`).
+- **[P2] Cross-surface consistency** — one panel radius (`MeetingView`/`GuidedTour` `rounded-2xl` → the `rounded-lg`
+  majority); shared `ui/SectionLabel` (eyebrow) + `ui/PlayerSwatch`; extract `ui/EmptyState`/`ui/Banner`/`ui/Loading`
+  (with `role="status"`) and adopt them in `ReplayPicker`/`TournamentDashboard`/`App`; delete the dead `ui/PlayerChip`.
+- **[P2] Map legibility** — draw the vent endpoints (the "6-vent ring" subtitle promises them) or drop the claim; enlarge
+  the impostor-reveal badge + add an Omniscient-only legend; align the advantage-graph and event-timeline to a shared
+  left plot origin so the tick crosshair lines up.
+- **[P2] Narrow-820** — inset the seek-marker track so the last-tick marker isn't clipped + give 16px markers a ≥24px
+  hitbox; tighten the ~200px dead space below the map card; keep a compact crew/imp/tasks summary on the collapsed roster
+  bar; inset the clipped "Mind inspector" drawer tab.
+- **[P2] Feedback + edge states** — an in-flight "Loading <set>…" cue on set switch; render `availableSetsError` as an
+  inline retry chip where `SetSelector` would be; give the replay-load error Banner a dismiss (`clearError()`); grey the
+  "0 mtg" Belief launcher with a tooltip; hoist the repeated 4p1i "Not scored" note to ONE Banner when
+  `rubricStatus === "absent"`; fill the mind-inspector default empty column (default-select / how-to-read).
+- **[P2] Misc** — verify the dashboard "interestingness distribution" section populates (it shows an empty card below the
+  fold); add a baseline/value to the Highlights R1/R2/R3/R7 mini-bars; mark/disable dead agents in the fog agent picker;
+  add a tour step for opening a mind; delete the dead `BeliefRow` MemoBar branch (off-token neutral ramps).
+**Definition of done:** the five remaining P1s are addressed (task-meter denominator stable or relabelled per the owner
+decision; agent inspection reachable from the map + roster; the belief hero discoverable during a meeting with its
+launcher off the room cells; the Admin body-cluster and sabotage-marker fixed); the P2 backlog is worked through; every
+change verified in the composed running app; no firewall regression (the leak test still passes — fog suppresses roles,
+the matrix stays Omniscient-only); `npm run tsc:check` + `npm run build` pass and `scripts/check.sh` is green.
+**Implementation hint:**
+build + test in the running spectator, not isolated stories — the overlay / composition / populate bugs only show
+composed. Group edits by file to minimise churn (most map items are `MapView`; the contrast sweep is largely a
+find-replace of `text-ink-400` + the distrust-orange label text). The task-meter likely needs a small loader/DTO
+projection for the fixed total (then regenerate the TS types). Reuse the `useFocusTrap` hook + the cream/ink primitive
+pattern the pre-dispatch P1 fixes established.
+**Integration risk:**
+broad surface area — regression-check each surface in the composed app and re-run the firewall leak test. This builds ON
+the six pre-dispatch P1 fixes (committed first); do not redo or revert them. The task-meter touches `api/` — keep it a
+loader projection, no engine change, no re-record. Dispatch this AFTER the pre-dispatch P1 fixes land on main.
+**Ready-to-paste prompt:** `agent_prompts/task-12-13-ux-polish.md`

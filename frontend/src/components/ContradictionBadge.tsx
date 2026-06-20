@@ -6,10 +6,14 @@
 
 import type { ContradictionView } from "../types/api";
 
-// Kind is colour-coded but role-neutral — the colours do not encode crew/impostor.
+// Role-neutral cream/ink chip — the KIND is conveyed by the label text, not hue,
+// so this badge never spends the reserved amber(=suspicion)/fuchsia(=contradiction)
+// channels as decorative colour (firewall discipline; the kinds carry no
+// crew/impostor meaning). Weak/strong contradiction emphasis lives on the chain
+// links (dashed vs fuchsia), not here.
 const KIND_STYLES: Record<ContradictionView["kind"], string> = {
-  alibi_conflict: "bg-amber-900/60 text-amber-200 ring-amber-600/60",
-  alibi_vs_sighting: "bg-fuchsia-900/60 text-fuchsia-200 ring-fuchsia-600/60",
+  alibi_conflict: "border border-ink-200 bg-paper-2 text-ink-700",
+  alibi_vs_sighting: "border border-ink-200 bg-paper-2 text-ink-700",
 };
 
 const KIND_LABELS: Record<ContradictionView["kind"], string> = {
@@ -26,7 +30,7 @@ export function ContradictionBadge({
     <span
       title={contradiction.description}
       className={
-        "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ring-1 " +
+        "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide " +
         KIND_STYLES[contradiction.kind]
       }
     >

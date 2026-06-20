@@ -19,9 +19,10 @@
 // in-flight-replay guard mirrored) rather than via a new store action — the shape
 // is exactly the served DTO, so a later store-backed fetch is a drop-in swap.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useReplayStore } from "../store/replayStore";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import type { BeliefFrameView } from "../types/api";
 import { BeliefPanel } from "./BeliefPanel";
 
@@ -56,6 +57,7 @@ export function BeliefMatrix() {
 
   const [open, setOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [frames, setFrames] = useState<BeliefFrameView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +111,10 @@ export function BeliefMatrix() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
+
+  // Trap focus inside the matrix dialog while open (aria-modal alone does not
+  // constrain focus); focus restores on close. Mirrors the MeetingView dialog.
+  useFocusTrap(dialogRef, open);
 
   if (replay === null) {
     return null;
@@ -173,10 +179,12 @@ export function BeliefMatrix() {
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label="Belief × Truth matrix"
-      className="fixed inset-0 z-[80] flex items-center justify-center overflow-auto bg-ink-900/50 p-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center overflow-auto bg-ink-900/50 p-4 outline-none"
       onClick={() => {
         setOpen(false);
       }}

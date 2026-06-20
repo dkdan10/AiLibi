@@ -18,10 +18,11 @@
 // impostor reveal) are Omniscient-only. The claim↔map cross-highlight (wired in
 // TurnCard → store → MapView) lights only the PUBLIC referent a sighting names.
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
 import { useReplayStore } from "../store/replayStore";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { tokens } from "../tokens";
 import type {
   BallotView,
@@ -416,6 +417,7 @@ export function MeetingView() {
   const selectMeeting = useReplayStore((s) => s.selectMeeting);
   const perspective = useReplayStore((s) => s.perspective);
   const setHighlightedSighting = useReplayStore((s) => s.setHighlightedSighting);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const meeting =
     meetingId !== null && replay !== null
@@ -423,6 +425,11 @@ export function MeetingView() {
       : undefined;
   const isOpen = meetingId !== null && replay !== null && meeting !== undefined;
   const omniscient = perspective.mode === "omniscient";
+
+  // Trap focus inside the dialog while open (aria-modal alone does not constrain
+  // focus); focus moves in on open and is restored on close. The guided tour,
+  // when open over this, runs its own trap.
+  useFocusTrap(dialogRef, isOpen);
 
   // Clear a stale selection (the replay switched out from under an open overlay)
   // in an effect, never during render.
@@ -486,10 +493,12 @@ export function MeetingView() {
     // The bottom transport (z-70) stays reachable: every overlay reserves the
     // MEASURED `--transport-h` instead of a magic px constant.
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={`Meeting at tick ${meeting.tick}`}
-      className="fixed inset-0 z-50 overflow-auto bg-ink-900/80 p-4 xl:pr-[26rem]"
+      className="fixed inset-0 z-50 overflow-auto bg-ink-900/80 p-4 outline-none xl:pr-[26rem]"
       style={{ paddingBottom: "var(--transport-h, 16rem)" }}
       onClick={close}
     >

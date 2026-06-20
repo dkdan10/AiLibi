@@ -363,6 +363,7 @@ export function ReplayPicker() {
   const setSeedSet = useReplayStore((s) => s.setSeedSet);
   const availableSets = useReplayStore((s) => s.availableSets);
   const loadSets = useReplayStore((s) => s.loadSets);
+  const availableSetsError = useReplayStore((s) => s.availableSetsError);
   const loadReplayList = useReplayStore((s) => s.loadReplayList);
   const setView = useReplayStore((s) => s.setView);
   const selectReplay = useReplayStore((s) => s.selectReplay);
@@ -466,13 +467,21 @@ export function ReplayPicker() {
   let status: BrowserStatus;
   let error: string | null;
   if (browserView === "highlights") {
-    status =
-      rubricStatus === "loading"
-        ? "loading"
-        : rubricStatus === "error"
-          ? "error"
-          : "ready";
-    error = rubricError;
+    // A /sets failure leaves seedSet null, so the rubric fetch never starts and
+    // rubricStatus would hang on "loading" forever — surface the sets error
+    // instead of a permanent silent spinner (else the Highlights route dead-ends).
+    if (seedSet === null && availableSetsError !== null) {
+      status = "error";
+      error = availableSetsError;
+    } else {
+      status =
+        rubricStatus === "loading"
+          ? "loading"
+          : rubricStatus === "error"
+            ? "error"
+            : "ready";
+      error = rubricError;
+    }
   } else {
     status =
       replayList === null && replayListError === null

@@ -11,10 +11,10 @@ export function ClaimLine({ claim }: { claim: StatementClaimView }) {
     case "alibi":
       return (
         <span className="min-w-0 break-words">
-          <span className="font-semibold text-sky-300">alibi</span> · {claim.subject}{" "}
+          <span className="font-semibold text-ink-900">alibi</span> · {claim.subject}{" "}
           in {claim.room} (ticks {claim.from_tick}–{claim.to_tick})
           {claim.evidence.length > 0 && (
-            <span className="text-neutral-400">
+            <span className="text-ink-500">
               {" "}
               · evidence: {claim.evidence.join(", ")}
             </span>
@@ -24,14 +24,14 @@ export function ClaimLine({ claim }: { claim: StatementClaimView }) {
     case "accusation":
       return (
         <span className="min-w-0 break-words">
-          <span className="font-semibold text-rose-300">accusation</span> · against{" "}
+          <span className="font-semibold text-ink-900">accusation</span> · against{" "}
           {claim.against} (confidence {claim.confidence.toFixed(2)}) — {claim.reason}
         </span>
       );
     case "corroboration":
       return (
         <span className="min-w-0 break-words">
-          <span className="font-semibold text-emerald-300">corroboration</span> ·
+          <span className="font-semibold text-ink-900">corroboration</span> ·
           supports {claim.supports} at tick {claim.on_tick} — {claim.reason}
         </span>
       );

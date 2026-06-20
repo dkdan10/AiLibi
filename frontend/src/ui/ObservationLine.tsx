@@ -11,24 +11,24 @@ export function ObservationLine({ obs }: { obs: ObservationClaimView }) {
     case "saw_player":
       return (
         <span className="min-w-0 break-words">
-          <span className="font-semibold text-amber-300">saw</span> {obs.subject} in{" "}
+          <span className="font-semibold text-ink-900">saw</span> {obs.subject} in{" "}
           {obs.room} at tick {obs.tick}
           {obs.co_present.length > 0 && (
-            <span className="text-neutral-400"> (with {obs.co_present.join(", ")})</span>
+            <span className="text-ink-500"> (with {obs.co_present.join(", ")})</span>
           )}
         </span>
       );
     case "completed_task":
       return (
         <span className="min-w-0 break-words">
-          <span className="font-semibold text-amber-300">completed</span>{" "}
+          <span className="font-semibold text-ink-900">completed</span>{" "}
           {obs.task_id} in {obs.room} at tick {obs.tick}
         </span>
       );
     case "found_body":
       return (
         <span className="min-w-0 break-words">
-          <span className="font-semibold text-amber-300">found body</span> of{" "}
+          <span className="font-semibold text-ink-900">found body</span> of{" "}
           {obs.body_of} in {obs.room} at tick {obs.tick}
         </span>
       );
