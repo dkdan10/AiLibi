@@ -501,6 +501,56 @@ def test_ensure_roster_4p1i_roster_now_writes_a_sidecar(tmp_path: Path) -> None:
     }
 
 
+@pytest.mark.parametrize(
+    "roster",
+    [
+        {"num_players": 4, "num_impostors": 2, "tasks_per_crewmate": 1},  # impostors
+        {"num_players": 4, "num_impostors": 1, "tasks_per_crewmate": 2},  # tasks
+        {"num_players": 7, "num_impostors": 1, "tasks_per_crewmate": 1},  # players
+    ],
+)
+def test_ensure_roster_rejects_contradicting_descriptorless_set(
+    tmp_path: Path, roster: dict[str, int]
+) -> None:
+    # Regression (Codex P1): a dir with committed replays + no roster.json is a
+    # descriptor-less set; a refresh roster that contradicts the loader default
+    # (num_impostors/tasks_per_crewmate != 1) or the set name's player count would
+    # corrupt the untouched replays, so it is refused BEFORE any write — replacing
+    # the removed flat-root guard (e.g. a refresh that forgot AILIBI_SAMPLE_DIR and
+    # pointed AILIBI_NUM_IMPOSTORS=2 at the committed 4p1i set).
+    set_dir = tmp_path / "4p1i"
+    set_dir.mkdir()
+    (set_dir / "replay-seed-0.jsonl").write_bytes(
+        (_REAL_SAMPLES / "replay-seed-0.jsonl").read_bytes()
+    )
+    with pytest.raises(ValueError):
+        mw.ensure_roster_descriptor(set_dir, **roster)
+    assert not (set_dir / "roster.json").exists()  # nothing written on rejection
+
+
+def test_ensure_roster_allows_matching_roster_on_descriptorless_set(
+    tmp_path: Path,
+) -> None:
+    # The legitimate in-place refresh: the default (4,1,1) is exactly what the
+    # descriptor-less 4p1i replays reconstruct at, so it is allowed and writes the
+    # sidecar (an empty/new dir is also allowed — the guard only gates dirs that
+    # ALREADY hold committed replays).
+    set_dir = tmp_path / "4p1i"
+    set_dir.mkdir()
+    (set_dir / "replay-seed-0.jsonl").write_bytes(
+        (_REAL_SAMPLES / "replay-seed-0.jsonl").read_bytes()
+    )
+    status = mw.ensure_roster_descriptor(
+        set_dir, num_players=4, num_impostors=1, tasks_per_crewmate=1
+    )
+    assert "wrote roster descriptor" in status
+    assert json.loads((set_dir / "roster.json").read_text()) == {
+        "num_players": 4,
+        "num_impostors": 1,
+        "tasks_per_crewmate": 1,
+    }
+
+
 def test_ensure_roster_is_idempotent_when_matching(tmp_path: Path) -> None:
     mw.ensure_roster_descriptor(
         tmp_path, num_players=9, num_impostors=2, tasks_per_crewmate=2

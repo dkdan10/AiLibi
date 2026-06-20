@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -506,6 +507,57 @@ def _validate_roster_is_seedable(roster: dict[str, int]) -> None:
         raise ValueError(f"requested roster is invalid for the seeder: {exc}") from exc
 
 
+# A committed set's dir name follows the ``<players>p<impostors>i`` convention
+# (mirrors api.replay_loader._expected_seedset), so a descriptor-less set's player
+# + impostor counts can be read off its name without parsing a replay.
+_SET_NAME_ROSTER_RE = re.compile(r"(\d+)p(\d+)i")
+
+
+def _reject_roster_contradicting_descriptorless_set(
+    sample_dir: Path, expected: dict[str, int]
+) -> None:
+    """Refuse a roster that would corrupt an existing descriptor-less set.
+
+    A dir that already holds committed replays but NO ``roster.json`` is a
+    descriptor-less set: the loader reconstructs its replays at the DEFAULT
+    (``num_impostors=1``, ``tasks_per_crewmate=1``, ``num_players`` inferred).
+    Writing a sidecar that contradicts that default would re-seed the untouched
+    replays under the wrong roster and fail the per-tick state-hash check, so this
+    rejects it BEFORE any write/spend. ``num_impostors`` / ``tasks_per_crewmate``
+    are checked generically (a descriptor-less set is always 1/1); ``num_players``
+    is pinned from the set-name convention (``<P>p<I>i``) when it parses — which
+    covers the committed flat 4p1i baseline, the realistic footgun (a refresh that
+    forgot ``AILIBI_SAMPLE_DIR``). The remedy is to record a different-roster set
+    into a NEW named subdir, not to overwrite a committed set's roster.
+    """
+
+    problems: list[str] = []
+    if expected["num_impostors"] != 1:
+        problems.append(
+            f"num_impostors={expected['num_impostors']} (a descriptor-less set "
+            "reconstructs at 1)"
+        )
+    if expected["tasks_per_crewmate"] != 1:
+        problems.append(
+            f"tasks_per_crewmate={expected['tasks_per_crewmate']} (a descriptor-less "
+            "set reconstructs at 1)"
+        )
+    name_match = _SET_NAME_ROSTER_RE.fullmatch(sample_dir.name)
+    if name_match is not None and expected["num_players"] != int(name_match.group(1)):
+        problems.append(
+            f"num_players={expected['num_players']} contradicts the set name "
+            f"{sample_dir.name!r} ({name_match.group(1)}p)"
+        )
+    if problems:
+        raise ValueError(
+            f"refusing to write {_ROSTER_FILENAME} into {sample_dir}: it already "
+            "holds committed descriptor-less replays that reconstruct at the loader "
+            "default (num_impostors=1, tasks_per_crewmate=1); the requested roster "
+            f"would corrupt them — {'; '.join(problems)}. Record a different-roster "
+            "set into a NEW named subdir and point AILIBI_SAMPLE_DIR at it."
+        )
+
+
 def ensure_roster_descriptor(
     sample_dir: Path,
     *,
@@ -570,6 +622,17 @@ def ensure_roster_descriptor(
                 "AILIBI_TASKS_PER_CREWMATE for this set."
             )
         return f"roster descriptor already matches: {path}"
+    # No descriptor yet. If the dir ALREADY holds committed replays it is a
+    # descriptor-less set: those replays were recorded descriptor-less, so the
+    # loader reconstructs them at its DEFAULTS (num_impostors=1, tasks_per_crewmate=1,
+    # num_players inferred / the set name's count). Writing a roster.json that
+    # contradicts those defaults would make the untouched replays fail the per-tick
+    # state-hash check and corrupt the whole set — e.g. a refresh that forgot
+    # AILIBI_SAMPLE_DIR and pointed a 4p/2i (or tasks=2, or 7p) roster at the
+    # committed flat 4p1i baseline. With the flat-root special case gone (Task
+    # 12.12), this generic guard replaces it.
+    if discover_seeds(sample_dir):
+        _reject_roster_contradicting_descriptorless_set(sample_dir, expected)
     _atomic_write_text(path, json.dumps(expected, sort_keys=True) + "\n")
     return f"wrote roster descriptor: {path}"
 

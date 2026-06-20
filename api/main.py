@@ -25,7 +25,6 @@ _FALLBACK_PATHS: Final[tuple[Path, ...]] = (
     Path("./replays"),
     Path("./replays/samples"),
 )
-_REPLAY_GLOB: Final[str] = "replay-seed-*.jsonl"
 
 # Optional comma-separated cross-origin allowlist (documented in
 # docs/deployment.md and .env.example). The spectator API is an
@@ -68,18 +67,19 @@ def _announce(parent: Path, sets: list[str]) -> None:
 
 
 def _has_set_subdir(parent: Path) -> bool:
-    """True iff ``parent`` holds >=1 per-set subdir (a subdir with replays).
+    """True iff ``parent`` holds >=1 per-set subdir the registry would SERVE.
 
-    The restructure (Task 12.12) makes ``replays/samples/`` a PARENT of per-set
-    subdirs, so a valid parent no longer carries ``replay-seed-*.jsonl`` directly
-    — it has subdirs that do.
+    Delegates to :meth:`SetLoaderRegistry.available_sets` so the fallback resolver
+    uses the EXACT same definition of "a set" the registry serves — a subdir with a
+    valid set name AND >=1 ``replay-seed-*.jsonl``. Without this, an invalid-name
+    scratch dir (e.g. ``.tmp/replay-seed-0.jsonl``, which the registry skips) could
+    make ``_resolve_replay_dir`` stop at a parent whose ``/sets`` is then empty,
+    instead of falling through to a parent that actually has serveable sets (Task
+    12.12). The restructure made ``replays/samples/`` a PARENT of per-set subdirs,
+    so a valid parent no longer carries ``replay-seed-*.jsonl`` directly.
     """
 
-    if not parent.is_dir():
-        return False
-    return any(
-        child.is_dir() and any(child.glob(_REPLAY_GLOB)) for child in parent.iterdir()
-    )
+    return bool(SetLoaderRegistry(parent).available_sets())
 
 
 def _resolve_replay_dir() -> Path:

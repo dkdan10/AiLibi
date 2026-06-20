@@ -295,10 +295,15 @@ export const useReplayStore = create<ReplayStoreState & ReplayStoreActions>(
             highlightedSighting: null,
           });
         } catch (error) {
-          if (
-            requestToken !== latestReplayRequest ||
-            (activeSet !== null && get().seedSet !== activeSet)
-          ) {
+          // Only the newest selection wins (token). We deliberately do NOT drop on
+          // a mid-flight set change here: a failed load carries no wrong-set DATA
+          // to leak, and surfacing it is what clears a pending URL hydration. A
+          // stale URL set (e.g. ?set=old that loadSets normalized away) 404s on the
+          // old set; if this were dropped silently, `currentReplay` and
+          // `currentReplayError` would both stay null and usePlayback's pending
+          // hydration would hang forever (URL sync disabled, no replay opened). The
+          // success branch still drops a wrong-set replay (that WOULD mislead).
+          if (requestToken !== latestReplayRequest) {
             return;
           }
           // Reset all replay-scoped state too, so a failed selection can't

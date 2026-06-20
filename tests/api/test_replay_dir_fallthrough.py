@@ -77,6 +77,24 @@ def test_falls_through_to_samples(
     assert _resolve_replay_dir() == Path("./replays/samples")
 
 
+def test_invalid_name_scratch_dir_does_not_shadow_valid_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regression (Codex P2): ./replays holds ONLY an invalid-name scratch "set" (a
+    # dot-prefixed dir the registry's set-name filter skips), while ./replays/samples
+    # holds a real set. The resolver uses the registry's set definition, so ./replays
+    # has no SERVEABLE set and it falls through to ./replays/samples — rather than
+    # stopping at ./replays (whose /sets would then be empty and default /replays
+    # 404).
+    monkeypatch.delenv(ENV_REPLAY_DIR, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    _make_set(tmp_path / "replays", ".tmp")  # invalid set name -> registry skips it
+    _make_set(tmp_path / "replays" / "samples", "4p1i")
+
+    assert _resolve_replay_dir() == Path("./replays/samples")
+
+
 def test_raises_when_no_set_subdir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
