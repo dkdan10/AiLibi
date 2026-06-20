@@ -213,7 +213,10 @@ export function GuidedTour() {
   }, []);
 
   // First-run auto-open: show the tour and load a high-interestingness 9p2i seed
-  // so the walkthrough has a real game behind it.
+  // so the walkthrough has a real game behind it. A first-time visitor who
+  // arrived via a SHARED deep link (a `game_id` in the URL) keeps that moment —
+  // the tour still opens to annotate it, but it must NOT clobber the shared
+  // replay with its own seed (the URL hydration in usePlaybackEngine owns that).
   useEffect(() => {
     let seen = false;
     try {
@@ -221,9 +224,13 @@ export function GuidedTour() {
     } catch {
       seen = false;
     }
-    if (!seen) {
-      setStep(0);
-      setOpen(true);
+    if (seen) {
+      return;
+    }
+    setStep(0);
+    setOpen(true);
+    const hasDeepLink = new URLSearchParams(window.location.search).has("game_id");
+    if (!hasDeepLink) {
       void loadHighInterestSeed();
     }
   }, []);
