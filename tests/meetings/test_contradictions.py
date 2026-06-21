@@ -32,7 +32,15 @@ from meetings.schemas import (
     ObservationClaim,
     SawPlayerObservation,
 )
-from meetings.transcript import detect_contradictions
+from meetings.transcript import (
+    WEAK_CONTRADICTION_MARKER_PREFIX,
+    WEAK_REASON_ADVERSARIAL,
+    WEAK_REASON_BOUNDARY_OVERLAP,
+    WEAK_REASON_NARROW_WINDOW,
+    WEAK_REASON_SELF_PAIR,
+    detect_contradictions,
+    is_weak_contradiction,
+)
 
 
 # --- Builders --------------------------------------------------------------
@@ -565,3 +573,163 @@ class TestMixedAndDeterministic:
             assert isinstance(flag, ContradictionRef)
             dumped = flag.model_dump(mode="json")
             assert ContradictionRef.model_validate(dumped) == flag
+
+
+# --- Cross-speaker alibi_conflict strength (Task 13.3, B2) ------------------
+
+
+class TestCrossSpeakerConflictStrength:
+    """A genuinely-independent cross-speaker ``alibi_conflict`` is STRONG.
+
+    Task 13.3 (DESIGN.md §5.4; report-phase-b-plan B2; grounding-audit P1):
+    two DISTINCT non-subject speakers placing the same subject in two rooms
+    over overlapping ticks, with NONE of the four weak-guard conditions
+    (self-pair / adversarial / narrow / boundary), is a real inferential
+    contradiction and carries NO weak marker -- so ``is_weak_contradiction``
+    returns ``False`` and a re-extraction stamps ``strong=True``. The four
+    weak guards stay byte-identical: each still down-weights its own
+    false-positive shape. These tests lock both halves in so a future detector
+    edit cannot silently re-mark the independent case weak (Goodharting R7) or
+    drop a guard (re-opening the wrong-ejection path the weak delta closed).
+    """
+
+    def test_independent_cross_speaker_conflict_is_strong(self) -> None:
+        # Two distinct non-subject speakers (p-1, p-2) place subject p-3 in
+        # disjoint rooms over a real (non-boundary) overlap; wide windows; no
+        # accusation relation. None of the four guards fire -> STRONG.
+        turns = (
+            _turn(
+                turn_index=0,
+                speaker="p-1",
+                claims=(
+                    _alibi(subject="p-3", from_tick=100, to_tick=200, room="STORAGE"),
+                ),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="reply",
+                claims=(
+                    _alibi(subject="p-3", from_tick=120, to_tick=180, room="CAFETERIA"),
+                ),
+            ),
+        )
+        flags = detect_contradictions(MeetingTranscript(turns=turns))
+
+        assert len(flags) == 1
+        flag = flags[0]
+        assert flag.kind == "alibi_conflict"
+        assert flag.subjects == ("p-3",)
+        assert is_weak_contradiction(flag) is False
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
+
+    def test_self_pair_conflict_stays_weak(self) -> None:
+        # Both conflicting alibis are the subject's OWN statements: the subject's
+        # coarse self-recollection disagreeing with itself, not cross-speaker
+        # evidence. The self-pair guard keeps it weak.
+        turn = _turn(
+            turn_index=0,
+            speaker="p-3",
+            claims=(
+                _alibi(subject="p-3", from_tick=100, to_tick=200, room="STORAGE"),
+                _alibi(subject="p-3", from_tick=120, to_tick=180, room="CAFETERIA"),
+            ),
+        )
+        flags = detect_contradictions(MeetingTranscript(turns=(turn,)))
+
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_conflict"
+        assert is_weak_contradiction(flags[0]) is True
+        assert WEAK_REASON_SELF_PAIR in flags[0].description
+
+    def test_adversarial_conflict_stays_weak(self) -> None:
+        # One speaker (p-1) is across the accusation chain from the subject
+        # (p-1 accused p-3), so p-1's alibi about p-3 is a weaponised
+        # counter-alibi (the seed-13 m2 impostor deflection). The adversarial
+        # guard keeps the conflict weak even though the speakers are distinct.
+        turns = (
+            _turn(
+                turn_index=0,
+                speaker="p-1",
+                claims=(
+                    AccusationClaim(
+                        type="accusation",
+                        against="p-3",
+                        confidence=0.7,
+                        reason="near MedBay before the kill",
+                    ),
+                    _alibi(subject="p-3", from_tick=100, to_tick=200, room="STORAGE"),
+                ),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="reply",
+                claims=(
+                    _alibi(subject="p-3", from_tick=120, to_tick=180, room="CAFETERIA"),
+                ),
+            ),
+        )
+        flags = detect_contradictions(MeetingTranscript(turns=turns))
+
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_conflict"
+        assert is_weak_contradiction(flags[0]) is True
+        assert WEAK_REASON_ADVERSARIAL in flags[0].description
+
+    def test_narrow_window_conflict_stays_weak(self) -> None:
+        # Distinct non-subject speakers, but one alibi spans a sub-
+        # NARROW_ALIBI_WINDOW_TICKS window (a single transit observation), so
+        # the conflict inherits the tick-boundary fuzz: weak.
+        turns = (
+            _turn(
+                turn_index=0,
+                speaker="p-1",
+                claims=(
+                    _alibi(subject="p-3", from_tick=100, to_tick=200, room="STORAGE"),
+                ),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="reply",
+                claims=(
+                    _alibi(subject="p-3", from_tick=150, to_tick=151, room="CAFETERIA"),
+                ),
+            ),
+        )
+        flags = detect_contradictions(MeetingTranscript(turns=turns))
+
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_conflict"
+        assert is_weak_contradiction(flags[0]) is True
+        assert WEAK_REASON_NARROW_WINDOW in flags[0].description
+
+    def test_boundary_overlap_conflict_stays_weak(self) -> None:
+        # Distinct non-subject speakers whose windows overlap ONLY on the
+        # junction tick where one ends and the other begins -- a movement pair
+        # ("STORAGE t100-150" then "CAFETERIA t150-200"), not two incompatible
+        # accounts: weak.
+        turns = (
+            _turn(
+                turn_index=0,
+                speaker="p-1",
+                claims=(
+                    _alibi(subject="p-3", from_tick=100, to_tick=150, room="STORAGE"),
+                ),
+            ),
+            _turn(
+                turn_index=1,
+                speaker="p-2",
+                turn_kind="reply",
+                claims=(
+                    _alibi(subject="p-3", from_tick=150, to_tick=200, room="CAFETERIA"),
+                ),
+            ),
+        )
+        flags = detect_contradictions(MeetingTranscript(turns=turns))
+
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_conflict"
+        assert is_weak_contradiction(flags[0]) is True
+        assert WEAK_REASON_BOUNDARY_OVERLAP in flags[0].description
