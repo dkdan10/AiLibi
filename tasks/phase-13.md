@@ -301,6 +301,19 @@ function of existing episodic deltas — NO packet field, firewall untouched). (
 removes no still-needed guard; bump the four prompt versions together. EXCLUDE the in-band reasoning field (→ 13.9; keep
 `think=False`).
 
+**Build approach — rebuild the two sighting prompts, don't patch the crowded ones.** `crewmate_report.j2` (241 lines)
+and `accusation_round.j2` (315 lines) are accreted walls a 7B drowns in; layering MORE sighting-elicitation onto them
+makes it worse. REBUILD those two from a clean, concise base tuned for the canonical model — **qwen2.5:7b-instruct with
+`think=False` structured output** (that 7B is the deployed provider, NOT a 9B; a model change is a separate substrate
+decision the model-ceiling probe already cautioned against). Ground the rebuild in qwen2.5 structured-output prompting
+best-practices (web-search them if the local agent has access; else apply the principles — short, schema-clear, a few
+worked examples, no redundant imperative stacking). CRITICAL: before rebuilding, **catalog the load-bearing guards** the
+existing prompts encode (each defensive patch exists because the 7B failed a specific way — anti-over-skip,
+anti-narration, cover-consistency, the firewall lines) and carry EACH forward; the fixture loop must regression-test the
+rebuild against BOTH the new goal (richer sightings) AND those failure modes (husk / over-skip / leak / cover-drift), so
+the rebuild trades crowding for clarity, NOT for regressions. `vote_ballot.j2` / `impostor_report.j2` get the lighter trim
++ the belief-mover framing, not a full rebuild.
+
 **Iterate fixture-first, not by full games (efficiency).** Build a local meeting-prompt fixture harness
 (`experiments/lab/meeting_prompt_battery.py`, extending the `deception_battery_2.py` pattern): **ISOLATE the fixed
 pre-meeting context** each agent has entering a meeting — reconstructed from the committed 9p2i replays (the observation
@@ -311,7 +324,9 @@ real-Ollama seeds to confirm it holds in-game. This isolates the prompt as the o
 games per edit.
 **Definition of done:** `store.py` emits the directional breadcrumb (byte-deterministic, no new packet field — leak test
 unaffected); the report/accusation prompts elicit concrete WHO/WHERE/WHEN `saw_player` observations + frame others'
-accounts as belief-movers; verbosity trimmed without dropping a guard; the four prompt versions bumped together;
+accounts as belief-movers; verbosity trimmed without dropping a guard; the existing prompts' load-bearing guards (anti-over-skip / anti-narration /
+cover-consistency / firewall lines) cataloged and carried into any rebuilt prompt, regression-tested by the fixture loop
+against the known failure modes (husk / over-skip / leak / cover-drift); the four prompt versions bumped together;
 `tests/agents/test_strategic_prompts.py` re-goldened; `think=False` preserved. **LOCAL real-Qwen validation (the real
 bar):** the fixture harness shows the new template yields MORE + MORE-SPECIFIC `saw_player` observations than the old on
 the SAME pre-meeting contexts, and a few full real-Ollama seeds + `inference_testimony_probe.py` show testimony richness
