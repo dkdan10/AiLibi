@@ -170,6 +170,68 @@ the Task 10.7 two-witness fold, and read by the disjointness guard in
 post-vote single-accuser bump (the phase routing below), so the per-meeting
 total stays +0.05 -- never double-counted."""
 
+TESTIMONY_SPREAD_TWO_VOICE_DELTA: Final[float] = 0.12
+"""Graduated PRE-VOTE testimony spread for exactly TWO independent voices
+(Task 13.7; report-phase-b-plan testimony-spread; the R1/R3 lever).
+
+The first rung above the single-voice :data:`ACCUSATION_SUSPICION_DELTA`
+inform. When :data:`TESTIMONY_INDEPENDENCE_BAR` (2) distinct independent
+voices (:func:`meetings.transcript.independent_voices`) stand behind an
+accusation, the PRE-VOTE bump is this delta instead of +0.05, so two
+corroborating observation-backed accounts lift a 0.50 baseline listener
+to 0.62 -- ACROSS the §4.6 0.60 eject gate within the round (the first
+gate-cross). This is the conversion lever for the richer shared testimony
+Task 13.6 elicits: two witnesses now EJECT where one only INFORMS.
+
+TRANSIENT, not persistent. The graduated delta moves only the
+vote-time suspicion graph (the ``phase="pre_vote"`` half consumed by the
+ballot prompt); the persistent post-meeting absorb folds the flat
+:data:`ACCUSATION_SUSPICION_DELTA` (+0.05) -- it passes no voice counts,
+so a gate-crossing transient lift NEVER railroads the next round (the
+"persist only +0.05" owner constraint, audit phase-b-plan line 34/74).
+A single voice stays byte-identical to the pre-13.7 inform (the
+no-regression pin): crew / no-witness games are unmoved."""
+
+TESTIMONY_SPREAD_CAP_DELTA: Final[float] = 0.15
+"""Graduated PRE-VOTE testimony-spread CAP for THREE-OR-MORE independent
+voices (Task 13.7; report-phase-b-plan testimony-spread).
+
+Three or more independent voices behind an accusation lift the PRE-VOTE
+bump to this ceiling (0.50 -> 0.65) -- a deliberately small margin over
+the two-voice :data:`TESTIMONY_SPREAD_TWO_VOICE_DELTA` so a large opt-in
+pile-on cannot run the prior away. The spread is bounded, mirroring the
+:data:`MEETING_CONTRADICTION_LIFT_CAP` discipline on the contradiction
+channel: more corroboration raises confidence past the gate but the
+magnitude is capped, never linear in voice count. Like the two-voice
+rung this is TRANSIENT pre-vote only; the persistent per-meeting total
+stays :data:`ACCUSATION_SUSPICION_DELTA`."""
+
+
+def graduated_spread_delta(voice_count: int) -> float:
+    """The graduated PRE-VOTE bump for ``voice_count`` independent voices.
+
+    The graduated testimony-spread curve keyed on the
+    :func:`meetings.transcript.independent_voices` COUNT (Task 13.7):
+
+    * 1 voice (below :data:`TESTIMONY_INDEPENDENCE_BAR`) ->
+      :data:`ACCUSATION_SUSPICION_DELTA` (+0.05) -- BYTE-IDENTICAL to the
+      pre-13.7 single-witness inform, the no-regression pin;
+    * exactly 2 voices (the bar) -> :data:`TESTIMONY_SPREAD_TWO_VOICE_DELTA`
+      (+0.12) -- the first §4.6 gate-cross;
+    * 3+ voices -> :data:`TESTIMONY_SPREAD_CAP_DELTA` (+0.15) -- capped.
+
+    Pure mapping; the persistence decoupling lives in
+    :func:`apply_meeting_evidence_rules` (only the ``pre_vote`` half reads
+    this curve; the persistent composed fold always folds the flat +0.05).
+    """
+
+    if voice_count > TESTIMONY_INDEPENDENCE_BAR:
+        return TESTIMONY_SPREAD_CAP_DELTA
+    if voice_count == TESTIMONY_INDEPENDENCE_BAR:
+        return TESTIMONY_SPREAD_TWO_VOICE_DELTA
+    return ACCUSATION_SUSPICION_DELTA
+
+
 CORROBORATION_SUSPICION_DELTA: Final[float] = 0.05
 """DESIGN.md §6.3 Rule 3 magnitude: suspicion REMOVED when a subject is
 publicly corroborated in a meeting (Task 9.8).
@@ -626,6 +688,7 @@ def apply_meeting_evidence_rules(
     phase: MeetingFoldPhase | None = None,
     pre_vote_folded: AbstractSet[PlayerId] = frozenset(),
     pre_vote_informed: AbstractSet[PlayerId] = frozenset(),
+    pre_vote_voice_counts: Mapping[PlayerId, int] | None = None,
 ) -> BeliefState:
     """Fold one meeting's public evidence into persistent beliefs (Tasks 9.8, 10.7, 10.15).
 
@@ -748,6 +811,28 @@ def apply_meeting_evidence_rules(
       the split phases order a single-voice bump after the pre-vote
       corroborations -- interior values are order-independent.)
 
+    **Graduated testimony spread (Task 13.7; report-phase-b-plan
+    testimony-spread; the R1/R3 lever).** ``pre_vote_voice_counts`` maps a
+    voiced subject to its :func:`meetings.transcript.independent_voices`
+    COUNT. When supplied, the ``phase="pre_vote"`` accusation bump is
+    GRADUATED by that count via :func:`graduated_spread_delta` -- 1 voice
+    keeps the flat :data:`ACCUSATION_SUSPICION_DELTA` (+0.05, byte-identical
+    to the pre-13.7 inform), 2 voices take
+    :data:`TESTIMONY_SPREAD_TWO_VOICE_DELTA` (+0.12, the first §4.6
+    gate-cross), 3+ take :data:`TESTIMONY_SPREAD_CAP_DELTA` (+0.15, capped).
+    The graduation is consulted ONLY in the ``pre_vote`` half, so it lifts
+    the transient vote-time graph the ballot reads; the ``post_vote`` and
+    composed (``None``) halves ALWAYS fold the flat +0.05 regardless of any
+    counts, which is the structural "persist only +0.05" guarantee -- the
+    persistent post-meeting absorb passes no counts, so a gate-crossing
+    transient lift can never railroad the next round (audit phase-b-plan
+    line 34/74). A subject in the pre-vote bump set with NO count entry --
+    every existing caller, which passes no counts -- takes the flat +0.05,
+    so the channel is byte-identical until a caller threads the count in.
+    Each count key must be a voiced subject (in ``pre_vote_folded`` or
+    ``pre_vote_informed``); a count for an un-voiced subject is caller
+    drift and fails loud (AGENTS.md "no silent fallbacks").
+
     The impostor teammate guard applies to both new channels exactly as
     to the old: ``pre_vote_folded`` and ``pre_vote_informed`` are
     intersected with the teammate-and-self-filtered bump set, so an
@@ -777,6 +862,16 @@ def apply_meeting_evidence_rules(
             f"(the fold is the two-witness band, {WITNESS_INFORM_REASON!r} the "
             f"single-witness one); subjects in both: {sorted(both_bands)}"
         )
+    voice_counts = dict(pre_vote_voice_counts) if pre_vote_voice_counts else {}
+    if voice_counts:
+        voiced = set(pre_vote_folded) | set(pre_vote_informed)
+        unknown_counts = set(voice_counts) - voiced
+        if unknown_counts:
+            raise ValueError(
+                "pre_vote_voice_counts keys must be voiced subjects "
+                "(in pre_vote_folded or pre_vote_informed); unknown count "
+                f"subjects: {sorted(unknown_counts)}"
+            )
     if roster is not None:
         accused = [subject for subject in accused if subject in roster]
         corroborated = [subject for subject in corroborated if subject in roster]
@@ -799,8 +894,11 @@ def apply_meeting_evidence_rules(
     # guards above already shaped ``bumped``, so intersecting the
     # folded/informed sets with it applies every guard to both testimony
     # channels for free. The two-witness fold and the single-witness inform
-    # share the pre-vote half (same +0.05); together they REPLACE the
-    # post-vote bump for their subjects (the double-fold guard).
+    # share the pre-vote half; together they REPLACE the post-vote bump for
+    # their subjects (the double-fold guard). The magnitude is graduated by
+    # voice count in the pre-vote half (Task 13.7) but the per-meeting
+    # PERSISTED total stays the flat +0.05 -- only the pre-vote half reads
+    # ``voice_counts`` below.
     pre_vote_bumped = bumped & (set(pre_vote_folded) | set(pre_vote_informed))
     if phase == "pre_vote":
         bump_now = pre_vote_bumped
@@ -821,7 +919,16 @@ def apply_meeting_evidence_rules(
             if player_id not in roster:
                 result.drop_player(player_id)
     for subject in sorted(bump_now):
-        result.adjust_suspicion(subject, delta=ACCUSATION_SUSPICION_DELTA)
+        # Graduated testimony spread (Task 13.7): the PRE-VOTE half lifts a
+        # voiced subject by its voice-count delta (1->+0.05, 2->+0.12,
+        # 3+->+0.15); every other path -- the persistent composed fold, the
+        # post-vote half, and any pre-vote subject with no threaded count --
+        # keeps the flat +0.05, which is what bounds the persisted lift.
+        if phase == "pre_vote" and subject in voice_counts:
+            delta = graduated_spread_delta(voice_counts[subject])
+        else:
+            delta = ACCUSATION_SUSPICION_DELTA
+        result.adjust_suspicion(subject, delta=delta)
     for subject in sorted(lower_now):
         result.adjust_suspicion(subject, delta=-CORROBORATION_SUSPICION_DELTA)
     if decay_now:
@@ -842,6 +949,8 @@ __all__ = [
     "MEETING_SUSPICION_DECAY_RATE",
     "OBSERVED_VENT_ACTION",
     "TESTIMONY_INDEPENDENCE_BAR",
+    "TESTIMONY_SPREAD_CAP_DELTA",
+    "TESTIMONY_SPREAD_TWO_VOICE_DELTA",
     "VENTING_SUSPICION_DELTA",
     "WEAK_CONTRADICTION_SUSPICION_DELTA",
     "WITNESS_INFORM_REASON",
@@ -853,4 +962,5 @@ __all__ = [
     "apply_contradiction_rule",
     "apply_meeting_evidence_rules",
     "apply_observation_rules",
+    "graduated_spread_delta",
 ]
