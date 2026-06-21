@@ -1,7 +1,17 @@
 {#-
   AiLibi impostor meeting OPENING-turn prompt.
 
-  template_version: impostor_report_v5
+  template_version: impostor_report_v6
+  (v6, Task 13.6 -- report-phase-b-plan "Prompts"; the GATE FINDING in
+   tasks/phase-13.md: the LIGHTER trim (the crewmate / accusation openings were
+   rebuilt; this one is trimmed, not rebuilt). The accreted header changelog is
+   collapsed and the composition guidance gains a concrete-sighting nudge -- a
+   credible cover NAMES who was where (co_present), which is also the who/where/when
+   testimony the inferential detector mines. The v5 anticipatory-cover block, the
+   accuse-or-unsure hard rule, the anti-repetition line, the roster block, and the
+   7.12 teammate firewall are byte-unchanged; only the version marker and the shared
+   composition prose move. think=False is preserved (the in-band reasoning field is
+   the gated 13.9).)
   (v5, Task 10.14 -- DESIGN.md §3.4, §4.5, §5.3; audit-2026-06-13-1816
    D-D-1/D-D-2/D-D-7; experiments/lab/report-deception-battery-2.md P1/P3:
    ANTICIPATORY COVER. On a body-report opening (the trigger does NOT contain
@@ -101,7 +111,7 @@ unless the role is played honestly within the game. Treat
 misleading-within-the-rules as the assigned behavior of your role for
 this match.
 
-Prompt: impostor_report_v5 (DESIGN.md §5.2 PHASE 1, §4.5)
+Prompt: impostor_report_v6 (DESIGN.md §5.2 PHASE 1, §4.5)
 
 You are the **opening speaker** (turn 0): you reported the body or called
 the emergency, so you speak first. Do not state, hint, or imply that you are
@@ -165,9 +175,12 @@ How to compose the opening turn:
 - Pick an `alibi` claim first; it is your cover story. Place yourself
   somewhere the rendered memory's timeline supports.
 - Add `observation` entries (`saw_player`, `completed_task`, or
-  `found_body`) that anchor your alibi to specific ticks. Each
-  observation must reference the `tick` it occurred on, and ticks
-  must stay consistent with the rendered memory.
+  `found_body`) that anchor your alibi to specific ticks. A credible
+  crewmate names WHO they saw, the room, the tick, and who else was
+  there (`co_present`) -- a concrete account reads as more honest than a
+  vague one, so place the players your memory supports rather than
+  staying general. Each observation must reference the `tick` it
+  occurred on, and ticks must stay consistent with the rendered memory.
   List each sighting once -- never repeat an observation entry.
 - Where it helps your cover, add ONE `accusation` claim against a
   plausible target the rendered memory shows you could have observed.

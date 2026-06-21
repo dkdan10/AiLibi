@@ -165,7 +165,7 @@ class TestCrewmateReportTemplate:
             public_transcript="",
         )
 
-        assert "crewmate_report.v7" in prompt
+        assert "crewmate_report.v8" in prompt
         assert "**crewmate**" in prompt
         assert "opening speaker" in prompt
 
@@ -359,175 +359,24 @@ _GOLDEN_EMERGENCY_TRIGGER = "p-3 called an emergency meeting at tick 320"
 _GOLDEN_LIVING_IDS = ("p-1", "p-5")
 _GOLDEN_DEAD_IDS = ("p-2",)
 
-# The v5 body-report render captured byte-for-byte at the Task 10.8 branch
-# point (crewmate_report.v5 as merged in Wave 0 and recorded by 10.5),
-# rendered with the inputs above. The v6 body branch must reproduce it
-# exactly, apart from the visible version-marker line — that is the
-# "body-report branch is byte-unchanged" contract the golden enforces.
-_CREWMATE_V5_BODY_GOLDEN = """You are an AI agent playing a social-deduction simulation. You are a
-**crewmate**. A meeting has been called and you are the **opening speaker**
-(turn 0): you reported the body or called the emergency, so you speak first.
-State what you saw and name the single player your evidence most points to. Your
-job is to catch the impostor; a non-answer hands them a free round and another
-kill. Only withhold an accusation if you genuinely recorded nothing pointing at
-anyone -- and if so, you MUST write the word "unsure" in your `free_text`.
-
-Hard rule: your opening must EITHER include one `accusation` claim OR say
-"unsure" in `free_text`. An opening with neither is rejected and re-requested.
-
-Prompt: crewmate_report.v5 (DESIGN.md §5.2 PHASE 1)
-
-Your job in this opening turn: surface your observations AND commit to your single
-best suspect. You are the crew's first mover — a decisive, grounded accusation
-drives the meeting toward the impostor; a non-answer ends it. You will almost
-always have something — a player you saw near the body, someone whose movements
-do not add up, a contradiction in someone's account. That is enough to name them.
-
-## Meeting context
-- You are: `p-3`
-- Current tick: 412
-- Meeting trigger: p-3 reported body body-p-2-1 at tick 410
-
-## Living players (the only valid accusation targets)
-You may ONLY accuse a player on the LIVING list below. Players found dead or
-previously ejected are out of the game and naming one wastes your turn; your
-own id is not listed because you cannot accuse yourself.
-
-`p-1`, `p-5`
-DEAD or EJECTED -- do NOT accuse: `p-2`. They are out of the game.
-
-
-## Your memory (rendered view)
-## Your role: CREWMATE
-## Tasks completed (global): 3 / 12
-
-## Recent observations (most salient first):
-- [tick 410] You discovered p-2's body in MEDBAY.
-- [tick 395] You saw p-5 in ELECTRICAL.
-
-## Your current beliefs:
-- p-5: suspicion 0.70
-
-## What to produce
-Emit exactly one JSON object that validates against the `MeetingTurn`
-schema. The meeting manager is authoritative for the identity fields and
-overrides whatever you emit for them, so emit a placeholder for each and put
-your real turn in the content fields.
-
-Identity fields (emit a placeholder; the manager overrides each):
-- `turn_id`: any non-empty string (e.g. `"t"`).
-- `turn_index`: any integer (e.g. `0`).
-- `speaker`: any non-empty string (your own player id is fine).
-- `turn_kind`: the string `"opening"`.
-- `reply_to`: `null` (the opening turn answers no prior turn).
-
-Content fields (your actual turn):
-- `observations`: an ordered list of first-hand observations *you* made. Each
-  entry is one of the discriminated union variants below; use the `type`
-  string exactly as shown.
-    - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
-    - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
-    - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
-  Only include observations whose `tick` matches an event that appears in
-  the rendered memory above. If you discovered the body, lead with the
-  `found_body` observation. Fabricated or unsupported ticks will be rejected
-  by validation. List each sighting once -- never repeat an observation
-  entry.
-- `claims`: an ordered list of higher-level claims. Each entry is one of:
-    - `{"type": "alibi", "subject": "p-3", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short evidence ref>", ...]}`
-      (use chronological ticks: `from_tick <= to_tick`).
-    - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0..1.0>, "reason": "<short reason>"}`
-    - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`
-  To accuse, add exactly one `accusation` claim naming your single best
-  suspect. To stay unsure, add no `accusation` claim and write the word
-  "unsure" in `free_text` (a self-alibi is fine).
-- `free_text`: at most 2-3 sentences stating your single conclusion -- what
-  you would say aloud to the table. Do NOT narrate or second-guess your reasoning:
-  no step-by-step deliberation, no weighing of alternatives; state your
-  conclusion and the single strongest signal behind it. Do not duplicate the
-  entire `observations` list here.
-
-## Reasoning guidelines
-- **Name one suspect.** Pick the single player your evidence most points to —
-  the one you saw near the body, in a suspicious place at a suspicious time, or
-  whose account conflicts with what you observed. The chain passes the floor to
-  the player you accuse. Do not stack several accusations into one opening.
-- **Ground every accusation in a REAL observation.** Your accusation must rest on
-  something you actually recorded — a sighting, a co-presence near the body, a
-  contradiction. Never name a player you have no recorded reason to suspect; a
-  baseless accusation is as harmful as silence. (This is the one hard limit on
-  being decisive.)
-- **Set confidence to your honest read** — circumstantial leads (proximity,
-  timing) around 0.6-0.7, hard signals (a witnessed kill or vent, a directly
-  contradicted alibi) above 0.8. Do not round your confidence down to avoid
-  committing; a real circumstantial lead is worth naming at its true confidence.
-- **Cite ticks from memory.** Every observation refers to a tick that appears in
-  the rendered memory view. Never invent ticks, rooms, or co-present players.
-- **Lead with the strongest signal.** If you discovered a body, report it first;
-  if you witnessed a kill or a vent, report that. If you saw ANY player near the
-  body, in a suspicious spot, or contradicting another's account, name them. An
-  alibi-only turn is acceptable only if you genuinely witnessed nothing relevant.
-- **Reason only from what you know.** Use only the rendered memory and the
-  public transcript. Do not assume facts about other players' roles, kill
-  attribution, or hidden vent moves you did not personally witness.
-- **Stay in role.** You are a crewmate. Do not claim to be the impostor and
-  do not invent hidden information you "would have" if you were."""
-
-# The two paragraphs the v6 emergency branch swaps in. The emergency render
-# must equal the body render with EXACTLY these two paragraph substitutions
-# (plus the echoed ``meeting_trigger`` input) — pinning the branch as
-# additive: no shared line moved.
-_BODY_INTRO_PARAGRAPH = (
-    "You are an AI agent playing a social-deduction simulation. You are a\n"
-    "**crewmate**. A meeting has been called and you are the **opening speaker**\n"
-    "(turn 0): you reported the body or called the emergency, so you speak first.\n"
-    "State what you saw and name the single player your evidence most points to. Your\n"
-    "job is to catch the impostor; a non-answer hands them a free round and another\n"
-    "kill. Only withhold an accusation if you genuinely recorded nothing pointing at\n"
-    'anyone -- and if so, you MUST write the word "unsure" in your `free_text`.'
-)
-
-_EMERGENCY_INTRO_PARAGRAPH = (
-    "You are an AI agent playing a social-deduction simulation. You are a\n"
-    "**crewmate**. YOU called this emergency meeting and you are the **opening\n"
-    "speaker** (turn 0): no body was reported -- you pressed the button because your\n"
-    "own observations point at someone. State who you suspect and the first-hand\n"
-    "basis for it. Your job is to catch the impostor; a meeting called on suspicion\n"
-    "with no named suspect hands them a free round and another kill. Only withhold\n"
-    "an accusation if you genuinely cannot back one -- and if so, you MUST write the\n"
-    'word "unsure" in your `free_text`.'
-)
-
-_BODY_JOB_PARAGRAPH = (
-    "Your job in this opening turn: surface your observations AND commit to your single\n"
-    "best suspect. You are the crew's first mover — a decisive, grounded accusation\n"
-    "drives the meeting toward the impostor; a non-answer ends it. You will almost\n"
-    "always have something — a player you saw near the body, someone whose movements\n"
-    "do not add up, a contradiction in someone's account. That is enough to name them."
-)
-
-_EMERGENCY_JOB_PARAGRAPH = (
-    "Your job in this opening turn: state why you called the meeting and commit to\n"
-    "your single best suspect. You spent the crew's one emergency call on this -- a\n"
-    "decisive, grounded accusation makes it count; a non-answer wastes it. Lead with\n"
-    "the suspicion that crossed the line: the first-hand observations that drove you\n"
-    "to the button -- a player whose movements do not add up, a suspicious\n"
-    "co-presence, a contradiction in someone's account. That is enough to name them.\n"
-    "No body was found in this meeting -- do NOT emit a `found_body` observation. Your\n"
-    "`observations` are the sightings, co-presences, and contradictions behind your\n"
-    "suspicion, never a body discovery."
-)
+# Task 13.6 (report-phase-b-plan "Prompts"; the GATE FINDING in tasks/phase-13.md)
+# REBUILT crewmate_report v7 -> v8 from a clean base: a focused WHO/WHERE/WHEN
+# sighting-elicitation section so the crew state richer saw_player observations,
+# every load-bearing guard carried forward. The body render is no longer a frozen
+# v5-era 96-line literal; the pins below are render-DERIVED so they track the
+# rebuilt template without a brittle byte-literal -- the body branch by
+# determinism + the full load-bearing-phrase checklist, and the emergency branch by
+# the two-paragraph-swap STRUCTURE (intro + job/lead), sliced from the renders.
 
 
 class TestCrewmateReportEmergencyBranch:
-    """Task 10.8/10.11 golden pins: emergency branch + body-branch stability.
+    """Task 13.6 pins: body-branch determinism + the emergency two-paragraph swap.
 
-    Task 10.11 (audit-2026-06-13-1816 B-B-1) bumped v6 -> v7 with a single
-    emergency-branch change -- the emergency job paragraph now leads with the
-    suspicion that crossed the line and FORBIDS a found_body observation. The
-    body-report branch stays byte-identical to v5/v6 apart from the version
-    marker, and the emergency render is still exactly the two-paragraph swap
-    (intro + job) off the body render.
+    crewmate_report v8 rebuilt the prompt; the emergency render must still be EXACTLY
+    the body render with two paragraphs swapped -- the intro frame and the job/lead
+    paragraph (which forbids a found_body for the body-less emergency, the 10.11
+    guard) -- plus the echoed trigger; everything else is shared. The body branch
+    leads WITH the body and never carries the no-found_body directive.
     """
 
     @staticmethod
@@ -542,19 +391,46 @@ class TestCrewmateReportEmergencyBranch:
             dead_ids=_GOLDEN_DEAD_IDS,
         )
 
-    def test_body_branch_renders_byte_identically_to_v5_modulo_marker(self) -> None:
-        # The golden pin behind the "body-report branch is byte-unchanged"
-        # contract: a body-meeting render under v6 equals the captured v5
-        # render byte-for-byte once the version-marker line is accounted
-        # for. The marker must move with DEFAULT_PROMPT_VERSIONS (replay
-        # provenance), so it is the one permitted difference.
+    @staticmethod
+    def _intro(render: str) -> str:
+        # The intro frame: everything before the shared "Hard rule:" line.
+        return render.split("\n\nHard rule:")[0]
+
+    @staticmethod
+    def _job(render: str) -> str:
+        # The job/lead paragraph: between the version marker and "## Meeting context".
+        marker = "Prompt: crewmate_report.v8 (DESIGN.md §5.2 PHASE 1)\n\n"
+        return render.split(marker)[1].split("\n\n## Meeting context")[0]
+
+    # Every load-bearing guard the v8 body render must carry: the rebuild trades
+    # crowding for clarity, NOT for a dropped guard (husk / over-skip / leak surface).
+    _BODY_LOAD_BEARING = (
+        "crewmate_report.v8",
+        "**crewmate**",
+        "opening speaker",
+        "you reported the body or called the emergency",
+        "if you discovered the body, report it",  # body branch leads WITH the body
+        "must EITHER include one `accusation` claim OR say",
+        '"unsure" in `free_text`',
+        "You may ONLY accuse a player on the LIVING list below",
+        "DEAD or EJECTED -- do NOT accuse: `p-2`.",
+        "co_present",  # the 13.6 sighting-richness elicitation
+        "Put what you saw on the record",
+        "List each sighting once",
+        "at most 2-3 sentences stating your single conclusion",
+        "Do NOT narrate or second-guess your reasoning",
+        "Reason only from what you know",
+    )
+
+    def test_body_branch_is_deterministic_and_carries_every_guard(self) -> None:
+        # The body-branch pin (render-derived, not a frozen literal): the render is
+        # deterministic and carries EVERY load-bearing guard. A rebuild that dropped a
+        # guard (the husk / over-skip / leak / cover-drift surfaces) fails here.
         prompt = self._render(_GOLDEN_BODY_TRIGGER)
 
-        expected = _CREWMATE_V5_BODY_GOLDEN.replace(
-            "Prompt: crewmate_report.v5 (DESIGN.md §5.2 PHASE 1)",
-            "Prompt: crewmate_report.v7 (DESIGN.md §5.2 PHASE 1)",
-        )
-        assert prompt == expected
+        assert prompt == self._render(_GOLDEN_BODY_TRIGGER)
+        for phrase in self._BODY_LOAD_BEARING:
+            assert phrase in prompt, phrase
 
     def test_emergency_branch_is_exactly_the_two_paragraph_swap(self) -> None:
         # The emergency-branch golden, constructed rather than duplicated:
@@ -565,11 +441,14 @@ class TestCrewmateReportEmergencyBranch:
         body = self._render(_GOLDEN_BODY_TRIGGER)
         emergency = self._render(_GOLDEN_EMERGENCY_TRIGGER)
 
-        assert _BODY_INTRO_PARAGRAPH in body
-        assert _BODY_JOB_PARAGRAPH in body
+        body_intro, emerg_intro = self._intro(body), self._intro(emergency)
+        body_job, emerg_job = self._job(body), self._job(emergency)
+        # Both paragraphs genuinely differ between the branches (a real swap).
+        assert body_intro != emerg_intro
+        assert body_job != emerg_job
         expected = (
-            body.replace(_BODY_INTRO_PARAGRAPH, _EMERGENCY_INTRO_PARAGRAPH)
-            .replace(_BODY_JOB_PARAGRAPH, _EMERGENCY_JOB_PARAGRAPH)
+            body.replace(body_intro, emerg_intro)
+            .replace(body_job, emerg_job)
             .replace(_GOLDEN_BODY_TRIGGER, _GOLDEN_EMERGENCY_TRIGGER)
         )
         assert emergency == expected
@@ -586,7 +465,7 @@ class TestCrewmateReportEmergencyBranch:
         assert '"unsure" in `free_text`' in prompt
         # Task 10.11: the emergency opening must NOT present a found_body --
         # lead with the suspicion that crossed the line.
-        assert "Lead with\nthe suspicion that crossed the line" in prompt
+        assert "Lead with the suspicion that crossed the line" in prompt
         assert "do NOT emit a `found_body` observation" in prompt
         assert "never a body discovery" in prompt
         # The accuse-or-unsure hard rule and roster constraints stay shared.
@@ -600,7 +479,7 @@ class TestCrewmateReportEmergencyBranch:
         prompt = self._render(_GOLDEN_BODY_TRIGGER)
 
         assert "do NOT emit a `found_body` observation" not in prompt
-        assert "If you discovered the body, lead with the" in prompt
+        assert "if you discovered the body, report it" in prompt
 
     def test_body_trigger_never_selects_emergency_frame(self) -> None:
         # A report-shaped description — and any ad-hoc trigger string that
@@ -646,7 +525,7 @@ class TestImpostorReportTemplate:
             public_transcript="",
         )
 
-        assert "impostor_report_v5" in prompt
+        assert "impostor_report_v6" in prompt
         assert "Your role for this match is IMPOSTOR" in prompt
 
     def test_renders_memory_into_prompt(self) -> None:
@@ -860,7 +739,7 @@ class TestImpostorReportV5AnticipatoryCover:
         assert "every time you are asked this meeting" in prompt
         assert "different room or tick is what exposes an impostor" in prompt
         # The v4 invariants stay intact under the new branch.
-        assert "impostor_report_v5" in prompt
+        assert "impostor_report_v6" in prompt
         assert "must EITHER include one `accusation` claim OR say" in prompt
 
     def test_emergency_opening_skips_the_cover_frame(self) -> None:
@@ -871,7 +750,7 @@ class TestImpostorReportV5AnticipatoryCover:
 
         assert "Prepare your cover" not in prompt
         assert "AWAY from the body's room" not in prompt
-        assert "impostor_report_v5" in prompt
+        assert "impostor_report_v6" in prompt
         assert "must EITHER include one `accusation` claim OR say" in prompt
 
     def test_cover_block_is_the_only_branch_difference(self) -> None:
@@ -923,7 +802,7 @@ class TestAccusationRoundTemplate:
             turn_kind="reply",
         )
 
-        assert "accusation_round.v8" in prompt
+        assert "accusation_round.v9" in prompt
         assert "reactive accusation chain" in prompt
 
     def test_reply_turn_frames_the_accuser(self) -> None:
@@ -1341,7 +1220,7 @@ class TestVoteBallotTemplate:
         # body, bumped to v4 in Task 8.16 (the `primary_reason_id` example
         # is now sourced from the live transcript). A regression that bumps
         # the version without updating the test is the desired failure mode.
-        assert "vote_ballot/v5" in prompt
+        assert "vote_ballot/v6" in prompt
 
     def test_renders_voter_and_candidates(self) -> None:
         prompt = vote_ballot_prompt(

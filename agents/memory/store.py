@@ -93,6 +93,24 @@ class _Observation:
     line: str
 
 
+@dataclass(frozen=True)
+class _Breadcrumb:
+    """A subject's most-recent room change, for the directional sighting render.
+
+    Task 13.6 (report-phase-b-plan "Prompts"): the directional breadcrumb. For a
+    subject the agent saw move between rooms, the most-recent ``saw_player`` line
+    gains a "moved from A, last seen there at tick t" suffix, surfacing the
+    subject's PATH so the model states it as the concrete who/where/when testimony
+    the inferential detector mines (the 13.4 GATE FINDING: the committed transcripts
+    are too thin to reconstruct physical alibis from).
+    """
+
+    subject_tick: int  # tick of the subject's most-recent rendered sighting
+    prior_room: str
+    prior_tick: int
+    current_room: str
+
+
 def render_for_prompt(
     memory: AgentMemory,
     *,
@@ -395,6 +413,104 @@ def _collect_own_kill_victims(episodic: MemoryStore) -> frozenset[str]:
     return frozenset(victims)
 
 
+def _collect_movement_breadcrumbs(
+    episodic: MemoryStore,
+    *,
+    own_agent_id: str | None,
+    teammate_ids: frozenset[str],
+    body_sightings: tuple[tuple[str, int], ...],
+) -> dict[str, _Breadcrumb]:
+    """Each subject's most-recent room change, from the agent's own sightings (Task 13.6).
+
+    A pure read of the existing ``saw_player`` episodic deltas -- NO packet field,
+    firewall untouched (the leak test scans packets, not this derived line). For a
+    subject the agent saw in two DIFFERENT rooms, the most-recent ordinary sighting
+    gets a directional "moved from A" suffix (:func:`_movement_suffix_for`), so the
+    rendered memory surfaces the subject's PATH and the model can state it as the
+    who/where/when testimony the inferential detector reconstructs from.
+
+    Only ordinary sightings feed the path (``vent`` / ``kill`` are witnessed events
+    rendered as their own high-salience lines, never suffixed), and the SAME §4.7
+    suppressions the renderer applies are mirrored here (self-subject, teammate
+    kill-window), so a suppressed sighting never contributes a breadcrumb. A subject
+    seen in only one room (or once) yields no breadcrumb, so a render whose subjects
+    never move is byte-identical to the pre-13.6 output.
+    """
+
+    paths: dict[str, list[tuple[int, str]]] = {}
+    for event in episodic.recent(since_tick=0):
+        if event.type != _EVENT_SAW_PLAYER:
+            continue
+        player_id = event.payload.get("player_id")
+        room = event.payload.get("room")
+        if not isinstance(player_id, str) or not isinstance(room, str):
+            continue
+        if own_agent_id is not None and player_id == own_agent_id:
+            continue
+        action = event.payload.get("action")
+        action_str = action if isinstance(action, str) else None
+        if action_str in ("vent", "kill"):
+            continue
+        if player_id in teammate_ids and _is_kill_window_sighting(
+            room=room,
+            tick=event.tick,
+            action=action_str,
+            body_sightings=body_sightings,
+        ):
+            continue
+        paths.setdefault(player_id, []).append((event.tick, room))
+
+    breadcrumbs: dict[str, _Breadcrumb] = {}
+    for subject, sightings in paths.items():
+        # Stable sort by tick keeps recorded order for same-tick ties, so the
+        # most-recent sighting and its prior different-room sighting are
+        # replay-deterministic.
+        ordered = sorted(sightings, key=lambda tr: tr[0])
+        last_tick, last_room = ordered[-1]
+        prior: tuple[int, str] | None = None
+        for tick, room in reversed(ordered[:-1]):
+            if room != last_room:
+                prior = (tick, room)
+                break
+        if prior is not None:
+            breadcrumbs[subject] = _Breadcrumb(
+                subject_tick=last_tick,
+                prior_room=prior[1],
+                prior_tick=prior[0],
+                current_room=last_room,
+            )
+    return breadcrumbs
+
+
+def _movement_suffix_for(
+    breadcrumbs: dict[str, _Breadcrumb] | None,
+    *,
+    player_id: str,
+    tick: int,
+    room: str,
+) -> str:
+    """The directional breadcrumb suffix for one ``saw_player`` line (Task 13.6).
+
+    Empty unless this line IS the subject's most-recent ordinary sighting
+    (``subject_tick`` + ``current_room`` match), so exactly one line per moving
+    subject is suffixed and a non-moving subject's render is byte-unchanged.
+    """
+
+    if breadcrumbs is None:
+        return ""
+    breadcrumb = breadcrumbs.get(player_id)
+    if (
+        breadcrumb is None
+        or breadcrumb.subject_tick != tick
+        or breadcrumb.current_room != room
+    ):
+        return ""
+    return (
+        f" (moved from {breadcrumb.prior_room}, "
+        f"last seen there at tick {breadcrumb.prior_tick})"
+    )
+
+
 def _is_kill_window_sighting(
     *,
     room: str,
@@ -448,6 +564,12 @@ def _build_observations(
     first_self_state = True
     body_sightings = _collect_body_sightings(episodic)
     own_kill_victims = _collect_own_kill_victims(episodic)
+    breadcrumbs = _collect_movement_breadcrumbs(
+        episodic,
+        own_agent_id=own_agent_id,
+        teammate_ids=teammate_ids,
+        body_sightings=body_sightings,
+    )
 
     for event in episodic.recent(since_tick=0):
         if event.type == _EVENT_SELF_STATE:
@@ -557,6 +679,7 @@ def _build_observations(
                 own_agent_id=own_agent_id,
                 teammate_ids=teammate_ids,
                 body_sightings=body_sightings,
+                breadcrumbs=breadcrumbs,
             )
             if obs is not None:
                 observations.append(obs)
@@ -605,6 +728,7 @@ def _render_saw_player(
     own_agent_id: str | None = None,
     teammate_ids: frozenset[str] = frozenset(),
     body_sightings: tuple[tuple[str, int], ...] = (),
+    breadcrumbs: dict[str, _Breadcrumb] | None = None,
 ) -> _Observation | None:
     player_id = event.payload.get("player_id")
     room = event.payload.get("room")
@@ -642,16 +766,26 @@ def _render_saw_player(
             tick=event.tick,
             line=(f"[tick {event.tick}] You witnessed {player_id} kill in {room}."),
         )
+    # Task 13.6: the most-recent ordinary sighting of a subject the agent saw move
+    # carries a directional breadcrumb suffix (vent/kill witnessed lines, handled
+    # above, stay clean). Empty for a non-moving subject, so the render is
+    # byte-unchanged where no one moved.
+    suffix = _movement_suffix_for(
+        breadcrumbs, player_id=player_id, tick=event.tick, room=room
+    )
     if action_str in _ACTIVE_PLAYER_ACTIONS:
         return _Observation(
             salience=_SALIENCE_SAW_PLAYER_ACTIVE,
             tick=event.tick,
-            line=(f"[tick {event.tick}] You saw {player_id} {action_str} in {room}."),
+            line=(
+                f"[tick {event.tick}] You saw {player_id} "
+                f"{action_str} in {room}{suffix}."
+            ),
         )
     return _Observation(
         salience=_SALIENCE_SAW_PLAYER,
         tick=event.tick,
-        line=f"[tick {event.tick}] You saw {player_id} in {room}.",
+        line=f"[tick {event.tick}] You saw {player_id} in {room}{suffix}.",
     )
 
 

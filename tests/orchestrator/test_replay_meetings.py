@@ -404,13 +404,15 @@ class TestReplayRecordsMeetingArtifacts:
         # (the emergency opening forbids a fabricated found_body). Task 10.14
         # bumped impostor_report alone to v5 (the anticipatory-cover branch), and
         # Task 11.2 bumped accusation_round alone to v8 (the impostor
-        # cover-consistency directive ported onto the reply branch). A fresh
-        # replay entry must carry the live version strings end-to-end; the
-        # committed sample bytes still record their as-recorded versions
-        # (accusation_round.v7 until the 11.4 re-record).
-        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v8"
-        assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v7"
-        assert meeting.prompt_versions["impostor_report"] == "impostor_report_v5"
+        # cover-consistency directive ported onto the reply branch). Task 13.6
+        # bumped ALL FOUR together (crewmate_report v7->v8 + accusation_round
+        # v8->v9 rebuilt for richer testimony, impostor_report v5->v6 +
+        # vote_ballot v5->v6 lighter-trimmed). A fresh replay entry must carry the
+        # live version strings end-to-end; the committed sample bytes still record
+        # their as-recorded versions (the v7/v5/v8/v5 set until the 13.10 re-record).
+        assert meeting.prompt_versions["accusation_round"] == "accusation_round.v9"
+        assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v8"
+        assert meeting.prompt_versions["impostor_report"] == "impostor_report_v6"
         # LLM cost metadata recorded per call. The chain protocol:
         #   turns: 1 opening + 1 reply = 2 calls
         #   ballots: 4 living voters = 4 calls

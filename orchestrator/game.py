@@ -232,11 +232,24 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # replies and opt-in turns are byte-unchanged. The committed sample bytes still
 # record accusation_round.v7 and are re-recorded at 11.4, not here (recording-side
 # only; replays/samples + the prompt-regression baseline out of scope).
+#
+# Task 13.6 (2026-06-21; report-phase-b-plan "Prompts"; the GATE FINDING in
+# tasks/phase-13.md) bumps ALL FOUR together: the meeting templates were reworked so
+# the crew STATE richer who/where/when sightings (the two-source material the
+# inferential detector starved for -- R7 0/50 on the committed set). crewmate_report
+# v7 -> v8 and accusation_round v8 -> v9 are REBUILT from a clean base (a focused
+# sighting-elicitation section + the belief-mover framing, every load-bearing guard
+# carried forward); impostor_report v5 -> v6 and vote_ballot/v5 -> v6 take the lighter
+# trim + the belief-mover framing. The store.py directional movement breadcrumb feeds
+# the same who/where/when material into the rendered memory. NO re-record here -- the
+# committed sample bytes still record the v7/v5/v8/v5 set and are re-recorded at the
+# Wave-B smoke re-record (13.10), not here (recording-side only; replays/samples + the
+# prompt-regression baseline out of scope). think=False is preserved (13.9).
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
-    "crewmate_report": "crewmate_report.v7",
-    "impostor_report": "impostor_report_v5",
-    "accusation_round": "accusation_round.v8",
-    "vote_ballot": "vote_ballot/v5",
+    "crewmate_report": "crewmate_report.v8",
+    "impostor_report": "impostor_report_v6",
+    "accusation_round": "accusation_round.v9",
+    "vote_ballot": "vote_ballot/v6",
 }
 
 # Headless recording runs meetings deadline-free (DESIGN.md §1.4, §5.2, §8.3:

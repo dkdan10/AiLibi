@@ -1,130 +1,69 @@
-{# Reactive accusation-chain turn prompt (DESIGN.md §5.2, §5.3).
+{#- Reactive accusation-chain turn prompt (DESIGN.md §5.2, §5.3).
 
-   prompt_id: accusation_round
-   version: 8
-   (v8, Task 11.2 -- DESIGN.md §5.2; experiments/lab/report-vent-escape-lab.md
-    (the 3 residual self-pair alibi_conflict drift flags the vent fix cannot
-    remove): the impostor "cover" directive -- DECIDE on ONE room and tick-window
-    AWAY from the body's room and the tick it happened, commit to it, and state
-    the SAME account every time you are asked -- was stranded on the
-    impostor_report body-report OPENING that impostors never take, so on the REPLY
-    turn (the only turn an impostor ever speaks) it got no cover guidance and its
-    account drifted across turns. The directive is ported here verbatim (one
-    wording across both paths) into the reply branch, gated on a new `is_impostor`
-    bool. The bool is an explicit kwarg rather than a reuse of fellow_impostor_ids
-    because a SOLE impostor has empty fellows but must still get the directive
-    (mirroring how impostor_report fires for sole impostors). The block is scoped
-    to the reply branch only -- the lab residual is opening<->reply drift and the
-    opt-in turn is terminal -- so crewmate replies and every opt-in turn are
-    byte-unchanged. The block is ALSO gated on a body-report meeting (the
-    `is_body_report` bool, PR #159 review): the directive speaks of "the body's
-    room and the tick it happened", so -- exactly as impostor_report gates its
-    cover block on `body_report_opening` -- it must not fire on a body-less
-    emergency reply, which would otherwise inject contradictory "a body was found"
-    copy.)
-   (v7, Task 10.3 -- DESIGN.md §5.1, §5.2; audit gp-9 H-H-2, H-H-3, D-D-8:
-    two terse nudges for residual qwen3.5:9b artifacts; the reply / opt-in
-    framing is otherwise unchanged. (1) An anti-repetition line ("list each
-    sighting once") against the structured-array repetition loop -- the
-    remaining cap-defaults were a single sighting repeated ~5x until the
-    frozen 2048 cap truncated the JSON. (2) The DEAD / ejected players
-    render as an explicit do-not-accuse line under the living roster via
-    the new optional `dead_ids` input -- 17/18 invalid accusation targets
-    named a real-but-DEAD player, and the living list alone never said who
-    is dead.)
-   (v4, Task 8.8: reshaped from the fixed-round `Statement` turn to a reactive
-    chain turn -- output is now meetings.schemas.MeetingTurn (turn_kind =
-    "reply" or "opt_in"). Gains two inputs over the old renderer: `prior_turn`
-    (the accusing turn this speaker answers; None for an opt-in) and
-    `turn_kind`. The gated "Your fellow impostors" 7.12 block is preserved,
-    rendered only when fellow_impostor_ids is non-empty.)
-   (v6, Task 9.9 -- DESIGN.md §5.1, §5.2, §5.5; audit gp-3: two prompt-layer
-    fixes for qwen3.5:9b artifacts. (1) free_text length discipline: at most
-    2-3 sentences stating the single conclusion, no narrated / second-guessed
-    reasoning -- with think:false the model relocates its deliberation into
-    free_text and overruns the frozen 2048 turn cap, truncating the turn into
-    a fail-soft default. (2) A gated living-roster block listing the only
-    valid accusation targets via the new optional `living_ids` input -- the
-    living players minus this speaker, mirroring the vote ballot's
-    candidate_targets -- so a turn never wastes its accusation on a dead /
-    ejected player.)
+   prompt_id: accusation_round  --  version 9
 
-   Targets the shared `MeetingTurn` schema (meetings/schemas.py). The meeting
-   manager substitutes the deterministic identity fields (`turn_id`,
-   `turn_index`, `speaker`, `turn_kind`, `reply_to`) after parsing; the LLM
-   produces `observations`, `claims`, and `free_text`. There is no separate
-   `target` field -- an accusation is an `accusation` claim, and the chain
-   reads its next speaker off that claim.
+   Output: meetings.schemas.MeetingTurn (turn_kind = "reply" | "opt_in"). The meeting
+   manager substitutes the identity fields after parsing; the LLM produces
+   observations, claims, and free_text. An accusation is an `accusation` claim (no
+   separate target field); the chain reads its next speaker off that claim.
 
    Inputs (DESIGN.md §5.2 + §5.3 + §5.4):
-     agent_id        -- str. This speaker's PlayerId. Threaded into the
-                        self-alibi example so the model emits its own id.
-     rendered_memory -- str. render_for_prompt output (§6.6): the agent's
-                        role, tasks-completed line, salience-ordered
-                        observations, beliefs, and pre-existing contradiction
-                        flags. The agent's role is in this view and nowhere
-                        else.
-     transcript      -- `meetings.schemas.MeetingTranscript`-shaped object
-                        with `.turns` (the ordered opening -> reactive chain ->
-                        opt-in turns so far). This is "the transcript so far"
-                        visible to every living agent.
-     contradictions  -- iterable of `meetings.schemas.ContradictionRef`-shaped
-                        flags raised by the transcript-update detector
-                        (DESIGN.md §5.4). Information, not verdicts.
-     prior_turn      -- `meetings.schemas.MeetingTurn` | None. The accusing
-                        turn this speaker is answering (turn_kind == "reply");
+     agent_id        -- this speaker's PlayerId (threaded into the self-alibi example).
+     rendered_memory -- render_for_prompt output (§6.6): role, tasks, salience-ordered
+                        observations (incl. the Task 13.6 directional breadcrumbs),
+                        beliefs, and pre-existing contradiction flags. The role is here.
+     transcript      -- MeetingTranscript-shaped object with `.turns` (the public chain
+                        so far) visible to every living agent.
+     contradictions  -- iterable of ContradictionRef flags from the §5.4 detector.
+                        Information, not verdicts.
+     prior_turn      -- the accusing turn this speaker answers (turn_kind == "reply");
                         None for a terminal opt-in info-share turn.
-     turn_kind       -- "reply" | "opt_in". Frames the turn.
-     living_ids      -- optional tuple of PlayerIds (Task 9.9, audit gp-3):
-                        the living players minus this speaker (an agent
-                        cannot accuse itself), i.e. the only valid accusation
-                        targets. The roster block is guarded on a non-empty
-                        value, so omitting it (or passing the default ())
-                        renders without the block under StrictUndefined.
-     dead_ids        -- optional tuple of PlayerIds (Task 10.3, audit gp-9):
-                        the dead / ejected players, rendered as an explicit
-                        do-not-accuse line under the living roster. Guarded
-                        like living_ids: omitting it (or passing ()) renders
-                        without the line.
-     is_impostor     -- optional bool (Task 11.2): when true, the reply branch
-                        renders the impostor cover-consistency directive (commit
-                        to ONE sheltered room + tick-window away from the body and
-                        reuse it every turn). An explicit kwarg rather than a
-                        reuse of fellow_impostor_ids, because a SOLE impostor has
-                        empty fellows but must still get the directive. Guarded on
-                        `is defined and is_impostor`, so omitting it (or passing
-                        the default False) renders without the block.
-     is_body_report  -- optional bool (Task 11.2; PR #159 review): the cover
-                        directive talks about "the body's room and the tick it
-                        happened", so -- mirroring impostor_report.j2's
-                        `body_report_opening` gate -- it must fire ONLY when a
-                        body is actually on the table. An emergency meeting has no
-                        body, so an emergency reply would otherwise render
-                        contradictory "a body was found" copy. The manager derives
-                        it from the meeting trigger (the same "called an emergency
-                        meeting" substring the opening templates branch on).
-                        Guarded on `is defined and is_body_report`, so omitting it
-                        (or passing the default False) renders without the block.
+     turn_kind       -- "reply" | "opt_in".
+     living_ids      -- optional tuple: living players minus this speaker, the only valid
+                        accusation targets (guarded on a non-empty value).
+     dead_ids        -- optional tuple: dead / ejected players, the do-not-accuse line.
+     is_impostor     -- optional bool (Task 11.2): on a reply, renders the impostor
+                        cover-consistency directive (commit to ONE sheltered room +
+                        tick-window away from the body, reuse it every turn). An explicit
+                        kwarg, not a reuse of fellow_impostor_ids, so a SOLE impostor
+                        still gets it. Guarded on `is defined and is_impostor`.
+     is_body_report  -- optional bool (Task 11.2; PR #159): the cover directive speaks of
+                        "the body's room", so it fires ONLY on a body-report meeting,
+                        never a body-less emergency reply. Guarded the same way.
 
-   These inputs are exhaustive: the template references nothing else, so no
-   hidden engine state can reach the LLM through this prompt.
+   Task 13.6 (report-phase-b-plan "Prompts"; the GATE FINDING in tasks/phase-13.md)
+   REBUILT this prompt from a clean base for qwen3.5:9b: v8's accreted wall buried the
+   model's attention, so replies / opt-ins stated thin firsthand sightings and the
+   inferential detector starved (R7 0/50). v9 keeps every load-bearing guard -- the
+   cover-consistency directive (byte-identical to impostor_report's), the
+   anti-narration free_text discipline, the anti-repetition line, the living/DEAD
+   roster, the fellow-impostor firewall, and the self-alibi example -- but adds a
+   WHO/WHERE/WHEN sighting-elicitation section and frames OTHERS' accounts as
+   belief-movers (a sighting that backs or contradicts another's claim is evidence; a
+   second observation-backed contradiction is worth stating). think=False is preserved
+   (the in-band reasoning field is the gated 13.9). Earlier history: v8 (11.2 cover
+   directive on the reply branch), v7 (10.3 anti-repetition + DEAD line), v6 (9.9
+   length discipline + roster), v4 -> reshape (8.8 reactive chain).
+
+   Firewall: the inputs above are exhaustive -- the template references nothing else,
+   so no hidden engine state can reach the LLM through this prompt.
 -#}
-You are an agent in a multi-agent social-deduction simulation, taking your
-turn in a reactive accusation chain (DESIGN.md §5.2). You will read the public
-meeting transcript so far together with your private memory, then submit
-exactly one turn.
+You are an agent in a multi-agent social-deduction simulation, taking your turn in a
+reactive accusation chain (DESIGN.md §5.2). Read the public meeting transcript and
+your private memory, then submit exactly one turn.
 
-Prompt: accusation_round.v8 (DESIGN.md §5.2)
+Prompt: accusation_round.v9 (DESIGN.md §5.2)
 {% if turn_kind == "reply" %}
 
 ## Your turn: a reply
 You were just accused{% if prior_turn %} by `{{ prior_turn.speaker }}`{% endif %}
-and the floor has passed to you. Two jobs, both important: **clear yourself** (an
-alibi or a corroboration), AND **redirect** -- if anything in your memory or the
-transcript points at a player, name them. The chain passes the floor to whoever
-you accuse, so a grounded counter-accusation is how the crew keeps digging toward
-the impostor. Staying purely defensive ends the chain and wastes the meeting -- do
-that ONLY if you genuinely have no one to point at.
+and the floor has passed to you. Two jobs, both important: **clear yourself** -- emit
+a structured `alibi` claim placing yourself (or a `corroboration`), not just an
+assertion in `free_text` -- AND **redirect**: if anything in your memory or the
+transcript points at a player, name them in an `accusation` claim. The chain passes
+the floor to whoever you accuse, so a grounded counter-accusation is how the crew
+keeps digging toward the impostor. Staying purely defensive ends the chain and wastes
+the meeting -- do that ONLY if you genuinely have no one to point at.
 {%- if prior_turn %}
 {%- for claim in prior_turn.claims %}
 {%- if claim.type == "accusation" %}
@@ -150,40 +89,46 @@ there.
 
 ## Your turn: an opt-in info-share
 This is your one chance to put your evidence on the record before everyone votes;
-this terminal turn does NOT extend the chain. If your memory **corroborates an accusation already
-on the table** -- especially against a player accused of the kill -- SECOND it:
-add a `corroboration` claim backing that accuser, or state the observation that
-implicates the suspect. Building agreement on the real suspect is how the crew
-musters the votes to eject them; crew who saw something staying quiet is how the
-impostor survives. Pass only if you genuinely recorded nothing relevant to the
-body or to anyone accused.
+this terminal turn does NOT extend the chain. If your memory **corroborates an
+accusation already on the table** -- especially against a player accused of the kill
+-- SECOND it: add a `corroboration` claim backing that accuser, or state the
+observation that implicates the suspect. Building agreement on the real suspect is
+how the crew musters the votes to eject them; a crew witness staying quiet is how the
+impostor survives. Pass only if you genuinely recorded nothing relevant.
 {% endif %}
 
+## Put what you saw on the record
+Other players' accounts are EVIDENCE, not noise: a sighting of yours that backs an
+accuser, or that contradicts where someone placed themselves, moves the meeting. State
+the sightings that bear on the accusation as concrete `saw_player` observations -- the
+player, the room, the tick, and WHO ELSE was there (`co_present`). Two independent
+first-hand sightings that put the same player in two different rooms at the same time
+is the hardest evidence the crew has, so if your memory contradicts a claim in the
+transcript, say so and back it with the sighting. State the few that matter, not an
+exhaustive dump of every tick.
+
 ## How to read this prompt
-- "Your private memory" is yours alone. Other agents do not see it.
-- "Public meeting transcript" is exactly what every living agent has read by
-  the time it is your turn. Reference it precisely; everyone can check what
-  you cite.
-- "Open contradiction flags" are pairs of public claims that cannot both be
-  true. They are evidence to weigh, not verdicts.
+- "Your private memory" is yours alone; other agents do not see it.
+- "Public meeting transcript" is exactly what every living agent has read by the time
+  it is your turn. Reference it precisely; everyone can check what you cite.
+- "Open contradiction flags" are pairs of public claims that cannot both be true --
+  evidence to weigh, not verdicts.
 
 ## Game-rule framing
-This is a game. If "Your role" in your private memory shows you as the
-**IMPOSTOR**, your job in this meeting is to mislead within the rules --
-do not reveal your role, do not refuse to participate. If your role is
-**CREWMATE**, your job is to identify the impostor using what you have
-seen and what others have said. Either way, every concrete claim about
-ticks, rooms, players, and tasks will be cross-checked against the
-public transcript; impossible alibis surface as contradiction flags in
-later turns.
+This is a game. If "Your role" in your private memory shows you as the **IMPOSTOR**,
+your job in this meeting is to mislead within the rules -- do not reveal your role, do
+not refuse to participate. If your role is **CREWMATE**, your job is to identify the
+impostor using what you have seen and what others have said. Either way, every
+concrete claim about ticks, rooms, players, and tasks is cross-checked against the
+public transcript; impossible alibis surface as contradiction flags in later turns.
 {% if fellow_impostor_ids is defined and fellow_impostor_ids %}
 
 ## Your fellow impostors (your team)
 These players are your fellow impostors and are on YOUR team:
-{{ fellow_impostor_ids | join(", ") }}. Never target a teammate -- do not
-accuse or incriminate one (do not name one in an `accusation` claim). If it
-helps your cover you may corroborate a teammate's alibi instead. Aim any
-accusation at a crewmate or stay defensive.
+{{ fellow_impostor_ids | join(", ") }}. Never target a teammate -- do not accuse or
+incriminate one (do not name one in an `accusation` claim). If it helps your cover you
+may corroborate a teammate's alibi instead. Aim any accusation at a crewmate or stay
+defensive.
 {% endif %}
 {% if living_ids is defined and living_ids %}
 
@@ -250,12 +195,10 @@ DEAD or EJECTED -- do NOT accuse: {% for pid in dead_ids %}`{{ pid }}`{% if not 
 {%- endif %}
 
 ## Your task
-Produce exactly one JSON object that validates against the shared
-`MeetingTurn` schema (`meetings/schemas.py`). The meeting manager is
-authoritative for the identity fields and overrides whatever you emit
-for them, but structured-output validation still requires every field to
-be present, so emit a placeholder for each identity field and put your
-real turn in the content fields.
+Produce exactly one JSON object that validates against the shared `MeetingTurn` schema
+(`meetings/schemas.py`). The meeting manager owns the identity fields and overrides
+whatever you emit, but validation still requires every field, so emit a placeholder
+for each and put your real turn in the content fields.
 
 Identity fields (emit a placeholder; the manager overrides each):
 - `turn_id`: any non-empty string (e.g. `"t"`).
@@ -265,51 +208,37 @@ Identity fields (emit a placeholder; the manager overrides each):
 - `reply_to`: any string or `null`.
 
 Content fields (your actual turn):
-- `observations`: zero or more first-hand observations, each tagged with its
-  own `tick`. List each sighting once -- never repeat an observation entry.
-  Each entry is one of:
+- `observations`: zero or more first-hand observations, each tagged with its own
+  `tick`. List each sighting once -- never repeat an observation entry. Each entry is
+  one of:
   - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
   - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
   - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
-- `claims`: zero or more of the structured claim types --
-  - `alibi`         -- `{type: "alibi", subject, from_tick, to_tick, room,
-                       evidence?}`. Places a player (usually yourself)
-                       in a room over a tick range. `from_tick` must be
-                       `<= to_tick`; the schema rejects reversed ranges.
-                       `evidence` is a list of free-text references
-                       (task ids, players you were with). For a
-                       self-alibi (the common case), `subject` is your
-                       own player id; emit it exactly as
-                       `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short evidence ref>", ...]}`.
-  - `accusation`    -- `{type: "accusation", against, confidence, reason}`.
-                       `confidence` is in `[0.0, 1.0]`. Give a concrete
-                       reason grounded in the transcript or your memory.
-                       Add at most one accusation; the chain passes the
-                       floor to the player it names.
-  - `corroboration` -- `{type: "corroboration", supports, on_tick, reason}`.
-                       Backs up another player's claim with what you saw.
-- `free_text`: at most 2-3 sentences stating your single conclusion, in
-  your own voice. Do NOT narrate or second-guess your reasoning: no
-  step-by-step deliberation, no weighing of alternatives; state your
-  conclusion and the single strongest reason behind it. It must be
-  consistent with the structured `claims`; the contradiction detector
-  cross-references both layers in later turns.
+- `claims`: zero or more of --
+  - `alibi`         -- `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}`.
+                       Places a player (usually yourself) in a room over a tick range
+                       (`from_tick <= to_tick`); the schema rejects reversed ranges.
+  - `accusation`    -- `{"type": "accusation", "against": "<player_id>", "confidence": <0.0..1.0>, "reason": "<short reason>"}`.
+                       Ground the reason in the transcript or your memory. Add at most
+                       one; the chain passes the floor to the player it names.
+  - `corroboration` -- `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`.
+                       Backs another player's claim with what you saw.
+- `free_text`: at most 2-3 sentences stating your single conclusion, in your own voice.
+  Do NOT narrate or second-guess your reasoning: no step-by-step deliberation, no
+  weighing of alternatives; state your conclusion and the single strongest reason. It
+  must be consistent with the structured `claims`; the detector cross-references both.
 
 ## Constraints
-- Only reference ticks, rooms, players, and tasks that appear in your
-  private memory or the public transcript above. Made-up identifiers
-  fail validation and burn your turn.
-- If a contradiction flag involves you, address it -- either with an
-  alibi backed by evidence or by acknowledging the conflict. Ignoring
-  a flag against you is read by other agents as a tell.
-- If your memory or the transcript points at a player -- a sighting, a
-  contradiction, proximity to the body -- name them; a grounded counter-accusation
-  or corroboration drives the meeting toward the impostor. Ground every
-  accusation in a real observation -- a baseless guess is as useless as silence --
-  and stay purely defensive only when you genuinely recorded nothing pointing at
-  anyone.
+- Only reference ticks, rooms, players, and tasks that appear in your private memory
+  or the public transcript above. Made-up identifiers fail validation and burn your turn.
+- If a contradiction flag involves you, address it -- with an alibi backed by evidence
+  or by acknowledging the conflict. Ignoring a flag against you reads as a tell.
+- If your memory or the transcript points at a player -- a sighting, a contradiction,
+  proximity to the body -- name them; a grounded counter-accusation or corroboration
+  drives the meeting toward the impostor. Stay purely defensive only when you genuinely
+  recorded nothing pointing at anyone.
 
 ## Output
-Your in-character voice belongs in the `free_text` field, not before the
-JSON. Output ONLY the JSON object -- no prose, preamble, or commentary
-before or after it. Start your response with `{` and end with `}`.
+Your in-character voice belongs in the `free_text` field, not before the JSON. Output
+ONLY the JSON object -- no prose, preamble, or commentary before or after it. Start
+your response with `{` and end with `}`.
