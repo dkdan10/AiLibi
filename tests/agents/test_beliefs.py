@@ -12,6 +12,8 @@ from agents.memory.beliefs import (
     MEETING_CONTRADICTION_LIFT_CAP,
     MEETING_SUSPICION_DECAY_RATE,
     TESTIMONY_INDEPENDENCE_BAR,
+    TESTIMONY_SPREAD_CAP_DELTA,
+    TESTIMONY_SPREAD_TWO_VOICE_DELTA,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
     WITNESS_INFORM_REASON,
     BeliefState,
@@ -20,6 +22,7 @@ from agents.memory.beliefs import (
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
     apply_observation_rules,
+    graduated_spread_delta,
 )
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
@@ -1901,6 +1904,255 @@ class TestSingleWitnessInform:
                 pre_vote_folded=frozenset({"p-5"}),
                 pre_vote_informed=frozenset({"p-5"}),
             )
+
+
+class TestGraduatedTestimonySpread:
+    """The Task 13.7 graduated corroboration-aware testimony spread (R1/R3 lever).
+
+    Replaces the flat +0.05 pre-vote inform with a spread keyed on the
+    ``meetings.transcript.independent_voices`` COUNT, threaded through
+    ``pre_vote_voice_counts``: 1 voice +0.05 (BYTE-IDENTICAL to today,
+    crew / no-witness games unmoved), 2 voices +0.12 (the first §4.6
+    gate-cross), 3+ +0.15 (capped). The graduated lift is TRANSIENT --
+    only the ``pre_vote`` half reads the counts; the persistent composed
+    fold always folds the flat +0.05, so a gate-crossing transient lift
+    never railroads the next round (``TESTIMONY_INDEPENDENCE_BAR=2``, the
+    independence derivation, and the §4.6 gate are all unchanged).
+    """
+
+    # -- the pure spread curve ------------------------------------------
+
+    def test_spread_curve_is_graduated_by_voice_count(self) -> None:
+        # 1 -> +0.05 (byte-identical pin), 2 -> +0.12 (first gate-cross),
+        # 3+ -> +0.15 (capped, never linear in count).
+        assert graduated_spread_delta(1) == ACCUSATION_SUSPICION_DELTA
+        assert graduated_spread_delta(2) == TESTIMONY_SPREAD_TWO_VOICE_DELTA
+        assert graduated_spread_delta(3) == TESTIMONY_SPREAD_CAP_DELTA
+        assert graduated_spread_delta(7) == TESTIMONY_SPREAD_CAP_DELTA
+
+    def test_spread_magnitudes_are_pinned(self) -> None:
+        # The owner-decided magnitudes (report-phase-b-plan testimony-spread).
+        assert ACCUSATION_SUSPICION_DELTA == pytest.approx(0.05)
+        assert TESTIMONY_SPREAD_TWO_VOICE_DELTA == pytest.approx(0.12)
+        assert TESTIMONY_SPREAD_CAP_DELTA == pytest.approx(0.15)
+
+    def test_one_voice_rung_is_the_unchanged_accusation_delta(self) -> None:
+        # The regression pin at the curve level: the below-bar rung is the
+        # pre-13.7 inform magnitude, byte-for-byte.
+        assert graduated_spread_delta(TESTIMONY_INDEPENDENCE_BAR - 1) == (
+            ACCUSATION_SUSPICION_DELTA
+        )
+
+    # -- the in-fold graduated bump -------------------------------------
+
+    def test_one_voice_count_is_byte_identical_to_no_counts(self) -> None:
+        # THE no-regression pin: an informed subject with a threaded count of
+        # 1 lands EXACTLY where the pre-13.7 flat inform did -- a single
+        # observation-backed witness (crew / no-witness games) is unmoved.
+        without_counts = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_informed=frozenset({"p-5"}),
+        )
+        with_count_one = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_informed=frozenset({"p-5"}),
+            pre_vote_voice_counts={"p-5": 1},
+        )
+        assert _snapshot(with_count_one) == _snapshot(without_counts)
+        assert with_count_one.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+
+    def test_no_counts_leaves_the_two_voice_fold_byte_identical(self) -> None:
+        # The dormant-until-wired pin: a folded (two-voice) subject with NO
+        # threaded count keeps the flat +0.05, so every existing caller (none
+        # of which pass counts) is byte-identical -- the channel only graduates
+        # once a caller threads the count in.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+        )
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+
+    def test_single_opt_in_voice_alone_cannot_cross_the_gate(self) -> None:
+        # The owner anti-single-signal tripwire survives the graduation: a
+        # single corroboration-aligned opt-in (one voice, the inform band)
+        # lands a baseline 0.50 listener at 0.55 -- UNDER the 0.60 gate.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_informed=frozenset({"p-5"}),
+            pre_vote_voice_counts={"p-5": 1},
+        )
+        crossed = updated.view("p-5").suspicion
+        assert crossed == pytest.approx(0.55)
+        assert crossed < 0.60
+
+    def test_two_independent_voices_cross_the_gate(self) -> None:
+        # THE conversion lever: two independent observation-backed voices lift
+        # a baseline 0.50 listener to 0.62 -- ACROSS the §4.6 0.60 eject gate
+        # within the round, where one voice only informs.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+            pre_vote_voice_counts={"p-5": 2},
+        )
+        crossed = updated.view("p-5").suspicion
+        assert crossed == pytest.approx(
+            _DEFAULT_SUSPICION + TESTIMONY_SPREAD_TWO_VOICE_DELTA
+        )
+        assert crossed == pytest.approx(0.62)
+        assert crossed >= 0.60
+
+    def test_three_plus_voices_take_the_cap(self) -> None:
+        # 3+ voices lift to the +0.15 ceiling (0.65), a bounded margin over the
+        # two-voice rung -- a large opt-in pile-on cannot run the prior away.
+        for count in (3, 5):
+            updated = apply_meeting_evidence_rules(
+                BeliefState(),
+                own_id="observer",
+                accused=("p-5",),
+                phase="pre_vote",
+                pre_vote_folded=frozenset({"p-5"}),
+                pre_vote_voice_counts={"p-5": count},
+            )
+            assert updated.view("p-5").suspicion == pytest.approx(
+                _DEFAULT_SUSPICION + TESTIMONY_SPREAD_CAP_DELTA
+            )
+
+    # -- persist only +0.05 ---------------------------------------------
+
+    def test_persistent_composed_fold_ignores_counts(self) -> None:
+        # "Persist only the flat +0.05": the composed (phase=None) fold -- the
+        # persistent post-meeting absorb shape -- bumps +0.05 even when a count
+        # is (defensively) threaded, so a two-voice transient gate-cross can
+        # never railroad the persisted prior across rounds.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-5",),
+            pre_vote_folded=frozenset({"p-5"}),
+            pre_vote_voice_counts={"p-5": 2},
+        )
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+
+    def test_transient_lift_exceeds_what_persists(self) -> None:
+        # The decoupling, stated directly: the pre-vote graduated lift (0.62)
+        # is strictly above what the persistent composed fold writes (0.55) for
+        # the same two-voice subject -- the gate-crossing magnitude is
+        # transient, only the flat +0.05 carries across rounds.
+        transient = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+            pre_vote_voice_counts={"p-5": 2},
+        )
+        persisted = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-5",),
+        )
+        assert transient.view("p-5").suspicion == pytest.approx(0.62)
+        assert persisted.view("p-5").suspicion == pytest.approx(0.55)
+        assert transient.view("p-5").suspicion > persisted.view("p-5").suspicion
+
+    def test_post_vote_half_folds_the_flat_delta(self) -> None:
+        # The post-vote half also folds the flat +0.05 regardless of counts: a
+        # bare accused subject (no pre-vote band) is byte-identical, and the
+        # folded subject was already bumped pre-vote (the double-fold guard).
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+            phase="post_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+            pre_vote_voice_counts={"p-5": 2},
+        )
+        assert updated.view("p-2").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        )
+        assert "p-5" not in updated.known_players()
+
+    # -- guards ride the graduation -------------------------------------
+
+    def test_graduation_rides_the_teammate_guard(self) -> None:
+        # The §4.7 firewall holds at the higher magnitude: an impostor listener
+        # takes NO graduated bump against a fellow impostor, however many voices
+        # stood behind the accusation.
+        updated = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2", "p-5"),
+            fellow_impostor_ids=("p-2",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-2", "p-5"}),
+            pre_vote_voice_counts={"p-2": 3, "p-5": 2},
+        )
+        assert "p-2" not in updated.known_players()
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + TESTIMONY_SPREAD_TWO_VOICE_DELTA
+        )
+
+    def test_count_for_unvoiced_subject_fails_loud(self) -> None:
+        # A count key outside the voiced bands is caller drift between the
+        # evidence derivation and the fold -- never silently ignored
+        # (AGENTS.md "no silent fallbacks").
+        with pytest.raises(ValueError, match="pre_vote_voice_counts"):
+            apply_meeting_evidence_rules(
+                BeliefState(),
+                own_id="observer",
+                accused=("p-5",),
+                phase="pre_vote",
+                pre_vote_informed=frozenset({"p-5"}),
+                pre_vote_voice_counts={"p-2": 2},
+            )
+
+    def test_graduated_pre_vote_call_is_pure_and_deterministic(self) -> None:
+        beliefs = BeliefState()
+        beliefs.seed_player("p-5", suspicion=0.55, trust=0.5)
+        before = _snapshot(beliefs)
+
+        first = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+            pre_vote_voice_counts={"p-5": 2},
+        )
+        second = apply_meeting_evidence_rules(
+            beliefs,
+            own_id="observer",
+            accused=("p-5",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-5"}),
+            pre_vote_voice_counts={"p-5": 2},
+        )
+
+        assert _snapshot(beliefs) == before
+        assert _snapshot(first) == _snapshot(second)
+        # 0.55 own prior + 0.12 graduated two-voice lift = 0.67.
+        assert first.view("p-5").suspicion == pytest.approx(0.67)
 
 
 # ---------------------------------------------------------------------------
