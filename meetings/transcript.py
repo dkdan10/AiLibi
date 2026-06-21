@@ -119,8 +119,9 @@ ALONGSIDE someone else, which the alibi-vs-sighting path (a sighting's OWN
 subject only) cannot reach. THE CRUX is role-gating: a STRONG flag is reserved
 for the TWO-SOURCE conjunction -- the subject's UNCORROBORATED alibi AND
 >= :data:`PHYSICAL_CONTRADICTION_MIN_VOICES` distinct non-adversarial
-co-presence voices contradicting it -- never mere two-source co-placement. The
-ceiling probe (``experiments/lab/inference_testimony_probe.py``) found 26
+co-presence voices contradicting it -- never mere two-source co-placement; a
+LONE contradicting voice still emits, but WEAK (informs, cannot eject alone).
+The ceiling probe (``experiments/lab/inference_testimony_probe.py``) found 26
 impostor- but ALSO 28 crewmate-subjects share two-source COVERAGE, so a
 co-placement detector false-positives on crew; keying on the subject's
 CONTRADICTED, uncorroborated alibi does not. Perception-time absence/last-seen
@@ -490,6 +491,16 @@ WEAK_REASON_RETARGETED_PROXY: Final[str] = "re-targeted proxy alibi"
 # strong flag survives as a 10.13 probe input).
 WEAK_REASON_PROXY_INTRA_TURN: Final[str] = "same-speaker proxy contradiction"
 
+# Task 13.4 (report-phase-b-plan B3/B4): the lone-atom weak band of the new
+# ``alibi_vs_physical`` kind. A SINGLE independent co-presence placement
+# contradicting an uncorroborated self-alibi is a real inferential atom but
+# below the two-source bar, so it carries this marker -- :func:`is_weak_
+# contradiction` returns True and belief Rule 2 down-weights it: it INFORMS but
+# cannot eject alone (the phase-B plan's "a single inferential atom emits at the
+# weak/mid band"). A SECOND independent voice promotes the same contradiction to
+# STRONG (no marker).
+WEAK_REASON_LONE_PHYSICAL: Final[str] = "single-voice physical contradiction"
+
 # Task 13.4 (report-phase-b-plan B3/B4): the minimum number of DISTINCT
 # independent CO-PRESENCE voices that must place a subject OUTSIDE their own
 # stated alibi for the inferential ``alibi_vs_physical`` flag to fire STRONG.
@@ -498,10 +509,11 @@ WEAK_REASON_PROXY_INTRA_TURN: Final[str] = "same-speaker proxy contradiction"
 # it is the load-bearing role-gate. Requiring a SECOND independent voice makes
 # the contradiction robust to a single mistaken co-presence mention, which is
 # what separates a genuine fabricated alibi (multiple honest witnesses place the
-# impostor away from their claim) from a one-off recall slip. (A direct sighting
-# of the subject is a different lever -- the 9.7 weak ``alibi_vs_sighting`` band,
-# the audited seed-3 shape behind 8/13 wrong ejections -- and is excluded from
-# the physical detector entirely, never counted toward this threshold.)
+# impostor away from their claim) from a one-off recall slip. A LONE voice still
+# emits, but WEAK (:data:`WEAK_REASON_LONE_PHYSICAL`): it informs, cannot eject.
+# (A direct sighting of the subject is a different lever -- the 9.7 weak
+# ``alibi_vs_sighting`` band, the audited seed-3 shape behind 8/13 wrong
+# ejections -- and is excluded from the physical detector entirely.)
 PHYSICAL_CONTRADICTION_MIN_VOICES: Final[int] = 2
 
 # The map's canonical room ids -- a frozen ALLOWLIST (Task 10.6; audit
@@ -911,6 +923,7 @@ def detect_contradictions(
     transcript: MeetingTranscript,
     *,
     roster: frozenset[PlayerId] | None = None,
+    trigger_kind: MeetingTriggerKind | None = None,
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
@@ -927,15 +940,18 @@ def detect_contradictions(
       observation places them in a different room at a tick that falls
       inside the alibi range.
     * ``alibi_vs_physical`` (Task 13.4, report-phase-b-plan B3/B4) -- the
-      inferential STRONG kind: a subject's OWN stated alibi is physically
-      contradicted by independent CO-PRESENCE placements of them (the subject
-      named in another player's ``saw_player`` co-presence, via
-      :func:`reconstruct_stated_paths`) in disjoint rooms at strictly interior
-      ticks. Minted (always STRONG) only under the two-source conjunction --
-      the alibi is uncorroborated AND >=
+      inferential kind: a subject's OWN stated alibi is physically contradicted
+      by independent CO-PRESENCE placements of them (the subject named in another
+      player's ``saw_player`` co-presence, via :func:`reconstruct_stated_paths`)
+      in disjoint rooms at strictly interior ticks. STRONG only under the
+      two-source conjunction -- the alibi is uncorroborated AND >=
       :data:`PHYSICAL_CONTRADICTION_MIN_VOICES` distinct non-adversarial
-      co-presence voices contradict it. Direct sightings of the subject stay
-      the 9.7 weak ``alibi_vs_sighting`` band (:func:`_detect_alibi_vs_physical`).
+      co-presence voices contradict it; a LONE contradicting voice emits WEAK
+      (informs, cannot eject alone). Direct sightings of the subject stay the
+      9.7 weak ``alibi_vs_sighting`` band (:func:`_detect_alibi_vs_physical`).
+      ``trigger_kind`` threads to the reconstruction's relevance gate so an
+      EMERGENCY meeting drops the (possibly fabricated) opening body's kill-scene
+      exclusion (Task 10.11), mirroring :func:`detect_corroborations`.
 
     Flags are *information*, not verdicts. The returned tuple is sorted
     by ``contradiction_id`` so the detector is deterministic across calls
@@ -1015,20 +1031,36 @@ def detect_contradictions(
             ),
         )
     )
-    # Task 13.4 (B3/B4): the inferential STRONG path. ``reconstruct_stated_paths``
-    # rebuilds each subject's stated room-by-tick positions from the PUBLIC
-    # transcript's ``saw_player`` observations (incl. co-presence) under the same
-    # roster, so :func:`_detect_alibi_vs_physical` can find a subject's OWN alibi
-    # an independent speaker physically contradicts. ``direct_sighting_events``
-    # marks the placements that came from a DIRECT ``saw_player(subject)`` (vs a
-    # co-presence mention): those stay the 9.7 weak ``alibi_vs_sighting`` band, so
-    # the physical detector reads only the CO-PRESENCE placements that path
-    # cannot reach (see :func:`_detect_alibi_vs_physical`).
+    # Task 13.4 (B3/B4): the inferential physical path.
+    # ``reconstruct_stated_paths`` rebuilds each subject's stated room-by-tick
+    # positions from the PUBLIC ``saw_player`` observations (incl. co-presence)
+    # under the same roster + trigger kind, so :func:`_detect_alibi_vs_physical`
+    # can find a subject's OWN alibi an independent speaker physically
+    # contradicts. Three inputs gate it to evidence-grade co-presence:
+    #   * ``self_alibis`` -- the subject's OWN alibis, de-echoed AMONG
+    #     self-statements only, so a proxy/defender stating the same alibi first
+    #     cannot let the global echo-dedup drop (and hide) the subject's own
+    #     claim (the seed-24-style turn-order dependence, here on the physical
+    #     path);
+    #   * ``direct_sighting_events`` -- the event ids on which a player was the
+    #     observation's OWN ``saw_player`` subject, so those (the 9.7 weak
+    #     ``alibi_vs_sighting`` band) are excluded and only CO-PRESENCE
+    #     placements feed the physical detector;
+    #   * ``roster_sighting_events`` -- the event ids of roster-valid sightings
+    #     (subject in roster), so a co-presence anchored on a HALLUCINATED
+    #     primary subject (dropped from ``sightings`` but still placed by the
+    #     reconstruction) never backs a physical flag.
+    self_alibis = _dedupe_echo_alibis(
+        tuple(a for a in indexed_alibis if a.speaker == a.claim.subject)
+    )
     flags.extend(
         _detect_alibi_vs_physical(
-            self_alibis=alibis,
-            paths=reconstruct_stated_paths(transcript, roster=roster),
+            self_alibis=self_alibis,
+            paths=reconstruct_stated_paths(
+                transcript, roster=roster, trigger_kind=trigger_kind
+            ),
             direct_sighting_events=_direct_sighting_events(sightings),
+            roster_sighting_events=frozenset(s.event_id for s in sightings),
             accusation_pairs=accusation_pairs,
         )
     )
@@ -1772,12 +1804,14 @@ def _detect_alibi_vs_physical(
     self_alibis: tuple[_IndexedAlibi, ...],
     paths: Mapping[PlayerId, tuple[StatedPlacement, ...]],
     direct_sighting_events: Mapping[PlayerId, frozenset[str]],
+    roster_sighting_events: frozenset[str],
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
 ) -> Iterator[ContradictionRef]:
-    """The Task 13.4 inferential ``alibi_vs_physical`` STRONG flags (B3/B4).
+    """The Task 13.4 inferential ``alibi_vs_physical`` flags (B3/B4).
 
-    The R7 lever. For each subject's OWN stated alibi (``speaker == subject``,
-    room set A over an inclusive window), the reconstructed stated path
+    The R7 lever. ``self_alibis`` is the caller's de-echoed set of the subjects'
+    OWN alibis (``speaker == subject`` already); for each (room set A over an
+    inclusive window) the reconstructed stated path
     (:func:`reconstruct_stated_paths`) is scanned for CO-PRESENCE placements
     that physically contradict it: an independent speaker who, sighting a THIRD
     player, named the subject as ``co_present`` in a room DISJOINT from A at a
@@ -1796,18 +1830,27 @@ def _detect_alibi_vs_physical(
     every placement here is evidence-grade and traces to one public
     ``saw_player`` (its ``event_id``) -- the 13.4 firewall assertion.
 
-    A flag is emitted (STRONG -- no weak marker) only under the TWO-SOURCE
-    CONJUNCTION, the crux's role-gate:
+    Banding (the crux's role-gate). A CORROBORATED alibi -- some independent
+    voice places the subject INSIDE A within the window -- is co-placement
+    agreement (the shape the ceiling probe found 28 crewmate-subjects share) and
+    mints NOTHING, so the detector keys on the subject's own CONTRADICTED alibi,
+    not on two-source coverage. Otherwise each contradicting placement emits a
+    flag whose band is the distinct contradicting-voice count:
 
-    * **uncorroborated alibi** -- NO independent voice (direct or co-presence)
-      places the subject inside A within the window. Mere co-placement (voices
-      AGREEING on A) is corroboration, the shape the ceiling probe found 28
-      crewmate-subjects share, so a corroborated alibi never mints a physical
-      flag -- the detector keys on the subject's own CONTRADICTED alibi, not on
-      two-source coverage;
-    * **>= :data:`PHYSICAL_CONTRADICTION_MIN_VOICES` distinct contradicting
-      voices** -- the contradiction is attested by independent (non-self,
-      non-adversarial) speakers, so one mistaken co-presence cannot mint it.
+    * **>= :data:`PHYSICAL_CONTRADICTION_MIN_VOICES` voices** -> STRONG (no weak
+      marker): the contradiction is attested by independent (non-self,
+      non-adversarial) speakers, so one mistaken co-presence cannot mint it;
+    * **exactly one voice** -> WEAK (:data:`WEAK_REASON_LONE_PHYSICAL`): a single
+      inferential atom informs but cannot eject alone.
+
+    Two soundness gates beyond co-presence: a placement must trace to a
+    ROSTER-VALID sighting (``roster_sighting_events`` -- its source observation's
+    OWN subject is in the roster, so a co-presence anchored on a hallucinated
+    player never backs a flag), and direct ``saw_player(subject)`` placements
+    (``direct_sighting_events`` -- the 9.7 weak ``alibi_vs_sighting`` band) are
+    excluded so only genuine co-presence feeds the detector. Endpoints are
+    excluded (transit fuzz); spawn-window / kill-scene placements are already
+    dropped by the reconstruction's relevance gate.
 
     One flag is emitted per qualifying contradicting placement (each is its own
     public ``saw_player``, so belief Rule 2 folds them on the shared alibi-claim
@@ -1819,10 +1862,9 @@ def _detect_alibi_vs_physical(
 
     for alibi in self_alibis:
         subject = alibi.claim.subject
-        # The subject's OWN alibi only -- a proxy alibi (speaker != subject)
-        # contradicted is the Task 10.6 re-targeted-proxy shape, not a physical
-        # lie by the subject. A non-spatial alibi locates nothing.
-        if alibi.speaker != subject or not alibi.rooms:
+        # ``self_alibis`` is already self-stated (the caller filters), so only a
+        # non-spatial alibi (locating nobody) is skipped here.
+        if not alibi.rooms:
             continue
         from_tick = alibi.claim.from_tick
         to_tick = alibi.claim.to_tick
@@ -1839,28 +1881,31 @@ def _detect_alibi_vs_physical(
         # agreement (the crewmate shape), never a clean lie -- suppress it.
         if any(placement.rooms & alibi.rooms for placement in independent):
             continue
-        # Contradicting placements: CO-PRESENCE (event id NOT a direct sighting
-        # of the subject) in a DISJOINT room at a strictly INTERIOR tick, stated
-        # by an independent voice NOT across the accusation chain from the
-        # subject (the 13.3 adversarial guard -- an accuser's counter-placement
-        # must not manufacture a strong flag).
+        # Contradicting placements: a roster-valid CO-PRESENCE (event id is a
+        # roster sighting but NOT a direct sighting of the subject) in a DISJOINT
+        # room at a strictly INTERIOR tick, stated by an independent voice NOT
+        # across the accusation chain from the subject (the 13.3 adversarial
+        # guard -- an accuser's counter-placement must not manufacture a flag).
         contradicting = tuple(
             placement
             for placement in independent
-            if placement.event_id not in direct_events
+            if placement.event_id in roster_sighting_events
+            and placement.event_id not in direct_events
             and from_tick < placement.tick < to_tick
             and not (placement.rooms & alibi.rooms)
             and (placement.speaker, subject) not in accusation_pairs
             and (subject, placement.speaker) not in accusation_pairs
         )
-        # The two-source conjunction: the contradiction must be attested by at
-        # least PHYSICAL_CONTRADICTION_MIN_VOICES distinct speakers, so one
-        # mistaken co-presence cannot mint a strong flag alone.
-        if (
-            len({placement.speaker for placement in contradicting})
-            < PHYSICAL_CONTRADICTION_MIN_VOICES
-        ):
+        n_voices = len({placement.speaker for placement in contradicting})
+        if n_voices == 0:
             continue
+        # The two-source conjunction is STRONG; a lone voice is WEAK (informs,
+        # cannot eject alone) -- the phase-B "single inferential atom" band.
+        weak_reasons: tuple[str, ...] = (
+            ()
+            if n_voices >= PHYSICAL_CONTRADICTION_MIN_VOICES
+            else (WEAK_REASON_LONE_PHYSICAL,)
+        )
         for placement in contradicting:
             yield _build_contradiction(
                 kind="alibi_vs_physical",
@@ -1868,7 +1913,7 @@ def _detect_alibi_vs_physical(
                 event_b_id=placement.event_id,
                 subjects=(subject,),
                 description=_describe_alibi_vs_physical(
-                    alibi=alibi.claim, placement=placement
+                    alibi=alibi.claim, placement=placement, weak_reasons=weak_reasons
                 ),
             )
 
@@ -2020,22 +2065,28 @@ def _describe_alibi_vs_sighting(
 
 
 def _describe_alibi_vs_physical(
-    *, alibi: AlibiClaim, placement: StatedPlacement
+    *,
+    alibi: AlibiClaim,
+    placement: StatedPlacement,
+    weak_reasons: tuple[str, ...] = (),
 ) -> str:
     # The placement's rooms are a canonical set (one or more member rooms);
     # join them sorted so the rendered memory view (§5.4 "flags are
     # information") is byte-stable regardless of frozenset order. ``speaker``
     # names the independent voice whose placement contradicts the subject's own
-    # alibi -- the deductive content a voter reads. ``alibi_vs_physical`` carries
-    # no weak marker: the detector only mints it under the two-source conjunction
-    # (:func:`_detect_alibi_vs_physical`), so it is STRONG by construction.
+    # alibi -- the deductive content a voter reads. A lone-voice atom carries the
+    # weak marker (:data:`WEAK_REASON_LONE_PHYSICAL`); the two-source conjunction
+    # carries none and is STRONG (:func:`_detect_alibi_vs_physical`).
     placed_in = "/".join(sorted(placement.rooms))
-    return (
+    base = (
         f"{alibi.subject}'s own alibi places them in {alibi.room} "
         f"(ticks {alibi.from_tick}-{alibi.to_tick}), but {placement.speaker} "
         f"placed {alibi.subject} in {placed_in} at tick {placement.tick} -- "
         f"physically incompatible with the stated alibi."
     )
+    if not weak_reasons:
+        return base
+    return f"{base} {WEAK_CONTRADICTION_MARKER_PREFIX}{'; '.join(weak_reasons)}]"
 
 
 def _describe_retargeted_proxy(
@@ -2238,6 +2289,7 @@ __all__ = [
     "WEAK_REASON_ADVERSARIAL",
     "WEAK_REASON_BOUNDARY_OVERLAP",
     "WEAK_REASON_ENDPOINT_TICK",
+    "WEAK_REASON_LONE_PHYSICAL",
     "WEAK_REASON_NARROW_WINDOW",
     "WEAK_REASON_PROXY_INTRA_TURN",
     "WEAK_REASON_RETARGETED_PROXY",

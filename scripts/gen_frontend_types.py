@@ -87,7 +87,7 @@ _ENUM_ALIASES: Final[dict[str, tuple[str, ...]]] = {
     "Winner": ("CREWMATES", "IMPOSTORS"),
     "TriggerKind": ("body", "emergency"),
     "MeetingOutcome": ("EJECTED", "SKIPPED"),
-    "ContradictionKind": ("alibi_conflict", "alibi_vs_sighting"),
+    "ContradictionKind": ("alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"),
     "TurnKind": ("opening", "reply", "opt_in"),
 }
 _ENUM_BY_VALUES: Final[dict[frozenset[str], str]] = {

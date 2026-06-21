@@ -232,14 +232,14 @@ class ContradictionRef(_FrozenModel):
     category so consumers can branch on it without parsing free text.
 
     Task 13.4 (report-phase-b-plan B3/B4): ``alibi_vs_physical`` is the
-    inferential STRONG kind reconstructed from public testimony -- a
-    subject's OWN stated alibi physically contradicted by an independent
-    speaker's placement of them elsewhere over the alibi window (see
-    :func:`meetings.transcript.detect_contradictions`). It only materialises
-    on a re-extraction of the recorded transcript (the extractor re-runs the
-    detector), so a served replay loaded by ``api.replay_loader`` does not
-    carry it until the 13.10 combined re-record (the API view + frontend kind
-    union widen there, alongside the recording change).
+    inferential kind reconstructed from public testimony -- a subject's OWN
+    stated alibi physically contradicted by independent co-presence placements
+    of them elsewhere over the alibi window (see
+    :func:`meetings.transcript.detect_contradictions`). The manager persists
+    ``detect_contradictions`` at meeting close, so a recorded ``MeetingResult``
+    can carry it; the served ``api.schemas.ContradictionView`` and the frontend
+    ``ContradictionKind`` union both accept it (rendered like the other alibi
+    kinds).
     """
 
     contradiction_id: ContradictionId

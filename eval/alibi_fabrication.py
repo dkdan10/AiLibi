@@ -113,8 +113,11 @@ from meetings.schemas import AlibiClaim, PlayerId, RoomId
 # Today this is the whole of :class:`~meetings.schemas.ContradictionRef`'s
 # ``kind`` Literal, so the filter is currently total; it is kept explicit so a
 # future non-alibi contradiction kind cannot silently start crediting catches.
+# ``alibi_vs_physical`` (Task 13.4) IS an alibi contradiction -- an impostor
+# whose fabricated alibi is exposed only by that STRONG kind must count as
+# caught, not survived -- so it joins the set.
 _ALIBI_CONTRADICTION_KINDS: Final[frozenset[str]] = frozenset(
-    {"alibi_conflict", "alibi_vs_sighting"}
+    {"alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"}
 )
 
 # Per-meeting dedup key for an alibi value: (author, subject, from_tick,

@@ -14,11 +14,13 @@ import type { ContradictionView } from "../types/api";
 const KIND_STYLES: Record<ContradictionView["kind"], string> = {
   alibi_conflict: "border border-ink-200 bg-paper-2 text-ink-700",
   alibi_vs_sighting: "border border-ink-200 bg-paper-2 text-ink-700",
+  alibi_vs_physical: "border border-ink-200 bg-paper-2 text-ink-700",
 };
 
 const KIND_LABELS: Record<ContradictionView["kind"], string> = {
   alibi_conflict: "alibi conflict",
   alibi_vs_sighting: "alibi vs sighting",
+  alibi_vs_physical: "alibi vs physical",
 };
 
 export function ContradictionBadge({

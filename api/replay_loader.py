@@ -1737,25 +1737,13 @@ def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
     # Lift the weak/strong class out of the free-text ``description`` marker via
     # the canonical predicate (imported, never re-implemented) so the meeting
     # view can draw weak=dashed / strong=solid without re-parsing client-side.
+    # ``kind`` passes through verbatim -- the Task 13.4 ``alibi_vs_physical`` kind
+    # a recorded ``MeetingResult`` carries (the manager persists
+    # ``detect_contradictions`` at close) renders like the other alibi kinds.
     weak = is_weak_contradiction(contradiction)
-    kind = contradiction.kind
-    # ``ContradictionView`` mirrors only the kinds a COMMITTED replay can carry.
-    # The Task 13.4 ``alibi_vs_physical`` kind materialises solely on a
-    # re-extraction of the recorded transcript (the extractor re-runs the
-    # detector); a served ``MeetingResult`` records its contradictions at record
-    # time, so the new kind cannot reach this loader until the 13.10 combined
-    # re-record -- which is where the served view + frontend kind union widen,
-    # alongside the recording change. Fail loud rather than silently coerce it
-    # to a 2-kind view (AGENTS.md "no silent fallbacks").
-    if kind == "alibi_vs_physical":
-        raise ValueError(
-            "ContradictionView received 'alibi_vs_physical'; a committed replay "
-            "cannot carry it before the 13.10 re-record (the view + frontend "
-            "kind union widen there)"
-        )
     return ContradictionView(
         contradiction_id=contradiction.contradiction_id,
-        kind=kind,
+        kind=contradiction.kind,
         event_a_id=contradiction.event_a_id,
         event_b_id=contradiction.event_b_id,
         subjects=tuple(contradiction.subjects),
