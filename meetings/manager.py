@@ -1048,7 +1048,15 @@ class MeetingManager:
         # run: this pre-vote derivation is unconditional (an evidence-free
         # meeting derives empty sets and folds nothing), and the post-vote
         # half is the orchestrator's standing post-meeting absorb.
-        contradictions = detect_contradictions(transcript, roster=roster)
+        # Thread the trigger kind so the 13.4 physical detector's reconstruction
+        # drops an EMERGENCY meeting's (possibly fabricated) opening-body
+        # kill-scene exclusion (Task 10.11); ``report`` keeps the opening body.
+        meeting_trigger_kind: MeetingTriggerKind = (
+            "emergency" if _trigger_is_emergency(trigger) else "report"
+        )
+        contradictions = detect_contradictions(
+            transcript, roster=roster, trigger_kind=meeting_trigger_kind
+        )
         evidence = derive_belief_evidence(
             transcript, contradictions=contradictions, roster=roster
         )

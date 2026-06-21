@@ -18,7 +18,7 @@ export type AgentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT
 export type Winner = "CREWMATES" | "IMPOSTORS";
 export type TriggerKind = "body" | "emergency";
 export type MeetingOutcome = "EJECTED" | "SKIPPED";
-export type ContradictionKind = "alibi_conflict" | "alibi_vs_sighting";
+export type ContradictionKind = "alibi_conflict" | "alibi_vs_sighting" | "alibi_vs_physical";
 export type TurnKind = "opening" | "reply" | "opt_in";
 
 export interface ReplayView {

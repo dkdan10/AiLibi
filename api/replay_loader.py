@@ -1737,6 +1737,9 @@ def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
     # Lift the weak/strong class out of the free-text ``description`` marker via
     # the canonical predicate (imported, never re-implemented) so the meeting
     # view can draw weak=dashed / strong=solid without re-parsing client-side.
+    # ``kind`` passes through verbatim -- the Task 13.4 ``alibi_vs_physical`` kind
+    # a recorded ``MeetingResult`` carries (the manager persists
+    # ``detect_contradictions`` at close) renders like the other alibi kinds.
     weak = is_weak_contradiction(contradiction)
     return ContradictionView(
         contradiction_id=contradiction.contradiction_id,

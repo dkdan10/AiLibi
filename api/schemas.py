@@ -555,7 +555,7 @@ class ContradictionView(_FrozenView):
     """
 
     contradiction_id: str
-    kind: Literal["alibi_conflict", "alibi_vs_sighting"]
+    kind: Literal["alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"]
     event_a_id: str
     event_b_id: str
     subjects: tuple[str, ...]

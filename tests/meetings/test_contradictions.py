@@ -440,6 +440,571 @@ class TestAlibiVsSighting:
         assert all(flag.kind == "alibi_vs_sighting" for flag in flags)
 
 
+# --- alibi_vs_physical (Task 13.4, report-phase-b-plan B3/B4) ---------------
+
+
+def _saw_player_obs_ids(transcript: MeetingTranscript) -> set[str]:
+    """Every ``saw_player`` observation id in the transcript (id-format mirror).
+
+    Mirrors ``meetings.transcript._turn_observation_id`` so the firewall
+    assertion below checks an ``alibi_vs_physical`` flag's placement event id
+    against the public ``saw_player`` observations it must trace to -- with no
+    reach into the belief layer (a leak test does not scan beliefs, so this is
+    the guard that every placement is transcript-derived).
+    """
+
+    return {
+        f"turn:{turn.turn_id}:obs:{index}"
+        for turn in transcript.turns
+        for index, obs in enumerate(turn.observations)
+        if isinstance(obs, SawPlayerObservation)
+    }
+
+
+def _alibi_claim_ids(transcript: MeetingTranscript) -> set[str]:
+    """Every ``alibi`` claim id in the transcript (id-format mirror)."""
+
+    return {
+        f"turn:{turn.turn_id}:claim:{index}"
+        for turn in transcript.turns
+        for index, claim in enumerate(turn.claims)
+        if isinstance(claim, AlibiClaim)
+    }
+
+
+class TestAlibiVsPhysical:
+    """The inferential ``alibi_vs_physical`` kind (Task 13.4).
+
+    A subject's OWN stated alibi physically contradicted by independent
+    CO-PRESENCE placements (the subject named in another player's ``saw_player``
+    co-presence list) reconstructed from public testimony. STRONG only under the
+    two-source conjunction: the alibi is uncorroborated AND
+    ``PHYSICAL_CONTRADICTION_MIN_VOICES`` (2) distinct non-adversarial voices
+    place the subject elsewhere at strictly interior ticks; a LONE contradicting
+    voice emits WEAK (informs, cannot eject alone). Direct sightings of the
+    subject stay the 9.7 weak ``alibi_vs_sighting`` band.
+    """
+
+    def _two_voice_conjunction(self) -> MeetingTranscript:
+        # p-3's OWN alibi (STORAGE) physically contradicted by two independent
+        # co-presence placements in EAST_HALL: p-5 sights p-1 (co-present p-3)
+        # and p-7 sights p-2 (co-present p-3). Nobody places p-3 in STORAGE
+        # after spawn -> uncorroborated; both co-presence ticks are interior.
+        return MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(
+                        _saw(
+                            tick=150,
+                            subject="p-1",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    observations=(
+                        _saw(
+                            tick=160,
+                            subject="p-2",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+            )
+        )
+
+    def test_two_source_co_presence_conjunction_is_strong(self) -> None:
+        flags = detect_contradictions(self._two_voice_conjunction())
+        physical = [f for f in flags if f.kind == "alibi_vs_physical"]
+        # One flag per contradicting co-presence placement (two voices).
+        assert len(physical) == 2
+        for flag in physical:
+            assert flag.subjects == ("p-3",)
+            # STRONG by construction: the physical detector mints no weak marker.
+            assert is_weak_contradiction(flag) is False
+            assert "p-3" in flag.description
+            assert "EAST_HALL" in flag.description
+            assert "STORAGE" in flag.description
+
+    def test_every_physical_flag_traces_to_a_saw_player(self) -> None:
+        # The firewall assertion (DoD): no alibi_vs_physical flag references a
+        # placement that is not a public transcript saw_player, and its alibi
+        # side is a real alibi claim -- so the flag is transcript-derived end to
+        # end (never a belief-layer artifact).
+        transcript = self._two_voice_conjunction()
+        flags = detect_contradictions(transcript)
+        obs_ids = _saw_player_obs_ids(transcript)
+        claim_ids = _alibi_claim_ids(transcript)
+        physical = [f for f in flags if f.kind == "alibi_vs_physical"]
+        assert physical  # the scenario does emit flags to check
+        for flag in physical:
+            # event_a is the subject's alibi claim; event_b the co-presence
+            # sighting (canonicalised order may swap them, so check membership).
+            assert flag.event_a_id in claim_ids or flag.event_a_id in obs_ids
+            assert flag.event_b_id in claim_ids or flag.event_b_id in obs_ids
+            placement_ids = {flag.event_a_id, flag.event_b_id} - claim_ids
+            assert placement_ids, "a physical flag must reference a saw_player"
+            assert placement_ids <= obs_ids
+
+    def test_lone_co_presence_voice_is_weak_not_strong(self) -> None:
+        # A single contradicting voice is below the two-source bar: it emits a
+        # WEAK alibi_vs_physical (informs) that cannot cross the gate alone.
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(
+                        _saw(
+                            tick=150,
+                            subject="p-1",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        physical = [f for f in flags if f.kind == "alibi_vs_physical"]
+        assert len(physical) == 1
+        assert is_weak_contradiction(physical[0]) is True
+        assert physical[0].subjects == ("p-3",)
+
+    def test_corroborated_alibi_suppresses_physical(self) -> None:
+        # An independent voice places p-3 INSIDE the STORAGE alibi (co-placement
+        # agreement, the crewmate shape) -> the alibi is corroborated, so even
+        # two contradicting voices mint no physical flag (the role-gate).
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(
+                        _saw(
+                            tick=150,
+                            subject="p-1",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    observations=(
+                        _saw(
+                            tick=160,
+                            subject="p-2",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=3,
+                    speaker="p-8",
+                    observations=(
+                        _saw(
+                            tick=140,
+                            subject="p-9",
+                            room="STORAGE",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        assert not [f for f in flags if f.kind == "alibi_vs_physical"]
+
+    def test_adversarial_voice_does_not_count_toward_the_conjunction(self) -> None:
+        # p-7 places p-3 elsewhere but also ACCUSES p-3 (across the accusation
+        # chain) -> the 13.3 adversarial guard drops p-7's voice, leaving one
+        # non-adversarial voice: below the two-source bar, so no STRONG flag (the
+        # lone p-5 voice stays weak).
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(
+                        _saw(
+                            tick=150,
+                            subject="p-1",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    turn_kind="reply",
+                    claims=(
+                        AccusationClaim(
+                            type="accusation",
+                            against="p-3",
+                            confidence=0.8,
+                            reason="placed p-3 away from their alibi",
+                        ),
+                    ),
+                    observations=(
+                        _saw(
+                            tick=160,
+                            subject="p-2",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        physical = [f for f in flags if f.kind == "alibi_vs_physical"]
+        # No STRONG flag: p-7's adversarial voice did not promote the conjunction.
+        assert all(is_weak_contradiction(f) is True for f in physical)
+
+    def test_endpoint_tick_co_presence_excluded(self) -> None:
+        # A co-presence exactly on the alibi window edge (tick 100) is transit
+        # fuzz and excluded, leaving one interior voice -> below the STRONG bar.
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(
+                        _saw(
+                            tick=100,
+                            subject="p-1",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    observations=(
+                        _saw(
+                            tick=160,
+                            subject="p-2",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        physical = [f for f in flags if f.kind == "alibi_vs_physical"]
+        # Only the interior p-7 voice survives -> weak, never STRONG.
+        assert all(is_weak_contradiction(f) is True for f in physical)
+
+    def test_direct_sightings_mint_no_physical_flag(self) -> None:
+        # Two DIRECT sightings of the subject contradict the self-alibi, but the
+        # physical detector reads co-presence ONLY: those stay the 9.7 weak
+        # alibi_vs_sighting band (preserving the audited seed-3 design).
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(_saw(tick=150, subject="p-3", room="EAST_HALL"),),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    observations=(_saw(tick=160, subject="p-3", room="ADMIN"),),
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        assert not [f for f in flags if f.kind == "alibi_vs_physical"]
+        assert all(f.kind == "alibi_vs_sighting" for f in flags)
+
+    def test_proxy_alibi_mints_no_physical_flag(self) -> None:
+        # The alibi must be the subject's OWN (speaker == subject); a proxy alibi
+        # (p-1 vouching for p-3) is the Task 10.6 retargeted-proxy domain, never
+        # an alibi_vs_physical.
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(
+                        _saw(
+                            tick=150,
+                            subject="p-2",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    observations=(
+                        _saw(
+                            tick=160,
+                            subject="p-4",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        assert not [f for f in flags if f.kind == "alibi_vs_physical"]
+
+    def test_self_alibi_not_hidden_by_earlier_proxy_echo(self) -> None:
+        # A proxy (p-1) states p-3's alibi FIRST, then p-3 restates it. The
+        # global echo-dedup keeps the proxy claim and would drop p-3's own; the
+        # physical detector de-echoes SELF-statements separately, so it still
+        # sees p-3's OWN alibi and the two-voice conjunction fires STRONG against
+        # p-3's own claim (not the proxy's).
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-1",  # proxy states it first
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-3",  # subject restates own alibi (an echo)
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-5",
+                    observations=(
+                        _saw(
+                            tick=150,
+                            subject="p-2",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=3,
+                    speaker="p-7",
+                    observations=(
+                        _saw(
+                            tick=160,
+                            subject="p-4",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        physical = [f for f in flags if f.kind == "alibi_vs_physical"]
+        assert physical
+        assert all(is_weak_contradiction(f) is False for f in physical)
+        assert all(f.subjects == ("p-3",) for f in physical)
+        # The contradicted alibi is p-3's OWN claim (turn 1), never the proxy's.
+        referenced = {f.event_a_id for f in physical} | {f.event_b_id for f in physical}
+        assert "turn:m-1:turn-1:claim:0" in referenced
+        assert "turn:m-1:turn-0:claim:0" not in referenced
+
+    def test_co_presence_anchored_on_hallucinated_subject_is_ignored(self) -> None:
+        # Each co-presence of p-3 is anchored on a sighting whose OWN subject is
+        # a hallucinated id (p-98 / p-99). Under a roster those sightings are
+        # dropped, so their co-presence cannot back a physical flag against p-3.
+        roster = frozenset({"p-1", "p-2", "p-3", "p-4", "p-5", "p-6", "p-7"})
+
+        def _scenario(anchor_a: str, anchor_b: str) -> MeetingTranscript:
+            return MeetingTranscript(
+                turns=(
+                    _turn(
+                        turn_index=0,
+                        speaker="p-3",
+                        claims=(
+                            _alibi(
+                                subject="p-3",
+                                from_tick=100,
+                                to_tick=200,
+                                room="STORAGE",
+                            ),
+                        ),
+                    ),
+                    _turn(
+                        turn_index=1,
+                        speaker="p-5",
+                        observations=(
+                            _saw(
+                                tick=150,
+                                subject=anchor_a,
+                                room="EAST_HALL",
+                                co_present=("p-3",),
+                            ),
+                        ),
+                    ),
+                    _turn(
+                        turn_index=2,
+                        speaker="p-7",
+                        observations=(
+                            _saw(
+                                tick=160,
+                                subject=anchor_b,
+                                room="EAST_HALL",
+                                co_present=("p-3",),
+                            ),
+                        ),
+                    ),
+                )
+            )
+
+        hallucinated = detect_contradictions(_scenario("p-98", "p-99"), roster=roster)
+        assert not [f for f in hallucinated if f.kind == "alibi_vs_physical"]
+        # Sanity: with roster-valid anchors the SAME shape DOES emit, so it is the
+        # roster gate that suppressed above, not the co-presence path itself.
+        valid = detect_contradictions(_scenario("p-1", "p-2"), roster=roster)
+        assert [f for f in valid if f.kind == "alibi_vs_physical"]
+
+    def test_emergency_trigger_kind_drops_kill_scene_exclusion(self) -> None:
+        # An emergency opening carries a (fabricated) found_body in EAST_HALL.
+        # With trigger_kind="emergency" the reconstruction does NOT treat that
+        # room as a kill scene, so the co-presence placements there still count
+        # and the conjunction fires; trigger_kind="report" (default) would gate
+        # them out as kill-scene sightings.
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    observations=(
+                        FoundBodyObservation(
+                            type="found_body",
+                            tick=40,
+                            body_of="p-9",
+                            room="EAST_HALL",
+                        ),
+                    ),
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(
+                        _saw(
+                            tick=150,
+                            subject="p-1",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    observations=(
+                        _saw(
+                            tick=160,
+                            subject="p-2",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+            )
+        )
+        report = detect_contradictions(transcript, trigger_kind="report")
+        assert not [f for f in report if f.kind == "alibi_vs_physical"]
+        emergency = detect_contradictions(transcript, trigger_kind="emergency")
+        assert [f for f in emergency if f.kind == "alibi_vs_physical"]
+
+    def test_physical_detection_is_deterministic(self) -> None:
+        transcript = self._two_voice_conjunction()
+        assert detect_contradictions(transcript) == detect_contradictions(transcript)
+
+
 # --- Mixed cases / determinism / surface contract --------------------------
 
 
