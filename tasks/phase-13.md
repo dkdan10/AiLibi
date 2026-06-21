@@ -302,17 +302,18 @@ removes no still-needed guard; bump the four prompt versions together. EXCLUDE t
 `think=False`).
 
 **Build approach — rebuild the two sighting prompts, don't patch the crowded ones.** `crewmate_report.j2` (241 lines)
-and `accusation_round.j2` (315 lines) are accreted walls a 7B drowns in; layering MORE sighting-elicitation onto them
-makes it worse. REBUILD those two from a clean, concise base tuned for the canonical model — **qwen2.5:7b-instruct with
-`think=False` structured output** (that 7B is the deployed provider, NOT a 9B; a model change is a separate substrate
-decision the model-ceiling probe already cautioned against). Ground the rebuild in qwen2.5 structured-output prompting
-best-practices (web-search them if the local agent has access; else apply the principles — short, schema-clear, a few
-worked examples, no redundant imperative stacking). CRITICAL: before rebuilding, **catalog the load-bearing guards** the
-existing prompts encode (each defensive patch exists because the 7B failed a specific way — anti-over-skip,
-anti-narration, cover-consistency, the firewall lines) and carry EACH forward; the fixture loop must regression-test the
-rebuild against BOTH the new goal (richer sightings) AND those failure modes (husk / over-skip / leak / cover-drift), so
-the rebuild trades crowding for clarity, NOT for regressions. `vote_ballot.j2` / `impostor_report.j2` get the lighter trim
-+ the belief-mover framing, not a full rebuild.
+and `accusation_round.j2` (315 lines) are accreted walls that bury the model's attention in noise; layering MORE
+sighting-elicitation onto them makes it worse. REBUILD those two from a clean, concise base tuned for the canonical model
+— **`qwen3.5:9b` with `think=False` structured output** (the deployed local model — confirmed by
+`llm/ollama_client.py::DEFAULT_OLLAMA_MODEL`, the committed replays' `llm_calls[].model`, and the MANIFEST; migrated from
+qwen2.5:7b in Phase 9, so ignore any older 7B reference). Ground the rebuild in **`qwen3.5:9b` structured-output
+prompting best-practices — WEB-SEARCH them** (it is a recent model; do not assume its quirks), else apply the principles:
+short, schema-clear, a few worked examples, no redundant imperative stacking. CRITICAL: before rebuilding, **catalog the
+load-bearing guards** the existing prompts encode (each defensive patch exists because the model failed a specific way —
+anti-over-skip, anti-narration, cover-consistency, the firewall lines) and carry EACH forward; the fixture loop must
+regression-test the rebuild against BOTH the new goal (richer sightings) AND those failure modes (husk / over-skip / leak
+/ cover-drift), so the rebuild trades crowding for clarity, NOT for regressions. `vote_ballot.j2` / `impostor_report.j2`
+get the lighter trim + the belief-mover framing, not a full rebuild.
 
 **Iterate fixture-first, not by full games (efficiency).** Build a local meeting-prompt fixture harness
 (`experiments/lab/meeting_prompt_battery.py`, extending the `deception_battery_2.py` pattern): **ISOLATE the fixed
