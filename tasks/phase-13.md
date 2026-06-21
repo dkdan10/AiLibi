@@ -214,23 +214,106 @@ traceable-to-transcript assertion test is the guard). NO re-record; byte-determi
 
 ---
 
-### Roadmap (13.5–13.10 — elaborated to full contracts immediately before each dispatch)
+### GATE FINDING 2026-06-21 — the detector spine is BUILT but the committed data is BARREN
 
-#### Task 13.5 — Belief-band wiring for the new STRONG classes (depends 13.3, 13.4)
-Route the new STRONG contradiction classes through `agents/memory/beliefs.py::apply_contradiction_rule` so a LONE
-inferential atom lands sub-gate (informs, cannot eject alone) and only the two-source conjunction reaches the full 0.3.
-Preserve `contradiction_lift_key` dedup + `MEETING_CONTRADICTION_LIFT_CAP=0.3` + the `+0.05 < 0.10` gate-distance
-invariant. No gate / tally / SKIP change. **Offline-validate:** unit test (one lone flag lifts a 0.50 listener to
-< 0.60; the conjunction crosses); re-extract + `rubric_score.py` shows R4 inversions = 0 and wrong-ejection games do not
-rise. $0.
+With 13.2–13.4 merged, the 13.4 $0 re-extract gate is the pivot: re-extracting the committed 9p2i replays yields **0
+`alibi_vs_physical` flags and R7 = 0/50** — NOT because the detector is wrong (13.4's own test fires the kind on a
+constructed case; it is firewall-clean + role-gated, 0 false positives) but because the committed transcripts hold **no
+inferential-deduction signal to mine** (111 weak firsthand `alibi_vs_sighting`, ~0 multi-witness contradictions). You
+cannot mine a signal the game never generated. **So the $0-re-extract path is exhausted; the lever is the GAME producing
+richer testimony** — asymmetric visibility (13.8, crew must infer not witness) + the prompt rework (13.6, crew STATE more
+sightings) + testimony-spread (13.7). The detector (13.2–13.4) is done and dormant; it lights R7 only once the game feeds
+it richer testimony, which is **real-Ollama-generated → tested by a SMOKE re-record, NOT $0 re-extraction.** Do NOT refine
+13.4 (it is correct — loosening it to fire on the thin data just reintroduces the crew false-positives it rightly avoids).
 
-#### Task 13.6 — Breadcrumb render + testimony-as-belief-mover framing + prompt trim (depends 13.5)
-`agents/memory/store.py` emits a directional "saw X leave A→R" line for the agent's most-recent sighting per subject
-(pure function of existing episodic deltas — no packet field, firewall untouched); add the "others' accounts are
-belief-movers" framing to `vote_ballot.j2` + `accusation_round.j2`; trim accreted verbosity ONLY where it removes no
-still-needed guard; bump the four prompt versions together. EXCLUDE the in-band reasoning field (→ 13.9).
-**Offline-validate:** re-golden `tests/agents/test_strategic_prompts.py` at the new versions; the breadcrumb render is
-byte-deterministic over a fixed episodic log; no packet field added (leak test unaffected). No re-record.
+### Re-sequenced Wave B (game-first; the detector is built, awaiting material)
+
+**Offline (dispatch now):** 13.5 belief-band wiring (routes the detector's strong flags into votes; unit-tested, ready
+for when flags fire). **Game-changers (the R7 lever — need a real run to test):** 13.6 prompt-rework → 13.8 asymmetric
+visibility → 13.7 testimony-spread. **New gate (replaces the $0 gate):** a SMOKE re-record (a few meeting-bearing seeds,
+real Ollama) → re-extract → does the built detector now light R7 (>0 on ≥2–3 seeds, zero STRONG-on-crewmate)? If yes →
+13.10 full re-record; if no → the deeper model / two-phase-reasoning question (13.9). **13.5 + 13.6 are full contracts
+below; 13.7–13.10 stay roadmap (elaborate before each dispatch).**
+
+### Roadmap / full contracts
+
+### Task 13.5 — Belief-band wiring for the new STRONG inferential classes
+**Branch:** `phase-13-belief-band`
+**Depends on:** 13.3, 13.4
+**Section refs:** experiments/lab/report-phase-b-plan.md (belief-band); agents/memory/beliefs.py (`apply_contradiction_rule`, `contradiction_lift_key`, `MEETING_CONTRADICTION_LIFT_CAP`, the `+0.05 < 0.10` gate-distance invariant)
+**Complexity:** Integration
+**Files in scope:**
+- agents/memory/beliefs.py
+- tests/agents/test_beliefs.py
+**Files NOT in scope:**
+- meetings/transcript.py — the detector + flag classes (13.2–13.4) are consumed, not changed
+- the §4.6 gate / tally / SKIP logic — untouched
+- engine/ and recordings — NO re-record
+
+Route the new STRONG contradiction classes (cross-speaker `alibi_conflict` from 13.3, `alibi_vs_physical` from 13.4)
+through `agents/memory/beliefs.py::apply_contradiction_rule` so a LONE inferential atom lands sub-gate (it INFORMS but
+cannot eject alone) and only the TWO-SOURCE conjunction reaches the full `CONTRADICTION_SUSPICION_DELTA=0.3`. Preserve the
+`contradiction_lift_key` dedup, `MEETING_CONTRADICTION_LIFT_CAP=0.3`, and the `+0.05 < 0.10` gate-distance invariant. No
+gate / tally / SKIP change. NOTE: the new strong flags do not fire on the committed data yet (the 13.4 gate found 0) —
+this is the PLUMBING that converts them to votes once the Wave-B game-changers (13.6–13.8) feed the detector richer
+testimony, so it is validated by UNIT tests now (constructed flags), not by a re-extraction.
+**Definition of done:** the new STRONG classes route through `apply_contradiction_rule` with a lone atom sub-gate and the
+two-source conjunction at the full 0.3; a unit test confirms one lone new-class flag lifts a baseline 0.50 listener to
+< 0.60 (cannot eject alone) while the conjunction crosses 0.60; `contradiction_lift_key` dedup + the 0.3 cap + the
+gate-distance invariant are preserved (tested); no §4.6 gate / tally / SKIP change; the existing belief + leak +
+determinism tests stay green; NO re-record; `scripts/check.sh` is green.
+**Implementation hint:**
+extend `apply_contradiction_rule`'s existing weak/strong handling to the new kinds rather than adding a parallel path; a
+lone new-class atom takes the same sub-gate inform delta as a weak flag, the two-source conjunction takes the full 0.3;
+reuse `contradiction_lift_key` so atoms of one contradiction cannot stack past the cap.
+**Integration risk:**
+the gate-distance invariant (`+0.05 < 0.10`) is load-bearing — a lone new-class atom that reaches 0.60 alone reopens the
+single-signal wrong-ejection path the weak delta closed, so keep the full 0.3 strictly behind the two-source conjunction.
+Belief-layer only: no §4.6 / tally / SKIP edit, no re-record, byte-determinism + firewall intact.
+**Ready-to-paste prompt:** `agent_prompts/task-13-5-belief-band.md`
+
+### Task 13.6 — Prompt rework: elicit richer testimony + breadcrumb render + trim
+**Branch:** `phase-13-prompt-rework`
+**Depends on:** 13.5
+**Section refs:** experiments/lab/report-phase-b-plan.md (prompts); the 13.4 GATE FINDING above (committed testimony is too thin to mine — this is the lever that fattens it); agents/memory/store.py; agents/strategic/prompts/{crewmate_report,accusation_round,vote_ballot,impostor_report}.j2
+**Complexity:** Integration
+**Files in scope:**
+- agents/memory/store.py
+- agents/strategic/prompts/crewmate_report.j2
+- agents/strategic/prompts/accusation_round.j2
+- agents/strategic/prompts/vote_ballot.j2
+- agents/strategic/prompts/impostor_report.j2
+- tests/agents/test_strategic_prompts.py
+**Files NOT in scope:**
+- the in-band reasoning field / two-phase reason→emit — that is the gated 13.9 (keep `think=False`)
+- engine/ visibility (13.8); api/ — none; NO re-record here (the testimony-richness payoff is measured at the smoke re-record)
+
+**This is a primary game-changer.** The 13.4 gate proved the detector is STARVED: crew state only thin firsthand
+sightings, so reconstruction finds no contradictions (R7 0/50). 13.6 fattens the testimony the detector mines. Three
+parts: (1) **elicit richer crew sightings** — rework `crewmate_report.j2` + `accusation_round.j2` so crew state WHO they
+saw, WHERE, and WHEN as concrete `saw_player` observations (not vague free-text), and frame OTHERS' accounts as
+belief-movers (a second observation-backed account corroborates) — more + more-specific `saw_player` claims are the
+two-source-conjunction material 13.4 needs. (2) **breadcrumb render** — `agents/memory/store.py` emits a directional
+"saw X leave A→R" line for the agent's most-recent sighting per subject (pure function of existing episodic deltas — NO
+packet field, firewall untouched). (3) **trim** accreted verbosity ONLY where it removes no still-needed guard; bump the
+four prompt versions together. EXCLUDE the in-band reasoning field (→ 13.9).
+**Definition of done:** `store.py` emits the directional breadcrumb (byte-deterministic over a fixed episodic log, no new
+packet field — leak test unaffected); the report/accusation prompts elicit concrete WHO/WHERE/WHEN `saw_player`
+observations and frame others' accounts as belief-movers; verbosity trimmed without dropping a guard; the four prompt
+versions bumped together; `tests/agents/test_strategic_prompts.py` re-goldened at the new versions; `think=False`
+preserved; NO re-record; `scripts/check.sh` is green.
+**Implementation hint:**
+the goal is MORE + MORE-SPECIFIC `saw_player` observations from crew (the reconstruction material), so make the report /
+accusation templates ask for concrete who/where/when sightings, not prose; the breadcrumb render is a pure read of the
+existing episodic deltas (no new packet field); keep `think=False` (the in-band reasoning field breaks structured output —
+deferred to the gated 13.9).
+**Integration risk:**
+the payoff (richer testimony → detector flags → R7) is observable ONLY on a real-Ollama run, so 13.6 cannot be
+$0-validated for its R7 effect — its offline DoD is render determinism + the prompt re-golden + no-leak; the R7 lift is
+gated at the Wave-B smoke re-record. `think=False` is load-bearing (the in-band reasoning field relocates JSON into the
+thinking channel). Firewall: the breadcrumb render adds no packet field; determinism intact; bump versions together so
+the regression pins stay coherent.
+**Ready-to-paste prompt:** `agent_prompts/task-13-6-prompt-rework.md`
 
 #### Task 13.7 — Graduated corroboration-aware testimony spread (depends 13.5, 13.6)
 `beliefs.py`: replace the flat `+0.05` pre-vote inform with a spread keyed on the `independent_voices` count
