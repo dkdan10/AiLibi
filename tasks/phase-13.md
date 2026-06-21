@@ -345,13 +345,43 @@ own bar is the fixture-harness richness gain + the placements/meeting rise on a 
 Firewall: the breadcrumb render adds no packet field; bump prompt versions together so the regression pins stay coherent.
 **Ready-to-paste prompt:** `agent_prompts/task-13-6-prompt-rework.md`
 
-#### Task 13.7 — Graduated corroboration-aware testimony spread (depends 13.5, 13.6)
-`beliefs.py`: replace the flat `+0.05` pre-vote inform with a spread keyed on the `independent_voices` count
-(1 → +0.05, byte-identical to today; 2 → +0.12, first gate-cross; 3+ → cap +0.15); persist only the flat +0.05 (no
-cross-round railroad); keep `TESTIMONY_INDEPENDENCE_BAR=2`; `independent_voices` derivation UNCHANGED. Gate on R1/R3
-conversion, explicitly NOT the win-split and NOT R7. **Offline-validate:** the 1-voice rung is byte-identical to today
-(crew / no-witness games unchanged); 2 INDEPENDENT voices cross 0.60 and a corroboration-aligned opt-in alone cannot;
-dump per-meeting voice counts on the committed replays and hand-confirm independence. $0.
+### Task 13.7 — Graduated corroboration-aware testimony spread (R1/R3 lever)
+**Branch:** `phase-13-testimony-spread`
+**Depends on:** 13.5
+**Section refs:** experiments/lab/report-phase-b-plan.md (testimony-spread); agents/memory/beliefs.py (the pre-vote inform fold, `apply_meeting_evidence_rules`, `MeetingBeliefEvidence`, `TESTIMONY_INDEPENDENCE_BAR`); meetings/transcript.py (`independent_voices` — REUSED unchanged)
+**Complexity:** Integration
+**Files in scope:**
+- agents/memory/beliefs.py
+- tests/agents/test_beliefs.py
+**Files NOT in scope:**
+- meetings/transcript.py — the `independent_voices` derivation is REUSED unchanged
+- the detector / flag classes (13.2–13.5, consumed), prompts (13.6), visibility (13.8) — file-disjoint → parallel
+- the §4.6 gate / tally / SKIP — untouched; engine/ + recordings — NO re-record
+
+File-disjoint from the in-flight 13.6 (prompts) and 13.8 (visibility); it builds on 13.5's now-merged `beliefs.py` (hence
+`depends on 13.5`, the shared-file edge). Replace the flat `+0.05` pre-vote inform with a graduated spread keyed on the
+`independent_voices` COUNT: 1 voice → +0.05 (BYTE-IDENTICAL to today, so crew / no-witness games are unchanged); 2
+INDEPENDENT voices → +0.12 (the first gate-cross — two corroborating observation-backed accounts can now move a 0.50
+listener over 0.60); 3+ → cap +0.15. Persist only the flat +0.05 across rounds (no cross-round railroad). Keep
+`TESTIMONY_INDEPENDENCE_BAR=2`; the `independent_voices` derivation in transcript.py is REUSED UNCHANGED. This is the
+R1/R3 lever — it converts the richer shared testimony 13.6 elicits into ejections — so gate it explicitly on R1/R3
+CONVERSION, NOT the win-split (decoupled) and NOT R7 (a separate channel).
+**Definition of done:** the pre-vote inform is graduated by independent-voice count (1→+0.05, 2→+0.12, 3+→cap +0.15),
+persisting only +0.05; `TESTIMONY_INDEPENDENCE_BAR=2` and the `independent_voices` derivation are unchanged; a unit test
+confirms the 1-voice rung is BYTE-IDENTICAL to today (crew / no-witness games unmoved), 2 INDEPENDENT voices cross 0.60,
+and a single corroboration-aligned opt-in alone cannot; no §4.6 gate / tally / SKIP change; the existing belief + leak +
+determinism tests stay green; NO re-record (the R1/R3 conversion lift is measured at the Wave-B smoke re-record);
+`scripts/check.sh` is green.
+**Implementation hint:**
+thread the `independent_voices` COUNT through `MeetingBeliefEvidence` + `apply_meeting_evidence_rules` (pre_vote) and map
+it to the graduated delta; keep the 1-voice path byte-identical (the regression pin); reuse `independent_voices` from
+transcript.py unchanged.
+**Integration risk:**
+this raises the stakes of any independence-filter bypass from a harmless +0.05 to a gate-crossing +0.12, so the
+`independent_voices` bar is now load-bearing — do NOT loosen it, and persist only the flat +0.05 (a persisted +0.12 would
+railroad across rounds). The 1-voice byte-identical pin guards the no-regression invariant. Belief-layer only: no §4.6 /
+tally / SKIP edit, no re-record, firewall + determinism intact.
+**Ready-to-paste prompt:** `agent_prompts/task-13-7-testimony-spread.md`
 
 ### Task 13.8 — Asymmetric visibility: crew `same_room_only` / impostor `same_room_and_adjacent`
 **Branch:** `phase-13-asym-visibility`
