@@ -2297,8 +2297,9 @@ class TestEmergencySuspicionMeetingEndToEnd:
                 isinstance(obs, FoundBodyObservation) for obs in turn.observations
             )
 
-        # A fresh replay records the v7 template revision (DoD version pin).
-        assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v7"
+        # A fresh replay records the live template revision (DoD version pin);
+        # Task 13.6 bumped crewmate_report v7 -> v8 (the richer-testimony rebuild).
+        assert meeting.prompt_versions["crewmate_report"] == "crewmate_report.v8"
 
         # The opening prompt rendered through the REAL crewmate template
         # carries the emergency trigger description and the v7

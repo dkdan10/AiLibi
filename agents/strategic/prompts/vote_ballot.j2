@@ -6,10 +6,20 @@
    that Pydantic schema; this template only produces the user-facing
    prompt body.
 
-   Prompt version: vote_ballot/v5
+   Prompt version: vote_ballot/v6
    Bump the version line below (and this header) whenever the prompt
    text changes in a way that could shift LLM behaviour, so eval runs
    and replay logs can attribute results to a known prompt revision.
+
+   v6 (Task 13.6 -- report-phase-b-plan "Prompts"; the GATE FINDING in
+   tasks/phase-13.md): the LIGHTER trim + the belief-mover framing (the
+   crewmate / accusation openings were rebuilt; this ballot is trimmed). The
+   §4.6 gate verdict computation is byte-UNCHANGED (load-bearing); decision rule
+   2 gains a belief-mover clause -- a suspect two independent witnesses place at
+   the scene, or whose alibi a contradiction flag refutes, is a stronger case
+   than one carried by a single voice -- so the ballot weights corroborated
+   suspicion when picking among above-threshold candidates. think=False is
+   preserved (the in-band reasoning field is the gated 13.9).
 
    v5 (Phase 9 conversion wave): the §4.6 skip-gate verdict is computed in
    the template (max suspicion vs threshold) and rendered as an imperative,
@@ -65,7 +75,7 @@
 #}
 You are agent `{{ voter_id }}` casting a vote at an AiLibi meeting.
 
-Prompt: vote_ballot/v5 (DESIGN.md §5.5)
+Prompt: vote_ballot/v6 (DESIGN.md §5.5)
 
 Read your rendered memory, the meeting transcript so far, the
 contradiction flags, and your current suspicion graph, then return a
@@ -133,7 +143,10 @@ set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
    {% if _max >= _thr %}**{{ "%.2f"|format(_max) }} ≥ {{ "%.2f"|format(_thr) }} — you MUST vote to eject; you may NOT skip.** Set `target` to the living player with the highest suspicion / strongest case. The suspicion score **already weighs how good the evidence is**, so do NOT skip on the grounds that it is "not definitive", "circumstantial", or "could be a memory error" — those are exactly the cases the threshold is built for. A met threshold means you VOTE; skipping now is a rule violation.{% else %}**{{ "%.2f"|format(_max) }} < {{ "%.2f"|format(_thr) }} — you MUST set `target` to `"SKIP"`.** No candidate crosses the threshold.{% endif %}
 2. **Pick the strongest case** among the above-threshold players (if more than
    one), using the rendered memory, the transcript, and the contradiction flags.
-   Do not re-open the gate decision — it is already made above.
+   Weigh corroborated evidence highest: a suspect two independent witnesses place
+   at the scene, or whose alibi a contradiction flag refutes, is a stronger case
+   than one carried by a single voice. Do not re-open the gate decision — it is
+   already made above.
 3. **`primary_reason_id`** references the `MeetingTurn` id{% if transcript.turns %} (e.g.
    `"{{ transcript.turns[0].turn_id }}"` — one of the turn ids listed in the
    transcript above){% endif %} that most drove your decision. It MUST be a turn id

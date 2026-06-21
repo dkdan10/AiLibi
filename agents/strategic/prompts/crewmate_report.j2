@@ -1,113 +1,46 @@
-{# prompt_version: crewmate_report.v7
-
-   Crewmate-side OPENING-turn prompt for the reactive accusation chain
+{#- Crewmate OPENING-turn prompt for the reactive accusation chain
    (DESIGN.md §5.1, §5.2 PHASE 1, §5.3, §6.6).
 
-   Task 10.11 (DESIGN.md §3.2, §5.2, §5.4; audit-2026-06-13-1816 B-B-1) bumps
-   v6 -> v7 with a SINGLE emergency-branch change: the emergency opening must
-   NOT present a `found_body` observation. On the close baseline every
-   emergency opening re-narrated a real-but-stale corpse as a fresh body
-   discovery to justify the suspicion-triggered meeting, and voters anchored
-   ejections on that fabrication (seed-27 m1 5/5 cite it). An emergency
-   meeting has NO kill scene by design (§5.2 PHASE 1), so the emergency
-   job paragraph now tells the model to lead with the SUSPICION that crossed
-   the line -- the sightings, co-presences, and contradictions behind the
-   button press -- and to emit no `found_body`. The body-report branch is
-   byte-identical to v6 (golden-pinned in
-   tests/agents/test_strategic_prompts.py); only the emergency job paragraph
-   and the version-marker line change.
+   Output: one meetings.schemas.MeetingTurn (turn_kind = "opening"); the meeting
+   manager overrides the identity fields after parsing.
 
-   Task 10.8 (DESIGN.md §3.2, §5.2; audit gp-3 B-B-1..B-B-9) bumped v5 -> v6
-   with an emergency-opening branch ONLY: now that the crewmate tactical
-   policy can reach the emergency button on accumulated suspicion, a meeting
-   whose trigger is EMERGENCY has no body -- the opener is the caller, and
-   the opening frame tells the model the meeting was called on suspicion
-   (state who you suspect and the first-hand basis, or unsure). The branch
-   keys off the orchestrator's trigger description (the rendered
-   `meeting_trigger` contains "called an emergency meeting" exactly when the
-   engine trigger was EMERGENCY -- see orchestrator.game._build_meeting_trigger,
-   which documents the phrase as load-bearing). The branch is additive: a
-   body-report render is byte-identical to v5 apart from the version marker
-   line (golden-pinned in tests/agents/test_strategic_prompts.py).
+   Inputs:
+     agent_id          -- this agent's PlayerId.
+     current_tick      -- tick the meeting opened.
+     meeting_trigger   -- short trigger description. The "called an emergency
+                          meeting" substring selects the emergency-opening branch
+                          (orchestrator.game._build_meeting_trigger documents the
+                          phrase as load-bearing); any other description renders the
+                          body-report branch.
+     rendered_memory   -- Markdown view from agents.memory.store.render_for_prompt
+                          (§6.6): role, tasks summary, salient observations (incl.
+                          the Task 13.6 directional movement breadcrumbs), beliefs,
+                          and open contradictions.
+     public_transcript -- prior public turns (empty at the opening).
+     living_ids        -- optional tuple: living players minus this speaker, the only
+                          valid accusation targets (guarded on a non-empty value, so
+                          an ad-hoc render that omits it drops the block).
+     dead_ids          -- optional tuple: dead / ejected players, the do-not-accuse
+                          line under the living roster (guarded like living_ids).
 
-   Task 10.3 (DESIGN.md §5.1, §5.2; audit gp-9 H-H-1, H-H-2, H-H-3) bumped
-   v4 -> v5 with three terse nudges for residual qwen3.5:9b artifacts:
-   (1) the §5.2 accuse-or-declare-unsure choice is now a HARD requirement
-   -- an opening with neither an accusation claim nor the word "unsure" in
-   free_text is rejected by the meeting manager and retried once (5 of 76
-   audited meetings opened narration-only and every one killed the chain
-   on turn 0); (2) an anti-repetition line ("list each sighting once")
-   against the structured-array repetition loop that rode observations to
-   the frozen 2048 cap; (3) the DEAD / ejected players render as an
-   explicit do-not-accuse line under the living roster via the new
-   optional `dead_ids` input -- 17/18 invalid accusation targets named a
-   real-but-DEAD player, and the living list alone never said who is dead.
+   Task 13.6 (report-phase-b-plan "Prompts"; the GATE FINDING in tasks/phase-13.md)
+   REBUILT this prompt from a clean base for qwen3.5:9b. The v7 wall buried the
+   model's attention in restacked imperatives, so the crew stated only thin
+   firsthand sightings and the inferential detector starved (R7 0/50). v8 keeps every
+   load-bearing guard -- the accuse-or-unsure hard rule, the free_text anti-narration
+   discipline, the anti-repetition line, the living/DEAD roster, the firewall, and
+   the 10.11 emergency no-fabricated-body branch -- but leads with a focused
+   WHO/WHERE/WHEN sighting-elicitation section so the crew STATE concrete saw_player
+   observations (with co_present), the two-source material the detector reconstructs
+   physical alibis from. think=False is preserved (the in-band reasoning field is the
+   gated 13.9). Earlier history: v7 (10.11 emergency no-found_body), v6 (10.8
+   emergency branch), v5 (10.3 nudges), v4 (9.9 length discipline + roster), v3 ->
+   reshape (8.8 reactive-chain opening).
 
-   Task 9.9 (DESIGN.md §5.1, §5.2, §5.5; audit gp-3) bumped v3 -> v4 with two
-   prompt-layer fixes for qwen3.5:9b artifacts: (1) a free_text length
-   discipline (at most 2-3 sentences stating the single conclusion; no
-   narrated / second-guessed reasoning) -- with think:false the model
-   relocates its deliberation into free_text and overruns the frozen 2048
-   turn cap, truncating the turn into a fail-soft default; and (2) a
-   living-roster constraint block listing the only valid accusation targets
-   (living players minus this speaker, mirroring the vote ballot's
-   candidate_targets) so the opening never wastes itself on a dead / ejected
-   player.
-
-   Task 8.8 reshaped this template from the old parallel-reports
-   ReportDocument intake to the chain's opening turn: the body-reporter /
-   emergency caller takes turn 0, states findings, and EITHER accuses one
-   player OR declares "unsure". The output schema is now
-   meetings.schemas.MeetingTurn (turn_kind = "opening"); the meeting manager /
-   strategic reasoner overrides the identity fields (turn_id, turn_index,
-   speaker, turn_kind, reply_to) after parsing.
-
-   Inputs (passed in by the meeting manager / strategic reasoner when this
-   template is rendered for the opening turn):
-
-     agent_id            -- this agent's PlayerId (e.g. "p3")
-     current_tick        -- tick at which the meeting opened
-     meeting_trigger     -- short free-text description of what triggered
-                            the meeting (e.g. "p3 reported p2's body in
-                            MedBay at tick 410" or "p4 called an emergency
-                            meeting at tick 320"). The "called an emergency
-                            meeting" substring selects the v6
-                            emergency-opening branch; any other description
-                            renders the body-report branch.
-     rendered_memory     -- Markdown string produced by
-                            agents.memory.store.render_for_prompt; it
-                            already carries the agent's role, tasks summary,
-                            salient observations, beliefs, and open
-                            contradictions per DESIGN.md §6.6.
-     public_transcript   -- Markdown string of any prior public turns in this
-                            meeting. Empty / falsy at the opening (turn 0
-                            precedes every other turn).
-     living_ids          -- optional tuple of PlayerIds: the living players
-                            minus this speaker (an agent cannot accuse
-                            itself), i.e. the only valid accusation targets
-                            (Task 9.9, audit gp-3). The roster block is
-                            guarded on a non-empty value, so omitting it (or
-                            passing the default ()) renders without the
-                            block under StrictUndefined.
-     dead_ids            -- optional tuple of PlayerIds: the dead / ejected
-                            players, rendered as an explicit do-not-accuse
-                            line under the living roster (Task 10.3, audit
-                            gp-9). Guarded like living_ids: omitting it (or
-                            passing ()) renders without the line.
-
-   Output contract: the LLM must emit one JSON object conforming exactly to
-   meetings.schemas.MeetingTurn (re-exported via
-   agents.strategic.output_schemas.MeetingTurn). The strategic reasoner /
-   meeting manager passes that schema to LLMClient.complete and rejects any
-   response that fails Pydantic validation, so the template never needs to
-   soften the shape requirements.
-
-   Inputs this prompt MUST NOT receive (firewall, DESIGN.md §1.3, §4.7):
-   raw engine state, other players' roles, kill attribution, vent use that
-   was not witnessed by this agent. Everything visible to the LLM here comes
-   from the rendered memory view (derived from this agent's episodic store)
-   and the public meeting transcript.
-#}{% set emergency_opening = "called an emergency meeting" in meeting_trigger %}
+   Firewall (DESIGN.md §1.3, §4.7): no raw engine state, other roles, kill
+   attribution, or unwitnessed vent reaches the LLM -- everything comes through the
+   rendered memory view and the public transcript.
+-#}{% set emergency_opening = "called an emergency meeting" in meeting_trigger %}
 {% if emergency_opening %}
 You are an AI agent playing a social-deduction simulation. You are a
 **crewmate**. YOU called this emergency meeting and you are the **opening
@@ -130,24 +63,20 @@ anyone -- and if so, you MUST write the word "unsure" in your `free_text`.
 Hard rule: your opening must EITHER include one `accusation` claim OR say
 "unsure" in `free_text`. An opening with neither is rejected and re-requested.
 
-Prompt: crewmate_report.v7 (DESIGN.md §5.2 PHASE 1)
-
+Prompt: crewmate_report.v8 (DESIGN.md §5.2 PHASE 1)
 {% if emergency_opening %}
-Your job in this opening turn: state why you called the meeting and commit to
-your single best suspect. You spent the crew's one emergency call on this -- a
-decisive, grounded accusation makes it count; a non-answer wastes it. Lead with
-the suspicion that crossed the line: the first-hand observations that drove you
-to the button -- a player whose movements do not add up, a suspicious
-co-presence, a contradiction in someone's account. That is enough to name them.
-No body was found in this meeting -- do NOT emit a `found_body` observation. Your
-`observations` are the sightings, co-presences, and contradictions behind your
-suspicion, never a body discovery.
+
+Lead with the suspicion that crossed the line: the first-hand sightings that drove
+you to the button -- a player whose movements do not add up, a suspicious
+co-presence, an account that conflicts with what you saw. No body was found in this
+meeting -- do NOT emit a `found_body` observation; your `observations` are the
+sightings and co-presences behind your suspicion, never a body discovery.
 {% else %}
-Your job in this opening turn: surface your observations AND commit to your single
-best suspect. You are the crew's first mover — a decisive, grounded accusation
-drives the meeting toward the impostor; a non-answer ends it. You will almost
-always have something — a player you saw near the body, someone whose movements
-do not add up, a contradiction in someone's account. That is enough to name them.
+
+Lead with the strongest signal you recorded: if you discovered the body, report it
+first; if you witnessed a kill or a vent, report that. Then name the single player
+your evidence most points to -- the one you saw near the body, in a suspicious spot,
+or whose movements do not add up.
 {% endif %}
 
 ## Meeting context
@@ -172,14 +101,24 @@ DEAD or EJECTED -- do NOT accuse: {% for pid in dead_ids %}`{{ pid }}`{% if not 
 ## Your memory (rendered view)
 {{ rendered_memory }}
 {% if public_transcript %}
+
 ## Public transcript so far
 {{ public_transcript }}
 {% endif %}
+
+## Put what you saw on the record
+The crew catches the impostor by pooling WHO was WHERE and WHEN. State the sightings
+that bear on it as concrete `saw_player` observations -- the player, the room, the
+tick, and WHO ELSE was there (`co_present`): the players near the body or the kill
+window, and the path of the player you most suspect. A player's path and who they were
+with is what exposes an impossible alibi in a later turn, so be specific rather than
+vague. Put the handful that matter as structured observations -- not an exhaustive
+dump of every tick, and never buried in `free_text`.
+
 ## What to produce
-Emit exactly one JSON object that validates against the `MeetingTurn`
-schema. The meeting manager is authoritative for the identity fields and
-overrides whatever you emit for them, so emit a placeholder for each and put
-your real turn in the content fields.
+Emit exactly one JSON object that validates against the `MeetingTurn` schema. The
+meeting manager owns the identity fields and overrides whatever you emit, so emit a
+placeholder for each and put your real turn in the content fields.
 
 Identity fields (emit a placeholder; the manager overrides each):
 - `turn_id`: any non-empty string (e.g. `"t"`).
@@ -189,53 +128,36 @@ Identity fields (emit a placeholder; the manager overrides each):
 - `reply_to`: `null` (the opening turn answers no prior turn).
 
 Content fields (your actual turn):
-- `observations`: an ordered list of first-hand observations *you* made. Each
-  entry is one of the discriminated union variants below; use the `type`
-  string exactly as shown.
+- `observations`: the first-hand sightings *you* recorded, each tied to its tick.
+  Use the `type` string exactly as shown. List each sighting once -- never repeat
+  an observation entry.
     - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
     - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
     - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
-  Only include observations whose `tick` matches an event that appears in
-  the rendered memory above. If you discovered the body, lead with the
-  `found_body` observation. Fabricated or unsupported ticks will be rejected
-  by validation. List each sighting once -- never repeat an observation
-  entry.
-- `claims`: an ordered list of higher-level claims. Each entry is one of:
-    - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short evidence ref>", ...]}`
-      (use chronological ticks: `from_tick <= to_tick`).
+  Only cite ticks, rooms, and players that appear in the rendered memory above;
+  fabricated identifiers are rejected by validation.
+- `claims`:
+    - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (chronological: `from_tick <= to_tick`).
     - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0..1.0>, "reason": "<short reason>"}`
     - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`
-  To accuse, add exactly one `accusation` claim naming your single best
-  suspect. To stay unsure, add no `accusation` claim and write the word
-  "unsure" in `free_text` (a self-alibi is fine).
-- `free_text`: at most 2-3 sentences stating your single conclusion -- what
-  you would say aloud to the table. Do NOT narrate or second-guess your reasoning:
-  no step-by-step deliberation, no weighing of alternatives; state your
-  conclusion and the single strongest signal behind it. Do not duplicate the
-  entire `observations` list here.
+  To accuse, add exactly one `accusation` claim HERE naming your single best suspect
+  -- naming them only in `free_text` does NOT count and the opening is rejected. To
+  stay unsure, add no `accusation` and write the word "unsure" in `free_text`.
+- `free_text`: at most 2-3 sentences stating your single conclusion -- what you would
+  say aloud to the table. Do NOT narrate or second-guess your reasoning: no
+  step-by-step deliberation, no weighing of alternatives; state your conclusion and
+  the single strongest signal behind it. Do not duplicate the observations list here.
 
-## Reasoning guidelines
-- **Name one suspect.** Pick the single player your evidence most points to —
-  the one you saw near the body, in a suspicious place at a suspicious time, or
-  whose account conflicts with what you observed. The chain passes the floor to
-  the player you accuse. Do not stack several accusations into one opening.
-- **Ground every accusation in a REAL observation.** Your accusation must rest on
-  something you actually recorded — a sighting, a co-presence near the body, a
-  contradiction. Never name a player you have no recorded reason to suspect; a
-  baseless accusation is as harmful as silence. (This is the one hard limit on
-  being decisive.)
-- **Set confidence to your honest read** — circumstantial leads (proximity,
-  timing) around 0.6-0.7, hard signals (a witnessed kill or vent, a directly
-  contradicted alibi) above 0.8. Do not round your confidence down to avoid
-  committing; a real circumstantial lead is worth naming at its true confidence.
-- **Cite ticks from memory.** Every observation refers to a tick that appears in
-  the rendered memory view. Never invent ticks, rooms, or co-present players.
-- **Lead with the strongest signal.** If you discovered a body, report it first;
-  if you witnessed a kill or a vent, report that. If you saw ANY player near the
-  body, in a suspicious spot, or contradicting another's account, name them. An
-  alibi-only turn is acceptable only if you genuinely witnessed nothing relevant.
-- **Reason only from what you know.** Use only the rendered memory and the
-  public transcript. Do not assume facts about other players' roles, kill
-  attribution, or hidden vent moves you did not personally witness.
-- **Stay in role.** You are a crewmate. Do not claim to be the impostor and
-  do not invent hidden information you "would have" if you were.
+## How to weigh it
+- **Name one suspect, as an `accusation` claim.** Your sightings are the evidence;
+  the accusation is the conclusion you must EMIT -- pick the single player your
+  evidence most points to and name them in one `accusation` claim (grounded in
+  something you recorded: a sighting, a co-presence near the body, a contradicted
+  account). The chain passes the floor to whoever you accuse, so do not stack several
+  into one opening, and do not leave the suspect in `free_text` only.
+- **Set confidence to your honest read** -- circumstantial leads (proximity, timing)
+  around 0.6-0.7, hard signals (a witnessed kill or vent, a directly contradicted
+  alibi) above 0.8. Do not round down to avoid committing.
+- **Reason only from what you know.** Use only the rendered memory and the public
+  transcript; do not assume roles, kill attribution, or vent moves you did not
+  witness, and do not claim to be the impostor.
