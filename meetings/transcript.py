@@ -86,6 +86,25 @@ contributes a voice only through a corroboration aligned with an
 existing accuser, which is what keeps the seed-30 three-accuser
 pile-on powerless (witness COUNT cannot filter pile-ons; independence
 can).
+
+Task 13.3 (report-phase-b-plan B2; report-grounding-audit P1 "add an
+inferential path"): a genuinely-INDEPENDENT cross-speaker
+``alibi_conflict`` -- two DISTINCT non-subject speakers placing the same
+subject in two disjoint rooms over overlapping ticks -- is a real
+inferential STRONG signal, the one contradiction class derived from
+testimony alone rather than from "was the impostor seen?". It is already
+not self-stated, so its only weak markers are the four
+:func:`_conflict_weak_reasons` guards (self-pair / adversarial / narrow /
+boundary); when NONE of those fire the conflict carries no marker, so
+:func:`is_weak_contradiction` returns ``False`` and a $0 re-extraction of
+the committed replays stamps ``strong=True`` (the extractor re-runs this
+detector over the recorded transcript). The four guards stay byte-identical
+-- the adversarial guard in particular MUST remain, because an impostor
+weaponised a counter-alibi (seed 13 m2) -- so promotion reaches ONLY the
+independent shape, never an accuser/accused, self, narrow, or movement-pair
+conflict. A STRONG flag naming a CREWMATE is a false positive (it both
+Goodharts R7 and risks a wrong ejection), so the promotion is deliberately
+confined to the genuinely-independent shape and role-gated downstream.
 """
 
 from __future__ import annotations
@@ -1561,6 +1580,15 @@ def _detect_alibi_conflicts(
                 right.claim.to_tick,
             ):
                 continue
+            # Task 13.3 (B2): the genuinely-INDEPENDENT cross-speaker conflict
+            # -- two distinct non-subject speakers, none of the four
+            # :func:`_conflict_weak_reasons` guards firing -- yields empty
+            # ``weak_reasons``, so :func:`_describe_alibi_conflict` appends no
+            # weak marker and the flag is STRONG (the one inferential STRONG
+            # class). When a guard fires (self-pair / adversarial / narrow /
+            # boundary) the marker is appended and the flag stays weak; the
+            # guards are byte-identical to keep the impostor from gaming the
+            # adversarial counter-alibi.
             yield _build_contradiction(
                 kind="alibi_conflict",
                 event_a_id=left.event_id,

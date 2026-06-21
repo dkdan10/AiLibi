@@ -371,6 +371,38 @@ def _genuine_subjects(transcript: Any, roster: frozenset[str]) -> frozenset[str]
     return frozenset(genuine)
 
 
+def _rederive_meeting_contradictions(
+    entry: MeetingReplayEntry,
+) -> MeetingReplayEntry:
+    """Re-run the CURRENT detector over the recorded transcript (Task 13.3).
+
+    The Phase-B ``$0`` re-extraction spine (report-phase-b-plan): every
+    contradiction-derived fact -- R7's ``contradictions_by_subject``,
+    ``n_contradictions``, the strong/weak ``subj_flags``, and the
+    :class:`MeetingResult` the shipped report carries -- must reflect the
+    CURRENT :func:`meetings.transcript.detect_contradictions`, NOT the flags
+    frozen in the replay at record time. Replacing the recorded set at load
+    (one home, so every downstream consumer reads the same re-run) makes a
+    detector change -- 13.3's genuinely-independent cross-speaker promotion,
+    13.4's ``alibi_vs_physical`` -- light up on a pure re-extraction with no
+    re-record (cadence doctrine). For a detector unchanged since the recording
+    this is a byte-for-byte no-op (recorded == re-derived under the ballot-voter
+    roster, verified across the committed 9p2i set); it diverges ONLY when the
+    detector itself changes, which is exactly the signal re-extraction surfaces.
+
+    The roster mirrors :func:`_genuine_subjects`: the recorded ballot voters are
+    the living participants the meeting ran with, so the re-run applies the same
+    subject filter the recording used.
+    """
+
+    roster = frozenset(b.voter for b in entry.ballots)
+    return entry.model_copy(
+        update={
+            "contradictions": detect_contradictions(entry.transcript, roster=roster)
+        }
+    )
+
+
 def _parse_suspicion_graph(prompt: str) -> dict[str, float]:
     """Return {player_id: rendered_suspicion} from a vote prompt's graph block.
 
@@ -1907,7 +1939,13 @@ def main() -> int:
             e for e in entries if isinstance(e, FailedCallReplayEntry)
         ]
         game_end = next((e for e in entries if isinstance(e, GameEndReplayEntry)), None)
-        meeting_by_tick = {e.tick: e for e in meeting_entries}
+        # Task 13.3: re-derive each meeting's contradictions from the recorded
+        # transcript with the CURRENT detector (the $0 re-extraction spine), so
+        # a detector change is reflected without a re-record. A byte-for-byte
+        # no-op for an unchanged detector (recorded == re-derived).
+        meeting_by_tick = {
+            e.tick: _rederive_meeting_contradictions(e) for e in meeting_entries
+        }
         total_meeting_records += len(meeting_entries)
 
         # Meetings whose OPENING defaulted (exhausted its single retry): the
