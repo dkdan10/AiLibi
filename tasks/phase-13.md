@@ -169,7 +169,7 @@ firewall are untouched and there is NO re-record.
 ### Task 13.4 — alibi_vs_physical STRONG from reconstructed testimony (B3/B4)
 **Branch:** `phase-13-strong-physical`
 **Depends on:** 13.2, 13.3
-**Section refs:** experiments/lab/report-phase-b-plan.md (B3/B4); meetings/transcript.py (the 13.2 helper, `is_relevant_sighting`)
+**Section refs:** experiments/lab/report-phase-b-plan.md (B3/B4); experiments/lab/inference_testimony_probe.py (the 13.4-ceiling probe) + inference_feasibility_probe.py; meetings/transcript.py (the 13.2 `reconstruct_stated_paths` helper, `is_relevant_sighting`)
 **Complexity:** Integration
 **Files in scope:**
 - meetings/transcript.py
@@ -179,24 +179,37 @@ firewall are untouched and there is NO re-record.
   in the meeting layer over public testimony only
 - agents/memory/beliefs.py (13.5); engine/ and recordings — NO re-record
 
-Add a new `alibi_vs_physical` contradiction kind in `meetings/transcript.py`, emitted from the 13.2 reconstruction over
-PUBLIC testimony: a subject whose stated alibi is physically impossible given other speakers' stated sightings, or who is
-the last speaker-placed party with the victim before the body. Emit STRONG ONLY under a TWO-SOURCE conjunction (the
-subject's uncorroborated claim AND an independent physical placement); a lone atom emits at the weak/mid band. DROP all
-perception-time forms (no liveness channel exists). Reuse `is_relevant_sighting` + endpoint-tick exclusion.
-**Definition of done:** new `alibi_vs_physical` STRONG flags are emitted from transcript reconstruction (public testimony
-only — no engine/perception); RE-EXTRACT + `rubric_score.py` shows R7 climbs further with every STRONG flag role-gated to
-a true impostor (STRONG-on-crewmate ≈ 0, gp-3 watch-the-games BLOCKING); an assertion test confirms no flag references a
-placement not traceable to a transcript `saw_player`; a lone atom cannot reach the §4.6 gate alone (only the two-source
-conjunction does); $0, NO re-record; `scripts/check.sh` is green.
+**This task is THE R7 lever.** The 13.3 $0 gate confirmed R7 stays 0/50 from promotion alone — the committed transcripts
+hold 111 `alibi_vs_sighting` + only 1 (guarded, crewmate-naming) `alibi_conflict`, so 13.3 had nothing to promote. 13.4
+GENERATES the STRONG flags. Add a new `alibi_vs_physical` contradiction kind in `meetings/transcript.py`, emitted from
+the 13.2 `reconstruct_stated_paths` over PUBLIC testimony: a subject whose stated alibi is **physically contradicted** by
+independent placements over its tick range, or who is the last speaker-placed party with the victim before the body. Do
+NOT rely on same-tick clashes — the ceiling probe found those are rare (~2); the lever is the reconstructed-path
+impossibility + last-seen-with-victim. **THE CRUX (role-gating): flag only a genuinely CONTRADICTED alibi, NEVER mere
+two-source co-placement.** The ceiling probe found the material exists (4.0 placements/meeting; 26 impostor-subjects
+placed by ≥2 independent speakers) — but ALSO **28 CREWMATE-subjects with the same two-source coverage**, so a detector
+that fires on co-placement (rather than on a genuine physical contradiction of the subject's OWN alibi) will
+false-positive on crew. Emit STRONG ONLY under the TWO-SOURCE conjunction (the subject's uncorroborated alibi AND an
+independent contradicting placement); a lone atom emits at the weak/mid band. DROP all perception-time forms (no liveness
+channel exists). Reuse `is_relevant_sighting` + endpoint-tick exclusion.
+**Definition of done:** new `alibi_vs_physical` STRONG flags are emitted from `reconstruct_stated_paths` (public testimony
+only — no engine/perception); RE-EXTRACT + `rubric_score.py` shows **R7 > 0 on ≥2–3 seeds with EVERY STRONG flag
+role-gated to a true impostor and ZERO STRONG-on-crewmate** (role-gating is the make-or-break given the 28 crew two-source
+cases; gp-3 watch-the-games is a BLOCKING manual check); an assertion test confirms no flag references a placement not
+traceable to a transcript `saw_player`; a lone atom cannot reach the §4.6 gate alone (only the two-source conjunction
+does); $0, NO re-record; `scripts/check.sh` is green.
 **Implementation hint:**
-consume the 13.2 helper (stated paths); STRONG only on the two-source conjunction, single atoms weak/mid; reuse
-`is_relevant_sighting` + endpoint-tick exclusion; no perception-time delta (the firewall has no liveness channel).
+consume `reconstruct_stated_paths` (returns `{subject -> (StatedPlacement{tick, rooms, speaker, event_id}, ...)}`); a
+STRONG flag = the subject's OWN alibi is physically impossible given ≥1 INDEPENDENT (different-speaker, non-accuser)
+placement over the alibi's tick range, OR last-speaker-placed with the victim pre-body — never co-placement agreement;
+single atoms weak/mid; reuse `is_relevant_sighting` + endpoint-tick exclusion; no perception-time delta.
 **Integration risk:**
-firewall — every placement MUST trace to a public `saw_player`; since a leak test does not scan the belief layer, the
-"traceable-to-transcript" assertion test is the guard; STRONG-on-crewmate is a false positive (Goodhart R7 / R4) →
-role-gate + count; two-source-only keeps a lone reconstruction atom from ejecting alone (the wrong-ejection path the weak
-delta closed).
+the 28 crew two-source cases are the Goodhart/R4 trap — a STRONG flag on a crewmate is a false positive (it games R7 AND
+risks a wrong ejection), so the contradiction MUST be against the subject's own alibi, role-gated + counted (the gate's
+zero-STRONG-on-crewmate is the guard). 13.4 carries the WHOLE R7 outcome (13.3 was a no-op), so if the gate yields thin
+R7 or ANY crew false positive, STOP — that is the refine/re-sequence signal, not a reason to weaken the role-gate.
+Firewall: every placement MUST trace to a public `saw_player` (a leak test does not scan the belief layer, so the
+traceable-to-transcript assertion test is the guard). NO re-record; byte-determinism intact.
 **Ready-to-paste prompt:** `agent_prompts/task-13-4-strong-physical.md`
 
 ---
