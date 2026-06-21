@@ -704,6 +704,154 @@ def triggering_body_rooms(
     return frozenset(rooms)
 
 
+# ---------------------------------------------------------------------------
+# Position reconstruction from stated sightings (Task 13.2, DESIGN.md §5.4)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StatedPlacement:
+    """One publicly stated placement of a player at a tick (Task 13.2).
+
+    A single ``saw_player`` observation in the transcript places its
+    ``subject`` -- and every player it lists as ``co_present`` -- in the
+    sighting's room(s) at the sighting tick. Each such placement is one
+    :class:`StatedPlacement`:
+
+    * ``tick`` -- the sighting tick.
+    * ``rooms`` -- the sighting's canonical room set
+      (:func:`canonical_rooms`, computed once at indexing so every
+      consumer reads the same parse, Task 10.1). Always non-empty: a
+      non-spatial label locates nobody and mints no placement.
+    * ``speaker`` -- the player who *stated* the sighting
+      (``turn.speaker``), kept so a consumer can tell a self-stated
+      placement (``speaker`` is the placed player) from an independent one
+      without re-walking the transcript -- the distinction the 13.4
+      two-source conjunction needs.
+    * ``event_id`` -- the contributing ``saw_player`` observation's id
+      (``turn:{turn_id}:obs:{index}``, the same id
+      :class:`~meetings.schemas.ContradictionRef` references), so every
+      reconstructed placement traces back to exactly one public transcript
+      observation (the 13.4 firewall assertion).
+
+    Frozen and hashable (``rooms`` is a frozenset), so placements dedupe
+    within an observation and sort deterministically.
+    """
+
+    tick: int
+    rooms: frozenset[str]
+    speaker: PlayerId
+    event_id: str
+
+
+def _placement_sort_key(
+    placement: StatedPlacement,
+) -> tuple[int, tuple[str, ...], PlayerId, str]:
+    """Total-order key for a subject's placements (replay-deterministic).
+
+    Sorts by tick, then the sorted room tuple, then the stating speaker,
+    then the unique observation id -- a total order (``event_id`` is unique
+    per observation), so a subject's reconstructed path is byte-identical
+    across runs regardless of transcript iteration or set order.
+    """
+
+    return (
+        placement.tick,
+        tuple(sorted(placement.rooms)),
+        placement.speaker,
+        placement.event_id,
+    )
+
+
+def reconstruct_stated_paths(
+    transcript: MeetingTranscript,
+    *,
+    roster: frozenset[PlayerId] | None = None,
+    trigger_kind: MeetingTriggerKind | None = None,
+) -> Mapping[PlayerId, tuple[StatedPlacement, ...]]:
+    """Each subject's STATED room-by-tick path from the transcript (Task 13.2).
+
+    The pure, replay-deterministic promotion of
+    ``experiments/lab/inference_feasibility_probe.py::reconstruct`` from
+    engine truth onto the PUBLIC meeting transcript: where the probe
+    rebuilt every player's room-by-tick path from the recorded ENGINE
+    actions, this rebuilds it from what speakers publicly *stated* they
+    saw -- the transcript's ``saw_player`` observations ONLY. It never
+    reads engine ``WorldState``, perception, or any ``observation`` packet
+    (DESIGN.md §1.3 firewall: :mod:`meetings` stays engine-free), so it is
+    the substrate the new STRONG inferential rules (Tasks 13.3 / 13.4)
+    consume to find a stated alibi that the stated sightings make
+    impossible.
+
+    For every ``saw_player`` observation on any turn, the ``subject`` and
+    each ``co_present`` player are placed in the sighting's canonical
+    rooms at its tick (a co-presence is as much a stated placement as the
+    subject's, traceable to the same observation). A sighting contributes
+    a placement only when it *counts*:
+
+    * its room label is spatial (:func:`canonical_rooms` non-empty), and
+    * it passes the §6.3 relevance gate :func:`is_relevant_sighting`
+      against this meeting's :func:`triggering_body_rooms` -- the same
+      one-home gate the corroboration path uses, so a spawn-window
+      (tick 0-1) or kill-scene sighting -- the evidentially-empty shapes --
+      reconstructs no position. ``trigger_kind="emergency"`` drops the
+      kill-scene exclusion (an emergency meeting has no body, Task 10.11).
+
+    The ``roster`` filter mirrors :func:`detect_contradictions`:
+    ``roster=None`` (the default) places every named player (unit-test
+    behaviour); an explicit roster -- the live path passes the living
+    participants -- drops a hallucinated id, whether it appears as a
+    sighting's ``subject`` or in its ``co_present`` list.
+
+    Returns ``{subject: placements}`` for every player with at least one
+    relevant stated placement, the subjects sorted and each subject's
+    placements sorted by :func:`_placement_sort_key`. Pure: the transcript
+    is not mutated and the function has no side effects, so re-running it
+    on the same transcript yields byte-identical paths -- the
+    DESIGN.md §0 rule 1 replay invariant the downstream flags inherit.
+    """
+
+    effective_roster = _NO_ROSTER if roster is None else roster
+    body_rooms = triggering_body_rooms(transcript, trigger_kind=trigger_kind)
+
+    paths: dict[PlayerId, list[StatedPlacement]] = {}
+    for sighting in _iter_sightings(transcript):
+        # A non-spatial label locates nobody (Task 10.1), and the §6.3
+        # relevance gate drops the evidentially-empty spawn-window /
+        # kill-scene sightings -- reused verbatim so the reconstruction
+        # counts exactly the sightings the detectors trust.
+        if not sighting.rooms:
+            continue
+        if not is_relevant_sighting(
+            tick=sighting.observation.tick,
+            rooms=sighting.rooms,
+            triggering_body_rooms=body_rooms,
+        ):
+            continue
+        placement = StatedPlacement(
+            tick=sighting.observation.tick,
+            rooms=sighting.rooms,
+            speaker=sighting.speaker,
+            event_id=sighting.event_id,
+        )
+        # The subject and every co-present player are placed by this one
+        # observation; the set literal collapses a player who is their own
+        # co-presence so each observation places a player at most once.
+        placed_players = {
+            sighting.observation.subject,
+            *sighting.observation.co_present,
+        }
+        for player in placed_players:
+            if not _subject_in_roster(player, effective_roster):
+                continue
+            paths.setdefault(player, []).append(placement)
+
+    return {
+        subject: tuple(sorted(placements, key=_placement_sort_key))
+        for subject, placements in sorted(paths.items())
+    }
+
+
 def detect_contradictions(
     transcript: MeetingTranscript,
     *,
@@ -1862,6 +2010,7 @@ __all__ = [
     "ChainTermination",
     "ChainWalk",
     "DetectedCorroboration",
+    "StatedPlacement",
     "accusation_target",
     "canonical_rooms",
     "contradiction_lift_key",
@@ -1872,6 +2021,7 @@ __all__ = [
     "is_relevant_sighting",
     "is_weak_contradiction",
     "next_chain_step",
+    "reconstruct_stated_paths",
     "sort_turns_canonically",
     "triggering_body_rooms",
     "walk_chain",
