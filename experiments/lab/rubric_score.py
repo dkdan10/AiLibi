@@ -205,16 +205,22 @@ def score(facts: dict[str, Any]) -> list[tuple[str, str, str]]:
 
     # ---- R7 legible stories ----
     mtgs = sum(len(g["meetings"]) for g in games)
+    # Evidence-bearing == carries a STRONG contradiction naming a true impostor
+    # (audit P0 / CAL-2), the SAME predicate the per-game R7 term scores —
+    # raw n_contradictions>0 counted weak below-gate flags that eject nobody.
     evid_mtgs = sum(
-        1 for g in games for m in g["meetings"] if m.get("n_contradictions", 0) > 0
+        1
+        for g in games
+        for m in g["meetings"]
+        if _meeting_has_strong_impostor_flag(g["roles"], m)
     )
     ft = agg["free_text_length_chars"]
     bf = agg["ballot_follows_chain"]
     rows.append(
         (
-            "R7 evidence-bearing meeting share",
+            "R7 strong-evidence meeting share",
             _pct(evid_mtgs, mtgs),
-            "UP (stories have evidence)",
+            "UP (a STRONG flag names a true impostor; weak alibi_vs_sighting excluded)",
         )
     )
     rows.append(
@@ -224,11 +230,16 @@ def score(facts: dict[str, Any]) -> list[tuple[str, str, str]]:
             "stable ~225; no catastrophic tail",
         )
     )
+    # ballot-follows-chain is a DIAGNOSTIC ONLY — dropped from any fitness
+    # aggregate (audit P1 / RB-1). ~65% of non-skip ballots are null-reason BY
+    # DESIGN (vote_ballot.j2 instructs null when the vote rests on own
+    # observation), so it caps near 35% and measures a coherence the meeting
+    # architecture deliberately suppresses — never an "UP-is-good" target.
     rows.append(
         (
-            "R7 ballot-follows-chain",
+            "ballot-follows-chain [DIAGNOSTIC]",
             _pct(bf["follows_chain"], bf["non_skip_ballots"]),
-            "UP (votes cite the chain)",
+            "DIAGNOSTIC only — not a fitness term (null-reason is by design)",
         )
     )
 
@@ -239,6 +250,12 @@ def _win_shape(reason: str, ejected_imps: int, n_mtg: int) -> str:
     """Coarse per-game win SHAPE for R5 diversity (decouples 'interesting' from W/L)."""
     if reason == "CREWMATE_EJECT":
         return "eject-decided"
+    # IMPOSTOR_SABOTAGE gets its OWN shape before the startswith('IMPOSTOR')
+    # catch-all (RUB-CAL-4 / P2): a sabotage-pressure win is a distinct R5 /
+    # MAP-Elites axis the catch-all otherwise folds into "impostor-win", so it
+    # could never register as its own diversity shape.
+    if reason == "IMPOSTOR_SABOTAGE":
+        return "sabotage-win"
     if reason.startswith("IMPOSTOR"):
         return "impostor-win"
     if reason == "CREWMATE_TASKS":
@@ -248,20 +265,181 @@ def _win_shape(reason: str, ejected_imps: int, n_mtg: int) -> str:
     return reason or "other"
 
 
-def _game_interestingness(g: dict[str, Any]) -> dict[str, Any]:
+def _active_deflection_counts(g: dict[str, Any]) -> tuple[int, int, bool]:
+    """Per-game ``(active_survivals, effective_deflections, any_accused)``.
+
+    Reproduces ``eval.meeting_quality.compute_effective_deflection``'s
+    ACTIVE-DEFLECTED split over the SAME data that function consumes — the
+    per-turn :class:`~meetings.schemas.AccusationClaim`s, materialized in the
+    facts JSON as each meeting's ``accusations`` rows — plus the firewalled
+    role. For every (meeting, true impostor verbally accused by ANOTHER
+    speaker) the impostor SURVIVES unless that meeting ejected them; a survival
+    is ACTIVE iff the impostor counter-accused some player other than itself
+    this meeting, and EFFECTIVE iff the strict unique eject-plurality
+    (``_strict_eject_plurality``: ``None`` on a tie / all-SKIP, recovered here
+    from the facts ``plurality_target`` gated on a positive ``plurality_margin``)
+    landed OFF the impostor — i.e. the counter-accusation moved the table.
+
+    This is a facts-resident derivation rather than an import of
+    ``compute_effective_deflection`` itself because that function takes
+    reconstructed ``GameReport`` objects, while this scorer reads only the facts
+    JSON (and the committed ``regen_for_set(_facts(), tmp_path)`` contract ships
+    no report on disk; ``refresh_samples.sh`` also runs this module as a script
+    file with no repo root on ``sys.path``, so a module-level ``eval`` import
+    would break the canonical regen). It is validated to reproduce that
+    function's aggregate EXACTLY on the committed 9p2i set (active 34,
+    effective 10, skip-saved 24), so the two cannot drift on what
+    ACTIVE-DEFLECTED means.
+    """
+
+    roles = g["roles"]
+    active = 0
+    effective = 0
+    any_accused = False
+    for m in g["meetings"]:
+        accusations = m.get("accusations", [])
+        accused_impostors = {
+            a["accused"]
+            for a in accusations
+            if roles.get(a["accused"]) == "IMPOSTOR" and a["accused"] != a["speaker"]
+        }
+        if not accused_impostors:
+            continue
+        any_accused = True
+        # Strict unique eject-plurality: facts carry the most-voted non-SKIP
+        # target (``plurality_target``) and its lead (``plurality_margin``); a
+        # zero margin is a tie, which the frozen §5.2 tally resolves to SKIP —
+        # so it moved the plurality nowhere (mirrors _strict_eject_plurality).
+        plurality = (
+            m.get("plurality_target") if m.get("plurality_margin", 0) > 0 else None
+        )
+        ejected = m.get("ejected_player_id")
+        ejected_this_meeting = m.get("outcome") == "EJECTED"
+        for impostor in accused_impostors:
+            if ejected_this_meeting and ejected == impostor:
+                continue  # caught here — not a survival
+            counter_targets = {
+                a["accused"]
+                for a in accusations
+                if a["speaker"] == impostor and a["accused"] != impostor
+            }
+            if not counter_targets:
+                continue  # passive / clock survival — no active deflection
+            active += 1
+            if plurality is not None and plurality != impostor:
+                effective += 1  # the counter-accusation MOVED the plurality off
+    return active, effective, any_accused
+
+
+def _meeting_has_strong_impostor_flag(
+    roles: dict[str, Any], meeting: dict[str, Any]
+) -> bool:
+    """Whether a meeting carries a STRONG contradiction naming a true impostor.
+
+    Reuses the extractor's ``is_weak_contradiction`` classification — each
+    recorded contradiction in ``contradictions_by_subject`` already carries the
+    ``strong`` bit the extractor stamped via that one-home predicate, so this
+    never re-runs a parallel weak/strong check that could drift — and the
+    firewalled role. Per-meeting credit is boolean (capped at 1): a meeting
+    counts iff SOME subject is a true impostor with at least one STRONG
+    (non-weak) flag. The all-weak ``alibi_vs_sighting`` baseline (every flag
+    below the §4.6 gate, ejects nobody) scores 0.
+    """
+
+    by_subject = meeting.get("contradictions_by_subject") or {}
+    return any(
+        roles.get(subject) == "IMPOSTOR"
+        and any(c.get("strong") for c in classifications)
+        for subject, classifications in by_subject.items()
+    )
+
+
+def _strong_evidence_meeting_share(g: dict[str, Any]) -> float:
+    """Share of a game's meetings that are evidence-bearing (R7)."""
+
+    meetings = g["meetings"]
+    if not meetings:
+        return 0.0
+    roles = g["roles"]
+    evidence_bearing = sum(
+        1 for m in meetings if _meeting_has_strong_impostor_flag(roles, m)
+    )
+    return evidence_bearing / len(meetings)
+
+
+def _suspicion_rose_onto_impostor(
+    g: dict[str, Any], traj_by_key: dict[tuple[Any, Any], dict[str, Any]]
+) -> bool:
+    """Whether the game ejected a true impostor on a RISING cross-meeting arc.
+
+    Sources the extractor's already-computed ``accumulator_trajectories`` (the
+    per-candidate across-meeting rendered-suspicion series) keyed by
+    ``(seed, player)`` + the firewalled role. True iff SOME ejected player is a
+    true impostor whose trajectory shows the ejection landing at a candidate
+    meeting strictly LATER than its first (``>= 1`` prior meeting — a genuine
+    cross-meeting arc, not a meeting-0 conviction) with rendered suspicion at
+    the ejection strictly ABOVE the first meeting's. A flagless meeting-0
+    conviction of an innocent (the seed-15 railroad) lands on a crewmate and so
+    can never satisfy this — the railroad R4 forbids no longer scores R3.
+    """
+
+    seed = g.get("seed")
+    roles = g["roles"]
+    for m in g["meetings"]:
+        ejected = m.get("ejected_player_id")
+        if not ejected or roles.get(ejected) != "IMPOSTOR":
+            continue
+        record = traj_by_key.get((seed, ejected))
+        if record is None:
+            continue
+        sequence = record.get("sequence", [])
+        eject_points = [i for i, pt in enumerate(sequence) if pt.get("ejected_here")]
+        if not eject_points:
+            continue
+        j = eject_points[0]
+        if (
+            j >= 1
+            and sequence[j]["rendered_suspicion"] > sequence[0]["rendered_suspicion"]
+        ):
+            return True
+    return False
+
+
+def _game_interestingness(
+    g: dict[str, Any], traj_by_key: dict[tuple[Any, Any], dict[str, Any]]
+) -> dict[str, Any]:
     """Per-game interestingness from the per-game-computable rubric items (R1/R2/R3/R7).
 
     The score is deliberately INDEPENDENT of who won the binary game — the lab
     proved the win split is "purchasable wholesale", so 'interesting' is scored
     from whether DEDUCTION decided (R1), DECEPTION worked (R2), suspicion built
     across meetings (R3), and the story was legible (R7). R5 (win-shape diversity)
-    is a set-level property, summarized in :func:`interestingness`.
+    is a set-level property, summarized in :func:`interestingness`. R1/R2/R3/R7
+    are emitted as SEPARATE terms (not only the collapsed scalar) so Phase-C can
+    read them as multi-objective fitness axes.
+
+    The grounding audit (``experiments/lab/report-grounding-audit.md``) verified
+    THREE perverse gradients in the pre-repair terms; each is closed here:
+
+    * **R2** no longer pays for passive survival (it banked 0.6 for a
+      lose-while-accused-alive game, anti-correlating R2 with the total at
+      Pearson −0.281). It is now gated on an ACTIVE-DEFLECTION event
+      (:func:`_active_deflection_counts`); passive / clock survival scores ≤ 0.2.
+    * **R3** no longer rewards the railroad R4 forbids (it gave full credit to a
+      flagless meeting-0 conviction of an innocent). It now requires a
+      cross-meeting suspicion RISE that LANDS on a true impostor
+      (:func:`_suspicion_rose_onto_impostor`).
+    * **R7** no longer counts raw flag presence (all baseline flags are WEAK
+      ``alibi_vs_sighting``, below the §4.6 gate). It now counts only meetings
+      bearing a STRONG contradiction naming a true impostor
+      (:func:`_strong_evidence_meeting_share`).
+
+    R1's ``CREWMATE_EJECT`` definition is SOUND and kept byte-identical.
     """
     roles = g["roles"]
     meetings = g["meetings"]
     n_mtg = len(meetings)
     reason = g.get("reason") or ""
-    impostor_win = reason.startswith("IMPOSTOR")
 
     ejected_imp_mtgs = sum(1 for m in meetings if m.get("ejected_role") == "IMPOSTOR")
     ejected_ever = {
@@ -277,6 +455,9 @@ def _game_interestingness(g: dict[str, Any]) -> dict[str, Any]:
     survived_accused = {p for p in accused_imps if p not in gone}
 
     # R1 decisiveness: did ejection (deduction) decide the board, not the clock?
+    # SOUND term (audit RB-7/G8): CREWMATE_EJECT fires iff alive_impostors == 0,
+    # and crew cannot kill impostors, so it faithfully means deduction cleared
+    # the board. Kept BYTE-IDENTICAL.
     if reason == "CREWMATE_EJECT":
         r1 = 1.0
     elif ejected_imp_mtgs >= 1:
@@ -284,29 +465,31 @@ def _game_interestingness(g: dict[str, Any]) -> dict[str, Any]:
     else:
         r1 = 0.0  # pure stopwatch / kill-gifted — deduction was inert
 
-    # R2 deception: did the impostor deceive effectively (and was it even tested)?
-    if impostor_win and accused_imps and survived_accused:
-        r2 = 1.0  # won DESPITE being accused — peak deception
-    elif impostor_win:
-        r2 = 0.4  # won via the parity/kill race, little meeting drama
-    elif accused_imps and survived_accused:
-        r2 = 0.6  # survived an accusation; crew still won
-    elif accused_imps:
-        r2 = 0.2  # accused and caught — some drama
+    # R2 deception: gated on an ACTIVE-DEFLECTION event (audit P0 / G3). Passive
+    # or clock survival — an accused impostor who was simply not ejected — is no
+    # longer worth 0.6; it caps at 0.2. Only an active counter-accusation that
+    # survived earns credit, and only one that MOVED the eject-plurality off the
+    # impostor (EFFECTIVE deflection — real deception skill) earns the top.
+    active_survivals, effective_deflections, any_accused = _active_deflection_counts(g)
+    if effective_deflections >= 1:
+        r2 = 1.0  # a counter-accusation moved the eject-plurality off a true impostor
+    elif active_survivals >= 1:
+        r2 = 0.6  # actively counter-accused and survived, but SKIP-saved (not skill)
+    elif any_accused:
+        r2 = 0.2  # accused yet only passive/clock survival or caught — no deflection
     else:
-        r2 = 0.0  # deception never tested
+        r2 = 0.0  # deception never tested (no true impostor was accused)
 
-    # R3 arcs: suspicion building across >=2 meetings + a carry-driven conviction
-    carry_eject = any(
-        m.get("ejected_player_id")
-        and m["ejected_player_id"] not in (m.get("contradictions_by_subject") or {})
-        for m in meetings
-    )
-    r3 = (0.5 + (0.5 if carry_eject else 0.0)) if n_mtg >= 2 else 0.0
+    # R3 arcs: a cross-meeting suspicion RISE that LANDED on a true impostor
+    # (audit P0 / G2). The old "0.5 for >=2 meetings + 0.5 for any flagless
+    # carry-eject" rewarded exactly the railroad R4 forbids; this credits only a
+    # genuine accumulator arc onto a real impostor.
+    r3 = 1.0 if _suspicion_rose_onto_impostor(g, traj_by_key) else 0.0
 
-    # R7 legibility: share of this game's meetings carrying structured evidence
-    evid = sum(1 for m in meetings if m.get("n_contradictions", 0) > 0)
-    r7 = (evid / n_mtg) if n_mtg else 0.0
+    # R7 legibility: share of meetings bearing a STRONG contradiction naming a
+    # true impostor (audit P0 / CAL-2). Raw n_contradictions>0 counted weak
+    # below-gate flags that eject nobody; this counts only decision-grade signal.
+    r7 = _strong_evidence_meeting_share(g)
 
     score = 100 * (0.35 * r1 + 0.25 * r2 + 0.20 * r3 + 0.20 * r7)
     return {
@@ -325,11 +508,34 @@ def _game_interestingness(g: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _accumulator_trajectory_index(
+    facts: dict[str, Any],
+) -> dict[tuple[Any, Any], dict[str, Any]]:
+    """Index the extractor's ``accumulator_trajectories`` by ``(seed, player)``.
+
+    The R3 arc source (audit P0). The records live under the facts JSON's
+    ``aggregates.wave1_contract_inputs.accumulator_trajectories.records`` — read
+    here, never re-derived — and are keyed by ``(seed, player)`` so a per-game
+    score can look up an ejected subject's across-meeting suspicion series.
+    Defensive ``get`` chain: a facts dict without the aggregate (a minimal
+    fixture) yields an empty index, so R3 scores 0 rather than raising.
+    """
+
+    records = (
+        facts.get("aggregates", {})
+        .get("wave1_contract_inputs", {})
+        .get("accumulator_trajectories", {})
+        .get("records", [])
+    )
+    return {(r["seed"], r["player"]): r for r in records}
+
+
 def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
     """Per-game interestingness scores + the set-level R5 win-shape diversity."""
     games = facts["games"]
+    traj_by_key = _accumulator_trajectory_index(facts)
     per = sorted(
-        (_game_interestingness(g) for g in games),
+        (_game_interestingness(g, traj_by_key) for g in games),
         key=lambda x: x["score"],
         reverse=True,
     )
@@ -477,16 +683,32 @@ def main() -> int:
             f"{p['r3_arcs']:<4} {p['r7_legible']:<4}"
         )
 
+    # Stamp the SET manifest sha (the replay version scored), NOT the scoring
+    # HEAD (audit RUB-CAL-5): the pre-repair lab-local write stamped
+    # ``facts['git_head']`` (a docs-descendant scoring commit), so the
+    # loader's freshness guard would have read the lab artifact as scored at a
+    # different version than the served copy. Resolve the set dir from
+    # ``--set-dir`` or the facts JSON's own ``sample_dir`` and read the same
+    # manifest sha the served copy carries, mirroring :func:`regen_for_set`.
+    sample_dir = facts.get("sample_dir")
+    set_dir = (
+        Path(args.set_dir)
+        if args.set_dir is not None
+        else (Path(sample_dir) if sample_dir else None)
+    )
+    lab_head = (
+        _set_manifest_sha(set_dir) if set_dir is not None else None
+    ) or facts.get("git_head")
     out = {
         "seedset": label,
-        "git_head": facts.get("git_head"),
+        "git_head": lab_head,
         "rows": [{"item": i, "value": v, "desired": d} for i, v, d in rows],
         "interestingness": inter,
     }
     Path("experiments/lab/results-rubric-score.json").write_text(
         json.dumps(out, indent=2)
     )
-    print("\nwrote experiments/lab/results-rubric-score.json")
+    print(f"\nwrote experiments/lab/results-rubric-score.json (set sha {lab_head})")
 
     if args.set_dir is not None:
         dest = regen_for_set(facts, Path(args.set_dir))
