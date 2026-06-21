@@ -313,10 +313,14 @@ def _active_deflection_counts(g: dict[str, Any]) -> tuple[int, int, bool]:
         plurality = (
             m.get("plurality_target") if m.get("plurality_margin", 0) > 0 else None
         )
+        # ``ejected_player_id`` is set IFF a player was ejected this meeting, so
+        # ``ejected == impostor`` IS "caught here" without depending on a
+        # separate ``outcome`` field — a meeting that carries the id but omits
+        # ``outcome`` (older/minimal facts) would otherwise mis-score a caught
+        # impostor as an active survival.
         ejected = m.get("ejected_player_id")
-        ejected_this_meeting = m.get("outcome") == "EJECTED"
         for impostor in accused_impostors:
-            if ejected_this_meeting and ejected == impostor:
+            if ejected == impostor:
                 continue  # caught here — not a survival
             counter_targets = {
                 a["accused"]
@@ -344,14 +348,27 @@ def _meeting_has_strong_impostor_flag(
     counts iff SOME subject is a true impostor with at least one STRONG
     (non-weak) flag. The all-weak ``alibi_vs_sighting`` baseline (every flag
     below the §4.6 gate, ejects nobody) scores 0.
+
+    A contradiction row that omits the ``strong`` key is malformed / pre-dates
+    the one-home classifier; it FAILS LOUD here rather than reading as
+    not-strong, so a missing classification can never silently zero the
+    20%-weight R7 axis (AGENTS.md "no silent fallbacks").
     """
 
     by_subject = meeting.get("contradictions_by_subject") or {}
-    return any(
-        roles.get(subject) == "IMPOSTOR"
-        and any(c.get("strong") for c in classifications)
-        for subject, classifications in by_subject.items()
-    )
+    for subject, classifications in by_subject.items():
+        if roles.get(subject) != "IMPOSTOR":
+            continue
+        for c in classifications:
+            if "strong" not in c:
+                raise ValueError(
+                    "contradiction row is missing the 'strong' classification "
+                    "bit (re-run the extractor's is_weak_contradiction pass); "
+                    f"row keys = {sorted(c)}"
+                )
+            if c["strong"]:
+                return True
+    return False
 
 
 def _strong_evidence_meeting_share(g: dict[str, Any]) -> float:
@@ -517,16 +534,35 @@ def _accumulator_trajectory_index(
     ``aggregates.wave1_contract_inputs.accumulator_trajectories.records`` — read
     here, never re-derived — and are keyed by ``(seed, player)`` so a per-game
     score can look up an ejected subject's across-meeting suspicion series.
-    Defensive ``get`` chain: a facts dict without the aggregate (a minimal
-    fixture) yields an empty index, so R3 scores 0 rather than raising.
+
+    A REAL extractor facts JSON always ships the aggregate; if its
+    ``aggregates`` block is present but the trajectories path is missing or
+    malformed (a stale / partial extractor run), this FAILS LOUD rather than
+    silently zeroing the 20%-weight R3 axis on a fresh-stamped artifact
+    (AGENTS.md "no silent fallbacks"). A facts dict carrying NO ``aggregates``
+    block at all (the regen-plumbing fixture, which scores no real R3) yields an
+    empty index — there is simply no arc source to index.
     """
 
-    records = (
-        facts.get("aggregates", {})
-        .get("wave1_contract_inputs", {})
-        .get("accumulator_trajectories", {})
-        .get("records", [])
-    )
+    aggregates = facts.get("aggregates")
+    if aggregates is None:
+        return {}
+    try:
+        records = aggregates["wave1_contract_inputs"]["accumulator_trajectories"][
+            "records"
+        ]
+    except (KeyError, TypeError) as exc:
+        raise ValueError(
+            "facts JSON carries an 'aggregates' block but is missing "
+            "'aggregates.wave1_contract_inputs.accumulator_trajectories.records' "
+            "(the R3 arc source) — refusing to silently score R3=0; re-run the "
+            "gameplay-facts extractor"
+        ) from exc
+    if not isinstance(records, list):
+        raise ValueError(
+            "accumulator_trajectories.records must be a list, got "
+            f"{type(records).__name__}"
+        )
     return {(r["seed"], r["player"]): r for r in records}
 
 
