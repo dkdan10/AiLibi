@@ -95,6 +95,38 @@ def _visible_body_ids(
     )
 
 
+def _resolve_observer_visibility_mode(
+    *,
+    observer: PlayerState,
+    world_state: WorldState,
+    game_map: Map,
+) -> VisibilityMode:
+    """Resolve the observer's effective visibility mode, role-parameterized.
+
+    Asymmetric visibility (Task 13.8): at BASE visibility — the resolved mode
+    equals the map's ``visibility_defaults.base``, i.e. there is no active
+    sabotage degrade — a CREWMATE is downgraded to ``same_room_only`` while an
+    IMPOSTOR keeps the base ``same_room_and_adjacent``. This is the genre-correct
+    impostor information economy: the predator keeps the sight edge, the crew
+    must INFER kills from testimony rather than witness them (the forcing
+    function that makes the inferential meeting-time detector load-bearing). An
+    ACTIVE sabotage degrade (the resolved mode differs from the base, e.g.
+    ``lights`` -> ``same_room_only``) still degrades EVERYONE, the impostor
+    included.
+
+    The asymmetry is role-parameterized in code, not a map base flip, so the
+    map's base mode and the lights sabotage stay intact. The predicate mirrors
+    ``experiments/lab/visibility_resim_asymmetric.py`` exactly. Firewall-clean:
+    an observer's sight depending on ITS OWN role leaks nothing about others'
+    hidden information, and role is fixed per game so byte-determinism holds.
+    """
+
+    mode = resolve_visibility_mode(world_state, game_map)
+    if mode == game_map.visibility_defaults.base and observer.role != "IMPOSTOR":
+        return "same_room_only"
+    return mode
+
+
 def compute_visibility_for_player(
     *,
     observer_id: PlayerId,
@@ -114,7 +146,9 @@ def compute_visibility_for_player(
             visible_body_ids=(),
         )
 
-    mode = resolve_visibility_mode(world_state, game_map)
+    mode = _resolve_observer_visibility_mode(
+        observer=observer, world_state=world_state, game_map=game_map
+    )
     visible_rooms = visible_rooms_for_player(
         observer=observer, game_map=game_map, mode=mode
     )
