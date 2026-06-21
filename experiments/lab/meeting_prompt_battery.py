@@ -72,11 +72,13 @@ from experiments.model_probe.corpus import _roles_for_seed, _roster
 from experiments.model_probe.probe import preflight
 from meetings.schemas import (
     AccusationClaim,
+    ContradictionRef,
     FoundBodyObservation,
     MeetingTranscript,
     MeetingTurn,
     SawPlayerObservation,
 )
+from meetings.transcript import detect_contradictions
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 
 MODEL = "qwen3.5:9b"
@@ -104,6 +106,7 @@ class CrewContext:
 
     seed: int
     meeting_id: str
+    meeting_tick: int
     speaker: str
     kind: str  # "opening" | "reply" | "opt_in"
     rendered_memory: str
@@ -111,7 +114,7 @@ class CrewContext:
     is_body_report: bool
     transcript_so_far: MeetingTranscript
     prior_turn: MeetingTurn | None
-    contradictions: tuple[Any, ...]
+    contradictions: tuple[ContradictionRef, ...]
     living: tuple[str, ...]
     dead: tuple[str, ...]
 
@@ -153,6 +156,7 @@ def build_crew_contexts(
         seed = int(path.stem.rsplit("-", 1)[1])
         game_id = f"headless-seed-{seed}"
         roles = _roles_for_seed(seed, game_map, roster)
+        roster_ids = frozenset(roles)
         for meeting in (
             e for e in read_all_entries(path) if isinstance(e, MeetingReplayEntry)
         ):
@@ -181,18 +185,32 @@ def build_crew_contexts(
                 prior = None
                 if kind == "reply" and turn.reply_to:
                     prior = next((t for t in turns if t.turn_id == turn.reply_to), None)
+                # Reconstruct the FIXED pre-meeting context faithfully: production
+                # renders each reply/opt-in turn with the flags detectable from the
+                # transcript-so-far (meetings.manager._statement_turn), NOT the
+                # meeting's FINAL contradiction list -- reusing the latter would leak
+                # flags from this speaker's own and later turns into its prompt.
+                transcript_so_far = MeetingTranscript(turns=tuple(turns[:i]))
+                contradictions = tuple(
+                    detect_contradictions(transcript_so_far, roster=roster_ids)
+                )
                 items.append(
                     CrewContext(
                         seed=seed,
                         meeting_id=meeting.meeting_id,
+                        # The meeting trigger tick, NOT 0: production renders the
+                        # opening with this tick, and the trigger description echoes
+                        # it -- a hard-coded 0 contradicts the trigger and is not the
+                        # context the model sees in-game.
+                        meeting_tick=meeting.tick,
                         speaker=turn.speaker,
                         kind=kind,
                         rendered_memory=view.rendered_memory_text,
                         trigger_description=trigger,
                         is_body_report=is_body,
-                        transcript_so_far=MeetingTranscript(turns=tuple(turns[:i])),
+                        transcript_so_far=transcript_so_far,
                         prior_turn=prior,
-                        contradictions=tuple(meeting.contradictions),
+                        contradictions=contradictions,
                         living=tuple(living),
                         dead=tuple(dead),
                     )
@@ -274,7 +292,7 @@ async def probe_crew(ctxs: list[CrewContext], *, sink: TextIO) -> None:
         if ctx.kind == "opening":
             prompt = crewmate_report_prompt(
                 agent_id=ctx.speaker,
-                current_tick=0,
+                current_tick=ctx.meeting_tick,
                 meeting_trigger=ctx.trigger_description,
                 rendered_memory=ctx.rendered_memory,
                 public_transcript="",
@@ -449,7 +467,12 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "with_co_present_per_turn": _mean([r["with_co_present"] for r in crew]),
         "distinct_subjects_per_turn": _mean([r["distinct_subjects"] for r in crew]),
         "crew_turns_with_a_sighting": sum(1 for r in crew if r["saw_player"] > 0),
-        "over_skip": sum(1 for r in crew if r.get("over_skip")),
+        # The §5.2 accuse-or-unsure opening validation fires for BOTH crewmate and
+        # impostor openers (meetings.manager validates impostor openings identically),
+        # so count over-skips on each side -- folding the impostor openings into a
+        # single crew metric would under-report the anti-over-skip guard's health.
+        "crew_over_skip": sum(1 for r in crew if r.get("over_skip")),
+        "imp_over_skip": sum(1 for r in imp if r.get("over_skip")),
         "leak": sum(1 for r in crew if r.get("leak"))
         + sum(1 for r in imp if r.get("leak")),
         "imp_cover_consistent": sum(1 for r in replies if r.get("story_consistent")),
