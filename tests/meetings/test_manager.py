@@ -4739,22 +4739,24 @@ class TestPreVoteFoldOnProductionPath:
 
         evidence = extract_belief_evidence(result)
         assert evidence.pre_vote_folded == ("p-2",)
-        # Every living listener's rendered view of p-2 moved by exactly
-        # +0.05 over their snapshot -- once, on the quantized lattice
-        # (the stub renders the same %.2f the production template uses):
-        # p-1's 0.75 eyewitness prior reads 0.80; p-3 had no row and the
-        # fold materialises the 0.5-prior bump at 0.55; p-4's 0.55
-        # parked-listener prior CROSSES the §4.6 gate at 0.60. The
-        # same-phase corroboration of p-1 (the vouched accuser) renders
-        # symmetrically: p-4's existing 0.50 row reads 0.45.
-        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.80/0.50"
+        assert evidence.pre_vote_voice_counts == (("p-2", 2),)
+        # Every living listener's rendered view of p-2 moved by the graduated
+        # TWO-voice +0.12 (Task 13.7) over their snapshot -- once, on the
+        # quantized lattice (the stub renders the same %.2f the production
+        # template uses): p-1's 0.75 eyewitness prior reads 0.87; p-3 had no
+        # row and the fold materialises the 0.5-prior bump at 0.62 (now ACROSS
+        # the §4.6 gate where the flat +0.05 inform left it at 0.55); p-4's
+        # 0.55 parked-listener prior crosses to 0.67. The same-phase
+        # corroboration of p-1 (the vouched accuser) renders symmetrically and
+        # stays the flat -0.05: p-4's existing 0.50 row reads 0.45.
+        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.87/0.50"
         assert (
             _stub_vote_graph(client, voter="p-3")
-            == "suspicion=p-1:0.45/0.50,p-2:0.55/0.50"
+            == "suspicion=p-1:0.45/0.50,p-2:0.62/0.50"
         )
         assert (
             _stub_vote_graph(client, voter="p-4")
-            == "suspicion=p-1:0.45/0.50,p-2:0.60/0.50"
+            == "suspicion=p-1:0.45/0.50,p-2:0.67/0.50"
         )
         # The subject votes too: no self row, and the defended accuser
         # renders lowered in their graph as well.
@@ -4948,8 +4950,11 @@ class TestPreVoteFoldOnProductionPath:
         )
 
         assert extract_belief_evidence(result).pre_vote_folded == ("p-2",)
+        # The impostor voter (p-4) carries NO teammate edge -- the graduated
+        # two-voice lift rides the §4.7 guard exactly as the flat bump did.
         assert _stub_vote_graph(client, voter="p-4") == "suspicion=p-1:0.45/0.50"
-        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.80/0.50"
+        # The crew listener takes the graduated +0.12 fold: 0.75 -> 0.87.
+        assert _stub_vote_graph(client, voter="p-1") == "suspicion=p-2:0.87/0.50"
 
     def test_fold_is_deterministic_across_runs(self) -> None:
         first_result, first_client = _run_meeting(
@@ -4984,8 +4989,22 @@ class TestRenderAfterFoldConsistency:
         # field, so a fixed stub ballot suffices.
         return _vote_json(voter="p-0", target="SKIP")
 
-    def _vote_prompts(self) -> dict[str, str]:
-        client = _ScriptedLLMClient(responder=self._real_template_responder)
+    @staticmethod
+    def _single_voice_real_template_responder(
+        prompt: str, schema: type[BaseModel] | None
+    ) -> str:
+        # The single-witness inform (one voice -> the flat +0.05): post-13.7
+        # this is the band that still leaves a no-prior listener UNDER the
+        # gate, so it is the only fold that can demonstrate the sub-gate
+        # MUST-SKIP verdict against the real template.
+        if "PHASE=OPENING" in prompt or "PHASE=TURN" in prompt:
+            return _single_voice_responder()(prompt, schema)
+        return _vote_json(voter="p-0", target="SKIP")
+
+    def _vote_prompts(
+        self, responder: Callable[[str, type[BaseModel] | None], str]
+    ) -> dict[str, str]:
+        client = _ScriptedLLMClient(responder=responder)
         manager = MeetingManager(
             llm_client=client,
             crewmate_report_prompt=_crewmate_report_prompt,
@@ -5010,24 +5029,29 @@ class TestRenderAfterFoldConsistency:
     def test_fold_crossed_listener_renders_post_fold_value_and_must_vote(
         self,
     ) -> None:
-        prompts = self._vote_prompts()
+        # The graduated two-voice fold (Task 13.7, +0.12): p-4's 0.55 prior
+        # crosses to 0.67 -- the graph row and the §4.6 verdict are computed
+        # from ONE post-fold source, so both read the same post-fold value.
+        prompts = self._vote_prompts(self._real_template_responder)
         crossed = prompts["p-4"]
 
         # The graph row shows the post-fold value, on the quantized
         # 2-decimal lattice...
-        assert "- `p-2`: suspicion 0.60, trust 0.50" in crossed
+        assert "- `p-2`: suspicion 0.67, trust 0.50" in crossed
         # ...and the §4.6 verdict -- computed by the frozen template from
         # the SAME rendered graph -- reads the post-fold max and the
         # MUST-vote imperative (the gate computation itself untouched).
-        assert parse_rendered_max_suspicion(crossed) == pytest.approx(0.60)
+        assert parse_rendered_max_suspicion(crossed) == pytest.approx(0.67)
         assert "you MUST vote to eject; you may NOT skip" in crossed
         assert 'you MUST set `target` to `"SKIP"`' not in crossed
 
     def test_sub_gate_listener_still_reads_must_skip(self) -> None:
-        # The fold materialises p-2 at 0.55 for the no-prior listener:
-        # below the gate, so the same one-source verdict reads MUST SKIP
-        # -- the fold moves values, never the §4.6 rule.
-        prompts = self._vote_prompts()
+        # The single-witness inform materialises p-2 at 0.55 for the no-prior
+        # listener: below the gate, so the same one-source verdict reads MUST
+        # SKIP -- the fold moves values, never the §4.6 rule. (Two voices would
+        # cross this same listener to 0.62 by design, so the sub-gate case is
+        # the single-voice band post-13.7.)
+        prompts = self._vote_prompts(self._single_voice_real_template_responder)
         sub_gate = prompts["p-3"]
 
         assert "- `p-2`: suspicion 0.55, trust 0.50" in sub_gate

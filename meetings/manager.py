@@ -1850,25 +1850,28 @@ def _suspicion_graph_with_contradictions(
     prior before the delta). The voter never accrues suspicion about
     themselves.
 
-    Pre-vote fold (Tasks 10.7, 10.15; audit gp-2 and 2026-06-13 C-C-1).
+    Pre-vote fold (Tasks 10.7, 10.15, 13.7; audit gp-2 and 2026-06-13 C-C-1).
     When ``evidence`` names ``pre_vote_folded`` (two-witness),
     ``pre_vote_informed`` (single-witness inform,
     :data:`agents.memory.beliefs.WITNESS_INFORM_REASON`), or
     ``corroborated`` subjects, the same reconstructed state takes
     :func:`agents.memory.beliefs.apply_meeting_evidence_rules` with
-    ``phase="pre_vote"`` AFTER the Rule-2 lift: the +0.05 testimony bumps
-    (two-witness fold and single-witness inform alike) and this meeting's
-    relevance-gated -0.05 corroborations land on the graph the ballot
-    prompt renders -- and because the frozen vote template computes the
-    §4.6 verdict from that same rendered graph, the graph and the verdict
+    ``phase="pre_vote"`` AFTER the Rule-2 lift: the testimony bumps and this
+    meeting's relevance-gated -0.05 corroborations land on the graph the
+    ballot prompt renders -- and because the frozen vote template computes
+    the §4.6 verdict from that same rendered graph, the graph and the verdict
     read ONE post-fold state source by construction (the render-after-fold
     consistency pin; a freshly-informed MUST-vote ballot is therefore NOT
     a threshold inversion -- the gate rule is untouched, only the rendered
-    prior moved). The fold is the recording-time twin of the post-meeting
-    persistent absorb: the identical +0.05/-0.05 deltas persist at the
-    meeting boundary through ``orchestrator.game._absorb_meeting_beliefs``,
-    so what the voter saw pre-vote is exactly what carries forward. When
-    the evidence folds nothing (no voiced subject, no relevance-gated
+    prior moved). The testimony bump is GRADUATED by the
+    ``pre_vote_voice_counts`` COUNT (Task 13.7): a single voice keeps the
+    +0.05 inform, two corroborating voices lift +0.12 (the first §4.6
+    gate-cross), three+ cap at +0.15. Crucially this graduated lift is
+    TRANSIENT: the post-meeting persistent absorb
+    (``orchestrator.game._absorb_meeting_beliefs``) passes NO counts, so only
+    the flat +0.05/-0.05 deltas carry across the meeting boundary -- a
+    gate-crossing two-voice ballot prior never railroads the next round.
+    When the evidence folds nothing (no voiced subject, no relevance-gated
     corroboration), this path is byte-identical to the pre-10.7 behaviour
     -- the channel is invisible until a witness speaks.
 
@@ -1917,6 +1920,11 @@ def _suspicion_graph_with_contradictions(
             phase="pre_vote",
             pre_vote_folded=frozenset(evidence.pre_vote_folded),
             pre_vote_informed=frozenset(evidence.pre_vote_informed),
+            # Task 13.7: graduate the transient pre-vote bump by the voice
+            # COUNT (2 -> +0.12, 3+ -> +0.15). The counts ride the meeting
+            # context only; the post-meeting persistent absorb passes none, so
+            # only the flat +0.05 carries across rounds.
+            pre_vote_voice_counts=dict(evidence.pre_vote_voice_counts),
         )
 
     entries: list[SuspicionEntry] = []
@@ -2533,6 +2541,17 @@ class MeetingBeliefEvidence:
       plurality bloc). Disjoint from ``pre_vote_folded`` (one voice vs
       two+) and likewise always a subset of ``accused``; the post-vote
       half skips it too, so the per-meeting total stays +0.05.
+    * ``pre_vote_voice_counts`` -- the Task 13.7 graduated testimony
+      spread input: a sorted ``(subject, voice_count)`` pair per voiced
+      subject (the :func:`meetings.transcript.independent_voices` COUNT),
+      covering exactly ``pre_vote_folded | pre_vote_informed``. The
+      vote-time pre-vote fold reads it to GRADUATE the bump by count --
+      1 voice +0.05 (byte-identical), 2 +0.12 (the first §4.6 gate-cross),
+      3+ +0.15 (capped) -- so two corroborating accounts EJECT where one
+      only informs. Carried on the meeting context ONLY: the persistent
+      post-meeting absorb passes no counts, so only the flat +0.05
+      persists (no cross-round railroad). Empty when no subject is voiced,
+      which keeps a no-witness meeting byte-identical.
     """
 
     accused: tuple[PlayerId, ...]
@@ -2540,6 +2559,7 @@ class MeetingBeliefEvidence:
     contradicted: tuple[PlayerId, ...]
     pre_vote_folded: tuple[PlayerId, ...] = ()
     pre_vote_informed: tuple[PlayerId, ...] = ()
+    pre_vote_voice_counts: tuple[tuple[PlayerId, int], ...] = ()
 
 
 def derive_belief_evidence(
@@ -2640,12 +2660,21 @@ def derive_belief_evidence(
             if len(speakers) < TESTIMONY_INDEPENDENCE_BAR
         )
     )
+    # The Task 13.7 graduated-spread input: the raw voice COUNT per voiced
+    # subject (covering exactly pre_vote_folded | pre_vote_informed), which the
+    # vote-time pre-vote fold maps to the graduated delta. Carried on the
+    # context only; the persistent absorb passes no counts, so only +0.05
+    # persists.
+    pre_vote_voice_counts = tuple(
+        sorted((subject, len(speakers)) for subject, speakers in voices.items())
+    )
     return MeetingBeliefEvidence(
         accused=tuple(sorted(accused)),
         corroborated=tuple(sorted(corroborated)),
         contradicted=tuple(sorted(contradicted)),
         pre_vote_folded=pre_vote_folded,
         pre_vote_informed=pre_vote_informed,
+        pre_vote_voice_counts=pre_vote_voice_counts,
     )
 
 
