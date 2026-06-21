@@ -30,9 +30,11 @@ from meetings.schemas import (
 )
 from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
+    WEAK_REASON_LONE_PHYSICAL,
     WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_SELF_STATED,
     detect_contradictions,
+    is_weak_contradiction,
 )
 from observation.packet import (
     BodyView,
@@ -677,6 +679,390 @@ class TestContradictionLiftDedupAndCap:
 
         assert updated.view("p-5").suspicion == pytest.approx(
             _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+
+
+# --- Task 13.5 new STRONG inferential classes (report-phase-b-plan belief-band)
+
+
+def _physical_flag(
+    *,
+    subject: str,
+    alibi_ordinal: int,
+    placement_ordinal: int,
+    lone: bool,
+) -> MeetingContradictionRef:
+    """An ``alibi_vs_physical`` flag shaped like 13.4 detector output.
+
+    ``alibi_ordinal`` is the subject's OWN alibi-claim turn -- the event the
+    13.4 conjunction's per-placement flags share, so flags on one alibi fold
+    onto a single :func:`meetings.transcript.contradiction_lift_key`;
+    ``placement_ordinal`` is the contradicting co-presence sighting's turn.
+    ``lone=True`` appends the detector's ``WEAK_REASON_LONE_PHYSICAL`` marker
+    (a single-voice inferential atom -> sub-gate); ``lone=False`` is the
+    STRONG two-source conjunction (no marker -> full 0.3).
+    """
+
+    claim_id = f"turn:m-1:turn-{alibi_ordinal}:claim:0"
+    obs_id = f"turn:m-1:turn-{placement_ordinal}:obs:0"
+    a_id, b_id = sorted((claim_id, obs_id))
+    description = (
+        f"{subject}'s own alibi places them in CAFETERIA (ticks 10-20), but "
+        f"p-2 placed {subject} in STORAGE at tick 15 -- physically "
+        f"incompatible with the stated alibi."
+    )
+    if lone:
+        description = (
+            f"{description} "
+            f"{WEAK_CONTRADICTION_MARKER_PREFIX}{WEAK_REASON_LONE_PHYSICAL}]"
+        )
+    return MeetingContradictionRef(
+        contradiction_id=f"contra:alibi_vs_physical:{a_id}|{b_id}",
+        kind="alibi_vs_physical",
+        event_a_id=a_id,
+        event_b_id=b_id,
+        subjects=(subject,),
+        description=description,
+    )
+
+
+def _self_alibi_turn(subject: str) -> MeetingTurn:
+    """Turn 0: ``subject`` states their OWN alibi (CAFETERIA, ticks 10-20)."""
+
+    return MeetingTurn(
+        turn_id="m-1:turn-0",
+        turn_index=0,
+        speaker=subject,
+        turn_kind="opening",
+        reply_to=None,
+        claims=(
+            SchemaAlibiClaim(
+                type="alibi",
+                subject=subject,
+                from_tick=10,
+                to_tick=20,
+                room="CAFETERIA",
+            ),
+        ),
+        free_text=f"{subject} self-alibi: CAFETERIA 10-20",
+    )
+
+
+def _co_presence_turn(
+    *, index: int, speaker: str, seen: str, subject: str, tick: int
+) -> MeetingTurn:
+    """``speaker`` saw ``seen`` in STORAGE@tick with ``subject`` co-present.
+
+    Places ``subject`` in STORAGE -- disjoint from their CAFETERIA self-alibi,
+    at an interior tick -- as an INDEPENDENT voice's CO-PRESENCE mention, not
+    as the sighting's own subject (the net-new 13.4 signal the
+    ``alibi_vs_sighting`` path structurally cannot reach).
+    """
+
+    return MeetingTurn(
+        turn_id=f"m-1:turn-{index}",
+        turn_index=index,
+        speaker=speaker,
+        turn_kind="reply",
+        reply_to=None,
+        observations=(
+            SawPlayerObservation(
+                type="saw_player",
+                tick=tick,
+                subject=seen,
+                room="STORAGE",
+                co_present=(subject,),
+            ),
+        ),
+        free_text=f"{speaker} saw {seen} with {subject} in STORAGE@{tick}",
+    )
+
+
+class TestNewStrongInferentialClassRouting:
+    """Task 13.5 (report-phase-b-plan belief-band; DESIGN.md §6.3 Rule 2, §4.6).
+
+    The new STRONG inferential classes -- the 13.3 cross-speaker
+    ``alibi_conflict`` and the 13.4 ``alibi_vs_physical`` -- route through the
+    SAME marker-keyed weak/strong handling as every other flag (the 10.10
+    precedent: a new kind / weak reason needs no ``beliefs.py`` logic change,
+    only the detector's marker). A LONE inferential atom
+    (``WEAK_REASON_LONE_PHYSICAL``) takes the sub-gate weak delta -- it INFORMS
+    but cannot eject a baseline 0.50 listener alone -- while only the
+    TWO-SOURCE conjunction (no marker) reaches the full 0.3. The
+    ``contradiction_lift_key`` dedup, the ``MEETING_CONTRADICTION_LIFT_CAP``,
+    and the gate-distance invariant (a lone atom must stay under 0.60) are all
+    preserved on the new kinds.
+
+    This is the PLUMBING: the new strong flags do not fire on the committed
+    data yet (the 13.4 $0 gate found 0), so it is validated by constructed
+    flags + detector round-trips now, not by a re-extraction.
+    """
+
+    def test_lone_physical_atom_lands_sub_gate(self) -> None:
+        # The DoD pin: one lone new-class flag lifts a baseline 0.50 listener
+        # by the weak delta only -> 0.58, suspicious but UNDER the 0.60 eject
+        # gate (it informs, cannot eject alone).
+        updated = apply_contradiction_rule(
+            BeliefState(),
+            [
+                _physical_flag(
+                    subject="p-5", alibi_ordinal=0, placement_ordinal=1, lone=True
+                )
+            ],
+        )
+
+        suspicion = updated.view("p-5").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+        assert _DEFAULT_SUSPICION < suspicion < 0.60
+
+    def test_two_source_physical_conjunction_crosses_gate(self) -> None:
+        # The DoD pin's other half: the two-source conjunction (no marker)
+        # takes the full CONTRADICTION_SUSPICION_DELTA -> 0.80, decisively
+        # over the gate.
+        updated = apply_contradiction_rule(
+            BeliefState(),
+            [
+                _physical_flag(
+                    subject="p-5", alibi_ordinal=0, placement_ordinal=1, lone=False
+                )
+            ],
+        )
+
+        suspicion = updated.view("p-5").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+        assert suspicion >= 0.60
+
+    def test_lone_atom_preserves_the_gate_distance_invariant(self) -> None:
+        # The load-bearing integration risk: a lone new-class atom reaching
+        # 0.60 alone re-opens the single-signal wrong-ejection path the weak
+        # delta closed. The weak delta is strictly less than the 0.10
+        # gate-distance from the 0.50 baseline, so the atom lands under 0.60.
+        assert WEAK_CONTRADICTION_SUSPICION_DELTA < 0.60 - _DEFAULT_SUSPICION
+
+        updated = apply_contradiction_rule(
+            BeliefState(),
+            [
+                _physical_flag(
+                    subject="p-5", alibi_ordinal=0, placement_ordinal=1, lone=True
+                )
+            ],
+        )
+
+        assert updated.view("p-5").suspicion < 0.60
+
+    def test_conjunction_placements_fold_to_one_strong_delta(self) -> None:
+        # The 13.4 conjunction emits one STRONG flag PER contradicting
+        # placement (each its own saw_player), all sharing the subject's OWN
+        # alibi-claim event -> contradiction_lift_key dedups them to ONE 0.3,
+        # never 2x0.3. Two placements (turns 1, 2) on the one alibi (turn 0).
+        flags = [
+            _physical_flag(
+                subject="p-5", alibi_ordinal=0, placement_ordinal=1, lone=False
+            ),
+            _physical_flag(
+                subject="p-5", alibi_ordinal=0, placement_ordinal=2, lone=False
+            ),
+        ]
+
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+
+    def test_lone_voice_multi_placement_folds_to_one_weak_delta(self) -> None:
+        # A single voice placing the subject outside their alibi at two
+        # interior ticks: two WEAK atoms sharing the alibi claim -> ONE 0.08,
+        # still sub-gate. A lone voice never stacks across the gate however
+        # many placements it states (the dedup is per claim, not per flag).
+        flags = [
+            _physical_flag(
+                subject="p-5", alibi_ordinal=0, placement_ordinal=1, lone=True
+            ),
+            _physical_flag(
+                subject="p-5", alibi_ordinal=0, placement_ordinal=2, lone=True
+            ),
+        ]
+
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        suspicion = updated.view("p-5").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+        assert suspicion < 0.60
+
+    def test_distinct_alibi_strongs_cap_at_one_strong_flag(self) -> None:
+        # Two DISTINCT self-alibis of the subject, each strong-contradicted:
+        # distinct lift keys would sum to 0.6, but the per-subject
+        # MEETING_CONTRADICTION_LIFT_CAP bounds the transient lift at one
+        # strong flag's worth -- no flag volume reaches 1.0.
+        flags = [
+            _physical_flag(
+                subject="p-5", alibi_ordinal=0, placement_ordinal=2, lone=False
+            ),
+            _physical_flag(
+                subject="p-5", alibi_ordinal=1, placement_ordinal=3, lone=False
+            ),
+        ]
+
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        assert updated.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + MEETING_CONTRADICTION_LIFT_CAP
+        )
+
+    def test_strong_cross_speaker_conflict_round_trips_to_full_delta(self) -> None:
+        # 13.3 end-to-end drift guard: a genuinely-independent cross-speaker
+        # alibi_conflict (two distinct non-subject speakers place p-5 in
+        # disjoint rooms over overlapping ticks, no weak guard firing) carries
+        # NO marker, so is_weak_contradiction is False and the rule lands the
+        # full 0.3 -- proving the detector's strong promotion routes to a vote.
+        transcript = MeetingTranscript(
+            turns=(
+                MeetingTurn(
+                    turn_id="m-1:turn-0",
+                    turn_index=0,
+                    speaker="p-1",
+                    turn_kind="opening",
+                    reply_to=None,
+                    free_text="emergency meeting, no body",
+                ),
+                MeetingTurn(
+                    turn_id="m-1:turn-1",
+                    turn_index=1,
+                    speaker="p-2",
+                    turn_kind="reply",
+                    reply_to=None,
+                    claims=(
+                        SchemaAlibiClaim(
+                            type="alibi",
+                            subject="p-5",
+                            from_tick=10,
+                            to_tick=20,
+                            room="CAFETERIA",
+                        ),
+                    ),
+                    free_text="p-2 places p-5 in CAFETERIA",
+                ),
+                MeetingTurn(
+                    turn_id="m-1:turn-2",
+                    turn_index=2,
+                    speaker="p-3",
+                    turn_kind="opt_in",
+                    reply_to=None,
+                    claims=(
+                        SchemaAlibiClaim(
+                            type="alibi",
+                            subject="p-5",
+                            from_tick=12,
+                            to_tick=22,
+                            room="STORAGE",
+                        ),
+                    ),
+                    free_text="p-3 places p-5 in STORAGE",
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_conflict"
+        assert not is_weak_contradiction(flags[0])
+
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        suspicion = updated.view("p-5").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+        assert suspicion >= 0.60
+
+    def test_two_source_physical_conjunction_round_trips_to_full_delta(self) -> None:
+        # 13.4 end-to-end drift guard: p-5's self-alibi physically contradicted
+        # by TWO independent co-presence voices -> STRONG alibi_vs_physical
+        # flags (no marker), one per placement, folded on the one alibi claim
+        # to a single 0.3 over the gate.
+        transcript = MeetingTranscript(
+            turns=(
+                _self_alibi_turn("p-5"),
+                _co_presence_turn(
+                    index=1, speaker="p-2", seen="p-9", subject="p-5", tick=15
+                ),
+                _co_presence_turn(
+                    index=2, speaker="p-3", seen="p-8", subject="p-5", tick=16
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        assert len(flags) == 2
+        assert {flag.kind for flag in flags} == {"alibi_vs_physical"}
+        assert not any(is_weak_contradiction(flag) for flag in flags)
+
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        suspicion = updated.view("p-5").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+        assert suspicion >= 0.60
+
+    def test_lone_physical_atom_round_trips_to_sub_gate(self) -> None:
+        # 13.4 end-to-end drift guard: ONE co-presence voice -> a WEAK
+        # alibi_vs_physical atom (WEAK_REASON_LONE_PHYSICAL) -> 0.08 -> 0.58,
+        # under the gate. The marker the detector writes is exactly the one
+        # is_weak_contradiction reads, so the lone atom cannot eject alone.
+        transcript = MeetingTranscript(
+            turns=(
+                _self_alibi_turn("p-5"),
+                _co_presence_turn(
+                    index=1, speaker="p-2", seen="p-9", subject="p-5", tick=15
+                ),
+            )
+        )
+        flags = detect_contradictions(transcript)
+        assert len(flags) == 1
+        assert flags[0].kind == "alibi_vs_physical"
+        assert is_weak_contradiction(flags[0])
+        assert WEAK_REASON_LONE_PHYSICAL in flags[0].description
+
+        updated = apply_contradiction_rule(BeliefState(), flags)
+
+        suspicion = updated.view("p-5").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+        assert _DEFAULT_SUSPICION < suspicion < 0.60
+
+    def test_new_class_routing_is_pure_and_deterministic(self) -> None:
+        # The rule stays a pure, replay-stable function of its arguments on
+        # the new kinds: identical inputs -> equal but independent results,
+        # and the input flags / state are never mutated.
+        base = BeliefState()
+        base.adjust_suspicion("p-5", delta=0.0)
+        before = _snapshot(base)
+        flags = [
+            _physical_flag(
+                subject="p-5", alibi_ordinal=0, placement_ordinal=1, lone=False
+            ),
+            _physical_flag(
+                subject="p-5", alibi_ordinal=0, placement_ordinal=2, lone=True
+            ),
+        ]
+
+        first = apply_contradiction_rule(base, flags)
+        second = apply_contradiction_rule(base, flags)
+
+        assert _snapshot(base) == before
+        assert first is not second
+        assert _snapshot(first) == _snapshot(second)
+        # Strong on the claim wins over the weak duplicate (max per lift key),
+        # so the single shared alibi claim lifts by the full 0.3 once.
+        assert first.view("p-5").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
         )
 
 
