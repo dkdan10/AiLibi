@@ -538,6 +538,29 @@ def apply_contradiction_rule(
     flag itself (:func:`meetings.transcript.is_weak_contradiction`), so
     the rule stays a pure function of its arguments.
 
+    New STRONG inferential classes (Task 13.5; report-phase-b-plan
+    belief-band). The 13.3 genuinely-independent cross-speaker
+    ``alibi_conflict`` and the 13.4 ``alibi_vs_physical`` route through this
+    SAME marker-keyed handling -- no new branch (the Task 10.10 precedent: a
+    new weak reason or kind needs no logic change here, only the marker).
+    A cross-speaker conflict and the 13.4 TWO-SOURCE conjunction (>= the
+    detector's ``PHYSICAL_CONTRADICTION_MIN_VOICES`` distinct co-presence
+    voices contradicting an uncorroborated self-alibi) carry no weak marker,
+    so :func:`is_weak_contradiction` is ``False`` and they take the full
+    ``CONTRADICTION_SUSPICION_DELTA``. A LONE 13.4 reconstruction atom -- a
+    single contradicting voice, the detector's ``WEAK_REASON_LONE_PHYSICAL``
+    marker -- is weak-classified and takes the sub-gate
+    ``WEAK_CONTRADICTION_SUSPICION_DELTA``: it INFORMS but cannot eject a
+    baseline listener alone (0.5 + 0.08 = 0.58, strictly under both the 0.60
+    §4.6 gate and the 0.10 gate-distance the single-witness inform's +0.05
+    also respects). Keeping full-0.3 strictly behind the two-source
+    conjunction is load-bearing -- a lone atom reaching 0.60 alone re-opens
+    the single-signal wrong-ejection path the weak delta closed (the 13/13
+    baseline). The 13.4 conjunction emits one flag per contradicting
+    placement, all sharing the subject's OWN alibi-claim event, so the
+    per-(subject, claim) dedup below folds them onto one key (one 0.3, never
+    N x 0.3) within the ``MEETING_CONTRADICTION_LIFT_CAP``.
+
     Lift dedup + cap (Task 10.1; audit gp-2 C-C-3). "Each detected
     contradiction is one piece of evidence" turned out to multiply: the
     detector emits one flag per (alibi, sighting) pair, so one alibi
