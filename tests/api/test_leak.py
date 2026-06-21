@@ -676,20 +676,27 @@ def _assert_fog_hides_hidden_fields(dump: JsonValue) -> None:
 
 
 def _seen_rooms(
-    observer_room: str, sabotage_kind: str | None, game_map: Map
+    observer_room: str,
+    observer_role: str,
+    sabotage_kind: str | None,
+    game_map: Map,
 ) -> set[str]:
     """The rooms an observer in ``observer_room`` can see (the engine rule).
 
-    Mirrors ``engine.visibility.resolve_visibility_mode`` +
+    Mirrors ``engine.visibility._resolve_observer_visibility_mode`` +
     ``visible_rooms_for_player`` using the REAL map adjacency + sabotage config
     (never a hardcoded topology), so the cross-room check cannot drift from the
-    map: a lights sabotage degrades to same-room-only; otherwise
-    same-room-and-adjacent.
+    map. Asymmetric visibility (Task 13.8): at BASE visibility a CREWMATE is
+    room-only while an IMPOSTOR keeps same-room-and-adjacent; an ACTIVE sabotage
+    degrade (e.g. lights -> same_room_only) collapses EVERYONE to same-room-only.
     """
 
-    mode = game_map.visibility_defaults.base
+    base = game_map.visibility_defaults.base
+    mode = base
     if sabotage_kind is not None:
         mode = game_map.sabotages[sabotage_kind].affected_visibility
+    if mode == base and observer_role != "IMPOSTOR":
+        mode = "same_room_only"
     if mode == "same_room_only":
         return {observer_room}
     return {observer_room, *game_map.room_neighbors(observer_room)}
@@ -719,6 +726,10 @@ def test_as_agent_fog_leaks_no_unseen_player_body_or_field() -> None:
     for meta in loader.list_replays():
         games += 1
         replay = loader.load_replay(meta.game_id)
+        # The spectator roster exposes role (privileged); asymmetric visibility
+        # (Task 13.8) makes the engine sight rule role-dependent, so the
+        # cross-room expectation must key on each observer's role.
+        role_by_player = {player.agent_id: player.role for player in replay.players}
         for tick in replay.ticks:
             room_by_player = {a.agent_id: a.room_id for a in tick.agent_states}
             alive = {a.agent_id for a in tick.agent_states if a.is_alive}
@@ -735,7 +746,12 @@ def test_as_agent_fog_leaks_no_unseen_player_body_or_field() -> None:
                 assert state.is_alive
                 observer_room = room_by_player[state.agent_id]
                 assert observer_room is not None
-                seen = _seen_rooms(observer_room, sabotage_kind, game_map)
+                seen = _seen_rooms(
+                    observer_room,
+                    role_by_player[state.agent_id],
+                    sabotage_kind,
+                    game_map,
+                )
 
                 fog_dump = cast(JsonValue, fog.model_dump(mode="json"))
                 _assert_fog_hides_hidden_fields(fog_dump)

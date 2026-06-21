@@ -2233,6 +2233,23 @@ def _run_emergency_game(
     return result.final_state, result.outcome
 
 
+# Task 13.8 (asymmetric visibility) invalidates this whole scenario: a crewmate
+# is now `same_room_only` at base, so it can no longer see a body in an ADJACENT
+# room and press the emergency button on accumulated suspicion. Any body a
+# room-only crewmate CAN perceive is in its OWN room and is REPORTED instead, so
+# the perception-driven emergency meeting never opens (genre-correct: private
+# kills require testimony-based deduction). The emergency-meeting integration
+# coverage must be redesigned around testimony-accumulated suspicion when the
+# meeting/agent side is reworked (Wave B); these three tests are xfailed
+# (strict) until that redesign lands. Owner-approved during Task 13.8.
+_ASYM_VISIBILITY_EMERGENCY_XFAIL = (
+    "Task 13.8 asymmetric visibility: a room-only crewmate cannot witness an "
+    "adjacent-room body, so this perception-driven emergency-meeting scenario no "
+    "longer opens a meeting (the body would be in-room and reported instead). "
+    "Redesign emergency coverage around testimony-accumulated suspicion in Wave B."
+)
+
+
 class TestEmergencySuspicionMeetingEndToEnd:
     """The Task 10.8 DoD scenario, through the production game loop.
 
@@ -2245,6 +2262,7 @@ class TestEmergencySuspicionMeetingEndToEnd:
     as caller/opener and the meeting runs the unchanged §5.2 protocol.
     """
 
+    @pytest.mark.xfail(reason=_ASYM_VISIBILITY_EMERGENCY_XFAIL, strict=True)
     def test_unwitnessed_kill_produces_emergency_meeting(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -2312,6 +2330,7 @@ class TestEmergencySuspicionMeetingEndToEnd:
         assert "no body was reported" in opening_call.prompt
         assert "do NOT emit a `found_body` observation" in opening_call.prompt
 
+    @pytest.mark.xfail(reason=_ASYM_VISIBILITY_EMERGENCY_XFAIL, strict=True)
     def test_eval_readers_run_clean_on_emergency_meeting_replay(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -2344,6 +2363,7 @@ class TestEmergencySuspicionMeetingEndToEnd:
         # analyzers see a well-formed meeting (no crash, sane scalars).
         assert evaluated.conversion.ejection_accuracy == 1.0
 
+    @pytest.mark.xfail(reason=_ASYM_VISIBILITY_EMERGENCY_XFAIL, strict=True)
     def test_skip_outcome_paces_exactly_one_meeting(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

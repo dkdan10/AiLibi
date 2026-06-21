@@ -164,8 +164,17 @@ def test_kill_witness_sees_killer_action(tmp_path: Path) -> None:
 
 def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> None:
     game_map = load_canonical_map()
+    # Under asymmetric visibility (Task 13.8) a crewmate sees only its OWN room
+    # at base, so the observer cannot witness the STORAGE kill from one room
+    # away. It sits in ENGINEERING while p-4 kills p-1 in adjacent STORAGE, then
+    # walks INTO STORAGE the next tick: it now sees the killer co-located, but
+    # the kill was a PRIOR tick, so the visible-player action must stay None.
+    state = _base_world_state()
+    players = dict(state.players)
+    players["p-2"] = _player("p-2", "CREWMATE", "ENGINEERING", (0.0, 0.0))
+    state = dataclasses.replace(state, players=players)
     state, _ = advance_tick(
-        _base_world_state(),
+        state,
         [_action({"type": "kill", "actor": "p-4", "payload": {"target": "p-1"}})],
         game_map=game_map,
     )
@@ -176,7 +185,7 @@ def test_visible_player_action_does_not_reveal_unseen_kill(tmp_path: Path) -> No
                 {
                     "type": "move",
                     "actor": "p-2",
-                    "payload": {"to_room": "ENGINEERING"},
+                    "payload": {"to_room": "STORAGE"},
                 }
             )
         ],
@@ -398,8 +407,16 @@ def test_sole_impostor_has_no_fellow_impostors(tmp_path: Path) -> None:
 
 def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
     game_map = load_canonical_map()
+    # See test_visible_player_action_does_not_reveal_unseen_kill: under Task 13.8
+    # asymmetric visibility the crewmate observer is room-only at base, so it
+    # cannot witness the adjacent-room kill — it walks INTO STORAGE to stand with
+    # the killer the next tick, where the (prior-tick) kill stays sanitized.
+    state = _base_world_state()
+    players = dict(state.players)
+    players["p-2"] = _player("p-2", "CREWMATE", "ENGINEERING", (0.0, 0.0))
+    state = dataclasses.replace(state, players=players)
     state, _ = advance_tick(
-        _base_world_state(),
+        state,
         [_action({"type": "kill", "actor": "p-4", "payload": {"target": "p-1"}})],
         game_map=game_map,
     )
@@ -410,24 +427,14 @@ def test_audit_log_records_sanitized_packet(tmp_path: Path) -> None:
                 {
                     "type": "move",
                     "actor": "p-2",
-                    "payload": {"to_room": "ENGINEERING"},
+                    "payload": {"to_room": "STORAGE"},
                 }
             )
         ],
         game_map=game_map,
     )
-    state_with_bad_cooldown = WorldState(
-        tick=state.tick,
-        phase=state.phase,
-        map=state.map,
-        players=state.players,
-        bodies=state.bodies,
-        tasks=state.tasks,
-        sabotage=state.sabotage,
-        cooldowns={**dict(state.cooldowns), "p-2": 7},
-        emergency_uses=state.emergency_uses,
-        rng_state=state.rng_state,
-        seed=state.seed,
+    state_with_bad_cooldown = dataclasses.replace(
+        state, cooldowns={**dict(state.cooldowns), "p-2": 7}
     )
     audit_path = tmp_path / "observation_audit.jsonl"
     service = ObservationService(
@@ -495,8 +502,9 @@ def test_visible_body_carries_victim_id_from_body_state(tmp_path: Path) -> None:
     # surfaces it as ``BodyView.victim_id``. The body-id format already
     # encodes the victim id; this assertion pins that the typed field
     # carries the same value across every visible body in every packet.
-    # REACTOR is adjacent to ENGINEERING in canonical_1, so an observer
-    # in REACTOR sees bodies in either room.
+    # Both bodies sit in the observer's OWN room (REACTOR): a crewmate is
+    # room-only at base under asymmetric visibility (Task 13.8), so co-locating
+    # them keeps two bodies in view to exercise the multi-body path.
     state = _base_world_state()
     bodies = {
         "body-p-1-3": BodyState(
@@ -510,7 +518,7 @@ def test_visible_body_carries_victim_id_from_body_state(tmp_path: Path) -> None:
         "body-p-3-4": BodyState(
             id="body-p-3-4",
             player_id="p-3",
-            room="ENGINEERING",
+            room="REACTOR",
             position=(0.0, 0.0),
             killed_by="p-4",
             discovered_by=None,
