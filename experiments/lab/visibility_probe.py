@@ -2,15 +2,21 @@
 
 Detection counterfactual: hold each committed 9p2i game's action stream FIXED and
 vary ONLY the visibility model — `same_room_and_adjacent` (today's base) vs
-`same_room_only` (the proposed change) — then measure how much firsthand
-KILL/BODY witnessing survives. Same kills, same movements; only "who saw what"
-changes. This isolates the visibility effect the way vent_escape_lab isolated the
-post-kill trail. $0, reads committed replays, NO engine edit, NO re-record.
+`same_room_only` (the proposed change) — then measure how much firsthand kill
+witnessing survives. Same kills, same movements; only "who saw what" changes. This
+isolates the visibility effect the way vent_escape_lab isolated the post-kill trail.
+$0, reads committed replays, NO engine edit, NO re-record.
 
-Caveat (honest): this is a counterfactual on the DETECTOR'S INPUT on a fixed game
-— agents do not re-decide under reduced sight (they would kill more / cluster
-differently). It answers "does room-local starve firsthand evidence?", not the
-full balance/rubric question (that needs a re-sim or re-record).
+State is reconstructed ENGINE-FAITHFULLY via `core.reconstruct` (Codex #1/#2/#4/#6):
+kills are resolved in engine actor-id order (submitted-but-rejected kills dropped),
+vented players are moved to the vent room and HIDDEN from sightings, and meeting
+ejections are applied so ejected players leave the alive set. Impostor roles come from
+the committed `tournament-eval-report.json` (Codex #5), not inferred from actions.
+
+Caveat: a counterfactual on a FIXED game (agents don't re-decide under reduced sight).
+Witnesses are evaluated on `core.reconstruct`'s end-of-tick `visible` map — the same
+basis the FO-6 surrogate uses — so within-tick kill-moment ordering is not separately
+modeled.
 """
 
 from __future__ import annotations
@@ -36,92 +42,59 @@ def seeds() -> list[int]:
     )
 
 
-def load(seed: int) -> list[dict]:
-    txt = (SAMPLES / f"replay-seed-{seed}.jsonl").read_text().splitlines()
-    return [json.loads(ln) for ln in txt if ln.strip()]
+def impostors_by_seed() -> dict:
+    """Role ground truth from the committed eval report (not action-inferred)."""
+    rep = json.loads((SAMPLES / "tournament-eval-report.json").read_text())
+    return {
+        g["seed"]: {p for p, role in g["roles"].items() if role == "IMPOSTOR"}
+        for g in rep["report"]["games"]
+    }
 
 
-def reconstruct(rows: list[dict]):
-    """Per-tick room snapshots + kill list + impostor set (killers/venters)."""
-    players: set[str] = set()
-    for r in rows:
-        if r.get("kind") == "tick":
-            for a in r["actions"]:
-                players.add(a["actor"])
-    room = dict.fromkeys(players, "CAFETERIA")
-    in_vent = dict.fromkeys(players, False)
-    alive = set(players)
-    impostors: set[str] = set()
-    snaps = []  # (tick, room, in_vent, alive, kills[(killer,victim,room)])
-    for r in rows:
-        if r.get("kind") != "tick":
-            continue
-        kills = []
-        for a in sorted(r["actions"], key=lambda x: x["actor"]):
-            act = a["actor"]
-            if act not in alive:
-                continue
-            ty = a["type"]
-            if ty == "move":
-                room[act] = a["payload"]["to_room"]
-                in_vent[act] = False
-            elif ty == "vent":
-                impostors.add(act)
-                in_vent[act] = not in_vent[act]
-            elif ty == "kill":
-                impostors.add(act)
-                v = a["payload"]["target"]
-                kills.append((act, v, room[act]))
-                alive.discard(v)
-        snaps.append((r["tick"], dict(room), dict(in_vent), set(alive), kills))
-    return snaps, impostors
-
-
-def crew_seeing(room_id, snap_room, snap_invent, snap_alive, impostors, exclude, mode):
-    """Alive crew (non-impostor) who can SEE room_id under `mode`."""
-    vis = {room_id} if mode == "room_only" else {room_id} | neighbors(room_id)
+def crew_seeing(room_id, visible, impostors, exclude, mode):
+    """Alive crew (from core's vent-hidden `visible`) who can SEE room_id under mode."""
+    rooms = {room_id} if mode == "room_only" else {room_id} | neighbors(room_id)
     out = []
-    for p in snap_alive:
-        if p in exclude or p in impostors or snap_invent.get(p):
-            continue
-        if snap_room[p] in vis:
+    for rm in rooms:
+        for p in visible.get(rm, ()):
+            if p in exclude or p in impostors:
+                continue
             out.append(p)
     return out
 
 
 def main() -> int:
     print("=== VISIBILITY PROBE — detection counterfactual on committed 9p2i ===")
-    print("    adjacent = same_room_and_adjacent (today)  |  room_only = proposed\n")
-    agg = {
-        "kills": 0,
-        "wit_adj": 0,
-        "wit_room": 0,
-        "sight_adj": 0,
-        "sight_room": 0,
-    }
+    print("    adjacent = same_room_and_adjacent (today)  |  room_only = proposed")
+    print("    engine-faithful state via core.reconstruct; roles from eval report\n")
+    imp_by = impostors_by_seed()
+    agg = {"kills": 0, "wit_adj": 0, "wit_room": 0, "sight_adj": 0, "sight_room": 0}
     per_seed = []
     for s in seeds():
-        snaps, imp = reconstruct(load(s))
+        states = core.reconstruct(core.replay_rows(SAMPLES / f"replay-seed-{s}.jsonl"))
+        imp = imp_by.get(s, set())
         k = wa = wr = sa = sr = 0
-        for tick, rm, iv, al, kills in snaps:
-            # detector "fuel": crew->impostor tick-sightings (any crew sees any impostor)
-            for ip in imp & al:
-                if iv.get(ip):
+        for st in states:
+            if "kills" not in st:  # meeting state
+                continue
+            visible, alive = st["visible"], st["alive"]
+            # detector "fuel": crew->impostor tick-sightings (vent-hidden via `visible`)
+            for ip in imp & alive:
+                iproom = next((rm for rm, ps in visible.items() if ip in ps), None)
+                if iproom is None:  # vented -> hidden
                     continue
-                sa += len(crew_seeing(rm[ip], rm, iv, al, imp, {ip}, "adjacent"))
-                sr += len(crew_seeing(rm[ip], rm, iv, al, imp, {ip}, "room_only"))
-            for killer, victim, kroom in kills:
+                sa += len(crew_seeing(iproom, visible, imp, {ip}, "adjacent"))
+                sr += len(crew_seeing(iproom, visible, imp, {ip}, "room_only"))
+            for killer, victim, kroom in st["kills"]:
                 k += 1
                 wa += (
                     1
-                    if crew_seeing(kroom, rm, iv, al, imp, {killer, victim}, "adjacent")
+                    if crew_seeing(kroom, visible, imp, {killer, victim}, "adjacent")
                     else 0
                 )
                 wr += (
                     1
-                    if crew_seeing(
-                        kroom, rm, iv, al, imp, {killer, victim}, "room_only"
-                    )
+                    if crew_seeing(kroom, visible, imp, {killer, victim}, "room_only")
                     else 0
                 )
         agg["kills"] += k
@@ -132,7 +105,7 @@ def main() -> int:
         per_seed.append((s, k, wa, wr))
 
     k = agg["kills"]
-    print(f"KILLS total: {k}  (across {len(per_seed)} seeds)")
+    print(f"RESOLVED KILLS total: {k}  (across {len(per_seed)} seeds)")
     print(
         f"  kills WITNESSED (>=1 crew sees killer at kill tick):"
         f"  adjacent {agg['wit_adj']}/{k} ({agg['wit_adj'] / k:.0%})"
@@ -151,22 +124,27 @@ def main() -> int:
 
     # --- seed-5 trace: p-1's sight of the p-3 -> p-7 kill (storage) ---
     print("\n=== SEED-5 TRACE: what p-1 sees of p-3's kill of p-7 ===")
-    snaps, imp = reconstruct(load(5))
-    print(f"  impostors (reconstructed) = {sorted(imp)}")
-    for tick, rm, iv, al, kills in snaps:
-        if tick > 8:
+    states = core.reconstruct(core.replay_rows(SAMPLES / "replay-seed-5.jsonl"))
+    print(f"  impostors (eval report) = {sorted(imp_by.get(5, set()))}")
+    for st in states:
+        if "kills" not in st or st["tick"] > 8:
+            if "kills" not in st:
+                continue
             break
-        p1 = rm.get("p-1")
-        vis_adj = {p1} | neighbors(p1)
-        sees_adj = [p for p in al if p != "p-1" and not iv.get(p) and rm[p] in vis_adj]
-        sees_room = [p for p in al if p != "p-1" and not iv.get(p) and rm[p] == p1]
-        note = ""
-        for killer, victim, kroom in kills:
-            note += f"  <KILL {killer}->{victim} in {kroom}>"
+        visible = st["visible"]
+        p1room = next((rm for rm, ps in visible.items() if "p-1" in ps), None)
+        if p1room is None:
+            continue
+        vis_adj = {p1room} | neighbors(p1room)
+        sees_adj = sorted(
+            p for rm in vis_adj for p in visible.get(rm, ()) if p != "p-1"
+        )
+        sees_room = sorted(p for p in visible.get(p1room, ()) if p != "p-1")
+        note = "".join(f"  <KILL {a}->{b} in {c}>" for a, b, c in st["kills"])
         flag = " p3-visible!" if "p-3" in sees_adj and "p-3" not in sees_room else ""
         print(
-            f"  t{tick}: p-1 in {p1:11s} | adj-sees {sorted(sees_adj)} | "
-            f"room-sees {sorted(sees_room)}{flag}{note}"
+            f"  t{st['tick']}: p-1 in {p1room:11s} | adj-sees {sees_adj} | "
+            f"room-sees {sees_room}{flag}{note}"
         )
     print(
         "\n  Read: where adj-sees has p-3 but room-sees does NOT, today's model lets p-1"

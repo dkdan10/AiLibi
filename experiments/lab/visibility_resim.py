@@ -35,7 +35,15 @@ def run_arm(label: str, room_only: bool) -> dict:
     out = TMP / label
     out.mkdir(parents=True, exist_ok=True)
     if room_only:
-        vis.resolve_visibility_mode = lambda ws, gm: "same_room_only"
+
+        def _room_local(
+            ws, gm
+        ):  # override only the BASE; keep sabotage modes (Codex #8)
+            if ws.sabotage is None or not ws.sabotage.active:
+                return "same_room_only"
+            return _ORIG(ws, gm)
+
+        vis.resolve_visibility_mode = _room_local
     else:
         vis.resolve_visibility_mode = _ORIG
     try:
@@ -52,18 +60,21 @@ def run_arm(label: str, room_only: bool) -> dict:
     reasons: Counter[str] = Counter()
     kills = mtgs = ejects = contras = 0
     for s in SEEDS:
-        rows = core.replay_rows(out / f"replay-seed-{s}.jsonl")
-        for r in rows:
-            if r.get("kind") == "tick":
-                kills += sum(1 for a in r.get("actions", []) if a["type"] == "kill")
-            elif r.get("kind") == "meeting":
+        path = out / f"replay-seed-{s}.jsonl"
+        kills += core.count_kills(
+            path
+        )  # RESOLVED kills, not submitted attempts (Codex #3)
+        for r in core.replay_rows(path):
+            if r.get("kind") == "meeting":
                 mtgs += 1
                 if r.get("ejected_player_id"):
                     ejects += 1
                 contras += len(r.get("contradictions", []))
             if "reason" in r:
                 reasons[r["reason"]] += 1
-    imp = reasons.get("IMPOSTOR_KILLS", 0) + reasons.get("IMPOSTOR_SABOTAGE", 0)
+    # the engine's impostor-kill win reason is IMPOSTOR_PARITY (there is no
+    # IMPOSTOR_KILLS reason) — Codex #7
+    imp = reasons.get("IMPOSTOR_PARITY", 0) + reasons.get("IMPOSTOR_SABOTAGE", 0)
     crew = reasons.get("CREWMATE_TASKS", 0) + reasons.get("CREWMATE_EJECT", 0)
     return {
         "reasons": dict(reasons),
@@ -73,6 +84,7 @@ def run_arm(label: str, room_only: bool) -> dict:
         "contras": contras,
         "imp_wins": imp,
         "crew_wins": crew,
+        "nondecisive": len(SEEDS) - imp - crew,
     }
 
 
@@ -86,9 +98,10 @@ def main() -> int:
         b, r = base[k], room[k]
         return f"  {label:28s} {b:>6}  ->  {r:>6}   (Δ {r - b:+d})"
 
-    print(line("imp_wins", "impostor wins"))
+    print(line("imp_wins", "impostor wins (parity+sabotage)"))
     print(line("crew_wins", "crew wins"))
-    print(line("kills", "total kills"))
+    print(line("nondecisive", "non-decisive (budget/None)"))
+    print(line("kills", "resolved kills"))
     print(line("mtgs", "meetings held"))
     print(line("ejects", "ejections"))
     print(line("contras", "contradictions (detector)"))
