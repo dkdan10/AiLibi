@@ -306,13 +306,6 @@ def _active_deflection_counts(g: dict[str, Any]) -> tuple[int, int, bool]:
         if not accused_impostors:
             continue
         any_accused = True
-        # Strict unique eject-plurality: facts carry the most-voted non-SKIP
-        # target (``plurality_target``) and its lead (``plurality_margin``); a
-        # zero margin is a tie, which the frozen §5.2 tally resolves to SKIP —
-        # so it moved the plurality nowhere (mirrors _strict_eject_plurality).
-        plurality = (
-            m.get("plurality_target") if m.get("plurality_margin", 0) > 0 else None
-        )
         # ``ejected_player_id`` is set IFF a player was ejected this meeting, so
         # ``ejected == impostor`` IS "caught here" without depending on a
         # separate ``outcome`` field — a meeting that carries the id but omits
@@ -330,6 +323,20 @@ def _active_deflection_counts(g: dict[str, Any]) -> tuple[int, int, bool]:
             if not counter_targets:
                 continue  # passive / clock survival — no active deflection
             active += 1
+            # An ACTIVE survival's EFFECTIVE-vs-skip-saved split needs the strict
+            # unique eject-plurality. Require the fields rather than defaulting a
+            # missing margin to 0 (which would silently MISCLASSIFY a real
+            # deflection as skip-saved on a stale facts JSON that predates them).
+            if "plurality_target" not in m or "plurality_margin" not in m:
+                raise ValueError(
+                    "meeting with an active impostor survival is missing "
+                    "plurality_target / plurality_margin — re-run the "
+                    "gameplay-facts extractor"
+                )
+            # A zero margin is a tie / all-SKIP, which the frozen §5.2 tally
+            # resolves to SKIP — so it moved the plurality nowhere (mirrors
+            # _strict_eject_plurality).
+            plurality = m["plurality_target"] if m["plurality_margin"] > 0 else None
             if plurality is not None and plurality != impostor:
                 effective += 1  # the counter-accusation MOVED the plurality off
     return active, effective, any_accused
@@ -349,13 +356,23 @@ def _meeting_has_strong_impostor_flag(
     (non-weak) flag. The all-weak ``alibi_vs_sighting`` baseline (every flag
     below the §4.6 gate, ejects nobody) scores 0.
 
-    A contradiction row that omits the ``strong`` key is malformed / pre-dates
-    the one-home classifier; it FAILS LOUD here rather than reading as
-    not-strong, so a missing classification can never silently zero the
-    20%-weight R7 axis (AGENTS.md "no silent fallbacks").
+    Missing classification FAILS LOUD rather than reading as zero strong
+    evidence (AGENTS.md "no silent fallbacks"), so a stale extractor run can
+    never masquerade as a valid all-weak baseline and silently zero the
+    20%-weight R7 axis: an ABSENT ``contradictions_by_subject`` map on a meeting
+    that nonetheless recorded ``n_contradictions > 0``, or a contradiction row
+    that omits the ``strong`` bit, both raise.
     """
 
-    by_subject = meeting.get("contradictions_by_subject") or {}
+    by_subject = meeting.get("contradictions_by_subject")
+    if by_subject is None:
+        if meeting.get("n_contradictions", 0) > 0:
+            raise ValueError(
+                "meeting recorded n_contradictions > 0 but has no "
+                "contradictions_by_subject classification map — re-run the "
+                "gameplay-facts extractor"
+            )
+        by_subject = {}
     for subject, classifications in by_subject.items():
         if roles.get(subject) != "IMPOSTOR":
             continue
@@ -482,18 +499,18 @@ def _game_interestingness(
     else:
         r1 = 0.0  # pure stopwatch / kill-gifted — deduction was inert
 
-    # R2 deception: gated on an ACTIVE-DEFLECTION event (audit P0 / G3). Passive
-    # or clock survival — an accused impostor who was simply not ejected — is no
-    # longer worth 0.6; it caps at 0.2. Only an active counter-accusation that
-    # survived earns credit, and only one that MOVED the eject-plurality off the
-    # impostor (EFFECTIVE deflection — real deception skill) earns the top.
-    active_survivals, effective_deflections, any_accused = _active_deflection_counts(g)
+    # R2 deception: credit ONLY an EFFECTIVE deflection (audit P0 / G3). The
+    # codebase's own eval.meeting_quality.EffectiveDeflectionReport is explicit
+    # that an active counter-accusation which survived because the table
+    # SKIP-saved is "survival, not deflection" (anchor on the EFFECTIVE subcount,
+    # NOT the raw active count), so skip-saved active survival stays in the
+    # passive band (0.2) and is never elevated to its own tier. ``_active`` is
+    # kept in the returned split for fidelity but is not itself scored.
+    _active, effective_deflections, any_accused = _active_deflection_counts(g)
     if effective_deflections >= 1:
         r2 = 1.0  # a counter-accusation moved the eject-plurality off a true impostor
-    elif active_survivals >= 1:
-        r2 = 0.6  # actively counter-accused and survived, but SKIP-saved (not skill)
     elif any_accused:
-        r2 = 0.2  # accused yet only passive/clock survival or caught — no deflection
+        r2 = 0.2  # accused yet no EFFECTIVE deflection (passive / skip-saved / caught)
     else:
         r2 = 0.0  # deception never tested (no true impostor was accused)
 

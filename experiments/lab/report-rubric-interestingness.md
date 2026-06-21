@@ -18,14 +18,15 @@ axes for Phase-C, not just the collapsed scalar):
 - **R1 decisive** (0.35) — *unchanged, SOUND.* 1.0 if the game is `CREWMATE_EJECT` (fires iff
   `alive_impostors==0`, and crew cannot kill impostors → deduction cleared the board), 0.5 if an impostor was
   ejected but the clock decided, 0.0 if pure stopwatch / kill-gifted.
-- **R2 deception** (0.25) — *repaired: gated on an ACTIVE-DEFLECTION event.* 1.0 if an accused impostor's
-  counter-accusation MOVED the eject-plurality off itself (effective deflection — real skill), 0.6 if it
-  actively counter-accused and survived but was SKIP-saved, **0.2 if it was accused yet only passively/clock
-  survived or was caught**, 0.0 if no true impostor was ever accused. (Reproduces
-  `eval/meeting_quality.py::compute_effective_deflection`'s ACTIVE-DEFLECTED split over the same accusation
-  data; validated to match its aggregate exactly: active 34, effective 10, skip-saved 24.) *Before:* passive
-  survival banked 0.6, so a lose-while-accused-alive game outscored a win-unaccused game and R2 was
-  **anti-correlated** with the total (Pearson −0.281).
+- **R2 deception** (0.25) — *repaired: credit only an EFFECTIVE deflection.* 1.0 iff an accused impostor's
+  counter-accusation MOVED the eject-plurality off itself (the deception-SKILL subcount), else **0.2 if a true
+  impostor was accused at all** (passive survival, SKIP-saved active survival, or caught — all "survival, not
+  deflection" per `compute_effective_deflection`'s own framing), 0.0 if no true impostor was ever accused.
+  (Reproduces `eval/meeting_quality.py::compute_effective_deflection`'s ACTIVE-DEFLECTED split over the same
+  accusation data; validated to match its aggregate exactly: active 34, effective 10, skip-saved 24 — and only
+  `effective` is elevated, the audit's explicit "anchor on the effective subcount, NOT the raw active count".)
+  *Before:* passive survival banked 0.6, so a lose-while-accused-alive game outscored a win-unaccused game and
+  R2 was **anti-correlated** with the total (Pearson −0.281).
 - **R3 arcs** (0.20) — *repaired: a cross-meeting suspicion RISE that LANDED on a true impostor.* 1.0 iff an
   ejected player is a true impostor whose rendered suspicion (the extractor's `accumulator_trajectories`) rose
   across ≥2 meetings up to the ejection; else 0.0. *Before:* 0.5 for ≥2 meetings + 0.5 for any flagless
@@ -43,21 +44,23 @@ axes for Phase-C, not just the collapsed scalar):
 
 | metric | value |
 |---|---|
-| mean interestingness | **25.9** (median 22.5, ceiling 62.5) |
+| mean interestingness | **22.4** (median 22.5, ceiling 62.5) |
 | eject-decided games (R1=1.0) | 6 / 50 |
-| R2 by level | 0.0 ×1, 0.2 ×23, 0.6 ×17, 1.0 ×9 |
+| R2 by level | 0.0 ×1, 0.2 ×40, 1.0 ×9 (only the 9 EFFECTIVE-deflection games are elevated) |
 | R3=1.0 (arc landed on a true impostor) | 6 / 50 |
 | R7 (strong-evidence share) | **0** everywhere — all 112 baseline flags are weak |
 | R5 win shapes ≥10% | 4 (stopwatch-some-eject 21, stopwatch-no-eject 16, impostor-win 7, eject-decided 6) |
 
-The mean falls from the pre-repair 45.1 because the perverse credit is gone: passive-survival R2 drops 0.6→0.2,
-flagless R3 is no longer farmable, and R7 honestly reads 0 on an all-weak baseline. That compression is the
-point — the substrate has little strong evidence and few genuine cross-meeting arcs, and the score now says so.
+The mean falls from the pre-repair 45.1 because the perverse credit is gone: non-effective R2 survival (passive,
+SKIP-saved active, or caught) all read 0.2 — only the 9 effective-deflection games keep the top — flagless R3 is
+no longer farmable, and R7 honestly reads 0 on an all-weak baseline. That compression is the point — the
+substrate has little strong evidence and few genuine cross-meeting arcs, and the score now says so.
 
 ## Validation — the three perverse gradients are gone (audit's specific cases)
 
-- **R2 no longer anti-correlated.** Pearson(R2, total) = **+0.451** (was −0.281): the optimizer is no longer
-  pushed toward "both impostors caught" / "prefer to lose slowly".
+- **R2 no longer anti-correlated.** Pearson(R2, total) = **+0.539** (was −0.281): the optimizer is no longer
+  pushed toward "both impostors caught" / "prefer to lose slowly", and skip-saved survival is no longer elevated
+  above passive survival.
 - **R3 no longer rewards the railroad.** seed-15 (a flagless meeting-0/-1 conviction of an INNOCENT crewmate)
   now scores **R3 = 0** (was 1.0); the term lands only on a true impostor with a rising arc (e.g. seeds 0, 5,
   47).
