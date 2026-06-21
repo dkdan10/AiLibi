@@ -274,8 +274,8 @@ Belief-layer only: no §4.6 / tally / SKIP edit, no re-record, byte-determinism 
 
 ### Task 13.6 — Prompt rework: elicit richer testimony + breadcrumb render + trim
 **Branch:** `phase-13-prompt-rework`
-**Depends on:** 13.5
-**Section refs:** experiments/lab/report-phase-b-plan.md (prompts); the 13.4 GATE FINDING above (committed testimony is too thin to mine — this is the lever that fattens it); agents/memory/store.py; agents/strategic/prompts/{crewmate_report,accusation_round,vote_ballot,impostor_report}.j2
+**Depends on:** none
+**Section refs:** experiments/lab/report-phase-b-plan.md (prompts); the 13.4 GATE FINDING above (committed testimony is too thin to mine — this is the lever that fattens it); experiments/lab/deception_battery_2.py (the local real-Qwen harness pattern) + experiments/lab/inference_testimony_probe.py (the richness metric); agents/memory/store.py; agents/strategic/prompts/{crewmate_report,accusation_round,vote_ballot,impostor_report}.j2 — **RUN LOCALLY (needs local Ollama/Qwen); file-disjoint from 13.5/13.8 so it runs in parallel.**
 **Complexity:** Integration
 **Files in scope:**
 - agents/memory/store.py
@@ -284,35 +284,49 @@ Belief-layer only: no §4.6 / tally / SKIP edit, no re-record, byte-determinism 
 - agents/strategic/prompts/vote_ballot.j2
 - agents/strategic/prompts/impostor_report.j2
 - tests/agents/test_strategic_prompts.py
+- experiments/lab/meeting_prompt_battery.py
 **Files NOT in scope:**
 - the in-band reasoning field / two-phase reason→emit — that is the gated 13.9 (keep `think=False`)
 - engine/ visibility (13.8); api/ — none; NO re-record here (the testimony-richness payoff is measured at the smoke re-record)
 
-**This is a primary game-changer.** The 13.4 gate proved the detector is STARVED: crew state only thin firsthand
-sightings, so reconstruction finds no contradictions (R7 0/50). 13.6 fattens the testimony the detector mines. Three
-parts: (1) **elicit richer crew sightings** — rework `crewmate_report.j2` + `accusation_round.j2` so crew state WHO they
-saw, WHERE, and WHEN as concrete `saw_player` observations (not vague free-text), and frame OTHERS' accounts as
-belief-movers (a second observation-backed account corroborates) — more + more-specific `saw_player` claims are the
-two-source-conjunction material 13.4 needs. (2) **breadcrumb render** — `agents/memory/store.py` emits a directional
-"saw X leave A→R" line for the agent's most-recent sighting per subject (pure function of existing episodic deltas — NO
-packet field, firewall untouched). (3) **trim** accreted verbosity ONLY where it removes no still-needed guard; bump the
-four prompt versions together. EXCLUDE the in-band reasoning field (→ 13.9).
-**Definition of done:** `store.py` emits the directional breadcrumb (byte-deterministic over a fixed episodic log, no new
-packet field — leak test unaffected); the report/accusation prompts elicit concrete WHO/WHERE/WHEN `saw_player`
-observations and frame others' accounts as belief-movers; verbosity trimmed without dropping a guard; the four prompt
-versions bumped together; `tests/agents/test_strategic_prompts.py` re-goldened at the new versions; `think=False`
-preserved; NO re-record; `scripts/check.sh` is green.
+**RUN LOCALLY (needs local Ollama/Qwen).** Unlike 13.5/13.8, 13.6's goal — does the new prompt make Qwen *state richer
+sightings* — is INVISIBLE to offline checks; only running the prompts through real Qwen verifies it, and a cloud session
+cannot reach local Ollama. The 13.4 gate proved the detector is STARVED (crew state only thin firsthand sightings →
+reconstruction finds no contradictions, R7 0/50); 13.6 fattens the testimony the detector mines. Three changes:
+(1) **elicit richer crew sightings** — rework `crewmate_report.j2` + `accusation_round.j2` so crew state WHO they saw,
+WHERE, and WHEN as concrete `saw_player` observations (not vague free-text), and frame OTHERS' accounts as belief-movers —
+more + more-specific `saw_player` claims are the two-source-conjunction material 13.4 needs. (2) **breadcrumb render** —
+`agents/memory/store.py` emits a directional "saw X leave A→R" line for the agent's most-recent sighting per subject (pure
+function of existing episodic deltas — NO packet field, firewall untouched). (3) **trim** accreted verbosity ONLY where it
+removes no still-needed guard; bump the four prompt versions together. EXCLUDE the in-band reasoning field (→ 13.9; keep
+`think=False`).
+
+**Iterate fixture-first, not by full games (efficiency).** Build a local meeting-prompt fixture harness
+(`experiments/lab/meeting_prompt_battery.py`, extending the `deception_battery_2.py` pattern): **ISOLATE the fixed
+pre-meeting context** each agent has entering a meeting — reconstructed from the committed 9p2i replays (the observation
+re-walk, or the context already embedded in the recorded `llm_calls` prompts) — then render the NEW template against those
+fixtures and run real Qwen **one call at a time**, inspecting whether the output carries richer/more-specific `saw_player`
+observations. Iterate the template on the fixtures (fast, prompt-isolated) until it does; **only then** run a few full
+real-Ollama seeds to confirm it holds in-game. This isolates the prompt as the only variable and avoids waiting on whole
+games per edit.
+**Definition of done:** `store.py` emits the directional breadcrumb (byte-deterministic, no new packet field — leak test
+unaffected); the report/accusation prompts elicit concrete WHO/WHERE/WHEN `saw_player` observations + frame others'
+accounts as belief-movers; verbosity trimmed without dropping a guard; the four prompt versions bumped together;
+`tests/agents/test_strategic_prompts.py` re-goldened; `think=False` preserved. **LOCAL real-Qwen validation (the real
+bar):** the fixture harness shows the new template yields MORE + MORE-SPECIFIC `saw_player` observations than the old on
+the SAME pre-meeting contexts, and a few full real-Ollama seeds + `inference_testimony_probe.py` show testimony richness
+rises (placements/meeting up from the committed ~4.0). NO re-record (the full R7 lift is the Wave-B smoke re-record);
+`scripts/check.sh` is green.
 **Implementation hint:**
-the goal is MORE + MORE-SPECIFIC `saw_player` observations from crew (the reconstruction material), so make the report /
-accusation templates ask for concrete who/where/when sightings, not prose; the breadcrumb render is a pure read of the
-existing episodic deltas (no new packet field); keep `think=False` (the in-band reasoning field breaks structured output —
-deferred to the gated 13.9).
+iterate on FIXTURES first (the `deception_battery_2.py` pattern) — reconstruct one realistic pre-meeting context per test,
+render the new template, run Qwen once, inspect; only after the template is dialed run full seeds. The breadcrumb render
+is a pure read of the existing episodic deltas (no packet field). Keep `think=False` (the in-band reasoning field
+relocates JSON into the thinking channel — deferred to 13.9).
 **Integration risk:**
-the payoff (richer testimony → detector flags → R7) is observable ONLY on a real-Ollama run, so 13.6 cannot be
-$0-validated for its R7 effect — its offline DoD is render determinism + the prompt re-golden + no-leak; the R7 lift is
-gated at the Wave-B smoke re-record. `think=False` is load-bearing (the in-band reasoning field relocates JSON into the
-thinking channel). Firewall: the breadcrumb render adds no packet field; determinism intact; bump versions together so
-the regression pins stay coherent.
+RUN LOCALLY — a cloud session cannot reach Qwen, so it would ship prompts BLIND to their actual effect (the exact
+look-done-but-inert failure the 13.4 gate caught). The R7 lift itself is observable only at the smoke re-record; 13.6's
+own bar is the fixture-harness richness gain + the placements/meeting rise on a few seeds. `think=False` is load-bearing.
+Firewall: the breadcrumb render adds no packet field; bump prompt versions together so the regression pins stay coherent.
 **Ready-to-paste prompt:** `agent_prompts/task-13-6-prompt-rework.md`
 
 #### Task 13.7 — Graduated corroboration-aware testimony spread (depends 13.5, 13.6)
@@ -323,14 +337,46 @@ conversion, explicitly NOT the win-split and NOT R7. **Offline-validate:** the 1
 (crew / no-witness games unchanged); 2 INDEPENDENT voices cross 0.60 and a corroboration-aligned opt-in alone cannot;
 dump per-meeting voice counts on the committed replays and hand-confirm independence. $0.
 
-#### Task 13.8 — Asymmetric visibility: crew `same_room_only` / impostor `same_room_and_adjacent` (depends 13.5, 13.6)
-Role-parameterize `engine/visibility.py` (`compute_visibility_for_player` keys on `observer.role`: crew → `same_room_only`
-at base, impostor → base; an ACTIVE sabotage degrade still hits everyone). Firewall-clean (your sight depends on YOUR
-role; leaks nothing about others). Probe-validated the impostor is NOT re-blinded (`visibility_resim_asymmetric.py`).
-Ships AFTER the detector (crew room-only needs the inferential detector + the 13.6 render to deduce). **Owner balance
-lever** (same class as the frozen clock). **Offline-validate:** state-hash determinism + leak test green; the
-fake-provider sweep confirms the impostor is not cratered — but the deduction-side BALANCE swing is a REAL-PROVIDER
-readout, gated at the 13.10 re-record, NOT pre-clearable on fake.
+### Task 13.8 — Asymmetric visibility: crew `same_room_only` / impostor `same_room_and_adjacent`
+**Branch:** `phase-13-asym-visibility`
+**Depends on:** none
+**Section refs:** experiments/lab/report-phase-b-plan.md (visibility); experiments/lab/visibility_resim_asymmetric.py (the probe — impostor NOT re-blinded); engine/visibility.py (`compute_visibility_for_player`, `resolve_visibility_mode`, `visible_rooms_for_player`); engine/maps/canonical_1.yaml (`visibility_defaults`)
+**Complexity:** Integration
+**Files in scope:**
+- engine/visibility.py
+- tests/engine/test_visibility.py
+**Files NOT in scope:**
+- agents/ and meetings/ — the detector (13.2–13.4), belief-wiring (13.5), and prompts (13.6) are the other levers; this is the engine sight rule only
+- engine/maps/canonical_1.yaml — the BASE stays `same_room_and_adjacent`; the asymmetry is role-parameterized IN CODE, not a yaml base flip (so the lights sabotage + the default stay intact)
+- recordings — the balance effect is measured at the smoke re-record; NO re-record here
+
+File-disjoint from 13.5 (beliefs.py) and 13.6 (store.py + prompts), so it runs in PARALLEL with them. Role-parameterize
+`engine/visibility.py` so an observer's visibility depends on its ROLE: at BASE visibility a CREWMATE sees
+`same_room_only` while an IMPOSTOR keeps the base `same_room_and_adjacent`; an ACTIVE sabotage degrade (mode != base, e.g.
+lights → `same_room_only`) still degrades EVERYONE. `compute_visibility_for_player` already holds the observer (with
+`.role`), so choose the mode on it. This is the genre-correct impostor information economy (the predator keeps the sight
+edge; the crew must INFER) and the FORCING FUNCTION that makes the inferential detector load-bearing (crew room-only →
+private kills → testimony-based deduction). Probe-validated the impostor is NOT re-blinded
+(`visibility_resim_asymmetric.py`: kills 168 / wins 11 ≈ baseline vs the symmetric flip's crater 141 / 5). Firewall-clean:
+an observer's sight depending on ITS OWN role leaks nothing about others' hidden info.
+**Definition of done:** crew observers get `same_room_only` and impostor observers `same_room_and_adjacent` at base, with
+an active sabotage degrade still applying to everyone (unit-tested for crew, impostor, and the sabotage case); state-hash
+determinism + the observation leak-property + firewall import tests stay green; a fake-provider sweep confirms the impostor
+is NOT cratered (kills / parity-wins hold near baseline, per `visibility_resim_asymmetric.py`); NO re-record (the
+deduction-side BALANCE swing is a REAL-PROVIDER readout gated at the Wave-B smoke re-record + owner sign-off);
+`scripts/check.sh` is green.
+**Implementation hint:**
+the seam is inside `compute_visibility_for_player` (it has the observer): when `resolve_visibility_mode` returns the base,
+use `same_room_only` for a crewmate and the base for an impostor; otherwise keep the resolved mode (so an active lights
+degrade still hits the impostor too) — exactly the predicate in `visibility_resim_asymmetric.py`. No yaml base change.
+**Integration risk:**
+OWNER BALANCE LEVER (same class as the frozen clock) — it favors the impostor (it hunts AND evades better while crew
+detect less); the fake sweep only certifies "impostor not cratered", and the real swing (does it overshoot the Phase-11
+~14% floor?) is a real-provider readout gated at the smoke re-record + your sign-off. Firewall: role-parameterized sight
+must not leak others' hidden state — the leak-property test is the guard. Determinism: role is fixed per game, so
+byte-determinism holds. Ships (re-records) AFTER the detector + 13.6 render — crew room-only needs the inferential
+detector to deduce — but is BUILT in parallel.
+**Ready-to-paste prompt:** `agent_prompts/task-13-8-asym-visibility.md`
 
 #### Task 13.9 — OPTIONAL gated: parse-only reasoning sub-schema (two-phase reason→emit) (depends 13.6, 13.7)
 Define a parse-only `ReasonedMeetingTurn` (reasoning + `MeetingTurn` fields); validate the LLM text against it, then
