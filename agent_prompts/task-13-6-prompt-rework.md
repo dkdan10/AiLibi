@@ -24,7 +24,7 @@ The authoritative task contract is copied below from tasks/phase-13.md. Follow i
 - tests/agents/test_strategic_prompts.py
 - experiments/lab/meeting_prompt_battery.py
 **Files NOT in scope:**
-- the in-band reasoning field / two-phase reason→emit — that is the gated 13.9 (keep `think=False`)
+- the in-band reasoning field / two-phase reason→emit — that is the gated 13.11 (keep `think=False`)
 - engine/ visibility (13.8); api/ — none; NO re-record here (the testimony-richness payoff is measured at the smoke re-record)
 
 **RUN LOCALLY (needs local Ollama/Qwen).** Unlike 13.5/13.8, 13.6's goal — does the new prompt make Qwen *state richer
@@ -36,7 +36,7 @@ WHERE, and WHEN as concrete `saw_player` observations (not vague free-text), and
 more + more-specific `saw_player` claims are the two-source-conjunction material 13.4 needs. (2) **breadcrumb render** —
 `agents/memory/store.py` emits a directional "saw X leave A→R" line for the agent's most-recent sighting per subject (pure
 function of existing episodic deltas — NO packet field, firewall untouched). (3) **trim** accreted verbosity ONLY where it
-removes no still-needed guard; bump the four prompt versions together. EXCLUDE the in-band reasoning field (→ 13.9; keep
+removes no still-needed guard; bump the four prompt versions together. EXCLUDE the in-band reasoning field (→ 13.11; keep
 `think=False`).
 
 **Build approach — rebuild the two sighting prompts, don't patch the crowded ones.** `crewmate_report.j2` (241 lines)
@@ -76,7 +76,7 @@ rises (placements/meeting up from the committed ~4.0). NO re-record (the full R7
 iterate on FIXTURES first (the `deception_battery_2.py` pattern) — reconstruct one realistic pre-meeting context per test,
 render the new template, run Qwen once, inspect; only after the template is dialed run full seeds. The breadcrumb render
 is a pure read of the existing episodic deltas (no packet field). Keep `think=False` (the in-band reasoning field
-relocates JSON into the thinking channel — deferred to 13.9).
+relocates JSON into the thinking channel — deferred to 13.11).
 
 ## Integration risk
 RUN LOCALLY — a cloud session cannot reach Qwen, so it would ship prompts BLIND to their actual effect (the exact
