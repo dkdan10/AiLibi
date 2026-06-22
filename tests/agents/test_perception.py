@@ -473,6 +473,39 @@ class TestIngestPacketBeliefRules:
             self._DEFAULT_SUSPICION + VENTING_SUSPICION_DELTA
         )
 
+    def test_observed_task_action_rides_through_and_is_belief_neutral(self) -> None:
+        # Task 13.9: the new observed-activity stamp arrives as a
+        # ``visible_players`` entry whose ``action`` is ``"task"``. It must ride
+        # into the ``saw_player`` episodic payload verbatim (so the §6.6 render
+        # and the inferential detector can read it), but -- unlike ``"vent"`` --
+        # it carries NO role signal, so it must NOT move the actor's suspicion
+        # (Rule 4 keys on ``"vent"`` only). This is the firewall guarantee that
+        # makes a real and a pretend task byte-identical AND inert in the belief
+        # graph, so the annotation never perturbs game trajectories.
+        store = MemoryStore()
+        beliefs = BeliefState()
+
+        ingest_packet(
+            packet=_packet(
+                tick=5,
+                room="STORAGE",
+                visible_players=(PlayerView(id="p2", room="STORAGE", action="task"),),
+            ),
+            memory=store,
+            beliefs=beliefs,
+        )
+
+        saw_events = [
+            e for e in store.recent(since_tick=0) if e.type == EVENT_SAW_PLAYER
+        ]
+        assert len(saw_events) == 1
+        assert saw_events[0].payload == {
+            "player_id": "p2",
+            "room": "STORAGE",
+            "action": "task",
+        }
+        assert beliefs.view("p2").suspicion == pytest.approx(self._DEFAULT_SUSPICION)
+
     def test_fresh_body_elevates_only_in_window_co_presence(self) -> None:
         # DESIGN.md §6.3 Rule 1: discovering a body elevates suspicion of
         # players seen in that room within the prior BODY_PROXIMITY_WINDOW_TICKS

@@ -54,6 +54,11 @@ _SALIENCE_VENT_HEARD: Final[int] = 75
 _SALIENCE_SABOTAGE_HEARD: Final[int] = 65
 _SALIENCE_SAW_PLAYER_ACTIVE: Final[int] = 55
 _SALIENCE_SAW_PLAYER: Final[int] = 50
+# A within-vision entry/exit (Task 13.9), derived from consecutive own-room
+# ``saw_player`` deltas. Ranked just below a direct sighting: it is valuable
+# trajectory testimony but secondary to the sighting it is reconstructed from,
+# so a tight budget keeps the primary sightings and sheds transitions first.
+_SALIENCE_TRANSITION: Final[int] = 48
 _SALIENCE_COMPLETED_TASK: Final[int] = 30
 _SALIENCE_COOLDOWN_STATUS: Final[int] = 10
 
@@ -445,16 +450,17 @@ def _collect_movement_breadcrumbs(
         room = event.payload.get("room")
         if not isinstance(player_id, str) or not isinstance(room, str):
             continue
-        if own_agent_id is not None and player_id == own_agent_id:
-            continue
         action = event.payload.get("action")
         action_str = action if isinstance(action, str) else None
         if action_str in ("vent", "kill"):
             continue
-        if player_id in teammate_ids and _is_kill_window_sighting(
+        if _sighting_is_suppressed(
+            player_id=player_id,
             room=room,
             tick=event.tick,
             action=action_str,
+            own_agent_id=own_agent_id,
+            teammate_ids=teammate_ids,
             body_sightings=body_sightings,
         ):
             continue
@@ -539,6 +545,199 @@ def _is_kill_window_sighting(
     )
 
 
+def _sighting_is_suppressed(
+    *,
+    player_id: str,
+    room: str,
+    tick: int,
+    action: str | None,
+    own_agent_id: str | None,
+    teammate_ids: frozenset[str],
+    body_sightings: tuple[tuple[str, int], ...],
+) -> bool:
+    """Whether a ``saw_player`` row is dropped by the §4.7 team-internal firewall.
+
+    The single source of truth for the two suppressions the renderer applies to
+    every sighting-derived line (Task 9.3, DESIGN.md §4.7):
+
+    * a self-subject sighting (the recipient's own id) -- it would render as
+      third-person "You saw {self}" garble; dropped for EVERY role.
+    * an impostor's sighting of a fellow impostor at a kill room/tick -- dropping
+      it from the impostor's own meeting input stops the own-goal where it
+      publicly places a teammate at the scene (audit gp-7 seed 47).
+      ``teammate_ids`` is empty for crew / a sole impostor (and role-gated to
+      IMPOSTOR by the caller), so the crew path never drops a row.
+
+    Shared by ``_render_saw_player`` (the sighting line), ``_collect_co_presence``
+    (the "with …" companions), and ``_collect_transitions`` (the entered/left
+    deltas) so a suppressed subject never re-surfaces through co-presence or a
+    transition -- the firewall holds across all three Task 13.9 surfaces.
+    """
+
+    if own_agent_id is not None and player_id == own_agent_id:
+        return True
+    return player_id in teammate_ids and _is_kill_window_sighting(
+        room=room,
+        tick=tick,
+        action=action,
+        body_sightings=body_sightings,
+    )
+
+
+def _collect_co_presence(
+    episodic: MemoryStore,
+    *,
+    own_agent_id: str | None,
+    teammate_ids: frozenset[str],
+    body_sightings: tuple[tuple[str, int], ...],
+) -> dict[tuple[int, str], frozenset[str]]:
+    """Who the observer saw TOGETHER, keyed by ``(tick, room)`` (Task 13.9).
+
+    A pure read of the existing ``saw_player`` episodic log: every non-suppressed
+    subject the observer saw in one room on one tick is co-present with the
+    others there. ``_render_saw_player`` turns this into the "(with …)" suffix so
+    the model states reliable co-presence, which feeds ``reconstruct_stated_paths``
+    -- the two-source material the inferential ``alibi_vs_physical`` detector
+    needs (the Wave-C smoke finding: room-only crew starved it of co-located
+    witnesses). NO packet field -- the firewall is untouched (the leak test scans
+    packets, not this derived render).
+
+    The §4.7 suppressions (:func:`_sighting_is_suppressed`) are mirrored here so a
+    self-subject or a teammate-at-a-kill-window never appears as a companion --
+    co-presence cannot re-introduce the own-goal the sighting line itself drops.
+    """
+
+    groups: dict[tuple[int, str], set[str]] = {}
+    for event in episodic.recent(since_tick=0):
+        if event.type != _EVENT_SAW_PLAYER:
+            continue
+        player_id = event.payload.get("player_id")
+        room = event.payload.get("room")
+        if not isinstance(player_id, str) or not isinstance(room, str):
+            continue
+        action = event.payload.get("action")
+        action_str = action if isinstance(action, str) else None
+        if _sighting_is_suppressed(
+            player_id=player_id,
+            room=room,
+            tick=event.tick,
+            action=action_str,
+            own_agent_id=own_agent_id,
+            teammate_ids=teammate_ids,
+            body_sightings=body_sightings,
+        ):
+            continue
+        groups.setdefault((event.tick, room), set()).add(player_id)
+    return {key: frozenset(members) for key, members in groups.items()}
+
+
+def _co_presence_suffix(
+    co_presence: dict[tuple[int, str], frozenset[str]] | None,
+    *,
+    player_id: str,
+    tick: int,
+    room: str,
+) -> str:
+    """The "(with …)" companion suffix for one ``saw_player`` line (Task 13.9).
+
+    Empty unless the observer saw at least one OTHER (non-suppressed) subject in
+    the same room on the same tick, so a solitary sighting renders byte-identically
+    to the pre-13.9 output. Companions are sorted for replay determinism.
+    """
+
+    if co_presence is None:
+        return ""
+    companions = co_presence.get((tick, room), frozenset()) - {player_id}
+    if not companions:
+        return ""
+    return " (with " + ", ".join(sorted(companions)) + ")"
+
+
+def _collect_transitions(
+    episodic: MemoryStore,
+    *,
+    own_agent_id: str | None,
+    teammate_ids: frozenset[str],
+    body_sightings: tuple[tuple[str, int], ...],
+) -> list[_Observation]:
+    """Within-vision entry/exit lines at the observer's OWN rooms (Task 13.9).
+
+    A pure read of consecutive own-room ``saw_player`` deltas: a subject ABSENT at
+    tick N but PRESENT at N+1 ⇒ "entered"; PRESENT at N but ABSENT at N+1 ⇒ "left"
+    (DESIGN.md §1.3; the Wave-C smoke finding). Emitted ONLY across a tick pair the
+    observer spent STATIONARY in one room (same own room at N and N+1, ticks
+    adjacent): if the observer moved -- or a meeting opened a tick gap -- the field
+    of view changed, so a delta cannot be attributed to the SUBJECT moving and is
+    skipped. The observer never sees the adjacent origin/destination (room-only),
+    so the full X→Y trajectory emerges COLLECTIVELY when meeting testimony is
+    combined -- complementing the 13.6 own-sightings breadcrumb.
+
+    Own-room scoping uses the observer's ``self_state`` room per tick; only
+    sightings in that room count, so an impostor's adjacent-room sightings (which
+    the observer cannot vouch a transition for) are excluded. The §4.7
+    suppressions are mirrored so a suppressed subject never produces a transition.
+    """
+
+    own_room_by_tick: dict[int, str] = {}
+    seen_in_own_room: dict[int, set[str]] = {}
+    for event in episodic.recent(since_tick=0):
+        if event.type == _EVENT_SELF_STATE:
+            room = event.payload.get("room")
+            if isinstance(room, str):
+                own_room_by_tick[event.tick] = room
+
+    for event in episodic.recent(since_tick=0):
+        if event.type != _EVENT_SAW_PLAYER:
+            continue
+        player_id = event.payload.get("player_id")
+        room = event.payload.get("room")
+        if not isinstance(player_id, str) or not isinstance(room, str):
+            continue
+        if own_room_by_tick.get(event.tick) != room:
+            continue
+        action = event.payload.get("action")
+        action_str = action if isinstance(action, str) else None
+        if _sighting_is_suppressed(
+            player_id=player_id,
+            room=room,
+            tick=event.tick,
+            action=action_str,
+            own_agent_id=own_agent_id,
+            teammate_ids=teammate_ids,
+            body_sightings=body_sightings,
+        ):
+            continue
+        seen_in_own_room.setdefault(event.tick, set()).add(player_id)
+
+    transitions: list[_Observation] = []
+    observed_ticks = sorted(own_room_by_tick)
+    for prev_tick, tick in zip(observed_ticks, observed_ticks[1:]):
+        if tick - prev_tick != 1:
+            continue
+        room = own_room_by_tick[tick]
+        if own_room_by_tick.get(prev_tick) != room:
+            continue
+        prev_seen = seen_in_own_room.get(prev_tick, set())
+        now_seen = seen_in_own_room.get(tick, set())
+        for subject in sorted(now_seen - prev_seen):
+            transitions.append(
+                _Observation(
+                    salience=_SALIENCE_TRANSITION,
+                    tick=tick,
+                    line=f"[tick {tick}] {subject} entered {room}.",
+                )
+            )
+        for subject in sorted(prev_seen - now_seen):
+            transitions.append(
+                _Observation(
+                    salience=_SALIENCE_TRANSITION,
+                    tick=tick,
+                    line=f"[tick {tick}] {subject} left {room}.",
+                )
+            )
+    return transitions
+
+
 def _latest_tasks_summary(episodic: MemoryStore) -> str | None:
     summary: str | None = None
     for event in episodic.recent(since_tick=0):
@@ -569,6 +768,24 @@ def _build_observations(
         own_agent_id=own_agent_id,
         teammate_ids=teammate_ids,
         body_sightings=body_sightings,
+    )
+    # Task 13.9 same-room enrichment, both pure reads of the existing episodic
+    # ``saw_player`` log (no packet field, firewall untouched): co-presence
+    # ("with …") suffixes the sighting line, and within-vision transitions
+    # ("entered/left") render as their own lines below.
+    co_presence = _collect_co_presence(
+        episodic,
+        own_agent_id=own_agent_id,
+        teammate_ids=teammate_ids,
+        body_sightings=body_sightings,
+    )
+    observations.extend(
+        _collect_transitions(
+            episodic,
+            own_agent_id=own_agent_id,
+            teammate_ids=teammate_ids,
+            body_sightings=body_sightings,
+        )
     )
 
     for event in episodic.recent(since_tick=0):
@@ -680,6 +897,7 @@ def _build_observations(
                 teammate_ids=teammate_ids,
                 body_sightings=body_sightings,
                 breadcrumbs=breadcrumbs,
+                co_presence=co_presence,
             )
             if obs is not None:
                 observations.append(obs)
@@ -729,6 +947,7 @@ def _render_saw_player(
     teammate_ids: frozenset[str] = frozenset(),
     body_sightings: tuple[tuple[str, int], ...] = (),
     breadcrumbs: dict[str, _Breadcrumb] | None = None,
+    co_presence: dict[tuple[int, str], frozenset[str]] | None = None,
 ) -> _Observation | None:
     player_id = event.payload.get("player_id")
     room = event.payload.get("room")
@@ -736,21 +955,17 @@ def _render_saw_player(
         return None
     action = event.payload.get("action")
     action_str: str | None = action if isinstance(action, str) else None
-    # Team-internal firewall (Task 9.3, DESIGN.md §4.7), suppress before the
-    # row is built so neither variant ever reaches the prompt:
-    #   * a self-subject sighting (the recipient's own id) -- it would render
-    #     as third-person "You saw {self}" garble; dropped for EVERY role.
-    #   * an impostor's sighting of a fellow impostor at a kill room/tick --
-    #     dropping it from the impostor's own meeting input stops the own-goal
-    #     where it publicly places a teammate at the scene (audit gp-7 seed 47).
-    #     ``teammate_ids`` is empty for crew / sole impostor and is role-gated
-    #     to IMPOSTOR by the caller, so the crew render is byte-identical.
-    if own_agent_id is not None and player_id == own_agent_id:
-        return None
-    if player_id in teammate_ids and _is_kill_window_sighting(
+    # Team-internal firewall (Task 9.3, DESIGN.md §4.7): suppress the self-subject
+    # garble and the impostor's teammate-at-a-kill-window own-goal before the row
+    # is built, so neither variant ever reaches the prompt (shared with
+    # co-presence + transitions via :func:`_sighting_is_suppressed`).
+    if _sighting_is_suppressed(
+        player_id=player_id,
         room=room,
         tick=event.tick,
         action=action_str,
+        own_agent_id=own_agent_id,
+        teammate_ids=teammate_ids,
         body_sightings=body_sightings,
     ):
         return None
@@ -766,10 +981,14 @@ def _render_saw_player(
             tick=event.tick,
             line=(f"[tick {event.tick}] You witnessed {player_id} kill in {room}."),
         )
-    # Task 13.6: the most-recent ordinary sighting of a subject the agent saw move
-    # carries a directional breadcrumb suffix (vent/kill witnessed lines, handled
-    # above, stay clean). Empty for a non-moving subject, so the render is
-    # byte-unchanged where no one moved.
+    # Task 13.9 co-presence + Task 13.6 breadcrumb suffixes, ordinary sightings
+    # only (the vent/kill witnessed lines above stay clean). Co-presence ("with …")
+    # lists the other subjects seen in the same room on the same tick; the
+    # breadcrumb states the subject's most-recent prior room. Both are empty for a
+    # solitary, non-moving subject, so that render is byte-identical to pre-13.6/9.
+    co_present = _co_presence_suffix(
+        co_presence, player_id=player_id, tick=event.tick, room=room
+    )
     suffix = _movement_suffix_for(
         breadcrumbs, player_id=player_id, tick=event.tick, room=room
     )
@@ -779,13 +998,13 @@ def _render_saw_player(
             tick=event.tick,
             line=(
                 f"[tick {event.tick}] You saw {player_id} "
-                f"{action_str} in {room}{suffix}."
+                f"{action_str} in {room}{co_present}{suffix}."
             ),
         )
     return _Observation(
         salience=_SALIENCE_SAW_PLAYER,
         tick=event.tick,
-        line=f"[tick {event.tick}] You saw {player_id} in {room}{suffix}.",
+        line=f"[tick {event.tick}] You saw {player_id} in {room}{co_present}{suffix}.",
     )
 
 
