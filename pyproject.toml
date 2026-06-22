@@ -31,10 +31,11 @@ mypy_path = "scripts"
 # exploratory (see experiments/lab/ml-spike-charter.md) and use a sys.path bootstrap
 # mypy can't follow; exclude them from the strict gate. The grounding probes
 # (experiments/lab/visibility_*.py + inference_*.py) reuse ml_spike.core via the same
+# bootstrap, and stopwatch_*.py monkeypatches engine internals through the same sys.path
 # bootstrap, so they are excluded on the same grounds. The maintained top-level lab
 # tools (experiments/lab/*.py) stay type-checked. design/ holds one-off design-artifact
 # generators (e.g. phase-12/gen_map_reference.py), not production code — excluded too.
-exclude = "^(experiments/lab/ml_spike/|experiments/lab/(visibility|inference)_|design/)"
+exclude = "^(experiments/lab/ml_spike/|experiments/lab/(visibility|inference|stopwatch)_|design/)"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
