@@ -431,12 +431,15 @@ replay. Gate adoption on an offline qwen husk/length measurement; do NOT delete 
 validated. **Offline-validate:** the `deception_battery` harness on qwen (reasoning stays 2–4 lines, free_text ~1
 sentence, total under the turn cap, husk rate does not rise); recorded turns carry no reasoning field. **Owner go/no-go.**
 
-#### Task 13.10 — ONE combined re-record (9p2i + 7p2i) + close-audit gate + era-pin re-anchor (depends 13.7, 13.8, 13.9)
-After all offline-validated changes land, the single combined re-record (cadence doctrine): fake-provider sweep FIRST
-(balance check, incl. the 13.8 asymmetric swing), then real-Ollama re-record of both sets, regenerate the rubric
-artifact, re-anchor the 15 era-pins (precedent `dbe1827`), run the close audit. **Gate:** `rubric_score.py` shows R7 > 0
-on multiple seeds, R3/R1 up, R4 (inversions / wrong-eject / friendly-fire) HARD-floor clean, impostor win ≥ the
-Phase-11 14% floor; abandon the branch if R1 regresses below 6/50.
+#### Task 13.10 — ONE combined re-record UNDER REDISTRIBUTE + close-audit gate + era-pin re-anchor (depends 13.9, 13.12)
+After 13.12 lands, the single combined re-record (cadence doctrine): flip `canonical_1.yaml`
+`dead_task_rule: redistribute` (the validated config — tpc=2, ×1.0 durations), fake-provider sweep FIRST (balance
+sanity), then real-Ollama re-record of BOTH sets under redistribute, regenerate the rubric artifact, re-anchor the
+era-pins (precedent `dbe1827`), run the close audit. **Gate (the from-scratch rubric, `report-rubric-design.md` /
+`rubric_v2`):** stopwatch broken (`CREWMATE_TASKS` down) + deduction DECIDES (`CREWMATE_EJECT` > 0, D1-resolution up) +
+ejections info-backed (0 railroad floors) + diverse win-shapes (D5 ≥ 3) + impostor in the validated band; the rubric mean
+rises vs the pre-redistribute baseline. ~13h overnight. NOTE: the old R7/R3 detector terms are DEAD by design (the
+from-scratch rubric supersedes them) — gate on D1/D2/D5, not R7.
 
 ## Wave C — information economy + from-scratch rubric (post-smoke pivot, 2026-06-21)
 
@@ -514,3 +517,72 @@ rejected kill surfacing would leak the impostor). Input side only — no detecto
 function of the visible submitted-action list + the episodic log, byte-stable. The deduction lift is real-Qwen-only →
 gated at the Wave-C combined smoke with the new rubric; this task's offline bar is firewall + goldens + determinism.
 **Ready-to-paste prompt:** `agent_prompts/task-13-9-perception-enrich.md`
+
+## Wave D — make the tuned config official (post-sweep, 2026-06-22)
+
+The stopwatch / redistribute sweeps (`experiments/lab/report-stopwatch-sweep.md`) + the real
+`qwen3.5:9b` smoke settled the structural fix: **REDISTRIBUTE** the dead-crewmate task burden (don't
+drop it) is what makes the deduction DECIDE — real smoke: **2 `CREWMATE_EJECT` wins, 3 win-shapes,
+stopwatch 8/8→3/8, meetings 1.9→4.0**, decisions 12/12 info-backed (0 railroads). Owner: **keep the
+validated config** (redistribute, tasks_per_crewmate=2, ×1.0 durations) — balance tuning deferred (the
+dial is duration at tpc=2; tpc=1 reintroduces the stopwatch). 13.12 makes redistribute a real,
+firewall-clean engine rule (today it is only a sim monkeypatch); the 13.10 re-record flips the canonical
+map to it and re-records under it.
+
+### Task 13.12 — Redistribute the dead-crewmate task rule (replace drop), map-flag-gated
+**Branch:** `phase-13-redistribute`
+**Depends on:** none
+**Section refs:** experiments/lab/report-stopwatch-sweep.md (the validation) + experiments/lab/stopwatch_sweep.py (`_redistribute_apply_kill` — the validated logic); engine/tick.py:323-340 (the DROP in `_apply_kill`); orchestrator/game.py:850-859 (the DROP on ejection); engine/world.py (`Map` config + a new `dead_task_rule`); engine/maps/canonical_1.yaml; engine/entities.py:52 (`TaskState`: id/owner/map_task_id/room/progress/required_ticks/completed); DESIGN.md §3.5 (the dead-crewmate task rule)
+**Complexity:** Integration
+**Files in scope:**
+- engine/tick.py
+- orchestrator/game.py
+- engine/world.py
+- engine/maps/canonical_1.yaml
+- tests/engine/test_tick.py
+- tests/orchestrator/test_game.py
+**Files NOT in scope:**
+- recordings — NO re-record here; the committed sets stay byte-identical under the DEFAULT `drop` flag. The redistribute re-record is 13.10.
+- the §4.6 gate / detector / beliefs / visibility — unchanged
+- agents/ and the observation packet — the recipient's new pending_task surfaces through the EXISTING owner-filtered SelfView channel; no agent-layer or packet change
+- tests/observation/test_leak_property.py — the leak sweeps are RUN (must stay green), not edited (the re-key adds no new packet field)
+
+Replace the dead-crewmate-task **DROP** with **REDISTRIBUTE**, behind a map config so the committed
+replays stay byte-identical until the re-record. The validated logic (`_redistribute_apply_kill`): when a
+crewmate dies (KILLED or EJECTED), instead of DELETING their incomplete task instances, RE-KEY each to a
+LIVING CREWMATE — the burden does not shrink on death, but the crew stay active (the recipient must travel
+to the task's room and finish it). **Recipient = the lowest-id living crewmate not already owning that map
+task** (carry the instance's progress / room / required_ticks; change only `id` and `owner`); if every
+living crewmate already owns it, fall back to dropping that one. Apply at BOTH death paths:
+`engine/tick.py::_apply_kill` (the kill) and `orchestrator/game.py::apply_meeting_result` (the ejection).
+Add `Map.dead_task_rule: Literal["drop","redistribute"]` (engine/world.py) read from canonical_1.yaml;
+**DEFAULT "drop"** and keep canonical_1.yaml at "drop" so the committed replays + their state-hash verify
+stay byte-identical — the 13.10 re-record is what flips canonical to "redistribute".
+
+**Firewall:** the re-key is ENGINE-INTERNAL — the recipient's new `pending_task_id` reaches it through the
+existing owner-filtered SelfView channel (its OWN task; no provenance, no role/attribution leak), and no
+other agent can see it (own-task-only filter). The engine reading `player.role` to choose a crewmate
+recipient is the same engine-side role access the win-conditions / kill-validation already use, never
+exposed to agents. **Determinism:** lowest-id recipient + carried progress = byte-stable; a NEW
+redistribute game re-sims to identical state hashes; committed replays (recorded under `drop`) re-walk
+under `drop` byte-identically.
+**Definition of done:** a `Map.dead_task_rule` config ("drop" | "redistribute"), default "drop", read from
+canonical_1.yaml (kept at "drop"); under "redistribute" a dead crewmate's incomplete instances re-key to
+the lowest-id living crewmate not already owning that map task (carry progress/room/required; new id+owner)
+with the no-eligible-recipient drop fallback, at BOTH the kill and ejection paths (unit-tested for both);
+under the default "drop" all behavior is UNCHANGED (committed replays + state-hash verify byte-identical);
+the leak-property + leak_test sweeps stay green (no leak from the re-key); a unit test runs a "redistribute"
+game twice and asserts identical state hashes; a redistributed task still counts toward CREWMATE_TASKS (the
+recipient can complete it); NO re-record; `scripts/check.sh` is green.
+**Implementation hint:**
+port `experiments/lab/stopwatch_sweep.py::_redistribute_apply_kill` (re-add the dropped instances, re-keyed
+to a living crewmate) gated on `game_map.dead_task_rule == "redistribute"`; mirror it in
+`apply_meeting_result`; keep the existing drop-filter as the default branch so `drop` is byte-identical.
+**Integration risk:**
+behavior changes ONLY when the flag is "redistribute" — keep canonical DEFAULT "drop" so check.sh + the
+committed state-hash verify stay green NOW (the redistribute re-record is 13.10). FIREWALL is the risk
+surface: the re-key must add NO agent-visible provenance (the recipient's pending_task is leak-allowed —
+assert the leak tests) and must not expose roles to agents (the role read is engine-side only).
+DETERMINISM: lowest-id recipient + carry progress → assert a redistribute game re-sims identically.
+Win-conditions unchanged: a redistributed instance still counts, so the crew can still win by tasks (harder).
+**Ready-to-paste prompt:** `agent_prompts/task-13-12-redistribute.md`
