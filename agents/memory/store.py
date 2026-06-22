@@ -70,6 +70,14 @@ _EVENT_SELF_STATE: Final[str] = "self_state"
 _EVENT_OWN_KILL: Final[str] = "own_kill"
 _EVENT_GLOBAL_STATUS: Final[str] = "global_status"
 _EVENT_COOLDOWN_STATUS: Final[str] = "cooldown_status"
+# A meeting-boundary marker (Task 13.9, Codex review). Recorded at the resume
+# tick by :func:`absorb_meeting_evidence` (the per-living-agent post-meeting fold,
+# called by both the live orchestrator and the replay loader) so the within-vision
+# transition render can tell that the world changed DISCONTINUOUSLY here -- a
+# player ejected/removed at the meeting is gone without gameplay movement, and the
+# resume tick is adjacent to the pre-meeting tick, so the tick-gap guard cannot see
+# it. Carries no sighting data; it is inert to every other consumer.
+_EVENT_MEETING_BOUNDARY: Final[str] = "meeting_boundary"
 
 _ACTIVE_PLAYER_ACTIONS: Final[frozenset[str]] = frozenset({"report", "task"})
 
@@ -269,6 +277,28 @@ def absorb_meeting_evidence(
         )
     )
 
+    # Mark the meeting boundary so the §6.9 within-vision transition render does
+    # NOT infer a movement across it (Task 13.9, Codex review). Gameplay resumes at
+    # the pre-meeting tick + 1 (``apply_meeting_result``: ``working.tick + 1``) and
+    # the meeting-trigger ``advance_tick`` does not increment the tick, so the
+    # pre-meeting and resume packets land on ADJACENT ticks -- the transition's
+    # tick-gap guard cannot see the boundary. Without this marker a player
+    # ejected/removed at the meeting (gone, no body, no gameplay movement) renders a
+    # bogus "left ROOM" on the resume tick. This is the universal per-living-agent
+    # post-meeting hook (live orchestrator AND replay loader both call it), so the
+    # marker lands on every path that reconstructs memory; it carries no sighting
+    # data and is inert to every consumer except :func:`_collect_transitions`.
+    last_perceived_tick = _latest_self_state_tick(memory.episodic)
+    if last_perceived_tick is not None:
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=last_perceived_tick + 1,
+                type=_EVENT_MEETING_BOUNDARY,
+                payload={},
+                provenance="inferred",
+            )
+        )
+
 
 def _estimate_tokens(text: str) -> int:
     """Approximate BPE token count from character length.
@@ -298,6 +328,19 @@ def _latest_role(episodic: MemoryStore) -> str | None:
         if isinstance(value, str):
             role = value
     return role
+
+
+def _latest_self_state_tick(episodic: MemoryStore) -> int | None:
+    """The tick of the most recent ``self_state`` -- the last tick the agent
+    perceived. ``self_state`` rows are appended in non-decreasing tick order, so
+    the last one seen is the latest. ``None`` before any perception has run.
+    """
+
+    tick: int | None = None
+    for event in episodic.recent(since_tick=0):
+        if event.type == _EVENT_SELF_STATE:
+            tick = event.tick
+    return tick
 
 
 def _latest_self_guard_fields(
@@ -666,11 +709,15 @@ def _collect_transitions(
     tick N but PRESENT at N+1 ⇒ "entered"; PRESENT at N but ABSENT at N+1 ⇒ "left"
     (DESIGN.md §1.3; the Wave-C smoke finding). Emitted ONLY across a tick pair the
     observer spent STATIONARY in one room (same own room at N and N+1, ticks
-    adjacent): if the observer moved -- or a meeting opened a tick gap -- the field
-    of view changed, so a delta cannot be attributed to the SUBJECT moving and is
-    skipped. The observer never sees the adjacent origin/destination (room-only),
-    so the full X→Y trajectory emerges COLLECTIVELY when meeting testimony is
-    combined -- complementing the 13.6 own-sightings breadcrumb.
+    adjacent): if the observer moved the field of view changed, so a delta cannot
+    be attributed to the SUBJECT moving and is skipped. A tick pair that SPANS a
+    meeting boundary (``_EVENT_MEETING_BOUNDARY`` at the resume tick) is likewise
+    skipped: gameplay resumes one tick after the pre-meeting tick, so the pair is
+    adjacent, but the world changed discontinuously (ejections, body consumption)
+    and no delta across it is movement (Codex review). The observer never sees the
+    adjacent origin/destination (room-only), so the full X→Y trajectory emerges
+    COLLECTIVELY when meeting testimony is combined -- complementing the 13.6
+    own-sightings breadcrumb.
 
     Own-room scoping uses the observer's ``self_state`` room per tick; only
     sightings in that room count, so an impostor's adjacent-room sightings (which
@@ -683,6 +730,12 @@ def _collect_transitions(
 
     own_room_by_tick: dict[int, str] = {}
     seen_in_own_room: dict[int, set[str]] = {}
+    # Resume ticks of concluded meetings (recorded by ``absorb_meeting_evidence``).
+    # The world changes DISCONTINUOUSLY across a meeting -- a player can be ejected
+    # or otherwise removed with no gameplay movement -- and the resume tick is
+    # adjacent to the pre-meeting tick, so a delta across this boundary must NOT
+    # become a transition (Codex review).
+    meeting_boundary_ticks: set[int] = set()
     # Bodies the observer saw, keyed by tick -> {(victim_id, room)}. A subject seen
     # at N but gone at N+1 because it was KILLED in the room (its body now visible)
     # did NOT leave -- the body discovery is the truthful testimony. Suppressing the
@@ -701,6 +754,8 @@ def _collect_transitions(
                 body_victims_by_tick.setdefault(event.tick, set()).add(
                     (victim_id, body_room)
                 )
+        elif event.type == _EVENT_MEETING_BOUNDARY:
+            meeting_boundary_ticks.add(event.tick)
 
     for event in episodic.recent(since_tick=0):
         if event.type != _EVENT_SAW_PLAYER:
@@ -729,6 +784,11 @@ def _collect_transitions(
     observed_ticks = sorted(own_room_by_tick)
     for prev_tick, tick in zip(observed_ticks, observed_ticks[1:]):
         if tick - prev_tick != 1:
+            continue
+        if tick in meeting_boundary_ticks:
+            # A meeting concluded between prev_tick and tick: the world changed
+            # discontinuously (ejections, body consumption), so no delta across
+            # this boundary is gameplay movement (Codex review).
             continue
         room = own_room_by_tick[tick]
         if own_room_by_tick.get(prev_tick) != room:

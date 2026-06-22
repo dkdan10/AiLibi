@@ -837,3 +837,50 @@ class TestWithinVisionTransitionRender:
         view = render_for_prompt(memory)
 
         assert "[tick 4] p-2 left STORAGE." in view
+
+    def test_no_transition_is_inferred_across_a_meeting_boundary(self) -> None:
+        # Codex review: a player ejected/removed at a meeting vanishes with no body
+        # and no gameplay movement, and gameplay resumes ADJACENT to the pre-meeting
+        # tick (apply_meeting_result: working.tick + 1), so the tick-gap guard
+        # cannot see the boundary. absorb_meeting_evidence -- the per-living-agent
+        # post-meeting hook the live orchestrator AND the replay loader both call --
+        # records the boundary at the resume tick, and no delta across it becomes a
+        # transition. The observer stays in STORAGE across the boundary.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+        # A meeting concludes (p-2 is ejected). Records the boundary at tick 4.
+        absorb_meeting_evidence(memory, accused=("p-2",))
+        # Gameplay resumes at tick 4: observer still in STORAGE, p-2 gone (ejected,
+        # no body) -- a removal, not a departure.
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "p-2 left STORAGE" not in view
+        assert "p-2 entered" not in view
+
+    def test_transitions_resume_after_a_meeting_boundary(self) -> None:
+        # The boundary guard is narrow: only the pair that SPANS the meeting is
+        # skipped. A genuine departure on a later, non-spanning pair still renders.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        absorb_meeting_evidence(memory, accused=())  # boundary recorded at tick 4
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=4, player_id="p-3", room="STORAGE"))
+        memory.episodic.append(
+            _self_state_event(tick=5, agent_id="p-1", room="STORAGE")
+        )
+
+        view = render_for_prompt(memory)
+
+        # The (4, 5) pair does not span the boundary (which sits at tick 4).
+        assert "[tick 5] p-3 left STORAGE." in view
