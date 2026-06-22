@@ -10,7 +10,7 @@ from engine.entities import BodyState, PlayerState, SabotageState, TaskState
 from engine.events import event_to_dict
 from engine.rng import EngineRng
 from engine.tick import advance_tick
-from engine.world import WorldState, load_canonical_map
+from engine.world import Map, WorldState, load_canonical_map
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -1416,3 +1416,213 @@ def test_kill_reaching_parity_with_last_task_completion_yields_impostor_win() ->
     assert len(game_over_events) == 1
     assert event_to_dict(game_over_events[0])["winner"] == "IMPOSTORS"
     assert event_to_dict(game_over_events[0])["reason"] == "IMPOSTOR_PARITY"
+
+
+def _redistribute_map() -> Map:
+    """The canonical map with the dead-crewmate task rule flipped to
+    ``redistribute`` (DESIGN.md §3.5; Task 13.10)."""
+
+    return load_canonical_map().model_copy(update={"dead_task_rule": "redistribute"})
+
+
+def test_redistribute_rekeys_dead_crewmate_task_to_lowest_id_living_crewmate() -> None:
+    """DESIGN.md §3.5 ``redistribute`` rule (Task 13.10).
+
+    A killed crewmate's incomplete instance is RE-KEYED to the lowest-id living
+    crewmate not already owning that map task — carrying progress / room /
+    required_ticks, changing only ``id`` and ``owner`` — rather than dropped.
+    """
+
+    game_map = _redistribute_map()
+    state = _state()
+    players = dict(state.players)
+    players["victim"] = _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0))
+    state = replace(
+        state,
+        players=players,
+        tasks={
+            "victim:long_haul": replace(
+                _task("long_haul", "victim", "STORAGE", required_ticks=3),
+                progress=2,
+            ),
+        },
+    )
+
+    after_kill, _ = advance_tick(
+        state,
+        [_action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}})],
+        game_map=game_map,
+    )
+
+    # Victim's instance is gone; the burden moved to p-1 (lowest-id living crew).
+    assert "victim:long_haul" not in after_kill.tasks
+    assert "p-1:long_haul" in after_kill.tasks
+    moved = after_kill.tasks["p-1:long_haul"]
+    assert moved.owner == "p-1"
+    assert moved.map_task_id == "long_haul"
+    # Progress / room / required_ticks are carried verbatim.
+    assert moved.progress == 2
+    assert moved.required_ticks == 3
+    assert moved.room == "STORAGE"
+    assert not moved.completed
+
+
+def test_redistribute_skips_crewmate_already_owning_the_map_task() -> None:
+    """The recipient is the lowest-id living crewmate NOT already owning that map
+    task: a crewmate who already holds an instance is skipped (DESIGN.md §3.5)."""
+
+    game_map = _redistribute_map()
+    state = _state()
+    players = dict(state.players)
+    players["victim"] = _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0))
+    state = replace(
+        state,
+        players=players,
+        tasks={
+            # p-1 already owns its own instance of the same map task, so the
+            # redistribute recipient must skip to the next-lowest crewmate (p-2).
+            "p-1:long_haul": _task("long_haul", "p-1", "STORAGE", required_ticks=3),
+            "victim:long_haul": _task(
+                "long_haul", "victim", "STORAGE", required_ticks=3
+            ),
+        },
+    )
+
+    after_kill, _ = advance_tick(
+        state,
+        [_action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}})],
+        game_map=game_map,
+    )
+
+    assert "victim:long_haul" not in after_kill.tasks
+    # p-1's pre-existing instance is untouched.
+    assert after_kill.tasks["p-1:long_haul"].owner == "p-1"
+    # The burden lands on p-2 (the next eligible crewmate).
+    assert "p-2:long_haul" in after_kill.tasks
+    assert after_kill.tasks["p-2:long_haul"].owner == "p-2"
+
+
+def test_redistribute_drops_when_no_eligible_recipient() -> None:
+    """No-eligible-recipient fallback: when every living crewmate already owns
+    that map task, the victim's instance is dropped (DESIGN.md §3.5)."""
+
+    game_map = _redistribute_map()
+    state = _state()
+    players = dict(state.players)
+    players["victim"] = _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0))
+    state = replace(
+        state,
+        players=players,
+        tasks={
+            "p-1:long_haul": _task("long_haul", "p-1", "STORAGE", required_ticks=3),
+            "p-2:long_haul": _task("long_haul", "p-2", "STORAGE", required_ticks=3),
+            "p-4:long_haul": _task("long_haul", "p-4", "STORAGE", required_ticks=3),
+            "victim:long_haul": _task(
+                "long_haul", "victim", "STORAGE", required_ticks=3
+            ),
+        },
+    )
+
+    after_kill, _ = advance_tick(
+        state,
+        [_action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}})],
+        game_map=game_map,
+    )
+
+    # The victim's instance is dropped (no living crewmate is free to take it).
+    assert "victim:long_haul" not in after_kill.tasks
+    # No new instance was created; only the three pre-existing alive-owned ones.
+    long_haul_owners = sorted(
+        task.owner
+        for task in after_kill.tasks.values()
+        if task.map_task_id == "long_haul"
+    )
+    assert long_haul_owners == ["p-1", "p-2", "p-4"]
+
+
+def test_redistribute_recipient_can_complete_task_for_crew_win() -> None:
+    """A redistributed instance still counts toward CREWMATE_TASKS: the recipient
+    can travel to its room and finish it to win (DESIGN.md §3.5)."""
+
+    game_map = _redistribute_map()
+    state = _state()
+    players = {
+        "p-3": _player("p-3", "IMPOSTOR", "CAFETERIA", (0.0, 0.0)),
+        # p-1 is already in ADMIN (the redistributed task's room) so it can
+        # complete the inherited instance on the next tick.
+        "p-1": _player("p-1", "CREWMATE", "ADMIN", (1.0, 0.0)),
+        "p-2": _player("p-2", "CREWMATE", "MEDBAY", (2.0, 0.0)),
+        "victim": _player("victim", "CREWMATE", "CAFETERIA", (3.0, 0.0)),
+    }
+    state = replace(
+        state,
+        players=players,
+        cooldowns={"p-3": 0},
+        # The only incomplete task is the victim's; completing the redistributed
+        # copy must therefore satisfy the crew task-win condition.
+        tasks={
+            "victim:swipe_card": _task(
+                "swipe_card", "victim", "ADMIN", required_ticks=1
+            ),
+        },
+    )
+
+    after_kill, _ = advance_tick(
+        state,
+        [_action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}})],
+        game_map=game_map,
+    )
+    assert after_kill.phase == "PLAY"
+    assert "p-1:swipe_card" in after_kill.tasks
+
+    final_state, final_events = advance_tick(
+        after_kill,
+        [
+            _action(
+                {
+                    "type": "do_task",
+                    "actor": "p-1",
+                    "payload": {"task_id": "swipe_card"},
+                }
+            )
+        ],
+        game_map=game_map,
+    )
+
+    assert final_state.phase == "GAME_OVER"
+    game_over = next(event for event in final_events if event.type == "GameOver")
+    assert event_to_dict(game_over)["winner"] == "CREWMATES"
+    assert event_to_dict(game_over)["reason"] == "CREWMATE_TASKS"
+
+
+def test_drop_default_leaves_dead_crewmate_redistribution_off() -> None:
+    """Under the DEFAULT ``drop`` rule the victim's incomplete instance is
+    removed with NO re-key — the byte-identical baseline (DESIGN.md §3.5)."""
+
+    game_map = load_canonical_map()
+    assert game_map.dead_task_rule == "drop"
+    state = _state()
+    players = dict(state.players)
+    players["victim"] = _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0))
+    state = replace(
+        state,
+        players=players,
+        tasks={
+            "victim:long_haul": replace(
+                _task("long_haul", "victim", "STORAGE", required_ticks=3),
+                progress=2,
+            ),
+        },
+    )
+
+    after_kill, _ = advance_tick(
+        state,
+        [_action({"type": "kill", "actor": "p-3", "payload": {"target": "victim"}})],
+        game_map=game_map,
+    )
+
+    assert "victim:long_haul" not in after_kill.tasks
+    # No re-key under drop: no living crewmate inherits the instance.
+    assert not any(
+        task.map_task_id == "long_haul" for task in after_kill.tasks.values()
+    )

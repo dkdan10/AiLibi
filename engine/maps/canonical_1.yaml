@@ -33,6 +33,12 @@ version: "0.2"
 tick_rate_hz: 2
 kill_cooldown_ticks: 4
 
+# Dead-crewmate task rule (DESIGN.md §3.5). ``drop`` (the default) deletes a
+# dead crewmate's incomplete task instances; ``redistribute`` re-keys each to a
+# living crewmate. Kept at ``drop`` so the committed replays + their state-hash
+# verify stay byte-identical — the 13.12 re-record flips this to ``redistribute``.
+dead_task_rule: drop
+
 # ---------------------------------------------------------------------------
 # VISIBILITY DEFAULTS
 # ---------------------------------------------------------------------------

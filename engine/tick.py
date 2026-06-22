@@ -311,6 +311,62 @@ def _apply_do_task(
     return replace(state, players=players, tasks=tasks), event
 
 
+def redistribute_dead_tasks(
+    *,
+    surviving_tasks: dict[TaskInstanceId, TaskState],
+    pre_death_tasks: Mapping[TaskInstanceId, TaskState],
+    players: Mapping[PlayerId, PlayerState],
+    victim: PlayerId,
+) -> dict[TaskInstanceId, TaskState]:
+    """Re-key a dead crewmate's incomplete task instances onto living crewmates.
+
+    DESIGN.md §3.5 dead-crewmate task rule, ``redistribute`` variant (validated
+    in ``experiments/lab/stopwatch_sweep.py::_redistribute_apply_kill``). The
+    ``redistribute`` rule keeps the crew task burden constant on a death rather
+    than shrinking it: the crew stay active because a living recipient must now
+    travel to the task's room and finish it.
+
+    ``surviving_tasks`` is the post-drop task map (the victim's incomplete
+    instances already removed). For each removed incomplete instance, re-key it
+    to the **lowest-id living crewmate not already owning that map task** —
+    carry the instance's ``progress`` / ``room`` / ``required_ticks`` and change
+    only ``id`` and ``owner`` — so a redistributed task still counts toward
+    ``crew_tasks_done`` and the recipient can complete it. If every living
+    crewmate already owns that map task (a completed OR incomplete instance is
+    enough), the instance is dropped (the no-eligible-recipient fallback).
+
+    Engine-internal: it reads ``player.role`` to pick a crewmate recipient — the
+    same engine-side role access win-conditions / kill-validation already use,
+    never exposed to agents. The recipient learns of its new instance only
+    through the existing owner-filtered SelfView channel (its OWN task; no
+    provenance, no role/attribution leak). Deterministic: lowest-id recipient +
+    carried progress is byte-stable across re-sims.
+    """
+    living_crew = sorted(
+        pid
+        for pid, player in players.items()
+        if player.alive and player.role == "CREWMATE"
+    )
+    if not living_crew:
+        return surviving_tasks
+    for task in pre_death_tasks.values():
+        if task.owner != victim or task.completed:
+            continue
+        recipient = next(
+            (
+                crew
+                for crew in living_crew
+                if f"{crew}:{task.map_task_id}" not in surviving_tasks
+            ),
+            None,
+        )
+        if recipient is None:
+            continue  # every living crewmate already owns this map task; drop it
+        new_id = f"{recipient}:{task.map_task_id}"
+        surviving_tasks[new_id] = replace(task, id=new_id, owner=recipient)
+    return surviving_tasks
+
+
 def _apply_kill(
     state: WorldState, game_map: Map, action: KillAction
 ) -> tuple[WorldState, KilledEvent]:
@@ -328,16 +384,28 @@ def _apply_kill(
     bodies[body.id] = body
     cooldowns = dict(state.cooldowns)
     cooldowns[action.actor] = game_map.kill_cooldown_ticks
-    # Dead-crewmate task rule: DESIGN.md §3.5 (dropped). Remove the killed
-    # player's incomplete task *instances* so the crew win check counts only
-    # alive-owned instances; completed instances remain (even the victim's) so
-    # they still count toward `crew_tasks_done`. The owner-filter is unchanged by
-    # the per-player re-key — it already keys on ``task.owner`` per instance.
-    tasks = {
+    # Dead-crewmate task rule: DESIGN.md §3.5. Drop the killed player's
+    # incomplete task *instances* so the crew win check counts only alive-owned
+    # instances; completed instances remain (even the victim's) so they still
+    # count toward `crew_tasks_done`. The owner-filter is unchanged by the
+    # per-player re-key — it already keys on ``task.owner`` per instance.
+    surviving_tasks = {
         instance_id: task
         for instance_id, task in state.tasks.items()
         if not (task.owner == action.payload.target and not task.completed)
     }
+    # Under ``redistribute`` the dropped incomplete instances are re-keyed to
+    # living crewmates instead of vanishing (DESIGN.md §3.5; map-flag-gated). The
+    # default ``drop`` leaves ``surviving_tasks`` byte-identical to before.
+    if game_map.dead_task_rule == "redistribute":
+        tasks = redistribute_dead_tasks(
+            surviving_tasks=surviving_tasks,
+            pre_death_tasks=state.tasks,
+            players=players,
+            victim=action.payload.target,
+        )
+    else:
+        tasks = surviving_tasks
     return (
         replace(
             state,

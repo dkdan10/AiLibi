@@ -31,6 +31,12 @@ RoomKind: TypeAlias = Literal["hallway", "room", "task_room", "meeting_room", "u
 EdgeKind: TypeAlias = Literal["doorway", "hallway"]
 TaskType: TypeAlias = Literal["short", "long", "common"]
 VisibilityMode: TypeAlias = Literal["same_room_and_adjacent", "same_room_only"]
+# The dead-crewmate task rule (DESIGN.md §3.5). ``drop`` (the default) DELETES a
+# dead crewmate's incomplete task instances; ``redistribute`` RE-KEYS each to a
+# living crewmate so the task burden does not shrink on death. Default ``drop``
+# keeps the committed replays + their state-hash verify byte-identical; the
+# canonical flip to ``redistribute`` is the 13.12 re-record.
+DeadTaskRule: TypeAlias = Literal["drop", "redistribute"]
 
 _ROOM_OR_VENT_ID_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _TASK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -238,6 +244,7 @@ class Map(_FrozenModel):
     version: str
     tick_rate_hz: int
     kill_cooldown_ticks: int
+    dead_task_rule: DeadTaskRule = "drop"
     visibility_defaults: VisibilityDefaults
     rooms: Mapping[RoomId, Room]
     edges: tuple[Edge, ...]
