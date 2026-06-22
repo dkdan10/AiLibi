@@ -13,7 +13,7 @@ the SPINE is a meeting-time **inferential contradiction detector** (a new STRONG
 that lights R7 on a **$0 re-extraction of the committed replays — before any re-record** (the extractor re-runs
 `detect_contradictions` over the recorded transcript). Sequence: detector (13.2–13.5) → breadcrumb-render + prompt
 rework (13.6) → graduated testimony-spread (13.7) → **asymmetric visibility** (13.8) → optional two-phase reasoning
-(13.9) → ONE combined re-record (13.10). Every pre-re-record task validates by **re-extracting committed replays**
+(13.11, optional) → ONE combined re-record (13.10). Every pre-re-record task validates by **re-extracting committed replays**
 (R7 climbs, every STRONG flag role-gated to a true impostor, R4 floors hold); one combined re-record at the end
 (cadence doctrine). **13.2–13.4 are elaborated as full contracts below; 13.5–13.10 are the roadmap, elaborated to full
 contracts immediately before each dispatch (they depend on interfaces the spine builds).**
@@ -24,7 +24,7 @@ crew `same_room_only` / impostor `same_room_and_adjacent` — probe-validated th
 ships AFTER the detector, balance gated at the real re-record (the fake sweep cannot read the deduction-side swing).
 (2) New STRONG flags use **full-0.3 only on a two-source conjunction**; a lone inferential atom stays sub-gate (informs,
 cannot eject alone). (3) Testimony graduated-spread lands AFTER the detector (13.7). (4) Two-phase reason→emit is
-OPTIONAL, gated on an offline qwen husk/length test (13.9). (5) $0 gate to greenlight the re-record = **R7 > 0 on ≥2–3
+OPTIONAL, gated on an offline qwen husk/length test (13.11). (5) $0 gate to greenlight the re-record = **R7 > 0 on ≥2–3
 seeds with ZERO STRONG-on-crewmate** (gp-3 watch-the-games is a BLOCKING manual check).
 
 The **Phase-C fitness-architecture** decisions (use the FO-6 LLM-free physical-suspicion RANK as the inner-loop objective;
@@ -232,7 +232,7 @@ it richer testimony, which is **real-Ollama-generated → tested by a SMOKE re-r
 for when flags fire). **Game-changers (the R7 lever — need a real run to test):** 13.6 prompt-rework → 13.8 asymmetric
 visibility → 13.7 testimony-spread. **New gate (replaces the $0 gate):** a SMOKE re-record (a few meeting-bearing seeds,
 real Ollama) → re-extract → does the built detector now light R7 (>0 on ≥2–3 seeds, zero STRONG-on-crewmate)? If yes →
-13.10 full re-record; if no → the deeper model / two-phase-reasoning question (13.9). **13.5 + 13.6 are full contracts
+13.10 full re-record; if no → the deeper model / two-phase-reasoning question (13.11). **13.5 + 13.6 are full contracts
 below; 13.7–13.10 stay roadmap (elaborate before each dispatch).**
 
 ### Roadmap / full contracts
@@ -286,7 +286,7 @@ Belief-layer only: no §4.6 / tally / SKIP edit, no re-record, byte-determinism 
 - tests/agents/test_strategic_prompts.py
 - experiments/lab/meeting_prompt_battery.py
 **Files NOT in scope:**
-- the in-band reasoning field / two-phase reason→emit — that is the gated 13.9 (keep `think=False`)
+- the in-band reasoning field / two-phase reason→emit — that is the gated 13.11 (keep `think=False`)
 - engine/ visibility (13.8); api/ — none; NO re-record here (the testimony-richness payoff is measured at the smoke re-record)
 
 **RUN LOCALLY (needs local Ollama/Qwen).** Unlike 13.5/13.8, 13.6's goal — does the new prompt make Qwen *state richer
@@ -298,7 +298,7 @@ WHERE, and WHEN as concrete `saw_player` observations (not vague free-text), and
 more + more-specific `saw_player` claims are the two-source-conjunction material 13.4 needs. (2) **breadcrumb render** —
 `agents/memory/store.py` emits a directional "saw X leave A→R" line for the agent's most-recent sighting per subject (pure
 function of existing episodic deltas — NO packet field, firewall untouched). (3) **trim** accreted verbosity ONLY where it
-removes no still-needed guard; bump the four prompt versions together. EXCLUDE the in-band reasoning field (→ 13.9; keep
+removes no still-needed guard; bump the four prompt versions together. EXCLUDE the in-band reasoning field (→ 13.11; keep
 `think=False`).
 
 **Build approach — rebuild the two sighting prompts, don't patch the crowded ones.** `crewmate_report.j2` (241 lines)
@@ -337,7 +337,7 @@ rises (placements/meeting up from the committed ~4.0). NO re-record (the full R7
 iterate on FIXTURES first (the `deception_battery_2.py` pattern) — reconstruct one realistic pre-meeting context per test,
 render the new template, run Qwen once, inspect; only after the template is dialed run full seeds. The breadcrumb render
 is a pure read of the existing episodic deltas (no packet field). Keep `think=False` (the in-band reasoning field
-relocates JSON into the thinking channel — deferred to 13.9).
+relocates JSON into the thinking channel — deferred to 13.11).
 **Integration risk:**
 RUN LOCALLY — a cloud session cannot reach Qwen, so it would ship prompts BLIND to their actual effect (the exact
 look-done-but-inert failure the 13.4 gate caught). The R7 lift itself is observable only at the smoke re-record; 13.6's
@@ -424,7 +424,7 @@ byte-determinism holds. Ships (re-records) AFTER the detector + 13.6 render — 
 detector to deduce — but is BUILT in parallel.
 **Ready-to-paste prompt:** `agent_prompts/task-13-8-asym-visibility.md`
 
-#### Task 13.9 — OPTIONAL gated: parse-only reasoning sub-schema (two-phase reason→emit) (depends 13.6, 13.7)
+#### Task 13.11 — OPTIONAL gated: parse-only reasoning sub-schema (two-phase reason→emit) (depends 13.6, 13.7)
 Define a parse-only `ReasonedMeetingTurn` (reasoning + `MeetingTurn` fields); validate the LLM text against it, then
 construct the RECORDED `MeetingTurn` from the non-reasoning fields ONLY so reasoning structurally never reaches the
 replay. Gate adoption on an offline qwen husk/length measurement; do NOT delete the anti-narration patches until
@@ -449,14 +449,14 @@ DOING, who they are WITH, and when they enter/leave — so the collective testim
 bare "p1 in Z" cannot. In parallel the rubric is rebuilt FROM ZERO around the deterministic suspicion graph + outcomes
 (not detector flag-strength): **`experiments/lab/report-rubric-design.md`**.
 
-**These are validated TOGETHER on ONE combined smoke** (extends 13.10): enrich perception (13.11) → re-record a few seeds →
+**These are validated TOGETHER on ONE combined smoke** (extends 13.10): enrich perception (13.9) → re-record a few seeds →
 measure (a) does **D2** (suspicion-truth separation + accusation→ejection conversion) RISE = the enrichment works, and
 (b) does the from-scratch rubric rank the enriched games above the stopwatch with NO perverse gradient = the rubric is
 sound. The rubric STRUCTURE is robust to the info level (it scores outcomes); only its CALIBRATION waits on the enriched
-economy — so it is designed now and locked after the smoke. 13.11 is offline-validatable (firewall + render goldens +
+economy — so it is designed now and locked after the smoke. 13.9 is offline-validatable (firewall + render goldens +
 determinism); its deduction/balance lift is the smoke gate.
 
-### Task 13.11 — Enrich same-room perception: observed activity + co-presence + transitions (firewall-gated)
+### Task 13.9 — Enrich same-room perception: observed activity + co-presence + transitions (firewall-gated)
 **Branch:** `phase-13-perception-enrich`
 **Depends on:** 13.6
 **Section refs:** the Wave-C smoke finding above (room-only starved the detector — fewer co-located witnesses → 0 alibi_vs_physical); observation/service.py (`_observed_actions_for_agent`, `_build_packet_from_visibility`); observation/packet.py (`PlayerView` = `{id, room, action}`); agents/perception.py (saw_player ingest); agents/memory/store.py (`_render_saw_player`, the 13.6 breadcrumb); the firewall — eval/leak_test.py (`_FORBIDDEN_VISIBLE_PLAYER_ACTIONS = {"sabotage"}`, visible_player keys EXACTLY `{id,room,action}`) + tests/observation/test_leak_property.py
@@ -513,4 +513,4 @@ tasks render byte-identical — ASSERT it), (c) sabotage-EXCLUDED, and `kill`/`v
 rejected kill surfacing would leak the impostor). Input side only — no detector/gate/belief change. Determinism: a pure
 function of the visible submitted-action list + the episodic log, byte-stable. The deduction lift is real-Qwen-only →
 gated at the Wave-C combined smoke with the new rubric; this task's offline bar is firewall + goldens + determinism.
-**Ready-to-paste prompt:** `agent_prompts/task-13-11-perception-enrich.md`
+**Ready-to-paste prompt:** `agent_prompts/task-13-9-perception-enrich.md`

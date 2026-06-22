@@ -1,4 +1,4 @@
-# Agent Prompt — 13.11 Enrich same-room perception: observed activity + co-presence + transitions (firewall-gated)
+# Agent Prompt — 13.9 Enrich same-room perception: observed activity + co-presence + transitions (firewall-gated)
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13.md.
 
@@ -6,7 +6,7 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 13.11 — Enrich same-room perception: observed activity + co-presence + transitions (firewall-gated), anchored to the Wave-C smoke finding above (room-only starved the detector — fewer co-located witnesses → 0 alibi_vs_physical); observation/service.py (`_observed_actions_for_agent`, `_build_packet_from_visibility`); observation/packet.py (`PlayerView` = `{id, room, action}`); agents/perception.py (saw_player ingest); agents/memory/store.py (`_render_saw_player`, the 13.6 breadcrumb); the firewall — eval/leak_test.py (`_FORBIDDEN_VISIBLE_PLAYER_ACTIONS = {"sabotage"}`, visible_player keys EXACTLY `{id,room,action}`) + tests/observation/test_leak_property.py. Do not implement work outside these references.
+Implement Task 13.9 — Enrich same-room perception: observed activity + co-presence + transitions (firewall-gated), anchored to the Wave-C smoke finding above (room-only starved the detector — fewer co-located witnesses → 0 alibi_vs_physical); observation/service.py (`_observed_actions_for_agent`, `_build_packet_from_visibility`); observation/packet.py (`PlayerView` = `{id, room, action}`); agents/perception.py (saw_player ingest); agents/memory/store.py (`_render_saw_player`, the 13.6 breadcrumb); the firewall — eval/leak_test.py (`_FORBIDDEN_VISIBLE_PLAYER_ACTIONS = {"sabotage"}`, visible_player keys EXACTLY `{id,room,action}`) + tests/observation/test_leak_property.py. Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-13.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
@@ -94,5 +94,5 @@ If the task mentions engine-free boundary schemas, keep agents/ free of engine i
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-13-perception-enrich` with a title like `task 13.11: enrich same-room perception: observed activity + co-presence + transitions (firewall-gated)`.
+Open a PR from branch `phase-13-perception-enrich` with a title like `task 13.9: enrich same-room perception: observed activity + co-presence + transitions (firewall-gated)`.
 The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing the Wave-C smoke finding above (room-only starved the detector — fewer co-located witnesses → 0 alibi_vs_physical); observation/service.py (`_observed_actions_for_agent`, `_build_packet_from_visibility`); observation/packet.py (`PlayerView` = `{id, room, action}`); agents/perception.py (saw_player ingest); agents/memory/store.py (`_render_saw_player`, the 13.6 breadcrumb); the firewall — eval/leak_test.py (`_FORBIDDEN_VISIBLE_PLAYER_ACTIONS = {"sabotage"}`, visible_player keys EXACTLY `{id,room,action}`) + tests/observation/test_leak_property.py), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
