@@ -46,18 +46,32 @@ from pydantic import TypeAdapter
 
 from engine.actions import Action
 from engine.entities import PlayerId, PlayerState, SabotageState, TaskId, TaskState
-from engine.events import KilledEvent
+from engine.events import (
+    ActionRejectedEvent,
+    KilledEvent,
+    TaskCompletedEvent,
+    TaskProgressedEvent,
+)
 from engine.rng import EngineRng
 from engine.tick import advance_tick
+from engine.visibility import compute_visibility_for_player
 from engine.world import Map, WorldState, load_canonical_map
 from eval.leak_test import (
+    _FORBIDDEN_VISIBLE_PLAYER_ACTIONS,
     JsonValue,
+    _action_is_permitted_by_witness_event,
     _assert_no_recursive_hidden_fields,
     _assert_no_role_bearing_values,
     _walk_json,
 )
 from observation.service import ObservationService, impostor_pretend_task_id
 from tests.engine.test_tick_properties import _unique_actions_per_actor
+
+# Every canonical map task id, so the do_task sweep below draws a mix of the
+# actor's OWN task (resolves -> TaskProgressed/TaskCompleted) and a FOREIGN one
+# (rejected -> ActionRejected[do_task]); both must stamp ``action="task"``
+# identically, exercising the role-blind fake-task lever (Task 13.9).
+_ROSTER_MAP_TASK_IDS = tuple(sorted(load_canonical_map().tasks))
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 
@@ -411,4 +425,147 @@ def test_global_view_sabotage_fields_are_role_invariant(
     # One distinct channel across every role recipient (public / role-blind), and
     # it matches the map definition the service projected.
     assert channels == {(expected.repair_rooms, expected.gates_tasks)}
+    service.close()
+
+
+@st.composite
+def _roster_activity_action(draw: st.DrawFn) -> Action:
+    """Draw the leak-sweep vocabulary EXTENDED with ``do_task`` and ``sabotage``.
+
+    The kill/vent/report/wait draws mirror :func:`_roster_action`; ``do_task``
+    draws any canonical map task (the actor's own resolves, a foreign one is
+    rejected -- both stamp ``action="task"`` for visible observers, Task 13.9),
+    and ``sabotage`` exercises the never-observable path (it must never reach
+    ``visible_players`` as an action). The engine rejects role-invalid attempts
+    via ``ActionRejectedEvent`` rather than raising, so every draw is safe.
+    """
+
+    kind = draw(
+        st.sampled_from(("kill", "vent", "report", "wait", "do_task", "sabotage"))
+    )
+    actor = draw(st.sampled_from(_ROSTER_PLAYER_IDS))
+    if kind == "kill":
+        target = draw(
+            st.sampled_from(tuple(pid for pid in _ROSTER_PLAYER_IDS if pid != actor))
+        )
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "kill", "actor": actor, "payload": {"target": target}}
+        )
+    if kind == "vent":
+        vent_id = draw(st.sampled_from(_ROSTER_VENT_IDS))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "vent", "actor": actor, "payload": {"vent_id": vent_id}}
+        )
+    if kind == "report":
+        body_id = draw(st.sampled_from(_ROSTER_BODY_ID_DRAWS))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "report", "actor": actor, "payload": {"body_id": body_id}}
+        )
+    if kind == "do_task":
+        task_id = draw(st.sampled_from(_ROSTER_MAP_TASK_IDS))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "do_task", "actor": actor, "payload": {"task_id": task_id}}
+        )
+    if kind == "sabotage":
+        sabotage_kind = draw(st.sampled_from(("reactor", "lights")))
+        return _ACTION_ADAPTER.validate_python(
+            {"type": "sabotage", "actor": actor, "payload": {"kind": sabotage_kind}}
+        )
+    return _ACTION_ADAPTER.validate_python(
+        {"type": "wait", "actor": actor, "payload": {}}
+    )
+
+
+@given(
+    seed=st.integers(min_value=0, max_value=2**31 - 1),
+    num_impostors=st.sampled_from(_VALID_IMPOSTOR_COUNTS),
+    action_batches=st.lists(
+        st.lists(_roster_activity_action(), max_size=3), max_size=10
+    ),
+)
+@settings(
+    max_examples=50,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+def test_observed_task_annotation_never_leaks_hidden_information(
+    seed: int,
+    num_impostors: int,
+    action_batches: list[list[Action]],
+    tmp_path: Path,
+) -> None:
+    """The Task 13.9 ``action="task"`` annotation never leaks hidden info.
+
+    Extends the purity sweep with ``do_task`` + ``sabotage`` in the action
+    vocabulary so every packet exercises the new observed-activity stamp across
+    many seeds and 2/3-impostor rosters. Per packet, beyond the imported leak
+    scanners:
+
+    * every ``visible_player`` carries EXACTLY ``{id, room, action}`` -- the
+      annotation reuses the ``action`` field and adds no key;
+    * ``sabotage`` NEVER surfaces as a visible action (the forbidden-action set);
+    * a ``kill`` / ``vent`` action is witness-permitted -- so a REJECTED kill or
+      vent (an ``ActionRejectedEvent`` the new code must ignore) can never leak;
+    * every ``task`` annotation is VISION-gated (the actor is in the observer's
+      independently-recomputed ``visible_player_ids``) and TRACEABLE to a do_task
+      event this tick (resolved ``TaskProgressed`` / ``TaskCompleted`` OR rejected
+      ``ActionRejected[do_task]``) -- no spurious or unseen task ever appears.
+    """
+
+    game_map = load_canonical_map()
+    state = _roster_initial_state(
+        seed=seed, num_impostors=num_impostors, game_map=game_map
+    )
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "audit.jsonl"
+    )
+
+    for batch in action_batches:
+        if state.phase != "PLAY":
+            break
+        state, events = advance_tick(
+            state, _unique_actions_per_actor(batch), game_map=game_map
+        )
+        task_event_actors: set[PlayerId] = set()
+        for event in events:
+            if isinstance(event, (TaskProgressedEvent, TaskCompletedEvent)):
+                task_event_actors.add(event.actor)
+            elif isinstance(event, ActionRejectedEvent) and event.action == "do_task":
+                task_event_actors.add(event.actor)
+        for player_id, player in state.players.items():
+            if not player.alive:
+                continue
+            packet = service.build_packet(
+                world_state=state,
+                agent_id=player_id,
+                engine_events=events,
+            )
+            packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
+            _assert_no_recursive_hidden_fields(packet_dump)
+            _assert_no_role_bearing_values(packet_dump)
+            visible_now = set(
+                compute_visibility_for_player(
+                    observer_id=player_id, world_state=state, game_map=game_map
+                ).visible_player_ids
+            )
+            for visible_player in packet.visible_players:
+                visible_player_dump = visible_player.model_dump(mode="json")
+                assert set(visible_player_dump.keys()) == {"id", "room", "action"}
+                assert visible_player.action not in _FORBIDDEN_VISIBLE_PLAYER_ACTIONS
+                if visible_player.action in {"kill", "vent"}:
+                    assert _action_is_permitted_by_witness_event(
+                        action=visible_player.action,
+                        actor_id=visible_player.id,
+                        agent_id=player_id,
+                        engine_events=list(events),
+                    )
+                if visible_player.action == "task":
+                    # Vision-gated: a task stamp only ever rides a player the
+                    # observer can currently SEE (never the witness-only channel).
+                    assert visible_player.id in visible_now
+                    # Traceable: it corresponds to a real do_task this tick.
+                    assert visible_player.id in task_event_actors
+        if state.phase != "PLAY":
+            break
+
     service.close()

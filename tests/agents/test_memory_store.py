@@ -548,3 +548,339 @@ class TestOwnKillRender:
 
         assert "You (IMPOSTOR) killed p-2 in REACTOR." in view
         assert "You discovered p-2's body" not in view
+
+
+def _saw_player_in(
+    *, tick: int, player_id: str, room: str, action: str | None = None
+) -> EpisodicEvent:
+    return EpisodicEvent(
+        tick=tick,
+        type="saw_player",
+        payload={"player_id": player_id, "room": room, "action": action},
+        provenance="observed",
+    )
+
+
+class TestSameRoomCoPresenceRender:
+    """Task 13.9 co-presence: each ordinary sighting line names the OTHER subjects
+    the observer saw in the same room on the same tick -- a pure render of the
+    episodic ``saw_player`` log so the model states reliable co-presence (the
+    two-source material the inferential detector needs). The §4.7 suppressions are
+    mirrored, so a self-subject or a teammate-at-a-kill-window is never named.
+    """
+
+    def test_co_present_sightings_name_the_other_companions(self) -> None:
+        # One tick, one room, three subjects -> each line lists the other two
+        # (sorted). A single tick has no consecutive pair, so no transition fires
+        # and the lines isolate the co-presence suffix.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        for player_id in ("p-2", "p-3", "p-4"):
+            memory.episodic.append(
+                _saw_player_in(tick=3, player_id=player_id, room="STORAGE")
+            )
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 3] You saw p-2 in STORAGE (with p-3, p-4)." in view
+        assert "[tick 3] You saw p-3 in STORAGE (with p-2, p-4)." in view
+        assert "[tick 3] You saw p-4 in STORAGE (with p-2, p-3)." in view
+
+    def test_solitary_sighting_has_no_companion_suffix(self) -> None:
+        # A lone sighting renders byte-identically to the pre-13.9 output.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 3] You saw p-2 in STORAGE." in view
+        assert "(with" not in view
+
+    def test_co_presence_is_scoped_to_one_tick_and_room(self) -> None:
+        # Subjects seen in the same room but on DIFFERENT ticks are not companions.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-3", room="ADMIN"))
+
+        view = render_for_prompt(memory)
+
+        # Same tick, DIFFERENT room -> not co-present.
+        assert "[tick 3] You saw p-2 in STORAGE." in view
+        assert "[tick 3] You saw p-3 in ADMIN." in view
+        assert "(with" not in view
+
+    def test_co_presence_carries_through_an_active_task_sighting(self) -> None:
+        # The "with …" suffix also rides the active-action sighting line (the
+        # observed-activity stamp): "You saw p-2 task in STORAGE (with p-3)."
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(
+            _saw_player_in(tick=3, player_id="p-2", room="STORAGE", action="task")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-3", room="STORAGE"))
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 3] You saw p-2 task in STORAGE (with p-3)." in view
+
+    def test_self_subject_is_never_named_as_a_companion(self) -> None:
+        # Defensive (the service never lists the recipient in its own
+        # visible_players): a stray self-subject sighting is dropped from both the
+        # sighting line and every companion list.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-1", room="STORAGE"))
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+
+        view = render_for_prompt(memory)
+
+        assert "You saw p-1" not in view
+        assert "[tick 3] You saw p-2 in STORAGE." in view
+        assert "(with" not in view
+
+    def test_impostor_co_presence_excludes_a_teammate_at_a_kill_window(self) -> None:
+        # The §4.7 own-goal guard reaches co-presence too: an impostor observer's
+        # fellow seen at a body's room/tick is suppressed from the sighting AND
+        # from any companion list, so the impostor's testimony never places the
+        # teammate at the scene -- not even via "with …".
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=4,
+                agent_id="p-1",
+                role="IMPOSTOR",
+                room="REACTOR",
+                fellow_impostor_ids=("p-2",),
+            )
+        )
+        memory.episodic.append(_saw_player_in(tick=4, player_id="p-2", room="REACTOR"))
+        memory.episodic.append(_saw_player_in(tick=4, player_id="p-3", room="REACTOR"))
+        memory.episodic.append(
+            _saw_body_event(
+                tick=4, body_id="body-p-9-4", victim_id="p-9", room="REACTOR"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You saw p-2" not in view
+        assert "(with p-2" not in view
+        assert "[tick 4] You saw p-3 in REACTOR." in view
+
+
+class TestWithinVisionTransitionRender:
+    """Task 13.9 within-vision transitions: entry/exit at the observer's OWN room,
+    from consecutive ``saw_player`` deltas while the observer is stationary. The
+    observer never sees the adjacent origin/destination (room-only), so the full
+    trajectory only emerges when meeting testimony is combined.
+    """
+
+    def test_entered_and_left_are_rendered_at_the_observer_room(self) -> None:
+        # Observer stationary in STORAGE across ticks 3-5; p-2 absent at 3, present
+        # at 4 (entered), absent at 5 (left).
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=4, player_id="p-2", room="STORAGE"))
+        memory.episodic.append(
+            _self_state_event(tick=5, agent_id="p-1", room="STORAGE")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 4] p-2 entered STORAGE." in view
+        assert "[tick 5] p-2 left STORAGE." in view
+        assert "[tick 4] You saw p-2 in STORAGE." in view
+
+    def test_observer_movement_does_not_fabricate_a_transition(self) -> None:
+        # p-2 "disappears" only because the OBSERVER left STORAGE, not because p-2
+        # moved -- no transition may be attributed across the observer's own move.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="ENGINEERING")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "left" not in view
+        assert "entered" not in view
+
+    def test_a_tick_gap_breaks_the_transition_delta(self) -> None:
+        # Non-adjacent ticks (e.g. across a meeting) cannot be a clean delta.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+        memory.episodic.append(
+            _self_state_event(tick=7, agent_id="p-1", room="STORAGE")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "left" not in view
+        assert "entered" not in view
+
+    def test_co_presence_and_transitions_render_together(self) -> None:
+        # A combined scene: at tick 4 the observer sees p-2 and p-3 together
+        # (co-presence), and across tick 3->4 both entered the observer's room.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=4, player_id="p-2", room="STORAGE"))
+        memory.episodic.append(_saw_player_in(tick=4, player_id="p-3", room="STORAGE"))
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 4] You saw p-2 in STORAGE (with p-3)." in view
+        assert "[tick 4] You saw p-3 in STORAGE (with p-2)." in view
+        assert "[tick 4] p-2 entered STORAGE." in view
+        assert "[tick 4] p-3 entered STORAGE." in view
+
+    def test_transition_excludes_a_teammate_at_a_kill_window(self) -> None:
+        # The §4.7 guard reaches transitions too: a fellow impostor at a body's
+        # room/tick produces no entered/left line in the impostor's own memory.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=3,
+                agent_id="p-1",
+                role="IMPOSTOR",
+                room="REACTOR",
+                fellow_impostor_ids=("p-2",),
+            )
+        )
+        memory.episodic.append(
+            _self_state_event(
+                tick=4,
+                agent_id="p-1",
+                role="IMPOSTOR",
+                room="REACTOR",
+                fellow_impostor_ids=("p-2",),
+            )
+        )
+        memory.episodic.append(_saw_player_in(tick=4, player_id="p-2", room="REACTOR"))
+        memory.episodic.append(
+            _saw_body_event(
+                tick=4, body_id="body-p-9-4", victim_id="p-9", room="REACTOR"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "p-2 entered" not in view
+        assert "p-2 left" not in view
+
+    def test_a_kill_in_the_room_does_not_render_a_false_left(self) -> None:
+        # Codex review: a subject seen at N but gone at N+1 because it was KILLED
+        # in the observer's room (dead -> dropped from visible_players, body now
+        # visible) did NOT leave. The "left" must be suppressed -- the body
+        # discovery is the truthful testimony and a false departure would corrupt
+        # path reconstruction. The observer stays put in STORAGE across 3->4.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(
+            _saw_body_event(
+                tick=4, body_id="body-p-2-4", victim_id="p-2", room="STORAGE"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "p-2 left STORAGE" not in view
+        assert "[tick 4] You discovered p-2's body in STORAGE." in view
+
+    def test_a_departure_still_renders_when_the_body_is_elsewhere(self) -> None:
+        # The kill-in-place guard is room-scoped: a subject who genuinely LEFT the
+        # observer's room (and whose body, if any, is in a room the observer cannot
+        # see) still yields a truthful "left". Here p-2 leaves STORAGE at tick 4
+        # with no body visible in STORAGE, so the departure renders.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 4] p-2 left STORAGE." in view
+
+    def test_no_transition_is_inferred_across_a_meeting_boundary(self) -> None:
+        # Codex review: a player ejected/removed at a meeting vanishes with no body
+        # and no gameplay movement, and gameplay resumes ADJACENT to the pre-meeting
+        # tick (apply_meeting_result: working.tick + 1), so the tick-gap guard
+        # cannot see the boundary. absorb_meeting_evidence -- the per-living-agent
+        # post-meeting hook the live orchestrator AND the replay loader both call --
+        # records the boundary at the resume tick, and no delta across it becomes a
+        # transition. The observer stays in STORAGE across the boundary.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+        # A meeting concludes (p-2 is ejected). Records the boundary at tick 4.
+        absorb_meeting_evidence(memory, accused=("p-2",))
+        # Gameplay resumes at tick 4: observer still in STORAGE, p-2 gone (ejected,
+        # no body) -- a removal, not a departure.
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "p-2 left STORAGE" not in view
+        assert "p-2 entered" not in view
+
+    def test_transitions_resume_after_a_meeting_boundary(self) -> None:
+        # The boundary guard is narrow: only the pair that SPANS the meeting is
+        # skipped. A genuine departure on a later, non-spanning pair still renders.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        absorb_meeting_evidence(memory, accused=())  # boundary recorded at tick 4
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=4, player_id="p-3", room="STORAGE"))
+        memory.episodic.append(
+            _self_state_event(tick=5, agent_id="p-1", room="STORAGE")
+        )
+
+        view = render_for_prompt(memory)
+
+        # The (4, 5) pair does not span the boundary (which sits at tick 4).
+        assert "[tick 5] p-3 left STORAGE." in view

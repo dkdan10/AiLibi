@@ -1042,3 +1042,194 @@ class TestGlobalViewSabotageRepairChannel:
             view.sabotage_repair_rooms == ("REACTOR", "ENGINEERING") for view in views
         )
         assert all(view.sabotage_is_gating is True for view in views)
+
+
+def _observed_activity_world(*, seed: int = 99) -> WorldState:
+    """A STORAGE scene for the Task 13.9 observed-activity (fake-task) lever.
+
+    ``p-1`` (crew) and ``p-3`` (impostor) stand in STORAGE; ``p-2`` (crew) owns
+    the STORAGE map task ``fuel_reserves`` and performs it for real while ``p-3``
+    submits a pretend ``do_task`` the engine REJECTS (impostors own no instance).
+    ``p-4`` (crew) sits in REACTOR -- room-only and non-adjacent to STORAGE -- as
+    the can't-see control, and ``p-5`` (impostor) sits in ENGINEERING, the one
+    room adjacent to STORAGE, so an adjacent-vision observer is exercised too.
+    """
+
+    game_map = load_canonical_map()
+    return WorldState(
+        tick=0,
+        phase="PLAY",
+        map=game_map.id,
+        players={
+            "p-1": _player("p-1", "CREWMATE", "STORAGE", (0.0, 0.0)),
+            "p-2": _player("p-2", "CREWMATE", "STORAGE", (1.0, 0.0)),
+            "p-3": _player("p-3", "IMPOSTOR", "STORAGE", (2.0, 0.0)),
+            "p-4": _player("p-4", "CREWMATE", "REACTOR", (0.0, 0.0)),
+            "p-5": _player("p-5", "IMPOSTOR", "ENGINEERING", (0.0, 0.0)),
+        },
+        bodies={},
+        tasks=_tasks(
+            _task_instance(
+                owner="p-2",
+                map_task_id="fuel_reserves",
+                room="STORAGE",
+                required_ticks=6,
+            ),
+        ),
+        sabotage=None,
+        cooldowns={"p-3": 0, "p-5": 0},
+        emergency_uses={},
+        rng_state=EngineRng.from_seed(seed).snapshot(),
+        seed=seed,
+    )
+
+
+def _do_task(actor: str, map_task_id: str = "fuel_reserves") -> Action:
+    return _action(
+        {"type": "do_task", "actor": actor, "payload": {"task_id": map_task_id}}
+    )
+
+
+class TestObservedActivityTaskLever:
+    """The Task 13.9 observed-activity enrichment (the fake-task lever, DESIGN.md
+    §1.3; the Wave-C smoke finding). A ``do_task`` a visible player submits this
+    tick stamps ``PlayerView.action="task"``: vision-gated, role-blind, and
+    BYTE-IDENTICAL whether the engine RESOLVED it (a crewmate's real task) or
+    REJECTED it (an impostor's instance-less pretend task) -- the cover mechanic
+    and the deduction surface in one. ``kill``/``vent`` stay resolved-witness-gated
+    so a rejected kill can never surface.
+    """
+
+    def test_visible_real_and_pretend_task_render_byte_identical(
+        self, tmp_path: Path
+    ) -> None:
+        game_map = load_canonical_map()
+        state, events = advance_tick(
+            _observed_activity_world(),
+            [_do_task("p-2"), _do_task("p-3")],
+            game_map=game_map,
+        )
+
+        # The two do_tasks resolved DIFFERENTLY in the engine: the crewmate
+        # progressed, the impostor's pretend task was rejected for owning no
+        # instance. The render below must erase that difference entirely.
+        assert any(
+            event.type == "TaskProgressed" and event.actor == "p-2" for event in events
+        )
+        assert any(
+            event.type == "ActionRejected"
+            and event.actor == "p-3"
+            and event.action == "do_task"
+            for event in events
+        )
+
+        service = _observation_service(tmp_path)
+        # Every observer who can see STORAGE: the crew room-only observer (p-1,
+        # co-located) and the impostor adjacent-vision observer (p-5, next door).
+        for observer in ("p-1", "p-5"):
+            packet = service.build_packet(
+                world_state=state, agent_id=observer, engine_events=events
+            )
+            crew_view = _visible_player("p-2", packet.visible_players)
+            impostor_view = _visible_player("p-3", packet.visible_players)
+            assert crew_view.action == "task"
+            assert impostor_view.action == "task"
+            # Byte-identical except the id: no role leaks through room or action.
+            assert crew_view.model_dump(exclude={"id"}) == impostor_view.model_dump(
+                exclude={"id"}
+            )
+            assert crew_view.model_dump(exclude={"id"}) == {
+                "room": "STORAGE",
+                "action": "task",
+            }
+
+    def test_completed_do_task_also_stamps_task(self, tmp_path: Path) -> None:
+        # A do_task that COMPLETES (TaskCompleted, not TaskProgressed) still reads
+        # as "task" to the observer -- resolution shape is invisible at the boundary.
+        game_map = load_canonical_map()
+        base = _observed_activity_world()
+        tasks = _tasks(
+            _task_instance(
+                owner="p-2",
+                map_task_id="fuel_reserves",
+                room="STORAGE",
+                required_ticks=1,
+            )
+        )
+        state, events = advance_tick(
+            dataclasses.replace(base, tasks=tasks),
+            [_do_task("p-2")],
+            game_map=game_map,
+        )
+        assert any(
+            event.type == "TaskCompleted" and event.actor == "p-2" for event in events
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert _visible_player("p-2", packet.visible_players).action == "task"
+
+    def test_continuing_task_stamps_task_without_resubmission(
+        self, tmp_path: Path
+    ) -> None:
+        # The annotation tracks task ACTIVITY, not just the submission tick: a
+        # multi-tick task continued by the engine (no fresh do_task) still emits a
+        # TaskProgressed each tick, so a stationary observer keeps seeing "task".
+        game_map = load_canonical_map()
+        state, _ = advance_tick(
+            _observed_activity_world(), [_do_task("p-2")], game_map=game_map
+        )
+        state, events = advance_tick(state, [], game_map=game_map)
+        assert any(
+            event.type == "TaskProgressed" and event.actor == "p-2" for event in events
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert _visible_player("p-2", packet.visible_players).action == "task"
+
+    def test_task_is_vision_gated_not_surfaced_to_a_blind_observer(
+        self, tmp_path: Path
+    ) -> None:
+        # p-4 is a room-only crewmate in REACTOR, which is NOT adjacent to STORAGE,
+        # so it cannot see the STORAGE task-doers at all -- the annotation surfaces
+        # no one the observer could not already see (it never ADDS a visible
+        # player, unlike the witness-gated kill/vent channel).
+        game_map = load_canonical_map()
+        state, events = advance_tick(
+            _observed_activity_world(),
+            [_do_task("p-2"), _do_task("p-3")],
+            game_map=game_map,
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-4", engine_events=events
+        )
+        visible_ids = {player.id for player in packet.visible_players}
+        assert "p-2" not in visible_ids
+        assert "p-3" not in visible_ids
+
+    def test_rejected_kill_never_surfaces_as_a_visible_action(
+        self, tmp_path: Path
+    ) -> None:
+        # The firewall edge: a do_task rejection surfaces as "task", but a KILL
+        # rejection must NEVER surface (it would leak the actor's impostor-only
+        # intent). p-3 is on cooldown, so its kill is rejected the same way the
+        # pretend task is -- yet the observer sees action=None, not "kill"/"task".
+        game_map = load_canonical_map()
+        base = _observed_activity_world()
+        state = dataclasses.replace(base, cooldowns={**dict(base.cooldowns), "p-3": 5})
+        state, events = advance_tick(
+            state,
+            [_action({"type": "kill", "actor": "p-3", "payload": {"target": "p-2"}})],
+            game_map=game_map,
+        )
+        assert any(
+            event.type == "ActionRejected"
+            and event.actor == "p-3"
+            and event.action == "kill"
+            for event in events
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert _visible_player("p-3", packet.visible_players).action is None

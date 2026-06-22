@@ -6,7 +6,15 @@ from pathlib import Path
 from typing import Final
 
 from engine.entities import PlayerId
-from engine.events import EngineEvent, KilledEvent, VentEnteredEvent, VentExitedEvent
+from engine.events import (
+    ActionRejectedEvent,
+    EngineEvent,
+    KilledEvent,
+    TaskCompletedEvent,
+    TaskProgressedEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
+)
 from engine.visibility import VisibilityResult, compute_visibility_for_player
 from engine.world import Map, RoomId, TaskId, WorldState
 from observation.audit import ObservationAuditLog
@@ -183,6 +191,8 @@ class ObservationService:
         )
         observed_actions = self._observed_actions_for_agent(
             agent_id=agent_id,
+            world_state=world_state,
+            visibility=visibility,
             engine_events=engine_events,
         )
         own_kill = self._own_kill_for_agent(
@@ -306,9 +316,34 @@ class ObservationService:
         self,
         *,
         agent_id: PlayerId,
+        world_state: WorldState,
+        visibility: VisibilityResult,
         engine_events: Sequence[EngineEvent],
     ) -> dict[PlayerId, _ObservedAction]:
+        """Per-actor activity the observer perceives this tick (DESIGN.md §1.3).
+
+        Two distinct gates, by the action's role-sensitivity:
+
+        * ``kill`` / ``vent`` are WITNESS-gated -- surfaced only when the engine
+          recorded ``agent_id`` among the event's witnesses, and ONLY from a
+          RESOLVED event (a ``KilledEvent`` / ``Vent*Event``). A rejected kill or
+          vent never produces such an event, so it can never surface here -- the
+          impostor-exclusive intent stays hidden.
+        * ``do_task`` is VISION-gated and role-BLIND (Task 13.9, the fake-task
+          lever). Every role tasks, so a SUBMITTED ``do_task`` this tick surfaces
+          to any observer who can currently see the actor, regardless of
+          resolution: a RESOLVED task (``TaskProgressed`` / ``TaskCompleted``) and
+          a REJECTED one (``ActionRejected`` with ``action == "do_task"`` -- an
+          impostor's instance-less pretend task, or a crew task the engine
+          declined) both stamp ``action="task"``, BYTE-IDENTICAL. Reading the
+          tick's task events (not the resolved ``last_action``) is what lets a
+          rejected attempt still count; only ``do_task`` rejections are read, so a
+          rejected ``kill`` / ``vent`` / ``sabotage`` ``ActionRejectedEvent`` never
+          surfaces (it would leak the actor's impostor-exclusive intent).
+        """
+
         observed_actions: dict[PlayerId, _ObservedAction] = {}
+        task_actor_ids: set[PlayerId] = set()
         for event in engine_events:
             if isinstance(event, KilledEvent):
                 if agent_id in event.witnesses:
@@ -323,6 +358,29 @@ class ObservationService:
                 )
                 if vent_observation is not None:
                     observed_actions[event.actor] = vent_observation
+            elif isinstance(event, (TaskProgressedEvent, TaskCompletedEvent)):
+                task_actor_ids.add(event.actor)
+            elif isinstance(event, ActionRejectedEvent) and event.action == "do_task":
+                task_actor_ids.add(event.actor)
+
+        # Stamp ``action="task"`` on every do_task actor the observer can SEE.
+        # ``visibility.visible_player_ids`` already excludes the observer itself,
+        # the dead, the vented, and out-of-room players, so this is the vision
+        # gate. A witness-gated kill/vent already claimed the slot wins (a player
+        # submits one action per tick, so this is only ever defensive). The room
+        # is the actor's CURRENT room -- a task does not move its actor, and the
+        # actor is co-located/visible by construction.
+        visible_player_ids = set(visibility.visible_player_ids)
+        for actor_id in sorted(task_actor_ids):
+            if actor_id not in visible_player_ids or actor_id in observed_actions:
+                continue
+            actor = world_state.players.get(actor_id)
+            if actor is None:
+                continue
+            observed_actions[actor_id] = _ObservedAction(
+                action="task",
+                room=actor.room,
+            )
         return observed_actions
 
     def _own_kill_for_agent(
