@@ -1,4 +1,4 @@
-# Agent Prompt — 13.12 Redistribute the dead-crewmate task rule (replace drop), map-flag-gated
+# Agent Prompt — 13.10 Redistribute the dead-crewmate task rule (replace drop), map-flag-gated
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-13.md.
 
@@ -6,7 +6,7 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 13.12 — Redistribute the dead-crewmate task rule (replace drop), map-flag-gated, anchored to experiments/lab/report-stopwatch-sweep.md (the validation) + experiments/lab/stopwatch_sweep.py (`_redistribute_apply_kill` — the validated logic); engine/tick.py:323-340 (the DROP in `_apply_kill`); orchestrator/game.py:850-859 (the DROP on ejection); engine/world.py (`Map` config + a new `dead_task_rule`); engine/maps/canonical_1.yaml; engine/entities.py:52 (`TaskState`: id/owner/map_task_id/room/progress/required_ticks/completed); DESIGN.md §3.5 (the dead-crewmate task rule). Do not implement work outside these references.
+Implement Task 13.10 — Redistribute the dead-crewmate task rule (replace drop), map-flag-gated, anchored to experiments/lab/report-stopwatch-sweep.md (the validation) + experiments/lab/stopwatch_sweep.py (`_redistribute_apply_kill` — the validated logic); engine/tick.py:323-340 (the DROP in `_apply_kill`); orchestrator/game.py:850-859 (the DROP on ejection); engine/world.py (`Map` config + a new `dead_task_rule`); engine/maps/canonical_1.yaml; engine/entities.py:52 (`TaskState`: id/owner/map_task_id/room/progress/required_ticks/completed); DESIGN.md §3.5 (the dead-crewmate task rule). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-13.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
@@ -23,7 +23,7 @@ The authoritative task contract is copied below from tasks/phase-13.md. Follow i
 - tests/engine/test_tick.py
 - tests/orchestrator/test_game.py
 **Files NOT in scope:**
-- recordings — NO re-record here; the committed sets stay byte-identical under the DEFAULT `drop` flag. The redistribute re-record is 13.10.
+- recordings — NO re-record here; the committed sets stay byte-identical under the DEFAULT `drop` flag. The redistribute re-record is 13.12.
 - the §4.6 gate / detector / beliefs / visibility — unchanged
 - agents/ and the observation packet — the recipient's new pending_task surfaces through the EXISTING owner-filtered SelfView channel; no agent-layer or packet change
 - tests/observation/test_leak_property.py — the leak sweeps are RUN (must stay green), not edited (the re-key adds no new packet field)
@@ -38,7 +38,7 @@ living crewmate already owns it, fall back to dropping that one. Apply at BOTH d
 `engine/tick.py::_apply_kill` (the kill) and `orchestrator/game.py::apply_meeting_result` (the ejection).
 Add `Map.dead_task_rule: Literal["drop","redistribute"]` (engine/world.py) read from canonical_1.yaml;
 **DEFAULT "drop"** and keep canonical_1.yaml at "drop" so the committed replays + their state-hash verify
-stay byte-identical — the 13.10 re-record is what flips canonical to "redistribute".
+stay byte-identical — the 13.12 re-record is what flips canonical to "redistribute".
 
 **Firewall:** the re-key is ENGINE-INTERNAL — the recipient's new `pending_task_id` reaches it through the
 existing owner-filtered SelfView channel (its OWN task; no provenance, no role/attribution leak), and no
@@ -63,7 +63,7 @@ to a living crewmate) gated on `game_map.dead_task_rule == "redistribute"`; mirr
 
 ## Integration risk
 behavior changes ONLY when the flag is "redistribute" — keep canonical DEFAULT "drop" so check.sh + the
-committed state-hash verify stay green NOW (the redistribute re-record is 13.10). FIREWALL is the risk
+committed state-hash verify stay green NOW (the redistribute re-record is 13.12). FIREWALL is the risk
 surface: the re-key must add NO agent-visible provenance (the recipient's pending_task is leak-allowed —
 assert the leak tests) and must not expose roles to agents (the role read is engine-side only).
 DETERMINISM: lowest-id recipient + carry progress → assert a redistribute game re-sims identically.
@@ -90,5 +90,5 @@ Do not implement work outside this task.
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-13-redistribute` with a title like `task 13.12: redistribute the dead-crewmate task rule (replace drop), map-flag-gated`.
+Open a PR from branch `phase-13-redistribute` with a title like `task 13.10: redistribute the dead-crewmate task rule (replace drop), map-flag-gated`.
 The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing experiments/lab/report-stopwatch-sweep.md (the validation) + experiments/lab/stopwatch_sweep.py (`_redistribute_apply_kill` — the validated logic); engine/tick.py:323-340 (the DROP in `_apply_kill`); orchestrator/game.py:850-859 (the DROP on ejection); engine/world.py (`Map` config + a new `dead_task_rule`); engine/maps/canonical_1.yaml; engine/entities.py:52 (`TaskState`: id/owner/map_task_id/room/progress/required_ticks/completed); DESIGN.md §3.5 (the dead-crewmate task rule)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.

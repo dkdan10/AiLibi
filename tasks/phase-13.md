@@ -13,9 +13,9 @@ the SPINE is a meeting-time **inferential contradiction detector** (a new STRONG
 that lights R7 on a **$0 re-extraction of the committed replays — before any re-record** (the extractor re-runs
 `detect_contradictions` over the recorded transcript). Sequence: detector (13.2–13.5) → breadcrumb-render + prompt
 rework (13.6) → graduated testimony-spread (13.7) → **asymmetric visibility** (13.8) → optional two-phase reasoning
-(13.11, optional) → ONE combined re-record (13.10). Every pre-re-record task validates by **re-extracting committed replays**
+(13.11, optional) → ONE combined re-record (13.12). Every pre-re-record task validates by **re-extracting committed replays**
 (R7 climbs, every STRONG flag role-gated to a true impostor, R4 floors hold); one combined re-record at the end
-(cadence doctrine). **13.2–13.4 are elaborated as full contracts below; 13.5–13.10 are the roadmap, elaborated to full
+(cadence doctrine). **13.2–13.4 are elaborated as full contracts below; 13.5–13.12 are the roadmap, elaborated to full
 contracts immediately before each dispatch (they depend on interfaces the spine builds).**
 
 **Owner decisions (taken with the workflow's recommended defaults — override if desired):** (1) **Visibility = ASYMMETRIC**
@@ -103,8 +103,8 @@ a repair that does not flip those has not fixed the gradient.
 
 The spine: a meeting-time inferential contradiction detector whose new STRONG flags light R7 on a **$0 re-extraction of
 the committed replays** (the extractor re-runs `detect_contradictions` + `is_weak_contradiction` over the recorded
-transcript — `audits/workflows/extract_gameplay_facts.py:286-293,358`). 13.2–13.4 are full contracts; 13.5–13.10 follow
-as the roadmap. All firewall- and byte-determinism-preserving; one combined re-record only at 13.10.
+transcript — `audits/workflows/extract_gameplay_facts.py:286-293,358`). 13.2–13.4 are full contracts; 13.5–13.12 follow
+as the roadmap. All firewall- and byte-determinism-preserving; one combined re-record only at 13.12.
 
 ### Task 13.2 — Meeting-time position-reconstruction helper (transcript-only)
 **Branch:** `phase-13-recon-helper`
@@ -232,8 +232,8 @@ it richer testimony, which is **real-Ollama-generated → tested by a SMOKE re-r
 for when flags fire). **Game-changers (the R7 lever — need a real run to test):** 13.6 prompt-rework → 13.8 asymmetric
 visibility → 13.7 testimony-spread. **New gate (replaces the $0 gate):** a SMOKE re-record (a few meeting-bearing seeds,
 real Ollama) → re-extract → does the built detector now light R7 (>0 on ≥2–3 seeds, zero STRONG-on-crewmate)? If yes →
-13.10 full re-record; if no → the deeper model / two-phase-reasoning question (13.11). **13.5 + 13.6 are full contracts
-below; 13.7–13.10 stay roadmap (elaborate before each dispatch).**
+13.12 full re-record; if no → the deeper model / two-phase-reasoning question (13.11). **13.5 + 13.6 are full contracts
+below; 13.7–13.12 stay roadmap (elaborate before each dispatch).**
 
 ### Roadmap / full contracts
 
@@ -431,8 +431,8 @@ replay. Gate adoption on an offline qwen husk/length measurement; do NOT delete 
 validated. **Offline-validate:** the `deception_battery` harness on qwen (reasoning stays 2–4 lines, free_text ~1
 sentence, total under the turn cap, husk rate does not rise); recorded turns carry no reasoning field. **Owner go/no-go.**
 
-#### Task 13.10 — ONE combined re-record UNDER REDISTRIBUTE + close-audit gate + era-pin re-anchor (depends 13.9, 13.12)
-After 13.12 lands, the single combined re-record (cadence doctrine): flip `canonical_1.yaml`
+#### Task 13.12 — ONE combined re-record UNDER REDISTRIBUTE + close-audit gate + era-pin re-anchor (depends 13.9, 13.10)
+After 13.10 lands, the single combined re-record (cadence doctrine): flip `canonical_1.yaml`
 `dead_task_rule: redistribute` (the validated config — tpc=2, ×1.0 durations), fake-provider sweep FIRST (balance
 sanity), then real-Ollama re-record of BOTH sets under redistribute, regenerate the rubric artifact, re-anchor the
 era-pins (precedent `dbe1827`), run the close audit. **Gate (the from-scratch rubric, `report-rubric-design.md` /
@@ -452,7 +452,7 @@ DOING, who they are WITH, and when they enter/leave — so the collective testim
 bare "p1 in Z" cannot. In parallel the rubric is rebuilt FROM ZERO around the deterministic suspicion graph + outcomes
 (not detector flag-strength): **`experiments/lab/report-rubric-design.md`**.
 
-**These are validated TOGETHER on ONE combined smoke** (extends 13.10): enrich perception (13.9) → re-record a few seeds →
+**These are validated TOGETHER on ONE combined smoke** (extends 13.12): enrich perception (13.9) → re-record a few seeds →
 measure (a) does **D2** (suspicion-truth separation + accusation→ejection conversion) RISE = the enrichment works, and
 (b) does the from-scratch rubric rank the enriched games above the stopwatch with NO perverse gradient = the rubric is
 sound. The rubric STRUCTURE is robust to the info level (it scores outcomes); only its CALIBRATION waits on the enriched
@@ -525,11 +525,11 @@ The stopwatch / redistribute sweeps (`experiments/lab/report-stopwatch-sweep.md`
 drop it) is what makes the deduction DECIDE — real smoke: **2 `CREWMATE_EJECT` wins, 3 win-shapes,
 stopwatch 8/8→3/8, meetings 1.9→4.0**, decisions 12/12 info-backed (0 railroads). Owner: **keep the
 validated config** (redistribute, tasks_per_crewmate=2, ×1.0 durations) — balance tuning deferred (the
-dial is duration at tpc=2; tpc=1 reintroduces the stopwatch). 13.12 makes redistribute a real,
-firewall-clean engine rule (today it is only a sim monkeypatch); the 13.10 re-record flips the canonical
+dial is duration at tpc=2; tpc=1 reintroduces the stopwatch). 13.10 makes redistribute a real,
+firewall-clean engine rule (today it is only a sim monkeypatch); the 13.12 re-record flips the canonical
 map to it and re-records under it.
 
-### Task 13.12 — Redistribute the dead-crewmate task rule (replace drop), map-flag-gated
+### Task 13.10 — Redistribute the dead-crewmate task rule (replace drop), map-flag-gated
 **Branch:** `phase-13-redistribute`
 **Depends on:** none
 **Section refs:** experiments/lab/report-stopwatch-sweep.md (the validation) + experiments/lab/stopwatch_sweep.py (`_redistribute_apply_kill` — the validated logic); engine/tick.py:323-340 (the DROP in `_apply_kill`); orchestrator/game.py:850-859 (the DROP on ejection); engine/world.py (`Map` config + a new `dead_task_rule`); engine/maps/canonical_1.yaml; engine/entities.py:52 (`TaskState`: id/owner/map_task_id/room/progress/required_ticks/completed); DESIGN.md §3.5 (the dead-crewmate task rule)
@@ -542,7 +542,7 @@ map to it and re-records under it.
 - tests/engine/test_tick.py
 - tests/orchestrator/test_game.py
 **Files NOT in scope:**
-- recordings — NO re-record here; the committed sets stay byte-identical under the DEFAULT `drop` flag. The redistribute re-record is 13.10.
+- recordings — NO re-record here; the committed sets stay byte-identical under the DEFAULT `drop` flag. The redistribute re-record is 13.12.
 - the §4.6 gate / detector / beliefs / visibility — unchanged
 - agents/ and the observation packet — the recipient's new pending_task surfaces through the EXISTING owner-filtered SelfView channel; no agent-layer or packet change
 - tests/observation/test_leak_property.py — the leak sweeps are RUN (must stay green), not edited (the re-key adds no new packet field)
@@ -557,7 +557,7 @@ living crewmate already owns it, fall back to dropping that one. Apply at BOTH d
 `engine/tick.py::_apply_kill` (the kill) and `orchestrator/game.py::apply_meeting_result` (the ejection).
 Add `Map.dead_task_rule: Literal["drop","redistribute"]` (engine/world.py) read from canonical_1.yaml;
 **DEFAULT "drop"** and keep canonical_1.yaml at "drop" so the committed replays + their state-hash verify
-stay byte-identical — the 13.10 re-record is what flips canonical to "redistribute".
+stay byte-identical — the 13.12 re-record is what flips canonical to "redistribute".
 
 **Firewall:** the re-key is ENGINE-INTERNAL — the recipient's new `pending_task_id` reaches it through the
 existing owner-filtered SelfView channel (its OWN task; no provenance, no role/attribution leak), and no
@@ -580,9 +580,9 @@ to a living crewmate) gated on `game_map.dead_task_rule == "redistribute"`; mirr
 `apply_meeting_result`; keep the existing drop-filter as the default branch so `drop` is byte-identical.
 **Integration risk:**
 behavior changes ONLY when the flag is "redistribute" — keep canonical DEFAULT "drop" so check.sh + the
-committed state-hash verify stay green NOW (the redistribute re-record is 13.10). FIREWALL is the risk
+committed state-hash verify stay green NOW (the redistribute re-record is 13.12). FIREWALL is the risk
 surface: the re-key must add NO agent-visible provenance (the recipient's pending_task is leak-allowed —
 assert the leak tests) and must not expose roles to agents (the role read is engine-side only).
 DETERMINISM: lowest-id recipient + carry progress → assert a redistribute game re-sims identically.
 Win-conditions unchanged: a redistributed instance still counts, so the crew can still win by tasks (harder).
-**Ready-to-paste prompt:** `agent_prompts/task-13-12-redistribute.md`
+**Ready-to-paste prompt:** `agent_prompts/task-13-10-redistribute.md`
