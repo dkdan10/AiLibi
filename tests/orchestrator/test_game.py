@@ -40,6 +40,7 @@ from orchestrator.game import (
     MeetingArtifacts,
     RosterPreset,
     TacticalAgent,
+    apply_meeting_result,
     build_default_agent_factory,
     build_default_meeting_runner,
 )
@@ -1500,3 +1501,114 @@ def test_recovered_failure_recorded_when_retry_succeeds_end_to_end(
     assert failed[0].model == "qwen2.5:7b-instruct"
     # ...and it is NOT a deadline_default (the turn succeeded; no default fired).
     assert failed[0].error_type == "ValidationError"
+
+
+# ---------------------------------------------------------------------------
+# Dead-crewmate task rule — redistribute (DESIGN.md §3.5; Task 13.10).
+# ---------------------------------------------------------------------------
+
+
+def _redistribute_map() -> Map:
+    """Canonical map with the dead-crewmate task rule flipped to
+    ``redistribute`` (DESIGN.md §3.5; Task 13.10)."""
+
+    return load_canonical_map().model_copy(update={"dead_task_rule": "redistribute"})
+
+
+def test_ejection_redistributes_incomplete_tasks_under_redistribute_rule() -> None:
+    """Under ``redistribute`` an EJECTED crewmate's incomplete instances re-key to
+    living crewmates instead of dropping — mirroring the kill path (DESIGN.md
+    §3.5). The default ``drop`` is unchanged (covered in test_meeting_integration).
+    """
+
+    game_map = _redistribute_map()
+    # 5-player lobby so ejecting one crewmate does not reach impostor parity.
+    base = seed_initial_state(seed=2026, game_map=game_map, num_players=5)
+    state = replace(base, phase="MEETING", tick=42)
+
+    # The lowest-id living crewmate that is NOT the ejected target is the
+    # expected recipient for any of the target's incomplete map tasks it does
+    # not already own.
+    living_crew = sorted(
+        pid for pid, p in state.players.items() if p.alive and p.role == "CREWMATE"
+    )
+    target = living_crew[0]
+    target_incomplete = {
+        task.map_task_id
+        for task in state.tasks.values()
+        if task.owner == target and not task.completed
+    }
+    assert target_incomplete, "fixture must give the target incomplete tasks"
+
+    ballot = VoteBallot(
+        voter="p-1",
+        target=target,
+        confidence=0.9,
+        primary_reason_id=None,
+        considered_alternatives=(),
+        rationale_text=f"eject {target}",
+    )
+    result = MeetingResult(
+        meeting_id="g-1:meeting-0",
+        triggered_by="p-1",
+        trigger_tick=42,
+        outcome="EJECTED",
+        ejected_player_id=target,
+        ballots=(ballot,),
+        contradictions=(),
+        transcript=MeetingTranscript(),
+    )
+
+    next_state, _ = apply_meeting_result(state, result, game_map=game_map)
+
+    assert next_state.players[target].alive is False
+    # The target owns no incomplete instances afterwards (re-keyed away).
+    assert not any(
+        task.owner == target and not task.completed
+        for task in next_state.tasks.values()
+    )
+    # Each redistributed map task landed on a living crewmate not previously
+    # owning it, carrying over as a new instance keyed by the recipient.
+    other_crew = [pid for pid in living_crew if pid != target]
+    for map_task_id in target_incomplete:
+        owners_before = {
+            task.owner
+            for task in state.tasks.values()
+            if task.map_task_id == map_task_id
+        }
+        recipient = next((pid for pid in other_crew if pid not in owners_before), None)
+        if recipient is None:
+            # No eligible recipient -> the no-recipient drop fallback applies.
+            continue
+        new_id = f"{recipient}:{map_task_id}"
+        assert new_id in next_state.tasks
+        moved = next_state.tasks[new_id]
+        assert moved.owner == recipient
+        assert moved.map_task_id == map_task_id
+
+
+def test_redistribute_game_resims_to_identical_state(tmp_path: Path) -> None:
+    """Determinism: a full game under ``redistribute`` (with kills firing) re-sims
+    byte-identically across two runs (DESIGN.md §3.5; Task 13.10). Seed 0 reaches
+    an impostor win with multiple deaths, so the redistribute re-key path is
+    exercised by the run."""
+
+    game_map = _redistribute_map()
+    first_path = tmp_path / "first.jsonl"
+    second_path = tmp_path / "second.jsonl"
+
+    results = []
+    for replay_path in (first_path, second_path):
+        game = HeadlessGame(
+            seed=0,
+            game_map=game_map,
+            agent_factory=build_default_agent_factory(),
+            replay_path=replay_path,
+            scheduler=TickScheduler(max_ticks=400),
+        )
+        results.append(game.run())
+
+    # The run terminates with deaths (so redistribute fired) and is reproducible.
+    assert results[0].outcome == results[1].outcome
+    assert sum(1 for p in results[0].final_state.players.values() if not p.alive) >= 1
+    assert first_path.read_bytes() == second_path.read_bytes()

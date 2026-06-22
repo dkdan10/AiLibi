@@ -49,7 +49,7 @@ from engine.events import (
 )
 from engine.rng import EngineRng
 from engine.rules import resolve_win_conditions
-from engine.tick import advance_tick
+from engine.tick import advance_tick, redistribute_dead_tasks
 from engine.world import Map, WorldState
 from llm.budget import GameBudget
 from llm.budgeted_client import BudgetedLLMClient
@@ -804,8 +804,9 @@ def apply_meeting_result(
     cleared, their ``last_action`` is reset to ``None`` so the next
     tick's task-progress pass does not try to continue their task,
     their cooldown entry is removed, and their incomplete tasks are
-    dropped per the dead-crewmate-task rule (DESIGN.md §3.5; same
-    semantics as a kill).
+    resolved per the map's dead-crewmate-task rule (DESIGN.md §3.5;
+    same semantics as a kill): dropped under the default ``drop`` and
+    re-keyed to living crewmates under ``redistribute``.
 
     Win conditions are re-evaluated after the ejection. An ejection
     that reaches impostor parity, sabotage timeout, or completes the
@@ -847,16 +848,28 @@ def apply_meeting_result(
         players = dict(working.players)
         ejected = players[ejected_id]
         players[ejected_id] = replace(ejected, alive=False, last_action=None)
-        # Dead-crewmate task rule: DESIGN.md §3.5 dropped. Mirror
+        # Dead-crewmate task rule: DESIGN.md §3.5. Mirror
         # ``engine/tick.py::_apply_kill``: drop the ejected player's
         # incomplete tasks so the crew win check counts only alive-
         # owned tasks; completed tasks remain so they still count
         # toward ``crew_tasks_done``.
-        tasks = {
+        surviving_tasks = {
             task_id: task
             for task_id, task in working.tasks.items()
             if not (task.owner == ejected_id and not task.completed)
         }
+        # Under ``redistribute`` the dropped incomplete instances are re-keyed to
+        # living crewmates instead of vanishing (DESIGN.md §3.5; map-flag-gated).
+        # The default ``drop`` leaves ``surviving_tasks`` byte-identical.
+        if game_map.dead_task_rule == "redistribute":
+            tasks = redistribute_dead_tasks(
+                surviving_tasks=surviving_tasks,
+                pre_death_tasks=working.tasks,
+                players=players,
+                victim=ejected_id,
+            )
+        else:
+            tasks = surviving_tasks
         cooldowns = dict(working.cooldowns)
         cooldowns.pop(ejected_id, None)
         working = replace(working, players=players, tasks=tasks, cooldowns=cooldowns)
