@@ -437,3 +437,80 @@ After all offline-validated changes land, the single combined re-record (cadence
 artifact, re-anchor the 15 era-pins (precedent `dbe1827`), run the close audit. **Gate:** `rubric_score.py` shows R7 > 0
 on multiple seeds, R3/R1 up, R4 (inversions / wrong-eject / friendly-fire) HARD-floor clean, impostor win ≥ the
 Phase-11 14% floor; abandon the branch if R1 regresses below 6/50.
+
+## Wave C — information economy + from-scratch rubric (post-smoke pivot, 2026-06-21)
+
+The Wave-B smoke (8 seeds, full stack on `qwen3.5:9b` @ 135b3eb) FALSIFIED the detector-for-R7 path: **0 `alibi_vs_physical`
+across ~80 meetings** (committed re-extract + both smokes agree), R7 ~0. Diagnosis from the engine/perception maps: **13.8's
+room-only crew did not enrich inference — it STARVED it.** The inferential detector needs ≥2 co-located witnesses of one
+subject; room-only CUTS co-located witnesses, so the two-source material never forms. The fix is NOT to restore adjacent
+sight (that removes the impostor's edge) but to make SAME-ROOM observation HIGH-FIDELITY — see what visible players are
+DOING, who they are WITH, and when they enter/leave — so the collective testimony reconstructs trajectories that today's
+bare "p1 in Z" cannot. In parallel the rubric is rebuilt FROM ZERO around the deterministic suspicion graph + outcomes
+(not detector flag-strength): **`experiments/lab/report-rubric-design.md`**.
+
+**These are validated TOGETHER on ONE combined smoke** (extends 13.10): enrich perception (13.11) → re-record a few seeds →
+measure (a) does **D2** (suspicion-truth separation + accusation→ejection conversion) RISE = the enrichment works, and
+(b) does the from-scratch rubric rank the enriched games above the stopwatch with NO perverse gradient = the rubric is
+sound. The rubric STRUCTURE is robust to the info level (it scores outcomes); only its CALIBRATION waits on the enriched
+economy — so it is designed now and locked after the smoke. 13.11 is offline-validatable (firewall + render goldens +
+determinism); its deduction/balance lift is the smoke gate.
+
+### Task 13.11 — Enrich same-room perception: observed activity + co-presence + transitions (firewall-gated)
+**Branch:** `phase-13-perception-enrich`
+**Depends on:** 13.6
+**Section refs:** the Wave-C smoke finding above (room-only starved the detector — fewer co-located witnesses → 0 alibi_vs_physical); observation/service.py (`_observed_actions_for_agent`, `_build_packet_from_visibility`); observation/packet.py (`PlayerView` = `{id, room, action}`); agents/perception.py (saw_player ingest); agents/memory/store.py (`_render_saw_player`, the 13.6 breadcrumb); the firewall — eval/leak_test.py (`_FORBIDDEN_VISIBLE_PLAYER_ACTIONS = {"sabotage"}`, visible_player keys EXACTLY `{id,room,action}`) + tests/observation/test_leak_property.py
+**Complexity:** Integration
+**Files in scope:**
+- observation/service.py
+- agents/perception.py
+- agents/memory/store.py
+- tests/observation/test_service.py
+- tests/observation/test_leak_property.py
+- tests/agents/test_memory_store.py
+- tests/agents/test_perception.py
+**Files NOT in scope:**
+- observation/packet.py `PlayerView` SCHEMA — do NOT add a key; reuse the existing `action` field for `"task"` (the leak test asserts visible_player keys are EXACTLY `{id,room,action}`). Co-presence + transitions are RENDER-only (store.py) from the episodic log — no packet field.
+- engine/ — no engine change (the observation reads the existing world_state + the tick's submitted actions)
+- meetings/transcript.py / agents/memory/beliefs.py / the §4.6 gate — the detector, suspicion deltas, and gate are UNCHANGED; this is the INPUT side only
+- recordings — NO re-record here (the deduction/balance lift is the Wave-C combined smoke, paired with the rubric)
+
+The smoke proved room-only crew STARVES the detector (fewer co-located witnesses → 0 alibi_vs_physical). Fix: keep the
+room-only asymmetry (the impostor's edge) but make same-room observation HIGH-FIDELITY. Three firewall-gated,
+vision-bounded enrichments:
+
+1. **Observed activity (the fake-task lever).** When a player VISIBLE to the observer SUBMITTED a `do_task` this tick —
+read from the TICK's submitted action list, NOT the resolved `last_action`, so a REJECTED attempt still counts — stamp the
+observer's `PlayerView.action = "task"` (reuse the field; add no key). This is the cover mechanic: an impostor's
+pretend-task `do_task` is engine-REJECTED (impostors own no instance) yet renders as `"task"` to observers,
+BYTE-IDENTICAL to a crewmate's real task (cover) AND a falsifiable placement (deduction surface). **Gate by
+role-sensitivity, not role:** `do_task` is role-BLIND (everyone tasks) so a submitted attempt shows regardless of
+resolution; `kill`/`vent` stay WITNESS-gated (resolved events only — a rejected kill must NEVER surface, it would leak
+impostor identity); `sabotage` is NEVER observable (`_FORBIDDEN_VISIBLE_PLAYER_ACTIONS`).
+
+2. **Co-presence render.** In store.py render who the observer saw TOGETHER: `"[tick N] You saw p1 in Z (with p3, p4)."`
+Pure render of the existing episodic `saw_player` sequence (same tick + room ⇒ co-present). Makes the LLM's
+`saw_player.co_present` claim reliable → feeds `reconstruct_stated_paths` → the two-source material `alibi_vs_physical`
+needs.
+
+3. **Within-vision transitions.** Render entry/exit at the observer's own rooms: `"[tick N] p1 entered Z"` /
+`"[tick N] p1 left Z"`, computed from consecutive `saw_player` deltas (present at N, gone at N+1 ⇒ left; absent at N,
+present at N+1 ⇒ entered). The observer NEVER sees the adjacent origin/destination (room-only) — the full X→Y trajectory
+emerges COLLECTIVELY when meeting testimony is combined (complements the 13.6 own-sightings breadcrumb).
+**Definition of done:** a visible player's submitted `do_task` (resolved OR rejected) stamps `PlayerView.action="task"`,
+vision-gated; a unit test asserts an impostor's rejected pretend-task and a crewmate's real task render BYTE-IDENTICAL to
+every observer (no role leak); `kill`/`vent` stay witness-gated and `sabotage` stays non-observable (leak tests extended +
+green; visible_player keys remain exactly `{id,room,action}`); store.py renders co-presence ("with …") + within-vision
+transitions ("entered/left") with new goldens; the leak-property + leak_test sweeps + state-hash determinism stay green;
+NO re-record; `scripts/check.sh` is green.
+**Implementation hint:**
+stamp `"task"` in `_observed_actions_for_agent` by scanning the TICK's submitted actions for VISIBLE players (NOT
+`last_action`, so a rejected fake task counts); render co-presence + transitions in store.py from the episodic `saw_player`
+log (no packet field); keep the `PlayerView` key set exactly `{id,room,action}`.
+**Integration risk:**
+FIREWALL is the whole risk surface — the new `"task"` annotation must be (a) vision-gated, (b) role-BLIND (real and fake
+tasks render byte-identical — ASSERT it), (c) sabotage-EXCLUDED, and `kill`/`vent` must stay resolved-witness-gated (a
+rejected kill surfacing would leak the impostor). Input side only — no detector/gate/belief change. Determinism: a pure
+function of the visible submitted-action list + the episodic log, byte-stable. The deduction lift is real-Qwen-only →
+gated at the Wave-C combined smoke with the new rubric; this task's offline bar is firewall + goldens + determinism.
+**Ready-to-paste prompt:** `agent_prompts/task-13-11-perception-enrich.md`
