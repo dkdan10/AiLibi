@@ -794,3 +794,46 @@ class TestWithinVisionTransitionRender:
 
         assert "p-2 entered" not in view
         assert "p-2 left" not in view
+
+    def test_a_kill_in_the_room_does_not_render_a_false_left(self) -> None:
+        # Codex review: a subject seen at N but gone at N+1 because it was KILLED
+        # in the observer's room (dead -> dropped from visible_players, body now
+        # visible) did NOT leave. The "left" must be suppressed -- the body
+        # discovery is the truthful testimony and a false departure would corrupt
+        # path reconstruction. The observer stays put in STORAGE across 3->4.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(
+            _saw_body_event(
+                tick=4, body_id="body-p-2-4", victim_id="p-2", room="STORAGE"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "p-2 left STORAGE" not in view
+        assert "[tick 4] You discovered p-2's body in STORAGE." in view
+
+    def test_a_departure_still_renders_when_the_body_is_elsewhere(self) -> None:
+        # The kill-in-place guard is room-scoped: a subject who genuinely LEFT the
+        # observer's room (and whose body, if any, is in a room the observer cannot
+        # see) still yields a truthful "left". Here p-2 leaves STORAGE at tick 4
+        # with no body visible in STORAGE, so the departure renders.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(tick=3, agent_id="p-1", room="STORAGE")
+        )
+        memory.episodic.append(_saw_player_in(tick=3, player_id="p-2", room="STORAGE"))
+        memory.episodic.append(
+            _self_state_event(tick=4, agent_id="p-1", room="STORAGE")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 4] p-2 left STORAGE." in view

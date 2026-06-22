@@ -676,15 +676,31 @@ def _collect_transitions(
     sightings in that room count, so an impostor's adjacent-room sightings (which
     the observer cannot vouch a transition for) are excluded. The §4.7
     suppressions are mirrored so a suppressed subject never produces a transition.
+    A subject that vanished because it was KILLED in the room (its body now
+    visible there) produces NO "left": a death in place is not a departure, and
+    the ``saw_body`` line carries the truthful testimony.
     """
 
     own_room_by_tick: dict[int, str] = {}
     seen_in_own_room: dict[int, set[str]] = {}
+    # Bodies the observer saw, keyed by tick -> {(victim_id, room)}. A subject seen
+    # at N but gone at N+1 because it was KILLED in the room (its body now visible)
+    # did NOT leave -- the body discovery is the truthful testimony. Suppressing the
+    # bogus "left" keeps path reconstruction from recording a departure that never
+    # happened (Codex review): a death in place is not a movement.
+    body_victims_by_tick: dict[int, set[tuple[str, str]]] = {}
     for event in episodic.recent(since_tick=0):
         if event.type == _EVENT_SELF_STATE:
             room = event.payload.get("room")
             if isinstance(room, str):
                 own_room_by_tick[event.tick] = room
+        elif event.type == _EVENT_SAW_BODY:
+            victim_id = event.payload.get("victim_id")
+            body_room = event.payload.get("room")
+            if isinstance(victim_id, str) and isinstance(body_room, str):
+                body_victims_by_tick.setdefault(event.tick, set()).add(
+                    (victim_id, body_room)
+                )
 
     for event in episodic.recent(since_tick=0):
         if event.type != _EVENT_SAW_PLAYER:
@@ -719,6 +735,11 @@ def _collect_transitions(
             continue
         prev_seen = seen_in_own_room.get(prev_tick, set())
         now_seen = seen_in_own_room.get(tick, set())
+        killed_in_room = {
+            victim
+            for victim, body_room in body_victims_by_tick.get(tick, set())
+            if body_room == room
+        }
         for subject in sorted(now_seen - prev_seen):
             transitions.append(
                 _Observation(
@@ -728,6 +749,10 @@ def _collect_transitions(
                 )
             )
         for subject in sorted(prev_seen - now_seen):
+            if subject in killed_in_room:
+                # Killed in place (body visible in this room/tick): a death, not a
+                # departure. The saw_body line carries the truthful testimony.
+                continue
             transitions.append(
                 _Observation(
                     salience=_SALIENCE_TRANSITION,
