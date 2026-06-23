@@ -127,3 +127,69 @@ the Wave-C smoke, not before. One combined real-`qwen3.5:9b` smoke validates bot
 
 Designing the rubric on today's starved data would be measuring a game we are about to replace; calibrating it on the
 enriched economy is the point.
+
+## 8. Implementation decisions (Task 13.15 — the geomean numeric spec)
+
+§3 is a narrative, not a numeric spec: the weights, the `floor_multiplier`, the epsilon, and each Dₙ's [0,1] mapping
+were fixed by the implementer (`experiments/lab/rubric_score.py`) and validated against the committed 9p2i set
+(`results-rubric-geomean.json`). These are the **pre-fix calibration** — the committed set is the pre-redistribute
+stopwatch the rubric is tuned against; the final recalibration is locked after the held 13.12 re-record (§7).
+
+**Composition.** `score = 100 · floor_multiplier · geomean_weighted(D1,D2,D3,D4)`, where
+`geomean_weighted = exp(Σ wₙ · ln(max(Dₙ, ε)))` (weights sum to 1, so a true weighted geometric mean in `[ε,1]`).
+
+- **Weights** `{D1: 0.40, D2: 0.25, D3: 0.15, D4: 0.20}`. D1 dominant because principle 2 makes resolution the primary
+  axis (separate decided-by-play from the stopwatch); D2 next (crew deduction); D4 (arc) above D3 (impostor craft, the
+  least about *deduction* interest, and the coarsest term).
+- **Epsilon** `ε = 1e-3`, applied inside the geomean (`max(Dₙ, ε)`): a single zero dimension SINKS the score (one dead
+  dimension ⇒ score ≈ 0.2–6) without `ln(0)` → −∞/NaN.
+- **`floor_multiplier`** is a hard `{0, 1}` (R4-style), 0 on any integrity breach: friendly-fire kill
+  (`victim_role == IMPOSTOR`), railroad (a CREWMATE ejected with rendered suspicion among the ejectors `< 0.60` — the
+  §4.6 gate — or none at all), or a firewall/determinism breach (a failing extractor `self_checks` entry). A crewmate
+  ejected *above* the 0.60 gate is an honest (mistaken) deduction, NOT a railroad — it is scored low by D2, not floored.
+
+**Dₙ → [0,1] mappings.**
+
+- **D1 (resolution):** `CREWMATE_EJECT → 1.0`; a contested `IMPOSTOR_PARITY`/`IMPOSTOR_SABOTAGE` (≥1 meeting) → `0.6`;
+  some impostor ejected but the clock decided → `0.3`; pure stopwatch / pre-meeting stomp → `0.0`.
+- **D2 (crew deduction):** `0.5·separation_norm + 0.5·conversion`.
+  - **separation scalar (specified here, NOT re-extracted):** per meeting, over the facts'
+    `suspicion_graph_by_voter`, `sep = mean(rendered_suspicion of true-impostor targets) − mean(of crew targets)`
+    (excluding self rows); the game value is the mean over meetings with both sides present;
+    `separation_norm = clamp(sep / 0.30, 0, 1)` (committed max sep ≈ 0.42; clamp-at-0 penalizes a negative separation, so
+    a railroad that raises suspicion on an innocent lowers, not raises, D2).
+  - **conversion:** of every `(meeting, observation-backed-accused true impostor)` pair, the fraction the meeting EJECTED
+    (the extractor's `observation_backed` testimony bit + the firewalled role; never a flagless conviction).
+- **D3 (impostor craft):** the repaired-R2 EFFECTIVE-deflection value (`1.0` effective / `0.2` accused-not-deflected /
+  `0.0` never-accused) — byte-identical to the `r2_deception` per_game term (one source). Evasion / tool-use / steering
+  (also §3 D3) fold in at the enriched re-record; the committed anchor is effective deflection.
+- **D4 (arc):** `0.45·arc + 0.35·swing + 0.20·contest`. `arc` = a cross-meeting suspicion rise onto a true impostor (=
+  `r3_arcs`); **`swing` = the new term: a knife-edge `plurality_margin == 1` eject + cross-meeting movement
+  (`n_meetings > 1`)**; `contest = min(1, (n_meetings−1)/2)` (graded, capped — no reward for raw stalling).
+
+**R7 is NOT a geomean input.** D1–D4 route around the dead R7 (0/50 on this set), so — unlike the old additive-R7 score
+— the geomean does NOT collapse to 0 on the committed R7=0 set. `r7_legible` stays a per_game diagnostic key (the DTO
+`RubricGameView` keeps `r1`–`r7`); only the `score` value changed.
+
+**Achieved ranking (the §6 validation, `results-rubric-geomean.json`, committed 9p2i, geomean mean 22.9 / median 24.1).**
+
+1. **Ranks contested above the stopwatch — ACHIEVED in full:** all 6 `CREWMATE_EJECT` games (score 43.9–80.2) rank
+   ABOVE all 37 `CREWMATE_TASKS` stopwatch games (0.2–39.6); 0 stopwatch games reach the worst eject-decided score. The
+   audit's top-3 seeds 5/47/34 all land in the top 6. Mean score by reason: `CREWMATE_EJECT` 63.3 ≫ `IMPOSTOR_PARITY`
+   28.5 > `CREWMATE_TASKS` 15.3. (The stronger "ALL eject-decided above ALL stopwatch" target DID hold under this weight
+   vector; per the contract the weights were NOT tuned to force it — it is reported as achieved.)
+2. **No perverse gradient:** `Pearson(Dₙ, crew_win)` is weak for every dimension (D1 −0.35, D2 +0.15, D3 −0.08, D4 +0.10)
+   and `Pearson(score, crew_win) = −0.11` (near zero — the rubric does not reward winning; D1 is *negatively* correlated
+   with crew_win because the 37 stopwatch crew wins score low on D1). No dimension rewards losing, railroading, or
+   passivity (the R2/R3/R7 traps).
+3. **Reachability:** every dimension is non-zero somewhere — D1 34/50, D2 43/50, D3 49/50, D4 43/50 (each max 1.0),
+   unlike R7 (0/50).
+4. **Watch-the-games:** top seed-28 (D1 1.0 / D2 0.67 / D3 1.0 / D4 0.55) is a high-on-all-axes eject; the bottom is
+   one-meeting stopwatch games at ≈ 0.2 (D1=0). The ranking matches a human interesting/boring call.
+
+**Floors on the committed set:** 0 games floored (no friendly-fire, no below-gate railroad, all self-checks OK) — the
+floors are clean regression guards here; they are unit-verified to sink synthetic friendly-fire / below-gate-railroad /
+integrity-breach games to 0.
+
+**Held-out referee, never the gradient.** The geomean scores recorded replays offline ($0); it is the SELECTION referee,
+never the ML inner-loop fitness (that is the FO-6 physical-suspicion rank — Phase-13 grounding-audit verdict).
