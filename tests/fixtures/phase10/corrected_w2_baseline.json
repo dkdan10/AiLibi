@@ -25,7 +25,6 @@
       "prior_meeting_carry"
     ],
     "seed-10:m1": [
-      "body_proximity",
       "contradiction_flag",
       "prior_meeting_carry"
     ],
@@ -42,14 +41,12 @@
     ],
     "seed-1:m0": [
       "body_proximity",
-      "contradiction_flag",
-      "single-witness inform"
+      "contradiction_flag"
     ],
     "seed-21:m0": [
       "body_proximity"
     ],
     "seed-23:m0": [
-      "body_proximity",
       "contradiction_flag"
     ],
     "seed-26:m1": [
@@ -101,8 +98,7 @@
     ],
     "seed-38:m0": [
       "body_proximity",
-      "contradiction_flag",
-      "single-witness inform"
+      "contradiction_flag"
     ],
     "seed-38:m2": [
       "contradiction_flag",
@@ -119,8 +115,7 @@
     ],
     "seed-42:m0": [
       "body_proximity",
-      "contradiction_flag",
-      "single-witness inform"
+      "contradiction_flag"
     ],
     "seed-43:m2": [
       "body_proximity",
@@ -140,8 +135,7 @@
     ],
     "seed-4:m0": [
       "body_proximity",
-      "contradiction_flag",
-      "single-witness inform"
+      "contradiction_flag"
     ],
     "seed-5:m0": [
       "body_proximity"
@@ -172,15 +166,15 @@
     "top_idler_wait_share": 0.525517252413297
   },
   "multi_signal_conversion": {
-    "conversions_with_body_proximity": 20,
+    "conversions_with_body_proximity": 18,
     "conversions_with_contradiction_flag": 20,
     "conversions_with_prior_meeting_carry": 13,
-    "conversions_with_single_witness_inform": 10,
+    "conversions_with_single_witness_inform": 6,
     "conversions_with_vent_witness": 10,
     "impostor_ejections": 33,
-    "multi_signal_conversions": 27,
-    "multi_signal_rate": 0.8181818181818182,
-    "single_signal_conversions": 6,
+    "multi_signal_conversions": 26,
+    "multi_signal_rate": 0.7878787878787878,
+    "single_signal_conversions": 7,
     "unattributed_conversions": 0
   },
   "sample_dir": "9p2i",
@@ -193,9 +187,9 @@
     "meetings_total": 114,
     "over_gate_listener_rows": 261,
     "over_gate_listeners_per_accused_impostor_meeting": 2.6363636363636362,
-    "strong_flags": 0,
+    "strong_flags": 52,
     "total_flags": 112,
-    "weak_flags": 112,
+    "weak_flags": 60,
     "zero_contradiction_meetings": 60,
     "zero_contradiction_share": 0.5263157894736842
   }

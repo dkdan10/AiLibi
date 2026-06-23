@@ -363,11 +363,26 @@ class TestWeakContradictionClassification:
     recorded set stays honest) but appends the weak audit marker for the
     two patterns, and :func:`is_weak_contradiction` is the predicate
     belief Rule 2 keys its graduated delta on.
+
+    Task 13.14 (owner LONE-STRONG decision, 2026-06-22) REVERSES the
+    self-stated down-weight for the ``alibi_vs_sighting`` band only: a
+    self-stated-only sighting contradiction now classifies STRONG (see
+    ``test_self_stated_alibi_vs_third_party_sighting_is_strong``). The
+    genuine shaky guards -- narrow window, endpoint-tick, and the
+    ``alibi_conflict`` self-pair / adversarial / boundary patterns -- STAY
+    weak (real precision guards, not the self-stated down-weight).
     """
 
-    def test_self_stated_alibi_vs_third_party_sighting_is_weak(self) -> None:
+    def test_self_stated_alibi_vs_third_party_sighting_is_strong(self) -> None:
         # The seed-3 audited shape: the reporter's own alibi (CAFETERIA)
-        # against a third party's sighting of them (EAST_HALL).
+        # against a third party's sighting of them (EAST_HALL). Task 13.14
+        # (owner LONE-STRONG decision, 2026-06-22; DESIGN.md §5.4 + §6.4)
+        # REVERSES the audit-9.7 self-stated down-weight for the
+        # alibi_vs_sighting band: a self-stated-only alibi contradicted by a
+        # third party's sighting now classifies STRONG (no weak marker) and
+        # drives Rule 2's full gate-crossing delta. The window is wide (100-200)
+        # and the sighting interior (150), so neither the narrow nor the
+        # endpoint guard fires -- the flag carries no weak marker at all.
         transcript = MeetingTranscript(
             turns=(
                 _alibi_turn(
@@ -392,10 +407,10 @@ class TestWeakContradictionClassification:
         assert len(flags) == 1
         flag = flags[0]
         assert flag.kind == "alibi_vs_sighting"
-        assert WEAK_CONTRADICTION_MARKER_PREFIX in flag.description
-        assert WEAK_REASON_SELF_STATED in flag.description
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
+        assert WEAK_REASON_SELF_STATED not in flag.description
         assert WEAK_REASON_NARROW_WINDOW not in flag.description
-        assert is_weak_contradiction(flag) is True
+        assert is_weak_contradiction(flag) is False
 
     def test_third_party_alibi_wide_window_stays_strong(self) -> None:
         # Two third parties disagreeing about the subject's location is
@@ -474,11 +489,14 @@ class TestWeakContradictionClassification:
         assert len(flags) == 1
         assert is_weak_contradiction(flags[0]) is False
 
-    def test_self_stated_and_narrow_reasons_render_in_fixed_order(self) -> None:
-        # A single-tick self-alibi with the sighting on that tick matches
-        # all three vs-sighting patterns; the reasons render in the fixed
-        # order self-stated -> narrow -> endpoint (Task 10.1 adds the
-        # endpoint reason) so the marker is byte-stable across runs.
+    def test_narrow_and_endpoint_reasons_render_in_fixed_order(self) -> None:
+        # A single-tick self-alibi with the sighting on that tick matches the
+        # narrow + endpoint vs-sighting patterns; the reasons render in the
+        # fixed order narrow -> endpoint so the marker is byte-stable across
+        # runs. Task 13.14 drops the self-stated reason from the sighting path
+        # (the owner LONE-STRONG reversal), so the marker no longer leads with
+        # self-stated; the flag STAYS weak on the surviving narrow/endpoint
+        # guards.
         transcript = MeetingTranscript(
             turns=(
                 _alibi_turn(
@@ -499,10 +517,10 @@ class TestWeakContradictionClassification:
         assert len(flags) == 1
         marker = (
             f"{WEAK_CONTRADICTION_MARKER_PREFIX}"
-            f"{WEAK_REASON_SELF_STATED}; {WEAK_REASON_NARROW_WINDOW}; "
-            f"{WEAK_REASON_ENDPOINT_TICK}]"
+            f"{WEAK_REASON_NARROW_WINDOW}; {WEAK_REASON_ENDPOINT_TICK}]"
         )
         assert flags[0].description.endswith(marker)
+        assert WEAK_REASON_SELF_STATED not in flags[0].description
         assert is_weak_contradiction(flags[0]) is True
 
     def test_narrow_alibi_conflict_is_weak_classified(self) -> None:
@@ -1078,9 +1096,12 @@ class TestDefenseEchoDedup:
     def test_defender_echo_mints_no_extra_flags(self) -> None:
         # The seed-26 m1 / seed-28 m1 shape: a defender restates the
         # accused's own alibi verbatim. Pre-10.1 the echo was other-stated
-        # and its sighting pairings minted STRONG flags against the player
+        # and its sighting pairings minted extra flags against the player
         # being defended; now the echo dedupes to the original (self-stated)
-        # claim and only the original's weak flag remains.
+        # claim and only the original's flag remains. Task 13.14 promotes that
+        # surviving self-stated alibi_vs_sighting to STRONG (the down-weight
+        # reversal); the echo-DEDUP property this test guards -- one flag,
+        # anchored to the original claim event -- is unchanged.
         transcript = MeetingTranscript(
             turns=(
                 _alibi_turn(
@@ -1112,8 +1133,8 @@ class TestDefenseEchoDedup:
 
         assert len(flags) == 1
         assert flags[0].event_a_id == "turn:m-1:turn-0:claim:0"
-        assert WEAK_REASON_SELF_STATED in flags[0].description
-        assert is_weak_contradiction(flags[0]) is True
+        assert WEAK_REASON_SELF_STATED not in flags[0].description
+        assert is_weak_contradiction(flags[0]) is False
 
     def test_echo_matches_on_canonical_rooms(self) -> None:
         # The echo predicate uses the canonical parse, so a case-variant
@@ -1576,6 +1597,33 @@ def _classify_removed_flag(
     return classes
 
 
+def _is_promoted_self_stated_divergence(
+    recorded: ContradictionRef | None, rederived: ContradictionRef | None
+) -> bool:
+    """Whether ``recorded`` -> ``rederived`` is the Task 13.14 self-stated drop.
+
+    The 13.14 reversal removes ``WEAK_REASON_SELF_STATED`` from the
+    ``alibi_vs_sighting`` marker writer, so a committed (pre-13.14) weak
+    self-stated flag re-derives as the SAME flag -- identical contradiction id,
+    kind, subjects, and event-id pair -- with only the self-stated reason gone
+    (the interior/wide subset thereby crossing into the STRONG band). This
+    recogniser lets the artifact-collapse pin treat that reclassification as
+    the EXPECTED $0-re-extraction divergence, distinct from the placeholder /
+    proxy-retarget repairs.
+    """
+
+    return (
+        recorded is not None
+        and rederived is not None
+        and recorded.kind == "alibi_vs_sighting"
+        and WEAK_REASON_SELF_STATED in recorded.description
+        and WEAK_REASON_SELF_STATED not in rederived.description
+        and recorded.subjects == rederived.subjects
+        and recorded.event_a_id == rederived.event_a_id
+        and recorded.event_b_id == rederived.event_b_id
+    )
+
+
 class TestCommittedBytesArtifactCollapse:
     """Re-derivation reproduces the recorded bytes EXACTLY (no offline divergence).
 
@@ -1607,6 +1655,15 @@ class TestCommittedBytesArtifactCollapse:
         recorded_total = 0
         rederived_total = 0
         removed_sites: dict[tuple[int, int], int] = {}
+        # Task 13.14: the self-stated down-weight is removed for the
+        # alibi_vs_sighting band, so a recorded (pre-13.14) weak self-stated
+        # flag re-derives as the SAME flag with the self-stated marker gone --
+        # the EXPECTED $0-re-extraction reclassification (no re-record). 52 of
+        # the 110 cross into the STRONG band; 58 stay weak on a surviving
+        # endpoint/narrow guard. These are counted + pinned separately from the
+        # placeholder / proxy-retarget repairs the original guard tracks.
+        promoted_divergences = 0
+        promoted_to_strong = 0
         for seed in range(50):
             for index, entry in enumerate(_committed_meetings(seed)):
                 recorded_by_id = {
@@ -1617,24 +1674,35 @@ class TestCommittedBytesArtifactCollapse:
                 }
                 recorded_total += len(recorded_by_id)
                 rederived_total += len(rederived_by_id)
-                removed = [
-                    flag
-                    for flag_id, flag in recorded_by_id.items()
-                    if rederived_by_id.get(flag_id) != flag
-                ]
+                removed = []
+                for flag_id, flag in recorded_by_id.items():
+                    rederived = rederived_by_id.get(flag_id)
+                    if rederived == flag:
+                        continue
+                    if rederived is not None and _is_promoted_self_stated_divergence(
+                        flag, rederived
+                    ):
+                        promoted_divergences += 1
+                        if not is_weak_contradiction(rederived):
+                            promoted_to_strong += 1
+                        continue
+                    removed.append(flag)
                 added = [
                     flag
                     for flag_id, flag in rederived_by_id.items()
                     if recorded_by_id.get(flag_id) != flag
+                    and not _is_promoted_self_stated_divergence(
+                        recorded_by_id.get(flag_id), flag
+                    )
                 ]
                 if removed:
                     removed_sites[(seed, index)] = len(removed)
                 for flag in removed:
-                    # Each removal must be explained by a repair: a 10.6
-                    # placeholder-variant side (the allowlist kill) or a flag
-                    # whose re-target now exists in the re-derived set under the
-                    # same event-id pair -- the 10.6 cross-speaker proxy alibi
-                    # or the 10.10 same-speaker proxy-intra-turn guard.
+                    # Each non-13.14 removal must be explained by a repair: a
+                    # 10.6 placeholder-variant side (the allowlist kill) or a
+                    # flag whose re-target now exists in the re-derived set under
+                    # the same event-id pair -- the 10.6 cross-speaker proxy
+                    # alibi or the 10.10 same-speaker proxy-intra-turn guard.
                     classes = _classify_removed_flag(entry, flag)
                     retargeted = flag.contradiction_id in rederived_by_id and any(
                         reason in rederived_by_id[flag.contradiction_id].description
@@ -1654,12 +1722,17 @@ class TestCommittedBytesArtifactCollapse:
                     ), flag.contradiction_id
                     assert is_weak_contradiction(flag)
 
+        # The placeholder / proxy-retarget repair divergence stays empty (the
+        # committed bytes already carry those repairs); only 13.14 reclassifies.
         assert removed_sites == self._REPAIRED_SITES
-        # W2: no offline divergence — the committed bytes were recorded with the
-        # fully repaired detector (10.6 + 10.10), so re-derivation reproduces them
-        # byte-for-byte (self-anchoring; the absolute flag count is pinned by the
-        # report at 55).
+        # Re-derivation preserves the flag COUNT (the 110 self-stated flags are
+        # reclassified in place, none added or removed).
         assert recorded_total == rederived_total
+        # 13.14 pin: every recorded self-stated alibi_vs_sighting flag
+        # re-derives with the self-stated marker dropped (110 total), and the
+        # interior/wide subset crosses into the STRONG band (52).
+        assert promoted_divergences == 110
+        assert promoted_to_strong == 52
 
     def test_surviving_endpoint_flags_are_weak_banded(self) -> None:
         # The endpoint class survives ONLY weak-banded (the 10.1 decision:
@@ -1755,18 +1828,18 @@ class TestCommittedBytesSeedPins:
         assert conflict_sites == [(31, 1)]
 
     @pytest.mark.parametrize(
-        ("seed", "subject", "interior_tick", "expect_weak"),
+        ("seed", "subject", "interior_tick"),
         [
-            (1, "p-6", 5, True),
-            (13, "p-4", 7, True),
-            (15, "p-3", 5, True),
-            (23, "p-7", 7, True),
-            (29, "p-4", 6, True),
-            (42, "p-4", 5, True),
+            (1, "p-6", 5),
+            (13, "p-4", 7),
+            (15, "p-3", 5),
+            (23, "p-7", 7),
+            (29, "p-4", 6),
+            (42, "p-4", 5),
         ],
     )
     def test_genuine_canon_interior_impostor_flag_survives(
-        self, seed: int, subject: str, interior_tick: int, expect_weak: bool
+        self, seed: int, subject: str, interior_tick: int
     ) -> None:
         # THE survival pin, re-pointed at the phase-11 Wave-1 re-record's genuine
         # supply (10.4's definition: alibi_vs_sighting WITHOUT the endpoint band,
@@ -1774,16 +1847,17 @@ class TestCommittedBytesSeedPins:
         # supplied (meeting-0, impostor) pair is pinned here). The interior_tick
         # sits strictly INSIDE the alibi window (never a from_tick/to_tick
         # boundary), so the flag carries neither the endpoint-tick nor the
-        # boundary-overlap weak reason — the test now asserts that explicitly, so
-        # it cannot drift onto an endpoint-band flag (a different class, covered
-        # by test_surviving_endpoint_flags_are_weak_banded) while the real
-        # interior genuine supply disappears. Each re-derives byte-identically.
-        # All are weak self-stated by construction (a fabricated alibi is
-        # self-stated) — and post-vent the WHOLE set is weak (0 strong flags), so
-        # the genuine class survives entirely in the weak band; the lone
-        # surviving alibi_conflict (seed-31 m1, impostor p-7) is a different KIND
-        # and is itself weak now (pinned by
-        # test_recorded_conflict_flags_sit_in_the_weak_band).
+        # boundary-overlap weak reason — the test asserts that explicitly, so it
+        # cannot drift onto an endpoint-band flag (a different class, covered by
+        # test_surviving_endpoint_flags_are_weak_banded) while the real interior
+        # genuine supply disappears.
+        #
+        # Task 13.14: these are self-stated interior flags (a fabricated alibi is
+        # self-stated), so the $0 re-extraction PROMOTES them to STRONG. The
+        # RECORDED flag (frozen committed bytes, recorded pre-13.14) stays weak
+        # self-stated; the RE-DERIVED flag at the same contradiction id is now
+        # STRONG with the self-stated marker gone. This pins that the genuine
+        # impostor supply both re-derives AND lights R7.
         entry = _committed_meetings(seed)[0]
         recorded = [
             flag
@@ -1801,10 +1875,17 @@ class TestCommittedBytesSeedPins:
         # endpoint-tick flag and pass while the interior supply drifted away.
         assert WEAK_REASON_ENDPOINT_TICK not in flag.description
         assert WEAK_REASON_BOUNDARY_OVERLAP not in flag.description
-        rederived = _rederive(entry)
-
-        assert flag in rederived
-        assert is_weak_contradiction(flag) == expect_weak
+        # The committed recording predates 13.14, so the recorded flag is still
+        # weak self-stated (the recorded bytes are unchanged — no re-record).
+        assert WEAK_REASON_SELF_STATED in flag.description
+        assert is_weak_contradiction(flag) is True
+        # Re-derivation (the $0 re-extraction) promotes the same contradiction
+        # id to STRONG: same subjects/event-ids, self-stated marker dropped.
+        rederived_by_id = {f.contradiction_id: f for f in _rederive(entry)}
+        promoted = rederived_by_id[flag.contradiction_id]
+        assert promoted.subjects == flag.subjects
+        assert WEAK_REASON_SELF_STATED not in promoted.description
+        assert is_weak_contradiction(promoted) is False
 
 
 # ---------------------------------------------------------------------------
@@ -2036,11 +2117,12 @@ class TestProxyAlibiSubjectAccountConsistency:
         )
 
     def test_self_stated_alibi_never_retargets(self) -> None:
-        # The proxy rule keys on speaker != subject; a self-stated alibi
-        # conflicting with a sighting stays the 9.7 weak self-stated flag
-        # on the subject even when another self-account agrees with the
-        # sighting (the subject contradicting themselves is the
-        # self-pair/self-stated band's business, not the proxy rule's).
+        # The proxy rule keys on speaker != subject, so a self-stated alibi is
+        # never re-targeted to a proxy speaker -- the flag stays on the subject
+        # (p-9), the self-pair/self-stated band's business, not the proxy
+        # rule's. Task 13.14 promotes this self-stated alibi_vs_sighting to
+        # STRONG (the down-weight reversal); the no-retarget property this test
+        # guards (subject stays p-9) is unchanged.
         transcript = MeetingTranscript(
             turns=(
                 _alibi_turn(
@@ -2059,7 +2141,8 @@ class TestProxyAlibiSubjectAccountConsistency:
         flags = detect_contradictions(transcript)
         assert len(flags) == 1
         assert flags[0].subjects == ("p-9",)
-        assert WEAK_REASON_SELF_STATED in flags[0].description
+        assert WEAK_REASON_SELF_STATED not in flags[0].description
+        assert is_weak_contradiction(flags[0]) is False
 
 
 class TestProxyIntraTurnGuard:
@@ -2585,22 +2668,31 @@ class TestCommittedBytes106Pins:
         assert recorded_strong == []
 
     def test_seed28_m1_p9_rederived_max_below_the_gate(self) -> None:
-        # The re-derived §4.6 verdict from the 0.5 prior stays BELOW the 0.60
-        # eject gate for p-9 and p-7 on the re-record (the proxy FP cannot
-        # eject alone). The exact lift is not pinned — seed 28 m1's flag shape
-        # moved with the re-record — but the below-gate property is what the
-        # audit C-C-4 repair guarantees.
+        # The audit C-C-4 proxy repair guarantees the over-broad proxy alibi
+        # cannot eject innocent p-9 alone: p-9 carries no re-derived flag, so
+        # its §4.6 verdict from the 0.5 prior stays BELOW the 0.60 gate.
+        #
+        # Task 13.14: p-7 (a crewmate here) carries a self-stated
+        # alibi_vs_sighting that the $0 re-extraction PROMOTES to STRONG, so its
+        # re-derived suspicion crosses to 0.80 — an accepted crew false-positive
+        # under the owner LONE-STRONG decision (within Probe 4's +3 worst-case
+        # bound; the recorded ballots are unchanged, no re-record). The C-C-4
+        # repair is unaffected: it suppressed the PROXY band, a different class.
         from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 
         entry = _committed_meetings(28)[1]
         rederived = _rederive(entry)
-        for player in ("p-9", "p-7"):
+
+        def _rederived_suspicion(player: str) -> float:
             beliefs = BeliefState()
             beliefs.seed_player(player, suspicion=0.5, trust=0.5)
             lifted = apply_contradiction_rule(
                 beliefs, [flag for flag in rederived if player in flag.subjects]
             )
-            assert lifted.view(player).suspicion < 0.60
+            return lifted.view(player).suspicion
+
+        assert _rederived_suspicion("p-9") < 0.60
+        assert _rederived_suspicion("p-7") == pytest.approx(0.80)
 
     def test_no_strong_flag_survives_post_vent(self) -> None:
         # The prior W2 carried a single STRONG (full-weight) contradiction — a

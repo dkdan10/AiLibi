@@ -219,7 +219,15 @@ def _strong_flag_turns() -> tuple[MeetingTurn, ...]:
 
 
 def _weak_flag_turns() -> tuple[MeetingTurn, ...]:
-    """A transcript whose re-derived flag on the impostor is WEAK (+0.08)."""
+    """A transcript whose re-derived flag on the impostor is WEAK (+0.08).
+
+    Task 13.14 reverses the self-stated down-weight for the
+    ``alibi_vs_sighting`` band, so a self-stated INTERIOR sighting is now
+    STRONG. This builder therefore lands the sighting on the alibi window's
+    ENDPOINT tick (``to_tick=8``), which keeps the genuine endpoint-tick weak
+    guard in force -- still a self-stated flag, still weak (+0.08), the same
+    single impostor-subject flag the eval instruments key on.
+    """
 
     return (
         _turn(
@@ -232,7 +240,7 @@ def _weak_flag_turns() -> tuple[MeetingTurn, ...]:
             speaker=_CREWMATE,
             index=1,
             kind="reply",
-            observations=(_sighting(subject=_IMPOSTOR, tick=5),),
+            observations=(_sighting(subject=_IMPOSTOR, tick=8),),
         ),
     )
 
@@ -652,27 +660,34 @@ class TestComputeMultiSignalConversion:
 
 class TestComputeSupplyGauges:
     def test_flag_census_shares_and_role_split(self) -> None:
+        # Task 13.14: a genuine-class (interior, non-proxy) sighting
+        # contradiction is now STRONG, while the surviving WEAK band is the
+        # endpoint guard (NOT genuine class). The census therefore separates the
+        # two: a strong genuine flag and a weak endpoint flag, both on the
+        # impostor.
         games = (
             _game(
                 meetings=(
-                    # A genuine-class weak flag on the impostor.
-                    _meeting(meeting_id="m-0", turns=_weak_flag_turns()),
+                    # A genuine-class STRONG flag on the impostor.
+                    _meeting(meeting_id="m-0", turns=_strong_flag_turns()),
+                    # An endpoint-banded WEAK flag on the impostor (not genuine).
+                    _meeting(meeting_id="m-1", turns=_weak_flag_turns()),
                     # No claims at all: a zero-contradiction meeting.
-                    _meeting(meeting_id="m-1"),
+                    _meeting(meeting_id="m-2"),
                 ),
             ),
         )
         gauges = compute_supply_gauges(games)
 
-        assert gauges.meetings_total == 2
-        assert gauges.total_flags == 1
+        assert gauges.meetings_total == 3
+        assert gauges.total_flags == 2
         assert gauges.weak_flags == 1
-        assert gauges.strong_flags == 0
+        assert gauges.strong_flags == 1
         assert gauges.zero_contradiction_meetings == 1
-        assert gauges.zero_contradiction_share == pytest.approx(0.5)
+        assert gauges.zero_contradiction_share == pytest.approx(1 / 3)
         assert gauges.genuine_subject_meetings == 1
-        assert gauges.genuine_subject_share == pytest.approx(0.5)
-        assert gauges.flag_subjects_impostor == 1
+        assert gauges.genuine_subject_share == pytest.approx(1 / 3)
+        assert gauges.flag_subjects_impostor == 2
         assert gauges.flag_subjects_crew == 0
 
     def test_over_gate_listeners_count_other_voters_rows(self) -> None:
@@ -732,8 +747,9 @@ class TestComputeSupplyGauges:
         # Drift guard: the gauge's membership rule IS
         # eval.vote_correctness.genuine_class_subjects (an import, never a
         # re-derivation) — the synthetic genuine meeting agrees with the
-        # helper on the same bytes.
-        meeting = _meeting(turns=_weak_flag_turns())
+        # helper on the same bytes. Task 13.14: the genuine (interior,
+        # non-proxy) class is now STRONG, so use the strong-flag builder.
+        meeting = _meeting(turns=_strong_flag_turns())
         assert genuine_class_subjects(meeting) == frozenset({_IMPOSTOR})
         gauges = compute_supply_gauges((_game(meetings=(meeting,)),))
         assert gauges.genuine_subject_meetings == 1
@@ -907,39 +923,41 @@ class TestCommittedW2GateSpecPins:
         ]
         assert channels_by_site == expected
 
-    def test_multi_signal_conversion_reads_27_of_33(self) -> None:
-        # W2 (phase-11 Wave-3 re-record): 27 of the 33 impostor ejections are
-        # multi-signal (prior W2 was 20 of 24, W1 11 of 11); the sabotage stall
-        # drops one impostor ejection (impostors run the clock to parity instead),
-        # leaving 6 single-signal conversions over the smaller ejection count. No
-        # unattributed conversions — the gp-7 channel attribution is still total
-        # on this record.
+    def test_multi_signal_conversion_reads_26_of_33(self) -> None:
+        # Re-extracted after Task 13.14: 26 of the 33 impostor ejections are
+        # multi-signal (was 27 of 33 pre-13.14). A promoted lone STRONG flag now
+        # explains an ejection's suspicion mass on the contradiction channel
+        # ALONE where it previously needed a second signal (single-witness inform
+        # / body proximity) to clear the gate, so one conversion moves
+        # multi-signal -> single-signal (27/6 -> 26/7). The impostor-ejection
+        # COUNT is unchanged (recorded outcomes) and channel attribution stays
+        # total (0 unattributed).
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
         assert result.impostor_ejections == 33
-        assert result.multi_signal_conversions == 27
-        assert result.single_signal_conversions == 6
+        assert result.multi_signal_conversions == 26
+        assert result.single_signal_conversions == 7
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(0.8181818181818182)
+        assert result.multi_signal_rate == pytest.approx(0.7878787878787878)
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
-        # The W2 supply row (phase-11 Wave-3 re-record): 112 flags (112w/0s — the
-        # headline holds: vents hide the post-kill sighting trail, so strong flags
-        # stay at 0), meetings up to 114 (prior W2 96), zero-contradiction share
-        # 60/114, genuine supply at 25 meetings (prior W2 10), over-gate listener
-        # rows 261 — 2.64 per accused-impostor meeting (prior W2 199 / 2.55). Role
-        # split 39 CREW / 73 IMP (prior W2 20/35): the sabotage stall's longer
-        # games accrue more weak cross-crew flags (crew co-locate on reactor
-        # repairs), driving crew-subject weak flags up (21->39) while
-        # impostor-subject flags hold (74->73).
+        # The W2 supply row, re-extracted after Task 13.14 promotes the
+        # self-stated alibi_vs_sighting band to STRONG: 112 flags now split
+        # 60w/52s (was 112w/0s — the headline R7 lever, 52 strong flags lighting
+        # off 0). The flag COUNT, role split (39 CREW / 73 IMP), zero-contradiction
+        # share (60/114), genuine-subject supply (25), and over-gate listener rows
+        # (261) are UNCHANGED: reclassification moves flags weak->strong without
+        # adding, removing, or re-subjecting any (the recorded bytes are
+        # untouched — no re-record). This is the expected eval-metric shift the
+        # is_weak_contradiction readers see, not a regression.
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
         assert gauges.meetings_total == 114
         assert gauges.total_flags == 112
-        assert gauges.weak_flags == 112
-        assert gauges.strong_flags == 0
+        assert gauges.weak_flags == 60
+        assert gauges.strong_flags == 52
         assert gauges.zero_contradiction_meetings == 60
         assert gauges.genuine_subject_meetings == 25
         assert gauges.flag_subjects_crew == 39

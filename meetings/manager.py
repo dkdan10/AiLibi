@@ -86,6 +86,7 @@ from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 from pydantic import ValidationError
 
 from agents.memory.beliefs import (
+    MEETING_CONTRADICTION_LIFT_CAP,
     TESTIMONY_INDEPENDENCE_BAR,
     BeliefState,
     apply_contradiction_rule,
@@ -1827,6 +1828,40 @@ def _opt_in_eligible_ids(
     )
 
 
+def _joint_capped_suspicion(*, prior: float, lifted: float) -> float:
+    """Bound a subject's combined transient meeting lift (Task 13.14).
+
+    The vote-time graph applies TWO upward suspicion channels in sequence on
+    the same reconstructed state -- belief Rule 2's contradiction lift
+    (:func:`agents.memory.beliefs.apply_contradiction_rule`, capped per
+    subject at
+    :data:`~agents.memory.beliefs.MEETING_CONTRADICTION_LIFT_CAP`) and the
+    Task 13.7 pre-vote testimony spread
+    (:func:`~agents.memory.beliefs.apply_meeting_evidence_rules`, graduated
+    +0.05 / +0.12 / +0.15). Those two caps are INDEPENDENT, so before this
+    joint cap a subject both lone-STRONG-flagged -- Task 13.14 promotes a
+    single-witness ``alibi_vs_sighting`` to the full
+    :data:`~agents.memory.beliefs.CONTRADICTION_SUSPICION_DELTA` -- AND named
+    by two+ accusers stacked to 0.5 + 0.3 + 0.12 = 0.92 rendered into the
+    ballot, and the spread is itself a per-listener convergence mechanism
+    that amplifies exactly the crew false-positive convergence the
+    LONE-STRONG decision must bound (audit-2026-06-22-2149 Blocking #3).
+
+    This caps the COMBINED upward lift per subject at one strong flag's worth
+    -- the same ``MEETING_CONTRADICTION_LIFT_CAP`` bound -- above the
+    subject's pre-fold prior, so a single STRONG contradiction still crosses
+    the §4.6 gate (0.5 -> 0.80, the owner LONE-STRONG outcome) while the
+    spread can no longer push it past the bound. Only the UPWARD direction is
+    bounded: a corroboration that lowers suspicion below the prior leaves
+    ``lifted`` under the cap, so the ``min`` is a no-op for it. The bound is
+    relative to the prior (mirroring the Rule-2 lift cap), so an accumulated
+    cross-round prior is preserved rather than flattened. Pure function of
+    its two scalar arguments -- replay-stable.
+    """
+
+    return min(lifted, prior + MEETING_CONTRADICTION_LIFT_CAP)
+
+
 def _suspicion_graph_with_contradictions(
     *,
     voter_id: PlayerId,
@@ -1932,10 +1967,20 @@ def _suspicion_graph_with_contradictions(
         if player_id == voter_id or player_id in teammates:
             continue
         belief = updated.view(player_id)
+        # Task 13.14 joint cap: ``beliefs`` still holds the pre-rule seeded
+        # prior (both rules above are pure and return new states; ``copy``
+        # deep-copies), so a subject the rules materialised reads the default
+        # 0.5. Bound the COMBINED contradiction-lift + testimony-spread above
+        # that prior so a lone-STRONG-flagged + multi-accused subject cannot
+        # stack past one strong flag's worth (0.92 -> capped at 0.80).
+        capped = _joint_capped_suspicion(
+            prior=beliefs.view(player_id).suspicion,
+            lifted=belief.suspicion,
+        )
         entries.append(
             SuspicionEntry(
                 player_id=player_id,
-                suspicion=belief.suspicion,
+                suspicion=capped,
                 trust=belief.trust,
             )
         )
