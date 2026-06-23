@@ -433,7 +433,7 @@ The same `AgentRuntime` class is used for both roles; the role flag selects whic
 
 ### 4.6 Uncertainty handling
 
-Every belief in the belief state is stored with a confidence in [0, 1]. The LLM is given confidences in its rendered memory view. Voting weights uncertainty: the default voting heuristic does not vote-eject if max suspicion confidence < 0.6; instead it skips. This prevents one confident liar from cascading the table into a wrong eject.
+Every belief in the belief state is stored with a confidence in [0, 1]. The LLM is given confidences in its rendered memory view. The anti-cascade floor that keeps uncertainty from ejecting is enforced **deterministically in the tally** (§5.5; `meetings/voting.py::tally_ballots`), not by prompt compliance: SKIP is a first-class plurality target, a tie skips, and a leader whose maximum ballot confidence is below the skip threshold (default 0.6) skips. The vote prompt presents the suspicion graph and that threshold as **evidence to weigh, not a directive** — the ballot is the model's own reasoned choice, and the silent tally floor (independent of LLM compliance) is what prevents one confident liar from cascading the table into a wrong eject.
 
 ### 4.7 Anti-cheating (defense in depth)
 
@@ -545,13 +545,13 @@ answers; a defensive turn carries an `alibi`/`corroboration` claim and no
 
 ### 5.4 Contradiction detection
 
-Implemented in `meetings/transcript.py`. After each turn, the transcript service:
+Implemented in `meetings/transcript.py::detect_contradictions`, recomputed once over the full transcript before voting. It indexes every alibi claim and `saw_player` observation and emits a `ContradictionRef` per pair that cannot both be true, in three kinds:
 
-1. Indexes all alibi claims by `(agent, tick_range, location)`.
-2. Cross-references with publicly stated `saw_player` observations.
-3. Flags inconsistencies (e.g., two agents both claiming to be in Storage during the same tick range with no third corroborator).
+1. `alibi_conflict` — two alibis place the same subject in different rooms over overlapping tick ranges (incl. self-contradiction and two speakers disagreeing about a third party).
+2. `alibi_vs_sighting` — an alibi vs another agent's `saw_player` placing the subject elsewhere inside the alibi range.
+3. `alibi_vs_physical` (inferential) — an alibi contradicted by independent co-presence placements reconstructed from the public transcript, **STRONG only under a two-source conjunction** (≥ `PHYSICAL_CONTRADICTION_MIN_VOICES` distinct non-adversarial voices); a lone contradicting voice is WEAK.
 
-Flags are *information*, not a verdict — they are added to the rendered memory view that subsequent agents see. This lets the model reason about contradictions without us hard-coding "always vote the contradicting player."
+Each flag carries a WEAK/STRONG classification (`is_weak_contradiction`): a **STRONG** flag drives the gate-crossing belief delta (§6.3 Rule 2); a **WEAK** flag informs only (a precision down-weight — a single uncorroborated voice, an endpoint-tick mismatch, a self-pair or defense-echo). Flags are *information* surfaced in the rendered memory view that subsequent agents see, not a verdict — the model reasons about contradictions rather than us hard-coding "always vote the contradicting player."
 
 ### 5.5 Voting decision
 
@@ -567,7 +567,7 @@ Voting is LLM-driven with a structured output:
 }
 ```
 
-The voting prompt receives: rendered memory, full transcript, contradiction flags, and the agent's current suspicion graph. The output is parsed and tallied. Ballots are publicly logged after the meeting (post-hoc transparency for analysis; not visible to agents during the vote).
+The voting prompt presents — as **evidence to weigh, not a directive** — the rendered memory, full transcript, contradiction flags, and the agent's current suspicion graph (with the §4.6 skip threshold shown for reference). The parsed ballots are tallied **deterministically** (`voting.py::tally_ballots`, §5.2 PHASE 5): plurality with SKIP a first-class target, tie → skip, and a leader-confidence floor below the threshold → skip. That deterministic tally — not the prompt — is the anti-cascade backstop, so the model votes its own reasoned conclusion while a confident-liar cascade stays structurally prevented. Ballots are publicly logged after the meeting (post-hoc transparency for analysis; not visible to agents during the vote).
 
 `primary_reason_id` must reference a `turn_id` from THIS meeting's transcript. The meeting manager validates every ballot's reason id against the transcript's turn-id set: a recoverable suffix form (a `:turn-{k}` whose meeting prefix is wrong) is normalized to the canonical id; an unresolvable id is nulled with an audit marker in `rationale_text` (mirroring the invalid-target normalization). A ballot coerced to SKIP by the teammate firewall also nulls its now-stale reason id. The vote prompt's reason-id example is drawn from the live transcript's real turn ids, never a hardcoded id.
 
@@ -627,7 +627,7 @@ The full episodic log is kept on disk; only the rendered view goes into the prom
 Belief updates have explicit rules (no hidden ML model):
 
 - `+0.2 suspicion` if seen near a body shortly before discovery. **(Rule 1 — live.)**
-- `+0.3 suspicion` if claimed alibi contradicts another agent's testimony. **(Rule 2 — live; wired into the meeting loop + perception in Phase 6 Task 6.4.)**
+- suspicion rises when a claimed alibi contradicts another agent's testimony — **graduated by the flag's WEAK/STRONG class (§5.4, §6.4) and corroboration**: a STRONG contradiction applies the full gate-crossing delta, a WEAK one a smaller informing delta (audit-9.7 down-weight), and corroboration within a round graduates the delta by independent-voice count. **(Rule 2 — live; wired into the meeting loop + perception in Phase 6 Task 6.4; weak/strong classes + spread in Phase 13 Wave B.)**
 - `−0.4 suspicion` (clamped) if a verifiable shared task is completed. **(Rule 3 — deferred.)**
 - `+0.5 suspicion` if observed venting (almost certain). **(Rule 4 — live.)**
 - Time decay: suspicion drifts toward 0.5 over rounds without new evidence. **(Rule 5 — deferred.)**
@@ -638,12 +638,13 @@ These weights are config, not constants — they will be tuned against the eval 
 
 ### 6.4 Contradiction detection
 
-Stored as `ContradictionRef` objects linking two events that cannot both be true. Examples:
+Stored as `ContradictionRef` objects linking two events that cannot both be true, each carrying a WEAK/STRONG class (`is_weak_contradiction`). The three kinds (§5.4):
 
-- Two alibis placing the same agent in different rooms at the same tick.
-- An alibi placing agent X in Room R, contradicted by another agent's `SawPlayer(X, in=Room S)` at the same tick.
+- `alibi_conflict` — two alibis placing the same agent in different rooms over overlapping ticks.
+- `alibi_vs_sighting` — an alibi placing agent X in Room R, contradicted by another agent's `SawPlayer(X, in=Room S)` inside the alibi range.
+- `alibi_vs_physical` — an alibi contradicted by independent co-presence placements reconstructed from the transcript (STRONG only under the two-source conjunction; a lone voice is WEAK).
 
-The detector runs on every meeting transcript update and on the local belief state when memory is updated. Detected contradictions are added to the belief state and surfaced to the LLM in subsequent turns.
+The detector runs on every meeting transcript update and on the local belief state when memory is updated. Detected contradictions are added to the belief state — a STRONG flag drives Rule 2's gate-crossing delta, a WEAK one informs — and surfaced to the LLM in subsequent turns.
 
 ### 6.5 Storage format
 
