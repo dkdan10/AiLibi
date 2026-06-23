@@ -123,3 +123,37 @@ gate-mediated**, with the real friendly-fire trade measured by the held re-recor
 **Sizing:** the detector-tuning task is **not a config sweep** — it is a **classification change**
 (promote the honest post-weak-guard `alibi_vs_sighting` set to STRONG so it crosses the gate);
 `MIN_VOICES`/co-presence is shelved as an empty path.
+
+---
+
+## Probe 4 — conversion: does the promotion EJECT crew, or just flag them?
+
+The Wave-E review (`audits/audit-2026-06-22-2149`) flagged that Probes 2–3 measured FLAG precision,
+not ejection CONVERSION, and that the "gate mediates the FPs" mitigation was asserted, never
+quantified. This probe quantifies it. Model (deterministic-gate worst case, i.e. PRE-13.13: the gate
+makes every voter vote the argmax-suspicion subject): a promoted flag lifts its subject to ~0.80, so
+the eject target = the argmax flagged subject — a crew flag SOLE in its meeting wrong-ejects; a crew
+flag co-flagged with an impostor is shielded (the impostor is the argmax). Reproduce:
+`uv run python experiments/lab/forward_redesign_conversion_probe.py`.
+
+| | impostor | CREW (wrong / R4) | SKIP |
+|---|---|---|---|
+| **Recorded baseline** | 33 correct | **6** | 75 |
+| **NEW ejections the promotion creates from SKIPs** | **+20** | **+3** (seeds 46/47/48, sole crew flag) | — |
+
+Crew flags break down as **6 SOLE (would wrong-eject) + 5 co-flagged-with-an-impostor (shielded)**.
+
+**Verdict: the harm is small and the trade is good.** The promotion converts ~20 recorded SKIPs into
+**correct impostor ejections** (a large R1 lift) for **+3 worst-case wrong crew ejections** — and this
+is the **deterministic-gate UPPER bound**; 13.13 de-imperative removes that convergence, so the real
+13.13+13.14 rate is ≤3 (the held re-record measures it). The earlier "13/13 wrong ejections" fear was a
+*pre-9.7-era* figure; the current substrate yields +3. **Counter-intuitively, the anti-cascade-safe
+two-witness alternative (MID-delta) is worse:** Probe 3 showed ≥2-corroboration craters to 14/114 at
+67% — it loses ~half the benefit *and* worsens precision. So lone-STRONG is the better operating point
+on the data; the cost is that the +3 are single-witness ejections, which **violates the owner's
+"no single signal ejects" principle** (`project_ejection_suspicion_principle`).
+
+**The owner decision** this informs: accept lone-STRONG (+20 / +3, info-backed, gate-de-converged by
+13.13, with a joint 13.7 cap + an R4-abandon gate on the re-record) versus hold the no-single-signal
+principle (require a second within-round witness — but that barely lights R7). The data favors
+lone-STRONG; the principle is the owner's to keep or relax.
