@@ -81,3 +81,45 @@ Both of the minimal fix's biggest uncertainties resolve **favorably for the plan
 The recommended minimal fix (A-1 + inferential detector + the epsilon-floored D-1 geomean) stands,
 sharpened by one correction: **A-1 is load-bearing, not a freebie** — it ships *with* the detector
 + testimony-spread and is validated by the step-1 real-LLM smoke.
+
+---
+
+## Probe 3 — detector threshold sweep on the LIVE merged detector
+
+Probe 2 hand-rolled the cross-speaker signal. This probe runs the **merged**
+`meetings.transcript.detect_contradictions` on `model_validate`'d committed transcripts (0/114
+validation fails), so the numbers are the real code's — and they **correct Probe 2's hopeful
+framing.** Reproduce: `uv run python experiments/lab/forward_redesign_detector_sweep.py`.
+
+The live detector emits **112 flags, every one WEAK** (111 `alibi_vs_sighting` + 1 `alibi_conflict`),
+and **zero `alibi_vs_physical`**. R7 = 0/114 confirmed on the real code.
+
+| Config | R7 (STRONG meetings) | Impostor / Crew flags | Precision |
+|---|---|---|---|
+| **Current (`MIN_VOICES`=2)** | **0 / 114** | 0 / 0 | — |
+| `MIN_VOICES` = 1 | 0 / 114 | 0 / 0 | — |
+| **Promote `alibi_vs_sighting` → STRONG** | **54 / 114** | 48 / 11 | **81%** |
+| …only if ≥2 corroborating sightings | 14 / 114 | 10 / 5 | 67% |
+
+- **`MIN_VOICES` is a dead knob.** The co-presence `alibi_vs_physical` path the forward-redesign hoped
+  to tune produces **zero** flags on the room-only substrate, so lowering 2→1 changes nothing.
+- **The only lever that lights R7 is promoting the single-witness `alibi_vs_sighting` band to STRONG**
+  — exactly the signal the audit-9.7 fix deliberately down-weighted for precision. It gives **54/114
+  at 81%**; the 11 crew flags are the 19% the down-weight was preventing.
+- **Corroboration does not rescue precision** — ≥2 sightings *craters* both signal (54→14) and
+  precision (81→67%). The "two-source conjunction" hope does not hold for this band.
+
+**Verdict: R7=0 is a deliberate precision floor, not a config bug — there is no precision-safe knob,
+so lighting R7 is a genuine precision/recall trade.** And ~81% is the right operating point: (1) it
+matches the owner principle *innocents are ejectable, just not at random* — each flag is concrete
+evidence ("your alibi says X, but you were seen in Y"), info-backed not a railroad; (2) some crew
+flags are impostors *framing* a crewmate via a false sighting — desirable deception, not detector
+error; (3) the flag is not the verdict — it adds suspicion, and the downstream plurality + the §4.6
+floor (now A-1) mediate it, so 19% flag-FP ≠ 19% wrong ejections. The forward-redesign's **"~0 crew"
+target was unrealistic on this substrate** (Probe 2's hand-rolled 56/114 @ 82% overstated the
+precision the guarded code achieves); the honest target is **info-backed flags at ~80% precision,
+gate-mediated**, with the real friendly-fire trade measured by the held re-record.
+
+**Sizing:** the detector-tuning task is **not a config sweep** — it is a **classification change**
+(promote the honest post-weak-guard `alibi_vs_sighting` set to STRONG so it crosses the gate);
+`MIN_VOICES`/co-presence is shelved as an empty path.
