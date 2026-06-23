@@ -437,10 +437,13 @@ class TestContradictionRuleGraduatedWeight:
 
         assert len(updated.view("p-5").inconsistencies) == 1
 
-    def test_detector_output_round_trips_into_graduated_delta(self) -> None:
-        # Drift guard: feed REAL detector output (not a hand-built
-        # marker) through the rule -- the seed-3 audited shape, the
-        # reporter's own alibi vs a third party's sighting of them.
+    def test_detector_output_round_trips_into_strong_delta(self) -> None:
+        # Drift guard: feed REAL detector output (not a hand-built marker)
+        # through the rule -- the seed-3 audited shape, the reporter's own alibi
+        # vs a third party's sighting of them. Task 13.14 (owner LONE-STRONG)
+        # promotes this self-stated alibi_vs_sighting to STRONG, so it now
+        # round-trips into the FULL CONTRADICTION_SUSPICION_DELTA and crosses
+        # the 0.60 gate -- no longer the sub-gate weak delta.
         transcript = MeetingTranscript(
             turns=(
                 MeetingTurn(
@@ -480,14 +483,15 @@ class TestContradictionRuleGraduatedWeight:
         )
         flags = detect_contradictions(transcript)
         assert len(flags) == 1
+        assert is_weak_contradiction(flags[0]) is False
 
         updated = apply_contradiction_rule(BeliefState(), flags)
 
         suspicion = updated.view("p-5").suspicion
         assert suspicion == pytest.approx(
-            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
         )
-        assert _DEFAULT_SUSPICION < suspicion < 0.60
+        assert suspicion >= 0.60
 
 
 # --- Task 10.1 lift dedup + per-meeting cap (audit gp-2 C-C-3) --------------
@@ -635,8 +639,12 @@ class TestContradictionLiftDedupAndCap:
 
     def test_detector_fountain_round_trips_into_one_lift(self) -> None:
         # Drift guard on the real pipeline: one self-stated alibi, three
-        # third-party sightings elsewhere -> three weak flags from the
-        # detector -> ONE effective weak delta through the rule.
+        # third-party sightings elsewhere -> three flags from the detector ->
+        # ONE effective delta through the rule (all three ride the same alibi
+        # claim, so contradiction_lift_key folds them). Task 13.14 promotes the
+        # self-stated alibi_vs_sighting band to STRONG, so the single folded
+        # delta is now the full CONTRADICTION_SUSPICION_DELTA; the per-claim
+        # dedup property this guards (3 flags -> 1 lift) is unchanged.
         turns = [
             MeetingTurn(
                 turn_id="m-1:turn-0",
@@ -677,11 +685,12 @@ class TestContradictionLiftDedupAndCap:
             )
         flags = detect_contradictions(MeetingTranscript(turns=tuple(turns)))
         assert len(flags) == 3
+        assert all(not is_weak_contradiction(flag) for flag in flags)
 
         updated = apply_contradiction_rule(BeliefState(), flags)
 
         assert updated.view("p-5").suspicion == pytest.approx(
-            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
         )
 
 

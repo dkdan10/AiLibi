@@ -1707,7 +1707,12 @@ def _detect_alibi_vs_sightings(
     for alibi in alibis:
         if not alibi.rooms:
             continue
-        base_reasons = _weak_signal_reasons(alibi)
+        # Task 13.14: the sighting path no longer down-weights a self-stated
+        # alibi (the owner LONE-STRONG reversal of audit-9.7) -- a self-stated
+        # alibi contradicted by a third party's sighting now classifies STRONG.
+        # The narrow-window guard (and the endpoint-tick guard appended below)
+        # STAY weak.
+        base_reasons = _weak_signal_reasons(alibi, include_self_stated=False)
         for sighting in sightings:
             if sighting.observation.subject != alibi.claim.subject:
                 continue
@@ -1918,7 +1923,9 @@ def _detect_alibi_vs_physical(
             )
 
 
-def _weak_signal_reasons(alibi: _IndexedAlibi) -> tuple[str, ...]:
+def _weak_signal_reasons(
+    alibi: _IndexedAlibi, *, include_self_stated: bool = True
+) -> tuple[str, ...]:
     """The Task 9.7 false-positive patterns ``alibi`` matches, if any.
 
     Both patterns are properties of the alibi side alone, so the
@@ -1927,10 +1934,24 @@ def _weak_signal_reasons(alibi: _IndexedAlibi) -> tuple[str, ...]:
     narrow window) so the rendered marker is byte-stable across runs.
     The Task 10.1 conflict classification reuses this helper per side,
     so the two paths share one definition of self-stated / narrow.
+
+    Task 13.14 (owner LONE-STRONG decision, 2026-06-22; DESIGN.md §5.4 +
+    §6.4) reverses the audit-9.7 self-stated down-weight for the
+    ``alibi_vs_sighting`` band: a self-stated-only alibi contradicted by a
+    third party's sighting now classifies STRONG and drives Rule 2's full
+    gate-crossing delta (the Probe-3 R7 lever, report-forward-redesign-probes.md).
+    The sighting path therefore passes ``include_self_stated=False`` so the
+    self-stated reason is no longer emitted there. The genuine shaky guards
+    -- narrow window (here), and endpoint-tick (appended by the caller at
+    :func:`_detect_alibi_vs_sightings`) -- STAY weak (real precision guards,
+    not the self-stated down-weight). The ``alibi_conflict`` path keeps the
+    default ``include_self_stated=True``: :func:`_conflict_weak_reasons`
+    needs the per-side self-stated classification to derive the
+    self-PAIR weak reason, which the task explicitly keeps weak.
     """
 
     reasons: list[str] = []
-    if alibi.speaker == alibi.claim.subject:
+    if include_self_stated and alibi.speaker == alibi.claim.subject:
         reasons.append(WEAK_REASON_SELF_STATED)
     if alibi.claim.to_tick - alibi.claim.from_tick < NARROW_ALIBI_WINDOW_TICKS:
         reasons.append(WEAK_REASON_NARROW_WINDOW)

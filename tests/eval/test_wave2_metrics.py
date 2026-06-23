@@ -558,15 +558,16 @@ class TestSingleWitnessInformChannel:
             {CHANNEL_BODY_PROXIMITY}
         )
 
-    def test_committed_w2_credits_ten_inform(self) -> None:
+    def test_committed_w2_credits_six_inform(self) -> None:
         # The inform fold is recording-time (Task 10.15); the committed W2 bytes
-        # carry it LIVE, so rendered rows carry the +0.05 and the channel credits
-        # 10 conversions (the prior W2 credited 14; vents hide more single-witness
-        # sightings, so fewer inform folds land — W1, recorded pre-fold,
-        # credited 0).
+        # carry it LIVE, so rendered rows carry the +0.05. Re-extracted after
+        # Task 13.14 the channel credits 6 conversions (was 10 pre-13.14): where a
+        # promoted lone STRONG contradiction now clears the gate on the
+        # contradiction channel alone, the ejection attributes there instead of to
+        # the single-witness inform, so 4 conversions move off the inform channel.
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_multi_signal_conversion(report.report.games)
-        assert result.conversions_with_single_witness_inform == 10
+        assert result.conversions_with_single_witness_inform == 6
 
 
 def test_gate_spec_states_the_three_tiers_separately() -> None:

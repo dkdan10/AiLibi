@@ -1139,22 +1139,29 @@ class TestDetectorPrecisionGraduatedSuspicion:
 
     The production path end-to-end: ``detect_contradictions`` over the
     final transcript -> belief Rule 2 -> the ballot-prompt suspicion
-    graph. A lone weak ``alibi_vs_sighting`` (self-stated / narrow
-    window) lands the subject in [0.5, 0.60) -- below the §4.6 0.60
-    eject gate the meeting runs with (``skip_confidence_threshold=0.6``
-    here, matching the production default), so the audited seed-3/16/47
-    railroad shapes no longer auto-eject. Corroboration -- a second
-    independent sighting, a strong contradiction, or a body-proximity
-    prior -- still carries the subject across the gate.
+    graph.
+
+    Task 13.14 (owner LONE-STRONG decision, 2026-06-22) REVERSES the
+    audit-9.7 self-stated down-weight for the ``alibi_vs_sighting`` band: a
+    lone SELF-STATED sighting contradiction now classifies STRONG and
+    crosses the §4.6 0.60 gate alone (0.5 -> 0.80) -- the seed-3 shape
+    converts. A NARROW-window flag stays weak ([0.5, 0.60)), so the
+    narrow-window railroad guard is unchanged. The joint per-subject cap
+    (``_joint_capped_suspicion``) bounds the COMBINED contradiction-lift +
+    13.7 testimony-spread at one strong flag's worth, so a lone-flagged +
+    multi-accused subject lands at 0.80, not 0.92.
     """
 
-    def test_seed3_shape_lone_self_stated_contradiction_stays_below_gate(
+    def test_seed3_shape_lone_self_stated_contradiction_crosses_gate(
         self,
     ) -> None:
-        # The seed-3 audited false positive: the reporter p-1 self-states
-        # an alibi (CAFETERIA) and a third party's sighting places them
-        # in EAST_HALL inside the window. One weak flag: 0.5 + 0.08 =
-        # 0.58, suspicious but below the 0.60 gate.
+        # The seed-3 shape: the reporter p-1 self-states an alibi (CAFETERIA)
+        # and a third party's sighting places them in EAST_HALL inside the
+        # window. Task 13.14 promotes this lone self-stated alibi_vs_sighting to
+        # STRONG, so it lifts p-1 by the full delta: 0.5 + 0.3 = 0.80, ACROSS
+        # the 0.60 gate (the owner LONE-STRONG outcome; pre-13.14 this stayed at
+        # 0.58 weak). p-1 is named by no accuser, so the testimony spread does
+        # not apply and the joint cap is a no-op here.
         responder = _make_responder(
             accusations={"p-1": "p-2", "p-2": None},
             claims_by={
@@ -1185,13 +1192,13 @@ class TestDetectorPrecisionGraduatedSuspicion:
         flag = result.contradictions[0]
         assert flag.kind == "alibi_vs_sighting"
         assert flag.subjects == ("p-1",)
-        assert WEAK_CONTRADICTION_MARKER_PREFIX in flag.description
-        assert WEAK_REASON_SELF_STATED in flag.description
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
+        assert WEAK_REASON_SELF_STATED not in flag.description
 
         for voter in ("p-2", "p-3", "p-4"):
             suspicion = _vote_prompt_suspicion(client, voter=voter, of="p-1")
-            assert suspicion == pytest.approx(0.58)
-            assert _DEFAULT_TEST_SUSPICION < suspicion < 0.6
+            assert suspicion == pytest.approx(0.80)
+            assert suspicion >= 0.6
 
     def test_narrow_window_shape_stays_below_gate(self) -> None:
         # The narrow-window false positive: a third party's 2-tick alibi
@@ -1227,11 +1234,12 @@ class TestDetectorPrecisionGraduatedSuspicion:
 
     def test_sighting_fountain_against_one_claim_lifts_once(self) -> None:
         # Task 10.1 (audit gp-2 C-C-3): two third parties sighting the
-        # self-alibi'd reporter elsewhere still emit two flags, but both
-        # ride the SAME alibi claim, so the lift dedups to one weak delta
-        # -> 0.58 < 0.60. Pre-10.1 these summed per flag (0.66) -- the
-        # fountain that let one truthful alibi rail an innocent over the
-        # gate on sighting volume alone.
+        # self-alibi'd reporter elsewhere still emit two flags, but both ride
+        # the SAME alibi claim, so the lift dedups to ONE delta. Task 13.14
+        # promotes the self-stated band to STRONG, so that one folded delta is
+        # now the full 0.3 -> 0.5 + 0.3 = 0.80 (pre-13.14: one weak 0.58). The
+        # per-claim dedup this guards -- two sightings, one lift -- is
+        # unchanged: sighting VOLUME still cannot stack past one flag's worth.
         responder = _make_responder(
             accusations={"p-1": "p-2", "p-2": "p-3", "p-3": None},
             claims_by={
@@ -1265,14 +1273,16 @@ class TestDetectorPrecisionGraduatedSuspicion:
 
         assert len(result.contradictions) == 2
         suspicion = _vote_prompt_suspicion(client, voter="p-4", of="p-1")
-        assert suspicion == pytest.approx(0.58)
-        assert suspicion < 0.6
+        assert suspicion == pytest.approx(0.80)
+        assert suspicion >= 0.6
 
-    def test_second_signal_from_an_independent_claim_corroborates(self) -> None:
-        # Corroboration still converts under the Task 10.1 dedup when the
-        # second weak signal rides a DIFFERENT claim: the reporter's two
-        # separate alibi claims each draw a contradicting sighting ->
-        # two lift groups -> 0.5 + 0.08 + 0.08 = 0.66 >= 0.60.
+    def test_two_strong_claims_are_capped_at_one_flags_worth(self) -> None:
+        # The Task 10.1 dedup is per (subject, claim), so the reporter's two
+        # separate self-alibi claims each draw a contradicting sighting -> two
+        # lift GROUPS. Pre-13.14 these summed two weak deltas (0.66). Post-13.14
+        # both claims are STRONG, so the per-subject MEETING_CONTRADICTION_LIFT_CAP
+        # (one strong flag's worth, 0.3) binds: 0.5 + min(0.3 + 0.3, 0.3) = 0.80,
+        # not 1.1 -- distinct claims still cannot stack past the cap.
         responder = _make_responder(
             accusations={"p-1": "p-2", "p-2": "p-3", "p-3": None},
             claims_by={
@@ -1313,14 +1323,16 @@ class TestDetectorPrecisionGraduatedSuspicion:
 
         assert len(result.contradictions) == 2
         suspicion = _vote_prompt_suspicion(client, voter="p-4", of="p-1")
-        assert suspicion == pytest.approx(0.66)
+        assert suspicion == pytest.approx(0.80)
         assert suspicion >= 0.6
 
-    def test_body_proximity_prior_plus_weak_flag_crosses_gate(self) -> None:
-        # The second signal can come from outside the meeting: a voter
-        # whose persistent beliefs already hold a Rule-1 body-proximity
-        # prior (0.5 + 0.2 = 0.7) sees the weak flag land on it ->
-        # 0.78 >= 0.60, while a prior-free voter stays at 0.58 < 0.60.
+    def test_body_proximity_prior_plus_strong_flag_reaches_clamp(self) -> None:
+        # A voter whose persistent beliefs already hold a Rule-1 body-proximity
+        # prior (0.5 + 0.2 = 0.7) sees the now-STRONG flag (Task 13.14) land on
+        # it. The joint cap bounds the per-meeting lift at one strong flag's
+        # worth above the prior: 0.7 + 0.3 = 1.0 (clamped). A prior-free voter
+        # also crosses now (0.5 + 0.3 = 0.80) -- pre-13.14 the prior-free voter
+        # stayed at 0.58 and only the prior crossed (at 0.78).
         participants = (
             _participant("p-1"),
             _participant("p-2"),
@@ -1358,13 +1370,13 @@ class TestDetectorPrecisionGraduatedSuspicion:
         )
         _, client = _run_meeting(responder, participants=participants)
 
-        corroborated = _vote_prompt_suspicion(client, voter="p-4", of="p-1")
-        assert corroborated == pytest.approx(0.78)
-        assert corroborated >= 0.6
+        with_prior = _vote_prompt_suspicion(client, voter="p-4", of="p-1")
+        assert with_prior == pytest.approx(1.0)
+        assert with_prior >= 0.6
 
         prior_free = _vote_prompt_suspicion(client, voter="p-3", of="p-1")
-        assert prior_free == pytest.approx(0.58)
-        assert prior_free < 0.6
+        assert prior_free == pytest.approx(0.80)
+        assert prior_free >= 0.6
 
     def test_third_party_contradiction_keeps_full_weight_and_crosses(self) -> None:
         # Recall control: two third parties disagreeing about p-3 is the
@@ -1439,6 +1451,67 @@ class TestDetectorPrecisionGraduatedSuspicion:
         assert by_id["p-2"] < 0.6
         assert by_id["p-3"] == pytest.approx(0.8)
         assert by_id["p-3"] >= 0.6
+
+    def test_joint_cap_bounds_lone_strong_plus_testimony_spread(self) -> None:
+        # Task 13.14 joint cap (manager seam): a subject both lone-STRONG-flagged
+        # (Rule 2 lifts +0.3) AND named by two independent voices (the 13.7
+        # pre-vote spread adds +0.12) would stack to 0.5 + 0.3 + 0.12 = 0.92 --
+        # the contradiction-lift cap and the spread cap are independent. The
+        # joint per-subject cap bounds the COMBINED lift at one strong flag's
+        # worth (0.3) above the prior, so p-3 renders at 0.80, not 0.92: the
+        # LONE-STRONG eject still lands, the spread cannot push it past the
+        # bound. Removing the cap regresses this back to 0.92.
+        contradictions = (
+            ContradictionRef(
+                contradiction_id="c-strong",
+                kind="alibi_vs_sighting",
+                event_a_id="c",
+                event_b_id="d",
+                subjects=("p-3",),
+                description="strong third-party flag",
+            ),
+        )
+        evidence = MeetingBeliefEvidence(
+            accused=("p-3",),
+            corroborated=(),
+            contradicted=("p-3",),
+            pre_vote_folded=("p-3",),
+            pre_vote_voice_counts=(("p-3", 2),),
+        )
+
+        graph = _suspicion_graph_with_contradictions(
+            voter_id="p-1",
+            suspicion_graph=(),
+            contradictions=contradictions,
+            evidence=evidence,
+        )
+
+        by_id = {entry.player_id: entry.suspicion for entry in graph}
+        assert by_id["p-3"] == pytest.approx(0.80)
+        assert by_id["p-3"] >= 0.6
+
+    def test_joint_cap_leaves_a_lone_two_voice_spread_unbounded(self) -> None:
+        # The joint cap is a no-op on the pure 13.7 spread path (no contradiction
+        # lift): two independent voices still lift a 0.50 listener to 0.62, the
+        # first gate-cross. The cap only binds when BOTH channels stack past one
+        # strong flag's worth.
+        evidence = MeetingBeliefEvidence(
+            accused=("p-3",),
+            corroborated=(),
+            contradicted=(),
+            pre_vote_folded=("p-3",),
+            pre_vote_voice_counts=(("p-3", 2),),
+        )
+
+        graph = _suspicion_graph_with_contradictions(
+            voter_id="p-1",
+            suspicion_graph=(),
+            contradictions=(),
+            evidence=evidence,
+        )
+
+        by_id = {entry.player_id: entry.suspicion for entry in graph}
+        assert by_id["p-3"] == pytest.approx(0.62)
 
 
 # --- Self-alibi normalization ----------------------------------------------
