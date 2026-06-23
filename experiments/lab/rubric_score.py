@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -723,7 +724,12 @@ def _facts_integrity_ok(facts: dict[str, Any]) -> bool:
         return True
     if not isinstance(checks, list):
         raise ValueError("facts 'self_checks' must be a list of check strings")
-    return not any("FAIL" in c for c in checks if isinstance(c, str))
+    if not all(isinstance(c, str) for c in checks):
+        raise ValueError(
+            "facts 'self_checks' contains a non-string entry (malformed) — "
+            "refusing to certify integrity; re-run the gameplay-facts extractor"
+        )
+    return not any("FAIL" in c for c in checks)
 
 
 def _floor_multiplier(g: dict[str, Any], *, integrity_ok: bool) -> float:
@@ -974,33 +980,57 @@ def _accumulator_trajectory_index(
     return {(r["seed"], r["player"]): r for r in records}
 
 
-def _require_d2_inputs(facts: dict[str, Any]) -> None:
-    """Fail loud when a real facts JSON is missing the D2 inputs.
+def _require_meeting_inputs(facts: dict[str, Any]) -> None:
+    """Fail loud when a real facts JSON is missing the meeting inputs the scorer needs.
 
-    When ``aggregates`` is present (a real extractor run), EVERY meeting must carry
-    the D2 inputs ``suspicion_graph_by_voter`` + ``testimony_records``; a stale /
-    partial / renamed-field run raises rather than silently zeroing the
-    25%-weight D2 axis (mirrors :func:`_accumulator_trajectory_index`). A facts
-    dict with NO ``aggregates`` block (the regen-plumbing fixture, no real D2 to
-    score) is skipped.
+    When ``aggregates`` is present (a real extractor run), every meeting must carry
+    the inputs the geomean dimensions read; a stale / partial / renamed-field /
+    null run raises rather than silently zeroing or undercounting a dimension
+    (mirrors :func:`_accumulator_trajectory_index`). Validated per meeting:
+
+    * ``suspicion_graph_by_voter`` — a NON-EMPTY dict (the D2 separation input;
+      the design's "the suspicion graph is always populated"). A missing / null /
+      empty / non-dict value raises — it would silently zero the 25%-weight D2.
+    * ``testimony_records`` — a list (the D2 conversion + railroad input). May be
+      EMPTY: a meeting with no accused subjects is legitimate.
+    * ``plurality_margin`` — present on every EJECTION meeting (the D4 swing
+      input). Absent on an ejection meeting raises — it would silently undercount
+      the swing.
+
+    A facts dict with NO ``aggregates`` block (the regen-plumbing fixture, no real
+    meeting to score) is skipped.
     """
     if facts.get("aggregates") is None:
         return
     for g in facts["games"]:
         for m in g["meetings"]:
-            for key in ("suspicion_graph_by_voter", "testimony_records"):
-                if key not in m:
-                    raise ValueError(
-                        f"meeting {m.get('meeting_id')!r} is missing D2 input "
-                        f"{key!r} on an aggregates-bearing facts JSON — refusing to "
-                        "silently score D2=0; re-run the gameplay-facts extractor"
-                    )
+            mid = m.get("meeting_id")
+            graph = m.get("suspicion_graph_by_voter")
+            if not isinstance(graph, dict) or not graph:
+                raise ValueError(
+                    f"meeting {mid!r} has a missing / null / empty / non-dict "
+                    "'suspicion_graph_by_voter' (the D2 separation input) on an "
+                    "aggregates-bearing facts JSON — refusing to silently score "
+                    "D2=0; re-run the gameplay-facts extractor"
+                )
+            if not isinstance(m.get("testimony_records"), list):
+                raise ValueError(
+                    f"meeting {mid!r} is missing the list 'testimony_records' (the "
+                    "D2 conversion input) on an aggregates-bearing facts JSON — "
+                    "re-run the gameplay-facts extractor"
+                )
+            if m.get("ejected_player_id") and "plurality_margin" not in m:
+                raise ValueError(
+                    f"ejection meeting {mid!r} is missing 'plurality_margin' (the "
+                    "D4 swing input) on an aggregates-bearing facts JSON — refusing "
+                    "to silently undercount the swing; re-run the extractor"
+                )
 
 
 def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
     """Per-game interestingness scores + the set-level R5 win-shape diversity."""
     games = facts["games"]
-    _require_d2_inputs(facts)
+    _require_meeting_inputs(facts)
     traj_by_key = _accumulator_trajectory_index(facts)
     integrity_ok = _facts_integrity_ok(facts)
     per = sorted(
@@ -1017,7 +1047,9 @@ def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
         shapes[p["win_shape"]] = shapes.get(p["win_shape"], 0) + 1
     return {
         "mean_score": round(sum(p["score"] for p in per) / n, 1),
-        "median_score": round(sorted(p["score"] for p in per)[len(per) // 2], 1)
+        # statistics.median averages the two middle values on an even-sized set
+        # (not the upper-middle), so a 50-game set reports the true median.
+        "median_score": round(statistics.median(p["score"] for p in per), 1)
         if per
         else 0.0,
         "n_games": len(per),
@@ -1094,7 +1126,7 @@ def geomean_validation(facts: dict[str, Any]) -> dict[str, Any]:
     committed facts only.
     """
     games = facts["games"]
-    _require_d2_inputs(facts)
+    _require_meeting_inputs(facts)
     traj = _accumulator_trajectory_index(facts)
     integrity_ok = _facts_integrity_ok(facts)
     per = sorted(
@@ -1187,7 +1219,8 @@ def geomean_validation(facts: dict[str, Any]) -> dict[str, Any]:
         "mean_score": round(math.fsum(r["score"] for r in per) / len(per), 2)
         if per
         else 0.0,
-        "median_score": round(sorted(r["score"] for r in per)[len(per) // 2], 2)
+        # true even-size median (averages the two middle values), not upper-middle.
+        "median_score": round(statistics.median(r["score"] for r in per), 2)
         if per
         else 0.0,
         "validation": {

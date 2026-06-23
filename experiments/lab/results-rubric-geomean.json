@@ -12,7 +12,7 @@
   "railroad_gate": 0.6,
   "n_games": 50,
   "mean_score": 21.34,
-  "median_score": 23.3,
+  "median_score": 22.9,
   "validation": {
     "ranking_contested_above_stopwatch": {
       "n_eject_decided": 6,

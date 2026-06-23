@@ -179,7 +179,7 @@ stopwatch the rubric is tuned against; the final recalibration is locked after t
 — the geomean does NOT collapse to 0 on the committed R7=0 set. `r7_legible` stays a per_game diagnostic key (the DTO
 `RubricGameView` keeps `r1`–`r7`); only the `score` value changed.
 
-**Achieved ranking (the §6 validation, `results-rubric-geomean.json`, committed 9p2i, geomean mean 21.3 / median 23.3).**
+**Achieved ranking (the §6 validation, `results-rubric-geomean.json`, committed 9p2i, geomean mean 21.3 / median 22.9).**
 
 1. **Ranks contested above the stopwatch — ACHIEVED in full:** all 6 `CREWMATE_EJECT` games (score 43.9–68.5) rank
    ABOVE all 37 `CREWMATE_TASKS` stopwatch games (0.0–39.6); 0 stopwatch games reach the worst eject-decided score. The
