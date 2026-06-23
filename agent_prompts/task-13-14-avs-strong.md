@@ -24,6 +24,17 @@ The authoritative task contract is copied below from tasks/phase-13.md. Follow i
 - meetings/voting.py + the §4.6 floor — unchanged
 - the belief delta wiring (`apply_contradiction_rule`) — already routes a non-weak flag to the gate-crossing delta from Wave B; only the CLASSIFICATION changes
 
+**⚠ BLOCKED — DO NOT DISPATCH; under revision after the Wave-E review (`audits/audit-2026-06-22-2149-wave-e-review.md`).**
+As written this is a NO-OP: all 111 committed `alibi_vs_sighting` flags carry a weak marker (self-stated /
+narrow / endpoint), so "promote the honest set, keep the weak-guards weak" promotes ZERO. The real lever
+REMOVES `WEAK_REASON_SELF_STATED` at the marker WRITER (`transcript.py:1933` + endpoint `:1767`), NOT
+`is_weak_contradiction` (a pure predicate); and a lone promoted flag → 0.5+0.3 = 0.80 crosses the gate ALONE
+(reversing the no-single-signal-eject invariant `beliefs.py:612-621` + stacking with 13.7 → 0.92, no joint
+cap `manager.py:1911-1928`). The $0 conversion probe shows the worst-case harm is SMALL — **+3 wrong crew
+ejections vs +20 correct impostor ejections** — but lone-STRONG vs a MID-delta (two-witness) is a PENDING
+OWNER DECISION. Rewrite after the owner decides + add a joint 13.7 cap + re-spec the held-13.12 gate. The text
+below is the ORIGINAL (defective) contract, kept for context.
+
 Change the contradiction CLASSIFICATION so the **honest** `alibi_vs_sighting` set — the flags that pass the
 existing weak-guards (NOT self-pair / defense-echo / adversarial / narrow / boundary / endpoint-mismatch,
 which STAY weak) — is classified **STRONG**, so it drives Rule 2's gate-crossing delta (§6.3). Today

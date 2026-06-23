@@ -12,13 +12,14 @@ Implement Task 13.15 — Geomean interestingness rubric as a held-out referee (r
 The authoritative task contract is copied below from tasks/phase-13.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-13-geomean-rubric`
-**Depends on:** 13.1, 13.14
+**Depends on:** 13.1
 **Section refs:** experiments/lab/report-rubric-design.md (the D1-D4 geomean spec + the §6 validation checks); experiments/lab/rubric_score.py:528 (the additive sum to replace) + :442 (`_game_interestingness`); experiments/lab/forward_redesign_detector_sweep.py (the re-extraction that lights R7 so D1-D4 are non-degenerate); the Phase-13 grounding-audit verdict (the rubric is a held-out referee, NEVER the inner-loop gradient)
 **Complexity:** Medium
 **Files in scope:**
 - experiments/lab/rubric_score.py
 - experiments/lab/report-rubric-design.md
 **Files NOT in scope:**
+- api/schemas.py + tests/api/test_view_model.py — UNCHANGED; per_game KEEPS its `r1`–`r7` keys (the geomean replaces only `score`), so `RubricGameView` (requires `r1_decisive`/`r7_legible`) does not break
 - the engine / meetings / agents / firewall — none touched (a pure-stdlib offline lab scorer)
 - the ML inner-loop fitness — the geomean is the held-out SELECTION referee, NEVER the gradient (the FO-6 suspicion rank is the inner-loop fitness; do not wire the geomean into training)
 
@@ -27,22 +28,31 @@ mean** of D1-D4 (`floor_multiplier * geomean_weighted(D1,D2,D3,D4)`, per `report
 dead dimension SINKS the score (the additive sum lets a live R2 mask a dead R1 — it ranks the seed-0/16
 stopwatch wins ABOVE every eject-decided game). D4 gains a **swing** term (`plurality_margin == 1` +
 cross-meeting suspicion movement). Keep the hard floors (railroad-eject / friendly-fire /
-firewall-or-determinism breach → 0). It stays a **held-out referee** — it scores recorded replays offline
-($0), never the gradient.
+firewall-or-determinism breach → 0). per_game KEEPS its `r1`–`r7` keys — the geomean replaces ONLY the `score`
+value, so `RubricGameView` (`api/schemas.py:933`) does not break. It stays a **held-out referee** — it scores
+recorded replays offline ($0), never the gradient.
+
+**Decisions the implementer must fix (NOT in `report-rubric-design.md`, a narrative not a numeric spec):** the
+4 geomean weights; the `floor_multiplier` value (recommend a hard 0, R4-style); the epsilon (1e-3); each Dₙ's
+[0,1] mapping — esp. D2's suspicion-SEPARATION scalar (the raw data exists at `extract_gameplay_facts.py`; the
+formula does NOT — specify it, do not re-extract). The "ranks ALL eject-decided above ALL `CREWMATE_TASKS`"
+target may not hold under one weight vector — REPORT the achieved ranking in a `## Decisions` section, do not
+tune weights to force it.
 
 **Firewall/determinism:** a pure-stdlib offline scorer over recorded replays + roles (no live packet, no
 engine); no firewall or determinism surface.
 **Definition of done:** `rubric_score.py` composes `floor_multiplier * geomean_weighted(D1-D4)` (epsilon-
-floored) replacing the additive sum; D4 includes the swing term; on a re-extracted committed set (R7 lit by
-Task 13.14) it ranks ALL eject-decided games ABOVE all `CREWMATE_TASKS` stopwatch games with no perverse
-R2/R3/R7 sub-gradient, emitted as a committed `results-*.json` artifact mirroring `results-rubric-score.json`;
+floored) replacing the additive sum; D4 includes the swing term; per_game still emits `r1`–`r7` keys (no
+`RubricGameView` break); the geomean ranks eject-decided games above `CREWMATE_TASKS` stopwatch games with the
+ACHIEVED ranking REPORTED in `## Decisions` (it does NOT collapse to 0 — D1-D4 route around the dead R7, so it
+lands independently of R7), emitted as a committed `results-*.json` artifact mirroring `results-rubric-score.json`;
 the hard floors hold; `scripts/check.sh` green.
 
 ## Implementation hint
 implement D1-D4 + `floor_multiplier` per `report-rubric-design.md` and swap the `score = 100 * (...)` line
 at `rubric_score.py:528`; add an epsilon (e.g. 1e-3) inside the geomean so a single zero term sinks the
-score but does not NaN; run it against the Task-13.14 re-extracted set so R7 is non-zero; mirror the §6
-validation as a committed results file.
+score but does not NaN; D1-D4 do NOT require R7 (they route around the dead term), so run it on the committed
+set directly; mirror the §6 validation as a committed results file.
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

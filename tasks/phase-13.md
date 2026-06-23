@@ -607,43 +607,53 @@ single-witness `alibi_vs_sighting` band to STRONG (54/114 at 81%). DESIGN.md rec
 **Files in scope:**
 - agents/strategic/prompts/vote_ballot.j2
 - orchestrator/game.py
-- tests/orchestrator/test_game.py
+- tests/agents/test_strategic_prompts.py
 **Files NOT in scope:**
 - meetings/voting.py — the deterministic tally floor (plurality, SKIP-first-class, tie→skip, leader-confidence floor) is UNCHANGED; it remains the silent anti-cascade backstop
+- meetings/manager.py::guard_ballot_target_graph (:2315) — the SECOND deterministic copy of the §4.6 verdict; deliberately UNCHANGED (it never forces SKIP→eject, so A-1 is NOT a no-op; do not soften this frozen safeguard)
 - the committed replays — NO re-record here; the recorded ballots stay byte-identical under the OLD prompt version; A-1's effect appears only in NEW recordings (the held 13.12 re-record)
 - the detector / beliefs / suspicion graph — unchanged
 
-Rewrite the §4.6 Decision-rule block in `vote_ballot.j2` (the `_max >= _thr` imperative, lines 131-149)
-from the pre-computed MUST-vote-to-eject / MUST-set-SKIP command into a **non-directive** evidence line:
+Rewrite the §4.6 Decision-rule prose in `vote_ballot.j2` (lines 140-149, the `_max >= _thr` imperative on :143;
+preserve the `_susp`/`_max`/`_thr` derivation at :131-137) from the pre-computed MUST-vote-to-eject /
+MUST-set-SKIP command into a **non-directive** evidence line:
 render the max-suspicion + the 0.60 reference threshold as ONE input among the transcript, contradiction
 flags, and memory, and ask the model to weigh them and emit its OWN target + confidence. **Keep the
 deterministic tally floor** (`voting.py::tally_ballots`) exactly as-is — it silently prevents a tie /
 below-threshold / SKIP-plurality eject regardless of the prompt, so removing the imperative CANNOT lower
-the floor (Probe 1 confirms the floor lives in the tally, not the prompt). **Pin the confidence rendering**
-so the model cannot self-rate a sub-threshold target across the gate (the bidirectional-imperative cascade
-vector Probe 1 flags). Bump the prompt version: the `.j2` version marker + `DEFAULT_PROMPT_VERSIONS` + the
-two live-recorded orchestrator test pins (the established version-bump cascade).
+the floor (Probe 1 confirms the floor lives in the tally, not the prompt). **Constrain the emitted confidence
+in PROSE (not a code clamp):** the model's emitted `confidence` must reflect the named target's rendered
+suspicion and may not report ≥0.60 on a sub-0.60 target (the bidirectional-imperative cascade vector Probe 1
+flags) — the tally leader-confidence floor (`voting.py:211`) is the deterministic backstop; a code clamp would
+be a NEW deterministic gate the plan does not intend. Bump the prompt version: the `.j2` version marker +
+`orchestrator/game.py::DEFAULT_PROMPT_VERSIONS` + the ONE live version pin at
+`tests/agents/test_strategic_prompts.py:1223` (`vote_ballot/v6`→`v7`); `tests/orchestrator/` has NO
+`vote_ballot` version assertion (the "two orchestrator pins" do not exist), and the manifest pin
+(`vote_ballot/v5`) reads as-recorded and does NOT break (no re-record).
 
 **Firewall:** prompt-only change; no new agent-visible field; the teammate firewall (the SKIP-coercion of a
 teammate ballot) is untouched. **Determinism:** the committed replays (recorded under the old prompt
 version) re-walk byte-identically — A-1 changes only NEW recordings; engine determinism untouched.
 **Definition of done:** `vote_ballot.j2` presents the gate as evidence not a command; the deterministic
-tally floor in `voting.py` is unchanged; confidence rendering is pinned; the prompt version + the two
-orchestrator pins are bumped; the committed sets + state-hash verify stay byte-identical (no re-record); a
-6–10-seed real-`qwen3.5:9b` smoke shows null `primary_reason_id` share DOWN, verbatim-threshold-number echo
+tally floor in `voting.py` is unchanged; the emitted-confidence PROSE constraint is added (no code clamp);
+the prompt version + the `test_strategic_prompts.py:1223` pin are bumped (`v6`→`v7`); the committed sets +
+state-hash verify stay byte-identical (no re-record); a 6–10-seed real-`qwen3.5:9b` smoke — measured against a
+pinned PRE-CHANGE baseline (null-reason-id share + count of under-gate / ≥0.60 ballots) so the criteria are
+falsifiable — shows null `primary_reason_id` share DOWN, verbatim-threshold-number echo
 → ~0, and the ballot-confidence distribution NOT clustering a sub-threshold target across the gate;
 `scripts/check.sh` green.
 **Implementation hint:**
-edit only the Decision-rule Jinja block (`vote_ballot.j2:131-149`) to a descriptive "here is the strongest
-suspicion and the 0.60 reference; weigh it with the transcript and flags and decide"; leave the schema +
-the reason-id machinery intact; for the smoke reuse the local-Ollama fixture path from Task 13.6 — this is a
-recording, not a committed-set reconstruction.
+edit only the decision-rule prose at `vote_ballot.j2:140-149` (the imperative on :143), preserving the
+:131-137 derivation, to a descriptive "here is the strongest suspicion and the 0.60 reference; weigh it with
+the transcript and flags and decide"; leave the schema + the reason-id machinery intact; for the smoke reuse
+the local-Ollama fixture path from Task 13.6 — this is a recording, not a committed-set reconstruction.
 **Integration risk:**
 the bidirectional imperative is the cascade vector — removing the MUST-vote half WITHOUT pinning confidence
 lets a self-rated confidence ≥ 0.6 on a sub-threshold target eject where it cannot today; the pin is
 load-bearing. The desk test (Probe 1) bounds but does not measure the live effect — the real-LLM smoke is
-the gate. Do NOT touch `voting.py::tally_ballots` (the floor must stay). The manifest/regression tests read
-literals/recorded data and are unaffected by the version bump.
+the gate. Do NOT touch `voting.py::tally_ballots` OR `guard_ballot_target_graph` (the deterministic floors must
+stay). The version-bump cascade is ONE pin (`test_strategic_prompts.py:1223`, in scope), NOT two orchestrator
+pins; the manifest/regression tests read as-recorded literals and are unaffected.
 **Ready-to-paste prompt:** `agent_prompts/task-13-13-deimperative-gate.md`
 
 ### Task 13.14 — Promote `alibi_vs_sighting` to STRONG (light R7 off 0/114)
@@ -659,6 +669,17 @@ literals/recorded data and are unaffected by the version bump.
 - the committed replays — NO re-record; the recorded `contradictions` field stays, validation is a $0 RE-EXTRACTION that recomputes; the held 13.12 re-record is what bakes STRONG flags into recordings
 - meetings/voting.py + the §4.6 floor — unchanged
 - the belief delta wiring (`apply_contradiction_rule`) — already routes a non-weak flag to the gate-crossing delta from Wave B; only the CLASSIFICATION changes
+
+**⚠ BLOCKED — DO NOT DISPATCH; under revision after the Wave-E review (`audits/audit-2026-06-22-2149-wave-e-review.md`).**
+As written this is a NO-OP: all 111 committed `alibi_vs_sighting` flags carry a weak marker (self-stated /
+narrow / endpoint), so "promote the honest set, keep the weak-guards weak" promotes ZERO. The real lever
+REMOVES `WEAK_REASON_SELF_STATED` at the marker WRITER (`transcript.py:1933` + endpoint `:1767`), NOT
+`is_weak_contradiction` (a pure predicate); and a lone promoted flag → 0.5+0.3 = 0.80 crosses the gate ALONE
+(reversing the no-single-signal-eject invariant `beliefs.py:612-621` + stacking with 13.7 → 0.92, no joint
+cap `manager.py:1911-1928`). The $0 conversion probe shows the worst-case harm is SMALL — **+3 wrong crew
+ejections vs +20 correct impostor ejections** — but lone-STRONG vs a MID-delta (two-witness) is a PENDING
+OWNER DECISION. Rewrite after the owner decides + add a joint 13.7 cap + re-spec the held-13.12 gate. The text
+below is the ORIGINAL (defective) contract, kept for context.
 
 Change the contradiction CLASSIFICATION so the **honest** `alibi_vs_sighting` set — the flags that pass the
 existing weak-guards (NOT self-pair / defense-echo / adversarial / narrow / boundary / endpoint-mismatch,
@@ -697,13 +718,14 @@ the committed replays' recorded data is unaffected (reconstruction replays recor
 
 ### Task 13.15 — Geomean interestingness rubric as a held-out referee (replace the additive sum)
 **Branch:** `phase-13-geomean-rubric`
-**Depends on:** 13.1, 13.14
+**Depends on:** 13.1
 **Section refs:** experiments/lab/report-rubric-design.md (the D1-D4 geomean spec + the §6 validation checks); experiments/lab/rubric_score.py:528 (the additive sum to replace) + :442 (`_game_interestingness`); experiments/lab/forward_redesign_detector_sweep.py (the re-extraction that lights R7 so D1-D4 are non-degenerate); the Phase-13 grounding-audit verdict (the rubric is a held-out referee, NEVER the inner-loop gradient)
 **Complexity:** Medium
 **Files in scope:**
 - experiments/lab/rubric_score.py
 - experiments/lab/report-rubric-design.md
 **Files NOT in scope:**
+- api/schemas.py + tests/api/test_view_model.py — UNCHANGED; per_game KEEPS its `r1`–`r7` keys (the geomean replaces only `score`), so `RubricGameView` (requires `r1_decisive`/`r7_legible`) does not break
 - the engine / meetings / agents / firewall — none touched (a pure-stdlib offline lab scorer)
 - the ML inner-loop fitness — the geomean is the held-out SELECTION referee, NEVER the gradient (the FO-6 suspicion rank is the inner-loop fitness; do not wire the geomean into training)
 
@@ -712,25 +734,36 @@ mean** of D1-D4 (`floor_multiplier * geomean_weighted(D1,D2,D3,D4)`, per `report
 dead dimension SINKS the score (the additive sum lets a live R2 mask a dead R1 — it ranks the seed-0/16
 stopwatch wins ABOVE every eject-decided game). D4 gains a **swing** term (`plurality_margin == 1` +
 cross-meeting suspicion movement). Keep the hard floors (railroad-eject / friendly-fire /
-firewall-or-determinism breach → 0). It stays a **held-out referee** — it scores recorded replays offline
-($0), never the gradient.
+firewall-or-determinism breach → 0). per_game KEEPS its `r1`–`r7` keys — the geomean replaces ONLY the `score`
+value, so `RubricGameView` (`api/schemas.py:933`) does not break. It stays a **held-out referee** — it scores
+recorded replays offline ($0), never the gradient.
+
+**Decisions the implementer must fix (NOT in `report-rubric-design.md`, a narrative not a numeric spec):** the
+4 geomean weights; the `floor_multiplier` value (recommend a hard 0, R4-style); the epsilon (1e-3); each Dₙ's
+[0,1] mapping — esp. D2's suspicion-SEPARATION scalar (the raw data exists at `extract_gameplay_facts.py`; the
+formula does NOT — specify it, do not re-extract). The "ranks ALL eject-decided above ALL `CREWMATE_TASKS`"
+target may not hold under one weight vector — REPORT the achieved ranking in a `## Decisions` section, do not
+tune weights to force it.
 
 **Firewall/determinism:** a pure-stdlib offline scorer over recorded replays + roles (no live packet, no
 engine); no firewall or determinism surface.
 **Definition of done:** `rubric_score.py` composes `floor_multiplier * geomean_weighted(D1-D4)` (epsilon-
-floored) replacing the additive sum; D4 includes the swing term; on a re-extracted committed set (R7 lit by
-Task 13.14) it ranks ALL eject-decided games ABOVE all `CREWMATE_TASKS` stopwatch games with no perverse
-R2/R3/R7 sub-gradient, emitted as a committed `results-*.json` artifact mirroring `results-rubric-score.json`;
+floored) replacing the additive sum; D4 includes the swing term; per_game still emits `r1`–`r7` keys (no
+`RubricGameView` break); the geomean ranks eject-decided games above `CREWMATE_TASKS` stopwatch games with the
+ACHIEVED ranking REPORTED in `## Decisions` (it does NOT collapse to 0 — D1-D4 route around the dead R7, so it
+lands independently of R7), emitted as a committed `results-*.json` artifact mirroring `results-rubric-score.json`;
 the hard floors hold; `scripts/check.sh` green.
 **Implementation hint:**
 implement D1-D4 + `floor_multiplier` per `report-rubric-design.md` and swap the `score = 100 * (...)` line
 at `rubric_score.py:528`; add an epsilon (e.g. 1e-3) inside the geomean so a single zero term sinks the
-score but does not NaN; run it against the Task-13.14 re-extracted set so R7 is non-zero; mirror the §6
-validation as a committed results file.
+score but does not NaN; D1-D4 do NOT require R7 (they route around the dead term), so run it on the committed
+set directly; mirror the §6 validation as a committed results file.
 **Integration risk:**
-a naive geomean on the CURRENT committed set collapses all 50 games to 0 (R7=0/50, R3=0/44) — it MUST land
-after Task 13.14 lights R7 and carry the epsilon floor (hence the dependency). It is a SELECTION referee,
-never the inner-loop gradient (the grounding-audit verdict) — do not wire it into ML fitness. Recalibrate
-thresholds only AFTER the held re-record (the committed set is the pre-fix stopwatch the rubric is tuned
-against).
+D1-D4 were DESIGNED to ROUTE AROUND the dead R7 (`report-rubric-design.md`), so — UNLIKE the old additive-R7
+score — the geomean does NOT collapse to 0 on the committed R7=0 set; 13.15 lands INDEPENDENTLY of 13.14 (it
+only enriches D2's conversion signal). Carry the epsilon floor for the geomean math. The DTO is the real risk:
+per_game MUST keep its `r1`–`r7` keys or `RubricGameView` (`api/schemas.py:933`, requires
+`r1_decisive`/`r7_legible`) breaks at `model_validate`. It is a SELECTION referee, never the inner-loop
+gradient (the grounding-audit verdict). Recalibrate thresholds only AFTER the held re-record (the committed
+set is the pre-fix stopwatch the rubric is tuned against).
 **Ready-to-paste prompt:** `agent_prompts/task-13-15-geomean-rubric.md`
