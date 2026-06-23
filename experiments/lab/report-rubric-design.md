@@ -144,9 +144,13 @@ stopwatch the rubric is tuned against; the final recalibration is locked after t
 - **Epsilon** `ε = 1e-3`, applied inside the geomean (`max(Dₙ, ε)`): a single zero dimension SINKS the score (one dead
   dimension ⇒ score ≈ 0.2–6) without `ln(0)` → −∞/NaN.
 - **`floor_multiplier`** is a hard `{0, 1}` (R4-style), 0 on any integrity breach: friendly-fire kill
-  (`victim_role == IMPOSTOR`), railroad (a CREWMATE ejected with rendered suspicion among the ejectors `< 0.60` — the
-  §4.6 gate — or none at all), or a firewall/determinism breach (a failing extractor `self_checks` entry). A crewmate
-  ejected *above* the 0.60 gate is an honest (mistaken) deduction, NOT a railroad — it is scored low by D2, not floored.
+  (`victim_role == IMPOSTOR`), a **railroad** CREWMATE ejection, or a firewall/determinism breach (a failing extractor
+  `self_checks` entry; an aggregates-bearing facts JSON missing `self_checks` FAILS LOUD rather than certifying clean).
+  A railroad has two structural forms (EITHER floors): **gate-bypass** — rendered suspicion among the ejectors `< 0.60`
+  (the §4.6 gate) or absent; or **evidence-free conviction** — NO observation-backed accusation names the ejected AND no
+  contradiction flag names them (an unarticulated conviction on private vibes). A crewmate ejected *above* the gate WITH
+  an observation-backed accusation or a contradiction flag is an honest (mistaken) deduction, NOT a railroad — scored low
+  by D2, not floored.
 
 **Dₙ → [0,1] mappings.**
 
@@ -158,38 +162,45 @@ stopwatch the rubric is tuned against; the final recalibration is locked after t
     (excluding self rows); the game value is the mean over meetings with both sides present;
     `separation_norm = clamp(sep / 0.30, 0, 1)` (committed max sep ≈ 0.42; clamp-at-0 penalizes a negative separation, so
     a railroad that raises suspicion on an innocent lowers, not raises, D2).
-  - **conversion:** of every `(meeting, observation-backed-accused true impostor)` pair, the fraction the meeting EJECTED
-    (the extractor's `observation_backed` testimony bit + the firewalled role; never a flagless conviction).
+  - **conversion:** of every `(meeting, true impostor named by an observation-backed ACCUSATION)` pair, the fraction the
+    meeting EJECTED. "Observation-backed accusation" = a turn whose `vehicle == "accusation"` AND `observation_backed`
+    (the accuser also logged a first-hand sighting); a sighting-only or free-text mention does NOT count, so enriched
+    meetings' mere sightings cannot masquerade as evidence-backed convictions.
 - **D3 (impostor craft):** the repaired-R2 EFFECTIVE-deflection value (`1.0` effective / `0.2` accused-not-deflected /
   `0.0` never-accused) — byte-identical to the `r2_deception` per_game term (one source). Evasion / tool-use / steering
   (also §3 D3) fold in at the enriched re-record; the committed anchor is effective deflection.
 - **D4 (arc):** `0.45·arc + 0.35·swing + 0.20·contest`. `arc` = a cross-meeting suspicion rise onto a true impostor (=
-  `r3_arcs`); **`swing` = the new term: a knife-edge `plurality_margin == 1` eject + cross-meeting movement
-  (`n_meetings > 1`)**; `contest = min(1, (n_meetings−1)/2)` (graded, capped — no reward for raw stalling).
+  `r3_arcs`); **`swing` = the new term: a knife-edge `plurality_margin == 1` eject of a subject whose rendered suspicion
+  actually MOVED across meetings — read from the ejected subject's accumulator trajectory (eject point `j ≥ 1` whose
+  suspicion differs from its first appearance), NOT a bare `n_meetings > 1` count (which the `contest` term already
+  rewards)**; `contest = min(1, (n_meetings−1)/2)` (graded, capped — no reward for raw stalling).
 
 **R7 is NOT a geomean input.** D1–D4 route around the dead R7 (0/50 on this set), so — unlike the old additive-R7 score
 — the geomean does NOT collapse to 0 on the committed R7=0 set. `r7_legible` stays a per_game diagnostic key (the DTO
 `RubricGameView` keeps `r1`–`r7`); only the `score` value changed.
 
-**Achieved ranking (the §6 validation, `results-rubric-geomean.json`, committed 9p2i, geomean mean 22.9 / median 24.1).**
+**Achieved ranking (the §6 validation, `results-rubric-geomean.json`, committed 9p2i, geomean mean 21.3 / median 23.3).**
 
-1. **Ranks contested above the stopwatch — ACHIEVED in full:** all 6 `CREWMATE_EJECT` games (score 43.9–80.2) rank
-   ABOVE all 37 `CREWMATE_TASKS` stopwatch games (0.2–39.6); 0 stopwatch games reach the worst eject-decided score. The
-   audit's top-3 seeds 5/47/34 all land in the top 6. Mean score by reason: `CREWMATE_EJECT` 63.3 ≫ `IMPOSTOR_PARITY`
-   28.5 > `CREWMATE_TASKS` 15.3. (The stronger "ALL eject-decided above ALL stopwatch" target DID hold under this weight
+1. **Ranks contested above the stopwatch — ACHIEVED in full:** all 6 `CREWMATE_EJECT` games (score 43.9–68.5) rank
+   ABOVE all 37 `CREWMATE_TASKS` stopwatch games (0.0–39.6); 0 stopwatch games reach the worst eject-decided score. The
+   audit's top-3 seeds 5/47/34 all land in the top 6. Mean score by reason: `CREWMATE_EJECT` 56.7 ≫ `IMPOSTOR_PARITY`
+   28.5 > `CREWMATE_TASKS` 14.3. (The stronger "ALL eject-decided above ALL stopwatch" target DID hold under this weight
    vector; per the contract the weights were NOT tuned to force it — it is reported as achieved.)
-2. **No perverse gradient:** `Pearson(Dₙ, crew_win)` is weak for every dimension (D1 −0.35, D2 +0.15, D3 −0.08, D4 +0.10)
-   and `Pearson(score, crew_win) = −0.11` (near zero — the rubric does not reward winning; D1 is *negatively* correlated
+2. **No perverse gradient:** `Pearson(Dₙ, crew_win)` is weak for every dimension (D1 −0.35, D2 +0.15, D3 −0.08, D4 +0.02)
+   and `Pearson(score, crew_win) = −0.15` (near zero — the rubric does not reward winning; D1 is *negatively* correlated
    with crew_win because the 37 stopwatch crew wins score low on D1). No dimension rewards losing, railroading, or
    passivity (the R2/R3/R7 traps).
 3. **Reachability:** every dimension is non-zero somewhere — D1 34/50, D2 43/50, D3 49/50, D4 43/50 (each max 1.0),
    unlike R7 (0/50).
-4. **Watch-the-games:** top seed-28 (D1 1.0 / D2 0.67 / D3 1.0 / D4 0.55) is a high-on-all-axes eject; the bottom is
-   one-meeting stopwatch games at ≈ 0.2 (D1=0). The ranking matches a human interesting/boring call.
+4. **Watch-the-games:** top seed-47 (D1 1.0 / D2 0.82 / D3 0.2 / D4 0.65) is a high-deduction eject; the bottom is
+   one-meeting stopwatch games at ≈ 0.2 (D1=0) and the floored railroad seed-14 at 0.0. The ranking matches a human
+   interesting/boring call.
 
-**Floors on the committed set:** 0 games floored (no friendly-fire, no below-gate railroad, all self-checks OK) — the
-floors are clean regression guards here; they are unit-verified to sink synthetic friendly-fire / below-gate-railroad /
-integrity-breach games to 0.
+**Floors on the committed set:** 1 game floored — seed-14, a `CREWMATE_TASKS` stopwatch that ejected an innocent crewmate
+(p-6) with NO observation-backed accusation and no contradiction flag (an evidence-free conviction → 0). No friendly-fire,
+no gate-bypass, all self-checks OK. The floors are unit-verified to sink synthetic friendly-fire / gate-bypass /
+evidence-free-conviction / integrity-breach games to 0, and to SPARE honest gate-clearing mistakes backed by an
+observation accusation or a flag (e.g. seed-31, spared by its contradiction flag).
 
 **Held-out referee, never the gradient.** The geomean scores recorded replays offline ($0); it is the SELECTION referee,
 never the ML inner-loop fitness (that is the FO-6 physical-suspicion rank — Phase-13 grounding-audit verdict).

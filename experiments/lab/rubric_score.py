@@ -541,24 +541,35 @@ def _meeting_suspicion_separation(
     return (math.fsum(imp) / len(imp)) - (math.fsum(crew) / len(crew))
 
 
-def _observation_backed_impostors(meeting: dict[str, Any]) -> set[str]:
-    """True impostors named by an OBSERVATION-BACKED testimony turn this meeting.
+def _subject_has_observation_backed_accusation(rec: dict[str, Any] | None) -> bool:
+    """A testimony record carries an OBSERVATION-BACKED ACCUSATION of its subject.
 
-    A subject counts only when a testimony turn naming them carries a first-hand
-    sighting (the extractor's ``observation_backed`` bit — the signal separating an
-    evidence-grounded accusation from a bare vibe). This is the D2 conversion
-    DENOMINATOR: an evidence-based accusation of a REAL impostor, never a flagless
-    mention.
+    The shared "observation-backed accusation" predicate (report-rubric-design.md
+    §3 D2 + the railroad floor): an ``accusation`` turn naming the subject whose
+    accuser ALSO logged a first-hand sighting (``observation_backed``). A
+    sighting-only turn (``vehicle == "sighting"``) or a bare free-text mention does
+    NOT count — only a *backed accusation* does, so an enriched meeting's mere
+    sightings cannot masquerade as evidence-backed convictions.
     """
-    out: set[str] = set()
-    for rec in meeting.get("testimony_records", []):
-        if rec.get("subject_role") != "IMPOSTOR":
-            continue
-        if any(
-            turn.get("observation_backed") for turn in rec.get("testimony_turns", [])
-        ):
-            out.add(rec["subject"])
-    return out
+    return rec is not None and any(
+        turn.get("observation_backed") and turn.get("vehicle") == "accusation"
+        for turn in rec.get("testimony_turns", [])
+    )
+
+
+def _observation_backed_impostors(meeting: dict[str, Any]) -> set[str]:
+    """True impostors named by an OBSERVATION-BACKED ACCUSATION this meeting.
+
+    The D2 conversion DENOMINATOR: a true impostor against whom some turn carried
+    an observation-backed *accusation* (:func:`_subject_has_observation_backed_accusation`),
+    never a sighting-only mention or a flagless vibe.
+    """
+    return {
+        rec["subject"]
+        for rec in meeting.get("testimony_records", [])
+        if rec.get("subject_role") == "IMPOSTOR"
+        and _subject_has_observation_backed_accusation(rec)
+    }
 
 
 def _d2_crew_deduction(g: dict[str, Any]) -> tuple[float, float, float]:
@@ -626,22 +637,41 @@ def _d3_impostor_craft(g: dict[str, Any]) -> float:
     return 0.0
 
 
-def _game_has_swing(g: dict[str, Any]) -> bool:
-    """The D4 SWING term: a knife-edge eject + cross-meeting suspicion movement.
+def _game_has_swing(
+    g: dict[str, Any], traj_by_key: dict[tuple[Any, Any], dict[str, Any]]
+) -> bool:
+    """The D4 SWING term: a knife-edge eject + REAL cross-meeting suspicion movement.
 
-    True iff SOME meeting ejected a player on a one-vote plurality
-    (``plurality_margin == 1`` — the table swung on a single ballot) AND the game
-    built across MORE THAN ONE meeting (cross-meeting movement, operationalized as
-    ``n_meetings > 1`` — a contested build, not a one-shot meeting-0 conviction).
-    Task 13.15: D4 gains this ``plurality_margin == 1`` + cross-meeting-movement
-    swing term.
+    Task 13.15: ``plurality_margin == 1`` (the table swung on a single ballot) AND
+    cross-meeting suspicion movement. Movement is read from the ejected subject's
+    accumulator trajectory (the same source as the arc), NOT a bare ``n_meetings >
+    1`` count (which the separate ``contest`` term already rewards): the eject must
+    land at a trajectory point ``j >= 1`` (the subject was a candidate in >= 1
+    PRIOR meeting) whose rendered suspicion DIFFERS from its first appearance — a
+    genuine cross-meeting build, not a one-shot first-appearance knife-edge eject
+    or a flat sustained-high eject.
     """
-    if len(g["meetings"]) <= 1:
-        return False
-    return any(
-        m.get("ejected_player_id") and m.get("plurality_margin") == 1
-        for m in g["meetings"]
-    )
+    seed = g.get("seed")
+    for m in g["meetings"]:
+        if not (m.get("ejected_player_id") and m.get("plurality_margin") == 1):
+            continue
+        record = traj_by_key.get((seed, m["ejected_player_id"]))
+        if record is None:
+            continue
+        sequence = record.get("sequence", [])
+        eject_points = [i for i, pt in enumerate(sequence) if pt.get("ejected_here")]
+        if not eject_points:
+            continue
+        j = eject_points[0]
+        if (
+            j >= 1
+            and abs(
+                sequence[j]["rendered_suspicion"] - sequence[0]["rendered_suspicion"]
+            )
+            > 1e-9
+        ):
+            return True
+    return False
 
 
 def _d4_arc(
@@ -663,7 +693,7 @@ def _d4_arc(
     """
     n_mtg = len(g["meetings"])
     arc = 1.0 if _suspicion_rose_onto_impostor(g, traj_by_key) else 0.0
-    swing = 1.0 if _game_has_swing(g) else 0.0
+    swing = 1.0 if _game_has_swing(g, traj_by_key) else 0.0
     contest = min(1.0, max(0, n_mtg - 1) / 2.0)
     return 0.45 * arc + 0.35 * swing + 0.20 * contest, arc, swing, contest
 
@@ -673,14 +703,23 @@ def _facts_integrity_ok(facts: dict[str, Any]) -> bool:
 
     The firewall/determinism FLOOR input (report-rubric-design.md §3). Reads the
     extractor's ``self_checks`` list (each entry ends ': OK' or ': FAIL'); any
-    'FAIL' is a breach -> every game is floored to 0. ``None`` (the regen-plumbing
-    fixture ships no self-checks) reads OK: the extractor is the determinism/leak
-    authority and FAILS LOUD upstream (it raises before writing facts), so a facts
-    JSON that reaches the scorer already passed — this guard is belt-and-suspenders.
-    A present-but-malformed value FAILS LOUD (AGENTS.md "no silent fallbacks").
+    'FAIL' is a breach -> every game is floored to 0. A real (aggregates-bearing)
+    facts JSON that OMITS ``self_checks`` (a stale / partial extractor run) FAILS
+    LOUD rather than certifying integrity by default — the floor depends on these
+    checks to detect a state-hash / leak breach, so a missing surface is not
+    "clean" (AGENTS.md "no silent fallbacks"; mirrors
+    :func:`_accumulator_trajectory_index`). Only the regen-plumbing fixture (NO
+    aggregates block, i.e. no real games to score) reads OK on absence. A
+    present-but-malformed value also FAILS LOUD.
     """
     checks = facts.get("self_checks")
     if checks is None:
+        if facts.get("aggregates") is not None:
+            raise ValueError(
+                "aggregates-bearing facts JSON is missing 'self_checks' (the "
+                "firewall/determinism floor input) — refusing to certify "
+                "integrity by default; re-run the gameplay-facts extractor"
+            )
         return True
     if not isinstance(checks, list):
         raise ValueError("facts 'self_checks' must be a list of check strings")
@@ -695,11 +734,8 @@ def _floor_multiplier(g: dict[str, Any], *, integrity_ok: bool) -> float:
 
     * **friendly-fire** — an impostor killed a fellow impostor (engine-forbidden;
       the floor guards a regression).
-    * **railroad ejection** — a CREWMATE ejected with rendered suspicion among the
-      ejectors below the §4.6 gate (``_SKIP_SUSPICION_THRESHOLD``) or with no
-      rendered suspicion at all: an innocent ejected without gate-clearing
-      observation-backed suspicion. A crewmate ejected ABOVE the gate is an honest
-      (mistaken) deduction, NOT a railroad — it is scored low by D2, not floored.
+    * **railroad ejection** — a CREWMATE ejected as a railroad
+      (:func:`_is_railroad_ejection`).
     * **firewall / determinism breach** — ``integrity_ok`` is False (a failing
       extractor self-check: a state-hash mismatch or a leak).
     """
@@ -708,11 +744,43 @@ def _floor_multiplier(g: dict[str, Any], *, integrity_ok: bool) -> float:
     if any(k.get("victim_role") == "IMPOSTOR" for k in g.get("kills", [])):
         return 0.0
     for m in g["meetings"]:
-        if m.get("ejected_player_id") and m.get("ejected_role") == "CREWMATE":
-            among = m.get("ejected_rendered_suspicion_among_ejectors")
-            if among is None or among < _SKIP_SUSPICION_THRESHOLD:
-                return 0.0
+        if (
+            m.get("ejected_player_id")
+            and m.get("ejected_role") == "CREWMATE"
+            and _is_railroad_ejection(m)
+        ):
+            return 0.0
     return 1.0
+
+
+def _is_railroad_ejection(meeting: dict[str, Any]) -> bool:
+    """Whether a CREWMATE ejection is a railroad (report-rubric-design.md §3 floor).
+
+    'An innocent ejected with no observation-backed suspicion' has two structural
+    forms, EITHER of which floors the game:
+
+    * **gate-bypass** — the ejected crewmate's rendered suspicion among the
+      ejectors is below the §4.6 gate (``_SKIP_SUSPICION_THRESHOLD``) or absent
+      (the deterministic anti-railroad tally was structurally bypassed).
+    * **evidence-free conviction** — NO observation-backed accusation names the
+      ejected (:func:`_subject_has_observation_backed_accusation`) AND no
+      contradiction flag names them: the eject rests on NO legible meeting evidence
+      at all (an unarticulated conviction on private vibes).
+
+    A crewmate ejected ABOVE the gate WITH an observation-backed accusation or a
+    contradiction flag is an honest (mistaken) deduction, NOT a railroad — it is
+    scored low by D2 (it lowers separation / conversion), never floored.
+    """
+    among = meeting.get("ejected_rendered_suspicion_among_ejectors")
+    if among is None or among < _SKIP_SUSPICION_THRESHOLD:
+        return True
+    ejected = meeting["ejected_player_id"]
+    rec = next(
+        (r for r in meeting.get("testimony_records", []) if r["subject"] == ejected),
+        None,
+    )
+    has_flag = ejected in (meeting.get("contradictions_by_subject") or {})
+    return not _subject_has_observation_backed_accusation(rec) and not has_flag
 
 
 def _contest_dimensions(
@@ -906,9 +974,33 @@ def _accumulator_trajectory_index(
     return {(r["seed"], r["player"]): r for r in records}
 
 
+def _require_d2_inputs(facts: dict[str, Any]) -> None:
+    """Fail loud when a real facts JSON is missing the D2 inputs.
+
+    When ``aggregates`` is present (a real extractor run), EVERY meeting must carry
+    the D2 inputs ``suspicion_graph_by_voter`` + ``testimony_records``; a stale /
+    partial / renamed-field run raises rather than silently zeroing the
+    25%-weight D2 axis (mirrors :func:`_accumulator_trajectory_index`). A facts
+    dict with NO ``aggregates`` block (the regen-plumbing fixture, no real D2 to
+    score) is skipped.
+    """
+    if facts.get("aggregates") is None:
+        return
+    for g in facts["games"]:
+        for m in g["meetings"]:
+            for key in ("suspicion_graph_by_voter", "testimony_records"):
+                if key not in m:
+                    raise ValueError(
+                        f"meeting {m.get('meeting_id')!r} is missing D2 input "
+                        f"{key!r} on an aggregates-bearing facts JSON — refusing to "
+                        "silently score D2=0; re-run the gameplay-facts extractor"
+                    )
+
+
 def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
     """Per-game interestingness scores + the set-level R5 win-shape diversity."""
     games = facts["games"]
+    _require_d2_inputs(facts)
     traj_by_key = _accumulator_trajectory_index(facts)
     integrity_ok = _facts_integrity_ok(facts)
     per = sorted(
@@ -1002,6 +1094,7 @@ def geomean_validation(facts: dict[str, Any]) -> dict[str, Any]:
     committed facts only.
     """
     games = facts["games"]
+    _require_d2_inputs(facts)
     traj = _accumulator_trajectory_index(facts)
     integrity_ok = _facts_integrity_ok(facts)
     per = sorted(

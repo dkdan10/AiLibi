@@ -11,18 +11,18 @@
   "separation_scale": 0.3,
   "railroad_gate": 0.6,
   "n_games": 50,
-  "mean_score": 22.88,
-  "median_score": 24.1,
+  "mean_score": 21.34,
+  "median_score": 23.3,
   "validation": {
     "ranking_contested_above_stopwatch": {
       "n_eject_decided": 6,
       "n_stopwatch": 37,
       "eject_decided_score_range": [
         43.9,
-        80.2
+        68.5
       ],
       "stopwatch_score_range": [
-        0.2,
+        0.0,
         39.6
       ],
       "all_eject_decided_above_all_stopwatch": true,
@@ -34,15 +34,15 @@
           "d1_resolution": 1.0,
           "d2_deduction": 0.6,
           "d3_craft": 0.467,
-          "d4_arc": 0.55,
-          "score": 63.267
+          "d4_arc": 0.317,
+          "score": 56.717
         },
         "CREWMATE_TASKS": {
           "d1_resolution": 0.17,
           "d2_deduction": 0.278,
           "d3_craft": 0.308,
-          "d4_arc": 0.192,
-          "score": 15.278
+          "d4_arc": 0.164,
+          "score": 14.259
         },
         "IMPOSTOR_PARITY": {
           "d1_resolution": 0.6,
@@ -56,10 +56,12 @@
         "d1_resolution": -0.346,
         "d2_deduction": 0.151,
         "d3_craft": -0.078,
-        "d4_arc": 0.098,
-        "score": -0.111
+        "d4_arc": 0.024,
+        "score": -0.154
       },
-      "floored_games": []
+      "floored_games": [
+        14
+      ]
     },
     "reachability": {
       "d1_resolution": {
@@ -82,40 +84,31 @@
     "watch_the_games": {
       "top": [
         {
-          "seed": 28,
-          "reason": "CREWMATE_EJECT",
-          "score": 80.2,
-          "d1_resolution": 1.0,
-          "d2_deduction": 0.667,
-          "d3_craft": 1.0,
-          "d4_arc": 0.55
-        },
-        {
           "seed": 47,
           "reason": "CREWMATE_EJECT",
-          "score": 74.7,
+          "score": 68.5,
           "d1_resolution": 1.0,
           "d2_deduction": 0.818,
           "d3_craft": 0.2,
-          "d4_arc": 1.0
+          "d4_arc": 0.65
+        },
+        {
+          "seed": 28,
+          "reason": "CREWMATE_EJECT",
+          "score": 65.5,
+          "d1_resolution": 1.0,
+          "d2_deduction": 0.667,
+          "d3_craft": 1.0,
+          "d4_arc": 0.2
         },
         {
           "seed": 38,
           "reason": "CREWMATE_EJECT",
-          "score": 72.6,
+          "score": 59.3,
           "d1_resolution": 1.0,
           "d2_deduction": 0.448,
           "d3_craft": 1.0,
-          "d4_arc": 0.55
-        },
-        {
-          "seed": 5,
-          "reason": "CREWMATE_EJECT",
-          "score": 54.4,
-          "d1_resolution": 1.0,
-          "d2_deduction": 0.25,
-          "d3_craft": 0.2,
-          "d4_arc": 0.9
+          "d4_arc": 0.2
         },
         {
           "seed": 36,
@@ -125,18 +118,18 @@
           "d2_deduction": 0.798,
           "d3_craft": 0.2,
           "d4_arc": 0.2
+        },
+        {
+          "seed": 5,
+          "reason": "CREWMATE_EJECT",
+          "score": 49.3,
+          "d1_resolution": 1.0,
+          "d2_deduction": 0.25,
+          "d3_craft": 0.2,
+          "d4_arc": 0.55
         }
       ],
       "bottom": [
-        {
-          "seed": 20,
-          "reason": "CREWMATE_TASKS",
-          "score": 0.6,
-          "d1_resolution": 0.0,
-          "d2_deduction": 0.0,
-          "d3_craft": 0.2,
-          "d4_arc": 0.1
-        },
         {
           "seed": 19,
           "reason": "CREWMATE_TASKS",
@@ -172,51 +165,60 @@
           "d2_deduction": 0.0,
           "d3_craft": 0.2,
           "d4_arc": 0.0
+        },
+        {
+          "seed": 14,
+          "reason": "CREWMATE_TASKS",
+          "score": 0.0,
+          "d1_resolution": 0.3,
+          "d2_deduction": 0.374,
+          "d3_craft": 0.2,
+          "d4_arc": 0.1
         }
       ]
     }
   },
   "per_game": [
     {
-      "seed": 28,
-      "reason": "CREWMATE_EJECT",
-      "win_shape": "eject-decided",
-      "n_meetings": 3,
-      "score": 80.2,
-      "floor_multiplier": 1.0,
-      "d1_resolution": 1.0,
-      "d2_deduction": 0.667,
-      "d3_craft": 1.0,
-      "d4_arc": 0.55,
-      "d2_separation_norm": 1.0,
-      "d2_conversion": 0.333,
-      "d4_arc_term": 0.0,
-      "d4_swing_term": 1.0,
-      "d4_contest_term": 1.0,
-      "r1_decisive": 1.0,
-      "r2_deception": 1.0,
-      "r3_arcs": 0.0,
-      "r7_legible": 0.0
-    },
-    {
       "seed": 47,
       "reason": "CREWMATE_EJECT",
       "win_shape": "eject-decided",
       "n_meetings": 3,
-      "score": 74.7,
+      "score": 68.5,
       "floor_multiplier": 1.0,
       "d1_resolution": 1.0,
       "d2_deduction": 0.818,
       "d3_craft": 0.2,
-      "d4_arc": 1.0,
+      "d4_arc": 0.65,
       "d2_separation_norm": 0.635,
       "d2_conversion": 1.0,
       "d4_arc_term": 1.0,
-      "d4_swing_term": 1.0,
+      "d4_swing_term": 0.0,
       "d4_contest_term": 1.0,
       "r1_decisive": 1.0,
       "r2_deception": 0.2,
       "r3_arcs": 1.0,
+      "r7_legible": 0.0
+    },
+    {
+      "seed": 28,
+      "reason": "CREWMATE_EJECT",
+      "win_shape": "eject-decided",
+      "n_meetings": 3,
+      "score": 65.5,
+      "floor_multiplier": 1.0,
+      "d1_resolution": 1.0,
+      "d2_deduction": 0.667,
+      "d3_craft": 1.0,
+      "d4_arc": 0.2,
+      "d2_separation_norm": 1.0,
+      "d2_conversion": 0.333,
+      "d4_arc_term": 0.0,
+      "d4_swing_term": 0.0,
+      "d4_contest_term": 1.0,
+      "r1_decisive": 1.0,
+      "r2_deception": 1.0,
+      "r3_arcs": 0.0,
       "r7_legible": 0.0
     },
     {
@@ -224,41 +226,20 @@
       "reason": "CREWMATE_EJECT",
       "win_shape": "eject-decided",
       "n_meetings": 3,
-      "score": 72.6,
+      "score": 59.3,
       "floor_multiplier": 1.0,
       "d1_resolution": 1.0,
       "d2_deduction": 0.448,
       "d3_craft": 1.0,
-      "d4_arc": 0.55,
+      "d4_arc": 0.2,
       "d2_separation_norm": 0.228,
       "d2_conversion": 0.667,
       "d4_arc_term": 0.0,
-      "d4_swing_term": 1.0,
+      "d4_swing_term": 0.0,
       "d4_contest_term": 1.0,
       "r1_decisive": 1.0,
       "r2_deception": 1.0,
       "r3_arcs": 0.0,
-      "r7_legible": 0.0
-    },
-    {
-      "seed": 5,
-      "reason": "CREWMATE_EJECT",
-      "win_shape": "eject-decided",
-      "n_meetings": 2,
-      "score": 54.4,
-      "floor_multiplier": 1.0,
-      "d1_resolution": 1.0,
-      "d2_deduction": 0.25,
-      "d3_craft": 0.2,
-      "d4_arc": 0.9,
-      "d2_separation_norm": 0.0,
-      "d2_conversion": 0.5,
-      "d4_arc_term": 1.0,
-      "d4_swing_term": 1.0,
-      "d4_contest_term": 0.5,
-      "r1_decisive": 1.0,
-      "r2_deception": 0.2,
-      "r3_arcs": 1.0,
       "r7_legible": 0.0
     },
     {
@@ -280,6 +261,27 @@
       "r1_decisive": 1.0,
       "r2_deception": 0.2,
       "r3_arcs": 0.0,
+      "r7_legible": 0.0
+    },
+    {
+      "seed": 5,
+      "reason": "CREWMATE_EJECT",
+      "win_shape": "eject-decided",
+      "n_meetings": 2,
+      "score": 49.3,
+      "floor_multiplier": 1.0,
+      "d1_resolution": 1.0,
+      "d2_deduction": 0.25,
+      "d3_craft": 0.2,
+      "d4_arc": 0.55,
+      "d2_separation_norm": 0.0,
+      "d2_conversion": 0.5,
+      "d4_arc_term": 1.0,
+      "d4_swing_term": 0.0,
+      "d4_contest_term": 0.5,
+      "r1_decisive": 1.0,
+      "r2_deception": 0.2,
+      "r3_arcs": 1.0,
       "r7_legible": 0.0
     },
     {
@@ -472,27 +474,6 @@
       "r7_legible": 0.0
     },
     {
-      "seed": 33,
-      "reason": "CREWMATE_TASKS",
-      "win_shape": "stopwatch-some-eject",
-      "n_meetings": 2,
-      "score": 32.5,
-      "floor_multiplier": 1.0,
-      "d1_resolution": 0.3,
-      "d2_deduction": 0.38,
-      "d3_craft": 0.2,
-      "d4_arc": 0.45,
-      "d2_separation_norm": 0.76,
-      "d2_conversion": 0.0,
-      "d4_arc_term": 0.0,
-      "d4_swing_term": 1.0,
-      "d4_contest_term": 0.5,
-      "r1_decisive": 0.5,
-      "r2_deception": 0.2,
-      "r3_arcs": 0.0,
-      "r7_legible": 0.0
-    },
-    {
       "seed": 48,
       "reason": "IMPOSTOR_PARITY",
       "win_shape": "impostor-win",
@@ -571,27 +552,6 @@
       "d4_arc_term": 0.0,
       "d4_swing_term": 0.0,
       "d4_contest_term": 0.5,
-      "r1_decisive": 0.5,
-      "r2_deception": 0.2,
-      "r3_arcs": 0.0,
-      "r7_legible": 0.0
-    },
-    {
-      "seed": 29,
-      "reason": "CREWMATE_TASKS",
-      "win_shape": "stopwatch-some-eject",
-      "n_meetings": 3,
-      "score": 27.5,
-      "floor_multiplier": 1.0,
-      "d1_resolution": 0.3,
-      "d2_deduction": 0.167,
-      "d3_craft": 0.2,
-      "d4_arc": 0.55,
-      "d2_separation_norm": 0.0,
-      "d2_conversion": 0.333,
-      "d4_arc_term": 0.0,
-      "d4_swing_term": 1.0,
-      "d4_contest_term": 1.0,
       "r1_decisive": 0.5,
       "r2_deception": 0.2,
       "r3_arcs": 0.0,
@@ -703,18 +663,18 @@
       "r7_legible": 0.0
     },
     {
-      "seed": 14,
+      "seed": 33,
       "reason": "CREWMATE_TASKS",
       "win_shape": "stopwatch-some-eject",
       "n_meetings": 2,
       "score": 24.0,
       "floor_multiplier": 1.0,
       "d1_resolution": 0.3,
-      "d2_deduction": 0.374,
+      "d2_deduction": 0.38,
       "d3_craft": 0.2,
       "d4_arc": 0.1,
-      "d2_separation_norm": 0.249,
-      "d2_conversion": 0.5,
+      "d2_separation_norm": 0.76,
+      "d2_conversion": 0.0,
       "d4_arc_term": 0.0,
       "d4_swing_term": 0.0,
       "d4_contest_term": 0.5,
@@ -739,6 +699,27 @@
       "d4_arc_term": 0.0,
       "d4_swing_term": 0.0,
       "d4_contest_term": 0.5,
+      "r1_decisive": 0.5,
+      "r2_deception": 0.2,
+      "r3_arcs": 0.0,
+      "r7_legible": 0.0
+    },
+    {
+      "seed": 29,
+      "reason": "CREWMATE_TASKS",
+      "win_shape": "stopwatch-some-eject",
+      "n_meetings": 3,
+      "score": 22.5,
+      "floor_multiplier": 1.0,
+      "d1_resolution": 0.3,
+      "d2_deduction": 0.167,
+      "d3_craft": 0.2,
+      "d4_arc": 0.2,
+      "d2_separation_norm": 0.0,
+      "d2_conversion": 0.333,
+      "d4_arc_term": 0.0,
+      "d4_swing_term": 0.0,
+      "d4_contest_term": 1.0,
       "r1_decisive": 0.5,
       "r2_deception": 0.2,
       "r3_arcs": 0.0,
@@ -1081,27 +1062,6 @@
       "r7_legible": 0.0
     },
     {
-      "seed": 31,
-      "reason": "CREWMATE_TASKS",
-      "win_shape": "stopwatch-no-eject",
-      "n_meetings": 2,
-      "score": 0.8,
-      "floor_multiplier": 1.0,
-      "d1_resolution": 0.0,
-      "d2_deduction": 0.0,
-      "d3_craft": 0.2,
-      "d4_arc": 0.45,
-      "d2_separation_norm": 0.0,
-      "d2_conversion": 0.0,
-      "d4_arc_term": 0.0,
-      "d4_swing_term": 1.0,
-      "d4_contest_term": 0.5,
-      "r1_decisive": 0.0,
-      "r2_deception": 0.2,
-      "r3_arcs": 0.0,
-      "r7_legible": 0.0
-    },
-    {
       "seed": 3,
       "reason": "CREWMATE_TASKS",
       "win_shape": "stopwatch-no-eject",
@@ -1124,6 +1084,27 @@
     },
     {
       "seed": 20,
+      "reason": "CREWMATE_TASKS",
+      "win_shape": "stopwatch-no-eject",
+      "n_meetings": 2,
+      "score": 0.6,
+      "floor_multiplier": 1.0,
+      "d1_resolution": 0.0,
+      "d2_deduction": 0.0,
+      "d3_craft": 0.2,
+      "d4_arc": 0.1,
+      "d2_separation_norm": 0.0,
+      "d2_conversion": 0.0,
+      "d4_arc_term": 0.0,
+      "d4_swing_term": 0.0,
+      "d4_contest_term": 0.5,
+      "r1_decisive": 0.0,
+      "r2_deception": 0.2,
+      "r3_arcs": 0.0,
+      "r7_legible": 0.0
+    },
+    {
+      "seed": 31,
       "reason": "CREWMATE_TASKS",
       "win_shape": "stopwatch-no-eject",
       "n_meetings": 2,
@@ -1223,6 +1204,27 @@
       "d4_swing_term": 0.0,
       "d4_contest_term": 0.0,
       "r1_decisive": 0.0,
+      "r2_deception": 0.2,
+      "r3_arcs": 0.0,
+      "r7_legible": 0.0
+    },
+    {
+      "seed": 14,
+      "reason": "CREWMATE_TASKS",
+      "win_shape": "stopwatch-some-eject",
+      "n_meetings": 2,
+      "score": 0.0,
+      "floor_multiplier": 0.0,
+      "d1_resolution": 0.3,
+      "d2_deduction": 0.374,
+      "d3_craft": 0.2,
+      "d4_arc": 0.1,
+      "d2_separation_norm": 0.249,
+      "d2_conversion": 0.5,
+      "d4_arc_term": 0.0,
+      "d4_swing_term": 0.0,
+      "d4_contest_term": 0.5,
+      "r1_decisive": 0.5,
       "r2_deception": 0.2,
       "r3_arcs": 0.0,
       "r7_legible": 0.0
