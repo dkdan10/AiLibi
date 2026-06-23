@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,34 @@ from typing import Any
 # dir, so ``api.replay_loader.ReplayLoader.rubric`` can serve it (Task 12.2;
 # DESIGN.md §3.1, §7). Kept identical to ``api.replay_loader._RUBRIC_FILENAME``.
 RUBRIC_RESULTS_FILENAME = "results-rubric-score.json"
+
+# Filename for the geomean interestingness validation artifact (Task 13.15) — the
+# held-out referee's D1-D4 breakdown + the report-rubric-design.md §6 validation,
+# mirroring ``results-rubric-score.json``. It is a LAB-LOCAL record, NOT served by
+# the DTO: it carries the D1-D4 detail the ``extra="forbid"`` ``RubricGameView``
+# (``api/schemas.py``) would reject, so it lives outside the served per_game rows.
+GEOMEAN_RESULTS_FILENAME = "results-rubric-geomean.json"
+
+# --- Geomean interestingness composition (Task 13.15; report-rubric-design.md §3) ---
+# The per-game score is the epsilon-floored, weighted GEOMETRIC mean of the four
+# contest dimensions D1-D4 (replacing the old additive R1-R7 sum): one dead
+# dimension SINKS the score, so a live term can no longer mask a dead one (the
+# additive sum let a live R2 mask a dead R1 — it ranked the seed-0/16 stopwatch
+# wins ABOVE every eject-decided game). D1-D4 route AROUND the dead R7 (it is NOT a
+# geomean input), so the score lands independently of R7 and does NOT collapse to 0
+# on the committed R7=0 set. The weights / epsilon / scale are implementer
+# DECISIONS (the design is a narrative, not a numeric spec); see the rationale +
+# the achieved ranking in report-rubric-design.md "## Decisions".
+_GEOMEAN_WEIGHTS = {"d1": 0.40, "d2": 0.25, "d3": 0.15, "d4": 0.20}
+_GEOMEAN_EPSILON = 1e-3
+# The §4.6 vote gate (DESIGN.md §4.6): a CREWMATE ejected with rendered suspicion
+# below it (the gate bypassed) is a RAILROAD floor; ejected above it is an honest
+# (mistaken) deduction, not a railroad.
+_SKIP_SUSPICION_THRESHOLD = 0.60
+# Suspicion-separation [0,1] normalizer: a per-meeting mean-impostor-minus-mean-crew
+# rendered suspicion of >= this maps to 1.0 (committed max ~0.42; a clean +0.30
+# separation is a decisively truth-tracking table).
+_D2_SEPARATION_SCALE = 0.30
 
 
 def _pct(n: int, d: int) -> str:
@@ -439,18 +469,385 @@ def _suspicion_rose_onto_impostor(
     return False
 
 
-def _game_interestingness(
-    g: dict[str, Any], traj_by_key: dict[tuple[Any, Any], dict[str, Any]]
-) -> dict[str, Any]:
-    """Per-game interestingness from the per-game-computable rubric items (R1/R2/R3/R7).
+def _geomean_weighted(dims: dict[str, float]) -> float:
+    """Epsilon-floored weighted geometric mean of the contest dimensions D1-D4.
 
-    The score is deliberately INDEPENDENT of who won the binary game — the lab
-    proved the win split is "purchasable wholesale", so 'interesting' is scored
-    from whether DEDUCTION decided (R1), DECEPTION worked (R2), suspicion built
-    across meetings (R3), and the story was legible (R7). R5 (win-shape diversity)
-    is a set-level property, summarized in :func:`interestingness`. R1/R2/R3/R7
-    are emitted as SEPARATE terms (not only the collapsed scalar) so Phase-C can
-    read them as multi-objective fitness axes.
+    ``exp(sum(w_n * ln(max(d_n, eps))))`` with ``sum(w_n) == 1`` (a true weighted
+    geomean in ``[eps, 1]``). The epsilon (``_GEOMEAN_EPSILON``) floors each term
+    so a single ZERO dimension SINKS the score (the multiplicative "requires
+    contest" property; report-rubric-design.md §3 Composition) WITHOUT driving
+    ``ln(0)`` to ``-inf`` / NaN. Unlike the additive R1-R7 sum, a live dimension
+    cannot mask a dead one.
+    """
+    total = math.fsum(
+        weight * math.log(max(dims[key], _GEOMEAN_EPSILON))
+        for key, weight in _GEOMEAN_WEIGHTS.items()
+    )
+    return math.exp(total)
+
+
+def _d1_resolution(g: dict[str, Any]) -> float:
+    """D1 — did PLAY decide the board, not the clock? (report-rubric-design.md §3 D1)
+
+    Scores the RESOLUTION mechanism, decoupled from who won: a crew DEDUCTION win
+    (``CREWMATE_EJECT`` — both impostors ejected via meetings) is the canonical
+    "play decided" (1.0); a CONTESTED impostor win (``IMPOSTOR_PARITY`` /
+    ``IMPOSTOR_SABOTAGE`` with >= 1 meeting — the crew tried and failed to deduce)
+    also scores (0.6); a game where some impostor was ejected but the task clock
+    decided scores partial (0.3); a pure stopwatch or a pre-meeting stomp scores 0.
+    Anti-perverse: passivity and the clock score 0, and BOTH sides can score on
+    play (it does not reward winning — see the §6 Pearson check).
+    """
+    reason = g.get("reason") or ""
+    n_mtg = len(g["meetings"])
+    ejected_imp_mtgs = sum(
+        1 for m in g["meetings"] if m.get("ejected_role") == "IMPOSTOR"
+    )
+    if reason == "CREWMATE_EJECT":
+        return 1.0
+    if reason in ("IMPOSTOR_PARITY", "IMPOSTOR_SABOTAGE") and n_mtg >= 1:
+        return 0.6
+    if ejected_imp_mtgs >= 1:
+        return 0.3
+    return 0.0
+
+
+def _meeting_suspicion_separation(
+    meeting: dict[str, Any], roles: dict[str, Any]
+) -> float | None:
+    """Mean rendered-suspicion(true impostors) − mean(crew) for ONE meeting.
+
+    Reads the meeting's ``suspicion_graph_by_voter`` (each living voter's §6.6
+    rendered suspicion of every other player) + the firewalled roles, partitions
+    every ``voter -> target`` row by the TARGET's true role (excluding self rows),
+    and returns impostor-mean minus crew-mean. ``None`` when either side has no
+    rows (no separation is computable). This is the D2 truth-tracking primitive:
+    a positive value means the table suspects impostors MORE than crew. The raw
+    suspicion graph exists in the extractor facts (Task 13.15 specifies this
+    formula; it does not re-extract).
+    """
+    imp: list[float] = []
+    crew: list[float] = []
+    for voter, graph in (meeting.get("suspicion_graph_by_voter") or {}).items():
+        for target, susp in graph.items():
+            if target == voter:
+                continue
+            role = roles.get(target)
+            if role == "IMPOSTOR":
+                imp.append(susp)
+            elif role == "CREWMATE":
+                crew.append(susp)
+    if not imp or not crew:
+        return None
+    return (math.fsum(imp) / len(imp)) - (math.fsum(crew) / len(crew))
+
+
+def _subject_has_observation_backed_accusation(rec: dict[str, Any] | None) -> bool:
+    """A testimony record carries an OBSERVATION-BACKED ACCUSATION of its subject.
+
+    The shared "observation-backed accusation" predicate (report-rubric-design.md
+    §3 D2 + the railroad floor): an ``accusation`` turn naming the subject whose
+    accuser ALSO logged a first-hand sighting (``observation_backed``). A
+    sighting-only turn (``vehicle == "sighting"``) or a bare free-text mention does
+    NOT count — only a *backed accusation* does, so an enriched meeting's mere
+    sightings cannot masquerade as evidence-backed convictions.
+    """
+    return rec is not None and any(
+        turn.get("observation_backed") and turn.get("vehicle") == "accusation"
+        for turn in rec.get("testimony_turns", [])
+    )
+
+
+def _observation_backed_impostors(meeting: dict[str, Any]) -> set[str]:
+    """True impostors named by an OBSERVATION-BACKED ACCUSATION this meeting.
+
+    The D2 conversion DENOMINATOR: a true impostor against whom some turn carried
+    an observation-backed *accusation* (:func:`_subject_has_observation_backed_accusation`),
+    never a sighting-only mention or a flagless vibe.
+    """
+    return {
+        rec["subject"]
+        for rec in meeting.get("testimony_records", [])
+        if rec.get("subject_role") == "IMPOSTOR"
+        and _subject_has_observation_backed_accusation(rec)
+    }
+
+
+def _d2_crew_deduction(g: dict[str, Any]) -> tuple[float, float, float]:
+    """D2 — does collective suspicion track truth AND convert? (§3 D2)
+
+    Returns ``(d2, separation_norm, conversion)``. Blends two REACHABLE signals
+    (the suspicion graph is ALWAYS populated — unlike R7's dead strong-flag
+    requirement, which is why D2 routes around R7):
+
+    * **separation** — the game-mean of :func:`_meeting_suspicion_separation`,
+      normalized to [0,1] by ``_D2_SEPARATION_SCALE`` and clamped at 0: a NEGATIVE
+      separation (a railroad raising suspicion on an INNOCENT lowers
+      impostor-over-crew separation) is penalized, never rewarded.
+    * **conversion** — of every ``(meeting, observation-backed-accused true
+      impostor)`` pair, the fraction the meeting actually EJECTED. Correct
+      conviction counts only when observation-backed, never flagless.
+
+    ``d2 = 0.5 * separation_norm + 0.5 * conversion``.
+    """
+    roles = g["roles"]
+    separations = [
+        sep
+        for m in g["meetings"]
+        if (sep := _meeting_suspicion_separation(m, roles)) is not None
+    ]
+    separation_norm = (
+        max(
+            0.0,
+            min(
+                1.0, (math.fsum(separations) / len(separations)) / _D2_SEPARATION_SCALE
+            ),
+        )
+        if separations
+        else 0.0
+    )
+    converted = attempted = 0
+    for m in g["meetings"]:
+        ejected = m.get("ejected_player_id")
+        for subject in _observation_backed_impostors(m):
+            attempted += 1
+            if ejected == subject:
+                converted += 1
+    conversion = (converted / attempted) if attempted else 0.0
+    return 0.5 * separation_norm + 0.5 * conversion, separation_norm, conversion
+
+
+def _d3_impostor_craft(g: dict[str, Any]) -> float:
+    """D3 — is deception + agency load-bearing? (§3 D3)
+
+    Anchored on the repaired-R2 EFFECTIVE-deflection subcount
+    (:func:`_active_deflection_counts`): 1.0 when a counter-accusation MOVED the
+    eject-plurality off a true impostor; 0.2 when a true impostor was accused but
+    not effectively deflected (passive / skip-saved / caught); 0.0 when no true
+    impostor was ever accused. Anti-perverse (the R2 trap): survival counts ONLY
+    when accused — a passive impostor that is simply never accused scores 0. This
+    is the SAME value the per-game ``r2_deception`` term reports (one source, no
+    drift). Evasion / tool-use / steering (also §3 D3) fold in at the held
+    re-record's richer data; the committed-set anchor is effective deflection.
+    """
+    _active, effective_deflections, any_accused = _active_deflection_counts(g)
+    if effective_deflections >= 1:
+        return 1.0
+    if any_accused:
+        return 0.2
+    return 0.0
+
+
+def _game_has_swing(
+    g: dict[str, Any], traj_by_key: dict[tuple[Any, Any], dict[str, Any]]
+) -> bool:
+    """The D4 SWING term: a knife-edge eject + REAL cross-meeting suspicion movement.
+
+    Task 13.15: ``plurality_margin == 1`` (the table swung on a single ballot) AND
+    cross-meeting suspicion movement. Movement is read from the ejected subject's
+    accumulator trajectory (the same source as the arc), NOT a bare ``n_meetings >
+    1`` count (which the separate ``contest`` term already rewards): the eject must
+    land at a trajectory point ``j >= 1`` (the subject was a candidate in >= 1
+    PRIOR meeting) whose rendered suspicion DIFFERS from its first appearance — a
+    genuine cross-meeting build, not a one-shot first-appearance knife-edge eject
+    or a flat sustained-high eject.
+    """
+    seed = g.get("seed")
+    for m in g["meetings"]:
+        if not (m.get("ejected_player_id") and m.get("plurality_margin") == 1):
+            continue
+        record = traj_by_key.get((seed, m["ejected_player_id"]))
+        if record is None:
+            continue
+        sequence = record.get("sequence", [])
+        eject_points = [i for i, pt in enumerate(sequence) if pt.get("ejected_here")]
+        if not eject_points:
+            continue
+        j = eject_points[0]
+        if (
+            j >= 1
+            and abs(
+                sequence[j]["rendered_suspicion"] - sequence[0]["rendered_suspicion"]
+            )
+            > 1e-9
+        ):
+            return True
+    return False
+
+
+def _d4_arc(
+    g: dict[str, Any], traj_by_key: dict[tuple[Any, Any], dict[str, Any]]
+) -> tuple[float, float, float, float]:
+    """D4 — a CONTESTED build, not a one-shot. (§3 D4)
+
+    Returns ``(d4, arc, swing, contest)``. Rewards suspicion MOVEMENT and a
+    contested chain, not raw length:
+
+    * **arc** — a cross-meeting suspicion RISE that landed on a true impostor
+      (:func:`_suspicion_rose_onto_impostor`; the same signal as ``r3_arcs``).
+    * **swing** — the Task-13.15 knife-edge term (:func:`_game_has_swing`).
+    * **contest** — a multi-meeting build, ``min(1, (n_meetings - 1) / 2)`` (0 for
+      one meeting, 0.5 for two, 1.0 for three+) — graded and CAPPED, so raw
+      stalling is not rewarded.
+
+    ``d4 = 0.45 * arc + 0.35 * swing + 0.20 * contest``.
+    """
+    n_mtg = len(g["meetings"])
+    arc = 1.0 if _suspicion_rose_onto_impostor(g, traj_by_key) else 0.0
+    swing = 1.0 if _game_has_swing(g, traj_by_key) else 0.0
+    contest = min(1.0, max(0, n_mtg - 1) / 2.0)
+    return 0.45 * arc + 0.35 * swing + 0.20 * contest, arc, swing, contest
+
+
+def _facts_integrity_ok(facts: dict[str, Any]) -> bool:
+    """Whether the extractor's self-checks all passed (no determinism/leak breach).
+
+    The firewall/determinism FLOOR input (report-rubric-design.md §3). Reads the
+    extractor's ``self_checks`` list (each entry ends ': OK' or ': FAIL'); any
+    'FAIL' is a breach -> every game is floored to 0. A real (aggregates-bearing)
+    facts JSON that OMITS ``self_checks`` (a stale / partial extractor run) FAILS
+    LOUD rather than certifying integrity by default — the floor depends on these
+    checks to detect a state-hash / leak breach, so a missing surface is not
+    "clean" (AGENTS.md "no silent fallbacks"; mirrors
+    :func:`_accumulator_trajectory_index`). Only the regen-plumbing fixture (NO
+    aggregates block, i.e. no real games to score) reads OK on absence. A
+    present-but-malformed value also FAILS LOUD.
+    """
+    checks = facts.get("self_checks")
+    if checks is None:
+        if facts.get("aggregates") is not None:
+            raise ValueError(
+                "aggregates-bearing facts JSON is missing 'self_checks' (the "
+                "firewall/determinism floor input) — refusing to certify "
+                "integrity by default; re-run the gameplay-facts extractor"
+            )
+        return True
+    if not isinstance(checks, list):
+        raise ValueError("facts 'self_checks' must be a list of check strings")
+    if not all(isinstance(c, str) for c in checks):
+        raise ValueError(
+            "facts 'self_checks' contains a non-string entry (malformed) — "
+            "refusing to certify integrity; re-run the gameplay-facts extractor"
+        )
+    return not any("FAIL" in c for c in checks)
+
+
+def _floor_multiplier(g: dict[str, Any], *, integrity_ok: bool) -> float:
+    """The hard integrity floors (report-rubric-design.md §3 "Hard floors").
+
+    Returns 0.0 (sinks the WHOLE game) on ANY integrity breach, else 1.0. These
+    are punish-only gates, never tradeable dimensions:
+
+    * **friendly-fire** — an impostor killed a fellow impostor (engine-forbidden;
+      the floor guards a regression).
+    * **railroad ejection** — a CREWMATE ejected as a railroad
+      (:func:`_is_railroad_ejection`).
+    * **firewall / determinism breach** — ``integrity_ok`` is False (a failing
+      extractor self-check: a state-hash mismatch or a leak).
+    """
+    if not integrity_ok:
+        return 0.0
+    if any(k.get("victim_role") == "IMPOSTOR" for k in g.get("kills", [])):
+        return 0.0
+    for m in g["meetings"]:
+        if (
+            m.get("ejected_player_id")
+            and m.get("ejected_role") == "CREWMATE"
+            and _is_railroad_ejection(m)
+        ):
+            return 0.0
+    return 1.0
+
+
+def _is_railroad_ejection(meeting: dict[str, Any]) -> bool:
+    """Whether a CREWMATE ejection is a railroad (report-rubric-design.md §3 floor).
+
+    'An innocent ejected with no observation-backed suspicion' has two structural
+    forms, EITHER of which floors the game:
+
+    * **gate-bypass** — the ejected crewmate's rendered suspicion among the
+      ejectors is below the §4.6 gate (``_SKIP_SUSPICION_THRESHOLD``) or absent
+      (the deterministic anti-railroad tally was structurally bypassed).
+    * **evidence-free conviction** — NO observation-backed accusation names the
+      ejected (:func:`_subject_has_observation_backed_accusation`) AND no
+      contradiction flag names them: the eject rests on NO legible meeting evidence
+      at all (an unarticulated conviction on private vibes).
+
+    A crewmate ejected ABOVE the gate WITH an observation-backed accusation or a
+    contradiction flag is an honest (mistaken) deduction, NOT a railroad — it is
+    scored low by D2 (it lowers separation / conversion), never floored.
+    """
+    among = meeting.get("ejected_rendered_suspicion_among_ejectors")
+    if among is None or among < _SKIP_SUSPICION_THRESHOLD:
+        return True
+    ejected = meeting["ejected_player_id"]
+    rec = next(
+        (r for r in meeting.get("testimony_records", []) if r["subject"] == ejected),
+        None,
+    )
+    has_flag = ejected in (meeting.get("contradictions_by_subject") or {})
+    return not _subject_has_observation_backed_accusation(rec) and not has_flag
+
+
+def _contest_dimensions(
+    g: dict[str, Any],
+    traj_by_key: dict[tuple[Any, Any], dict[str, Any]],
+    *,
+    integrity_ok: bool,
+) -> dict[str, Any]:
+    """The four [0,1] contest dimensions D1-D4 + the floor + the composed score.
+
+    The SINGLE source for the geomean composition (report-rubric-design.md §3):
+    ``score = 100 * floor_multiplier * geomean_weighted(D1, D2, D3, D4)``. Both
+    the served per_game ``score`` and the lab geomean artifact route through here,
+    so they can never drift.
+    """
+    d1 = _d1_resolution(g)
+    d2, d2_sep, d2_conv = _d2_crew_deduction(g)
+    d3 = _d3_impostor_craft(g)
+    d4, d4_arc, d4_swing, d4_contest = _d4_arc(g, traj_by_key)
+    floor = _floor_multiplier(g, integrity_ok=integrity_ok)
+    geomean = _geomean_weighted({"d1": d1, "d2": d2, "d3": d3, "d4": d4})
+    return {
+        "d1_resolution": d1,
+        "d2_deduction": d2,
+        "d3_craft": d3,
+        "d4_arc": d4,
+        "d2_separation_norm": d2_sep,
+        "d2_conversion": d2_conv,
+        "d4_arc_term": d4_arc,
+        "d4_swing_term": d4_swing,
+        "d4_contest_term": d4_contest,
+        "floor_multiplier": floor,
+        "geomean": geomean,
+        "score": 100.0 * floor * geomean,
+    }
+
+
+def _game_interestingness(
+    g: dict[str, Any],
+    traj_by_key: dict[tuple[Any, Any], dict[str, Any]],
+    *,
+    integrity_ok: bool,
+) -> dict[str, Any]:
+    """Per-game interestingness — the geomean of D1-D4, with the r1-r7 axes kept.
+
+    The ``score`` is the epsilon-floored, weighted GEOMETRIC mean of the four
+    contest dimensions (``floor_multiplier * geomean_weighted(D1, D2, D3, D4)``,
+    Task 13.15; report-rubric-design.md §3), replacing the old additive R1-R7 sum:
+    one dead dimension SINKS the score, so a live term can no longer mask a dead
+    one. D1-D4 route AROUND the dead R7 (it is NOT a geomean input), so the score
+    lands independently of R7 and does not collapse to 0 on the committed R7=0 set.
+
+    per_game KEEPS its ``r1``-``r7`` keys (the geomean replaces ONLY the ``score``
+    value, so the ``extra="forbid"`` ``RubricGameView`` does not break); the D1-D4
+    breakdown is emitted in :func:`geomean_validation` /
+    ``results-rubric-geomean.json``, never in this DTO-served row. The score is
+    deliberately INDEPENDENT of who won the binary game — the lab proved the win
+    split is "purchasable wholesale" — and the §6 Pearson check confirms it does
+    not reward winning. R5 (win-shape diversity) is a set-level property,
+    summarized in :func:`interestingness`. R1/R2/R3/R7 stay emitted as SEPARATE
+    terms so Phase-C can read them as multi-objective fitness axes.
 
     The grounding audit (``experiments/lab/report-grounding-audit.md``) verified
     THREE perverse gradients in the pre-repair terms; each is closed here:
@@ -499,20 +896,12 @@ def _game_interestingness(
     else:
         r1 = 0.0  # pure stopwatch / kill-gifted — deduction was inert
 
-    # R2 deception: credit ONLY an EFFECTIVE deflection (audit P0 / G3). The
-    # codebase's own eval.meeting_quality.EffectiveDeflectionReport is explicit
-    # that an active counter-accusation which survived because the table
-    # SKIP-saved is "survival, not deflection" (anchor on the EFFECTIVE subcount,
-    # NOT the raw active count), so skip-saved active survival stays in the
-    # passive band (0.2) and is never elevated to its own tier. ``_active`` is
-    # kept in the returned split for fidelity but is not itself scored.
-    _active, effective_deflections, any_accused = _active_deflection_counts(g)
-    if effective_deflections >= 1:
-        r2 = 1.0  # a counter-accusation moved the eject-plurality off a true impostor
-    elif any_accused:
-        r2 = 0.2  # accused yet no EFFECTIVE deflection (passive / skip-saved / caught)
-    else:
-        r2 = 0.0  # deception never tested (no true impostor was accused)
+    # R2 deception == D3 impostor craft: credit ONLY an EFFECTIVE deflection
+    # (audit P0 / G3). Computed via :func:`_d3_impostor_craft` (the EFFECTIVE
+    # subcount — a skip-saved active survival stays in the passive 0.2 band, never
+    # its own tier), so the per-game ``r2_deception`` term and the geomean's D3
+    # input are ONE value and can never drift.
+    r2 = _d3_impostor_craft(g)
 
     # R3 arcs: a cross-meeting suspicion RISE that LANDED on a true impostor
     # (audit P0 / G2). The old "0.5 for >=2 meetings + 0.5 for any flagless
@@ -525,7 +914,15 @@ def _game_interestingness(
     # below-gate flags that eject nobody; this counts only decision-grade signal.
     r7 = _strong_evidence_meeting_share(g)
 
-    score = 100 * (0.35 * r1 + 0.25 * r2 + 0.20 * r3 + 0.20 * r7)
+    # GEOMEAN composition (Task 13.15): score = 100 * floor * geomean(D1-D4),
+    # replacing the additive 0.35·R1 + 0.25·R2 + 0.20·R3 + 0.20·R7 sum. The
+    # additive sum let a live R2 mask a dead R1 (it ranked the seed-0/16 stopwatch
+    # wins above every eject-decided game); the geomean SINKS the score on any one
+    # dead dimension. D1-D4 route AROUND the dead R7 (it is NOT an input), so the
+    # score lands independently of R7 and does not collapse to 0 on the R7=0 set.
+    # r1-r7 above stay emitted as per_game keys (the geomean replaces ONLY this
+    # score value); the D1-D4 breakdown lives in results-rubric-geomean.json.
+    score = _contest_dimensions(g, traj_by_key, integrity_ok=integrity_ok)["score"]
     return {
         "seed": g.get("seed"),
         "reason": reason,
@@ -583,12 +980,64 @@ def _accumulator_trajectory_index(
     return {(r["seed"], r["player"]): r for r in records}
 
 
+def _require_meeting_inputs(facts: dict[str, Any]) -> None:
+    """Fail loud when a real facts JSON is missing the meeting inputs the scorer needs.
+
+    When ``aggregates`` is present (a real extractor run), every meeting must carry
+    the inputs the geomean dimensions read; a stale / partial / renamed-field /
+    null run raises rather than silently zeroing or undercounting a dimension
+    (mirrors :func:`_accumulator_trajectory_index`). Validated per meeting:
+
+    * ``suspicion_graph_by_voter`` — a NON-EMPTY dict (the D2 separation input;
+      the design's "the suspicion graph is always populated"). A missing / null /
+      empty / non-dict value raises — it would silently zero the 25%-weight D2.
+    * ``testimony_records`` — a list (the D2 conversion + railroad input). May be
+      EMPTY: a meeting with no accused subjects is legitimate.
+    * ``plurality_margin`` — present on every EJECTION meeting (the D4 swing
+      input). Absent on an ejection meeting raises — it would silently undercount
+      the swing.
+
+    A facts dict with NO ``aggregates`` block (the regen-plumbing fixture, no real
+    meeting to score) is skipped.
+    """
+    if facts.get("aggregates") is None:
+        return
+    for g in facts["games"]:
+        for m in g["meetings"]:
+            mid = m.get("meeting_id")
+            graph = m.get("suspicion_graph_by_voter")
+            if not isinstance(graph, dict) or not graph:
+                raise ValueError(
+                    f"meeting {mid!r} has a missing / null / empty / non-dict "
+                    "'suspicion_graph_by_voter' (the D2 separation input) on an "
+                    "aggregates-bearing facts JSON — refusing to silently score "
+                    "D2=0; re-run the gameplay-facts extractor"
+                )
+            if not isinstance(m.get("testimony_records"), list):
+                raise ValueError(
+                    f"meeting {mid!r} is missing the list 'testimony_records' (the "
+                    "D2 conversion input) on an aggregates-bearing facts JSON — "
+                    "re-run the gameplay-facts extractor"
+                )
+            if m.get("ejected_player_id") and "plurality_margin" not in m:
+                raise ValueError(
+                    f"ejection meeting {mid!r} is missing 'plurality_margin' (the "
+                    "D4 swing input) on an aggregates-bearing facts JSON — refusing "
+                    "to silently undercount the swing; re-run the extractor"
+                )
+
+
 def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
     """Per-game interestingness scores + the set-level R5 win-shape diversity."""
     games = facts["games"]
+    _require_meeting_inputs(facts)
     traj_by_key = _accumulator_trajectory_index(facts)
+    integrity_ok = _facts_integrity_ok(facts)
     per = sorted(
-        (_game_interestingness(g, traj_by_key) for g in games),
+        (
+            _game_interestingness(g, traj_by_key, integrity_ok=integrity_ok)
+            for g in games
+        ),
         key=lambda x: x["score"],
         reverse=True,
     )
@@ -598,12 +1047,188 @@ def interestingness(facts: dict[str, Any]) -> dict[str, Any]:
         shapes[p["win_shape"]] = shapes.get(p["win_shape"], 0) + 1
     return {
         "mean_score": round(sum(p["score"] for p in per) / n, 1),
-        "median_score": round(sorted(p["score"] for p in per)[len(per) // 2], 1)
+        # statistics.median averages the two middle values on an even-sized set
+        # (not the upper-middle), so a 50-game set reports the true median.
+        "median_score": round(statistics.median(p["score"] for p in per), 1)
         if per
         else 0.0,
         "n_games": len(per),
         "win_shapes": dict(sorted(shapes.items(), key=lambda kv: -kv[1])),
         "r5_shapes_over_10pct": sum(1 for c in shapes.values() if c / n >= 0.10),
+        "per_game": per,
+    }
+
+
+def _pearson(xs: list[float], ys: list[float]) -> float | None:
+    """Pearson correlation, or ``None`` when undefined (n < 2 or a flat series)."""
+    n = len(xs)
+    if n < 2:
+        return None
+    mx = math.fsum(xs) / n
+    my = math.fsum(ys) / n
+    sxy = math.fsum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    sxx = math.fsum((x - mx) ** 2 for x in xs)
+    syy = math.fsum((y - my) ** 2 for y in ys)
+    if sxx == 0.0 or syy == 0.0:
+        return None
+    return sxy / math.sqrt(sxx * syy)
+
+
+def _geomean_breakdown(
+    g: dict[str, Any],
+    traj_by_key: dict[tuple[Any, Any], dict[str, Any]],
+    *,
+    integrity_ok: bool,
+) -> dict[str, Any]:
+    """A per-game D1-D4 record for the geomean validation artifact (NOT DTO-served).
+
+    Merges the DTO per_game row (r1-r7 + the geomean ``score``) with the full
+    D1-D4 breakdown the ``extra="forbid"`` :class:`RubricGameView` would reject, so
+    ``results-rubric-geomean.json`` can carry the contest dimensions + their
+    sub-terms for the §6 validation while the served ``results-rubric-score.json``
+    keeps its exact key set.
+    """
+    base = _game_interestingness(g, traj_by_key, integrity_ok=integrity_ok)
+    dims = _contest_dimensions(g, traj_by_key, integrity_ok=integrity_ok)
+    return {
+        "seed": base["seed"],
+        "reason": base["reason"],
+        "win_shape": base["win_shape"],
+        "n_meetings": base["n_meetings"],
+        "score": base["score"],
+        "floor_multiplier": dims["floor_multiplier"],
+        "d1_resolution": round(dims["d1_resolution"], 3),
+        "d2_deduction": round(dims["d2_deduction"], 3),
+        "d3_craft": round(dims["d3_craft"], 3),
+        "d4_arc": round(dims["d4_arc"], 3),
+        "d2_separation_norm": round(dims["d2_separation_norm"], 3),
+        "d2_conversion": round(dims["d2_conversion"], 3),
+        "d4_arc_term": round(dims["d4_arc_term"], 3),
+        "d4_swing_term": round(dims["d4_swing_term"], 3),
+        "d4_contest_term": round(dims["d4_contest_term"], 3),
+        "r1_decisive": base["r1_decisive"],
+        "r2_deception": base["r2_deception"],
+        "r3_arcs": base["r3_arcs"],
+        "r7_legible": base["r7_legible"],
+    }
+
+
+def geomean_validation(facts: dict[str, Any]) -> dict[str, Any]:
+    """The §6 validation of the geomean rubric over committed replays ($0).
+
+    Mirrors report-rubric-design.md §6: (1) does the geomean rank
+    contested/eject-decided games ABOVE the stopwatch; (2) NO perverse gradient —
+    no dimension rewards losing / railroading / passivity (per-reason dimension
+    means + ``Pearson(dim, crew_win)``, which must stay weak); (3) reachability —
+    every dimension is non-zero somewhere on the committed data (unlike R7, 0/50);
+    (4) a watch-the-games top/bottom slice for the human eyeball check. Emitted as
+    ``results-rubric-geomean.json`` — the held-out referee's record. $0; reads the
+    committed facts only.
+    """
+    games = facts["games"]
+    _require_meeting_inputs(facts)
+    traj = _accumulator_trajectory_index(facts)
+    integrity_ok = _facts_integrity_ok(facts)
+    per = sorted(
+        (_geomean_breakdown(g, traj, integrity_ok=integrity_ok) for g in games),
+        key=lambda r: r["score"],
+        reverse=True,
+    )
+
+    by_reason: dict[str, list[dict[str, Any]]] = {}
+    for r in per:
+        by_reason.setdefault(r["reason"], []).append(r)
+
+    # (1) ranking — eject-decided (CREWMATE_EJECT) above the stopwatch (CREWMATE_TASKS)
+    eject = [r for r in per if r["reason"] == "CREWMATE_EJECT"]
+    tasks = [r for r in per if r["reason"] == "CREWMATE_TASKS"]
+    worst_eject = min((r["score"] for r in eject), default=None)
+    best_tasks = max((r["score"] for r in tasks), default=None)
+    ranking = {
+        "n_eject_decided": len(eject),
+        "n_stopwatch": len(tasks),
+        "eject_decided_score_range": [
+            worst_eject,
+            max((r["score"] for r in eject), default=None),
+        ],
+        "stopwatch_score_range": [
+            min((r["score"] for r in tasks), default=None),
+            best_tasks,
+        ],
+        "all_eject_decided_above_all_stopwatch": (
+            worst_eject is not None
+            and best_tasks is not None
+            and worst_eject > best_tasks
+        ),
+        "n_stopwatch_at_or_above_worst_eject": sum(
+            1 for r in tasks if worst_eject is not None and r["score"] >= worst_eject
+        ),
+    }
+
+    # (2) no perverse gradient — per-reason dimension means + Pearson(dim, crew_win)
+    dim_keys = ("d1_resolution", "d2_deduction", "d3_craft", "d4_arc", "score")
+    crew_win = [1.0 if r["reason"].startswith("CREWMATE") else 0.0 for r in per]
+    gradient = {
+        "mean_dim_by_reason": {
+            reason: {
+                k: round(math.fsum(r[k] for r in rows) / len(rows), 3) for k in dim_keys
+            }
+            for reason, rows in sorted(by_reason.items())
+        },
+        "pearson_dim_vs_crew_win": {
+            k: (
+                round(p, 3)
+                if (p := _pearson([r[k] for r in per], crew_win)) is not None
+                else None
+            )
+            for k in dim_keys
+        },
+        "floored_games": [r["seed"] for r in per if r["floor_multiplier"] == 0.0],
+    }
+
+    # (3) reachability — every dimension non-zero somewhere
+    reachability = {
+        k: {
+            "max": round(max(r[k] for r in per), 3),
+            "n_nonzero": sum(1 for r in per if r[k] > 0.0),
+        }
+        for k in ("d1_resolution", "d2_deduction", "d3_craft", "d4_arc")
+    }
+
+    # (4) watch-the-games — top/bottom slice for the human eyeball check
+    slice_keys = (
+        "seed",
+        "reason",
+        "score",
+        "d1_resolution",
+        "d2_deduction",
+        "d3_craft",
+        "d4_arc",
+    )
+    watch = {
+        "top": [{k: r[k] for k in slice_keys} for r in per[:5]],
+        "bottom": [{k: r[k] for k in slice_keys} for r in per[-5:]],
+    }
+
+    return {
+        "weights": _GEOMEAN_WEIGHTS,
+        "epsilon": _GEOMEAN_EPSILON,
+        "separation_scale": _D2_SEPARATION_SCALE,
+        "railroad_gate": _SKIP_SUSPICION_THRESHOLD,
+        "n_games": len(per),
+        "mean_score": round(math.fsum(r["score"] for r in per) / len(per), 2)
+        if per
+        else 0.0,
+        # true even-size median (averages the two middle values), not upper-middle.
+        "median_score": round(statistics.median(r["score"] for r in per), 2)
+        if per
+        else 0.0,
+        "validation": {
+            "ranking_contested_above_stopwatch": ranking,
+            "no_perverse_gradient": gradient,
+            "reachability": reachability,
+            "watch_the_games": watch,
+        },
         "per_game": per,
     }
 
@@ -762,6 +1387,23 @@ def main() -> int:
         json.dumps(out, indent=2)
     )
     print(f"\nwrote experiments/lab/results-rubric-score.json (set sha {lab_head})")
+
+    # ---- Geomean interestingness referee (Task 13.15) ----
+    # The held-out referee's D1-D4 score + the report-rubric-design.md §6
+    # validation, written as a SEPARATE lab artifact (the served per_game keeps its
+    # r1-r7 DTO shape; D1-D4 cannot ride in it). $0; committed.
+    geo = geomean_validation(facts)
+    geo_out = {"seedset": label, "git_head": lab_head, **geo}
+    Path(f"experiments/lab/{GEOMEAN_RESULTS_FILENAME}").write_text(
+        json.dumps(geo_out, indent=2)
+    )
+    rank = geo["validation"]["ranking_contested_above_stopwatch"]
+    print(
+        f"wrote experiments/lab/{GEOMEAN_RESULTS_FILENAME} "
+        f"(geomean mean {geo['mean_score']} / median {geo['median_score']}; "
+        f"all eject-decided above all stopwatch: "
+        f"{rank['all_eject_decided_above_all_stopwatch']})"
+    )
 
     if args.set_dir is not None:
         dest = regen_for_set(facts, Path(args.set_dir))
