@@ -4975,10 +4975,15 @@ class TestRenderAfterFoldConsistency:
 
     When a listener's view of a folded subject crosses 0.60 pre-vote,
     the rendered vote prompt shows the post-fold value AND the in-prompt
-    §4.6 verdict reads MUST vote -- graph and verdict computed from ONE
-    post-fold state source (the template derives the verdict max from
-    the same ``suspicion_graph`` rows it renders, so a stale pre-fold
-    graph anywhere in the path would break both assertions at once).
+    §4.6 max-suspicion evidence line renders that same post-fold value --
+    graph and gate-max computed from ONE post-fold state source (the
+    template derives the rendered max from the same ``suspicion_graph``
+    rows it renders, so a stale pre-fold graph anywhere in the path would
+    break both assertions at once). Task 13.13 de-imperatived the §4.6
+    gate (v7): the verdict is now rendered as NON-directive evidence, so
+    these pins assert the rendered max (via ``parse_rendered_max_suspicion``,
+    whose parse line is preserved byte-for-byte) and the ABSENCE of the old
+    MUST-vote / MUST-skip command, not its presence.
     """
 
     @staticmethod
@@ -5026,29 +5031,32 @@ class TestRenderAfterFoldConsistency:
                 prompts[call.agent_id] = call.prompt
         return prompts
 
-    def test_fold_crossed_listener_renders_post_fold_value_and_must_vote(
+    def test_fold_crossed_listener_renders_post_fold_value_above_gate(
         self,
     ) -> None:
         # The graduated two-voice fold (Task 13.7, +0.12): p-4's 0.55 prior
-        # crosses to 0.67 -- the graph row and the §4.6 verdict are computed
-        # from ONE post-fold source, so both read the same post-fold value.
+        # crosses to 0.67 -- the graph row and the §4.6 max-suspicion evidence
+        # line are computed from ONE post-fold source, so both read the same
+        # post-fold value.
         prompts = self._vote_prompts(self._real_template_responder)
         crossed = prompts["p-4"]
 
         # The graph row shows the post-fold value, on the quantized
         # 2-decimal lattice...
         assert "- `p-2`: suspicion 0.67, trust 0.50" in crossed
-        # ...and the §4.6 verdict -- computed by the frozen template from
-        # the SAME rendered graph -- reads the post-fold max and the
-        # MUST-vote imperative (the gate computation itself untouched).
+        # ...and the §4.6 max-suspicion evidence line -- rendered by the
+        # template from the SAME rendered graph -- reads the post-fold max,
+        # above the 0.60 gate (the gate-max derivation itself untouched at the
+        # v7 de-imperative). The verdict is now rendered as NON-directive
+        # evidence, so the old MUST-vote command is gone.
         assert parse_rendered_max_suspicion(crossed) == pytest.approx(0.67)
-        assert "you MUST vote to eject; you may NOT skip" in crossed
+        assert "you MUST vote to eject" not in crossed
         assert 'you MUST set `target` to `"SKIP"`' not in crossed
 
-    def test_sub_gate_listener_still_reads_must_skip(self) -> None:
+    def test_sub_gate_listener_renders_post_fold_value_below_gate(self) -> None:
         # The single-witness inform materialises p-2 at 0.55 for the no-prior
-        # listener: below the gate, so the same one-source verdict reads MUST
-        # SKIP -- the fold moves values, never the §4.6 rule. (Two voices would
+        # listener: below the gate, so the same one-source max renders 0.55 --
+        # the fold moves values, never the §4.6 derivation. (Two voices would
         # cross this same listener to 0.62 by design, so the sub-gate case is
         # the single-voice band post-13.7.)
         prompts = self._vote_prompts(self._single_voice_real_template_responder)
@@ -5056,7 +5064,11 @@ class TestRenderAfterFoldConsistency:
 
         assert "- `p-2`: suspicion 0.55, trust 0.50" in sub_gate
         assert parse_rendered_max_suspicion(sub_gate) == pytest.approx(0.55)
-        assert 'you MUST set `target` to `"SKIP"`' in sub_gate
+        # De-imperatived (v7): a sub-gate max no longer emits a MUST-skip
+        # command; the deterministic tally floor enforces the below-threshold
+        # skip regardless of the prompt.
+        assert 'you MUST set `target` to `"SKIP"`' not in sub_gate
+        assert "you MUST vote to eject" not in sub_gate
 
 
 class TestCommittedBytes107FoldPins:
@@ -5894,9 +5906,17 @@ class TestBallotTargetGuardVerdictEquality:
 
         rendered_max = parse_rendered_max_suspicion(prompt)
         assert rendered_max is not None
+        # The §4.6 verdict is now rendered as NON-directive evidence (Task
+        # 13.13, v7 de-imperative): "the verdict reads MUST vote" is read off
+        # the rendered MAX vs the 0.60 gate, not an imperative literal. The
+        # parse line (eval._suspicion_parse) is preserved byte-for-byte, so
+        # this reconstruction is unchanged -- and the deterministic guard
+        # (guard_ballot_target_graph) is UNTOUCHED, so it still fires iff the
+        # rendered max crosses the gate.
         must_vote_rendered = rendered_max >= 0.6
         assert must_vote_rendered == expect_must_vote
-        assert ("you MUST vote to eject" in prompt) == expect_must_vote
+        # De-imperative invariant: no MUST-vote command renders, at any max.
+        assert "you MUST vote to eject" not in prompt
 
         assert self._guard_fired(graph) == expect_must_vote
 

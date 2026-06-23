@@ -6,10 +6,33 @@
    that Pydantic schema; this template only produces the user-facing
    prompt body.
 
-   Prompt version: vote_ballot/v6
+   Prompt version: vote_ballot/v7
    Bump the version line below (and this header) whenever the prompt
    text changes in a way that could shift LLM behaviour, so eval runs
    and replay logs can attribute results to a known prompt revision.
+
+   v7 (Task 13.13 -- DESIGN.md §4.6 + §5.5 reconciled; the §4.6 gate is a
+   deterministic TALLY backstop, the prompt NON-directive;
+   experiments/lab/report-forward-redesign-probes.md Probe 1): the §4.6 gate
+   verdict in decision rule 1 is DE-IMPERATIVED. The pre-computed
+   MUST-vote-to-eject / MUST-set-SKIP command is replaced by a non-directive
+   evidence line -- the max suspicion over the LIVING candidates and the 0.60
+   reference threshold render as ONE input among the transcript, the
+   contradiction flags, and the rendered memory, and the model weighs them and
+   emits its OWN target + confidence. The `_susp`/`_max`/`_thr` derivation
+   (the gate-max-over-candidate_targets filter) is byte-UNCHANGED, so the
+   "maximum suspicion among the living ejection targets is **X**" line the eval
+   parser reads (eval._suspicion_parse) still renders. A PROSE confidence
+   constraint is added (rule 2): the emitted `confidence` must track the named
+   target's rendered suspicion and may NOT reach the skip threshold on a
+   sub-threshold target -- this pins the Probe-1 bidirectional-imperative
+   cascade vector WITHOUT a code clamp (the deterministic tally
+   leader-confidence floor in meetings.voting.tally_ballots is the backstop,
+   UNCHANGED; the manager's guard_ballot_target_graph §4.6 verdict is also
+   UNCHANGED). NO re-record here -- the committed replays stay byte-identical
+   under the OLD version; A-1's effect appears only in NEW recordings (the held
+   13.12 re-record). think=False preserved (the in-band reasoning field is the
+   gated 13.9).
 
    v6 (Task 13.6 -- report-phase-b-plan "Prompts"; the GATE FINDING in
    tasks/phase-13.md): the LIGHTER trim + the belief-mover framing (the
@@ -75,7 +98,7 @@
 #}
 You are agent `{{ voter_id }}` casting a vote at an AiLibi meeting.
 
-Prompt: vote_ballot/v6 (DESIGN.md §5.5)
+Prompt: vote_ballot/v7 (DESIGN.md §5.5)
 
 Read your rendered memory, the meeting transcript so far, the
 contradiction flags, and your current suspicion graph, then return a
@@ -124,10 +147,13 @@ set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
    are already stripped from `suspicion_graph` upstream
    (meetings.manager._suspicion_graph_with_contradictions). Filtering here stops
    a high-suspicion DEAD / ejected player — still carried in the voter's
-   `known_players()` belief rows — from tripping the "MUST eject" gate when no
-   LIVING candidate actually crosses the threshold (which would force a ballot
-   onto an unrelated living player). Falls back to the full graph only when
-   `candidate_targets` is omitted (ad-hoc renders; production always passes it). #}
+   `known_players()` belief rows — from inflating the rendered max-suspicion
+   reference when no LIVING candidate actually crosses the threshold (which would
+   spotlight an unrelated living player). The max is the §4.6 EVIDENCE line the
+   model weighs (v7 de-imperative); the deterministic anti-cascade backstop lives
+   in meetings.voting.tally_ballots, not this render. Falls back to the full graph
+   only when `candidate_targets` is omitted (ad-hoc renders; production always
+   passes it). #}
 {% if candidate_targets is defined and candidate_targets %}
 {% set _susp = suspicion_graph | selectattr('player_id', 'in', candidate_targets) | map(attribute='suspicion') | list %}
 {% else %}
@@ -137,16 +163,25 @@ set `target` to `"SKIP"` instead -- they are on your side, not a candidate.
 {% set _thr = skip_confidence_threshold | default(0.6) %}
 ## Decision rules
 
-1. **Gate verdict — already computed for you, do not recompute (DESIGN.md §4.6).**
+1. **Suspicion evidence — a §4.6 reference to weigh, not a verdict.**
    Your maximum suspicion among the living ejection targets is
-   **{{ "%.2f"|format(_max) }}**; the skip threshold is **{{ "%.2f"|format(_thr) }}**.
-   {% if _max >= _thr %}**{{ "%.2f"|format(_max) }} ≥ {{ "%.2f"|format(_thr) }} — you MUST vote to eject; you may NOT skip.** Set `target` to the living player with the highest suspicion / strongest case. The suspicion score **already weighs how good the evidence is**, so do NOT skip on the grounds that it is "not definitive", "circumstantial", or "could be a memory error" — those are exactly the cases the threshold is built for. A met threshold means you VOTE; skipping now is a rule violation.{% else %}**{{ "%.2f"|format(_max) }} < {{ "%.2f"|format(_thr) }} — you MUST set `target` to `"SKIP"`.** No candidate crosses the threshold.{% endif %}
-2. **Pick the strongest case** among the above-threshold players (if more than
-   one), using the rendered memory, the transcript, and the contradiction flags.
-   Weigh corroborated evidence highest: a suspect two independent witnesses place
-   at the scene, or whose alibi a contradiction flag refutes, is a stronger case
-   than one carried by a single voice. Do not re-open the gate decision — it is
-   already made above.
+   **{{ "%.2f"|format(_max) }}**; the skip threshold is **{{ "%.2f"|format(_thr) }}**,
+   shown only as the §4.6 reference point. Treat this max and threshold as ONE
+   input — read it alongside the transcript, the contradiction flags, and your
+   rendered memory, not above them. Weigh the evidence and reach your OWN
+   conclusion, then emit the `target` (a living candidate or `"SKIP"`) and the
+   `confidence` you actually hold. The meeting outcome is decided by a
+   deterministic tally over every ballot (DESIGN.md §5.5), so vote the
+   conclusion you genuinely reach — you do not need to force or withhold a vote
+   to satisfy the threshold.
+2. **Calibrate `confidence` to the target you name, and weigh corroboration.**
+   `confidence` is your own probability that this call is right, so it must
+   track the rendered suspicion and the evidence for the player you actually
+   name: do NOT report a `confidence` at or above the skip threshold on a target
+   whose suspicion is below it. When more than one candidate is plausible, weigh
+   corroborated evidence highest — a suspect two independent witnesses place at
+   the scene, or whose alibi a contradiction flag refutes, is a stronger case
+   than one carried by a single voice.
 3. **`primary_reason_id`** references the `MeetingTurn` id{% if transcript.turns %} (e.g.
    `"{{ transcript.turns[0].turn_id }}"` — one of the turn ids listed in the
    transcript above){% endif %} that most drove your decision. It MUST be a turn id

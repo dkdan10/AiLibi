@@ -1217,10 +1217,11 @@ class TestVoteBallotTemplate:
         )
 
         # vote_ballot.j2 carries an explicit visible version marker in its
-        # body, bumped to v4 in Task 8.16 (the `primary_reason_id` example
-        # is now sourced from the live transcript). A regression that bumps
-        # the version without updating the test is the desired failure mode.
-        assert "vote_ballot/v6" in prompt
+        # body, bumped to v7 in Task 13.13 (the §4.6 gate is de-imperatived:
+        # the MUST-vote/MUST-skip command becomes a non-directive evidence
+        # line). A regression that bumps the version without updating the test
+        # is the desired failure mode.
+        assert "vote_ballot/v7" in prompt
 
     def test_renders_voter_and_candidates(self) -> None:
         prompt = vote_ballot_prompt(
@@ -1310,14 +1311,15 @@ class TestVoteBallotTemplate:
         assert "trust 0.30" in prompt
 
     def test_gate_max_ignores_high_suspicion_non_candidate(self) -> None:
-        """A dead/ejected player's belief row must not trip the §4.6 eject gate.
+        """A dead/ejected player's belief row must not inflate the §4.6 max.
 
         ``suspicion_graph_for_meeting`` snapshots every ``known_players()`` row,
-        including players who are no longer living ejection targets. The v5 gate
-        computes its max over ``candidate_targets`` (the living set) so a
-        high-suspicion DEAD player cannot force a "MUST eject" verdict when no
-        LIVING candidate crosses the threshold — that would otherwise coerce a
-        ballot onto an unrelated living player.
+        including players who are no longer living ejection targets. The gate
+        max (preserved byte-for-byte at the v7 de-imperative) is computed over
+        ``candidate_targets`` (the living set), so a high-suspicion DEAD player
+        does NOT contribute to the rendered max-suspicion evidence line: the
+        rendered max is 0.45 (the living candidates' max), never the dead
+        player's 0.95.
         """
 
         prompt = vote_ballot_prompt(
@@ -1336,12 +1338,20 @@ class TestVoteBallotTemplate:
             skip_confidence_threshold=0.6,
         )
 
-        assert 'you MUST set `target` to `"SKIP"`' in prompt
+        # The rendered max-suspicion evidence line (the bolded **X**) is the
+        # living-candidate max, 0.45 — the dead p-9's 0.95 never bolds into it.
+        assert "maximum suspicion among the living ejection targets is" in prompt
+        assert "**0.45**" in prompt
+        assert "**0.95**" not in prompt
+        # De-imperatived (v7): no MUST-vote / MUST-skip command remains.
         assert "you MUST vote to eject" not in prompt
+        assert 'you MUST set `target` to `"SKIP"`' not in prompt
 
-    def test_gate_max_fires_on_above_threshold_candidate(self) -> None:
-        """Sibling of the dead-player case: a LIVING candidate at/above the
-        threshold still yields a "MUST eject" verdict (conversion preserved)."""
+    def test_gate_max_renders_above_threshold_candidate_as_evidence(self) -> None:
+        """Sibling of the dead-player case: a LIVING candidate above the
+        threshold renders as the max-suspicion EVIDENCE value (0.72), with no
+        MUST-vote command (v7 de-imperative; the gate-max derivation preserved).
+        """
 
         prompt = vote_ballot_prompt(
             voter_id="p-3",
@@ -1356,8 +1366,75 @@ class TestVoteBallotTemplate:
             skip_confidence_threshold=0.6,
         )
 
-        assert "you MUST vote to eject" in prompt
+        assert "maximum suspicion among the living ejection targets is" in prompt
+        assert "**0.72**" in prompt
+        # Non-directive: the threshold-crossing no longer emits an imperative.
+        assert "you MUST vote to eject" not in prompt
         assert 'you MUST set `target` to `"SKIP"`' not in prompt
+
+    def test_gate_is_non_directive_evidence_not_command(self) -> None:
+        """DoD: the §4.6 gate presents as evidence to weigh, not a command.
+
+        Task 13.13 (DESIGN.md §4.6 + §5.5 reconciled): the imperative
+        MUST-vote-to-eject / MUST-set-SKIP block is gone for BOTH an
+        above-threshold and a below-threshold max, and the prose asks the model
+        to reach its own conclusion. The deterministic tally floor
+        (meetings.voting.tally_ballots) is the anti-cascade backstop, not the
+        prompt.
+        """
+
+        for max_suspicion in (0.72, 0.45):
+            prompt = vote_ballot_prompt(
+                voter_id="p-3",
+                rendered_memory=_STUB_CREWMATE_MEMORY,
+                transcript=_stub_transcript(),
+                contradiction_flags=(),
+                suspicion_graph=(
+                    SuspicionEntry(player_id="p-1", suspicion=0.40, trust=0.5),
+                    SuspicionEntry(player_id="p-2", suspicion=max_suspicion, trust=0.5),
+                ),
+                candidate_targets=("p-1", "p-2"),
+                skip_confidence_threshold=0.6,
+            )
+
+            # No imperative, in either direction, at any max.
+            assert "you MUST vote to eject" not in prompt
+            assert 'you MUST set `target` to `"SKIP"`' not in prompt
+            assert "you MUST" not in prompt
+            assert "rule violation" not in prompt
+            assert "already computed for you" not in prompt
+            # Non-directive framing: the gate is a reference the model weighs
+            # and the model emits its OWN conclusion.
+            assert "not a verdict" in prompt
+            assert "reach your OWN" in prompt
+
+    def test_confidence_constraint_prose_present(self) -> None:
+        """Task 13.13: the emitted-confidence constraint is added IN PROSE (no
+        code clamp) — the model may not report a confidence at/above the skip
+        threshold on a sub-threshold target (Probe 1 bidirectional-cascade pin).
+        """
+
+        prompt = vote_ballot_prompt(
+            voter_id="p-3",
+            rendered_memory=_STUB_CREWMATE_MEMORY,
+            transcript=_stub_transcript(),
+            contradiction_flags=(),
+            suspicion_graph=(
+                SuspicionEntry(player_id="p-1", suspicion=0.40, trust=0.5),
+                SuspicionEntry(player_id="p-2", suspicion=0.45, trust=0.5),
+            ),
+            candidate_targets=("p-1", "p-2"),
+            skip_confidence_threshold=0.6,
+        )
+
+        # Two single-line fragments (robust to the template's line wrap between
+        # them): the constraint names the skip threshold and the sub-threshold
+        # target, and it is PROSE — no numeric clamp on `confidence`.
+        assert (
+            "do NOT report a `confidence` at or above the skip threshold on a target"
+            in prompt
+        )
+        assert "whose suspicion is below it." in prompt
 
     def test_missing_kwarg_raises_under_strict_undefined(self) -> None:
         # vote_ballot.j2 iterates ``transcript.turns`` near the top

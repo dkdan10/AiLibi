@@ -245,11 +245,24 @@ ROSTER_PRESETS: Final[Mapping[str, RosterPreset]] = {
 # committed sample bytes still record the v7/v5/v8/v5 set and are re-recorded at the
 # Wave-B smoke re-record (13.10), not here (recording-side only; replays/samples + the
 # prompt-regression baseline out of scope). think=False is preserved (13.9).
+#
+# Task 13.13 (DESIGN.md §4.6 + §5.5 reconciled; Probe 1) bumps vote_ballot ALONE,
+# vote_ballot/v6 -> v7: the §4.6 decision-rule gate is DE-IMPERATIVED -- the
+# pre-computed MUST-vote-to-eject / MUST-set-SKIP command becomes a non-directive
+# evidence line (max suspicion + the 0.60 reference threshold as ONE input), and the
+# emitted confidence is pinned IN PROSE (no code clamp) so a sub-threshold target
+# cannot carry a >= threshold confidence. The deterministic tally floor
+# (meetings.voting.tally_ballots) and the manager's guard_ballot_target_graph §4.6
+# verdict are UNCHANGED -- the anti-cascade backstop is the tally, not the prompt. NO
+# re-record here: the committed sample bytes still record vote_ballot/v5 (the 13.6 v6
+# bump was never re-recorded either; the manifest pin reads v5 as-recorded) and are
+# re-recorded at the held 13.12 combined re-record (recording-side only). The other
+# three templates are byte-unchanged at this task.
 DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "crewmate_report": "crewmate_report.v8",
     "impostor_report": "impostor_report_v6",
     "accusation_round": "accusation_round.v9",
-    "vote_ballot": "vote_ballot/v6",
+    "vote_ballot": "vote_ballot/v7",
 }
 
 # Headless recording runs meetings deadline-free (DESIGN.md §1.4, §5.2, §8.3:
