@@ -291,12 +291,21 @@ def test_canonical_balance_keeps_both_sides_alive(tmp_path: Path) -> None:
     100-game merge gate — the merge gate lives in
     ``tasks/phase-2.md`` Merge Criteria and is exercised by
     ``scripts/run_tournament.py``.
+
+    Task 13.12 flipped the canonical default to ``redistribute``, which removes
+    the FAKE crew-win path (no deduction -> the crew can only win by out-tasking,
+    which redistribute's constant burden denies). This canary isolates the
+    ``kill_cooldown_ticks`` tuning, NOT the dead-task rule, so it runs on an
+    explicit DROP config where both sides can be decisive in fake. (The real
+    redistribute balance is the owner-accepted ~84%-impostor gate result, measured
+    on real-Ollama, not this fake canary.)
     """
 
     seeds = tuple(range(10))
     report = run_balance_eval(
         seeds=seeds,
         output_dir=tmp_path,
+        game_map=load_canonical_map().model_copy(update={"dead_task_rule": "drop"}),
         max_ticks=1000,
     )
 

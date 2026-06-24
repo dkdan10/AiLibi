@@ -878,6 +878,13 @@ def test_meeting_rate_validator_rejects_negative_counts() -> None:
 _KILL_GIFT_MAP: Map = load_canonical_map().model_copy(
     update={
         "kill_cooldown_ticks": 1,
+        # The kill-gift mechanic is a DROP-rule property (a kill that removes the
+        # crew's last incomplete instance gifts the task-win). The Task 13.12 flip
+        # made the canonical map ``redistribute`` (which re-keys instead of
+        # dropping, so a kill never gifts), so pin the rule EXPLICITLY to ``drop``
+        # here — this map tests the drop-rule kill-gift semantics, independent of
+        # the canonical default.
+        "dead_task_rule": "drop",
         "tasks": {
             task_id: task.model_copy(
                 update={"room": load_canonical_map().spawn.room, "duration_ticks": 1}

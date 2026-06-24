@@ -2171,7 +2171,7 @@ class TestGraduatedTestimonySpread:
 
 
 class TestRelevanceGatedFoldOnCommittedBytes:
-    """The seed-13 trajectory pin: gated Rule 3 lets accusation carry climb.
+    """The trajectory pin: gated Rule 3 lets accusation carry climb.
 
     Audit C-C-3: a repeat-accused impostor's accusation carry is cancelled
     in-meeting by an evidentially-empty Rule-3 vouch (the accuser's OWN
@@ -2180,22 +2180,18 @@ class TestRelevanceGatedFoldOnCommittedBytes:
     vouches die, so the re-derived cross-meeting fold stays ELEVATED across
     the accused meetings instead of netting back to the prior.
 
-    Re-anchored to the phase-11 Wave-1 re-record. The witnessed coordinate is
-    still seed-13, impostor p-4, four committed meetings -- the re-record kept
-    p-4 a repeat-accused impostor exhibiting the property, but moved the
-    per-meeting shape. p-4 is accused in m0, m1 and m2; m0/m1 also carry a
-    GENUINE surviving corroboration that nets each bump flat (0.5), and m2's
-    accusation lands clean (0.55). At m3 (a CAFETERIA body-report meeting, the
-    kill scene) the detector re-derives a corroboration for p-4 from p-4's own
-    CAFETERIA@18 alibi confirmed by third parties' CAFETERIA@18 sightings -- a
-    presence-at-the-scene vouch that the kill-scene prong of the relevance gate
-    drops. WITH the gate the m3 vouch dies, so the m2 carry merely decays to
-    0.5375 (stays above the prior); WITHOUT the gate (re-derived below) the m3
-    vouch corroborates p-4 and cancels the carry back to 0.5 (flat) -- the gate
-    is load-bearing.
+    Re-anchored to the Task 13.12 redistribute + Wave-E re-record (was seed-13
+    p-4, whose trajectory went flat both ways with the bytes). The witnessed
+    coordinate is now seed-45, impostor p-8, five committed meetings -- a
+    repeat-accused impostor exhibiting the property. WITH the relevance gate the
+    kill-scene presence vouches are dropped, so the accusation carry survives and
+    stays elevated above the prior (the trajectory rises to 0.55 and decays only
+    to 0.521); WITHOUT the gate (re-derived below) those vouches corroborate p-8
+    and cancel EVERY accusation bump back to 0.5 (flat across all five meetings)
+    -- the gate is load-bearing.
     """
 
-    def _seed13_trajectory(self, *, gate_killscene_vouches: bool = True) -> list[float]:
+    def _seed45_trajectory(self, *, gate_killscene_vouches: bool = True) -> list[float]:
         from pathlib import Path
 
         import meetings.transcript as transcript_mod
@@ -2208,7 +2204,7 @@ class TestRelevanceGatedFoldOnCommittedBytes:
             / "replays"
             / "samples"
             / "9p2i"
-            / "replay-seed-13.jsonl"
+            / "replay-seed-45.jsonl"
         )
 
         # The ungated comparison disables ONLY the relevance predicate (a
@@ -2252,55 +2248,52 @@ class TestRelevanceGatedFoldOnCommittedBytes:
                     corroborated=evidence.corroborated,
                     contradicted=evidence.contradicted,
                 )
-                trajectory.append(beliefs.view("p-4").suspicion)
+                trajectory.append(beliefs.view("p-8").suspicion)
         finally:
             setattr(transcript_mod, "is_relevant_sighting", original_gate)
         return trajectory
 
-    def test_seed13_subject_is_a_true_impostor(self) -> None:
+    def test_seed45_subject_is_a_true_impostor(self) -> None:
         # The property is only meaningful for a true impostor: re-derive the
         # roster via the seeder (as the other committed-bytes tests do) at the
-        # recorded 9p/2i config and confirm p-4 is an IMPOSTOR.
+        # recorded 9p/2i config and confirm p-8 is an IMPOSTOR.
         from engine.world import load_canonical_map
         from orchestrator.seeder import seed_initial_state
 
         state = seed_initial_state(
-            seed=13,
+            seed=45,
             game_map=load_canonical_map(),
             num_players=9,
             num_impostors=2,
             tasks_per_crewmate=2,
         )
-        assert state.players["p-4"].role == "IMPOSTOR"
+        assert state.players["p-8"].role == "IMPOSTOR"
 
-    def test_seed13_p4_trajectory_rises_instead_of_rendering_flat(self) -> None:
-        trajectory = self._seed13_trajectory()
+    def test_seed45_p8_trajectory_rises_instead_of_rendering_flat(self) -> None:
+        trajectory = self._seed45_trajectory()
 
-        # Four committed meetings; impostor p-4 is accused in m0/m1/m2.
-        # The relevance gate lets the carry stay elevated across meetings
-        # rather than cancelling it in-meeting with an evidence-free
-        # kill-scene vouch: m0 and m1 net flat (a GENUINE relevant sighting
-        # survives the gate and cancels each accusation bump, 0.5), m2's
-        # accusation lands clean (0.55), and at m3 the kill-scene CAFETERIA@18
-        # vouch is dropped by the gate so the carry is not cancelled -- with no
-        # live evidence it merely decays to 0.5375.
-        assert len(trajectory) == 4
-        assert trajectory == pytest.approx([0.5, 0.5, 0.55, 0.5375])
+        # Five committed meetings; impostor p-8 is repeat-accused. The relevance
+        # gate lets the carry stay elevated rather than cancelling it in-meeting
+        # with evidence-free kill-scene vouches: the carry rises to 0.55 and then
+        # decays only to 0.521 over the later meetings -- it stays ABOVE the 0.5
+        # prior the whole way, because the kill-scene presence vouches that would
+        # cancel it are dropped by the gate.
+        assert len(trajectory) == 5
+        assert trajectory == pytest.approx([0.5, 0.55, 0.5375, 0.528125, 0.52109375])
         assert trajectory[-1] > trajectory[0]  # climbs, not flat at the prior
 
-    def test_seed13_gate_is_load_bearing_at_the_kill_scene_meeting(self) -> None:
-        # The gate's contribution, isolated: WITHOUT the relevance predicate
-        # the m3 detector re-derives a corroboration for p-4 from p-4's own
-        # CAFETERIA@18 alibi (CAFETERIA is the triggering body room) confirmed
-        # by third parties' CAFETERIA@18 sightings -- a presence-at-the-
-        # kill-scene vouch -- which corroborates p-4 at m3 and cancels the
-        # accumulated m2 carry, flattening the trajectory back to the 0.5 prior.
-        # The gate dropping that vouch is the whole difference between a carry
-        # that stays elevated and one cancelled to the prior.
-        gated = self._seed13_trajectory()
-        ungated = self._seed13_trajectory(gate_killscene_vouches=False)
+    def test_seed45_gate_is_load_bearing_at_the_kill_scene_meeting(self) -> None:
+        # The gate's contribution, isolated: WITHOUT the relevance predicate the
+        # detector re-derives presence-at-the-kill-scene corroborations for p-8
+        # from p-8's own body-room alibi confirmed by third parties' sightings,
+        # which corroborate p-8 and cancel EVERY accusation bump -- flattening the
+        # trajectory to the 0.5 prior across all five meetings. The gate dropping
+        # those vouches is the whole difference between a carry that stays elevated
+        # and one cancelled to the prior.
+        gated = self._seed45_trajectory()
+        ungated = self._seed45_trajectory(gate_killscene_vouches=False)
 
-        assert ungated == pytest.approx([0.5, 0.5, 0.55, 0.5])
+        assert ungated == pytest.approx([0.5, 0.5, 0.5, 0.5, 0.5])
         assert ungated[-1] == pytest.approx(0.5)  # cancelled back to the prior
         assert gated[-1] > ungated[-1]  # the gate is what keeps it elevated
 

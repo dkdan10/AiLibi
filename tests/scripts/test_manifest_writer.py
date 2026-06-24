@@ -19,8 +19,14 @@ import _manifest_writer as mw
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
 _REAL_SAMPLES = _REPO_ROOT / "replays" / "samples" / "4p1i"
+# Task 13.12 redistribute + Wave-E re-record: the new 4p/1i recording is far more
+# meeting-dense (39/50 seeds carry a meeting), so the old _NO_MEETING_SEED 0 now
+# HAS a meeting — re-anchored to seed 12 (still meeting-free). seed 22 stays
+# meeting-bearing. The recorded prompt versions bumped with the merged Wave-E:
+# accusation_round.v9 / crewmate_report.v8 / impostor_report_v6 / vote_ballot/v7
+# (was v8/v7/v5/v5; the 13.13 de-imperative bumped vote_ballot v6->v7).
 _MEETING_SEED = 22
-_NO_MEETING_SEED = 0
+_NO_MEETING_SEED = 12
 
 
 @pytest.fixture
@@ -52,7 +58,7 @@ def test_parse_seed_csv_rejects_bad(bad: str) -> None:
 
 
 def test_discover_seeds_sorted(small_samples: Path) -> None:
-    assert mw.discover_seeds(small_samples) == [0, 22]
+    assert mw.discover_seeds(small_samples) == [_NO_MEETING_SEED, _MEETING_SEED]
 
 
 def test_provenance_meeting_seed(small_samples: Path) -> None:
@@ -63,8 +69,8 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     assert model == "qwen3.5:9b"
     # The union of the recorded prompt-version *values*, sorted — using the
     # actual recorded values (e.g. "vote_ballot/v5"), not the idealized hint.
-    assert "accusation_round.v8" in prompt_versions
-    assert "vote_ballot/v5" in prompt_versions
+    assert "accusation_round.v9" in prompt_versions
+    assert "vote_ballot/v7" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
     # The committed re-records (Task 8.12 / Task 8.18) run on the local Ollama
@@ -98,9 +104,12 @@ def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None
     assert mw._COLUMNS in text
     assert mw._SEPARATOR in text
     rows = mw.parse_manifest(text)
-    assert list(rows) == [0, 22]  # parsed in file order -> ascending
-    assert rows[22].prompt_versions.startswith("accusation_round.v8")
-    assert rows[0].prompt_versions == mw._NO_MEETINGS
+    assert list(rows) == [
+        _NO_MEETING_SEED,
+        _MEETING_SEED,
+    ]  # parsed in file order -> ascending
+    assert rows[22].prompt_versions.startswith("accusation_round.v9")
+    assert rows[_NO_MEETING_SEED].prompt_versions == mw._NO_MEETINGS
 
 
 def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
@@ -109,13 +118,13 @@ def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     assert written == 50
     rows = mw.parse_manifest(manifest.read_text())
     assert set(rows) == set(range(50))
-    # Meeting-bearing seeds in the Task 10.17 Wave-2 flat 4p/1i re-record (seed 49
-    # is meeting-free on this set, so it is no longer a probe — seed 39 is one of
-    # the now-meeting-bearing seeds).
+    # Meeting-bearing seeds in the Task 13.12 redistribute + Wave-E flat 4p/1i
+    # re-record (39/50 seeds carry a meeting now; 22/24/26/39 are all meeting-
+    # bearing, recording the bumped Wave-E prompt versions).
     for seed in (22, 24, 26, 39):
-        assert "accusation_round.v8" in rows[seed].prompt_versions
+        assert "accusation_round.v9" in rows[seed].prompt_versions
         assert rows[seed].git_sha  # non-empty provenance
-    assert rows[0].prompt_versions == mw._NO_MEETINGS
+    assert rows[_NO_MEETING_SEED].prompt_versions == mw._NO_MEETINGS
 
 
 def test_header_uses_contracted_snake_case_column_names() -> None:
@@ -150,7 +159,7 @@ def test_render_parse_round_trip(small_samples: Path) -> None:
     fallback = mw.fallback_model(small_samples)
     original = {
         seed: mw.build_row(small_samples, seed, fallback, "abc1234", "2026-05-28")
-        for seed in (0, 22)
+        for seed in (_NO_MEETING_SEED, _MEETING_SEED)
     }
     reparsed = mw.parse_manifest(mw.render_manifest(original.values()))
     assert reparsed == original
@@ -168,7 +177,7 @@ def test_update_merges_without_touching_other_rows(
     after = mw.parse_manifest(manifest.read_text())
     assert after[22].git_sha == "abc1234"
     assert after[22].refreshed_at == "2026-05-28"
-    assert after[0] == before[0]  # untouched
+    assert after[_NO_MEETING_SEED] == before[_NO_MEETING_SEED]  # untouched
     assert set(after) == set(before)
 
 
@@ -176,11 +185,19 @@ def test_update_is_idempotent(small_samples: Path, tmp_path: Path) -> None:
     manifest = tmp_path / "MANIFEST.md"
     mw.rebuild_manifest(manifest, small_samples)
     mw.update_manifest(
-        manifest, small_samples, [0, 22], git_sha="cafe123", refreshed_at="2026-05-28"
+        manifest,
+        small_samples,
+        [_NO_MEETING_SEED, _MEETING_SEED],
+        git_sha="cafe123",
+        refreshed_at="2026-05-28",
     )
     first = manifest.read_text()
     mw.update_manifest(
-        manifest, small_samples, [0, 22], git_sha="cafe123", refreshed_at="2026-05-28"
+        manifest,
+        small_samples,
+        [_NO_MEETING_SEED, _MEETING_SEED],
+        git_sha="cafe123",
+        refreshed_at="2026-05-28",
     )
     assert manifest.read_text() == first
 
@@ -276,7 +293,15 @@ def test_main_rebuild(
 def test_main_sum_cost_prints_single_float(
     small_samples: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    rc = mw.main(["sum-cost", "--seeds", "0,22", "--sample-dir", str(small_samples)])
+    rc = mw.main(
+        [
+            "sum-cost",
+            "--seeds",
+            f"{_NO_MEETING_SEED},{_MEETING_SEED}",
+            "--sample-dir",
+            str(small_samples),
+        ]
+    )
     assert rc == 0
     out = capsys.readouterr().out.strip()
     # The only thing on stdout is a parseable float ($0 on the Ollama record).
@@ -337,27 +362,34 @@ def test_update_model_override_attributes_no_call_seed(
     mw.update_manifest(
         manifest,
         small_samples,
-        [0, 22],
+        [_NO_MEETING_SEED, _MEETING_SEED],
         git_sha="s",
         refreshed_at="2026-05-28",
         model_override="claude-opus-4-8",
     )
     rows = mw.parse_manifest(manifest.read_text())
     # No meetings -> attributed to the active (override) model...
-    assert rows[0].model == "claude-opus-4-8"
+    assert rows[_NO_MEETING_SEED].model == "claude-opus-4-8"
     # ...but a seed that recorded calls keeps its own recorded model.
     assert rows[22].model == "qwen3.5:9b"
 
 
 def test_prune_drops_rows_without_files(small_samples: Path, tmp_path: Path) -> None:
     manifest = tmp_path / "MANIFEST.md"
-    mw.rebuild_manifest(manifest, small_samples)  # rows for seeds 0 and 22
+    mw.rebuild_manifest(manifest, small_samples)  # rows for seeds 12 and 22
     stale = "| 99 | m | (none — no meetings) | d | s | 0.0000 | CREWMATES |\n"
     manifest.write_text(manifest.read_text() + stale)
-    assert set(mw.parse_manifest(manifest.read_text())) == {0, 22, 99}
+    assert set(mw.parse_manifest(manifest.read_text())) == {
+        _NO_MEETING_SEED,
+        _MEETING_SEED,
+        99,
+    }
     dropped = mw.prune_manifest(manifest, small_samples)
     assert dropped == 1  # seed 99 has no replay file
-    assert set(mw.parse_manifest(manifest.read_text())) == {0, 22}
+    assert set(mw.parse_manifest(manifest.read_text())) == {
+        _NO_MEETING_SEED,
+        _MEETING_SEED,
+    }
 
 
 def test_update_routes_to_per_set_subdir_manifest(small_samples: Path) -> None:
@@ -384,7 +416,10 @@ def test_main_prune_keeps_rows_with_files(small_samples: Path, tmp_path: Path) -
         ["prune", "--sample-dir", str(small_samples), "--manifest", str(manifest)]
     )
     assert rc == 0
-    assert set(mw.parse_manifest(manifest.read_text())) == {0, 22}
+    assert set(mw.parse_manifest(manifest.read_text())) == {
+        _NO_MEETING_SEED,
+        _MEETING_SEED,
+    }
 
 
 def test_remove_noncanonical_replays_drops_aliases_and_strays(tmp_path: Path) -> None:

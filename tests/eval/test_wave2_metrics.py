@@ -243,12 +243,15 @@ class TestConversionPerMeeting:
                 conversion_per_meeting=1.5,
             )
 
-    def test_committed_w2_reads_33_of_114(self) -> None:
+    def test_committed_w2_reads_14_of_195(self) -> None:
+        # Task 13.12 redistribute + Wave-E re-record: the de-imperatived 13.13 gate
+        # ejects 14 impostors (was 33) across 195 resolved meetings (was 114) — the
+        # headline R1 effect (fewer auto-conversions) over more, longer meetings.
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_conversion_per_meeting(report.report.games)
-        assert result.impostor_ejections == 33
-        assert result.resolved_meetings == 114
-        assert result.conversion_per_meeting == pytest.approx(33 / 114)
+        assert result.impostor_ejections == 14
+        assert result.resolved_meetings == 195
+        assert result.conversion_per_meeting == pytest.approx(14 / 195)
 
 
 # ---------------------------------------------------------------------------
@@ -381,19 +384,20 @@ class TestEffectiveDeflection:
             )
 
     def test_committed_w2_reproduces_the_audit_subcount(self) -> None:
-        # W2 (phase-11 Wave-3 re-record): 101 accused / 75 survived / 34 active;
-        # effective 10 = 1 named + 9 third (the gate subcount), NOT the raw 34.
-        # The active split is still mostly SKIP-saved (24) — the toolkit's
-        # deflection is rarely the lever that lands plurality off the impostor.
+        # W2 (Task 13.12 redistribute + Wave-E re-record): 132 accused / 119
+        # survived / 40 active; effective 9 = 1 named + 8 third (the gate subcount),
+        # NOT the raw 40. The active split is still mostly SKIP-saved (31) — the
+        # toolkit's deflection is rarely the lever that lands plurality off the
+        # impostor, and the de-imperatived gate ejects far less so survivals rise.
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_effective_deflection(report.report.games)
-        assert result.accused_impostor_events == 101
-        assert result.accused_impostor_survivals == 75
-        assert result.active_survivals == 34
+        assert result.accused_impostor_events == 132
+        assert result.accused_impostor_survivals == 119
+        assert result.active_survivals == 40
         assert result.named_target_deflections == 1
-        assert result.third_party_deflections == 9
-        assert result.effective_deflections == 10
-        assert result.skip_saved_active_survivals == 24
+        assert result.third_party_deflections == 8
+        assert result.effective_deflections == 9
+        assert result.skip_saved_active_survivals == 31
 
 
 # ---------------------------------------------------------------------------
@@ -448,22 +452,23 @@ class TestIndistinguishability:
             )
 
     def test_committed_w2_tasks_fingerprint_closed(self) -> None:
-        # W2 (phase-11 Wave-3 re-record): the toolkit keeps the D-D-1 fingerprint
-        # closed. Impostor do_task 380 vs crew 3465, and the impostor wait-share
-        # ~0.083 sits near crew's ~0.072 — the two roles idle at a comparable
-        # rate (W1 was the inverted ~0.52 vs ~0.10). Impostors no longer idle
-        # their way to a fingerprint.
+        # W2 (Task 13.12 redistribute + Wave-E re-record): the toolkit keeps the
+        # D-D-1 fingerprint closed. Impostor do_task 467 vs crew 3890, and the
+        # impostor wait-share ~0.065 sits BELOW crew's ~0.179 — under redistribute
+        # the crew carry the dead-crewmate task burden (crew do_task up to 3890) yet
+        # idle MORE between consoles, so impostors no longer idle their way to a
+        # fingerprint (the closed property holds even more strongly than W1).
         report = build_report(_COMMITTED_9P2I_DIR)
         tally = tally_actions_by_role(_COMMITTED_9P2I_DIR, report.report.games)
         result = compute_indistinguishability(tally)
-        assert result.impostor_do_task == 380
-        assert result.crewmate_do_task == 3465
+        assert result.impostor_do_task == 467
+        assert result.crewmate_do_task == 3890
         assert result.impostor_wait_share is not None
         assert result.crewmate_wait_share is not None
-        assert result.impostor_wait_share == pytest.approx(0.0828, abs=1e-3)
-        assert result.crewmate_wait_share == pytest.approx(0.0725, abs=1e-3)
+        assert result.impostor_wait_share == pytest.approx(0.0650, abs=1e-3)
+        assert result.crewmate_wait_share == pytest.approx(0.1790, abs=1e-3)
         # The fingerprint is gone: impostor wait-share no longer dwarfs crew's —
-        # the two roles now idle at a comparable rate.
+        # impostors now idle LESS than the redistribute-burdened crew.
         assert result.impostor_wait_share < 2 * result.crewmate_wait_share
 
     def test_ingest_is_deterministic(self) -> None:
@@ -558,16 +563,16 @@ class TestSingleWitnessInformChannel:
             {CHANNEL_BODY_PROXIMITY}
         )
 
-    def test_committed_w2_credits_six_inform(self) -> None:
+    def test_committed_w2_credits_no_inform(self) -> None:
         # The inform fold is recording-time (Task 10.15); the committed W2 bytes
-        # carry it LIVE, so rendered rows carry the +0.05. Re-extracted after
-        # Task 13.14 the channel credits 6 conversions (was 10 pre-13.14): where a
-        # promoted lone STRONG contradiction now clears the gate on the
-        # contradiction channel alone, the ejection attributes there instead of to
-        # the single-witness inform, so 4 conversions move off the inform channel.
+        # carry it LIVE. Re-extracted on the Task 13.12 redistribute + Wave-E
+        # re-record the channel credits 0 conversions (was 6): with the 13.14
+        # promoted lone STRONG contradictions clearing the gate on the contradiction
+        # channel and the de-imperatived 13.13 gate ejecting far fewer impostors (14
+        # vs 33), no ejection now attributes to the single-witness inform.
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_multi_signal_conversion(report.report.games)
-        assert result.conversions_with_single_witness_inform == 6
+        assert result.conversions_with_single_witness_inform == 0
 
 
 def test_gate_spec_states_the_three_tiers_separately() -> None:

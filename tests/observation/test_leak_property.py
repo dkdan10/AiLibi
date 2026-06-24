@@ -328,6 +328,18 @@ def test_observation_packets_never_leak_hidden_information(
             # leak), the impostor's own per-seat blend target, never a dropped-filter
             # foreign min. The pretend selection is a pure function of map + seat +
             # tick, so the swept value stays deterministic and replay-safe.
+            #
+            # Task 13.12 (redistribute): the canonical map now re-keys a dead
+            # crewmate's incomplete instances to a LIVING crewmate, so a crewmate's
+            # pending task is no longer its STATIC initial assignment -- it may be an
+            # INHERITED instance it now owns. The firewall is unchanged (the packet
+            # still surfaces only a bare map id of a task this crewmate OWNS), so the
+            # expectation is re-derived from CURRENT ownership (``task.owner ==
+            # player_id``) INDEPENDENTLY of the function under test: the lexico-
+            # graphically-first owned, unfinished map id, exactly mirroring
+            # ``_pending_task_id_for_agent``'s crewmate contract. A dropped owner
+            # filter (surfacing a FOREIGN / global-min task this crewmate does not
+            # own) still mismatches here and is caught.
             if packet.self_state.role == "IMPOSTOR":
                 expected_pending = impostor_pretend_task_id(
                     game_map=game_map,
@@ -336,7 +348,12 @@ def test_observation_packets_never_leak_hidden_information(
                     tick=state.tick,
                 )
             else:
-                expected_pending = task_assignment[player_id]
+                owned_map_ids = sorted(
+                    task.map_task_id
+                    for task in state.tasks.values()
+                    if task.owner == player_id and not task.completed
+                )
+                expected_pending = owned_map_ids[0] if owned_map_ids else None
             assert packet.self_state.pending_task_id == expected_pending
             assert ":" not in (packet.self_state.pending_task_id or "")
             if packet.self_state.role == "CREWMATE":
@@ -344,13 +361,23 @@ def test_observation_packets_never_leak_hidden_information(
                 # A crewmate never kills, so it never carries an ``own_kill`` --
                 # the privileged self-channel field is impostor-act only.
                 assert packet.self_state.own_kill is None
-                # No OTHER owner's task id appears anywhere in a crew packet
-                # (distinct ids make the owner-scope leak unambiguous). The only
-                # task id a packet legitimately carries is the recipient's own
-                # ``pending_task_id``, asserted above.
+                # No task this crewmate does NOT currently own appears anywhere in
+                # its packet (distinct ids make the owner-scope leak unambiguous).
+                # "Foreign" is scoped to CURRENT ownership, not the static initial
+                # deal: under redistribute a crewmate may now own an INHERITED
+                # re-keyed instance (a task another player held at seed time), which
+                # is its own and legitimately present -- so a static-assignment id
+                # the crewmate now owns is exempt, while any task it does NOT own
+                # (a living other's, or a global-min foreign min) still must not
+                # leak.
                 dumped = json.dumps(packet_dump)
+                owned_now = {
+                    task.map_task_id
+                    for task in state.tasks.values()
+                    if task.owner == player_id
+                }
                 for other_id, other_map_id in task_assignment.items():
-                    if other_id == player_id:
+                    if other_id == player_id or other_map_id in owned_now:
                         continue
                     assert other_map_id not in dumped, (
                         f"{player_id} packet leaked {other_id}'s task {other_map_id!r}"

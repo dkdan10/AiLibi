@@ -442,7 +442,9 @@ def test_advantage_reflects_post_meeting_ejection(
     # meeting tick the advantage frame is recomputed from the POST-resolution
     # state, so the ejected player is not counted even though the tick's
     # agent_states (the meeting roster) still show them alive.
-    replay = nine_p_two_i_loader.load_replay("headless-seed-12")
+    # Task 13.12 redistribute re-record: seed-12 no longer ejects (all SKIP);
+    # re-pointed to seed-16, which carries an EJECTED meeting on the new bytes.
+    replay = nine_p_two_i_loader.load_replay("headless-seed-16")
     ejection = next(m for m in replay.meetings if m.outcome == "EJECTED")
     tick = next(t for t in replay.ticks if t.tick == ejection.tick)
     ejected_still_in_states = any(

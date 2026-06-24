@@ -988,9 +988,11 @@ def _require_meeting_inputs(facts: dict[str, Any]) -> None:
     null run raises rather than silently zeroing or undercounting a dimension
     (mirrors :func:`_accumulator_trajectory_index`). Validated per meeting:
 
-    * ``suspicion_graph_by_voter`` — a NON-EMPTY dict (the D2 separation input;
-      the design's "the suspicion graph is always populated"). A missing / null /
-      empty / non-dict value raises — it would silently zero the 25%-weight D2.
+    * ``suspicion_graph_by_voter`` — a dict (the D2 separation input). A missing /
+      null / non-dict value raises — it would silently zero the 25%-weight D2. May
+      be EMPTY, mirroring ``testimony_records`` below: a no-accusation SKIP meeting
+      (nobody voiced a suspicion → an empty graph) legitimately scores D2=0, so an
+      empty dict is a real game state, not the data error the tripwire guards.
     * ``testimony_records`` — a list (the D2 conversion + railroad input). May be
       EMPTY: a meeting with no accused subjects is legitimate.
     * ``plurality_margin`` — present on every EJECTION meeting (the D4 swing
@@ -1006,9 +1008,13 @@ def _require_meeting_inputs(facts: dict[str, Any]) -> None:
         for m in g["meetings"]:
             mid = m.get("meeting_id")
             graph = m.get("suspicion_graph_by_voter")
-            if not isinstance(graph, dict) or not graph:
+            # An EMPTY dict is legitimate (a no-accusation SKIP meeting voices no
+            # suspicion → an empty graph → a correct D2=0), mirroring the empty
+            # testimony_records case below; only a missing / null / non-dict value
+            # is the data error this tripwire guards against.
+            if not isinstance(graph, dict):
                 raise ValueError(
-                    f"meeting {mid!r} has a missing / null / empty / non-dict "
+                    f"meeting {mid!r} has a missing / null / non-dict "
                     "'suspicion_graph_by_voter' (the D2 separation input) on an "
                     "aggregates-bearing facts JSON — refusing to silently score "
                     "D2=0; re-run the gameplay-facts extractor"
