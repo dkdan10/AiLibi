@@ -1,5 +1,13 @@
 # Phase 13 — Pre-ML grounding fixes (rubric repair → deduction rework)
 
+> **STATUS: CLOSED 2026-06-25.** Substrate BUILT + the forward-redesign mechanism VERIFIED PRESENT
+> (R7 lit 13/195; geomean ranks the 3 eject-decided games top-3; R4 flat at 4), but the combined
+> 13.12 re-record **FAILED its headline gate** — R1 fell 6/50→3/50, impostor win 84%, eject-rate 9%.
+> The 9B cannot drive the meeting under single-room vision (info+model bottleneck, not a vote bug).
+> The re-record is kept as the **final-9B baseline** (PR #195, `58ee87f`). **NEXT = Phase 14 model
+> migration**, carrying this same gate forward. Full close-audit:
+> `audits/audit-2026-06-25-0859-phase-13-close.md`.
+
 Goal: make the substrate SOUND before Phase-C ML. The 2026-06-20 grounding audit
 (`experiments/lab/report-grounding-audit.md` — 26-agent, adversarially verified; lands on main via
 PR #181) found the **rubric is unsafe as raw ML fitness**: three of four scored terms (R2/R3/R7) have
