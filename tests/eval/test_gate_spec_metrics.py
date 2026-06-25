@@ -923,47 +923,44 @@ class TestCommittedW2GateSpecPins:
         ]
         assert channels_by_site == expected
 
-    def test_multi_signal_conversion_reads_26_of_33(self) -> None:
-        # Re-extracted after Task 13.14: 26 of the 33 impostor ejections are
-        # multi-signal (was 27 of 33 pre-13.14). A promoted lone STRONG flag now
-        # explains an ejection's suspicion mass on the contradiction channel
-        # ALONE where it previously needed a second signal (single-witness inform
-        # / body proximity) to clear the gate, so one conversion moves
-        # multi-signal -> single-signal (27/6 -> 26/7). The impostor-ejection
-        # COUNT is unchanged (recorded outcomes) and channel attribution stays
-        # total (0 unattributed).
+    def test_multi_signal_conversion_reads_11_of_14(self) -> None:
+        # Re-extracted on the Task 13.12 redistribute + Wave-E re-record: 11 of the
+        # 14 impostor ejections are multi-signal (the impostor-ejection COUNT fell
+        # 33 -> 14 as the de-imperatived 13.13 gate stops auto-converting argmax
+        # suspicion into ejections — the headline R1 effect). Channel attribution
+        # stays TOTAL (0 unattributed); the 11/3 multi/single split holds the
+        # multi-signal rate at 0.786.
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
-        assert result.impostor_ejections == 33
-        assert result.multi_signal_conversions == 26
-        assert result.single_signal_conversions == 7
+        assert result.impostor_ejections == 14
+        assert result.multi_signal_conversions == 11
+        assert result.single_signal_conversions == 3
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(0.7878787878787878)
+        assert result.multi_signal_rate == pytest.approx(11 / 14)
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
-        # The W2 supply row, re-extracted after Task 13.14 promotes the
-        # self-stated alibi_vs_sighting band to STRONG: 112 flags now split
-        # 60w/52s (was 112w/0s — the headline R7 lever, 52 strong flags lighting
-        # off 0). The flag COUNT, role split (39 CREW / 73 IMP), zero-contradiction
-        # share (60/114), genuine-subject supply (25), and over-gate listener rows
-        # (261) are UNCHANGED: reclassification moves flags weak->strong without
-        # adding, removing, or re-subjecting any (the recorded bytes are
-        # untouched — no re-record). This is the expected eval-metric shift the
-        # is_weak_contradiction readers see, not a regression.
+        # The W2 supply row, re-extracted on the Task 13.12 redistribute + Wave-E
+        # re-record: 173 flags now split 101w/72s (prior W2 read 112 flags 60w/52s)
+        # — the 13.14 alibi_vs_sighting->STRONG promotion is now BAKED into the
+        # recorded bytes (R7 lit: 72 strong flags off 0). Counts scale with the
+        # redistribute substrate's longer, more numerous meetings (195 vs 114): flag
+        # role split 91 CREW / 82 IMP, zero-contradiction share 128/195, genuine-
+        # subject supply 25 (unchanged), accused-impostor 131, over-gate listener
+        # rows 297. The expected eval-metric shift, not a regression.
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
-        assert gauges.meetings_total == 114
-        assert gauges.total_flags == 112
-        assert gauges.weak_flags == 60
-        assert gauges.strong_flags == 52
-        assert gauges.zero_contradiction_meetings == 60
+        assert gauges.meetings_total == 195
+        assert gauges.total_flags == 173
+        assert gauges.weak_flags == 101
+        assert gauges.strong_flags == 72
+        assert gauges.zero_contradiction_meetings == 128
         assert gauges.genuine_subject_meetings == 25
-        assert gauges.flag_subjects_crew == 39
-        assert gauges.flag_subjects_impostor == 73
-        assert gauges.accused_impostor_meetings == 99
-        assert gauges.over_gate_listener_rows == 261
+        assert gauges.flag_subjects_crew == 91
+        assert gauges.flag_subjects_impostor == 82
+        assert gauges.accused_impostor_meetings == 131
+        assert gauges.over_gate_listener_rows == 297
 
     def test_corrected_w2_baseline_matches_a_rederivation(self) -> None:
         # ONE home: corrected_w2_baseline.json IS the current-era baseline,

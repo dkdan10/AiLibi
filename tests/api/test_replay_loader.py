@@ -262,7 +262,11 @@ def test_get_meeting_memory_fields(tmp_path: Path) -> None:
     assert memory.agent_id == reporter
     assert memory.tick == expected.meeting_tick
     assert memory.role == "CREWMATE"
-    assert memory.tasks_assigned == 1
+    # Task 13.12 flipped the canonical default to ``redistribute``: the fixture's
+    # kill re-keys the victim's incomplete task to the surviving reporter, so the
+    # reconstructed memory view shows 2 assigned tasks (was 1 under the old drop
+    # default — the dropped task is now inherited, not deleted).
+    assert memory.tasks_assigned == 2
     assert memory.rendered_memory_text.startswith("## Your role: CREWMATE")
     # Observations are projected from the reconstructed episodic memory (the
     # same store rendered_memory_text draws from): the reporter saw the body, so

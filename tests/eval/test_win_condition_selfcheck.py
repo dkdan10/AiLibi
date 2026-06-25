@@ -117,14 +117,14 @@ def test_committed_4p1i_set_holds_the_invariant() -> None:
         if check.first_zero_impostor_tick is not None:
             eliminations += 1
             assert check.game_over_tick == check.first_zero_impostor_tick
-    # Ground truth of the phase-11 Wave-1 re-record (vents/cover-on-reply/
-    # kill-memory): on qwen3.5:9b the flat 4p/1i set ejects the impostor in five
-    # games (CREWMATE_EJECT, seeds 2/3/11/24/29) — the prior re-record ejected
-    # in four. Each elimination's first_zero == game_over tick is asserted above
-    # (the A-A-3 invariant, which still holds set-wide); this pins the count the
-    # re-record produced, so the §6.3 elimination path now runs on the committed
-    # bytes, not only the hermetic apply_meeting_result eject tests.
-    assert eliminations == 5
+    # Ground truth of the Task 13.12 redistribute + Wave-E re-record: on
+    # qwen3.5:9b the flat 4p/1i set ejects the impostor in four games
+    # (CREWMATE_EJECT, seeds 19/20/26/46) — the prior re-record ejected in five.
+    # Each elimination's first_zero == game_over tick is asserted above (the A-A-3
+    # invariant, which still holds set-wide); this pins the count the re-record
+    # produced, so the §6.3 elimination path now runs on the committed bytes, not
+    # only the hermetic apply_meeting_result eject tests.
+    assert eliminations == 4
 
 
 def _roster(replay_dir: Path) -> tuple[int, int, int]:

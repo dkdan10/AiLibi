@@ -1246,7 +1246,9 @@ def test_dead_crewmate_incomplete_task_is_dropped_and_crew_can_still_win() -> No
     dead crewmate stay so they continue to count toward ``crew_tasks_done``.
     """
 
-    game_map = load_canonical_map()
+    # Task 13.12 flipped the canonical default to ``redistribute``; this test
+    # covers the DROP rule explicitly (still a valid rule, just no longer default).
+    game_map = load_canonical_map().model_copy(update={"dead_task_rule": "drop"})
     state = _state()
     players = dict(state.players)
     # Add a second crewmate co-located with the impostor in CAFETERIA so
@@ -1327,7 +1329,9 @@ def test_kill_removing_last_incomplete_task_triggers_crew_win_same_tick() -> Non
     regress it.
     """
 
-    game_map = load_canonical_map()
+    # Task 13.12 flipped the canonical default to ``redistribute``; this test
+    # covers the DROP rule explicitly (still a valid rule, just no longer default).
+    game_map = load_canonical_map().model_copy(update={"dead_task_rule": "drop"})
     state = _state()
     players = dict(state.players)
     players["victim"] = _player("victim", "CREWMATE", "CAFETERIA", (2.0, 0.0))
@@ -1595,11 +1599,13 @@ def test_redistribute_recipient_can_complete_task_for_crew_win() -> None:
     assert event_to_dict(game_over)["reason"] == "CREWMATE_TASKS"
 
 
-def test_drop_default_leaves_dead_crewmate_redistribution_off() -> None:
-    """Under the DEFAULT ``drop`` rule the victim's incomplete instance is
-    removed with NO re-key — the byte-identical baseline (DESIGN.md §3.5)."""
+def test_drop_rule_leaves_dead_crewmate_redistribution_off() -> None:
+    """Under the ``drop`` rule the victim's incomplete instance is removed with
+    NO re-key — the byte-identical baseline (DESIGN.md §3.5). Task 13.12 flipped
+    the canonical DEFAULT to ``redistribute``, so this pins the drop rule on an
+    explicit drop-map (drop is still a valid rule, just no longer the default)."""
 
-    game_map = load_canonical_map()
+    game_map = load_canonical_map().model_copy(update={"dead_task_rule": "drop"})
     assert game_map.dead_task_rule == "drop"
     state = _state()
     players = dict(state.players)

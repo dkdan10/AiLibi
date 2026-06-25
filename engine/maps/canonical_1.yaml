@@ -33,11 +33,16 @@ version: "0.2"
 tick_rate_hz: 2
 kill_cooldown_ticks: 4
 
-# Dead-crewmate task rule (DESIGN.md §3.5). ``drop`` (the default) deletes a
-# dead crewmate's incomplete task instances; ``redistribute`` re-keys each to a
-# living crewmate. Kept at ``drop`` so the committed replays + their state-hash
-# verify stay byte-identical — the 13.12 re-record flips this to ``redistribute``.
-dead_task_rule: drop
+# Dead-crewmate task rule (DESIGN.md §3.5). ``drop`` deletes a dead crewmate's
+# incomplete task instances; ``redistribute`` (active) re-keys each to a living
+# crewmate, carrying progress, so the crew task burden does not shrink on a death.
+# This is the validated Wave-D lever that breaks the CREWMATE_TASKS stopwatch
+# (experiments/lab/report-stopwatch-sweep.md): the only crew win path becomes
+# ejection — i.e. deduction. Flipped from ``drop`` by the Task 13.12 combined
+# re-record; the committed replays were re-recorded under this rule + the Wave-E
+# substrate (13.13 de-imperative gate / 13.14 alibi_vs_sighting STRONG / 13.15
+# geomean rubric), and the state-hash verify re-anchors to the new recording.
+dead_task_rule: redistribute
 
 # ---------------------------------------------------------------------------
 # VISIBILITY DEFAULTS
