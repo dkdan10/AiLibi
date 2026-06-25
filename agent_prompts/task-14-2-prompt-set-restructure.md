@@ -20,10 +20,13 @@ Introduce a per-model prompt-set directory layer so the right templates load for
 four existing templates VERBATIM (no content edit) into `agents/strategic/prompts/qwen3_5_9b/`, pinning them
 as the frozen 9B reference set. Parameterize the loader by a `prompt_set` selector (env `AILIBI_PROMPT_SET`,
 default `qwen3_5_9b` for backward-compatible rendering), building the Jinja `Environment` /
-`FileSystemLoader` against the selected subdir. Make `DEFAULT_PROMPT_VERSIONS` a per-set registry and
-namespace the recorded `prompt_versions` with the set name so a 9B replay is distinguishable from a new-model
-replay. Because the move is content-preserving, the `qwen3_5_9b` set renders byte-identically and the
-committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
+`FileSystemLoader` against the selected subdir. Add a per-set version registry ALONGSIDE the existing
+`DEFAULT_PROMPT_VERSIONS`, keeping that symbol and the 9B set's recorded values (`crewmate_report.v8`,
+`accusation_round.v9`, `impostor_report_v6`, `vote_ballot/v7`) byte-identically unchanged — so the committed
+replays AND the existing `prompt_versions` assertions in `tests/orchestrator/` + `tests/scripts/` stay green
+without edits. A new-model replay is distinguished by its OWN version strings plus the recorded model id, not
+by prefixing the 9B set's keys/values. Because the move is content-preserving and the 9B recorded metadata is
+unchanged, the committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
 
 **Files in scope:**
 - agents/strategic/prompts/qwen3_5_9b/crewmate_report.j2 (moved verbatim from the flat path)
@@ -31,7 +34,7 @@ committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
 - agents/strategic/prompts/qwen3_5_9b/accusation_round.j2 (moved verbatim)
 - agents/strategic/prompts/qwen3_5_9b/vote_ballot.j2 (moved verbatim)
 - agents/strategic/prompts/loader.py (the `prompt_set` selector + per-set Environment resolution; the template-name constants stay, the directory varies)
-- orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS` becomes a per-set registry; recorded `prompt_versions` namespaced by set)
+- orchestrator/game.py (add a per-set version registry alongside `DEFAULT_PROMPT_VERSIONS`; the 9B set's recorded `prompt_versions` keys/values are unchanged)
 - tests/agents/test_prompt_loader.py (new or extended: the default set resolves to `qwen3_5_9b` and renders byte-identically; a second set loads; an unknown set fails loud)
 
 **Files NOT in scope:**
@@ -43,7 +46,7 @@ committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
 **Definition of done:**
 - [ ] The four templates live under `agents/strategic/prompts/qwen3_5_9b/` with byte-identical content; the `qwen3_5_9b` set renders byte-identically to the pre-move templates (a rendered-output equality test pins this).
 - [ ] The loader takes a `prompt_set` selector defaulting to `qwen3_5_9b` (via `AILIBI_PROMPT_SET`); an unknown set raises (no silent fallback); a second (empty-stub) set is loadable to prove the seam.
-- [ ] `DEFAULT_PROMPT_VERSIONS` is a per-set registry; recorded `prompt_versions` carry the set namespace; committed 4p1i + 9p2i reconstruct byte-identical with NO re-record (`scripts/verify_samples.sh` + `eval/prompt_regression.py` exact-match hold).
+- [ ] A per-set version registry is added alongside `DEFAULT_PROMPT_VERSIONS`; the 9B set's recorded `prompt_versions` keys/values are byte-identically unchanged, so the existing assertions in `tests/orchestrator/test_replay_meetings.py`, `tests/orchestrator/test_meeting_integration.py`, and `tests/scripts/test_manifest_writer.py` stay green WITHOUT edits; committed 4p1i + 9p2i reconstruct byte-identical with NO re-record (`scripts/verify_samples.sh` + `eval/prompt_regression.py` exact-match hold).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -56,10 +59,13 @@ committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
 
 Keep template bytes identical — this is a `git mv` plus a loader/registry change, nothing more. The loader's
 `_TEMPLATE_DIR` (`loader.py:57`) becomes per-set: resolve `prompt_set` to a subdir and build the
-`FileSystemLoader` against it; the `*_TEMPLATE` filename constants are unchanged. For `DEFAULT_PROMPT_VERSIONS`
-(`orchestrator/game.py:261`), key the mapping by set name (e.g. `{"qwen3_5_9b": {...current...}}`) and have
-the game/meeting runner select by the active set; the recorded `prompt_versions` should make the set explicit
-so provenance never confuses a 9B replay with a new-model replay. Determinism is the acceptance bar:
+`FileSystemLoader` against it; the `*_TEMPLATE` filename constants are unchanged. Keep `DEFAULT_PROMPT_VERSIONS`
+(`orchestrator/game.py:261`) as the 9B default mapping with its EXACT current values and add a registry
+alongside (e.g. `PROMPT_VERSION_SETS = {"qwen3_5_9b": DEFAULT_PROMPT_VERSIONS, ...}`) that the runner selects
+by active set. Do NOT prefix or reformat the 9B set's keys/values — `tests/orchestrator/test_replay_meetings.py:390-415`,
+`tests/orchestrator/test_meeting_integration.py:2320`, and `tests/scripts/test_manifest_writer.py` pin them and
+the committed replays store them verbatim; provenance for a new set comes from its own version strings + the
+recorded model id. Determinism is the acceptance bar:
 reconstruction reads recorded prompt bytes, so a content-preserving move keeps the committed samples valid —
 prove it with `verify_samples` rather than asserting it.
 

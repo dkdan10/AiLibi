@@ -28,7 +28,12 @@ seam so Task 7.6 normalization and failed-call recording are inherited unchanged
 an A/B model swap can never fall back to a frontier rate. A `thinking_policy` knob (`fail_loud` default /
 `strip`) handles reasoning models: `fail_loud` raises on a populated reasoning channel (parity with the
 Ollama doctrine), `strip` discards it explicitly (logged, never silent) so the 14.4 sweep can evaluate
-reasoning models.
+reasoning models. Because the shared `_extract_json_block` deliberately strips a prose preamble and returns
+the first valid JSON object, `fail_loud` runs a RAW-CONTENT reasoning guard BEFORE extraction (inspecting the
+`reasoning_content` channel and the raw `content` for reasoning markers / leading prose) — otherwise a
+`reasoning\n{JSON}` response would be silently accepted. Separately, a REQUEST-time thinking toggle (mirroring
+Ollama's top-level `think=` field) tells the model whether to reason at all, so 14.4 can drive the
+non-thinking/thinking sweep axis — distinct from the response-side `thinking_policy`.
 
 **Files in scope:**
 - llm/featherless_client.py (new: `FeatherlessClient`, `FeatherlessRawResponse`, `FeatherlessSendHook`, `_default_send`, `_raw_from_response_body`, module defaults, the thinking policy)
@@ -46,7 +51,8 @@ reasoning models.
 **Definition of done:**
 - [ ] `FeatherlessClient` implements the `LLMClient` Protocol; `complete()` builds the `response_format` json_schema request from `schema.model_json_schema()` and routes the response through the SHARED `_extract_json_block` + `model_validate_json` + `_attach_parse_failure` seam.
 - [ ] Cost is $0 for every Featherless model (provider-keyed zero table; an A/B model swap cannot fall back to a frontier rate); `preflight_cost_per_input_token_usd == preflight_cost_per_output_token_usd == 0.0`.
-- [ ] Thinking policy: `fail_loud` (default) raises a descriptive error on a populated reasoning channel; `strip` discards it explicitly. No silent strip. Inline reasoning that survives into content is caught by the parse seam as a `ValidationError` (test both paths).
+- [ ] Response-side thinking policy: `fail_loud` (default) raises a descriptive error on a populated reasoning channel — INCLUDING inline reasoning in `content` — via a raw-content guard that runs BEFORE `_extract_json_block` (the shared extractor strips a prose preamble and would otherwise silently accept `reasoning\n{JSON}`); `strip` discards reasoning explicitly. No silent strip. Tests assert `reasoning\n{valid JSON}` under `fail_loud` RAISES and under `strip` returns the JSON.
+- [ ] Request-time thinking toggle: a first-class knob (mirroring Ollama's top-level `think=`) requests thinking ON or OFF, distinct from the response-side `thinking_policy`, so 14.4's non-thinking/thinking sweep axis is real and not degenerate; the exact wire field (e.g. `chat_template_kwargs` / `reasoning_effort`) is resolved per model at implementation time.
 - [ ] `build_default_client` selects Featherless on `AILIBI_LLM_PROVIDER=featherless`, fails loud without `FEATHERLESS_API_KEY`, and reuses `AILIBI_LLM_MEETING_MODEL` / `AILIBI_LLM_TRIGGER_MODEL`; `.env.example` documents the provider.
 - [ ] `httpx` is imported lazily inside `_default_send`; CI / fake-provider runs never import it; unit tests inject `send` and make no network call; `_raw_from_response_body` fails loud on missing `usage` / empty `choices`.
 - [ ] `@real_provider` Featherless tests are skipped in CI (env-gated on `AILIBI_RUN_REAL_PROVIDER_TESTS=1`) and documented as operator-verified.
@@ -73,8 +79,12 @@ reasoning side-channel `choices[0].message.reasoning_content` (`"" `when absent)
 `ollama_client.py:324 _raw_from_generate_response`). Fail loud on empty content (mirror Anthropic's "no text
 blocks" `RuntimeError`). Add `_FEATHERLESS_PRICING_USD_PER_MTOK = {}` +
 `_FEATHERLESS_FALLBACK_PRICING_USD_PER_MTOK = (0.0, 0.0)` and a `provider == PROVIDER_FEATHERLESS` branch in
-`_compute_cost_usd` (`provider.py:597`). `max_tokens` vs `max_completion_tokens` and any request-level
-reasoning-suppression field are resolved against the endpoint docs at implementation time.
+`_compute_cost_usd` (`provider.py:597`). The `fail_loud` raw-content guard must run BEFORE
+`_extract_json_block` (`provider.py:474-526`), which strips a prose preamble and returns the first valid JSON
+— so a post-extraction check cannot catch `reasoning\n{JSON}`. The request-time thinking toggle mirrors
+`ollama_client.py:205`'s top-level `think=`; its wire field (`chat_template_kwargs` / `reasoning_effort` / a
+`/no_think` token) and `max_tokens` vs `max_completion_tokens` are resolved against the endpoint docs per
+model at implementation time.
 
 ## Public types this task introduces
 - `llm.featherless_client.FeatherlessClient`
@@ -92,7 +102,9 @@ seam must rescue?) is model-specific and is what 14.4 measures — but the adapt
 OpenAI-shaped response first. The `fail_loud` thinking default must NOT abort the 14.4 sweep of reasoning
 models — the harness selects `strip`; the recorded baseline (14.7) selects `fail_loud` unless the owner signs
 off on `strip` at 14.6. Getting the `usage` / `choices` fail-loud mapping right protects the per-game token
-budget that is now the only real backstop ($0 cost zeroes the `BudgetedLLMClient` USD dimension). Changes to
+budget that is now the only real backstop ($0 cost zeroes the `BudgetedLLMClient` USD dimension). The
+`fail_loud` reasoning guard MUST run before `_extract_json_block` (which strips prose preambles), or
+`fail_loud` silently degrades to `strip` — a no-silent-fallbacks violation. Changes to
 `provider.py` shared constants / `__all__` / `_compute_cost_usd` are additive-only; the existing
 Anthropic/Ollama tests must stay green.
 

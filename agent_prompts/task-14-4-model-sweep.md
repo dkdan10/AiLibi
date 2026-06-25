@@ -37,7 +37,7 @@ tuple WITH its evidence — including an honest statement of whether the informa
 - orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS` unchanged until a baseline locks)
 
 **Definition of done:**
-- [ ] Each candidate model (Qwen3-32B instruct, Qwen3-30B-A3B, GLM-4-32B, one RP fine-tune) runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available; mechanical metrics + per-model parse-success rate are tabulated against the 9B baseline.
+- [ ] Each candidate model (Qwen3-32B instruct, Qwen3-30B-A3B, GLM-4-32B, one RP fine-tune) runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available (driven by the request-time thinking toggle from 14.1, threaded via 14.3 — not the response-side policy); mechanical metrics + per-model parse-success rate are tabulated against the 9B baseline.
 - [ ] The cover-directive 2×2 (model × {cover OFF, cover ON-reply}) is run and the report states the quadrant verdict: capability ceiling / prompt artifact / both / information ceiling.
 - [ ] Per-model structured-output fidelity (parse-success under `response_format`) is reported; any model that cannot reliably emit schema-valid JSON is flagged unfit for the sim.
 - [ ] A recommended (meeting_model, trigger_model, mode) tuple is proposed WITH evidence; the report states honestly whether the information-ceiling hypothesis is supported (tell persists across all models) — a valid finding either way.

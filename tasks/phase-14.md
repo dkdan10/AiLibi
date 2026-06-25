@@ -31,8 +31,9 @@ Locked decisions (2026-06-25):
   a hosted endpoint that returns reasoning in a separate channel); thinking-mode is a sweep AXIS.
 - **Two-set structure** (4p1i flat + 9p2i canonical with its roster sidecar) is unchanged.
 
-Parallelism: 14.1, 14.2, 14.3 are independent roots and dispatch in parallel (disjoint file scopes):
-`(14.1 ∥ 14.2 ∥ 14.3) → 14.4 → 14.5 → 14.6 → 14.7 → 14.8`. 14.4 needs 14.1 + 14.3; 14.5 needs 14.2 + 14.4.
+Parallelism: 14.1 and 14.2 are independent roots and dispatch in parallel (disjoint file scopes); 14.3
+follows 14.1 because its probe backend imports the Featherless `_default_send` introduced by 14.1:
+`(14.1 ∥ 14.2) → 14.3 → 14.4 → 14.5 → 14.6 → 14.7 → 14.8`. 14.3 needs 14.1; 14.4 needs 14.1 + 14.3; 14.5 needs 14.2 + 14.4.
 Operator-run / spend gates: 14.4 (model sweep, $0 marginal) and 14.7 (re-record, the time gate).
 Design-thread (no agent dispatch): 14.6 (lock decision) and 14.8 (close). Track with
 `python3 scripts/compute_next_task.py --phase 14`.
@@ -69,7 +70,12 @@ seam so Task 7.6 normalization and failed-call recording are inherited unchanged
 an A/B model swap can never fall back to a frontier rate. A `thinking_policy` knob (`fail_loud` default /
 `strip`) handles reasoning models: `fail_loud` raises on a populated reasoning channel (parity with the
 Ollama doctrine), `strip` discards it explicitly (logged, never silent) so the 14.4 sweep can evaluate
-reasoning models.
+reasoning models. Because the shared `_extract_json_block` deliberately strips a prose preamble and returns
+the first valid JSON object, `fail_loud` runs a RAW-CONTENT reasoning guard BEFORE extraction (inspecting the
+`reasoning_content` channel and the raw `content` for reasoning markers / leading prose) — otherwise a
+`reasoning\n{JSON}` response would be silently accepted. Separately, a REQUEST-time thinking toggle (mirroring
+Ollama's top-level `think=` field) tells the model whether to reason at all, so 14.4 can drive the
+non-thinking/thinking sweep axis — distinct from the response-side `thinking_policy`.
 
 **Files in scope:**
 - llm/featherless_client.py (new: `FeatherlessClient`, `FeatherlessRawResponse`, `FeatherlessSendHook`, `_default_send`, `_raw_from_response_body`, module defaults, the thinking policy)
@@ -87,7 +93,8 @@ reasoning models.
 **Definition of done:**
 - [ ] `FeatherlessClient` implements the `LLMClient` Protocol; `complete()` builds the `response_format` json_schema request from `schema.model_json_schema()` and routes the response through the SHARED `_extract_json_block` + `model_validate_json` + `_attach_parse_failure` seam.
 - [ ] Cost is $0 for every Featherless model (provider-keyed zero table; an A/B model swap cannot fall back to a frontier rate); `preflight_cost_per_input_token_usd == preflight_cost_per_output_token_usd == 0.0`.
-- [ ] Thinking policy: `fail_loud` (default) raises a descriptive error on a populated reasoning channel; `strip` discards it explicitly. No silent strip. Inline reasoning that survives into content is caught by the parse seam as a `ValidationError` (test both paths).
+- [ ] Response-side thinking policy: `fail_loud` (default) raises a descriptive error on a populated reasoning channel — INCLUDING inline reasoning in `content` — via a raw-content guard that runs BEFORE `_extract_json_block` (the shared extractor strips a prose preamble and would otherwise silently accept `reasoning\n{JSON}`); `strip` discards reasoning explicitly. No silent strip. Tests assert `reasoning\n{valid JSON}` under `fail_loud` RAISES and under `strip` returns the JSON.
+- [ ] Request-time thinking toggle: a first-class knob (mirroring Ollama's top-level `think=`) requests thinking ON or OFF, distinct from the response-side `thinking_policy`, so 14.4's non-thinking/thinking sweep axis is real and not degenerate; the exact wire field (e.g. `chat_template_kwargs` / `reasoning_effort`) is resolved per model at implementation time.
 - [ ] `build_default_client` selects Featherless on `AILIBI_LLM_PROVIDER=featherless`, fails loud without `FEATHERLESS_API_KEY`, and reuses `AILIBI_LLM_MEETING_MODEL` / `AILIBI_LLM_TRIGGER_MODEL`; `.env.example` documents the provider.
 - [ ] `httpx` is imported lazily inside `_default_send`; CI / fake-provider runs never import it; unit tests inject `send` and make no network call; `_raw_from_response_body` fails loud on missing `usage` / empty `choices`.
 - [ ] `@real_provider` Featherless tests are skipped in CI (env-gated on `AILIBI_RUN_REAL_PROVIDER_TESTS=1`) and documented as operator-verified.
@@ -120,8 +127,12 @@ reasoning side-channel `choices[0].message.reasoning_content` (`"" `when absent)
 `ollama_client.py:324 _raw_from_generate_response`). Fail loud on empty content (mirror Anthropic's "no text
 blocks" `RuntimeError`). Add `_FEATHERLESS_PRICING_USD_PER_MTOK = {}` +
 `_FEATHERLESS_FALLBACK_PRICING_USD_PER_MTOK = (0.0, 0.0)` and a `provider == PROVIDER_FEATHERLESS` branch in
-`_compute_cost_usd` (`provider.py:597`). `max_tokens` vs `max_completion_tokens` and any request-level
-reasoning-suppression field are resolved against the endpoint docs at implementation time.
+`_compute_cost_usd` (`provider.py:597`). The `fail_loud` raw-content guard must run BEFORE
+`_extract_json_block` (`provider.py:474-526`), which strips a prose preamble and returns the first valid JSON
+— so a post-extraction check cannot catch `reasoning\n{JSON}`. The request-time thinking toggle mirrors
+`ollama_client.py:205`'s top-level `think=`; its wire field (`chat_template_kwargs` / `reasoning_effort` / a
+`/no_think` token) and `max_tokens` vs `max_completion_tokens` are resolved against the endpoint docs per
+model at implementation time.
 
 **Integration risk:**
 
@@ -131,7 +142,9 @@ seam must rescue?) is model-specific and is what 14.4 measures — but the adapt
 OpenAI-shaped response first. The `fail_loud` thinking default must NOT abort the 14.4 sweep of reasoning
 models — the harness selects `strip`; the recorded baseline (14.7) selects `fail_loud` unless the owner signs
 off on `strip` at 14.6. Getting the `usage` / `choices` fail-loud mapping right protects the per-game token
-budget that is now the only real backstop ($0 cost zeroes the `BudgetedLLMClient` USD dimension). Changes to
+budget that is now the only real backstop ($0 cost zeroes the `BudgetedLLMClient` USD dimension). The
+`fail_loud` reasoning guard MUST run before `_extract_json_block` (which strips prose preambles), or
+`fail_loud` silently degrades to `strip` — a no-silent-fallbacks violation. Changes to
 `provider.py` shared constants / `__all__` / `_compute_cost_usd` are additive-only; the existing
 Anthropic/Ollama tests must stay green.
 
@@ -147,10 +160,13 @@ Introduce a per-model prompt-set directory layer so the right templates load for
 four existing templates VERBATIM (no content edit) into `agents/strategic/prompts/qwen3_5_9b/`, pinning them
 as the frozen 9B reference set. Parameterize the loader by a `prompt_set` selector (env `AILIBI_PROMPT_SET`,
 default `qwen3_5_9b` for backward-compatible rendering), building the Jinja `Environment` /
-`FileSystemLoader` against the selected subdir. Make `DEFAULT_PROMPT_VERSIONS` a per-set registry and
-namespace the recorded `prompt_versions` with the set name so a 9B replay is distinguishable from a new-model
-replay. Because the move is content-preserving, the `qwen3_5_9b` set renders byte-identically and the
-committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
+`FileSystemLoader` against the selected subdir. Add a per-set version registry ALONGSIDE the existing
+`DEFAULT_PROMPT_VERSIONS`, keeping that symbol and the 9B set's recorded values (`crewmate_report.v8`,
+`accusation_round.v9`, `impostor_report_v6`, `vote_ballot/v7`) byte-identically unchanged — so the committed
+replays AND the existing `prompt_versions` assertions in `tests/orchestrator/` + `tests/scripts/` stay green
+without edits. A new-model replay is distinguished by its OWN version strings plus the recorded model id, not
+by prefixing the 9B set's keys/values. Because the move is content-preserving and the 9B recorded metadata is
+unchanged, the committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
 
 **Files in scope:**
 - agents/strategic/prompts/qwen3_5_9b/crewmate_report.j2 (moved verbatim from the flat path)
@@ -158,7 +174,7 @@ committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
 - agents/strategic/prompts/qwen3_5_9b/accusation_round.j2 (moved verbatim)
 - agents/strategic/prompts/qwen3_5_9b/vote_ballot.j2 (moved verbatim)
 - agents/strategic/prompts/loader.py (the `prompt_set` selector + per-set Environment resolution; the template-name constants stay, the directory varies)
-- orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS` becomes a per-set registry; recorded `prompt_versions` namespaced by set)
+- orchestrator/game.py (add a per-set version registry alongside `DEFAULT_PROMPT_VERSIONS`; the 9B set's recorded `prompt_versions` keys/values are unchanged)
 - tests/agents/test_prompt_loader.py (new or extended: the default set resolves to `qwen3_5_9b` and renders byte-identically; a second set loads; an unknown set fails loud)
 
 **Files NOT in scope:**
@@ -170,7 +186,7 @@ committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
 **Definition of done:**
 - [ ] The four templates live under `agents/strategic/prompts/qwen3_5_9b/` with byte-identical content; the `qwen3_5_9b` set renders byte-identically to the pre-move templates (a rendered-output equality test pins this).
 - [ ] The loader takes a `prompt_set` selector defaulting to `qwen3_5_9b` (via `AILIBI_PROMPT_SET`); an unknown set raises (no silent fallback); a second (empty-stub) set is loadable to prove the seam.
-- [ ] `DEFAULT_PROMPT_VERSIONS` is a per-set registry; recorded `prompt_versions` carry the set namespace; committed 4p1i + 9p2i reconstruct byte-identical with NO re-record (`scripts/verify_samples.sh` + `eval/prompt_regression.py` exact-match hold).
+- [ ] A per-set version registry is added alongside `DEFAULT_PROMPT_VERSIONS`; the 9B set's recorded `prompt_versions` keys/values are byte-identically unchanged, so the existing assertions in `tests/orchestrator/test_replay_meetings.py`, `tests/orchestrator/test_meeting_integration.py`, and `tests/scripts/test_manifest_writer.py` stay green WITHOUT edits; committed 4p1i + 9p2i reconstruct byte-identical with NO re-record (`scripts/verify_samples.sh` + `eval/prompt_regression.py` exact-match hold).
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -183,10 +199,13 @@ committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
 
 Keep template bytes identical — this is a `git mv` plus a loader/registry change, nothing more. The loader's
 `_TEMPLATE_DIR` (`loader.py:57`) becomes per-set: resolve `prompt_set` to a subdir and build the
-`FileSystemLoader` against it; the `*_TEMPLATE` filename constants are unchanged. For `DEFAULT_PROMPT_VERSIONS`
-(`orchestrator/game.py:261`), key the mapping by set name (e.g. `{"qwen3_5_9b": {...current...}}`) and have
-the game/meeting runner select by the active set; the recorded `prompt_versions` should make the set explicit
-so provenance never confuses a 9B replay with a new-model replay. Determinism is the acceptance bar:
+`FileSystemLoader` against it; the `*_TEMPLATE` filename constants are unchanged. Keep `DEFAULT_PROMPT_VERSIONS`
+(`orchestrator/game.py:261`) as the 9B default mapping with its EXACT current values and add a registry
+alongside (e.g. `PROMPT_VERSION_SETS = {"qwen3_5_9b": DEFAULT_PROMPT_VERSIONS, ...}`) that the runner selects
+by active set. Do NOT prefix or reformat the 9B set's keys/values — `tests/orchestrator/test_replay_meetings.py:390-415`,
+`tests/orchestrator/test_meeting_integration.py:2320`, and `tests/scripts/test_manifest_writer.py` pin them and
+the committed replays store them verbatim; provenance for a new set comes from its own version strings + the
+recorded model id. Determinism is the acceptance bar:
 reconstruction reads recorded prompt bytes, so a content-preserving move keeps the committed samples valid —
 prove it with `verify_samples` rather than asserting it.
 
@@ -194,7 +213,7 @@ prove it with `verify_samples` rather than asserting it.
 
 ### Task 14.3 — Provider-neutral probe backend (Featherless behind the probe seam)
 **Branch:** `phase-14-probe-backend`
-**Depends on:** none
+**Depends on:** 14.1
 **Section refs:** experiments/model_probe/probe.py; experiments/lab/deception_battery.py; experiments/lab/deflection_probe.py; experiments/lab/model_ceiling_probe.py (the `dump` / `grade-frontier` modes)
 **Complexity:** Medium
 
@@ -202,9 +221,11 @@ The real-data probes reconstruct hard contexts from committed `replays/samples/9
 through one tiny seam that today hits `llm.ollama_client._default_send` then `_extract_json_block` +
 `model_validate_json` (`probe.py:_one_call`, `deception_battery.py:_call`, `model_ceiling_probe.py:_call_ollama`).
 Add a provider-neutral `call_turn` behind that seam so the identical reconstructed contexts can flow to
-Featherless, parameterized by a `--backend`/`--models` flag (default `ollama` preserves CI + the existing
-`results-*.jsonl`). The Featherless path is selectable with `thinking_policy="strip"` so reasoning models do
-not abort the sweep. No engine/agent/replay bytes change — the probes stay read-only over committed replays.
+Featherless via 14.1's `llm.featherless_client._default_send` (hence the dependency on 14.1), parameterized by
+a `--backend`/`--models` flag (default `ollama` preserves CI + the existing `results-*.jsonl`). `call_turn`
+threads BOTH the request-time thinking toggle (so 14.4 can drive its non-thinking/thinking axis) and the
+response-side `thinking_policy="strip"` (so reasoning models do not abort the sweep). No engine/agent/replay
+bytes change — the probes stay read-only over committed replays.
 
 **Files in scope:**
 - experiments/lab/probe_backends.py (new: `Backend` literal, `call_turn(prompt, schema, *, backend, model, ...)` dispatching to the ollama or featherless `_default_send`, both through `_extract_json_block` + validate, returning `(parsed_or_None, raw_text, latency)`)
@@ -223,7 +244,7 @@ not abort the sweep. No engine/agent/replay bytes change — the probes stay rea
 **Definition of done:**
 - [ ] `call_turn` routes the SAME reconstructed prompt to either backend through the production `_extract_json_block` + `model_validate_json` path and returns `(parsed_or_None, raw_text, latency)`.
 - [ ] All four probes default to `ollama` (CI + existing reports unaffected) and accept `--backend featherless --models <list>`; the ollama branch stays byte-identical so existing `results-*.jsonl` reproduce.
-- [ ] The Featherless path is selectable with `thinking_policy=strip` so reasoning models do not abort the sweep; bounded concurrency is opt-in (sequential when latency is the measured metric).
+- [ ] `call_turn` threads BOTH the request-time thinking toggle (to drive 14.4's non-thinking/thinking axis) and the response-side `thinking_policy=strip` (so reasoning models do not abort the sweep); bounded concurrency is opt-in (sequential when latency is the measured metric).
 - [ ] No engine/agent/replay-byte mutation; probes stay read-only over committed replays.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -241,7 +262,8 @@ each already call `_default_send` then `_extract_json_block` + `model_validate_j
 read from a new CLI flag. Keep the ollama branch's `_default_send` call byte-identical (same
 `format=schema.model_json_schema()`, same options) so the committed `results-*.jsonl` reproduce. For
 Featherless, build the `response_format` json_schema from `schema` and call `llm.featherless_client._default_send`
-with `thinking_policy` threaded. Featherless is a concurrent hosted API, so a bounded `asyncio.Semaphore`
+(introduced by 14.1) with BOTH the request-time thinking flag and the response-side `thinking_policy` threaded
+through `call_turn`'s signature. Featherless is a concurrent hosted API, so a bounded `asyncio.Semaphore`
 (opt-in, 4–8) can cut sweep wall time — but run a sequential pass whenever per-call latency is the metric.
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-3-probe-backend.md`
@@ -273,7 +295,7 @@ tuple WITH its evidence — including an honest statement of whether the informa
 - orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS` unchanged until a baseline locks)
 
 **Definition of done:**
-- [ ] Each candidate model (Qwen3-32B instruct, Qwen3-30B-A3B, GLM-4-32B, one RP fine-tune) runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available; mechanical metrics + per-model parse-success rate are tabulated against the 9B baseline.
+- [ ] Each candidate model (Qwen3-32B instruct, Qwen3-30B-A3B, GLM-4-32B, one RP fine-tune) runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available (driven by the request-time thinking toggle from 14.1, threaded via 14.3 — not the response-side policy); mechanical metrics + per-model parse-success rate are tabulated against the 9B baseline.
 - [ ] The cover-directive 2×2 (model × {cover OFF, cover ON-reply}) is run and the report states the quadrant verdict: capability ceiling / prompt artifact / both / information ceiling.
 - [ ] Per-model structured-output fidelity (parse-success under `response_format`) is reported; any model that cannot reliably emit schema-valid JSON is flagged unfit for the sim.
 - [ ] A recommended (meeting_model, trigger_model, mode) tuple is proposed WITH evidence; the report states honestly whether the information-ceiling hypothesis is supported (tell persists across all models) — a valid finding either way.

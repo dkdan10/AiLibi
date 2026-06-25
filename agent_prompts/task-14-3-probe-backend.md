@@ -12,7 +12,7 @@ Implement Task 14.3 — Provider-neutral probe backend (Featherless behind the p
 The authoritative task contract is copied below from tasks/phase-14.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-14-probe-backend`
-**Depends on:** none
+**Depends on:** 14.1
 **Section refs:** experiments/model_probe/probe.py; experiments/lab/deception_battery.py; experiments/lab/deflection_probe.py; experiments/lab/model_ceiling_probe.py (the `dump` / `grade-frontier` modes)
 **Complexity:** Medium
 
@@ -20,9 +20,11 @@ The real-data probes reconstruct hard contexts from committed `replays/samples/9
 through one tiny seam that today hits `llm.ollama_client._default_send` then `_extract_json_block` +
 `model_validate_json` (`probe.py:_one_call`, `deception_battery.py:_call`, `model_ceiling_probe.py:_call_ollama`).
 Add a provider-neutral `call_turn` behind that seam so the identical reconstructed contexts can flow to
-Featherless, parameterized by a `--backend`/`--models` flag (default `ollama` preserves CI + the existing
-`results-*.jsonl`). The Featherless path is selectable with `thinking_policy="strip"` so reasoning models do
-not abort the sweep. No engine/agent/replay bytes change — the probes stay read-only over committed replays.
+Featherless via 14.1's `llm.featherless_client._default_send` (hence the dependency on 14.1), parameterized by
+a `--backend`/`--models` flag (default `ollama` preserves CI + the existing `results-*.jsonl`). `call_turn`
+threads BOTH the request-time thinking toggle (so 14.4 can drive its non-thinking/thinking axis) and the
+response-side `thinking_policy="strip"` (so reasoning models do not abort the sweep). No engine/agent/replay
+bytes change — the probes stay read-only over committed replays.
 
 **Files in scope:**
 - experiments/lab/probe_backends.py (new: `Backend` literal, `call_turn(prompt, schema, *, backend, model, ...)` dispatching to the ollama or featherless `_default_send`, both through `_extract_json_block` + validate, returning `(parsed_or_None, raw_text, latency)`)
@@ -41,7 +43,7 @@ not abort the sweep. No engine/agent/replay bytes change — the probes stay rea
 **Definition of done:**
 - [ ] `call_turn` routes the SAME reconstructed prompt to either backend through the production `_extract_json_block` + `model_validate_json` path and returns `(parsed_or_None, raw_text, latency)`.
 - [ ] All four probes default to `ollama` (CI + existing reports unaffected) and accept `--backend featherless --models <list>`; the ollama branch stays byte-identical so existing `results-*.jsonl` reproduce.
-- [ ] The Featherless path is selectable with `thinking_policy=strip` so reasoning models do not abort the sweep; bounded concurrency is opt-in (sequential when latency is the measured metric).
+- [ ] `call_turn` threads BOTH the request-time thinking toggle (to drive 14.4's non-thinking/thinking axis) and the response-side `thinking_policy=strip` (so reasoning models do not abort the sweep); bounded concurrency is opt-in (sequential when latency is the measured metric).
 - [ ] No engine/agent/replay-byte mutation; probes stay read-only over committed replays.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -59,8 +61,15 @@ each already call `_default_send` then `_extract_json_block` + `model_validate_j
 read from a new CLI flag. Keep the ollama branch's `_default_send` call byte-identical (same
 `format=schema.model_json_schema()`, same options) so the committed `results-*.jsonl` reproduce. For
 Featherless, build the `response_format` json_schema from `schema` and call `llm.featherless_client._default_send`
-with `thinking_policy` threaded. Featherless is a concurrent hosted API, so a bounded `asyncio.Semaphore`
+(introduced by 14.1) with BOTH the request-time thinking flag and the response-side `thinking_policy` threaded
+through `call_turn`'s signature. Featherless is a concurrent hosted API, so a bounded `asyncio.Semaphore`
 (opt-in, 4–8) can cut sweep wall time — but run a sequential pass whenever per-call latency is the metric.
+
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import llm.featherless_client"`
+- `uv run python -c "import llm.provider"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
