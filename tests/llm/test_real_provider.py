@@ -38,6 +38,7 @@ from agents.strategic.prompts.loader import (
     vote_ballot_prompt,
 )
 from llm.client import LLMResponse
+from llm.featherless_client import DEFAULT_FEATHERLESS_MODEL, FeatherlessClient
 from llm.provider import (
     AnthropicClient,
     AnthropicRawResponse,
@@ -635,6 +636,84 @@ class TestAnthropicTruncationFailureMode:
         # The leading-backtick failure mode is what the 2138 eval saw;
         # confirm the fence strip means we no longer hit it.
         assert "line 1 column 1" not in str(exc.value)
+
+
+class TestFeatherlessRoundTrip:
+    """Live round-trip against the real Featherless AI endpoint. Opt-in only.
+
+    Gated by the same ``@real_provider`` marker as the Anthropic tests (a
+    ``skipif`` keyed on ``AILIBI_RUN_REAL_PROVIDER_TESTS == "1"``), so CI —
+    which leaves that env var unset — always reports them as skipped and never
+    touches the network. Run them in an operator session with a real
+    ``FEATHERLESS_API_KEY`` set; they go through :meth:`FeatherlessClient.complete`,
+    so the OpenAI-compatible ``response_format`` request, the $0 provider-keyed
+    cost, and (under the default ``fail_loud`` policy) the reasoning guard are
+    all exercised against the real endpoint. The model id is read from
+    ``AILIBI_LLM_MEETING_MODEL`` when set, else the slate-lead default — so an
+    operator can point the round-trip at the model under evaluation without a
+    code edit.
+    """
+
+    @real_provider
+    def test_real_featherless_round_trip(self) -> None:
+        api_key = os.environ["FEATHERLESS_API_KEY"]
+        meeting_model = (
+            os.environ.get("AILIBI_LLM_MEETING_MODEL") or DEFAULT_FEATHERLESS_MODEL
+        )
+        client = FeatherlessClient(api_key=api_key, meeting_model=meeting_model)
+
+        response = asyncio.run(
+            client.complete(
+                prompt="Respond with the single token: OK",
+                schema=None,
+                max_tokens=16,
+                temperature=0.0,
+            )
+        )
+
+        # Exact text is not asserted — live LLM output varies. We assert the
+        # round-trip produced a real completion from a named model, recorded at
+        # the flat-rate $0 cost.
+        assert isinstance(response, LLMResponse)
+        assert response.text, "expected non-empty text from the live endpoint"
+        assert response.usage.input_tokens > 0
+        assert response.usage.output_tokens > 0
+        # A flat-rate hosted subscription is recorded as free.
+        assert response.cost_usd == 0.0
+        assert response.model, "expected a non-empty model id from the endpoint"
+
+    @real_provider
+    def test_real_featherless_schema_constrained_round_trip(self) -> None:
+        api_key = os.environ["FEATHERLESS_API_KEY"]
+        meeting_model = (
+            os.environ.get("AILIBI_LLM_MEETING_MODEL") or DEFAULT_FEATHERLESS_MODEL
+        )
+        client = FeatherlessClient(api_key=api_key, meeting_model=meeting_model)
+        prompt = (
+            "You are agent p-1 in a social-deduction game meeting. Output ONLY "
+            "a single JSON object (no prose) with EXACTLY these fields: "
+            '"turn_id" (the string "m-1:turn-0"), "turn_index" (the integer 0), '
+            '"speaker" (the string "p-1"), "turn_kind" (the string "opening"), '
+            '"reply_to" (null), "observations" (an empty array), "claims" (an '
+            'empty array), and "free_text" (a one-sentence status string).'
+        )
+
+        response = asyncio.run(
+            client.complete(
+                prompt=prompt,
+                schema=MeetingTurn,
+                max_tokens=512,
+                temperature=0.0,
+            )
+        )
+
+        # The adapter has already routed the strict ``response_format`` request,
+        # extracted + validated; pin the observable contract: a $0 completion
+        # whose recorded text is the schema-valid JSON.
+        assert isinstance(response, LLMResponse)
+        assert response.cost_usd == 0.0
+        turn = MeetingTurn.model_validate_json(response.text)
+        assert turn.turn_kind == "opening"
 
 
 class TestAnthropicProsePreamble:
