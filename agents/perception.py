@@ -31,6 +31,7 @@ from observation.packet import (
     BodyId,
     BodyView,
     GlobalView,
+    MovedPlayerView,
     ObservationPacket,
     OwnKillView,
     PlayerId,
@@ -41,15 +42,35 @@ from observation.packet import (
 
 PROVENANCE_OBSERVED: Final[str] = "observed"
 PROVENANCE_INFERRED: Final[str] = "inferred"
+# Public testimony heard at a meeting (Task 13.5.2; 2026-06-25 memory diagnosis,
+# workflow `wg54kfoxy`: "social info is a scalar, not content"). A meeting
+# speaker's STRUCTURED claim/observation about another player, ingested as
+# episodic content by :func:`agents.memory.store.absorb_reported_testimony` and
+# rendered self-framed as an UNVERIFIED claim (strictly below first-hand
+# salience). Not first-hand: the recipient did not perceive it, it was stated.
+PROVENANCE_REPORTED: Final[str] = "reported"
 
 EVENT_SELF_STATE: Final[str] = "self_state"
 EVENT_OWN_KILL: Final[str] = "own_kill"
 EVENT_COOLDOWN_STATUS: Final[str] = "cooldown_status"
 EVENT_SAW_PLAYER: Final[str] = "saw_player"
+# A room→room transition the agent DIRECTLY witnessed this tick (Task 13.5.4;
+# 2026-06-25 memory diagnosis, workflow `wg54kfoxy`: "movement is never
+# perceived"). First-hand observation, distinct from the within-vision
+# transition/breadcrumb the renderer RECONSTRUCTS from consecutive ``saw_player``
+# deltas: this is the single-tick transit the witness actually saw, derived from
+# the engine ``MovedEvent`` and witness-gated identically to ``saw_player`` in
+# ``observation/service.py``. Ingested from ``packet.moved_players``; rendered as
+# a first-hand sighting-class line and wires ``WorkingMemory.last_seen``.
+EVENT_SAW_PLAYER_MOVE: Final[str] = "saw_player_move"
 EVENT_SAW_BODY: Final[str] = "saw_body"
 EVENT_HEARD_VENT_USE: Final[str] = "heard_vent_use"
 EVENT_HEARD_SABOTAGE_ALARM: Final[str] = "heard_sabotage_alarm"
 EVENT_GLOBAL_STATUS: Final[str] = "global_status"
+# Episodic type for a reported-testimony row (Task 13.5.2). Written only by
+# :func:`agents.memory.store.absorb_reported_testimony`, never by
+# :func:`ingest_packet` (testimony is meeting content, not packet perception).
+EVENT_REPORTED_TESTIMONY: Final[str] = "reported_testimony"
 
 _AUDIBLE_EVENT_TYPES: Final[Mapping[str, str]] = {
     "vent_use_heard": EVENT_HEARD_VENT_USE,
@@ -71,9 +92,15 @@ def ingest_packet(
     2. ``own_kill`` (the recipient's OWN kill this tick — skipped when None)
     3. ``cooldown_status`` (impostor only — skipped when ``cooldown`` is None)
     4. ``saw_player`` for each entry in ``visible_players`` (packet order)
-    5. ``saw_body`` for each entry in ``visible_bodies`` (packet order)
-    6. one ``heard_*`` per ``audible_events`` entry (packet order)
-    7. ``global_status`` (inferred system-wide aggregate)
+    5. ``saw_player_move`` for each entry in ``moved_players`` (packet order)
+    6. ``saw_body`` for each entry in ``visible_bodies`` (packet order)
+    7. one ``heard_*`` per ``audible_events`` entry (packet order)
+    8. ``global_status`` (inferred system-wide aggregate)
+
+    ``moved_players`` is empty unless ``AILIBI_MOVEMENT_PERCEPTION`` is ON
+    (gated in ``observation/service.py``), so the flag-OFF episodic store is
+    byte-identical to pre-task HEAD -- no extra branch or flag read is needed
+    here; ingestion simply reacts to the presence of the witness-gated signal.
 
     When ``beliefs`` is supplied, the agent's DESIGN.md §6.3 rule-based belief
     updates (Rules 1 and 4) run after the episodic append: the proximity and
@@ -121,6 +148,16 @@ def ingest_packet(
                 tick=tick,
                 type=EVENT_SAW_PLAYER,
                 payload=_visible_player_payload(player),
+                provenance=PROVENANCE_OBSERVED,
+            )
+        )
+
+    for moved in packet.moved_players:
+        memory.append(
+            EpisodicEvent(
+                tick=tick,
+                type=EVENT_SAW_PLAYER_MOVE,
+                payload=_moved_player_payload(moved),
                 provenance=PROVENANCE_OBSERVED,
             )
         )
@@ -281,6 +318,20 @@ def _visible_player_payload(player: PlayerView) -> Mapping[str, Any]:
     }
 
 
+def _moved_player_payload(moved: MovedPlayerView) -> Mapping[str, Any]:
+    # A witnessed room→room transition (Task 13.5.4). ``player_id`` mirrors the
+    # ``saw_player`` payload key (the episodic store is internal, NOT the
+    # leak-scanned packet, so ``player_id`` is the established episodic
+    # convention); ``from_room`` / ``to_room`` give the §6.6 renderer the
+    # directional sighting line and ``to_room`` (the actor's current room) wires
+    # ``WorkingMemory.last_seen``.
+    return {
+        "player_id": moved.id,
+        "from_room": moved.from_room,
+        "to_room": moved.to_room,
+    }
+
+
 def _visible_body_payload(body: BodyView) -> Mapping[str, Any]:
     # ``body_id`` is the canonical body identifier for deduplication and
     # replay references; ``victim_id`` is the authoritative source for
@@ -329,10 +380,13 @@ __all__ = [
     "EVENT_HEARD_SABOTAGE_ALARM",
     "EVENT_HEARD_VENT_USE",
     "EVENT_OWN_KILL",
+    "EVENT_REPORTED_TESTIMONY",
     "EVENT_SAW_BODY",
     "EVENT_SAW_PLAYER",
+    "EVENT_SAW_PLAYER_MOVE",
     "EVENT_SELF_STATE",
     "PROVENANCE_INFERRED",
     "PROVENANCE_OBSERVED",
+    "PROVENANCE_REPORTED",
     "ingest_packet",
 ]

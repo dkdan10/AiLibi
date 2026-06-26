@@ -79,7 +79,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Coroutine, Iterable, Mapping, Sequence
+from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 
@@ -107,6 +107,7 @@ from meetings.schemas import (
     MeetingTurn,
     ObservationClaim,
     PlayerId,
+    ReportedStatement,
     SawPlayerObservation,
     TurnId,
     TurnKind,
@@ -487,10 +488,10 @@ class SuspicionEntry:
 class MeetingParticipant:
     """One living agent's contribution to the meeting (DESIGN.md §5.1).
 
-    The manager treats this as a static snapshot for the duration of the
-    meeting: ``rendered_memory`` is what the §6.6 renderer produced when
-    the meeting opened, ``role`` selects which opening prompt is used, and
-    ``suspicion_graph`` populates the vote-ballot prompt input.
+    By default the manager treats this as a static snapshot for the
+    duration of the meeting: ``rendered_memory`` is what the §6.6 renderer
+    produced when the meeting opened, ``role`` selects which opening prompt
+    is used, and ``suspicion_graph`` populates the vote-ballot prompt input.
 
     ``fellow_impostor_ids`` carries the impostor-only teammate list
     (Task 7.12) onto the meeting layer: the sorted ids of the OTHER
@@ -499,6 +500,20 @@ class MeetingParticipant:
     orchestrator populates it from world-state roles; the default of
     ``()`` keeps every existing construction site valid and is the
     firewall-correct value for a crewmate.
+
+    ``rerender_memory`` is the Task 13.5.5 unfreeze hook (behind
+    ``AILIBI_UNFREEZE_MEMORY``). When ``None`` (the default, flag OFF) the
+    ballot reads the frozen open-tick ``rendered_memory`` -- byte-identical to
+    pre-task HEAD. When the orchestrator attaches a hook (flag ON) the manager
+    calls it ONLY for the ballot, passing the per-voter pre-vote-folded
+    suspicion (the same numbers the ballot's ``suspicion_graph`` carries) as a
+    ``suspicion_override``, so the rendered belief-line suspicion and that
+    graph agree by construction (the PR #198 review inconsistency). Turn
+    prompts always use the frozen render: they carry no ``suspicion_graph``,
+    so there is no divergence to resolve there. The hook is a pure function of
+    its argument + the deterministic belief snapshot (it re-invokes the §6.6
+    renderer with the additive override), so a replay rebuilds the identical
+    ballot string and ``verify_samples.sh`` stays byte-identical.
     """
 
     agent_id: PlayerId
@@ -506,6 +521,7 @@ class MeetingParticipant:
     rendered_memory: str
     suspicion_graph: tuple[SuspicionEntry, ...] = ()
     fellow_impostor_ids: tuple[PlayerId, ...] = ()
+    rerender_memory: Callable[[Mapping[PlayerId, float]], str] | None = None
 
 
 @dataclass(frozen=True)
@@ -1398,6 +1414,11 @@ class MeetingManager:
         accusation_targets = _candidate_targets(
             living_ids, exclude=participant.agent_id
         )
+        # Task 13.5.5: turn prompts always read the frozen open-tick render.
+        # A turn carries NO ``suspicion_graph`` kwarg (the belief-line-vs-graph
+        # divergence the unfreeze lever targets exists only at the ballot), and
+        # the running meeting evidence already reaches speakers via the
+        # transcript -- so re-rendering here would change nothing it needs.
         if turn_kind == "opening":
             renderer = (
                 self._impostor_report_prompt
@@ -1505,9 +1526,23 @@ class MeetingManager:
             fellow_impostor_ids=participant.fellow_impostor_ids,
             evidence=evidence,
         )
+        # Task 13.5.5: when the unfreeze hook is attached (flag ON), re-render
+        # the ballot's memory with the pre-vote-folded ``suspicion_graph``
+        # numbers substituted into the belief lines, so the belief-line
+        # suspicion and the ``suspicion_graph`` kwarg below read ONE folded
+        # source (the PR #198 review inconsistency, resolved by construction).
+        # Flag OFF (``rerender_memory is None``) keeps the frozen open-tick
+        # render -- byte-identical to pre-task HEAD.
+        if participant.rerender_memory is not None:
+            suspicion_override = {
+                entry.player_id: entry.suspicion for entry in suspicion_graph
+            }
+            rendered_memory = participant.rerender_memory(suspicion_override)
+        else:
+            rendered_memory = participant.rendered_memory
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
-            rendered_memory=participant.rendered_memory,
+            rendered_memory=rendered_memory,
             transcript=transcript,
             contradiction_flags=contradictions,
             suspicion_graph=suspicion_graph,
@@ -2755,6 +2790,120 @@ def extract_belief_evidence(
     )
 
 
+def _reported_statement_sort_key(
+    statement: ReportedStatement,
+) -> tuple[PlayerId, str, PlayerId, int, int, str]:
+    """Total order over reported statements for replay-deterministic output.
+
+    Every component is concrete (``None`` ticks/room collapse to a sentinel),
+    so the sort is stable and byte-identical across runs regardless of the
+    transcript's turn order.
+    """
+
+    return (
+        statement.speaker,
+        statement.kind,
+        statement.subject,
+        statement.from_tick if statement.from_tick is not None else -1,
+        statement.to_tick if statement.to_tick is not None else -1,
+        statement.room if statement.room is not None else "",
+    )
+
+
+def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement, ...]:
+    """Reduce a resolved meeting to its public reported testimony (Task 13.5.2).
+
+    The content twin of :func:`extract_belief_evidence` -- where that reduction
+    collapses a meeting to scalar suspicion subject-sets, this one preserves the
+    WHAT of public speech as :class:`~meetings.schemas.ReportedStatement` rows
+    (the 2026-06-25 memory diagnosis, workflow ``wg54kfoxy``: "social info is a
+    scalar, not content"). A pure, replay-deterministic function of the recorded
+    ``MeetingResult``: it imports no engine and no perception, reads only the
+    recorded ``transcript.turns`` (NEVER ``free_text``), and returns the same
+    sorted tuple every time.
+
+    Scope (owner decision, locked 2026-06-25): the four STRUCTURED kinds only --
+    :class:`~meetings.schemas.SawPlayerObservation` sightings,
+    :class:`~meetings.schemas.AlibiClaim`,
+    :class:`~meetings.schemas.AccusationClaim`, and
+    :class:`~meetings.schemas.CorroborationClaim`. ``completed_task`` /
+    ``found_body`` observations and all free-text are dropped.
+
+    Speaker-gated; subject gating deferred to ingest (Codex P2, Task 13.5.2):
+    ``roster`` is the meeting's living-participant set read off the recorded
+    ballots (identical to :func:`extract_belief_evidence`). Only the SPEAKER is
+    gated here -- only a living participant takes a turn. The SUBJECT is NOT gated
+    against this living set, because a ``saw_player`` observation about a player
+    DEAD before this meeting (the body victim, an earlier ejection) is real public
+    testimony yet is absent from the ballots; gating it here would silently drop
+    the kill-scene sightings the prompts explicitly elicit. Subject validity is
+    enforced per-agent at ingest against
+    :func:`agents.memory.store._known_roster_ids` (the engine-witnessed set, which
+    covers dead-but-seen players via co-spawn), so a hallucinated structural id
+    still never reaches an episodic row. Claims (alibi/accusation/corroboration)
+    are already living-subject by the per-turn chokepoint
+    (:func:`_drop_non_roster_claims`); observations are NOT chokepoint-validated,
+    which is why the ingest gate is load-bearing for them.
+
+    NOT teammate-firewalled: reported content is PUBLIC speech, so an impostor's
+    derivation carries a statement that publicly incriminates its own team
+    exactly as a crewmate's does. Only the SCALAR suspicion path keeps the
+    teammate firewall (unchanged, :func:`extract_belief_evidence` ->
+    :func:`apply_meeting_evidence_rules`).
+    """
+
+    roster = frozenset(ballot.voter for ballot in result.ballots)
+    statements: list[ReportedStatement] = []
+    for turn in result.transcript.turns:
+        speaker = turn.speaker
+        if speaker not in roster:
+            continue
+        for observation in turn.observations:
+            if isinstance(observation, SawPlayerObservation):
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="saw_player",
+                        subject=observation.subject,
+                        from_tick=observation.tick,
+                        to_tick=observation.tick,
+                        room=observation.room,
+                        co_present=observation.co_present,
+                    )
+                )
+        for claim in turn.claims:
+            if isinstance(claim, AlibiClaim):
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="alibi",
+                        subject=claim.subject,
+                        from_tick=claim.from_tick,
+                        to_tick=claim.to_tick,
+                        room=claim.room,
+                    )
+                )
+            elif isinstance(claim, AccusationClaim):
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="accusation",
+                        subject=claim.against,
+                    )
+                )
+            elif isinstance(claim, CorroborationClaim):
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="corroboration",
+                        subject=claim.supports,
+                        from_tick=claim.on_tick,
+                        to_tick=claim.on_tick,
+                    )
+                )
+    return tuple(sorted(statements, key=_reported_statement_sort_key))
+
+
 def _candidate_targets(
     player_ids: Iterable[PlayerId],
     *,
@@ -2892,6 +3041,7 @@ __all__ = [
     "VotePromptRenderer",
     "coerce_teammate_ballot_to_skip",
     "derive_belief_evidence",
+    "derive_reported_testimony",
     "drop_teammate_statement_target",
     "exclude_teammate_accusation_claims",
     "extract_belief_evidence",

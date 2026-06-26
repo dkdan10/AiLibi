@@ -11,7 +11,8 @@ through (audit R-6, `audits/audit-2026-05-15-0225-reconciled.md`).
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+import os
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final, TypeAlias
 
@@ -25,12 +26,44 @@ from agents.memory.beliefs import (
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.working import LastSeen, WorkingMemory
+from agents.perception import (
+    EVENT_REPORTED_TESTIMONY,
+    EVENT_SAW_PLAYER_MOVE,
+    PROVENANCE_REPORTED,
+)
+from meetings.schemas import ReportedStatement
 
 PlayerId: TypeAlias = str
 RoomId: TypeAlias = str
 TaskId: TypeAlias = str
 
 DEFAULT_TOKEN_BUDGET: Final[int] = 1500
+
+# Task 13.5.2 feature flag. Resolved once like ``AILIBI_LLM_PROVIDER``
+# (``llm/provider.py``): OFF by default, so a build that never sets it is
+# BYTE-IDENTICAL to pre-task HEAD (no reported rows ever ingest or render, the
+# alibi map stays empty). The 9B smoke and the Phase-14 re-record run it ON.
+ENV_TESTIMONY_AS_CONTENT: Final[str] = "AILIBI_TESTIMONY_AS_CONTENT"
+_TESTIMONY_FLAG_TRUE: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
+
+
+def testimony_as_content_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 13.5.2 reported-testimony lever is ON.
+
+    Reads :data:`ENV_TESTIMONY_AS_CONTENT` from ``env`` (defaulting to the real
+    process environment), mirroring how :func:`llm.provider.resolve_provider`
+    reads ``AILIBI_LLM_PROVIDER``. Default OFF: an unset / empty / unrecognised
+    value is ``False`` so the merge is byte-identical to today and the existing
+    golden/regression suite is untouched. Accepts ``1/true/yes/on``
+    (case-insensitive). The ``env`` argument lets tests toggle the flag
+    deterministically without mutating ``os.environ``.
+    """
+
+    environment = env if env is not None else os.environ
+    return environment.get(ENV_TESTIMONY_AS_CONTENT, "").strip().lower() in (
+        _TESTIMONY_FLAG_TRUE
+    )
+
 
 # 4 chars/token is the widely-cited heuristic for English BPE
 # tokenizers. The renderer does not depend on a provider tokenizer:
@@ -53,6 +86,14 @@ _SALIENCE_VENT_WITNESSED: Final[int] = 85
 _SALIENCE_VENT_HEARD: Final[int] = 75
 _SALIENCE_SABOTAGE_HEARD: Final[int] = 65
 _SALIENCE_SAW_PLAYER_ACTIVE: Final[int] = 55
+# A DIRECTLY-witnessed room→room transition (Task 13.5.4). First-hand sighting
+# class -- the witness actually saw the actor move -- so it ranks just above a
+# bare ``saw_player`` snapshot (it carries strictly more information: where the
+# actor came FROM) and well above the RECONSTRUCTED within-vision breadcrumb
+# (``_SALIENCE_TRANSITION``=48), which is inferred from consecutive deltas rather
+# than seen. A tight budget therefore keeps the witnessed transit over the
+# reconstructed one.
+_SALIENCE_SAW_PLAYER_MOVE: Final[int] = 52
 _SALIENCE_SAW_PLAYER: Final[int] = 50
 # A within-vision entry/exit (Task 13.9), derived from consecutive own-room
 # ``saw_player`` deltas. Ranked just below a direct sighting: it is valuable
@@ -60,7 +101,21 @@ _SALIENCE_SAW_PLAYER: Final[int] = 50
 # so a tight budget keeps the primary sightings and sheds transitions first.
 _SALIENCE_TRANSITION: Final[int] = 48
 _SALIENCE_COMPLETED_TASK: Final[int] = 30
+# Reported testimony (Task 13.5.2): a meeting speaker's public CLAIM, rendered
+# self-framed as unverified. Strictly BELOW every first-hand sighting band
+# (``_SALIENCE_SAW_PLAYER``=50 and above) and below own completed-task memory,
+# above routine cooldown status -- so a budget-tight render sheds reported rows
+# BEFORE any first-hand observation (the load-bearing band invariant: testimony
+# the model WEIGHS, never ground truth it acts on as if witnessed).
+_SALIENCE_REPORTED_TESTIMONY: Final[int] = 25
 _SALIENCE_COOLDOWN_STATUS: Final[int] = 10
+
+# Per-subject cap on rendered reported alibis (Task 13.5.2, Codex P2). The §6.6
+# belief block is the non-elastic carve-out (``_assemble_view`` never budgets it),
+# so an unbounded accumulated alibi list could push ``render_for_prompt`` over
+# ``DEFAULT_TOKEN_BUDGET``. Render only the most-recent few per subject; a newer
+# alibi supersedes a stale one and N x subjects x this cap stays bounded.
+_MAX_RENDERED_ALIBIS: Final[int] = 3
 
 _EVENT_SAW_BODY: Final[str] = "saw_body"
 _EVENT_SAW_PLAYER: Final[str] = "saw_player"
@@ -128,6 +183,7 @@ def render_for_prompt(
     memory: AgentMemory,
     *,
     token_budget: int = DEFAULT_TOKEN_BUDGET,
+    suspicion_override: Mapping[PlayerId, float] | None = None,
 ) -> str:
     """Produce a token-budgeted Markdown view of agent memory (DESIGN.md §6.6).
 
@@ -143,6 +199,14 @@ def render_for_prompt(
     salience first; the role line, tasks-completed line, beliefs, and
     contradictions are always retained because they are agent-essential
     context that the LLM cannot work around.
+
+    ``suspicion_override`` (Task 13.5.5) replaces the SUSPICION value of a
+    belief line for the listed players, leaving trust, alibis, last-seen,
+    and the open-contradictions section read from ``memory.beliefs``. The
+    meeting passes the per-voter pre-vote-folded suspicion (the same numbers
+    the vote-ballot ``suspicion_graph`` kwarg carries) so the ballot's belief
+    lines and that graph agree by construction. ``None`` (the default, and
+    every non-ballot render) is byte-identical to pre-task HEAD.
 
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
@@ -188,7 +252,25 @@ def render_for_prompt(
     # production perception has recorded the id on every tick since
     # Task 9.3.
     roster = _known_roster_ids(memory.episodic) if own_agent_id is not None else None
-    beliefs_lines = _build_belief_lines(memory.beliefs, memory.working, roster=roster)
+    # Fill ``working.last_seen`` ← perceived movement (Task 13.5.4), read by the
+    # belief-line suffix below (the R-6 composite-memory gate: render reads all
+    # three stores). Idempotent across repeated renders and firewall-suppressed
+    # (Codex P1/P2 -- see :func:`_record_movement_sightings`). Empty unless the
+    # movement flag is ON (no ``saw_player_move`` rows when OFF), so the suffix is
+    # byte-identical to pre-task HEAD.
+    _record_movement_sightings(
+        memory.episodic,
+        memory.working,
+        own_agent_id=own_agent_id,
+        teammate_ids=teammate_ids,
+        body_sightings=_collect_body_sightings(memory.episodic),
+    )
+    beliefs_lines = _build_belief_lines(
+        memory.beliefs,
+        memory.working,
+        roster=roster,
+        suspicion_override=suspicion_override,
+    )
     contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
 
     return _assemble_view(
@@ -300,6 +382,112 @@ def absorb_meeting_evidence(
         )
 
 
+def absorb_reported_testimony(
+    memory: AgentMemory,
+    *,
+    statements: Sequence[ReportedStatement],
+) -> None:
+    """Fold one meeting's public testimony into ``memory`` as CONTENT (Task 13.5.2).
+
+    The content twin of :func:`absorb_meeting_evidence`. Where that wrapper folds
+    a meeting into a scalar suspicion Δ, this one preserves the WHAT of public
+    speech (the 2026-06-25 memory diagnosis, workflow ``wg54kfoxy``: "social info
+    is a scalar, not content"): it appends one ``provenance="reported"`` episodic
+    row per :class:`~meetings.schemas.ReportedStatement` and, for each
+    ``alibi`` statement, populates the previously-dead ``alibi_map`` via
+    :meth:`BeliefState.record_alibi`. The orchestrator and the replay loader call
+    it per LIVING agent in the SAME loop as :func:`absorb_meeting_evidence`,
+    gated on :func:`testimony_as_content_enabled`; with the flag OFF it is never
+    called and the store is byte-identical to today.
+
+    Reported rows land at the meeting-boundary tick (``_latest_self_state_tick``
+    + 1, the tick :func:`absorb_meeting_evidence` already uses for its boundary
+    marker), so the episodic store's non-decreasing-tick invariant holds and the
+    rows render under a ``[meeting]`` tag at a salience strictly below first-hand.
+
+    Three guards, mirroring the scalar twin's self channel / roster filter:
+
+    * OWN statements are SKIPPED -- a statement whose ``speaker`` is the
+      recipient's own id (read from the privileged ``self_state`` channel,
+      :func:`_latest_self_guard_fields`) is testimony the agent itself gave; it
+      already lives in the agent's first-hand memory and must not echo back as a
+      third-party claim.
+    * ROSTER-only -- both the speaker and the subject must be in the agent's
+      engine-witnessed id set (:func:`_known_roster_ids`), so a hallucinated
+      structural id never materialises a reported row (the same backstop
+      :func:`absorb_meeting_evidence` applies to the scalar fold).
+    * NOT teammate-firewalled -- reported content is PUBLIC speech (owner
+      decision, locked 2026-06-25), so a teammate-incriminating public statement
+      DOES appear in an impostor's reported memory. Only the SCALAR suspicion
+      firewall stays (unchanged, in :func:`absorb_meeting_evidence`).
+
+    Raises :class:`ValueError` when no ``self_state`` event carrying the agent's
+    own id has been recorded -- the own-statement guard cannot run without it,
+    and a meeting before perception is a wiring bug, not a normal state (AGENTS.md
+    "no silent fallbacks"; matches :func:`absorb_meeting_evidence`).
+    """
+
+    own_agent_id, _fellow_impostor_ids = _latest_self_guard_fields(memory.episodic)
+    if own_agent_id is None:
+        raise ValueError(
+            "cannot absorb reported testimony: no self_state event carrying "
+            "'agent_id' has been recorded; perception must run at least once "
+            "before a meeting's testimony is folded."
+        )
+    last_perceived_tick = _latest_self_state_tick(memory.episodic)
+    if last_perceived_tick is None:
+        # Unreachable when own_agent_id is set (both come from self_state rows),
+        # but keeps the tick derivation total for mypy and future callers.
+        return
+    boundary_tick = last_perceived_tick + 1
+    roster = _known_roster_ids(memory.episodic)
+    for statement in statements:
+        if statement.speaker == own_agent_id:
+            continue
+        if statement.speaker not in roster or statement.subject not in roster:
+            continue
+        memory.episodic.append(
+            EpisodicEvent(
+                tick=boundary_tick,
+                type=EVENT_REPORTED_TESTIMONY,
+                payload={
+                    "speaker": statement.speaker,
+                    "kind": statement.kind,
+                    "subject": statement.subject,
+                    "from_tick": statement.from_tick,
+                    "to_tick": statement.to_tick,
+                    "room": statement.room,
+                    # Co-present companions, roster-gated like the subject -- the
+                    # public "who was with whom" sighting evidence (Codex P2).
+                    "co_present": sorted(
+                        companion
+                        for companion in statement.co_present
+                        if companion in roster
+                    ),
+                },
+                provenance=PROVENANCE_REPORTED,
+            )
+        )
+        # A reported alibi ABOUT the recipient never materialises a SELF belief
+        # row: belief rows are about OTHER players and the scalar fold excludes
+        # own_id, so a self alibi would pollute the §6.6 view and the vote-prompt
+        # suspicion graph (Codex P2). The episodic CONTENT row above is still kept
+        # -- the agent may want to know it was publicly placed somewhere.
+        if (
+            statement.kind == "alibi"
+            and statement.from_tick is not None
+            and statement.subject != own_agent_id
+        ):
+            memory.beliefs.record_alibi(
+                AlibiClaim(
+                    player_id=statement.subject,
+                    tick=statement.from_tick,
+                    room=statement.room if statement.room is not None else "",
+                    source=statement.speaker,
+                )
+            )
+
+
 def _estimate_tokens(text: str) -> int:
     """Approximate BPE token count from character length.
 
@@ -384,6 +572,10 @@ def _known_roster_ids(episodic: MemoryStore) -> frozenset[str]:
     * ``self_state`` -- the recipient's own ``agent_id`` plus the
       privileged ``fellow_impostor_ids`` self channel;
     * ``saw_player`` -- every first-hand sighting's ``player_id``;
+    * ``saw_player_move`` -- every witnessed transition's mover (Task 13.5.4);
+      a player the agent saw move is a witnessed roster member (in practice it
+      always co-occurs with a ``saw_player`` row under the same visibility gate,
+      so this adds nothing flag-OFF and is byte-identical to HEAD);
     * ``saw_body`` -- every discovered body's ``victim_id``.
 
     Players co-spawn in one room (``orchestrator.seeder``), so in
@@ -408,7 +600,7 @@ def _known_roster_ids(episodic: MemoryStore) -> frozenset[str]:
             fellows = event.payload.get("fellow_impostor_ids")
             if isinstance(fellows, (tuple, list)):
                 ids.update(str(player_id) for player_id in fellows)
-        elif event.type == _EVENT_SAW_PLAYER:
+        elif event.type in (_EVENT_SAW_PLAYER, EVENT_SAW_PLAYER_MOVE):
             player_id = event.payload.get("player_id")
             if isinstance(player_id, str):
                 ids.add(player_id)
@@ -988,6 +1180,23 @@ def _build_observations(
                 observations.append(obs)
             continue
 
+        if event.type == EVENT_SAW_PLAYER_MOVE:
+            obs = _render_saw_player_move(
+                event,
+                own_agent_id=own_agent_id,
+                teammate_ids=teammate_ids,
+                body_sightings=body_sightings,
+            )
+            if obs is not None:
+                observations.append(obs)
+            continue
+
+        if event.type == EVENT_REPORTED_TESTIMONY:
+            obs = _render_reported_testimony(event)
+            if obs is not None:
+                observations.append(obs)
+            continue
+
         if event.type == _EVENT_HEARD_VENT_USE:
             obs = _render_heard(
                 event,
@@ -1093,6 +1302,114 @@ def _render_saw_player(
     )
 
 
+def _render_saw_player_move(
+    event: EpisodicEvent,
+    *,
+    own_agent_id: str | None = None,
+    teammate_ids: frozenset[str] = frozenset(),
+    body_sightings: tuple[tuple[str, int], ...] = (),
+) -> _Observation | None:
+    """Render one DIRECTLY-witnessed room→room transition (Task 13.5.4).
+
+    A first-hand sighting-class line ("You saw p-3 move from CAFETERIA to ADMIN
+    at tick 5"), distinct from the RECONSTRUCTED within-vision breadcrumb
+    (``_collect_movement_breadcrumbs`` / ``_collect_transitions``): this is the
+    single-tick transit the witness actually saw, gated upstream exactly like a
+    ``saw_player`` sighting. The §4.7 firewall suppressions
+    (:func:`_sighting_is_suppressed`) are mirrored from ``_render_saw_player`` so
+    a self-subject move never garbles and an impostor's witnessed teammate transit
+    at a kill room/tick is dropped, just as the ordinary sighting line is.
+
+    A malformed payload (missing player / room) renders nothing, matching the
+    defensive ``.get`` convention of the sibling renderers.
+    """
+
+    player_id = event.payload.get("player_id")
+    from_room = event.payload.get("from_room")
+    to_room = event.payload.get("to_room")
+    if (
+        not isinstance(player_id, str)
+        or not isinstance(from_room, str)
+        or not isinstance(to_room, str)
+    ):
+        return None
+    # Suppression keys on the actor's CURRENT room (``to_room``, where the witness
+    # saw it), with no active action -- the same shape ``_render_saw_player`` uses
+    # for an ordinary sighting.
+    if _sighting_is_suppressed(
+        player_id=player_id,
+        room=to_room,
+        tick=event.tick,
+        action=None,
+        own_agent_id=own_agent_id,
+        teammate_ids=teammate_ids,
+        body_sightings=body_sightings,
+    ):
+        return None
+    return _Observation(
+        salience=_SALIENCE_SAW_PLAYER_MOVE,
+        tick=event.tick,
+        line=(
+            f"[tick {event.tick}] You saw {player_id} move from "
+            f"{from_room} to {to_room}."
+        ),
+    )
+
+
+def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
+    """Render one ``reported_testimony`` row as a self-framed unverified claim (Task 13.5.2).
+
+    The framing is LOAD-BEARING (the §contract): every line reads
+    ``[meeting] CLAIM by X (unverified): …`` so a weaker model WEIGHS the
+    testimony as a third party's assertion rather than treating a reported
+    sighting as something it witnessed. The line states the claim's own tick(s)
+    / room, while the :class:`_Observation` sorts by ``event.tick`` (the
+    meeting-boundary tick) at :data:`_SALIENCE_REPORTED_TESTIMONY` -- strictly
+    below first-hand, so a tight budget sheds it first.
+
+    A malformed payload (missing speaker / subject / kind) renders nothing,
+    matching the defensive ``.get`` convention of the other renderers.
+    """
+
+    speaker = event.payload.get("speaker")
+    subject = event.payload.get("subject")
+    kind = event.payload.get("kind")
+    if (
+        not isinstance(speaker, str)
+        or not isinstance(subject, str)
+        or not isinstance(kind, str)
+    ):
+        return None
+    room = event.payload.get("room")
+    from_tick = event.payload.get("from_tick")
+    to_tick = event.payload.get("to_tick")
+    prefix = f"[tick {event.tick}] [meeting] CLAIM by {speaker} (unverified):"
+    if kind == "saw_player" and isinstance(room, str) and isinstance(from_tick, int):
+        companions = event.payload.get("co_present")
+        with_suffix = ""
+        if isinstance(companions, (list, tuple)) and companions:
+            with_suffix = f" (with {', '.join(str(c) for c in companions)})"
+        body = f"saw {subject} in {room} @ tick {from_tick}{with_suffix}"
+    elif (
+        kind == "alibi"
+        and isinstance(room, str)
+        and isinstance(from_tick, int)
+        and isinstance(to_tick, int)
+    ):
+        body = f"{subject} was in {room} during ticks {from_tick}-{to_tick}"
+    elif kind == "accusation":
+        body = f"accused {subject}"
+    elif kind == "corroboration" and isinstance(from_tick, int):
+        body = f"backed {subject}'s account @ tick {from_tick}"
+    else:
+        return None
+    return _Observation(
+        salience=_SALIENCE_REPORTED_TESTIMONY,
+        tick=event.tick,
+        line=f"{prefix} {body}.",
+    )
+
+
 def _render_heard(
     event: EpisodicEvent,
     *,
@@ -1109,11 +1426,70 @@ def _render_heard(
     return _Observation(salience=salience, tick=event.tick, line=line)
 
 
+def _record_movement_sightings(
+    episodic: MemoryStore,
+    working: WorkingMemory,
+    *,
+    own_agent_id: str | None,
+    teammate_ids: frozenset[str],
+    body_sightings: tuple[tuple[str, int], ...],
+) -> None:
+    """Fill ``WorkingMemory.last_seen`` from witnessed movement (Task 13.5.4).
+
+    The §6.6 render reads ``working.last_seen`` (the R-6 composite-memory gate),
+    so this writer fills it from the first-hand ``saw_player_move`` episodic rows:
+    each records the actor "last seen in ``to_room`` at the move tick", so the
+    belief-line suffix renders.
+
+    IDEMPOTENT across repeated renders (a refreshed meeting turn, a vote prompt,
+    the Task 13.5.5 per-turn re-render): ``working.last_seen`` persists between
+    renders, so a row whose tick is NOT after the player's already-recorded
+    last-seen is skipped -- re-processing the same rows never trips
+    :meth:`WorkingMemory.record_sighting`'s non-decreasing-tick guard, which the
+    earlier unconditional writer did on the second render (Codex P1).
+
+    The §4.7 firewall is applied exactly as the sighting render
+    (:func:`_sighting_is_suppressed`): a self-subject row, and -- for an impostor
+    -- a TEAMMATE moving into a kill-window body room, are skipped, so the
+    last-seen suffix can never reintroduce the teammate-at-scene own-goal the
+    movement render line itself suppresses (Codex P2). No ``saw_player_move`` rows
+    exist when the movement flag is OFF, so ``last_seen`` stays empty and the
+    suffix is byte-identical to HEAD.
+    """
+
+    for event in episodic.recent(since_tick=0):
+        if event.type != EVENT_SAW_PLAYER_MOVE:
+            continue
+        player_id = event.payload.get("player_id")
+        to_room = event.payload.get("to_room")
+        if not isinstance(player_id, str) or not isinstance(to_room, str):
+            continue
+        if _sighting_is_suppressed(
+            player_id=player_id,
+            room=to_room,
+            tick=event.tick,
+            action=None,
+            own_agent_id=own_agent_id,
+            teammate_ids=teammate_ids,
+            body_sightings=body_sightings,
+        ):
+            continue
+        previous = working.last_seen(player_id)
+        if previous is not None and event.tick < previous.tick:
+            # Idempotency guard (Codex P1): a re-render replays older rows into a
+            # ``last_seen`` that already holds a later tick; recording the older
+            # one would trip the backwards-tick guard. Skipping it leaves the
+            # latest-per-subject value, so repeated renders are stable.
+            continue
+        working.record_sighting(player_id=player_id, room=to_room, tick=event.tick)
+
+
 def _build_belief_lines(
     beliefs: BeliefState,
     working: WorkingMemory,
     *,
     roster: frozenset[str] | None = None,
+    suspicion_override: Mapping[PlayerId, float] | None = None,
 ) -> list[str]:
     """Render the §6.6 belief rows, filtered to ``roster`` when supplied.
 
@@ -1123,6 +1499,20 @@ def _build_belief_lines(
     row) and is skipped rather than rendered into the prompt. ``None``
     renders every known row (legacy fixtures without the 9.3 self
     channel, where the roster is underivable).
+
+    ``suspicion_override`` (Task 13.5.5) supplies a per-player effective
+    suspicion that replaces ``belief.suspicion`` in the rendered score; a
+    player absent from the mapping falls back to its stored suspicion. Only
+    the suspicion number is overridden -- trust, alibis, last-seen, and
+    contradictions still read from ``beliefs`` -- because the meeting's
+    ``suspicion_graph`` it mirrors is suspicion-only. ``None`` is
+    byte-identical to pre-task HEAD.
+
+    Reads ``working.last_seen`` for the last-seen suffix (the R-6
+    composite-memory gate: render reads all three stores). The field is filled
+    by :func:`_record_movement_sightings` from the witnessed ``saw_player_move``
+    rows (firewall-suppressed); empty when the movement flag is OFF, so the
+    suffix is byte-identical to pre-task HEAD.
     """
 
     lines: list[str] = []
@@ -1130,19 +1520,77 @@ def _build_belief_lines(
         if roster is not None and player_id not in roster:
             continue
         belief = beliefs.view(player_id)
-        belief_text = _format_belief_score(belief)
-        if belief_text is None:
+        effective_suspicion = (
+            suspicion_override.get(player_id, belief.suspicion)
+            if suspicion_override is not None
+            else None
+        )
+        belief_text = _format_belief_score(belief, suspicion=effective_suspicion)
+        # last_seen render hook (Task 13.5.4): the "last seen in ROOM at tick T"
+        # suffix for a subject the agent witnessed move. Filled in
+        # ``working.last_seen`` by :func:`_record_movement_sightings`
+        # (firewall-suppressed); empty (suffix absent, byte-identical to
+        # pre-13.5.4 HEAD) when ``AILIBI_MOVEMENT_PERCEPTION`` is OFF.
+        last_seen_suffix = _format_last_seen_suffix(working.last_seen(player_id))
+        # alibi_map render (Task 13.5.2): the now-populated ``PlayerBelief.alibis``
+        # list, written by :func:`absorb_reported_testimony` from each public
+        # ``AlibiClaim``. Empty (so this is the empty string) until the
+        # testimony-as-content flag is ON, keeping the flag-OFF render
+        # byte-identical to pre-task HEAD.
+        alibi_suffix = _format_alibi_suffix(belief.alibis)
+        parentheticals = [s for s in (last_seen_suffix, alibi_suffix) if s]
+        if belief_text is None and not parentheticals:
             continue
-        suffix = _format_last_seen_suffix(working.last_seen(player_id))
-        if suffix:
-            lines.append(f"{player_id}: {belief_text} ({suffix})")
+        if belief_text is None:
+            # Neutral suspicion but a recorded alibi (a subject named only in
+            # reported testimony): lead the row with the alibi content so the
+            # alibi map still surfaces.
+            lines.append(f"{player_id}: {'; '.join(parentheticals)}")
+        elif parentheticals:
+            lines.append(f"{player_id}: {belief_text} ({'; '.join(parentheticals)})")
         else:
             lines.append(f"{player_id}: {belief_text}")
     return lines
 
 
-def _format_belief_score(belief: PlayerBelief) -> str | None:
-    suspicion_dev = abs(belief.suspicion - 0.5)
+def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...]) -> str:
+    """Render a subject's recorded alibi claims for the §6.6 belief view (Task 13.5.2).
+
+    Empty for a subject with no recorded alibi (the flag-OFF case and any
+    subject never alibied), so the belief line is byte-identical to pre-task
+    HEAD. Claims are sorted by ``(tick, room, source)`` for replay determinism;
+    each renders as ``in ROOM at tick T per SPEAKER`` so the alibi stays
+    attributed to the player who asserted it.
+    """
+
+    if not alibis:
+        return ""
+    # Cap the rendered alibis per subject so the non-elastic §6.6 belief block
+    # cannot grow unbounded across many meetings and push the budgeted render over
+    # ``DEFAULT_TOKEN_BUDGET`` (Codex P2): keep the most-recent
+    # ``_MAX_RENDERED_ALIBIS`` by tick (a newer alibi supersedes a stale one),
+    # then render oldest-first for a stable, replay-deterministic line.
+    ordered = sorted(alibis, key=lambda a: (a.tick, a.room, a.source))
+    if len(ordered) > _MAX_RENDERED_ALIBIS:
+        recent = sorted(ordered, key=lambda a: (a.tick, a.room, a.source))[
+            -_MAX_RENDERED_ALIBIS:
+        ]
+        ordered = recent
+    parts = [
+        f"in {alibi.room} at tick {alibi.tick} per {alibi.source}" for alibi in ordered
+    ]
+    return "alibi: " + "; ".join(parts)
+
+
+def _format_belief_score(
+    belief: PlayerBelief, *, suspicion: float | None = None
+) -> str | None:
+    # Task 13.5.5: ``suspicion`` overrides the stored value when supplied (the
+    # pre-vote-folded number the ballot's ``suspicion_graph`` carries), so the
+    # neutral test, the suspicion-vs-trust comparison, AND the rendered figure
+    # all read the folded suspicion. ``None`` -> stored value, byte-identical.
+    effective_suspicion = belief.suspicion if suspicion is None else suspicion
+    suspicion_dev = abs(effective_suspicion - 0.5)
     trust_dev = abs(belief.trust - 0.5)
     # Anything within half of the displayed precision (0.01) rounds to
     # "0.50" in the rendered line and carries no signal, so treat it as
@@ -1153,7 +1601,7 @@ def _format_belief_score(belief: PlayerBelief) -> str | None:
     if suspicion_dev < 0.005 and trust_dev < 0.005:
         return None
     if suspicion_dev >= trust_dev:
-        return f"suspicion {belief.suspicion:.2f}"
+        return f"suspicion {effective_suspicion:.2f}"
     return f"trust {belief.trust:.2f}"
 
 
@@ -1314,13 +1762,17 @@ __all__ = [
     "BeliefState",
     "ContradictionRef",
     "DEFAULT_TOKEN_BUDGET",
+    "ENV_TESTIMONY_AS_CONTENT",
     "EpisodicEvent",
     "MemoryStore",
     "PlayerBelief",
     "PlayerId",
+    "ReportedStatement",
     "RoomId",
     "TaskId",
     "WorkingMemory",
     "absorb_meeting_evidence",
+    "absorb_reported_testimony",
     "render_for_prompt",
+    "testimony_as_content_enabled",
 ]

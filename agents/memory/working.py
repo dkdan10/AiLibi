@@ -7,6 +7,19 @@ events plus belief state — it does not persist across runs.
 This module ships the write paths that perception (Task 2.4) and tactical
 policies (Tasks 2.6 / 2.7) need to set and overwrite scratch state. Higher
 level rendering of working memory belongs to Task 3.3.
+
+CURRENT STATUS — ``last_seen`` is WIRED by Task 13.5.4 (movement perception);
+``set_goal`` / ``set_path`` remain without a production writer (2026-06-25
+memory-pipeline diagnosis, workflow `wg54kfoxy`). ``record_sighting`` is called
+by ``agents/memory/store.py`` (``_record_movement_sightings``, at render time)
+for every witnessed room→room transition, so ``_last_seen`` fills and the §6.6
+belief-line suffix renders -- behind ``AILIBI_MOVEMENT_PERCEPTION`` (OFF by
+default, so ``_last_seen`` stays empty and the render is byte-identical to
+pre-13.5.4 HEAD). The writer is idempotent (skips a row not after the recorded
+last-seen) so the repeated renders a meeting drives never trip
+``record_sighting``'s non-decreasing-tick guard, and §4.7-firewall-suppressed.
+``set_goal`` / ``set_path`` are still scaffolding (zero non-test callers), NOT
+dead code to delete.
 """
 
 from __future__ import annotations

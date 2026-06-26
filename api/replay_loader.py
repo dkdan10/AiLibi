@@ -45,7 +45,9 @@ from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
     absorb_meeting_evidence,
+    absorb_reported_testimony,
     render_for_prompt,
+    testimony_as_content_enabled,
 )
 from agents.perception import EVENT_SAW_BODY, EVENT_SAW_PLAYER, ingest_packet
 from api.schemas import (
@@ -115,6 +117,7 @@ from meetings.manager import (
     INVALID_REASON_ID_MARKER,
     TEAMMATE_VOTE_TARGET_MARKER,
     VOTE_PARSE_DEFAULT_MARKER,
+    derive_reported_testimony,
     extract_belief_evidence,
 )
 from meetings.schemas import (
@@ -837,6 +840,17 @@ class ReplayLoader:
                     # suspicion the live agents held. Memory-side only --
                     # engine state and its hash checks are untouched.
                     evidence = extract_belief_evidence(result)
+                    # Task 13.5.2: mirror the live loop's reported-testimony
+                    # content fold in the SAME per-living-agent loop, gated on
+                    # ``AILIBI_TESTIMONY_AS_CONTENT`` (default OFF -> byte-identical
+                    # reconstruction). The derivation is the SAME pure function of
+                    # the recorded ``result`` the orchestrator uses, so the live
+                    # and replay reconstructions are identical. Memory-side only --
+                    # engine state and its hash checks are untouched.
+                    testimony_enabled = testimony_as_content_enabled()
+                    statements = (
+                        derive_reported_testimony(result) if testimony_enabled else ()
+                    )
                     for pid in sorted(state.players):
                         if not state.players[pid].alive:
                             continue
@@ -846,6 +860,10 @@ class ReplayLoader:
                             corroborated=evidence.corroborated,
                             contradicted=evidence.contradicted,
                         )
+                        if testimony_enabled:
+                            absorb_reported_testimony(
+                                memories[pid], statements=statements
+                            )
                 meeting_index += 1
                 if state.phase == "GAME_OVER":
                     break

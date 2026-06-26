@@ -18,6 +18,7 @@ from agents.perception import (
     EVENT_HEARD_VENT_USE,
     EVENT_SAW_BODY,
     EVENT_SAW_PLAYER,
+    EVENT_SAW_PLAYER_MOVE,
     EVENT_SELF_STATE,
     PROVENANCE_INFERRED,
     PROVENANCE_OBSERVED,
@@ -28,6 +29,7 @@ from observation.packet import (
     AudibleEvent,
     BodyView,
     GlobalView,
+    MovedPlayerView,
     ObservationPacket,
     PlayerView,
     SelfView,
@@ -80,6 +82,7 @@ def _packet(
     visible_players: tuple[PlayerView, ...] = (),
     visible_bodies: tuple[BodyView, ...] = (),
     audible_events: tuple[AudibleEvent, ...] = (),
+    moved_players: tuple[MovedPlayerView, ...] = (),
     global_state: GlobalView | None = None,
     cooldown: int | None = None,
 ) -> ObservationPacket:
@@ -95,6 +98,7 @@ def _packet(
         visible_players=visible_players,
         visible_bodies=visible_bodies,
         audible_events=audible_events,
+        moved_players=moved_players,
         global_state=global_state if global_state is not None else _global_view(),
         cooldown=cooldown,
     )
@@ -304,6 +308,69 @@ class TestIngestPacketSightings:
         types = {e.type for e in store.recent(since_tick=0)}
         assert EVENT_SAW_PLAYER not in types
         assert EVENT_SAW_BODY not in types
+
+
+class TestIngestPacketMovement:
+    """Perceived room transitions become first-hand episodic rows (Task 13.5.4)."""
+
+    def test_one_saw_player_move_event_per_moved_player_in_packet_order(self) -> None:
+        store = MemoryStore()
+        moved = (
+            MovedPlayerView(id="p2", from_room="CAFETERIA", to_room="ADMIN"),
+            MovedPlayerView(id="p4", from_room="STORAGE", to_room="ENGINEERING"),
+        )
+
+        ingest_packet(packet=_packet(tick=5, moved_players=moved), memory=store)
+
+        move_events = [
+            e for e in store.recent(since_tick=0) if e.type == EVENT_SAW_PLAYER_MOVE
+        ]
+        assert len(move_events) == 2
+        assert move_events[0].payload == {
+            "player_id": "p2",
+            "from_room": "CAFETERIA",
+            "to_room": "ADMIN",
+        }
+        assert move_events[1].payload == {
+            "player_id": "p4",
+            "from_room": "STORAGE",
+            "to_room": "ENGINEERING",
+        }
+        # First-hand: a directly-witnessed transition, not reported testimony.
+        assert {e.provenance for e in move_events} == {PROVENANCE_OBSERVED}
+        assert {e.tick for e in move_events} == {5}
+
+    def test_no_move_events_when_moved_players_empty(self) -> None:
+        # The flag-OFF boundary: ``observation/service.py`` leaves
+        # ``moved_players`` empty, so ingestion appends no movement row and the
+        # episodic store is byte-identical to pre-task HEAD.
+        store = MemoryStore()
+
+        ingest_packet(packet=_packet(), memory=store)
+
+        types = {e.type for e in store.recent(since_tick=0)}
+        assert EVENT_SAW_PLAYER_MOVE not in types
+
+    def test_movement_rows_follow_sightings_and_precede_bodies(self) -> None:
+        store = MemoryStore()
+
+        ingest_packet(
+            packet=_packet(
+                tick=7,
+                visible_players=(PlayerView(id="p2", room="ADMIN", action=None),),
+                moved_players=(
+                    MovedPlayerView(id="p2", from_room="CAFETERIA", to_room="ADMIN"),
+                ),
+                visible_bodies=(
+                    BodyView(id="p3-body", room="ELECTRICAL", victim_id="p3"),
+                ),
+            ),
+            memory=store,
+        )
+
+        types = [e.type for e in store.recent(since_tick=0)]
+        assert types.index(EVENT_SAW_PLAYER) < types.index(EVENT_SAW_PLAYER_MOVE)
+        assert types.index(EVENT_SAW_PLAYER_MOVE) < types.index(EVENT_SAW_BODY)
 
 
 class TestIngestPacketAudibles:

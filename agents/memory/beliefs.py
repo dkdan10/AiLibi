@@ -18,7 +18,11 @@ from dataclasses import dataclass, field
 from typing import Final, Literal, TypeAlias
 
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
-from meetings.transcript import contradiction_lift_key, is_weak_contradiction
+from meetings.transcript import (
+    contradiction_lift_key,
+    is_weak_contradiction,
+    witnessed_kill_evidence_enabled,
+)
 from observation.packet import ObservationPacket
 
 PlayerId: TypeAlias = str
@@ -39,6 +43,27 @@ _DEFAULT_SUSPICION = 0.5
 # 4; Rules 2, 3, and 5 from §6.3 are deferred to Phase 5.
 VENTING_SUSPICION_DELTA: Final[float] = 0.5
 """DESIGN.md §6.3 Rule 4: suspicion added when a player is observed venting."""
+
+WITNESSED_KILL_SUSPICION_DELTA: Final[float] = 1.0
+"""Suspicion added when a player is *witnessed* committing a kill (Task 13.5.3;
+the 2026-06-25 design-thread eyewitness-strength decision).
+
+A witnessed kill is the single most conclusive act in the game -- only
+impostors kill, and unlike a vent (which the §6.3 Rule-4 witness weights
+"almost certain" at :data:`VENTING_SUSPICION_DELTA` = 0.5) it is the killer
+caught in the act itself. The owner decision is that a first-hand kill view IS
+conclusive for the witness: unforgeable, read from the agent's OWN memory, no
+corroboration needed. So the delta is the largest in the file -- ``1.0``,
+``>= VENTING_SUSPICION_DELTA`` -- and from any prior it pins the killer's
+suspicion to the ``1.0`` clamp, near-certain and well over the §4.6 0.60 eject
+gate. With both a vent and a kill witnessed for the same player the kill weighs
+``>=`` the vent by construction (its delta is the larger, both clamp to 1.0).
+
+Gated by :data:`meetings.transcript.ENV_WITNESSED_KILL_EVIDENCE` (default OFF
+-> byte-identical to pre-task HEAD: a witnessed kill moves no structured belief,
+exactly as before). The witness-time rule lives in
+:func:`apply_observation_rules`; see there for the §4.7 team-internal firewall
+(an impostor that witnesses a TEAMMATE's kill accrues nothing)."""
 
 BODY_PROXIMITY_SUSPICION_DELTA: Final[float] = 0.2
 """DESIGN.md §6.3 Rule 1: suspicion added for co-presence near a fresh body."""
@@ -290,6 +315,15 @@ evidence outlives weak evidence."""
 # no subject and is deliberately not used.
 OBSERVED_VENT_ACTION: Final[str] = "vent"
 
+# The action label the observation layer stamps on a ``PlayerView`` when the
+# observer *witnesses* a player committing a kill (observation/service.py
+# ``_observed_actions_for_agent``, ~:351 -- a witness-gated ``KilledEvent``).
+# Seeing the kill is the player-attributed signal the Task 13.5.3 witness rule
+# keys on; it is never mirrored onto a crewmate-visible channel for a kill the
+# observer did NOT witness (the leak test), so a ``PlayerView`` carrying it is
+# always a first-hand, witness-permitted view.
+OBSERVED_KILL_ACTION: Final[str] = "kill"
+
 # The two deterministic halves of the per-meeting belief fold (Task 10.7;
 # audit gp-2). ``pre_vote`` runs BEFORE ballots: two-witness testimony
 # bumps plus this meeting's relevance-gated corroborations, both
@@ -333,7 +367,17 @@ class ContradictionRef:
 
 @dataclass(frozen=True)
 class PlayerBelief:
-    """Immutable snapshot of beliefs about a single other player."""
+    """Immutable snapshot of beliefs about a single other player.
+
+    ``alibis`` is DEAD in production today (2026-06-25 memory-pipeline
+    diagnosis, workflow `wg54kfoxy`): its only writer is :meth:`BeliefState.record_alibi`,
+    which has zero non-test callers, and the §6.6 memory render
+    (``agents/memory/store.py``) reads this field nowhere -- testimony reaches
+    beliefs only as a scalar suspicion delta, never as stored alibi content. It
+    is scaffolding, NOT dead code to delete: Wave C (Task 13.5.2,
+    testimony-as-content) is the lever that wires it (the ``"reported"``
+    provenance write path → ``record_alibi`` → render).
+    """
 
     trust: float = _DEFAULT_TRUST
     suspicion: float = _DEFAULT_SUSPICION
@@ -431,6 +475,17 @@ class BeliefState:
         return belief.snapshot()
 
     def record_alibi(self, claim: AlibiClaim) -> PlayerBelief:
+        """Append an alibi claim to ``claim.player_id``'s belief row.
+
+        DEAD in production today (2026-06-25 memory-pipeline diagnosis,
+        workflow `wg54kfoxy`): this method has zero non-test callers, so no
+        live path writes the ``PlayerBelief.alibis`` list, and the §6.6 render
+        does not read it -- testimony currently reaches beliefs only as a
+        scalar suspicion delta. Kept as scaffolding (NOT dead code to delete):
+        Wave C (Task 13.5.2, testimony-as-content) wires this as the persistence
+        target for the ``"reported"`` provenance write path.
+        """
+
         belief = self._ensure(claim.player_id)
         belief.alibis.append(claim)
         return belief.snapshot()
@@ -525,6 +580,7 @@ def apply_observation_rules(
     observation: ObservationPacket,
     previous_visible_bodies: AbstractSet[BodyId],
     recent_co_presence: Mapping[RoomId, Sequence[tuple[int, PlayerId]]],
+    env: Mapping[str, str] | None = None,
 ) -> BeliefState:
     """Apply DESIGN.md §6.3 rule-based belief updates (Rules 1 and 4).
 
@@ -536,6 +592,24 @@ def apply_observation_rules(
     ``action == "vent"`` in ``visible_players``; the room-only
     ``vent_use_heard`` AudibleEvent is deliberately ignored because it has no
     player attribution and would smear suspicion across the whole room.
+
+    Witnessed kill (``WITNESSED_KILL_SUSPICION_DELTA``, Task 13.5.3 -- the
+    2026-06-25 eyewitness-strength decision). A kill is even more conclusive
+    than a vent (only impostors kill, and this is the act itself), so a
+    ``PlayerView`` carrying ``action == "kill"`` -- the witness-gated kill stamp
+    (observation/service.py) -- lifts the killer's suspicion by the largest
+    delta in the file, pinning to the ~1.0 clamp (near-certain, over the §4.6
+    gate). It mirrors the vent branch with ONE added guard: the §4.7
+    team-internal firewall. An impostor frequently co-locates with a teammate's
+    kill, so a killer in ``observation.self_state.fellow_impostor_ids`` is
+    SKIPPED (the vent branch needs no such guard -- a crew never vents to be
+    witnessed by a teammate, but a teammate kill is routine). The witness
+    reasons from its OWN first-hand view -- unforgeable, no corroboration -- and
+    because this runs at perception (via ``ingest_packet``), the bump persists
+    into the stored :class:`BeliefState` the meeting suspicion graph reads.
+    Behind :data:`meetings.transcript.ENV_WITNESSED_KILL_EVIDENCE` (read from
+    ``env``, defaulting to the process environment): default OFF -> a kill stamp
+    moves no belief and the result is byte-identical to pre-task HEAD.
 
     Rule 1 -- body proximity (``BODY_PROXIMITY_SUSPICION_DELTA``). On the tick a
     body is *first* seen (``body.id`` absent from ``previous_visible_bodies``),
@@ -552,9 +626,18 @@ def apply_observation_rules(
 
     result = beliefs.copy()
 
+    witnessed_kill = witnessed_kill_evidence_enabled(env)
+    fellow_impostor_ids = frozenset(observation.self_state.fellow_impostor_ids)
+
     for player in observation.visible_players:
         if player.action == OBSERVED_VENT_ACTION:
             result.adjust_suspicion(player.id, delta=VENTING_SUSPICION_DELTA)
+        elif (
+            witnessed_kill
+            and player.action == OBSERVED_KILL_ACTION
+            and player.id not in fellow_impostor_ids
+        ):
+            result.adjust_suspicion(player.id, delta=WITNESSED_KILL_SUSPICION_DELTA)
 
     for body in observation.visible_bodies:
         if body.id in previous_visible_bodies:
@@ -622,6 +705,19 @@ def apply_contradiction_rule(
     placement, all sharing the subject's OWN alibi-claim event, so the
     per-(subject, claim) dedup below folds them onto one key (one 0.3, never
     N x 0.3) within the ``MEETING_CONTRADICTION_LIFT_CAP``.
+
+    Kill-scene ``alibi_vs_physical`` (Task 13.5.3) routes through this SAME
+    marker-keyed handling -- again no new branch. A LONE kill-scene placement
+    (the accused placed at the body's room within the kill window by ONE
+    independent voice, contradicting an alibi elsewhere) carries the detector's
+    :data:`meetings.transcript.WEAK_REASON_KILL_SCENE` marker, so
+    :func:`is_weak_contradiction` is ``True`` and it takes the sub-gate
+    ``WEAK_CONTRADICTION_SUSPICION_DELTA`` -- it INFORMS but cannot eject a
+    baseline listener alone (the owner-LOCKED STRICT strictness: no single
+    forgeable kill-accusation railroads a crewmate). The placement crosses to
+    the full ``CONTRADICTION_SUSPICION_DELTA`` only under the two-source
+    conjunction (>= ``PHYSICAL_CONTRADICTION_MIN_VOICES`` distinct contradicting
+    voices, kill-scene or not), exactly like the 13.4 atom.
 
     Lift dedup + cap (Task 10.1; audit gp-2 C-C-3). "Each detected
     contradiction is one piece of evidence" turned out to multiply: the
@@ -947,6 +1043,7 @@ __all__ = [
     "CORROBORATION_SUSPICION_DELTA",
     "MEETING_CONTRADICTION_LIFT_CAP",
     "MEETING_SUSPICION_DECAY_RATE",
+    "OBSERVED_KILL_ACTION",
     "OBSERVED_VENT_ACTION",
     "TESTIMONY_INDEPENDENCE_BAR",
     "TESTIMONY_SPREAD_CAP_DELTA",
@@ -954,6 +1051,7 @@ __all__ = [
     "VENTING_SUSPICION_DELTA",
     "WEAK_CONTRADICTION_SUSPICION_DELTA",
     "WITNESS_INFORM_REASON",
+    "WITNESSED_KILL_SUSPICION_DELTA",
     "AlibiClaim",
     "BeliefState",
     "ContradictionRef",

@@ -11,8 +11,8 @@
 > JSONL/JSON files on local disk — no PostgreSQL/JSONB yet; the spectator surface
 > is a static read-only replay + eval REST API consumed by a replay-scrubbing
 > React UI — the live WebSocket broadcast layer is not built; games are created
-> from the CLI — there is no `POST /games`; belief Rules 1, 2, and 4 are live and
-> Rules 3 and 5 are deferred. MVP (roadmap phases 0–5) is complete; post-MVP
+> from the CLI — there is no `POST /games`; belief Rules 1–5 are
+> live (Rules 3 and 5 landed in Phase 9, Task 9.8). MVP (roadmap phases 0–5) is complete; post-MVP
 > repair/hardening is tracked in `tasks/` (the executed Phase 6 was a repair
 > phase, and the §9 "human player" work is deferred to Phase 7+).
 
@@ -423,7 +423,7 @@ Tactical decisions are deterministic given memory state, which means agent behav
 1. The opening turn (reporter / emergency caller) → produce an opening `MeetingTurn`.
 2. Each chain or opt-in turn the agent takes → produce a `MeetingTurn`.
 3. End of meeting → produce `VoteBallot`.
-4. After meeting closes → optional belief-state update reflection.
+4. After meeting closes → optional belief-state update reflection. **(NOT IMPLEMENTED at HEAD — the post-meeting belief update is the *deterministic* fold `agents.memory.store.absorb_meeting_evidence` → `apply_meeting_evidence_rules`; there is no LLM reflection turn.)**
 
 Inputs to the LLM: a *rendered* view of memory (not raw chat; not raw events) plus the public meeting transcript so far. Output is constrained to a Pydantic schema (JSON mode / structured outputs). No free-form reasoning leaks into game state.
 
@@ -613,11 +613,26 @@ This is the heart of the project. A weak memory system is the most likely cause 
 └──────────────────────────────────────────────────────────┘
 ```
 
+> **HEAD status (truth-up 2026-06-25; alibi_map updated after Task 13.5.2).** The diagram is the
+> intended model; some boxes are still scaffolding the Phase 13.5 memory-correctness work:
+> **WORKING MEMORY** is instantiated once per agent and is NOT rebuilt each tick — `current goal` /
+> `current path` are written by the tactical policy but never read back, and `last_seen[player]` is
+> structurally present with no production writer (`WorkingMemory.record_sighting` is uncalled), so
+> its render suffix never fires (Wave C Task 13.5.4 wires `last_seen` ← movement perception).
+> **BELIEF STATE** `alibi_map` (`PlayerBelief.alibis`) is now **WIRED** (Task 13.5.2, PR #198):
+> `agents.memory.store.absorb_reported_testimony` calls `record_alibi` from each public `AlibiClaim`
+> and the §6.6 view renders it — gated on the `AILIBI_TESTIMONY_AS_CONTENT` flag (default OFF, so the
+> flag-off render stays byte-identical). The same task adds `provenance="reported"` episodic CONTENT
+> rows (a meeting speaker's structured claims, self-framed as unverified), so cross-meeting memory is
+> no longer scalar-only. **MEETING MEMO** and the belief box's "post-meeting reflection" updater
+> remain unimplemented — the rest of the cross-meeting persistence is still the scalar suspicion the
+> deterministic fold writes.
+
 ### 6.2 Event abstraction (raw → summarized)
 
 Raw `ObservationPacket`s would explode the prompt by mid-game. Two-stage compression:
 
-1. **Per-tick coalescing:** consecutive `EnteredRoom` events for the same room collapse into a single "stayed in Room X from tick A to tick B."
+1. **Per-tick coalescing:** consecutive `EnteredRoom` events for the same room collapse into a single "stayed in Room X from tick A to tick B." **(NOT IMPLEMENTED at HEAD — perception appends raw rows; there is no `EnteredRoom` event type. Only stage 2, the salience filter, is live.)**
 2. **Salience filter at meeting time:** when rendering memory for an LLM call, the rendering function selects events by salience — kills witnessed, body discoveries, vent observations, contradicting claims — and elides routine task work unless explicitly relevant.
 
 The full episodic log is kept on disk; only the rendered view goes into the prompt.
@@ -628,13 +643,13 @@ Belief updates have explicit rules (no hidden ML model):
 
 - `+0.2 suspicion` if seen near a body shortly before discovery. **(Rule 1 — live.)**
 - suspicion rises when a claimed alibi contradicts another agent's testimony — **graduated by the flag's WEAK/STRONG class (§5.4, §6.4) and corroboration**: a STRONG contradiction applies the full gate-crossing delta, a WEAK one a smaller informing delta (audit-9.7 down-weight), and corroboration within a round graduates the delta by independent-voice count. **(Rule 2 — live; wired into the meeting loop + perception in Phase 6 Task 6.4; weak/strong classes + spread in Phase 13 Wave B.)**
-- `−0.4 suspicion` (clamped) if a verifiable shared task is completed. **(Rule 3 — deferred.)**
+- `−0.4 suspicion` (clamped) if a verifiable shared task is completed. **(Rule 3 — LIVE since Phase 9, Task 9.8, in a weaker meeting-layer form: a verbal `CorroborationClaim` lowers suspicion by `CORROBORATION_SUSPICION_DELTA` = −0.05 — mirroring the +0.05 accusation weight, applied in `apply_meeting_evidence_rules`. The original −0.4 verified-shared-task version did not ship.)**
 - `+0.5 suspicion` if observed venting (almost certain). **(Rule 4 — live.)**
-- Time decay: suspicion drifts toward 0.5 over rounds without new evidence. **(Rule 5 — deferred.)**
+- Time decay: suspicion drifts toward 0.5 over rounds without new evidence. **(Rule 5 — LIVE since Phase 9, Task 9.8: `MEETING_SUSPICION_DECAY_RATE` = 0.25 per *meeting round*, applied in the post-vote half of `apply_meeting_evidence_rules` to players the meeting produced no new evidence about.)**
 
 These weights are config, not constants — they will be tuned against the eval harness.
 
-**Implemented at MVP.** Rules 1, 2, and 4 are live; Rules 3 and 5 are deferred. Until Phase 6 the belief path was dormant in headless games because `AgentRuntime._perceive` did not pass a `BeliefState` into `ingest_packet`; Task 6.4 wired that through (and the contradiction subsystem into the meeting loop), so Rules 1/2/4 now fire in headless play. Rule 2's contradiction-derived suspicion is applied via `apply_contradiction_rule` on detected meeting contradictions.
+**Implemented.** Rules 1, 2, and 4 went live at MVP; Rules 3 (corroboration) and 5 (decay) followed in Phase 9 (Task 9.8), so **all five rules are live at HEAD**. Until Phase 6 the belief path was dormant in headless games because the perception path did not pass a `BeliefState` into `ingest_packet`; Task 6.4 wired that through (and the contradiction subsystem into the meeting loop), so Rules 1/2/4 fire in headless play. Rule 2's contradiction-derived suspicion is applied via `apply_contradiction_rule` on detected meeting contradictions; Rules 3 and 5 fold in `apply_meeting_evidence_rules` (the per-meeting post-vote absorb). The production perceive→memory→policy wiring is `orchestrator/game.py::TacticalAgent`, not the Phase-2 `AgentRuntime` test stub.
 
 ### 6.4 Contradiction detection
 
