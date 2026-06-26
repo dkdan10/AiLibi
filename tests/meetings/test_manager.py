@@ -26,7 +26,7 @@ is also exercised to confirm Protocol compatibility + determinism.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeVar
@@ -6504,57 +6504,109 @@ class TestEmergencyOpeningNoBody:
 
 
 # ---------------------------------------------------------------------------
-# Task 13.5.5 — unfreeze rendered memory mid-meeting (refresh per turn).
-# A participant may carry a ``rerender_memory`` hook; when present the manager
-# re-renders before each of its turns AND its ballot instead of reusing the
-# frozen open-tick ``rendered_memory``. The hook MUST be a pure function of the
-# deterministic stored state, so a replay rebuilds identical prompts.
+# Task 13.5.5 — unfreeze rendered memory mid-meeting (the BALLOT belief lines).
+# When a participant carries a ``rerender_memory`` hook (flag ON) the manager
+# re-renders the BALLOT's memory with the per-voter pre-vote-folded suspicion
+# substituted in, so the belief lines and the ``suspicion_graph`` kwarg read one
+# folded source. TURN prompts always use the frozen open-tick render. OFF (no
+# hook) -> the frozen render everywhere, byte-identical to pre-task HEAD.
 # ---------------------------------------------------------------------------
 
 
 def _participants_with_p1_hook(
-    hook: Callable[[], str],
+    hook: Callable[[Mapping[PlayerId, float]], str],
     *,
     frozen: str = "FROZEN-OPEN-p-1",
+    suspicion_graph: tuple[SuspicionEntry, ...] = (
+        SuspicionEntry(player_id="p-2", suspicion=0.4, trust=0.5),
+    ),
 ) -> tuple[MeetingParticipant, ...]:
-    """Crew roster where p-1 (the meeting opener) carries a re-render hook."""
+    """Crew roster where p-1 (the meeting opener) carries a ballot hook."""
 
     p1 = MeetingParticipant(
         agent_id="p-1",
         role="CREWMATE",
         rendered_memory=frozen,
-        suspicion_graph=(SuspicionEntry(player_id="p-2", suspicion=0.4, trust=0.5),),
+        suspicion_graph=suspicion_graph,
         rerender_memory=hook,
     )
     return (p1, _participant("p-2"), _participant("p-3"), _participant("p-4"))
 
 
-class TestUnfreezeRenderedMemory:
-    """The manager honours a participant's ``rerender_memory`` hook (flag ON),
-    and falls back to the frozen open-tick render when it is ``None`` (OFF)."""
+def _suspicion_block_to_dict(prompt: str) -> dict[str, float]:
+    """Parse the fake vote prompt's ``suspicion=`` block into ``{pid: susp}``.
 
-    def test_hook_drives_turn_and_ballot_memory_not_the_frozen_string(self) -> None:
-        # p-1 opens (turn 0) and votes; with a hook the manager must render
-        # BOTH from the hook's fresh string and NEVER from the frozen field.
+    Mirrors the format ``_vote_prompt`` renders (``pid:susp/trust`` entries),
+    so a test can compare the suspicion_graph the BALLOT showed against the
+    override the manager fed the re-render hook.
+    """
+
+    block = _extract_marker(prompt, "suspicion=")
+    out: dict[str, float] = {}
+    for entry in block.split(","):
+        if not entry:
+            continue
+        pid, scores = entry.split(":")
+        out[pid] = float(scores.split("/")[0])
+    return out
+
+
+class TestUnfreezeRenderedMemory:
+    """The manager re-renders ONLY the ballot through the hook (flag ON),
+    feeding it the post-fold suspicion_graph; turns and the no-hook default
+    keep the frozen open-tick render."""
+
+    def test_ballot_uses_hook_output_and_turns_stay_frozen(self) -> None:
+        # p-1 opens (turn 0) and votes. The hook output must reach ONLY the
+        # ballot; the opening turn keeps the frozen open-tick render.
         result, client = _run_meeting(
             _make_responder(),
-            participants=_participants_with_p1_hook(lambda: "FRESH-RERENDER-p-1"),
+            participants=_participants_with_p1_hook(
+                lambda _override: "BALLOT-RERENDER-p-1"
+            ),
         )
         assert isinstance(result, MeetingResult)
-        p1_prompts = [
+        p1_turns = [
             c.prompt
             for c in client.calls
-            if "agent_id=p-1 " in c.prompt or "voter=p-1\n" in c.prompt
+            if "agent_id=p-1 " in c.prompt and "PHASE=VOTE" not in c.prompt
         ]
-        # p-1 is surfaced at least at its opening and its ballot.
-        assert len(p1_prompts) >= 2
-        for prompt in p1_prompts:
-            assert "FRESH-RERENDER-p-1" in prompt
+        p1_ballots = [c.prompt for c in client.calls if "voter=p-1\n" in c.prompt]
+        assert p1_turns and p1_ballots
+        # Turns: frozen open-tick render, never the hook output.
+        for prompt in p1_turns:
+            assert "FROZEN-OPEN-p-1" in prompt
+            assert "BALLOT-RERENDER-p-1" not in prompt
+        # Ballot: the hook output, never the frozen string.
+        for prompt in p1_ballots:
+            assert "BALLOT-RERENDER-p-1" in prompt
             assert "FROZEN-OPEN-p-1" not in prompt
+
+    def test_ballot_override_equals_the_suspicion_graph_it_renders(self) -> None:
+        # The override fed to the hook must be EXACTLY the per-voter post-fold
+        # suspicion_graph the SAME ballot prompt renders -- so the belief lines
+        # and the suspicion_graph kwarg agree by construction (PR #198 fix).
+        captured: list[dict[str, float]] = []
+
+        def _hook(override: Mapping[PlayerId, float]) -> str:
+            captured.append(dict(override))
+            return "BALLOT-RERENDER-p-1"
+
+        _result, client = _run_meeting(
+            _make_responder(),
+            participants=_participants_with_p1_hook(_hook),
+        )
+        ballot_prompt = next(
+            c.prompt for c in client.calls if "voter=p-1\n" in c.prompt
+        )
+        # The hook fired exactly once for p-1 (its single ballot), not on turns.
+        assert len(captured) == 1
+        assert captured[0] == _suspicion_block_to_dict(ballot_prompt)
 
     def test_no_hook_uses_the_frozen_open_tick_render(self) -> None:
         # Default participants carry no hook: the manager reads the frozen
-        # ``rendered_memory`` verbatim (the byte-identical pre-task path).
+        # ``rendered_memory`` verbatim for turns AND the ballot (the
+        # byte-identical pre-task path).
         _result, client = _run_meeting(_make_responder())
         p1_prompts = [
             c.prompt
@@ -6565,45 +6617,15 @@ class TestUnfreezeRenderedMemory:
         # ``_participant`` freezes ``"## Your role: CREWMATE\np-1 memory"``.
         assert all("p-1 memory" in prompt for prompt in p1_prompts)
 
-    def test_ballot_sees_a_later_render_than_the_opening(self) -> None:
-        # A counter-backed hook proves the manager re-renders FRESH before the
-        # ballot rather than reusing the opening-tick render: the ballot's
-        # render index is strictly greater than the opening's.
-        counter = {"n": 0}
-
-        def _hook() -> str:
-            counter["n"] += 1
-            return f"render-{counter['n']:03d}"
-
-        _result, client = _run_meeting(
-            _make_responder(),
-            participants=_participants_with_p1_hook(_hook),
-        )
-        opening_prompt = next(
-            c.prompt
-            for c in client.calls
-            if "PHASE=OPENING" in c.prompt and "agent_id=p-1 " in c.prompt
-        )
-        ballot_prompt = next(
-            c.prompt
-            for c in client.calls
-            if "PHASE=VOTE" in c.prompt and "voter=p-1\n" in c.prompt
-        )
-        opening_idx = int(_extract_marker(opening_prompt, "render-"))
-        ballot_idx = int(_extract_marker(ballot_prompt, "render-"))
-        assert ballot_idx > opening_idx
-        # The hook fired at least once per surfaced p-1 turn plus the ballot.
-        assert counter["n"] >= 2
-
     def test_rerender_is_deterministic_across_repeats(self) -> None:
-        # A pure hook (constant content) must yield byte-identical prompt
-        # sequences across two runs -- the replay-determinism property that
+        # A pure hook (override -> constant content) must yield byte-identical
+        # prompt sequences across two runs -- the replay-determinism property
         # ``verify_samples.sh`` gates on the committed replays.
         def _make_run() -> list[str]:
             _result, client = _run_meeting(
                 _make_responder(),
                 participants=_participants_with_p1_hook(
-                    lambda: "## belief lines\na\nb\nc"
+                    lambda _override: "## belief lines\na\nb\nc"
                 ),
             )
             return [c.prompt for c in client.calls]

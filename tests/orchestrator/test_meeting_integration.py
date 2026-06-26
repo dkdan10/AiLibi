@@ -34,6 +34,8 @@ from typing import TypeVar
 import pytest
 from pydantic import BaseModel, TypeAdapter
 
+from agents.memory.episodic import EpisodicEvent
+from agents.tactical.crewmate_policy import CrewmatePolicy
 from engine.entities import BodyState, PlayerId, PlayerState, Role
 from engine.world import Map, WorldState, load_canonical_map
 from llm.budget import GameBudget
@@ -1492,7 +1494,12 @@ class _MeetingAwareStub:
     def role(self) -> Role:
         return self._role
 
-    def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+    def render_memory_for_meeting(
+        self,
+        *,
+        token_budget: int = 1500,
+        suspicion_override: Mapping[PlayerId, float] | None = None,
+    ) -> str:
         return f"## Your role: {self._role}\nmemory for {self._agent_id}"
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
@@ -1575,39 +1582,40 @@ class TestBuildParticipantsFellowImpostorIds:
 
 # ---------------------------------------------------------------------------
 # Task 13.5.5 — unfreeze rendered memory mid-meeting (AILIBI_UNFREEZE_MEMORY).
-# The orchestrator attaches a per-turn re-render hook only when the flag is ON;
-# the frozen open-tick render is the byte-identical default.
+# The orchestrator attaches a BALLOT re-render hook only when the flag is ON;
+# the hook substitutes the pre-vote-folded suspicion into the belief lines so
+# the ballot's belief lines match the suspicion_graph it consumes. Turns and
+# the flag-OFF default keep the frozen open-tick render (byte-identical).
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _LiveMemoryStub:
-    """A :class:`MeetingAwareAgent` whose rendered memory EVOLVES.
+def _self_state_event() -> EpisodicEvent:
+    # The minimal episodic row ``render_for_prompt`` requires (it fails loud
+    # without a recorded role). No ``agent_id`` -> the roster filter is
+    # underivable -> every seeded belief row renders (so a seeded subject is
+    # not dropped as a phantom).
+    return EpisodicEvent(
+        tick=0,
+        type="self_state",
+        payload={"room": "CAFETERIA", "role": "CREWMATE", "pending_task_id": None},
+        provenance="observed",
+    )
 
-    ``render_memory_for_meeting`` reads the current value of a mutable
-    ``memory_lines`` list, so a re-render after the list is mutated surfaces
-    new content -- the stand-in for the live ``BeliefState`` / episodic the
-    real renderer reads. The render itself is a pure function of that stored
-    state (sorted, no wall-clock / RNG), matching the determinism contract.
-    """
 
-    _agent_id: PlayerId
-    _role: Role
-    memory_lines: list[str] = field(default_factory=list)
+def _agent_with_standing_suspicion(
+    *, agent_id: PlayerId, beliefs: Mapping[PlayerId, float]
+) -> TacticalAgent:
+    """A real :class:`TacticalAgent` whose belief store carries fixed priors."""
 
-    @property
-    def agent_id(self) -> PlayerId:
-        return self._agent_id
-
-    @property
-    def role(self) -> Role:
-        return self._role
-
-    def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
-        return "## belief lines\n" + "\n".join(sorted(self.memory_lines))
-
-    def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
-        return ()
+    agent = TacticalAgent(
+        agent_id=agent_id,
+        role="CREWMATE",
+        policy=CrewmatePolicy(agent_id=agent_id),
+    )
+    agent.memory.episodic.append(_self_state_event())
+    for subject, standing in beliefs.items():
+        agent.memory.beliefs.seed_player(subject, suspicion=standing, trust=0.5)
+    return agent
 
 
 class TestUnfreezeMemoryFlag:
@@ -1627,8 +1635,8 @@ class TestUnfreezeMemoryFlag:
 
 
 class TestBuildParticipantsUnfreezeMemory:
-    """``_build_participants`` attaches a re-render hook only with the flag ON;
-    the frozen open-tick render is the byte-identical default."""
+    """``_build_participants`` attaches a ballot re-render hook only with the
+    flag ON; the frozen open-tick render is the byte-identical default."""
 
     def test_flag_off_carries_no_rerender_hook(self) -> None:
         state = seed_initial_state(
@@ -1643,43 +1651,58 @@ class TestBuildParticipantsUnfreezeMemory:
         assert all(p.rerender_memory is None for p in participants)
         assert all(p.rendered_memory for p in participants)
 
-    def test_flag_on_attaches_hook_that_reads_live_memory(self) -> None:
+    def test_flag_on_attaches_a_ballot_hook(self) -> None:
         state = seed_initial_state(
             seed=2026, game_map=load_canonical_map(), num_players=4
         )
-        agents = {
-            pid: _LiveMemoryStub(
-                _agent_id=pid, _role=player.role, memory_lines=[f"open:{pid}"]
-            )
-            for pid, player in state.players.items()
-        }
         participants = _build_participants(
             state=state,
-            agents=agents,  # type: ignore[arg-type]
+            agents=_stub_agents_for(state),  # type: ignore[arg-type]
             token_budget=1500,
             unfreeze_memory=True,
         )
-        by_id = {p.agent_id: p for p in participants}
-        # The open-tick freeze captured the construction-time content.
-        assert "open:p-1" in by_id["p-1"].rendered_memory
-        # Mutate p-1's live memory; the hook re-renders the NEW content while
-        # the frozen ``rendered_memory`` field still shows the open-tick value.
-        agents["p-1"].memory_lines.append("later:p-1")
-        hook = by_id["p-1"].rerender_memory
-        assert hook is not None
-        refreshed = hook()
-        assert "later:p-1" in refreshed
-        assert "later:p-1" not in by_id["p-1"].rendered_memory
+        # Every participant carries a callable ballot hook (taking the override).
+        assert all(p.rerender_memory is not None for p in participants)
 
-    def test_rerender_hook_is_deterministic_across_repeats(self) -> None:
-        agent = _LiveMemoryStub(
-            _agent_id="p-1", _role="CREWMATE", memory_lines=["b", "a", "c"]
-        )
+
+class TestBallotSuspicionOverrideRender:
+    """The orchestrator's ballot hook renders a participant's belief-line
+    suspicion from the pre-vote-folded override (the PR #198 fix), exercising
+    the real ``render_memory_for_meeting`` -> ``render_for_prompt`` path."""
+
+    def test_hook_renders_belief_line_from_the_folded_override(self) -> None:
+        agent = _agent_with_standing_suspicion(agent_id="p-1", beliefs={"p-2": 0.58})
+        # The standing render shows the STORED suspicion.
+        assert "p-2: suspicion 0.58" in agent.render_memory_for_meeting()
+        # The ballot hook substitutes the pre-vote-folded suspicion (0.72), so
+        # the belief line now matches the suspicion_graph entry the ballot reads.
         hook = _memory_rerender_hook(agent, token_budget=1500)
-        # A pure function of the stored state: repeated calls with no mutation
-        # rebuild a byte-identical string (the replay-determinism property).
-        assert hook() == hook()
-        assert hook() == agent.render_memory_for_meeting(token_budget=1500)
+        folded = hook({"p-2": 0.72})
+        assert "p-2: suspicion 0.72" in folded
+        assert "p-2: suspicion 0.58" not in folded
+
+    def test_override_only_touches_listed_players(self) -> None:
+        agent = _agent_with_standing_suspicion(
+            agent_id="p-1", beliefs={"p-2": 0.58, "p-3": 0.62}
+        )
+        # Override lifts only p-2; p-3's belief line keeps its standing value.
+        rendered = agent.render_memory_for_meeting(suspicion_override={"p-2": 0.80})
+        assert "p-2: suspicion 0.80" in rendered
+        assert "p-3: suspicion 0.62" in rendered
+
+    def test_hook_is_replay_deterministic(self) -> None:
+        agent = _agent_with_standing_suspicion(agent_id="p-1", beliefs={"p-2": 0.58})
+        hook = _memory_rerender_hook(agent, token_budget=1500)
+        # A pure function of (override, belief snapshot): twice -> byte-identical.
+        assert hook({"p-2": 0.72}) == hook({"p-2": 0.72})
+
+    def test_render_without_override_is_byte_identical(self) -> None:
+        # The additive override parameter is byte-identical to pre-task HEAD
+        # when absent: the flag-OFF / non-ballot boundary at the renderer.
+        agent = _agent_with_standing_suspicion(agent_id="p-1", beliefs={"p-2": 0.58})
+        assert agent.render_memory_for_meeting() == (
+            agent.render_memory_for_meeting(suspicion_override=None)
+        )
 
 
 class _Seed6BetrayalClient:

@@ -371,7 +371,10 @@ class MeetingAwareAgent(Protocol):
     def role(self) -> Role: ...
 
     def render_memory_for_meeting(
-        self, *, token_budget: int = DEFAULT_TOKEN_BUDGET
+        self,
+        *,
+        token_budget: int = DEFAULT_TOKEN_BUDGET,
+        suspicion_override: Mapping[PlayerId, float] | None = None,
     ) -> str: ...
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]: ...
@@ -700,12 +703,14 @@ def build_default_meeting_runner(
 # Task 13.5.5 unfreeze-rendered-memory lever. Default OFF: every
 # ``MeetingParticipant`` carries the one-time open-tick render (the frozen
 # snapshot), byte-identical to pre-task HEAD, so the existing meeting suite and
-# the committed replays are untouched. ON: the orchestrator attaches a
-# per-turn re-render hook so a speaker's later turns and its ballot read belief
-# lines recomputed from the live deterministic memory -- internally consistent
-# with the pre-vote ``suspicion_graph`` the ballot consumes (the PR #198 review
-# inconsistency). Mirrors ``meetings.transcript.witnessed_kill_evidence_enabled``
-# and ``agents.memory.store.testimony_as_content_enabled``.
+# the committed replays are untouched. ON: the orchestrator attaches a ballot
+# re-render hook so a voter's ballot renders its belief-line suspicion from the
+# SAME pre-vote-folded suspicion the ``suspicion_graph`` kwarg carries --
+# resolving the belief-line-vs-graph divergence (the PR #198 review
+# inconsistency). Turn prompts keep the frozen render (they carry no
+# ``suspicion_graph``). Mirrors
+# ``meetings.transcript.witnessed_kill_evidence_enabled`` and
+# ``agents.memory.store.testimony_as_content_enabled``.
 ENV_UNFREEZE_MEMORY: Final[str] = "AILIBI_UNFREEZE_MEMORY"
 _UNFREEZE_MEMORY_FLAG_TRUE: Final[frozenset[str]] = frozenset(
     {"1", "true", "yes", "on"}
@@ -732,22 +737,28 @@ def unfreeze_memory_enabled(env: Mapping[str, str] | None = None) -> bool:
 
 def _memory_rerender_hook(
     agent: MeetingAwareAgent, *, token_budget: int
-) -> Callable[[], str]:
-    """Build a participant's per-turn re-render hook (Task 13.5.5).
+) -> Callable[[Mapping[PlayerId, float]], str]:
+    """Build a participant's ballot re-render hook (Task 13.5.5).
 
-    Returns a zero-arg callable that re-invokes the UNCHANGED §6.6 renderer
-    (``MeetingAwareAgent.render_memory_for_meeting`` ->
-    :func:`agents.memory.store.render_for_prompt`) against the agent's LIVE
-    memory. Because that renderer is a pure function of the deterministic
-    stored ``BeliefState`` / episodic (no wall-clock, no RNG, stable salience
-    tie-breaks), calling the hook before each turn and the ballot rebuilds an
-    identical string on replay -- the property ``verify_samples.sh`` gates.
-    The hook does NOT edit the renderer (the parallel-safety boundary with
-    Task 13.5.4); it only calls it at a later point in the meeting.
+    Returns a callable taking the per-voter ``suspicion_override`` (the
+    pre-vote-folded suspicion the ballot's ``suspicion_graph`` carries) and
+    re-rendering the agent's standing memory with that suspicion substituted
+    into the belief lines, via ``render_memory_for_meeting`` ->
+    :func:`agents.memory.store.render_for_prompt`. So the ballot's belief
+    lines and its ``suspicion_graph`` kwarg read ONE folded suspicion source
+    (the PR #198 review inconsistency, resolved by construction).
+
+    Replay-deterministic: the override is a pure function of the recorded
+    transcript + the agent's belief snapshot, and the renderer is itself
+    deterministic (no wall-clock / RNG / set-order), so a replay rebuilds an
+    identical ballot prompt. The renderer is CALLED, not edited beyond the
+    additive ``suspicion_override`` parameter.
     """
 
-    def _rerender() -> str:
-        return agent.render_memory_for_meeting(token_budget=token_budget)
+    def _rerender(suspicion_override: Mapping[PlayerId, float]) -> str:
+        return agent.render_memory_for_meeting(
+            token_budget=token_budget, suspicion_override=suspicion_override
+        )
 
     return _rerender
 
@@ -815,11 +826,12 @@ def _build_participants(
             if player.role == "IMPOSTOR"
             else ()
         )
-        # Task 13.5.5: the open-tick render is ALWAYS produced (the frozen
-        # default the manager reads with the flag OFF, byte-identical to HEAD).
-        # With the flag ON we additionally attach a re-render hook the manager
-        # calls before each later turn and the ballot; the open-tick string
-        # then serves as the turn-0 value the hook reproduces.
+        # Task 13.5.5: the open-tick render is ALWAYS produced (it is the
+        # frozen value every TURN prompt reads, and the flag-OFF default for
+        # the ballot too -- byte-identical to HEAD). With the flag ON we also
+        # attach a re-render hook the manager calls ONLY for the ballot, with
+        # the per-voter pre-vote-folded suspicion, so the ballot's belief lines
+        # match the ``suspicion_graph`` it consumes.
         rerender_memory = (
             _memory_rerender_hook(agent, token_budget=token_budget)
             if unfreeze_memory
@@ -1943,11 +1955,24 @@ class TacticalAgent:
         return self._policy.decide(self._memory.episodic, public_map)
 
     def render_memory_for_meeting(
-        self, *, token_budget: int = DEFAULT_TOKEN_BUDGET
+        self,
+        *,
+        token_budget: int = DEFAULT_TOKEN_BUDGET,
+        suspicion_override: Mapping[PlayerId, float] | None = None,
     ) -> str:
-        """Token-budgeted rendered memory view (DESIGN.md §6.6)."""
+        """Token-budgeted rendered memory view (DESIGN.md §6.6).
 
-        return render_for_prompt(self._memory, token_budget=token_budget)
+        ``suspicion_override`` (Task 13.5.5) is forwarded to
+        :func:`render_for_prompt` so the meeting can render a ballot's
+        belief-line suspicion from the pre-vote-folded numbers; ``None``
+        (every non-ballot render) is byte-identical to pre-task HEAD.
+        """
+
+        return render_for_prompt(
+            self._memory,
+            token_budget=token_budget,
+            suspicion_override=suspicion_override,
+        )
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
         """Snapshot of the agent's belief state as a suspicion graph.
