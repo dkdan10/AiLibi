@@ -613,16 +613,20 @@ This is the heart of the project. A weak memory system is the most likely cause 
 └──────────────────────────────────────────────────────────┘
 ```
 
-> **HEAD status (truth-up 2026-06-25).** The diagram is the intended model; three boxes are not
-> realized at HEAD and are scaffolding the Phase 13.5 memory-correctness work wires or retires:
+> **HEAD status (truth-up 2026-06-25; alibi_map updated after Task 13.5.2).** The diagram is the
+> intended model; some boxes are still scaffolding the Phase 13.5 memory-correctness work:
 > **WORKING MEMORY** is instantiated once per agent and is NOT rebuilt each tick — `current goal` /
 > `current path` are written by the tactical policy but never read back, and `last_seen[player]` is
 > structurally present with no production writer (`WorkingMemory.record_sighting` is uncalled), so
-> its render suffix never fires. **BELIEF STATE** `alibi_map` (`PlayerBelief.alibis`) is defined but
-> `record_alibi` has no production caller, so it is never populated or rendered. **MEETING MEMO** and
-> the belief box's "post-meeting reflection" updater are not implemented — the only cross-meeting
-> persistence is the scalar suspicion the deterministic fold writes. (Wave C wires `last_seen` ←
-> movement perception and `alibi_map` ← testimony-as-content.)
+> its render suffix never fires (Wave C Task 13.5.4 wires `last_seen` ← movement perception).
+> **BELIEF STATE** `alibi_map` (`PlayerBelief.alibis`) is now **WIRED** (Task 13.5.2, PR #198):
+> `agents.memory.store.absorb_reported_testimony` calls `record_alibi` from each public `AlibiClaim`
+> and the §6.6 view renders it — gated on the `AILIBI_TESTIMONY_AS_CONTENT` flag (default OFF, so the
+> flag-off render stays byte-identical). The same task adds `provenance="reported"` episodic CONTENT
+> rows (a meeting speaker's structured claims, self-framed as unverified), so cross-meeting memory is
+> no longer scalar-only. **MEETING MEMO** and the belief box's "post-meeting reflection" updater
+> remain unimplemented — the rest of the cross-meeting persistence is still the scalar suspicion the
+> deterministic fold writes.
 
 ### 6.2 Event abstraction (raw → summarized)
 
