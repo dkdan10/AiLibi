@@ -245,11 +245,141 @@ holds, and the (b)-strictness keeps a lone forgeable kill-accusation sub-gate. B
 re-record. No re-record here (the $0 R7 re-extraction is the gate, per the Phase-13 cadence).
 **Ready-to-paste prompt:** `agent_prompts/task-13-5-3-witnessed-kill.md`
 
-- **13.5.4 — Movement perception** (`observation/service.py` reads `MovedEvent`/`last_action` → new
-  `agents/perception` event + render; wires `working.last_seen`). Today only current-room snapshots.
-- **13.5.5 — Unfreeze rendered memory mid-meeting** (`orchestrator/game.py`,
-  `meetings/manager.py::MeetingParticipant`). HIGHEST RISK — replay-determinism hazard; flag and
-  gate separately; land last, after 13.5.2–13.5.4.
+> **Parallel-dispatch note (2026-06-26).** `13.5.3` / `13.5.4` / `13.5.5` have DELIBERATELY DISJOINT
+> file scopes (3.3 = `beliefs.py` + `transcript.py`; 3.4 = `observation/` + `perception.py` +
+> `store.py` + `working.py`; 3.5 = `game.py` + `manager.py`), so the validator clears them as
+> parallel-safe and `13.5.3 ∥ 13.5.4` can be dispatched concurrently. `13.5.5` is file-disjoint too
+> but RECOMMENDED LAST — it re-renders the memory the other two enrich and is the replay-determinism
+> risk. The `Depends on` lines point only at the MERGED `13.5.1` / `13.5.2` (shared files), never at
+> each other, so there is no inter-task ordering among the three.
+
+### Task 13.5.4 — Movement perception (perceive room transitions; wire last_seen)
+**Branch:** `phase-13-5-movement-perception`
+**Depends on:** 13.5.1, 13.5.2
+**Section refs:** the 2026-06-25 memory diagnosis (workflow `wg54kfoxy`: "movement is never perceived — agents learn only an actor's CURRENT room; the engine emits `MovedEvent` + maintains `last_action` but the observation layer reads neither"); engine/tick.py (`MovedEvent` from_room/to_room ~:261-267, `PlayerState.last_action`); observation/service.py (`_observed_actions_for_agent`, the witness gate); observation/packet.py (`PlayerView`); agents/perception.py (`ingest_packet`, the `EVENT_*` types); agents/memory/store.py (`render_for_prompt`, the existing within-vision `_collect_transitions` / `_SALIENCE_TRANSITION` + `_collect_movement_breadcrumbs`, and the dead `last_seen` render hook ~:1323); agents/memory/working.py (`record_sighting` / `last_seen`, dead — wired here, earmarked by 13.5.1)
+**Complexity:** Integration
+**Files in scope:**
+- observation/service.py
+- observation/packet.py
+- agents/perception.py
+- agents/memory/store.py
+- agents/memory/working.py
+- tests/observation/test_service.py
+- tests/agents/test_perception.py
+- tests/agents/test_memory_rendering.py
+**Files NOT in scope:**
+- agents/memory/beliefs.py and meetings/transcript.py — movement here is PERCEPTION + RENDER only; NO belief rule and NO detector change, which is what keeps this task file-disjoint from 13.5.3 so the two dispatch in parallel. A movement-driven belief/contradiction rule is a deliberate later item.
+- orchestrator/game.py, meetings/manager.py — disjoint from 13.5.5
+- the scalar belief path and the §4.6 gate — untouched
+- engine/ and the recorded replays — observation reads the EXISTING `MovedEvent`; NO engine change, NO re-record
+
+Today an agent perceives only a position SNAPSHOT (the actor's current room); the engine's
+`MovedEvent` (room→room each tick) and `last_action` are never read, so a witness cannot perceive a
+transition it directly saw, and the `WorkingMemory.last_seen` field (dead since Phase 2) never
+populates. The render reconstructs coarse "moved from A" breadcrumbs from consecutive `saw_player`
+deltas (Tasks 13.6/13.9), but a single-tick transit the agent witnessed is lost. This task surfaces
+witnessed movement: `observation/service.py` derives a movement signal for a CO-LOCATED witness
+from the engine `MovedEvent` (an actor the witness can see moving room→room), `agents/perception.py`
+ingests it as a new first-hand event, `agents/memory/store.py` renders "You saw p-3 move from
+CAFETERIA to ADMIN at tick 5", and the same path calls `working.record_sighting` → the now-live
+"last seen in ROOM at tick T" belief-line suffix. Behind `AILIBI_MOVEMENT_PERCEPTION` (default OFF →
+no movement event, `record_sighting` uncalled, render byte-identical to HEAD).
+
+**Definition of done:** with the flag ON, a witness who could see an actor transition rooms gets a
+first-hand perceived-movement episodic event (witness-gated exactly like `saw_player` — never for an
+observer who could not see the actor, so no firewall/leak regression), rendered as a first-hand
+sighting-class line; `working.last_seen` is populated via `record_sighting`, so the "last seen in
+ROOM at tick T" belief suffix finally renders. Replay-deterministic: the movement signal is
+re-derived from the recorded `MovedEvent` on the replay path, so committed replays reconstruct
+byte-identically (`scripts/verify_samples.sh`). Flag OFF → every packet, episodic store, and memory
+render is byte-identical to pre-task HEAD; the existing within-vision transition/breadcrumb renders
+are unchanged. NO `agents/memory/beliefs.py` or `meetings/transcript.py` edit (the parallel-safety
+boundary). New tests cover the witness gate, the movement render, the `last_seen` wiring, flag-off
+byte-identity, and determinism. Full `scripts/check.sh` green; a 9B smoke (flag ON) shows the leak
+suite passing and the render within the 1500-tok budget.
+**Implementation hint:**
+Mirror the `saw_player` witness gate: surface movement only for an observer already entitled to see
+the actor (reuse the same visibility/witness path `_observed_actions_for_agent` uses), so the §4.7
+firewall and the leak suite hold for free. Carry the transition on a new `observation/packet.py`
+field (e.g. a `moved_from` on `PlayerView` or a small `moved_players` list) and ingest it in
+`ingest_packet` as a new `EVENT_*`; gate the `record_sighting` call on the flag so `last_seen` stays
+empty (and its suffix absent) when OFF — that is the byte-identity boundary. Salience is first-hand
+class (a witnessed transition is direct observation, distinct from the reconstructed
+`_SALIENCE_TRANSITION` breadcrumb). Keep `agents/` engine-free (read the engine `MovedEvent` only in
+`observation/service.py`, the orchestrator-owned boundary). Run a memory-render fixture before/after
+with the flag OFF to confirm byte-identity.
+**Integration risk:**
+A new first-hand perception channel + the first live writer of `WorkingMemory.last_seen`. The
+firewall/leak surface is the main risk: movement MUST be witness-gated identically to `saw_player`
+(a movement the observer could not see must never appear), so the leak suite is the hard gate.
+Behind `AILIBI_MOVEMENT_PERCEPTION` (default OFF) so the merge is byte-identical and committed
+replays are untouched; determinism holds because the signal re-derives from the recorded
+`MovedEvent`. File-disjoint from 13.5.3 and 13.5.5 by construction (no `beliefs.py` / `transcript.py`
+/ `game.py` / `manager.py`), so all three dispatch in parallel. No re-record (smoke only).
+**Ready-to-paste prompt:** `agent_prompts/task-13-5-4-movement-perception.md`
+
+### Task 13.5.5 — Unfreeze rendered memory mid-meeting (refresh per turn)
+**Branch:** `phase-13-5-unfreeze-memory`
+**Depends on:** 13.5.2
+**Section refs:** the 2026-06-25 diagnosis + PR #198 review (rendered_memory frozen at meeting-open while only `suspicion_graph` is recomputed pre-vote, so the belief lines and the `suspicion_graph` kwarg diverge); orchestrator/game.py (`render_memory_for_meeting`, the one-time frozen render ~:733-743); meetings/manager.py (`MeetingParticipant` frozen dataclass ~:486-507, the turn loop + the ballot render); [[project_substrate_cadence_doctrine]] (replay determinism)
+**Complexity:** Integration
+**Files in scope:**
+- orchestrator/game.py
+- meetings/manager.py
+- tests/orchestrator/test_meeting_integration.py
+- tests/meetings/test_manager.py
+**Files NOT in scope:**
+- agents/memory/store.py (`render_for_prompt`) — UNCHANGED; this task CALLS the renderer per turn, it does not edit it, which keeps it file-disjoint from 13.5.4
+- agents/memory/beliefs.py, meetings/transcript.py — disjoint from 13.5.3
+- observation/, agents/perception.py — disjoint from 13.5.4
+- the scalar fold and the §4.6 gate value — untouched
+- engine/ and the recorded replays — NO re-record; `verify_samples.sh` must stay byte-identical
+
+Today `render_memory_for_meeting` runs ONCE per participant at meeting open
+(`orchestrator/game.py` ~:733-743) into the frozen `MeetingParticipant.rendered_memory`; every turn
+AND the ballot reuse that open-tick snapshot, while the pre-vote fold updates the `suspicion_graph`
+separately — so a speaker's later turn/ballot reads STALE belief lines that diverge from the
+recomputed `suspicion_graph` (the PR #198 review inconsistency). This task re-renders a participant's
+memory before their later turns and their ballot, from the CURRENT (pre-vote-folded) `BeliefState` +
+episodic, so the belief lines are internally consistent with the suspicion graph the ballot reads.
+HIGHEST RISK in Wave C: the per-turn re-render MUST be replay-deterministic (a pure function of the
+deterministic `BeliefState` + episodic at that point, with the renderer's existing stable salience
+tie-breaks), so `verify_samples.sh` reconstructs the committed replays byte-identically. Behind
+`AILIBI_UNFREEZE_MEMORY` (default OFF → the one-time frozen render, byte-identical to HEAD). LAND
+LAST (after 13.5.2–13.5.4) so the re-render is exercised against the real richer content.
+
+**Definition of done:** with the flag ON, a participant's `rendered_memory` is recomputed before each
+of their turns and their ballot from the current `BeliefState` / episodic (not the open-tick freeze),
+so the rendered belief lines match the pre-vote `suspicion_graph` the ballot consumes; the
+`MeetingParticipant` carries a refresh mechanism (a re-render hook / per-turn recompute) rather than a
+single frozen string, without breaking the existing frozen-default call path. Replay-deterministic:
+run twice → byte-identical; `scripts/verify_samples.sh` reconstructs all committed samples cleanly.
+Flag OFF → the one-time frozen render, byte-identical to pre-task HEAD (the existing meeting suite
+passes unchanged). NO `agents/memory/store.py` edit (the renderer is called, not changed — the
+parallel-safety boundary with 13.5.4). New tests cover the refresh (a later turn sees updated belief
+lines consistent with the suspicion graph), determinism (twice → identical; `verify_samples`), and
+flag-off byte-identity. Full `scripts/check.sh` green; a 9B smoke (flag ON) holds the meeting-rate
+floor and byte-identical reconstruction.
+**Implementation hint:**
+The frozen-default path is the byte-identity boundary: keep `MeetingParticipant.rendered_memory` as
+the open-tick render when the flag is OFF, and ONLY when ON recompute it per the speaker's turn via a
+re-render hook (a callable the participant holds, or a manager-side recompute that reads the live
+`BeliefState`). The recompute calls the UNCHANGED `agents.memory.store.render_for_prompt` — do not
+edit the renderer. Determinism is the hard part: the re-render must read only the deterministic
+stored state at that point (no wall-clock, no RNG, no set iteration order), so a replay rebuilds the
+identical string; pin it with a `verify_samples` run in the task. Because the per-meeting fold that
+moves suspicion pre-vote already exists, the new content the re-render surfaces is just the
+up-to-date belief lines — no new belief math here.
+**Integration risk:**
+The replay-determinism hazard is the reason this lands LAST. Re-rendering mid-meeting changes WHEN a
+speaker sees its belief lines; if the re-render is not a pure function of the deterministic stored
+state, a replay diverges and `verify_samples` breaks — so that check is the hard gate, not just
+`check.sh`. Behind `AILIBI_UNFREEZE_MEMORY` (default OFF) so the merge is the frozen path,
+byte-identical, with the existing meeting suite untouched; gameplay value is measured on the new
+model in Phase 14. File-disjoint from 13.5.3 (`beliefs`/`transcript`) and 13.5.4 (`observation`/
+`store`) — it touches only `game.py` + `manager.py` — so it can run in parallel, though landing it
+after 13.5.3/13.5.4 exercises the re-render against the real richer memory. No re-record (smoke only).
+**Ready-to-paste prompt:** `agent_prompts/task-13-5-5-unfreeze-memory.md`
 
 The phase closes when Wave C's smoke is green and the corrected-substrate 9B prompts are pinned;
 then **Phase 14** (model migration, PR #196) selects + re-baselines on this corrected substrate.
