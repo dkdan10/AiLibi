@@ -183,6 +183,7 @@ def render_for_prompt(
     memory: AgentMemory,
     *,
     token_budget: int = DEFAULT_TOKEN_BUDGET,
+    suspicion_override: Mapping[PlayerId, float] | None = None,
 ) -> str:
     """Produce a token-budgeted Markdown view of agent memory (DESIGN.md §6.6).
 
@@ -198,6 +199,14 @@ def render_for_prompt(
     salience first; the role line, tasks-completed line, beliefs, and
     contradictions are always retained because they are agent-essential
     context that the LLM cannot work around.
+
+    ``suspicion_override`` (Task 13.5.5) replaces the SUSPICION value of a
+    belief line for the listed players, leaving trust, alibis, last-seen,
+    and the open-contradictions section read from ``memory.beliefs``. The
+    meeting passes the per-voter pre-vote-folded suspicion (the same numbers
+    the vote-ballot ``suspicion_graph`` kwarg carries) so the ballot's belief
+    lines and that graph agree by construction. ``None`` (the default, and
+    every non-ballot render) is byte-identical to pre-task HEAD.
 
     Raises :class:`ValueError` if ``token_budget`` is non-positive or
     if no ``self_state`` event has been recorded. A render call before
@@ -256,7 +265,12 @@ def render_for_prompt(
         teammate_ids=teammate_ids,
         body_sightings=_collect_body_sightings(memory.episodic),
     )
-    beliefs_lines = _build_belief_lines(memory.beliefs, memory.working, roster=roster)
+    beliefs_lines = _build_belief_lines(
+        memory.beliefs,
+        memory.working,
+        roster=roster,
+        suspicion_override=suspicion_override,
+    )
     contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
 
     return _assemble_view(
@@ -1475,6 +1489,7 @@ def _build_belief_lines(
     working: WorkingMemory,
     *,
     roster: frozenset[str] | None = None,
+    suspicion_override: Mapping[PlayerId, float] | None = None,
 ) -> list[str]:
     """Render the §6.6 belief rows, filtered to ``roster`` when supplied.
 
@@ -1484,6 +1499,14 @@ def _build_belief_lines(
     row) and is skipped rather than rendered into the prompt. ``None``
     renders every known row (legacy fixtures without the 9.3 self
     channel, where the roster is underivable).
+
+    ``suspicion_override`` (Task 13.5.5) supplies a per-player effective
+    suspicion that replaces ``belief.suspicion`` in the rendered score; a
+    player absent from the mapping falls back to its stored suspicion. Only
+    the suspicion number is overridden -- trust, alibis, last-seen, and
+    contradictions still read from ``beliefs`` -- because the meeting's
+    ``suspicion_graph`` it mirrors is suspicion-only. ``None`` is
+    byte-identical to pre-task HEAD.
 
     Reads ``working.last_seen`` for the last-seen suffix (the R-6
     composite-memory gate: render reads all three stores). The field is filled
@@ -1497,7 +1520,12 @@ def _build_belief_lines(
         if roster is not None and player_id not in roster:
             continue
         belief = beliefs.view(player_id)
-        belief_text = _format_belief_score(belief)
+        effective_suspicion = (
+            suspicion_override.get(player_id, belief.suspicion)
+            if suspicion_override is not None
+            else None
+        )
+        belief_text = _format_belief_score(belief, suspicion=effective_suspicion)
         # last_seen render hook (Task 13.5.4): the "last seen in ROOM at tick T"
         # suffix for a subject the agent witnessed move. Filled in
         # ``working.last_seen`` by :func:`_record_movement_sightings`
@@ -1554,8 +1582,15 @@ def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...]) -> str:
     return "alibi: " + "; ".join(parts)
 
 
-def _format_belief_score(belief: PlayerBelief) -> str | None:
-    suspicion_dev = abs(belief.suspicion - 0.5)
+def _format_belief_score(
+    belief: PlayerBelief, *, suspicion: float | None = None
+) -> str | None:
+    # Task 13.5.5: ``suspicion`` overrides the stored value when supplied (the
+    # pre-vote-folded number the ballot's ``suspicion_graph`` carries), so the
+    # neutral test, the suspicion-vs-trust comparison, AND the rendered figure
+    # all read the folded suspicion. ``None`` -> stored value, byte-identical.
+    effective_suspicion = belief.suspicion if suspicion is None else suspicion
+    suspicion_dev = abs(effective_suspicion - 0.5)
     trust_dev = abs(belief.trust - 0.5)
     # Anything within half of the displayed precision (0.01) rounds to
     # "0.50" in the rendered line and carries no signal, so treat it as
@@ -1566,7 +1601,7 @@ def _format_belief_score(belief: PlayerBelief) -> str | None:
     if suspicion_dev < 0.005 and trust_dev < 0.005:
         return None
     if suspicion_dev >= trust_dev:
-        return f"suspicion {belief.suspicion:.2f}"
+        return f"suspicion {effective_suspicion:.2f}"
     return f"trust {belief.trust:.2f}"
 
 
