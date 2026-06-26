@@ -1,3 +1,19 @@
+"""TEST-ONLY runtime harness (DESIGN.md §4.1) — NOT the production agent.
+
+`AgentRuntime` is a Phase-2 glue scaffold, imported only by tests (the
+2026-06-25 memory-pipeline diagnosis, workflow `wg54kfoxy`, confirmed zero
+non-test importers of ``agents.runtime``). It is NOT wired into a live game:
+its ``_choose_action`` is a hardcoded ``WaitIntent`` and its ``_update_memory``
+is a no-op, so it never drives a real tactical decision.
+
+The REAL production agent is ``orchestrator/game.py::TacticalAgent`` — that is
+the class the orchestrator's default :data:`~orchestrator.game.AgentFactory`
+instantiates per player, and the class that actually bridges perception,
+memory, and policy in a live game. Do not mistake this harness for the
+production path, and do not delete it as dead code: it is the Phase-2 skeleton
+later phases keep around as a documented reference (it is exercised by tests).
+"""
+
 from __future__ import annotations
 
 from agents.memory.beliefs import BeliefState
@@ -9,14 +25,19 @@ from observation.public_map import PublicMapView
 
 
 class AgentRuntime:
-    """Glue object that wires perception → memory → tactical (DESIGN.md §4.1).
+    """TEST-ONLY glue harness (DESIGN.md §4.1) — NOT the production agent.
 
-    Task 2.2 introduces only the runtime skeleton. The perception, memory, and
-    tactical hooks below are deliberate stubs that later phase-2 tasks fill in:
+    A Phase-2 skeleton, imported only by tests; the live game's agent is
+    ``orchestrator/game.py::TacticalAgent`` (see this module's docstring). Task
+    2.2 introduces only the runtime skeleton, and in the absence of the later
+    phase-2 wiring the hooks below remain stubs at runtime:
 
     - ``_perceive`` is owned by Task 2.4 (`agents/perception.py`).
-    - ``_update_memory`` is owned by Task 2.3 (`agents/memory/`).
-    - ``_choose_action`` is owned by Tasks 2.6 / 2.7 (`agents/tactical/`).
+    - ``_update_memory`` is a NO-OP (Task 2.3's full wiring was never bolted
+      back onto this harness — ``TacticalAgent`` carries the production path).
+    - ``_choose_action`` always returns a hardcoded ``WaitIntent`` (the
+      role-specific FSMs of Tasks 2.6 / 2.7 live in ``agents/tactical/`` and
+      are driven by ``TacticalAgent``, not this harness).
 
     The runtime never imports from ``engine/``: it consumes only the engine-free
     observation schemas and emits ``ActionIntent``.

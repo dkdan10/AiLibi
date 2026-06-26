@@ -7,6 +7,15 @@ events plus belief state — it does not persist across runs.
 This module ships the write paths that perception (Task 2.4) and tactical
 policies (Tasks 2.6 / 2.7) need to set and overwrite scratch state. Higher
 level rendering of working memory belongs to Task 3.3.
+
+CURRENT STATUS — no production writer (2026-06-25 memory-pipeline diagnosis,
+workflow `wg54kfoxy`). ``set_goal`` / ``set_path`` / ``record_sighting`` have
+zero non-test callers, so a live agent's ``WorkingMemory`` is empty at runtime:
+``_last_seen`` never fills, and the ``last_seen`` lookup the §6.6 render reads
+(``agents/memory/store.py`` belief-line suffix) is always ``None`` in
+production. This is scaffolding, NOT dead code to delete: Wave C (Task 13.5.4,
+movement perception) is the lever that wires ``last_seen`` ← perceived movement
+so the suffix begins to render.
 """
 
 from __future__ import annotations

@@ -333,7 +333,17 @@ class ContradictionRef:
 
 @dataclass(frozen=True)
 class PlayerBelief:
-    """Immutable snapshot of beliefs about a single other player."""
+    """Immutable snapshot of beliefs about a single other player.
+
+    ``alibis`` is DEAD in production today (2026-06-25 memory-pipeline
+    diagnosis, workflow `wg54kfoxy`): its only writer is :meth:`BeliefState.record_alibi`,
+    which has zero non-test callers, and the §6.6 memory render
+    (``agents/memory/store.py``) reads this field nowhere -- testimony reaches
+    beliefs only as a scalar suspicion delta, never as stored alibi content. It
+    is scaffolding, NOT dead code to delete: Wave C (Task 13.5.2,
+    testimony-as-content) is the lever that wires it (the ``"reported"``
+    provenance write path → ``record_alibi`` → render).
+    """
 
     trust: float = _DEFAULT_TRUST
     suspicion: float = _DEFAULT_SUSPICION
@@ -431,6 +441,17 @@ class BeliefState:
         return belief.snapshot()
 
     def record_alibi(self, claim: AlibiClaim) -> PlayerBelief:
+        """Append an alibi claim to ``claim.player_id``'s belief row.
+
+        DEAD in production today (2026-06-25 memory-pipeline diagnosis,
+        workflow `wg54kfoxy`): this method has zero non-test callers, so no
+        live path writes the ``PlayerBelief.alibis`` list, and the §6.6 render
+        does not read it -- testimony currently reaches beliefs only as a
+        scalar suspicion delta. Kept as scaffolding (NOT dead code to delete):
+        Wave C (Task 13.5.2, testimony-as-content) wires this as the persistence
+        target for the ``"reported"`` provenance write path.
+        """
+
         belief = self._ensure(claim.player_id)
         belief.alibis.append(claim)
         return belief.snapshot()

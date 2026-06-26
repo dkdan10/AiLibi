@@ -1133,6 +1133,13 @@ def _build_belief_lines(
         belief_text = _format_belief_score(belief)
         if belief_text is None:
             continue
+        # last_seen render hook: DEAD in production today (2026-06-25
+        # memory-pipeline diagnosis, workflow `wg54kfoxy`). ``WorkingMemory``
+        # has no production writer (``record_sighting`` has zero non-test
+        # callers), so ``working.last_seen`` is always ``None`` at runtime and
+        # this suffix never renders. Wave C (Task 13.5.4, movement perception)
+        # wires ``last_seen`` ← perceived movement, at which point the suffix
+        # begins to appear on belief lines.
         suffix = _format_last_seen_suffix(working.last_seen(player_id))
         if suffix:
             lines.append(f"{player_id}: {belief_text} ({suffix})")
