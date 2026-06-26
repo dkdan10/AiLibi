@@ -107,6 +107,7 @@ from meetings.schemas import (
     MeetingTurn,
     ObservationClaim,
     PlayerId,
+    ReportedStatement,
     SawPlayerObservation,
     TurnId,
     TurnKind,
@@ -2755,6 +2756,113 @@ def extract_belief_evidence(
     )
 
 
+def _reported_statement_sort_key(
+    statement: ReportedStatement,
+) -> tuple[PlayerId, str, PlayerId, int, int, str]:
+    """Total order over reported statements for replay-deterministic output.
+
+    Every component is concrete (``None`` ticks/room collapse to a sentinel),
+    so the sort is stable and byte-identical across runs regardless of the
+    transcript's turn order.
+    """
+
+    return (
+        statement.speaker,
+        statement.kind,
+        statement.subject,
+        statement.from_tick if statement.from_tick is not None else -1,
+        statement.to_tick if statement.to_tick is not None else -1,
+        statement.room if statement.room is not None else "",
+    )
+
+
+def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement, ...]:
+    """Reduce a resolved meeting to its public reported testimony (Task 13.5.2).
+
+    The content twin of :func:`extract_belief_evidence` -- where that reduction
+    collapses a meeting to scalar suspicion subject-sets, this one preserves the
+    WHAT of public speech as :class:`~meetings.schemas.ReportedStatement` rows
+    (the 2026-06-25 memory diagnosis, workflow ``wg54kfoxy``: "social info is a
+    scalar, not content"). A pure, replay-deterministic function of the recorded
+    ``MeetingResult``: it imports no engine and no perception, reads only the
+    recorded ``transcript.turns`` (NEVER ``free_text``), and returns the same
+    sorted tuple every time.
+
+    Scope (owner decision, locked 2026-06-25): the four STRUCTURED kinds only --
+    :class:`~meetings.schemas.SawPlayerObservation` sightings,
+    :class:`~meetings.schemas.AlibiClaim`,
+    :class:`~meetings.schemas.AccusationClaim`, and
+    :class:`~meetings.schemas.CorroborationClaim`. ``completed_task`` /
+    ``found_body`` observations and all free-text are dropped.
+
+    Roster-only: ``roster`` is the meeting's living-participant set read off the
+    recorded ballots (identical to :func:`extract_belief_evidence`). Both the
+    speaker and the named subject must be roster ids, so a hallucinated
+    structural id (a turn id, a free-text phrase) never reaches an episodic row
+    -- the same guarantee the scalar twin gives. Claims are read AS RECORDED,
+    after the per-turn guards (:func:`_drop_non_roster_claims` etc.) already ran.
+
+    NOT teammate-firewalled: reported content is PUBLIC speech, so an impostor's
+    derivation carries a statement that publicly incriminates its own team
+    exactly as a crewmate's does. Only the SCALAR suspicion path keeps the
+    teammate firewall (unchanged, :func:`extract_belief_evidence` ->
+    :func:`apply_meeting_evidence_rules`).
+    """
+
+    roster = frozenset(ballot.voter for ballot in result.ballots)
+    statements: list[ReportedStatement] = []
+    for turn in result.transcript.turns:
+        speaker = turn.speaker
+        if speaker not in roster:
+            continue
+        for observation in turn.observations:
+            if (
+                isinstance(observation, SawPlayerObservation)
+                and observation.subject in roster
+            ):
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="saw_player",
+                        subject=observation.subject,
+                        from_tick=observation.tick,
+                        to_tick=observation.tick,
+                        room=observation.room,
+                    )
+                )
+        for claim in turn.claims:
+            if isinstance(claim, AlibiClaim) and claim.subject in roster:
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="alibi",
+                        subject=claim.subject,
+                        from_tick=claim.from_tick,
+                        to_tick=claim.to_tick,
+                        room=claim.room,
+                    )
+                )
+            elif isinstance(claim, AccusationClaim) and claim.against in roster:
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="accusation",
+                        subject=claim.against,
+                    )
+                )
+            elif isinstance(claim, CorroborationClaim) and claim.supports in roster:
+                statements.append(
+                    ReportedStatement(
+                        speaker=speaker,
+                        kind="corroboration",
+                        subject=claim.supports,
+                        from_tick=claim.on_tick,
+                        to_tick=claim.on_tick,
+                    )
+                )
+    return tuple(sorted(statements, key=_reported_statement_sort_key))
+
+
 def _candidate_targets(
     player_ids: Iterable[PlayerId],
     *,
@@ -2892,6 +3000,7 @@ __all__ = [
     "VotePromptRenderer",
     "coerce_teammate_ballot_to_skip",
     "derive_belief_evidence",
+    "derive_reported_testimony",
     "drop_teammate_statement_target",
     "exclude_teammate_accusation_claims",
     "extract_belief_evidence",
