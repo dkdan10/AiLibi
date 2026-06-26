@@ -29,7 +29,16 @@ from agents.memory.store import (
     testimony_as_content_enabled as _flag_enabled,
 )
 from agents.perception import EVENT_REPORTED_TESTIMONY, PROVENANCE_REPORTED
-from meetings.schemas import ReportedStatement
+from meetings.manager import derive_reported_testimony
+from meetings.schemas import (
+    AccusationClaim,
+    MeetingResult,
+    MeetingTranscript,
+    MeetingTurn,
+    ReportedStatement,
+    SawPlayerObservation,
+    VoteBallot,
+)
 
 
 def _self_state_event(
@@ -411,3 +420,142 @@ class TestTestimonyFlag:
     def test_truthy_values_are_on(self) -> None:
         for value in ("1", "true", "TRUE", "yes", "on", "On"):
             assert _flag_enabled(env={"AILIBI_TESTIMONY_AS_CONTENT": value}) is True
+
+
+class TestReviewFixes:
+    """PR #198 review fixes: the self-subject finding + Codex P2 comments."""
+
+    def test_self_subject_alibi_is_not_recorded_as_belief_row(self) -> None:
+        # A reported alibi ABOUT the recipient (p-1) keeps the episodic CONTENT row
+        # but must NOT materialise a self belief/alibi row -- belief rows are about
+        # OTHERS and the scalar fold excludes own_id.
+        memory = _memory_for(agent_id="p-1", self_tick=4)
+        absorb_reported_testimony(
+            memory,
+            statements=(
+                ReportedStatement(
+                    speaker="p-3",
+                    kind="alibi",
+                    subject="p-1",  # the recipient itself
+                    from_tick=10,
+                    to_tick=12,
+                    room="MEDBAY",
+                ),
+            ),
+        )
+        assert len(_reported_rows(memory)) == 1  # content row kept
+        assert "p-1" not in memory.beliefs.known_players()  # no self belief row
+        assert not memory.beliefs.view("p-1").alibis
+        assert "p-1: alibi" not in render_for_prompt(memory)
+
+    def test_co_present_companions_render_and_are_roster_gated(self) -> None:
+        # A sighting's co_present companions are public "who was with whom"
+        # evidence -- carried, roster-gated, and rendered "(with …)".
+        memory = _memory_for(agent_id="p-1", self_tick=5)  # known roster p-1..p-5
+        absorb_reported_testimony(
+            memory,
+            statements=(
+                ReportedStatement(
+                    speaker="p-3",
+                    kind="saw_player",
+                    subject="p-2",
+                    from_tick=8,
+                    to_tick=8,
+                    room="MEDBAY",
+                    co_present=("p-5", "ghost-9", "p-4"),  # ghost-9 not in roster
+                ),
+            ),
+        )
+        assert _reported_rows(memory)[0].payload["co_present"] == ["p-4", "p-5"]
+        rendered = render_for_prompt(memory)
+        assert "(with p-4, p-5)" in rendered
+        assert "ghost-9" not in rendered
+
+    def test_rendered_alibis_are_capped_per_subject(self) -> None:
+        # The non-elastic §6.6 belief block must not grow unbounded -- only the
+        # most-recent few alibis per subject render.
+        memory = _memory_for(agent_id="p-1", self_tick=0)
+        absorb_reported_testimony(
+            memory,
+            statements=tuple(
+                ReportedStatement(
+                    speaker="p-3",
+                    kind="alibi",
+                    subject="p-2",
+                    from_tick=t,
+                    to_tick=t,
+                    room=f"ROOM{t}",
+                )
+                for t in (10, 11, 12, 13, 14)
+            ),
+        )
+        rendered = render_for_prompt(memory)
+        assert "at tick 14 per p-3" in rendered
+        assert "at tick 12 per p-3" in rendered
+        assert "at tick 11 per p-3" not in rendered
+        assert "at tick 10 per p-3" not in rendered
+
+    def test_derive_then_ingest_round_trip_per_living_agent(self) -> None:
+        # Integration across the manager->store boundary (the two halves the
+        # orchestrator + replay loops wire per living agent): a meeting where p-3
+        # publicly reports seeing the dead victim p-5 and accuses p-2.
+        result = MeetingResult(
+            meeting_id="m1",
+            triggered_by="p-1",
+            trigger_tick=10,
+            outcome="SKIPPED",
+            ejected_player_id=None,
+            ballots=tuple(
+                VoteBallot(
+                    voter=v,
+                    target="SKIP",
+                    confidence=0.5,
+                    primary_reason_id=None,
+                    rationale_text="x",
+                )
+                for v in ("p-1", "p-2", "p-3", "p-4")  # p-5 dead: not a voter
+            ),
+            transcript=MeetingTranscript(
+                turns=(
+                    MeetingTurn(
+                        turn_id="m1:turn-0",
+                        turn_index=0,
+                        speaker="p-3",
+                        turn_kind="opening",
+                        reply_to=None,
+                        observations=(
+                            SawPlayerObservation(
+                                type="saw_player",
+                                tick=8,
+                                subject="p-5",
+                                room="MEDBAY",
+                            ),
+                        ),
+                        claims=(
+                            AccusationClaim(
+                                type="accusation",
+                                against="p-2",
+                                confidence=0.7,
+                                reason="r",
+                            ),
+                        ),
+                        free_text="...",
+                    ),
+                )
+            ),
+        )
+        statements = derive_reported_testimony(result)
+
+        # A non-speaking listener (p-1, whose known roster includes the dead p-5)
+        # records p-3's public testimony about BOTH subjects.
+        listener = _memory_for(agent_id="p-1", self_tick=9)
+        absorb_reported_testimony(listener, statements=statements)
+        assert {r.payload["subject"] for r in _reported_rows(listener)} == {
+            "p-5",
+            "p-2",
+        }
+
+        # The speaker p-3 never re-records its own statements.
+        speaker = _memory_for(agent_id="p-3", self_tick=9)
+        absorb_reported_testimony(speaker, statements=statements)
+        assert _reported_rows(speaker) == ()

@@ -228,9 +228,14 @@ class TestDeriveReportedTestimony:
 
         assert derive_reported_testimony(result) == ()
 
-    def test_only_roster_ids_appear(self) -> None:
-        # A subject NOT in the ballot roster (e.g. a hallucinated id that somehow
-        # survived the recording-time guards) is dropped; only roster ids appear.
+    def test_observation_about_dead_subject_is_preserved(self) -> None:
+        # Codex P2 (Task 13.5.2): a saw_player about a player DEAD before this
+        # meeting (the body victim p-5, absent from the ballots) is real public
+        # testimony the prompts explicitly elicit -- derive must NOT drop it on the
+        # living-voter roster. Subject validity for observations is enforced
+        # per-agent at INGEST against the agent's known roster (which covers
+        # dead-but-seen players via co-spawn); see the ingest suite's
+        # test_roster_only_drops_unknown_ids for the garbage backstop.
         result = _result_with(
             turns=(
                 _turn(
@@ -238,10 +243,7 @@ class TestDeriveReportedTestimony:
                     speaker="p-1",
                     observations=(
                         SawPlayerObservation(
-                            type="saw_player",
-                            tick=7,
-                            subject="ghost-99",
-                            room="ELECTRICAL",
+                            type="saw_player", tick=7, subject="p-5", room="ELECTRICAL"
                         ),
                         SawPlayerObservation(
                             type="saw_player", tick=8, subject="p-3", room="ELECTRICAL"
@@ -249,13 +251,14 @@ class TestDeriveReportedTestimony:
                     ),
                 ),
             ),
-            voters=("p-1", "p-2", "p-3"),
+            voters=("p-1", "p-2", "p-3"),  # p-5 is dead -- not a voter
         )
 
         statements = derive_reported_testimony(result)
 
-        assert all(s.subject in {"p-1", "p-2", "p-3"} for s in statements)
-        assert [s.subject for s in statements] == ["p-3"]
+        # Both sightings survive derive; the dead victim p-5 is preserved (the gate
+        # moved to ingest). Sorted by (speaker, kind, subject): p-3 then p-5.
+        assert [s.subject for s in statements] == ["p-3", "p-5"]
 
     def test_speaker_outside_roster_is_dropped(self) -> None:
         # A turn whose speaker is not among the living voters contributes nothing.

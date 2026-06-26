@@ -98,6 +98,13 @@ _SALIENCE_COMPLETED_TASK: Final[int] = 30
 _SALIENCE_REPORTED_TESTIMONY: Final[int] = 25
 _SALIENCE_COOLDOWN_STATUS: Final[int] = 10
 
+# Per-subject cap on rendered reported alibis (Task 13.5.2, Codex P2). The §6.6
+# belief block is the non-elastic carve-out (``_assemble_view`` never budgets it),
+# so an unbounded accumulated alibi list could push ``render_for_prompt`` over
+# ``DEFAULT_TOKEN_BUDGET``. Render only the most-recent few per subject; a newer
+# alibi supersedes a stale one and N x subjects x this cap stays bounded.
+_MAX_RENDERED_ALIBIS: Final[int] = 3
+
 _EVENT_SAW_BODY: Final[str] = "saw_body"
 _EVENT_SAW_PLAYER: Final[str] = "saw_player"
 _EVENT_HEARD_VENT_USE: Final[str] = "heard_vent_use"
@@ -411,11 +418,27 @@ def absorb_reported_testimony(
                     "from_tick": statement.from_tick,
                     "to_tick": statement.to_tick,
                     "room": statement.room,
+                    # Co-present companions, roster-gated like the subject -- the
+                    # public "who was with whom" sighting evidence (Codex P2).
+                    "co_present": sorted(
+                        companion
+                        for companion in statement.co_present
+                        if companion in roster
+                    ),
                 },
                 provenance=PROVENANCE_REPORTED,
             )
         )
-        if statement.kind == "alibi" and statement.from_tick is not None:
+        # A reported alibi ABOUT the recipient never materialises a SELF belief
+        # row: belief rows are about OTHER players and the scalar fold excludes
+        # own_id, so a self alibi would pollute the §6.6 view and the vote-prompt
+        # suspicion graph (Codex P2). The episodic CONTENT row above is still kept
+        # -- the agent may want to know it was publicly placed somewhere.
+        if (
+            statement.kind == "alibi"
+            and statement.from_tick is not None
+            and statement.subject != own_agent_id
+        ):
             memory.beliefs.record_alibi(
                 AlibiClaim(
                     player_id=statement.subject,
@@ -1254,7 +1277,11 @@ def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
     to_tick = event.payload.get("to_tick")
     prefix = f"[tick {event.tick}] [meeting] CLAIM by {speaker} (unverified):"
     if kind == "saw_player" and isinstance(room, str) and isinstance(from_tick, int):
-        body = f"saw {subject} in {room} @ tick {from_tick}"
+        companions = event.payload.get("co_present")
+        with_suffix = ""
+        if isinstance(companions, (list, tuple)) and companions:
+            with_suffix = f" (with {', '.join(str(c) for c in companions)})"
+        body = f"saw {subject} in {room} @ tick {from_tick}{with_suffix}"
     elif (
         kind == "alibi"
         and isinstance(room, str)
@@ -1354,9 +1381,19 @@ def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...]) -> str:
 
     if not alibis:
         return ""
+    # Cap the rendered alibis per subject so the non-elastic §6.6 belief block
+    # cannot grow unbounded across many meetings and push the budgeted render over
+    # ``DEFAULT_TOKEN_BUDGET`` (Codex P2): keep the most-recent
+    # ``_MAX_RENDERED_ALIBIS`` by tick (a newer alibi supersedes a stale one),
+    # then render oldest-first for a stable, replay-deterministic line.
+    ordered = sorted(alibis, key=lambda a: (a.tick, a.room, a.source))
+    if len(ordered) > _MAX_RENDERED_ALIBIS:
+        recent = sorted(ordered, key=lambda a: (a.tick, a.room, a.source))[
+            -_MAX_RENDERED_ALIBIS:
+        ]
+        ordered = recent
     parts = [
-        f"in {alibi.room} at tick {alibi.tick} per {alibi.source}"
-        for alibi in sorted(alibis, key=lambda a: (a.tick, a.room, a.source))
+        f"in {alibi.room} at tick {alibi.tick} per {alibi.source}" for alibi in ordered
     ]
     return "alibi: " + "; ".join(parts)
 

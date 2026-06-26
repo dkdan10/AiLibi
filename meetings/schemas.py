@@ -229,7 +229,9 @@ class ReportedStatement(_FrozenModel):
 
     The optional fields are populated per ``kind``:
 
-    * ``saw_player`` -- ``from_tick == to_tick`` (the sighting tick) and ``room``.
+    * ``saw_player`` -- ``from_tick == to_tick`` (the sighting tick), ``room``, and
+      any ``co_present`` companions the sighting publicly named (the "who was with
+      whom" evidence the structured schema carries; Task 13.5.2, Codex P2).
     * ``alibi`` -- the inclusive ``from_tick``/``to_tick`` window and ``room``.
     * ``accusation`` -- ``subject`` only (no tick, no room).
     * ``corroboration`` -- ``from_tick == to_tick`` (the corroborated tick); no room.
@@ -244,6 +246,7 @@ class ReportedStatement(_FrozenModel):
     from_tick: int | None = None
     to_tick: int | None = None
     room: RoomId | None = None
+    co_present: tuple[PlayerId, ...] = ()
 
 
 # ---------------------------------------------------------------------------

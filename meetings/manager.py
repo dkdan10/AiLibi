@@ -2795,12 +2795,21 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
     :class:`~meetings.schemas.CorroborationClaim`. ``completed_task`` /
     ``found_body`` observations and all free-text are dropped.
 
-    Roster-only: ``roster`` is the meeting's living-participant set read off the
-    recorded ballots (identical to :func:`extract_belief_evidence`). Both the
-    speaker and the named subject must be roster ids, so a hallucinated
-    structural id (a turn id, a free-text phrase) never reaches an episodic row
-    -- the same guarantee the scalar twin gives. Claims are read AS RECORDED,
-    after the per-turn guards (:func:`_drop_non_roster_claims` etc.) already ran.
+    Speaker-gated; subject gating deferred to ingest (Codex P2, Task 13.5.2):
+    ``roster`` is the meeting's living-participant set read off the recorded
+    ballots (identical to :func:`extract_belief_evidence`). Only the SPEAKER is
+    gated here -- only a living participant takes a turn. The SUBJECT is NOT gated
+    against this living set, because a ``saw_player`` observation about a player
+    DEAD before this meeting (the body victim, an earlier ejection) is real public
+    testimony yet is absent from the ballots; gating it here would silently drop
+    the kill-scene sightings the prompts explicitly elicit. Subject validity is
+    enforced per-agent at ingest against
+    :func:`agents.memory.store._known_roster_ids` (the engine-witnessed set, which
+    covers dead-but-seen players via co-spawn), so a hallucinated structural id
+    still never reaches an episodic row. Claims (alibi/accusation/corroboration)
+    are already living-subject by the per-turn chokepoint
+    (:func:`_drop_non_roster_claims`); observations are NOT chokepoint-validated,
+    which is why the ingest gate is load-bearing for them.
 
     NOT teammate-firewalled: reported content is PUBLIC speech, so an impostor's
     derivation carries a statement that publicly incriminates its own team
@@ -2816,10 +2825,7 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
         if speaker not in roster:
             continue
         for observation in turn.observations:
-            if (
-                isinstance(observation, SawPlayerObservation)
-                and observation.subject in roster
-            ):
+            if isinstance(observation, SawPlayerObservation):
                 statements.append(
                     ReportedStatement(
                         speaker=speaker,
@@ -2828,10 +2834,11 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
                         from_tick=observation.tick,
                         to_tick=observation.tick,
                         room=observation.room,
+                        co_present=observation.co_present,
                     )
                 )
         for claim in turn.claims:
-            if isinstance(claim, AlibiClaim) and claim.subject in roster:
+            if isinstance(claim, AlibiClaim):
                 statements.append(
                     ReportedStatement(
                         speaker=speaker,
@@ -2842,7 +2849,7 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
                         room=claim.room,
                     )
                 )
-            elif isinstance(claim, AccusationClaim) and claim.against in roster:
+            elif isinstance(claim, AccusationClaim):
                 statements.append(
                     ReportedStatement(
                         speaker=speaker,
@@ -2850,7 +2857,7 @@ def derive_reported_testimony(result: MeetingResult) -> tuple[ReportedStatement,
                         subject=claim.against,
                     )
                 )
-            elif isinstance(claim, CorroborationClaim) and claim.supports in roster:
+            elif isinstance(claim, CorroborationClaim):
                 statements.append(
                     ReportedStatement(
                         speaker=speaker,
