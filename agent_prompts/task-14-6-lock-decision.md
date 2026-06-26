@@ -18,14 +18,16 @@ The authoritative task contract is copied below from tasks/phase-14.md. Follow i
 
 Design-thread decision (no code): read the 14.4/14.5 sweep evidence and lock the baseline tuple before any
 re-record exists — the chosen meeting_model + trigger_model Featherless ids, the chosen prompt set, the
-recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), and a go/no-go for the
-re-record. Mirror the Phase-9 pause between 9.4 (client) and 9.5 (re-record): the decision is re-answered
+recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), the substrate-flag
+config for the re-record (all 4 13.5 flags ON per owner decision 2026-06-26; 14.8's per-lever ablation
+characterizes each, non-gating), and a go/no-go for the re-record. Mirror the Phase-9 pause between 9.4
+(client) and 9.5 (re-record): the decision is re-answered
 against the sweep's data, and a NO-GO is an allowed outcome (no candidate clears the structured-output /
 behavior bar → stay on 9B / escalate the information ceiling), since the merge criterion is a VALID baseline,
 not an improved one.
 
 **Files in scope:**
-- tasks/phase-14.md (record the locked decision: chosen meeting_model, trigger_model, prompt set, thinking policy, and the re-record go/no-go with its evidence)
+- tasks/phase-14.md (record the locked decision: chosen meeting_model, trigger_model, prompt set, thinking policy, substrate-flag config (all 4 ON), and the re-record go/no-go with its evidence)
 
 **Files NOT in scope:**
 - llm/ + agents/ + replays/ (no implementation; this is a recorded decision)
@@ -35,6 +37,7 @@ not an improved one.
 **Definition of done:**
 - [ ] The locked (meeting_model, trigger_model) Featherless ids are recorded in `tasks/phase-14.md` with their evidence from the sweep report.
 - [ ] The chosen prompt set and the recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`) are recorded with rationale.
+- [ ] The re-record substrate-flag config is recorded = all 4 13.5 flags ON (owner decision 2026-06-26), with 14.8's per-lever ablation noted as characterization (non-gating).
 - [ ] A re-record go/no-go is recorded, explicitly allowing a NO-GO ("no candidate clears the structured-output / behavior bar; stay on 9B / escalate the information ceiling").
 - [ ] `uv run python scripts/generate_prompts.py --check` passes.
 - [ ] `uv run python scripts/validate_task_docs.py` passes.

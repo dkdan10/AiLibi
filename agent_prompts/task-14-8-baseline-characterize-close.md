@@ -16,17 +16,24 @@ The authoritative task contract is copied below from tasks/phase-14.md. Follow i
 **Section refs:** audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py
 **Complexity:** Medium
 
-Design-thread close: compute the Phase-13 R-gate as a MEASUREMENT over the committed 14.7 baseline — R1
-(games decided by ejection), R4 floor, R7, impostor win rate, and the rubric geomean ranking (eject-decided >
-stopwatch) — and compare to the final-9B baseline (R1 3/50, impostor 84%, eject 9%). Write the close audit
-framing the result as an honest finding: state whether the stronger model raised R1 and, if not, whether the
-evidence supports the information-ceiling hypothesis (single-room vision → ~45% detector precision → correct
-SKIP), recommending Phase 15 (asymmetric visibility / information richness). This is characterization, not a
-gate — the phase already merged on the valid new baseline (14.7); a flat or down R1 is a recorded finding.
+Design-thread close: compute the Phase-13 R-gate as a MEASUREMENT over the committed 14.7 flags-ON baseline —
+R1 (games decided by ejection), R4 floor, R7, impostor win rate, and the rubric geomean ranking (eject-decided
+> stopwatch) — and compare to the final-9B baseline (R1 3/50, impostor 84%, eject 9%). Also run a per-lever
+ABLATION (offline, $0): toggle each of the 4 substrate flags during re-derivation over the baseline replays to
+characterize each lever's contribution, and recommend the default set for 14.9 (note the kill-scene flag fired
+0× in the 9B smoke — flag it as UNMEASURED / needing a richer scenario, not a negative result). Write the
+close audit framing the result as an honest finding: state whether the stronger model raised R1 — the sharper
+hypothesis is can the NEW model DRIVE the corrected substrate where the 9B couldn't (the 9B's voter sat at
+suspicion 1.00 over the 0.60 gate yet the meeting SKIPPED) — and, if not, whether the evidence supports the
+information-ceiling hypothesis (single-room vision → ~45% detector precision → correct SKIP) even with the
+corrected substrate ON, recommending Phase 15 (asymmetric visibility / information richness). This is
+characterization, not a gate — the phase already merged on the valid new baseline (14.7); a flat or down R1 is
+a recorded finding.
 
 **Files in scope:**
-- audits/audit-2026-06-25-phase-14-close.md (new: the R-gate measurement + the hypothesis-test verdict + the Phase 15 recommendation)
-- tasks/phase-14.md (a STATUS banner recording the R-gate outcome and the next step)
+- audits/audit-2026-06-25-phase-14-close.md (new: the R-gate measurement + the per-lever ablation + the hypothesis-test verdict + the Phase 15 recommendation)
+- experiments/lab/results-substrate-ablation.jsonl (new: per-lever ablation — each of the 4 flags toggled offline over the baseline replays, R-gate / conversion metrics per cell; $0)
+- tasks/phase-14.md (a STATUS banner recording the R-gate outcome, the recommended default flag set, and the next step)
 - experiments/lab/results-rubric-score.json (re-ranked offline over the new committed replays — data regen, no code change)
 - experiments/lab/report-rubric-interestingness.md (re-ranked offline — data regen)
 
@@ -36,8 +43,9 @@ gate — the phase already merged on the valid new baseline (14.7); a flat or do
 - eval/ source (the analyzers are reused as-is; this folds, it does not change them)
 
 **Definition of done:**
-- [ ] The R-gate is computed offline over the 14.7 baseline (R1, R4 floor, R7, impostor win rate, rubric geomean ranking) and compared to the final-9B baseline (R1 3/50, impostor 84%, eject 9%).
-- [ ] The close audit frames the verdict as an HONEST hypothesis test: it states whether the model raised R1, and if not, whether the evidence supports the information-ceiling hypothesis; a null result is recorded as a valid finding, never a blocker.
+- [ ] The R-gate is computed offline over the 14.7 flags-ON baseline (R1, R4 floor, R7, impostor win rate, rubric geomean ranking) and compared to the final-9B baseline (R1 3/50, impostor 84%, eject 9%).
+- [ ] A per-lever ablation (each of the 4 13.5 flags toggled offline over the baseline replays) characterizes each lever's contribution and recommends the default set for 14.9; the kill-scene flag's 0× firing is noted as UNMEASURED (needs a richer scenario), not a negative result.
+- [ ] The close audit frames the verdict as an HONEST hypothesis test: it states whether the model raised R1, and if not, whether the evidence supports the information-ceiling hypothesis (even with the corrected substrate ON); a null result is recorded as a valid finding, never a blocker.
 - [ ] The close audit recommends the next phase (asymmetric visibility / information richness if the ceiling is confirmed; prompt/tactical work if a gap remains).
 - [ ] The rubric data is re-ranked offline over the new committed replays ($0, no code change); no number is retrofit to pass.
 - [ ] `uv run python scripts/generate_prompts.py --check` passes.

@@ -24,7 +24,10 @@ Featherless via 14.1's `llm.featherless_client._default_send` (hence the depende
 a `--backend`/`--models` flag (default `ollama` preserves CI + the existing `results-*.jsonl`). `call_turn`
 threads BOTH the request-time thinking toggle (so 14.4 can drive its non-thinking/thinking axis) and the
 response-side `thinking_policy="strip"` (so reasoning models do not abort the sweep). No engine/agent/replay
-bytes change — the probes stay read-only over committed replays.
+bytes change — the probes stay read-only over committed replays. The reconstructed-context path honors the
+merged 13.5 substrate flags (`*_enabled()` read from `os.environ`), so the sweep can build flag-OFF and
+flag-ON contexts by toggling the env vars; `call_turn` records the active `substrate_flags` config on each
+result row for provenance. The 13.5 flag logic is not modified.
 
 **Files in scope:**
 - experiments/lab/probe_backends.py (new: `Backend` literal, `call_turn(prompt, schema, *, backend, model, ...)` dispatching to the ollama or featherless `_default_send`, both through `_extract_json_block` + validate, returning `(parsed_or_None, raw_text, latency)`)
@@ -44,6 +47,7 @@ bytes change — the probes stay read-only over committed replays.
 - [ ] `call_turn` routes the SAME reconstructed prompt to either backend through the production `_extract_json_block` + `model_validate_json` path and returns `(parsed_or_None, raw_text, latency)`.
 - [ ] All four probes default to `ollama` (CI + existing reports unaffected) and accept `--backend featherless --models <list>`; the ollama branch stays byte-identical so existing `results-*.jsonl` reproduce.
 - [ ] `call_turn` threads BOTH the request-time thinking toggle (to drive 14.4's non-thinking/thinking axis) and the response-side `thinking_policy=strip` (so reasoning models do not abort the sweep); bounded concurrency is opt-in (sequential when latency is the measured metric).
+- [ ] The reconstructed-context path honors the 13.5 `*_enabled()` flags (set via env) so the sweep can build BOTH flag-OFF and flag-ON contexts; each result row tags its `substrate_flags` config; the 13.5 flag gates are not modified.
 - [ ] No engine/agent/replay-byte mutation; probes stay read-only over committed replays.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -64,6 +68,10 @@ Featherless, build the `response_format` json_schema from `schema` and call `llm
 (introduced by 14.1) with BOTH the request-time thinking flag and the response-side `thinking_policy` threaded
 through `call_turn`'s signature. Featherless is a concurrent hosted API, so a bounded `asyncio.Semaphore`
 (opt-in, 4–8) can cut sweep wall time — but run a sequential pass whenever per-call latency is the metric.
+The substrate-flag config is controlled by the sweep via the 4 `AILIBI_*` env vars (read during context
+reconstruction at `replay_loader.py:850` / `observation/service.py:461` / `beliefs.py:629` / the unfreeze
+ballot re-render); `call_turn` accepts and records the active `substrate_flags` so 14.4's two-column
+(flag-OFF / flag-ON) rows are self-describing.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.

@@ -26,9 +26,9 @@ the information ceiling. Emit a comparison report proposing a recommended (meeti
 tuple WITH its evidence — including an honest statement of whether the information-ceiling hypothesis holds.
 
 **Files in scope:**
-- experiments/lab/featherless_sweep.py (new: the matrix driver over vote/opening/reply corpora × models × {pinned-9B prompts, cover ON/OFF} × {non-thinking, thinking}, reusing `model_ceiling_probe.do_dump` to freeze contexts once and `grade-frontier` to grade)
-- experiments/lab/results-featherless-sweep.jsonl (new: per-cell mechanical grades + parse-success + tokens + latency)
-- experiments/lab/report-featherless-sweep.md (new: the comparison table, the model-ceiling-vs-information read, the cover-directive quadrant verdict, and the recommended tuple with evidence)
+- experiments/lab/featherless_sweep.py (new: the matrix driver over vote/opening/reply corpora × models × {pinned-9B prompts, cover ON/OFF} × {non-thinking, thinking} × {flag-OFF, flag-ON substrate}, reusing `model_ceiling_probe.do_dump` to freeze contexts once per substrate and `grade-frontier` to grade)
+- experiments/lab/results-featherless-sweep.jsonl (new: per-cell mechanical grades + parse-success + tokens + latency + the `substrate_flags` config)
+- experiments/lab/report-featherless-sweep.md (new: the comparison table, the model-ceiling-vs-information read, the cover-directive quadrant verdict, the per-model flag-OFF vs flag-ON substrate delta, and the recommended tuple with evidence)
 
 **Files NOT in scope:**
 - llm/ (the adapter is 14.1) + experiments/model_probe/probe.py + experiments/lab/deception_battery.py + experiments/lab/deflection_probe.py + experiments/lab/model_ceiling_probe.py + experiments/lab/probe_backends.py (14.2/14.3 own those; this consumes them)
@@ -37,8 +37,9 @@ tuple WITH its evidence — including an honest statement of whether the informa
 - orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS` unchanged until a baseline locks)
 
 **Definition of done:**
-- [ ] Each candidate model (Qwen3-32B instruct, Qwen3-30B-A3B, GLM-4-32B, one RP fine-tune) runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available (driven by the request-time thinking toggle from 14.1, threaded via 14.3 — not the response-side policy); mechanical metrics + per-model parse-success rate are tabulated against the 9B baseline.
+- [ ] Each candidate model (Qwen3-32B instruct, Qwen3-30B-A3B, GLM-4-32B, one RP fine-tune) — AND the 9B reference — runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available (driven by the request-time thinking toggle from 14.1, threaded via 14.3 — not the response-side policy), on BOTH the flag-OFF (legacy) and flag-ON (corrected 13.5) substrate (two columns; flag-ON contexts re-derived offline by setting the 4 `AILIBI_*` env vars); each result row carries its `substrate_flags`; mechanical metrics + per-model parse-success rate are tabulated per substrate against the 9B.
 - [ ] The cover-directive 2×2 (model × {cover OFF, cover ON-reply}) is run and the report states the quadrant verdict: capability ceiling / prompt artifact / both / information ceiling.
+- [ ] The report states the per-model SUBSTRATE delta (flag-ON vs flag-OFF): does the corrected 13.5 substrate help THIS model decide where the 9B degraded (a voter at suspicion 1.00 over the 0.60 gate, meeting STILL SKIPPED)? — separating "corrected memory helps the model" from "the model is just stronger."
 - [ ] Per-model structured-output fidelity (parse-success under `response_format`) is reported; any model that cannot reliably emit schema-valid JSON is flagged unfit for the sim.
 - [ ] A recommended (meeting_model, trigger_model, mode) tuple is proposed WITH evidence; the report states honestly whether the information-ceiling hypothesis is supported (tell persists across all models) — a valid finding either way.
 - [ ] `uv run mypy .` passes.
@@ -58,7 +59,12 @@ For votes, drive `experiments/model_probe/probe.py --backend featherless` with i
 This generalizes `model_ceiling_probe.py:11-14` ("if self-flagging does NOT fall as model strength rises, the
 binding constraint is INFORMATION not the model") across Featherless models. Operator session: set
 `FEATHERLESS_API_KEY`; bounded concurrency for behavior passes, a sequential pass for latency. $0 marginal,
-but watch token usage against the 32K context and the frozen 2048/1024 caps.
+but watch token usage against the 32K context and the frozen 2048/1024 caps. Build the flag-ON (corrected
+13.5) contexts by setting the 4 env vars (`AILIBI_TESTIMONY_AS_CONTENT` / `AILIBI_WITNESSED_KILL_EVIDENCE` /
+`AILIBI_MOVEMENT_PERCEPTION` / `AILIBI_UNFREEZE_MEMORY`) before the context reconstruction (`ReplayLoader` /
+`build_*_contexts` re-derive memory through the `*_enabled()` reads), and the flag-OFF column with them unset;
+the levers are replay-deterministic over the committed (flags-OFF) replays, so no re-record is needed. Tag
+every row's `substrate_flags`.
 
 ## Integration risk
 

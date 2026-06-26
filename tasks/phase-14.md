@@ -30,10 +30,22 @@ Locked decisions (2026-06-25):
   structured-output breakage — `experiments/lab/report-model-ceiling-probe.md` Finding 2 — does not apply to
   a hosted endpoint that returns reasoning in a separate channel); thinking-mode is a sweep AXIS.
 - **Two-set structure** (4p1i flat + 9p2i canonical with its roster sidecar) is unchanged.
+- **Corrected substrate (Phase 13.5, now merged):** Phase 14 builds on the 13.5 substrate — four
+  behavior-changing levers behind default-OFF env flags (`AILIBI_TESTIMONY_AS_CONTENT`,
+  `AILIBI_WITNESSED_KILL_EVIDENCE`, `AILIBI_MOVEMENT_PERCEPTION`, `AILIBI_UNFREEZE_MEMORY`;
+  `tasks/phase-13-5.md`), read ad-hoc from `os.environ` via the `*_enabled()` resolvers. The levers are pure
+  replay-deterministic reductions of recorded events, so flag-ON ("corrected") contexts re-derive OFFLINE
+  from the committed (flags-OFF) replays — no re-record needed for the sweep. Phase 14 SWEEPS each model on
+  BOTH substrates (flag-OFF legacy + flag-ON corrected; owner decision 2026-06-26) and RE-RECORDS the new
+  baseline with ALL 4 flags ON (the full corrected substrate); a per-lever ablation in 14.8 characterizes
+  each. The 9B's own 3-game smoke showed the levers FIRE (54 reported-testimony prompts, 5 witnessed kills,
+  202 movement packets, ballot lines == graph 36/36) but the 9B cannot DRIVE them (a voter at suspicion 1.00
+  over the 0.60 gate, meeting STILL SKIPPED; kill-scene flag fired 0×). So the central Phase-14 hypothesis
+  sharpens: can the NEW model DRIVE the corrected substrate where the 9B couldn't?
 
 Parallelism: 14.1 and 14.2 are independent roots and dispatch in parallel (disjoint file scopes); 14.3
 follows 14.1 because its probe backend imports the Featherless `_default_send` introduced by 14.1:
-`(14.1 ∥ 14.2) → 14.3 → 14.4 → 14.5 → 14.6 → 14.7 → 14.8`. 14.3 needs 14.1; 14.4 needs 14.1 + 14.3; 14.5 needs 14.2 + 14.4.
+`(14.1 ∥ 14.2) → 14.3 → 14.4 → 14.5 → 14.6 → 14.7 → 14.8 → 14.9`. 14.3 needs 14.1; 14.4 needs 14.1 + 14.3; 14.5 needs 14.2 + 14.4; 14.9 (flag-default cleanup) needs 14.8.
 Operator-run / spend gates: 14.4 (model sweep, $0 marginal) and 14.7 (re-record, the time gate).
 Design-thread (no agent dispatch): 14.6 (lock decision) and 14.8 (close). Track with
 `python3 scripts/compute_next_task.py --phase 14`.
@@ -45,12 +57,14 @@ parse/normalize/failed-call seam, green under `bash scripts/check.sh`; (2) the p
 is in place with the 9B set pinned byte-identically; (3) the 14.4/14.5 sweep has chosen a model + prompt set
 on real reconstructed 9p2i contexts and reported per-model structured-output fidelity + the
 cover-directive/information-ceiling read; (4) THE PRIMARY CRITERION — a new full-sim baseline (both 4p1i +
-9p2i, all 50 seeds) is re-recorded on the locked model + new prompt set in one atomic PR, passes the HARD
-validity gate, reconstructs byte-identically, and is committed as the canonical baseline replacing the
-final-9B one; and (5) the Phase-13 R-gate is computed and recorded as a MEASUREMENT on that baseline — a flat
-or down R1 (information ceiling held) closes the phase as a finding, not a failure. The only thing that
-blocks the baseline is a VALIDITY failure at 14.6/14.7 (no candidate model drives a valid sim), a real NO-GO
-that pauses the phase rather than papering over the gate.
+9p2i, all 50 seeds) is re-recorded on the locked model + new prompt set with ALL 4 substrate flags ON (the
+flag config STAMPED into the MANIFEST + replay metadata; verify run flag-aware with roster.json) in one
+atomic PR, passes the HARD validity gate, reconstructs byte-identically, and is committed as the canonical
+baseline replacing the final-9B one; and (5) the Phase-13 R-gate is computed and recorded as a MEASUREMENT on
+that baseline — a flat or down R1 (information ceiling held) closes the phase as a finding, not a failure. The
+only thing that blocks the baseline is a VALIDITY failure at 14.6/14.7 (no candidate model drives a valid
+sim), a real NO-GO that pauses the phase rather than papering over the gate. After the R-gate measurement,
+Task 14.9 makes the adopted levers default-ON and retires the vestigial flag-OFF path.
 
 ### Task 14.1 — FeatherlessClient adapter (OpenAI-compatible, $0, thinking policy)
 **Branch:** `phase-14-featherless-client`
@@ -153,7 +167,7 @@ Anthropic/Ollama tests must stay green.
 ### Task 14.2 — Per-model prompt-set restructure (pin the 9B set byte-identically)
 **Branch:** `phase-14-prompt-set-restructure`
 **Depends on:** none
-**Section refs:** DESIGN.md §11.4 (replay provenance / prompt_versions); agents/strategic/prompts/loader.py; orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS`, `:261`); owner decision 2026-06-25 (per-model prompt sets)
+**Section refs:** DESIGN.md §11.4 (replay provenance / prompt_versions); agents/strategic/prompts/loader.py; orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS`, `:266-271`); owner decision 2026-06-25 (per-model prompt sets)
 **Complexity:** Medium
 
 Introduce a per-model prompt-set directory layer so the right templates load for the right model. Move the
@@ -166,7 +180,10 @@ default `qwen3_5_9b` for backward-compatible rendering), building the Jinja `Env
 replays AND the existing `prompt_versions` assertions in `tests/orchestrator/` + `tests/scripts/` stay green
 without edits. A new-model replay is distinguished by its OWN version strings plus the recorded model id, not
 by prefixing the 9B set's keys/values. Because the move is content-preserving and the 9B recorded metadata is
-unchanged, the committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record.
+unchanged, the committed 4p1i/9p2i samples reconstruct byte-identical with ZERO re-record. The prompt SET
+(templates) is orthogonal to the 13.5 substrate-flag config: 13.5 changed no `.j2` and bumped no version, so
+the byte-identical pin is independent of which substrate flags are ON (the corrected substrate is a
+render-INPUT dimension, handled in 14.4/14.7, not a template change).
 
 **Files in scope:**
 - agents/strategic/prompts/qwen3_5_9b/crewmate_report.j2 (moved verbatim from the flat path)
@@ -174,7 +191,7 @@ unchanged, the committed 4p1i/9p2i samples reconstruct byte-identical with ZERO 
 - agents/strategic/prompts/qwen3_5_9b/accusation_round.j2 (moved verbatim)
 - agents/strategic/prompts/qwen3_5_9b/vote_ballot.j2 (moved verbatim)
 - agents/strategic/prompts/loader.py (the `prompt_set` selector + per-set Environment resolution; the template-name constants stay, the directory varies)
-- orchestrator/game.py (add a per-set version registry alongside `DEFAULT_PROMPT_VERSIONS`; the 9B set's recorded `prompt_versions` keys/values are unchanged)
+- orchestrator/game.py (add a per-set version registry alongside `DEFAULT_PROMPT_VERSIONS`; the 9B set's recorded `prompt_versions` keys/values are unchanged; additive only — preserve the merged 13.5 flag wiring, e.g. `unfreeze_memory_enabled()` / `ENV_UNFREEZE_MEMORY` at `:714-735` and the testimony read at `:1656`)
 - tests/agents/test_prompt_loader.py (new or extended: the default set resolves to `qwen3_5_9b` and renders byte-identically; a second set loads; an unknown set fails loud)
 
 **Files NOT in scope:**
@@ -200,7 +217,7 @@ unchanged, the committed 4p1i/9p2i samples reconstruct byte-identical with ZERO 
 Keep template bytes identical — this is a `git mv` plus a loader/registry change, nothing more. The loader's
 `_TEMPLATE_DIR` (`loader.py:57`) becomes per-set: resolve `prompt_set` to a subdir and build the
 `FileSystemLoader` against it; the `*_TEMPLATE` filename constants are unchanged. Keep `DEFAULT_PROMPT_VERSIONS`
-(`orchestrator/game.py:261`) as the 9B default mapping with its EXACT current values and add a registry
+(`orchestrator/game.py:266-271`) as the 9B default mapping with its EXACT current values and add a registry
 alongside (e.g. `PROMPT_VERSION_SETS = {"qwen3_5_9b": DEFAULT_PROMPT_VERSIONS, ...}`) that the runner selects
 by active set. Do NOT prefix or reformat the 9B set's keys/values — `tests/orchestrator/test_replay_meetings.py:390-415`,
 `tests/orchestrator/test_meeting_integration.py:2320`, and `tests/scripts/test_manifest_writer.py` pin them and
@@ -225,7 +242,10 @@ Featherless via 14.1's `llm.featherless_client._default_send` (hence the depende
 a `--backend`/`--models` flag (default `ollama` preserves CI + the existing `results-*.jsonl`). `call_turn`
 threads BOTH the request-time thinking toggle (so 14.4 can drive its non-thinking/thinking axis) and the
 response-side `thinking_policy="strip"` (so reasoning models do not abort the sweep). No engine/agent/replay
-bytes change — the probes stay read-only over committed replays.
+bytes change — the probes stay read-only over committed replays. The reconstructed-context path honors the
+merged 13.5 substrate flags (`*_enabled()` read from `os.environ`), so the sweep can build flag-OFF and
+flag-ON contexts by toggling the env vars; `call_turn` records the active `substrate_flags` config on each
+result row for provenance. The 13.5 flag logic is not modified.
 
 **Files in scope:**
 - experiments/lab/probe_backends.py (new: `Backend` literal, `call_turn(prompt, schema, *, backend, model, ...)` dispatching to the ollama or featherless `_default_send`, both through `_extract_json_block` + validate, returning `(parsed_or_None, raw_text, latency)`)
@@ -245,6 +265,7 @@ bytes change — the probes stay read-only over committed replays.
 - [ ] `call_turn` routes the SAME reconstructed prompt to either backend through the production `_extract_json_block` + `model_validate_json` path and returns `(parsed_or_None, raw_text, latency)`.
 - [ ] All four probes default to `ollama` (CI + existing reports unaffected) and accept `--backend featherless --models <list>`; the ollama branch stays byte-identical so existing `results-*.jsonl` reproduce.
 - [ ] `call_turn` threads BOTH the request-time thinking toggle (to drive 14.4's non-thinking/thinking axis) and the response-side `thinking_policy=strip` (so reasoning models do not abort the sweep); bounded concurrency is opt-in (sequential when latency is the measured metric).
+- [ ] The reconstructed-context path honors the 13.5 `*_enabled()` flags (set via env) so the sweep can build BOTH flag-OFF and flag-ON contexts; each result row tags its `substrate_flags` config; the 13.5 flag gates are not modified.
 - [ ] No engine/agent/replay-byte mutation; probes stay read-only over committed replays.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -265,6 +286,10 @@ Featherless, build the `response_format` json_schema from `schema` and call `llm
 (introduced by 14.1) with BOTH the request-time thinking flag and the response-side `thinking_policy` threaded
 through `call_turn`'s signature. Featherless is a concurrent hosted API, so a bounded `asyncio.Semaphore`
 (opt-in, 4–8) can cut sweep wall time — but run a sequential pass whenever per-call latency is the metric.
+The substrate-flag config is controlled by the sweep via the 4 `AILIBI_*` env vars (read during context
+reconstruction at `replay_loader.py:850` / `observation/service.py:461` / `beliefs.py:629` / the unfreeze
+ballot re-render); `call_turn` accepts and records the active `substrate_flags` so 14.4's two-column
+(flag-OFF / flag-ON) rows are self-describing.
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-3-probe-backend.md`
 
@@ -284,9 +309,9 @@ the information ceiling. Emit a comparison report proposing a recommended (meeti
 tuple WITH its evidence — including an honest statement of whether the information-ceiling hypothesis holds.
 
 **Files in scope:**
-- experiments/lab/featherless_sweep.py (new: the matrix driver over vote/opening/reply corpora × models × {pinned-9B prompts, cover ON/OFF} × {non-thinking, thinking}, reusing `model_ceiling_probe.do_dump` to freeze contexts once and `grade-frontier` to grade)
-- experiments/lab/results-featherless-sweep.jsonl (new: per-cell mechanical grades + parse-success + tokens + latency)
-- experiments/lab/report-featherless-sweep.md (new: the comparison table, the model-ceiling-vs-information read, the cover-directive quadrant verdict, and the recommended tuple with evidence)
+- experiments/lab/featherless_sweep.py (new: the matrix driver over vote/opening/reply corpora × models × {pinned-9B prompts, cover ON/OFF} × {non-thinking, thinking} × {flag-OFF, flag-ON substrate}, reusing `model_ceiling_probe.do_dump` to freeze contexts once per substrate and `grade-frontier` to grade)
+- experiments/lab/results-featherless-sweep.jsonl (new: per-cell mechanical grades + parse-success + tokens + latency + the `substrate_flags` config)
+- experiments/lab/report-featherless-sweep.md (new: the comparison table, the model-ceiling-vs-information read, the cover-directive quadrant verdict, the per-model flag-OFF vs flag-ON substrate delta, and the recommended tuple with evidence)
 
 **Files NOT in scope:**
 - llm/ (the adapter is 14.1) + experiments/model_probe/probe.py + experiments/lab/deception_battery.py + experiments/lab/deflection_probe.py + experiments/lab/model_ceiling_probe.py + experiments/lab/probe_backends.py (14.2/14.3 own those; this consumes them)
@@ -295,8 +320,9 @@ tuple WITH its evidence — including an honest statement of whether the informa
 - orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS` unchanged until a baseline locks)
 
 **Definition of done:**
-- [ ] Each candidate model (Qwen3-32B instruct, Qwen3-30B-A3B, GLM-4-32B, one RP fine-tune) runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available (driven by the request-time thinking toggle from 14.1, threaded via 14.3 — not the response-side policy); mechanical metrics + per-model parse-success rate are tabulated against the 9B baseline.
+- [ ] Each candidate model (Qwen3-32B instruct, Qwen3-30B-A3B, GLM-4-32B, one RP fine-tune) — AND the 9B reference — runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available (driven by the request-time thinking toggle from 14.1, threaded via 14.3 — not the response-side policy), on BOTH the flag-OFF (legacy) and flag-ON (corrected 13.5) substrate (two columns; flag-ON contexts re-derived offline by setting the 4 `AILIBI_*` env vars); each result row carries its `substrate_flags`; mechanical metrics + per-model parse-success rate are tabulated per substrate against the 9B.
 - [ ] The cover-directive 2×2 (model × {cover OFF, cover ON-reply}) is run and the report states the quadrant verdict: capability ceiling / prompt artifact / both / information ceiling.
+- [ ] The report states the per-model SUBSTRATE delta (flag-ON vs flag-OFF): does the corrected 13.5 substrate help THIS model decide where the 9B degraded (a voter at suspicion 1.00 over the 0.60 gate, meeting STILL SKIPPED)? — separating "corrected memory helps the model" from "the model is just stronger."
 - [ ] Per-model structured-output fidelity (parse-success under `response_format`) is reported; any model that cannot reliably emit schema-valid JSON is flagged unfit for the sim.
 - [ ] A recommended (meeting_model, trigger_model, mode) tuple is proposed WITH evidence; the report states honestly whether the information-ceiling hypothesis is supported (tell persists across all models) — a valid finding either way.
 - [ ] `uv run mypy .` passes.
@@ -316,7 +342,12 @@ For votes, drive `experiments/model_probe/probe.py --backend featherless` with i
 This generalizes `model_ceiling_probe.py:11-14` ("if self-flagging does NOT fall as model strength rises, the
 binding constraint is INFORMATION not the model") across Featherless models. Operator session: set
 `FEATHERLESS_API_KEY`; bounded concurrency for behavior passes, a sequential pass for latency. $0 marginal,
-but watch token usage against the 32K context and the frozen 2048/1024 caps.
+but watch token usage against the 32K context and the frozen 2048/1024 caps. Build the flag-ON (corrected
+13.5) contexts by setting the 4 env vars (`AILIBI_TESTIMONY_AS_CONTENT` / `AILIBI_WITNESSED_KILL_EVIDENCE` /
+`AILIBI_MOVEMENT_PERCEPTION` / `AILIBI_UNFREEZE_MEMORY`) before the context reconstruction (`ReplayLoader` /
+`build_*_contexts` re-derive memory through the `*_enabled()` reads), and the flag-OFF column with them unset;
+the levers are replay-deterministic over the committed (flags-OFF) replays, so no re-record is needed. Tag
+every row's `substrate_flags`.
 
 **Integration risk:**
 
@@ -398,14 +429,16 @@ re-sweep, or the sweep aborts on an `UndefinedError` rather than a behavior sign
 
 Design-thread decision (no code): read the 14.4/14.5 sweep evidence and lock the baseline tuple before any
 re-record exists — the chosen meeting_model + trigger_model Featherless ids, the chosen prompt set, the
-recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), and a go/no-go for the
-re-record. Mirror the Phase-9 pause between 9.4 (client) and 9.5 (re-record): the decision is re-answered
+recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), the substrate-flag
+config for the re-record (all 4 13.5 flags ON per owner decision 2026-06-26; 14.8's per-lever ablation
+characterizes each, non-gating), and a go/no-go for the re-record. Mirror the Phase-9 pause between 9.4
+(client) and 9.5 (re-record): the decision is re-answered
 against the sweep's data, and a NO-GO is an allowed outcome (no candidate clears the structured-output /
 behavior bar → stay on 9B / escalate the information ceiling), since the merge criterion is a VALID baseline,
 not an improved one.
 
 **Files in scope:**
-- tasks/phase-14.md (record the locked decision: chosen meeting_model, trigger_model, prompt set, thinking policy, and the re-record go/no-go with its evidence)
+- tasks/phase-14.md (record the locked decision: chosen meeting_model, trigger_model, prompt set, thinking policy, substrate-flag config (all 4 ON), and the re-record go/no-go with its evidence)
 
 **Files NOT in scope:**
 - llm/ + agents/ + replays/ (no implementation; this is a recorded decision)
@@ -415,6 +448,7 @@ not an improved one.
 **Definition of done:**
 - [ ] The locked (meeting_model, trigger_model) Featherless ids are recorded in `tasks/phase-14.md` with their evidence from the sweep report.
 - [ ] The chosen prompt set and the recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`) are recorded with rationale.
+- [ ] The re-record substrate-flag config is recorded = all 4 13.5 flags ON (owner decision 2026-06-26), with 14.8's per-lever ablation noted as characterization (non-gating).
 - [ ] A re-record go/no-go is recorded, explicitly allowing a NO-GO ("no candidate clears the structured-output / behavior bar; stay on 9B / escalate the information ceiling").
 - [ ] `uv run python scripts/generate_prompts.py --check` passes.
 - [ ] `uv run python scripts/validate_task_docs.py` passes.
@@ -431,15 +465,20 @@ not an improved one.
 Operator-run spend/time gate. With the tuple locked at 14.6, smoke first (3–5 seeds at 9p2i) to confirm the
 thinking policy holds and structured-output parse-success ≈ 100% under the FROZEN token caps, project the
 full-run wall time, and STOP for operator go. Then re-record BOTH committed sets (4p1i + 9p2i, all 50 seeds)
-on the locked Featherless model + new prompt set in ONE atomic PR, regenerate reports + MANIFESTs +
-prompt-regression fixtures + baseline, verify byte-identical reconstruction from the new recordings, and pass
-the HARD validity gate. This new baseline replaces the final-9B one as canonical. Win split moves in any
-direction and is REPORTED, not gated (the R-gate is 14.8).
+on the locked Featherless model + new prompt set with ALL 4 13.5 substrate flags ON, in ONE atomic PR,
+STAMPING the flag config into the MANIFEST (a new `flags` column) + the replay metadata so a replay
+self-describes which substrate generated it, regenerate reports + MANIFESTs + prompt-regression fixtures +
+baseline, verify byte-identical reconstruction from the new recordings WITH the same 4 flags set and
+roster.json present, and pass the HARD validity gate. This new baseline replaces the final-9B one as
+canonical. Win split moves in any direction and is REPORTED, not gated (the R-gate is 14.8).
 
 **Files in scope:**
-- replays/samples/4p1i/ (50 replays + tournament-eval-report.json + MANIFEST.md re-recorded on the locked model; model + prompt_versions + git_sha rows updated)
-- replays/samples/9p2i/ (50 replays + report + MANIFEST re-recorded; roster sidecar {9,2,2} unchanged)
-- tests/fixtures/prompt_regression/ (v_a + v_b fixtures + baseline.json regenerated — provider changed)
+- replays/samples/4p1i/ (50 replays + tournament-eval-report.json + MANIFEST.md re-recorded on the locked model, all 4 flags ON; model + prompt_versions + `flags` + git_sha rows updated)
+- replays/samples/9p2i/ (50 replays + report + MANIFEST re-recorded, all 4 flags ON; roster sidecar {9,2,2} unchanged)
+- scripts/_manifest_writer.py (NEW `flags` MANIFEST column stamping the substrate-flag config per seed; the `seed | model | prompt_versions | ...` header gains `flags`)
+- orchestrator/replay.py (a substrate-flag-config field on the replay metadata so a replay self-describes which substrate generated it — additive; preserve the merged 13.5 reads)
+- api/replay_loader.py (verify/reconstruct honors the stamped flag config; preserve the merged 13.5 `*_enabled()` reads)
+- tests/fixtures/prompt_regression/ (v_a + v_b fixtures + baseline.json regenerated — provider + substrate changed)
 - tests/api/test_replay_loader.py (committed-set pins re-verified on new bytes; zero-denominator skips re-scoped)
 - tests/eval/test_win_condition_selfcheck.py (committed-set pins re-verified)
 - tests/scripts/test_refresh_samples.py (model rows = locked Featherless id, cost 0, git_sha)
@@ -450,13 +489,14 @@ direction and is REPORTED, not gated (the R-gate is 14.8).
 - engine/ + meetings/ + agents/ + llm/ + eval/ source (behavior landed in 14.1 / 14.5; this records + regenerates only)
 - meetings/manager.py (token caps FROZEN — turn 2048 / vote 1024; do NOT raise; the 9.5 ctx-overrun lesson)
 - agents/strategic/prompts/ (no template authoring here; this records the chosen prompt set, it does not edit it)
+- the 13.5 flag-source logic (the `*_enabled()` resolvers + flag gates) — 14.7 sets the flags ON via env + STAMPS the config; it does NOT change the flag logic (default-ON + retiring the OFF path is 14.9)
 - audits/workflows/extract_gameplay_facts.py (run read-only for the funnel; do not modify)
 
 **Definition of done:**
 - [ ] Smoke first (3–5 seeds at 9p2i): thinking policy holds (no un-audited reasoning under `fail_loud`, or the signed-off `strip` behaving), structured-output parse-success ≈ 100%, per-seed wall time + full-run projection reported BEFORE the full runs; STOP for operator go. ABANDON without recording if the guard trips or parse-success craters — re-open 14.1/14.4 or escalate; do NOT weaken the guard or raise the caps.
 - [ ] Smoke confirms the floor: every smoke seed reaches game_over with zero ballot truncation / unterminated-JSON parse failures under the FROZEN caps.
-- [ ] Both sets re-recorded in ONE PR on the locked model + new prompt set; both reports + MANIFESTs regenerated (model + prompt_versions + new git_sha); prompt-regression fixtures + baseline regenerated; byte-identical reconstruction holds from the new recordings.
-- [ ] Validity gate (HARD): friendly-fire 0; every game reaches game_over; betrayal ballots/accusations 0; leak suite green at 4p1i and 9p2i; meeting_rate ≥ 0.60 with ≥ 30 resolved meetings at 9p2i; byte-identical reconstruction; zero tick-1 kills; zero missed-deadline markers; zero dangling primary_reason_id; cost rows 0; model + prompt_versions rows correct.
+- [ ] Both sets re-recorded in ONE PR on the locked model + new prompt set with all 4 13.5 substrate flags ON; both reports + MANIFESTs regenerated (model + prompt_versions + new `flags` column + new git_sha); the flag config is also stamped into the replay metadata; prompt-regression fixtures + baseline regenerated; byte-identical reconstruction holds from the new recordings.
+- [ ] Validity gate (HARD): friendly-fire 0; every game reaches game_over; betrayal ballots/accusations 0; leak suite green at 4p1i and 9p2i; meeting_rate ≥ 0.60 with ≥ 30 resolved meetings at 9p2i; byte-identical reconstruction (verified FLAG-AWARE — the same 4 flags set AND roster.json present, else the loader defaults to 4p1i and fails spuriously); zero tick-1 kills; zero missed-deadline markers; zero dangling primary_reason_id; cost rows 0; model + prompt_versions + flags rows correct.
 - [ ] Funnel report ($0): `extract_gameplay_facts` over the new 9p2i set; the PR body reports win split, ejection count, accusation precision, accuser follow-through, persuasion rate, threshold-quoting-skip count.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -469,13 +509,19 @@ direction and is REPORTED, not gated (the R-gate is 14.8).
 **Implementation hint:**
 
 This is the Phase-9 9.5 shape transplanted to Featherless: `AILIBI_LLM_PROVIDER=featherless` +
-`FEATHERLESS_API_KEY` + `AILIBI_PROMPT_SET=<chosen>` on every `scripts/refresh_samples.sh` invocation; the
-model from 14.6's locked constant. ONE atomic PR — an intermediate commit is un-reconstructable. Featherless
-is concurrent, so the full re-record can run far faster than the 9B's ~13h; still smoke-project first. The
-report regeneration + MANIFEST update + fixture refresh all happen through `scripts/build_sample_report.py` +
-`scripts/_manifest_writer.py` exactly as the 9.5 operator workflow documents. Hosted non-determinism means
-FRESH generation won't byte-reproduce, but the recordings replay byte-identically — verify that property
-explicitly with `scripts/verify_samples.sh`.
+`FEATHERLESS_API_KEY` + `AILIBI_PROMPT_SET=<chosen>` PLUS all 4 substrate flags
+(`AILIBI_TESTIMONY_AS_CONTENT=1 AILIBI_WITNESSED_KILL_EVIDENCE=1 AILIBI_MOVEMENT_PERCEPTION=1
+AILIBI_UNFREEZE_MEMORY=1`) on every `scripts/refresh_samples.sh` invocation; the model from 14.6's locked
+constant. ONE atomic PR — an intermediate commit is un-reconstructable. Featherless is concurrent, so the
+full re-record can run far faster than the 9B's ~13h; still smoke-project first. The report regeneration +
+MANIFEST update + fixture refresh all happen through `scripts/build_sample_report.py` +
+`scripts/_manifest_writer.py` (the latter gains the `flags` column) exactly as the 9.5 operator workflow
+documents. Hosted non-determinism means FRESH generation won't byte-reproduce, but the recordings replay
+byte-identically — verify that property explicitly with `scripts/verify_samples.sh` RUN WITH THE SAME 4 FLAGS
+SET and a present `roster.json` (a flag-ON recording reconstructs byte-identically only when verify sets the
+same flags AND finds roster.json; a temp dir without it defaults to 4p1i and fails spuriously — not a
+determinism bug). Do NOT touch the 13.5 `*_enabled()` logic here (set via env + stamp only; default-ON is
+14.9).
 
 **Integration risk:**
 
@@ -494,17 +540,24 @@ a degraded baseline through.
 **Section refs:** audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py
 **Complexity:** Medium
 
-Design-thread close: compute the Phase-13 R-gate as a MEASUREMENT over the committed 14.7 baseline — R1
-(games decided by ejection), R4 floor, R7, impostor win rate, and the rubric geomean ranking (eject-decided >
-stopwatch) — and compare to the final-9B baseline (R1 3/50, impostor 84%, eject 9%). Write the close audit
-framing the result as an honest finding: state whether the stronger model raised R1 and, if not, whether the
-evidence supports the information-ceiling hypothesis (single-room vision → ~45% detector precision → correct
-SKIP), recommending Phase 15 (asymmetric visibility / information richness). This is characterization, not a
-gate — the phase already merged on the valid new baseline (14.7); a flat or down R1 is a recorded finding.
+Design-thread close: compute the Phase-13 R-gate as a MEASUREMENT over the committed 14.7 flags-ON baseline —
+R1 (games decided by ejection), R4 floor, R7, impostor win rate, and the rubric geomean ranking (eject-decided
+> stopwatch) — and compare to the final-9B baseline (R1 3/50, impostor 84%, eject 9%). Also run a per-lever
+ABLATION (offline, $0): toggle each of the 4 substrate flags during re-derivation over the baseline replays to
+characterize each lever's contribution, and recommend the default set for 14.9 (note the kill-scene flag fired
+0× in the 9B smoke — flag it as UNMEASURED / needing a richer scenario, not a negative result). Write the
+close audit framing the result as an honest finding: state whether the stronger model raised R1 — the sharper
+hypothesis is can the NEW model DRIVE the corrected substrate where the 9B couldn't (the 9B's voter sat at
+suspicion 1.00 over the 0.60 gate yet the meeting SKIPPED) — and, if not, whether the evidence supports the
+information-ceiling hypothesis (single-room vision → ~45% detector precision → correct SKIP) even with the
+corrected substrate ON, recommending Phase 15 (asymmetric visibility / information richness). This is
+characterization, not a gate — the phase already merged on the valid new baseline (14.7); a flat or down R1 is
+a recorded finding.
 
 **Files in scope:**
-- audits/audit-2026-06-25-phase-14-close.md (new: the R-gate measurement + the hypothesis-test verdict + the Phase 15 recommendation)
-- tasks/phase-14.md (a STATUS banner recording the R-gate outcome and the next step)
+- audits/audit-2026-06-25-phase-14-close.md (new: the R-gate measurement + the per-lever ablation + the hypothesis-test verdict + the Phase 15 recommendation)
+- experiments/lab/results-substrate-ablation.jsonl (new: per-lever ablation — each of the 4 flags toggled offline over the baseline replays, R-gate / conversion metrics per cell; $0)
+- tasks/phase-14.md (a STATUS banner recording the R-gate outcome, the recommended default flag set, and the next step)
 - experiments/lab/results-rubric-score.json (re-ranked offline over the new committed replays — data regen, no code change)
 - experiments/lab/report-rubric-interestingness.md (re-ranked offline — data regen)
 
@@ -514,8 +567,9 @@ gate — the phase already merged on the valid new baseline (14.7); a flat or do
 - eval/ source (the analyzers are reused as-is; this folds, it does not change them)
 
 **Definition of done:**
-- [ ] The R-gate is computed offline over the 14.7 baseline (R1, R4 floor, R7, impostor win rate, rubric geomean ranking) and compared to the final-9B baseline (R1 3/50, impostor 84%, eject 9%).
-- [ ] The close audit frames the verdict as an HONEST hypothesis test: it states whether the model raised R1, and if not, whether the evidence supports the information-ceiling hypothesis; a null result is recorded as a valid finding, never a blocker.
+- [ ] The R-gate is computed offline over the 14.7 flags-ON baseline (R1, R4 floor, R7, impostor win rate, rubric geomean ranking) and compared to the final-9B baseline (R1 3/50, impostor 84%, eject 9%).
+- [ ] A per-lever ablation (each of the 4 13.5 flags toggled offline over the baseline replays) characterizes each lever's contribution and recommends the default set for 14.9; the kill-scene flag's 0× firing is noted as UNMEASURED (needs a richer scenario), not a negative result.
+- [ ] The close audit frames the verdict as an HONEST hypothesis test: it states whether the model raised R1, and if not, whether the evidence supports the information-ceiling hypothesis (even with the corrected substrate ON); a null result is recorded as a valid finding, never a blocker.
 - [ ] The close audit recommends the next phase (asymmetric visibility / information richness if the ceiling is confirmed; prompt/tactical work if a gap remains).
 - [ ] The rubric data is re-ranked offline over the new committed replays ($0, no code change); no number is retrofit to pass.
 - [ ] `uv run python scripts/generate_prompts.py --check` passes.
@@ -533,3 +587,66 @@ audit the bottleneck may be INFORMATION not the model, so "R1 did not rise even 
 a genuine finding that redirects Phase 15, not a Phase-14 failure. Do not retrofit any number.
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-8-baseline-characterize-close.md`
+
+### Task 14.9 — Make the adopted 13.5 levers default-ON + retire the flag-OFF path
+**Branch:** `phase-14-substrate-default-on`
+**Depends on:** 14.8
+**Section refs:** tasks/phase-13-5.md (the 4 levers); tasks/phase-14.md (the 14.7 flags-ON baseline + 14.8 ablation); agents/memory/store.py + meetings/transcript.py + observation/service.py + orchestrator/game.py (the `*_enabled()` resolvers)
+**Complexity:** Integration
+
+With the new baseline recorded flags-ON (14.7) and the per-lever ablation in hand (14.8), finish the
+integration: make the adopted 13.5 levers the DEFAULT behavior and retire the now-vestigial flag-OFF path. Per
+owner decision 2026-06-26 all 4 flags are adopted (the ablation is characterization, not a veto): flip the 4
+`*_enabled()` resolvers to default-ON (or remove the env gate entirely), delete the now-dead OFF branches, and
+retarget the flag-OFF byte-identity tests onto the flags-ON baseline. The committed replays are already
+flags-ON (14.7), so reconstruction no longer needs the env vars set and the determinism story simplifies.
+
+**Files in scope:**
+- agents/memory/store.py (testimony + movement-sighting derivation becomes unconditional; the OFF branch + `ENV_TESTIMONY_AS_CONTENT` / `testimony_as_content_enabled` gate retired)
+- meetings/transcript.py (`witnessed_kill_evidence_enabled` gate retired; kill-scene + witness-belief derivation unconditional)
+- observation/service.py (`movement_perception_enabled` gate retired; the empty-tuple OFF branch removed)
+- orchestrator/game.py (`unfreeze_memory_enabled` gate retired; the `rerender_memory is None` OFF branch removed)
+- agents/memory/beliefs.py (the witnessed-kill suspicion read becomes unconditional)
+- api/replay_loader.py (reconstruction no longer reads the flags — the corrected derivation is unconditional)
+- tests/ (the flag-OFF byte-identity / flag-toggle tests across tests/agents/ + tests/meetings/ + tests/observation/ + tests/orchestrator/ retargeted onto the flags-ON baseline)
+- .env.example (remove the now-defunct flag knobs)
+
+**Files NOT in scope:**
+- replays/samples/ (the 14.7 flags-ON bytes ARE the baseline; this changes no replay)
+- agents/strategic/prompts/ (the prompt sets are 14.2/14.5)
+- llm/ (the provider is 14.1)
+- scripts/_manifest_writer.py (the `flags` column from 14.7 stays as provenance even though the flags are no longer toggleable)
+
+**Definition of done:**
+- [ ] The 4 adopted levers are DEFAULT behavior (the `*_enabled()` env gates default-ON or removed); the now-dead flag-OFF branches and env constants are deleted, not left vestigial.
+- [ ] The committed flags-ON baseline (14.7) reconstructs byte-identically WITHOUT any env vars set (`scripts/verify_samples.sh` under a bare environment); the MANIFEST/replay `flags` stamp reads "all 4 ON" and is consistent with the now-unconditional behavior.
+- [ ] The former flag-OFF byte-identity tests are retargeted onto the flags-ON baseline (or deleted with rationale); no test asserts the retired OFF behavior; the leak suite stays green at 4p1i and 9p2i.
+- [ ] `.env.example` no longer advertises the retired flag knobs.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+A pure simplification gated on the 14.7 baseline existing flags-ON: the corrected derivation becomes
+unconditional, so the `*_enabled()` resolvers + their OFF branches + the env constants
+(`ENV_TESTIMONY_AS_CONTENT` / `ENV_WITNESSED_KILL_EVIDENCE` / `ENV_MOVEMENT_PERCEPTION` /
+`ENV_UNFREEZE_MEMORY`) can be deleted. Do it lever-by-lever, re-running `scripts/verify_samples.sh` under a
+BARE environment after each so any residual flag-read is caught immediately. The `flags` MANIFEST column
+(14.7) stays as provenance even though the flags are no longer toggleable — it records that this baseline was
+generated on the corrected substrate.
+
+**Integration risk:**
+
+Touches the exact files 13.5 just landed (`store.py`, `transcript.py`, `observation/service.py`, `game.py`,
+`beliefs.py`, `replay_loader.py`) and the committed-baseline tests — a missed OFF-branch deletion or a test
+still asserting flag-OFF behavior breaks the suite. Sequence AFTER 14.7 (the baseline must be flags-ON first)
+and 14.8 (the ablation must confirm no lever is harmful; if one is, STOP and escalate rather than silently
+dropping it — the owner adopted all 4). The reconstruction must be byte-identical under a BARE environment
+once the gates are removed — that is the acceptance bar; verify it explicitly.
+
+**Ready-to-paste prompt:** `agent_prompts/task-14-9-substrate-default-on.md`
