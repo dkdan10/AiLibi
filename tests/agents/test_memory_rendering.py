@@ -109,6 +109,25 @@ def _saw_player_event(
     )
 
 
+def _saw_player_move_event(
+    *,
+    tick: int,
+    player_id: str,
+    from_room: str,
+    to_room: str,
+) -> EpisodicEvent:
+    return EpisodicEvent(
+        tick=tick,
+        type="saw_player_move",
+        payload={
+            "player_id": player_id,
+            "from_room": from_room,
+            "to_room": to_room,
+        },
+        provenance="observed",
+    )
+
+
 def _saw_body_event(
     *, tick: int, body_id: str, victim_id: str, room: str
 ) -> EpisodicEvent:
@@ -1084,3 +1103,204 @@ class TestBeliefNeutralityEpsilon:
 
         assert "p-3" not in view
         assert "## Your current beliefs" not in view
+
+
+class TestMovementPerceptionRender:
+    """Render side of Task 13.5.4 — perceived room transitions + last_seen.
+
+    A ``saw_player_move`` row renders as a first-hand sighting-class line and,
+    via the render-time ``record_sighting`` wiring, populates ``last_seen`` so the
+    §6.6 belief-line suffix finally appears. Flag-OFF byte-identity holds because
+    no ``saw_player_move`` row exists when ``AILIBI_MOVEMENT_PERCEPTION`` is OFF
+    (gated in ``observation/service.py``); these tests inject the rows directly to
+    exercise the render path independent of the observation flag.
+    """
+
+    def test_witnessed_move_renders_first_hand_line(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=5, player_id="p-3", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "[tick 5] You saw p-3 move from CAFETERIA to ADMIN." in view
+
+    def test_witnessed_move_wires_last_seen_suffix_on_belief_line(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        # A belief on p-3 so the belief row renders, then the witnessed move that
+        # wires the "last seen" suffix onto it.
+        memory.beliefs.adjust_suspicion("p-3", delta=0.3)
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=8, player_id="p-3", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert memory.working.last_seen("p-3") is not None
+        assert "last seen in ADMIN at tick 8" in view
+
+    def test_last_seen_takes_most_recent_transition(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.beliefs.adjust_suspicion("p-3", delta=0.3)
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=4, player_id="p-3", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=9, player_id="p-3", from_room="ADMIN", to_room="STORAGE"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        last_seen = memory.working.last_seen("p-3")
+        assert last_seen is not None
+        assert (last_seen.room, last_seen.tick) == ("STORAGE", 9)
+        assert "last seen in STORAGE at tick 9" in view
+        assert "last seen in ADMIN at tick 4" not in view
+
+    def test_repeated_render_is_idempotent_after_two_moves(self) -> None:
+        # Codex P1: render is called repeatedly (meeting turns, vote prompts, the
+        # 13.5.5 per-turn re-render). With two transitions for one player, a second
+        # render must not trip ``record_sighting``'s non-decreasing-tick guard on
+        # the replayed OLDER row -- it stays the latest-per-subject value.
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.beliefs.adjust_suspicion("p-3", delta=0.3)
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=4, player_id="p-3", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=9, player_id="p-3", from_room="ADMIN", to_room="STORAGE"
+            )
+        )
+
+        first = render_for_prompt(memory)
+        second = render_for_prompt(memory)  # must not raise on the replayed tick-4
+
+        assert first == second
+        assert "last seen in STORAGE at tick 9" in second
+
+    def test_teammate_move_into_kill_window_room_is_suppressed(self) -> None:
+        # §4.7 firewall (Codex P2): an impostor that witnessed a TEAMMATE move into
+        # a room where it also saw a fresh body must NOT surface that as a last-seen
+        # suffix (nor a movement line) -- the teammate-at-scene own-goal the
+        # sighting render already suppresses. last_seen must be suppressed too.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=0, role="IMPOSTOR", agent_id="p-9", fellow_impostor_ids=("p-1",)
+            )
+        )
+        memory.beliefs.adjust_suspicion("p-1", delta=0.3)  # a belief row exists
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=8, player_id="p-1", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+        memory.episodic.append(
+            _saw_body_event(tick=8, body_id="b", victim_id="p-3", room="ADMIN")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert memory.working.last_seen("p-1") is None  # suppressed, not wired
+        assert "last seen in ADMIN" not in view
+        assert "You saw p-1 move" not in view  # the movement line is suppressed too
+
+    def test_movement_line_outranks_reconstructed_transition_salience(self) -> None:
+        # A directly-witnessed transit is first-hand class and ranks above a bare
+        # ``saw_player`` snapshot: under a tight budget the move survives and the
+        # plain sighting is shed.
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.episodic.append(
+            _saw_player_event(tick=10, player_id="p-9", room="MEDBAY", action=None)
+        )
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=10, player_id="p-3", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+
+        # Budget for exactly one observation line.
+        for budget in (40, 55, 70):
+            view = render_for_prompt(memory, token_budget=budget)
+            if "You saw p-3 move from CAFETERIA to ADMIN." in view:
+                if "You saw p-9 in MEDBAY" not in view:
+                    break
+        else:  # pragma: no cover - defensive
+            raise AssertionError(
+                "no budget isolated the movement line above the snapshot"
+            )
+
+    def test_self_subject_move_row_is_suppressed(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=5, player_id="p-1", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        assert "You saw p-1 move" not in view
+        assert memory.working.last_seen("p-1") is None
+
+    def test_flag_off_shape_is_byte_identical_without_movement_rows(self) -> None:
+        # Two stores identical except one carries a (flag-ON) movement row. With
+        # no movement row, the render must be byte-identical to a pre-task store
+        # (no movement line, no last_seen suffix).
+        baseline = AgentMemory()
+        baseline.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        baseline.beliefs.adjust_suspicion("p-3", delta=0.3)
+        baseline_view = render_for_prompt(baseline)
+
+        assert "move from" not in baseline_view
+        assert "last seen in" not in baseline_view
+
+    def test_render_is_deterministic_across_repeated_calls(self) -> None:
+        # The render-time ``record_sighting`` writer is idempotent: re-rendering
+        # replays the same rows in non-decreasing tick order without error and
+        # yields a byte-identical view.
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.beliefs.adjust_suspicion("p-3", delta=0.3)
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=6, player_id="p-3", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+
+        first = render_for_prompt(memory)
+        second = render_for_prompt(memory)
+
+        assert first == second
+
+    def test_rendered_movement_view_is_leak_clean(self) -> None:
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.beliefs.adjust_suspicion("p-3", delta=0.3)
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=5, player_id="p-3", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+
+        view = render_for_prompt(memory)
+
+        _scan_rendered_view(view)

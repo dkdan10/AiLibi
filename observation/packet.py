@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from typing import Literal, TypeAlias
+from typing import Any, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+)
 
 BodyId: TypeAlias = str
 PlayerId: TypeAlias = str
@@ -81,6 +87,33 @@ class PlayerView(_FrozenModel):
     action: str | None
 
 
+class MovedPlayerView(_FrozenModel):
+    """A room→room transition the observer DIRECTLY witnessed this tick (Task 13.5.4).
+
+    The movement-perception channel (2026-06-25 memory diagnosis, workflow
+    `wg54kfoxy`: "movement is never perceived"). The engine emits a
+    ``MovedEvent`` (from_room→to_room) every tick, but the observation layer
+    never read it, so a witness could not perceive a transition it directly saw.
+    ``ObservationService`` now derives this view from that ``MovedEvent`` for an
+    actor the observer can currently SEE -- WITNESS-gated exactly like a
+    ``saw_player`` sighting (the actor is in ``visibility.visible_player_ids``),
+    so the §1.3 / §4.7 firewall and the leak suite hold: a movement the observer
+    could not see never appears here.
+
+    Field names carry no role information; ``id`` / ``from_room`` / ``to_room``
+    are all leak-allowed (ids and rooms). It is NOT named ``player_id`` because
+    the leak scanner forbids that key anywhere in the packet
+    (``eval/leak_test.py``), matching the ``PlayerView`` / ``BodyView`` ``id``
+    convention. Surfaced only behind ``AILIBI_MOVEMENT_PERCEPTION`` (default OFF
+    → the ``moved_players`` tuple is empty and every downstream store/render is
+    byte-identical to pre-task HEAD).
+    """
+
+    id: PlayerId
+    from_room: RoomId
+    to_room: RoomId
+
+
 class BodyView(_FrozenModel):
     """A body visible to the observer.
 
@@ -132,3 +165,26 @@ class ObservationPacket(_FrozenModel):
     audible_events: tuple[AudibleEvent, ...]
     global_state: GlobalView
     cooldown: int | None
+    # Room→room transitions the observer DIRECTLY witnessed this tick (Task
+    # 13.5.4), derived from the engine ``MovedEvent`` and WITNESS-gated to actors
+    # the observer can see (see :class:`MovedPlayerView`). Default empty, so a
+    # build that never sets ``AILIBI_MOVEMENT_PERCEPTION`` carries no movement
+    # signal and every downstream episodic store / memory render is byte-identical
+    # to pre-task HEAD. Carried as a top-level packet field (not a ``PlayerView``
+    # key) because the leak suite pins ``PlayerView``'s key set exactly.
+    moved_players: tuple[MovedPlayerView, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Flag-OFF byte-identity (Task 13.5.4, Codex P2). The audit log writes
+        # ``packet.model_dump(mode="json")`` verbatim (observation/audit.py), so an
+        # always-present ``moved_players`` default would add ``"moved_players": []``
+        # to every packet/audit line and committed replay even when
+        # ``AILIBI_MOVEMENT_PERCEPTION`` is OFF -- a byte-level divergence from
+        # pre-task HEAD with NO re-record. Omit the field when empty so a flag-OFF
+        # packet serializes byte-identically; when the lever is ON and a transition
+        # was witnessed the non-empty tuple is dumped normally.
+        data: dict[str, Any] = handler(self)
+        if not self.moved_players:
+            data.pop("moved_players", None)
+        return data

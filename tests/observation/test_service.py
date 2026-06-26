@@ -13,7 +13,7 @@ from engine.entities import BodyState, PlayerState, SabotageState, TaskState
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
-from observation.packet import PlayerView
+from observation.packet import MovedPlayerView, PlayerView
 from observation.service import ObservationService, impostor_pretend_task_id
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
@@ -1233,3 +1233,227 @@ class TestObservedActivityTaskLever:
             world_state=state, agent_id="p-1", engine_events=events
         )
         assert _visible_player("p-3", packet.visible_players).action is None
+
+
+def _move(actor: str, to_room: str) -> Action:
+    return _action({"type": "move", "actor": actor, "payload": {"to_room": to_room}})
+
+
+def _movement_world(*, seed: int = 11) -> WorldState:
+    # A roster wired for the movement-perception witness gate (Task 13.5.4). A
+    # transition is witnessed by an observer who could see the DEPARTURE room
+    # (Codex P2): the observer p-1 sits in STORAGE alongside the movers p-2 / p-4,
+    # so it sees them LEAVE STORAGE (the departure); p-3 sits in ADMIN and cannot
+    # see STORAGE, so it never witnesses those transits. ENGINEERING is the shared
+    # destination (adjacent to STORAGE), and an observer who only saw the ARRIVAL
+    # there must NOT receive the move (test_move_not_surfaced_for_arrival_only).
+    game_map = load_canonical_map()
+    return WorldState(
+        tick=0,
+        phase="PLAY",
+        map=game_map.id,
+        players={
+            "p-1": _player("p-1", "CREWMATE", "STORAGE", (0.0, 0.0)),
+            "p-2": _player("p-2", "CREWMATE", "STORAGE", (0.0, 0.0)),
+            "p-3": _player("p-3", "CREWMATE", "ADMIN", (0.0, 0.0)),
+            "p-4": _player("p-4", "IMPOSTOR", "STORAGE", (1.0, 0.0)),
+            # Arrival-only observer: sits in the shared DESTINATION, so it sees
+            # the movers arrive but never saw them leave STORAGE.
+            "p-5": _player("p-5", "CREWMATE", "ENGINEERING", (2.0, 0.0)),
+        },
+        bodies={},
+        tasks={},
+        sabotage=None,
+        cooldowns={"p-4": 0},
+        emergency_uses={},
+        rng_state=EngineRng.from_seed(seed).snapshot(),
+        seed=seed,
+    )
+
+
+class TestMovementPerception:
+    """Witness gate + flag boundary for perceived room transitions (Task 13.5.4)."""
+
+    def test_flag_default_off_and_env_parsing(self) -> None:
+        from observation.service import movement_perception_enabled
+
+        assert movement_perception_enabled({}) is False
+        assert movement_perception_enabled({"AILIBI_MOVEMENT_PERCEPTION": ""}) is False
+        assert (
+            movement_perception_enabled({"AILIBI_MOVEMENT_PERCEPTION": "nope"}) is False
+        )
+        for truthy in ("1", "true", "TRUE", "yes", "on"):
+            assert movement_perception_enabled(
+                {"AILIBI_MOVEMENT_PERCEPTION": truthy}
+            ), truthy
+
+    def test_witnessed_move_surfaces_for_co_located_observer(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
+        game_map = load_canonical_map()
+        state, events = advance_tick(
+            _movement_world(),
+            [_move("p-2", "ENGINEERING")],
+            game_map=game_map,
+        )
+        assert any(
+            event.type == "Moved"
+            and event.actor == "p-2"
+            and event.from_room == "STORAGE"
+            and event.to_room == "ENGINEERING"
+            for event in events
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert packet.moved_players == (
+            MovedPlayerView(id="p-2", from_room="STORAGE", to_room="ENGINEERING"),
+        )
+
+    def test_move_not_surfaced_for_observer_who_cannot_see_actor(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The witness gate (identical to ``saw_player``): p-3 in ADMIN cannot see
+        # ENGINEERING, so p-2's transit must NEVER reach p-3's packet -- the §4.7
+        # firewall / leak invariant the task pins as the hard gate.
+        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
+        game_map = load_canonical_map()
+        state, events = advance_tick(
+            _movement_world(),
+            [_move("p-2", "ENGINEERING")],
+            game_map=game_map,
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-3", engine_events=events
+        )
+        assert packet.moved_players == ()
+
+    def test_no_op_same_room_move_is_not_a_transition(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
+        game_map = load_canonical_map()
+        # p-2 "moves" to the room it is already in: a MovedEvent with from==to,
+        # which is not a transition and must not surface.
+        state, events = advance_tick(
+            _movement_world(),
+            [_move("p-2", "STORAGE")],
+            game_map=game_map,
+        )
+        # p-1 cannot see STORAGE-resident p-2 anyway; assert from the perspective
+        # of an observer co-located with p-2 to isolate the from==to skip.
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert packet.moved_players == ()
+
+    def test_multiple_witnessed_moves_are_sorted_by_actor_id(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
+        game_map = load_canonical_map()
+        # p-2 and p-4 both LEAVE STORAGE (where observer p-1 waits and witnesses
+        # both departures) for ENGINEERING; the packet lists them deterministically
+        # by actor id.
+        state, events = advance_tick(
+            _movement_world(),
+            [_move("p-2", "ENGINEERING"), _move("p-4", "ENGINEERING")],
+            game_map=game_map,
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert packet.moved_players == (
+            MovedPlayerView(id="p-2", from_room="STORAGE", to_room="ENGINEERING"),
+            MovedPlayerView(id="p-4", from_room="STORAGE", to_room="ENGINEERING"),
+        )
+
+    def test_move_not_surfaced_for_arrival_only_observer(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Witness the DEPARTURE, not the post-move position (Codex P2): p-5 sits in
+        # the DESTINATION (ENGINEERING) and sees p-2 ARRIVE, but never saw it leave
+        # STORAGE, so the transition (and its STORAGE origin) must NOT reach p-5 --
+        # it still gets the plain ``saw_player`` for p-2 in ENGINEERING, just no
+        # movement with an origin it did not witness.
+        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
+        game_map = load_canonical_map()
+        state, events = advance_tick(
+            _movement_world(),
+            [_move("p-2", "ENGINEERING")],
+            game_map=game_map,
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-5", engine_events=events
+        )
+        assert packet.moved_players == ()
+        # The arrival itself is still seen via the ordinary sighting channel.
+        assert any(view.id == "p-2" for view in packet.visible_players)
+
+    def test_flag_off_packet_dump_omits_moved_players(self, tmp_path: Path) -> None:
+        # Codex P2 byte-identity: the audit log writes ``packet.model_dump(mode=
+        # "json")`` verbatim (observation/audit.py), so a flag-OFF packet must NOT
+        # carry ``"moved_players": []`` -- that would diverge from pre-task HEAD
+        # with no re-record. The empty default is omitted from serialization.
+        game_map = load_canonical_map()
+        state, events = advance_tick(
+            _movement_world(), [_move("p-2", "ENGINEERING")], game_map=game_map
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert "moved_players" not in packet.model_dump(mode="json")
+
+    def test_flag_on_packet_dump_includes_witnessed_moves(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # When the lever is ON and a transition was witnessed, the non-empty tuple
+        # serializes normally (the observer p-1 sees p-2 leave STORAGE).
+        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
+        game_map = load_canonical_map()
+        state, events = advance_tick(
+            _movement_world(), [_move("p-2", "ENGINEERING")], game_map=game_map
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert packet.model_dump(mode="json")["moved_players"] == [
+            {"id": "p-2", "from_room": "STORAGE", "to_room": "ENGINEERING"}
+        ]
+
+    def test_flag_off_yields_no_moved_players(self, tmp_path: Path) -> None:
+        # No env set (default OFF): a witnessed transition produces an EMPTY
+        # ``moved_players`` -- the byte-identity boundary with pre-task HEAD.
+        game_map = load_canonical_map()
+        state, events = advance_tick(
+            _movement_world(),
+            [_move("p-2", "ENGINEERING")],
+            game_map=game_map,
+        )
+        packet = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert packet.moved_players == ()
+
+    def test_movement_signal_is_replay_deterministic(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Re-deriving from the SAME recorded ``MovedEvent`` yields an identical
+        # packet -- the replay-determinism contract (committed replays
+        # reconstruct byte-identically).
+        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
+        game_map = load_canonical_map()
+        state, events = advance_tick(
+            _movement_world(),
+            [_move("p-2", "ENGINEERING")],
+            game_map=game_map,
+        )
+        first = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        second = _observation_service(tmp_path).build_packet(
+            world_state=state, agent_id="p-1", engine_events=events
+        )
+        assert first.moved_players == second.moved_players
+        assert first.model_dump(mode="json") == second.model_dump(mode="json")
