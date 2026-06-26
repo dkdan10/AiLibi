@@ -36,11 +36,14 @@ from meetings.transcript import (
     WEAK_CONTRADICTION_MARKER_PREFIX,
     WEAK_REASON_ADVERSARIAL,
     WEAK_REASON_BOUNDARY_OVERLAP,
+    WEAK_REASON_KILL_SCENE,
     WEAK_REASON_NARROW_WINDOW,
     WEAK_REASON_SELF_PAIR,
     detect_contradictions,
     is_weak_contradiction,
 )
+
+_FLAG_ON = {"AILIBI_WITNESSED_KILL_EVIDENCE": "1"}
 
 
 # --- Builders --------------------------------------------------------------
@@ -1003,6 +1006,193 @@ class TestAlibiVsPhysical:
     def test_physical_detection_is_deterministic(self) -> None:
         transcript = self._two_voice_conjunction()
         assert detect_contradictions(transcript) == detect_contradictions(transcript)
+
+
+# --- alibi_vs_physical kill-scene intensification (Task 13.5.3 (b)) ---------
+
+
+class TestKillSceneStrongFlag:
+    """Task 13.5.3 (b) -- the kill-scene intensification of alibi_vs_physical.
+
+    A co-presence placing the accused at the BODY's room within the kill window
+    (normally DROPPED by the relevance gate -- presence at the scene must never
+    exonerate) is RECOVERED behind ``AILIBI_WITNESSED_KILL_EVIDENCE`` and made to
+    CONTRADICT an alibi placed elsewhere. STRICT (owner-LOCKED): a lone
+    kill-scene placement is sub-gate; STRONG needs a second independent source.
+    """
+
+    def _body(self, *, room: str = "REACTOR") -> FoundBodyObservation:
+        return FoundBodyObservation(
+            type="found_body", tick=40, body_of="p-9", room=room
+        )
+
+    def _scene(
+        self,
+        *,
+        placements: tuple[tuple[str, str, int, str], ...],
+        alibi_room: str = "STORAGE",
+    ) -> MeetingTranscript:
+        # turn 0 reports the body (the kill scene); turn 1 is p-3's OWN alibi;
+        # each placement is (speaker, sighting_subject, tick, room) naming p-3 as
+        # co_present.
+        turns = [
+            _turn(turn_index=0, speaker="p-1", observations=(self._body(),)),
+            _turn(
+                turn_index=1,
+                speaker="p-3",
+                claims=(
+                    _alibi(subject="p-3", from_tick=100, to_tick=200, room=alibi_room),
+                ),
+            ),
+        ]
+        for index, (speaker, subject, tick, room) in enumerate(placements, start=2):
+            turns.append(
+                _turn(
+                    turn_index=index,
+                    speaker=speaker,
+                    observations=(
+                        _saw(
+                            tick=tick, subject=subject, room=room, co_present=("p-3",)
+                        ),
+                    ),
+                )
+            )
+        return MeetingTranscript(turns=tuple(turns))
+
+    def test_two_kill_scene_voices_strong_only_when_flag_on(self) -> None:
+        # Two independent co-presence placements of p-3 at the REACTOR kill scene
+        # contradict p-3's STORAGE alibi.
+        transcript = self._scene(
+            placements=(
+                ("p-5", "p-8", 150, "REACTOR"),
+                ("p-7", "p-2", 160, "REACTOR"),
+            )
+        )
+        # Flag OFF (default): the kill-scene placements are dropped -> no flag,
+        # byte-identical to HEAD.
+        off = [
+            f
+            for f in detect_contradictions(transcript)
+            if f.kind == "alibi_vs_physical"
+        ]
+        assert off == []
+        # Flag ON: both placements recovered -> two-source conjunction STRONG.
+        on = [
+            f
+            for f in detect_contradictions(transcript, env=_FLAG_ON)
+            if f.kind == "alibi_vs_physical"
+        ]
+        assert len(on) == 2
+        for flag in on:
+            assert flag.subjects == ("p-3",)
+            assert is_weak_contradiction(flag) is False  # STRONG
+            assert "kill scene" in flag.description
+            assert "REACTOR" in flag.description
+            assert "STORAGE" in flag.description
+
+    def test_lone_kill_scene_placement_is_sub_gate(self) -> None:
+        # A SINGLE kill-scene placement INFORMS but cannot eject alone: WEAK with
+        # the kill-scene marker (read by is_weak_contradiction), the STRICT rule.
+        transcript = self._scene(placements=(("p-5", "p-8", 150, "REACTOR"),))
+        on = [
+            f
+            for f in detect_contradictions(transcript, env=_FLAG_ON)
+            if f.kind == "alibi_vs_physical"
+        ]
+        assert len(on) == 1
+        flag = on[0]
+        assert is_weak_contradiction(flag) is True
+        assert WEAK_REASON_KILL_SCENE in flag.description
+        assert flag.subjects == ("p-3",)
+        # And OFF it is not even emitted.
+        assert not [
+            f
+            for f in detect_contradictions(transcript)
+            if f.kind == "alibi_vs_physical"
+        ]
+
+    def test_body_placement_two_source_conjunction_is_strong(self) -> None:
+        # The second independent source can be a REGULAR (non-kill-scene)
+        # placement: one REACTOR kill-scene voice + one EAST_HALL voice = two
+        # sources -> STRONG (the "body+placement two-source conjunction").
+        transcript = self._scene(
+            placements=(
+                ("p-5", "p-8", 150, "REACTOR"),  # kill scene
+                ("p-7", "p-2", 160, "EAST_HALL"),  # regular physical placement
+            )
+        )
+        on = [
+            f
+            for f in detect_contradictions(transcript, env=_FLAG_ON)
+            if f.kind == "alibi_vs_physical"
+        ]
+        assert len(on) == 2
+        assert all(is_weak_contradiction(f) is False for f in on)
+        # Exactly one of the two STRONG flags names the kill scene.
+        assert sum("kill scene" in f.description for f in on) == 1
+
+    def test_accused_admitting_the_scene_is_not_contradicted(self) -> None:
+        # If the accused's OWN alibi places them at the body's room (REACTOR), a
+        # kill-scene placement there AGREES -> corroboration suppresses, no flag.
+        # Presence-at-scene never exonerates, but a self-consistent account is no
+        # contradiction.
+        transcript = self._scene(
+            placements=(
+                ("p-5", "p-8", 150, "REACTOR"),
+                ("p-7", "p-2", 160, "REACTOR"),
+            ),
+            alibi_room="REACTOR",
+        )
+        assert not [
+            f
+            for f in detect_contradictions(transcript, env=_FLAG_ON)
+            if f.kind == "alibi_vs_physical"
+        ]
+
+    def test_flag_on_without_a_body_is_unchanged(self) -> None:
+        # Flag ON but the meeting has NO kill scene (no opening found_body): the
+        # kill-scene path is inert and the detector is byte-identical to flag OFF
+        # (the regular 13.4 two-voice conjunction still fires STRONG).
+        transcript = MeetingTranscript(
+            turns=(
+                _turn(
+                    turn_index=0,
+                    speaker="p-3",
+                    claims=(
+                        _alibi(
+                            subject="p-3", from_tick=100, to_tick=200, room="STORAGE"
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=1,
+                    speaker="p-5",
+                    observations=(
+                        _saw(
+                            tick=150,
+                            subject="p-8",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+                _turn(
+                    turn_index=2,
+                    speaker="p-7",
+                    observations=(
+                        _saw(
+                            tick=160,
+                            subject="p-2",
+                            room="EAST_HALL",
+                            co_present=("p-3",),
+                        ),
+                    ),
+                ),
+            )
+        )
+        assert detect_contradictions(transcript) == detect_contradictions(
+            transcript, env=_FLAG_ON
+        )
 
 
 # --- Mixed cases / determinism / surface contract --------------------------

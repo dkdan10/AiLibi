@@ -132,6 +132,7 @@ such inference lives in the meeting layer over public testimony
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -159,6 +160,41 @@ _ContradictionKind = Literal["alibi_conflict", "alibi_vs_sighting", "alibi_vs_ph
 # the opening body off the transcript) for callers/tests that do not carry the
 # kind.
 MeetingTriggerKind = Literal["report", "emergency"]
+
+# Task 13.5.3 feature flag (the witnessed-kill evidence lever). Resolved once
+# like ``AILIBI_LLM_PROVIDER`` / ``AILIBI_TESTIMONY_AS_CONTENT``: OFF by
+# default, so a build that never sets it is BYTE-IDENTICAL to pre-task HEAD --
+# the witness-time belief rule (:func:`agents.memory.beliefs.
+# apply_observation_rules`) moves no suspicion on a kill stamp AND the
+# kill-scene ``alibi_vs_physical`` intensification below mints no new flag, so
+# every belief render, suspicion graph, and re-extraction is unchanged and the
+# committed replays reconstruct identically. Single home for the env-var string:
+# both halves (the belief side imports :func:`witnessed_kill_evidence_enabled`)
+# read it here so the name can never drift. The 9B smoke and the Phase-14
+# re-record run it ON; the $0 R7 re-extraction runs it ON over the committed
+# replays to measure the kill-scene STRONG flags without a re-record.
+ENV_WITNESSED_KILL_EVIDENCE: Final[str] = "AILIBI_WITNESSED_KILL_EVIDENCE"
+_WITNESSED_KILL_FLAG_TRUE: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
+
+
+def witnessed_kill_evidence_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 13.5.3 witnessed-kill evidence lever is ON.
+
+    Reads :data:`ENV_WITNESSED_KILL_EVIDENCE` from ``env`` (defaulting to the
+    real process environment), mirroring
+    :func:`agents.memory.store.testimony_as_content_enabled`. Default OFF: an
+    unset / empty / unrecognised value is ``False`` so the merge is
+    byte-identical to today and the existing golden/regression suite plus the
+    committed replays are untouched. Accepts ``1/true/yes/on``
+    (case-insensitive). The ``env`` argument lets tests toggle the flag
+    deterministically without mutating ``os.environ``.
+    """
+
+    environment = env if env is not None else os.environ
+    return environment.get(ENV_WITNESSED_KILL_EVIDENCE, "").strip().lower() in (
+        _WITNESSED_KILL_FLAG_TRUE
+    )
+
 
 # Deterministic termination reasons for the reactive chain (DESIGN.md §5.2
 # PHASE 2). Surfaced by :func:`next_chain_step` / :func:`walk_chain` so the
@@ -501,6 +537,24 @@ WEAK_REASON_PROXY_INTRA_TURN: Final[str] = "same-speaker proxy contradiction"
 # STRONG (no marker).
 WEAK_REASON_LONE_PHYSICAL: Final[str] = "single-voice physical contradiction"
 
+# Task 13.5.3 (the witnessed-kill kill-scene intensification; owner-LOCKED
+# STRICT 2026-06-26): the lone-atom weak band of a KILL-SCENE
+# ``alibi_vs_physical`` placement -- a SINGLE independent co-presence placing
+# the accused at the BODY's room within the kill window, contradicting an alibi
+# elsewhere. Such placements are normally DROPPED by the reconstruction's
+# kill-scene relevance gate ("presence at the scene must never EXONERATE"); the
+# ``AILIBI_WITNESSED_KILL_EVIDENCE`` lever recovers them so a kill-scene placement
+# can CONTRADICT a contradicting alibi. STRICT strictness: a lone kill-scene
+# placement carries this marker -> :func:`is_weak_contradiction` is True and
+# belief Rule 2 down-weights it to the sub-gate band, so a single forgeable
+# kill-accusation INFORMS but cannot eject a crewmate alone. A SECOND
+# independent source (another contradicting placement -- kill-scene or not --
+# reaching :data:`PHYSICAL_CONTRADICTION_MIN_VOICES` voices) promotes it to
+# STRONG (no marker), exactly the 13.4 two-source conjunction. Distinct from
+# :data:`WEAK_REASON_LONE_PHYSICAL` only to name the kill-scene origin in the
+# rendered flag; both are read identically by :func:`is_weak_contradiction`.
+WEAK_REASON_KILL_SCENE: Final[str] = "single-voice kill-scene placement"
+
 # Task 13.4 (report-phase-b-plan B3/B4): the minimum number of DISTINCT
 # independent CO-PRESENCE voices that must place a subject OUTSIDE their own
 # stated alibi for the inferential ``alibi_vs_physical`` flag to fire STRONG.
@@ -835,6 +889,7 @@ def reconstruct_stated_paths(
     *,
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
+    include_kill_scene: bool = False,
 ) -> Mapping[PlayerId, tuple[StatedPlacement, ...]]:
     """Each subject's STATED room-by-tick path from the transcript (Task 13.2).
 
@@ -870,6 +925,18 @@ def reconstruct_stated_paths(
     participants -- drops a hallucinated id, whether it appears as a
     sighting's ``subject`` or in its ``co_present`` list.
 
+    ``include_kill_scene`` (Task 13.5.3, the witnessed-kill lever; default
+    ``False`` -> byte-identical for every existing caller). When ``True`` the
+    relevance gate's KILL-SCENE prong is dropped (the spawn-window prong still
+    applies), so a sighting placing a player at the meeting's
+    :func:`triggering_body_rooms` -- normally excluded because "presence at the
+    scene must never EXONERATE" -- is RETAINED. The kill-scene path needs those
+    recovered placements not to corroborate but to CONTRADICT a stated alibi
+    that puts the accused elsewhere; :func:`_detect_alibi_vs_physical` partitions
+    them back out by intersecting each placement's rooms with the body rooms.
+    The returned mapping is therefore a SUPERSET of the default reconstruction
+    (the same regular placements, plus the recovered kill-scene ones).
+
     Returns ``{subject: placements}`` for every player with at least one
     relevant stated placement, the subjects sorted and each subject's
     placements sorted by :func:`_placement_sort_key`. Pure: the transcript
@@ -880,6 +947,10 @@ def reconstruct_stated_paths(
 
     effective_roster = _NO_ROSTER if roster is None else roster
     body_rooms = triggering_body_rooms(transcript, trigger_kind=trigger_kind)
+    # Task 13.5.3: ``include_kill_scene`` drops ONLY the kill-scene prong by
+    # passing an empty body-room set to the relevance gate (the spawn-window
+    # prong still applies), so kill-scene placements are recovered.
+    relevance_body_rooms = frozenset() if include_kill_scene else body_rooms
 
     paths: dict[PlayerId, list[StatedPlacement]] = {}
     for sighting in _iter_sightings(transcript):
@@ -892,7 +963,7 @@ def reconstruct_stated_paths(
         if not is_relevant_sighting(
             tick=sighting.observation.tick,
             rooms=sighting.rooms,
-            triggering_body_rooms=body_rooms,
+            triggering_body_rooms=relevance_body_rooms,
         ):
             continue
         placement = StatedPlacement(
@@ -924,6 +995,7 @@ def detect_contradictions(
     *,
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
@@ -951,7 +1023,14 @@ def detect_contradictions(
       9.7 weak ``alibi_vs_sighting`` band (:func:`_detect_alibi_vs_physical`).
       ``trigger_kind`` threads to the reconstruction's relevance gate so an
       EMERGENCY meeting drops the (possibly fabricated) opening body's kill-scene
-      exclusion (Task 10.11), mirroring :func:`detect_corroborations`.
+      exclusion (Task 10.11), mirroring :func:`detect_corroborations`. Task
+      13.5.3 (behind ``AILIBI_WITNESSED_KILL_EVIDENCE``, read from ``env``;
+      default OFF -> byte-identical) intensifies this kind at the KILL SCENE: a
+      co-presence placing the accused at the body's room within the kill window
+      (normally dropped by the relevance gate) is RECOVERED and made to
+      CONTRADICT an alibi placed elsewhere, STRICT -- a lone kill-scene
+      placement is sub-gate (:data:`WEAK_REASON_KILL_SCENE`) and crosses to
+      STRONG only under the same two-source conjunction.
 
     Flags are *information*, not verdicts. The returned tuple is sorted
     by ``contradiction_id`` so the detector is deterministic across calls
@@ -1053,15 +1132,37 @@ def detect_contradictions(
     self_alibis = _dedupe_echo_alibis(
         tuple(a for a in indexed_alibis if a.speaker == a.claim.subject)
     )
+    paths = reconstruct_stated_paths(
+        transcript, roster=roster, trigger_kind=trigger_kind
+    )
+    # Task 13.5.3 (the witnessed-kill kill-scene intensification, behind
+    # ``AILIBI_WITNESSED_KILL_EVIDENCE``). Default OFF -> ``kill_scene_paths`` is
+    # ``None`` and ``body_rooms`` empty, so :func:`_detect_alibi_vs_physical`
+    # runs the exact pre-task path (byte-identical, committed replays
+    # reconstruct unchanged). When ON and the meeting HAS a kill scene, a
+    # second reconstruction recovers the kill-scene placements (the relevance
+    # gate normally drops them) so a co-presence at the body's room can
+    # CONTRADICT an alibi placed elsewhere.
+    kill_scene_paths: Mapping[PlayerId, tuple[StatedPlacement, ...]] | None = None
+    body_rooms: frozenset[str] = frozenset()
+    if witnessed_kill_evidence_enabled(env):
+        body_rooms = triggering_body_rooms(transcript, trigger_kind=trigger_kind)
+        if body_rooms:
+            kill_scene_paths = reconstruct_stated_paths(
+                transcript,
+                roster=roster,
+                trigger_kind=trigger_kind,
+                include_kill_scene=True,
+            )
     flags.extend(
         _detect_alibi_vs_physical(
             self_alibis=self_alibis,
-            paths=reconstruct_stated_paths(
-                transcript, roster=roster, trigger_kind=trigger_kind
-            ),
+            paths=paths,
             direct_sighting_events=_direct_sighting_events(sightings),
             roster_sighting_events=frozenset(s.event_id for s in sightings),
             accusation_pairs=accusation_pairs,
+            kill_scene_paths=kill_scene_paths,
+            body_rooms=body_rooms,
         )
     )
     guarded = _apply_proxy_intra_turn_guard(
@@ -1811,8 +1912,27 @@ def _detect_alibi_vs_physical(
     direct_sighting_events: Mapping[PlayerId, frozenset[str]],
     roster_sighting_events: frozenset[str],
     accusation_pairs: frozenset[tuple[PlayerId, PlayerId]],
+    kill_scene_paths: Mapping[PlayerId, tuple[StatedPlacement, ...]] | None = None,
+    body_rooms: frozenset[str] = frozenset(),
 ) -> Iterator[ContradictionRef]:
     """The Task 13.4 inferential ``alibi_vs_physical`` flags (B3/B4).
+
+    Task 13.5.3 (the witnessed-kill kill-scene intensification, behind
+    ``AILIBI_WITNESSED_KILL_EVIDENCE``). ``kill_scene_paths`` (the
+    kill-scene-inclusive reconstruction; ``None`` -> byte-identical 13.4 path)
+    ADDS kill-scene contradicting placements -- co-presences at the meeting's
+    ``body_rooms`` that the relevance gate normally DROPS. They never enter the
+    CORROBORATION check (which keeps reading the relevance-gated ``paths`` only),
+    so the §6.3 invariant holds: presence at the scene must never EXONERATE -- a
+    recovered scene placement can only CONTRADICT. A kill-scene placement that is
+    the LONE contradicting voice carries :data:`WEAK_REASON_KILL_SCENE`
+    (sub-gate, owner-LOCKED STRICT: a single forgeable kill-accusation INFORMS
+    but cannot eject), and it crosses to STRONG only under the SAME two-source
+    conjunction (>= :data:`PHYSICAL_CONTRADICTION_MIN_VOICES` distinct
+    contradicting voices, kill-scene or not -- "another placement, or the
+    body+placement two-source conjunction"). ``body_rooms`` empty (the default /
+    flag-OFF / emergency meeting) -> no scene placements, so the result is the
+    13.4 set exactly.
 
     The R7 lever. ``self_alibis`` is the caller's de-echoed set of the subjects'
     OWN alibis (``speaker == subject`` already); for each (room set A over an
@@ -1875,7 +1995,8 @@ def _detect_alibi_vs_physical(
         to_tick = alibi.claim.to_tick
         direct_events = direct_sighting_events.get(subject, frozenset())
         # Independent (non-self) placements of the subject inside the alibi
-        # window. ``reconstruct_stated_paths`` already relevance-gated them.
+        # window, from the RELEVANCE-GATED ``paths`` (kill-scene placements
+        # excluded). ``reconstruct_stated_paths`` already relevance-gated them.
         independent = tuple(
             placement
             for placement in paths.get(subject, ())
@@ -1883,7 +2004,11 @@ def _detect_alibi_vs_physical(
         )
         # Corroboration = ANY independent voice places the subject INSIDE the
         # alibi's rooms within the window. A corroborated alibi is co-placement
-        # agreement (the crewmate shape), never a clean lie -- suppress it.
+        # agreement (the crewmate shape), never a clean lie -- suppress it. This
+        # reads ONLY the relevance-gated ``independent`` (kill-scene placements
+        # NEVER enter here), so the §6.3 invariant holds even with the 13.5.3
+        # lever ON: presence at the scene must never EXONERATE -- a kill-scene
+        # placement can CONTRADICT below, never corroborate.
         if any(placement.rooms & alibi.rooms for placement in independent):
             continue
         # Contradicting placements: a roster-valid CO-PRESENCE (event id is a
@@ -1901,24 +2026,59 @@ def _detect_alibi_vs_physical(
             and (placement.speaker, subject) not in accusation_pairs
             and (subject, placement.speaker) not in accusation_pairs
         )
+        # Task 13.5.3: kill-scene contradicting placements -- co-presences at the
+        # body's room (``body_rooms``) the relevance gate normally DROPS, recovered
+        # via ``kill_scene_paths`` (the kill-scene-inclusive reconstruction) ONLY
+        # when the lever is ON. Same soundness filters as the regular set, plus
+        # ``placement.rooms & body_rooms`` (it IS the scene) and disjoint-from-alibi
+        # (the accused claimed elsewhere). The body-room filter makes this set
+        # DISJOINT from ``contradicting`` above (which excludes scene placements by
+        # the relevance gate), so the union never double-counts a placement. Empty
+        # when the lever is OFF / the meeting has no kill scene -> byte-identical.
+        kill_scene_contradicting: tuple[StatedPlacement, ...] = ()
+        if kill_scene_paths is not None and body_rooms:
+            kill_scene_contradicting = tuple(
+                placement
+                for placement in kill_scene_paths.get(subject, ())
+                if placement.speaker != subject
+                and from_tick < placement.tick < to_tick
+                and bool(placement.rooms & body_rooms)
+                and not (placement.rooms & alibi.rooms)
+                and placement.event_id in roster_sighting_events
+                and placement.event_id not in direct_events
+                and (placement.speaker, subject) not in accusation_pairs
+                and (subject, placement.speaker) not in accusation_pairs
+            )
+        contradicting = contradicting + kill_scene_contradicting
         n_voices = len({placement.speaker for placement in contradicting})
         if n_voices == 0:
             continue
         # The two-source conjunction is STRONG; a lone voice is WEAK (informs,
-        # cannot eject alone) -- the phase-B "single inferential atom" band.
-        weak_reasons: tuple[str, ...] = (
-            ()
-            if n_voices >= PHYSICAL_CONTRADICTION_MIN_VOICES
-            else (WEAK_REASON_LONE_PHYSICAL,)
-        )
+        # cannot eject alone) -- the phase-B "single inferential atom" band. A
+        # lone KILL-SCENE atom (Task 13.5.3, ``body_rooms`` non-empty) carries
+        # the distinct kill-scene marker but is read identically by
+        # :func:`is_weak_contradiction`; ``body_rooms`` empty -> the marker can
+        # never apply, so the banding is byte-identical to the 13.4 path.
+        strong = n_voices >= PHYSICAL_CONTRADICTION_MIN_VOICES
+        weak_reasons: tuple[str, ...]
         for placement in contradicting:
+            is_kill_scene = bool(placement.rooms & body_rooms)
+            if strong:
+                weak_reasons = ()
+            elif is_kill_scene:
+                weak_reasons = (WEAK_REASON_KILL_SCENE,)
+            else:
+                weak_reasons = (WEAK_REASON_LONE_PHYSICAL,)
             yield _build_contradiction(
                 kind="alibi_vs_physical",
                 event_a_id=alibi.event_id,
                 event_b_id=placement.event_id,
                 subjects=(subject,),
                 description=_describe_alibi_vs_physical(
-                    alibi=alibi.claim, placement=placement, weak_reasons=weak_reasons
+                    alibi=alibi.claim,
+                    placement=placement,
+                    weak_reasons=weak_reasons,
+                    kill_scene=is_kill_scene,
                 ),
             )
 
@@ -2090,6 +2250,7 @@ def _describe_alibi_vs_physical(
     alibi: AlibiClaim,
     placement: StatedPlacement,
     weak_reasons: tuple[str, ...] = (),
+    kill_scene: bool = False,
 ) -> str:
     # The placement's rooms are a canonical set (one or more member rooms);
     # join them sorted so the rendered memory view (§5.4 "flags are
@@ -2105,6 +2266,11 @@ def _describe_alibi_vs_physical(
         f"placed {alibi.subject} in {placed_in} at tick {placement.tick} -- "
         f"physically incompatible with the stated alibi."
     )
+    # Task 13.5.3: name the kill scene in the rendered flag (legibility only --
+    # ``kill_scene`` is False on every flag-OFF / non-kill-scene path, so this
+    # is byte-identical to the 13.4 text there).
+    if kill_scene:
+        base = f"{base} The sighting places them at the kill scene."
     if not weak_reasons:
         return base
     return f"{base} {WEAK_CONTRADICTION_MARKER_PREFIX}{'; '.join(weak_reasons)}]"
@@ -2303,6 +2469,7 @@ def _ranges_overlap(a_from: int, a_to: int, b_from: int, b_to: int) -> bool:
 
 __all__ = [
     "CANONICAL_ROOMS",
+    "ENV_WITNESSED_KILL_EVIDENCE",
     "NARROW_ALIBI_WINDOW_TICKS",
     "PHYSICAL_CONTRADICTION_MIN_VOICES",
     "SPAWN_WINDOW_LAST_TICK",
@@ -2310,6 +2477,7 @@ __all__ = [
     "WEAK_REASON_ADVERSARIAL",
     "WEAK_REASON_BOUNDARY_OVERLAP",
     "WEAK_REASON_ENDPOINT_TICK",
+    "WEAK_REASON_KILL_SCENE",
     "WEAK_REASON_LONE_PHYSICAL",
     "WEAK_REASON_NARROW_WINDOW",
     "WEAK_REASON_PROXY_INTRA_TURN",
@@ -2335,4 +2503,5 @@ __all__ = [
     "sort_turns_canonically",
     "triggering_body_rooms",
     "walk_chain",
+    "witnessed_kill_evidence_enabled",
 ]

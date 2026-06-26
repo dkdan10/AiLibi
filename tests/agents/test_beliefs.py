@@ -11,11 +11,13 @@ from agents.memory.beliefs import (
     CORROBORATION_SUSPICION_DELTA,
     MEETING_CONTRADICTION_LIFT_CAP,
     MEETING_SUSPICION_DECAY_RATE,
+    OBSERVED_KILL_ACTION,
     TESTIMONY_INDEPENDENCE_BAR,
     TESTIMONY_SPREAD_CAP_DELTA,
     TESTIMONY_SPREAD_TWO_VOICE_DELTA,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
     WITNESS_INFORM_REASON,
+    WITNESSED_KILL_SUSPICION_DELTA,
     BeliefState,
     PlayerBelief,
     VENTING_SUSPICION_DELTA,
@@ -209,6 +211,150 @@ class TestTeamInternalFirewallContract:
             _DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
         )
         assert result.view("filtered").suspicion == _DEFAULT_SUSPICION
+
+
+_GATE = 0.60  # DESIGN.md §4.6 eject gate
+_FLAG_ON: Mapping[str, str] = {"AILIBI_WITNESSED_KILL_EVIDENCE": "1"}
+
+
+def _kill_packet(
+    *,
+    killer: str,
+    tick: int = 10,
+    role: str = "CREWMATE",
+    fellow_impostor_ids: tuple[str, ...] = (),
+) -> ObservationPacket:
+    """A packet whose ``visible_players`` carries one witness-gated kill stamp."""
+
+    return ObservationPacket(
+        tick=tick,
+        agent_id="observer",
+        self_state=SelfView(
+            room="R",
+            role=role,  # type: ignore[arg-type]
+            pending_task_id=None,
+            fellow_impostor_ids=fellow_impostor_ids,
+        ),
+        visible_players=(PlayerView(id=killer, room="R", action=OBSERVED_KILL_ACTION),),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+
+
+class TestWitnessedKillBelief:
+    """Task 13.5.3 (a) -- a witnessed kill becomes near-certain belief.
+
+    A ``PlayerView`` carrying ``action == "kill"`` (the witness-gated kill stamp)
+    lifts the killer's suspicion over the §4.6 gate, behind
+    ``AILIBI_WITNESSED_KILL_EVIDENCE``. Teammate-firewalled (§4.7) and >= the
+    vent weight by construction.
+    """
+
+    def test_witnessed_kill_lifts_killer_over_gate(self) -> None:
+        result = apply_observation_rules(
+            BeliefState(),
+            observation=_kill_packet(killer="killer"),
+            previous_visible_bodies=set(),
+            recent_co_presence={},
+            env=_FLAG_ON,
+        )
+        # Near-certain: the delta pins to the 1.0 clamp, well over the gate.
+        assert result.view("killer").suspicion == pytest.approx(1.0)
+        assert result.view("killer").suspicion > _GATE
+
+    def test_kill_stamp_is_inert_when_flag_off(self) -> None:
+        # Default OFF (no env) -> byte-identical to pre-task HEAD: the kill stamp
+        # moves no belief and the killer is not even materialised.
+        result = apply_observation_rules(
+            BeliefState(),
+            observation=_kill_packet(killer="killer"),
+            previous_visible_bodies=set(),
+            recent_co_presence={},
+        )
+        assert result.known_players() == ()
+        assert result.view("killer").suspicion == _DEFAULT_SUSPICION
+
+    def test_teammate_kill_is_firewalled(self) -> None:
+        # §4.7: an impostor that witnesses a TEAMMATE's kill accrues NO suspicion
+        # against the teammate (the killer is in fellow_impostor_ids).
+        result = apply_observation_rules(
+            BeliefState(),
+            observation=_kill_packet(
+                killer="teammate",
+                role="IMPOSTOR",
+                fellow_impostor_ids=("teammate",),
+            ),
+            previous_visible_bodies=set(),
+            recent_co_presence={},
+            env=_FLAG_ON,
+        )
+        assert result.known_players() == ()
+        assert result.view("teammate").suspicion == _DEFAULT_SUSPICION
+
+    def test_impostor_witnessing_non_teammate_kill_still_bumps(self) -> None:
+        # The firewall excludes ONLY teammates: a kill by a non-teammate (e.g. a
+        # solo-impostor game where the witness is the lone impostor, or a future
+        # multi-impostor seeing a non-teammate) still lands the full delta.
+        result = apply_observation_rules(
+            BeliefState(),
+            observation=_kill_packet(
+                killer="stranger",
+                role="IMPOSTOR",
+                fellow_impostor_ids=("teammate",),
+            ),
+            previous_visible_bodies=set(),
+            recent_co_presence={},
+            env=_FLAG_ON,
+        )
+        assert result.view("stranger").suspicion == pytest.approx(1.0)
+        assert result.view("stranger").suspicion > _GATE
+
+    def test_kill_weighs_at_least_as_much_as_a_vent(self) -> None:
+        # The delta is >= the vent delta, and from the same prior the witnessed
+        # kill never lands BELOW the witnessed vent (the "backwards" bug the task
+        # fixes -- a kill must not weigh under a vent).
+        assert WITNESSED_KILL_SUSPICION_DELTA >= VENTING_SUSPICION_DELTA
+        kill = apply_observation_rules(
+            BeliefState(),
+            observation=_kill_packet(killer="x"),
+            previous_visible_bodies=set(),
+            recent_co_presence={},
+            env=_FLAG_ON,
+        )
+        vent = apply_observation_rules(
+            BeliefState(),
+            observation=_packet(
+                tick=10,
+                visible_players=(PlayerView(id="x", room="R", action="vent"),),
+            ),
+            previous_visible_bodies=set(),
+            recent_co_presence={},
+        )
+        assert kill.view("x").suspicion >= vent.view("x").suspicion
+
+    def test_bump_persists_into_the_meeting_suspicion_graph(self) -> None:
+        # The rule runs at perception and the result is the stored BeliefState
+        # the meeting graph reads. Seed a prior graph snapshot, apply the rule,
+        # and confirm the killer's persisted suspicion is over-gate -- so the
+        # witness votes the killer in the meeting.
+        graph = BeliefState()
+        graph.seed_player("killer", suspicion=0.45, trust=0.5)
+        result = apply_observation_rules(
+            graph,
+            observation=_kill_packet(killer="killer"),
+            previous_visible_bodies=set(),
+            recent_co_presence={},
+            env=_FLAG_ON,
+        )
+        assert result.view("killer").suspicion > _GATE
 
 
 # --- Rule 2 graduated weak-contradiction weight (Task 9.7; audit gp-1) ------
