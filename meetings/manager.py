@@ -79,7 +79,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Coroutine, Iterable, Mapping, Sequence
+from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal, Protocol, TypeVar, runtime_checkable
 
@@ -488,10 +488,10 @@ class SuspicionEntry:
 class MeetingParticipant:
     """One living agent's contribution to the meeting (DESIGN.md §5.1).
 
-    The manager treats this as a static snapshot for the duration of the
-    meeting: ``rendered_memory`` is what the §6.6 renderer produced when
-    the meeting opened, ``role`` selects which opening prompt is used, and
-    ``suspicion_graph`` populates the vote-ballot prompt input.
+    By default the manager treats this as a static snapshot for the
+    duration of the meeting: ``rendered_memory`` is what the §6.6 renderer
+    produced when the meeting opened, ``role`` selects which opening prompt
+    is used, and ``suspicion_graph`` populates the vote-ballot prompt input.
 
     ``fellow_impostor_ids`` carries the impostor-only teammate list
     (Task 7.12) onto the meeting layer: the sorted ids of the OTHER
@@ -500,6 +500,20 @@ class MeetingParticipant:
     orchestrator populates it from world-state roles; the default of
     ``()`` keeps every existing construction site valid and is the
     firewall-correct value for a crewmate.
+
+    ``rerender_memory`` is the Task 13.5.5 unfreeze hook (behind
+    ``AILIBI_UNFREEZE_MEMORY``). When ``None`` (the default, flag OFF) the
+    manager reads the frozen open-tick ``rendered_memory`` for every turn
+    and the ballot -- byte-identical to pre-task HEAD. When the orchestrator
+    attaches a hook (flag ON) the manager calls it to RE-RENDER a
+    participant's memory before each of its later turns and its ballot, so
+    the rendered belief lines track the pre-vote ``suspicion_graph`` the
+    ballot consumes instead of the stale open-tick snapshot (the PR #198
+    review inconsistency). The hook MUST be a pure function of the
+    participant's deterministic stored state (it re-invokes the UNCHANGED
+    §6.6 renderer over the live ``BeliefState`` / episodic, with the
+    renderer's existing stable salience tie-breaks), so a replay rebuilds
+    the identical string and ``verify_samples.sh`` stays byte-identical.
     """
 
     agent_id: PlayerId
@@ -507,6 +521,28 @@ class MeetingParticipant:
     rendered_memory: str
     suspicion_graph: tuple[SuspicionEntry, ...] = ()
     fellow_impostor_ids: tuple[PlayerId, ...] = ()
+    rerender_memory: Callable[[], str] | None = None
+
+
+def _current_rendered_memory(participant: MeetingParticipant) -> str:
+    """Rendered-memory view for one of ``participant``'s turns / its ballot.
+
+    The single read point for ``rendered_memory`` across the turn loop and
+    the ballot, so the freeze-vs-unfreeze choice lives in exactly one place
+    (Task 13.5.5).
+
+    Flag OFF (``rerender_memory is None``, the default): the open-tick frozen
+    ``rendered_memory`` -- byte-identical to pre-task HEAD. Flag ON: the
+    orchestrator attached a ``rerender_memory`` hook, so each turn / the
+    ballot re-renders from the live deterministic ``BeliefState`` / episodic
+    and the belief lines track the pre-vote ``suspicion_graph`` instead of
+    the stale open-tick snapshot. The hook is a pure function of the stored
+    state, so calling it once per turn stays replay-deterministic.
+    """
+
+    if participant.rerender_memory is not None:
+        return participant.rerender_memory()
+    return participant.rendered_memory
 
 
 @dataclass(frozen=True)
@@ -1399,6 +1435,11 @@ class MeetingManager:
         accusation_targets = _candidate_targets(
             living_ids, exclude=participant.agent_id
         )
+        # Task 13.5.5: with the unfreeze flag ON this re-renders from the live
+        # deterministic memory before THIS turn; OFF it returns the frozen
+        # open-tick snapshot (byte-identical to HEAD). Read once and reused by
+        # both prompt branches.
+        rendered_memory = _current_rendered_memory(participant)
         if turn_kind == "opening":
             renderer = (
                 self._impostor_report_prompt
@@ -1409,7 +1450,7 @@ class MeetingManager:
                 agent_id=participant.agent_id,
                 current_tick=trigger.trigger_tick,
                 meeting_trigger=trigger.description,
-                rendered_memory=participant.rendered_memory,
+                rendered_memory=rendered_memory,
                 public_transcript="",
                 fellow_impostor_ids=participant.fellow_impostor_ids,
                 living_ids=accusation_targets,
@@ -1417,7 +1458,7 @@ class MeetingManager:
             )
         return self._statement_prompt(
             agent_id=participant.agent_id,
-            rendered_memory=participant.rendered_memory,
+            rendered_memory=rendered_memory,
             transcript=transcript_so_far,
             contradictions=contradictions,
             prior_turn=prior_turn,
@@ -1506,9 +1547,14 @@ class MeetingManager:
             fellow_impostor_ids=participant.fellow_impostor_ids,
             evidence=evidence,
         )
+        # Task 13.5.5: re-render before the ballot (flag ON) so the rendered
+        # belief lines are internally consistent with the pre-vote-folded
+        # ``suspicion_graph`` derived just above; OFF returns the frozen
+        # open-tick snapshot, byte-identical to HEAD.
+        rendered_memory = _current_rendered_memory(participant)
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
-            rendered_memory=participant.rendered_memory,
+            rendered_memory=rendered_memory,
             transcript=transcript,
             contradiction_flags=contradictions,
             suspicion_graph=suspicion_graph,

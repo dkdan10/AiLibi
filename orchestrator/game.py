@@ -20,6 +20,7 @@ orchestrator's job (DESIGN.md §1.3).
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -575,6 +576,7 @@ class DefaultMeetingRunner:
             state=state,
             agents=agents,
             token_budget=self._token_budget,
+            unfreeze_memory=unfreeze_memory_enabled(),
         )
         # Dead / ejected roster (Task 10.3, audit gp-9): the orchestrator is
         # the only meeting-adjacent layer that may read world state, so it
@@ -695,11 +697,67 @@ def build_default_meeting_runner(
     )
 
 
+# Task 13.5.5 unfreeze-rendered-memory lever. Default OFF: every
+# ``MeetingParticipant`` carries the one-time open-tick render (the frozen
+# snapshot), byte-identical to pre-task HEAD, so the existing meeting suite and
+# the committed replays are untouched. ON: the orchestrator attaches a
+# per-turn re-render hook so a speaker's later turns and its ballot read belief
+# lines recomputed from the live deterministic memory -- internally consistent
+# with the pre-vote ``suspicion_graph`` the ballot consumes (the PR #198 review
+# inconsistency). Mirrors ``meetings.transcript.witnessed_kill_evidence_enabled``
+# and ``agents.memory.store.testimony_as_content_enabled``.
+ENV_UNFREEZE_MEMORY: Final[str] = "AILIBI_UNFREEZE_MEMORY"
+_UNFREEZE_MEMORY_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def unfreeze_memory_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 13.5.5 unfreeze-rendered-memory lever is ON.
+
+    Reads :data:`ENV_UNFREEZE_MEMORY` from ``env`` (defaulting to the real
+    process environment). Default OFF: an unset / empty / unrecognised value
+    is ``False`` so the merge is the frozen open-tick render, byte-identical
+    to pre-task HEAD. Accepts ``1/true/yes/on`` (case-insensitive). The
+    ``env`` argument lets tests toggle the flag deterministically without
+    mutating ``os.environ``.
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_UNFREEZE_MEMORY, "").strip().lower()
+        in _UNFREEZE_MEMORY_FLAG_TRUE
+    )
+
+
+def _memory_rerender_hook(
+    agent: MeetingAwareAgent, *, token_budget: int
+) -> Callable[[], str]:
+    """Build a participant's per-turn re-render hook (Task 13.5.5).
+
+    Returns a zero-arg callable that re-invokes the UNCHANGED §6.6 renderer
+    (``MeetingAwareAgent.render_memory_for_meeting`` ->
+    :func:`agents.memory.store.render_for_prompt`) against the agent's LIVE
+    memory. Because that renderer is a pure function of the deterministic
+    stored ``BeliefState`` / episodic (no wall-clock, no RNG, stable salience
+    tie-breaks), calling the hook before each turn and the ballot rebuilds an
+    identical string on replay -- the property ``verify_samples.sh`` gates.
+    The hook does NOT edit the renderer (the parallel-safety boundary with
+    Task 13.5.4); it only calls it at a later point in the meeting.
+    """
+
+    def _rerender() -> str:
+        return agent.render_memory_for_meeting(token_budget=token_budget)
+
+    return _rerender
+
+
 def _build_participants(
     *,
     state: WorldState,
     agents: Mapping[PlayerId, AgentInterface],
     token_budget: int,
+    unfreeze_memory: bool = False,
 ) -> tuple[MeetingParticipant, ...]:
     """Build one :class:`MeetingParticipant` per living agent.
 
@@ -757,6 +815,16 @@ def _build_participants(
             if player.role == "IMPOSTOR"
             else ()
         )
+        # Task 13.5.5: the open-tick render is ALWAYS produced (the frozen
+        # default the manager reads with the flag OFF, byte-identical to HEAD).
+        # With the flag ON we additionally attach a re-render hook the manager
+        # calls before each later turn and the ballot; the open-tick string
+        # then serves as the turn-0 value the hook reproduces.
+        rerender_memory = (
+            _memory_rerender_hook(agent, token_budget=token_budget)
+            if unfreeze_memory
+            else None
+        )
         participants.append(
             MeetingParticipant(
                 agent_id=player_id,
@@ -766,6 +834,7 @@ def _build_participants(
                 ),
                 suspicion_graph=agent.suspicion_graph_for_meeting(),
                 fellow_impostor_ids=fellow_impostor_ids,
+                rerender_memory=rerender_memory,
             )
         )
     return tuple(participants)

@@ -6501,3 +6501,111 @@ class TestEmergencyOpeningNoBody:
             first.transcript.turns[0].model_dump_json()
             == second.transcript.turns[0].model_dump_json()
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 13.5.5 — unfreeze rendered memory mid-meeting (refresh per turn).
+# A participant may carry a ``rerender_memory`` hook; when present the manager
+# re-renders before each of its turns AND its ballot instead of reusing the
+# frozen open-tick ``rendered_memory``. The hook MUST be a pure function of the
+# deterministic stored state, so a replay rebuilds identical prompts.
+# ---------------------------------------------------------------------------
+
+
+def _participants_with_p1_hook(
+    hook: Callable[[], str],
+    *,
+    frozen: str = "FROZEN-OPEN-p-1",
+) -> tuple[MeetingParticipant, ...]:
+    """Crew roster where p-1 (the meeting opener) carries a re-render hook."""
+
+    p1 = MeetingParticipant(
+        agent_id="p-1",
+        role="CREWMATE",
+        rendered_memory=frozen,
+        suspicion_graph=(SuspicionEntry(player_id="p-2", suspicion=0.4, trust=0.5),),
+        rerender_memory=hook,
+    )
+    return (p1, _participant("p-2"), _participant("p-3"), _participant("p-4"))
+
+
+class TestUnfreezeRenderedMemory:
+    """The manager honours a participant's ``rerender_memory`` hook (flag ON),
+    and falls back to the frozen open-tick render when it is ``None`` (OFF)."""
+
+    def test_hook_drives_turn_and_ballot_memory_not_the_frozen_string(self) -> None:
+        # p-1 opens (turn 0) and votes; with a hook the manager must render
+        # BOTH from the hook's fresh string and NEVER from the frozen field.
+        result, client = _run_meeting(
+            _make_responder(),
+            participants=_participants_with_p1_hook(lambda: "FRESH-RERENDER-p-1"),
+        )
+        assert isinstance(result, MeetingResult)
+        p1_prompts = [
+            c.prompt
+            for c in client.calls
+            if "agent_id=p-1 " in c.prompt or "voter=p-1\n" in c.prompt
+        ]
+        # p-1 is surfaced at least at its opening and its ballot.
+        assert len(p1_prompts) >= 2
+        for prompt in p1_prompts:
+            assert "FRESH-RERENDER-p-1" in prompt
+            assert "FROZEN-OPEN-p-1" not in prompt
+
+    def test_no_hook_uses_the_frozen_open_tick_render(self) -> None:
+        # Default participants carry no hook: the manager reads the frozen
+        # ``rendered_memory`` verbatim (the byte-identical pre-task path).
+        _result, client = _run_meeting(_make_responder())
+        p1_prompts = [
+            c.prompt
+            for c in client.calls
+            if "agent_id=p-1 " in c.prompt or "voter=p-1\n" in c.prompt
+        ]
+        assert p1_prompts
+        # ``_participant`` freezes ``"## Your role: CREWMATE\np-1 memory"``.
+        assert all("p-1 memory" in prompt for prompt in p1_prompts)
+
+    def test_ballot_sees_a_later_render_than_the_opening(self) -> None:
+        # A counter-backed hook proves the manager re-renders FRESH before the
+        # ballot rather than reusing the opening-tick render: the ballot's
+        # render index is strictly greater than the opening's.
+        counter = {"n": 0}
+
+        def _hook() -> str:
+            counter["n"] += 1
+            return f"render-{counter['n']:03d}"
+
+        _result, client = _run_meeting(
+            _make_responder(),
+            participants=_participants_with_p1_hook(_hook),
+        )
+        opening_prompt = next(
+            c.prompt
+            for c in client.calls
+            if "PHASE=OPENING" in c.prompt and "agent_id=p-1 " in c.prompt
+        )
+        ballot_prompt = next(
+            c.prompt
+            for c in client.calls
+            if "PHASE=VOTE" in c.prompt and "voter=p-1\n" in c.prompt
+        )
+        opening_idx = int(_extract_marker(opening_prompt, "render-"))
+        ballot_idx = int(_extract_marker(ballot_prompt, "render-"))
+        assert ballot_idx > opening_idx
+        # The hook fired at least once per surfaced p-1 turn plus the ballot.
+        assert counter["n"] >= 2
+
+    def test_rerender_is_deterministic_across_repeats(self) -> None:
+        # A pure hook (constant content) must yield byte-identical prompt
+        # sequences across two runs -- the replay-determinism property that
+        # ``verify_samples.sh`` gates on the committed replays.
+        def _make_run() -> list[str]:
+            _result, client = _run_meeting(
+                _make_responder(),
+                participants=_participants_with_p1_hook(
+                    lambda: "## belief lines\na\nb\nc"
+                ),
+            )
+            return [c.prompt for c in client.calls]
+
+        assert _make_run() == _make_run()

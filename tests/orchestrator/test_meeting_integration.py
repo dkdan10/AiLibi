@@ -60,15 +60,18 @@ from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
 from orchestrator.game import (
+    ENV_UNFREEZE_MEMORY,
     DefaultMeetingRunner,
     HeadlessGame,
     MeetingArtifacts,
     TacticalAgent,
     _assert_no_emergency_opening_body,  # noqa: PLC2701
     _build_participants,  # noqa: PLC2701
+    _memory_rerender_hook,  # noqa: PLC2701
     apply_meeting_result,
     build_default_agent_factory,
     build_default_meeting_runner,
+    unfreeze_memory_enabled,
 )
 from orchestrator.replay import (
     MeetingReplayEntry,
@@ -1568,6 +1571,115 @@ class TestBuildParticipantsFellowImpostorIds:
         for impostor_id in impostor_ids:
             expected = tuple(pid for pid in impostor_ids if pid != impostor_id)
             assert by_id[impostor_id].fellow_impostor_ids == expected
+
+
+# ---------------------------------------------------------------------------
+# Task 13.5.5 — unfreeze rendered memory mid-meeting (AILIBI_UNFREEZE_MEMORY).
+# The orchestrator attaches a per-turn re-render hook only when the flag is ON;
+# the frozen open-tick render is the byte-identical default.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _LiveMemoryStub:
+    """A :class:`MeetingAwareAgent` whose rendered memory EVOLVES.
+
+    ``render_memory_for_meeting`` reads the current value of a mutable
+    ``memory_lines`` list, so a re-render after the list is mutated surfaces
+    new content -- the stand-in for the live ``BeliefState`` / episodic the
+    real renderer reads. The render itself is a pure function of that stored
+    state (sorted, no wall-clock / RNG), matching the determinism contract.
+    """
+
+    _agent_id: PlayerId
+    _role: Role
+    memory_lines: list[str] = field(default_factory=list)
+
+    @property
+    def agent_id(self) -> PlayerId:
+        return self._agent_id
+
+    @property
+    def role(self) -> Role:
+        return self._role
+
+    def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+        return "## belief lines\n" + "\n".join(sorted(self.memory_lines))
+
+    def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+        return ()
+
+
+class TestUnfreezeMemoryFlag:
+    """``unfreeze_memory_enabled`` parses ``AILIBI_UNFREEZE_MEMORY`` the same
+    way the sibling Wave-C levers parse theirs: default OFF, truthy tokens ON."""
+
+    def test_default_is_off_when_unset(self) -> None:
+        assert unfreeze_memory_enabled(env={}) is False
+
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "Yes", "on", " on "])
+    def test_truthy_tokens_enable(self, value: str) -> None:
+        assert unfreeze_memory_enabled(env={ENV_UNFREEZE_MEMORY: value}) is True
+
+    @pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "nope"])
+    def test_falsey_tokens_stay_off(self, value: str) -> None:
+        assert unfreeze_memory_enabled(env={ENV_UNFREEZE_MEMORY: value}) is False
+
+
+class TestBuildParticipantsUnfreezeMemory:
+    """``_build_participants`` attaches a re-render hook only with the flag ON;
+    the frozen open-tick render is the byte-identical default."""
+
+    def test_flag_off_carries_no_rerender_hook(self) -> None:
+        state = seed_initial_state(
+            seed=2026, game_map=load_canonical_map(), num_players=4
+        )
+        participants = _build_participants(
+            state=state,
+            agents=_stub_agents_for(state),  # type: ignore[arg-type]
+            token_budget=1500,
+        )
+        # Frozen default: no hook, and the open-tick render is the frozen field.
+        assert all(p.rerender_memory is None for p in participants)
+        assert all(p.rendered_memory for p in participants)
+
+    def test_flag_on_attaches_hook_that_reads_live_memory(self) -> None:
+        state = seed_initial_state(
+            seed=2026, game_map=load_canonical_map(), num_players=4
+        )
+        agents = {
+            pid: _LiveMemoryStub(
+                _agent_id=pid, _role=player.role, memory_lines=[f"open:{pid}"]
+            )
+            for pid, player in state.players.items()
+        }
+        participants = _build_participants(
+            state=state,
+            agents=agents,  # type: ignore[arg-type]
+            token_budget=1500,
+            unfreeze_memory=True,
+        )
+        by_id = {p.agent_id: p for p in participants}
+        # The open-tick freeze captured the construction-time content.
+        assert "open:p-1" in by_id["p-1"].rendered_memory
+        # Mutate p-1's live memory; the hook re-renders the NEW content while
+        # the frozen ``rendered_memory`` field still shows the open-tick value.
+        agents["p-1"].memory_lines.append("later:p-1")
+        hook = by_id["p-1"].rerender_memory
+        assert hook is not None
+        refreshed = hook()
+        assert "later:p-1" in refreshed
+        assert "later:p-1" not in by_id["p-1"].rendered_memory
+
+    def test_rerender_hook_is_deterministic_across_repeats(self) -> None:
+        agent = _LiveMemoryStub(
+            _agent_id="p-1", _role="CREWMATE", memory_lines=["b", "a", "c"]
+        )
+        hook = _memory_rerender_hook(agent, token_budget=1500)
+        # A pure function of the stored state: repeated calls with no mutation
+        # rebuild a byte-identical string (the replay-determinism property).
+        assert hook() == hook()
+        assert hook() == agent.render_memory_for_meeting(token_budget=1500)
 
 
 class _Seed6BetrayalClient:
