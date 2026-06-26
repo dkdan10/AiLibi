@@ -197,6 +197,59 @@ class MeetingTurn(_FrozenModel):
 
 
 # ---------------------------------------------------------------------------
+# Reported testimony (Task 13.5.2 -- testimony as reported episodic content)
+# ---------------------------------------------------------------------------
+
+
+ReportedStatementKind: TypeAlias = Literal[
+    "saw_player", "alibi", "accusation", "corroboration"
+]
+"""Discriminator for the four STRUCTURED testimony shapes carried as content.
+
+Task 13.5.2 (2026-06-25 memory diagnosis, workflow ``wg54kfoxy``: "social info
+is a scalar, not content"). Exactly the four structured claim/observation kinds
+the owner scoped IN -- a :class:`SawPlayerObservation` sighting, an
+:class:`AlibiClaim`, an :class:`AccusationClaim`, a :class:`CorroborationClaim`.
+Free-text is excluded by construction (it never produces a
+:class:`ReportedStatement`).
+"""
+
+
+class ReportedStatement(_FrozenModel):
+    """One public testimony statement reduced from a meeting transcript (Task 13.5.2).
+
+    The engine-free DTO :func:`meetings.manager.derive_reported_testimony`
+    emits and :func:`agents.memory.store.absorb_reported_testimony` ingests as
+    ``provenance="reported"`` episodic content -- the "social info is a scalar,
+    not content" fix from the 2026-06-25 memory diagnosis (workflow
+    ``wg54kfoxy``). It mirrors the scalar twin
+    (:class:`meetings.manager.MeetingBeliefEvidence`) but carries the WHAT of a
+    statement, not a suspicion delta: who spoke (``speaker``), the structured
+    ``kind``, who it is about (``subject``), and the optional tick window / room.
+
+    The optional fields are populated per ``kind``:
+
+    * ``saw_player`` -- ``from_tick == to_tick`` (the sighting tick), ``room``, and
+      any ``co_present`` companions the sighting publicly named (the "who was with
+      whom" evidence the structured schema carries; Task 13.5.2, Codex P2).
+    * ``alibi`` -- the inclusive ``from_tick``/``to_tick`` window and ``room``.
+    * ``accusation`` -- ``subject`` only (no tick, no room).
+    * ``corroboration`` -- ``from_tick == to_tick`` (the corroborated tick); no room.
+
+    Frozen and ``extra='forbid'`` like every meeting DTO, so the reduction is a
+    pure, replay-deterministic function of the recorded ``MeetingResult``.
+    """
+
+    speaker: PlayerId
+    kind: ReportedStatementKind
+    subject: PlayerId
+    from_tick: int | None = None
+    to_tick: int | None = None
+    room: RoomId | None = None
+    co_present: tuple[PlayerId, ...] = ()
+
+
+# ---------------------------------------------------------------------------
 # Voting (DESIGN.md §5.5)
 # ---------------------------------------------------------------------------
 
@@ -336,6 +389,8 @@ __all__ = [
     "MeetingTurn",
     "ObservationClaim",
     "PlayerId",
+    "ReportedStatement",
+    "ReportedStatementKind",
     "RoomId",
     "SawPlayerObservation",
     "TaskId",

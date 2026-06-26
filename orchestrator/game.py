@@ -30,7 +30,9 @@ from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
     absorb_meeting_evidence,
+    absorb_reported_testimony,
     render_for_prompt,
+    testimony_as_content_enabled,
 )
 from agents.perception import ingest_packet
 from agents.strategic.prompts import (
@@ -68,11 +70,13 @@ from meetings.manager import (
     StatementPromptRenderer,
     SuspicionEntry,
     VotePromptRenderer,
+    derive_reported_testimony,
     extract_belief_evidence,
 )
 from meetings.schemas import (
     FoundBodyObservation,
     MeetingResult,
+    ReportedStatement,
 )
 from meetings.transcript import MeetingTriggerKind
 from observation.action_intent import ActionIntent
@@ -400,6 +404,29 @@ class BeliefPersistingAgent(Protocol):
         accused: tuple[PlayerId, ...],
         corroborated: tuple[PlayerId, ...],
         contradicted: tuple[PlayerId, ...],
+    ) -> None: ...
+
+
+@runtime_checkable
+class ReportedTestimonyAgent(Protocol):
+    """Agent that folds a meeting's public testimony into memory as CONTENT (Task 13.5.2).
+
+    The content twin of :class:`BeliefPersistingAgent`: where that capability
+    folds a meeting into a scalar suspicion Δ, this one preserves the WHAT of
+    public speech as ``provenance="reported"`` episodic rows and populates the
+    alibi map (the 2026-06-25 memory diagnosis, workflow ``wg54kfoxy``: "social
+    info is a scalar, not content"). A SEPARATE, OPTIONAL capability for the same
+    reason :class:`BeliefPersistingAgent` is one -- a scripted / packet-recording
+    test agent without a memory store has nothing to ingest -- and additive, so
+    no existing agent must implement it. :func:`_absorb_meeting_beliefs` calls it
+    per living agent only when :func:`testimony_as_content_enabled` is ON, so the
+    flag-OFF path is byte-identical to today.
+    """
+
+    def absorb_reported_testimony(
+        self,
+        *,
+        statements: tuple[ReportedStatement, ...],
     ) -> None: ...
 
 
@@ -1537,6 +1564,18 @@ def _absorb_meeting_beliefs(
     """
 
     evidence = extract_belief_evidence(result, trigger_kind=trigger_kind)
+    # Task 13.5.2: the reported-testimony content fold rides the SAME
+    # per-living-agent loop as the scalar belief fold, gated on the
+    # ``AILIBI_TESTIMONY_AS_CONTENT`` flag (resolved once here, like
+    # ``llm.provider`` resolves the provider). Flag OFF (the default) -> the
+    # derivation never runs and no reported row is ingested, so the live game is
+    # byte-identical to pre-task HEAD. The derivation is a pure function of the
+    # recorded ``result``, identical to the replay loader's, so reconstruction
+    # stays byte-identical.
+    testimony_enabled = testimony_as_content_enabled()
+    statements: tuple[ReportedStatement, ...] = (
+        derive_reported_testimony(result) if testimony_enabled else ()
+    )
     for player_id in sorted(state.players):
         if not state.players[player_id].alive:
             continue
@@ -1547,6 +1586,13 @@ def _absorb_meeting_beliefs(
                 corroborated=evidence.corroborated,
                 contradicted=evidence.contradicted,
             )
+        # Reported content is ADDITIVE narrative, never a suspicion Δ -- it runs
+        # AFTER the scalar fold (so the meeting-boundary marker is already
+        # appended) and is wholly separate from it. NOT teammate-firewalled: the
+        # capability ingests public speech faithfully (the scalar firewall above
+        # is unchanged).
+        if testimony_enabled and isinstance(agent, ReportedTestimonyAgent):
+            agent.absorb_reported_testimony(statements=statements)
 
 
 def _assert_no_emergency_opening_body(
@@ -1877,6 +1923,23 @@ class TacticalAgent:
             contradicted=contradicted,
         )
 
+    def absorb_reported_testimony(
+        self,
+        *,
+        statements: tuple[ReportedStatement, ...],
+    ) -> None:
+        """Fold one meeting's public testimony into memory as content (Task 13.5.2).
+
+        Implements :class:`ReportedTestimonyAgent` by delegating to the composite
+        store (``agents.memory.store.absorb_reported_testimony``), which appends
+        ``provenance="reported"`` rows for OTHER speakers' structured claims and
+        populates the alibi map on the SAME :class:`AgentMemory` the scalar fold
+        and the meeting renderer read. Only invoked when the
+        ``AILIBI_TESTIMONY_AS_CONTENT`` flag is ON.
+        """
+
+        absorb_reported_testimony(self._memory, statements=statements)
+
     def note_meeting_concluded(
         self,
         *,
@@ -1950,6 +2013,7 @@ __all__ = [
     "MeetingRunner",
     "Outcome",
     "ROSTER_PRESETS",
+    "ReportedTestimonyAgent",
     "RosterPreset",
     "TacticalAgent",
     "apply_meeting_result",

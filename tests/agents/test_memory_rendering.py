@@ -16,7 +16,7 @@ from typing import Any, cast
 
 import pytest
 
-from agents.memory.beliefs import AlibiClaim, ContradictionRef
+from agents.memory.beliefs import ContradictionRef
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
@@ -375,11 +375,16 @@ class TestBeliefsAndContradictions:
         assert "- p-4: trust 0.80" in view
 
     def test_beliefs_section_omits_neutral_players(self) -> None:
+        # A player known to the belief store but at neutral suspicion AND trust
+        # (and with no recorded alibi) carries no signal and is omitted. Before
+        # Task 13.5.2 this test seeded the known-but-neutral player with a dead
+        # ``record_alibi`` call; that path now WIRES an alibi render (the
+        # testimony-as-content lever), so the neutral player is seeded here by an
+        # adjust-and-revert that leaves suspicion back at 0.5 without an alibi.
         memory = AgentMemory()
         memory.episodic.append(_self_state_event(tick=0))
-        memory.beliefs.record_alibi(
-            AlibiClaim(player_id="p-9", tick=10, room="ADMIN", source="p-9")
-        )
+        memory.beliefs.adjust_suspicion("p-9", delta=0.2)
+        memory.beliefs.adjust_suspicion("p-9", delta=-0.2)
 
         view = render_for_prompt(memory)
 

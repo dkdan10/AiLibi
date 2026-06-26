@@ -41,6 +41,13 @@ from observation.packet import (
 
 PROVENANCE_OBSERVED: Final[str] = "observed"
 PROVENANCE_INFERRED: Final[str] = "inferred"
+# Public testimony heard at a meeting (Task 13.5.2; 2026-06-25 memory diagnosis,
+# workflow `wg54kfoxy`: "social info is a scalar, not content"). A meeting
+# speaker's STRUCTURED claim/observation about another player, ingested as
+# episodic content by :func:`agents.memory.store.absorb_reported_testimony` and
+# rendered self-framed as an UNVERIFIED claim (strictly below first-hand
+# salience). Not first-hand: the recipient did not perceive it, it was stated.
+PROVENANCE_REPORTED: Final[str] = "reported"
 
 EVENT_SELF_STATE: Final[str] = "self_state"
 EVENT_OWN_KILL: Final[str] = "own_kill"
@@ -50,6 +57,10 @@ EVENT_SAW_BODY: Final[str] = "saw_body"
 EVENT_HEARD_VENT_USE: Final[str] = "heard_vent_use"
 EVENT_HEARD_SABOTAGE_ALARM: Final[str] = "heard_sabotage_alarm"
 EVENT_GLOBAL_STATUS: Final[str] = "global_status"
+# Episodic type for a reported-testimony row (Task 13.5.2). Written only by
+# :func:`agents.memory.store.absorb_reported_testimony`, never by
+# :func:`ingest_packet` (testimony is meeting content, not packet perception).
+EVENT_REPORTED_TESTIMONY: Final[str] = "reported_testimony"
 
 _AUDIBLE_EVENT_TYPES: Final[Mapping[str, str]] = {
     "vent_use_heard": EVENT_HEARD_VENT_USE,
@@ -329,10 +340,12 @@ __all__ = [
     "EVENT_HEARD_SABOTAGE_ALARM",
     "EVENT_HEARD_VENT_USE",
     "EVENT_OWN_KILL",
+    "EVENT_REPORTED_TESTIMONY",
     "EVENT_SAW_BODY",
     "EVENT_SAW_PLAYER",
     "EVENT_SELF_STATE",
     "PROVENANCE_INFERRED",
     "PROVENANCE_OBSERVED",
+    "PROVENANCE_REPORTED",
     "ingest_packet",
 ]
