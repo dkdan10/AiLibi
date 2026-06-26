@@ -434,12 +434,21 @@ class ObservationService:
 
         Movement perception (Task 13.5.4, 2026-06-25 memory diagnosis). The
         engine emits a ``MovedEvent`` (from_room→to_room) per move; this surfaces
-        it for an actor the observer can currently SEE -- WITNESS-gated on the
-        SAME ``visibility.visible_player_ids`` the ``saw_player`` channel uses
-        (the actor has arrived in ``to_room`` and is co-located / in vision), so
-        the §1.3 / §4.7 firewall and the leak suite hold for free: a movement the
-        observer could not see never appears. A no-op move (``from_room ==
-        to_room``) is not a transition and is skipped.
+        it to an observer who WITNESSED THE TRANSITION -- gated on the observer
+        being able to see the DEPARTURE room (``event.from_room`` in
+        ``visibility.visible_rooms``), not merely the actor's post-move position.
+        ``MovedEvent`` carries no witness set (unlike a kill/vent), and gating on
+        the post-advance ``visible_player_ids`` (the actor's ``to_room``) was
+        wrong (Codex P2): it attributed the origin to an observer who only saw
+        the ARRIVAL -- leaking ``from_room`` to a late-arriver -- and dropped the
+        departure for an observer left behind in ``from_room`` who actually saw
+        the actor leave. Seeing the source room IS the departure-witness
+        condition (in the room-graph an observer in / adjacent-to ``from_room``
+        saw the actor there and saw it leave), so the §1.3 / §4.7 firewall and
+        the leak suite hold: a transition the observer could not witness never
+        appears, and an observer who only saw the arrival still gets the plain
+        ``saw_player`` for ``to_room`` (just not the origin). A no-op move
+        (``from_room == to_room``) is not a transition and is skipped.
 
         Gated on :func:`movement_perception_enabled`: OFF (the default) returns
         the empty tuple, so the packet -- and every episodic store / render /
@@ -451,14 +460,14 @@ class ObservationService:
 
         if not movement_perception_enabled():
             return ()
-        visible_player_ids = set(visibility.visible_player_ids)
+        visible_rooms = set(visibility.visible_rooms)
         moved: dict[PlayerId, MovedPlayerView] = {}
         for event in engine_events:
             if not isinstance(event, MovedEvent):
                 continue
             if event.from_room == event.to_room:
                 continue
-            if event.actor not in visible_player_ids:
+            if event.from_room not in visible_rooms:
                 continue
             moved[event.actor] = MovedPlayerView(
                 id=event.actor,

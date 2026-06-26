@@ -243,15 +243,18 @@ def render_for_prompt(
     # production perception has recorded the id on every tick since
     # Task 9.3.
     roster = _known_roster_ids(memory.episodic) if own_agent_id is not None else None
-    # Wire ``WorkingMemory.last_seen`` ← perceived movement (Task 13.5.4). The
-    # first live writer of the field, dead since Phase 2: each witnessed transition
-    # records "last seen in ``to_room`` at this tick" so the §6.6 belief-line
-    # suffix (``_format_last_seen_suffix``) finally renders. Empty unless the
-    # movement flag is ON (no ``saw_player_move`` rows exist when OFF), so the
-    # flag-OFF render -- and the belief suffix -- is byte-identical to pre-task
-    # HEAD.
+    # Fill ``working.last_seen`` ← perceived movement (Task 13.5.4), read by the
+    # belief-line suffix below (the R-6 composite-memory gate: render reads all
+    # three stores). Idempotent across repeated renders and firewall-suppressed
+    # (Codex P1/P2 -- see :func:`_record_movement_sightings`). Empty unless the
+    # movement flag is ON (no ``saw_player_move`` rows when OFF), so the suffix is
+    # byte-identical to pre-task HEAD.
     _record_movement_sightings(
-        memory.episodic, memory.working, own_agent_id=own_agent_id
+        memory.episodic,
+        memory.working,
+        own_agent_id=own_agent_id,
+        teammate_ids=teammate_ids,
+        body_sightings=_collect_body_sightings(memory.episodic),
     )
     beliefs_lines = _build_belief_lines(memory.beliefs, memory.working, roster=roster)
     contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
@@ -1414,23 +1417,30 @@ def _record_movement_sightings(
     working: WorkingMemory,
     *,
     own_agent_id: str | None,
+    teammate_ids: frozenset[str],
+    body_sightings: tuple[tuple[str, int], ...],
 ) -> None:
-    """Populate ``WorkingMemory.last_seen`` from witnessed movement (Task 13.5.4).
+    """Fill ``WorkingMemory.last_seen`` from witnessed movement (Task 13.5.4).
 
-    The render-time writer that finally wires the ``last_seen`` field dead since
-    Phase 2 (2026-06-25 memory diagnosis). The production ``ingest_packet`` call
-    path threads only the episodic + belief stores, not working memory, so the
-    sighting is recorded here -- the one place that holds the composite
-    :class:`AgentMemory` -- from the first-hand ``saw_player_move`` episodic rows:
+    The §6.6 render reads ``working.last_seen`` (the R-6 composite-memory gate),
+    so this writer fills it from the first-hand ``saw_player_move`` episodic rows:
     each records the actor "last seen in ``to_room`` at the move tick", so the
-    §6.6 belief-line suffix renders. Pure and deterministic: ``recent`` returns
-    rows in non-decreasing tick order, which is exactly the order
-    :meth:`WorkingMemory.record_sighting` requires, and a later render replays the
-    same rows idempotently (the latest per subject wins). A self-subject row never
-    arises (the witness is never in its own ``visible_player_ids``); the
-    ``own_agent_id`` guard is a defensive backstop mirroring the render
-    suppression. No ``saw_player_move`` rows exist when the movement flag is OFF,
-    so ``last_seen`` stays empty and the suffix is byte-identical to HEAD.
+    belief-line suffix renders.
+
+    IDEMPOTENT across repeated renders (a refreshed meeting turn, a vote prompt,
+    the Task 13.5.5 per-turn re-render): ``working.last_seen`` persists between
+    renders, so a row whose tick is NOT after the player's already-recorded
+    last-seen is skipped -- re-processing the same rows never trips
+    :meth:`WorkingMemory.record_sighting`'s non-decreasing-tick guard, which the
+    earlier unconditional writer did on the second render (Codex P1).
+
+    The §4.7 firewall is applied exactly as the sighting render
+    (:func:`_sighting_is_suppressed`): a self-subject row, and -- for an impostor
+    -- a TEAMMATE moving into a kill-window body room, are skipped, so the
+    last-seen suffix can never reintroduce the teammate-at-scene own-goal the
+    movement render line itself suppresses (Codex P2). No ``saw_player_move`` rows
+    exist when the movement flag is OFF, so ``last_seen`` stays empty and the
+    suffix is byte-identical to HEAD.
     """
 
     for event in episodic.recent(since_tick=0):
@@ -1440,7 +1450,22 @@ def _record_movement_sightings(
         to_room = event.payload.get("to_room")
         if not isinstance(player_id, str) or not isinstance(to_room, str):
             continue
-        if own_agent_id is not None and player_id == own_agent_id:
+        if _sighting_is_suppressed(
+            player_id=player_id,
+            room=to_room,
+            tick=event.tick,
+            action=None,
+            own_agent_id=own_agent_id,
+            teammate_ids=teammate_ids,
+            body_sightings=body_sightings,
+        ):
+            continue
+        previous = working.last_seen(player_id)
+        if previous is not None and event.tick < previous.tick:
+            # Idempotency guard (Codex P1): a re-render replays older rows into a
+            # ``last_seen`` that already holds a later tick; recording the older
+            # one would trip the backwards-tick guard. Skipping it leaves the
+            # latest-per-subject value, so repeated renders are stable.
             continue
         working.record_sighting(player_id=player_id, room=to_room, tick=event.tick)
 
@@ -1459,6 +1484,12 @@ def _build_belief_lines(
     row) and is skipped rather than rendered into the prompt. ``None``
     renders every known row (legacy fixtures without the 9.3 self
     channel, where the roster is underivable).
+
+    Reads ``working.last_seen`` for the last-seen suffix (the R-6
+    composite-memory gate: render reads all three stores). The field is filled
+    by :func:`_record_movement_sightings` from the witnessed ``saw_player_move``
+    rows (firewall-suppressed); empty when the movement flag is OFF, so the
+    suffix is byte-identical to pre-task HEAD.
     """
 
     lines: list[str] = []
@@ -1467,13 +1498,11 @@ def _build_belief_lines(
             continue
         belief = beliefs.view(player_id)
         belief_text = _format_belief_score(belief)
-        # last_seen render hook: WIRED by Task 13.5.4 (movement perception).
-        # ``record_sighting`` is now called -- via :func:`_record_movement_sightings`
-        # at render time -- for every witnessed room→room transition, so this
-        # suffix renders "last seen in ROOM at tick T" for a subject the agent
-        # saw move. It stays empty (suffix absent, byte-identical to pre-13.5.4
-        # HEAD) when ``AILIBI_MOVEMENT_PERCEPTION`` is OFF, because no
-        # ``saw_player_move`` rows exist to feed ``working.last_seen``.
+        # last_seen render hook (Task 13.5.4): the "last seen in ROOM at tick T"
+        # suffix for a subject the agent witnessed move. Filled in
+        # ``working.last_seen`` by :func:`_record_movement_sightings`
+        # (firewall-suppressed); empty (suffix absent, byte-identical to
+        # pre-13.5.4 HEAD) when ``AILIBI_MOVEMENT_PERCEPTION`` is OFF.
         last_seen_suffix = _format_last_seen_suffix(working.last_seen(player_id))
         # alibi_map render (Task 13.5.2): the now-populated ``PlayerBelief.alibis``
         # list, written by :func:`absorb_reported_testimony` from each public

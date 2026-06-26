@@ -1169,6 +1169,58 @@ class TestMovementPerceptionRender:
         assert "last seen in STORAGE at tick 9" in view
         assert "last seen in ADMIN at tick 4" not in view
 
+    def test_repeated_render_is_idempotent_after_two_moves(self) -> None:
+        # Codex P1: render is called repeatedly (meeting turns, vote prompts, the
+        # 13.5.5 per-turn re-render). With two transitions for one player, a second
+        # render must not trip ``record_sighting``'s non-decreasing-tick guard on
+        # the replayed OLDER row -- it stays the latest-per-subject value.
+        memory = AgentMemory()
+        memory.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
+        memory.beliefs.adjust_suspicion("p-3", delta=0.3)
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=4, player_id="p-3", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=9, player_id="p-3", from_room="ADMIN", to_room="STORAGE"
+            )
+        )
+
+        first = render_for_prompt(memory)
+        second = render_for_prompt(memory)  # must not raise on the replayed tick-4
+
+        assert first == second
+        assert "last seen in STORAGE at tick 9" in second
+
+    def test_teammate_move_into_kill_window_room_is_suppressed(self) -> None:
+        # §4.7 firewall (Codex P2): an impostor that witnessed a TEAMMATE move into
+        # a room where it also saw a fresh body must NOT surface that as a last-seen
+        # suffix (nor a movement line) -- the teammate-at-scene own-goal the
+        # sighting render already suppresses. last_seen must be suppressed too.
+        memory = AgentMemory()
+        memory.episodic.append(
+            _self_state_event(
+                tick=0, role="IMPOSTOR", agent_id="p-9", fellow_impostor_ids=("p-1",)
+            )
+        )
+        memory.beliefs.adjust_suspicion("p-1", delta=0.3)  # a belief row exists
+        memory.episodic.append(
+            _saw_player_move_event(
+                tick=8, player_id="p-1", from_room="CAFETERIA", to_room="ADMIN"
+            )
+        )
+        memory.episodic.append(
+            _saw_body_event(tick=8, body_id="b", victim_id="p-3", room="ADMIN")
+        )
+
+        view = render_for_prompt(memory)
+
+        assert memory.working.last_seen("p-1") is None  # suppressed, not wired
+        assert "last seen in ADMIN" not in view
+        assert "You saw p-1 move" not in view  # the movement line is suppressed too
+
     def test_movement_line_outranks_reconstructed_transition_salience(self) -> None:
         # A directly-witnessed transit is first-hand class and ranks above a bare
         # ``saw_player`` snapshot: under a tight budget the move survives and the

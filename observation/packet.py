@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from typing import Literal, TypeAlias
+from typing import Any, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+)
 
 BodyId: TypeAlias = str
 PlayerId: TypeAlias = str
@@ -167,3 +173,18 @@ class ObservationPacket(_FrozenModel):
     # to pre-task HEAD. Carried as a top-level packet field (not a ``PlayerView``
     # key) because the leak suite pins ``PlayerView``'s key set exactly.
     moved_players: tuple[MovedPlayerView, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        # Flag-OFF byte-identity (Task 13.5.4, Codex P2). The audit log writes
+        # ``packet.model_dump(mode="json")`` verbatim (observation/audit.py), so an
+        # always-present ``moved_players`` default would add ``"moved_players": []``
+        # to every packet/audit line and committed replay even when
+        # ``AILIBI_MOVEMENT_PERCEPTION`` is OFF -- a byte-level divergence from
+        # pre-task HEAD with NO re-record. Omit the field when empty so a flag-OFF
+        # packet serializes byte-identically; when the lever is ON and a transition
+        # was witnessed the non-empty tuple is dumped normally.
+        data: dict[str, Any] = handler(self)
+        if not self.moved_players:
+            data.pop("moved_players", None)
+        return data
