@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,7 @@ from engine.events import (
     ActionRejectedEvent,
     EngineEvent,
     KilledEvent,
+    MovedEvent,
     TaskCompletedEvent,
     TaskProgressedEvent,
     VentEnteredEvent,
@@ -22,11 +24,45 @@ from observation.packet import (
     AudibleEvent,
     BodyView,
     GlobalView,
+    MovedPlayerView,
     ObservationPacket,
     OwnKillView,
     PlayerView,
     SelfView,
 )
+
+# Task 13.5.4 feature flag: movement perception. Resolved once like
+# ``AILIBI_LLM_PROVIDER`` (``llm/provider.py``) / ``AILIBI_TESTIMONY_AS_CONTENT``
+# (``agents/memory/store.py``): OFF by default, so a build that never sets it is
+# BYTE-IDENTICAL to pre-task HEAD -- the ``ObservationPacket.moved_players`` tuple
+# stays empty, no perceived-movement episodic row is ingested, ``record_sighting``
+# is never called, and the "last seen in ROOM at tick T" suffix never renders. The
+# 9B smoke and the Phase-14 re-record run it ON. Read at the observation boundary
+# (the orchestrator-owned engine→agent translation) so BOTH the live game loop and
+# the replay loader gate identically with no caller change; the signal re-derives
+# from the recorded ``MovedEvent`` on replay, so committed replays reconstruct
+# byte-identically.
+ENV_MOVEMENT_PERCEPTION: Final[str] = "AILIBI_MOVEMENT_PERCEPTION"
+_MOVEMENT_FLAG_TRUE: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
+
+
+def movement_perception_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 13.5.4 movement-perception lever is ON.
+
+    Reads :data:`ENV_MOVEMENT_PERCEPTION` from ``env`` (defaulting to the real
+    process environment), mirroring how :func:`llm.provider.resolve_provider`
+    reads ``AILIBI_LLM_PROVIDER``. Default OFF: an unset / empty / unrecognised
+    value is ``False`` so the merge is byte-identical to today and the existing
+    leak/golden suite is untouched. Accepts ``1/true/yes/on`` (case-insensitive).
+    The ``env`` argument lets tests toggle the flag deterministically without
+    mutating ``os.environ``.
+    """
+
+    environment = env if env is not None else os.environ
+    return environment.get(ENV_MOVEMENT_PERCEPTION, "").strip().lower() in (
+        _MOVEMENT_FLAG_TRUE
+    )
+
 
 # -- Impostor blending: the pretend-task channel (Task 10.14, DESIGN.md §3.4,
 # §4.5; audit-2026-06-13-1816 D-D-1) ----------------------------------------
@@ -204,6 +240,10 @@ class ObservationService:
             visibility=visibility,
             observed_actions=observed_actions,
         )
+        moved_players = self._moved_players_for_agent(
+            visibility=visibility,
+            engine_events=engine_events,
+        )
         cooldown = (
             world_state.cooldowns.get(agent_id) if player.role == "IMPOSTOR" else None
         )
@@ -252,6 +292,7 @@ class ObservationService:
             ),
             global_state=self._global_view(world_state=world_state),
             cooldown=cooldown,
+            moved_players=moved_players,
         )
         return packet
 
@@ -382,6 +423,49 @@ class ObservationService:
                 room=actor.room,
             )
         return observed_actions
+
+    def _moved_players_for_agent(
+        self,
+        *,
+        visibility: VisibilityResult,
+        engine_events: Sequence[EngineEvent],
+    ) -> tuple[MovedPlayerView, ...]:
+        """Room→room transitions the observer DIRECTLY witnessed this tick.
+
+        Movement perception (Task 13.5.4, 2026-06-25 memory diagnosis). The
+        engine emits a ``MovedEvent`` (from_room→to_room) per move; this surfaces
+        it for an actor the observer can currently SEE -- WITNESS-gated on the
+        SAME ``visibility.visible_player_ids`` the ``saw_player`` channel uses
+        (the actor has arrived in ``to_room`` and is co-located / in vision), so
+        the §1.3 / §4.7 firewall and the leak suite hold for free: a movement the
+        observer could not see never appears. A no-op move (``from_room ==
+        to_room``) is not a transition and is skipped.
+
+        Gated on :func:`movement_perception_enabled`: OFF (the default) returns
+        the empty tuple, so the packet -- and every episodic store / render /
+        ``last_seen`` derived from it -- is byte-identical to pre-task HEAD. The
+        result is sorted by actor id for replay-deterministic packet ordering.
+        Reading the engine ``MovedEvent`` here (the orchestrator-owned boundary)
+        keeps ``agents/`` engine-free.
+        """
+
+        if not movement_perception_enabled():
+            return ()
+        visible_player_ids = set(visibility.visible_player_ids)
+        moved: dict[PlayerId, MovedPlayerView] = {}
+        for event in engine_events:
+            if not isinstance(event, MovedEvent):
+                continue
+            if event.from_room == event.to_room:
+                continue
+            if event.actor not in visible_player_ids:
+                continue
+            moved[event.actor] = MovedPlayerView(
+                id=event.actor,
+                from_room=event.from_room,
+                to_room=event.to_room,
+            )
+        return tuple(moved[actor_id] for actor_id in sorted(moved))
 
     def _own_kill_for_agent(
         self,

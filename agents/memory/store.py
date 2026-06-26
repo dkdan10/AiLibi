@@ -26,7 +26,11 @@ from agents.memory.beliefs import (
 )
 from agents.memory.episodic import EpisodicEvent, MemoryStore
 from agents.memory.working import LastSeen, WorkingMemory
-from agents.perception import EVENT_REPORTED_TESTIMONY, PROVENANCE_REPORTED
+from agents.perception import (
+    EVENT_REPORTED_TESTIMONY,
+    EVENT_SAW_PLAYER_MOVE,
+    PROVENANCE_REPORTED,
+)
 from meetings.schemas import ReportedStatement
 
 PlayerId: TypeAlias = str
@@ -82,6 +86,14 @@ _SALIENCE_VENT_WITNESSED: Final[int] = 85
 _SALIENCE_VENT_HEARD: Final[int] = 75
 _SALIENCE_SABOTAGE_HEARD: Final[int] = 65
 _SALIENCE_SAW_PLAYER_ACTIVE: Final[int] = 55
+# A DIRECTLY-witnessed room→room transition (Task 13.5.4). First-hand sighting
+# class -- the witness actually saw the actor move -- so it ranks just above a
+# bare ``saw_player`` snapshot (it carries strictly more information: where the
+# actor came FROM) and well above the RECONSTRUCTED within-vision breadcrumb
+# (``_SALIENCE_TRANSITION``=48), which is inferred from consecutive deltas rather
+# than seen. A tight budget therefore keeps the witnessed transit over the
+# reconstructed one.
+_SALIENCE_SAW_PLAYER_MOVE: Final[int] = 52
 _SALIENCE_SAW_PLAYER: Final[int] = 50
 # A within-vision entry/exit (Task 13.9), derived from consecutive own-room
 # ``saw_player`` deltas. Ranked just below a direct sighting: it is valuable
@@ -231,6 +243,16 @@ def render_for_prompt(
     # production perception has recorded the id on every tick since
     # Task 9.3.
     roster = _known_roster_ids(memory.episodic) if own_agent_id is not None else None
+    # Wire ``WorkingMemory.last_seen`` ← perceived movement (Task 13.5.4). The
+    # first live writer of the field, dead since Phase 2: each witnessed transition
+    # records "last seen in ``to_room`` at this tick" so the §6.6 belief-line
+    # suffix (``_format_last_seen_suffix``) finally renders. Empty unless the
+    # movement flag is ON (no ``saw_player_move`` rows exist when OFF), so the
+    # flag-OFF render -- and the belief suffix -- is byte-identical to pre-task
+    # HEAD.
+    _record_movement_sightings(
+        memory.episodic, memory.working, own_agent_id=own_agent_id
+    )
     beliefs_lines = _build_belief_lines(memory.beliefs, memory.working, roster=roster)
     contradiction_lines = _build_contradiction_lines(memory.beliefs, roster=roster)
 
@@ -533,6 +555,10 @@ def _known_roster_ids(episodic: MemoryStore) -> frozenset[str]:
     * ``self_state`` -- the recipient's own ``agent_id`` plus the
       privileged ``fellow_impostor_ids`` self channel;
     * ``saw_player`` -- every first-hand sighting's ``player_id``;
+    * ``saw_player_move`` -- every witnessed transition's mover (Task 13.5.4);
+      a player the agent saw move is a witnessed roster member (in practice it
+      always co-occurs with a ``saw_player`` row under the same visibility gate,
+      so this adds nothing flag-OFF and is byte-identical to HEAD);
     * ``saw_body`` -- every discovered body's ``victim_id``.
 
     Players co-spawn in one room (``orchestrator.seeder``), so in
@@ -557,7 +583,7 @@ def _known_roster_ids(episodic: MemoryStore) -> frozenset[str]:
             fellows = event.payload.get("fellow_impostor_ids")
             if isinstance(fellows, (tuple, list)):
                 ids.update(str(player_id) for player_id in fellows)
-        elif event.type == _EVENT_SAW_PLAYER:
+        elif event.type in (_EVENT_SAW_PLAYER, EVENT_SAW_PLAYER_MOVE):
             player_id = event.payload.get("player_id")
             if isinstance(player_id, str):
                 ids.add(player_id)
@@ -1137,6 +1163,17 @@ def _build_observations(
                 observations.append(obs)
             continue
 
+        if event.type == EVENT_SAW_PLAYER_MOVE:
+            obs = _render_saw_player_move(
+                event,
+                own_agent_id=own_agent_id,
+                teammate_ids=teammate_ids,
+                body_sightings=body_sightings,
+            )
+            if obs is not None:
+                observations.append(obs)
+            continue
+
         if event.type == EVENT_REPORTED_TESTIMONY:
             obs = _render_reported_testimony(event)
             if obs is not None:
@@ -1248,6 +1285,60 @@ def _render_saw_player(
     )
 
 
+def _render_saw_player_move(
+    event: EpisodicEvent,
+    *,
+    own_agent_id: str | None = None,
+    teammate_ids: frozenset[str] = frozenset(),
+    body_sightings: tuple[tuple[str, int], ...] = (),
+) -> _Observation | None:
+    """Render one DIRECTLY-witnessed room→room transition (Task 13.5.4).
+
+    A first-hand sighting-class line ("You saw p-3 move from CAFETERIA to ADMIN
+    at tick 5"), distinct from the RECONSTRUCTED within-vision breadcrumb
+    (``_collect_movement_breadcrumbs`` / ``_collect_transitions``): this is the
+    single-tick transit the witness actually saw, gated upstream exactly like a
+    ``saw_player`` sighting. The §4.7 firewall suppressions
+    (:func:`_sighting_is_suppressed`) are mirrored from ``_render_saw_player`` so
+    a self-subject move never garbles and an impostor's witnessed teammate transit
+    at a kill room/tick is dropped, just as the ordinary sighting line is.
+
+    A malformed payload (missing player / room) renders nothing, matching the
+    defensive ``.get`` convention of the sibling renderers.
+    """
+
+    player_id = event.payload.get("player_id")
+    from_room = event.payload.get("from_room")
+    to_room = event.payload.get("to_room")
+    if (
+        not isinstance(player_id, str)
+        or not isinstance(from_room, str)
+        or not isinstance(to_room, str)
+    ):
+        return None
+    # Suppression keys on the actor's CURRENT room (``to_room``, where the witness
+    # saw it), with no active action -- the same shape ``_render_saw_player`` uses
+    # for an ordinary sighting.
+    if _sighting_is_suppressed(
+        player_id=player_id,
+        room=to_room,
+        tick=event.tick,
+        action=None,
+        own_agent_id=own_agent_id,
+        teammate_ids=teammate_ids,
+        body_sightings=body_sightings,
+    ):
+        return None
+    return _Observation(
+        salience=_SALIENCE_SAW_PLAYER_MOVE,
+        tick=event.tick,
+        line=(
+            f"[tick {event.tick}] You saw {player_id} move from "
+            f"{from_room} to {to_room}."
+        ),
+    )
+
+
 def _render_reported_testimony(event: EpisodicEvent) -> _Observation | None:
     """Render one ``reported_testimony`` row as a self-framed unverified claim (Task 13.5.2).
 
@@ -1318,6 +1409,42 @@ def _render_heard(
     return _Observation(salience=salience, tick=event.tick, line=line)
 
 
+def _record_movement_sightings(
+    episodic: MemoryStore,
+    working: WorkingMemory,
+    *,
+    own_agent_id: str | None,
+) -> None:
+    """Populate ``WorkingMemory.last_seen`` from witnessed movement (Task 13.5.4).
+
+    The render-time writer that finally wires the ``last_seen`` field dead since
+    Phase 2 (2026-06-25 memory diagnosis). The production ``ingest_packet`` call
+    path threads only the episodic + belief stores, not working memory, so the
+    sighting is recorded here -- the one place that holds the composite
+    :class:`AgentMemory` -- from the first-hand ``saw_player_move`` episodic rows:
+    each records the actor "last seen in ``to_room`` at the move tick", so the
+    §6.6 belief-line suffix renders. Pure and deterministic: ``recent`` returns
+    rows in non-decreasing tick order, which is exactly the order
+    :meth:`WorkingMemory.record_sighting` requires, and a later render replays the
+    same rows idempotently (the latest per subject wins). A self-subject row never
+    arises (the witness is never in its own ``visible_player_ids``); the
+    ``own_agent_id`` guard is a defensive backstop mirroring the render
+    suppression. No ``saw_player_move`` rows exist when the movement flag is OFF,
+    so ``last_seen`` stays empty and the suffix is byte-identical to HEAD.
+    """
+
+    for event in episodic.recent(since_tick=0):
+        if event.type != EVENT_SAW_PLAYER_MOVE:
+            continue
+        player_id = event.payload.get("player_id")
+        to_room = event.payload.get("to_room")
+        if not isinstance(player_id, str) or not isinstance(to_room, str):
+            continue
+        if own_agent_id is not None and player_id == own_agent_id:
+            continue
+        working.record_sighting(player_id=player_id, room=to_room, tick=event.tick)
+
+
 def _build_belief_lines(
     beliefs: BeliefState,
     working: WorkingMemory,
@@ -1340,13 +1467,13 @@ def _build_belief_lines(
             continue
         belief = beliefs.view(player_id)
         belief_text = _format_belief_score(belief)
-        # last_seen render hook: DEAD in production today (2026-06-25
-        # memory-pipeline diagnosis, workflow `wg54kfoxy`). ``WorkingMemory``
-        # has no production writer (``record_sighting`` has zero non-test
-        # callers), so ``working.last_seen`` is always ``None`` at runtime and
-        # this suffix never renders. Wave C (Task 13.5.4, movement perception)
-        # wires ``last_seen`` ← perceived movement, at which point the suffix
-        # begins to appear on belief lines.
+        # last_seen render hook: WIRED by Task 13.5.4 (movement perception).
+        # ``record_sighting`` is now called -- via :func:`_record_movement_sightings`
+        # at render time -- for every witnessed room→room transition, so this
+        # suffix renders "last seen in ROOM at tick T" for a subject the agent
+        # saw move. It stays empty (suffix absent, byte-identical to pre-13.5.4
+        # HEAD) when ``AILIBI_MOVEMENT_PERCEPTION`` is OFF, because no
+        # ``saw_player_move`` rows exist to feed ``working.last_seen``.
         last_seen_suffix = _format_last_seen_suffix(working.last_seen(player_id))
         # alibi_map render (Task 13.5.2): the now-populated ``PlayerBelief.alibis``
         # list, written by :func:`absorb_reported_testimony` from each public
