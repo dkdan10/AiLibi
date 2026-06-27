@@ -92,6 +92,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from llm.client import CallKind, LLMResponse, TokenUsage
 from llm.provider import (
     _ERROR_MESSAGE_CHARS,
+    _FENCE_OPEN_PATTERN,
     _RAW_RESPONSE_CHARS,
     PROVIDER_FEATHERLESS,
     LLMCallFailure,
@@ -99,6 +100,12 @@ from llm.provider import (
     _compute_cost_usd,
     _extract_json_block,
 )
+
+# Reasoning-model marker pair some models emit inline around their chain of
+# thought (Qwen3 etc.). Used both by the ``fail_loud`` guard (to detect inline
+# reasoning) and by the ``strip`` path (to excise the block before extraction).
+_THINK_CLOSE_TAG: Final[str] = "</think>"
+_THINK_OPEN_TAG: Final[str] = "<think>"
 
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
@@ -284,6 +291,7 @@ class FeatherlessClient:
         # ``reasoning\n{JSON}`` and ``fail_loud`` would silently degrade to
         # ``strip``, a no-silent-fallbacks violation).
         reasoning = _detect_reasoning(raw.text, raw.reasoning_content, schema)
+        content = raw.text
         if reasoning is not None:
             if self._thinking_policy == "fail_loud":
                 raise RuntimeError(
@@ -294,10 +302,13 @@ class FeatherlessClient:
                     "discard it explicitly for the model sweep."
                 )
             # ``strip``: discard reasoning EXPLICITLY (logged, never silent).
-            # For structured calls the discard is performed by
-            # ``_extract_json_block`` below (it drops the prose/marker preamble
-            # and returns the JSON); the dedicated ``reasoning_content`` channel
-            # is never read into ``text``. This log makes that drop auditable.
+            # EXCISE a ``<think>...</think>`` reasoning block before extraction:
+            # the shared ``_extract_json_block`` returns the FIRST valid JSON
+            # object, so scratch/example JSON inside the reasoning would be
+            # picked up instead of the final answer. Removing the block first
+            # makes the extractor see the answer (a leading prose preamble
+            # without think tags is still safely skipped by the extractor).
+            content = _strip_reasoning_segment(content)
             _LOGGER.warning(
                 "FeatherlessClient discarding reasoning under "
                 "thinking_policy='strip' (model=%r): %s",
@@ -314,10 +325,10 @@ class FeatherlessClient:
             output_tokens=raw.completion_tokens,
             provider=PROVIDER_FEATHERLESS,
         )
-        # Pull the JSON object out of the raw text through the SAME shared
-        # extractor the Anthropic / Ollama clients use, so 7.6's normalization
-        # (which lands in that shared path) automatically covers Featherless.
-        text = _extract_json_block(raw.text, schema) if schema is not None else raw.text
+        # Pull the JSON object out of the (reasoning-stripped) text through the
+        # SAME shared extractor the Anthropic / Ollama clients use, so 7.6's
+        # normalization (which lands in that shared path) covers Featherless.
+        text = _extract_json_block(content, schema) if schema is not None else content
         if schema is not None:
             try:
                 schema.model_validate_json(text)
@@ -421,18 +432,40 @@ def _detect_reasoning(
     if reasoning_content.strip():
         return f"populated reasoning_content channel ({len(reasoning_content)} chars)"
     lowered = text.lower()
-    if "<think>" in lowered or "</think>" in lowered:
+    if _THINK_OPEN_TAG in lowered or _THINK_CLOSE_TAG in lowered:
         return "reasoning markers (<think>...</think>) in content"
     if schema is not None:
-        stripped = text.lstrip()
-        if stripped and not stripped.startswith("{") and not stripped.startswith("```"):
-            first_brace = stripped.find("{")
-            preamble = (
-                stripped if first_brace == -1 else stripped[:first_brace]
-            ).strip()
+        # Strip a leading code-fence opener FIRST so reasoning buried inside a
+        # fence (```json\nI think...\n{JSON}\n```) is still caught — a bare
+        # ``startswith("```")`` skip would let it through, and the shared
+        # extractor would then drop the prose silently (the exact gap the guard
+        # exists to close). Reuse the same fence-opener pattern the extractor
+        # strips so the two stay in lock-step.
+        body = _FENCE_OPEN_PATTERN.sub("", text.lstrip(), count=1).lstrip()
+        if body and not body.startswith("{"):
+            first_brace = body.find("{")
+            preamble = (body if first_brace == -1 else body[:first_brace]).strip()
             if preamble:
                 return f"leading prose preamble before JSON ({len(preamble)} chars)"
     return None
+
+
+def _strip_reasoning_segment(text: str) -> str:
+    """Excise a leading ``<think>...</think>`` reasoning block from ``text``.
+
+    Used by the ``strip`` thinking policy BEFORE :func:`_extract_json_block`:
+    that extractor returns the FIRST valid JSON object, so a JSON object inside
+    the reasoning (scratch notes, an example) would be selected instead of the
+    model's final answer. Returns the content after the LAST ``</think>`` (a
+    model may emit several blocks), left-stripped; if no closing tag is present
+    the text is returned unchanged — a leading prose preamble without think
+    tags is already handled safely by the extractor's first-valid-object scan.
+    """
+
+    close_at = text.rfind(_THINK_CLOSE_TAG)
+    if close_at == -1:
+        return text
+    return text[close_at + len(_THINK_CLOSE_TAG) :].lstrip()
 
 
 # Transient HTTP statuses worth a bounded retry: rate-limiting plus the 5xx

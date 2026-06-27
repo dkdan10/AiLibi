@@ -661,7 +661,9 @@ class TestFeatherlessRoundTrip:
 
     @real_provider
     def test_real_featherless_round_trip(self) -> None:
-        api_key = os.environ["FEATHERLESS_API_KEY"]
+        api_key = os.environ.get("FEATHERLESS_API_KEY")
+        if not api_key:
+            pytest.skip("FEATHERLESS_API_KEY not set (Anthropic-only real run)")
         meeting_model = (
             os.environ.get("AILIBI_LLM_MEETING_MODEL") or DEFAULT_FEATHERLESS_MODEL
         )
@@ -689,7 +691,9 @@ class TestFeatherlessRoundTrip:
 
     @real_provider
     def test_real_featherless_schema_constrained_round_trip(self) -> None:
-        api_key = os.environ["FEATHERLESS_API_KEY"]
+        api_key = os.environ.get("FEATHERLESS_API_KEY")
+        if not api_key:
+            pytest.skip("FEATHERLESS_API_KEY not set (Anthropic-only real run)")
         meeting_model = (
             os.environ.get("AILIBI_LLM_MEETING_MODEL") or DEFAULT_FEATHERLESS_MODEL
         )

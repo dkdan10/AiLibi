@@ -672,6 +672,25 @@ class TestThinkingFailLoud:
         )
         assert response.text == _VALID_BODY
 
+    def test_fenced_reasoning_preamble_raises(self) -> None:
+        # Reasoning buried INSIDE a code fence (```json\nI think...\n{JSON}\n```)
+        # must still trip fail_loud: the fence-opener is stripped before the
+        # prose check so the leading rationale is not silently accepted (Codex
+        # review P2). Without the fix the ``startswith("```")`` skip would let
+        # it through and the extractor would record only the JSON.
+        send = _send_returning(text=f"```json\nI think p-1 did it.\n{_VALID_BODY}\n```")
+        client = _client(send)
+
+        with pytest.raises(RuntimeError, match="leading prose preamble"):
+            asyncio.run(
+                client.complete(
+                    prompt="p",
+                    schema=_SampleReport,
+                    max_tokens=64,
+                    temperature=0.0,
+                )
+            )
+
 
 class TestThinkingStrip:
     """``strip`` discards reasoning EXPLICITLY (logged, never silent) so the
@@ -690,6 +709,27 @@ class TestThinkingStrip:
 
         assert response.text == _VALID_BODY
         _SampleReport.model_validate_json(response.text)
+
+    def test_think_block_with_embedded_json_returns_final_answer(self) -> None:
+        # The reasoning block carries its OWN (wrong) JSON object before the
+        # final answer. The shared extractor returns the FIRST valid object, so
+        # without excising the <think>...</think> block first it would record
+        # the scratch JSON, not the answer (Codex review P2). Strip mode must
+        # remove the block and return the real MeetingTurn/answer.
+        embedded = '{"agent_id": "wrong", "tick": 0, "free_text": "scratch"}'
+        send = _send_returning(
+            text=f"<think>let me draft {embedded} first</think>\n{_VALID_BODY}"
+        )
+        client = _client(send, thinking_policy="strip")
+
+        response = asyncio.run(
+            client.complete(
+                prompt="p", schema=_SampleReport, max_tokens=64, temperature=0.0
+            )
+        )
+
+        assert response.text == _VALID_BODY
+        assert "wrong" not in response.text
 
     def test_reasoning_content_channel_is_discarded_not_recorded(self) -> None:
         # The dedicated channel never enters ``text``; under strip it is simply
