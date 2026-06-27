@@ -14,11 +14,29 @@ on the constructor and never leak through the Protocol.
 This adapter is structurally cloned from :mod:`llm.ollama_client` — the closer
 template, which already solved lazy-import, an injectable ``send`` hook,
 $0-by-provider cost, fail-loud thinking, and the ``_raw_from_*`` test split.
-The OpenAI-compatible analogue of Ollama's ``format=schema.model_json_schema()``
-is a ``response_format`` of ``{"type": "json_schema", "json_schema": {"name":
-schema.__name__, "schema": schema.model_json_schema(), "strict": True}}`` —
-strict structured-output decoding. The response then routes through the SAME
-shared seam the Anthropic and Ollama adapters use:
+
+Structured output — ``response_format_mode`` (owner-ratified finding 2026-06-27)
+================================================================================
+
+Task 14.1's contract named the strict ``json_schema`` ``response_format`` as
+the OpenAI-compatible analogue of Ollama's ``format=schema.model_json_schema()``.
+LIVE testing against the Featherless slate (Qwen3-32B, Qwen3-30B-A3B, GLM-4-32B)
+showed that shape is **rejected with a deterministic HTTP 400** on every slate
+model — Featherless does not implement guided ``json_schema`` decoding for them
+(the only capability it advertises is ``tool_use``, and forced tool-calling is
+not honored either). ``response_format={"type":"json_object"}`` (syntactic-JSON
+mode) succeeds on every model, and the 32B-class models clear the
+structured-output parse bar on the production prompts under ``json_object`` (and
+even with no ``response_format`` at all — exactly how the Anthropic adapter has
+always worked: prompt + extract + validate + FailedCall, no constrained
+decoding).
+
+So the wire shape is a constructor knob, :data:`ResponseFormatMode`, defaulting
+to ``json_object``: ``json_schema`` is kept selectable for a future
+endpoint/model that supports it (and so 14.4 can A/B it), but it is never the
+default and there is NO silent fallback between modes — the mode is explicit and
+a rejected ``json_schema`` request fails loud. Regardless of mode the response
+routes through the SAME shared seam the Anthropic and Ollama adapters use:
 
 * :func:`llm.provider._extract_json_block` pulls the JSON object out of the
   raw model text — so 7.6's parse-tolerance normalization, which lands in that
@@ -64,9 +82,10 @@ contract Ollama already carries).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -100,6 +119,32 @@ ThinkingPolicy = Literal["fail_loud", "strip"]
 # mirrors the Ollama doctrine (a half-thinking run is refused, not recorded);
 # ``strip`` is the 14.4-sweep harness choice (reasoning discarded explicitly).
 DEFAULT_THINKING_POLICY: Final[ThinkingPolicy] = "fail_loud"
+
+ResponseFormatMode = Literal["json_object", "json_schema", "none"]
+# How a structured (schema-bearing) call asks Featherless for JSON:
+#
+# * ``json_object`` — ``response_format={"type":"json_object"}``: the model is
+#   forced to emit syntactically valid JSON. It does NOT constrain the schema
+#   shape; conformance is enforced afterward by the shared
+#   ``_extract_json_block`` -> ``model_validate_json`` -> FailedCall seam
+#   (exactly how the Anthropic adapter — which sends NO ``response_format`` —
+#   has always worked).
+# * ``json_schema`` — the strict ``{"type":"json_schema",...,"strict":True}``
+#   grammar shape. This is true constrained decoding WHERE THE BACKEND
+#   IMPLEMENTS IT (OpenAI, a vLLM server with guided decoding, local Ollama's
+#   GBNF). On the Featherless slate it is NOT implemented and is REJECTED with
+#   an HTTP 400, so it is an explicit opt-in for a future endpoint/model that
+#   supports it, never the default.
+# * ``none`` — send no ``response_format`` at all (the pure Anthropic shape).
+#
+# DEFAULT is ``json_object`` (owner-ratified deviation 2026-06-27 — see the
+# module docstring): live testing showed every Phase-14 slate model returns a
+# deterministic 400 to ``json_schema`` while ``json_object`` succeeds, and the
+# 32B-class models clear the structured-output parse bar on the production
+# prompts under ``json_object`` (and even with ``none``). There is NO silent
+# fallback between modes (AGENTS.md): the mode is chosen explicitly at
+# construction time; a rejected ``json_schema`` request fails loud.
+DEFAULT_RESPONSE_FORMAT_MODE: Final[ResponseFormatMode] = "json_object"
 
 
 class FeatherlessRawResponse(BaseModel):
@@ -145,6 +190,10 @@ class FeatherlessClient:
       ``chat_template_kwargs={"enable_thinking": ...}``. Default ``False``.
     * ``thinking_policy`` — the response-side policy (``fail_loud`` default /
       ``strip``). Distinct from ``request_thinking``.
+    * ``response_format_mode`` — how a structured call asks for JSON
+      (``json_object`` default / ``json_schema`` / ``none``). See
+      :data:`ResponseFormatMode`; ``json_object`` is the Featherless-supported
+      default (strict ``json_schema`` is rejected by the slate).
     * ``send`` — injectable transport hook used by unit tests in place of the
       real ``httpx`` POST. Defaults to ``None`` (real transport via
       :func:`_default_send`).
@@ -167,6 +216,7 @@ class FeatherlessClient:
         trigger_model: str = DEFAULT_FEATHERLESS_MODEL,
         request_thinking: bool = False,
         thinking_policy: ThinkingPolicy = DEFAULT_THINKING_POLICY,
+        response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
         send: FeatherlessSendHook | None = None,
     ) -> None:
         if not api_key:
@@ -178,6 +228,11 @@ class FeatherlessClient:
                 "FeatherlessClient thinking_policy must be 'fail_loud' or "
                 f"'strip', got {thinking_policy!r}"
             )
+        if response_format_mode not in ("json_object", "json_schema", "none"):
+            raise ValueError(
+                "FeatherlessClient response_format_mode must be 'json_object', "
+                f"'json_schema', or 'none', got {response_format_mode!r}"
+            )
         self._api_key = api_key
         # Normalize a trailing slash so ``{base_url}/chat/completions`` never
         # produces a double slash.
@@ -186,6 +241,7 @@ class FeatherlessClient:
         self._trigger_model = trigger_model
         self._request_thinking = request_thinking
         self._thinking_policy: ThinkingPolicy = thinking_policy
+        self._response_format_mode: ResponseFormatMode = response_format_mode
         self._send: FeatherlessSendHook = send if send is not None else _default_send
 
     async def complete(
@@ -204,22 +260,11 @@ class FeatherlessClient:
         # to the upstream Featherless endpoint.
         del agent_id
         chosen_model = model if model is not None else self._model_for(call_kind)
-        # Constrained (schema-shaped) decoding: the OpenAI-compatible analogue
-        # of Ollama's ``format=schema.model_json_schema()`` is a strict
-        # ``response_format`` json_schema. ``None`` when the caller wants free
-        # text. The json_schema ``name`` is ``schema.__name__``.
-        response_format = (
-            {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": schema.__name__,
-                    "schema": schema.model_json_schema(),
-                    "strict": True,
-                },
-            }
-            if schema is not None
-            else None
-        )
+        # Translate the engine-free ``schema`` into the wire ``response_format``
+        # per the configured mode (default ``json_object``; see
+        # :data:`DEFAULT_RESPONSE_FORMAT_MODE` and the module docstring). ``None``
+        # for a free-text call or the ``none`` mode.
+        response_format = self._response_format_for(schema)
         raw = await self._send(
             base_url=self._base_url,
             api_key=self._api_key,
@@ -277,8 +322,10 @@ class FeatherlessClient:
             try:
                 schema.model_validate_json(text)
             except ValidationError as exc:
-                # A model can emit schema-invalid JSON even under strict
-                # ``response_format``. Attach the cost + partial response to the
+                # Under ``json_object`` (the default) the model is only
+                # constrained to syntactic JSON, not the schema shape, so a
+                # schema-invalid body is expected and must be recoverable.
+                # Attach the cost + partial response to the
                 # propagating ValidationError (the same carrier the Anthropic /
                 # Ollama paths use) so the orchestrator's recording layer
                 # persists a recoverable failed-call audit row instead of
@@ -316,6 +363,33 @@ class FeatherlessClient:
         # but AGENTS.md mandates no silent fallbacks even for type-system-
         # guarded branches.
         raise ValueError(f"unknown call_kind: {call_kind!r}")
+
+    def _response_format_for(
+        self, schema: type[BaseModel] | None
+    ) -> dict[str, Any] | None:
+        """Build the wire ``response_format`` for ``schema`` per the active mode.
+
+        Returns ``None`` for a free-text call (``schema is None``) or the
+        ``none`` mode — the model is left unconstrained and the shared
+        extract→validate→FailedCall seam carries correctness. ``json_object``
+        forces syntactic JSON (the Featherless-supported default).
+        ``json_schema`` builds the strict grammar shape (``name`` =
+        ``schema.__name__``) — an explicit opt-in REJECTED by the current
+        slate; there is no silent fallback to another mode.
+        """
+
+        if schema is None or self._response_format_mode == "none":
+            return None
+        if self._response_format_mode == "json_object":
+            return {"type": "json_object"}
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema.__name__,
+                "schema": schema.model_json_schema(),
+                "strict": True,
+            },
+        }
 
 
 def _detect_reasoning(
@@ -361,6 +435,115 @@ def _detect_reasoning(
     return None
 
 
+# Transient HTTP statuses worth a bounded retry: rate-limiting plus the 5xx
+# family. Featherless surfaces a genuinely-busy upstream as a 500 ("This model
+# is busy, please try again later.") — distinct from a permanent 400 (an
+# unsupported ``json_schema`` request), which must fail loud immediately rather
+# than burn retries. The 50-seed re-record (Task 14.7) will hit transient 5xx,
+# so a small backoff keeps an atomic run from aborting on a blip.
+_RETRYABLE_STATUS: Final[frozenset[int]] = frozenset({429, 500, 502, 503, 504})
+_MAX_SEND_ATTEMPTS: Final[int] = 3
+_SEND_BACKOFF_BASE_S: Final[float] = 1.0
+
+
+class _HttpResponse(Protocol):
+    """Structural type for the bits of an ``httpx.Response`` the retry needs.
+
+    Declared structurally so :func:`_send_with_retry` is unit-testable with a
+    fake response and ``httpx`` stays a lazy, test-optional import. The
+    accessors are read-only properties so a real ``httpx.Response`` (whose
+    ``text`` is a property) structurally matches.
+    """
+
+    @property
+    def status_code(self) -> int: ...
+
+    @property
+    def text(self) -> str: ...
+
+    def json(self) -> Any: ...
+
+
+def _build_chat_payload(
+    *,
+    model: str,
+    prompt: str,
+    response_format: dict[str, Any] | None,
+    max_tokens: int,
+    temperature: float,
+    request_thinking: bool,
+) -> dict[str, Any]:
+    """Assemble the OpenAI-compatible chat-completions request body.
+
+    Pure (no I/O) so the wire shape is unit-testable without the transport.
+    ``response_format`` is omitted entirely when ``None`` (free-text / ``none``
+    mode). ``chat_template_kwargs.enable_thinking`` is the request-time thinking
+    toggle (the Qwen3 convention; harmlessly ignored by non-Qwen slate models,
+    verified live). ``max_tokens`` is the broadly-compatible OpenAI output cap
+    honored by Featherless (a vLLM-class server).
+    """
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "chat_template_kwargs": {"enable_thinking": request_thinking},
+    }
+    if response_format is not None:
+        payload["response_format"] = response_format
+    return payload
+
+
+def _format_send_error(status_code: int, body_text: str, model: str) -> str:
+    """Descriptive message for a non-2xx Featherless response.
+
+    Surfaces the status + a truncated body so an unsupported-``json_schema``
+    400 (or an exhausted-retry 5xx) is actionable, instead of a bare
+    ``httpx.HTTPStatusError`` crashing the meeting.
+    """
+
+    return (
+        f"Featherless chat-completions POST failed: HTTP {status_code} "
+        f"(model={model!r}): {body_text[:_ERROR_MESSAGE_CHARS]}"
+    )
+
+
+async def _send_with_retry(
+    poster: Callable[[], Awaitable[_HttpResponse]],
+    *,
+    model: str,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    max_attempts: int = _MAX_SEND_ATTEMPTS,
+    backoff_base: float = _SEND_BACKOFF_BASE_S,
+) -> Any:
+    """Call ``poster`` with bounded exponential backoff on transient statuses.
+
+    Returns the parsed JSON body on a 2xx. Retries the
+    :data:`_RETRYABLE_STATUS` family (rate-limit + 5xx, e.g. Featherless's
+    "model is busy" 500) up to ``max_attempts``; a non-retryable status (e.g. a
+    permanent 400 for an unsupported ``json_schema`` request) raises
+    immediately — no silent fallback (AGENTS.md). On exhaustion the last
+    status/body is surfaced via :func:`_format_send_error`. ``sleep`` is
+    injectable so the loop is unit-testable without real delay.
+    """
+
+    last_status = 0
+    last_text = ""
+    for attempt in range(max_attempts):
+        response = await poster()
+        if 200 <= response.status_code < 300:
+            return response.json()
+        last_status = response.status_code
+        last_text = response.text
+        retryable = response.status_code in _RETRYABLE_STATUS
+        if retryable and attempt < max_attempts - 1:
+            await sleep(backoff_base * (2**attempt))
+            continue
+        break
+    raise RuntimeError(_format_send_error(last_status, last_text, model))
+
+
 async def _default_send(
     *,
     base_url: str,
@@ -377,36 +560,32 @@ async def _default_send(
     # `bash scripts/check.sh` never need it loaded at import time.
     import httpx
 
-    payload: dict[str, Any] = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        # ``max_tokens`` is the broadly-compatible OpenAI output cap honored by
-        # Featherless (a vLLM-class server); it maps the Protocol's max_tokens
-        # so the knob is honored rather than silently dropped.
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        # Request-time thinking toggle: the Qwen3 convention for an
-        # OpenAI-compatible server is the chat-template kwarg ``enable_thinking``
-        # (the sibling of Ollama's top-level ``think=``). False suppresses
-        # reasoning so structured-output decoding stays clean.
-        "chat_template_kwargs": {"enable_thinking": request_thinking},
-    }
-    if response_format is not None:
-        payload["response_format"] = response_format
+    payload = _build_chat_payload(
+        model=model,
+        prompt=prompt,
+        response_format=response_format,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        request_thinking=request_thinking,
+    )
+    url = f"{base_url}/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}"}
 
     # A fresh client per call (closed via the async context manager) keeps the
     # module-level send-hook stateless — there is no FeatherlessClient instance
     # on which to hang a pooled client without introducing module-level state
     # (which the design forbids), mirroring the Ollama / Anthropic adapters.
     async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json=payload,
-            timeout=httpx.Timeout(600.0),
-        )
-        response.raise_for_status()
-        body = response.json()
+
+        async def _post() -> httpx.Response:
+            return await client.post(
+                url, headers=headers, json=payload, timeout=httpx.Timeout(600.0)
+            )
+
+        # Bounded retry on transient 5xx / rate-limit; a permanent 4xx (e.g. an
+        # unsupported json_schema request) fails loud with a descriptive error
+        # rather than a raw httpx.HTTPStatusError.
+        body = await _send_with_retry(_post, model=model)
 
     return _raw_from_response_body(body, model=model)
 
@@ -474,9 +653,11 @@ def _raw_from_response_body(
 __all__ = [
     "DEFAULT_FEATHERLESS_BASE_URL",
     "DEFAULT_FEATHERLESS_MODEL",
+    "DEFAULT_RESPONSE_FORMAT_MODE",
     "DEFAULT_THINKING_POLICY",
     "FeatherlessClient",
     "FeatherlessRawResponse",
     "FeatherlessSendHook",
+    "ResponseFormatMode",
     "ThinkingPolicy",
 ]

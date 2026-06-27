@@ -646,12 +646,17 @@ class TestFeatherlessRoundTrip:
     which leaves that env var unset — always reports them as skipped and never
     touches the network. Run them in an operator session with a real
     ``FEATHERLESS_API_KEY`` set; they go through :meth:`FeatherlessClient.complete`,
-    so the OpenAI-compatible ``response_format`` request, the $0 provider-keyed
-    cost, and (under the default ``fail_loud`` policy) the reasoning guard are
-    all exercised against the real endpoint. The model id is read from
-    ``AILIBI_LLM_MEETING_MODEL`` when set, else the slate-lead default — so an
-    operator can point the round-trip at the model under evaluation without a
-    code edit.
+    so the default ``json_object`` ``response_format`` request, the $0
+    provider-keyed cost, and (under the default ``fail_loud`` policy) the
+    reasoning guard are all exercised against the real endpoint. The model id is
+    read from ``AILIBI_LLM_MEETING_MODEL`` when set, else the slate-lead default
+    — so an operator can point the round-trip at the model under evaluation
+    without a code edit.
+
+    Live-verified 2026-06-27 against ``Qwen/Qwen3-32B``: the free-text and the
+    ``json_object`` schema round-trips both pass; the strict ``json_schema``
+    mode is REJECTED (HTTP 400) by the slate, which is why ``json_object`` is the
+    adapter default (see :data:`llm.featherless_client.DEFAULT_RESPONSE_FORMAT_MODE`).
     """
 
     @real_provider
@@ -707,9 +712,9 @@ class TestFeatherlessRoundTrip:
             )
         )
 
-        # The adapter has already routed the strict ``response_format`` request,
-        # extracted + validated; pin the observable contract: a $0 completion
-        # whose recorded text is the schema-valid JSON.
+        # The adapter has already routed the (default json_object)
+        # ``response_format`` request, extracted + validated; pin the observable
+        # contract: a $0 completion whose recorded text is the schema-valid JSON.
         assert isinstance(response, LLMResponse)
         assert response.cost_usd == 0.0
         turn = MeetingTurn.model_validate_json(response.text)

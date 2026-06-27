@@ -4,9 +4,12 @@ These drive :class:`llm.featherless_client.FeatherlessClient` with an injected
 ``send`` hook in place of the real ``httpx`` transport, so they make no network
 call and need no API key on the wire. They pin:
 
-* the request shape — the OpenAI-compatible ``response_format`` json_schema
-  translation of ``schema.model_json_schema()``, the model routing per
-  ``call_kind``, and the request-time thinking toggle;
+* the request shape — the ``response_format_mode`` translation of ``schema``
+  (default ``json_object``; ``json_schema`` / ``none`` selectable), the model
+  routing per ``call_kind``, and the request-time thinking toggle;
+* the transport retry/error mapping (bounded retry on transient 5xx, fail-loud
+  on a permanent 4xx) via the pure ``_send_with_retry`` / ``_build_chat_payload``
+  helpers;
 * the token mapping + ``cost_usd == 0.0`` for every model (provider-keyed);
 * the response-side thinking policy (``fail_loud`` raises on reasoning —
   INCLUDING inline ``reasoning\\n{JSON}`` content — and ``strip`` discards it);
@@ -45,7 +48,9 @@ from llm.featherless_client import (
     DEFAULT_FEATHERLESS_MODEL,
     FeatherlessClient,
     FeatherlessRawResponse,
+    _build_chat_payload,
     _raw_from_response_body,
+    _send_with_retry,
 )
 from llm.provider import (
     AnthropicClient,
@@ -170,13 +175,20 @@ class TestConstructorValidation:
         with pytest.raises(ValueError, match="thinking_policy"):
             FeatherlessClient(api_key="k", thinking_policy="loud")  # type: ignore[arg-type]
 
+    def test_unknown_response_format_mode_fails_loud(self) -> None:
+        with pytest.raises(ValueError, match="response_format_mode"):
+            FeatherlessClient(api_key="k", response_format_mode="grammar")  # type: ignore[arg-type]
 
-class TestRequestShape:
-    """The POST carries the OpenAI-compatible ``response_format`` json_schema
-    (the analogue of Ollama's ``format``), the bearer key, the model, and the
-    request-time thinking toggle (Task 14.1 DoD item 1)."""
 
-    def test_schema_translates_to_response_format_json_schema(self) -> None:
+class TestResponseFormatMode:
+    """A structured call translates ``schema`` into the wire ``response_format``
+    per the configured mode. Default is ``json_object`` (the Featherless-
+    supported mode; strict ``json_schema`` is REJECTED by the slate — owner-
+    ratified deviation 2026-06-27). ``json_schema`` stays selectable for a
+    future endpoint/model; ``none`` sends nothing; there is no silent fallback
+    (Task 14.1 DoD item 1)."""
+
+    def test_default_mode_is_json_object(self) -> None:
         send = _send_returning()
         client = _client(send)
 
@@ -189,9 +201,19 @@ class TestRequestShape:
             )
         )
 
-        assert len(send.calls) == 1
-        response_format = send.calls[0]["response_format"]
-        assert response_format == {
+        assert send.calls[0]["response_format"] == {"type": "json_object"}
+
+    def test_json_schema_mode_builds_strict_json_schema(self) -> None:
+        send = _send_returning()
+        client = _client(send, response_format_mode="json_schema")
+
+        asyncio.run(
+            client.complete(
+                prompt="p", schema=_SampleReport, max_tokens=8, temperature=0.0
+            )
+        )
+
+        assert send.calls[0]["response_format"] == {
             "type": "json_schema",
             "json_schema": {
                 "name": "_SampleReport",
@@ -200,9 +222,12 @@ class TestRequestShape:
             },
         }
 
-    def test_json_schema_name_is_the_schema_class_name(self) -> None:
+    def test_none_mode_sends_no_response_format_even_with_schema(self) -> None:
+        # The pure Anthropic shape: no response_format; the shared seam carries
+        # correctness. Distinct from a free-text call (which is None because
+        # schema is None, not because of the mode).
         send = _send_returning()
-        client = _client(send)
+        client = _client(send, response_format_mode="none")
 
         asyncio.run(
             client.complete(
@@ -210,8 +235,16 @@ class TestRequestShape:
             )
         )
 
-        name = send.calls[0]["response_format"]["json_schema"]["name"]
-        assert name == _SampleReport.__name__
+        assert send.calls[0]["response_format"] is None
+
+    def test_free_text_call_has_no_response_format_in_any_mode(self) -> None:
+        for mode in ("json_object", "json_schema", "none"):
+            send = _send_returning(text="prose")
+            client = _client(send, response_format_mode=mode)
+            asyncio.run(
+                client.complete(prompt="p", schema=None, max_tokens=8, temperature=0.0)
+            )
+            assert send.calls[0]["response_format"] is None, mode
 
     def test_max_tokens_and_temperature_are_forwarded(self) -> None:
         send = _send_returning()
@@ -745,6 +778,15 @@ class TestBuildDefaultClientFeatherless:
         assert client._request_thinking is False
         assert client._thinking_policy == "fail_loud"
 
+    def test_default_response_format_mode_is_json_object(self) -> None:
+        # The Featherless-supported default; strict json_schema is rejected by
+        # the slate (owner-ratified deviation 2026-06-27).
+        client = build_default_client(
+            env={"AILIBI_LLM_PROVIDER": "featherless", "FEATHERLESS_API_KEY": "k"}
+        )
+        assert isinstance(client, FeatherlessClient)
+        assert client._response_format_mode == "json_object"
+
     def test_fake_branch_is_unchanged(self) -> None:
         assert isinstance(build_default_client(env={}), FakeProvider)
 
@@ -812,3 +854,118 @@ class TestBudgetUsdDimensionDisabledForFeatherless:
                 )
             )
         assert exc_info.value.dimension in {"input_tokens", "output_tokens"}
+
+
+@dataclass
+class _FakeResponse:
+    """Minimal stand-in for an ``httpx.Response`` (status + body), so the
+    transport retry/error mapping is unit-testable without the network."""
+
+    status_code: int
+    _json: Any = None
+    text: str = ""
+
+    def json(self) -> Any:
+        return self._json
+
+
+class _FakePoster:
+    """Returns a scripted sequence of :class:`_FakeResponse`, recording calls.
+
+    Stands in for the live ``client.post`` coroutine so :func:`_send_with_retry`
+    can be driven deterministically — the last response repeats once the script
+    is exhausted (so a single-element script models a stable endpoint)."""
+
+    def __init__(self, responses: list[_FakeResponse]) -> None:
+        self._responses = responses
+        self.calls = 0
+
+    async def __call__(self) -> _FakeResponse:
+        index = min(self.calls, len(self._responses) - 1)
+        self.calls += 1
+        return self._responses[index]
+
+
+async def _noop_sleep(_seconds: float) -> None:
+    return None
+
+
+class TestBuildChatPayload:
+    """The pure payload builder pins the OpenAI-compatible wire shape (Task 14.1
+    DoD item 1 / item 5)."""
+
+    def test_includes_messages_caps_and_thinking_toggle(self) -> None:
+        payload = _build_chat_payload(
+            model="Qwen/Qwen3-32B",
+            prompt="hello",
+            response_format={"type": "json_object"},
+            max_tokens=128,
+            temperature=0.3,
+            request_thinking=False,
+        )
+        assert payload["model"] == "Qwen/Qwen3-32B"
+        assert payload["messages"] == [{"role": "user", "content": "hello"}]
+        assert payload["max_tokens"] == 128
+        assert payload["temperature"] == 0.3
+        assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+        assert payload["response_format"] == {"type": "json_object"}
+
+    def test_omits_response_format_when_none(self) -> None:
+        payload = _build_chat_payload(
+            model="m",
+            prompt="p",
+            response_format=None,
+            max_tokens=8,
+            temperature=0.0,
+            request_thinking=True,
+        )
+        assert "response_format" not in payload
+        assert payload["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+class TestSendWithRetry:
+    """Bounded retry on transient 5xx / rate-limit, fail-loud on a permanent
+    4xx, no silent fallback (Task 14.1 transport robustness)."""
+
+    def test_2xx_returns_parsed_json_without_retry(self) -> None:
+        poster = _FakePoster([_FakeResponse(200, _json={"ok": True})])
+        body = asyncio.run(_send_with_retry(poster, model="m", sleep=_noop_sleep))
+        assert body == {"ok": True}
+        assert poster.calls == 1
+
+    def test_retries_transient_500_then_succeeds(self) -> None:
+        # Featherless surfaces a busy upstream as a 500; a bounded retry should
+        # recover rather than abort the call.
+        poster = _FakePoster(
+            [
+                _FakeResponse(500, text="This model is busy"),
+                _FakeResponse(500, text="This model is busy"),
+                _FakeResponse(200, _json={"ok": 1}),
+            ]
+        )
+        body = asyncio.run(_send_with_retry(poster, model="m", sleep=_noop_sleep))
+        assert body == {"ok": 1}
+        assert poster.calls == 3
+
+    def test_permanent_400_fails_loud_without_retry(self) -> None:
+        # A permanent 400 (e.g. an unsupported json_schema request) must NOT be
+        # retried and must surface a descriptive error — never a silent
+        # fallback to another mode.
+        poster = _FakePoster([_FakeResponse(400, text="request rejected as invalid")])
+        with pytest.raises(RuntimeError, match="HTTP 400") as exc_info:
+            asyncio.run(
+                _send_with_retry(poster, model="Qwen/Qwen3-32B", sleep=_noop_sleep)
+            )
+        assert poster.calls == 1
+        message = str(exc_info.value)
+        assert "Qwen/Qwen3-32B" in message
+        assert "rejected as invalid" in message
+
+    def test_exhausted_retries_raise_with_last_status(self) -> None:
+        poster = _FakePoster([_FakeResponse(503, text="unavailable")])
+        with pytest.raises(RuntimeError, match="HTTP 503"):
+            asyncio.run(
+                _send_with_retry(poster, model="m", sleep=_noop_sleep, max_attempts=3)
+            )
+        # All attempts consumed (no early success).
+        assert poster.calls == 3
