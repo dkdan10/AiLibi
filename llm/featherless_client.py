@@ -294,6 +294,20 @@ class FeatherlessClient:
         content = raw.text
         if reasoning is not None:
             if self._thinking_policy == "fail_loud":
+                # Deliberate abort-vs-recoverable trade-off (PR #202 review):
+                # this raises a RuntimeError, NOT a recoverable FailedCall like
+                # a schema-invalid body. The meeting manager's fail-soft nets
+                # only TimeoutError / ValidationError, so this propagates and
+                # aborts the run — by design: recording a half-thinking run is
+                # exactly the failure mode the guard exists to prevent (Ollama
+                # parity), so it must fail loud rather than silently record. The
+                # cost: a BENIGN leading preamble on a structured call ("Here is
+                # the turn: {...}") that ``_extract_json_block`` would have
+                # accepted is also flagged and aborts. Acceptable in production
+                # because the default ``json_object`` mode forces JSON-first
+                # output (a preamble is rare), and 14.7's smoke gate
+                # (parse-success ~100%, abandon-on-crater) catches any model
+                # that emits one before the atomic 50-seed re-record.
                 raise RuntimeError(
                     "Featherless returned reasoning under thinking_policy="
                     f"'fail_loud' (model={raw.model!r}): {reasoning}. Refusing "
@@ -460,9 +474,17 @@ def _strip_reasoning_segment(text: str) -> str:
     model may emit several blocks), left-stripped; if no closing tag is present
     the text is returned unchanged — a leading prose preamble without think
     tags is already handled safely by the extractor's first-valid-object scan.
+
+    The closing tag is matched CASE-INSENSITIVELY so it stays in lock-step with
+    :func:`_detect_reasoning` (which lowercases before matching): a model that
+    emits ``</THINK>`` is detected as reasoning, so it must also be stripped —
+    otherwise the block (and any scratch JSON inside it) would survive into the
+    extractor, the exact failure this function exists to prevent (PR #202
+    review). ``str.lower()`` preserves length/indices, so the offset is valid
+    against the original ``text``.
     """
 
-    close_at = text.rfind(_THINK_CLOSE_TAG)
+    close_at = text.lower().rfind(_THINK_CLOSE_TAG)
     if close_at == -1:
         return text
     return text[close_at + len(_THINK_CLOSE_TAG) :].lstrip()

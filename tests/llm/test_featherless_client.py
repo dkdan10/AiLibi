@@ -731,6 +731,25 @@ class TestThinkingStrip:
         assert response.text == _VALID_BODY
         assert "wrong" not in response.text
 
+    def test_uppercase_think_close_tag_is_stripped(self) -> None:
+        # detect/strip must stay in lock-step on case: a model emitting
+        # </THINK> is DETECTED as reasoning (case-insensitive), so the strip
+        # must also be case-insensitive — otherwise the block (with its scratch
+        # JSON) survives into the extractor and the wrong object is recorded
+        # (Codex review, minor). The closing tag here is uppercase.
+        embedded = '{"agent_id": "wrong", "tick": 0, "free_text": "scratch"}'
+        send = _send_returning(text=f"<THINK>draft {embedded}</THINK>\n{_VALID_BODY}")
+        client = _client(send, thinking_policy="strip")
+
+        response = asyncio.run(
+            client.complete(
+                prompt="p", schema=_SampleReport, max_tokens=64, temperature=0.0
+            )
+        )
+
+        assert response.text == _VALID_BODY
+        assert "wrong" not in response.text
+
     def test_reasoning_content_channel_is_discarded_not_recorded(self) -> None:
         # The dedicated channel never enters ``text``; under strip it is simply
         # discarded (and logged) rather than aborting the call.
