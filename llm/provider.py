@@ -35,10 +35,13 @@ ENV_ANTHROPIC_API_KEY: Final[str] = "ANTHROPIC_API_KEY"
 ENV_OLLAMA_HOST: Final[str] = "AILIBI_OLLAMA_HOST"
 ENV_OLLAMA_SEED: Final[str] = "AILIBI_OLLAMA_SEED"
 ENV_OLLAMA_NUM_CTX: Final[str] = "AILIBI_OLLAMA_NUM_CTX"
+ENV_FEATHERLESS_API_KEY: Final[str] = "FEATHERLESS_API_KEY"
+ENV_FEATHERLESS_BASE_URL: Final[str] = "AILIBI_FEATHERLESS_BASE_URL"
 
 PROVIDER_ANTHROPIC: Final[str] = "anthropic"
 PROVIDER_FAKE: Final[str] = "fake"
 PROVIDER_OLLAMA: Final[str] = "ollama"
+PROVIDER_FEATHERLESS: Final[str] = "featherless"
 
 # Anthropic per-million-token list pricing as of 2026-05. Kept private so
 # call sites never depend on it; if pricing changes only this file moves.
@@ -57,6 +60,17 @@ _FALLBACK_PRICING_USD_PER_MTOK: Final[tuple[float, float]] = (3.00, 15.00)
 # local endpoint; absent an entry the zero fallback applies.
 _OLLAMA_PRICING_USD_PER_MTOK: Final[dict[str, tuple[float, float]]] = {}
 _OLLAMA_FALLBACK_PRICING_USD_PER_MTOK: Final[tuple[float, float]] = (0.0, 0.0)
+
+# Featherless AI is a flat-rate hosted subscription ($25/mo Premium, owner
+# decision 2026-06-25), not metered per token. The rate is keyed by PROVIDER,
+# not by model name: every Featherless model resolves to the (0.0, 0.0)
+# fallback, so an A/B swap across the model slate (Qwen3-32B -> GLM-4-32B -> a
+# RP fine-tune) cannot silently fall back to a non-zero frontier rate the way a
+# model-keyed lookup against the Anthropic table would. The per-model dict is
+# the optional override surface (empty today); absent an entry the zero
+# fallback applies.
+_FEATHERLESS_PRICING_USD_PER_MTOK: Final[dict[str, tuple[float, float]]] = {}
+_FEATHERLESS_FALLBACK_PRICING_USD_PER_MTOK: Final[tuple[float, float]] = (0.0, 0.0)
 
 
 class AnthropicRawResponse(BaseModel):
@@ -249,6 +263,16 @@ def build_default_client(
       ``AILIBI_LLM_TRIGGER_MODEL`` knobs, both defaulting to
       ``qwen3.5:9b`` (the canonical local model, run with thinking disabled —
       see :class:`llm.ollama_client.OllamaClient`).
+    * ``AILIBI_LLM_PROVIDER=featherless`` →
+      :class:`llm.featherless_client.FeatherlessClient`, POSTing to
+      ``AILIBI_FEATHERLESS_BASE_URL`` (default the hosted Featherless endpoint)
+      with ``FEATHERLESS_API_KEY`` (fail-loud when unset) and reusing the same
+      ``AILIBI_LLM_MEETING_MODEL`` / ``AILIBI_LLM_TRIGGER_MODEL`` knobs, both
+      defaulting to the Phase-14 slate lead (see
+      :class:`llm.featherless_client.FeatherlessClient`). $0 provider-keyed
+      cost; the request-time thinking toggle / response-side thinking policy
+      keep their fail-loud, non-thinking defaults here (the 14.4 sweep harness
+      drives the other modes directly).
 
     ``seed`` is the per-game seed the Ollama client folds into
     ``options.seed`` for reproducible-ish fresh generation; when ``None``
@@ -300,9 +324,36 @@ def build_default_client(
             meeting_model=environment.get(ENV_MEETING_MODEL, DEFAULT_OLLAMA_MODEL),
             trigger_model=environment.get(ENV_TRIGGER_MODEL, DEFAULT_OLLAMA_MODEL),
         )
+    if provider == PROVIDER_FEATHERLESS:
+        # Lazy import keeps httpx optional at module-import time, mirroring the
+        # fake/anthropic/ollama branches: a non-Featherless run never imports
+        # featherless_client (and thus never the httpx transport).
+        from llm.featherless_client import (
+            DEFAULT_FEATHERLESS_BASE_URL,
+            DEFAULT_FEATHERLESS_MODEL,
+            FeatherlessClient,
+        )
+
+        api_key = environment.get(ENV_FEATHERLESS_API_KEY, "")
+        if not api_key:
+            raise ValueError(
+                f"{ENV_FEATHERLESS_API_KEY} must be set when "
+                f"{ENV_PROVIDER}={PROVIDER_FEATHERLESS}"
+            )
+        base_url = (
+            environment.get(ENV_FEATHERLESS_BASE_URL, "").strip()
+            or DEFAULT_FEATHERLESS_BASE_URL
+        )
+        return FeatherlessClient(
+            api_key=api_key,
+            base_url=base_url,
+            meeting_model=environment.get(ENV_MEETING_MODEL, DEFAULT_FEATHERLESS_MODEL),
+            trigger_model=environment.get(ENV_TRIGGER_MODEL, DEFAULT_FEATHERLESS_MODEL),
+        )
     raise ValueError(
         f"unknown {ENV_PROVIDER} value: {provider!r}; expected one of "
-        f"{PROVIDER_ANTHROPIC!r}, {PROVIDER_OLLAMA!r}, or {PROVIDER_FAKE!r}"
+        f"{PROVIDER_ANTHROPIC!r}, {PROVIDER_OLLAMA!r}, {PROVIDER_FEATHERLESS!r}, "
+        f"or {PROVIDER_FAKE!r}"
     )
 
 
@@ -592,11 +643,18 @@ def _compute_cost_usd(
     parameter existed. :data:`PROVIDER_OLLAMA` selects the local-model
     rate table, whose zero fallback makes every Ollama model free
     regardless of name (see :data:`_OLLAMA_PRICING_USD_PER_MTOK`).
+    :data:`PROVIDER_FEATHERLESS` selects the hosted flat-rate table, whose
+    zero fallback likewise makes every Featherless model free regardless of
+    name (see :data:`_FEATHERLESS_PRICING_USD_PER_MTOK`).
     """
 
     if provider == PROVIDER_OLLAMA:
         input_rate, output_rate = _OLLAMA_PRICING_USD_PER_MTOK.get(
             model, _OLLAMA_FALLBACK_PRICING_USD_PER_MTOK
+        )
+    elif provider == PROVIDER_FEATHERLESS:
+        input_rate, output_rate = _FEATHERLESS_PRICING_USD_PER_MTOK.get(
+            model, _FEATHERLESS_FALLBACK_PRICING_USD_PER_MTOK
         )
     else:
         input_rate, output_rate = _ANTHROPIC_PRICING_USD_PER_MTOK.get(
@@ -667,6 +725,8 @@ __all__ = [
     "DEFAULT_MEETING_MODEL",
     "DEFAULT_TRIGGER_MODEL",
     "ENV_ANTHROPIC_API_KEY",
+    "ENV_FEATHERLESS_API_KEY",
+    "ENV_FEATHERLESS_BASE_URL",
     "ENV_MEETING_MODEL",
     "ENV_OLLAMA_HOST",
     "ENV_OLLAMA_NUM_CTX",
@@ -676,6 +736,7 @@ __all__ = [
     "LLMCallFailure",
     "PROVIDER_ANTHROPIC",
     "PROVIDER_FAKE",
+    "PROVIDER_FEATHERLESS",
     "PROVIDER_OLLAMA",
     "SendHook",
     "build_default_client",
