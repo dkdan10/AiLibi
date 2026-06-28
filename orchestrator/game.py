@@ -37,9 +37,11 @@ from agents.memory.store import (
 )
 from agents.perception import ingest_packet
 from agents.strategic.prompts import (
+    DEFAULT_PROMPT_SET,
     accusation_round_prompt,
     crewmate_report_prompt,
     impostor_report_prompt,
+    resolve_prompt_set,
     vote_ballot_prompt,
 )
 from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
@@ -269,6 +271,46 @@ DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "accusation_round": "accusation_round.v9",
     "vote_ballot": "vote_ballot/v7",
 }
+
+# Per-model prompt-set version registry (Task 14.2; owner decision 2026-06-25 —
+# per-model prompt sets; DESIGN.md §11.4 replay provenance). The frozen
+# ``qwen3.5:9b`` reference set keeps the EXACT ``DEFAULT_PROMPT_VERSIONS``
+# mapping above (same symbol, byte-identical keys/values) so the committed
+# replays and the ``prompt_versions`` assertions in ``tests/orchestrator/`` and
+# ``tests/scripts/`` stay green with ZERO re-record. A new-model set is
+# distinguished by its OWN version strings plus the recorded model id -- NOT by
+# prefixing or reformatting the 9B set's keys/values. New sets register
+# themselves here (Task 14.5) keyed by the same ``AILIBI_PROMPT_SET`` selector
+# the loader (:mod:`agents.strategic.prompts.loader`) resolves.
+PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
+    DEFAULT_PROMPT_SET: DEFAULT_PROMPT_VERSIONS,
+}
+
+
+def prompt_versions_for_set(
+    prompt_set: str | None = None,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> Mapping[str, str]:
+    """Return the recorded ``prompt_versions`` mapping for a prompt set.
+
+    Resolves the active set via :func:`resolve_prompt_set` (the same
+    ``AILIBI_PROMPT_SET`` selector the loader uses) and looks it up in
+    :data:`PROMPT_VERSION_SETS`. An unregistered set raises :class:`ValueError`
+    -- no silent fallback (AGENTS.md §"No silent fallbacks"). With the default
+    (9B) set this returns :data:`DEFAULT_PROMPT_VERSIONS` byte-identically.
+    """
+
+    name = resolve_prompt_set(prompt_set, env=env)
+    try:
+        return PROMPT_VERSION_SETS[name]
+    except KeyError as exc:
+        known = ", ".join(sorted(PROMPT_VERSION_SETS))
+        raise ValueError(
+            f"Unknown prompt set {name!r}: no version registry entry "
+            f"(known sets: {known})"
+        ) from exc
+
 
 # Headless recording runs meetings deadline-free (DESIGN.md §1.4, §5.2, §8.3:
 # "Meeting deadlines off in headless mode; on with generous defaults in live
@@ -636,7 +678,7 @@ def build_default_meeting_runner(
     llm_client: LLMClient | None = None,
     budget: GameBudget | None = None,
     config: MeetingConfig | None = None,
-    prompt_versions: Mapping[str, str] = DEFAULT_PROMPT_VERSIONS,
+    prompt_versions: Mapping[str, str] | None = None,
     token_budget: int = DEFAULT_TOKEN_BUDGET,
 ) -> DefaultMeetingRunner:
     """Construct the production default meeting runner (DESIGN.md §5.1, §11.4).
@@ -674,6 +716,15 @@ def build_default_meeting_runner(
     not share one runner (or one budget) across a tournament.
     """
 
+    # Provenance must match the rendered set: when the caller does not pin an
+    # explicit mapping, resolve the recorded ``prompt_versions`` from the SAME
+    # ``AILIBI_PROMPT_SET`` selector the loader's wrapper callables render
+    # through (Task 14.2). With the default 9B set this is
+    # :data:`DEFAULT_PROMPT_VERSIONS` byte-identically, so committed replays and
+    # the version assertions stay green with no re-record.
+    resolved_versions = (
+        prompt_versions if prompt_versions is not None else prompt_versions_for_set()
+    )
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
     client: LLMClient = (
         BudgetedLLMClient(inner=inner, budget=budget) if budget is not None else inner
@@ -695,7 +746,7 @@ def build_default_meeting_runner(
         statement_prompt=accusation_round_prompt,
         vote_prompt=vote_ballot_prompt,
         config=resolved_config,
-        prompt_versions=prompt_versions,
+        prompt_versions=resolved_versions,
         token_budget=token_budget,
     )
 
@@ -2106,6 +2157,7 @@ __all__ = [
     "MeetingPacingAgent",
     "MeetingRunner",
     "Outcome",
+    "PROMPT_VERSION_SETS",
     "ROSTER_PRESETS",
     "ReportedTestimonyAgent",
     "RosterPreset",
@@ -2113,4 +2165,5 @@ __all__ = [
     "apply_meeting_result",
     "build_default_agent_factory",
     "build_default_meeting_runner",
+    "prompt_versions_for_set",
 ]

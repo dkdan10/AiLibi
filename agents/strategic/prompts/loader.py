@@ -27,6 +27,22 @@ them as-is. If a template needs a new kwarg, the wrapper callable's
 signature is updated here; the template itself is not edited from this
 module.
 
+Per-model prompt sets (Task 14.2)
+=================================
+
+The four templates live under a per-model *set* subdirectory rather than
+flat next to this module (owner decision 2026-06-25 — per-model prompt
+sets). The frozen ``qwen3.5:9b`` reference set is :data:`DEFAULT_PROMPT_SET`
+(directory ``qwen3_5_9b/``); :func:`build_environment` resolves a set name
+to its subdirectory and builds the strict-undefined
+:class:`jinja2.Environment` against it. The active set is selected by the
+:data:`ENV_PROMPT_SET` environment variable (``AILIBI_PROMPT_SET``),
+defaulting to :data:`DEFAULT_PROMPT_SET` so existing renders are
+byte-identical. An unknown set name (no matching subdirectory) raises
+:class:`ValueError` — there is no silent fallback (AGENTS.md §"No silent
+fallbacks"). The ``*_TEMPLATE`` filename constants are shared across sets;
+only the directory varies.
+
 Per-template wrapper signatures
 ===============================
 
@@ -40,6 +56,8 @@ intermediate adapter layer.
 
 from __future__ import annotations
 
+import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Final
 
@@ -54,15 +72,71 @@ from meetings.schemas import (
     TurnKind,
 )
 
-_TEMPLATE_DIR: Final[Path] = Path(__file__).resolve().parent
+# Root holding the per-model prompt-set subdirectories (Task 14.2). The four
+# ``.j2`` templates no longer live flat next to this module; each set is a
+# subdirectory (``qwen3_5_9b/`` is the frozen 9B reference set).
+_PROMPTS_ROOT: Final[Path] = Path(__file__).resolve().parent
 
-_ENV: Final[Environment] = Environment(
-    loader=FileSystemLoader(_TEMPLATE_DIR),
-    autoescape=False,
-    undefined=StrictUndefined,
-    trim_blocks=True,
-    lstrip_blocks=True,
-)
+# The frozen ``qwen3.5:9b`` reference set — the default so existing renders are
+# byte-identical (owner decision 2026-06-25). Selected by ``AILIBI_PROMPT_SET``.
+DEFAULT_PROMPT_SET: Final[str] = "qwen3_5_9b"
+ENV_PROMPT_SET: Final[str] = "AILIBI_PROMPT_SET"
+
+
+def resolve_prompt_set(
+    prompt_set: str | None = None,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> str:
+    """Resolve the active prompt-set name (Task 14.2).
+
+    An explicit ``prompt_set`` wins; otherwise the :data:`ENV_PROMPT_SET`
+    environment variable is consulted, defaulting to :data:`DEFAULT_PROMPT_SET`
+    (the frozen 9B set) when unset or empty. The ``env`` argument lets tests
+    select a set deterministically without mutating ``os.environ``.
+    """
+
+    if prompt_set is not None:
+        return prompt_set
+    environment = env if env is not None else os.environ
+    return environment.get(ENV_PROMPT_SET, "").strip() or DEFAULT_PROMPT_SET
+
+
+def build_environment(
+    prompt_set: str | None = None,
+    *,
+    root: Path = _PROMPTS_ROOT,
+    env: Mapping[str, str] | None = None,
+) -> Environment:
+    """Build a strict-undefined :class:`jinja2.Environment` for a prompt set.
+
+    Resolves ``prompt_set`` (via :func:`resolve_prompt_set`) to a subdirectory
+    of ``root`` and builds the loader against it. An unknown set — no matching
+    subdirectory — raises :class:`ValueError`; there is no silent fallback
+    (AGENTS.md §"No silent fallbacks"). The strict-undefined / trim / lstrip /
+    no-autoescape policy is identical across sets, so a content-preserving move
+    of the 9B templates renders byte-identically.
+    """
+
+    name = resolve_prompt_set(prompt_set, env=env)
+    directory = root / name
+    if not directory.is_dir():
+        raise ValueError(
+            f"Unknown prompt set {name!r}: no template directory at {directory}"
+        )
+    return Environment(
+        loader=FileSystemLoader(directory),
+        autoescape=False,
+        undefined=StrictUndefined,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
+
+# The process-default environment, bound to the active set at import time. The
+# wrapper callables below render through it so call sites stay unchanged; the
+# set is selected by ``AILIBI_PROMPT_SET`` (default: the frozen 9B set).
+_ENV: Final[Environment] = build_environment()
 
 CREWMATE_REPORT_TEMPLATE: Final[str] = "crewmate_report.j2"
 IMPOSTOR_REPORT_TEMPLATE: Final[str] = "impostor_report.j2"
@@ -280,10 +354,14 @@ def vote_ballot_prompt(
 __all__ = [
     "ACCUSATION_ROUND_TEMPLATE",
     "CREWMATE_REPORT_TEMPLATE",
+    "DEFAULT_PROMPT_SET",
+    "ENV_PROMPT_SET",
     "IMPOSTOR_REPORT_TEMPLATE",
     "VOTE_BALLOT_TEMPLATE",
     "accusation_round_prompt",
+    "build_environment",
     "crewmate_report_prompt",
     "impostor_report_prompt",
+    "resolve_prompt_set",
     "vote_ballot_prompt",
 ]
