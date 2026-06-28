@@ -35,6 +35,17 @@ the first valid JSON object, `fail_loud` runs a RAW-CONTENT reasoning guard BEFO
 Ollama's top-level `think=` field) tells the model whether to reason at all, so 14.4 can drive the
 non-thinking/thinking sweep axis — distinct from the response-side `thinking_policy`.
 
+**Live finding + ratification (implemented in PR #202, 2026-06-27):** the strict `json_schema`
+`response_format` above is REJECTED with a deterministic HTTP 400 by every Phase-14 slate model (Featherless
+does not implement guided `json_schema` decoding). The adapter therefore exposes a `response_format_mode`
+knob defaulting to **`json_object`** (syntactic-JSON; structured-output correctness comes from the shared
+extract→validate→FailedCall seam + prompt engineering, exactly as the Anthropic adapter — which sends no
+`response_format` — has always worked), with `json_schema` kept SELECTABLE (for a future endpoint and for
+14.4 to A/B) and NO silent fallback between modes (a rejected `json_schema` request fails loud). This
+deviation from the contract's strict-`json_schema` shape is ratified here and carried into 14.6's locked
+tuple. The contract's own Integration risk anticipated it ("structured-output fidelity … is model-specific
+and is what 14.4 measures").
+
 **Files in scope:**
 - llm/featherless_client.py (new: `FeatherlessClient`, `FeatherlessRawResponse`, `FeatherlessSendHook`, `_default_send`, `_raw_from_response_body`, module defaults, the thinking policy)
 - llm/provider.py (`PROVIDER_FEATHERLESS`, `ENV_FEATHERLESS_API_KEY`, `ENV_FEATHERLESS_BASE_URL`, the zero pricing table, the `_compute_cost_usd` provider branch, the `build_default_client` branch, the trailing error message, `__all__`)

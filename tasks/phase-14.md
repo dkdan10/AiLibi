@@ -91,6 +91,17 @@ the first valid JSON object, `fail_loud` runs a RAW-CONTENT reasoning guard BEFO
 Ollama's top-level `think=` field) tells the model whether to reason at all, so 14.4 can drive the
 non-thinking/thinking sweep axis — distinct from the response-side `thinking_policy`.
 
+**Live finding + ratification (implemented in PR #202, 2026-06-27):** the strict `json_schema`
+`response_format` above is REJECTED with a deterministic HTTP 400 by every Phase-14 slate model (Featherless
+does not implement guided `json_schema` decoding). The adapter therefore exposes a `response_format_mode`
+knob defaulting to **`json_object`** (syntactic-JSON; structured-output correctness comes from the shared
+extract→validate→FailedCall seam + prompt engineering, exactly as the Anthropic adapter — which sends no
+`response_format` — has always worked), with `json_schema` kept SELECTABLE (for a future endpoint and for
+14.4 to A/B) and NO silent fallback between modes (a rejected `json_schema` request fails loud). This
+deviation from the contract's strict-`json_schema` shape is ratified here and carried into 14.6's locked
+tuple. The contract's own Integration risk anticipated it ("structured-output fidelity … is model-specific
+and is what 14.4 measures").
+
 **Files in scope:**
 - llm/featherless_client.py (new: `FeatherlessClient`, `FeatherlessRawResponse`, `FeatherlessSendHook`, `_default_send`, `_raw_from_response_body`, module defaults, the thinking policy)
 - llm/provider.py (`PROVIDER_FEATHERLESS`, `ENV_FEATHERLESS_API_KEY`, `ENV_FEATHERLESS_BASE_URL`, the zero pricing table, the `_compute_cost_usd` provider branch, the `build_default_client` branch, the trailing error message, `__all__`)
@@ -429,7 +440,9 @@ re-sweep, or the sweep aborts on an `UndefinedError` rather than a behavior sign
 
 Design-thread decision (no code): read the 14.4/14.5 sweep evidence and lock the baseline tuple before any
 re-record exists — the chosen meeting_model + trigger_model Featherless ids, the chosen prompt set, the
-recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), the substrate-flag
+recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), the
+`response_format_mode` (`json_object` default per the 14.1 live finding 2026-06-27 — strict `json_schema` is
+rejected by the slate; `json_schema` stays selectable), the substrate-flag
 config for the re-record (all 4 13.5 flags ON per owner decision 2026-06-26; 14.8's per-lever ablation
 characterizes each, non-gating), and a go/no-go for the re-record. Mirror the Phase-9 pause between 9.4
 (client) and 9.5 (re-record): the decision is re-answered
@@ -438,7 +451,7 @@ behavior bar → stay on 9B / escalate the information ceiling), since the merge
 not an improved one.
 
 **Files in scope:**
-- tasks/phase-14.md (record the locked decision: chosen meeting_model, trigger_model, prompt set, thinking policy, substrate-flag config (all 4 ON), and the re-record go/no-go with its evidence)
+- tasks/phase-14.md (record the locked decision: chosen meeting_model, trigger_model, prompt set, thinking policy, response_format_mode (json_object), substrate-flag config (all 4 ON), and the re-record go/no-go with its evidence)
 
 **Files NOT in scope:**
 - llm/ + agents/ + replays/ (no implementation; this is a recorded decision)
@@ -448,6 +461,7 @@ not an improved one.
 **Definition of done:**
 - [ ] The locked (meeting_model, trigger_model) Featherless ids are recorded in `tasks/phase-14.md` with their evidence from the sweep report.
 - [ ] The chosen prompt set and the recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`) are recorded with rationale.
+- [ ] The `response_format_mode` is recorded = `json_object` (the 14.1 live finding 2026-06-27: strict `json_schema` 400s on the slate), with `json_schema` noted as selectable for a future endpoint and no silent fallback between modes.
 - [ ] The re-record substrate-flag config is recorded = all 4 13.5 flags ON (owner decision 2026-06-26), with 14.8's per-lever ablation noted as characterization (non-gating).
 - [ ] A re-record go/no-go is recorded, explicitly allowing a NO-GO ("no candidate clears the structured-output / behavior bar; stay on 9B / escalate the information ceiling").
 - [ ] `uv run python scripts/generate_prompts.py --check` passes.
