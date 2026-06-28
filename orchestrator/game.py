@@ -38,11 +38,8 @@ from agents.memory.store import (
 from agents.perception import ingest_packet
 from agents.strategic.prompts import (
     DEFAULT_PROMPT_SET,
-    accusation_round_prompt,
-    crewmate_report_prompt,
-    impostor_report_prompt,
+    build_prompt_renderers,
     resolve_prompt_set,
-    vote_ballot_prompt,
 )
 from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
 from agents.tactical.impostor_policy import ImpostorPolicy
@@ -716,14 +713,21 @@ def build_default_meeting_runner(
     not share one runner (or one budget) across a tournament.
     """
 
-    # Provenance must match the rendered set: when the caller does not pin an
-    # explicit mapping, resolve the recorded ``prompt_versions`` from the SAME
-    # ``AILIBI_PROMPT_SET`` selector the loader's wrapper callables render
-    # through (Task 14.2). With the default 9B set this is
-    # :data:`DEFAULT_PROMPT_VERSIONS` byte-identically, so committed replays and
-    # the version assertions stay green with no re-record.
+    # Provenance must match the rendered set (DESIGN.md §11.4). Resolve the
+    # active set ONCE and bind both the renderers and the recorded
+    # ``prompt_versions`` to it, so a runner never records one set's versions
+    # while rendering another's templates -- the failure mode when the module's
+    # import-time ``_ENV`` lags an in-process ``AILIBI_PROMPT_SET`` change (Task
+    # 14.2; PR #203 review). With the default 9B set the renderers and versions
+    # are byte-identical to pre-task HEAD, so committed replays + the version
+    # assertions stay green with no re-record. An explicit ``prompt_versions``
+    # mapping still wins (the caller pins its own provenance).
+    active_prompt_set = resolve_prompt_set()
+    renderers = build_prompt_renderers(active_prompt_set)
     resolved_versions = (
-        prompt_versions if prompt_versions is not None else prompt_versions_for_set()
+        prompt_versions
+        if prompt_versions is not None
+        else prompt_versions_for_set(active_prompt_set)
     )
     inner: LLMClient = llm_client if llm_client is not None else build_default_client()
     client: LLMClient = (
@@ -741,10 +745,10 @@ def build_default_meeting_runner(
     )
     return DefaultMeetingRunner(
         llm_client=client,
-        crewmate_report_prompt=crewmate_report_prompt,
-        impostor_report_prompt=impostor_report_prompt,
-        statement_prompt=accusation_round_prompt,
-        vote_prompt=vote_ballot_prompt,
+        crewmate_report_prompt=renderers.crewmate_report,
+        impostor_report_prompt=renderers.impostor_report,
+        statement_prompt=renderers.statement,
+        vote_prompt=renderers.vote,
         config=resolved_config,
         prompt_versions=resolved_versions,
         token_budget=token_budget,

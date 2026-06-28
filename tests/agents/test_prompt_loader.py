@@ -24,6 +24,7 @@ from agents.strategic.prompts import (
     DEFAULT_PROMPT_SET,
     ENV_PROMPT_SET,
     build_environment,
+    build_prompt_renderers,
     crewmate_report_prompt,
     resolve_prompt_set,
 )
@@ -139,6 +140,57 @@ class TestSecondSetLoads:
         env = build_environment("stub_model", root=tmp_path)
         rendered = env.get_template(CREWMATE_REPORT_TEMPLATE).render(agent_id="p-7")
         assert rendered == "stub crewmate report for p-7"
+
+
+class TestBuildPromptRenderersBindsToOneSet:
+    def test_renderers_render_the_qwen_set_for_default(self) -> None:
+        # build_prompt_renderers(default) renders byte-identically to the module
+        # wrapper for the 9B set -- the production binding path is unchanged for
+        # the default set (no re-record).
+        renderers = build_prompt_renderers("qwen3_5_9b")
+        kwargs = dict(
+            agent_id="p-3",
+            current_tick=412,
+            meeting_trigger="body_report",
+            rendered_memory="## Memory\n- saw p-2 in cafeteria",
+            public_transcript="",
+            living_ids=("p-1", "p-5"),
+            dead_ids=("p-2",),
+        )
+        assert renderers.crewmate_report(**kwargs) == crewmate_report_prompt(  # type: ignore[arg-type]
+            **kwargs  # type: ignore[arg-type]
+        )
+
+    def test_renderers_bind_to_resolved_set_independent_of_process_env(
+        self, tmp_path: Path
+    ) -> None:
+        # The provenance fix (PR #203 review): renderers are bound to the set
+        # passed at construction, NOT the import-time _ENV / current env var. A
+        # second stub set renders its OWN template even though the module default
+        # is qwen3_5_9b.
+        for name, marker in (("set_a", "ALPHA"), ("set_b", "BRAVO")):
+            set_dir = tmp_path / name
+            set_dir.mkdir()
+            (set_dir / CREWMATE_REPORT_TEMPLATE).write_text(
+                f"{marker} {{{{ agent_id }}}}", encoding="utf-8"
+            )
+        renderers_a = build_prompt_renderers("set_a", root=tmp_path)
+        renderers_b = build_prompt_renderers("set_b", root=tmp_path)
+        # The stub template only references agent_id; the wrapper still requires
+        # its full kwarg set (render ignores the unused ones).
+        common = dict(
+            agent_id="p-1",
+            current_tick=0,
+            meeting_trigger="t",
+            rendered_memory="",
+            public_transcript="",
+        )
+        assert renderers_a.crewmate_report(**common) == "ALPHA p-1"  # type: ignore[arg-type]
+        assert renderers_b.crewmate_report(**common) == "BRAVO p-1"  # type: ignore[arg-type]
+
+    def test_unknown_set_raises_via_factory(self) -> None:
+        with pytest.raises(ValueError, match="Unknown prompt set 'no_such_set'"):
+            build_prompt_renderers("no_such_set")
 
 
 class TestUnknownSetFailsLoud:
