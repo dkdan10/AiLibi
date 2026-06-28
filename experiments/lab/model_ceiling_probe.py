@@ -24,8 +24,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import pickle
-import time
 from pathlib import Path
 from typing import Any
 
@@ -33,8 +33,17 @@ from pydantic import ValidationError
 
 from agents.strategic.prompts.loader import accusation_round_prompt
 from meetings.schemas import MeetingTurn
-from llm.ollama_client import _default_send
+from llm.featherless_client import (
+    DEFAULT_FEATHERLESS_BASE_URL,
+    DEFAULT_RESPONSE_FORMAT_MODE,
+    ResponseFormatMode,
+)
 from llm.provider import _extract_json_block
+from experiments.lab.probe_backends import (
+    DEFAULT_PROBE_THINKING_POLICY,
+    active_substrate_flags,
+    call_turn,
+)
 from experiments.model_probe.probe import _ollama_host, preflight
 from experiments.lab.deception_battery import ReplyContext, build_reply_contexts
 from experiments.lab.deflection_probe import _body, _grade
@@ -88,28 +97,22 @@ def do_dump(sample_dir: Path) -> None:
 async def _call_ollama(
     prompt: str, model: str, think: bool, num_ctx: int, num_predict: int
 ) -> tuple[MeetingTurn | None, str, float]:
-    started = time.perf_counter()
-    raw = await _default_send(
-        host=_ollama_host(),
+    # Generalized to the provider-neutral seam (Task 14.3); the ollama wire call
+    # stays byte-identical (same temperature/seed/options/think) so the committed
+    # ``results-model-ceiling-*.jsonl`` reproduce.
+    result = await call_turn(
+        prompt,
+        MeetingTurn,
+        backend="ollama",
         model=model,
-        prompt=prompt,
-        format_schema=MeetingTurn.model_json_schema(),
-        options={
-            "temperature": 0.4,
-            "seed": 0,
-            "num_predict": num_predict,
-            "num_ctx": num_ctx,
-        },
+        temperature=0.4,
+        max_tokens=num_predict,
+        ollama_host=_ollama_host(),
+        seed=0,
+        num_ctx=num_ctx,
         think=think,
     )
-    lat = time.perf_counter() - started
-    try:
-        turn = MeetingTurn.model_validate_json(
-            _extract_json_block(raw.text, MeetingTurn)
-        )
-        return turn, raw.text, lat
-    except ValidationError:
-        return None, raw.text, lat
+    return result.parsed, result.raw_text, result.latency_s
 
 
 def do_run_ollama(
@@ -131,9 +134,77 @@ def do_run_ollama(
                     "tag": tag,
                     "parsed_ok": turn is not None,
                     "latency_s": round(lat, 1),
+                    "substrate_flags": active_substrate_flags(),
                 }
                 if turn is None:
                     rec["raw_head"] = raw[:200]
+                else:
+                    rec.update(_grade(turn, ctx, br, bt))
+                sink.write(json.dumps(rec) + "\n")
+                sink.flush()
+                print(
+                    f"  {tag} {n + 1}/{len(ctxs)} (parsed={turn is not None})",
+                    flush=True,
+                )
+
+    asyncio.run(_run())
+    print(f"wrote {out}")
+
+
+def do_run_featherless(
+    model: str,
+    tag: str,
+    *,
+    num_predict: int,
+    request_thinking: bool,
+    base_url: str,
+    response_format_mode: ResponseFormatMode,
+) -> None:
+    """Run the dumped hard contexts through the Featherless backend (Task 14.3).
+
+    Shares the frozen ``contexts.pkl`` (``dump``) and the mechanical
+    ``deflection_probe._grade``, so the only moving variable vs ``run-ollama`` is
+    the provider. Reasoning is discarded explicitly (``thinking_policy='strip'``)
+    so a reasoning model does not abort the sweep; the request-time thinking
+    toggle drives the non-thinking/thinking axis. Graded results can also be
+    produced from external turns via ``grade-frontier``.
+    """
+
+    api_key = os.environ.get("FEATHERLESS_API_KEY")
+    if not api_key:
+        raise SystemExit("run-featherless requires FEATHERLESS_API_KEY in the env.")
+    ctxs: list[ReplyContext] = pickle.loads(CTX_PKL.read_bytes())
+    out = WORK / f"results-model-ceiling-{tag}.jsonl"
+
+    async def _run() -> None:
+        with out.open("w", encoding="utf-8") as sink:
+            for n, ctx in enumerate(ctxs):
+                br, bt = _body(ctx)
+                result = await call_turn(
+                    _prompt(ctx),
+                    MeetingTurn,
+                    backend="featherless",
+                    model=model,
+                    temperature=0.4,
+                    max_tokens=num_predict,
+                    api_key=api_key,
+                    base_url=base_url,
+                    request_thinking=request_thinking,
+                    thinking_policy=DEFAULT_PROBE_THINKING_POLICY,
+                    response_format_mode=response_format_mode,
+                )
+                turn = result.parsed
+                rec: dict[str, Any] = {
+                    "item": ctx.item_id,
+                    "tag": tag,
+                    "parsed_ok": turn is not None,
+                    "latency_s": round(result.latency_s, 1),
+                    "in_tokens": result.in_tokens,
+                    "out_tokens": result.out_tokens,
+                    "substrate_flags": result.substrate_flags,
+                }
+                if turn is None:
+                    rec["raw_head"] = result.raw_text[:200]
                 else:
                     rec.update(_grade(turn, ctx, br, bt))
                 sink.write(json.dumps(rec) + "\n")
@@ -160,6 +231,7 @@ def do_grade_frontier(turns_path: Path, tag: str) -> None:
                 continue
             br, bt = _body(ctx)
             payload = raw_turn if isinstance(raw_turn, str) else json.dumps(raw_turn)
+            flags = active_substrate_flags()
             try:
                 turn = MeetingTurn.model_validate_json(
                     _extract_json_block(payload, MeetingTurn)
@@ -172,6 +244,7 @@ def do_grade_frontier(turns_path: Path, tag: str) -> None:
                             "tag": tag,
                             "parsed_ok": False,
                             "err": str(exc)[:160],
+                            "substrate_flags": flags,
                         }
                     )
                     + "\n"
@@ -181,6 +254,7 @@ def do_grade_frontier(turns_path: Path, tag: str) -> None:
                 "item": item_id,
                 "tag": tag,
                 "parsed_ok": True,
+                "substrate_flags": flags,
                 **_grade(turn, ctx, br, bt),
             }
             sink.write(json.dumps(rec) + "\n")
@@ -198,6 +272,21 @@ def main() -> int:
     r.add_argument("--tag", required=True)
     r.add_argument("--num-ctx", type=int, default=8192)
     r.add_argument("--num-predict", type=int, default=2048)
+    f = sub.add_parser("run-featherless")
+    f.add_argument("--model", required=True)
+    f.add_argument("--tag", required=True)
+    f.add_argument("--num-predict", type=int, default=2048)
+    f.add_argument(
+        "--request-thinking",
+        action="store_true",
+        help="Request-time thinking toggle (the non-thinking/thinking sweep axis).",
+    )
+    f.add_argument("--base-url", type=str, default=DEFAULT_FEATHERLESS_BASE_URL)
+    f.add_argument(
+        "--response-format-mode",
+        choices=["json_object", "json_schema", "none"],
+        default=DEFAULT_RESPONSE_FORMAT_MODE,
+    )
     g = sub.add_parser("grade-frontier")
     g.add_argument("--turns", type=Path, required=True)
     g.add_argument("--tag", required=True)
@@ -207,6 +296,15 @@ def main() -> int:
     elif args.mode == "run-ollama":
         do_run_ollama(
             args.model, args.think == "true", args.tag, args.num_ctx, args.num_predict
+        )
+    elif args.mode == "run-featherless":
+        do_run_featherless(
+            args.model,
+            args.tag,
+            num_predict=args.num_predict,
+            request_thinking=args.request_thinking,
+            base_url=args.base_url,
+            response_format_mode=args.response_format_mode,
         )
     else:
         do_grade_frontier(args.turns, args.tag)

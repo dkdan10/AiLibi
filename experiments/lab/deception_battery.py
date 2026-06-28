@@ -39,12 +39,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
-
-from pydantic import ValidationError
 
 from agents.strategic.prompts.loader import (
     accusation_round_prompt,
@@ -52,10 +49,20 @@ from agents.strategic.prompts.loader import (
 )
 from api.replay_loader import ReplayLoader
 from engine.world import load_canonical_map
+from experiments.lab.probe_backends import (
+    DEFAULT_PROBE_THINKING_POLICY,
+    Backend,
+    active_substrate_flags,
+    call_turn,
+)
 from experiments.model_probe.corpus import _roles_for_seed, _roster
 from experiments.model_probe.probe import _ollama_host, preflight
-from llm.ollama_client import _default_send
-from llm.provider import _extract_json_block
+from llm.featherless_client import (
+    DEFAULT_FEATHERLESS_BASE_URL,
+    DEFAULT_RESPONSE_FORMAT_MODE,
+    ResponseFormatMode,
+    ThinkingPolicy,
+)
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -88,6 +95,10 @@ KILL_WORDS = (
 
 
 def _emit(sink: TextIO, rec: dict[str, object]) -> None:
+    # Tag every emitted row with the active 13.5 substrate-flag config (Task
+    # 14.3) so the two-column (flag-OFF / flag-ON) sweep rows are
+    # self-describing; ``setdefault`` lets a caller stamp its own config.
+    rec.setdefault("substrate_flags", active_substrate_flags())
     sink.write(json.dumps(rec) + "\n")
     sink.flush()
 
@@ -315,29 +326,43 @@ def build_reply_contexts(sample_dir: Path, cap: int) -> list[ReplyContext]:
     return items
 
 
-async def _call(prompt: str) -> tuple[MeetingTurn | None, str, float]:
-    started = time.perf_counter()
-    raw = await _default_send(
-        host=_ollama_host(),
-        model=MODEL,
-        prompt=prompt,
-        format_schema=MeetingTurn.model_json_schema(),
-        options={
-            "temperature": TEMPERATURE,
-            "seed": SEED,
-            "num_predict": NUM_PREDICT,
-            "num_ctx": NUM_CTX,
-        },
+async def _call(
+    prompt: str,
+    *,
+    backend: Backend = "ollama",
+    model: str = MODEL,
+    api_key: str | None = None,
+    base_url: str = DEFAULT_FEATHERLESS_BASE_URL,
+    request_thinking: bool = False,
+    thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
+    response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
+) -> tuple[MeetingTurn | None, str, float]:
+    """Run one MeetingTurn call through the provider-neutral probe seam.
+
+    Defaults reproduce the historical Ollama wire call byte-identically (the
+    committed ``results-deception-battery.jsonl`` reproduces); ``backend`` /
+    ``model`` + the featherless knobs route the SAME prompt to the Task 14.1
+    hosted slate for the 14.4 sweep.
+    """
+
+    result = await call_turn(
+        prompt,
+        MeetingTurn,
+        backend=backend,
+        model=model,
+        temperature=TEMPERATURE,
+        max_tokens=NUM_PREDICT,
+        ollama_host=_ollama_host(),
+        seed=SEED,
+        num_ctx=NUM_CTX,
         think=False,
+        api_key=api_key,
+        base_url=base_url,
+        request_thinking=request_thinking,
+        thinking_policy=thinking_policy,
+        response_format_mode=response_format_mode,
     )
-    latency = time.perf_counter() - started
-    try:
-        turn = MeetingTurn.model_validate_json(
-            _extract_json_block(raw.text, MeetingTurn)
-        )
-        return turn, raw.text, latency
-    except ValidationError:
-        return None, raw.text, latency
+    return result.parsed, result.raw_text, result.latency_s
 
 
 def _grade_fabrication(

@@ -38,8 +38,12 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
-from pydantic import ValidationError
-
+from experiments.lab.probe_backends import (
+    DEFAULT_PROBE_THINKING_POLICY,
+    Backend,
+    active_substrate_flags,
+    call_turn,
+)
 from experiments.model_probe.corpus import (
     DEFAULT_SAMPLE_DIR,
     CorpusItem,
@@ -48,8 +52,12 @@ from experiments.model_probe.corpus import (
     render_prompt,
 )
 from experiments.model_probe.variants import variant_renderers
-from llm.ollama_client import _default_send
-from llm.provider import _extract_json_block
+from llm.featherless_client import (
+    DEFAULT_FEATHERLESS_BASE_URL,
+    DEFAULT_RESPONSE_FORMAT_MODE,
+    ResponseFormatMode,
+    ThinkingPolicy,
+)
 from meetings.schemas import VoteBallot
 
 DEFAULT_MODELS = ("qwen2.5:7b-instruct", "qwen3.5:9b")
@@ -125,6 +133,12 @@ async def _one_call(
     num_ctx: int,
     temperature: float,
     num_predict: int,
+    backend: Backend = "ollama",
+    api_key: str | None = None,
+    base_url: str = DEFAULT_FEATHERLESS_BASE_URL,
+    request_thinking: bool = False,
+    thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
+    response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
 ) -> dict[str, object]:
     prompt = render(item.context)
     record: dict[str, object] = {
@@ -143,21 +157,30 @@ async def _one_call(
         "temperature": temperature,
         "variant": variant,
         "prompt_chars": len(prompt),
+        # Provenance for the two-backend / two-substrate world (Task 14.3): the
+        # default ``ollama`` wire call is byte-identical, so the deterministic
+        # decision columns below still reproduce the committed results.
+        "backend": backend,
+        "substrate_flags": active_substrate_flags(),
     }
     started = time.perf_counter()
     try:
-        raw = await _default_send(
-            host=_ollama_host(),
+        result = await call_turn(
+            prompt,
+            VoteBallot,
+            backend=backend,
             model=model,
-            prompt=prompt,
-            format_schema=VoteBallot.model_json_schema(),
-            options={
-                "temperature": temperature,
-                "seed": SEED,
-                "num_predict": num_predict,
-                "num_ctx": num_ctx,
-            },
+            temperature=temperature,
+            max_tokens=num_predict,
+            ollama_host=_ollama_host(),
+            seed=SEED,
+            num_ctx=num_ctx,
             think=think,
+            api_key=api_key,
+            base_url=base_url,
+            request_thinking=request_thinking,
+            thinking_policy=thinking_policy,
+            response_format_mode=response_format_mode,
         )
     except Exception as exc:  # noqa: BLE001 — record transport failures, don't abort the matrix
         record["latency_s"] = round(time.perf_counter() - started, 3)
@@ -165,17 +188,15 @@ async def _one_call(
         record["parsed_ok"] = False
         return record
 
-    record["latency_s"] = round(time.perf_counter() - started, 3)
-    record["in_tokens"] = raw.prompt_eval_count
-    record["out_tokens"] = raw.eval_count
-    record["thinking_chars"] = len(raw.thinking)
-    text = _extract_json_block(raw.text, VoteBallot)
-    try:
-        parsed = VoteBallot.model_validate_json(text)
-    except ValidationError as exc:
+    record["latency_s"] = round(result.latency_s, 3)
+    record["in_tokens"] = result.in_tokens
+    record["out_tokens"] = result.out_tokens
+    record["thinking_chars"] = result.thinking_chars
+    parsed = result.parsed
+    if parsed is None:
         record["parsed_ok"] = False
-        record["rationale_chars"] = len(raw.text)
-        record["error"] = f"parse: {exc}"[:200]
+        record["rationale_chars"] = len(result.raw_text)
+        record["error"] = f"parse: {result.parse_error}"[:200]
         return record
     record["parsed_ok"] = True
     record["target"] = parsed.target
@@ -196,6 +217,12 @@ async def run_matrix(
     temperature: float,
     num_predict: int,
     out_path: Path,
+    backend: Backend = "ollama",
+    api_key: str | None = None,
+    base_url: str = DEFAULT_FEATHERLESS_BASE_URL,
+    request_thinking: bool = False,
+    thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
+    response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
 ) -> int:
     total = len(items) * len(models) * len(thinks) * len(num_ctxs) * len(variants)
     print(
@@ -219,6 +246,12 @@ async def run_matrix(
                                 num_ctx=num_ctx,
                                 temperature=temperature,
                                 num_predict=num_predict,
+                                backend=backend,
+                                api_key=api_key,
+                                base_url=base_url,
+                                request_thinking=request_thinking,
+                                thinking_policy=thinking_policy,
+                                response_format_mode=response_format_mode,
                             )
                             sink.write(json.dumps(record) + "\n")
                             sink.flush()
@@ -243,8 +276,44 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sample-dir", type=Path, default=DEFAULT_SAMPLE_DIR)
     parser.add_argument("--seeds", type=str, default=None)
+    parser.add_argument(
+        "--backend",
+        type=str,
+        choices=["ollama", "featherless"],
+        default="ollama",
+        help="Provider seam: ollama (default, preserves CI + committed results) "
+        "or featherless (Task 14.1 hosted slate; needs FEATHERLESS_API_KEY).",
+    )
     parser.add_argument("--models", type=str, default=",".join(DEFAULT_MODELS))
     parser.add_argument("--think", type=str, default="false,true")
+    parser.add_argument(
+        "--featherless-base-url",
+        type=str,
+        default=DEFAULT_FEATHERLESS_BASE_URL,
+        help="Featherless OpenAI-compatible base URL (--backend featherless).",
+    )
+    parser.add_argument(
+        "--request-thinking",
+        action="store_true",
+        help="Request-time thinking toggle for the featherless backend (the "
+        "14.4 non-thinking/thinking sweep axis); ignored for ollama (use --think).",
+    )
+    parser.add_argument(
+        "--thinking-policy",
+        type=str,
+        choices=["fail_loud", "strip"],
+        default=DEFAULT_PROBE_THINKING_POLICY,
+        help="Response-side policy for a reasoning featherless response "
+        "(default strip so a reasoning model does not abort the sweep).",
+    )
+    parser.add_argument(
+        "--response-format-mode",
+        type=str,
+        choices=["json_object", "json_schema", "none"],
+        default=DEFAULT_RESPONSE_FORMAT_MODE,
+        help="How a featherless structured call asks for JSON (default "
+        "json_object; the slate rejects strict json_schema).",
+    )
     parser.add_argument("--num-ctx", type=str, default="8192,16384")
     parser.add_argument(
         "--variants",
@@ -267,7 +336,18 @@ def main() -> int:
     args = parser.parse_args()
 
     models = tuple(m.strip() for m in args.models.split(",") if m.strip())
-    preflight(models)
+    backend: Backend = args.backend
+    api_key: str | None = None
+    if backend == "ollama":
+        preflight(models)
+    else:
+        # Featherless: no Ollama preflight; fail loud on a missing key rather
+        # than silently hitting an unauthorized endpoint (no silent fallback).
+        api_key = os.environ.get("FEATHERLESS_API_KEY")
+        if not api_key:
+            raise SystemExit(
+                "--backend featherless requires FEATHERLESS_API_KEY in the env."
+            )
 
     items = build_corpus(args.sample_dir, seeds=_parse_seeds(args.seeds))
     items = select_corpus(
@@ -292,6 +372,12 @@ def main() -> int:
             temperature=args.temperature,
             num_predict=args.num_predict,
             out_path=out_path,
+            backend=backend,
+            api_key=api_key,
+            base_url=args.featherless_base_url,
+            request_thinking=args.request_thinking,
+            thinking_policy=args.thinking_policy,
+            response_format_mode=args.response_format_mode,
         )
     )
 

@@ -29,6 +29,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +43,7 @@ from meetings.schemas import (
 )
 from meetings.transcript import detect_contradictions
 from experiments.lab.deception_battery import (
+    MODEL,
     RESULTS,
     ReplyContext,
     _call,
@@ -49,9 +52,51 @@ from experiments.lab.deception_battery import (
     _self_alibis,
     build_reply_contexts,
 )
+from experiments.lab.probe_backends import (
+    DEFAULT_PROBE_THINKING_POLICY,
+    Backend,
+)
 from experiments.model_probe.probe import preflight
+from llm.featherless_client import (
+    DEFAULT_FEATHERLESS_BASE_URL,
+    DEFAULT_RESPONSE_FORMAT_MODE,
+    ResponseFormatMode,
+    ThinkingPolicy,
+)
 
-MODEL = "qwen3.5:9b"
+
+@dataclass(frozen=True)
+class BackendConfig:
+    """Provider routing forwarded to :func:`deception_battery._call` (Task 14.3).
+
+    Bundles the ``backend`` / ``model`` selector plus the featherless wire knobs
+    so the two A/B runners thread one object instead of seven keyword args. The
+    default reproduces the historical Ollama wire call byte-identically.
+    """
+
+    backend: Backend = "ollama"
+    model: str = MODEL
+    api_key: str | None = None
+    base_url: str = DEFAULT_FEATHERLESS_BASE_URL
+    request_thinking: bool = False
+    thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY
+    response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE
+
+
+async def _call_cfg(
+    prompt: str, cfg: BackendConfig
+) -> tuple[MeetingTurn | None, str, float]:
+    """Forward one call through :func:`deception_battery._call` per ``cfg``."""
+    return await _call(
+        prompt,
+        backend=cfg.backend,
+        model=cfg.model,
+        api_key=cfg.api_key,
+        base_url=cfg.base_url,
+        request_thinking=cfg.request_thinking,
+        thinking_policy=cfg.thinking_policy,
+        response_format_mode=cfg.response_format_mode,
+    )
 
 
 def _body(ctx: ReplyContext) -> tuple[str | None, int | None]:
@@ -164,6 +209,7 @@ async def run_memory_fix(
     kills_by_seed: dict[int, list[tuple[str, str, str, int]]],
     *,
     sink: Any,
+    cfg: BackendConfig = BackendConfig(),
 ) -> None:
     """A/B isolating the kill-memory fix ON TOP of the gp-1 cover directive:
     A = cover on the CURRENT 'discovered body' memory (the backfire condition),
@@ -196,7 +242,7 @@ async def run_memory_fix(
                 living_ids=tuple(p for p in ctx.living if p != ctx.speaker),
                 dead_ids=tuple(ctx.dead),
             )
-            turn, _raw, _lat = await _call(prompt)
+            turn, _raw, _lat = await _call_cfg(prompt, cfg)
             results[arm] = (
                 {"parsed_ok": False}
                 if turn is None
@@ -215,7 +261,12 @@ async def run_memory_fix(
         print(f"  {n + 1}/{len(ctxs)}", flush=True)
 
 
-async def run(ctxs: list[ReplyContext], *, sink: Any) -> None:
+async def run(
+    ctxs: list[ReplyContext],
+    *,
+    sink: Any,
+    cfg: BackendConfig = BackendConfig(),
+) -> None:
     for n, ctx in enumerate(ctxs):
         body_room, body_tick = _body(ctx)
         base_prompt = accusation_round_prompt(
@@ -249,7 +300,7 @@ async def run(ctxs: list[ReplyContext], *, sink: Any) -> None:
                     dead_ids=tuple(ctx.dead),
                 )
             )
-            turn, _raw, _lat = await _call(prompt)
+            turn, _raw, _lat = await _call_cfg(prompt, cfg)
             results[arm] = (
                 {"parsed_ok": False}
                 if turn is None
@@ -293,8 +344,43 @@ def main() -> int:
     parser.add_argument(
         "--facts", type=Path, help="extractor facts JSON (memory-fix mode)"
     )
+    parser.add_argument(
+        "--backend",
+        choices=["ollama", "featherless"],
+        default="ollama",
+        help="Provider seam routed through deception_battery._call (Task 14.3); "
+        "featherless needs FEATHERLESS_API_KEY.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=MODEL,
+        help="Model id for the chosen backend (default the pinned 9B).",
+    )
+    parser.add_argument(
+        "--request-thinking",
+        action="store_true",
+        help="Request-time thinking toggle for the featherless backend.",
+    )
     args = parser.parse_args()
-    preflight((MODEL,))
+
+    backend: Backend = args.backend
+    api_key: str | None = None
+    if backend == "ollama":
+        preflight((args.model,))
+    else:
+        api_key = os.environ.get("FEATHERLESS_API_KEY")
+        if not api_key:
+            raise SystemExit(
+                "--backend featherless requires FEATHERLESS_API_KEY in the env."
+            )
+    cfg = BackendConfig(
+        backend=backend,
+        model=args.model,
+        api_key=api_key,
+        request_thinking=args.request_thinking,
+    )
+
     ctxs = build_reply_contexts(args.sample_dir, args.cap)
     print(f"impostor reply contexts: {len(ctxs)} (within-impostor A/B)", flush=True)
     if args.mode == "memory-fix":
@@ -303,11 +389,11 @@ def main() -> int:
         kills = _kills_by_seed(args.facts)
         out_path = RESULTS / "results-memory-fix-probe.jsonl"
         with out_path.open("w", encoding="utf-8") as sink:
-            asyncio.run(run_memory_fix(ctxs, kills, sink=sink))
+            asyncio.run(run_memory_fix(ctxs, kills, sink=sink, cfg=cfg))
     else:
         out_path = RESULTS / "results-deflection-probe.jsonl"
         with out_path.open("w", encoding="utf-8") as sink:
-            asyncio.run(run(ctxs, sink=sink))
+            asyncio.run(run(ctxs, sink=sink, cfg=cfg))
     print(f"wrote {out_path}")
     return 0
 
