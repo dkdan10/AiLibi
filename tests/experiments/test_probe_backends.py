@@ -267,7 +267,8 @@ def test_featherless_response_format_json_schema(
 def test_featherless_strip_excises_think_block(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    send = _RecordingFeatherless(text=f"<think>scratch {{}}</think>{_VALID}")
+    raw = f"<think>scratch {{}}</think>{_VALID}"
+    send = _RecordingFeatherless(text=raw)
     monkeypatch.setattr(pb, "_featherless_send", send)
     result = asyncio.run(
         call_turn(
@@ -284,6 +285,10 @@ def test_featherless_strip_excises_think_block(
     )
     assert result.parsed is not None
     assert result.parsed.target == "p-1"
+    # Inline reasoning (no side-channel) is counted: the excised prefix length,
+    # not 0 — otherwise inline-tag models under-report thinking pollution.
+    assert result.thinking_chars == len(raw) - len(_VALID)
+    assert result.thinking_chars > 0
 
 
 def test_featherless_strip_ignores_reasoning_channel(
@@ -385,6 +390,31 @@ def test_substrate_flags_default_snapshot(monkeypatch: pytest.MonkeyPatch) -> No
         )
     )
     assert result.substrate_flags == _FLAGS_OFF
+
+
+def test_deception_battery_cfg_routes_to_featherless(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Fix #2 regression: BackendConfig threaded through deception_battery._call_cfg
+    # must reach call_turn's featherless branch (not the ollama default).
+    from experiments.lab.deception_battery import BackendConfig, _call_cfg
+
+    # MeetingTurn is the schema deception_battery uses; a minimal valid body.
+    body = (
+        '{"turn_index": 0, "turn_id": "m:turn-0", "speaker": "p-1", '
+        '"turn_kind": "opening", "reply_to": null, "observations": [], '
+        '"claims": [], "free_text": "hello"}'
+    )
+    send = _RecordingFeatherless(text=body)
+    monkeypatch.setattr(pb, "_featherless_send", send)
+    monkeypatch.setattr(pb, "_ollama_send", _forbidden_send("ollama"))
+    cfg = BackendConfig(backend="featherless", model="Qwen/Qwen3-32B", api_key="sk")
+    turn, raw_text, latency = asyncio.run(_call_cfg("prompt", cfg))
+    assert turn is not None
+    assert send.seen["model"] == "Qwen/Qwen3-32B"
+    assert send.seen["api_key"] == "sk"
+    assert raw_text == body
+    assert latency >= 0.0
 
 
 def test_active_substrate_flags_reads_env() -> None:

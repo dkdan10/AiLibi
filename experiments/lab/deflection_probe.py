@@ -30,7 +30,6 @@ import argparse
 import asyncio
 import json
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -45,58 +44,16 @@ from meetings.transcript import detect_contradictions
 from experiments.lab.deception_battery import (
     MODEL,
     RESULTS,
+    BackendConfig,
     ReplyContext,
-    _call,
+    _call_cfg,
     _emit,
     _envelope,
     _self_alibis,
     build_reply_contexts,
 )
-from experiments.lab.probe_backends import (
-    DEFAULT_PROBE_THINKING_POLICY,
-    Backend,
-)
+from experiments.lab.probe_backends import Backend
 from experiments.model_probe.probe import preflight
-from llm.featherless_client import (
-    DEFAULT_FEATHERLESS_BASE_URL,
-    DEFAULT_RESPONSE_FORMAT_MODE,
-    ResponseFormatMode,
-    ThinkingPolicy,
-)
-
-
-@dataclass(frozen=True)
-class BackendConfig:
-    """Provider routing forwarded to :func:`deception_battery._call` (Task 14.3).
-
-    Bundles the ``backend`` / ``model`` selector plus the featherless wire knobs
-    so the two A/B runners thread one object instead of seven keyword args. The
-    default reproduces the historical Ollama wire call byte-identically.
-    """
-
-    backend: Backend = "ollama"
-    model: str = MODEL
-    api_key: str | None = None
-    base_url: str = DEFAULT_FEATHERLESS_BASE_URL
-    request_thinking: bool = False
-    thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY
-    response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE
-
-
-async def _call_cfg(
-    prompt: str, cfg: BackendConfig
-) -> tuple[MeetingTurn | None, str, float]:
-    """Forward one call through :func:`deception_battery._call` per ``cfg``."""
-    return await _call(
-        prompt,
-        backend=cfg.backend,
-        model=cfg.model,
-        api_key=cfg.api_key,
-        base_url=cfg.base_url,
-        request_thinking=cfg.request_thinking,
-        thinking_policy=cfg.thinking_policy,
-        response_format_mode=cfg.response_format_mode,
-    )
 
 
 def _body(ctx: ReplyContext) -> tuple[str | None, int | None]:

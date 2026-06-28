@@ -50,9 +50,38 @@ from experiments.lab.deflection_probe import _body, _grade
 
 WORK = Path("experiments/lab")
 CTX_PKL = WORK / "model-ceiling-contexts.pkl"
+# Sidecar recording the substrate-flag config ACTIVE WHEN THE CONTEXTS WERE
+# DUMPED (Task 14.3). ``dump`` reconstructs rendered memory through the 13.5
+# ``*_enabled()`` reads, so the flag config is baked into ``CTX_PKL``; run /
+# grade are separate invocations whose live env may differ. Stamping rows from
+# this sidecar (not the run-time env) keeps the flag-OFF/flag-ON comparison
+# honest even if an operator dumps flag-ON and later runs with the flags unset.
+CTX_FLAGS = WORK / "model-ceiling-contexts-flags.json"
 PROMPTS = WORK / "model-ceiling-prompts.json"
 N_HARD = 16
 RAW_CAP = 40  # pull this many reply contexts, then keep the body-meeting ones
+
+
+def _dumped_substrate_flags() -> dict[str, bool]:
+    """Substrate flags baked into ``CTX_PKL`` at dump time (Task 14.3).
+
+    Reads the :data:`CTX_FLAGS` sidecar written by :func:`do_dump`. Falls back to
+    a live :func:`active_substrate_flags` snapshot — with a loud warning — only
+    when the sidecar is absent (a pickle dumped before flag-stamping landed), so
+    a stale dump is flagged rather than silently mis-tagged.
+    """
+
+    if CTX_FLAGS.exists():
+        loaded: dict[str, bool] = json.loads(CTX_FLAGS.read_text())
+        return loaded
+    flags = active_substrate_flags()
+    print(
+        f"WARNING: {CTX_FLAGS} missing (dump predates flag-stamping); tagging "
+        f"rows with the RUN-TIME substrate flags {flags} — re-run `dump` to "
+        "stamp the dump-time config.",
+        flush=True,
+    )
+    return flags
 
 
 def _prompt(ctx: ReplyContext) -> str:
@@ -78,6 +107,10 @@ def _select(sample_dir: Path) -> list[ReplyContext]:
 def do_dump(sample_dir: Path) -> None:
     ctxs = _select(sample_dir)
     CTX_PKL.write_bytes(pickle.dumps(ctxs))
+    # Stamp the dump-time substrate-flag config alongside the pickle so run /
+    # grade tag rows with the config that actually produced the rendered memory.
+    flags = active_substrate_flags()
+    CTX_FLAGS.write_text(json.dumps(flags, indent=2))
     rows = []
     for c in ctxs:
         br, bt = _body(c)
@@ -91,7 +124,10 @@ def do_dump(sample_dir: Path) -> None:
             }
         )
     PROMPTS.write_text(json.dumps(rows, indent=2))
-    print(f"dumped {len(ctxs)} hard body-meeting contexts -> {CTX_PKL} / {PROMPTS}")
+    print(
+        f"dumped {len(ctxs)} hard body-meeting contexts (substrate {flags}) -> "
+        f"{CTX_PKL} / {PROMPTS} / {CTX_FLAGS}"
+    )
 
 
 async def _call_ollama(
@@ -120,6 +156,7 @@ def do_run_ollama(
 ) -> None:
     preflight((model,))
     ctxs: list[ReplyContext] = pickle.loads(CTX_PKL.read_bytes())
+    flags = _dumped_substrate_flags()
     out = WORK / f"results-model-ceiling-{tag}.jsonl"
 
     async def _run() -> None:
@@ -134,7 +171,7 @@ def do_run_ollama(
                     "tag": tag,
                     "parsed_ok": turn is not None,
                     "latency_s": round(lat, 1),
-                    "substrate_flags": active_substrate_flags(),
+                    "substrate_flags": flags,
                 }
                 if turn is None:
                     rec["raw_head"] = raw[:200]
@@ -174,6 +211,7 @@ def do_run_featherless(
     if not api_key:
         raise SystemExit("run-featherless requires FEATHERLESS_API_KEY in the env.")
     ctxs: list[ReplyContext] = pickle.loads(CTX_PKL.read_bytes())
+    flags = _dumped_substrate_flags()
     out = WORK / f"results-model-ceiling-{tag}.jsonl"
 
     async def _run() -> None:
@@ -192,6 +230,9 @@ def do_run_featherless(
                     request_thinking=request_thinking,
                     thinking_policy=DEFAULT_PROBE_THINKING_POLICY,
                     response_format_mode=response_format_mode,
+                    # Tag with the DUMP-TIME substrate config (baked into the
+                    # pickle), not call_turn's run-time snapshot.
+                    substrate_flags=flags,
                 )
                 turn = result.parsed
                 rec: dict[str, Any] = {
@@ -222,6 +263,7 @@ def do_grade_frontier(turns_path: Path, tag: str) -> None:
     ctxs: list[ReplyContext] = pickle.loads(CTX_PKL.read_bytes())
     by_id = {c.item_id: c for c in ctxs}
     turns = json.loads(turns_path.read_text())  # {item_id: turn-json (obj or str)}
+    flags = _dumped_substrate_flags()
     out = WORK / f"results-model-ceiling-{tag}.jsonl"
     with out.open("w", encoding="utf-8") as sink:
         for item_id, raw_turn in turns.items():
@@ -231,7 +273,6 @@ def do_grade_frontier(turns_path: Path, tag: str) -> None:
                 continue
             br, bt = _body(ctx)
             payload = raw_turn if isinstance(raw_turn, str) else json.dumps(raw_turn)
-            flags = active_substrate_flags()
             try:
                 turn = MeetingTurn.model_validate_json(
                     _extract_json_block(payload, MeetingTurn)

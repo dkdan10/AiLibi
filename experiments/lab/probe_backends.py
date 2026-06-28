@@ -308,13 +308,21 @@ async def call_turn(
                 reasoning,
             )
         parsed, parse_error = _parse(schema, content)
+        # Count thinking pollution from BOTH channels: the dedicated
+        # ``reasoning_content`` side-channel AND any inline ``<think>...</think>``
+        # block the ``strip`` path excised (``len(text) - len(content)``). Inline
+        # tags are exactly how Qwen-style models surface reasoning, so omitting
+        # them would under-report ``thinking_chars`` for the reasoning-model sweep
+        # cases that use them — making the comparison against Ollama's
+        # ``thinking_chars`` and side-channel models misleading.
+        stripped_inline = len(raw_f.text) - len(content)
         return CallResult(
             parsed=parsed,
             raw_text=raw_f.text,
             latency_s=latency_s,
             in_tokens=raw_f.prompt_tokens,
             out_tokens=raw_f.completion_tokens,
-            thinking_chars=len(raw_f.reasoning_content),
+            thinking_chars=len(raw_f.reasoning_content) + stripped_inline,
             substrate_flags=flags,
             parse_error=parse_error,
         )

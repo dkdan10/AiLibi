@@ -136,7 +136,6 @@ async def _one_call(
     backend: Backend = "ollama",
     api_key: str | None = None,
     base_url: str = DEFAULT_FEATHERLESS_BASE_URL,
-    request_thinking: bool = False,
     thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
     response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
 ) -> dict[str, object]:
@@ -178,7 +177,13 @@ async def _one_call(
             think=think,
             api_key=api_key,
             base_url=base_url,
-            request_thinking=request_thinking,
+            # The single ``think`` matrix axis drives BOTH backends: ollama reads
+            # ``think`` (above), featherless reads ``request_thinking`` (the wire
+            # thinking toggle). Deriving it from ``think`` keeps the two
+            # think-labelled rows actually distinct on Featherless — otherwise
+            # both rows would send identical requests under one fixed flag and the
+            # 14.4 non-thinking/thinking axis would be duplicated/mislabelled.
+            request_thinking=think,
             thinking_policy=thinking_policy,
             response_format_mode=response_format_mode,
         )
@@ -220,7 +225,6 @@ async def run_matrix(
     backend: Backend = "ollama",
     api_key: str | None = None,
     base_url: str = DEFAULT_FEATHERLESS_BASE_URL,
-    request_thinking: bool = False,
     thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
     response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
 ) -> int:
@@ -249,7 +253,6 @@ async def run_matrix(
                                 backend=backend,
                                 api_key=api_key,
                                 base_url=base_url,
-                                request_thinking=request_thinking,
                                 thinking_policy=thinking_policy,
                                 response_format_mode=response_format_mode,
                             )
@@ -285,18 +288,19 @@ def main() -> int:
         "or featherless (Task 14.1 hosted slate; needs FEATHERLESS_API_KEY).",
     )
     parser.add_argument("--models", type=str, default=",".join(DEFAULT_MODELS))
-    parser.add_argument("--think", type=str, default="false,true")
+    parser.add_argument(
+        "--think",
+        type=str,
+        default="false,true",
+        help="Comma list of think values; drives ollama's top-level think AND "
+        "(for --backend featherless) the request-time thinking toggle, so this "
+        "IS the 14.4 non-thinking/thinking sweep axis for both backends.",
+    )
     parser.add_argument(
         "--featherless-base-url",
         type=str,
         default=DEFAULT_FEATHERLESS_BASE_URL,
         help="Featherless OpenAI-compatible base URL (--backend featherless).",
-    )
-    parser.add_argument(
-        "--request-thinking",
-        action="store_true",
-        help="Request-time thinking toggle for the featherless backend (the "
-        "14.4 non-thinking/thinking sweep axis); ignored for ollama (use --think).",
     )
     parser.add_argument(
         "--thinking-policy",
@@ -375,7 +379,6 @@ def main() -> int:
             backend=backend,
             api_key=api_key,
             base_url=args.featherless_base_url,
-            request_thinking=args.request_thinking,
             thinking_policy=args.thinking_policy,
             response_format_mode=args.response_format_mode,
         )

@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
@@ -365,6 +366,43 @@ async def _call(
     return result.parsed, result.raw_text, result.latency_s
 
 
+@dataclass(frozen=True)
+class BackendConfig:
+    """Provider routing forwarded to :func:`_call` (Task 14.3).
+
+    Bundles the ``backend`` / ``model`` selector plus the featherless wire knobs
+    so the deception / deflection probe runners thread ONE object instead of
+    seven keyword args. The default reproduces the historical Ollama wire call
+    byte-identically. Defined here (the ``_call`` import root) so
+    :mod:`experiments.lab.deflection_probe` can reuse it without duplication.
+    """
+
+    backend: Backend = "ollama"
+    model: str = MODEL
+    api_key: str | None = None
+    base_url: str = DEFAULT_FEATHERLESS_BASE_URL
+    request_thinking: bool = False
+    thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY
+    response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE
+
+
+async def _call_cfg(
+    prompt: str, cfg: BackendConfig
+) -> tuple[MeetingTurn | None, str, float]:
+    """Run one :func:`_call` routed by ``cfg`` (the provider seam, Task 14.3)."""
+
+    return await _call(
+        prompt,
+        backend=cfg.backend,
+        model=cfg.model,
+        api_key=cfg.api_key,
+        base_url=cfg.base_url,
+        request_thinking=cfg.request_thinking,
+        thinking_policy=cfg.thinking_policy,
+        response_format_mode=cfg.response_format_mode,
+    )
+
+
 def _grade_fabrication(
     turn: MeetingTurn, ctx: KillContext, *, cover: tuple[str, int, int] | None = None
 ) -> dict[str, object]:
@@ -432,7 +470,12 @@ def _grade_fabrication(
 
 
 async def probe_a_and_c(
-    ctxs: list[KillContext], *, sink: TextIO, do_a2: int, do_c: int
+    ctxs: list[KillContext],
+    *,
+    sink: TextIO,
+    do_a2: int,
+    do_c: int,
+    cfg: BackendConfig = BackendConfig(),
 ) -> None:
     a2_done = 0
     for n, ctx in enumerate(ctxs):
@@ -446,7 +489,7 @@ async def probe_a_and_c(
             living_ids=tuple(p for p in ctx.living if p != ctx.killer),
             dead_ids=tuple(ctx.dead),
         )
-        turn, raw, latency = await _call(prompt)
+        turn, raw, latency = await _call_cfg(prompt, cfg)
         rec = {
             "probe": "A",
             "item": ctx.item_id,
@@ -507,7 +550,7 @@ async def probe_a_and_c(
                 living_ids=tuple(p for p in ctx.living if p != ctx.killer),
                 dead_ids=tuple(ctx.dead),
             )
-            r_turn, r_raw, r_lat = await _call(reply_prompt)
+            r_turn, r_raw, r_lat = await _call_cfg(reply_prompt, cfg)
             rec2 = {
                 "probe": "A2",
                 "item": ctx.item_id,
@@ -581,7 +624,7 @@ async def probe_a_and_c(
                 living_ids=tuple(p for p in ctx.living if p != ctx.killer),
                 dead_ids=tuple(ctx.dead),
             )
-            c_turn, c_raw, c_lat = await _call(c_prompt)
+            c_turn, c_raw, c_lat = await _call_cfg(c_prompt, cfg)
             rec3 = {
                 "probe": "C",
                 "item": ctx.item_id,
@@ -595,7 +638,9 @@ async def probe_a_and_c(
         print(f"  A/A2/C item {n + 1}/{len(ctxs)}", flush=True)
 
 
-async def probe_b(ctxs: list[ReplyContext], *, sink: TextIO) -> None:
+async def probe_b(
+    ctxs: list[ReplyContext], *, sink: TextIO, cfg: BackendConfig = BackendConfig()
+) -> None:
     for n, ctx in enumerate(ctxs):
         prompt = accusation_round_prompt(
             agent_id=ctx.speaker,
@@ -608,7 +653,7 @@ async def probe_b(ctxs: list[ReplyContext], *, sink: TextIO) -> None:
             living_ids=tuple(p for p in ctx.living if p != ctx.speaker),
             dead_ids=tuple(ctx.dead),
         )
-        turn, raw, latency = await _call(prompt)
+        turn, raw, latency = await _call_cfg(prompt, cfg)
         rec = {
             "probe": "B",
             "item": ctx.item_id,
@@ -680,10 +725,44 @@ def main() -> int:
     parser.add_argument("--cap-a2", type=int, default=10)
     parser.add_argument("--cap-b", type=int, default=22)
     parser.add_argument("--cap-c", type=int, default=12)
+    parser.add_argument(
+        "--backend",
+        choices=["ollama", "featherless"],
+        default="ollama",
+        help="Provider seam (Task 14.3); featherless needs FEATHERLESS_API_KEY.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=MODEL,
+        help="Model id for the chosen backend (default the pinned 9B).",
+    )
+    parser.add_argument(
+        "--request-thinking",
+        action="store_true",
+        help="Request-time thinking toggle for the featherless backend (the "
+        "14.4 non-thinking/thinking axis).",
+    )
     args = parser.parse_args()
     probes = {p.strip().upper() for p in args.probes.split(",")}
 
-    preflight((MODEL,))
+    backend: Backend = args.backend
+    api_key: str | None = None
+    if backend == "ollama":
+        preflight((args.model,))
+    else:
+        api_key = os.environ.get("FEATHERLESS_API_KEY")
+        if not api_key:
+            raise SystemExit(
+                "--backend featherless requires FEATHERLESS_API_KEY in the env."
+            )
+    cfg = BackendConfig(
+        backend=backend,
+        model=args.model,
+        api_key=api_key,
+        request_thinking=args.request_thinking,
+    )
+
     out_path = RESULTS / "results-deception-battery.jsonl"
     kill_ctxs = (
         build_kill_contexts(args.sample_dir, args.facts, args.cap_a)
@@ -706,9 +785,10 @@ def main() -> int:
                     sink=sink,
                     do_a2=args.cap_a2 if "A2" in probes else 0,
                     do_c=args.cap_c if "C" in probes else 0,
+                    cfg=cfg,
                 )
             if reply_ctxs:
-                await probe_b(reply_ctxs, sink=sink)
+                await probe_b(reply_ctxs, sink=sink, cfg=cfg)
 
     asyncio.run(_run())
     print(f"wrote {out_path}")
