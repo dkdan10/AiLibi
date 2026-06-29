@@ -37,7 +37,7 @@ tuple WITH its evidence — including an honest statement of whether the informa
 - orchestrator/game.py (`DEFAULT_PROMPT_VERSIONS` unchanged until a baseline locks)
 
 **Definition of done:**
-- [ ] Each candidate model (Qwen3-32B instruct, Qwen3-30B-A3B, GLM-4-32B, one RP fine-tune) — AND the 9B reference — runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available (driven by the request-time thinking toggle from 14.1, threaded via 14.3 — not the response-side policy), on BOTH the flag-OFF (legacy) and flag-ON (corrected 13.5) substrate (two columns; flag-ON contexts re-derived offline by setting the 4 `AILIBI_*` env vars); each result row carries its `substrate_flags`; mechanical metrics + per-model parse-success rate are tabulated per substrate against the 9B.
+- [ ] Each candidate model (`Qwen/Qwen3-32B`, `Qwen/Qwen3-30B-A3B`, `zai-org/GLM-4-32B`, `TheDrummer/Cydonia-24B-v2` [RP/creative]) — AND the 9B reference — runs over the SAME reconstructed contexts on the PINNED 9B prompts, in non-thinking and thinking mode where available (driven by the request-time thinking toggle from 14.1, threaded via 14.3 — not the response-side policy), on BOTH the flag-OFF (legacy) and flag-ON (corrected 13.5) substrate (two columns; flag-ON contexts re-derived offline by setting the 4 `AILIBI_*` env vars); each result row carries its `substrate_flags`; mechanical metrics + per-model parse-success rate are tabulated per substrate against the 9B.
 - [ ] The cover-directive 2×2 (model × {cover OFF, cover ON-reply}) is run and the report states the quadrant verdict: capability ceiling / prompt artifact / both / information ceiling.
 - [ ] The report states the per-model SUBSTRATE delta (flag-ON vs flag-OFF): does the corrected 13.5 substrate help THIS model decide where the 9B degraded (a voter at suspicion 1.00 over the 0.60 gate, meeting STILL SKIPPED)? — separating "corrected memory helps the model" from "the model is just stronger."
 - [ ] Per-model structured-output fidelity (parse-success under `response_format`) is reported; any model that cannot reliably emit schema-valid JSON is flagged unfit for the sim.
@@ -64,7 +64,12 @@ but watch token usage against the 32K context and the frozen 2048/1024 caps. Bui
 `AILIBI_MOVEMENT_PERCEPTION` / `AILIBI_UNFREEZE_MEMORY`) before the context reconstruction (`ReplayLoader` /
 `build_*_contexts` re-derive memory through the `*_enabled()` reads), and the flag-OFF column with them unset;
 the levers are replay-deterministic over the committed (flags-OFF) replays, so no re-record is needed. Tag
-every row's `substrate_flags`.
+every row's `substrate_flags`. Slate ids (HuggingFace repo form, owner-confirmed 2026-06-28):
+`Qwen/Qwen3-32B` (quality baseline; the adapter default), `Qwen/Qwen3-30B-A3B` (MoE / speed), and
+`zai-org/GLM-4-32B` (agentic) — these three are live-verified on Featherless (PR #202) — plus the RP/creative
+wildcard `TheDrummer/Cydonia-24B-v2` (confirm it is served via `GET {base_url}/v1/models` before the run; an
+unrecognized id is a hard HTTP 400). The thinking axis (`request_thinking` True/False) applies ONLY to the
+two Qwen3 models (native `enable_thinking`); `zai-org/GLM-4-32B` and the RP tune run non-thinking only.
 
 ## Integration risk
 
