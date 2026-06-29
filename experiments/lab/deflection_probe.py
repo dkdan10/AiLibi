@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -41,17 +42,18 @@ from meetings.schemas import (
 )
 from meetings.transcript import detect_contradictions
 from experiments.lab.deception_battery import (
+    MODEL,
     RESULTS,
+    BackendConfig,
     ReplyContext,
-    _call,
+    _call_cfg,
     _emit,
     _envelope,
     _self_alibis,
     build_reply_contexts,
 )
+from experiments.lab.probe_backends import Backend
 from experiments.model_probe.probe import preflight
-
-MODEL = "qwen3.5:9b"
 
 
 def _body(ctx: ReplyContext) -> tuple[str | None, int | None]:
@@ -164,6 +166,7 @@ async def run_memory_fix(
     kills_by_seed: dict[int, list[tuple[str, str, str, int]]],
     *,
     sink: Any,
+    cfg: BackendConfig = BackendConfig(),
 ) -> None:
     """A/B isolating the kill-memory fix ON TOP of the gp-1 cover directive:
     A = cover on the CURRENT 'discovered body' memory (the backfire condition),
@@ -196,7 +199,7 @@ async def run_memory_fix(
                 living_ids=tuple(p for p in ctx.living if p != ctx.speaker),
                 dead_ids=tuple(ctx.dead),
             )
-            turn, _raw, _lat = await _call(prompt)
+            turn, _raw, _lat = await _call_cfg(prompt, cfg)
             results[arm] = (
                 {"parsed_ok": False}
                 if turn is None
@@ -211,11 +214,17 @@ async def run_memory_fix(
                 "A": results["A_cover_current_mem"],
                 "B": results["B_cover_kill_explicit"],
             },
+            cfg=cfg,
         )
         print(f"  {n + 1}/{len(ctxs)}", flush=True)
 
 
-async def run(ctxs: list[ReplyContext], *, sink: Any) -> None:
+async def run(
+    ctxs: list[ReplyContext],
+    *,
+    sink: Any,
+    cfg: BackendConfig = BackendConfig(),
+) -> None:
     for n, ctx in enumerate(ctxs):
         body_room, body_tick = _body(ctx)
         base_prompt = accusation_round_prompt(
@@ -249,7 +258,7 @@ async def run(ctxs: list[ReplyContext], *, sink: Any) -> None:
                     dead_ids=tuple(ctx.dead),
                 )
             )
-            turn, _raw, _lat = await _call(prompt)
+            turn, _raw, _lat = await _call_cfg(prompt, cfg)
             results[arm] = (
                 {"parsed_ok": False}
                 if turn is None
@@ -264,6 +273,7 @@ async def run(ctxs: list[ReplyContext], *, sink: Any) -> None:
                 "A": results["A_baseline"],
                 "B": results["B_cover_on_reply"],
             },
+            cfg=cfg,
         )
         print(f"  {n + 1}/{len(ctxs)}", flush=True)
 
@@ -293,21 +303,64 @@ def main() -> int:
     parser.add_argument(
         "--facts", type=Path, help="extractor facts JSON (memory-fix mode)"
     )
+    parser.add_argument(
+        "--backend",
+        choices=["ollama", "featherless"],
+        default="ollama",
+        help="Provider seam routed through deception_battery._call (Task 14.3); "
+        "featherless needs FEATHERLESS_API_KEY.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=MODEL,
+        help="Model id for the chosen backend (default the pinned 9B).",
+    )
+    parser.add_argument(
+        "--request-thinking",
+        action="store_true",
+        help="Request-time thinking toggle for the featherless backend.",
+    )
+    parser.add_argument(
+        "--out-tag",
+        type=str,
+        default="",
+        help="Suffix for the results file (e.g. a model id) so a multi-model "
+        "sweep writes distinct files; default empty keeps the committed names.",
+    )
     args = parser.parse_args()
-    preflight((MODEL,))
+
+    backend: Backend = args.backend
+    api_key: str | None = None
+    if backend == "ollama":
+        preflight((args.model,))
+    else:
+        api_key = os.environ.get("FEATHERLESS_API_KEY")
+        if not api_key:
+            raise SystemExit(
+                "--backend featherless requires FEATHERLESS_API_KEY in the env."
+            )
+    cfg = BackendConfig(
+        backend=backend,
+        model=args.model,
+        api_key=api_key,
+        request_thinking=args.request_thinking,
+    )
+
+    suffix = f"-{args.out_tag}" if args.out_tag else ""
     ctxs = build_reply_contexts(args.sample_dir, args.cap)
     print(f"impostor reply contexts: {len(ctxs)} (within-impostor A/B)", flush=True)
     if args.mode == "memory-fix":
         if args.facts is None:
             raise SystemExit("memory-fix mode requires --facts")
         kills = _kills_by_seed(args.facts)
-        out_path = RESULTS / "results-memory-fix-probe.jsonl"
+        out_path = RESULTS / f"results-memory-fix-probe{suffix}.jsonl"
         with out_path.open("w", encoding="utf-8") as sink:
-            asyncio.run(run_memory_fix(ctxs, kills, sink=sink))
+            asyncio.run(run_memory_fix(ctxs, kills, sink=sink, cfg=cfg))
     else:
-        out_path = RESULTS / "results-deflection-probe.jsonl"
+        out_path = RESULTS / f"results-deflection-probe{suffix}.jsonl"
         with out_path.open("w", encoding="utf-8") as sink:
-            asyncio.run(run(ctxs, sink=sink))
+            asyncio.run(run(ctxs, sink=sink, cfg=cfg))
     print(f"wrote {out_path}")
     return 0
 

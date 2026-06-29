@@ -39,12 +39,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import time
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
-
-from pydantic import ValidationError
 
 from agents.strategic.prompts.loader import (
     accusation_round_prompt,
@@ -52,10 +50,19 @@ from agents.strategic.prompts.loader import (
 )
 from api.replay_loader import ReplayLoader
 from engine.world import load_canonical_map
+from experiments.lab.probe_backends import (
+    DEFAULT_PROBE_THINKING_POLICY,
+    Backend,
+    active_substrate_flags,
+    call_turn,
+)
 from experiments.model_probe.corpus import _roles_for_seed, _roster
 from experiments.model_probe.probe import _ollama_host, preflight
-from llm.ollama_client import _default_send
-from llm.provider import _extract_json_block
+from llm.featherless_client import (
+    DEFAULT_RESPONSE_FORMAT_MODE,
+    ResponseFormatMode,
+    ThinkingPolicy,
+)
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
@@ -87,7 +94,19 @@ KILL_WORDS = (
 )
 
 
-def _emit(sink: TextIO, rec: dict[str, object]) -> None:
+def _emit(
+    sink: TextIO, rec: dict[str, object], *, cfg: "BackendConfig | None" = None
+) -> None:
+    # Tag every emitted row with the active 13.5 substrate-flag config (Task
+    # 14.3) so the two-column (flag-OFF / flag-ON) sweep rows are
+    # self-describing; ``setdefault`` lets a caller stamp its own config. When a
+    # ``cfg`` is supplied (a featherless/ollama sweep), also stamp the selected
+    # ``backend`` / ``model`` so rows from a multi-model sweep stay
+    # distinguishable when combined or when an output path is reused.
+    rec.setdefault("substrate_flags", active_substrate_flags())
+    if cfg is not None:
+        rec.setdefault("backend", cfg.backend)
+        rec.setdefault("model", cfg.model)
     sink.write(json.dumps(rec) + "\n")
     sink.flush()
 
@@ -315,29 +334,82 @@ def build_reply_contexts(sample_dir: Path, cap: int) -> list[ReplyContext]:
     return items
 
 
-async def _call(prompt: str) -> tuple[MeetingTurn | None, str, float]:
-    started = time.perf_counter()
-    raw = await _default_send(
-        host=_ollama_host(),
-        model=MODEL,
-        prompt=prompt,
-        format_schema=MeetingTurn.model_json_schema(),
-        options={
-            "temperature": TEMPERATURE,
-            "seed": SEED,
-            "num_predict": NUM_PREDICT,
-            "num_ctx": NUM_CTX,
-        },
+async def _call(
+    prompt: str,
+    *,
+    backend: Backend = "ollama",
+    model: str = MODEL,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    request_thinking: bool = False,
+    thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
+    response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
+) -> tuple[MeetingTurn | None, str, float]:
+    """Run one MeetingTurn call through the provider-neutral probe seam.
+
+    Defaults reproduce the historical Ollama wire call byte-identically (the
+    committed ``results-deception-battery.jsonl`` reproduces); ``backend`` /
+    ``model`` + the featherless knobs route the SAME prompt to the Task 14.1
+    hosted slate for the 14.4 sweep.
+    """
+
+    result = await call_turn(
+        prompt,
+        MeetingTurn,
+        backend=backend,
+        model=model,
+        temperature=TEMPERATURE,
+        max_tokens=NUM_PREDICT,
+        ollama_host=_ollama_host(),
+        seed=SEED,
+        num_ctx=NUM_CTX,
         think=False,
+        api_key=api_key,
+        base_url=base_url,
+        request_thinking=request_thinking,
+        thinking_policy=thinking_policy,
+        response_format_mode=response_format_mode,
     )
-    latency = time.perf_counter() - started
-    try:
-        turn = MeetingTurn.model_validate_json(
-            _extract_json_block(raw.text, MeetingTurn)
-        )
-        return turn, raw.text, latency
-    except ValidationError:
-        return None, raw.text, latency
+    return result.parsed, result.raw_text, result.latency_s
+
+
+@dataclass(frozen=True)
+class BackendConfig:
+    """Provider routing forwarded to :func:`_call` (Task 14.3).
+
+    Bundles the ``backend`` / ``model`` selector plus the featherless wire knobs
+    so the deception / deflection probe runners thread ONE object instead of
+    seven keyword args. The default reproduces the historical Ollama wire call
+    byte-identically. Defined here (the ``_call`` import root) so
+    :mod:`experiments.lab.deflection_probe` can reuse it without duplication.
+    """
+
+    backend: Backend = "ollama"
+    model: str = MODEL
+    api_key: str | None = None
+    # ``None`` -> resolved from AILIBI_FEATHERLESS_BASE_URL (else the hosted
+    # default) inside ``call_turn``, so proxy / self-hosted sweeps are honored.
+    base_url: str | None = None
+    request_thinking: bool = False
+    thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY
+    response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE
+
+
+async def _call_cfg(
+    prompt: str, cfg: BackendConfig
+) -> tuple[MeetingTurn | None, str, float]:
+    """Run one :func:`_call` routed by ``cfg`` (the provider seam, Task 14.3)."""
+
+    return await _call(
+        prompt,
+        backend=cfg.backend,
+        model=cfg.model,
+        api_key=cfg.api_key,
+        base_url=cfg.base_url,
+        request_thinking=cfg.request_thinking,
+        thinking_policy=cfg.thinking_policy,
+        response_format_mode=cfg.response_format_mode,
+    )
 
 
 def _grade_fabrication(
@@ -407,7 +479,12 @@ def _grade_fabrication(
 
 
 async def probe_a_and_c(
-    ctxs: list[KillContext], *, sink: TextIO, do_a2: int, do_c: int
+    ctxs: list[KillContext],
+    *,
+    sink: TextIO,
+    do_a2: int,
+    do_c: int,
+    cfg: BackendConfig = BackendConfig(),
 ) -> None:
     a2_done = 0
     for n, ctx in enumerate(ctxs):
@@ -421,7 +498,7 @@ async def probe_a_and_c(
             living_ids=tuple(p for p in ctx.living if p != ctx.killer),
             dead_ids=tuple(ctx.dead),
         )
-        turn, raw, latency = await _call(prompt)
+        turn, raw, latency = await _call_cfg(prompt, cfg)
         rec = {
             "probe": "A",
             "item": ctx.item_id,
@@ -435,7 +512,7 @@ async def probe_a_and_c(
         else:
             rec.update(_grade_fabrication(turn, ctx))
             rec["free_text"] = (turn.free_text or "")[:400]
-        _emit(sink, rec)
+        _emit(sink, rec, cfg=cfg)
 
         if turn is not None and a2_done < do_a2:
             a2_done += 1
@@ -482,7 +559,7 @@ async def probe_a_and_c(
                 living_ids=tuple(p for p in ctx.living if p != ctx.killer),
                 dead_ids=tuple(ctx.dead),
             )
-            r_turn, r_raw, r_lat = await _call(reply_prompt)
+            r_turn, r_raw, r_lat = await _call_cfg(reply_prompt, cfg)
             rec2 = {
                 "probe": "A2",
                 "item": ctx.item_id,
@@ -537,7 +614,7 @@ async def probe_a_and_c(
                         "free_text": (r_turn.free_text or "")[:400],
                     }
                 )
-            _emit(sink, rec2)
+            _emit(sink, rec2, cfg=cfg)
 
         if n < do_c:
             cover_room = next(r for r in sorted(CANONICAL_ROOMS) if r != ctx.kill_room)
@@ -556,7 +633,7 @@ async def probe_a_and_c(
                 living_ids=tuple(p for p in ctx.living if p != ctx.killer),
                 dead_ids=tuple(ctx.dead),
             )
-            c_turn, c_raw, c_lat = await _call(c_prompt)
+            c_turn, c_raw, c_lat = await _call_cfg(c_prompt, cfg)
             rec3 = {
                 "probe": "C",
                 "item": ctx.item_id,
@@ -566,11 +643,13 @@ async def probe_a_and_c(
             if c_turn is not None:
                 rec3.update(_grade_fabrication(c_turn, ctx, cover=(cover_room, t1, t2)))
                 rec3["free_text"] = (c_turn.free_text or "")[:400]
-            _emit(sink, rec3)
+            _emit(sink, rec3, cfg=cfg)
         print(f"  A/A2/C item {n + 1}/{len(ctxs)}", flush=True)
 
 
-async def probe_b(ctxs: list[ReplyContext], *, sink: TextIO) -> None:
+async def probe_b(
+    ctxs: list[ReplyContext], *, sink: TextIO, cfg: BackendConfig = BackendConfig()
+) -> None:
     for n, ctx in enumerate(ctxs):
         prompt = accusation_round_prompt(
             agent_id=ctx.speaker,
@@ -583,7 +662,7 @@ async def probe_b(ctxs: list[ReplyContext], *, sink: TextIO) -> None:
             living_ids=tuple(p for p in ctx.living if p != ctx.speaker),
             dead_ids=tuple(ctx.dead),
         )
-        turn, raw, latency = await _call(prompt)
+        turn, raw, latency = await _call_cfg(prompt, cfg)
         rec = {
             "probe": "B",
             "item": ctx.item_id,
@@ -637,7 +716,7 @@ async def probe_b(ctxs: list[ReplyContext], *, sink: TextIO) -> None:
                     "free_text": (turn.free_text or "")[:400],
                 }
             )
-        _emit(sink, rec)
+        _emit(sink, rec, cfg=cfg)
         print(f"  B item {n + 1}/{len(ctxs)}", flush=True)
 
 
@@ -655,11 +734,54 @@ def main() -> int:
     parser.add_argument("--cap-a2", type=int, default=10)
     parser.add_argument("--cap-b", type=int, default=22)
     parser.add_argument("--cap-c", type=int, default=12)
+    parser.add_argument(
+        "--backend",
+        choices=["ollama", "featherless"],
+        default="ollama",
+        help="Provider seam (Task 14.3); featherless needs FEATHERLESS_API_KEY.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=MODEL,
+        help="Model id for the chosen backend (default the pinned 9B).",
+    )
+    parser.add_argument(
+        "--request-thinking",
+        action="store_true",
+        help="Request-time thinking toggle for the featherless backend (the "
+        "14.4 non-thinking/thinking axis).",
+    )
+    parser.add_argument(
+        "--out-tag",
+        type=str,
+        default="",
+        help="Suffix for the results file (e.g. a model id) so a multi-model "
+        "sweep writes distinct files instead of overwriting one path; default "
+        "empty keeps the committed results-deception-battery.jsonl name.",
+    )
     args = parser.parse_args()
     probes = {p.strip().upper() for p in args.probes.split(",")}
 
-    preflight((MODEL,))
-    out_path = RESULTS / "results-deception-battery.jsonl"
+    backend: Backend = args.backend
+    api_key: str | None = None
+    if backend == "ollama":
+        preflight((args.model,))
+    else:
+        api_key = os.environ.get("FEATHERLESS_API_KEY")
+        if not api_key:
+            raise SystemExit(
+                "--backend featherless requires FEATHERLESS_API_KEY in the env."
+            )
+    cfg = BackendConfig(
+        backend=backend,
+        model=args.model,
+        api_key=api_key,
+        request_thinking=args.request_thinking,
+    )
+
+    suffix = f"-{args.out_tag}" if args.out_tag else ""
+    out_path = RESULTS / f"results-deception-battery{suffix}.jsonl"
     kill_ctxs = (
         build_kill_contexts(args.sample_dir, args.facts, args.cap_a)
         if probes & {"A", "A2", "C"}
@@ -681,9 +803,10 @@ def main() -> int:
                     sink=sink,
                     do_a2=args.cap_a2 if "A2" in probes else 0,
                     do_c=args.cap_c if "C" in probes else 0,
+                    cfg=cfg,
                 )
             if reply_ctxs:
-                await probe_b(reply_ctxs, sink=sink)
+                await probe_b(reply_ctxs, sink=sink, cfg=cfg)
 
     asyncio.run(_run())
     print(f"wrote {out_path}")
