@@ -27,6 +27,30 @@ them as-is. If a template needs a new kwarg, the wrapper callable's
 signature is updated here; the template itself is not edited from this
 module.
 
+Per-model prompt sets (Task 14.2)
+=================================
+
+The four templates live under a per-model *set* subdirectory rather than
+flat next to this module (owner decision 2026-06-25 — per-model prompt
+sets). The frozen ``qwen3.5:9b`` reference set is :data:`DEFAULT_PROMPT_SET`
+(directory ``qwen3_5_9b/``); :func:`build_environment` resolves a set name
+to its subdirectory and builds the strict-undefined
+:class:`jinja2.Environment` against it. The active set is selected by the
+:data:`ENV_PROMPT_SET` environment variable (``AILIBI_PROMPT_SET``),
+defaulting to :data:`DEFAULT_PROMPT_SET` so existing renders are
+byte-identical. An unknown set name (no matching subdirectory) raises
+:class:`ValueError` — there is no silent fallback (AGENTS.md §"No silent
+fallbacks"). The ``*_TEMPLATE`` filename constants are shared across sets;
+only the directory varies.
+
+The module-level wrapper callables render through the import-time process
+default :data:`_ENV` (selected by ``AILIBI_PROMPT_SET`` at import). Each also
+accepts an explicit ``environment`` so a caller can pin a specific set's
+:class:`jinja2.Environment` per call — :func:`build_prompt_renderers` uses this
+to bind the four renderers to ONE resolved set at construction time, so a runner
+renders and records the SAME set even when ``AILIBI_PROMPT_SET`` is changed
+in-process after this module is imported (PR #203 review).
+
 Per-template wrapper signatures
 ===============================
 
@@ -40,12 +64,21 @@ intermediate adapter layer.
 
 from __future__ import annotations
 
+import os
+from collections.abc import Mapping
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Final
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from meetings.manager import SuspicionEntry
+from meetings.manager import (
+    ReportPromptRenderer,
+    StatementPromptRenderer,
+    SuspicionEntry,
+    VotePromptRenderer,
+)
 from meetings.schemas import (
     ContradictionRef,
     MeetingTranscript,
@@ -54,15 +87,71 @@ from meetings.schemas import (
     TurnKind,
 )
 
-_TEMPLATE_DIR: Final[Path] = Path(__file__).resolve().parent
+# Root holding the per-model prompt-set subdirectories (Task 14.2). The four
+# ``.j2`` templates no longer live flat next to this module; each set is a
+# subdirectory (``qwen3_5_9b/`` is the frozen 9B reference set).
+_PROMPTS_ROOT: Final[Path] = Path(__file__).resolve().parent
 
-_ENV: Final[Environment] = Environment(
-    loader=FileSystemLoader(_TEMPLATE_DIR),
-    autoescape=False,
-    undefined=StrictUndefined,
-    trim_blocks=True,
-    lstrip_blocks=True,
-)
+# The frozen ``qwen3.5:9b`` reference set — the default so existing renders are
+# byte-identical (owner decision 2026-06-25). Selected by ``AILIBI_PROMPT_SET``.
+DEFAULT_PROMPT_SET: Final[str] = "qwen3_5_9b"
+ENV_PROMPT_SET: Final[str] = "AILIBI_PROMPT_SET"
+
+
+def resolve_prompt_set(
+    prompt_set: str | None = None,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> str:
+    """Resolve the active prompt-set name (Task 14.2).
+
+    An explicit ``prompt_set`` wins; otherwise the :data:`ENV_PROMPT_SET`
+    environment variable is consulted, defaulting to :data:`DEFAULT_PROMPT_SET`
+    (the frozen 9B set) when unset or empty. The ``env`` argument lets tests
+    select a set deterministically without mutating ``os.environ``.
+    """
+
+    if prompt_set is not None:
+        return prompt_set
+    environment = env if env is not None else os.environ
+    return environment.get(ENV_PROMPT_SET, "").strip() or DEFAULT_PROMPT_SET
+
+
+def build_environment(
+    prompt_set: str | None = None,
+    *,
+    root: Path = _PROMPTS_ROOT,
+    env: Mapping[str, str] | None = None,
+) -> Environment:
+    """Build a strict-undefined :class:`jinja2.Environment` for a prompt set.
+
+    Resolves ``prompt_set`` (via :func:`resolve_prompt_set`) to a subdirectory
+    of ``root`` and builds the loader against it. An unknown set — no matching
+    subdirectory — raises :class:`ValueError`; there is no silent fallback
+    (AGENTS.md §"No silent fallbacks"). The strict-undefined / trim / lstrip /
+    no-autoescape policy is identical across sets, so a content-preserving move
+    of the 9B templates renders byte-identically.
+    """
+
+    name = resolve_prompt_set(prompt_set, env=env)
+    directory = root / name
+    if not directory.is_dir():
+        raise ValueError(
+            f"Unknown prompt set {name!r}: no template directory at {directory}"
+        )
+    return Environment(
+        loader=FileSystemLoader(directory),
+        autoescape=False,
+        undefined=StrictUndefined,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
+
+# The process-default environment, bound to the active set at import time. The
+# wrapper callables below render through it so call sites stay unchanged; the
+# set is selected by ``AILIBI_PROMPT_SET`` (default: the frozen 9B set).
+_ENV: Final[Environment] = build_environment()
 
 CREWMATE_REPORT_TEMPLATE: Final[str] = "crewmate_report.j2"
 IMPOSTOR_REPORT_TEMPLATE: Final[str] = "impostor_report.j2"
@@ -80,6 +169,7 @@ def crewmate_report_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    environment: Environment | None = None,
 ) -> str:
     """Render the Phase-1 crewmate report prompt (DESIGN.md §5.3).
 
@@ -101,14 +191,18 @@ def crewmate_report_prompt(
     roster. Guarded the same way: the default ``()`` omits the line.
     """
 
-    return _ENV.get_template(CREWMATE_REPORT_TEMPLATE).render(
-        agent_id=agent_id,
-        current_tick=current_tick,
-        meeting_trigger=meeting_trigger,
-        rendered_memory=rendered_memory,
-        public_transcript=public_transcript,
-        living_ids=living_ids,
-        dead_ids=dead_ids,
+    return (
+        (environment or _ENV)
+        .get_template(CREWMATE_REPORT_TEMPLATE)
+        .render(
+            agent_id=agent_id,
+            current_tick=current_tick,
+            meeting_trigger=meeting_trigger,
+            rendered_memory=rendered_memory,
+            public_transcript=public_transcript,
+            living_ids=living_ids,
+            dead_ids=dead_ids,
+        )
     )
 
 
@@ -122,6 +216,7 @@ def impostor_report_prompt(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     living_ids: tuple[PlayerId, ...] = (),
     dead_ids: tuple[PlayerId, ...] = (),
+    environment: Environment | None = None,
 ) -> str:
     """Render the Phase-1 impostor report prompt (DESIGN.md §4.5, §5.3).
 
@@ -146,15 +241,19 @@ def impostor_report_prompt(
     a non-empty value, so the defaults (``()``) omit the blocks.
     """
 
-    return _ENV.get_template(IMPOSTOR_REPORT_TEMPLATE).render(
-        agent_id=agent_id,
-        current_tick=current_tick,
-        meeting_trigger=meeting_trigger,
-        rendered_memory=rendered_memory,
-        public_transcript=public_transcript,
-        fellow_impostor_ids=fellow_impostor_ids,
-        living_ids=living_ids,
-        dead_ids=dead_ids,
+    return (
+        (environment or _ENV)
+        .get_template(IMPOSTOR_REPORT_TEMPLATE)
+        .render(
+            agent_id=agent_id,
+            current_tick=current_tick,
+            meeting_trigger=meeting_trigger,
+            rendered_memory=rendered_memory,
+            public_transcript=public_transcript,
+            fellow_impostor_ids=fellow_impostor_ids,
+            living_ids=living_ids,
+            dead_ids=dead_ids,
+        )
     )
 
 
@@ -171,6 +270,7 @@ def accusation_round_prompt(
     dead_ids: tuple[PlayerId, ...] = (),
     is_impostor: bool = False,
     is_body_report: bool = False,
+    environment: Environment | None = None,
 ) -> str:
     """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
@@ -227,18 +327,22 @@ def accusation_round_prompt(
     the caller explicitly marks the meeting a body report.
     """
 
-    return _ENV.get_template(ACCUSATION_ROUND_TEMPLATE).render(
-        agent_id=agent_id,
-        rendered_memory=rendered_memory,
-        transcript=transcript,
-        contradictions=contradictions,
-        prior_turn=prior_turn,
-        turn_kind=turn_kind,
-        fellow_impostor_ids=fellow_impostor_ids,
-        living_ids=living_ids,
-        dead_ids=dead_ids,
-        is_impostor=is_impostor,
-        is_body_report=is_body_report,
+    return (
+        (environment or _ENV)
+        .get_template(ACCUSATION_ROUND_TEMPLATE)
+        .render(
+            agent_id=agent_id,
+            rendered_memory=rendered_memory,
+            transcript=transcript,
+            contradictions=contradictions,
+            prior_turn=prior_turn,
+            turn_kind=turn_kind,
+            fellow_impostor_ids=fellow_impostor_ids,
+            living_ids=living_ids,
+            dead_ids=dead_ids,
+            is_impostor=is_impostor,
+            is_body_report=is_body_report,
+        )
     )
 
 
@@ -252,6 +356,7 @@ def vote_ballot_prompt(
     candidate_targets: tuple[PlayerId, ...],
     skip_confidence_threshold: float,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    environment: Environment | None = None,
 ) -> str:
     """Render a vote-ballot prompt (DESIGN.md §5.5).
 
@@ -265,25 +370,78 @@ def vote_ballot_prompt(
     sole-impostor ballot (``()``) is byte-unchanged.
     """
 
-    return _ENV.get_template(VOTE_BALLOT_TEMPLATE).render(
-        voter_id=voter_id,
-        rendered_memory=rendered_memory,
-        transcript=transcript,
-        contradiction_flags=contradiction_flags,
-        suspicion_graph=suspicion_graph,
-        candidate_targets=candidate_targets,
-        skip_confidence_threshold=skip_confidence_threshold,
-        fellow_impostor_ids=fellow_impostor_ids,
+    return (
+        (environment or _ENV)
+        .get_template(VOTE_BALLOT_TEMPLATE)
+        .render(
+            voter_id=voter_id,
+            rendered_memory=rendered_memory,
+            transcript=transcript,
+            contradiction_flags=contradiction_flags,
+            suspicion_graph=suspicion_graph,
+            candidate_targets=candidate_targets,
+            skip_confidence_threshold=skip_confidence_threshold,
+            fellow_impostor_ids=fellow_impostor_ids,
+        )
+    )
+
+
+@dataclass(frozen=True)
+class PromptRenderers:
+    """The four strategic prompt renderers bound to ONE prompt set (Task 14.2).
+
+    Each field is a wrapper callable pre-bound (via :func:`functools.partial`)
+    to a single set's :class:`jinja2.Environment`, so a meeting runner renders
+    its turns and records its ``prompt_versions`` from the SAME set -- even if
+    ``AILIBI_PROMPT_SET`` is changed in-process after this module's import-time
+    :data:`_ENV` was built (PR #203 review). The field names mirror the
+    :class:`~meetings.manager.MeetingManager` prompt-callable parameters.
+    """
+
+    crewmate_report: ReportPromptRenderer
+    impostor_report: ReportPromptRenderer
+    statement: StatementPromptRenderer
+    vote: VotePromptRenderer
+
+
+def build_prompt_renderers(
+    prompt_set: str | None = None,
+    *,
+    root: Path = _PROMPTS_ROOT,
+    env: Mapping[str, str] | None = None,
+) -> PromptRenderers:
+    """Build the four renderers bound to a single resolved prompt set.
+
+    Resolves ``prompt_set`` once (via :func:`build_environment`) and binds every
+    renderer to that set's :class:`jinja2.Environment`. Pairing the returned
+    bundle with :func:`orchestrator.game.prompt_versions_for_set` for the SAME
+    resolved set keeps a recording's rendered templates and recorded
+    ``prompt_versions`` on one set, which is the replay-provenance invariant
+    (DESIGN.md §11.4). An unknown set raises via :func:`build_environment`.
+    """
+
+    environment = build_environment(prompt_set, root=root, env=env)
+    return PromptRenderers(
+        crewmate_report=partial(crewmate_report_prompt, environment=environment),
+        impostor_report=partial(impostor_report_prompt, environment=environment),
+        statement=partial(accusation_round_prompt, environment=environment),
+        vote=partial(vote_ballot_prompt, environment=environment),
     )
 
 
 __all__ = [
     "ACCUSATION_ROUND_TEMPLATE",
     "CREWMATE_REPORT_TEMPLATE",
+    "DEFAULT_PROMPT_SET",
+    "ENV_PROMPT_SET",
     "IMPOSTOR_REPORT_TEMPLATE",
     "VOTE_BALLOT_TEMPLATE",
+    "PromptRenderers",
     "accusation_round_prompt",
+    "build_environment",
+    "build_prompt_renderers",
     "crewmate_report_prompt",
     "impostor_report_prompt",
+    "resolve_prompt_set",
     "vote_ballot_prompt",
 ]
