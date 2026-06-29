@@ -1378,6 +1378,8 @@ def _recommendation_text(
     order = {s.label: i for i, s in enumerate(SLATE)}
     cands.sort(key=lambda k: (k[1] != "non_thinking", order.get(k[0], 99)))
     best = cands[0]
+    best_s = off_off[best]
+    best_parse = _pct(int(best_s["parsed"]), int(best_s["n"]))
     latv = lat.get(best)
     lats = f"~{latv}s/turn isolated" if latv is not None else "latency n/a"
     speed = next(
@@ -1422,8 +1424,8 @@ def _recommendation_text(
         f"**Recommended (meeting_model, trigger_model, mode) = "
         f"(`{_id_for(best[0])}`, `{_id_for(best[0])}`, `{best[1]}` / "
         f"`response_format_mode=json_object`).** Evidence: it clears the "
-        f"structured-output bar at ~100% parse-success ({lats}), posts a low "
-        f"self-co-location, and converts on the hard vote cases.{speed_line} "
+        f"structured-output bar at {best_parse} parse-success ({lats}), posts a "
+        f"low self-co-location, and converts on the hard vote cases.{speed_line} "
         f"`non_thinking` is chosen because under `json_object` the request-time "
         f"thinking toggle is effectively INERT (thinking_chars ≈ 0) yet adds "
         f"latency/tokens.{nq} NOTE (integration risk): these isolated-turn "
