@@ -53,7 +53,6 @@ from experiments.model_probe.corpus import (
 )
 from experiments.model_probe.variants import variant_renderers
 from llm.featherless_client import (
-    DEFAULT_FEATHERLESS_BASE_URL,
     DEFAULT_RESPONSE_FORMAT_MODE,
     ResponseFormatMode,
     ThinkingPolicy,
@@ -135,7 +134,7 @@ async def _one_call(
     num_predict: int,
     backend: Backend = "ollama",
     api_key: str | None = None,
-    base_url: str = DEFAULT_FEATHERLESS_BASE_URL,
+    base_url: str | None = None,
     thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
     response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
 ) -> dict[str, object]:
@@ -224,7 +223,7 @@ async def run_matrix(
     out_path: Path,
     backend: Backend = "ollama",
     api_key: str | None = None,
-    base_url: str = DEFAULT_FEATHERLESS_BASE_URL,
+    base_url: str | None = None,
     thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
     response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
 ) -> int:
@@ -299,8 +298,9 @@ def main() -> int:
     parser.add_argument(
         "--featherless-base-url",
         type=str,
-        default=DEFAULT_FEATHERLESS_BASE_URL,
-        help="Featherless OpenAI-compatible base URL (--backend featherless).",
+        default=None,
+        help="Featherless OpenAI-compatible base URL (--backend featherless); "
+        "default resolves AILIBI_FEATHERLESS_BASE_URL, else the hosted endpoint.",
     )
     parser.add_argument(
         "--thinking-policy",

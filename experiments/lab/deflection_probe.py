@@ -214,6 +214,7 @@ async def run_memory_fix(
                 "A": results["A_cover_current_mem"],
                 "B": results["B_cover_kill_explicit"],
             },
+            cfg=cfg,
         )
         print(f"  {n + 1}/{len(ctxs)}", flush=True)
 
@@ -272,6 +273,7 @@ async def run(
                 "A": results["A_baseline"],
                 "B": results["B_cover_on_reply"],
             },
+            cfg=cfg,
         )
         print(f"  {n + 1}/{len(ctxs)}", flush=True)
 
@@ -319,6 +321,13 @@ def main() -> int:
         action="store_true",
         help="Request-time thinking toggle for the featherless backend.",
     )
+    parser.add_argument(
+        "--out-tag",
+        type=str,
+        default="",
+        help="Suffix for the results file (e.g. a model id) so a multi-model "
+        "sweep writes distinct files; default empty keeps the committed names.",
+    )
     args = parser.parse_args()
 
     backend: Backend = args.backend
@@ -338,17 +347,18 @@ def main() -> int:
         request_thinking=args.request_thinking,
     )
 
+    suffix = f"-{args.out_tag}" if args.out_tag else ""
     ctxs = build_reply_contexts(args.sample_dir, args.cap)
     print(f"impostor reply contexts: {len(ctxs)} (within-impostor A/B)", flush=True)
     if args.mode == "memory-fix":
         if args.facts is None:
             raise SystemExit("memory-fix mode requires --facts")
         kills = _kills_by_seed(args.facts)
-        out_path = RESULTS / "results-memory-fix-probe.jsonl"
+        out_path = RESULTS / f"results-memory-fix-probe{suffix}.jsonl"
         with out_path.open("w", encoding="utf-8") as sink:
             asyncio.run(run_memory_fix(ctxs, kills, sink=sink, cfg=cfg))
     else:
-        out_path = RESULTS / "results-deflection-probe.jsonl"
+        out_path = RESULTS / f"results-deflection-probe{suffix}.jsonl"
         with out_path.open("w", encoding="utf-8") as sink:
             asyncio.run(run(ctxs, sink=sink, cfg=cfg))
     print(f"wrote {out_path}")

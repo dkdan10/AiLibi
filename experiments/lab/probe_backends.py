@@ -67,7 +67,7 @@ from llm.featherless_client import (
 )
 from llm.featherless_client import _default_send as _featherless_send
 from llm.ollama_client import _default_send as _ollama_send
-from llm.provider import _extract_json_block
+from llm.provider import ENV_FEATHERLESS_BASE_URL, _extract_json_block
 from meetings.transcript import witnessed_kill_evidence_enabled
 from observation.service import movement_perception_enabled
 from orchestrator.game import unfreeze_memory_enabled
@@ -105,6 +105,27 @@ def _resolve_ollama_host(env: Mapping[str, str] | None = None) -> str:
 
     environment = env if env is not None else os.environ
     return environment.get(_ENV_OLLAMA_HOST, _DEFAULT_OLLAMA_HOST)
+
+
+def resolve_featherless_base_url(env: Mapping[str, str] | None = None) -> str:
+    """Resolve the Featherless base URL the way ``build_default_client`` does.
+
+    Reads :data:`llm.provider.ENV_FEATHERLESS_BASE_URL`
+    (``AILIBI_FEATHERLESS_BASE_URL``) and falls back to
+    :data:`~llm.featherless_client.DEFAULT_FEATHERLESS_BASE_URL`, mirroring
+    :func:`llm.provider.build_default_client` (``provider.py:343``). The probe
+    seam bypasses ``build_default_client`` (it calls ``_default_send`` directly),
+    so without this a proxy / self-hosted Featherless endpoint configured via the
+    documented env var would be ignored and the sweep would post to the public
+    endpoint — especially in the deception / deflection probes, which expose no
+    base-url CLI.
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_FEATHERLESS_BASE_URL, "").strip()
+        or DEFAULT_FEATHERLESS_BASE_URL
+    )
 
 
 def active_substrate_flags(env: Mapping[str, str] | None = None) -> dict[str, bool]:
@@ -201,7 +222,7 @@ async def call_turn(
     think: bool = False,
     # ── Featherless wire knobs (Task 14.1 adapter) ──
     api_key: str | None = None,
-    base_url: str = DEFAULT_FEATHERLESS_BASE_URL,
+    base_url: str | None = None,
     request_thinking: bool = False,
     thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
     response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
@@ -271,9 +292,14 @@ async def call_turn(
                 "(set FEATHERLESS_API_KEY for the sweep)."
             )
         response_format = _featherless_response_format(schema, response_format_mode)
+        # Honor the documented AILIBI_FEATHERLESS_BASE_URL override (proxy /
+        # self-hosted endpoint) when no explicit base_url is supplied.
+        resolved_base_url = (
+            base_url if base_url is not None else resolve_featherless_base_url()
+        )
         started = time.perf_counter()
         raw_f = await _featherless_send(
-            base_url=base_url,
+            base_url=resolved_base_url,
             api_key=api_key,
             model=model,
             prompt=prompt,
@@ -340,4 +366,5 @@ __all__ = [
     "DEFAULT_PROBE_THINKING_POLICY",
     "active_substrate_flags",
     "call_turn",
+    "resolve_featherless_base_url",
 ]

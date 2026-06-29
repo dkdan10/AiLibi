@@ -34,7 +34,6 @@ from pydantic import ValidationError
 from agents.strategic.prompts.loader import accusation_round_prompt
 from meetings.schemas import MeetingTurn
 from llm.featherless_client import (
-    DEFAULT_FEATHERLESS_BASE_URL,
     DEFAULT_RESPONSE_FORMAT_MODE,
     ResponseFormatMode,
 )
@@ -194,7 +193,7 @@ def do_run_featherless(
     *,
     num_predict: int,
     request_thinking: bool,
-    base_url: str,
+    base_url: str | None,
     response_format_mode: ResponseFormatMode,
 ) -> None:
     """Run the dumped hard contexts through the Featherless backend (Task 14.3).
@@ -322,7 +321,13 @@ def main() -> int:
         action="store_true",
         help="Request-time thinking toggle (the non-thinking/thinking sweep axis).",
     )
-    f.add_argument("--base-url", type=str, default=DEFAULT_FEATHERLESS_BASE_URL)
+    f.add_argument(
+        "--base-url",
+        type=str,
+        default=None,
+        help="Featherless base URL; default resolves AILIBI_FEATHERLESS_BASE_URL, "
+        "else the hosted endpoint.",
+    )
     f.add_argument(
         "--response-format-mode",
         choices=["json_object", "json_schema", "none"],

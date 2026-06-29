@@ -31,8 +31,13 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 
 import experiments.lab.probe_backends as pb
-from experiments.lab.probe_backends import CallResult, active_substrate_flags, call_turn
-from llm.featherless_client import FeatherlessRawResponse
+from experiments.lab.probe_backends import (
+    CallResult,
+    active_substrate_flags,
+    call_turn,
+    resolve_featherless_base_url,
+)
+from llm.featherless_client import DEFAULT_FEATHERLESS_BASE_URL, FeatherlessRawResponse
 from llm.ollama_client import OllamaRawResponse
 
 
@@ -415,6 +420,66 @@ def test_deception_battery_cfg_routes_to_featherless(
     assert send.seen["api_key"] == "sk"
     assert raw_text == body
     assert latency >= 0.0
+
+
+def test_resolve_featherless_base_url() -> None:
+    # Honors AILIBI_FEATHERLESS_BASE_URL (proxy / self-hosted), else the hosted
+    # default — mirroring build_default_client.
+    assert (
+        resolve_featherless_base_url(env={"AILIBI_FEATHERLESS_BASE_URL": "http://x/v1"})
+        == "http://x/v1"
+    )
+    assert resolve_featherless_base_url(env={}) == DEFAULT_FEATHERLESS_BASE_URL
+    # Whitespace-only override falls back to the default (no empty base URL).
+    assert (
+        resolve_featherless_base_url(env={"AILIBI_FEATHERLESS_BASE_URL": "  "})
+        == DEFAULT_FEATHERLESS_BASE_URL
+    )
+
+
+def test_featherless_base_url_resolves_from_env_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # base_url=None (the default) -> call_turn resolves the env override and
+    # posts there, so a proxy/self-hosted sweep is honored without a CLI flag.
+    send = _RecordingFeatherless(text=_VALID)
+    monkeypatch.setattr(pb, "_featherless_send", send)
+    monkeypatch.setenv("AILIBI_FEATHERLESS_BASE_URL", "http://proxy.local/v1")
+    asyncio.run(
+        call_turn(
+            "prompt",
+            _Ballot,
+            backend="featherless",
+            model="m",
+            temperature=0.0,
+            max_tokens=64,
+            api_key="sk",
+            substrate_flags=_FLAGS_OFF,
+        )
+    )
+    assert send.seen["base_url"] == "http://proxy.local/v1"
+
+
+def test_featherless_explicit_base_url_wins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    send = _RecordingFeatherless(text=_VALID)
+    monkeypatch.setattr(pb, "_featherless_send", send)
+    monkeypatch.setenv("AILIBI_FEATHERLESS_BASE_URL", "http://env.local/v1")
+    asyncio.run(
+        call_turn(
+            "prompt",
+            _Ballot,
+            backend="featherless",
+            model="m",
+            temperature=0.0,
+            max_tokens=64,
+            api_key="sk",
+            base_url="http://explicit.local/v1",
+            substrate_flags=_FLAGS_OFF,
+        )
+    )
+    assert send.seen["base_url"] == "http://explicit.local/v1"
 
 
 def test_active_substrate_flags_reads_env() -> None:

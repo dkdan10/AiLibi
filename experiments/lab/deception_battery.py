@@ -59,7 +59,6 @@ from experiments.lab.probe_backends import (
 from experiments.model_probe.corpus import _roles_for_seed, _roster
 from experiments.model_probe.probe import _ollama_host, preflight
 from llm.featherless_client import (
-    DEFAULT_FEATHERLESS_BASE_URL,
     DEFAULT_RESPONSE_FORMAT_MODE,
     ResponseFormatMode,
     ThinkingPolicy,
@@ -95,11 +94,19 @@ KILL_WORDS = (
 )
 
 
-def _emit(sink: TextIO, rec: dict[str, object]) -> None:
+def _emit(
+    sink: TextIO, rec: dict[str, object], *, cfg: "BackendConfig | None" = None
+) -> None:
     # Tag every emitted row with the active 13.5 substrate-flag config (Task
     # 14.3) so the two-column (flag-OFF / flag-ON) sweep rows are
-    # self-describing; ``setdefault`` lets a caller stamp its own config.
+    # self-describing; ``setdefault`` lets a caller stamp its own config. When a
+    # ``cfg`` is supplied (a featherless/ollama sweep), also stamp the selected
+    # ``backend`` / ``model`` so rows from a multi-model sweep stay
+    # distinguishable when combined or when an output path is reused.
     rec.setdefault("substrate_flags", active_substrate_flags())
+    if cfg is not None:
+        rec.setdefault("backend", cfg.backend)
+        rec.setdefault("model", cfg.model)
     sink.write(json.dumps(rec) + "\n")
     sink.flush()
 
@@ -333,7 +340,7 @@ async def _call(
     backend: Backend = "ollama",
     model: str = MODEL,
     api_key: str | None = None,
-    base_url: str = DEFAULT_FEATHERLESS_BASE_URL,
+    base_url: str | None = None,
     request_thinking: bool = False,
     thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY,
     response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE,
@@ -380,7 +387,9 @@ class BackendConfig:
     backend: Backend = "ollama"
     model: str = MODEL
     api_key: str | None = None
-    base_url: str = DEFAULT_FEATHERLESS_BASE_URL
+    # ``None`` -> resolved from AILIBI_FEATHERLESS_BASE_URL (else the hosted
+    # default) inside ``call_turn``, so proxy / self-hosted sweeps are honored.
+    base_url: str | None = None
     request_thinking: bool = False
     thinking_policy: ThinkingPolicy = DEFAULT_PROBE_THINKING_POLICY
     response_format_mode: ResponseFormatMode = DEFAULT_RESPONSE_FORMAT_MODE
@@ -503,7 +512,7 @@ async def probe_a_and_c(
         else:
             rec.update(_grade_fabrication(turn, ctx))
             rec["free_text"] = (turn.free_text or "")[:400]
-        _emit(sink, rec)
+        _emit(sink, rec, cfg=cfg)
 
         if turn is not None and a2_done < do_a2:
             a2_done += 1
@@ -605,7 +614,7 @@ async def probe_a_and_c(
                         "free_text": (r_turn.free_text or "")[:400],
                     }
                 )
-            _emit(sink, rec2)
+            _emit(sink, rec2, cfg=cfg)
 
         if n < do_c:
             cover_room = next(r for r in sorted(CANONICAL_ROOMS) if r != ctx.kill_room)
@@ -634,7 +643,7 @@ async def probe_a_and_c(
             if c_turn is not None:
                 rec3.update(_grade_fabrication(c_turn, ctx, cover=(cover_room, t1, t2)))
                 rec3["free_text"] = (c_turn.free_text or "")[:400]
-            _emit(sink, rec3)
+            _emit(sink, rec3, cfg=cfg)
         print(f"  A/A2/C item {n + 1}/{len(ctxs)}", flush=True)
 
 
@@ -707,7 +716,7 @@ async def probe_b(
                     "free_text": (turn.free_text or "")[:400],
                 }
             )
-        _emit(sink, rec)
+        _emit(sink, rec, cfg=cfg)
         print(f"  B item {n + 1}/{len(ctxs)}", flush=True)
 
 
@@ -743,6 +752,14 @@ def main() -> int:
         help="Request-time thinking toggle for the featherless backend (the "
         "14.4 non-thinking/thinking axis).",
     )
+    parser.add_argument(
+        "--out-tag",
+        type=str,
+        default="",
+        help="Suffix for the results file (e.g. a model id) so a multi-model "
+        "sweep writes distinct files instead of overwriting one path; default "
+        "empty keeps the committed results-deception-battery.jsonl name.",
+    )
     args = parser.parse_args()
     probes = {p.strip().upper() for p in args.probes.split(",")}
 
@@ -763,7 +780,8 @@ def main() -> int:
         request_thinking=args.request_thinking,
     )
 
-    out_path = RESULTS / "results-deception-battery.jsonl"
+    suffix = f"-{args.out_tag}" if args.out_tag else ""
+    out_path = RESULTS / f"results-deception-battery{suffix}.jsonl"
     kill_ctxs = (
         build_kill_contexts(args.sample_dir, args.facts, args.cap_a)
         if probes & {"A", "A2", "C"}
