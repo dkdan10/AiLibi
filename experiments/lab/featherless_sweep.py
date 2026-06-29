@@ -166,6 +166,12 @@ REFERENCE_LABEL: Final[str] = "qwen3-8b"
 # so a pacer enforces a minimum gap between switches to a DIFFERENT model.
 MIN_SWITCH_INTERVAL_S: Final[float] = 20.0
 
+# Bounded retry on transport exceptions (network outage / connection reset) that
+# the HTTP-status retry in ``_send_with_retry`` does not cover — so a brief blip
+# mid-run does not turn a whole model's cells into recorded ConnectErrors.
+_TURN_MAX_ATTEMPTS: Final[int] = 4
+_TURN_RETRY_BACKOFF_S: Final[float] = 5.0
+
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
@@ -218,7 +224,11 @@ SLATE: Final[tuple[ModelSpec, ...]] = (
     ModelSpec(
         "Qwen/Qwen3-8B",
         REFERENCE_LABEL,
-        thinking_axis=False,
+        # The contract wants the 9B-class reference in BOTH modes where available;
+        # Qwen3-8B honors enable_thinking, so run the thinking axis too — its
+        # thinking row matches the candidate Qwen thinking rows on identical
+        # contexts.
+        thinking_axis=True,
         qwen_kwarg=True,
         role="reference",
     ),
@@ -367,65 +377,76 @@ async def _run_turn(
 
     resolved = base_url if base_url is not None else resolve_featherless_base_url()
     async with sem:
-        started = time.perf_counter()
-        try:
-            if spec.qwen_kwarg:
-                r = await call_turn(
-                    prompt,
-                    schema,
-                    backend="featherless",
-                    model=spec.model_id,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
+        # Bounded retry on TRANSPORT exceptions (e.g. ``httpx.ConnectError`` from
+        # a brief network outage — which a multi-hour run is exposed to and which
+        # ``_send_with_retry`` does NOT cover, as it only retries HTTP statuses,
+        # not connection failures). A schema-invalid body is NOT an exception
+        # here (``_parse`` returns it as ``parse_error``), so this only retries
+        # genuine transport failures; the last error is recorded if all fail.
+        last_exc: Exception | None = None
+        for attempt in range(_TURN_MAX_ATTEMPTS):
+            started = time.perf_counter()
+            try:
+                if spec.qwen_kwarg:
+                    r = await call_turn(
+                        prompt,
+                        schema,
+                        backend="featherless",
+                        model=spec.model_id,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        api_key=api_key,
+                        base_url=base_url,
+                        request_thinking=request_thinking,
+                        thinking_policy=THINKING_POLICY,  # type: ignore[arg-type]
+                        response_format_mode=RESPONSE_FORMAT_MODE,  # type: ignore[arg-type]
+                        substrate_flags=flags,
+                    )
+                    return TurnOutcome(
+                        parsed=r.parsed,
+                        raw_text=r.raw_text,
+                        latency_s=r.latency_s,
+                        in_tokens=r.in_tokens,
+                        out_tokens=r.out_tokens,
+                        thinking_chars=r.thinking_chars,
+                        error=None,
+                        parse_error=r.parse_error,
+                    )
+                raw = await _bare_send(
+                    base_url=resolved,
                     api_key=api_key,
-                    base_url=base_url,
-                    request_thinking=request_thinking,
-                    thinking_policy=THINKING_POLICY,  # type: ignore[arg-type]
-                    response_format_mode=RESPONSE_FORMAT_MODE,  # type: ignore[arg-type]
-                    substrate_flags=flags,
+                    model=spec.model_id,
+                    prompt=prompt,
+                    response_format={"type": "json_object"},
+                    max_tokens=max_tokens,
+                    temperature=temperature,
                 )
+                latency = time.perf_counter() - started
+                parsed, parse_error = _parse(schema, raw.text)
                 return TurnOutcome(
-                    parsed=r.parsed,
-                    raw_text=r.raw_text,
-                    latency_s=r.latency_s,
-                    in_tokens=r.in_tokens,
-                    out_tokens=r.out_tokens,
-                    thinking_chars=r.thinking_chars,
+                    parsed=parsed,
+                    raw_text=raw.text,
+                    latency_s=latency,
+                    in_tokens=raw.prompt_tokens,
+                    out_tokens=raw.completion_tokens,
+                    thinking_chars=len(raw.reasoning_content),
                     error=None,
-                    parse_error=r.parse_error,
+                    parse_error=parse_error,
                 )
-            raw = await _bare_send(
-                base_url=resolved,
-                api_key=api_key,
-                model=spec.model_id,
-                prompt=prompt,
-                response_format={"type": "json_object"},
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
-            latency = time.perf_counter() - started
-            parsed, parse_error = _parse(schema, raw.text)
-            return TurnOutcome(
-                parsed=parsed,
-                raw_text=raw.text,
-                latency_s=latency,
-                in_tokens=raw.prompt_tokens,
-                out_tokens=raw.completion_tokens,
-                thinking_chars=len(raw.reasoning_content),
-                error=None,
-                parse_error=parse_error,
-            )
-        except Exception as exc:  # noqa: BLE001 — record transport failures, don't abort
-            return TurnOutcome(
-                parsed=None,
-                raw_text="",
-                latency_s=time.perf_counter() - started,
-                in_tokens=0,
-                out_tokens=0,
-                thinking_chars=0,
-                error=f"{type(exc).__name__}: {exc}"[:240],
-                parse_error=None,
-            )
+            except Exception as exc:  # noqa: BLE001 — record transport failures, don't abort
+                last_exc = exc
+                if attempt < _TURN_MAX_ATTEMPTS - 1:
+                    await asyncio.sleep(_TURN_RETRY_BACKOFF_S * (attempt + 1))
+        return TurnOutcome(
+            parsed=None,
+            raw_text="",
+            latency_s=0.0,
+            in_tokens=0,
+            out_tokens=0,
+            thinking_chars=0,
+            error=f"{type(last_exc).__name__}: {last_exc}"[:240],
+            parse_error=None,
+        )
 
 
 def _base_row(
@@ -760,14 +781,21 @@ def _contexts_for(
             for c in build_kill_contexts(cfg.sample_dir, cfg.facts_path, 10_000)
         }
         openings = [kill_by_id[i] for i in pinned.opening if i in kill_by_id]
-    missing = [i for i in pinned.reply if i not in reply_by_id] + [
-        i for i in pinned.vote if i not in vote_by_id
-    ]
+    # Fail loud (AGENTS.md: no silent fallbacks) if a pinned id cannot be
+    # re-rendered under this substrate: silently shrinking the corpus would make
+    # the flag-OFF vs flag-ON delta compare DIFFERENT contexts while the report
+    # still describes a same-context delta. Opening ids are checked too.
+    opening_ids = {c.item_id for c in openings}
+    missing = (
+        [f"reply:{i}" for i in pinned.reply if i not in reply_by_id]
+        + [f"vote:{i}" for i in pinned.vote if i not in vote_by_id]
+        + [f"opening:{i}" for i in pinned.opening if i not in opening_ids]
+    )
     if missing:
-        print(
-            f"  WARNING substrate {'ON' if flag_on else 'OFF'}: {len(missing)} "
-            f"pinned ids missing under re-render: {missing[:5]}",
-            flush=True,
+        raise SystemExit(
+            f"substrate {'ON' if flag_on else 'OFF'}: {len(missing)} pinned ids "
+            "could not be re-rendered (aborting rather than comparing different "
+            f"corpora): {missing[:8]}"
         )
     print(
         f"substrate {'ON' if flag_on else 'OFF'} {flags}: {len(reply)} reply, "
@@ -1036,11 +1064,21 @@ def _verdict(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         for k, s in off_off.items()
         if int(s["n"]) and int(s["parsed"]) / int(s["n"]) >= 0.5
     }
+
+    # Cover Δ is only meaningful when BOTH arms parsed comparably: a cover-ON
+    # cell that fails to parse would make `_rate` 0 (zero denominator) and read
+    # as a large self-co IMPROVEMENT, corrupting the prompt-artifact-vs-ceiling
+    # read. Require cover-ON parse ≥ 50% (same bar as `fit`) to count the cell;
+    # otherwise it is INCONCLUSIVE (surfaced separately).
+    def _ok(s: Mapping[str, Any]) -> bool:
+        return bool(int(s["n"])) and int(s["parsed"]) / int(s["n"]) >= 0.5
+
     cover_helps = [
         (k, _rate(off_off[k], "self_co") - _rate(off_on[k], "self_co"))
         for k in fit
-        if k in off_on
+        if k in off_on and _ok(off_on[k])
     ]
+    cover_inconclusive = sorted(k for k in fit if k not in off_on or not _ok(off_on[k]))
     flag_floor = min((_rate(off_off[k], "self_flag") for k in fit), default=0.0)
     ref = off_off.get((REFERENCE_LABEL, "non_thinking"), {"n": 0, "parsed": 0})
     return {
@@ -1048,6 +1086,7 @@ def _verdict(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "off_on": off_on,
         "fit_cells": sorted(fit),
         "cover_helps": cover_helps,
+        "cover_inconclusive": cover_inconclusive,
         "flag_floor": flag_floor,
         "ref_cell": ref,
     }
@@ -1161,14 +1200,22 @@ def write_report() -> int:
     for k in _ordered_cells(v["off_off"]):
         soff = v["off_off"][k]
         son = v["off_on"].get(k)
-        poff = int(soff["parsed"])
-        if poff == 0 or son is None or int(son["parsed"]) == 0:
+        poff, noff = int(soff["parsed"]), int(soff["n"])
+        if poff == 0 or noff == 0:
             add(f"| {k[0]} | {k[1]} | — | — | — |")
             continue
-        pon = int(son["parsed"])
+        pon = int(son["parsed"]) if son else 0
+        non = int(son["n"]) if son else 0
+        coff = _pct(int(soff["self_co"]), poff)
+        # A cover-ON cell that did not parse comparably (≥50%) is INCONCLUSIVE,
+        # not an improvement: a 0-denominator self-co rate would otherwise read
+        # as a spurious cover win (corrupting the prompt-artifact-vs-ceiling read).
+        if son is None or non == 0 or pon / non < 0.5:
+            con = _pct(pon, non) if son else "—"
+            add(f"| {k[0]} | {k[1]} | {coff} | inconclusive (parse {con}) | — |")
+            continue
         add(
-            f"| {k[0]} | {k[1]} | {_pct(int(soff['self_co']), poff)} | "
-            f"{_pct(int(son['self_co']), pon)} | "
+            f"| {k[0]} | {k[1]} | {coff} | {_pct(int(son['self_co']), pon)} | "
             f"{100 * (int(son['self_co']) / pon - int(soff['self_co']) / poff):+.0f} pp |"
         )
     add("")
@@ -1198,7 +1245,8 @@ def write_report() -> int:
     add("## Opening corpus — impostor self-report (parse + self-incrimination)")
     add("")
     op_off = _group_opening(rows, substrate="flag_off")
-    if not op_off:
+    op_on = _group_opening(rows, substrate="flag_on")
+    if not op_off and not op_on:
         add(
             "_Not run in this sweep (no `--facts` supplied). The opening pass "
             "renders the production `impostor_report` prompt over reconstructed "
@@ -1209,19 +1257,20 @@ def write_report() -> int:
         add(
             "Killer opens the meeting for their own kill. `self-co-loc` = the "
             "opener placed itself at the true kill room (the opening tell); "
-            "`confess` = self-incriminating free text. flag-OFF."
+            "`confess` = self-incriminating free text. Tabulated per substrate."
         )
         add("")
-        add("| model | mode | parse-success | self-co-loc | confess |")
-        add("|---|---|---|---|---|")
-        for k in _ordered_cells(op_off):
-            s = op_off[k]
-            p = int(s["parsed"])
-            ref_tag = " (ref)" if k[0] == REFERENCE_LABEL else ""
-            add(
-                f"| {k[0]}{ref_tag} | {k[1]} | {_pct(p, int(s['n']))} | "
-                f"{_pct(int(s['self_co']), p)} | {_pct(int(s['confess']), p)} |"
-            )
+        add("| model | mode | substrate | parse-success | self-co-loc | confess |")
+        add("|---|---|---|---|---|---|")
+        for sub, g in (("flag_off", op_off), ("flag_on", op_on)):
+            for k in _ordered_cells(g):
+                s = g[k]
+                p = int(s["parsed"])
+                ref_tag = " (ref)" if k[0] == REFERENCE_LABEL else ""
+                add(
+                    f"| {k[0]}{ref_tag} | {k[1]} | {sub} | {_pct(p, int(s['n']))} | "
+                    f"{_pct(int(s['self_co']), p)} | {_pct(int(s['confess']), p)} |"
+                )
     add("")
 
     # ── Votes ──
@@ -1285,20 +1334,28 @@ def _quadrant_text(v: Mapping[str, Any]) -> str:
     mean_delta = statistics.mean(deltas) if deltas else 0.0
     helped = sum(1 for d in deltas if d >= 0.1)
     floor = float(v["flag_floor"])
+    inconclusive = v.get("cover_inconclusive", [])
+    incon_note = (
+        f" ({len(inconclusive)} cell(s) excluded as INCONCLUSIVE — cover-ON "
+        "parse-success below 50%, so a 0-denominator self-co rate is not counted "
+        "as a cover win.)"
+        if inconclusive
+        else ""
+    )
     return (
         "**Quadrant verdict — BOTH, leaning INFORMATION CEILING.** The cover "
         "directive's effect on self-co-location is SMALL and INCONSISTENT across "
         f"the fit cells (mean Δ {100 * mean_delta:+.0f} pp; helps ≥10 pp in only "
-        f"{helped} of {len(deltas)} cells, back-fires in others) — far weaker "
-        "than its effect on the 9B's own contexts (cover cut self-co 55%→21% in "
-        "`results-deflection-probe.jsonl`). So there IS a prompt-artifact "
-        "component (the v5 directive never reaches the reply path today, audit "
-        "gp-1) worth wiring in at 14.5, but it does NOT reliably dissolve the "
-        "tell. The decisive ceiling signal is the self-FLAG floor: it never falls "
-        f"below {100 * floor:.0f}% on any fit model — the impostor keeps minting a "
-        "structured self-contradiction because it is lying into a detector fed by "
-        "sightings it never saw (`report-model-ceiling-probe.md`). Capability "
-        "buys cleaner JSON, not a clean alibi."
+        f"{helped} of {len(deltas)} comparable cells, back-fires in others) — far "
+        "weaker than its effect on the 9B's own contexts (cover cut self-co "
+        f"55%→21% in `results-deflection-probe.jsonl`).{incon_note} So there IS a "
+        "prompt-artifact component (the v5 directive never reaches the reply path "
+        "today, audit gp-1) worth wiring in at 14.5, but it does NOT reliably "
+        "dissolve the tell. The decisive ceiling signal is the self-FLAG floor: it "
+        f"never falls below {100 * floor:.0f}% on any fit model — the impostor keeps "
+        "minting a structured self-contradiction because it is lying into a "
+        "detector fed by sightings it never saw (`report-model-ceiling-probe.md`). "
+        "Capability buys cleaner JSON, not a clean alibi."
     )
 
 
@@ -1334,18 +1391,32 @@ def _recommendation_text(
         if speed and speed_lat is not None
         else ""
     )
-    fit_non_qwen = [
-        lbl for lbl in _fit_labels(v) if lbl in ("glm-4-32b", "cydonia-24b")
-    ]
+
+    # Classify the non-Qwen models against the SAME 90% structured-output bar the
+    # recommendation/fidelity table use (NOT the 50% verdict-`fit` threshold), so
+    # the text doesn't claim a marginal model "clears the parse bar".
+    def _parse_rate(label: str) -> float:
+        s = off_off.get((label, "non_thinking"))
+        return (int(s["parsed"]) / int(s["n"])) if s and int(s["n"]) else 0.0
+
+    nq_bits: list[str] = []
+    for label, name in (
+        ("cydonia-24b", "Cydonia-24B-v2"),
+        ("glm-4-32b", "GLM-4-32B-0414"),
+    ):
+        pr = _parse_rate(label)
+        if pr >= 0.9:
+            nq_bits.append(f"{name} clears the 90% bar ({pr * 100:.0f}%)")
+        elif pr >= 0.5:
+            nq_bits.append(f"{name} is MARGINAL ({pr * 100:.0f}%, below the 90% bar)")
+        else:
+            nq_bits.append(f"{name} is unfit ({pr * 100:.0f}%)")
     nq = (
-        f" GLM-4-32B-0414 / Cydonia-24B-v2 DO clear the parse bar via the bare "
-        f"send ({', '.join(fit_non_qwen)} fit), so the 0% in the prior version "
-        f"was an adapter artifact, now corrected; they remain non-default."
-        if fit_non_qwen
-        else (
-            " GLM-4-32B-0414 / Cydonia-24B-v2 remain unfit even via the bare "
-            "send (see fidelity table)."
-        )
+        " Via the bare send (omitting the Qwen-only chat kwarg), "
+        + "; ".join(nq_bits)
+        + " — so the 0% in the prior version was an adapter artifact, now "
+        "corrected. They remain non-default (a marginal/lower-deflection profile "
+        "behind the recommended Qwen3-32B), not disqualified on a parse artifact."
     )
     return (
         f"**Recommended (meeting_model, trigger_model, mode) = "
@@ -1441,11 +1512,17 @@ def main() -> int:
     api_key = os.environ.get("FEATHERLESS_API_KEY")
     if not api_key:
         raise SystemExit("run requires FEATHERLESS_API_KEY in the env.")
-    substrates = tuple(
-        token.strip().lower() == "on"
-        for token in args.substrates.split(",")
-        if token.strip()
-    )
+    # Validate the substrate tokens exactly (a typo like "onn" must not silently
+    # be treated as flag-OFF and mislabel the operator-run matrix).
+    tokens = [t.strip().lower() for t in args.substrates.split(",") if t.strip()]
+    bad = [t for t in tokens if t not in ("off", "on")]
+    if bad or not tokens:
+        raise SystemExit(
+            f"--substrates must be a comma list of 'off'/'on' (got {args.substrates!r}"
+            + (f"; invalid: {bad}" if bad else "; empty")
+            + ")"
+        )
+    substrates = tuple(t == "on" for t in tokens)
     cfg = SweepConfig(
         sample_dir=args.sample_dir,
         facts_path=args.facts,
