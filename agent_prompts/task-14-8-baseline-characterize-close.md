@@ -26,7 +26,8 @@ close audit framing the result as an honest finding: state whether the stronger 
 hypothesis is can the NEW model DRIVE the corrected substrate where the 9B couldn't (the 9B's voter sat at
 suspicion 1.00 over the 0.60 gate yet the meeting SKIPPED) — and, if not, whether the evidence supports the
 information-ceiling hypothesis (single-room vision → ~45% detector precision → correct SKIP) even with the
-corrected substrate ON, recommending Phase 15 (asymmetric visibility / information richness). This is
+corrected substrate ON, recommending Phase 15 (asymmetric visibility / information richness; and
+heterogeneous-model games — per-agent model routing — enabled by the 14.5 bespoke same-schema sets). This is
 characterization, not a gate — the phase already merged on the valid new baseline (14.7); a flat or down R1 is
 a recorded finding.
 

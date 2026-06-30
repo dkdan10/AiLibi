@@ -17,8 +17,9 @@ The authoritative task contract is copied below from tasks/phase-14.md. Follow i
 **Complexity:** Small
 
 Design-thread decision (no code): read the 14.4/14.5 sweep evidence and lock the baseline tuple before any
-re-record exists — the chosen meeting_model + trigger_model Featherless ids, the chosen prompt set, the
-recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), the
+re-record exists — the chosen meeting_model + trigger_model Featherless ids, the chosen prompt set (ONE of the
+14.5 bespoke sets; the baseline stays HOMOGENEOUS — the other bespoke sets remain available but unrecorded,
+for the Phase-15 heterogeneous-games task they enable), the recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), the
 `response_format_mode` (`json_object` default per the 14.1 live finding 2026-06-27 — strict `json_schema` is
 rejected by the slate; `json_schema` stays selectable), the substrate-flag
 config for the re-record (all 4 13.5 flags ON per owner decision 2026-06-26; 14.8's per-lever ablation
@@ -39,6 +40,7 @@ not an improved one.
 **Definition of done:**
 - [ ] The locked (meeting_model, trigger_model) Featherless ids are recorded in `tasks/phase-14.md` with their evidence from the sweep report.
 - [ ] The chosen prompt set and the recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`) are recorded with rationale.
+- [ ] The locked baseline is HOMOGENEOUS — ONE (meeting_model, trigger_model, prompt set, mode); the other 14.5 bespoke sets remain available but are NOT recorded (heterogeneous-model play is a Phase-15 task enabled by them).
 - [ ] The `response_format_mode` is recorded = `json_object` (the 14.1 live finding 2026-06-27: strict `json_schema` 400s on the slate), with `json_schema` noted as selectable for a future endpoint and no silent fallback between modes.
 - [ ] The re-record substrate-flag config is recorded = all 4 13.5 flags ON (owner decision 2026-06-26), with 14.8's per-lever ablation noted as characterization (non-gating).
 - [ ] A re-record go/no-go is recorded, explicitly allowing a NO-GO ("no candidate clears the structured-output / behavior bar; stay on 9B / escalate the information ceiling").
