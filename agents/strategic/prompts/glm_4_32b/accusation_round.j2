@@ -1,6 +1,6 @@
 {#- Reactive accusation-chain turn (reply / opt_in) — bespoke glm_4_32b set (Task 14.5).
 
-   prompt_id: accusation_round  --  version accusation_round.glm_4_32b.v2
+   prompt_id: accusation_round  --  version accusation_round.glm_4_32b.v3
 
    Ground-up bespoke set for GLM-4-32B (a strong AGENTIC instruct model); NOT
    derived from the pinned qwen3_5_9b set. The turn is framed as an agent goal +
@@ -43,6 +43,9 @@ The case against you: {{ claim.reason }} (confidence {{ "%.2f" | format(claim.co
 {%- endfor %}
 {%- endif %}
 {% if is_impostor is defined and is_impostor %}
+Speak only of what a crewmate in your position could have seen: never cite a kill
+you committed, your kill cooldown, or a vent you used — naming an impostor-only
+fact instantly exposes you.
 Keep your cover consistent: if a body was reported this meeting (see the opening
 turn and your memory), give an `alibi` in ONE room and tick-window AWAY from the
 body's room and the tick it happened, and reuse that same account every time you

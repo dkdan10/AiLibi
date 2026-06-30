@@ -1,6 +1,6 @@
 {#- Reactive accusation-chain turn (reply / opt_in) — bespoke cydonia_24b set (Task 14.5).
 
-   prompt_id: accusation_round  --  version accusation_round.cydonia_24b.v1
+   prompt_id: accusation_round  --  version accusation_round.cydonia_24b.v2
 
    Ground-up bespoke set for TheDrummer/Cydonia-24B-v2 (a roleplay / creative
    finetune); NOT derived from the pinned qwen3_5_9b set. Framing leans into
@@ -50,6 +50,9 @@ The case against you: {{ claim.reason }} (confidence {{ "%.2f" | format(claim.co
 {%- endfor %}
 {%- endif %}
 {% if is_impostor is defined and is_impostor %}
+Let nothing slip that only the killer would know — a kill you committed, your kill
+cooldown, a vent you used. Speak only of what a worried crewmate could have seen;
+one impostor-only word and the room turns on you.
 Hold your cover steady: if a body was reported this meeting (see the opening turn and
 your memory), give an `alibi` in ONE room and tick-window AWAY from the body's room
 and the tick it happened, and reuse that very same account every time you are pressed.
