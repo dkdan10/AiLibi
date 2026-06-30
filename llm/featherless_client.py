@@ -54,8 +54,20 @@ is on the cloud) are handled by TWO distinct knobs:
 * **Request-time thinking toggle** (``request_thinking``) — mirrors Ollama's
   top-level ``think=`` field: it tells the model whether to reason AT ALL.
   Sent on the wire as ``chat_template_kwargs={"enable_thinking": ...}`` (the
-  Qwen3 convention for OpenAI-compatible servers). This is the sweep AXIS
-  14.4 drives.
+  Qwen3 convention for OpenAI-compatible servers) — but ONLY for models whose
+  family honors that chat-template kwarg (:func:`_supports_thinking_kwarg`).
+  The Task 14.4 sweep (``experiments/lab/report-featherless-sweep.md``) found
+  the mandatory field is honored by the Qwen3 models but BREAKS the non-Qwen
+  slate — ``zai-org/GLM-4-32B-0414`` collapses to an empty ``{}`` response and
+  ``TheDrummer/Cydonia-24B-v2`` 400/504s — so the sweep had to route them
+  through a sweep-local BARE send (``featherless_sweep.py:_bare_send``) that
+  omits the field. This adapter instead makes the field CONDITIONAL: for a
+  non-supporting model the whole ``chat_template_kwargs`` object is OMITTED (an
+  empty ``{}`` is what broke GLM) and ``request_thinking`` is an explicit
+  documented no-op (the model runs non-thinking). The gate is an EXPLICIT
+  per-family signal, not a swallowed HTTP 400 (AGENTS.md §"No silent
+  fallbacks"); an unrecognized id fails loud. This is the sweep AXIS 14.4
+  drives.
 * **Response-side thinking policy** (``thinking_policy``) — what to do when a
   response nonetheless carries reasoning. ``fail_loud`` (default) RAISES on a
   populated reasoning channel (parity with the Ollama doctrine); ``strip``
@@ -194,7 +206,9 @@ class FeatherlessClient:
       both defaulting to :data:`DEFAULT_FEATHERLESS_MODEL`.
     * ``request_thinking`` — the request-time thinking toggle (does the model
       reason at all). Mirrors Ollama's top-level ``think=``; sent as
-      ``chat_template_kwargs={"enable_thinking": ...}``. Default ``False``.
+      ``chat_template_kwargs={"enable_thinking": ...}`` for Qwen3-family models
+      and an explicit no-op (the field is omitted) for non-supporting models
+      (:func:`_supports_thinking_kwarg`). Default ``False``.
     * ``thinking_policy`` — the response-side policy (``fail_loud`` default /
       ``strip``). Distinct from ``request_thinking``.
     * ``response_format_mode`` — how a structured call asks for JSON
@@ -519,6 +533,58 @@ class _HttpResponse(Protocol):
     def json(self) -> Any: ...
 
 
+# Per-model thinking-capability registry (AGENTS.md §"No silent fallbacks").
+#
+# ``chat_template_kwargs.enable_thinking`` is the Qwen3 chat-template convention.
+# The Task 14.4 sweep (``experiments/lab/report-featherless-sweep.md``) found it
+# is honored ONLY by the Qwen3 family on Featherless and BREAKS the non-Qwen
+# slate — ``zai-org/GLM-4-32B-0414`` collapses to an empty ``{}`` response and
+# ``TheDrummer/Cydonia-24B-v2`` 400/504s — which is why the 14.4 harness routed
+# those models through a sweep-local BARE send (``featherless_sweep.py:_bare_send``)
+# that omits the field. This adapter makes the field CONDITIONAL on an EXPLICIT
+# per-family capability signal instead, so the PRODUCTION client can call GLM /
+# Cydonia without that workaround.
+#
+# The signal is a case-insensitive family marker matched against the served
+# model id (HuggingFace repo form, e.g. ``Qwen/Qwen3-32B``,
+# ``zai-org/GLM-4-32B-0414``, ``TheDrummer/Cydonia-24B-v2``). An UNRECOGNIZED id
+# is a hard error, never a silent default: a new model must be classified
+# deliberately rather than guessed — exactly the swallow-the-400 fallback this
+# task replaces.
+_THINKING_KWARG_BY_FAMILY: Final[dict[str, bool]] = {
+    "qwen3": True,
+    "glm": False,
+    "cydonia": False,
+}
+
+
+def _supports_thinking_kwarg(model: str) -> bool:
+    """Whether ``model``'s Featherless deployment honors ``enable_thinking``.
+
+    Returns ``True`` for the Qwen3 family (the ``chat_template_kwargs.enable_thinking``
+    kwarg is native) and ``False`` for the known non-Qwen slate families (GLM,
+    Cydonia), whose request the field BREAKS (14.4 sweep finding). Raises
+    :class:`ValueError` on an unrecognized id: the capability is an EXPLICIT
+    per-family decision, never a silent fallback (AGENTS.md), so an unknown model
+    fails loud HERE — up front, by id — rather than 400-ing on the wire and being
+    caught after the fact. Match is by case-insensitive family marker keyed off
+    :data:`_THINKING_KWARG_BY_FAMILY`.
+    """
+
+    lowered = model.lower()
+    for marker, supported in _THINKING_KWARG_BY_FAMILY.items():
+        if marker in lowered:
+            return supported
+    raise ValueError(
+        "FeatherlessClient cannot determine enable_thinking support for model "
+        f"{model!r}: it matches no known family "
+        f"({sorted(_THINKING_KWARG_BY_FAMILY)}). Classify the model explicitly "
+        "instead of guessing whether to send the Qwen-only "
+        "chat_template_kwargs.enable_thinking field (AGENTS.md: no silent "
+        "fallbacks)."
+    )
+
+
 def _build_chat_payload(
     *,
     model: str,
@@ -532,10 +598,15 @@ def _build_chat_payload(
 
     Pure (no I/O) so the wire shape is unit-testable without the transport.
     ``response_format`` is omitted entirely when ``None`` (free-text / ``none``
-    mode). ``chat_template_kwargs.enable_thinking`` is the request-time thinking
-    toggle (the Qwen3 convention; harmlessly ignored by non-Qwen slate models,
-    verified live). ``max_tokens`` is the broadly-compatible OpenAI output cap
-    honored by Featherless (a vLLM-class server).
+    mode). ``chat_template_kwargs.enable_thinking`` (the Qwen3 request-time
+    thinking toggle) is sent ONLY for models whose family supports it
+    (:func:`_supports_thinking_kwarg`); the whole ``chat_template_kwargs`` object
+    is OMITTED otherwise, because an empty ``{}`` is what collapsed GLM in the
+    14.4 sweep. For a non-supporting model ``request_thinking`` is an explicit
+    no-op — the field is dropped and the request runs non-thinking — rather than
+    an error caught after a wire 400. An unrecognized model id fails loud (see
+    :func:`_supports_thinking_kwarg`). ``max_tokens`` is the broadly-compatible
+    OpenAI output cap honored by Featherless (a vLLM-class server).
     """
 
     payload: dict[str, Any] = {
@@ -543,8 +614,12 @@ def _build_chat_payload(
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
         "temperature": temperature,
-        "chat_template_kwargs": {"enable_thinking": request_thinking},
     }
+    # Conditional on an explicit per-family capability signal: the Qwen3 path
+    # keeps the field (byte-identical to 14.1); a non-Qwen model omits the whole
+    # object (an empty ``{}`` is what broke GLM); an unknown id fails loud.
+    if _supports_thinking_kwarg(model):
+        payload["chat_template_kwargs"] = {"enable_thinking": request_thinking}
     if response_format is not None:
         payload["response_format"] = response_format
     return payload
