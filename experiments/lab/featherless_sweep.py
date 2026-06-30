@@ -145,16 +145,44 @@ SUBSTRATE_FLAGS: Final[tuple[str, ...]] = (
     "AILIBI_UNFREEZE_MEMORY",
 )
 
-# Production turn caps (frozen) — the real backstop under $0 provider-keyed cost.
-NUM_PREDICT_TURN: Final[int] = 2048
-NUM_PREDICT_VOTE: Final[int] = 1024
+# Production turn caps (the deployed sim's frozen backstop) — recorded for
+# reference only; the PROBE does NOT constrain models to these, it measures each
+# model's BEST-SHOT result (see _profile below).
+PROD_TURN_CAP: Final[int] = 2048
+PROD_VOTE_CAP: Final[int] = 1024
 TEMPERATURE: Final[float] = 0.4
 VOTE_TEMPERATURE: Final[float] = 0.0
-# json_object is the ratified default (the slate 400s strict json_schema; 14.1).
-RESPONSE_FORMAT_MODE: Final[str] = "json_object"
 # The harness discards reasoning explicitly so a reasoning model does not abort
 # the sweep (probe-side default; the recorded baseline at 14.7 uses fail_loud).
 THINKING_POLICY: Final[str] = "strip"
+
+# ── Best-shot probe call profiles (owner decision 2026-06-29) ──
+# The probe's job is to rank how well each model performs on the corpus, so each
+# model/mode is called with the settings MOST LIKELY TO SUCCEED, not the 9B-era
+# 2048 / json_object handicap. The OUTPUT (the parsed MeetingTurn / VoteBallot)
+# is schema-identical regardless, so downstream graders / consumers are unchanged
+# — only the LLM-call knobs vary, and reasoning is DISCARDED (never recorded), so
+# it cannot leak into game state.
+#
+# * THINKING rows: ``response_format=none`` (json_object SUPPRESSES Qwen3
+#   reasoning — calibrated 2026-06-29: out=243 vs 3187 tokens), so the model
+#   actually reasons; the ``<think>`` block is stripped before extract→validate.
+#   A generous 16384 generation budget so reasoning (observed ~3.2k–4.7k tokens)
+#   + the answer never truncate, while staying inside the 32K context (~4k input).
+# * NON-THINKING rows: ``json_object`` forces JSON-first output; a 4096 budget
+#   (headroom over the ~250–500-token turns) removes the rare non-thinking
+#   truncation. The recorded answer still fits the production 2048 turn cap.
+THINK_BUDGET: Final[int] = 16384
+NONTHINK_BUDGET: Final[int] = 4096
+
+
+def _profile(request_thinking: bool) -> tuple[str, int]:
+    """Best-shot ``(response_format_mode, max_tokens)`` for the given mode."""
+
+    if request_thinking:
+        return "none", THINK_BUDGET
+    return "json_object", NONTHINK_BUDGET
+
 
 # The in-sweep 9B-class reference (closest served analogue of ``qwen3.5:9b``).
 REFERENCE_LABEL: Final[str] = "qwen3-8b"
@@ -362,6 +390,7 @@ async def _run_turn(
     request_thinking: bool,
     max_tokens: int,
     temperature: float,
+    response_format_mode: str,
     flags: Mapping[str, bool],
     api_key: str,
     base_url: str | None,
@@ -399,7 +428,7 @@ async def _run_turn(
                         base_url=base_url,
                         request_thinking=request_thinking,
                         thinking_policy=THINKING_POLICY,  # type: ignore[arg-type]
-                        response_format_mode=RESPONSE_FORMAT_MODE,  # type: ignore[arg-type]
+                        response_format_mode=response_format_mode,  # type: ignore[arg-type]
                         substrate_flags=flags,
                     )
                     return TurnOutcome(
@@ -417,7 +446,11 @@ async def _run_turn(
                     api_key=api_key,
                     model=spec.model_id,
                     prompt=prompt,
-                    response_format={"type": "json_object"},
+                    response_format=(
+                        None
+                        if response_format_mode == "none"
+                        else {"type": response_format_mode}
+                    ),
                     max_tokens=max_tokens,
                     temperature=temperature,
                 )
@@ -455,6 +488,8 @@ def _base_row(
     spec: ModelSpec,
     request_thinking: bool,
     flags: Mapping[str, bool],
+    response_format_mode: str,
+    max_tokens: int,
 ) -> dict[str, Any]:
     return {
         "corpus": corpus,
@@ -466,9 +501,10 @@ def _base_row(
         "transport": "adapter" if spec.qwen_kwarg else "bare",
         "substrate": "flag_on" if any(flags.values()) else "flag_off",
         "substrate_flags": dict(flags),
-        "response_format_mode": RESPONSE_FORMAT_MODE
-        if spec.qwen_kwarg
-        else "json_object",
+        # The best-shot call profile that produced this row (so the comparison is
+        # transparent and 14.6 sees exactly how each number was obtained).
+        "response_format_mode": response_format_mode,
+        "max_tokens": max_tokens,
     }
 
 
@@ -498,8 +534,14 @@ async def _reply_cell(
 ) -> dict[str, Any]:
     body_room, body_tick = _body(ctx)
     prompt = _reply_prompt(ctx, cover=cover)
+    rf_mode, cap = _profile(request_thinking)
     rec = _base_row(
-        corpus="reply", spec=spec, request_thinking=request_thinking, flags=flags
+        corpus="reply",
+        spec=spec,
+        request_thinking=request_thinking,
+        flags=flags,
+        response_format_mode=rf_mode,
+        max_tokens=cap,
     )
     rec["cover"] = "on" if cover else "off"
     rec["item"] = ctx.item_id
@@ -509,8 +551,9 @@ async def _reply_cell(
         prompt,
         MeetingTurn,
         request_thinking=request_thinking,
-        max_tokens=NUM_PREDICT_TURN,
+        max_tokens=cap,
         temperature=TEMPERATURE,
+        response_format_mode=rf_mode,
         flags=flags,
         api_key=api_key,
         base_url=base_url,
@@ -533,8 +576,14 @@ async def _vote_cell(
     sem: asyncio.Semaphore,
 ) -> dict[str, Any]:
     prompt = render_prompt(item.context)
+    rf_mode, cap = _profile(request_thinking)
     rec = _base_row(
-        corpus="vote", spec=spec, request_thinking=request_thinking, flags=flags
+        corpus="vote",
+        spec=spec,
+        request_thinking=request_thinking,
+        flags=flags,
+        response_format_mode=rf_mode,
+        max_tokens=cap,
     )
     rec["cover"] = "n/a"
     rec["item"] = item.item_id
@@ -548,8 +597,9 @@ async def _vote_cell(
         prompt,
         VoteBallot,
         request_thinking=request_thinking,
-        max_tokens=NUM_PREDICT_VOTE,
+        max_tokens=cap,
         temperature=VOTE_TEMPERATURE,
+        response_format_mode=rf_mode,
         flags=flags,
         api_key=api_key,
         base_url=base_url,
@@ -586,8 +636,14 @@ async def _opening_cell(
         living_ids=tuple(p for p in ctx.living if p != ctx.killer),
         dead_ids=tuple(ctx.dead),
     )
+    rf_mode, cap = _profile(request_thinking)
     rec = _base_row(
-        corpus="opening", spec=spec, request_thinking=request_thinking, flags=flags
+        corpus="opening",
+        spec=spec,
+        request_thinking=request_thinking,
+        flags=flags,
+        response_format_mode=rf_mode,
+        max_tokens=cap,
     )
     rec["cover"] = "n/a"
     rec["item"] = ctx.item_id
@@ -598,8 +654,9 @@ async def _opening_cell(
         prompt,
         MeetingTurn,
         request_thinking=request_thinking,
-        max_tokens=NUM_PREDICT_TURN,
+        max_tokens=cap,
         temperature=TEMPERATURE,
+        response_format_mode=rf_mode,
         flags=flags,
         api_key=api_key,
         base_url=base_url,
@@ -632,8 +689,14 @@ async def _latency_cell(
     """One SEQUENTIAL reply call timed in isolation (the latency pass)."""
 
     prompt = _reply_prompt(ctx, cover=False)
+    rf_mode, cap = _profile(request_thinking)
     rec = _base_row(
-        corpus="latency", spec=spec, request_thinking=request_thinking, flags=flags
+        corpus="latency",
+        spec=spec,
+        request_thinking=request_thinking,
+        flags=flags,
+        response_format_mode=rf_mode,
+        max_tokens=cap,
     )
     rec["item"] = ctx.item_id
     out = await _run_turn(
@@ -641,8 +704,9 @@ async def _latency_cell(
         prompt,
         MeetingTurn,
         request_thinking=request_thinking,
-        max_tokens=NUM_PREDICT_TURN,
+        max_tokens=cap,
         temperature=TEMPERATURE,
+        response_format_mode=rf_mode,
         flags=flags,
         api_key=api_key,
         base_url=base_url,
@@ -1044,6 +1108,34 @@ def _ordered_cells(summary: Mapping[tuple[str, str], Any]) -> list[tuple[str, st
     return sorted(summary, key=lambda k: (order.get(k[0], 99), k[1]))
 
 
+def _profile_info(
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[tuple[str, str], tuple[str, int, float]]:
+    """Per (label, mode): the call profile (response_format_mode, max_tokens) and
+    mean reasoning length (thinking_chars over parsed reply rows) — so the
+    fidelity table shows exactly how each cell was called and whether the model
+    actually reasoned."""
+
+    out: dict[tuple[str, str], tuple[str, int, float]] = {}
+    think: dict[tuple[str, str], list[float]] = {}
+    for r in rows:
+        if r.get("corpus") != "reply":
+            continue
+        k = (str(r["label"]), str(r["mode"]))
+        if k not in out:
+            out[k] = (
+                str(r.get("response_format_mode", "?")),
+                int(r.get("max_tokens", 0)),
+                0.0,
+            )
+        if r.get("parsed_ok"):
+            think.setdefault(k, []).append(float(r.get("thinking_chars", 0)))
+    return {
+        k: (mode, cap, round(statistics.mean(think[k]), 0) if think.get(k) else 0.0)
+        for k, (mode, cap, _) in out.items()
+    }
+
+
 def _historical_q9b() -> dict[str, Any]:
     rows = [
         json.loads(line) for line in REF_REPLY.read_text().splitlines() if line.strip()
@@ -1142,14 +1234,36 @@ def write_report() -> int:
         "revisions `Qwen/Qwen3-30B-A3B-Instruct-2507` and `zai-org/GLM-4-32B-0414`."
     )
     add("")
+    add(
+        "**Best-shot call profiles (owner decision 2026-06-29):** the probe's job "
+        "is to rank how each model performs on the corpus, so each model/mode is "
+        "called with the settings MOST LIKELY TO SUCCEED — not the 9B-era "
+        f"`json_object` / {PROD_TURN_CAP}-token handicap. THINKING rows use "
+        f"`response_format=none` (json_object SUPPRESSES Qwen3 reasoning — "
+        "calibrated: out=243 vs 3187 tokens) + a 16384-token budget so reasoning "
+        "actually happens and never truncates, with the `<think>` block stripped "
+        "before extract→validate. NON-THINKING rows use `json_object` + a 4096 "
+        "budget. The OUTPUT is the schema-identical `MeetingTurn`/`VoteBallot` "
+        "either way (downstream graders unchanged), and reasoning is DISCARDED "
+        "(never recorded), so it cannot leak into game state. Per-row `profile` "
+        f"(mode + max_tokens) is stamped in the jsonl. The deployed sim still caps "
+        f"turns at {PROD_TURN_CAP} / votes at {PROD_VOTE_CAP}; choosing thinking "
+        "for the recorded baseline is a 14.6/14.7 decision (raise the generation "
+        "budget, cap the recorded answer, strip reasoning) — see the latency note "
+        "in the recommendation."
+    )
+    add("")
 
     # ── Fidelity ──
-    add("## Structured-output fidelity (parse-success)")
+    add("## Structured-output fidelity (parse-success, best-shot profile)")
     add("")
     add("Reply corpus, cover OFF, flag-OFF substrate.")
     add("")
-    add("| model | mode | parse-success | latency (isolated) | fit for sim? |")
-    add("|---|---|---|---|---|")
+    prof = _profile_info(rows)
+    add(
+        "| model | mode | profile | parse-success | latency (isolated) | reasoning | fit? |"
+    )
+    add("|---|---|---|---|---|---|---|")
     for k in _ordered_cells(v["off_off"]):
         s = v["off_off"][k]
         p, n = int(s["parsed"]), int(s["n"])
@@ -1158,7 +1272,13 @@ def write_report() -> int:
         latv = lat.get(k)
         lats = f"~{latv}s" if latv is not None else "—"
         ref_tag = " (ref)" if k[0] == REFERENCE_LABEL else ""
-        add(f"| {k[0]}{ref_tag} | {k[1]} | {_pct(p, n)} | {lats} | {fit} |")
+        pmode, pcap, think = prof.get(k, ("?", 0, 0.0))
+        prof_s = f"{pmode}/{pcap}"
+        reason_s = f"~{think:.0f} ch" if think else "—"
+        add(
+            f"| {k[0]}{ref_tag} | {k[1]} | {prof_s} | {_pct(p, n)} | {lats} | "
+            f"{reason_s} | {fit} |"
+        )
     add("")
 
     # ── Model-ceiling read ──
@@ -1420,19 +1540,70 @@ def _recommendation_text(
         "corrected. They remain non-default (a marginal/lower-deflection profile "
         "behind the recommended Qwen3-32B), not disqualified on a parse artifact."
     )
+    # Data-driven mode rationale: thinking now ACTUALLY reasons (best-shot
+    # profile = none + 16384 + strip), so compare the recommended model's thinking
+    # vs non-thinking cells on the FAIR test and report the DIRECTION from the
+    # numbers — not a pre-data assumption that thinking is inert.
+    nt = off_off.get((best[0], "non_thinking"))
+    th = off_off.get((best[0], "thinking"))
+    mode_note = ""
+    if nt and th and int(nt["parsed"]) and int(th["parsed"]):
+
+        def _r(s: Mapping[str, Any], key: str) -> int:
+            return round(100 * _rate(s, key))
+
+        d_defl = _r(th, "deflect") - _r(nt, "deflect")
+        d_co = _r(th, "self_co") - _r(nt, "self_co")
+        d_flag = _r(th, "self_flag") - _r(nt, "self_flag")
+        helps = (d_defl >= 10 or d_flag <= -10 or d_co <= -10) and not (
+            d_defl <= -10 or d_flag >= 10 or d_co >= 10
+        )
+        hurts = (d_defl <= -10 or d_flag >= 10 or d_co >= 10) and not (
+            d_defl >= 10 or d_flag <= -10 or d_co <= -10
+        )
+        nt_lat, th_lat = (
+            lat.get((best[0], "non_thinking")),
+            lat.get((best[0], "thinking")),
+        )
+        cost = (
+            f" at a real latency cost (~{th_lat}s vs ~{nt_lat}s/turn)"
+            if nt_lat is not None and th_lat is not None
+            else " at a real latency cost"
+        )
+        deltas = (
+            f"deflect {d_defl:+d} pp, self-flag {d_flag:+d} pp, self-co {d_co:+d} pp"
+        )
+        if helps:
+            mode_note = (
+                f" **Mode is a genuine tradeoff now** (the fair best-shot test — "
+                f"thinking really reasons, ~16k tokens): on this model thinking "
+                f"MEASURABLY IMPROVES behavior ({deltas}){cost}. Mode is therefore "
+                f"a 14.6 quality-vs-latency call — `non_thinking` is the "
+                f"latency-cheap default, `thinking` the higher-quality option; it is "
+                f"no longer the degenerate axis it was under the 2048/json_object "
+                f"handicap."
+            )
+        elif hurts:
+            mode_note = (
+                f" Mode: on a fair best-shot test thinking does NOT help here "
+                f"({deltas}){cost}; `non_thinking` recommended."
+            )
+        else:
+            mode_note = (
+                f" Mode: on a fair best-shot test thinking and non-thinking are "
+                f"close ({deltas}){cost}; `non_thinking` recommended for latency."
+            )
     return (
         f"**Recommended (meeting_model, trigger_model, mode) = "
-        f"(`{_id_for(best[0])}`, `{_id_for(best[0])}`, `{best[1]}` / "
-        f"`response_format_mode=json_object`).** Evidence: it clears the "
-        f"structured-output bar at {best_parse} parse-success ({lats}), posts a "
-        f"low self-co-location, and converts on the hard vote cases.{speed_line} "
-        f"`non_thinking` is chosen because under `json_object` the request-time "
-        f"thinking toggle is effectively INERT (thinking_chars ≈ 0) yet adds "
-        f"latency/tokens.{nq} NOTE (integration risk): these isolated-turn "
-        f"metrics are PROXIES, not the live R-gate — a model can deflect/convert "
-        f"better in isolation yet still correctly SKIP in a noisy full game. The "
-        f"lock at 14.6 must read this as evidence, not verdict; the trigger_model "
-        f"defaults to the meeting_model id pending a dedicated trigger-corpus pass."
+        f"(`{_id_for(best[0])}`, `{_id_for(best[0])}`, `{best[1]}`).** Evidence: "
+        f"it clears the structured-output bar at {best_parse} parse-success "
+        f"({lats}), posts a low self-co-location, and converts on the hard vote "
+        f"cases.{speed_line}{mode_note}{nq} NOTE (integration risk): these "
+        f"isolated-turn metrics are PROXIES, not the live R-gate — a model can "
+        f"deflect/convert better in isolation yet still correctly SKIP in a noisy "
+        f"full game. The lock at 14.6 must read this as evidence, not verdict; the "
+        f"trigger_model defaults to the meeting_model id pending a dedicated "
+        f"trigger-corpus pass."
     )
 
 
