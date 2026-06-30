@@ -1,6 +1,6 @@
 {#- Vote-ballot prompt — bespoke qwen3_32b set (Task 14.5).
 
-   prompt_id: vote_ballot  --  version vote_ballot.qwen3_32b.v2
+   prompt_id: vote_ballot  --  version vote_ballot.qwen3_32b.v3
 
    Ground-up bespoke set for Qwen3-32B (non-thinking); NOT derived from the
    pinned qwen3_5_9b set. Output: ONE meetings.schemas.VoteBallot (the shared JSON
@@ -74,7 +74,14 @@ to your honest probability that the call is right: do not report a confidence at
 above the skip threshold for a target whose suspicion is below it.
 
 ## Output
-Return exactly one JSON object matching the `VoteBallot` schema:
+Return exactly one JSON object matching the `VoteBallot` schema — nothing else.
+
+Required keys — EXACTLY these 6, every one present and no others:
+`voter`, `target`, `confidence`, `primary_reason_id`, `considered_alternatives`,
+`rationale_text`. The reason key is `primary_reason_id` (WITH the `_id` suffix) —
+never `primary_reason`; use `null` when your call rests on your own memory or a
+contradiction flag rather than a specific turn.
+
 ```json
 {
   "voter": "{{ voter_id }}",
@@ -82,12 +89,13 @@ Return exactly one JSON object matching the `VoteBallot` schema:
   "confidence": <float 0.0-1.0>,
   "primary_reason_id": "<turn id from the transcript, or null>",
   "considered_alternatives": ["<player_id>", ...],
-  "rationale_text": "<one sentence with your vote and its strongest reason>"
+  "rationale_text": "<ONE short sentence, ~20 words max>"
 }
 ```
 - `voter` MUST equal `"{{ voter_id }}"`.
 - `target` is `"SKIP"` or one living player other than yourself{% if candidate_targets is defined and candidate_targets %} (one of the valid targets above){% endif %}.
 - `primary_reason_id` is a turn id copied exactly from the transcript, or `null` if your decision rests on your own memory / a contradiction flag.
-- `considered_alternatives` lists any other player you seriously weighed (empty if none).
+- `considered_alternatives` lists at most two or three other players you weighed (empty if none).
+- `rationale_text` is ONE short sentence — the vote and its single strongest reason, nothing more. Keep the whole object compact: a long rationale can overrun the output limit and truncate the JSON, which DISCARDS your vote.
 
 Output ONLY the JSON object — no preamble or trailing commentary.

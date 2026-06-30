@@ -1,6 +1,6 @@
 {#- Crewmate OPENING-turn prompt — bespoke qwen3_32b set (Task 14.5).
 
-   prompt_id: crewmate_report  --  version crewmate_report.qwen3_32b.v2
+   prompt_id: crewmate_report  --  version crewmate_report.qwen3_32b.v3
 
    Built from the ground up for Qwen3-32B (non-thinking), NOT derived from the
    pinned qwen3_5_9b set: a simple "game + role + memory -> deduction" frame that
@@ -64,27 +64,47 @@ you recorded points at anyone, write the word "unsure" in `free_text`.
 You are an AI agent playing AiLibi. Reason only from your memory and the transcript
 above; do not assume roles, kills, or vents you did not witness.
 
-Output exactly one JSON object matching the `MeetingTurn` schema. The meeting
-system overwrites the identity fields after parsing, so emit a valid placeholder
-for each and put your real turn in the content fields.
+Output exactly one JSON object matching the `MeetingTurn` schema — nothing else.
 
-Identity fields (placeholders — the system overrides each):
+Required keys — your object has EXACTLY these 8 top-level keys, every one present,
+and NO others:
+`turn_id`, `turn_index`, `speaker`, `turn_kind`, `reply_to`, `observations`,
+`claims`, `free_text`.
+There is NO top-level `type` key — a `type` field appears ONLY inside each
+`observations` / `claims` item (its discriminator), never on the turn itself.
+
+The first five are identity fields the meeting system overwrites after parsing, but
+each is still REQUIRED — omitting one fails validation. Emit them as:
 - `turn_id`: any non-empty string (e.g. `"t"`).
 - `turn_index`: any integer (e.g. `0`).
-- `speaker`: your own player id, or any non-empty string.
+- `speaker`: `"{{ agent_id }}"`.
 - `turn_kind`: the string `"opening"`.
 - `reply_to`: `null`.
 
 Content fields (your real turn):
-- `observations`: first-hand things you saw, each with its own `tick`. Each is one of:
+- `observations`: first-hand things you saw, each item one of these shapes (each carries its own `type`):
   - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
   - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
   - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
-- `claims`: your conclusions, each one of:
+- `claims`: your conclusions, each item one of:
   - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (`from_tick <= to_tick`).
   - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0-1.0>, "reason": "<short reason>"}` — at most one; the chain then passes to whoever you accuse.
   - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`.
 - `free_text`: one or two sentences stating your conclusion in your own voice.
+
+Worked shape (substitute your OWN ids, ticks, and rooms — do not copy these values):
+```json
+{
+  "turn_id": "t",
+  "turn_index": 0,
+  "speaker": "{{ agent_id }}",
+  "turn_kind": "opening",
+  "reply_to": null,
+  "observations": [{"type": "saw_player", "tick": 12, "subject": "<player_id>", "room": "<room_id>", "co_present": []}],
+  "claims": [{"type": "accusation", "against": "<player_id>", "confidence": 0.6, "reason": "near the body just before it was found"}],
+  "free_text": "I saw them leave that room right before the body turned up."
+}
+```
 
 Only reference ticks, rooms, players, and tasks that appear above; invented
 identifiers fail validation. To accuse, the `accusation` claim is required —
