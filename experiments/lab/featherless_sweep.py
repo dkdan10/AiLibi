@@ -280,6 +280,20 @@ SLATE: Final[tuple[ModelSpec, ...]] = (
 )
 
 
+# Each Task 14.5 bespoke set is authored for ONE (model, mode). The A/B is "each
+# set vs pinned-9B on its OWN model" and the report groups rows by ``prompt_set``,
+# so a ``--prompt-set`` run MUST target only that owner model/mode — otherwise the
+# bespoke templates render across the whole slate and stamp invalid comparison rows
+# after a multi-hour run. Maps set -> (owner model label, owner request-thinking).
+_SET_OWNER: Final[dict[str, tuple[str, bool]]] = {
+    "qwen3_32b": ("qwen3-32b", False),
+    "qwen3_32b_thinking": ("qwen3-32b", True),
+    "qwen3_30b_a3b": ("qwen3-30b-a3b", False),
+    "glm_4_32b": ("glm-4-32b", False),
+    "cydonia_24b": ("cydonia-24b", False),
+}
+
+
 @dataclass
 class SweepConfig:
     """Knobs for one sweep invocation."""
@@ -343,11 +357,21 @@ class RenderBinding:
     """
 
     renderers: PromptRenderers
-    # The resolved set name stamped on every row (so the A/B is self-describing).
+    # The resolved set name (the bespoke set, or DEFAULT_PROMPT_SET on a no-flag
+    # run). Stamped on a row ONLY when ``is_bespoke`` (see below).
     prompt_set: str
+    # Is this an explicit ``--prompt-set`` (bespoke) run? Drives ALL three
+    # divergences from the 14.4 default path, so the no-flag path stays
+    # byte-identical: (1) the row ``prompt_set`` stamp is added ONLY when bespoke
+    # (a no-flag row omits the field entirely — the committed 14.4 rows have no
+    # such key, and ``_prompt_set_of`` reads a missing field as the default set,
+    # so a no-flag re-run reproduces the prior JSONL byte-for-byte); (2) the
+    # non-Qwen slate routes through the real adapter; (3) impostor replies render
+    # ``is_impostor=True`` to fire the wired cover directive.
+    is_bespoke: bool
     # Route the non-Qwen slate through the real adapter (``call_turn``) instead of
-    # ``_bare_send``? True only for a bespoke (non-default) set — the 14.4.1 fix
-    # retired the bare-send workaround for GLM / Cydonia in the re-sweep.
+    # ``_bare_send``? True only for a bespoke set — the 14.4.1 fix retired the
+    # bare-send workaround for GLM / Cydonia in the re-sweep.
     force_adapter: bool
     # Render impostor replies with ``is_impostor=True`` so a bespoke set's wired
     # reply cover directive fires (the reply corpus is impostor-only). False for
@@ -373,6 +397,7 @@ def _binding_for(cfg: SweepConfig) -> RenderBinding:
     return RenderBinding(
         renderers=build_prompt_renderers(set_name),
         prompt_set=set_name,
+        is_bespoke=bespoke,
         force_adapter=bespoke,
         reply_is_impostor=bespoke,
     )
@@ -576,7 +601,7 @@ def _base_row(
     binding: RenderBinding,
 ) -> dict[str, Any]:
     adapter = spec.qwen_kwarg or binding.force_adapter
-    return {
+    row: dict[str, Any] = {
         "corpus": corpus,
         "model": spec.model_id,
         "label": spec.label,
@@ -586,14 +611,19 @@ def _base_row(
         "transport": "adapter" if adapter else "bare",
         "substrate": "flag_on" if any(flags.values()) else "flag_off",
         "substrate_flags": dict(flags),
-        # The prompt SET rendered for this row (Task 14.5 A/B axis); the default
-        # set name when ``--prompt-set`` is absent, so the A/B is self-describing.
-        "prompt_set": binding.prompt_set,
-        # The best-shot call profile that produced this row (so the comparison is
-        # transparent and 14.6 sees exactly how each number was obtained).
-        "response_format_mode": response_format_mode,
-        "max_tokens": max_tokens,
     }
+    # Stamp the prompt SET (Task 14.5 A/B axis) ONLY on a bespoke ``--prompt-set``
+    # run. A no-flag default run omits the field entirely so its rows are
+    # byte-identical to the committed 14.4 matrix (which predates the column); the
+    # report's ``_prompt_set_of`` reads a missing field as the default 9B set, so
+    # the A/B stays self-describing without polluting the legacy output path.
+    if binding.is_bespoke:
+        row["prompt_set"] = binding.prompt_set
+    # The best-shot call profile that produced this row (so the comparison is
+    # transparent and 14.6 sees exactly how each number was obtained).
+    row["response_format_mode"] = response_format_mode
+    row["max_tokens"] = max_tokens
+    return row
 
 
 def _record_outcome(rec: dict[str, Any], out: TurnOutcome[Any]) -> None:
@@ -1380,8 +1410,14 @@ def _ab_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         out.append("")
         out.append("```")
         out.append("# example: the qwen3_32b set on Qwen3-32B, merged into the matrix")
+        out.append("# (the mode is pinned so the non-thinking set is not also run")
+        out.append(
+            "#  in thinking mode, which would overlap the qwen3_32b_thinking set)"
+        )
         out.append("uv run python -m experiments.lab.featherless_sweep run \\")
-        out.append("    --prompt-set qwen3_32b --models qwen3-32b --append")
+        out.append(
+            "    --prompt-set qwen3_32b --models qwen3-32b --modes non_thinking --append"
+        )
         out.append("```")
         out.append("")
         out.append(
@@ -2105,6 +2141,46 @@ def main() -> int:
             raise SystemExit(
                 f"--models: unknown label(s) {sorted(unknown)}; "
                 f"valid: {[s.label for s in SLATE]}"
+            )
+    # A bespoke ``--prompt-set`` run must target ONLY that set's owner model/mode
+    # (the A/B compares each set on its own model; the report groups by prompt_set).
+    # Auto-restrict when --models / --modes are omitted; fail loud on a mismatch
+    # rather than silently rendering the set across the slate (AGENTS.md: no silent
+    # fallbacks) — which would waste a multi-hour run on invalid comparison rows.
+    if args.prompt_set is not None:
+        owner = _SET_OWNER.get(args.prompt_set)
+        if owner is None:
+            raise SystemExit(
+                f"--prompt-set {args.prompt_set!r} is not a known bespoke set "
+                f"(valid: {sorted(_SET_OWNER)})"
+            )
+        owner_label, owner_thinking = owner
+        owner_mode = _mode_label(owner_thinking)
+        if not args.models:
+            models = tuple(s for s in SLATE if s.label == owner_label)
+            print(
+                f"NOTE: --prompt-set {args.prompt_set} -> restricting --models to "
+                f"its owner {owner_label} (the A/B runs each set on its own model).",
+                flush=True,
+            )
+        elif [s.label for s in models] != [owner_label]:
+            raise SystemExit(
+                f"--prompt-set {args.prompt_set} owns model {owner_label!r}, but "
+                f"--models is {[s.label for s in models]}. A bespoke A/B must run "
+                f"ONLY on its owner model (the report groups by prompt_set); rerun "
+                f"with --models {owner_label}."
+            )
+        if mode_filter is None:
+            mode_filter = (owner_thinking,)
+            print(
+                f"NOTE: --prompt-set {args.prompt_set} -> setting "
+                f"--modes {owner_mode}.",
+                flush=True,
+            )
+        elif mode_filter != (owner_thinking,):
+            raise SystemExit(
+                f"--prompt-set {args.prompt_set} is the {owner_mode} set; --modes "
+                f"must be {owner_mode} (got {[_mode_label(m) for m in mode_filter]})."
             )
     cfg = SweepConfig(
         sample_dir=args.sample_dir,
