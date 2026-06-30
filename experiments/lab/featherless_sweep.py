@@ -109,7 +109,6 @@ from agents.strategic.prompts.loader import (
     DEFAULT_PROMPT_SET,
     PromptRenderers,
     build_prompt_renderers,
-    resolve_prompt_set,
 )
 from experiments.lab.deception_battery import (
     KillContext,
@@ -357,12 +356,23 @@ class RenderBinding:
 
 
 def _binding_for(cfg: SweepConfig) -> RenderBinding:
-    """Resolve the render binding for one sweep run from its ``prompt_set``."""
+    """Resolve the render binding for one sweep run from its ``prompt_set``.
+
+    The sweep's ``--prompt-set`` axis is EXPLICIT and does NOT inherit the ambient
+    ``AILIBI_PROMPT_SET`` selector: a no-flag run is ALWAYS the pinned-9B baseline
+    (byte-identical 14.4 behavior) even when ``AILIBI_PROMPT_SET`` is exported in
+    the environment — which the 14.7 re-record workflow does. Binding the renderers
+    to an EXPLICIT set name (``DEFAULT_PROMPT_SET`` when the flag is absent) rather
+    than resolving ``None`` through the env var is what keeps the default path's
+    render + row stamping + transport from silently flipping to a bespoke set (and
+    so keeps the committed 14.4 report regenerating byte-identically).
+    """
 
     bespoke = cfg.prompt_set is not None
+    set_name = cfg.prompt_set if cfg.prompt_set is not None else DEFAULT_PROMPT_SET
     return RenderBinding(
-        renderers=build_prompt_renderers(cfg.prompt_set),
-        prompt_set=resolve_prompt_set(cfg.prompt_set),
+        renderers=build_prompt_renderers(set_name),
+        prompt_set=set_name,
         force_adapter=bespoke,
         reply_is_impostor=bespoke,
     )
@@ -1020,6 +1030,7 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
     sem = asyncio.Semaphore(cfg.concurrency)
     n_rows = 0
     matrix_log: list[str] = []
+    mode_skipped: list[str] = []
     with RESULTS.open("a" if cfg.append else "w", encoding="utf-8") as sink:
 
         def emit(rec: dict[str, Any]) -> None:
@@ -1032,11 +1043,26 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
         # ALL its work before the next, so the 4-switches/min plan limit is
         # respected (the pacer guards the boundary).
         for spec in specs:
+            # A --modes filter that excludes this model's only axis value (e.g.
+            # --modes thinking against GLM / Cydonia, which run non-thinking only)
+            # leaves it with no mode to run. Surface that EXPLICITLY rather than
+            # silently emitting zero rows (AGENTS.md: no silent fallbacks) — and
+            # skip before the pacer burns a model switch on a no-op.
+            spec_modes = _modes_for(spec, cfg.mode_filter)
+            if not spec_modes:
+                print(
+                    f"  NOTE: {spec.label} has no mode under --modes "
+                    f"{[_mode_label(m) for m in (cfg.mode_filter or ())]}; "
+                    "emitting no rows for it.",
+                    flush=True,
+                )
+                mode_skipped.append(spec.label)
+                continue
             pacer.touch(spec.model_id)
             for flag_on in cfg.substrates:
                 flags, reply_ctxs, vote_items, kill_ctxs = ctx_by_sub[flag_on]
                 sub = "flag_on" if flag_on else "flag_off"
-                for request_thinking in _modes_for(spec, cfg.mode_filter):
+                for request_thinking in spec_modes:
                     mode = _mode_label(request_thinking)
                     tag = f"{spec.label}/{mode}/{sub}"
 
@@ -1124,7 +1150,9 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
     for line in matrix_log:
         print(f"  {line}")
     if skipped:
-        print(f"  skipped models: {skipped}")
+        print(f"  skipped models (unserved): {skipped}")
+    if mode_skipped:
+        print(f"  skipped models (no mode under --modes filter): {mode_skipped}")
     return 0
 
 
