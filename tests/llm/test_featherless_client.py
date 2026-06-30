@@ -51,6 +51,7 @@ from llm.featherless_client import (
     _build_chat_payload,
     _raw_from_response_body,
     _send_with_retry,
+    _supports_thinking_kwarg,
 )
 from llm.provider import (
     AnthropicClient,
@@ -970,8 +971,11 @@ class TestBuildChatPayload:
         assert payload["response_format"] == {"type": "json_object"}
 
     def test_omits_response_format_when_none(self) -> None:
+        # A recognized (Qwen3) id so the thinking kwarg is sent — the point of
+        # this test is the response_format omission, not the 14.4.1 conditional
+        # (an unrecognized id now fails loud; see TestThinkingKwargConditional).
         payload = _build_chat_payload(
-            model="m",
+            model="Qwen/Qwen3-32B",
             prompt="p",
             response_format=None,
             max_tokens=8,
@@ -980,6 +984,137 @@ class TestBuildChatPayload:
         )
         assert "response_format" not in payload
         assert payload["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+class TestSupportsThinkingKwarg:
+    """The EXPLICIT per-model thinking-capability signal (Task 14.4.1).
+
+    Qwen3 honors the ``chat_template_kwargs.enable_thinking`` chat-template
+    kwarg; the non-Qwen slate (GLM, Cydonia) does not — the 14.4 sweep found the
+    mandatory field collapses GLM to ``{}`` and 400/504s Cydonia. Classification
+    is an EXACT id lookup (not substring matching), so an unverified finetune
+    whose name merely contains a known marker is NOT auto-classified; an
+    unrecognized id fails loud (no silent fallback; the capability is decided up
+    front by id, not by swallowing a wire 400)."""
+
+    @pytest.mark.parametrize(
+        "model",
+        ["Qwen/Qwen3-32B", "Qwen/Qwen3-30B-A3B-Instruct-2507", "Qwen/Qwen3-8B"],
+    )
+    def test_qwen3_models_support_kwarg(self, model: str) -> None:
+        assert _supports_thinking_kwarg(model) is True
+
+    @pytest.mark.parametrize(
+        "model",
+        ["zai-org/GLM-4-32B", "zai-org/GLM-4-32B-0414", "TheDrummer/Cydonia-24B-v2"],
+    )
+    def test_non_qwen_models_do_not_support_kwarg(self, model: str) -> None:
+        assert _supports_thinking_kwarg(model) is False
+
+    def test_unrecognized_id_fails_loud(self) -> None:
+        # No silent fallback (AGENTS.md): an unclassified id raises rather than
+        # guessing whether to send the Qwen-only field.
+        with pytest.raises(ValueError, match="no enable_thinking capability entry"):
+            _supports_thinking_kwarg("mystery-org/mystery-model-1")
+
+    def test_substring_lookalike_is_not_auto_classified(self) -> None:
+        # An unverified finetune whose NAME contains a known marker must NOT be
+        # silently classified by the fragment — exact id only (Codex P2). It is
+        # an unknown model and must fail loud until classified deliberately.
+        with pytest.raises(ValueError, match="no enable_thinking capability entry"):
+            _supports_thinking_kwarg("someorg/Qwen3-32B-roleplay-merge")
+
+
+class TestThinkingKwargConditional:
+    """``_build_chat_payload`` gates ``chat_template_kwargs.enable_thinking`` on
+    the per-family signal (Task 14.4.1). A Qwen3 request INCLUDES it (both True
+    and False — byte-unchanged from 14.1); a GLM / Cydonia request OMITS the
+    whole ``chat_template_kwargs`` object (an empty ``{}`` is what broke GLM);
+    ``request_thinking=True`` on a non-supporting model is an explicit no-op, not
+    an exception; an unrecognized id fails loud."""
+
+    @pytest.mark.parametrize("request_thinking", [True, False])
+    def test_qwen3_request_includes_enable_thinking(
+        self, request_thinking: bool
+    ) -> None:
+        payload = _build_chat_payload(
+            model="Qwen/Qwen3-32B",
+            prompt="p",
+            response_format={"type": "json_object"},
+            max_tokens=64,
+            temperature=0.0,
+            request_thinking=request_thinking,
+        )
+        assert payload["chat_template_kwargs"] == {"enable_thinking": request_thinking}
+
+    @pytest.mark.parametrize(
+        "model",
+        ["zai-org/GLM-4-32B-0414", "TheDrummer/Cydonia-24B-v2"],
+    )
+    @pytest.mark.parametrize("request_thinking", [True, False])
+    def test_non_qwen_request_omits_chat_template_kwargs(
+        self, model: str, request_thinking: bool
+    ) -> None:
+        # request_thinking=True must NOT raise here (the parametrize over True
+        # exercises the explicit no-op) — the field is simply dropped.
+        payload = _build_chat_payload(
+            model=model,
+            prompt="p",
+            response_format={"type": "json_object"},
+            max_tokens=64,
+            temperature=0.0,
+            request_thinking=request_thinking,
+        )
+        # Omitted ENTIRELY — not present as an empty ``{}`` (which collapsed GLM).
+        assert "chat_template_kwargs" not in payload
+        # The rest of the wire shape is the normal request, so the production
+        # client can call GLM / Cydonia where 14.4 needed the bare-send workaround.
+        assert payload["model"] == model
+        assert payload["messages"] == [{"role": "user", "content": "p"}]
+        assert payload["response_format"] == {"type": "json_object"}
+
+    def test_unrecognized_model_id_fails_loud(self) -> None:
+        with pytest.raises(ValueError, match="enable_thinking"):
+            _build_chat_payload(
+                model="some-rp-finetune",
+                prompt="p",
+                response_format=None,
+                max_tokens=8,
+                temperature=0.0,
+                request_thinking=False,
+            )
+
+
+class TestNonQwenModelRoutesThroughCompleteSeam:
+    """A GLM / Cydonia request flows through ``complete()`` and the SHARED
+    extract->validate seam (Task 14.4.1) — the production client can call them
+    where 14.4 needed the bare-send workaround. The injected send proves the
+    call path with no network; the wire-shape omission is pinned in
+    ``TestThinkingKwargConditional`` (the builder is downstream of the send hook
+    the test replaces)."""
+
+    @pytest.mark.parametrize(
+        "model",
+        ["zai-org/GLM-4-32B-0414", "TheDrummer/Cydonia-24B-v2"],
+    )
+    def test_non_qwen_model_parses_via_shared_seam(self, model: str) -> None:
+        send = _send_returning(model=model)
+        # request_thinking=True on a non-supporting model is an explicit no-op,
+        # not an exception — complete() must not raise.
+        client = _client(send, request_thinking=True, thinking_policy="strip")
+
+        response = asyncio.run(
+            client.complete(
+                prompt="p",
+                schema=_SampleReport,
+                max_tokens=64,
+                temperature=0.0,
+                model=model,
+            )
+        )
+
+        assert response.model == model
+        _SampleReport.model_validate_json(response.text)
 
 
 class TestSendWithRetry:
