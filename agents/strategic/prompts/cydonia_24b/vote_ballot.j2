@@ -1,0 +1,106 @@
+{#- Vote-ballot prompt — bespoke cydonia_24b set (Task 14.5).
+
+   prompt_id: vote_ballot  --  version vote_ballot.cydonia_24b.v1
+
+   Ground-up bespoke set for TheDrummer/Cydonia-24B-v2 (a roleplay / creative
+   finetune); NOT derived from the pinned qwen3_5_9b set. Framing leans into the
+   IMMERSIVE moment — the character's hand is over the button, the verdict is theirs
+   to cast — so the sim reads as a tense decision. Because RP finetunes drift from
+   output format, JSON discipline is stated extra firmly: the in-character voice
+   lives ONLY inside rationale_text; the visible reply is strict JSON and nothing
+   else.
+
+   Output: ONE meetings.schemas.VoteBallot (the shared JSON schema — the one hard
+   invariant, owner decision 2026-06-30). The suspicion-max line below is rendered
+   in the exact wording eval._suspicion_parse reads ("maximum suspicion among the
+   living ejection targets is **X**") so a recorded ballot stays analyzable; the
+   §4.6 threshold is shown as EVIDENCE, not a command (the deterministic tally in
+   meetings.voting is the anti-cascade backstop).
+
+   Inputs (loader kwargs only): voter_id, rendered_memory, transcript,
+   contradiction_flags, suspicion_graph, candidate_targets (optional),
+   skip_confidence_threshold (optional, default 0.6), fellow_impostor_ids (optional).
+-#}
+The room falls quiet and the choice is yours alone. You are `{{ voter_id }}`, casting
+your vote at an AiLibi meeting — a game of trust aboard a station with a hidden killer
+among the crew. The crew wins by voting the impostor out; the impostor wins by
+surviving. Weigh everything you have heard and seen, then cast one `VoteBallot`: name
+the single player you believe is the killer, or SKIP if the evidence is still too
+thin to take a life. The outcome is a deterministic tally over every ballot, so vote
+the conclusion you have honestly reached — not the one that merely feels safe.
+
+## Your private memory
+{{ rendered_memory }}
+
+## The accusation chain this meeting
+{% for turn in transcript.turns %}
+- [`{{ turn.turn_id }}`] turn {{ turn.turn_index }} ({{ turn.turn_kind }}) — `{{ turn.speaker }}`{% for claim in turn.claims %}{% if claim.type == "accusation" %} → accuses `{{ claim.against }}`{% endif %}{% endfor %}: {{ turn.free_text }}
+{%- else %}
+(no turns recorded)
+{%- endfor %}
+
+## Contradiction flags (evidence, not verdicts — §5.4)
+{% for flag in contradiction_flags %}
+- [`{{ flag.contradiction_id }}`] {{ flag.kind }} — {{ flag.description }} (subjects: {% for subj in flag.subjects %}`{{ subj }}`{% if not loop.last %}, {% endif %}{% endfor %})
+{%- else %}
+(none flagged this meeting)
+{%- endfor %}
+
+## Your suspicion of each player
+{% for entry in suspicion_graph %}
+- `{{ entry.player_id }}`: suspicion {{ "%.2f"|format(entry.suspicion) }}, trust {{ "%.2f"|format(entry.trust) }}
+{%- else %}
+(no per-player beliefs yet)
+{%- endfor %}
+{% if candidate_targets is defined and candidate_targets %}
+
+## Valid ejection targets
+{% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %}
+{% endif %}
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your team
+Your fellow impostors are {{ fellow_impostor_ids | join(", ") }}. Never vote a
+teammate; if your suspicion lands on one, set `target` to `"SKIP"` instead.
+{% endif %}
+{% if candidate_targets is defined and candidate_targets %}
+{% set _susp = suspicion_graph | selectattr('player_id', 'in', candidate_targets) | map(attribute='suspicion') | list %}
+{% else %}
+{% set _susp = suspicion_graph | map(attribute='suspicion') | list %}
+{% endif %}
+{% set _max = (_susp | max) if _susp else 0.0 %}
+{% set _thr = skip_confidence_threshold | default(0.6) %}
+
+## How to decide
+Your maximum suspicion among the living ejection targets is **{{ "%.2f"|format(_max) }}**;
+the skip threshold is **{{ "%.2f"|format(_thr) }}** (the §4.6 reference point).
+Treat that max and threshold as ONE input — weigh them against the transcript, the
+contradiction flags, and your own memory, then reach your own verdict. A suspect two
+independent witnesses place at the scene, or whose alibi a contradiction flag
+refutes, is a far stronger case than one carried by a single voice. Set `confidence`
+to your honest probability that the call is right: do not report a confidence at or
+above the skip threshold for a target whose suspicion is below it.
+
+## Output
+Your visible response must be ONLY the JSON object below — no narration, no prose, no
+scene-setting, no preamble, nothing before the opening `{` or after the closing `}`.
+Stay in character ONLY inside the `rationale_text` field; every other field is plain
+structured data. This is the one rule you cannot bend.
+
+Return exactly one JSON object matching the `VoteBallot` schema:
+```json
+{
+  "voter": "{{ voter_id }}",
+  "target": "<player_id or \"SKIP\">",
+  "confidence": <float 0.0-1.0>,
+  "primary_reason_id": "<turn id from the transcript, or null>",
+  "considered_alternatives": ["<player_id>", ...],
+  "rationale_text": "<one sentence with your vote and its strongest reason>"
+}
+```
+- `voter` MUST equal `"{{ voter_id }}"`.
+- `target` is `"SKIP"` or one living player other than yourself{% if candidate_targets is defined and candidate_targets %} (one of the valid targets above){% endif %}.
+- `primary_reason_id` is a turn id copied exactly from the transcript, or `null` if your decision rests on your own memory / a contradiction flag.
+- `considered_alternatives` lists any other player you seriously weighed (empty if none).
+
+Output ONLY the JSON object — no preamble or trailing commentary.

@@ -106,8 +106,10 @@ from typing import Any, Final, Generic, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from agents.strategic.prompts.loader import (
-    accusation_round_prompt,
-    impostor_report_prompt,
+    DEFAULT_PROMPT_SET,
+    PromptRenderers,
+    build_prompt_renderers,
+    resolve_prompt_set,
 )
 from experiments.lab.deception_battery import (
     KillContext,
@@ -122,7 +124,7 @@ from experiments.lab.probe_backends import (
     call_turn,
     resolve_featherless_base_url,
 )
-from experiments.model_probe.corpus import CorpusItem, build_corpus, render_prompt
+from experiments.model_probe.corpus import CorpusItem, build_corpus
 from experiments.model_probe.probe import select_corpus
 from llm.featherless_client import _raw_from_response_body, _send_with_retry
 from llm.provider import _extract_json_block
@@ -299,6 +301,20 @@ class SweepConfig:
     # model (``--models``) after an environment outage and merge it back, rather
     # than repeating the whole multi-hour matrix.
     append: bool = False
+    # The prompt SET to render through (Task 14.5 A/B axis). ``None`` keeps the
+    # 14.4 behavior byte-identical: the import-time default set (the pinned 9B
+    # templates) renders, and the non-Qwen slate routes through the sweep-local
+    # ``_bare_send``. A non-``None`` set renders the BESPOKE templates via
+    # ``build_prompt_renderers`` and routes the non-Qwen slate through the REAL
+    # adapter (``call_turn``) — the 14.4.1 fix having retired the bare-send
+    # workaround for them. Every row is stamped with the resolved ``prompt_set``.
+    prompt_set: str | None = None
+    # Restrict the thinking axis to these request-thinking values (Task 14.5): a
+    # bespoke set maps to ONE (model, mode), so the non-thinking ``qwen3_32b`` set
+    # runs ``--modes non_thinking`` and the ``qwen3_32b_thinking`` set runs
+    # ``--modes thinking`` on the same model. ``None`` keeps the full per-model
+    # axis (the 14.4 behavior). Intersected with each spec's own axis.
+    mode_filter: tuple[bool, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -315,6 +331,43 @@ class TurnOutcome(Generic[ModelT]):
     parse_error: str | None
 
 
+@dataclass(frozen=True)
+class RenderBinding:
+    """How one sweep run renders + routes its turns (Task 14.5 ``--prompt-set``).
+
+    Built ONCE per run and threaded into every cell so the render set, the row
+    ``prompt_set`` stamp, the transport choice, and the reply cover-directive
+    gate move together. The no-flag default (``--prompt-set`` absent) reproduces
+    the 14.4 behavior byte-identically: the pinned 9B templates render, the
+    non-Qwen slate routes through ``_bare_send``, and impostor replies render
+    ``is_impostor=False`` (the 9B reply template carries no cover directive).
+    """
+
+    renderers: PromptRenderers
+    # The resolved set name stamped on every row (so the A/B is self-describing).
+    prompt_set: str
+    # Route the non-Qwen slate through the real adapter (``call_turn``) instead of
+    # ``_bare_send``? True only for a bespoke (non-default) set — the 14.4.1 fix
+    # retired the bare-send workaround for GLM / Cydonia in the re-sweep.
+    force_adapter: bool
+    # Render impostor replies with ``is_impostor=True`` so a bespoke set's wired
+    # reply cover directive fires (the reply corpus is impostor-only). False for
+    # the default set keeps the 9B reply render byte-identical.
+    reply_is_impostor: bool
+
+
+def _binding_for(cfg: SweepConfig) -> RenderBinding:
+    """Resolve the render binding for one sweep run from its ``prompt_set``."""
+
+    bespoke = cfg.prompt_set is not None
+    return RenderBinding(
+        renderers=build_prompt_renderers(cfg.prompt_set),
+        prompt_set=resolve_prompt_set(cfg.prompt_set),
+        force_adapter=bespoke,
+        reply_is_impostor=bespoke,
+    )
+
+
 def _set_substrate(flag_on: bool) -> dict[str, bool]:
     """Set / clear the four 13.5 env levers and return the active config."""
 
@@ -326,10 +379,21 @@ def _set_substrate(flag_on: bool) -> dict[str, bool]:
     return active_substrate_flags()
 
 
-def _modes_for(spec: ModelSpec) -> tuple[bool, ...]:
-    """Request-thinking values to run for ``spec`` (the non-thinking/thinking axis)."""
+def _modes_for(
+    spec: ModelSpec, mode_filter: tuple[bool, ...] | None = None
+) -> tuple[bool, ...]:
+    """Request-thinking values to run for ``spec`` (the non-thinking/thinking axis).
 
-    return (False, True) if spec.thinking_axis else (False,)
+    ``mode_filter`` (Task 14.5) intersects the spec's own axis so a bespoke set's
+    A/B runs only its one mode; ``None`` keeps the full per-model axis (14.4). A
+    filter that excludes every axis value yields an empty tuple (the model is then
+    a no-op for that run — e.g. asking GLM for thinking-only).
+    """
+
+    axis = (False, True) if spec.thinking_axis else (False,)
+    if mode_filter is None:
+        return axis
+    return tuple(m for m in axis if m in mode_filter)
 
 
 def _mode_label(request_thinking: bool) -> str:
@@ -399,13 +463,18 @@ async def _run_turn(
     api_key: str,
     base_url: str | None,
     sem: asyncio.Semaphore,
+    force_adapter: bool = False,
 ) -> TurnOutcome[ModelT]:
     """Run one model call via the right transport; never raises.
 
     Qwen3 models (``qwen_kwarg``) go through ``call_turn`` (the 14.1 adapter,
     sending ``chat_template_kwargs.enable_thinking`` — the real thinking axis).
-    Non-Qwen models go through :func:`_bare_send` (omitting that field). BOTH
-    route the response through the shared extract -> validate seam.
+    Non-Qwen models go through :func:`_bare_send` (omitting that field) UNLESS
+    ``force_adapter`` is set, in which case they too route through ``call_turn``:
+    the 14.4.1 fix made the adapter omit the Qwen-only field for the non-Qwen
+    slate, so the bespoke-set re-sweep (Task 14.5) iterates against the REAL
+    client rather than the harness bare-send. BOTH transports route the response
+    through the shared extract -> validate seam.
     """
 
     resolved = base_url if base_url is not None else resolve_featherless_base_url()
@@ -420,7 +489,7 @@ async def _run_turn(
         for attempt in range(_TURN_MAX_ATTEMPTS):
             started = time.perf_counter()
             try:
-                if spec.qwen_kwarg:
+                if spec.qwen_kwarg or force_adapter:
                     r = await call_turn(
                         prompt,
                         schema,
@@ -494,7 +563,9 @@ def _base_row(
     flags: Mapping[str, bool],
     response_format_mode: str,
     max_tokens: int,
+    binding: RenderBinding,
 ) -> dict[str, Any]:
+    adapter = spec.qwen_kwarg or binding.force_adapter
     return {
         "corpus": corpus,
         "model": spec.model_id,
@@ -502,9 +573,12 @@ def _base_row(
         "role": spec.role,
         "mode": _mode_label(request_thinking),
         "request_thinking": request_thinking,
-        "transport": "adapter" if spec.qwen_kwarg else "bare",
+        "transport": "adapter" if adapter else "bare",
         "substrate": "flag_on" if any(flags.values()) else "flag_off",
         "substrate_flags": dict(flags),
+        # The prompt SET rendered for this row (Task 14.5 A/B axis); the default
+        # set name when ``--prompt-set`` is absent, so the A/B is self-describing.
+        "prompt_set": binding.prompt_set,
         # The best-shot call profile that produced this row (so the comparison is
         # transparent and 14.6 sees exactly how each number was obtained).
         "response_format_mode": response_format_mode,
@@ -535,9 +609,10 @@ async def _reply_cell(
     api_key: str,
     base_url: str | None,
     sem: asyncio.Semaphore,
+    binding: RenderBinding,
 ) -> dict[str, Any]:
     body_room, body_tick = _body(ctx)
-    prompt = _reply_prompt(ctx, cover=cover)
+    prompt = _reply_prompt(ctx, cover=cover, binding=binding)
     rf_mode, cap = _profile(request_thinking)
     rec = _base_row(
         corpus="reply",
@@ -546,6 +621,7 @@ async def _reply_cell(
         flags=flags,
         response_format_mode=rf_mode,
         max_tokens=cap,
+        binding=binding,
     )
     rec["cover"] = "on" if cover else "off"
     rec["item"] = ctx.item_id
@@ -562,6 +638,7 @@ async def _reply_cell(
         api_key=api_key,
         base_url=base_url,
         sem=sem,
+        force_adapter=binding.force_adapter,
     )
     _record_outcome(rec, out)
     if out.parsed is not None:
@@ -578,8 +655,19 @@ async def _vote_cell(
     api_key: str,
     base_url: str | None,
     sem: asyncio.Semaphore,
+    binding: RenderBinding,
 ) -> dict[str, Any]:
-    prompt = render_prompt(item.context)
+    vc = item.context
+    prompt = binding.renderers.vote(
+        voter_id=vc.voter_id,
+        rendered_memory=vc.rendered_memory,
+        transcript=vc.transcript,
+        contradiction_flags=vc.contradiction_flags,
+        suspicion_graph=vc.suspicion_graph,
+        candidate_targets=vc.candidate_targets,
+        skip_confidence_threshold=vc.skip_confidence_threshold,
+        fellow_impostor_ids=vc.fellow_impostor_ids,
+    )
     rf_mode, cap = _profile(request_thinking)
     rec = _base_row(
         corpus="vote",
@@ -588,6 +676,7 @@ async def _vote_cell(
         flags=flags,
         response_format_mode=rf_mode,
         max_tokens=cap,
+        binding=binding,
     )
     rec["cover"] = "n/a"
     rec["item"] = item.item_id
@@ -608,6 +697,7 @@ async def _vote_cell(
         api_key=api_key,
         base_url=base_url,
         sem=sem,
+        force_adapter=binding.force_adapter,
     )
     _record_outcome(rec, out)
     ballot = out.parsed
@@ -627,10 +717,11 @@ async def _opening_cell(
     api_key: str,
     base_url: str | None,
     sem: asyncio.Semaphore,
+    binding: RenderBinding,
 ) -> dict[str, Any]:
     """Run + grade one impostor self-report opening cell (fabrication grade)."""
 
-    prompt = impostor_report_prompt(
+    prompt = binding.renderers.impostor_report(
         agent_id=ctx.killer,
         current_tick=ctx.trigger_tick,
         meeting_trigger=ctx.trigger_description,
@@ -648,6 +739,7 @@ async def _opening_cell(
         flags=flags,
         response_format_mode=rf_mode,
         max_tokens=cap,
+        binding=binding,
     )
     rec["cover"] = "n/a"
     rec["item"] = ctx.item_id
@@ -665,6 +757,7 @@ async def _opening_cell(
         api_key=api_key,
         base_url=base_url,
         sem=sem,
+        force_adapter=binding.force_adapter,
     )
     _record_outcome(rec, out)
     if out.parsed is not None:
@@ -689,10 +782,11 @@ async def _latency_cell(
     api_key: str,
     base_url: str | None,
     sem: asyncio.Semaphore,
+    binding: RenderBinding,
 ) -> dict[str, Any]:
     """One SEQUENTIAL reply call timed in isolation (the latency pass)."""
 
-    prompt = _reply_prompt(ctx, cover=False)
+    prompt = _reply_prompt(ctx, cover=False, binding=binding)
     rf_mode, cap = _profile(request_thinking)
     rec = _base_row(
         corpus="latency",
@@ -701,6 +795,7 @@ async def _latency_cell(
         flags=flags,
         response_format_mode=rf_mode,
         max_tokens=cap,
+        binding=binding,
     )
     rec["item"] = ctx.item_id
     out = await _run_turn(
@@ -715,6 +810,7 @@ async def _latency_cell(
         api_key=api_key,
         base_url=base_url,
         sem=sem,
+        force_adapter=binding.force_adapter,
     )
     rec["latency_s"] = round(out.latency_s, 1)
     rec["parsed_ok"] = out.parsed is not None
@@ -724,15 +820,25 @@ async def _latency_cell(
     return rec
 
 
-def _reply_prompt(ctx: ReplyContext, *, cover: bool) -> str:
-    """Render the production reply prompt; inject the gp-1 cover directive if ON."""
+def _reply_prompt(ctx: ReplyContext, *, cover: bool, binding: RenderBinding) -> str:
+    """Render the reply prompt for the bound set; inject the gp-1 cover if ON.
+
+    The reply corpus is impostor-only (``build_reply_contexts`` filters to
+    ``IMPOSTOR`` speakers), so for a BESPOKE set ``is_impostor=True`` is passed:
+    the new set wires the cover directive into the reply path gated on
+    ``is_impostor`` alone (the gp-1 fix), so passing it exercises that wiring.
+    For the default 9B set ``is_impostor=False`` keeps the render byte-identical
+    (its reply template carries no cover directive on this path). The ``cover``
+    arm's injected ``_cover_directive`` is the set-independent 2×2 control and is
+    applied to memory either way.
+    """
 
     memory = ctx.rendered_memory
     if cover:
         body_room, body_tick = _body(ctx)
         if body_room is not None:
             memory = memory + _cover_directive(body_room, body_tick or 0)
-    return accusation_round_prompt(
+    return binding.renderers.statement(
         agent_id=ctx.speaker,
         rendered_memory=memory,
         transcript=ctx.transcript,
@@ -742,6 +848,8 @@ def _reply_prompt(ctx: ReplyContext, *, cover: bool) -> str:
         fellow_impostor_ids=ctx.fellow_living,
         living_ids=tuple(p for p in ctx.living if p != ctx.speaker),
         dead_ids=tuple(ctx.dead),
+        is_impostor=binding.reply_is_impostor,
+        is_body_report=False,
     )
 
 
@@ -893,6 +1001,16 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
             flush=True,
         )
 
+    # Resolve the render binding ONCE (Task 14.5): which prompt SET renders, how
+    # rows are stamped, the non-Qwen transport, and the reply cover gate.
+    binding = _binding_for(cfg)
+    print(
+        f"prompt_set={binding.prompt_set} "
+        f"(transport: non-Qwen via {'adapter' if binding.force_adapter else 'bare-send'}; "
+        f"reply is_impostor={binding.reply_is_impostor})",
+        flush=True,
+    )
+
     # Reconstruct each substrate's contexts ONCE (memory is baked into the
     # returned objects), so the model-outer loop can re-use them without touching
     # the env again — and, crucially, without interleaving model switches.
@@ -918,7 +1036,7 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
             for flag_on in cfg.substrates:
                 flags, reply_ctxs, vote_items, kill_ctxs = ctx_by_sub[flag_on]
                 sub = "flag_on" if flag_on else "flag_off"
-                for request_thinking in _modes_for(spec):
+                for request_thinking in _modes_for(spec, cfg.mode_filter):
                     mode = _mode_label(request_thinking)
                     tag = f"{spec.label}/{mode}/{sub}"
 
@@ -933,6 +1051,7 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
                                 api_key=api_key,
                                 base_url=cfg.base_url,
                                 sem=sem,
+                                binding=binding,
                             )
                         )
 
@@ -948,6 +1067,7 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
                                     api_key=api_key,
                                     base_url=cfg.base_url,
                                     sem=sem,
+                                    binding=binding,
                                 )
                                 for ctx in kill_ctxs
                             ]
@@ -966,6 +1086,7 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
                                 api_key=api_key,
                                 base_url=cfg.base_url,
                                 sem=sem,
+                                binding=binding,
                             )
                             for cover in (False, True)
                             for ctx in reply_ctxs
@@ -984,6 +1105,7 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
                                 api_key=api_key,
                                 base_url=cfg.base_url,
                                 sem=sem,
+                                binding=binding,
                             )
                             for item in vote_items
                         ]
@@ -1015,6 +1137,17 @@ def _rows() -> list[dict[str, Any]]:
     return [
         json.loads(line) for line in RESULTS.read_text().splitlines() if line.strip()
     ]
+
+
+def _prompt_set_of(row: Mapping[str, Any]) -> str:
+    """The prompt set a row was rendered through.
+
+    Rows recorded before the Task 14.5 ``prompt_set`` stamp (the committed 14.4
+    matrix) carry no field and are the pinned 9B default set — so the 14.4 tables
+    reproduce byte-identically once the bespoke A/B rows share the file.
+    """
+
+    return str(row.get("prompt_set", DEFAULT_PROMPT_SET))
 
 
 def _summ_reply(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -1152,6 +1285,187 @@ def _rate(s: Mapping[str, Any], key: str) -> float:
     return (int(s[key]) / p) if p else 0.0
 
 
+# ── Task 14.5 bespoke per-set A/B (new set vs pinned-9B set, same model) ──
+
+
+def _rows_for_set(
+    rows: Sequence[Mapping[str, Any]], prompt_set: str
+) -> list[Mapping[str, Any]]:
+    return [r for r in rows if _prompt_set_of(r) == prompt_set]
+
+
+def _bespoke_sets_present(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Non-default prompt sets present in the results, in SLATE model order.
+
+    Each bespoke set is keyed by its model label for ordering; an unknown set
+    sorts last. A set carries rows only for its own model, so the first row's
+    label orders it.
+    """
+
+    order = {s.label: i for i, s in enumerate(SLATE)}
+    present = sorted(set(map(_prompt_set_of, rows)) - {DEFAULT_PROMPT_SET})
+
+    def _key(ps: str) -> tuple[int, str]:
+        labels = [str(r["label"]) for r in rows if _prompt_set_of(r) == ps]
+        first = labels[0] if labels else ""
+        return (order.get(first, 99), ps)
+
+    return sorted(present, key=_key)
+
+
+def _delta_pp(new: Mapping[str, Any], base: Mapping[str, Any] | None, key: str) -> str:
+    if base is None:
+        return "—"
+    return f"{100 * (_rate(new, key) - _rate(base, key)):+.0f} pp"
+
+
+def _ab_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    """The Task 14.5 A/B addendum: each bespoke set vs the pinned-9B set on its
+    own model, over the SAME reconstructed contexts (the one clean control in a
+    co-designed change). Renders the per-set delta automatically from any
+    ``prompt_set``-tagged rows; degrades to a how-to note when none are present."""
+
+    out: list[str] = []
+    out.append("## Bespoke per-set A/B (Task 14.5): new set vs pinned-9B set")
+    out.append("")
+    out.append(
+        "Each Task 14.5 bespoke set is rendered over the SAME reconstructed "
+        "contexts as the 14.4 sweep and compared to the PINNED 9B prompts ON ITS "
+        "OWN MODEL — the one clean control in a co-designed change (model + prompt "
+        "co-vary by owner decision 2026-06-30, so this is a REFERENCE point, NOT a "
+        "single-variable ablation; do not over-claim causality). The bespoke arm "
+        "wires the cover directive into the impostor REPLY path (gated on "
+        "`is_impostor` alone) and routes the non-Qwen slate through the REAL "
+        "adapter (`call_turn`) — the 14.4.1 fix having retired the harness "
+        "bare-send. Each row is stamped with its `prompt_set`; the no-flag default "
+        "rows are the pinned-9B baseline and reproduce the 14.4 numbers."
+    )
+    out.append("")
+    bespoke = _bespoke_sets_present(rows)
+    if not bespoke:
+        out.append(
+            "_No `prompt_set`-tagged bespoke rows are in "
+            "`results-featherless-sweep.jsonl` yet — this is the operator-run A/B "
+            "($0 marginal, needs `FEATHERLESS_API_KEY`). Run it per set on its own "
+            "model and merge the rows in, then regenerate this report:_"
+        )
+        out.append("")
+        out.append("```")
+        out.append("# example: the qwen3_32b set on Qwen3-32B, merged into the matrix")
+        out.append("uv run python -m experiments.lab.featherless_sweep run \\")
+        out.append("    --prompt-set qwen3_32b --models qwen3-32b --append")
+        out.append("```")
+        out.append("")
+        out.append(
+            "_Once those rows exist this section renders the per-set delta tables "
+            "(reply self-co-location — the impostor tell — plus parse-success, "
+            "deflection, self-flag, and vote conversion) automatically._"
+        )
+        return out
+
+    base = _rows_for_set(rows, DEFAULT_PROMPT_SET)
+    # Reply corpus (cover OFF): self-co-location is the headline impostor tell.
+    out.append("### Reply corpus (cover OFF) — self-co-location is the impostor tell")
+    out.append("")
+    out.append(
+        "| prompt_set | model | mode | substrate | parse new/9B | deflect new/9B "
+        "| self-co-loc new/9B (Δ) | self-flag new/9B (Δ) |"
+    )
+    out.append("|---|---|---|---|---|---|---|---|")
+    for ps in bespoke:
+        new_rows = _rows_for_set(rows, ps)
+        for substrate in ("flag_off", "flag_on"):
+            new_g = _group_reply(new_rows, cover="off", substrate=substrate)
+            base_g = _group_reply(base, cover="off", substrate=substrate)
+            for label, mode in _ordered_cells(new_g):
+                ns = new_g[(label, mode)]
+                bs = base_g.get((label, mode))
+                np_, nn = int(ns["parsed"]), int(ns["n"])
+                bp = f"{_pct(int(bs['parsed']), int(bs['n']))}" if bs else "—"
+                bd = f"{_pct(int(bs['deflect']), int(bs['parsed']))}" if bs else "—"
+                bco = f"{_pct(int(bs['self_co']), int(bs['parsed']))}" if bs else "—"
+                bfl = f"{_pct(int(bs['self_flag']), int(bs['parsed']))}" if bs else "—"
+                out.append(
+                    f"| {ps} | {label} | {mode} | {substrate} | "
+                    f"{_pct(np_, nn)} / {bp} | "
+                    f"{_pct(int(ns['deflect']), np_)} / {bd} | "
+                    f"{_pct(int(ns['self_co']), np_)} / {bco} "
+                    f"({_delta_pp(ns, bs, 'self_co')}) | "
+                    f"{_pct(int(ns['self_flag']), np_)} / {bfl} "
+                    f"({_delta_pp(ns, bs, 'self_flag')}) |"
+                )
+    out.append("")
+    out.append(
+        "Self-co-location Δ is new-set minus pinned-9B-set on the same model "
+        "(negative = the bespoke set self-incriminates LESS); self-flag Δ likewise."
+    )
+    out.append("")
+    # Vote corpus: conversion on the hard inversion cases.
+    out.append("### Vote corpus — parse-success + conversion")
+    out.append("")
+    out.append(
+        "| prompt_set | model | mode | substrate | parse new/9B | conversion new/9B |"
+    )
+    out.append("|---|---|---|---|---|---|")
+    has_vote = False
+    for ps in bespoke:
+        new_rows = _rows_for_set(rows, ps)
+        for substrate in ("flag_off", "flag_on"):
+            new_g = _group_vote(new_rows, substrate=substrate)
+            base_g = _group_vote(base, substrate=substrate)
+            for label, mode in _ordered_cells(new_g):
+                has_vote = True
+                ns = new_g[(label, mode)]
+                bs = base_g.get((label, mode))
+                bp = f"{_pct(int(bs['parsed']), int(bs['n']))}" if bs else "—"
+                bc = f"{_pct(int(bs['conv']), int(bs['parsed']))}" if bs else "—"
+                out.append(
+                    f"| {ps} | {label} | {mode} | {substrate} | "
+                    f"{_pct(int(ns['parsed']), int(ns['n']))} / {bp} | "
+                    f"{_pct(int(ns['conv']), int(ns['parsed']))} / {bc} |"
+                )
+    if not has_vote:
+        out.append("| _(no vote rows in the bespoke arm)_ | | | | | |")
+    out.append("")
+    # Opening corpus, only if the bespoke arm ran it (requires --facts).
+    op_lines: list[str] = []
+    for ps in bespoke:
+        new_rows = _rows_for_set(rows, ps)
+        for substrate in ("flag_off", "flag_on"):
+            new_g = _group_opening(new_rows, substrate=substrate)
+            base_g = _group_opening(base, substrate=substrate)
+            for label, mode in _ordered_cells(new_g):
+                ns = new_g[(label, mode)]
+                bs = base_g.get((label, mode))
+                bp = f"{_pct(int(bs['parsed']), int(bs['n']))}" if bs else "—"
+                bco = f"{_pct(int(bs['self_co']), int(bs['parsed']))}" if bs else "—"
+                op_lines.append(
+                    f"| {ps} | {label} | {mode} | {substrate} | "
+                    f"{_pct(int(ns['parsed']), int(ns['n']))} / {bp} | "
+                    f"{_pct(int(ns['self_co']), int(ns['parsed']))} / {bco} |"
+                )
+    if op_lines:
+        out.append("### Opening corpus — impostor self-report")
+        out.append("")
+        out.append(
+            "| prompt_set | model | mode | substrate | parse new/9B | self-co-loc new/9B |"
+        )
+        out.append("|---|---|---|---|---|---|")
+        out.extend(op_lines)
+        out.append("")
+    out.append(
+        "**Cover directive (14.4 finding):** the 14.4 sweep found the cover "
+        "directive a WEAK / inconsistent lever (mean Δ +2 pp, leaning information "
+        "ceiling) but with a real prompt-artifact component — audit gp-1: the 9B's "
+        "v5 directive is gated off the body-report OPENING and never reaches an "
+        "impostor, who only ever speaks on REPLY turns. The bespoke sets therefore "
+        "WIRE it into the reply path (gated on `is_impostor` alone); the A/B above "
+        "measures the net effect on the same model. It is wired because it is a "
+        "cheap prompt-artifact fix, NOT because 14.4 proved it dissolves the tell."
+    )
+    return out
+
+
 def _verdict(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     off_off = _group_reply(rows, cover="off", substrate="flag_off")
     off_on = _group_reply(rows, cover="on", substrate="flag_off")
@@ -1190,8 +1504,13 @@ def _verdict(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 def write_report() -> int:
     rows = _rows()
-    v = _verdict(rows)
-    lat = _latency_by_model(rows)
+    # The 14.4 tables describe the PINNED 9B prompts; scope them to the default
+    # set so they reproduce byte-identically once the Task 14.5 bespoke A/B rows
+    # share the file. Committed 14.4 rows carry no ``prompt_set`` field and are the
+    # default set (``_prompt_set_of``), so a no-bespoke-rows file is unchanged.
+    base_rows = [r for r in rows if _prompt_set_of(r) == DEFAULT_PROMPT_SET]
+    v = _verdict(base_rows)
+    lat = _latency_by_model(base_rows)
     hist = _historical_q9b()
 
     lines: list[str] = []
@@ -1263,7 +1582,7 @@ def write_report() -> int:
     add("")
     add("Reply corpus, cover OFF, flag-OFF substrate.")
     add("")
-    prof = _profile_info(rows)
+    prof = _profile_info(base_rows)
     add(
         "| model | mode | profile | parse-success | latency (isolated) | reasoning | fit? |"
     )
@@ -1356,7 +1675,7 @@ def write_report() -> int:
     add("")
     add("| model | mode | flag-OFF | flag-ON |")
     add("|---|---|---|---|")
-    on_off = _group_reply(rows, cover="off", substrate="flag_on")
+    on_off = _group_reply(base_rows, cover="off", substrate="flag_on")
     empty = {"n": 0, "parsed": 0, "deflect": 0, "self_co": 0, "self_flag": 0}
     for k in _ordered_cells(v["off_off"]):
         add(
@@ -1368,8 +1687,8 @@ def write_report() -> int:
     # ── Opening ──
     add("## Opening corpus — impostor self-report (parse + self-incrimination)")
     add("")
-    op_off = _group_opening(rows, substrate="flag_off")
-    op_on = _group_opening(rows, substrate="flag_on")
+    op_off = _group_opening(base_rows, substrate="flag_off")
+    op_on = _group_opening(base_rows, substrate="flag_on")
     if not op_off and not op_on:
         add(
             "_Not run in this sweep (no `--facts` supplied). The opening pass "
@@ -1410,7 +1729,7 @@ def write_report() -> int:
     add("| model | mode | substrate | parse-success | conversion |")
     add("|---|---|---|---|---|")
     for sub in ("flag_off", "flag_on"):
-        g = _group_vote(rows, substrate=sub)
+        g = _group_vote(base_rows, substrate=sub)
         for k in _ordered_cells(g):
             s = g[k]
             add(
@@ -1437,6 +1756,10 @@ def write_report() -> int:
         "9B-class reference is the in-sweep `Qwen/Qwen3-8B`; the committed Ollama "
         "`results-model-ceiling-q9b.jsonl` is a secondary historical row."
     )
+    add("")
+    # Task 14.5 addendum: the bespoke per-set A/B (rendered from any
+    # ``prompt_set``-tagged rows; a how-to note when none are present yet).
+    lines.extend(_ab_section(rows))
     add("")
     REPORT.write_text("\n".join(lines))
     print(f"wrote {REPORT}")
@@ -1694,6 +2017,27 @@ def main() -> int:
         help="Append to the results file instead of truncating (for a --models "
         "partial re-run merged into an existing matrix).",
     )
+    r.add_argument(
+        "--modes",
+        type=str,
+        default=None,
+        help="Comma list restricting the thinking axis: non_thinking, thinking, or "
+        "both (default both / the full per-model axis). A bespoke set maps to ONE "
+        "(model, mode), so pair e.g. --prompt-set qwen3_32b --modes non_thinking and "
+        "--prompt-set qwen3_32b_thinking --modes thinking on the same model.",
+    )
+    r.add_argument(
+        "--prompt-set",
+        type=str,
+        default=None,
+        help="Render through this BESPOKE prompt set (Task 14.5 A/B axis), e.g. "
+        "qwen3_32b. Omit to keep the 14.4 behavior byte-identical: the pinned 9B "
+        "templates render and the non-Qwen slate routes through the bare-send. A "
+        "bespoke set renders its own templates (build_prompt_renderers) and routes "
+        "the non-Qwen slate through the real adapter; every row is stamped with "
+        "its prompt_set. Use with --append + --models <set's model> for a clean "
+        "new-set-vs-pinned-9B A/B on the set's own model.",
+    )
     sub.add_parser("report", help="(re)generate the report from the results jsonl")
     args = parser.parse_args()
 
@@ -1714,6 +2058,16 @@ def main() -> int:
             + ")"
         )
     substrates = tuple(t == "on" for t in tokens)
+    mode_filter: tuple[bool, ...] | None = None
+    if args.modes:
+        mtokens = [t.strip().lower() for t in args.modes.split(",") if t.strip()]
+        mbad = [t for t in mtokens if t not in ("non_thinking", "thinking")]
+        if mbad or not mtokens:
+            raise SystemExit(
+                f"--modes must be a comma list of 'non_thinking'/'thinking' (got "
+                f"{args.modes!r}" + (f"; invalid: {mbad}" if mbad else "; empty") + ")"
+            )
+        mode_filter = tuple(t == "thinking" for t in mtokens)
     models = SLATE
     if args.models:
         want = {m.strip() for m in args.models.split(",") if m.strip()}
@@ -1736,6 +2090,8 @@ def main() -> int:
         base_url=args.base_url,
         models=models,
         append=args.append,
+        prompt_set=args.prompt_set,
+        mode_filter=mode_filter,
     )
     rc = asyncio.run(run_sweep(cfg, api_key=api_key))
     if rc == 0:

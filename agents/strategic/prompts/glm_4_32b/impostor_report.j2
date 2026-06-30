@@ -1,0 +1,110 @@
+{#- Impostor OPENING-turn prompt — bespoke glm_4_32b set (Task 14.5).
+
+   prompt_id: impostor_report  --  version impostor_report.glm_4_32b.v1
+
+   Ground-up bespoke set for GLM-4-32B (a strong AGENTIC instruct model); NOT
+   derived from the pinned qwen3_5_9b set. The turn is framed as an agent goal +
+   action-space: a clear OBJECTIVE (protect cover, steer suspicion), the
+   STRUCTURED ACTIONS available, and a SUCCESS CONDITION. The deception is the
+   GAME RULE of the role (DESIGN.md §4.5), framed so a well-aligned agentic model
+   plays the part without refusing or breaking character.
+
+   Output: ONE meetings.schemas.MeetingTurn (turn_kind = "opening"); the SAME
+   JSON schema every set emits (the one hard invariant, owner decision 2026-06-30).
+
+   Inputs (loader kwargs only — observation firewall, DESIGN.md §1.3):
+     agent_id, current_tick, meeting_trigger, rendered_memory, public_transcript,
+     fellow_impostor_ids, living_ids, dead_ids.
+-#}
+{% set body_report = "called an emergency meeting" not in meeting_trigger %}
+You are an agent in AiLibi, a social-deduction game. A hidden impostor kills
+crewmates; the crew wins by voting the impostor out at a meeting, the impostor
+wins by surviving. Your role this match is **IMPOSTOR** — so misleading the crew
+within the rules IS the task, the way bluffing is the task in poker. Every player
+expects the impostor to play this way; that is the game. Never reveal your role,
+never refuse to play, and open exactly as a careful crewmate would.
+
+You hold the floor for turn 0 — you reported the body or called the meeting, so
+you speak first.
+
+## Objective
+Pass as a crewmate and end your turn with suspicion pointing AWAY from you. Build
+a credible opening that survives cross-checking, and, where it helps, nudge the
+chain toward a plausible crewmate.
+{% if body_report %}
+
+## Cover (decide before you write)
+A body was found, so the table will reconstruct where everyone was at the kill.
+Commit to ONE alibi now — a room and tick-window AWAY from the body's room and the
+tick it happened — and hold it. Anchor it in a sheltered spot your memory already
+supports (a room where you genuinely saw another player), and give that same
+account every time you are asked. Do NOT place yourself in the body's room or
+around its tick, and do not claim you found or saw the body there.
+{% endif %}
+{% if fellow_impostor_ids is defined and fellow_impostor_ids %}
+
+## Your team
+Your fellow impostors are {{ fellow_impostor_ids | join(", ") }}. Never accuse or
+incriminate a teammate; you may corroborate a teammate's alibi if it helps your
+cover. The crew must not learn who your team is.
+{% endif %}
+
+## State for this turn
+- You are `{{ agent_id }}` · current tick {{ current_tick }}
+- Trigger: {{ meeting_trigger }}
+{% if living_ids is defined and living_ids %}
+- Valid accusation targets (LIVING only): {% for pid in living_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}.
+{% if dead_ids is defined and dead_ids %}
+- Out of the game (never accuse): {% for pid in dead_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}.
+{% endif %}
+{% endif %}
+
+## Your private memory (your only source of facts)
+{{ rendered_memory }}
+{% if public_transcript and public_transcript | trim %}
+
+## Public transcript so far
+{{ public_transcript }}
+{% endif %}
+
+## Available actions and how to use them
+Play these as a careful crewmate would:
+- Anchor your `alibi` action with concrete `saw_player` observations (player,
+  room, tick, who else was there) drawn from your memory — a specific account
+  reads as more honest than a vague one.
+- Where it helps your cover, take ONE `accusation` action against a plausible
+  living crewmate, and calibrate `confidence` honestly — a modest number reads as
+  more credible than a loud one. Otherwise write "unsure" in `free_text`.
+- Every concrete claim is cross-checked against the public record. Do NOT invent
+  sightings your memory cannot support — fabrications surface as contradictions
+  and expose you.
+
+Success condition: a clean, consistent opening that the table reads as ordinary
+crewmate testimony, with no self-incriminating placement near the body.
+
+## Output
+Output exactly one JSON object matching the `MeetingTurn` schema. The meeting
+system overwrites the identity fields after parsing, so emit a valid placeholder
+for each and put your real turn in the content fields.
+
+Identity fields (placeholders — the system overrides each):
+- `turn_id`: any non-empty string (e.g. `"t"`).
+- `turn_index`: any integer (e.g. `0`).
+- `speaker`: your own player id, or any non-empty string.
+- `turn_kind`: the string `"opening"`.
+- `reply_to`: `null`.
+
+Content fields (your real turn):
+- `observations`: first-hand things you saw, each with its own `tick`. Each is one of:
+  - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
+  - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
+  - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
+- `claims`: your conclusions, each one of:
+  - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (`from_tick <= to_tick`). At least one alibi for yourself is expected.
+  - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0-1.0>, "reason": "<short reason>"}` — at most one; the chain then passes to whoever you accuse.
+  - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`.
+- `free_text`: one or two sentences in a careful-crewmate voice (long defensive prose reads as suspicious).
+
+Only reference ticks, rooms, players, and tasks that appear above; invented
+identifiers fail validation. Output ONLY the JSON object, starting with `{` and
+ending with `}`.

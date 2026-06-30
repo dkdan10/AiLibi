@@ -128,3 +128,17 @@ Crew votes WITH a visible impostor; half are recorded-SKIP inversion cases (a tr
 **Supported — and now controlled on identical contexts.** With the 9B-class `qwen3-8b` reference run over the SAME frozen contexts as the stronger candidates, the self-incrimination tell does NOT fall as model strength rises: the self-FLAG floor stays ≥ 19% across every fit model (reference self-flag 19%, self-co 44%) and the cover prompt does not reliably remove it. This is the `model_ceiling_probe.py:11-14` signature of an INFORMATION ceiling, not a model ceiling — the impostor reasons faithfully from a memory that says "you found the body here" into a detector fed by sightings it never saw. The one place the stronger models clearly DIFFER from the 9B is the vote corpus: on the hard inversion cases (a true impostor at suspicion 1.00 over the 0.60 gate where the recorded 9B SKIPPED) the fit Featherless models convert — the sharpened Phase-14 question ('can the new model DRIVE the corrected substrate where the 9B couldn't?') answered YES *in isolation*. But that is an isolated single-ballot proxy, NOT the live R-gate: only the 14.7 re-record + 14.8 R-gate can settle it. Net: a stronger model is necessary (it fixes the 9B's structured output + the isolated skip pathology) but the meeting-deflection tell points at Phase-15 information levers (asymmetric visibility / vents / sabotage), not a further model upgrade.
 
 **Harness/raw:** `experiments/lab/featherless_sweep.py` + `experiments/lab/results-featherless-sweep.jsonl` (per-cell grades + parse-success + tokens + latency + `transport` + `substrate_flags`; the matrix actually run is logged at run time — no silent truncation). The 9B-class reference is the in-sweep `Qwen/Qwen3-8B`; the committed Ollama `results-model-ceiling-q9b.jsonl` is a secondary historical row.
+
+## Bespoke per-set A/B (Task 14.5): new set vs pinned-9B set
+
+Each Task 14.5 bespoke set is rendered over the SAME reconstructed contexts as the 14.4 sweep and compared to the PINNED 9B prompts ON ITS OWN MODEL — the one clean control in a co-designed change (model + prompt co-vary by owner decision 2026-06-30, so this is a REFERENCE point, NOT a single-variable ablation; do not over-claim causality). The bespoke arm wires the cover directive into the impostor REPLY path (gated on `is_impostor` alone) and routes the non-Qwen slate through the REAL adapter (`call_turn`) — the 14.4.1 fix having retired the harness bare-send. Each row is stamped with its `prompt_set`; the no-flag default rows are the pinned-9B baseline and reproduce the 14.4 numbers.
+
+_No `prompt_set`-tagged bespoke rows are in `results-featherless-sweep.jsonl` yet — this is the operator-run A/B ($0 marginal, needs `FEATHERLESS_API_KEY`). Run it per set on its own model and merge the rows in, then regenerate this report:_
+
+```
+# example: the qwen3_32b set on Qwen3-32B, merged into the matrix
+uv run python -m experiments.lab.featherless_sweep run \
+    --prompt-set qwen3_32b --models qwen3-32b --append
+```
+
+_Once those rows exist this section renders the per-set delta tables (reply self-co-location — the impostor tell — plus parse-success, deflection, self-flag, and vote conversion) automatically._

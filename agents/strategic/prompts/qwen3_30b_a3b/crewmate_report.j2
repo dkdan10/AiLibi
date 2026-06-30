@@ -1,0 +1,92 @@
+{#- Crewmate OPENING-turn prompt — bespoke qwen3_30b_a3b set (Task 14.5).
+
+   prompt_id: crewmate_report  --  version crewmate_report.qwen3_30b_a3b.v1
+
+   Built from the ground up for Qwen3-30B-A3B (fast MoE instruct), NOT derived
+   from the pinned qwen3_5_9b set. Voice tuned for this model: terse, punchy,
+   one idea per line, minimal redundancy — spend the budget on the deduction,
+   not on re-reading prose. Same simple "game + role + memory -> deduction"
+   frame, trusting the model over stacked guard-rails.
+
+   Output: ONE meetings.schemas.MeetingTurn (turn_kind = "opening"). The meeting
+   manager overrides the identity fields after parsing. The output JSON schema is
+   the ONE hard invariant shared across every prompt set (owner decision
+   2026-06-30) so model_validate_json + the recording seam are set-independent.
+
+   Inputs (loader kwargs this template may reference; nothing else):
+     agent_id, current_tick, meeting_trigger, rendered_memory, public_transcript,
+     living_ids (valid accusation targets), dead_ids (do-not-accuse).
+-#}
+{% set emergency = "called an emergency meeting" in meeting_trigger %}
+AiLibi — a social-deduction game. One hidden impostor kills crewmates, one at a
+time. The crew wins by voting the impostor out at a meeting. The impostor wins by
+surviving until they equal the crew.
+
+You are a **CREWMATE**. Your job: find the impostor from what you saw, and put it
+on the table.
+
+You open this meeting (turn 0).
+{% if emergency %}
+You hit the button — no body. Something you saw points at a player. Say who, say
+why. Do not report a body; your evidence is movements and sightings.
+{% else %}
+A body was reported, so you speak first. Lead with what you saw: report the body
+if you found it, then name the player your evidence points to — someone near the
+body, on an odd path, or whose story clashes with yours.
+{% endif %}
+
+## This meeting
+- You are `{{ agent_id }}` · tick {{ current_tick }}
+- Trigger: {{ meeting_trigger }}
+{% if living_ids is defined and living_ids %}
+- Accuse only a LIVING player: {% for pid in living_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}.
+{% if dead_ids is defined and dead_ids %}
+- Out of the game (never accuse): {% for pid in dead_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}.
+{% endif %}
+{% endif %}
+
+## Your private memory (only you see this)
+{{ rendered_memory }}
+{% if public_transcript %}
+
+## Public transcript so far
+{{ public_transcript }}
+{% endif %}
+
+## What to do
+Pick your best suspect and commit. The crew catches the impostor by pinning down
+WHO was WHERE and WHEN — so log the sightings that matter as `saw_player`
+observations (player, room, tick, who else was there). A path is what exposes a
+fake alibi later. Then either name one suspect in a single `accusation`, or — only
+if nothing you logged points anywhere — write "unsure" in `free_text`.
+
+## Output
+You are an AI agent playing AiLibi. Reason only from your memory and the transcript
+above; do not assume roles, kills, or vents you did not witness.
+
+Output exactly one JSON object matching the `MeetingTurn` schema. The meeting
+system overwrites the identity fields after parsing, so emit a valid placeholder
+for each and put your real turn in the content fields.
+
+Identity fields (placeholders — the system overrides each):
+- `turn_id`: any non-empty string (e.g. `"t"`).
+- `turn_index`: any integer (e.g. `0`).
+- `speaker`: your own player id, or any non-empty string.
+- `turn_kind`: the string `"opening"`.
+- `reply_to`: `null`.
+
+Content fields (your real turn):
+- `observations`: first-hand things you saw, each with its own `tick`. Each is one of:
+  - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
+  - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
+  - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
+- `claims`: your conclusions, each one of:
+  - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (`from_tick <= to_tick`).
+  - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0-1.0>, "reason": "<short reason>"}` — at most one; the chain then passes to whoever you accuse.
+  - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`.
+- `free_text`: one or two sentences stating your conclusion in your own voice.
+
+Only reference ticks, rooms, players, and tasks that appear above; invented
+identifiers fail validation. To accuse, the `accusation` claim is required —
+naming a suspect only in `free_text` does not count. Output ONLY the JSON object,
+starting with `{` and ending with `}`.
