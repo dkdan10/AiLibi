@@ -63,11 +63,15 @@ canonical. Win split moves in any direction and is REPORTED, not gated (the R-ga
 ## Implementation hint
 
 This is the Phase-9 9.5 shape transplanted to Featherless: `AILIBI_LLM_PROVIDER=featherless` +
-`FEATHERLESS_API_KEY` + `AILIBI_PROMPT_SET=<chosen>` PLUS all 4 substrate flags
+`FEATHERLESS_API_KEY` + `AILIBI_PROMPT_SET=qwen3_32b` PLUS all 4 substrate flags
 (`AILIBI_TESTIMONY_AS_CONTENT=1 AILIBI_WITNESSED_KILL_EVIDENCE=1 AILIBI_MOVEMENT_PERCEPTION=1
-AILIBI_UNFREEZE_MEMORY=1`) on every `scripts/refresh_samples.sh` invocation; the model from 14.6's locked
-constant. ONE atomic PR — an intermediate commit is un-reconstructable. Featherless is concurrent, so the
-full re-record can run far faster than the 9B's ~13h; still smoke-project first. The report regeneration +
+AILIBI_UNFREEZE_MEMORY=1`) on every `scripts/refresh_samples.sh` invocation; the locked model
+`Qwen/Qwen3-32B` for both meeting and trigger call kinds (14.6), request-time thinking OFF, `fail_loud`.
+ONE atomic PR — an intermediate commit is un-reconstructable. Time expectation (measured, 14.4/14.6): Qwen3-32B
+non-thinking is ~27.1s/turn isolated — roughly 2× the local 9B's per-call latency, offset by the plan's 32B
+concurrency cap of 2 (a 32B request = 2 of 4 units), so the full 50-seed × 2-format re-record lands in the
+SAME ~13–30h ballpark as the 9B (the win is offloading the operator's machine, NOT wall-clock); do NOT assume
+"far faster." The smoke (3–5 seeds) MUST project the real wall time before the full run. The report regeneration +
 MANIFEST update + fixture refresh all happen through `scripts/build_sample_report.py` +
 `scripts/_manifest_writer.py` (the latter gains the `flags` column) exactly as the 9.5 operator workflow
 documents. Hosted non-determinism means FRESH generation won't byte-reproduce, but the recordings replay

@@ -540,6 +540,15 @@ against the sweep's data, and a NO-GO is an allowed outcome (no candidate clears
 behavior bar → stay on 9B / escalate the information ceiling), since the merge criterion is a VALID baseline,
 not an improved one.
 
+**LOCKED DECISION (owner, 2026-06-30) — GO:**
+- **meeting_model = trigger_model = `Qwen/Qwen3-32B`** (homogeneous; qwen3_32b used for EVERYTHING — both call kinds).
+- **prompt set = `qwen3_32b`** (the Task 14.5 bespoke set; registered `…​.qwen3_32b.v2`, selectable via `AILIBI_PROMPT_SET=qwen3_32b`).
+- **mode = `non_thinking`** (the request-time thinking toggle OFF).
+- **thinking policy = `fail_loud`** (non-thinking baseline expects NO reasoning channel; a populated one is an auditable error, not silently stripped).
+- **response_format_mode = `json_object`** (the 14.1 live finding: strict `json_schema` 400s on the slate; `json_schema` stays selectable, no silent fallback).
+- **substrate flags = all 4 13.5 levers ON** (`AILIBI_TESTIMONY_AS_CONTENT` / `AILIBI_WITNESSED_KILL_EVIDENCE` / `AILIBI_MOVEMENT_PERCEPTION` / `AILIBI_UNFREEZE_MEMORY`); 14.8's per-lever ablation is characterization (non-gating).
+- **Evidence:** Qwen3-32B non-thinking on the qwen3_32b set is validity-clean — reply parse-success 16/16 (100%) on both substrates, vote conversion 8/8, ~27.1s/turn isolated (vs ~226.1s thinking, an ~8× time cost over a 50-seed × 2-format run). The mechanical self-co tell is mixed vs the pinned-9B prompts (an information-ceiling artifact, NOT a model gap — 14.4/14.8), so the recorded baseline is chosen on VALIDITY + latency, which non-thinking wins; the tell is scoped to Phase 15. The other four bespoke sets (incl. the strong-tell-reduction thinking set and GLM at 100% parse) stay available but unrecorded, for the Phase-15 heterogeneous-games task. NO validity NO-GO — proceed to the 14.7 smoke.
+
 **Files in scope:**
 - tasks/phase-14.md (record the locked decision: chosen meeting_model, trigger_model, prompt set, thinking policy, response_format_mode (json_object), substrate-flag config (all 4 ON), and the re-record go/no-go with its evidence)
 
@@ -614,11 +623,15 @@ canonical. Win split moves in any direction and is REPORTED, not gated (the R-ga
 **Implementation hint:**
 
 This is the Phase-9 9.5 shape transplanted to Featherless: `AILIBI_LLM_PROVIDER=featherless` +
-`FEATHERLESS_API_KEY` + `AILIBI_PROMPT_SET=<chosen>` PLUS all 4 substrate flags
+`FEATHERLESS_API_KEY` + `AILIBI_PROMPT_SET=qwen3_32b` PLUS all 4 substrate flags
 (`AILIBI_TESTIMONY_AS_CONTENT=1 AILIBI_WITNESSED_KILL_EVIDENCE=1 AILIBI_MOVEMENT_PERCEPTION=1
-AILIBI_UNFREEZE_MEMORY=1`) on every `scripts/refresh_samples.sh` invocation; the model from 14.6's locked
-constant. ONE atomic PR — an intermediate commit is un-reconstructable. Featherless is concurrent, so the
-full re-record can run far faster than the 9B's ~13h; still smoke-project first. The report regeneration +
+AILIBI_UNFREEZE_MEMORY=1`) on every `scripts/refresh_samples.sh` invocation; the locked model
+`Qwen/Qwen3-32B` for both meeting and trigger call kinds (14.6), request-time thinking OFF, `fail_loud`.
+ONE atomic PR — an intermediate commit is un-reconstructable. Time expectation (measured, 14.4/14.6): Qwen3-32B
+non-thinking is ~27.1s/turn isolated — roughly 2× the local 9B's per-call latency, offset by the plan's 32B
+concurrency cap of 2 (a 32B request = 2 of 4 units), so the full 50-seed × 2-format re-record lands in the
+SAME ~13–30h ballpark as the 9B (the win is offloading the operator's machine, NOT wall-clock); do NOT assume
+"far faster." The smoke (3–5 seeds) MUST project the real wall time before the full run. The report regeneration +
 MANIFEST update + fixture refresh all happen through `scripts/build_sample_report.py` +
 `scripts/_manifest_writer.py` (the latter gains the `flags` column) exactly as the 9.5 operator workflow
 documents. Hosted non-determinism means FRESH generation won't byte-reproduce, but the recordings replay
