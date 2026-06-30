@@ -269,6 +269,7 @@ DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
     "vote_ballot": "vote_ballot/v7",
 }
 
+
 # Per-model prompt-set version registry (Task 14.2; owner decision 2026-06-25 —
 # per-model prompt sets; DESIGN.md §11.4 replay provenance). The frozen
 # ``qwen3.5:9b`` reference set keeps the EXACT ``DEFAULT_PROMPT_VERSIONS``
@@ -279,8 +280,40 @@ DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
 # prefixing or reformatting the 9B set's keys/values. New sets register
 # themselves here (Task 14.5) keyed by the same ``AILIBI_PROMPT_SET`` selector
 # the loader (:mod:`agents.strategic.prompts.loader`) resolves.
+def _bespoke_versions(set_name: str, version: str = "v1") -> Mapping[str, str]:
+    """Per-set ``prompt_versions`` for a Task 14.5 bespoke set.
+
+    Every bespoke set carries the SAME four keys as :data:`DEFAULT_PROMPT_VERSIONS`
+    (so the recording seam reads them identically — the same-schema invariant,
+    owner decision 2026-06-30) but its OWN version VALUES, namespaced by the set
+    name (``<template>.<set>.<version>``). A new-model replay is distinguished by
+    these strings plus its recorded model id, never by reformatting the 9B set's
+    values. ``version`` bumps when a set's templates are revised as a unit (e.g.
+    ``glm_4_32b`` -> ``v2`` after the response-shape hardening that lifted its
+    structured-output parse-success).
+    """
+
+    return {
+        "crewmate_report": f"crewmate_report.{set_name}.{version}",
+        "impostor_report": f"impostor_report.{set_name}.{version}",
+        "accusation_round": f"accusation_round.{set_name}.{version}",
+        "vote_ballot": f"vote_ballot.{set_name}.{version}",
+    }
+
+
+# Per-model prompt-set version registry. The frozen ``qwen3_5_9b`` reference set
+# keeps the EXACT ``DEFAULT_PROMPT_VERSIONS`` mapping (same object identity); the
+# Task 14.5 bespoke sets (one per candidate model/mode) register their OWN version
+# strings here, keyed by the same ``AILIBI_PROMPT_SET`` selector the loader
+# resolves. A set listed here MUST have a matching template directory under
+# ``agents/strategic/prompts/<set>/`` (the loader fails loud otherwise).
 PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     DEFAULT_PROMPT_SET: DEFAULT_PROMPT_VERSIONS,
+    "qwen3_32b": _bespoke_versions("qwen3_32b", version="v2"),
+    "qwen3_32b_thinking": _bespoke_versions("qwen3_32b_thinking", version="v2"),
+    "qwen3_30b_a3b": _bespoke_versions("qwen3_30b_a3b", version="v2"),
+    "glm_4_32b": _bespoke_versions("glm_4_32b", version="v3"),
+    "cydonia_24b": _bespoke_versions("cydonia_24b", version="v2"),
 }
 
 

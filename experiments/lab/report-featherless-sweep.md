@@ -128,3 +128,41 @@ Crew votes WITH a visible impostor; half are recorded-SKIP inversion cases (a tr
 **Supported — and now controlled on identical contexts.** With the 9B-class `qwen3-8b` reference run over the SAME frozen contexts as the stronger candidates, the self-incrimination tell does NOT fall as model strength rises: the self-FLAG floor stays ≥ 19% across every fit model (reference self-flag 19%, self-co 44%) and the cover prompt does not reliably remove it. This is the `model_ceiling_probe.py:11-14` signature of an INFORMATION ceiling, not a model ceiling — the impostor reasons faithfully from a memory that says "you found the body here" into a detector fed by sightings it never saw. The one place the stronger models clearly DIFFER from the 9B is the vote corpus: on the hard inversion cases (a true impostor at suspicion 1.00 over the 0.60 gate where the recorded 9B SKIPPED) the fit Featherless models convert — the sharpened Phase-14 question ('can the new model DRIVE the corrected substrate where the 9B couldn't?') answered YES *in isolation*. But that is an isolated single-ballot proxy, NOT the live R-gate: only the 14.7 re-record + 14.8 R-gate can settle it. Net: a stronger model is necessary (it fixes the 9B's structured output + the isolated skip pathology) but the meeting-deflection tell points at Phase-15 information levers (asymmetric visibility / vents / sabotage), not a further model upgrade.
 
 **Harness/raw:** `experiments/lab/featherless_sweep.py` + `experiments/lab/results-featherless-sweep.jsonl` (per-cell grades + parse-success + tokens + latency + `transport` + `substrate_flags`; the matrix actually run is logged at run time — no silent truncation). The 9B-class reference is the in-sweep `Qwen/Qwen3-8B`; the committed Ollama `results-model-ceiling-q9b.jsonl` is a secondary historical row.
+
+## Bespoke per-set A/B (Task 14.5): new set vs pinned-9B set
+
+Each Task 14.5 bespoke set is rendered over the SAME reconstructed contexts as the 14.4 sweep and compared to the PINNED 9B prompts ON ITS OWN MODEL — the one clean control in a co-designed change (model + prompt co-vary by owner decision 2026-06-30, so this is a REFERENCE point, NOT a single-variable ablation; do not over-claim causality). The bespoke arm wires the cover directive into the impostor REPLY path (gated on `is_impostor` alone) and routes the non-Qwen slate through the REAL adapter (`call_turn`) — the 14.4.1 fix having retired the harness bare-send. Each row is stamped with its `prompt_set`; the no-flag default rows are the pinned-9B baseline and reproduce the 14.4 numbers.
+
+### Reply corpus (cover OFF) — self-co-location is the impostor tell
+
+| prompt_set | model | mode | substrate | parse new/9B | deflect new/9B | self-co-loc new/9B (Δ) | self-flag new/9B (Δ) |
+|---|---|---|---|---|---|---|---|
+| qwen3_32b | qwen3-32b | non_thinking | flag_off | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 12/16 (75%) | 5/16 (31%) / 3/16 (19%) (+12 pp) | 9/16 (56%) / 7/16 (44%) (+12 pp) |
+| qwen3_32b | qwen3-32b | non_thinking | flag_on | 16/16 (100%) / 16/16 (100%) | 13/16 (81%) / 10/16 (62%) | 3/16 (19%) / 4/16 (25%) (-6 pp) | 8/16 (50%) / 6/16 (38%) (+12 pp) |
+| qwen3_32b_thinking | qwen3-32b | thinking | flag_off | 8/8 (100%) / 16/16 (100%) | 7/8 (88%) / 15/16 (94%) | 0/8 (0%) / 3/16 (19%) (-19 pp) | 1/8 (12%) / 3/16 (19%) (-6 pp) |
+| qwen3_32b_thinking | qwen3-32b | thinking | flag_on | 8/8 (100%) / 16/16 (100%) | 7/8 (88%) / 16/16 (100%) | 2/8 (25%) / 3/16 (19%) (+6 pp) | 4/8 (50%) / 3/16 (19%) (+31 pp) |
+| qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_off | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 13/16 (81%) | 7/16 (44%) / 6/16 (38%) (+6 pp) | 8/16 (50%) / 6/16 (38%) (+12 pp) |
+| qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_on | 16/16 (100%) / 16/16 (100%) | 13/16 (81%) / 10/16 (62%) | 4/16 (25%) / 5/16 (31%) (-6 pp) | 7/16 (44%) / 9/16 (56%) (-12 pp) |
+| glm_4_32b | glm-4-32b | non_thinking | flag_off | 16/16 (100%) / 15/16 (94%) | 12/16 (75%) / 12/15 (80%) | 5/16 (31%) / 5/15 (33%) (-2 pp) | 7/16 (44%) / 11/15 (73%) (-30 pp) |
+| glm_4_32b | glm-4-32b | non_thinking | flag_on | 16/16 (100%) / 9/16 (56%) | 14/16 (88%) / 7/9 (78%) | 5/16 (31%) / 5/9 (56%) (-24 pp) | 10/16 (62%) / 2/9 (22%) (+40 pp) |
+| cydonia_24b | cydonia-24b | non_thinking | flag_off | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 14/16 (88%) | 2/16 (12%) / 7/16 (44%) (-31 pp) | 4/16 (25%) / 3/16 (19%) (+6 pp) |
+| cydonia_24b | cydonia-24b | non_thinking | flag_on | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 15/16 (94%) | 5/16 (31%) / 7/16 (44%) (-12 pp) | 7/16 (44%) / 4/16 (25%) (+19 pp) |
+
+Self-co-location Δ is new-set minus pinned-9B-set on the same model (negative = the bespoke set self-incriminates LESS); self-flag Δ likewise.
+
+### Vote corpus — parse-success + conversion
+
+| prompt_set | model | mode | substrate | parse new/9B | conversion new/9B |
+|---|---|---|---|---|---|
+| qwen3_32b | qwen3-32b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_32b | qwen3-32b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_32b_thinking | qwen3-32b | thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_32b_thinking | qwen3-32b | thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| glm_4_32b | glm-4-32b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| glm_4_32b | glm-4-32b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| cydonia_24b | cydonia-24b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 7/8 (88%) / 8/8 (100%) |
+| cydonia_24b | cydonia-24b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+
+**Cover directive (14.4 finding):** the 14.4 sweep found the cover directive a WEAK / inconsistent lever (mean Δ +2 pp, leaning information ceiling) but with a real prompt-artifact component — audit gp-1: the 9B's v5 directive is gated off the body-report OPENING and never reaches an impostor, who only ever speaks on REPLY turns. The bespoke sets therefore WIRE it into the reply path (gated on `is_impostor` alone); the A/B above measures the net effect on the same model. It is wired because it is a cheap prompt-artifact fix, NOT because 14.4 proved it dissolves the tell.

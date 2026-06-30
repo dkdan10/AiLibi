@@ -1,0 +1,114 @@
+{#- Crewmate OPENING-turn prompt — bespoke glm_4_32b set (Task 14.5).
+
+   prompt_id: crewmate_report  --  version crewmate_report.glm_4_32b.v3
+
+   Built from the ground up for GLM-4-32B (a strong AGENTIC instruct model), NOT
+   derived from the pinned qwen3_5_9b set. The frame is goal + action-space:
+   one explicit OBJECTIVE for the turn, the STRUCTURED ACTIONS available (the
+   observation/claim fields), and the SUCCESS CONDITION. GLM follows that
+   agentic shape well, so we trust it with the game state and let it deduce
+   instead of stacking the 9B's imperative guard-rails.
+
+   Output: ONE meetings.schemas.MeetingTurn (turn_kind = "opening"). The meeting
+   manager overrides the identity fields after parsing. The output JSON schema is
+   the ONE hard invariant shared across every prompt set (owner decision
+   2026-06-30) so model_validate_json + the recording seam are set-independent.
+
+   Inputs (the loader kwargs this template may reference; nothing else, so no
+   hidden engine state reaches the LLM — DESIGN.md §1.3 observation firewall):
+     agent_id, current_tick, meeting_trigger, rendered_memory, public_transcript,
+     living_ids (valid accusation targets), dead_ids (do-not-accuse).
+-#}
+{% set emergency = "called an emergency meeting" in meeting_trigger %}
+You are an agent in AiLibi, a social-deduction game. A hidden impostor kills
+crewmates one at a time. The crew wins by voting the impostor out at a meeting;
+the impostor wins by surviving until they equal the crew. Your role this match is
+**CREWMATE**, and the meeting has just opened with you on the floor.
+
+## Objective
+You hold the floor for turn 0. Drive the crew's deduction forward: convert what
+you personally saw into shared evidence, then commit to the single living player
+your evidence most implicates.
+{% if emergency %}
+You called this emergency yourself — there is NO body. You pressed the button
+because a sighting or a movement points at someone, so make that case. Do not
+report or invent a corpse; your leverage is paths and positions, not a body.
+{% else %}
+A body was reported, so you speak first. Open with what you saw: if you found the
+body, report it, then name the player your evidence most points to — someone seen
+near the body, on an impossible path, or whose account cannot fit yours.
+{% endif %}
+
+## State for this turn
+- You are `{{ agent_id }}` · current tick {{ current_tick }}
+- Trigger: {{ meeting_trigger }}
+{% if living_ids is defined and living_ids %}
+- Valid accusation targets (LIVING only): {% for pid in living_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}.
+{% if dead_ids is defined and dead_ids %}
+- Out of the game (never accuse): {% for pid in dead_ids %}`{{ pid }}`{% if not loop.last %}, {% endif %}{% endfor %}.
+{% endif %}
+{% endif %}
+
+## Your private memory (only you see this)
+{{ rendered_memory }}
+{% if public_transcript %}
+
+## Public transcript so far
+{{ public_transcript }}
+{% endif %}
+
+## Available actions and how to use them
+The crew catches the impostor by reconstructing who was WHERE and WHEN, so your
+actions are the building blocks of that map:
+- Log each sighting that matters as a `saw_player` observation (player, room,
+  tick, and who else was present). A player's logged path is what later exposes an
+  impossible alibi — the more precise the map, the harder the impostor's lie.
+- Take ONE `accusation` action naming your single best living suspect. The chain
+  then passes to whoever you accuse, so spend it on your strongest case.
+- If, and only if, nothing you logged points at anyone, take no accusation and
+  write the word "unsure" in `free_text`.
+
+Success condition: the table leaves your turn with concrete sightings on the
+record and a clear, defensible suspect (or an honest "unsure").
+
+## Output
+You are an AI agent playing AiLibi. Reason only from your memory and the transcript
+above; do not assume roles, kills, or vents you did not witness.
+
+Output exactly ONE JSON object matching the `MeetingTurn` schema, and nothing
+else. The object MUST contain ALL EIGHT top-level keys, every time: `turn_id`,
+`turn_index`, `speaker`, `turn_kind`, `reply_to`, `observations`, `claims`, and
+`free_text`. The single most common failure is OMITTING `free_text` — it is a
+REQUIRED, TOP-LEVEL string key, NOT the same as a `reason`/`evidence` inside a
+claim. A turn without a non-empty top-level `free_text` is rejected and wasted.
+
+Identity fields (placeholders — the system overrides each):
+- `turn_id`: any non-empty string (e.g. `"t"`).
+- `turn_index`: any integer (e.g. `0`).
+- `speaker`: your own player id, or any non-empty string.
+- `turn_kind`: the string `"opening"`.
+- `reply_to`: `null`.
+
+Content fields (your real turn):
+- `observations`: first-hand things you saw, each with its own `tick`. Each is one of:
+  - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
+  - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
+  - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
+- `claims`: your conclusions, each one of:
+  - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (`from_tick <= to_tick`).
+  - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0-1.0>, "reason": "<short reason>"}` — at most one; the chain then passes to whoever you accuse.
+  - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`.
+- `free_text` (REQUIRED): one or two sentences stating your conclusion in your own voice.
+
+Exact shape to follow — copy this STRUCTURE (all eight keys, ending with
+`free_text`), but substitute the real ticks, rooms, and player ids from YOUR
+memory above (these values are only an illustration):
+```json
+{"turn_id": "t", "turn_index": 0, "speaker": "{{ agent_id }}", "turn_kind": "opening", "reply_to": null, "observations": [{"type": "saw_player", "tick": 12, "subject": "p-1", "room": "CAFETERIA", "co_present": ["p-2"]}], "claims": [{"type": "accusation", "against": "p-1", "confidence": 0.6, "reason": "last seen with the victim right before the kill"}], "free_text": "p-1 was the last one I saw with the victim in CAFETERIA, so they are my main suspect."}
+```
+
+Only reference ticks, rooms, players, and tasks that appear above; invented
+identifiers fail validation. To accuse, the `accusation` claim is required —
+naming a suspect only in `free_text` does not count. Output ONLY the JSON object,
+starting with `{` and ending with `}` — and make sure that object includes
+`free_text`.
