@@ -24,7 +24,12 @@ import pytest
 # committed-set meeting reconstruction stays skipped per-test until Task 8.12
 # re-records it (idempotent with Task 8.1's state_hash-driven skip).
 from api import replay_loader
-from api.replay_loader import ReplayLoader, ReplayStateMismatchError, RosterConfig
+from api.replay_loader import (
+    ReplayLoader,
+    ReplayStateMismatchError,
+    ReplaySubstrateMismatchError,
+    RosterConfig,
+)
 from api.schemas import (
     FoundBodyObsView,
     KillEventView,
@@ -39,7 +44,12 @@ from orchestrator.game import (
     build_default_agent_factory,
     build_default_meeting_runner,
 )
-from orchestrator.replay import LLMCallRecord, ReplayLogEntry, read_all_entries
+from orchestrator.replay import (
+    GameEndReplayEntry,
+    LLMCallRecord,
+    ReplayLogEntry,
+    read_all_entries,
+)
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
 from tests.api.fixtures.sample_replay import (
@@ -906,3 +916,135 @@ def test_committed_9p2i_set_holds_crew_firewall(tmp_path: Path) -> None:
                 assert set(packet.self_state.fellow_impostor_ids) == impostor_ids - {
                     pid
                 }
+
+
+# -- Task 14.7: the loader HONORS the stamped substrate-flag config -----------
+#
+# A flag-ON re-record stamps its Phase-13.5 lever config onto the game_over
+# record. The loader's memory reconstruction re-derives through the four
+# ``*_enabled()`` env reads, so it refuses to reconstruct a stamped replay under
+# a DIFFERENT ambient substrate (no silent cross-substrate replay). An unstamped
+# (legacy / flag-OFF) replay is never checked, so the committed final-9B baseline
+# reconstructs unchanged.
+
+_ALL_FLAGS_ON = {
+    "testimony_as_content": True,
+    "witnessed_kill_evidence": True,
+    "movement_perception": True,
+    "unfreeze_memory": True,
+}
+_FLAG_ENV_VARS = (
+    "AILIBI_TESTIMONY_AS_CONTENT",
+    "AILIBI_WITNESSED_KILL_EVIDENCE",
+    "AILIBI_MOVEMENT_PERCEPTION",
+    "AILIBI_UNFREEZE_MEMORY",
+)
+
+
+def _set_substrate_env(monkeypatch: pytest.MonkeyPatch, *, on: bool) -> None:
+    for var in _FLAG_ENV_VARS:
+        if on:
+            monkeypatch.setenv(var, "1")
+        else:
+            monkeypatch.delenv(var, raising=False)
+
+
+def test_assert_substrate_matches_skips_unstamped_replay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An unstamped game_over (the committed final-9B baseline) is never checked,
+    # regardless of the ambient substrate.
+    entries = [
+        GameEndReplayEntry(game_id="g", tick=1, winner="CREWMATES", reason="TASKS")
+    ]
+    _set_substrate_env(monkeypatch, on=True)
+    replay_loader._assert_substrate_matches("g", entries)  # no raise
+    _set_substrate_env(monkeypatch, on=False)
+    replay_loader._assert_substrate_matches("g", entries)  # no raise
+
+
+def test_assert_substrate_matches_passes_when_env_matches_stamp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries = [
+        GameEndReplayEntry(
+            game_id="g",
+            tick=1,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=_ALL_FLAGS_ON,
+        )
+    ]
+    _set_substrate_env(monkeypatch, on=True)
+    replay_loader._assert_substrate_matches("g", entries)  # no raise
+
+
+def test_assert_substrate_matches_raises_on_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries = [
+        GameEndReplayEntry(
+            game_id="g",
+            tick=1,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=_ALL_FLAGS_ON,
+        )
+    ]
+    _set_substrate_env(monkeypatch, on=False)
+    with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
+        replay_loader._assert_substrate_matches("g", entries)
+    # The error names the divergent levers + the env-var remediation.
+    assert "AILIBI_TESTIMONY_AS_CONTENT=1" in str(excinfo.value)
+
+
+def _stamp_committed_9p2i_seed(dst: Path, seed: int, flags: dict[str, bool]) -> str:
+    """Copy a committed 9p2i replay into ``dst`` with ``flags`` stamped on its
+    game_over record (tick/meeting bytes verbatim, so the state_hash chain is
+    unchanged). Returns the replay's game_id."""
+
+    dst.mkdir(parents=True, exist_ok=True)
+    (dst / "roster.json").write_text(
+        (_COMMITTED_9P2I_DIR / "roster.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    src = _COMMITTED_9P2I_DIR / f"replay-seed-{seed}.jsonl"
+    out: list[str] = []
+    for line in src.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if record.get("kind") == "game_over":
+            record["substrate_flags"] = flags
+            line = json.dumps(record, sort_keys=True, separators=(",", ":"))
+        out.append(line)
+    (dst / f"replay-seed-{seed}.jsonl").write_text(
+        "\n".join(out) + "\n", encoding="utf-8"
+    )
+    return f"headless-seed-{seed}"
+
+
+def test_stamped_replay_reconstructs_under_matching_substrate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A flag-ON recording reconstructs byte-identically when the ambient substrate
+    # matches the stamp AND roster.json is present (the FLAG-AWARE verify the 14.7
+    # gate requires). The state hash is substrate-independent, so the tick/meeting
+    # bytes (verbatim) still reconstruct; the guard passes because env == stamp.
+    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
+    _set_substrate_env(monkeypatch, on=True)
+    loader = ReplayLoader(replay_dir=tmp_path)
+    replay = loader.load_replay(game_id)  # no raise — reconstructs
+    assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 10)}
+
+
+def test_stamped_replay_under_wrong_substrate_fails_loud(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The same stamped recording reconstructed under a flag-OFF environment fails
+    # loud (no silent cross-substrate replay), naming the env-var remediation.
+    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
+    _set_substrate_env(monkeypatch, on=False)
+    loader = ReplayLoader(replay_dir=tmp_path)
+    with pytest.raises(ReplaySubstrateMismatchError):
+        loader.load_replay(game_id)

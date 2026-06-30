@@ -177,6 +177,51 @@ def test_dry_run_default_provider_is_anthropic() -> None:
     assert "AILIBI_LLM_PROVIDER=anthropic uv run python" in proc.stdout
 
 
+def test_dry_run_featherless_provider_echoes_substrate() -> None:
+    # Task 14.7: AILIBI_LLM_PROVIDER=featherless is an accepted provider; the
+    # dry-run echoes it, its FEATHERLESS_API_KEY preflight, the prompt set, and
+    # the four 13.5 substrate flags so the locked tuple's substrate is never
+    # silent (AGENTS.md "no silent fallbacks").
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_TESTIMONY_AS_CONTENT="1",
+        AILIBI_WITNESSED_KILL_EVIDENCE="1",
+        AILIBI_MOVEMENT_PERCEPTION="1",
+        AILIBI_UNFREEZE_MEMORY="1",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] provider: featherless" in proc.stdout
+    assert "[dry-run] preflight: would require FEATHERLESS_API_KEY" in proc.stdout
+    assert "[dry-run] prompt set: qwen3_32b" in proc.stdout
+    assert (
+        "[dry-run] substrate flags: testimony=1 witnessed_kill=1 "
+        "movement=1 unfreeze=1" in proc.stdout
+    )
+
+
+def test_featherless_preflight_requires_api_key_before_spend() -> None:
+    # A real (non-dry-run) featherless mode with no key must fail at preflight,
+    # before any tournament invocation -- so this test never spends, even with a
+    # key configured in the ambient environment (it is stripped here).
+    env = {k: v for k, v in _clean_env().items() if k != "FEATHERLESS_API_KEY"}
+    env["AILIBI_LLM_PROVIDER"] = "featherless"
+    proc = _run("--seeds", "0", env=env)
+    assert proc.returncode != 0
+    assert "FEATHERLESS_API_KEY must be set" in proc.stdout + proc.stderr
+
+
+def test_unknown_provider_lists_featherless_in_error() -> None:
+    # A typo must not silently select a provider; the error names the three valid
+    # providers, now including featherless (Task 14.7).
+    env = dict(_clean_env(), AILIBI_LLM_PROVIDER="featherles")
+    proc = _run("--seeds", "0", env=env)
+    assert proc.returncode != 0
+    assert "featherless" in proc.stdout + proc.stderr
+
+
 def test_duplicate_seeds_deduped() -> None:
     # A typo like 22,22 must not double-call the provider / double-count cost.
     proc = _run("--seeds", "22,22,24", "--dry-run")

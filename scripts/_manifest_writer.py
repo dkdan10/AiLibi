@@ -56,6 +56,7 @@ from orchestrator.replay import (  # noqa: E402
     read_all_entries,
     read_game_outcome,
     read_meeting_entries,
+    read_substrate_flags,
 )
 
 _FILENAME_PREFIX = "replay-seed-"
@@ -81,6 +82,29 @@ _ROSTER_FIELDS = ("num_players", "num_impostors", "tasks_per_crewmate")
 # prompt_versions cell is neither empty nor this sentinel.
 _NO_MEETINGS = "(none — no meetings)"
 _NULL_WINNER = "null"
+# Sentinel for the ``flags`` column of a replay that carries NO substrate stamp:
+# a legacy / flag-OFF replay (the committed final-9B baseline, recorded before
+# Task 14.7 added the stamp, ran every lever OFF). A flag-ON re-record stamps its
+# ``game_over`` record, so its rows list the ON levers instead (Task 14.7;
+# DESIGN.md §11.4 replay provenance).
+_NO_FLAGS = "(none)"
+
+
+def _render_flags(flags: dict[str, bool] | None) -> str:
+    """Render a replay's stamped substrate config for the MANIFEST ``flags`` cell.
+
+    ``None`` (an unstamped legacy / flag-OFF replay) and an all-OFF stamp both
+    render as :data:`_NO_FLAGS`; a stamped replay renders its ON levers as a
+    sorted, comma-joined list (e.g. the 14.7 baseline's four). Commas-but-no-pipes
+    keeps the cell unambiguous for :func:`parse_manifest` (mirroring the
+    prompt_versions column).
+    """
+
+    if not flags:
+        return _NO_FLAGS
+    on = sorted(key for key, value in flags.items() if value)
+    return ", ".join(on) if on else _NO_FLAGS
+
 
 _HEADER = (
     "# Sample Replay Manifest\n"
@@ -94,12 +118,19 @@ _HEADER = (
     "byte-identically under the current engine.\n"
 )
 _COLUMNS = (
-    "| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner |"
+    "| seed | model | prompt_versions | flags | refreshed_at | git_sha "
+    "| cost_usd | winner |"
 )
 _SEPARATOR = (
-    "|------|-------|-----------------|--------------|---------|----------|--------|"
+    "|------|-------|-----------------|-------|--------------|---------"
+    "|----------|--------|"
 )
-_NUM_COLUMNS = 7
+_NUM_COLUMNS = 8
+# A pre-Task-14.7 manifest had no ``flags`` column. ``parse_manifest`` still
+# accepts that legacy width so a committed 7-column MANIFEST.md (the final-9B
+# baseline, not re-recorded here) keeps parsing — its rows read back with the
+# ``_NO_FLAGS`` sentinel.
+_LEGACY_NUM_COLUMNS = 7
 
 
 @dataclass(frozen=True)
@@ -109,6 +140,7 @@ class ManifestRow:
     seed: int
     model: str
     prompt_versions: str
+    flags: str
     refreshed_at: str
     git_sha: str
     cost_usd: str
@@ -117,8 +149,8 @@ class ManifestRow:
     def render(self) -> str:
         return (
             f"| {self.seed} | {self.model} | {self.prompt_versions} | "
-            f"{self.refreshed_at} | {self.git_sha} | {self.cost_usd} | "
-            f"{self.winner} |"
+            f"{self.flags} | {self.refreshed_at} | {self.git_sha} | "
+            f"{self.cost_usd} | {self.winner} |"
         )
 
 
@@ -171,12 +203,15 @@ def fallback_model(sample_dir: Path) -> str:
 
 def sample_provenance(
     sample_dir: Path, seed: int, fallback: str
-) -> tuple[str, str, str, str]:
-    """Return ``(model, prompt_versions, cost_usd, winner)`` for one sample.
+) -> tuple[str, str, str, str, str]:
+    """Return ``(model, prompt_versions, flags, cost_usd, winner)`` for one sample.
 
     Derived entirely from the replay JSONL: the union of every meeting's
     ``prompt_versions`` values, the distinct models its LLM calls used, the
-    summed cost, and the decisive outcome.
+    Phase-13.5 substrate config stamped on the ``game_over`` record (Task 14.7),
+    the summed cost, and the decisive outcome. The ``flags`` stamp lives on the
+    game-end record (not a meeting), so a no-meeting seed recorded under a
+    flag-ON substrate still reports its levers.
     """
 
     path = _sample_path(sample_dir, seed)
@@ -187,9 +222,10 @@ def sample_provenance(
         models.update(call.model for call in meeting.llm_calls)
     model = ", ".join(sorted(models)) if models else fallback
     prompt_versions = ", ".join(sorted(versions)) if versions else _NO_MEETINGS
+    flags = _render_flags(read_substrate_flags(path))
     cost_usd = f"{compute_cost_usd(path):.4f}"
     winner = read_game_outcome(path) or _NULL_WINNER
-    return model, prompt_versions, cost_usd, winner
+    return model, prompt_versions, flags, cost_usd, winner
 
 
 def _git_short_sha() -> str | None:
@@ -255,7 +291,7 @@ def build_row(
     override_sha: str | None,
     override_date: str | None,
 ) -> ManifestRow:
-    model, prompt_versions, cost_usd, winner = sample_provenance(
+    model, prompt_versions, flags, cost_usd, winner = sample_provenance(
         sample_dir, seed, fallback
     )
     sha, date = _resolve_sha_date(
@@ -265,6 +301,7 @@ def build_row(
         seed=seed,
         model=model,
         prompt_versions=prompt_versions,
+        flags=flags,
         refreshed_at=date,
         git_sha=sha,
         cost_usd=cost_usd,
@@ -306,10 +343,13 @@ def _atomic_write_text(path: Path, text: str) -> None:
 def parse_manifest(text: str) -> dict[int, ManifestRow]:
     """Parse a rendered manifest back into ``{seed: ManifestRow}``.
 
-    Tolerant by design: any line that is not a pipe-delimited row with exactly
-    seven cells whose first cell is an integer is skipped (title, prose,
-    header, and separator rows all fall away). Prompt-version cells contain
-    commas but never pipes, so the split is unambiguous.
+    Tolerant by design: any line that is not a pipe-delimited row with the
+    current eight cells (or the legacy seven, pre-Task-14.7, before the ``flags``
+    column) whose first cell is an integer is skipped (title, prose, header, and
+    separator rows all fall away). Prompt-version and flags cells contain commas
+    but never pipes, so the split is unambiguous. A legacy 7-column row reads back
+    with the :data:`_NO_FLAGS` sentinel, so a committed pre-14.7 MANIFEST.md still
+    parses and merges.
     """
 
     rows: dict[int, ManifestRow] = {}
@@ -318,17 +358,28 @@ def parse_manifest(text: str) -> dict[int, ManifestRow]:
         if not stripped.startswith("|"):
             continue
         cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-        if len(cells) != _NUM_COLUMNS or not cells[0].isdigit():
+        if not cells or not cells[0].isdigit():
+            continue
+        if len(cells) == _NUM_COLUMNS:
+            model, prompt_versions, flags = cells[1], cells[2], cells[3]
+            refreshed_at, git_sha, cost_usd, winner = cells[4:8]
+        elif len(cells) == _LEGACY_NUM_COLUMNS:
+            # Pre-14.7 row: no ``flags`` column. The remaining cells shift left.
+            model, prompt_versions = cells[1], cells[2]
+            flags = _NO_FLAGS
+            refreshed_at, git_sha, cost_usd, winner = cells[3:7]
+        else:
             continue
         seed = int(cells[0])
         rows[seed] = ManifestRow(
             seed=seed,
-            model=cells[1],
-            prompt_versions=cells[2],
-            refreshed_at=cells[3],
-            git_sha=cells[4],
-            cost_usd=cells[5],
-            winner=cells[6],
+            model=model,
+            prompt_versions=prompt_versions,
+            flags=flags,
+            refreshed_at=refreshed_at,
+            git_sha=git_sha,
+            cost_usd=cost_usd,
+            winner=winner,
         )
     return rows
 
