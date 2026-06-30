@@ -37,6 +37,7 @@ adapter fix so they iterate against the real client, not the harness bare-send.
 - agents/strategic/prompts/glm_4_32b/ (new bespoke set; requires the 14.4.1 adapter fix to run on the real client)
 - agents/strategic/prompts/cydonia_24b/ (new bespoke set; requires the 14.4.1 adapter fix)
 - orchestrator/game.py (register each new set in the per-set prompt-version registry; preserve the merged 13.5 flag wiring)
+- experiments/lab/featherless_sweep.py (add a `--prompt-set` axis + a `prompt_set` result column so the set-vs-set A/B is self-describing; the driver renders through the loader bound to the selected set rather than the single import-time default — keep the existing default-set behavior unchanged when the flag is absent; non-Qwen sets now route through the real adapter, the 14.4.1 fix having retired the need for the harness `_bare_send`)
 - experiments/lab/report-featherless-sweep.md (append the per-set new-vs-pinned-9B A/B delta on each set's own model)
 
 **Files NOT in scope:**
@@ -49,7 +50,7 @@ adapter fix so they iterate against the real client, not the harness bare-send.
 **Definition of done:**
 - [ ] A bespoke prompt set is authored for EACH candidate (`qwen3_32b`, `qwen3_32b_thinking`, `qwen3_30b_a3b`, `glm_4_32b`, `cydonia_24b`) under its own `agents/strategic/prompts/<set>/`, built from the ground up (not copied from the 9B set), registered in the per-set version registry and selectable via `AILIBI_PROMPT_SET`.
 - [ ] Every set's turns emit the SAME output JSON schema (`MeetingTurn` / `VoteBallot`) so all sets parse identically — a cross-set parse check over a reconstructed context confirms it; the output contract is the one hard invariant.
-- [ ] A re-sweep over the SAME reconstructed contexts records each set's delta vs the pinned-9B prompts ON its own model (mechanical metrics + parse-success); the pinned `qwen3_5_9b` set is unchanged.
+- [ ] A re-sweep over the SAME reconstructed contexts records each set's delta vs the pinned-9B prompts ON its own model (mechanical metrics + parse-success); the pinned `qwen3_5_9b` set is unchanged. The driver gains a `--prompt-set` axis and stamps a `prompt_set` column on every result row so the A/B is self-describing and reproducible (no manual run-tracking); the default-set behavior is byte-unchanged when the flag is absent so existing 14.4 rows still reproduce.
 - [ ] Where 14.4 showed the cover directive is a binding lever, it is wired into the new set's reply path (not gated off the body-report opening); otherwise the report records why it was not.
 - [ ] Every new set renders under `StrictUndefined` with the existing loader kwargs (no template kwarg drift); a render smoke test over a reconstructed context passes for each.
 - [ ] `uv run mypy .` passes.
@@ -72,8 +73,12 @@ the recording seam working across every set and is the precondition for later he
 `qwen3_32b_thinking` set will usually differ from `qwen3_32b` in only a template or two (a thinking model needs
 less step-by-step coaxing) — author only what differs, but keep it a self-contained directory. Re-use the
 14.3/14.4 harness to A/B: render each set over the same `contexts.pkl` and grade with the identical `_grade`.
-GLM / Cydonia need the 14.4.1 adapter fix to iterate against the real client rather than the sweep's
-bare-send.
+The 14.4 driver renders the prompts through the loader's module-level wrappers bound to the import-time
+`AILIBI_PROMPT_SET` and writes one fixed results path with no set column — so a clean A/B needs a `--prompt-set`
+axis that builds the renderers via `build_prompt_renderers(<set>)` (Task 14.2) and tags each row's
+`prompt_set`; keep the no-flag path byte-identical so the committed 14.4 rows still reproduce. GLM / Cydonia
+now route through the real adapter (`call_turn`) — the 14.4.1 fix retired the harness `_bare_send` for them, so
+drop that branch for the non-Qwen sets rather than carrying the workaround into the re-sweep.
 
 ## Integration risk
 
