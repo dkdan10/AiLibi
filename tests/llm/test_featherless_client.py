@@ -987,33 +987,42 @@ class TestBuildChatPayload:
 
 
 class TestSupportsThinkingKwarg:
-    """The EXPLICIT per-family thinking-capability signal (Task 14.4.1).
+    """The EXPLICIT per-model thinking-capability signal (Task 14.4.1).
 
     Qwen3 honors the ``chat_template_kwargs.enable_thinking`` chat-template
     kwarg; the non-Qwen slate (GLM, Cydonia) does not — the 14.4 sweep found the
-    mandatory field collapses GLM to ``{}`` and 400/504s Cydonia. An unrecognized
-    id fails loud (no silent fallback; the capability is decided up front by id,
-    not by swallowing a wire 400)."""
+    mandatory field collapses GLM to ``{}`` and 400/504s Cydonia. Classification
+    is an EXACT id lookup (not substring matching), so an unverified finetune
+    whose name merely contains a known marker is NOT auto-classified; an
+    unrecognized id fails loud (no silent fallback; the capability is decided up
+    front by id, not by swallowing a wire 400)."""
 
     @pytest.mark.parametrize(
         "model",
         ["Qwen/Qwen3-32B", "Qwen/Qwen3-30B-A3B-Instruct-2507", "Qwen/Qwen3-8B"],
     )
-    def test_qwen3_family_supports_kwarg(self, model: str) -> None:
+    def test_qwen3_models_support_kwarg(self, model: str) -> None:
         assert _supports_thinking_kwarg(model) is True
 
     @pytest.mark.parametrize(
         "model",
         ["zai-org/GLM-4-32B", "zai-org/GLM-4-32B-0414", "TheDrummer/Cydonia-24B-v2"],
     )
-    def test_non_qwen_families_do_not_support_kwarg(self, model: str) -> None:
+    def test_non_qwen_models_do_not_support_kwarg(self, model: str) -> None:
         assert _supports_thinking_kwarg(model) is False
 
     def test_unrecognized_id_fails_loud(self) -> None:
         # No silent fallback (AGENTS.md): an unclassified id raises rather than
         # guessing whether to send the Qwen-only field.
-        with pytest.raises(ValueError, match="no known family"):
+        with pytest.raises(ValueError, match="no enable_thinking capability entry"):
             _supports_thinking_kwarg("mystery-org/mystery-model-1")
+
+    def test_substring_lookalike_is_not_auto_classified(self) -> None:
+        # An unverified finetune whose NAME contains a known marker must NOT be
+        # silently classified by the fragment — exact id only (Codex P2). It is
+        # an unknown model and must fail loud until classified deliberately.
+        with pytest.raises(ValueError, match="no enable_thinking capability entry"):
+            _supports_thinking_kwarg("someorg/Qwen3-32B-roleplay-merge")
 
 
 class TestThinkingKwargConditional:
