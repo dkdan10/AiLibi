@@ -139,6 +139,8 @@ Each Task 14.5 bespoke set is rendered over the SAME reconstructed contexts as t
 |---|---|---|---|---|---|---|---|
 | qwen3_32b | qwen3-32b | non_thinking | flag_off | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 12/16 (75%) | 5/16 (31%) / 3/16 (19%) (+12 pp) | 9/16 (56%) / 7/16 (44%) (+12 pp) |
 | qwen3_32b | qwen3-32b | non_thinking | flag_on | 16/16 (100%) / 16/16 (100%) | 13/16 (81%) / 10/16 (62%) | 3/16 (19%) / 4/16 (25%) (-6 pp) | 8/16 (50%) / 6/16 (38%) (+12 pp) |
+| qwen3_32b_thinking | qwen3-32b | thinking | flag_off | 8/8 (100%) / 16/16 (100%) | 7/8 (88%) / 15/16 (94%) | 0/8 (0%) / 3/16 (19%) (-19 pp) | 1/8 (12%) / 3/16 (19%) (-6 pp) |
+| qwen3_32b_thinking | qwen3-32b | thinking | flag_on | 8/8 (100%) / 16/16 (100%) | 7/8 (88%) / 16/16 (100%) | 2/8 (25%) / 3/16 (19%) (+6 pp) | 4/8 (50%) / 3/16 (19%) (+31 pp) |
 | qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_off | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 13/16 (81%) | 7/16 (44%) / 6/16 (38%) (+6 pp) | 8/16 (50%) / 6/16 (38%) (+12 pp) |
 | qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_on | 16/16 (100%) / 16/16 (100%) | 13/16 (81%) / 10/16 (62%) | 4/16 (25%) / 5/16 (31%) (-6 pp) | 7/16 (44%) / 9/16 (56%) (-12 pp) |
 | glm_4_32b | glm-4-32b | non_thinking | flag_off | 12/16 (75%) / 15/16 (94%) | 10/12 (83%) / 12/15 (80%) | 4/12 (33%) / 5/15 (33%) (+0 pp) | 5/12 (42%) / 11/15 (73%) (-32 pp) |
@@ -154,6 +156,8 @@ Self-co-location Δ is new-set minus pinned-9B-set on the same model (negative =
 |---|---|---|---|---|---|
 | qwen3_32b | qwen3-32b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
 | qwen3_32b | qwen3-32b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_32b_thinking | qwen3-32b | thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_32b_thinking | qwen3-32b | thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
 | qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
 | qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
 | glm_4_32b | glm-4-32b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
