@@ -133,12 +133,32 @@ Crew votes WITH a visible impostor; half are recorded-SKIP inversion cases (a tr
 
 Each Task 14.5 bespoke set is rendered over the SAME reconstructed contexts as the 14.4 sweep and compared to the PINNED 9B prompts ON ITS OWN MODEL — the one clean control in a co-designed change (model + prompt co-vary by owner decision 2026-06-30, so this is a REFERENCE point, NOT a single-variable ablation; do not over-claim causality). The bespoke arm wires the cover directive into the impostor REPLY path (gated on `is_impostor` alone) and routes the non-Qwen slate through the REAL adapter (`call_turn`) — the 14.4.1 fix having retired the harness bare-send. Each row is stamped with its `prompt_set`; the no-flag default rows are the pinned-9B baseline and reproduce the 14.4 numbers.
 
-_No `prompt_set`-tagged bespoke rows are in `results-featherless-sweep.jsonl` yet — this is the operator-run A/B ($0 marginal, needs `FEATHERLESS_API_KEY`). Run it per set on its own model and merge the rows in, then regenerate this report:_
+### Reply corpus (cover OFF) — self-co-location is the impostor tell
 
-```
-# example: the qwen3_32b set on Qwen3-32B, merged into the matrix
-uv run python -m experiments.lab.featherless_sweep run \
-    --prompt-set qwen3_32b --models qwen3-32b --append
-```
+| prompt_set | model | mode | substrate | parse new/9B | deflect new/9B | self-co-loc new/9B (Δ) | self-flag new/9B (Δ) |
+|---|---|---|---|---|---|---|---|
+| qwen3_32b | qwen3-32b | non_thinking | flag_off | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 12/16 (75%) | 5/16 (31%) / 3/16 (19%) (+12 pp) | 9/16 (56%) / 7/16 (44%) (+12 pp) |
+| qwen3_32b | qwen3-32b | non_thinking | flag_on | 16/16 (100%) / 16/16 (100%) | 13/16 (81%) / 10/16 (62%) | 3/16 (19%) / 4/16 (25%) (-6 pp) | 8/16 (50%) / 6/16 (38%) (+12 pp) |
+| qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_off | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 13/16 (81%) | 7/16 (44%) / 6/16 (38%) (+6 pp) | 8/16 (50%) / 6/16 (38%) (+12 pp) |
+| qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_on | 16/16 (100%) / 16/16 (100%) | 13/16 (81%) / 10/16 (62%) | 4/16 (25%) / 5/16 (31%) (-6 pp) | 7/16 (44%) / 9/16 (56%) (-12 pp) |
+| glm_4_32b | glm-4-32b | non_thinking | flag_off | 12/16 (75%) / 15/16 (94%) | 10/12 (83%) / 12/15 (80%) | 4/12 (33%) / 5/15 (33%) (+0 pp) | 5/12 (42%) / 11/15 (73%) (-32 pp) |
+| glm_4_32b | glm-4-32b | non_thinking | flag_on | 13/16 (81%) / 9/16 (56%) | 9/13 (69%) / 7/9 (78%) | 4/13 (31%) / 5/9 (56%) (-25 pp) | 6/13 (46%) / 2/9 (22%) (+24 pp) |
+| cydonia_24b | cydonia-24b | non_thinking | flag_off | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 14/16 (88%) | 2/16 (12%) / 7/16 (44%) (-31 pp) | 4/16 (25%) / 3/16 (19%) (+6 pp) |
+| cydonia_24b | cydonia-24b | non_thinking | flag_on | 16/16 (100%) / 16/16 (100%) | 14/16 (88%) / 15/16 (94%) | 5/16 (31%) / 7/16 (44%) (-12 pp) | 7/16 (44%) / 4/16 (25%) (+19 pp) |
 
-_Once those rows exist this section renders the per-set delta tables (reply self-co-location — the impostor tell — plus parse-success, deflection, self-flag, and vote conversion) automatically._
+Self-co-location Δ is new-set minus pinned-9B-set on the same model (negative = the bespoke set self-incriminates LESS); self-flag Δ likewise.
+
+### Vote corpus — parse-success + conversion
+
+| prompt_set | model | mode | substrate | parse new/9B | conversion new/9B |
+|---|---|---|---|---|---|
+| qwen3_32b | qwen3-32b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_32b | qwen3-32b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| qwen3_30b_a3b | qwen3-30b-a3b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| glm_4_32b | glm-4-32b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| glm_4_32b | glm-4-32b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+| cydonia_24b | cydonia-24b | non_thinking | flag_off | 8/8 (100%) / 8/8 (100%) | 7/8 (88%) / 8/8 (100%) |
+| cydonia_24b | cydonia-24b | non_thinking | flag_on | 8/8 (100%) / 8/8 (100%) | 8/8 (100%) / 8/8 (100%) |
+
+**Cover directive (14.4 finding):** the 14.4 sweep found the cover directive a WEAK / inconsistent lever (mean Δ +2 pp, leaning information ceiling) but with a real prompt-artifact component — audit gp-1: the 9B's v5 directive is gated off the body-report OPENING and never reaches an impostor, who only ever speaks on REPLY turns. The bespoke sets therefore WIRE it into the reply path (gated on `is_impostor` alone); the A/B above measures the net effect on the same model. It is wired because it is a cheap prompt-artifact fix, NOT because 14.4 proved it dissolves the tell.
