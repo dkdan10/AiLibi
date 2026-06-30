@@ -12,8 +12,8 @@ binding constraint is INFORMATION (single-room vision → ~45% detector precisio
 stronger model may *correctly still SKIP*. The phase therefore does NOT gate on "R1 went up" — it gates on
 a VALID new baseline existing. The Phase-13 R-gate (R1/R4/R7/impostor/geomean) is computed and recorded as
 a measurement on that baseline (the headline finding that scopes Phase 15), never a pass/fail gate the
-re-record must beat. Structural information levers (vents/sabotage/wider vision) are explicitly deferred to
-Phase 15.
+re-record must beat. Structural information levers (vents/sabotage/wider vision) — and heterogeneous-model
+games (per-agent model routing) — are explicitly deferred to Phase 15.
 
 Locked decisions (2026-06-25):
 - **Provider:** Featherless AI (flat-rate, OpenAI-compatible, $25/mo Premium, any model size, 32K context).
@@ -21,10 +21,19 @@ Locked decisions (2026-06-25):
   real backstop. Hosted models do not byte-reproduce FRESH generation; recordings still replay
   byte-identically (the loosened contract Ollama already carries).
 - **Prompts:** the four existing templates are PINNED as the frozen `qwen3.5:9b` reference set; NEW,
-  independent prompt sets are authored per new model (simple game instructions + role + memory → deduction +
-  interesting sim). A small per-model prompt-folder restructure selects the right set for the right model.
-  New-model prompts are compared against the 9B results but are not a single-variable ablation — model +
-  prompt are co-designed, by choice.
+  independent BESPOKE prompt sets are authored per CANDIDATE (model, mode) — built from the ground up (simple
+  game instructions + role + memory → deduction + interesting sim), NOT derived from the 9B set, so each model
+  is prompted to its own strengths rather than catering to the 9B's quirks (owner decision 2026-06-30; bespoke
+  now, to learn each model's ceiling before sharing structure later). The single hard invariant across every
+  set is that its turns emit the SAME output JSON schema (`MeetingTurn` / `VoteBallot`) so all sets parse
+  identically and the downstream graders / recording seam are unchanged. The candidate sets are `qwen3-32b`
+  (non-thinking + a thinking variant), `qwen3-30b-a3b`, `glm-4-32b`, and `cydonia-24b`. A per-model
+  prompt-folder restructure selects the right set for the right model. New-model prompts are compared against
+  the 9B results but are not a single-variable ablation — model + prompt are co-designed, by choice; the one
+  clean control kept is new-set-vs-pinned-9B-set ON THE SAME model. The same-schema invariant is also what
+  makes heterogeneous-model games possible (different models as different players in one seed) — that
+  capability is structural (per-agent model + set routing + per-player provenance stamping) and is deferred to
+  Phase 15; the Phase-14 recorded baseline stays HOMOGENEOUS (one locked model + one set).
 - **Model slate:** sweep Qwen3-32B (instruct), Qwen3-30B-A3B (MoE), GLM-4-32B, and one RP/creative
   fine-tune. Thinking models are on the table now that inference is on the cloud (the local `think=False`
   structured-output breakage — `experiments/lab/report-model-ceiling-probe.md` Finding 2 — does not apply to
@@ -45,7 +54,7 @@ Locked decisions (2026-06-25):
 
 Parallelism: 14.1 and 14.2 are independent roots and dispatch in parallel (disjoint file scopes); 14.3
 follows 14.1 because its probe backend imports the Featherless `_default_send` introduced by 14.1:
-`(14.1 ∥ 14.2) → 14.3 → 14.4 → 14.5 → 14.6 → 14.7 → 14.8 → 14.9`. 14.3 needs 14.1; 14.4 needs 14.1 + 14.3; 14.5 needs 14.2 + 14.4; 14.9 (flag-default cleanup) needs 14.8.
+`(14.1 ∥ 14.2) → 14.3 → 14.4 → 14.4.1 → 14.5 → 14.6 → 14.7 → 14.8 → 14.9`. 14.3 needs 14.1; 14.4 needs 14.1 + 14.3; 14.4.1 (adapter `enable_thinking` fix surfaced by the 14.4 sweep) needs 14.1 + 14.4; 14.5 needs 14.2 + 14.4 + 14.4.1; 14.9 (flag-default cleanup) needs 14.8.
 Operator-run / spend gates: 14.4 (model sweep, $0 marginal) and 14.7 (re-record, the time gate).
 Design-thread (no agent dispatch): 14.6 (lock decision) and 14.8 (close). Track with
 `python3 scripts/compute_next_task.py --phase 14`.
@@ -376,39 +385,39 @@ sweep must not be silently truncated — log the model/mode/context matrix actua
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-4-model-sweep.md`
 
-### Task 14.5 — Author redesigned per-model prompt set + A/B re-sweep
-**Branch:** `phase-14-new-model-prompts`
-**Depends on:** 14.2, 14.4
-**Section refs:** tasks/phase-14.md (this phase); experiments/lab/report-featherless-sweep.md (14.4 evidence); agents/strategic/prompts/accusation_round.j2 (the cover-directive gating `is_impostor` + `is_body_report`); owner decision 2026-06-25 (simple instructions + role + memory)
-**Complexity:** Integration
+### Task 14.4.1 — Make the Featherless adapter's `enable_thinking` kwarg conditional (unblock non-Qwen models)
+**Branch:** `phase-14-adapter-thinking-conditional`
+**Depends on:** 14.1, 14.4
+**Section refs:** llm/featherless_client.py (the 14.1 adapter; the request-time `chat_template_kwargs.enable_thinking` field); experiments/lab/report-featherless-sweep.md (14.4 finding: the mandatory field collapses GLM to `{}` and 400/504s Cydonia); experiments/lab/featherless_sweep.py (`_bare_send`, the harness workaround this task makes unnecessary in production)
+**Complexity:** Medium
 
-Author a NEW, independent prompt set for the chosen model under its own `agents/strategic/prompts/<set>/`
-directory — simpler "game instructions + role + memory → deduction + interesting sim" prompts with lighter
-guard-rails than the 9B needed (the v8/v9 templates were rebuilt to fight the 9B's attention drift; a stronger
-model should need less). Register the new set's versions and re-run the 14.4 sweep over the SAME reconstructed
-contexts to A/B the new prompts vs the pinned-9B prompts ON the new model, recording the delta. If 14.4 showed
-the cover directive is the binding lever, wire it into the reply path of the new set (not gated off the
-body-report opening as it is today).
+The 14.1 adapter ALWAYS sends `chat_template_kwargs.enable_thinking` (the Qwen3 convention). The 14.4 sweep
+found this field is honored by the Qwen3 models but BREAKS the non-Qwen slate — `zai-org/GLM-4-32B-0414`
+collapses to an empty `{}` response and `TheDrummer/Cydonia-24B-v2` 400/504s — so the sweep had to route them
+through a sweep-local BARE send (`featherless_sweep.py:_bare_send`) that omits the field. That workaround lives
+ONLY in the probe harness; the PRODUCTION client still cannot call GLM or Cydonia, which blocks locking (14.6)
+or recording (14.7) a baseline on any non-Qwen model and blocks authoring/validating their bespoke prompts
+(14.5) against the real client. Make the field CONDITIONAL: send `chat_template_kwargs.enable_thinking` only
+for models that support the Qwen chat-template kwarg, and omit the whole `chat_template_kwargs` object
+otherwise (an empty `{}` is what broke GLM). Gate it on an EXPLICIT per-model capability signal, not by
+swallowing the HTTP 400 (AGENTS.md §"No silent fallbacks"); a non-thinking-only model that is asked to think
+omits the field and runs non-thinking explicitly, rather than catching an error after the fact.
 
 **Files in scope:**
-- agents/strategic/prompts/<chosen_set>/crewmate_report.j2 (new)
-- agents/strategic/prompts/<chosen_set>/impostor_report.j2 (new)
-- agents/strategic/prompts/<chosen_set>/accusation_round.j2 (new; cover directive wired into the reply path if 14.4 showed it binding)
-- agents/strategic/prompts/<chosen_set>/vote_ballot.j2 (new)
-- orchestrator/game.py (register the new set in the per-set `DEFAULT_PROMPT_VERSIONS` registry)
-- experiments/lab/report-featherless-sweep.md (append the new-prompts-vs-pinned A/B delta on the chosen model)
+- llm/featherless_client.py (gate the `chat_template_kwargs.enable_thinking` field on an explicit per-model thinking-capability signal; omit `chat_template_kwargs` entirely when it would be empty; the request-time thinking toggle becomes an explicit no-op for non-supporting models rather than an error)
+- tests/llm/test_featherless_client.py (assert a Qwen3-id request INCLUDES `chat_template_kwargs.enable_thinking`; a GLM / Cydonia-id request OMITS it and omits an empty `chat_template_kwargs`; `request_thinking=True` on a non-supporting model omits the field and does not raise; all still route through the shared extract→validate seam)
 
 **Files NOT in scope:**
-- agents/strategic/prompts/qwen3_5_9b/ (the pinned 9B set is frozen — never edited)
-- agents/strategic/prompts/loader.py (the selector seam landed in 14.2; this only adds a set directory)
-- replays/samples/ (re-record is 14.7)
-- llm/ (provider work is 14.1)
+- llm/provider.py + llm/ollama_client.py + llm/fake_provider.py (`build_default_client` constructs the client unchanged; the conditional is internal to the adapter)
+- experiments/lab/featherless_sweep.py + experiments/lab/probe_backends.py (the harness `_bare_send` stays as the sweep's record of the workaround; this task fixes the PRODUCTION path, it does not refactor the probes)
+- agents/ + meetings/ + orchestrator/ + replays/ (no call-site or recording change)
 
 **Definition of done:**
-- [ ] A new prompt set for the chosen model is authored under `agents/strategic/prompts/<set>/` with lighter guard-rails than the 9B set, registered in the per-set version registry and selectable via `AILIBI_PROMPT_SET`.
-- [ ] A re-sweep over the SAME reconstructed contexts records the new prompts' delta vs the pinned-9B prompts ON the new model (mechanical metrics + parse-success); the pinned `qwen3_5_9b` set is unchanged.
-- [ ] If 14.4 showed the cover directive is the binding lever, it is wired into the new set's reply path (not gated off the body-report opening); otherwise the report records why it was not.
-- [ ] The new set renders under `StrictUndefined` with the existing loader kwargs (no template kwarg drift); a render smoke test over a reconstructed context passes.
+- [ ] A Qwen3 model request still INCLUDES `chat_template_kwargs.enable_thinking` (both True and False) — the Qwen3 thinking axis is byte-unchanged and the existing 14.1 tests stay green.
+- [ ] A non-Qwen request (`zai-org/GLM-4-32B-0414`, `TheDrummer/Cydonia-24B-v2`) OMITS `chat_template_kwargs.enable_thinking`, and omits `chat_template_kwargs` entirely when it would be empty — verified against the wire payload, so the production client can call GLM / Cydonia where 14.4 needed the bare-send workaround.
+- [ ] The thinking-capability signal is EXPLICIT (a per-model capability flag / detection), not a caught-and-swallowed HTTP 400 — no silent fallback; an unrecognized id still fails loud.
+- [ ] `request_thinking=True` on a non-supporting model is an explicit documented no-op (the field is omitted; the request runs non-thinking), not an exception.
+- [ ] Unit tests inject `send` and assert both wire shapes with no network call.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -419,21 +428,91 @@ body-report opening as it is today).
 
 **Implementation hint:**
 
-This is where the owner's "simple instructions, generate deduction + interesting sim" intent lands. Start from
-the structural skeleton of the 9B templates (same MeetingTurn / VoteBallot output contract, same kwargs the
-loader passes — `agent_id`, `rendered_memory`, `transcript`, `contradictions`, `prior_turn`, `turn_kind`,
-`living_ids`, `dead_ids`, `is_impostor`, `is_body_report`) but strip the stacked-imperative guard-rails the 9B
-needed. The output JSON contract is FROZEN (the schema is shared) — only the natural-language instruction body
-changes. Re-use the 14.3/14.4 harness to A/B: render the new set over the same `contexts.pkl` and grade with
-the identical `_grade`. Keep the new set self-contained so a future model gets its own sibling directory.
+The 14.4 harness already proved the fix shape: `featherless_sweep.py:_bare_send` posts the identical request
+MINUS `chat_template_kwargs` and parses through the SAME `_extract_json_block` + `model_validate_json` seam, so
+the production change is to make the adapter's payload builder (`_build_chat_payload` / wherever the 14.1
+adapter assembles `chat_template_kwargs`) emit the field conditionally on a per-model capability signal. Prefer
+an explicit signal over substring magic: a small `enable_thinking`-supported predicate keyed off the model id
+family, or a constructor / per-call capability flag the caller can override — so the behavior is testable and
+fails loud on an unknown id rather than swallowing the 400. When the model does not support it, drop the whole
+`chat_template_kwargs` object. Keep the Qwen3 path byte-identical so the existing 14.1 adapter tests stay green.
+
+**Ready-to-paste prompt:** `agent_prompts/task-14-4-1-adapter-thinking-conditional.md`
+
+### Task 14.5 — Author bespoke per-candidate prompt sets + A/B re-sweep
+**Branch:** `phase-14-new-model-prompts`
+**Depends on:** 14.2, 14.4, 14.4.1
+**Section refs:** tasks/phase-14.md (this phase); experiments/lab/report-featherless-sweep.md (14.4 evidence); agents/strategic/prompts/qwen3_5_9b/accusation_round.j2 (the cover-directive gating `is_impostor` + `is_body_report`); owner decision 2026-06-30 (bespoke per-candidate sets, same-schema invariant)
+**Complexity:** Integration
+
+Author a NEW, independent BESPOKE prompt set for EACH candidate (model, mode) under its own
+`agents/strategic/prompts/<set>/` directory — built from the ground up (simpler "game instructions + role +
+memory → deduction + interesting sim"), NOT derived from the 9B templates, so each model is prompted to its
+own strengths rather than inheriting the v8/v9 scaffolding rebuilt to fight the 9B's attention drift. The
+candidate sets are `qwen3_32b` (non-thinking), `qwen3_32b_thinking`, `qwen3_30b_a3b`, `glm_4_32b`, and
+`cydonia_24b` (owner decision 2026-06-30; bespoke now, to learn each model's ceiling before sharing structure
+later). The ONE hard invariant is the output JSON schema: every set's turns must emit the SAME
+`MeetingTurn` / `VoteBallot` shape so all sets parse identically and the graders / recording seam are
+unchanged. Register each set's versions and re-run the 14.4 sweep over the SAME reconstructed contexts to A/B
+each new set vs the pinned-9B prompts ON its own model (the one clean control in a co-designed change),
+recording the delta. Where 14.4 showed the cover directive is a binding lever, wire it into the reply path of
+the new set(s) (not gated off the body-report opening as it is today). The non-Qwen sets require the 14.4.1
+adapter fix so they iterate against the real client, not the harness bare-send.
+
+**Files in scope:**
+- agents/strategic/prompts/qwen3_32b/ (new bespoke set: the 4 templates — crewmate_report, impostor_report, accusation_round [cover directive wired into the reply path if 14.4 showed it binding], vote_ballot — same output schema)
+- agents/strategic/prompts/qwen3_32b_thinking/ (new bespoke set for the thinking variant; may share most templates with `qwen3_32b`, author only what genuinely differs)
+- agents/strategic/prompts/qwen3_30b_a3b/ (new bespoke set)
+- agents/strategic/prompts/glm_4_32b/ (new bespoke set; requires the 14.4.1 adapter fix to run on the real client)
+- agents/strategic/prompts/cydonia_24b/ (new bespoke set; requires the 14.4.1 adapter fix)
+- orchestrator/game.py (register each new set in the per-set prompt-version registry; preserve the merged 13.5 flag wiring)
+- experiments/lab/report-featherless-sweep.md (append the per-set new-vs-pinned-9B A/B delta on each set's own model)
+
+**Files NOT in scope:**
+- agents/strategic/prompts/qwen3_5_9b/ (the pinned 9B set is frozen — never edited)
+- agents/strategic/prompts/loader.py (the selector seam landed in 14.2; this only adds set directories)
+- replays/samples/ (re-record is 14.7)
+- llm/ (the provider adapter is 14.1; the `enable_thinking` conditional is 14.4.1)
+- per-agent model/set routing for heterogeneous-model games (structural; deferred to Phase 15 — these sets are the enabler, but 14.5 authors + validates them HOMOGENEOUSLY)
+
+**Definition of done:**
+- [ ] A bespoke prompt set is authored for EACH candidate (`qwen3_32b`, `qwen3_32b_thinking`, `qwen3_30b_a3b`, `glm_4_32b`, `cydonia_24b`) under its own `agents/strategic/prompts/<set>/`, built from the ground up (not copied from the 9B set), registered in the per-set version registry and selectable via `AILIBI_PROMPT_SET`.
+- [ ] Every set's turns emit the SAME output JSON schema (`MeetingTurn` / `VoteBallot`) so all sets parse identically — a cross-set parse check over a reconstructed context confirms it; the output contract is the one hard invariant.
+- [ ] A re-sweep over the SAME reconstructed contexts records each set's delta vs the pinned-9B prompts ON its own model (mechanical metrics + parse-success); the pinned `qwen3_5_9b` set is unchanged.
+- [ ] Where 14.4 showed the cover directive is a binding lever, it is wired into the new set's reply path (not gated off the body-report opening); otherwise the report records why it was not.
+- [ ] Every new set renders under `StrictUndefined` with the existing loader kwargs (no template kwarg drift); a render smoke test over a reconstructed context passes for each.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+This is where the owner's "simple instructions, generate deduction + interesting sim" intent lands, per
+candidate. For each set, start from the OUTPUT contract (the shared `MeetingTurn` / `VoteBallot` schema and the
+loader kwargs the templates may reference — `agent_id`, `rendered_memory`, `transcript`, `contradictions`,
+`prior_turn`, `turn_kind`, `living_ids`, `dead_ids`, `is_impostor`, `is_body_report`) and write the
+natural-language instruction body FRESH for that model — do NOT port the 9B's stacked-imperative guard-rails.
+The JSON contract is FROZEN (only the instruction prose changes), which is what keeps `model_validate_json` and
+the recording seam working across every set and is the precondition for later heterogeneous play. The
+`qwen3_32b_thinking` set will usually differ from `qwen3_32b` in only a template or two (a thinking model needs
+less step-by-step coaxing) — author only what differs, but keep it a self-contained directory. Re-use the
+14.3/14.4 harness to A/B: render each set over the same `contexts.pkl` and grade with the identical `_grade`.
+GLM / Cydonia need the 14.4.1 adapter fix to iterate against the real client rather than the sweep's
+bare-send.
 
 **Integration risk:**
 
 The new prompts co-vary with the model by design (owner decision), so the 9B comparison is a REFERENCE point,
-not a controlled ablation — say so in the report and do not over-claim causality. The output schema must not
-drift: a reworded prompt that changes the emitted JSON shape breaks `model_validate_json` and the recording
-seam. Validate every new template renders under `StrictUndefined` with the exact loader kwargs before the
-re-sweep, or the sweep aborts on an `UndefinedError` rather than a behavior signal.
+not a controlled ablation — say so in the report and do not over-claim causality. Authoring 5 bespoke sets
+multiplies the schema-drift surface: each set is an independent output surface, and a single set drifting the
+emitted JSON shape breaks `model_validate_json`, its own recording, AND the same-schema invariant that later
+heterogeneous play depends on. Validate every new template renders under `StrictUndefined` with the exact
+loader kwargs AND parses to the shared schema before the re-sweep, or the sweep aborts on an `UndefinedError` /
+`ValidationError` rather than a behavior signal.
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-5-new-model-prompts.md`
 
@@ -444,8 +523,9 @@ re-sweep, or the sweep aborts on an `UndefinedError` rather than a behavior sign
 **Complexity:** Small
 
 Design-thread decision (no code): read the 14.4/14.5 sweep evidence and lock the baseline tuple before any
-re-record exists — the chosen meeting_model + trigger_model Featherless ids, the chosen prompt set, the
-recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), the
+re-record exists — the chosen meeting_model + trigger_model Featherless ids, the chosen prompt set (ONE of the
+14.5 bespoke sets; the baseline stays HOMOGENEOUS — the other bespoke sets remain available but unrecorded,
+for the Phase-15 heterogeneous-games task they enable), the recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`), the
 `response_format_mode` (`json_object` default per the 14.1 live finding 2026-06-27 — strict `json_schema` is
 rejected by the slate; `json_schema` stays selectable), the substrate-flag
 config for the re-record (all 4 13.5 flags ON per owner decision 2026-06-26; 14.8's per-lever ablation
@@ -466,6 +546,7 @@ not an improved one.
 **Definition of done:**
 - [ ] The locked (meeting_model, trigger_model) Featherless ids are recorded in `tasks/phase-14.md` with their evidence from the sweep report.
 - [ ] The chosen prompt set and the recorded-baseline thinking policy (`fail_loud` unless the owner signs off on `strip`) are recorded with rationale.
+- [ ] The locked baseline is HOMOGENEOUS — ONE (meeting_model, trigger_model, prompt set, mode); the other 14.5 bespoke sets remain available but are NOT recorded (heterogeneous-model play is a Phase-15 task enabled by them).
 - [ ] The `response_format_mode` is recorded = `json_object` (the 14.1 live finding 2026-06-27: strict `json_schema` 400s on the slate), with `json_schema` noted as selectable for a future endpoint and no silent fallback between modes.
 - [ ] The re-record substrate-flag config is recorded = all 4 13.5 flags ON (owner decision 2026-06-26), with 14.8's per-lever ablation noted as characterization (non-gating).
 - [ ] A re-record go/no-go is recorded, explicitly allowing a NO-GO ("no candidate clears the structured-output / behavior bar; stay on 9B / escalate the information ceiling").
@@ -569,7 +650,8 @@ close audit framing the result as an honest finding: state whether the stronger 
 hypothesis is can the NEW model DRIVE the corrected substrate where the 9B couldn't (the 9B's voter sat at
 suspicion 1.00 over the 0.60 gate yet the meeting SKIPPED) — and, if not, whether the evidence supports the
 information-ceiling hypothesis (single-room vision → ~45% detector precision → correct SKIP) even with the
-corrected substrate ON, recommending Phase 15 (asymmetric visibility / information richness). This is
+corrected substrate ON, recommending Phase 15 (asymmetric visibility / information richness; and
+heterogeneous-model games — per-agent model routing — enabled by the 14.5 bespoke same-schema sets). This is
 characterization, not a gate — the phase already merged on the valid new baseline (14.7); a flat or down R1 is
 a recorded finding.
 
