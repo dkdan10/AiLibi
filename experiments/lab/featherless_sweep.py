@@ -295,6 +295,10 @@ class SweepConfig:
     substrates: tuple[bool, ...] = (False, True)
     base_url: str | None = None
     models: tuple[ModelSpec, ...] = SLATE
+    # Append to the results file instead of truncating — used to re-run a single
+    # model (``--models``) after an environment outage and merge it back, rather
+    # than repeating the whole multi-hour matrix.
+    append: bool = False
 
 
 @dataclass(frozen=True)
@@ -898,7 +902,7 @@ async def run_sweep(cfg: SweepConfig, *, api_key: str) -> int:
     sem = asyncio.Semaphore(cfg.concurrency)
     n_rows = 0
     matrix_log: list[str] = []
-    with RESULTS.open("w", encoding="utf-8") as sink:
+    with RESULTS.open("a" if cfg.append else "w", encoding="utf-8") as sink:
 
         def emit(rec: dict[str, Any]) -> None:
             nonlocal n_rows
@@ -1676,6 +1680,20 @@ def main() -> int:
         help="Comma list of substrates to run: off, on, or off,on.",
     )
     r.add_argument("--base-url", type=str, default=None)
+    r.add_argument(
+        "--models",
+        type=str,
+        default=None,
+        help="Comma list of model LABELS to run (default all). Use with --append "
+        "to re-run a single model after an outage and merge it back, e.g. "
+        "--models cydonia-24b --append.",
+    )
+    r.add_argument(
+        "--append",
+        action="store_true",
+        help="Append to the results file instead of truncating (for a --models "
+        "partial re-run merged into an existing matrix).",
+    )
     sub.add_parser("report", help="(re)generate the report from the results jsonl")
     args = parser.parse_args()
 
@@ -1696,6 +1714,16 @@ def main() -> int:
             + ")"
         )
     substrates = tuple(t == "on" for t in tokens)
+    models = SLATE
+    if args.models:
+        want = {m.strip() for m in args.models.split(",") if m.strip()}
+        models = tuple(s for s in SLATE if s.label in want)
+        unknown = want - {s.label for s in SLATE}
+        if unknown or not models:
+            raise SystemExit(
+                f"--models: unknown label(s) {sorted(unknown)}; "
+                f"valid: {[s.label for s in SLATE]}"
+            )
     cfg = SweepConfig(
         sample_dir=args.sample_dir,
         facts_path=args.facts,
@@ -1706,6 +1734,8 @@ def main() -> int:
         latency_samples=args.latency_samples,
         substrates=substrates,
         base_url=args.base_url,
+        models=models,
+        append=args.append,
     )
     rc = asyncio.run(run_sweep(cfg, api_key=api_key))
     if rc == 0:
