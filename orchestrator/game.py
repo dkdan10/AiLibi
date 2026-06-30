@@ -280,21 +280,24 @@ DEFAULT_PROMPT_VERSIONS: Final[Mapping[str, str]] = {
 # prefixing or reformatting the 9B set's keys/values. New sets register
 # themselves here (Task 14.5) keyed by the same ``AILIBI_PROMPT_SET`` selector
 # the loader (:mod:`agents.strategic.prompts.loader`) resolves.
-def _bespoke_versions(set_name: str) -> Mapping[str, str]:
+def _bespoke_versions(set_name: str, version: str = "v1") -> Mapping[str, str]:
     """Per-set ``prompt_versions`` for a Task 14.5 bespoke set.
 
     Every bespoke set carries the SAME four keys as :data:`DEFAULT_PROMPT_VERSIONS`
     (so the recording seam reads them identically — the same-schema invariant,
     owner decision 2026-06-30) but its OWN version VALUES, namespaced by the set
-    name (``<template>.<set>.v1``). A new-model replay is distinguished by these
-    strings plus its recorded model id, never by reformatting the 9B set's values.
+    name (``<template>.<set>.<version>``). A new-model replay is distinguished by
+    these strings plus its recorded model id, never by reformatting the 9B set's
+    values. ``version`` bumps when a set's templates are revised as a unit (e.g.
+    ``glm_4_32b`` -> ``v2`` after the response-shape hardening that lifted its
+    structured-output parse-success).
     """
 
     return {
-        "crewmate_report": f"crewmate_report.{set_name}.v1",
-        "impostor_report": f"impostor_report.{set_name}.v1",
-        "accusation_round": f"accusation_round.{set_name}.v1",
-        "vote_ballot": f"vote_ballot.{set_name}.v1",
+        "crewmate_report": f"crewmate_report.{set_name}.{version}",
+        "impostor_report": f"impostor_report.{set_name}.{version}",
+        "accusation_round": f"accusation_round.{set_name}.{version}",
+        "vote_ballot": f"vote_ballot.{set_name}.{version}",
     }
 
 
@@ -309,7 +312,7 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     "qwen3_32b": _bespoke_versions("qwen3_32b"),
     "qwen3_32b_thinking": _bespoke_versions("qwen3_32b_thinking"),
     "qwen3_30b_a3b": _bespoke_versions("qwen3_30b_a3b"),
-    "glm_4_32b": _bespoke_versions("glm_4_32b"),
+    "glm_4_32b": _bespoke_versions("glm_4_32b", version="v2"),
     "cydonia_24b": _bespoke_versions("cydonia_24b"),
 }
 

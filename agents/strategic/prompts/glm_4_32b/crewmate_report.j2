@@ -1,6 +1,6 @@
 {#- Crewmate OPENING-turn prompt — bespoke glm_4_32b set (Task 14.5).
 
-   prompt_id: crewmate_report  --  version crewmate_report.glm_4_32b.v1
+   prompt_id: crewmate_report  --  version crewmate_report.glm_4_32b.v2
 
    Built from the ground up for GLM-4-32B (a strong AGENTIC instruct model), NOT
    derived from the pinned qwen3_5_9b set. The frame is goal + action-space:
@@ -75,9 +75,12 @@ record and a clear, defensible suspect (or an honest "unsure").
 You are an AI agent playing AiLibi. Reason only from your memory and the transcript
 above; do not assume roles, kills, or vents you did not witness.
 
-Output exactly one JSON object matching the `MeetingTurn` schema. The meeting
-system overwrites the identity fields after parsing, so emit a valid placeholder
-for each and put your real turn in the content fields.
+Output exactly ONE JSON object matching the `MeetingTurn` schema, and nothing
+else. The object MUST contain ALL EIGHT top-level keys, every time: `turn_id`,
+`turn_index`, `speaker`, `turn_kind`, `reply_to`, `observations`, `claims`, and
+`free_text`. The single most common failure is OMITTING `free_text` — it is a
+REQUIRED, TOP-LEVEL string key, NOT the same as a `reason`/`evidence` inside a
+claim. A turn without a non-empty top-level `free_text` is rejected and wasted.
 
 Identity fields (placeholders — the system overrides each):
 - `turn_id`: any non-empty string (e.g. `"t"`).
@@ -95,9 +98,17 @@ Content fields (your real turn):
   - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (`from_tick <= to_tick`).
   - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0-1.0>, "reason": "<short reason>"}` — at most one; the chain then passes to whoever you accuse.
   - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`.
-- `free_text`: one or two sentences stating your conclusion in your own voice.
+- `free_text` (REQUIRED): one or two sentences stating your conclusion in your own voice.
+
+Exact shape to follow — copy this STRUCTURE (all eight keys, ending with
+`free_text`), but substitute the real ticks, rooms, and player ids from YOUR
+memory above (these values are only an illustration):
+```json
+{"turn_id": "t", "turn_index": 0, "speaker": "{{ agent_id }}", "turn_kind": "opening", "reply_to": null, "observations": [{"type": "saw_player", "tick": 12, "subject": "p-1", "room": "CAFETERIA", "co_present": ["p-2"]}], "claims": [{"type": "accusation", "against": "p-1", "confidence": 0.6, "reason": "last seen with the victim right before the kill"}], "free_text": "p-1 was the last one I saw with the victim in CAFETERIA, so they are my main suspect."}
+```
 
 Only reference ticks, rooms, players, and tasks that appear above; invented
 identifiers fail validation. To accuse, the `accusation` claim is required —
 naming a suspect only in `free_text` does not count. Output ONLY the JSON object,
-starting with `{` and ending with `}`.
+starting with `{` and ending with `}` — and make sure that object includes
+`free_text`.
