@@ -1,5 +1,20 @@
 # Phase 14 — Integrate Featherless AI: provider + model/prompt migration
 
+> **STATUS: IN PROGRESS (updated 2026-07-01).** Provider + prompt machinery landed and the model/prompt
+> tuple is LOCKED. Merged: 14.1 (`FeatherlessClient` adapter), 14.2 (per-model prompt-set restructure — 9B
+> set pinned byte-identically), 14.3 (provider-neutral probe backend), 14.4 (model × thinking-mode sweep),
+> 14.4.1 (adapter `enable_thinking` conditional — unblocks GLM/Cydonia), 14.5 (five bespoke per-candidate
+> prompt sets + live A/B re-sweep), 14.6 (baseline lock — **GO**).
+> **Locked baseline (14.6):** meeting_model = trigger_model = `Qwen/Qwen3-32B`, prompt set = `qwen3_32b`
+> (non-thinking), thinking policy = `fail_loud`, `response_format_mode = json_object`, all 4 13.5 substrate
+> flags ON.
+> **NEXT = Task 14.7 — smoke → re-record.** Smoke 3–5 seeds @ 9p2i to confirm the thinking policy holds and
+> structured-output parse-success ≈ 100% under the FROZEN token caps (turn 2048 / vote 1024), project the
+> full-run wall time, STOP for operator go; then re-record BOTH committed sets (4p1i + 9p2i, all 50 seeds) on
+> the locked tuple with all 4 flags ON in ONE atomic PR, stamping the flag config into the MANIFEST + replay
+> metadata, and pass the HARD validity gate. Then 14.8 (R-gate measurement + phase close) and 14.9 (adopted
+> levers default-ON).
+
 Goal: migrate the canonical agent-intelligence provider from local Ollama `qwen3.5:9b` to a hosted
 **Featherless AI** model. The 9B's 50-seed tournament takes ~13h and Phase 13 closed concluding
 "mechanism built, the 9B can't drive it" (R1 = 3/50 games decided by ejection, eject-rate 9%, 177/195
