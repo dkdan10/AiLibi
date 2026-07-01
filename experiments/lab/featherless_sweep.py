@@ -1377,6 +1377,76 @@ def _delta_pp(new: Mapping[str, Any], base: Mapping[str, Any] | None, key: str) 
     return f"{100 * (_rate(new, key) - _rate(base, key)):+.0f} pp"
 
 
+def _summ_vote(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    parsed = [r for r in rows if r.get("parsed_ok")]
+    return {
+        "n": len(rows),
+        "parsed": len(parsed),
+        "conv": sum(1 for r in parsed if r.get("voted_available_impostor")),
+    }
+
+
+def _summ_opening(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    parsed = [r for r in rows if r.get("parsed_ok")]
+    return {
+        "n": len(rows),
+        "parsed": len(parsed),
+        "self_co": sum(1 for r in parsed if r.get("self_co_locates_kill")),
+        "confess": sum(1 for r in parsed if r.get("self_incriminating_text")),
+    }
+
+
+def _align_by_item(
+    new_rows: Sequence[Mapping[str, Any]],
+    base_rows: Sequence[Mapping[str, Any]],
+    *,
+    corpus: str,
+    substrate: str,
+    cover: str | None = None,
+) -> dict[
+    tuple[str, str], tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], int]
+]:
+    """Per (label, mode): the new + base rows restricted to their SHARED item ids.
+
+    The bespoke arm and the pinned-9B arm can differ in reply-cap (the thinking set
+    ran at cap 8 vs the 9B baseline's 16), so a naive per-(label,mode) aggregate
+    would compare DIFFERENT items with different denominators (PR #207 Codex round
+    2). This intersects the two arms on ``item`` id and returns both arms filtered
+    to that shared set, so every A/B delta is a true SAME-CONTEXTS comparison and
+    the aligned ``n`` is reported. A cell with no overlap is dropped.
+    """
+
+    def _by_item(
+        rows: Sequence[Mapping[str, Any]],
+    ) -> dict[tuple[str, str], dict[str, Mapping[str, Any]]]:
+        out: dict[tuple[str, str], dict[str, Mapping[str, Any]]] = {}
+        for r in rows:
+            if r.get("corpus") != corpus or r.get("substrate") != substrate:
+                continue
+            if cover is not None and r.get("cover") != cover:
+                continue
+            out.setdefault((str(r["label"]), str(r["mode"])), {})[
+                str(r.get("item"))
+            ] = r
+        return out
+
+    new_by, base_by = _by_item(new_rows), _by_item(base_rows)
+    aligned: dict[
+        tuple[str, str], tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], int]
+    ] = {}
+    for key, ndict in new_by.items():
+        bdict = base_by.get(key, {})
+        shared = sorted(set(ndict) & set(bdict))
+        if not shared:
+            continue
+        aligned[key] = (
+            [ndict[i] for i in shared],
+            [bdict[i] for i in shared],
+            len(shared),
+        )
+    return aligned
+
+
 def _ab_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     """The Task 14.5 A/B addendum: each bespoke set vs the pinned-9B set on its
     own model, over the SAME reconstructed contexts (the one clean control in a
@@ -1429,29 +1499,33 @@ def _ab_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
 
     base = _rows_for_set(rows, DEFAULT_PROMPT_SET)
     # Reply corpus (cover OFF): self-co-location is the headline impostor tell.
+    # ITEM-ALIGNED: both arms are restricted to their shared item ids, so a set
+    # run at a smaller reply-cap (the thinking set at 8 vs the 9B baseline's 16)
+    # is compared over the SAME contexts, not different denominators (Codex r2).
     out.append("### Reply corpus (cover OFF) — self-co-location is the impostor tell")
     out.append("")
     out.append(
-        "| prompt_set | model | mode | substrate | parse new/9B | deflect new/9B "
-        "| self-co-loc new/9B (Δ) | self-flag new/9B (Δ) |"
+        "| prompt_set | model | mode | substrate | items | parse new/9B | deflect "
+        "new/9B | self-co-loc new/9B (Δ) | self-flag new/9B (Δ) |"
     )
-    out.append("|---|---|---|---|---|---|---|---|")
+    out.append("|---|---|---|---|---|---|---|---|---|")
     for ps in bespoke:
         new_rows = _rows_for_set(rows, ps)
         for substrate in ("flag_off", "flag_on"):
-            new_g = _group_reply(new_rows, cover="off", substrate=substrate)
-            base_g = _group_reply(base, cover="off", substrate=substrate)
-            for label, mode in _ordered_cells(new_g):
-                ns = new_g[(label, mode)]
-                bs = base_g.get((label, mode))
-                np_, nn = int(ns["parsed"]), int(ns["n"])
-                bp = f"{_pct(int(bs['parsed']), int(bs['n']))}" if bs else "—"
-                bd = f"{_pct(int(bs['deflect']), int(bs['parsed']))}" if bs else "—"
-                bco = f"{_pct(int(bs['self_co']), int(bs['parsed']))}" if bs else "—"
-                bfl = f"{_pct(int(bs['self_flag']), int(bs['parsed']))}" if bs else "—"
+            aligned = _align_by_item(
+                new_rows, base, corpus="reply", substrate=substrate, cover="off"
+            )
+            for label, mode in _ordered_cells(aligned):
+                nrows, brows, n_shared = aligned[(label, mode)]
+                ns, bs = _summ_reply(nrows), _summ_reply(brows)
+                np_ = int(ns["parsed"])
+                bp = _pct(int(bs["parsed"]), int(bs["n"]))
+                bd = _pct(int(bs["deflect"]), int(bs["parsed"]))
+                bco = _pct(int(bs["self_co"]), int(bs["parsed"]))
+                bfl = _pct(int(bs["self_flag"]), int(bs["parsed"]))
                 out.append(
-                    f"| {ps} | {label} | {mode} | {substrate} | "
-                    f"{_pct(np_, nn)} / {bp} | "
+                    f"| {ps} | {label} | {mode} | {substrate} | {n_shared} | "
+                    f"{_pct(np_, int(ns['n']))} / {bp} | "
                     f"{_pct(int(ns['deflect']), np_)} / {bd} | "
                     f"{_pct(int(ns['self_co']), np_)} / {bco} "
                     f"({_delta_pp(ns, bs, 'self_co')}) | "
@@ -1460,63 +1534,84 @@ def _ab_section(rows: Sequence[Mapping[str, Any]]) -> list[str]:
                 )
     out.append("")
     out.append(
-        "Self-co-location Δ is new-set minus pinned-9B-set on the same model "
-        "(negative = the bespoke set self-incriminates LESS); self-flag Δ likewise."
+        "`items` is the count of item ids present in BOTH arms — the delta is over "
+        "exactly those SAME reconstructed contexts (the thinking set ran at "
+        "reply-cap 8, so its row aligns to 8 shared items vs 16 for the others; "
+        "read its Δ as the smaller-sample signal it is). Self-co-location Δ is "
+        "new-set minus pinned-9B-set on the same model (negative = the bespoke set "
+        "self-incriminates LESS); self-flag Δ likewise."
     )
     out.append("")
-    # Vote corpus: conversion on the hard inversion cases.
+    # Vote corpus: conversion on the hard inversion cases (item-aligned).
     out.append("### Vote corpus — parse-success + conversion")
     out.append("")
     out.append(
-        "| prompt_set | model | mode | substrate | parse new/9B | conversion new/9B |"
+        "| prompt_set | model | mode | substrate | items | parse new/9B | conversion new/9B |"
     )
-    out.append("|---|---|---|---|---|---|")
+    out.append("|---|---|---|---|---|---|---|")
     has_vote = False
     for ps in bespoke:
         new_rows = _rows_for_set(rows, ps)
         for substrate in ("flag_off", "flag_on"):
-            new_g = _group_vote(new_rows, substrate=substrate)
-            base_g = _group_vote(base, substrate=substrate)
-            for label, mode in _ordered_cells(new_g):
+            aligned = _align_by_item(new_rows, base, corpus="vote", substrate=substrate)
+            for label, mode in _ordered_cells(aligned):
                 has_vote = True
-                ns = new_g[(label, mode)]
-                bs = base_g.get((label, mode))
-                bp = f"{_pct(int(bs['parsed']), int(bs['n']))}" if bs else "—"
-                bc = f"{_pct(int(bs['conv']), int(bs['parsed']))}" if bs else "—"
+                nrows, brows, n_shared = aligned[(label, mode)]
+                ns, bs = _summ_vote(nrows), _summ_vote(brows)
+                bp = _pct(int(bs["parsed"]), int(bs["n"]))
+                bc = _pct(int(bs["conv"]), int(bs["parsed"]))
                 out.append(
-                    f"| {ps} | {label} | {mode} | {substrate} | "
+                    f"| {ps} | {label} | {mode} | {substrate} | {n_shared} | "
                     f"{_pct(int(ns['parsed']), int(ns['n']))} / {bp} | "
                     f"{_pct(int(ns['conv']), int(ns['parsed']))} / {bc} |"
                 )
     if not has_vote:
-        out.append("| _(no vote rows in the bespoke arm)_ | | | | | |")
+        out.append("| _(no vote rows in the bespoke arm)_ | | | | | | |")
     out.append("")
-    # Opening corpus, only if the bespoke arm ran it (requires --facts).
+    # Opening corpus: item-aligned IF the bespoke arm ran it (requires --facts).
     op_lines: list[str] = []
     for ps in bespoke:
         new_rows = _rows_for_set(rows, ps)
         for substrate in ("flag_off", "flag_on"):
-            new_g = _group_opening(new_rows, substrate=substrate)
-            base_g = _group_opening(base, substrate=substrate)
-            for label, mode in _ordered_cells(new_g):
-                ns = new_g[(label, mode)]
-                bs = base_g.get((label, mode))
-                bp = f"{_pct(int(bs['parsed']), int(bs['n']))}" if bs else "—"
-                bco = f"{_pct(int(bs['self_co']), int(bs['parsed']))}" if bs else "—"
+            aligned = _align_by_item(
+                new_rows, base, corpus="opening", substrate=substrate
+            )
+            for label, mode in _ordered_cells(aligned):
+                nrows, brows, n_shared = aligned[(label, mode)]
+                nsv, bsv = _summ_opening(nrows), _summ_opening(brows)
+                bp = _pct(int(bsv["parsed"]), int(bsv["n"]))
+                bco = _pct(int(bsv["self_co"]), int(bsv["parsed"]))
                 op_lines.append(
-                    f"| {ps} | {label} | {mode} | {substrate} | "
-                    f"{_pct(int(ns['parsed']), int(ns['n']))} / {bp} | "
-                    f"{_pct(int(ns['self_co']), int(ns['parsed']))} / {bco} |"
+                    f"| {ps} | {label} | {mode} | {substrate} | {n_shared} | "
+                    f"{_pct(int(nsv['parsed']), int(nsv['n']))} / {bp} | "
+                    f"{_pct(int(nsv['self_co']), int(nsv['parsed']))} / {bco} |"
                 )
+    out.append("### Opening corpus — impostor self-report")
+    out.append("")
     if op_lines:
-        out.append("### Opening corpus — impostor self-report")
-        out.append("")
         out.append(
-            "| prompt_set | model | mode | substrate | parse new/9B | self-co-loc new/9B |"
+            "| prompt_set | model | mode | substrate | items | parse new/9B | self-co-loc new/9B |"
         )
-        out.append("|---|---|---|---|---|---|")
+        out.append("|---|---|---|---|---|---|---|")
         out.extend(op_lines)
-        out.append("")
+    else:
+        # Flag the gap EXPLICITLY (Codex r2): the bespoke arm did not run the
+        # opening corpus, so the new impostor_report templates are NOT exercised
+        # here — the committed opening rows are the pinned-9B prompts only.
+        out.append(
+            "_The bespoke A/B did **not** run the opening corpus: it requires a "
+            "`--facts` gameplay-facts file (produced by "
+            "`audits/workflows/extract_gameplay_facts.py`), which is not committed "
+            "in-repo, so the reply+vote passes ran but the opening pass was skipped "
+            "(the run logs this — no silent truncation). The new `impostor_report` "
+            "(opening-turn) templates are therefore NOT exercised in this live A/B; "
+            "they are validated OFFLINE (StrictUndefined render + shared-schema "
+            "parse, `tests/agents/test_bespoke_prompt_sets.py`), and 14.4 found the "
+            "opening corpus non-discriminating (0% self-incriminating text across "
+            "every model). To measure it live, generate the facts file and re-run "
+            "each set with `--facts`._"
+        )
+    out.append("")
     out.append(
         "**Cover directive (14.4 finding):** the 14.4 sweep found the cover "
         "directive a WEAK / inconsistent lever (mean Δ +2 pp, leaning information "
@@ -2153,6 +2248,20 @@ def main() -> int:
             raise SystemExit(
                 f"--prompt-set {args.prompt_set!r} is not a known bespoke set "
                 f"(valid: {sorted(_SET_OWNER)})"
+            )
+        # A bespoke A/B MUST merge into the committed results: they hold the
+        # pinned-9B baseline the A/B compares against. Without --append,
+        # ``run_sweep`` opens the results file in write mode and TRUNCATES that
+        # baseline, so the report's deltas degrade to missing comparisons. Fail
+        # loud on this common operator mistake rather than silently wiping it
+        # (AGENTS.md: no silent fallbacks).
+        if not args.append:
+            raise SystemExit(
+                f"--prompt-set {args.prompt_set} requires --append: a bespoke A/B "
+                "run must MERGE into the committed results, which hold the pinned-9B "
+                "baseline it compares against. Without --append the results file is "
+                "opened in write mode and that baseline is wiped. Re-run with "
+                "--append."
             )
         owner_label, owner_thinking = owner
         owner_mode = _mode_label(owner_thinking)
