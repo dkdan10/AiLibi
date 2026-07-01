@@ -263,14 +263,27 @@ done
 #                                     provider the user did not intend, AGENTS.md)
 # The resolved provider is echoed (dry-run + real path) and EXPORTED below, so it
 # is never silent and never falls through to build_default_client()'s fake default.
+#   featherless                    -> featherless (hosted flat-rate provider, Task
+#                                     14.7 baseline re-record; $0 provider-keyed
+#                                     cost, key required, the locked
+#                                     Qwen/Qwen3-32B model + qwen3_32b prompt set
+#                                     + all four 13.5 substrate flags exported by
+#                                     the operator — see the hint in
+#                                     tasks/phase-14.md Task 14.7)
 DEFAULT_OLLAMA_HOST="localhost:11434"
 DEFAULT_OLLAMA_MODEL="qwen3.5:9b"
+# The locked Featherless baseline model (Task 14.6); mirrors
+# llm.featherless_client.DEFAULT_FEATHERLESS_MODEL. Used for the no-meeting-seed
+# MANIFEST attribution so a Featherless refresh attributes those rows to the
+# model it actually ran with, not the anthropic/ollama default.
+DEFAULT_FEATHERLESS_MODEL="Qwen/Qwen3-32B"
 PROVIDER="$(printf '%s' "${AILIBI_LLM_PROVIDER:-anthropic}" | tr '[:upper:]' '[:lower:]')"
 case "$PROVIDER" in
   ollama) ;;
+  featherless) ;;
   anthropic | fake) PROVIDER="anthropic" ;;
   *)
-    echo "Error: unknown AILIBI_LLM_PROVIDER='$PROVIDER'; expected 'anthropic' or 'ollama'." >&2
+    echo "Error: unknown AILIBI_LLM_PROVIDER='$PROVIDER'; expected 'anthropic', 'ollama', or 'featherless'." >&2
     exit 1
     ;;
 esac
@@ -297,10 +310,20 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] provider: $PROVIDER"
   if [[ "$PROVIDER" == "ollama" ]]; then
     echo "[dry-run] preflight: would ping http://$OLLAMA_HOST/api/tags for reachability and confirm model $OLLAMA_MODEL is pulled"
+  elif [[ "$PROVIDER" == "featherless" ]]; then
+    echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
   else
     echo "[dry-run] preflight: would require ANTHROPIC_API_KEY (real-provider spend)"
   fi
   echo "[dry-run] meeting model: ${AILIBI_LLM_MEETING_MODEL:-(provider default)}"
+  # Provenance the recorded replay self-describes (Task 14.7): the prompt set and
+  # the four Phase-13.5 substrate levers are read from the ambient env by the
+  # game (AILIBI_PROMPT_SET / AILIBI_TESTIMONY_AS_CONTENT / *_WITNESSED_KILL_EVIDENCE
+  # / *_MOVEMENT_PERCEPTION / *_UNFREEZE_MEMORY) and stamped into each replay's
+  # game_over record + the MANIFEST flags column. Echo them so the substrate is
+  # never silent (AGENTS.md "no silent fallbacks").
+  echo "[dry-run] prompt set: ${AILIBI_PROMPT_SET:-(default qwen3_5_9b)}"
+  echo "[dry-run] substrate flags: testimony=${AILIBI_TESTIMONY_AS_CONTENT:-0} witnessed_kill=${AILIBI_WITNESSED_KILL_EVIDENCE:-0} movement=${AILIBI_MOVEMENT_PERCEPTION:-0} unfreeze=${AILIBI_UNFREEZE_MEMORY:-0}"
   echo "[dry-run] per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
   echo "[dry-run]   AILIBI_LLM_PROVIDER=$PROVIDER uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $NUM_PLAYERS --num-impostors $NUM_IMPOSTORS --tasks-per-crewmate $TASKS_PER_CREWMATE --force"
   if [[ "$mode" == "full" ]]; then
@@ -324,6 +347,42 @@ if [[ "$PROVIDER" == "ollama" ]]; then
     exit 1
   fi
   echo "Ollama preflight OK: $OLLAMA_HOST reachable, model $OLLAMA_MODEL present."
+elif [[ "$PROVIDER" == "featherless" ]]; then
+  # Featherless is a hosted flat-rate provider ($0 provider-keyed cost, Task
+  # 14.7), but the key must still be set BEFORE any call so the run fails loud
+  # here instead of crashing mid-record (mirrors build_default_client's fail-loud
+  # on a missing FEATHERLESS_API_KEY). Only the prefix is printed, never the key.
+  if [[ -z "${FEATHERLESS_API_KEY:-}" ]]; then
+    echo "Error: FEATHERLESS_API_KEY must be set for a featherless sample refresh." >&2
+    exit 1
+  fi
+  echo "Using Featherless API key prefix: ${FEATHERLESS_API_KEY:0:8}"
+  # Task 14.7: refresh_samples.sh records the CANONICAL baseline into
+  # replays/samples/, and the only sanctioned Featherless baseline is the
+  # 14.6-locked tuple — prompt set qwen3_32b + all four 13.5 substrate flags ON.
+  # The game reads these from the ambient env; if they are unset the run would
+  # SILENTLY record the default 9B set with flags OFF and only reveal it in the
+  # MANIFEST afterward, wasting the whole (multi-hour) spend. Fail loud HERE,
+  # before any seed is staged (AGENTS.md "no silent fallbacks"). A future re-lock
+  # of the baseline updates REQUIRED_PROMPT_SET to match tasks/phase-14.md §14.6.
+  REQUIRED_PROMPT_SET="qwen3_32b"
+  substrate_errors=()
+  if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
+    substrate_errors+=("AILIBI_PROMPT_SET must be '$REQUIRED_PROMPT_SET' (got '${AILIBI_PROMPT_SET:-<unset>}')")
+  fi
+  for _flag in AILIBI_TESTIMONY_AS_CONTENT AILIBI_WITNESSED_KILL_EVIDENCE \
+               AILIBI_MOVEMENT_PERCEPTION AILIBI_UNFREEZE_MEMORY; do
+    if [[ "${!_flag:-}" != "1" ]]; then
+      substrate_errors+=("$_flag must be '1' (got '${!_flag:-<unset>}')")
+    fi
+  done
+  if (( ${#substrate_errors[@]} > 0 )); then
+    echo "Error: a featherless refresh must run the 14.6-locked substrate (Task 14.7)." >&2
+    echo "       Export the locked tuple before re-running; nothing was staged:" >&2
+    for _e in "${substrate_errors[@]}"; do echo "  - $_e" >&2; done
+    exit 1
+  fi
+  echo "Locked 14.7 substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET + all 4 flags ON."
 else
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2
@@ -380,12 +439,21 @@ active_model="${AILIBI_LLM_MEETING_MODEL:-}"
 if [[ -z "$active_model" ]]; then
   if [[ "$PROVIDER" == "ollama" ]]; then
     active_model="$DEFAULT_OLLAMA_MODEL"
+  elif [[ "$PROVIDER" == "featherless" ]]; then
+    active_model="$DEFAULT_FEATHERLESS_MODEL"
   else
     active_model="$(uv run python -c \
       'from llm.provider import DEFAULT_MEETING_MODEL; print(DEFAULT_MEETING_MODEL)')"
   fi
 fi
 echo "Attributing no-meeting seeds to model: $active_model"
+# Echo the substrate provenance the recorded replays self-stamp (Task 14.7), so
+# the operator can confirm the locked tuple is in effect and the substrate is
+# never silent (AGENTS.md "no silent fallbacks"). The game reads these from the
+# ambient env and stamps them into each replay's game_over record + the MANIFEST
+# flags column; this script does not set them.
+echo "Prompt set: ${AILIBI_PROMPT_SET:-(default qwen3_5_9b)}"
+echo "Substrate flags: testimony=${AILIBI_TESTIMONY_AS_CONTENT:-0} witnessed_kill=${AILIBI_WITNESSED_KILL_EVIDENCE:-0} movement=${AILIBI_MOVEMENT_PERCEPTION:-0} unfreeze=${AILIBI_UNFREEZE_MEMORY:-0}"
 
 # Stage each per-seed run in a temp dir on the same filesystem as the sample dir
 # so the replay can be moved into place atomically, and only after the run

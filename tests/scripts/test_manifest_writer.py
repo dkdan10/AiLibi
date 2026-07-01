@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import _manifest_writer as mw
+from orchestrator.replay import ReplayLog
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
@@ -63,7 +64,7 @@ def test_discover_seeds_sorted(small_samples: Path) -> None:
 
 def test_provenance_meeting_seed(small_samples: Path) -> None:
     fallback = mw.fallback_model(small_samples)
-    model, prompt_versions, cost, winner = mw.sample_provenance(
+    model, prompt_versions, flags, cost, winner = mw.sample_provenance(
         small_samples, _MEETING_SEED, fallback
     )
     assert model == "qwen3.5:9b"
@@ -73,6 +74,10 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     assert "vote_ballot/v7" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
+    # The committed final-9B baseline predates the Task-14.7 substrate stamp and
+    # was recorded with every lever OFF, so it carries no stamp -> the flags
+    # column reads the legacy sentinel.
+    assert flags == mw._NO_FLAGS
     # The committed re-records (Task 8.12 / Task 8.18) run on the local Ollama
     # provider: real LLM calls, zero spend, so the recorded per-seed cost is
     # exactly 0.
@@ -86,14 +91,47 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
 
 def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     fallback = mw.fallback_model(small_samples)
-    model, prompt_versions, cost, winner = mw.sample_provenance(
+    model, prompt_versions, flags, cost, winner = mw.sample_provenance(
         small_samples, _NO_MEETING_SEED, fallback
     )
     assert prompt_versions == mw._NO_MEETINGS
+    assert flags == mw._NO_FLAGS
     assert cost == "0.0000"
     # No LLM call recorded -> attributed to the directory's meeting model.
     assert model == fallback == "qwen3.5:9b"
     assert winner in {"CREWMATES", "IMPOSTORS", "null"}
+
+
+def test_provenance_reads_stamped_substrate_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A flag-ON re-record (the Task-14.7 baseline) stamps its substrate config
+    # onto the replay's game_over record; the MANIFEST flags column reports the
+    # ON levers, sorted. This is the stamp -> manifest provenance path.
+    for var in (
+        "AILIBI_TESTIMONY_AS_CONTENT",
+        "AILIBI_WITNESSED_KILL_EVIDENCE",
+        "AILIBI_MOVEMENT_PERCEPTION",
+        "AILIBI_UNFREEZE_MEMORY",
+    ):
+        monkeypatch.setenv(var, "1")
+    samples = tmp_path / "samples"
+    samples.mkdir()
+    log = ReplayLog(samples / "replay-seed-5.jsonl", game_id="headless-seed-5")
+    log.record_game_end(winner="CREWMATES", reason="TASKS_COMPLETE", tick=10)
+    log.close()
+
+    model, prompt_versions, flags, cost, winner = mw.sample_provenance(
+        samples, 5, "Qwen/Qwen3-32B"
+    )
+    assert flags == (
+        "movement_perception, testimony_as_content, "
+        "unfreeze_memory, witnessed_kill_evidence"
+    )
+    assert winner == "CREWMATES"
+    # No meeting recorded -> attributed to the active model, no prompt versions.
+    assert model == "Qwen/Qwen3-32B"
+    assert prompt_versions == mw._NO_MEETINGS
 
 
 def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None:
@@ -134,6 +172,7 @@ def test_header_uses_contracted_snake_case_column_names() -> None:
         "seed",
         "model",
         "prompt_versions",
+        "flags",
         "refreshed_at",
         "git_sha",
         "cost_usd",
@@ -148,11 +187,31 @@ def test_parse_manifest_ignores_prose_and_separators() -> None:
     text = (
         "# Title\n\nsome prose | with a pipe\n"
         f"{mw._COLUMNS}\n{mw._SEPARATOR}\n"
-        "| 3 | m | (none — no meetings) | d | sha | 0.0000 | CREWMATES |\n"
+        "| 3 | m | (none — no meetings) | testimony_as_content | d | sha "
+        "| 0.0000 | CREWMATES |\n"
     )
     rows = mw.parse_manifest(text)
     assert set(rows) == {3}
     assert rows[3].winner == "CREWMATES"
+    assert rows[3].flags == "testimony_as_content"
+
+
+def test_parse_manifest_tolerates_legacy_7_column_rows() -> None:
+    # A pre-Task-14.7 MANIFEST.md (the committed final-9B baseline) has no
+    # ``flags`` column. The parser must still read those rows so a legacy manifest
+    # merges/updates without a re-record; the missing column reads the sentinel.
+    legacy = (
+        "| seed | model | prompt_versions | refreshed_at | git_sha "
+        "| cost_usd | winner |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| 7 | qwen3.5:9b | crewmate_report.v8 | 2026-06-23 | 4289051 "
+        "| 0.0000 | IMPOSTORS |\n"
+    )
+    rows = mw.parse_manifest(legacy)
+    assert set(rows) == {7}
+    assert rows[7].model == "qwen3.5:9b"
+    assert rows[7].winner == "IMPOSTORS"
+    assert rows[7].flags == mw._NO_FLAGS
 
 
 def test_render_parse_round_trip(small_samples: Path) -> None:

@@ -144,6 +144,7 @@ from orchestrator.game import (
     apply_meeting_result,
 )
 from orchestrator.replay import (
+    SUBSTRATE_FLAG_KEYS,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
@@ -153,6 +154,7 @@ from orchestrator.replay import (
     WinnerSide,
     _state_hash,
     read_all_entries,
+    substrate_flag_snapshot,
 )
 from orchestrator.seeder import seed_initial_state
 
@@ -178,11 +180,19 @@ _TOURNAMENT_REPORT_FILENAME: Final[str] = "tournament-eval-report.json"
 _RUBRIC_FILENAME: Final[str] = "results-rubric-score.json"
 _MANIFEST_FILENAME: Final[str] = "MANIFEST.md"
 
-# The ``MANIFEST.md`` table row shape (``scripts/_manifest_writer.py``):
-# ``| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd |
-# winner |``. The git sha is column index 5 once the leading empty cell (from
-# the leading ``|``) is included; a data row's first cell is the integer seed.
-_MANIFEST_GIT_SHA_COLUMN: Final[int] = 5
+# The ``MANIFEST.md`` table row shape (``scripts/_manifest_writer.py``). Task 14.7
+# inserted an optional ``flags`` column after ``prompt_versions``, so a data row
+# split on ``|`` is now one of:
+#   legacy 7-col: ``["", seed, model, prompt_versions, refreshed_at, git_sha, cost_usd, winner, ""]``
+#   new 8-col:    ``["", seed, model, prompt_versions, flags, refreshed_at, git_sha, cost_usd, winner, ""]``
+# In BOTH, ``git_sha`` is the 4th cell from the end (``cells[-4]``) — reading it
+# by a fixed head-index would slide onto ``refreshed_at`` for the 8-col rows and
+# make the freshness guard compare a DATE. A data row's first cell is the integer
+# seed. Kept in lockstep with ``experiments.lab.rubric_score``.
+_MANIFEST_GIT_SHA_FROM_END: Final[int] = -4
+# Fewest ``|``-split cells a well-formed data row can have (the legacy 7-col row,
+# with its two empty end cells): shorter lines cannot carry ``git_sha`` at -4.
+_MANIFEST_MIN_ROW_CELLS: Final[int] = 9
 
 # Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
 # that is NOT the MVP-default flat 4p/1i set ships this sidecar so the loader can
@@ -272,6 +282,91 @@ class ReplayStateMismatchError(RuntimeError):
         super().__init__(
             f"replay state-hash mismatch for {game_id!r} at tick {tick}: "
             f"recorded {expected!r}, reconstructed {actual!r}"
+        )
+
+
+class ReplaySubstrateMismatchError(RuntimeError):
+    """A stamped replay is being reconstructed under a DIFFERENT substrate (Task 14.7).
+
+    A replay recorded with the corrected Phase-13.5 substrate stamps its lever
+    config onto its ``game_over`` record (``orchestrator.replay.GameEndReplayEntry
+    .substrate_flags``). The loader HONORS that stamp: reconstruction re-derives
+    agent memory / testimony / movement / belief through the four ``*_enabled()``
+    env reads, so playing a flag-ON recording back under a flag-OFF environment
+    (or vice versa) would silently reconstruct a memory view the recording never
+    produced. Rather than fall back silently (AGENTS.md "no silent fallbacks"),
+    the loader fails loud here and names the divergent levers + the exact env vars
+    to export. A legacy / flag-OFF replay carries NO stamp and is never checked,
+    so the committed final-9B baseline reconstructs unchanged. Surfaced as HTTP
+    500 with the offending game id in the response body.
+    """
+
+    def __init__(
+        self,
+        *,
+        game_id: str,
+        recorded: Mapping[str, bool],
+        ambient: Mapping[str, bool],
+    ) -> None:
+        self.game_id = game_id
+        self.recorded = dict(recorded)
+        self.ambient = dict(ambient)
+        differing = sorted(
+            key
+            for key in SUBSTRATE_FLAG_KEYS
+            if bool(recorded.get(key)) != bool(ambient.get(key))
+        )
+        super().__init__(
+            f"replay substrate mismatch for {game_id!r}: recorded with "
+            f"{self.recorded!r} but reconstructing under {self.ambient!r} "
+            f"(differing levers: {differing}). Export the recorded substrate "
+            "before reconstruction, e.g. "
+            "AILIBI_TESTIMONY_AS_CONTENT=1 AILIBI_WITNESSED_KILL_EVIDENCE=1 "
+            "AILIBI_MOVEMENT_PERCEPTION=1 AILIBI_UNFREEZE_MEMORY=1, so the "
+            "memory reconstruction matches the substrate the replay was recorded "
+            "under (this is not a determinism break — the per-tick state hash is "
+            "substrate-independent)."
+        )
+
+
+def _recorded_substrate_flags(
+    entries: Sequence[object],
+) -> dict[str, bool] | None:
+    """Extract the stamped substrate config from a replay's ``game_over`` record.
+
+    Mirrors :func:`orchestrator.replay.read_substrate_flags` but reads the
+    already-loaded ``entries`` (the walk reads the file once) instead of
+    re-opening the path. Returns ``None`` for a legacy / flag-OFF replay that
+    carries no stamp — the committed final-9B baseline — so the caller skips the
+    substrate check entirely for unstamped replays.
+    """
+
+    flags: dict[str, bool] | None = None
+    for entry in entries:
+        if isinstance(entry, GameEndReplayEntry) and entry.substrate_flags is not None:
+            flags = dict(entry.substrate_flags)
+    return flags
+
+
+def _assert_substrate_matches(game_id: str, entries: Sequence[object]) -> None:
+    """Fail loud if a stamped replay is reconstructed under a different substrate.
+
+    The honoring half of the Task-14.7 stamp: a flag-ON recording's memory
+    reconstruction re-derives through the four ``*_enabled()`` env reads, so it is
+    only faithful when the ambient substrate matches the one stamped at record
+    time. An unstamped (legacy / flag-OFF) replay is never checked, so the
+    committed baseline reconstructs unchanged.
+    """
+
+    recorded = _recorded_substrate_flags(entries)
+    if recorded is None:
+        return
+    ambient = substrate_flag_snapshot()
+    if any(
+        bool(recorded.get(key)) != bool(ambient.get(key)) for key in SUBSTRATE_FLAG_KEYS
+    ):
+        raise ReplaySubstrateMismatchError(
+            game_id=game_id, recorded=recorded, ambient=ambient
         )
 
 
@@ -613,6 +708,13 @@ class ReplayLoader:
 
         game_id = _game_id_for_seed(seed)
         entries = read_all_entries(path)
+        # Honor the stamped substrate (Task 14.7): a flag-ON recording's memory
+        # reconstruction below re-derives through the four ``*_enabled()`` env
+        # reads, so refuse to reconstruct it under a mismatched ambient substrate
+        # rather than silently producing a memory view the recording never made.
+        # Unstamped (legacy / flag-OFF) replays are not checked — the committed
+        # final-9B baseline reconstructs unchanged.
+        _assert_substrate_matches(game_id, entries)
         replay_entries = [e for e in entries if isinstance(e, ReplayEntry)]
         meeting_entries = tuple(e for e in entries if isinstance(e, MeetingReplayEntry))
         failed_calls = tuple(e for e in entries if isinstance(e, FailedCallReplayEntry))
@@ -2177,13 +2279,13 @@ def _manifest_git_sha(replay_dir: Path) -> str | None:
         if not line.startswith("|"):
             continue
         cells = [cell.strip() for cell in line.split("|")]
-        if len(cells) <= _MANIFEST_GIT_SHA_COLUMN:
+        if len(cells) < _MANIFEST_MIN_ROW_CELLS:
             continue
         # cells[0] is the empty leading cell; cells[1] is the seed (data rows
         # only — the header/separator rows fail the integer check).
         if not cells[1].lstrip("-").isdigit():
             continue
-        sha = cells[_MANIFEST_GIT_SHA_COLUMN]
+        sha = cells[_MANIFEST_GIT_SHA_FROM_END]
         if sha:
             shas.add(sha)
     return next(iter(shas)) if len(shas) == 1 else None
@@ -2407,6 +2509,7 @@ __all__ = [
     "DEFAULT_SET",
     "ReplayLoader",
     "ReplayStateMismatchError",
+    "ReplaySubstrateMismatchError",
     "RosterConfig",
     "SetLoaderRegistry",
     "get_loader_registry",

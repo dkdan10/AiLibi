@@ -1239,11 +1239,15 @@ def geomean_validation(facts: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# The ``MANIFEST.md`` git_sha column index once the leading empty cell (from the
-# leading ``|``) is included — kept in lockstep with
-# ``api.replay_loader._MANIFEST_GIT_SHA_COLUMN`` so the producer stamps the exact
+# ``git_sha`` is the 4th ``|``-split cell from the END of a ``MANIFEST.md`` data
+# row — robust to the optional Task-14.7 ``flags`` column (inserted after
+# ``prompt_versions``, so it shifts every HEAD-index but not the tail). A fixed
+# head-index would slide onto ``refreshed_at`` for 8-col rows and stamp a DATE as
+# the "scored-against" sha. Kept in lockstep with
+# ``api.replay_loader._MANIFEST_GIT_SHA_FROM_END`` so the producer stamps the exact
 # sha the loader's staleness guard reads back.
-_MANIFEST_GIT_SHA_COLUMN = 5
+_MANIFEST_GIT_SHA_FROM_END = -4
+_MANIFEST_MIN_ROW_CELLS = 9
 
 
 def _set_manifest_sha(set_dir: Path) -> str | None:
@@ -1266,11 +1270,11 @@ def _set_manifest_sha(set_dir: Path) -> str | None:
         if not line.startswith("|"):
             continue
         cells = [cell.strip() for cell in line.split("|")]
-        if len(cells) <= _MANIFEST_GIT_SHA_COLUMN:
+        if len(cells) < _MANIFEST_MIN_ROW_CELLS:
             continue
         if not cells[1].lstrip("-").isdigit():
             continue  # header / separator row
-        sha = cells[_MANIFEST_GIT_SHA_COLUMN]
+        sha = cells[_MANIFEST_GIT_SHA_FROM_END]
         if sha:
             shas.add(sha)
     return next(iter(shas)) if len(shas) == 1 else None
