@@ -370,7 +370,7 @@ class TestFailedCallSingleWriteGuard:
     def _record_seed_shape_row(
         log: ReplayLog,
         *,
-        model: str = "qwen3.5:9b",
+        model: str = "Qwen/Qwen3-32B",
         raw_response: str = '{\n  "turn_id": "t",\n  "turn_index": 0,\n  "speaker": "p-2"',
         input_tokens: int = 1984,
         output_tokens: int = 2048,
@@ -470,12 +470,13 @@ class TestFailedCallSingleWriteGuard:
     def test_committed_9p2i_rows_rerecord_to_their_distinct_set(
         self, tmp_path: Path
     ) -> None:
-        # Offline confirmation against the committed 9p2i set (audit gp-4):
-        # re-recording each replay's failed-call rows through the guarded
-        # chokepoint yields exactly its distinct rows in order — on the
-        # audited bytes, seeds 8/36/39 collapse 2→1 while seed 5's single
-        # non-duplicated default is untouched. Stays green after the 9.11
-        # re-record (clean bytes re-record to themselves).
+        # Offline confirmation against the committed 9p2i set: re-recording
+        # each replay's failed-call rows through the guarded chokepoint yields
+        # exactly its distinct rows in order. On the Qwen/Qwen3-32B qwen3_32b.v3
+        # re-record the committed bytes carry no duplicate failed-call shapes —
+        # every seed's rows are already distinct, so clean bytes re-record to
+        # themselves (including the rendered_vote_max carried on vote defaults,
+        # e.g. seeds 21/34/36).
         sample_files = sorted(_COMMITTED_9P2I_REPLAYS.glob("replay-seed-*.jsonl"))
         assert sample_files, f"no committed replays under {_COMMITTED_9P2I_REPLAYS}"
         for sample in sample_files:
@@ -497,6 +498,7 @@ class TestFailedCallSingleWriteGuard:
                         cost_usd=entry.cost_usd,
                         error_type=entry.error_type,
                         error_message=entry.error_message,
+                        rendered_vote_max=entry.rendered_vote_max,
                     )
             assert list(read_failed_call_entries(rerecord_path)) == distinct
 

@@ -702,7 +702,9 @@ def _seen_rooms(
     return {observer_room, *game_map.room_neighbors(observer_room)}
 
 
-def test_as_agent_fog_leaks_no_unseen_player_body_or_field() -> None:
+def test_as_agent_fog_leaks_no_unseen_player_body_or_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The As-agent fog never exposes an entity/field the agent could not perceive.
 
     Mirrors ``eval/leak_test.py`` for the spectator's per-tick visibility
@@ -715,10 +717,21 @@ def test_as_agent_fog_leaks_no_unseen_player_body_or_field() -> None:
     so they are field-hygiene-checked, not re-derived against co-location (a
     witness may move the same tick). Coverage counters assert the run actually
     exercised every channel — else the test proves nothing.
+
+    The committed 9p2i set was re-recorded on the Featherless / Qwen/Qwen3-32B
+    substrate with all four Phase-13.5 levers ON, so its memory reconstruction is
+    only faithful under that substrate: export the four flags for THIS test (never
+    module-wide) so ``ReplayLoader`` reconstructs against the stamped substrate
+    rather than tripping ``ReplaySubstrateMismatchError`` under the bare CI env.
     """
 
     if not _NINE_P_TWO_I.is_dir():
         pytest.skip("committed 9p2i sample set not present")
+
+    monkeypatch.setenv("AILIBI_TESTIMONY_AS_CONTENT", "1")
+    monkeypatch.setenv("AILIBI_WITNESSED_KILL_EVIDENCE", "1")
+    monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
+    monkeypatch.setenv("AILIBI_UNFREEZE_MEMORY", "1")
 
     game_map = load_canonical_map()
     loader = ReplayLoader(replay_dir=_NINE_P_TWO_I)
