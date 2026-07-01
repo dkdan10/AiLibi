@@ -565,15 +565,16 @@ class TestSingleWitnessInformChannel:
             {CHANNEL_BODY_PROXIMITY}
         )
 
-    def test_committed_w2_credits_no_inform(self) -> None:
+    def test_committed_w2_credits_single_witness_inform(self) -> None:
         # The inform fold is recording-time (Task 10.15); the committed W2 bytes
         # carry it LIVE. Re-extracted on the Featherless Qwen/Qwen3-32B
         # (qwen3_32b.v3, four Phase-13.5 substrate flags ON) re-record the channel
-        # credits 0 conversions: no ejection on the new bytes attributes to the
-        # single-witness inform band.
+        # credits 10 conversions to the single-witness inform band. (This reads the
+        # vote-prompt suspicion graph; the parser was updated to the qwen3_32b.v3
+        # header in this PR — before that fix it read a spurious 0.)
         report = build_report(_COMMITTED_9P2I_DIR)
         result = compute_multi_signal_conversion(report.report.games)
-        assert result.conversions_with_single_witness_inform == 0
+        assert result.conversions_with_single_witness_inform == 10
 
 
 def test_gate_spec_states_the_three_tiers_separately() -> None:

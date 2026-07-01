@@ -848,14 +848,17 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
 
     assert gate.accused_impostor_events == 137
     assert gate.accused_impostor_survivals == 71
-    assert gate.survivals_rendered_met == 0
-    assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 71
+    # The 71 accused-impostor survivals partition into rendered-met (voters saw a
+    # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,
+    # and unevidenced. On the qwen3_32b.v3 re-record the suspicion graph renders
+    # densely, so most survivals are rendered-met.
+    assert gate.survivals_rendered_met == 50
+    assert gate.survivals_sheltered_sub_gate == 5
+    assert gate.survivals_unevidenced == 16
 
     # Per-seed identities re-derived from the same committed games: the
     # genuine-class supply, the lost openings, and the sheltered survivals sit
-    # exactly where documented above (the flag-ON substrate shelters no
-    # survivor, so the sheltered set is empty and matches the 0 aggregate).
+    # exactly where documented above.
     supplied_seeds = {
         game.seed
         for game in report.report.games
@@ -938,7 +941,7 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
         for game in report.report.games
         if compute_gate_metrics((game,)).survivals_sheltered_sub_gate > 0
     }
-    assert sheltered_seeds == set()
+    assert sheltered_seeds == {10, 14, 35, 37, 38}
 
     # JSON-level guard: the committed file itself serves the gate surface and
     # the era-invalidity note (a reader pulling the raw report sees the
@@ -976,6 +979,6 @@ def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
 
     assert gate.accused_impostor_events == 34
     assert gate.accused_impostor_survivals == 10
-    assert gate.survivals_rendered_met == 0
-    assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 10
+    assert gate.survivals_rendered_met == 1
+    assert gate.survivals_sheltered_sub_gate == 2
+    assert gate.survivals_unevidenced == 7

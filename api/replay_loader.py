@@ -1924,24 +1924,32 @@ def _classify_template_id(
     bodies and mapped to the recorded ``prompt_versions``. Falls back to the
     ``call_kind`` tier when the marker set does not match.
 
-    Markers track the reactive-chain meeting templates (Task 8.7/8.8): the vote
-    prompt is the only one that says "casting a vote"; the impostor opening is
-    the only one framed "Your role for this match is IMPOSTOR"; the crewmate
-    opening addresses the "opening speaker"; and the reply / opt-in turns render
-    the "reactive accusation chain". Vote and impostor markers are checked first
-    so they cannot be shadowed by a transcript echo in a later template.
+    Markers track the meeting templates across prompt sets. The qwen3_32b.v3 set
+    (Task 14.7) renamed the section headers, so each key is matched by its
+    qwen3_32b.v3 marker OR the legacy qwen3.5:9b literal (back-compat): the vote
+    prompt is the only one with "## Valid ejection targets" (v3) / "casting a
+    vote" (9B); the impostor opening the only one with "## Your cover" (v3) /
+    "Your role for this match is IMPOSTOR" (9B); the crewmate opening leads with
+    "## This meeting" (v3) / "opening speaker" (9B); and the reply / opt-in turns
+    carry "## Your turn: a reply" or "## Your turn: an info-share" (v3) /
+    "reactive accusation chain" (9B). Vote and impostor markers are checked first
+    so they cannot be shadowed by a section echo in a later template.
     """
 
     if call.call_kind == "trigger":
         return "trigger"
     prompt = call.prompt
-    if "casting a vote" in prompt:
+    if "## Valid ejection targets" in prompt or "casting a vote" in prompt:
         key = "vote_ballot"
-    elif "Your role for this match is IMPOSTOR" in prompt:
+    elif "## Your cover" in prompt or "Your role for this match is IMPOSTOR" in prompt:
         key = "impostor_report"
-    elif "opening speaker" in prompt:
+    elif "## This meeting" in prompt or "opening speaker" in prompt:
         key = "crewmate_report"
-    elif "reactive accusation chain" in prompt:
+    elif (
+        "## Your turn: a reply" in prompt
+        or "## Your turn: an info-share" in prompt
+        or "reactive accusation chain" in prompt
+    ):
         key = "accusation_round"
     else:
         return call.call_kind

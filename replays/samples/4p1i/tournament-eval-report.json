@@ -15685,8 +15685,8 @@
     "cap_defaulted_turns": 0,
     "accused_impostor_events": 34,
     "accused_impostor_survivals": 10,
-    "survivals_rendered_met": 0,
-    "survivals_sheltered_sub_gate": 0,
-    "survivals_unevidenced": 10
+    "survivals_rendered_met": 1,
+    "survivals_sheltered_sub_gate": 2,
+    "survivals_unevidenced": 7
   }
 }
