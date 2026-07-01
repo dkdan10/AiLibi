@@ -683,6 +683,26 @@ def _write_manifest(replay_dir: Path, git_sha: str) -> None:
     )
 
 
+def _write_manifest_flags(
+    replay_dir: Path, git_sha: str, *, refreshed_at: str = "2026-06-30"
+) -> None:
+    # The Task-14.7 8-column layout: a `flags` cell inserted after
+    # prompt_versions, which shifts git_sha one head-index to the right. The
+    # readers must key off the tail (cells[-4]) so they return git_sha, not the
+    # refreshed_at DATE that now sits at the old head-index 5.
+    (replay_dir / "MANIFEST.md").write_text(
+        "# Sample Replay Manifest\n\n"
+        "| seed | model | prompt_versions | flags | refreshed_at | git_sha "
+        "| cost_usd | winner |\n"
+        "|------|-------|-----------------|-------|--------------|---------"
+        "|----------|--------|\n"
+        "| 0 | Qwen/Qwen3-32B | accusation_round.qwen3_32b.v3 | "
+        "testimony_as_content, unfreeze_memory | "
+        f"{refreshed_at} | {git_sha} | 0.0 | CREWMATES |\n",
+        encoding="utf-8",
+    )
+
+
 def _facts() -> dict[str, object]:
     return {
         "seedset": "9p2i",
@@ -716,6 +736,29 @@ def test_manifest_git_sha_parses_uniform_set(tmp_path: Path) -> None:
     _write_manifest(tmp_path, "1e48c40")
     assert _manifest_git_sha(tmp_path) == "1e48c40"
     assert _manifest_git_sha(tmp_path / "missing") is None
+
+
+def test_manifest_git_sha_reads_git_sha_from_8col_flags_manifest(
+    tmp_path: Path,
+) -> None:
+    # Regression (Task 14.7 flags column, PR #209 review): with the 8-column
+    # layout the reader must return git_sha, NOT the refreshed_at date that sits
+    # at the old head-index 5 — else same-day re-records read as fresh against
+    # stale rubric bytes.
+    _write_manifest_flags(tmp_path, "1e48c40", refreshed_at="2026-06-30")
+    assert _manifest_git_sha(tmp_path) == "1e48c40"
+    assert _manifest_git_sha(tmp_path) != "2026-06-30"
+
+
+def test_rubric_stamps_git_sha_from_8col_flags_manifest(tmp_path: Path) -> None:
+    # The rubric producer's _set_manifest_sha must likewise read git_sha (not the
+    # date) from the 8-column manifest, so the freshness guard stays meaningful.
+    _write_manifest_flags(tmp_path, "1e48c40", refreshed_at="2026-06-30")
+    _rubric_score.regen_for_set(_facts(), tmp_path)  # no git_head -> stamps set sha
+    view = ReplayLoader(replay_dir=tmp_path).rubric()
+    assert view.git_head == "1e48c40"
+    assert view.manifest_sha == "1e48c40"
+    assert view.stale is False
 
 
 def test_rubric_is_stale_prefix_logic() -> None:

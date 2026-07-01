@@ -357,6 +357,32 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
     exit 1
   fi
   echo "Using Featherless API key prefix: ${FEATHERLESS_API_KEY:0:8}"
+  # Task 14.7: refresh_samples.sh records the CANONICAL baseline into
+  # replays/samples/, and the only sanctioned Featherless baseline is the
+  # 14.6-locked tuple — prompt set qwen3_32b + all four 13.5 substrate flags ON.
+  # The game reads these from the ambient env; if they are unset the run would
+  # SILENTLY record the default 9B set with flags OFF and only reveal it in the
+  # MANIFEST afterward, wasting the whole (multi-hour) spend. Fail loud HERE,
+  # before any seed is staged (AGENTS.md "no silent fallbacks"). A future re-lock
+  # of the baseline updates REQUIRED_PROMPT_SET to match tasks/phase-14.md §14.6.
+  REQUIRED_PROMPT_SET="qwen3_32b"
+  substrate_errors=()
+  if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
+    substrate_errors+=("AILIBI_PROMPT_SET must be '$REQUIRED_PROMPT_SET' (got '${AILIBI_PROMPT_SET:-<unset>}')")
+  fi
+  for _flag in AILIBI_TESTIMONY_AS_CONTENT AILIBI_WITNESSED_KILL_EVIDENCE \
+               AILIBI_MOVEMENT_PERCEPTION AILIBI_UNFREEZE_MEMORY; do
+    if [[ "${!_flag:-}" != "1" ]]; then
+      substrate_errors+=("$_flag must be '1' (got '${!_flag:-<unset>}')")
+    fi
+  done
+  if (( ${#substrate_errors[@]} > 0 )); then
+    echo "Error: a featherless refresh must run the 14.6-locked substrate (Task 14.7)." >&2
+    echo "       Export the locked tuple before re-running; nothing was staged:" >&2
+    for _e in "${substrate_errors[@]}"; do echo "  - $_e" >&2; done
+    exit 1
+  fi
+  echo "Locked 14.7 substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET + all 4 flags ON."
 else
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2

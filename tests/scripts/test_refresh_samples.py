@@ -213,6 +213,25 @@ def test_featherless_preflight_requires_api_key_before_spend() -> None:
     assert "FEATHERLESS_API_KEY must be set" in proc.stdout + proc.stderr
 
 
+def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
+    # Task 14.7 (PR #209 review): a real featherless refresh WITH a key but
+    # WITHOUT the 14.6-locked substrate (prompt set qwen3_32b + all four flags ON)
+    # must fail loud at preflight, before any seed is staged -- so an operator
+    # cannot spend a multi-hour run recording the wrong (default 9B / flags-OFF)
+    # tuple and only learn afterward from the MANIFEST. _clean_env strips every
+    # AILIBI_* var, so the locked substrate is absent here; the dummy key clears
+    # the key check so the substrate guard (which follows it) is what fires.
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "featherless"
+    env["FEATHERLESS_API_KEY"] = "test-key-unused"  # guard exits before any call
+    proc = _run("--seeds", "0", env=env)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "14.6-locked substrate" in out
+    assert "AILIBI_PROMPT_SET must be 'qwen3_32b'" in out
+    assert "AILIBI_TESTIMONY_AS_CONTENT must be '1'" in out
+
+
 def test_unknown_provider_lists_featherless_in_error() -> None:
     # A typo must not silently select a provider; the error names the three valid
     # providers, now including featherless (Task 14.7).

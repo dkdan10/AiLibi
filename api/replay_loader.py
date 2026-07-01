@@ -180,11 +180,19 @@ _TOURNAMENT_REPORT_FILENAME: Final[str] = "tournament-eval-report.json"
 _RUBRIC_FILENAME: Final[str] = "results-rubric-score.json"
 _MANIFEST_FILENAME: Final[str] = "MANIFEST.md"
 
-# The ``MANIFEST.md`` table row shape (``scripts/_manifest_writer.py``):
-# ``| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd |
-# winner |``. The git sha is column index 5 once the leading empty cell (from
-# the leading ``|``) is included; a data row's first cell is the integer seed.
-_MANIFEST_GIT_SHA_COLUMN: Final[int] = 5
+# The ``MANIFEST.md`` table row shape (``scripts/_manifest_writer.py``). Task 14.7
+# inserted an optional ``flags`` column after ``prompt_versions``, so a data row
+# split on ``|`` is now one of:
+#   legacy 7-col: ``["", seed, model, prompt_versions, refreshed_at, git_sha, cost_usd, winner, ""]``
+#   new 8-col:    ``["", seed, model, prompt_versions, flags, refreshed_at, git_sha, cost_usd, winner, ""]``
+# In BOTH, ``git_sha`` is the 4th cell from the end (``cells[-4]``) — reading it
+# by a fixed head-index would slide onto ``refreshed_at`` for the 8-col rows and
+# make the freshness guard compare a DATE. A data row's first cell is the integer
+# seed. Kept in lockstep with ``experiments.lab.rubric_score``.
+_MANIFEST_GIT_SHA_FROM_END: Final[int] = -4
+# Fewest ``|``-split cells a well-formed data row can have (the legacy 7-col row,
+# with its two empty end cells): shorter lines cannot carry ``git_sha`` at -4.
+_MANIFEST_MIN_ROW_CELLS: Final[int] = 9
 
 # Per-set roster descriptor (Task 7.4; DESIGN.md §11.4). A committed sample set
 # that is NOT the MVP-default flat 4p/1i set ships this sidecar so the loader can
@@ -2271,13 +2279,13 @@ def _manifest_git_sha(replay_dir: Path) -> str | None:
         if not line.startswith("|"):
             continue
         cells = [cell.strip() for cell in line.split("|")]
-        if len(cells) <= _MANIFEST_GIT_SHA_COLUMN:
+        if len(cells) < _MANIFEST_MIN_ROW_CELLS:
             continue
         # cells[0] is the empty leading cell; cells[1] is the seed (data rows
         # only — the header/separator rows fail the integer check).
         if not cells[1].lstrip("-").isdigit():
             continue
-        sha = cells[_MANIFEST_GIT_SHA_COLUMN]
+        sha = cells[_MANIFEST_GIT_SHA_FROM_END]
         if sha:
             shas.add(sha)
     return next(iter(shas)) if len(shas) == 1 else None
