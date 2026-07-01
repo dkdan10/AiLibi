@@ -586,20 +586,31 @@ baseline, verify byte-identical reconstruction from the new recordings WITH the 
 roster.json present, and pass the HARD validity gate. This new baseline replaces the final-9B one as
 canonical. Win split moves in any direction and is REPORTED, not gated (the R-gate is 14.8).
 
-**Files in scope:**
+**STATUS (2026-07-01) — infra LANDED; RESUME at the re-smoke:**
+- The 14.7 flag-stamping infrastructure is MERGED to main (PR #209): the MANIFEST `flags` column
+  (`scripts/_manifest_writer.py`), the additive-optional substrate stamp on the replay `game_over` record
+  (`orchestrator/replay.py`), the flag-aware loader guard (`api/replay_loader.py`,
+  `ReplaySubstrateMismatchError`), and `scripts/refresh_samples.sh` Featherless support — which now FAILS LOUD
+  before staging any seed unless the 14.6-locked substrate (`AILIBI_PROMPT_SET=qwen3_32b` + all 4 flags = `1`)
+  is exported. So the re-record PR does NOT rebuild any of that; it produces the replay BYTES + regenerated
+  reports/MANIFESTs/fixtures + re-pinned byte tests only.
+- The FIRST smoke (2026-06-30, locked tuple) NO-GO'd: parse-success ~88.5% on a complete game (seed 0: 46/52),
+  with 2 unterminated-JSON vote-cap truncations at the frozen 1024 cap + 4 schema-adherence failures. Root
+  cause: the 14.4/14.5 sweep tested only reply+vote corpora (never the opening turns) and votes at a 4096-token
+  budget, not the production 1024 cap — so it could not surface these. The `qwen3_32b` set was hardened to
+  **v3** for full-game schema adherence + a compact-ballot fix (PR #209). The task now RESUMES at a re-smoke on
+  v3; the bar to clear before the full re-record is parse-success ≈ 100% AND zero 1024-truncation.
+
+**Files in scope:** (the atomic re-record PR only — the flag-stamping infra is already on main, PR #209)
 - replays/samples/4p1i/ (50 replays + tournament-eval-report.json + MANIFEST.md re-recorded on the locked model, all 4 flags ON; model + prompt_versions + `flags` + git_sha rows updated)
 - replays/samples/9p2i/ (50 replays + report + MANIFEST re-recorded, all 4 flags ON; roster sidecar {9,2,2} unchanged)
-- scripts/_manifest_writer.py (NEW `flags` MANIFEST column stamping the substrate-flag config per seed; the `seed | model | prompt_versions | ...` header gains `flags`)
-- orchestrator/replay.py (a substrate-flag-config field on the replay metadata so a replay self-describes which substrate generated it — additive; preserve the merged 13.5 reads)
-- api/replay_loader.py (verify/reconstruct honors the stamped flag config; preserve the merged 13.5 `*_enabled()` reads)
-- tests/fixtures/prompt_regression/ (v_a + v_b fixtures + baseline.json regenerated — provider + substrate changed)
-- tests/api/test_replay_loader.py (committed-set pins re-verified on new bytes; zero-denominator skips re-scoped)
-- tests/eval/test_win_condition_selfcheck.py (committed-set pins re-verified)
-- tests/scripts/test_refresh_samples.py (model rows = locked Featherless id, cost 0, git_sha)
-- tests/scripts/test_manifest_writer.py (MANIFEST row pins for the new model + prompt_versions)
-- scripts/refresh_samples.sh (provider/model literals point at Featherless for the operator run)
+- tests/fixtures/prompt_regression/ (v_a + v_b fixtures + baseline.json regenerated — provider + substrate + prompt set changed)
+- tests/api/test_replay_loader.py (committed-set BYTE pins re-verified on the new recordings)
+- tests/eval/test_win_condition_selfcheck.py (committed-set pins re-verified on the new bytes)
+- tests/scripts/test_manifest_writer.py (MANIFEST row pins for the locked model + `qwen3_32b.v3` prompt_versions + the new `flags` cell)
 
 **Files NOT in scope:**
+- the 14.7 flag-stamping infra — `scripts/_manifest_writer.py` (flags column), `orchestrator/replay.py` (stamp), `api/replay_loader.py` (guard) — plus `scripts/refresh_samples.sh` Featherless support + the locked-substrate preflight guard + their behavior tests: ALL LANDED on main (PR #209); the re-record CONSUMES them, it does not re-edit them
 - engine/ + meetings/ + agents/ + llm/ + eval/ source (behavior landed in 14.1 / 14.5; this records + regenerates only)
 - meetings/manager.py (token caps FROZEN — turn 2048 / vote 1024; do NOT raise; the 9.5 ctx-overrun lesson)
 - agents/strategic/prompts/ (no template authoring here; this records the chosen prompt set, it does not edit it)
@@ -607,9 +618,9 @@ canonical. Win split moves in any direction and is REPORTED, not gated (the R-ga
 - audits/workflows/extract_gameplay_facts.py (run read-only for the funnel; do not modify)
 
 **Definition of done:**
-- [ ] Smoke first (3–5 seeds at 9p2i): thinking policy holds (no un-audited reasoning under `fail_loud`, or the signed-off `strip` behaving), structured-output parse-success ≈ 100%, per-seed wall time + full-run projection reported BEFORE the full runs; STOP for operator go. ABANDON without recording if the guard trips or parse-success craters — re-open 14.1/14.4 or escalate; do NOT weaken the guard or raise the caps.
-- [ ] Smoke confirms the floor: every smoke seed reaches game_over with zero ballot truncation / unterminated-JSON parse failures under the FROZEN caps.
-- [ ] Both sets re-recorded in ONE PR on the locked model + new prompt set with all 4 13.5 substrate flags ON; both reports + MANIFESTs regenerated (model + prompt_versions + new `flags` column + new git_sha); the flag config is also stamped into the replay metadata; prompt-regression fixtures + baseline regenerated; byte-identical reconstruction holds from the new recordings.
+- [ ] RE-smoke first (3–5 seeds at 9p2i) on the `qwen3_32b` **v3** set — the FIRST smoke NO-GO'd at ~88.5% parse: thinking policy holds under `fail_loud`, structured-output parse-success ≈ 100%, per-seed wall time + full-run projection reported BEFORE the full runs; STOP for operator go. ABANDON without recording if parse-success craters or the guard trips — iterate the `qwen3_32b` prompts (as v3 already did) or re-open 14.6; do NOT weaken the guard or raise the caps.
+- [ ] Re-smoke confirms the floor on v3: every smoke seed reaches game_over with ZERO ballot truncation / unterminated-JSON parse failures under the FROZEN caps (the exact failure the first smoke hit — 2 vote-cap truncations at 1024, now targeted by v3's compact-ballot fix).
+- [ ] Both sets re-recorded in ONE PR on the locked model + `qwen3_32b.v3` prompt set with all 4 13.5 substrate flags ON; both reports + MANIFESTs regenerated (the LANDED infra stamps model + prompt_versions + the `flags` column + new git_sha, and the flag config into the replay `game_over` metadata); prompt-regression fixtures + baseline regenerated; byte-identical reconstruction holds from the new recordings.
 - [ ] Validity gate (HARD): friendly-fire 0; every game reaches game_over; betrayal ballots/accusations 0; leak suite green at 4p1i and 9p2i; meeting_rate ≥ 0.60 with ≥ 30 resolved meetings at 9p2i; byte-identical reconstruction (verified FLAG-AWARE — the same 4 flags set AND roster.json present, else the loader defaults to 4p1i and fails spuriously); zero tick-1 kills; zero missed-deadline markers; zero dangling primary_reason_id; cost rows 0; model + prompt_versions + flags rows correct.
 - [ ] Funnel report ($0): `extract_gameplay_facts` over the new 9p2i set; the PR body reports win split, ejection count, accusation precision, accuser follow-through, persuasion rate, threshold-quoting-skip count.
 - [ ] `uv run mypy .` passes.
@@ -627,14 +638,17 @@ This is the Phase-9 9.5 shape transplanted to Featherless: `AILIBI_LLM_PROVIDER=
 (`AILIBI_TESTIMONY_AS_CONTENT=1 AILIBI_WITNESSED_KILL_EVIDENCE=1 AILIBI_MOVEMENT_PERCEPTION=1
 AILIBI_UNFREEZE_MEMORY=1`) on every `scripts/refresh_samples.sh` invocation; the locked model
 `Qwen/Qwen3-32B` for both meeting and trigger call kinds (14.6), request-time thinking OFF, `fail_loud`.
+`refresh_samples.sh` now ENFORCES exactly this tuple at preflight (PR #209): a real Featherless run aborts $0
+before staging if `AILIBI_PROMPT_SET` ≠ `qwen3_32b` or any of the 4 flags ≠ `1`, so a mis-set env fails loud
+instead of recording the wrong baseline.
 ONE atomic PR — an intermediate commit is un-reconstructable. Time expectation (measured, 14.4/14.6): Qwen3-32B
 non-thinking is ~27.1s/turn isolated — roughly 2× the local 9B's per-call latency, offset by the plan's 32B
 concurrency cap of 2 (a 32B request = 2 of 4 units), so the full 50-seed × 2-format re-record lands in the
 SAME ~13–30h ballpark as the 9B (the win is offloading the operator's machine, NOT wall-clock); do NOT assume
 "far faster." The smoke (3–5 seeds) MUST project the real wall time before the full run. The report regeneration +
 MANIFEST update + fixture refresh all happen through `scripts/build_sample_report.py` +
-`scripts/_manifest_writer.py` (the latter gains the `flags` column) exactly as the 9.5 operator workflow
-documents. Hosted non-determinism means FRESH generation won't byte-reproduce, but the recordings replay
+`scripts/_manifest_writer.py` (which already emits the `flags` column, PR #209) exactly as the 9.5 operator
+workflow documents. Hosted non-determinism means FRESH generation won't byte-reproduce, but the recordings replay
 byte-identically — verify that property explicitly with `scripts/verify_samples.sh` RUN WITH THE SAME 4 FLAGS
 SET and a present `roster.json` (a flag-ON recording reconstructs byte-identically only when verify sets the
 same flags AND finds roster.json; a temp dir without it defaults to 4p1i and fails spuriously — not a
@@ -648,7 +662,11 @@ guard trips, STOP and fix upstream (14.1 adapter, 14.6 model choice) rather than
 particular do NOT raise the token caps (the 9.5 lesson: a raised ctx reintroduced overrun). The recorded
 baseline must be auditable: no silent thinking, no silent cost, model/prompt rows exact. A VALIDITY failure
 here (no candidate drives a valid sim) is the one real NO-GO that pauses the phase — surface it, do not force
-a degraded baseline through.
+a degraded baseline through. The FIRST smoke already exercised this gate as designed — it NO-GO'd at ~88.5%
+parse (vote-cap truncations + opening-turn schema failures the narrow sweep never covered), which drove the
+`qwen3_32b` → v3 hardening (PR #209). That is the gate working, not a phase failure; the re-smoke on v3 must
+clear ≈ 100% parse + zero 1024-truncation before the full run, and a second NO-GO means iterate the prompts
+again — never raise the caps.
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-7-rerecord.md`
 
