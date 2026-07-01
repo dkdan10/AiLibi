@@ -266,10 +266,21 @@ def test_unknown_set_is_404_on_replays(monkeypatch: pytest.MonkeyPatch) -> None:
         assert client.get("/replays", params={"set": "../9p2i"}).status_code == 404
 
 
-def test_determinism_holds_per_set() -> None:
+def test_determinism_holds_per_set(monkeypatch: pytest.MonkeyPatch) -> None:
     # The determinism gate runs PER SET (Task 12.12 DoD): each committed set
     # reconstructs byte-identically through its own per-set loader. A divergence
     # raises ReplayStateMismatchError inside load_replay.
+    #
+    # The committed sets were re-recorded on the Featherless / Qwen/Qwen3-32B
+    # substrate with all four Phase-13.5 flags ON, so they carry a substrate
+    # stamp; export the recorded substrate for THIS test only so the memory
+    # reconstruction matches what the replay was recorded under (else load_replay
+    # raises ReplaySubstrateMismatchError). Scoped here so any flag-OFF test in
+    # this file is unaffected.
+    monkeypatch.setenv("AILIBI_TESTIMONY_AS_CONTENT", "1")
+    monkeypatch.setenv("AILIBI_WITNESSED_KILL_EVIDENCE", "1")
+    monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
+    monkeypatch.setenv("AILIBI_UNFREEZE_MEMORY", "1")
     registry = SetLoaderRegistry(_PARENT)
     for set_name in registry.available_sets():
         loader = registry.get(set_name)

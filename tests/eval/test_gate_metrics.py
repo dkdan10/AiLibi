@@ -822,35 +822,39 @@ def _load_committed(path: Path) -> TournamentEvalReport:
 def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     """The shipped 9p/2i report carries the recorded gp-7 gate values exactly.
 
-    These pin the Task 13.12 redistribute + Wave-E re-record and are NOT
-    immutable — the next re-record regenerates the report and updates these pins,
-    the standard re-record pattern.
+    These pin the Featherless Qwen/Qwen3-32B (prompt set qwen3_32b v3, all four
+    Phase-13.5 substrate flags ON) re-record and are NOT immutable — the next
+    re-record regenerates the report and updates these pins, the standard
+    re-record pattern.
 
-    Recorded values: genuine-class 8 converted / 13 supplied (supply in 12 seeds,
-    conversions in 7 of them), conversion_rate 0.615; lost openings 15 against 12
-    cap-defaulted turns — the redistribute substrate's longer, more numerous
-    meetings (195 vs 114) raise both the opening-retry and fail-soft counts;
-    accused-impostor survival 119/132 with the partition 97 rendered-met
-    (under-conversion, NOT deception) + 2 sheltered (seeds 5/25) + 20 unevidenced.
+    Recorded values: genuine-class 32 converted / 48 supplied (supply in 32 seeds,
+    conversions in 25 of them), conversion_rate 0.667; lost openings 2 against 24
+    cap-defaulted turns; accused-impostor survival 71/137 with the partition 0
+    rendered-met + 0 sheltered + 71 unevidenced — the flag-ON substrate renders
+    no sub-gate suspicion rows on the survivors, so every survival is unevidenced.
     """
 
     report = _load_committed(_COMMITTED_9P2I_REPORT)
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 13
-    assert genuine.converted == 8
-    assert genuine.conversion_rate == pytest.approx(8 / 13)
+    assert genuine.supplied == 48
+    assert genuine.converted == 32
+    assert genuine.conversion_rate == pytest.approx(32 / 48)
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
-    assert gate.lost_opening_accusations == 15
-    assert gate.cap_defaulted_turns == 12
+    assert gate.lost_opening_accusations == 2
+    assert gate.cap_defaulted_turns == 24
 
-    assert gate.accused_impostor_events == 132
-    assert gate.accused_impostor_survivals == 119
-    assert gate.survivals_rendered_met == 97
-    assert gate.survivals_sheltered_sub_gate == 2
-    assert gate.survivals_unevidenced == 20
+    assert gate.accused_impostor_events == 137
+    assert gate.accused_impostor_survivals == 71
+    # The 71 accused-impostor survivals partition into rendered-met (voters saw a
+    # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,
+    # and unevidenced. On the qwen3_32b.v3 re-record the suspicion graph renders
+    # densely, so most survivals are rendered-met.
+    assert gate.survivals_rendered_met == 50
+    assert gate.survivals_sheltered_sub_gate == 5
+    assert gate.survivals_unevidenced == 16
 
     # Per-seed identities re-derived from the same committed games: the
     # genuine-class supply, the lost openings, and the sheltered survivals sit
@@ -861,44 +865,90 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
         if compute_genuine_class_conversion((game,)).supplied > 0
     }
     assert supplied_seeds == {
-        4,
+        0,
+        1,
+        2,
+        3,
+        5,
+        8,
+        9,
+        10,
+        11,
         12,
+        13,
         15,
         17,
+        18,
+        19,
+        23,
+        25,
+        27,
         28,
         29,
+        31,
+        32,
         34,
         36,
         38,
+        40,
+        42,
+        43,
         44,
         45,
-        49,
+        46,
+        48,
     }
     converted_seeds = {
         game.seed
         for game in report.report.games
         if compute_genuine_class_conversion((game,)).converted > 0
     }
-    assert converted_seeds == {17, 28, 34, 36, 38, 44, 45}
+    assert converted_seeds == {
+        0,
+        1,
+        2,
+        3,
+        5,
+        8,
+        10,
+        12,
+        13,
+        15,
+        18,
+        19,
+        23,
+        25,
+        27,
+        29,
+        31,
+        32,
+        34,
+        38,
+        42,
+        44,
+        45,
+        46,
+        48,
+    }
     lost_opening_seeds = {
         game.seed
         for game in report.report.games
         if compute_gate_metrics((game,)).lost_opening_accusations > 0
     }
-    assert lost_opening_seeds == {0, 2, 16, 17, 18, 20, 30, 31, 35, 36, 40, 41, 48}
+    assert lost_opening_seeds == {3, 45}
     sheltered_seeds = {
         game.seed
         for game in report.report.games
         if compute_gate_metrics((game,)).survivals_sheltered_sub_gate > 0
     }
-    assert sheltered_seeds == {5, 25}
+    assert sheltered_seeds == {10, 14, 35, 37, 38}
 
     # JSON-level guard: the committed file itself serves the gate surface and
     # the era-invalidity note (a reader pulling the raw report sees the
     # PRIMARY gate and the warning, the gp-7 ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 13
-    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 8
+    assert raw["gate_metrics"]["genuine_class_conversion"]["supplied"] == 48
+    assert raw["gate_metrics"]["genuine_class_conversion"]["converted"] == 32
     assert (
         "ejection_accuracy" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     )
@@ -906,29 +956,29 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
 
 
 def test_committed_flat_4p1i_report_pins_the_gate_metrics() -> None:
-    """The flat 4p/1i set's gate block, pinned at the Task 13.12 redistribute +
-    Wave-E re-record.
+    """The flat 4p/1i set's gate block, pinned at the Featherless Qwen/Qwen3-32B
+    (prompt set qwen3_32b v3, all four Phase-13.5 substrate flags ON) re-record.
 
     NOT immutable — the next re-record regenerates and updates these. The set
-    supplies 3 genuine-class flags and converts 1 (rate 0.333), loses 7 openings
-    and defaults 6 turns, and its 19 accused-impostor survivals split 10
-    rendered-met / 2 sheltered / 7 unevidenced.
+    supplies 6 genuine-class flags and converts all 6 (rate 1.0), loses 0 openings
+    and defaults 0 turns, and its 10 accused-impostor survivals split 0
+    rendered-met / 0 sheltered / 10 unevidenced.
     """
 
     report = _load_committed(_COMMITTED_FLAT_REPORT)
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 3
-    assert genuine.converted == 1
-    assert genuine.conversion_rate == pytest.approx(1 / 3)
+    assert genuine.supplied == 6
+    assert genuine.converted == 6
+    assert genuine.conversion_rate == pytest.approx(1.0)
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
-    assert gate.lost_opening_accusations == 7
-    assert gate.cap_defaulted_turns == 6
+    assert gate.lost_opening_accusations == 0
+    assert gate.cap_defaulted_turns == 0
 
-    assert gate.accused_impostor_events == 23
-    assert gate.accused_impostor_survivals == 19
-    assert gate.survivals_rendered_met == 10
+    assert gate.accused_impostor_events == 34
+    assert gate.accused_impostor_survivals == 10
+    assert gate.survivals_rendered_met == 1
     assert gate.survivals_sheltered_sub_gate == 2
     assert gate.survivals_unevidenced == 7

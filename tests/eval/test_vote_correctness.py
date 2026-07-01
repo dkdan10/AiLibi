@@ -1856,31 +1856,20 @@ _COMMITTED_9P2I_REPORT = (
 def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     """The shipped 9p/2i report carries the recorded gp-2 values exactly.
 
-    Re-anchored to the Task 13.12 redistribute + Wave-E re-record (NOT immutable
-    — the standard re-record regeneration). ejection_accuracy 14/18 = 0.7778,
-    impostor-accused conversion 13/132 = 0.0985, missed_skip 380.
+    Re-anchored to the Phase-13.5 substrate re-record (Featherless /
+    Qwen/Qwen3-32B, prompt set qwen3_32b v3, all four substrate flags ON — NOT
+    immutable; the standard re-record regeneration). ejection_accuracy
+    69/122 = 0.5656, impostor-accused conversion 67/127 = 0.5276, missed_skip 14.
 
-    **threshold_inversions 0 -> 201 is the headline shift, and it is the merged
-    13.13 de-imperative gate's intended signature, NOT a firewall regression.**
-    The metric is the §4.6 gate-OBEDIENCE sentinel: a crew voter shown a met
-    threshold over a living target who SKIPs anyway with no by-design excuse. The
-    OLD imperative gate rendered "you MUST eject the met-threshold subject", so
-    crew obeyed and the count was 0 by construction. 13.13 rewrote that prompt to
-    a NON-directive evidence line (the deterministic anti-railroad tally FLOOR
-    stays, the must-eject DIRECTIVE goes), so crew exercising the discretion the
-    de-imperative granted them — declining to pile on a met-threshold target — is
-    now BY DESIGN, not a gate-obedience bug. The missed_skip partition holds
-    exactly: 380 = 179 impostor-voter (sanctioned in-character declines) + 0
-    invalid-target + 201 threshold_inversions (the crew discretionary remainder).
-    This same de-imperatived caution is the proximate cause of the R1 drop (the
-    new baseline's eject-decided 6 -> 3): the crew now skip met-thresholds (201),
-    which lowered WRONG ejections (R4 6 -> 4) AND correct ones — the frozen-LLM
-    conversion ceiling the re-record documents. (The eval-layer docstring at
-    eval/meeting_quality.py still frames a nonzero count as "a bug to chase";
-    that framing predates 13.13 and is the metric's pre-de-imperative reading.)
+    threshold_inversions is 0 on this substrate: no crew voter shown a met
+    threshold over a living target SKIPs without a by-design excuse. The
+    missed_skip partition holds exactly: 14 = 3 impostor-voter (sanctioned
+    in-character declines, of which 2 are §7.12 teammate-coerced) + 11
+    invalid-target (hallucinated targets normalized to SKIP) + 0
+    threshold_inversions (the crew discretionary remainder).
 
-    The sentinel reads the recorded truth: 12 of the 14 impostor ejections are
-    transcript-evidence-backed (vote_correctness_rate 12/14 = 0.857); the 2
+    The sentinel reads the recorded truth: 62 of the 69 impostor ejections are
+    transcript-evidence-backed (vote_correctness_rate 62/69 = 0.899); the 7
     unbacked ejections converted on accumulated/carried suspicion that
     ``_has_real_evidence`` deliberately does not consult.
     """
@@ -1890,33 +1879,33 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     )
     conversion = report.conversion
 
-    assert conversion.total_ejections == 18
-    assert conversion.impostor_ejections == 14
-    assert conversion.ejection_accuracy == pytest.approx(14 / 18)
-    assert conversion.impostor_accused_meetings == 132
-    assert conversion.impostor_accused_conversions == 13
-    assert conversion.impostor_accused_conversion_rate == pytest.approx(13 / 132)
-    assert conversion.skip_ballots == 914
-    assert conversion.correct_skip_ballots == 534
-    assert conversion.missed_skip_ballots == 380
+    assert conversion.total_ejections == 122
+    assert conversion.impostor_ejections == 69
+    assert conversion.ejection_accuracy == pytest.approx(69 / 122)
+    assert conversion.impostor_accused_meetings == 127
+    assert conversion.impostor_accused_conversions == 67
+    assert conversion.impostor_accused_conversion_rate == pytest.approx(67 / 127)
+    assert conversion.skip_ballots == 108
+    assert conversion.correct_skip_ballots == 94
+    assert conversion.missed_skip_ballots == 14
     assert conversion.unclassified_skip_ballots == 0
-    assert conversion.missed_skip_impostor_voters == 179
-    assert conversion.missed_skip_teammate_coerced == 0
-    assert conversion.missed_skip_invalid_target == 0
-    # The 13.13 de-imperative signature (see docstring): crew discretionary skips,
-    # by design, the genuine remainder of the 380-missed-skip partition.
-    assert conversion.threshold_inversions == 201
+    assert conversion.missed_skip_impostor_voters == 3
+    assert conversion.missed_skip_teammate_coerced == 2
+    assert conversion.missed_skip_invalid_target == 11
+    # The missed_skip partition holds exactly: 14 = 3 impostor-voter + 11
+    # invalid-target + 0 threshold_inversions (the crew discretionary remainder).
+    assert conversion.threshold_inversions == 0
 
-    # The sentinel reads the recorded truth: 12 of the 14 impostor ejections are
+    # The sentinel reads the recorded truth: 62 of the 69 impostor ejections are
     # transcript-evidence-backed (see docstring).
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(12 / 14)
-    assert report.vote_correctness.evidence_backed_impostor_ejections == 12
-    assert report.vote_correctness.impostor_ejections == 14
+    assert report.vote_correctness.vote_correctness_rate == pytest.approx(62 / 69)
+    assert report.vote_correctness.evidence_backed_impostor_ejections == 62
+    assert report.vote_correctness.impostor_ejections == 69
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
     assert conversion.ejection_accuracy == report.vote_correctness.ejection_accuracy
 
     # JSON-level guard: the committed file itself serves both leads (a reader
     # pulling the raw report sees the published metric surface, gp-2's ask).
     raw = json.loads(_COMMITTED_9P2I_REPORT.read_text(encoding="utf-8"))
-    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.7778, abs=1e-4)
-    assert raw["conversion"]["missed_skip_ballots"] == 380
+    assert raw["conversion"]["ejection_accuracy"] == pytest.approx(0.5656, abs=1e-4)
+    assert raw["conversion"]["missed_skip_ballots"] == 14

@@ -218,7 +218,16 @@ _BALLOT_REDIRECT_MARKER_PREFIX: Final[str] = BALLOT_TARGET_REDIRECT_MARKER.split
 # match. The per-voter MAX line stays the shared
 # :mod:`eval._suspicion_parse` parse — this block adds only the per-target
 # graph read that parse does not cover.
-_SUSPICION_GRAPH_HEADER: Final[str] = "## Your suspicion graph"
+# The vote template's suspicion-graph header changed with the qwen3_32b.v3
+# prompt set (Task 14.7): "## Your suspicion of each player" replaces the legacy
+# qwen3.5:9b "## Your suspicion graph". Both emit the identical row shape below,
+# so the parser accepts either header (newest first) and only the header string
+# alternates. Recognizing both keeps the frozen 9B-era prompt_regression
+# fixtures parsing while the canonical set is on the new header.
+_SUSPICION_GRAPH_HEADERS: Final[tuple[str, ...]] = (
+    "## Your suspicion of each player",
+    "## Your suspicion graph",
+)
 _SUSPICION_GRAPH_ROW_RE: Final[re.Pattern[str]] = re.compile(
     r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
     r"trust (?P<trust>[0-9]*\.?[0-9]+)"
@@ -283,15 +292,16 @@ def _persisted_vote_verdict_maxes(
 def _parse_suspicion_graph(prompt: str) -> dict[PlayerId, float]:
     """Return ``{player_id: rendered_suspicion}`` from a vote prompt's graph.
 
-    Empty when the prompt carries no ``## Your suspicion graph`` section (a
-    voter with no beliefs about anyone, or a non-vote prompt). The block ends
-    at the next ``## `` header. See the constants above for why this parse
-    lives here.
+    Empty when the prompt carries no suspicion-graph section (a voter with no
+    beliefs about anyone, or a non-vote prompt). The block ends at the next
+    ``## `` header. Accepts either the qwen3_32b.v3 or the legacy 9B header (see
+    the constants above for why this parse lives here).
     """
 
-    if _SUSPICION_GRAPH_HEADER not in prompt:
+    header = next((h for h in _SUSPICION_GRAPH_HEADERS if h in prompt), None)
+    if header is None:
         return {}
-    after = prompt.split(_SUSPICION_GRAPH_HEADER, 1)[1]
+    after = prompt.split(header, 1)[1]
     block = after.split("## ", 1)[0]
     return {
         match.group("pid"): float(match.group("sus"))

@@ -841,13 +841,23 @@ def _committed_9p2i_seeds() -> list[int]:
     )
 
 
-def test_committed_9p2i_set_reconstructs_byte_identically() -> None:
+def test_committed_9p2i_set_reconstructs_byte_identically(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Every committed 9p/2i replay reconstructs byte-identically under the current
     # engine: load_replay re-seeds from the committed roster.json (9p/2i + 2
     # tasks/crewmate) and raises ReplayStateMismatchError on ANY per-tick
     # state_hash drift. num_impostors / tasks_per_crewmate are not recoverable from
     # the action stream, so this only reconstructs because the committed descriptor
     # is correct — making this both the determinism gate and a roster.json check.
+    #
+    # The committed set was re-recorded on the Featherless / Qwen/Qwen3-32B
+    # substrate with all four Phase-13.5 levers ON, so each game_over record is
+    # stamped with that lever config. The loader's memory reconstruction honors the
+    # stamp (Task 14.7), refusing to reconstruct under a divergent ambient
+    # substrate; export the recorded flags for the walk so the reconstruction
+    # matches the substrate the set was recorded under.
+    _set_substrate_env(monkeypatch, on=True)
     assert replay_loader._load_roster_config(_COMMITTED_9P2I_DIR) == RosterConfig(
         num_players=9, num_impostors=2, tasks_per_crewmate=2
     )

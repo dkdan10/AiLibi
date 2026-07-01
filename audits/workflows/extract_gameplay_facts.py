@@ -253,7 +253,14 @@ _INVALID_ACC_MARKER_FULL_RE: re.Pattern[str] = re.compile(
 # about itself, so the ejected player's value never appears in their own
 # prompt). Pin the header literal and the row regex; both are produced by the
 # committed vote_ballot.j2 template.
-_SUSPICION_GRAPH_HEADER = "## Your suspicion graph"
+# The qwen3_32b.v3 prompt set (Task 14.7) renames the vote-graph header to
+# "## Your suspicion of each player"; the legacy qwen3.5:9b set used
+# "## Your suspicion graph". Same row shape, so accept either (newest first) —
+# back-compat keeps the frozen 9B-era fixtures parsing.
+_SUSPICION_GRAPH_HEADERS = (
+    "## Your suspicion of each player",
+    "## Your suspicion graph",
+)
 _SUSPICION_GRAPH_ROW_RE: re.Pattern[str] = re.compile(
     r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
     r"trust (?P<trust>[0-9]*\.?[0-9]+)"
@@ -424,9 +431,10 @@ def _parse_suspicion_graph(prompt: str) -> dict[str, float]:
     at the next ``## `` header.
     """
 
-    if _SUSPICION_GRAPH_HEADER not in prompt:
+    header = next((h for h in _SUSPICION_GRAPH_HEADERS if h in prompt), None)
+    if header is None:
         return {}
-    after = prompt.split(_SUSPICION_GRAPH_HEADER, 1)[1]
+    after = prompt.split(header, 1)[1]
     block = after.split("## ", 1)[0]
     return {
         m.group("pid"): float(m.group("sus"))
@@ -434,17 +442,24 @@ def _parse_suspicion_graph(prompt: str) -> dict[str, float]:
     }
 
 
-# Vote-prompt graph block header (pinned in the constants above) and the
-# turn-prompt first-header literals the committed templates emit, used to
-# classify each meeting llm_call by the slot it filled (Task 10.3 retry lens).
-# A VOTE call is the only one that renders "## Your suspicion graph"; the three
-# turn kinds are distinguished by their first markdown header (the opening's
-# "## Meeting context" vs the reply / opt-in statement headers). These are the
-# literals the regression-pinned vote_ballot.v5 / accusation_round.v7 /
-# crewmate_report.v5 / impostor_report_v4 templates produce on this set.
-_OPENING_PROMPT_FIRST_HEADER = "## Meeting context"
-_REPLY_PROMPT_FIRST_HEADER = "## Your turn: a reply"
-_OPTIN_PROMPT_FIRST_HEADER = "## Your turn: an opt-in info-share"
+# Turn-prompt first-header literals used to classify each meeting llm_call by the
+# slot it filled (Task 10.3 retry lens). A VOTE call is the only one that renders
+# a suspicion graph (see _SUSPICION_GRAPH_HEADERS above). The three turn kinds are
+# told apart by their first markdown header. The qwen3_32b.v3 set (Task 14.7)
+# renamed these — a crewmate opening now leads with "## This meeting", an impostor
+# opening with "## Your cover", and an opt-in with "## Your turn: an info-share" —
+# while the reply header is unchanged. Accept the qwen3_32b.v3 and the legacy 9B
+# literals so both eras classify.
+_OPENING_PROMPT_FIRST_HEADERS = (
+    "## This meeting",
+    "## Your cover",
+    "## Meeting context",
+)
+_REPLY_PROMPT_FIRST_HEADERS = ("## Your turn: a reply",)
+_OPTIN_PROMPT_FIRST_HEADERS = (
+    "## Your turn: an info-share",
+    "## Your turn: an opt-in info-share",
+)
 _FIRST_HEADER_RE: re.Pattern[str] = re.compile(r"^#+ .*$", re.MULTILINE)
 
 
@@ -452,23 +467,23 @@ def _classify_call_slot(prompt: str) -> str:
     """Classify a meeting llm_call by the meeting slot it filled.
 
     Returns one of ``vote`` / ``opening`` / ``reply`` / ``opt_in`` / ``other``.
-    The §6.6 vote ballot is the only prompt carrying ``## Your suspicion
-    graph``; the three turn kinds carry distinct first markdown headers (the
-    opening's ``## Meeting context`` vs the reply / opt-in statement headers).
-    Deterministic over the regression-pinned templates this set was recorded
-    with — a divergent header lands in ``other`` rather than silently
-    mis-binning, so the retry counts stay honest.
+    The §6.6 vote ballot is the only prompt carrying a suspicion graph
+    (:data:`_SUSPICION_GRAPH_HEADERS`); the three turn kinds carry distinct first
+    markdown headers (:data:`_OPENING_PROMPT_FIRST_HEADERS` etc.). Both the
+    qwen3_32b.v3 and the legacy 9B literals are accepted. Deterministic over the
+    committed templates — a divergent header lands in ``other`` rather than
+    silently mis-binning, so the retry counts stay honest.
     """
 
-    if _SUSPICION_GRAPH_HEADER in prompt:
+    if any(h in prompt for h in _SUSPICION_GRAPH_HEADERS):
         return "vote"
     match = _FIRST_HEADER_RE.search(prompt)
     first = match.group(0) if match else ""
-    if first == _OPENING_PROMPT_FIRST_HEADER:
+    if first in _OPENING_PROMPT_FIRST_HEADERS:
         return "opening"
-    if first == _REPLY_PROMPT_FIRST_HEADER:
+    if first in _REPLY_PROMPT_FIRST_HEADERS:
         return "reply"
-    if first == _OPTIN_PROMPT_FIRST_HEADER:
+    if first in _OPTIN_PROMPT_FIRST_HEADERS:
         return "opt_in"
     return "other"
 
