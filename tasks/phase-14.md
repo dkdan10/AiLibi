@@ -54,12 +54,14 @@ Locked decisions (2026-06-25):
 
 Parallelism: 14.1 and 14.2 are independent roots and dispatch in parallel (disjoint file scopes); 14.3
 follows 14.1 because its probe backend imports the Featherless `_default_send` introduced by 14.1:
-`(14.1 ∥ 14.2) → 14.3 → 14.4 → 14.4.1 → 14.5 → 14.6 → 14.7 → 14.8 → 14.9 → (14.10 ∥ 14.11) → 14.12`.
+`(14.1 ∥ 14.2) → 14.3 → 14.4 → 14.4.1 → 14.5 → 14.6 → 14.7 → 14.8 → (14.9 ∥ 14.11) → 14.10 → 14.12`.
 14.3 needs 14.1; 14.4 needs 14.1 + 14.3; 14.4.1 (adapter `enable_thinking` fix surfaced by the 14.4 sweep)
-needs 14.1 + 14.4; 14.5 needs 14.2 + 14.4 + 14.4.1; 14.9 (flag-default cleanup) needs 14.8; 14.10 (evidence-
-quality lift fix) and 14.11 (qwen3_32b v4) both need 14.8 (the fix specs) + 14.9 (file overlap in
-agents/memory + orchestrator/game.py) and are parallel to each other (disjoint scopes); 14.12 (baseline 2,
-the phase close) needs both.
+needs 14.1 + 14.4; 14.5 needs 14.2 + 14.4 + 14.4.1; 14.9 (flag-default cleanup) needs 14.8 (the ablation runs
+on the toggles 14.9 deletes); 14.11 (qwen3_32b v4) needs only 14.8 and runs in PARALLEL with 14.9 (their one
+shared file, orchestrator/game.py, is disjoint-region — registry line vs gate retirement); 14.10 (evidence-
+quality lift fix) needs 14.8 + 14.9 and STAYS SEQUENTIAL behind 14.9 — both edit `substrate_flag_snapshot()`
+and agents/memory/beliefs.py, and 14.10's byte-identity/offline-proof semantics differ pre- vs post-14.9;
+14.12 (baseline 2, the phase close) needs 14.10 + 14.11.
 Operator-run / spend gates: 14.4 (model sweep, $0 marginal), 14.7 (baseline 1 — DONE, measured ~5h with 2
 parallel seed workers), and 14.12 (baseline 2, the final re-record).
 Design-thread (no agent dispatch): 14.6 (lock decision). 14.8 is agent-dispatchable ($0 offline analysis + a
@@ -948,7 +950,7 @@ Over-damping is the failure mode to watch: if the lever ON drops genuine-class c
 
 ### Task 14.11 — qwen3_32b v4: alibi discipline, ballot craft, and voice (the measured-defect batch)
 **Branch:** `phase-14-qwen3-32b-v4`
-**Depends on:** 14.8, 14.9
+**Depends on:** 14.8
 **Section refs:** audits/audit-2026-07-01-phase-14-baseline1-characterization.md (the per-defect counts + targets); agents/strategic/prompts/qwen3_32b/ (the v3 set); meetings/schemas.py (the frozen output contract); replays/samples/9p2i/replay-seed-44.jsonl (the worked railroad-fuel example)
 **Complexity:** Medium
 
@@ -975,7 +977,7 @@ recordings.
 - agents/strategic/prompts/qwen3_32b/impostor_report.j2 (fixes 1, 4, 5; header → v4)
 - agents/strategic/prompts/qwen3_32b/accusation_round.j2 (fixes 1, 2, 4, 5; header → v4)
 - agents/strategic/prompts/qwen3_32b/vote_ballot.j2 (fixes 2, 3, 6; header → v4)
-- orchestrator/game.py (registry bump: `qwen3_32b` → `_bespoke_versions("qwen3_32b", version="v4")`)
+- orchestrator/game.py (registry bump ONLY: `qwen3_32b` → `_bespoke_versions("qwen3_32b", version="v4")` — one line at the PROMPT_VERSION_SETS registry, disjoint from the gate-retirement region 14.9 edits at `:714-735`; this task may run in PARALLEL with 14.9, whichever merges second rebases this trivially)
 - tests/agents/test_bespoke_prompt_sets.py (render + cross-set parse stay green; add pins for the new directives — alibi-discipline present, dead-roster adjacency, confidence rubric — mirroring the cover-directive gating pins)
 
 **Files NOT in scope:**

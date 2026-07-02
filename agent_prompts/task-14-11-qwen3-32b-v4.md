@@ -12,7 +12,7 @@ Implement Task 14.11 — qwen3_32b v4: alibi discipline, ballot craft, and voice
 The authoritative task contract is copied below from tasks/phase-14.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-14-qwen3-32b-v4`
-**Depends on:** 14.8, 14.9
+**Depends on:** 14.8
 **Section refs:** audits/audit-2026-07-01-phase-14-baseline1-characterization.md (the per-defect counts + targets); agents/strategic/prompts/qwen3_32b/ (the v3 set); meetings/schemas.py (the frozen output contract); replays/samples/9p2i/replay-seed-44.jsonl (the worked railroad-fuel example)
 **Complexity:** Medium
 
@@ -39,7 +39,7 @@ recordings.
 - agents/strategic/prompts/qwen3_32b/impostor_report.j2 (fixes 1, 4, 5; header → v4)
 - agents/strategic/prompts/qwen3_32b/accusation_round.j2 (fixes 1, 2, 4, 5; header → v4)
 - agents/strategic/prompts/qwen3_32b/vote_ballot.j2 (fixes 2, 3, 6; header → v4)
-- orchestrator/game.py (registry bump: `qwen3_32b` → `_bespoke_versions("qwen3_32b", version="v4")`)
+- orchestrator/game.py (registry bump ONLY: `qwen3_32b` → `_bespoke_versions("qwen3_32b", version="v4")` — one line at the PROMPT_VERSION_SETS registry, disjoint from the gate-retirement region 14.9 edits at `:714-735`; this task may run in PARALLEL with 14.9, whichever merges second rebases this trivially)
 - tests/agents/test_bespoke_prompt_sets.py (render + cross-set parse stay green; add pins for the new directives — alibi-discipline present, dead-roster adjacency, confidence rubric — mirroring the cover-directive gating pins)
 
 **Files NOT in scope:**
