@@ -25,10 +25,14 @@ flag-aware reconstruction. Baseline 2 replaces baseline 1 as canonical. BECAUSE 
 against measured defects, this close also measures them: restore the railroad REGRESSION PIN to the original
 TRIPWIRE (zero crew rows at 1.0 from same-meeting flag stacks), and report the per-defect deltas vs baseline 1
 (ejection accuracy vs 0.566, self-contradicted alibis vs 10%, guard-normalized ballots vs 47, conf-1.0
-accusations vs 64, template-rationale share vs 33%, missed-deadline vs 23) plus the re-measured R-gate (R1 vs
-27/50, impostor win vs 0.32). Better CONVICTIONS, not just more: R1 holding near baseline 1 with ejection
-accuracy up is the win condition; R1 collapsing means 14.10 over-damped (stop, iterate the weighting, re-smoke
-— never weaken the gate). Close the phase with the final audit + STATUS banner.
+accusations vs 64, template-rationale share vs 33%, missed-deadline vs 23) plus the re-measured R-gate. The
+honest R1 anchor is the RAILROAD-DISCOUNTED baseline-1 figure (25/50, audit §2 — the pinned rows accounted
+for only 2 of the 24-game lift), not raw 27/50; and per audit §2 the stacked-flag signature is role-blind
+(46% of impostor ejections carry it too), so "fewer stacked-flag convictions" alone is NOT a success metric.
+Better CONVICTIONS, not just more: R1 holding near 25 with ejection accuracy up from 0.566 is the win
+condition; R1 collapsing means 14.10 over-damped (stop, iterate the weighting, re-smoke — never weaken the
+gate). Also report whether the 22 zero-flag crew mis-ejects (audit §7, untouched by 14.10's lever) moved
+under v4's calibration/curation fixes. Close the phase with the final audit + STATUS banner.
 
 **Files in scope:**
 - replays/samples/4p1i/ (50 replays + report + MANIFEST re-recorded; `flags` rows now stamp the 14.10 lever)

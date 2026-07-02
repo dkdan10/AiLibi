@@ -860,26 +860,34 @@ once the gates are removed — that is the acceptance bar; verify it explicitly.
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-9-substrate-default-on.md`
 
-### Task 14.10 — Evidence-quality lift fix: close the 10.1 railroad-cap bypass (default-OFF lever)
+### Task 14.10 — Evidence-quality lift fix: certain-guilt ceiling + self-refuted-alibi downgrade (default-OFF lever)
 **Branch:** `phase-14-evidence-quality-lift`
 **Depends on:** 14.8, 14.9
-**Section refs:** tests/meetings/test_manager.py (the downgraded railroad tripwire + the pinned 5-row known set); audits/audit-2026-07-01-phase-14-baseline1-characterization.md (the 14.8 fix spec: the exact cap-bypass mechanism); agents/memory/beliefs.py (the Phase-10.1 same-meeting lift cap); tasks/phase-13-5.md (the default-OFF-lever + stamp pattern this task reuses)
+**Section refs:** audits/audit-2026-07-01-phase-14-baseline1-characterization.md §3/§3a (the MEASURED mechanism + the two-bound fix spec — read it first, it overturned the original framing); tests/meetings/test_manager.py (the pinned 5-row railroad set = the reproduction corpus); agents/memory/beliefs.py (the 13.14 joint cap this extends); tasks/phase-13-5.md (the default-OFF-lever + stamp pattern this task reuses)
 **Complexity:** Integration
 
-Fix the crew-railroad defect baseline 1 exposed: the new model's ~4× contradiction-flag density (702 vs the
-9B's 173 set-wide) DEFEATS the Phase-10.1 same-meeting lift cap — 5 crew rows rendered at certain-guilt 1.0
-from 2–9 stacked same-meeting flags and 3 innocents were ejected. Using 14.8's diagnosis of the exact bypass
-mechanism, change the belief fold so that NO count of same-meeting contradiction flags can drive a crew
-render to 1.0 by stacking alone — bound the aggregate same-meeting contradiction lift (and, where 14.8's spec
-supports it, weight flags by evidence class: a self-inconsistency or third-party-refuted alibi is worth more
-than a proximity grumble — so evidence QUALITY, not flag COUNT, moves suspicion). The change alters belief
-re-derivation, so committed baseline-1 replays would no longer reconstruct byte-identically under it — gate it
-behind a NEW default-OFF env lever (the proven 13.5 pattern): OFF preserves baseline-1 byte-identity and every
-committed-bytes test; 14.12 records baseline 2 with it ON and stamps it. Register the lever in the
-`substrate_flag_snapshot()` stamp machinery (kept generic by 14.9) so the recording self-describes.
+Fix the crew-railroad defect per the MEASURED 14.8 diagnosis (audit §3 — which OVERTURNED the original
+flag-density framing: the 10.1/13.14 caps HOLD; even seed-44's 9 flags dedup to ONE `contradiction_lift_key`
+group capped at +0.30, so flag COUNT is a signature, not the causal variable). The real mechanism compounds:
+one saturated strong group lands +0.30 in EVERY voter's graph in lockstep (0.50 → 0.80 ≥ the 0.60 gate = a
+roster-wide must-vote on the flagged subject), and the voters carrying the Phase-10 Rule-1 body-proximity
+prior (0.70) clamp to certain-guilt 1.00 — in all 5 pinned rows the 1.00-renderers are the impostors.
+Implement the audit's TWO measured bounds behind a NEW default-OFF env lever (the 13.5 pattern): (1)
+CERTAIN-GUILT EXCLUSION — extend the 13.14 joint cap to `min(lifted, prior + 0.3, CONTRADICTION_RENDER_CEIL)`
+(just below the clamp, e.g. 0.97) for flag/testimony-driven lift, EXEMPTING first-hand conclusive observation
+(a witnessed kill legitimately reads ~1.0); zero conversion cost — every 0.97 stays a must-vote. (2)
+SELF-REFUTED-ALIBI DOWNGRADE — a contradiction group whose refuted alibi is contradicted by the subject's OWN
+same-turn `completed_task` observation contributes the WEAK delta (0.08), not STRONG (0.30); measured cost on
+baseline 1: 0/57 flagged impostor ejections, while keeping seed-16/44's rosters sub-gate. The audit REJECTS
+two tempting shapes BY MEASUREMENT — do NOT implement witness-count weighting (an anti-signal: honest greedy
+alibis attract MORE independent refuting witnesses than impostor lies) or ≥2-group gating (over-damps: 54/57
+flagged impostor ejections ride exactly ONE group). The change alters belief re-derivation, so gate it
+default-OFF: OFF preserves baseline-1 byte-identity and every committed-bytes test; 14.12 records baseline 2
+with the lever ON and stamps it. Register the lever in the `substrate_flag_snapshot()` stamp machinery (kept
+generic by 14.9) so the recording self-describes.
 
 **Files in scope:**
-- agents/memory/beliefs.py (the aggregate same-meeting lift bound + optional evidence-class weighting, behind the new `*_enabled()` resolver; the 10.1 cap logic is corrected, not bypassed)
+- agents/memory/beliefs.py (the render-ceiling extension of the 13.14 joint cap + the self-refuted-alibi WEAK downgrade, behind the new `*_enabled()` resolver; the existing caps are extended, not rewritten)
 - orchestrator/replay.py (register the new lever key in `SUBSTRATE_FLAG_KEYS` / `substrate_flag_snapshot()` so 14.12's recording stamps it — additive)
 - .env.example (document the new default-OFF lever)
 - tests/agents/test_beliefs.py (unit tests: a synthetic 9-flag same-meeting stack renders BELOW certain-guilt with the lever ON; byte-identity of the fold with it OFF; evidence-class weighting cases if implemented)
@@ -892,9 +900,11 @@ committed-bytes test; 14.12 records baseline 2 with it ON and stamps it. Registe
 - meetings/transcript.py detector logic (flags are still DETECTED the same; this task changes how the belief fold WEIGHS them)
 
 **Definition of done:**
-- [ ] With the lever ON, no crew render can reach 1.0 from same-meeting contradiction flags alone: the aggregate same-meeting contradiction lift is bounded per 14.8's spec, demonstrated by a unit test stacking ≥9 synthetic same-meeting flags (the seed-44 worst case) that renders below certain-guilt.
+- [ ] Bound 1 (certain-guilt exclusion): with the lever ON, NO flag/testimony-driven lift can render at the 1.0 clamp — unit tests cover BOTH 1.0 paths from the audit: the neutral-prior case (0.50 + saturated 0.30 → 0.80, unchanged) and the compounding case (body-proximity prior 0.70 + 0.30 → CEILS at ~0.97, not 1.00); a first-hand witnessed-kill pin still renders ~1.0 (the exemption).
+- [ ] Bound 2 (self-refuted-alibi downgrade): a contradiction group whose refuted alibi is contradicted by the subject's OWN same-turn `completed_task` observation contributes WEAK (0.08) not STRONG (0.30), with tests for the self-refuted and not-self-refuted cases.
+- [ ] The offline proof over baseline-1 bytes (via the 14.8 `allow_substrate_mismatch` override): all 5 pinned railroad rows render below 1.0 with the lever ON, AND the seed-44 m0 true-impostor catch still gate-crosses (the over-damping canary).
 - [ ] With the lever OFF (the default), the belief fold is byte-identical to pre-task behavior: committed baseline-1 reconstructs byte-identically and every committed-bytes test stays green unmodified.
-- [ ] If 14.8's spec includes evidence-class weighting, flags are weighted by class (self-inconsistency / third-party-refuted / proximity) with tests per class; if deferred, the audit records why.
+- [ ] The REJECTED shapes are absent: no witness-count weighting, no ≥2-group gating (audit §3a rejected both by measurement — a reviewer finding either is a contract violation, not an improvement).
 - [ ] The new lever is registered in `substrate_flag_snapshot()` / `SUBSTRATE_FLAG_KEYS` and round-trips through the replay stamp + MANIFEST `flags` cell (so the 14.12 recording self-describes).
 - [ ] `.env.example` documents the lever as default-OFF pending the 14.12 baseline-2 re-record.
 - [ ] `uv run mypy .` passes.
@@ -910,17 +920,19 @@ committed-bytes test; 14.12 records baseline 2 with it ON and stamps it. Registe
 
 **Implementation hint:**
 
-Start from 14.8's diagnosis, not from scratch — the audit names the exact mechanism by which ≥2 same-meeting
-flags defeat the 10.1 cap (the pinned rows in `tests/meetings/test_manager.py` are the reproduction corpus:
-seed-44 m1 p-1 with 9 flags is the worst case). The 13.5 lever pattern is the template for the gate: a module
-constant `ENV_EVIDENCE_QUALITY_LIFT` + an `evidence_quality_lift_enabled()` resolver read ad-hoc from
-`os.environ`, OFF branch byte-identical. The likely fix shape: the 10.1 cap bounds the lift PER FLAG (or per
-detector kind) and stacking distinct flags each contributes — replace with an aggregate per-(meeting, subject)
-contradiction-lift budget of one strong flag's worth (0.3), optionally allocated by evidence class. Prove the
+Read audit §3/§3a FIRST — it reproduced the production fold exactly (2482/2482 recorded vote-prompt rows) and
+its spec is measured, not hypothesized. Both bounds are small extensions at the 13.14 joint-cap site in
+`agents/memory/beliefs.py`: bound 1 adds a third term to the min (`CONTRADICTION_RENDER_CEIL`, ~0.97, applied
+only to flag/testimony-driven lift — the first-hand witnessed-kill pin path stays exempt); bound 2 needs the
+self-refutation signal at fold time, which is mechanically derivable from the transcript (the subject's own
+same-turn `completed_task` room/tick inside the refuted alibi span — the same check the audit ran). The 13.5
+lever pattern is the template for the gate: a module constant `ENV_EVIDENCE_QUALITY_LIFT` + an
+`evidence_quality_lift_enabled()` resolver read ad-hoc from `os.environ`, OFF branch byte-identical. Prove the
 fix offline before 14.12 spends: re-derive the 5 pinned railroad meetings from baseline-1 bytes with the lever
-ON and confirm every pinned row now renders below 1.0. Note the stamp: baseline 1's stamp lacks the new lever
-key, so re-deriving with it ON is a substrate mismatch — use the 14.8 analysis-only override
-(`allow_substrate_mismatch=True`) for exactly this comparison; that is what it exists for.
+ON and confirm every pinned row renders below 1.0 AND the seed-44 m0 true-impostor catch still converts. Note
+the stamp: baseline 1's stamp lacks the new lever key, so re-deriving with it ON is a substrate mismatch — use
+the 14.8 analysis-only override (`allow_substrate_mismatch=True`) for exactly this comparison; that is what it
+exists for.
 
 **Integration risk:**
 
@@ -1015,10 +1027,14 @@ flag-aware reconstruction. Baseline 2 replaces baseline 1 as canonical. BECAUSE 
 against measured defects, this close also measures them: restore the railroad REGRESSION PIN to the original
 TRIPWIRE (zero crew rows at 1.0 from same-meeting flag stacks), and report the per-defect deltas vs baseline 1
 (ejection accuracy vs 0.566, self-contradicted alibis vs 10%, guard-normalized ballots vs 47, conf-1.0
-accusations vs 64, template-rationale share vs 33%, missed-deadline vs 23) plus the re-measured R-gate (R1 vs
-27/50, impostor win vs 0.32). Better CONVICTIONS, not just more: R1 holding near baseline 1 with ejection
-accuracy up is the win condition; R1 collapsing means 14.10 over-damped (stop, iterate the weighting, re-smoke
-— never weaken the gate). Close the phase with the final audit + STATUS banner.
+accusations vs 64, template-rationale share vs 33%, missed-deadline vs 23) plus the re-measured R-gate. The
+honest R1 anchor is the RAILROAD-DISCOUNTED baseline-1 figure (25/50, audit §2 — the pinned rows accounted
+for only 2 of the 24-game lift), not raw 27/50; and per audit §2 the stacked-flag signature is role-blind
+(46% of impostor ejections carry it too), so "fewer stacked-flag convictions" alone is NOT a success metric.
+Better CONVICTIONS, not just more: R1 holding near 25 with ejection accuracy up from 0.566 is the win
+condition; R1 collapsing means 14.10 over-damped (stop, iterate the weighting, re-smoke — never weaken the
+gate). Also report whether the 22 zero-flag crew mis-ejects (audit §7, untouched by 14.10's lever) moved
+under v4's calibration/curation fixes. Close the phase with the final audit + STATUS banner.
 
 **Files in scope:**
 - replays/samples/4p1i/ (50 replays + report + MANIFEST re-recorded; `flags` rows now stamp the 14.10 lever)
