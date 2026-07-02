@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,39 +29,6 @@ from observation.packet import (
     PlayerView,
     SelfView,
 )
-
-# Task 13.5.4 feature flag: movement perception. Resolved once like
-# ``AILIBI_LLM_PROVIDER`` (``llm/provider.py``) / ``AILIBI_TESTIMONY_AS_CONTENT``
-# (``agents/memory/store.py``): OFF by default, so a build that never sets it is
-# BYTE-IDENTICAL to pre-task HEAD -- the ``ObservationPacket.moved_players`` tuple
-# stays empty, no perceived-movement episodic row is ingested, ``record_sighting``
-# is never called, and the "last seen in ROOM at tick T" suffix never renders. The
-# 9B smoke and the Phase-14 re-record run it ON. Read at the observation boundary
-# (the orchestrator-owned engine→agent translation) so BOTH the live game loop and
-# the replay loader gate identically with no caller change; the signal re-derives
-# from the recorded ``MovedEvent`` on replay, so committed replays reconstruct
-# byte-identically.
-ENV_MOVEMENT_PERCEPTION: Final[str] = "AILIBI_MOVEMENT_PERCEPTION"
-_MOVEMENT_FLAG_TRUE: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
-
-
-def movement_perception_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 13.5.4 movement-perception lever is ON.
-
-    Reads :data:`ENV_MOVEMENT_PERCEPTION` from ``env`` (defaulting to the real
-    process environment), mirroring how :func:`llm.provider.resolve_provider`
-    reads ``AILIBI_LLM_PROVIDER``. Default OFF: an unset / empty / unrecognised
-    value is ``False`` so the merge is byte-identical to today and the existing
-    leak/golden suite is untouched. Accepts ``1/true/yes/on`` (case-insensitive).
-    The ``env`` argument lets tests toggle the flag deterministically without
-    mutating ``os.environ``.
-    """
-
-    environment = env if env is not None else os.environ
-    return environment.get(ENV_MOVEMENT_PERCEPTION, "").strip().lower() in (
-        _MOVEMENT_FLAG_TRUE
-    )
-
 
 # -- Impostor blending: the pretend-task channel (Task 10.14, DESIGN.md §3.4,
 # §4.5; audit-2026-06-13-1816 D-D-1) ----------------------------------------
@@ -450,16 +416,13 @@ class ObservationService:
         ``saw_player`` for ``to_room`` (just not the origin). A no-op move
         (``from_room == to_room``) is not a transition and is skipped.
 
-        Gated on :func:`movement_perception_enabled`: OFF (the default) returns
-        the empty tuple, so the packet -- and every episodic store / render /
-        ``last_seen`` derived from it -- is byte-identical to pre-task HEAD. The
+        Unconditional since Task 14.9 (the adopted 13.5.4 lever is the default
+        substrate; the ``AILIBI_MOVEMENT_PERCEPTION`` gate is retired). The
         result is sorted by actor id for replay-deterministic packet ordering.
         Reading the engine ``MovedEvent`` here (the orchestrator-owned boundary)
         keeps ``agents/`` engine-free.
         """
 
-        if not movement_perception_enabled():
-            return ()
         visible_rooms = set(visibility.visible_rooms)
         moved: dict[PlayerId, MovedPlayerView] = {}
         for event in engine_events:

@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 
 from orchestrator.replay import (
+    SUBSTRATE_FLAG_KEYS,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
@@ -136,56 +137,32 @@ class TestGameEndRecording:
 class TestSubstrateFlagStamp:
     """The Task-14.7 substrate-flag stamp on the game_over record.
 
-    A replay self-describes which Phase-13.5 levers generated it. The stamp is
-    ADDITIVE and CONDITIONAL: a flag-OFF run writes byte-identical bytes to the
-    pre-14.7 format (no key), so the committed final-9B baseline and every
-    determinism/byte-identity test stay green; a flag-ON run carries the snapshot.
+    A replay self-describes which Phase-13.5 levers generated it. Since Task
+    14.9 the four levers are unconditionally ON (their env gates are retired),
+    so the snapshot is constant all-True regardless of the environment and
+    every new recording stamps the full snapshot — matching the committed
+    14.7 flags-ON baseline. The stamp machinery stays generic: a future
+    toggleable lever (14.10) registers its key + resolver in
+    ``orchestrator.replay`` and rides the same snapshot/stamp/guard path.
     """
 
-    _ALL_ON = {
-        "AILIBI_TESTIMONY_AS_CONTENT": "1",
-        "AILIBI_WITNESSED_KILL_EVIDENCE": "1",
-        "AILIBI_MOVEMENT_PERCEPTION": "1",
-        "AILIBI_UNFREEZE_MEMORY": "1",
-    }
-
-    def test_substrate_flag_snapshot_reads_env(self) -> None:
-        assert substrate_flag_snapshot({}) == {
-            "testimony_as_content": False,
-            "witnessed_kill_evidence": False,
-            "movement_perception": False,
-            "unfreeze_memory": False,
-        }
-        assert substrate_flag_snapshot(self._ALL_ON) == {
-            "testimony_as_content": True,
-            "witnessed_kill_evidence": True,
-            "movement_perception": True,
-            "unfreeze_memory": True,
+    def test_substrate_flag_snapshot_is_unconditionally_all_on(self) -> None:
+        # The retired levers report True under ANY env — a bare mapping, an
+        # explicit legacy "0", or the legacy all-ON export all read identically.
+        all_on = dict.fromkeys(SUBSTRATE_FLAG_KEYS, True)
+        assert substrate_flag_snapshot({}) == all_on
+        assert substrate_flag_snapshot() == all_on
+        assert substrate_flag_snapshot({"AILIBI_TESTIMONY_AS_CONTENT": "0"}) == all_on
+        assert set(SUBSTRATE_FLAG_KEYS) == {
+            "testimony_as_content",
+            "witnessed_kill_evidence",
+            "movement_perception",
+            "unfreeze_memory",
         }
 
-    def test_flag_off_run_writes_no_stamp_key(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Default (all OFF): the game_over record omits substrate_flags entirely,
-        # so a flag-OFF replay is byte-identical to the pre-14.7 format.
-        for var in self._ALL_ON:
-            monkeypatch.delenv(var, raising=False)
-        path = tmp_path / "off.jsonl"
-        ReplayLog(path, game_id="g-off").record_game_end(
-            winner="CREWMATES", reason="TASKS", tick=10
-        )
-        raw = path.read_text(encoding="utf-8")
-        assert "substrate_flags" not in raw
-        entry = read_all_entries(path)[0]
-        assert isinstance(entry, GameEndReplayEntry)
-        assert entry.substrate_flags is None
-        assert read_substrate_flags(path) is None
-
-    def test_flag_on_run_stamps_full_snapshot(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        for var, value in self._ALL_ON.items():
-            monkeypatch.setenv(var, value)
+    def test_every_recording_stamps_the_full_snapshot(self, tmp_path: Path) -> None:
+        # No env vars needed: recording under a bare environment stamps all
+        # four levers ON, consistent with the committed 14.7 baseline.
         path = tmp_path / "on.jsonl"
         ReplayLog(path, game_id="g-on").record_game_end(
             winner="IMPOSTORS", reason="IMPOSTOR_PARITY", tick=41
@@ -199,25 +176,6 @@ class TestSubstrateFlagStamp:
             "unfreeze_memory": True,
         }
         assert read_substrate_flags(path) == dict(entry.substrate_flags)
-
-    def test_partial_flags_stamp_records_the_full_four_keys(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Any lever ON triggers a full four-key snapshot (the OFF levers recorded
-        # as False), so the stamp always fully describes the substrate.
-        for var in self._ALL_ON:
-            monkeypatch.delenv(var, raising=False)
-        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
-        path = tmp_path / "partial.jsonl"
-        ReplayLog(path, game_id="g-part").record_game_end(
-            winner="CREWMATES", reason="TASKS", tick=5
-        )
-        assert read_substrate_flags(path) == {
-            "testimony_as_content": False,
-            "witnessed_kill_evidence": False,
-            "movement_perception": True,
-            "unfreeze_memory": False,
-        }
 
     def test_legacy_game_over_without_stamp_deserializes(self) -> None:
         # A pre-14.7 game_over record (no substrate_flags key) still validates,

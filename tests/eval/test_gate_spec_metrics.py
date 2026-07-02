@@ -923,12 +923,10 @@ class TestCommittedW2GateSpecPins:
         ]
         assert channels_by_site == expected
 
-    def test_multi_signal_conversion_reads_54_of_69(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_multi_signal_conversion_reads_54_of_69(self) -> None:
         # Re-extracted on the qwen3_32b v3 re-record (Featherless, Qwen/Qwen3-32B,
-        # all four Phase-13.5 substrate flags ON — the committed bytes carry the
-        # flag stamp, so the census must be re-derived under the flag-ON substrate).
+        # all four Phase-13.5 substrate levers ON — the unconditional default
+        # since Task 14.9, so the census re-derives under the bare env).
         # The gate ejects far more often (69 impostor ejections, up from the W2 14),
         # and on the qwen3_32b.v3 substrate most of those rows carry two or more
         # signal channels: 54 of 69 multi-signal, 15 single-signal, 0 unattributed —
@@ -936,10 +934,6 @@ class TestCommittedW2GateSpecPins:
         # the v3 header in this PR; before that fix this census read a spurious 0/69.)
         # The channel decomposition per site is pinned below against the committed W2
         # baseline fixture.
-        monkeypatch.setenv("AILIBI_TESTIMONY_AS_CONTENT", "1")
-        monkeypatch.setenv("AILIBI_WITNESSED_KILL_EVIDENCE", "1")
-        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
-        monkeypatch.setenv("AILIBI_UNFREEZE_MEMORY", "1")
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
@@ -949,13 +943,11 @@ class TestCommittedW2GateSpecPins:
         assert result.unattributed_conversions == 0
         assert result.multi_signal_rate == pytest.approx(54 / 69)
 
-    def test_supply_gauges_read_the_corrected_instrument(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_supply_gauges_read_the_corrected_instrument(self) -> None:
         # The supply row, re-extracted on the qwen3_32b v3 re-record (Featherless,
-        # Qwen/Qwen3-32B, all four Phase-13.5 substrate flags ON — the committed
-        # bytes carry the flag stamp, so the flag census must re-derive under the
-        # flag-ON substrate). The new substrate lights every inferential channel:
+        # Qwen/Qwen3-32B, all four Phase-13.5 substrate levers ON — the
+        # unconditional default since Task 14.9, so the flag census re-derives
+        # under the bare env). The new substrate lights every inferential channel:
         # 702 flags now split 302w/400s (the 13.5 STRONG rules — testimony-as-content,
         # witnessed-kill-evidence, movement, unfreeze — fire off the recorded bytes),
         # 152 meetings, flag role split 451 CREW / 251 IMP, zero-contradiction 41,
@@ -963,10 +955,6 @@ class TestCommittedW2GateSpecPins:
         # listener rows (the vote graph renders densely on this set). NB: the
         # suspicion-graph parser was updated to the qwen3_32b.v3 header in this PR;
         # before that fix this gauge (and multi-signal/inform) read a spurious 0.
-        monkeypatch.setenv("AILIBI_TESTIMONY_AS_CONTENT", "1")
-        monkeypatch.setenv("AILIBI_WITNESSED_KILL_EVIDENCE", "1")
-        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
-        monkeypatch.setenv("AILIBI_UNFREEZE_MEMORY", "1")
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
@@ -981,26 +969,19 @@ class TestCommittedW2GateSpecPins:
         assert gauges.accused_impostor_meetings == 127
         assert gauges.over_gate_listener_rows == 397
 
-    def test_corrected_w2_baseline_matches_a_rederivation(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_corrected_w2_baseline_matches_a_rederivation(self) -> None:
         # ONE home: corrected_w2_baseline.json IS the current-era baseline,
-        # produced by the operator command (with the Task-14.7 substrate flags ON)
-        #   AILIBI_TESTIMONY_AS_CONTENT=1 AILIBI_WITNESSED_KILL_EVIDENCE=1 \
-        #   AILIBI_MOVEMENT_PERCEPTION=1 AILIBI_UNFREEZE_MEMORY=1 \
+        # produced by the operator command
         #   scripts/build_sample_report.py --sample-dir replays/samples/9p2i
         #     --baseline-out tests/fixtures/phase10/corrected_w2_baseline.json
+        # (originally under the Task-14.7 all-ON flag export; since Task 14.9
+        # that substrate is the unconditional default, so the re-derivation
+        # runs under the bare env and needs no flag export.)
         # A byte-identical re-derivation here proves (a) the committed W2 fixture
         # has not drifted from the committed bytes and (b) the whole derivation
-        # chain — detector, predicate, metrics — is deterministic end to end. The
-        # re-record stamps its game_over records flag-ON, so the re-derivation must
-        # run under the same substrate the fixture was built under.
+        # chain — detector, predicate, metrics — is deterministic end to end.
         # corrected_w0/w1_baseline.json are the frozen prior-era A/B anchors,
         # decoupled from the W2 bytes by the re-record (rows pinned below).
-        monkeypatch.setenv("AILIBI_TESTIMONY_AS_CONTENT", "1")
-        monkeypatch.setenv("AILIBI_WITNESSED_KILL_EVIDENCE", "1")
-        monkeypatch.setenv("AILIBI_MOVEMENT_PERCEPTION", "1")
-        monkeypatch.setenv("AILIBI_UNFREEZE_MEMORY", "1")
         report = build_report(_COMMITTED_9P2I_DIR)
         rederived = serialize_corrected_baseline(
             corrected_baseline_from_report(report, sample_dir=_COMMITTED_9P2I_DIR)

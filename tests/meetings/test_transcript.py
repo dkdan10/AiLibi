@@ -1532,23 +1532,12 @@ def _living_roster(entry: MeetingReplayEntry) -> frozenset[str]:
 
 
 # The committed replays/samples sets were re-recorded on the Featherless
-# Qwen/Qwen3-32B substrate with ALL FOUR Phase-13.5 flags ON, and the set
-# carries a substrate stamp requiring those 4 flags to reconstruct. Every
-# offline re-derivation of the committed contradiction bytes therefore runs
-# under the flag-ON substrate (the existing detect_contradictions(env=...)
-# idiom) so it reproduces the recorded flag-ON census byte-for-byte.
-_SUBSTRATE_FLAGS_ON = {
-    "AILIBI_TESTIMONY_AS_CONTENT": "1",
-    "AILIBI_WITNESSED_KILL_EVIDENCE": "1",
-    "AILIBI_MOVEMENT_PERCEPTION": "1",
-    "AILIBI_UNFREEZE_MEMORY": "1",
-}
-
-
+# Qwen/Qwen3-32B substrate with ALL FOUR Phase-13.5 levers ON — the DEFAULT
+# (and only) substrate since Task 14.9 retired the env gates. A bare
+# re-derivation therefore reproduces the recorded flags-ON census
+# byte-for-byte.
 def _rederive(entry: MeetingReplayEntry) -> tuple[ContradictionRef, ...]:
-    return detect_contradictions(
-        entry.transcript, roster=_living_roster(entry), env=_SUBSTRATE_FLAGS_ON
-    )
+    return detect_contradictions(entry.transcript, roster=_living_roster(entry))
 
 
 def _alibi_rooms_by_event_id(entry: MeetingReplayEntry) -> dict[str, frozenset[str]]:

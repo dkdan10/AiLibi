@@ -20,7 +20,6 @@ orchestrator's job (DESIGN.md §1.3).
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -33,7 +32,6 @@ from agents.memory.store import (
     absorb_meeting_evidence,
     absorb_reported_testimony,
     render_for_prompt,
-    testimony_as_content_enabled,
 )
 from agents.perception import ingest_packet
 from agents.strategic.prompts import (
@@ -495,8 +493,8 @@ class ReportedTestimonyAgent(Protocol):
     reason :class:`BeliefPersistingAgent` is one -- a scripted / packet-recording
     test agent without a memory store has nothing to ingest -- and additive, so
     no existing agent must implement it. :func:`_absorb_meeting_beliefs` calls it
-    per living agent only when :func:`testimony_as_content_enabled` is ON, so the
-    flag-OFF path is byte-identical to today.
+    per living agent unconditionally since Task 14.9 (the adopted 13.5.2 lever
+    is the default substrate).
     """
 
     def absorb_reported_testimony(
@@ -651,7 +649,6 @@ class DefaultMeetingRunner:
             state=state,
             agents=agents,
             token_budget=self._token_budget,
-            unfreeze_memory=unfreeze_memory_enabled(),
         )
         # Dead / ejected roster (Task 10.3, audit gp-9): the orchestrator is
         # the only meeting-adjacent layer that may read world state, so it
@@ -788,41 +785,6 @@ def build_default_meeting_runner(
     )
 
 
-# Task 13.5.5 unfreeze-rendered-memory lever. Default OFF: every
-# ``MeetingParticipant`` carries the one-time open-tick render (the frozen
-# snapshot), byte-identical to pre-task HEAD, so the existing meeting suite and
-# the committed replays are untouched. ON: the orchestrator attaches a ballot
-# re-render hook so a voter's ballot renders its belief-line suspicion from the
-# SAME pre-vote-folded suspicion the ``suspicion_graph`` kwarg carries --
-# resolving the belief-line-vs-graph divergence (the PR #198 review
-# inconsistency). Turn prompts keep the frozen render (they carry no
-# ``suspicion_graph``). Mirrors
-# ``meetings.transcript.witnessed_kill_evidence_enabled`` and
-# ``agents.memory.store.testimony_as_content_enabled``.
-ENV_UNFREEZE_MEMORY: Final[str] = "AILIBI_UNFREEZE_MEMORY"
-_UNFREEZE_MEMORY_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
-
-
-def unfreeze_memory_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 13.5.5 unfreeze-rendered-memory lever is ON.
-
-    Reads :data:`ENV_UNFREEZE_MEMORY` from ``env`` (defaulting to the real
-    process environment). Default OFF: an unset / empty / unrecognised value
-    is ``False`` so the merge is the frozen open-tick render, byte-identical
-    to pre-task HEAD. Accepts ``1/true/yes/on`` (case-insensitive). The
-    ``env`` argument lets tests toggle the flag deterministically without
-    mutating ``os.environ``.
-    """
-
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_UNFREEZE_MEMORY, "").strip().lower()
-        in _UNFREEZE_MEMORY_FLAG_TRUE
-    )
-
-
 def _memory_rerender_hook(
     agent: MeetingAwareAgent, *, token_budget: int
 ) -> Callable[[Mapping[PlayerId, float]], str]:
@@ -856,7 +818,6 @@ def _build_participants(
     state: WorldState,
     agents: Mapping[PlayerId, AgentInterface],
     token_budget: int,
-    unfreeze_memory: bool = False,
 ) -> tuple[MeetingParticipant, ...]:
     """Build one :class:`MeetingParticipant` per living agent.
 
@@ -914,17 +875,13 @@ def _build_participants(
             if player.role == "IMPOSTOR"
             else ()
         )
-        # Task 13.5.5: the open-tick render is ALWAYS produced (it is the
-        # frozen value every TURN prompt reads, and the flag-OFF default for
-        # the ballot too -- byte-identical to HEAD). With the flag ON we also
-        # attach a re-render hook the manager calls ONLY for the ballot, with
-        # the per-voter pre-vote-folded suspicion, so the ballot's belief lines
+        # Task 13.5.5 (unconditional since Task 14.9 — the adopted lever is the
+        # default substrate): the open-tick render is ALWAYS produced (it is
+        # the frozen value every TURN prompt reads), and a re-render hook is
+        # attached that the manager calls ONLY for the ballot, with the
+        # per-voter pre-vote-folded suspicion, so the ballot's belief lines
         # match the ``suspicion_graph`` it consumes.
-        rerender_memory = (
-            _memory_rerender_hook(agent, token_budget=token_budget)
-            if unfreeze_memory
-            else None
-        )
+        rerender_memory = _memory_rerender_hook(agent, token_budget=token_budget)
         participants.append(
             MeetingParticipant(
                 agent_id=player_id,
@@ -1734,17 +1691,11 @@ def _absorb_meeting_beliefs(
 
     evidence = extract_belief_evidence(result, trigger_kind=trigger_kind)
     # Task 13.5.2: the reported-testimony content fold rides the SAME
-    # per-living-agent loop as the scalar belief fold, gated on the
-    # ``AILIBI_TESTIMONY_AS_CONTENT`` flag (resolved once here, like
-    # ``llm.provider`` resolves the provider). Flag OFF (the default) -> the
-    # derivation never runs and no reported row is ingested, so the live game is
-    # byte-identical to pre-task HEAD. The derivation is a pure function of the
-    # recorded ``result``, identical to the replay loader's, so reconstruction
-    # stays byte-identical.
-    testimony_enabled = testimony_as_content_enabled()
-    statements: tuple[ReportedStatement, ...] = (
-        derive_reported_testimony(result) if testimony_enabled else ()
-    )
+    # per-living-agent loop as the scalar belief fold, unconditionally since
+    # Task 14.9 (the adopted lever is the default substrate). The derivation is
+    # a pure function of the recorded ``result``, identical to the replay
+    # loader's, so reconstruction stays byte-identical.
+    statements: tuple[ReportedStatement, ...] = derive_reported_testimony(result)
     for player_id in sorted(state.players):
         if not state.players[player_id].alive:
             continue
@@ -1760,7 +1711,7 @@ def _absorb_meeting_beliefs(
         # appended) and is wholly separate from it. NOT teammate-firewalled: the
         # capability ingests public speech faithfully (the scalar firewall above
         # is unchanged).
-        if testimony_enabled and isinstance(agent, ReportedTestimonyAgent):
+        if isinstance(agent, ReportedTestimonyAgent):
             agent.absorb_reported_testimony(statements=statements)
 
 
@@ -2116,8 +2067,7 @@ class TacticalAgent:
         store (``agents.memory.store.absorb_reported_testimony``), which appends
         ``provenance="reported"`` rows for OTHER speakers' structured claims and
         populates the alibi map on the SAME :class:`AgentMemory` the scalar fold
-        and the meeting renderer read. Only invoked when the
-        ``AILIBI_TESTIMONY_AS_CONTENT`` flag is ON.
+        and the meeting renderer read.
         """
 
         absorb_reported_testimony(self._memory, statements=statements)

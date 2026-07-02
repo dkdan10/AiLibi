@@ -27,28 +27,10 @@ _SEED = 0  # smallest committed sample: fast to reconstruct
 _MEETING_SEED = 22  # a committed sample that contains a meeting
 
 # The canonical samples were re-recorded on the Featherless / Qwen/Qwen3-32B
-# substrate (prompt set qwen3_32b v3) with all four Phase-13.5 levers ON, so
-# reconstructing the committed bytes requires exporting the same four flags —
-# otherwise ReplayLoader raises ReplaySubstrateMismatchError. Tests that drive a
-# reconstruction (verify_samples / main / the bash wrapper / load_replay) set
-# these on their own env only, never module-wide.
-_SUBSTRATE_FLAGS = {
-    "AILIBI_TESTIMONY_AS_CONTENT": "1",
-    "AILIBI_WITNESSED_KILL_EVIDENCE": "1",
-    "AILIBI_MOVEMENT_PERCEPTION": "1",
-    "AILIBI_UNFREEZE_MEMORY": "1",
-}
-
-
-def _export_substrate(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Export the four flag-ON substrate levers for a single test's process env.
-
-    Scoped to the calling test only (monkeypatch auto-reverts), so any flag-OFF
-    test in this module is unaffected.
-    """
-
-    for key, value in _SUBSTRATE_FLAGS.items():
-        monkeypatch.setenv(key, value)
+# substrate (prompt set qwen3_32b v3) with all four Phase-13.5 levers ON — the
+# unconditional default since Task 14.9, so reconstructing the committed bytes
+# needs NO flag export: verification runs under a BARE environment (the
+# Task-14.9 acceptance bar).
 
 
 def _copy_seed(dst_dir: Path, seed: int) -> Path:
@@ -86,7 +68,6 @@ def _corrupt_first_tick_hash(path: Path) -> int:
 
 
 def test_clean_sample_verifies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _export_substrate(monkeypatch)
     _copy_seed(tmp_path, _SEED)
     assert vs.verify_samples(tmp_path) == []
 
@@ -94,7 +75,6 @@ def test_clean_sample_verifies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 def test_corrupted_hash_detected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _export_substrate(monkeypatch)
     path = _copy_seed(tmp_path, _SEED)
     tick = _corrupt_first_tick_hash(path)
     failures = vs.verify_samples(tmp_path)
@@ -111,7 +91,6 @@ def test_main_clean_exit_zero(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _export_substrate(monkeypatch)
     _copy_seed(tmp_path, _SEED)
     rc = vs.main([str(tmp_path)])
     assert rc == 0
@@ -123,7 +102,6 @@ def test_main_corrupted_exit_one(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _export_substrate(monkeypatch)
     path = _copy_seed(tmp_path, _SEED)
     tick = _corrupt_first_tick_hash(path)
     rc = vs.main([str(tmp_path)])
@@ -165,7 +143,7 @@ def test_verify_sh_detects_corruption(tmp_path: Path) -> None:
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
-        env={**os.environ, **_SUBSTRATE_FLAGS},
+        env=dict(os.environ),
     )
     assert proc.returncode == 1
     assert f"tick {tick}" in proc.stdout
@@ -197,7 +175,6 @@ def _corrupt_meeting_before_hash(path: Path) -> int:
 def test_meeting_state_hash_before_corruption_detected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _export_substrate(monkeypatch)
     path = _copy_seed(tmp_path, _MEETING_SEED)
     tick = _corrupt_meeting_before_hash(path)
     # load_replay alone does NOT inspect state_hash_before, so it still passes —
@@ -228,7 +205,6 @@ def test_duplicate_seed_alias_rejected(tmp_path: Path) -> None:
 def test_missing_canonical_seed_detected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _export_substrate(monkeypatch)
     # A manifest declares seeds 0 and 22, but seed 22's replay is absent.
     _copy_seed(tmp_path, _SEED)  # only replay-seed-0.jsonl present
     (tmp_path / "MANIFEST.md").write_text(
@@ -245,7 +221,6 @@ def test_missing_canonical_seed_detected(
 def test_no_manifest_skips_completeness_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _export_substrate(monkeypatch)
     # An ad-hoc directory without a manifest declares no expected set, so a
     # single clean sample passes (completeness is only enforced via a manifest).
     _copy_seed(tmp_path, _SEED)
@@ -266,7 +241,6 @@ def _manifest_for_seeds(*seeds: int) -> str:
 def test_unmanifested_sample_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _export_substrate(monkeypatch)
     # The manifest lists only seed 0, but seed 22's replay is also on disk. It
     # would be consumed by ReplayLoader (and any Phase 5 directory walk) with no
     # provenance row, so verification must reject the unmanifested extra.
@@ -298,7 +272,6 @@ def _corrupt_meeting_tick(path: Path, new_tick: int) -> None:
 def test_orphaned_meeting_tick_detected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _export_substrate(monkeypatch)
     path = _copy_seed(tmp_path, _MEETING_SEED)
     _corrupt_meeting_tick(path, 9999)  # no tick row exists at 9999
     # load_replay only attaches a meeting when a *reconstructed* tick enters

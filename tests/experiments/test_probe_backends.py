@@ -55,11 +55,21 @@ _VALID = '{"target": "p-1", "confidence": 0.5}'
 # can emit, which must surface as ``parsed is None`` + a ``parse_error``.
 _MALFORMED = '{"target": "p-1"}'
 
+# An arbitrary EXPLICIT provenance dict threaded through call_turn verbatim.
+# (Historical flag-OFF shape; since Task 14.9 the live snapshot is
+# unconditionally all-ON, so an explicit dict is the only way a row can carry
+# anything else — which is exactly what the passthrough contract covers.)
 _FLAGS_OFF = {
     "testimony_as_content": False,
     "witnessed_kill_evidence": False,
     "movement_perception": False,
     "unfreeze_memory": False,
+}
+_FLAGS_ON = {
+    "testimony_as_content": True,
+    "witnessed_kill_evidence": True,
+    "movement_perception": True,
+    "unfreeze_memory": True,
 }
 
 
@@ -373,17 +383,11 @@ def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_substrate_flags_default_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
-    # No explicit substrate_flags: call_turn snapshots the live resolvers. The
-    # CI environment leaves the AILIBI_* flags unset, so all four read False.
+    # No explicit substrate_flags: call_turn snapshots the live substrate. The
+    # four 13.5 levers are unconditionally ON since Task 14.9, so the snapshot
+    # reads all-True regardless of the (bare CI) environment.
     send = _RecordingOllama(text=_VALID)
     monkeypatch.setattr(pb, "_ollama_send", send)
-    for var in (
-        "AILIBI_TESTIMONY_AS_CONTENT",
-        "AILIBI_WITNESSED_KILL_EVIDENCE",
-        "AILIBI_MOVEMENT_PERCEPTION",
-        "AILIBI_UNFREEZE_MEMORY",
-    ):
-        monkeypatch.delenv(var, raising=False)
     result = asyncio.run(
         call_turn(
             "prompt",
@@ -394,7 +398,7 @@ def test_substrate_flags_default_snapshot(monkeypatch: pytest.MonkeyPatch) -> No
             max_tokens=64,
         )
     )
-    assert result.substrate_flags == _FLAGS_OFF
+    assert result.substrate_flags == _FLAGS_ON
 
 
 def test_deception_battery_cfg_routes_to_featherless(
@@ -482,19 +486,9 @@ def test_featherless_explicit_base_url_wins(
     assert send.seen["base_url"] == "http://explicit.local/v1"
 
 
-def test_active_substrate_flags_reads_env() -> None:
-    flags = active_substrate_flags(
-        env={
-            "AILIBI_TESTIMONY_AS_CONTENT": "1",
-            "AILIBI_WITNESSED_KILL_EVIDENCE": "true",
-            "AILIBI_MOVEMENT_PERCEPTION": "on",
-            "AILIBI_UNFREEZE_MEMORY": "yes",
-        }
-    )
-    assert flags == {
-        "testimony_as_content": True,
-        "witnessed_kill_evidence": True,
-        "movement_perception": True,
-        "unfreeze_memory": True,
-    }
-    assert active_substrate_flags(env={}) == _FLAGS_OFF
+def test_active_substrate_flags_is_unconditionally_all_on() -> None:
+    # Task 14.9 retired the four env gates: the snapshot reads all-True under
+    # any env — bare, legacy all-ON export, or a legacy "0".
+    assert active_substrate_flags(env={}) == _FLAGS_ON
+    assert active_substrate_flags() == _FLAGS_ON
+    assert active_substrate_flags(env={"AILIBI_TESTIMONY_AS_CONTENT": "0"}) == _FLAGS_ON

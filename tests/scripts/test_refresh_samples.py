@@ -180,16 +180,14 @@ def test_dry_run_default_provider_is_anthropic() -> None:
 def test_dry_run_featherless_provider_echoes_substrate() -> None:
     # Task 14.7: AILIBI_LLM_PROVIDER=featherless is an accepted provider; the
     # dry-run echoes it, its FEATHERLESS_API_KEY preflight, the prompt set, and
-    # the four 13.5 substrate flags so the locked tuple's substrate is never
-    # silent (AGENTS.md "no silent fallbacks").
+    # the substrate provenance so the locked tuple is never silent (AGENTS.md
+    # "no silent fallbacks"). The four 13.5 levers are unconditionally ON since
+    # Task 14.9, so no flag env vars are exported and the echo states the
+    # unconditional substrate.
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         AILIBI_PROMPT_SET="qwen3_32b",
-        AILIBI_TESTIMONY_AS_CONTENT="1",
-        AILIBI_WITNESSED_KILL_EVIDENCE="1",
-        AILIBI_MOVEMENT_PERCEPTION="1",
-        AILIBI_UNFREEZE_MEMORY="1",
     )
     proc = _run("--seeds", "0", "--dry-run", env=env)
     assert proc.returncode == 0
@@ -197,8 +195,8 @@ def test_dry_run_featherless_provider_echoes_substrate() -> None:
     assert "[dry-run] preflight: would require FEATHERLESS_API_KEY" in proc.stdout
     assert "[dry-run] prompt set: qwen3_32b" in proc.stdout
     assert (
-        "[dry-run] substrate flags: testimony=1 witnessed_kill=1 "
-        "movement=1 unfreeze=1" in proc.stdout
+        "[dry-run] substrate flags: all four 13.5 levers ON "
+        "(unconditional since Task 14.9)" in proc.stdout
     )
 
 
@@ -215,12 +213,15 @@ def test_featherless_preflight_requires_api_key_before_spend() -> None:
 
 def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
     # Task 14.7 (PR #209 review): a real featherless refresh WITH a key but
-    # WITHOUT the 14.6-locked substrate (prompt set qwen3_32b + all four flags ON)
-    # must fail loud at preflight, before any seed is staged -- so an operator
-    # cannot spend a multi-hour run recording the wrong (default 9B / flags-OFF)
-    # tuple and only learn afterward from the MANIFEST. _clean_env strips every
-    # AILIBI_* var, so the locked substrate is absent here; the dummy key clears
-    # the key check so the substrate guard (which follows it) is what fires.
+    # WITHOUT the 14.6-locked prompt set (qwen3_32b) must fail loud at
+    # preflight, before any seed is staged -- so an operator cannot spend a
+    # multi-hour run recording the wrong (default 9B) prompt set and only learn
+    # afterward from the MANIFEST. The four retired 13.5 flag requirements are
+    # gone (Task 14.9: those env vars no longer exist, and a guard demanding
+    # them would fail every refresh); the prompt-set requirement stays.
+    # _clean_env strips every AILIBI_* var, so the locked prompt set is absent
+    # here; the dummy key clears the key check so the substrate guard (which
+    # follows it) is what fires.
     env = _clean_env()
     env["AILIBI_LLM_PROVIDER"] = "featherless"
     env["FEATHERLESS_API_KEY"] = "test-key-unused"  # guard exits before any call
@@ -229,7 +230,7 @@ def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
     out = proc.stdout + proc.stderr
     assert "14.6-locked substrate" in out
     assert "AILIBI_PROMPT_SET must be 'qwen3_32b'" in out
-    assert "AILIBI_TESTIMONY_AS_CONTENT must be '1'" in out
+    assert "AILIBI_TESTIMONY_AS_CONTENT" not in out
 
 
 def test_unknown_provider_lists_featherless_in_error() -> None:

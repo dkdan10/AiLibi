@@ -501,10 +501,12 @@ class MeetingParticipant:
     ``()`` keeps every existing construction site valid and is the
     firewall-correct value for a crewmate.
 
-    ``rerender_memory`` is the Task 13.5.5 unfreeze hook (behind
-    ``AILIBI_UNFREEZE_MEMORY``). When ``None`` (the default, flag OFF) the
-    ballot reads the frozen open-tick ``rendered_memory`` -- byte-identical to
-    pre-task HEAD. When the orchestrator attaches a hook (flag ON) the manager
+    ``rerender_memory`` is the Task 13.5.5 unfreeze hook. The orchestrator
+    attaches it unconditionally since Task 14.9 (the adopted lever is the
+    default substrate); the manager stays env-free and hook-driven, so a
+    ``None`` (the structural default, e.g. a direct-construction test or
+    tooling participant) keeps the frozen open-tick ``rendered_memory`` for
+    the ballot too. When a hook is attached the manager
     calls it ONLY for the ballot, passing the per-voter pre-vote-folded
     suspicion (the same numbers the ballot's ``suspicion_graph`` carries) as a
     ``suspicion_override``, so the rendered belief-line suspicion and that
@@ -1526,13 +1528,14 @@ class MeetingManager:
             fellow_impostor_ids=participant.fellow_impostor_ids,
             evidence=evidence,
         )
-        # Task 13.5.5: when the unfreeze hook is attached (flag ON), re-render
+        # Task 13.5.5: when the unfreeze hook is attached (unconditionally by
+        # the orchestrator since Task 14.9), re-render
         # the ballot's memory with the pre-vote-folded ``suspicion_graph``
         # numbers substituted into the belief lines, so the belief-line
         # suspicion and the ``suspicion_graph`` kwarg below read ONE folded
         # source (the PR #198 review inconsistency, resolved by construction).
-        # Flag OFF (``rerender_memory is None``) keeps the frozen open-tick
-        # render -- byte-identical to pre-task HEAD.
+        # A hook-less participant (a direct-construction test/tooling caller)
+        # keeps the frozen open-tick render.
         if participant.rerender_memory is not None:
             suspicion_override = {
                 entry.player_id: entry.suspicion for entry in suspicion_graph

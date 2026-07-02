@@ -21,7 +21,6 @@ from meetings.schemas import ContradictionRef as MeetingContradictionRef
 from meetings.transcript import (
     contradiction_lift_key,
     is_weak_contradiction,
-    witnessed_kill_evidence_enabled,
 )
 from observation.packet import ObservationPacket
 
@@ -59,11 +58,11 @@ suspicion to the ``1.0`` clamp, near-certain and well over the §4.6 0.60 eject
 gate. With both a vent and a kill witnessed for the same player the kill weighs
 ``>=`` the vent by construction (its delta is the larger, both clamp to 1.0).
 
-Gated by :data:`meetings.transcript.ENV_WITNESSED_KILL_EVIDENCE` (default OFF
--> byte-identical to pre-task HEAD: a witnessed kill moves no structured belief,
-exactly as before). The witness-time rule lives in
-:func:`apply_observation_rules`; see there for the §4.7 team-internal firewall
-(an impostor that witnesses a TEAMMATE's kill accrues nothing)."""
+Unconditional since Task 14.9 (the adopted 13.5.3 lever is the default
+substrate; the ``AILIBI_WITNESSED_KILL_EVIDENCE`` gate is retired). The
+witness-time rule lives in :func:`apply_observation_rules`; see there for the
+§4.7 team-internal firewall (an impostor that witnesses a TEAMMATE's kill
+accrues nothing)."""
 
 BODY_PROXIMITY_SUSPICION_DELTA: Final[float] = 0.2
 """DESIGN.md §6.3 Rule 1: suspicion added for co-presence near a fresh body."""
@@ -580,7 +579,6 @@ def apply_observation_rules(
     observation: ObservationPacket,
     previous_visible_bodies: AbstractSet[BodyId],
     recent_co_presence: Mapping[RoomId, Sequence[tuple[int, PlayerId]]],
-    env: Mapping[str, str] | None = None,
 ) -> BeliefState:
     """Apply DESIGN.md §6.3 rule-based belief updates (Rules 1 and 4).
 
@@ -607,9 +605,8 @@ def apply_observation_rules(
     reasons from its OWN first-hand view -- unforgeable, no corroboration -- and
     because this runs at perception (via ``ingest_packet``), the bump persists
     into the stored :class:`BeliefState` the meeting suspicion graph reads.
-    Behind :data:`meetings.transcript.ENV_WITNESSED_KILL_EVIDENCE` (read from
-    ``env``, defaulting to the process environment): default OFF -> a kill stamp
-    moves no belief and the result is byte-identical to pre-task HEAD.
+    Unconditional since Task 14.9 (the adopted 13.5.3 lever is the default
+    substrate; the ``AILIBI_WITNESSED_KILL_EVIDENCE`` gate is retired).
 
     Rule 1 -- body proximity (``BODY_PROXIMITY_SUSPICION_DELTA``). On the tick a
     body is *first* seen (``body.id`` absent from ``previous_visible_bodies``),
@@ -626,15 +623,13 @@ def apply_observation_rules(
 
     result = beliefs.copy()
 
-    witnessed_kill = witnessed_kill_evidence_enabled(env)
     fellow_impostor_ids = frozenset(observation.self_state.fellow_impostor_ids)
 
     for player in observation.visible_players:
         if player.action == OBSERVED_VENT_ACTION:
             result.adjust_suspicion(player.id, delta=VENTING_SUSPICION_DELTA)
         elif (
-            witnessed_kill
-            and player.action == OBSERVED_KILL_ACTION
+            player.action == OBSERVED_KILL_ACTION
             and player.id not in fellow_impostor_ids
         ):
             result.adjust_suspicion(player.id, delta=WITNESSED_KILL_SUSPICION_DELTA)

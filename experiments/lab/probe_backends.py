@@ -34,10 +34,12 @@ and the active ``substrate_flags`` config (see :func:`active_substrate_flags`).
 
 This module is READ-ONLY over the committed replays — it reconstructs contexts
 and calls models, it never mutates the engine, agents, or recorded bytes. The
-13.5 substrate-flag logic is consumed (via the four ``*_enabled()`` resolvers)
-but never modified: the sweep toggles the four ``AILIBI_*`` env vars to build
-flag-OFF vs flag-ON contexts, and :func:`call_turn` records which config was
-active on each result row.
+substrate-lever config is consumed (via
+:func:`orchestrator.replay.substrate_flag_snapshot`) but never modified:
+:func:`call_turn` records which config was active on each result row. (The
+four 13.5 levers are unconditionally ON since Task 14.9 — their ``AILIBI_*``
+env gates are retired, so the historical flag-OFF column can no longer be
+re-derived; the snapshot keeps rows self-describing for future levers.)
 
 No network import at module load: the real ``httpx`` / ``ollama`` transports are
 imported lazily inside each provider's ``_default_send``, and unit tests inject
@@ -56,7 +58,6 @@ from typing import Any, Final, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from agents.memory.store import testimony_as_content_enabled
 from llm.featherless_client import (
     DEFAULT_FEATHERLESS_BASE_URL,
     DEFAULT_RESPONSE_FORMAT_MODE,
@@ -68,9 +69,7 @@ from llm.featherless_client import (
 from llm.featherless_client import _default_send as _featherless_send
 from llm.ollama_client import _default_send as _ollama_send
 from llm.provider import ENV_FEATHERLESS_BASE_URL, _extract_json_block
-from meetings.transcript import witnessed_kill_evidence_enabled
-from observation.service import movement_perception_enabled
-from orchestrator.game import unfreeze_memory_enabled
+from orchestrator.replay import substrate_flag_snapshot
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -129,23 +128,18 @@ def resolve_featherless_base_url(env: Mapping[str, str] | None = None) -> str:
 
 
 def active_substrate_flags(env: Mapping[str, str] | None = None) -> dict[str, bool]:
-    """Snapshot the four merged 13.5 substrate levers for result-row provenance.
+    """Snapshot the active substrate-lever config for result-row provenance.
 
-    Reads the four ``*_enabled()`` resolvers (each consulting its ``AILIBI_*``
-    env var, default OFF) WITHOUT modifying the flag logic. The sweep toggles
-    these env vars to reconstruct flag-OFF vs flag-ON contexts; tagging the
-    active config on each result row makes the two-column (flag-OFF / flag-ON)
-    sweep rows self-describing. ``env`` is threaded through so a caller can
-    snapshot a specific mapping deterministically (tests, an explicit sweep
-    config) instead of the live process environment.
+    Delegates to :func:`orchestrator.replay.substrate_flag_snapshot` (the
+    single home for the lever config since Task 14.9 retired the four 13.5
+    ``*_enabled()`` resolvers — those levers report unconditionally ON).
+    Tagging the active config on each result row keeps sweep rows
+    self-describing. ``env`` is threaded through so a caller can snapshot a
+    specific mapping deterministically (tests, an explicit sweep config)
+    instead of the live process environment.
     """
 
-    return {
-        "testimony_as_content": testimony_as_content_enabled(env),
-        "witnessed_kill_evidence": witnessed_kill_evidence_enabled(env),
-        "movement_perception": movement_perception_enabled(env),
-        "unfreeze_memory": unfreeze_memory_enabled(env),
-    }
+    return substrate_flag_snapshot(env)
 
 
 @dataclass(frozen=True)

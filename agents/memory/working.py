@@ -13,9 +13,9 @@ CURRENT STATUS — ``last_seen`` is WIRED by Task 13.5.4 (movement perception);
 memory-pipeline diagnosis, workflow `wg54kfoxy`). ``record_sighting`` is called
 by ``agents/memory/store.py`` (``_record_movement_sightings``, at render time)
 for every witnessed room→room transition, so ``_last_seen`` fills and the §6.6
-belief-line suffix renders -- behind ``AILIBI_MOVEMENT_PERCEPTION`` (OFF by
-default, so ``_last_seen`` stays empty and the render is byte-identical to
-pre-13.5.4 HEAD). The writer is idempotent (skips a row not after the recorded
+belief-line suffix renders -- unconditionally since Task 14.9 (the adopted
+13.5.4 lever is the default substrate).
+The writer is idempotent (skips a row not after the recorded
 last-seen) so the repeated renders a meeting drives never trip
 ``record_sighting``'s non-decreasing-tick guard, and §4.7-firewall-suppressed.
 ``set_goal`` / ``set_path`` are still scaffolding (zero non-test callers), NOT

@@ -11,7 +11,6 @@ through (audit R-6, `audits/audit-2026-05-15-0225-reconciled.md`).
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final, TypeAlias
@@ -38,32 +37,6 @@ RoomId: TypeAlias = str
 TaskId: TypeAlias = str
 
 DEFAULT_TOKEN_BUDGET: Final[int] = 1500
-
-# Task 13.5.2 feature flag. Resolved once like ``AILIBI_LLM_PROVIDER``
-# (``llm/provider.py``): OFF by default, so a build that never sets it is
-# BYTE-IDENTICAL to pre-task HEAD (no reported rows ever ingest or render, the
-# alibi map stays empty). The 9B smoke and the Phase-14 re-record run it ON.
-ENV_TESTIMONY_AS_CONTENT: Final[str] = "AILIBI_TESTIMONY_AS_CONTENT"
-_TESTIMONY_FLAG_TRUE: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
-
-
-def testimony_as_content_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 13.5.2 reported-testimony lever is ON.
-
-    Reads :data:`ENV_TESTIMONY_AS_CONTENT` from ``env`` (defaulting to the real
-    process environment), mirroring how :func:`llm.provider.resolve_provider`
-    reads ``AILIBI_LLM_PROVIDER``. Default OFF: an unset / empty / unrecognised
-    value is ``False`` so the merge is byte-identical to today and the existing
-    golden/regression suite is untouched. Accepts ``1/true/yes/on``
-    (case-insensitive). The ``env`` argument lets tests toggle the flag
-    deterministically without mutating ``os.environ``.
-    """
-
-    environment = env if env is not None else os.environ
-    return environment.get(ENV_TESTIMONY_AS_CONTENT, "").strip().lower() in (
-        _TESTIMONY_FLAG_TRUE
-    )
-
 
 # 4 chars/token is the widely-cited heuristic for English BPE
 # tokenizers. The renderer does not depend on a provider tokenizer:
@@ -255,9 +228,7 @@ def render_for_prompt(
     # Fill ``working.last_seen`` ← perceived movement (Task 13.5.4), read by the
     # belief-line suffix below (the R-6 composite-memory gate: render reads all
     # three stores). Idempotent across repeated renders and firewall-suppressed
-    # (Codex P1/P2 -- see :func:`_record_movement_sightings`). Empty unless the
-    # movement flag is ON (no ``saw_player_move`` rows when OFF), so the suffix is
-    # byte-identical to pre-task HEAD.
+    # (Codex P1/P2 -- see :func:`_record_movement_sightings`).
     _record_movement_sightings(
         memory.episodic,
         memory.working,
@@ -397,8 +368,8 @@ def absorb_reported_testimony(
     ``alibi`` statement, populates the previously-dead ``alibi_map`` via
     :meth:`BeliefState.record_alibi`. The orchestrator and the replay loader call
     it per LIVING agent in the SAME loop as :func:`absorb_meeting_evidence`,
-    gated on :func:`testimony_as_content_enabled`; with the flag OFF it is never
-    called and the store is byte-identical to today.
+    unconditionally since Task 14.9 (the adopted 13.5.2 lever is the default
+    substrate; the ``AILIBI_TESTIMONY_AS_CONTENT`` gate is retired).
 
     Reported rows land at the meeting-boundary tick (``_latest_self_state_tick``
     + 1, the tick :func:`absorb_meeting_evidence` already uses for its boundary
@@ -574,8 +545,8 @@ def _known_roster_ids(episodic: MemoryStore) -> frozenset[str]:
     * ``saw_player`` -- every first-hand sighting's ``player_id``;
     * ``saw_player_move`` -- every witnessed transition's mover (Task 13.5.4);
       a player the agent saw move is a witnessed roster member (in practice it
-      always co-occurs with a ``saw_player`` row under the same visibility gate,
-      so this adds nothing flag-OFF and is byte-identical to HEAD);
+      always co-occurs with a ``saw_player`` row under the same visibility
+      gate);
     * ``saw_body`` -- every discovered body's ``victim_id``.
 
     Players co-spawn in one room (``orchestrator.seeder``), so in
@@ -1452,9 +1423,7 @@ def _record_movement_sightings(
     (:func:`_sighting_is_suppressed`): a self-subject row, and -- for an impostor
     -- a TEAMMATE moving into a kill-window body room, are skipped, so the
     last-seen suffix can never reintroduce the teammate-at-scene own-goal the
-    movement render line itself suppresses (Codex P2). No ``saw_player_move`` rows
-    exist when the movement flag is OFF, so ``last_seen`` stays empty and the
-    suffix is byte-identical to HEAD.
+    movement render line itself suppresses (Codex P2).
     """
 
     for event in episodic.recent(since_tick=0):
@@ -1511,8 +1480,7 @@ def _build_belief_lines(
     Reads ``working.last_seen`` for the last-seen suffix (the R-6
     composite-memory gate: render reads all three stores). The field is filled
     by :func:`_record_movement_sightings` from the witnessed ``saw_player_move``
-    rows (firewall-suppressed); empty when the movement flag is OFF, so the
-    suffix is byte-identical to pre-task HEAD.
+    rows (firewall-suppressed).
     """
 
     lines: list[str] = []
@@ -1529,14 +1497,12 @@ def _build_belief_lines(
         # last_seen render hook (Task 13.5.4): the "last seen in ROOM at tick T"
         # suffix for a subject the agent witnessed move. Filled in
         # ``working.last_seen`` by :func:`_record_movement_sightings`
-        # (firewall-suppressed); empty (suffix absent, byte-identical to
-        # pre-13.5.4 HEAD) when ``AILIBI_MOVEMENT_PERCEPTION`` is OFF.
+        # (firewall-suppressed); suffix absent for a never-witnessed subject.
         last_seen_suffix = _format_last_seen_suffix(working.last_seen(player_id))
         # alibi_map render (Task 13.5.2): the now-populated ``PlayerBelief.alibis``
         # list, written by :func:`absorb_reported_testimony` from each public
-        # ``AlibiClaim``. Empty (so this is the empty string) until the
-        # testimony-as-content flag is ON, keeping the flag-OFF render
-        # byte-identical to pre-task HEAD.
+        # ``AlibiClaim``. Empty (so this is the empty string) for a subject
+        # never alibied.
         alibi_suffix = _format_alibi_suffix(belief.alibis)
         parentheticals = [s for s in (last_seen_suffix, alibi_suffix) if s]
         if belief_text is None and not parentheticals:
@@ -1556,11 +1522,10 @@ def _build_belief_lines(
 def _format_alibi_suffix(alibis: tuple[AlibiClaim, ...]) -> str:
     """Render a subject's recorded alibi claims for the §6.6 belief view (Task 13.5.2).
 
-    Empty for a subject with no recorded alibi (the flag-OFF case and any
-    subject never alibied), so the belief line is byte-identical to pre-task
-    HEAD. Claims are sorted by ``(tick, room, source)`` for replay determinism;
-    each renders as ``in ROOM at tick T per SPEAKER`` so the alibi stays
-    attributed to the player who asserted it.
+    Empty for a subject with no recorded alibi, so that subject's belief line
+    carries no suffix. Claims are sorted by ``(tick, room, source)`` for replay
+    determinism; each renders as ``in ROOM at tick T per SPEAKER`` so the alibi
+    stays attributed to the player who asserted it.
     """
 
     if not alibis:
@@ -1762,7 +1727,6 @@ __all__ = [
     "BeliefState",
     "ContradictionRef",
     "DEFAULT_TOKEN_BUDGET",
-    "ENV_TESTIMONY_AS_CONTENT",
     "EpisodicEvent",
     "MemoryStore",
     "PlayerBelief",
@@ -1774,5 +1738,4 @@ __all__ = [
     "absorb_meeting_evidence",
     "absorb_reported_testimony",
     "render_for_prompt",
-    "testimony_as_content_enabled",
 ]

@@ -97,10 +97,10 @@ def ingest_packet(
     7. one ``heard_*`` per ``audible_events`` entry (packet order)
     8. ``global_status`` (inferred system-wide aggregate)
 
-    ``moved_players`` is empty unless ``AILIBI_MOVEMENT_PERCEPTION`` is ON
-    (gated in ``observation/service.py``), so the flag-OFF episodic store is
-    byte-identical to pre-task HEAD -- no extra branch or flag read is needed
-    here; ingestion simply reacts to the presence of the witness-gated signal.
+    ``moved_players`` is empty when the observer witnessed no transition
+    (derived unconditionally in ``observation/service.py`` since Task 14.9) --
+    no extra branch is needed here; ingestion simply reacts to the presence of
+    the witness-gated signal.
 
     When ``beliefs`` is supplied, the agent's DESIGN.md §6.3 rule-based belief
     updates (Rules 1 and 4) run after the episodic append: the proximity and

@@ -6508,11 +6508,13 @@ class TestEmergencyOpeningNoBody:
 
 # ---------------------------------------------------------------------------
 # Task 13.5.5 — unfreeze rendered memory mid-meeting (the BALLOT belief lines).
-# When a participant carries a ``rerender_memory`` hook (flag ON) the manager
-# re-renders the BALLOT's memory with the per-voter pre-vote-folded suspicion
-# substituted in, so the belief lines and the ``suspicion_graph`` kwarg read one
-# folded source. TURN prompts always use the frozen open-tick render. OFF (no
-# hook) -> the frozen render everywhere, byte-identical to pre-task HEAD.
+# When a participant carries a ``rerender_memory`` hook (the orchestrator
+# attaches one unconditionally since Task 14.9) the manager re-renders the
+# BALLOT's memory with the per-voter pre-vote-folded suspicion substituted in,
+# so the belief lines and the ``suspicion_graph`` kwarg read one folded source.
+# TURN prompts always use the frozen open-tick render. The manager itself stays
+# env-free and hook-driven: a hook-less participant (a direct-construction
+# test/tooling caller) keeps the frozen render everywhere.
 # ---------------------------------------------------------------------------
 
 
