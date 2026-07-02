@@ -47,7 +47,7 @@ from dataclasses import fields, is_dataclass
 import hashlib
 import json
 from pathlib import Path
-from typing import Annotated, Any, Literal, TextIO, TypeAlias
+from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -237,22 +237,27 @@ ReplayLogEntry: TypeAlias = Annotated[
 # ON, env gates deleted) but stay in the snapshot as provenance; a future
 # toggleable lever (e.g. Task 14.10's) registers its key here and its resolver
 # in ``_TOGGLEABLE_LEVER_RESOLVERS`` below.
-_RETIRED_ALWAYS_ON_LEVERS: tuple[str, ...] = (
+_RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
     "movement_perception",
     "unfreeze_memory",
 )
 
-# key -> resolver for levers that still consult an ``AILIBI_*`` env var. Empty
-# since Task 14.9 retired the 13.5 gates; Task 14.10's default-OFF lever is the
-# next registrant. Each resolver takes the optional ``env`` mapping and returns
+# (key, resolver) pairs for levers that still consult an ``AILIBI_*`` env var.
+# Empty since Task 14.9 retired the 13.5 gates; Task 14.10's default-OFF lever
+# is the next registrant — added HERE in source, never mutated at runtime (an
+# immutable ``Final`` tuple, per AGENTS.md "no module-level mutable state", so
+# nothing can silently change replay stamps or the loader's mismatch check
+# mid-process). Each resolver takes the optional ``env`` mapping and returns
 # the lever's active state (the 13.5 ``*_enabled()`` signature).
-_TOGGLEABLE_LEVER_RESOLVERS: dict[str, Callable[[Mapping[str, str] | None], bool]] = {}
+_TOGGLEABLE_LEVER_RESOLVERS: Final[
+    tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
+] = ()
 
-SUBSTRATE_FLAG_KEYS: tuple[str, ...] = (
+SUBSTRATE_FLAG_KEYS: Final[tuple[str, ...]] = (
     *_RETIRED_ALWAYS_ON_LEVERS,
-    *_TOGGLEABLE_LEVER_RESOLVERS,
+    *(key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS),
 )
 
 
@@ -267,14 +272,14 @@ def substrate_flag_snapshot(
     substrate this build can produce. They stay in the snapshot so the MANIFEST
     ``flags`` column and the replay stamp keep self-describing recordings (and
     so the loader's substrate-mismatch guard can still validate legacy stamped
-    replays). A future toggleable lever's resolver is read from
-    ``_TOGGLEABLE_LEVER_RESOLVERS`` with ``env`` threaded through (defaulting
-    to the live process environment), preserving the deterministic-snapshot
-    seam tests and sweep configs rely on.
+    replays). A future toggleable lever's resolver is read from the immutable
+    ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through
+    (defaulting to the live process environment), preserving the
+    deterministic-snapshot seam tests and sweep configs rely on.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)
-    for key, resolver in _TOGGLEABLE_LEVER_RESOLVERS.items():
+    for key, resolver in _TOGGLEABLE_LEVER_RESOLVERS:
         snapshot[key] = resolver(env)
     return snapshot
 

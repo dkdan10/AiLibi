@@ -29,25 +29,30 @@ moving variable is the model (and, in the cover 2x2, the directive injection):
   production vote prompt, scored for parse-success and conversion (did the voter
   pick an available impostor).
 
-The corpus item IDs are PINNED ONCE (off the flag-OFF reconstruction) and the
-SAME ids are re-rendered under each substrate, so the flag-OFF vs flag-ON
-comparison is a controlled re-render of identical contexts, not a re-selection
-(vote selection in particular is substrate-sensitive — its ``available_impostor``
-gate reads the suspicion graph — so pinning is load-bearing there).
+The corpus item IDs are PINNED ONCE and the SAME ids are re-rendered per
+substrate cell, so a substrate comparison is a controlled re-render of
+identical contexts, not a re-selection (vote selection in particular is
+substrate-sensitive — its ``available_impostor`` gate reads the suspicion
+graph — so pinning is load-bearing there).
 
-Every cell is run on BOTH the flag-OFF (legacy) and the flag-ON (corrected 13.5)
-substrate. The flag-ON contexts are re-derived OFFLINE by setting the four
-``AILIBI_*`` env vars before reconstruction (the levers are replay-deterministic
-reductions of the recorded events, read ad-hoc via the ``*_enabled()`` resolvers
-— so no re-record is needed); each result row carries the ``substrate_flags``
-config that produced its context. The Qwen3 models run in both non-thinking and
-thinking mode (the request-time ``enable_thinking`` toggle, Task 14.1, threaded
-via :func:`experiments.lab.probe_backends.call_turn`, Task 14.3).
+HISTORICAL substrate axis: the 14.4 matrix ran every cell on BOTH the flag-OFF
+(legacy) and the flag-ON (corrected 13.5) substrate, toggled via the four
+``AILIBI_*`` env vars; the committed ``results-featherless-sweep.jsonl`` rows
+retain that genuine two-column data and the report grouping still reads it.
+Since Task 14.9 the four levers are unconditionally ON (their env gates are
+retired), so the flag-OFF cohort can no longer be reconstructed: a NEW run is
+single-substrate (all-ON) and requesting ``off`` fails loud
+(:func:`_set_substrate`) instead of silently double-spending on a second
+all-ON cohort mislabeled ``flag_off``. Each result row carries the
+``substrate_flags`` config that produced its context. The Qwen3 models run in
+both non-thinking and thinking mode (the request-time ``enable_thinking``
+toggle, Task 14.1, threaded via
+:func:`experiments.lab.probe_backends.call_turn`, Task 14.3).
 
 9B-class reference: ``qwen3.5:9b`` is a local Ollama model off the hosted
 endpoint, so the IN-SWEEP reference is its closest served Featherless analogue —
 ``Qwen/Qwen3-8B`` (same Qwen3 generation, nearest size, native
-``enable_thinking``) — run over the SAME frozen contexts on BOTH substrates, so
+``enable_thinking``) — run over the SAME frozen contexts per substrate cell, so
 the model-ceiling/information-ceiling read is controlled on identical contexts
 (addresses the prior version's stale-9B mismatch). The committed Ollama
 ``results-model-ceiling-q9b.jsonl`` is folded only as a secondary HISTORICAL row
@@ -135,16 +140,6 @@ REPORT: Final[Path] = WORK / "report-featherless-sweep.md"
 # Committed Ollama 9B data (PRIOR recording) — folded only as a HISTORICAL row.
 REF_REPLY: Final[Path] = WORK / "results-model-ceiling-q9b.jsonl"
 REF_COVER: Final[Path] = WORK / "results-deflection-probe.jsonl"
-
-# The four merged 13.5 substrate levers, toggled to build the flag-OFF vs flag-ON
-# columns. Set before context reconstruction; read ad-hoc by the ``*_enabled()``
-# resolvers (Task 14.3), so toggling them in-process re-derives memory cleanly.
-SUBSTRATE_FLAGS: Final[tuple[str, ...]] = (
-    "AILIBI_TESTIMONY_AS_CONTENT",
-    "AILIBI_WITNESSED_KILL_EVIDENCE",
-    "AILIBI_MOVEMENT_PERCEPTION",
-    "AILIBI_UNFREEZE_MEMORY",
-)
 
 # Production turn caps (the deployed sim's frozen backstop) — recorded for
 # reference only; the PROBE does NOT constrain models to these, it measures each
@@ -307,7 +302,9 @@ class SweepConfig:
     # safe default is 2 concurrent requests (>2 turns valid cells into 429s).
     concurrency: int = 2
     latency_samples: int = 2
-    substrates: tuple[bool, ...] = (False, True)
+    # Single all-ON cohort since Task 14.9 (the flag-OFF substrate is retired;
+    # ``_set_substrate`` fails loud on a ``False`` request).
+    substrates: tuple[bool, ...] = (True,)
     base_url: str | None = None
     models: tuple[ModelSpec, ...] = SLATE
     # Append to the results file instead of truncating — used to re-run a single
@@ -404,13 +401,24 @@ def _binding_for(cfg: SweepConfig) -> RenderBinding:
 
 
 def _set_substrate(flag_on: bool) -> dict[str, bool]:
-    """Set / clear the four 13.5 env levers and return the active config."""
+    """Return the active substrate config for a sweep cell (all-ON since 14.9).
 
-    for name in SUBSTRATE_FLAGS:
-        if flag_on:
-            os.environ[name] = "1"
-        else:
-            os.environ.pop(name, None)
+    The four 13.5 levers are unconditionally ON since Task 14.9 (their env
+    gates are retired), so the legacy flag-OFF cohort can no longer be
+    reconstructed. Requesting it fails loud here — BEFORE any context
+    reconstruction or model spend — rather than silently deriving a second
+    all-ON cohort that the ``substrate_flags`` row label would mark
+    ``flag_on`` while the matrix believed it ran ``flag_off`` (AGENTS.md "no
+    silent fallbacks"). The committed results keep their genuine pre-14.9
+    ``flag_off`` rows; only NEW runs are single-substrate.
+    """
+
+    if not flag_on:
+        raise SystemExit(
+            "substrate 'off' is retired: the four 13.5 levers are "
+            "unconditionally ON since Task 14.9, so a flag-OFF context can no "
+            "longer be reconstructed. Run with --substrates on."
+        )
     return active_substrate_flags()
 
 
@@ -959,9 +967,13 @@ class PinnedIds:
 
 
 def _pin_ids(cfg: SweepConfig) -> PinnedIds:
-    """Select the corpus item IDs once, off the flag-OFF reconstruction."""
+    """Select the corpus item IDs once, off the (all-ON) reconstruction.
 
-    _set_substrate(False)
+    Historically pinned off the flag-OFF reconstruction; since Task 14.9 the
+    unconditional all-ON substrate is the only one a NEW run can derive.
+    """
+
+    _set_substrate(True)
     reply = tuple(c.item_id for c in _select(cfg.sample_dir)[: cfg.reply_cap])
     votes = select_corpus(
         build_corpus(cfg.sample_dir),
@@ -2063,8 +2075,10 @@ def main() -> int:
     r.add_argument(
         "--substrates",
         type=str,
-        default="off,on",
-        help="Comma list of substrates to run: off, on, or off,on.",
+        default="on",
+        help="Comma list of substrates to run. Only 'on' remains runnable: the "
+        "flag-OFF substrate is retired since Task 14.9 (requesting 'off' "
+        "fails loud).",
     )
     r.add_argument("--base-url", type=str, default=None)
     r.add_argument(
