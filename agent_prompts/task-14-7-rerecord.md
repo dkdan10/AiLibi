@@ -26,7 +26,15 @@ baseline, verify byte-identical reconstruction from the new recordings WITH the 
 roster.json present, and pass the HARD validity gate. This new baseline replaces the final-9B one as
 canonical. Win split moves in any direction and is REPORTED, not gated (the R-gate is 14.8).
 
-**STATUS (2026-07-01) — infra LANDED; RESUME at the re-smoke:**
+**STATUS (2026-07-01) — COMPLETE (PR #213).** The v3 re-smoke cleared the gate (parse 99.19%, ZERO
+1024-truncations), both sets re-recorded on the locked tuple, HARD validity gate PASS, byte-identical
+flag-aware reconstruction holds; the baseline is canonical. Headline: R1 eject-decided 27/50 (9B: 3/50),
+impostor win 0.32 (9B: 0.84). Measured wall time: **~5h for both 50-seed sets with 2 parallel seed workers**
+(each worker running the next available seed) — far under the 13–30h projection; use ~5h for future re-record
+planning (14.12). Carried findings → 14.8: ejection accuracy 0.566, the 5-row crew railroad (10.1 cap defeated
+at 4× flag density; tripwire downgraded to a regression pin), 23 missed-deadline markers. History below.
+
+**STATUS (2026-06-30, historical) — infra landed; resumed at the re-smoke:**
 - The 14.7 flag-stamping infrastructure is MERGED to main (PR #209): the MANIFEST `flags` column
   (`scripts/_manifest_writer.py`), the additive-optional substrate stamp on the replay `game_over` record
   (`orchestrator/replay.py`), the flag-aware loader guard (`api/replay_loader.py`,
@@ -85,7 +93,9 @@ ONE atomic PR — an intermediate commit is un-reconstructable. Time expectation
 non-thinking is ~27.1s/turn isolated — roughly 2× the local 9B's per-call latency, offset by the plan's 32B
 concurrency cap of 2 (a 32B request = 2 of 4 units), so the full 50-seed × 2-format re-record lands in the
 SAME ~13–30h ballpark as the 9B (the win is offloading the operator's machine, NOT wall-clock); do NOT assume
-"far faster." The smoke (3–5 seeds) MUST project the real wall time before the full run. The report regeneration +
+"far faster." The smoke (3–5 seeds) MUST project the real wall time before the full run. (MEASURED OUTCOME,
+2026-07-01: the projection was over — the run took ~5h for both sets with 2 parallel seed workers each pulling
+the next available seed; seed-level parallelism amortizes the per-turn latency. Plan future re-records at ~5h.) The report regeneration +
 MANIFEST update + fixture refresh all happen through `scripts/build_sample_report.py` +
 `scripts/_manifest_writer.py` (which already emits the `flags` column, PR #209) exactly as the 9.5 operator
 workflow documents. Hosted non-determinism means FRESH generation won't byte-reproduce, but the recordings replay

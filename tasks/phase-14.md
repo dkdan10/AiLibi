@@ -54,10 +54,16 @@ Locked decisions (2026-06-25):
 
 Parallelism: 14.1 and 14.2 are independent roots and dispatch in parallel (disjoint file scopes); 14.3
 follows 14.1 because its probe backend imports the Featherless `_default_send` introduced by 14.1:
-`(14.1 ∥ 14.2) → 14.3 → 14.4 → 14.4.1 → 14.5 → 14.6 → 14.7 → 14.8 → 14.9`. 14.3 needs 14.1; 14.4 needs 14.1 + 14.3; 14.4.1 (adapter `enable_thinking` fix surfaced by the 14.4 sweep) needs 14.1 + 14.4; 14.5 needs 14.2 + 14.4 + 14.4.1; 14.9 (flag-default cleanup) needs 14.8.
-Operator-run / spend gates: 14.4 (model sweep, $0 marginal) and 14.7 (re-record, the time gate).
-Design-thread (no agent dispatch): 14.6 (lock decision) and 14.8 (close). Track with
-`python3 scripts/compute_next_task.py --phase 14`.
+`(14.1 ∥ 14.2) → 14.3 → 14.4 → 14.4.1 → 14.5 → 14.6 → 14.7 → 14.8 → 14.9 → (14.10 ∥ 14.11) → 14.12`.
+14.3 needs 14.1; 14.4 needs 14.1 + 14.3; 14.4.1 (adapter `enable_thinking` fix surfaced by the 14.4 sweep)
+needs 14.1 + 14.4; 14.5 needs 14.2 + 14.4 + 14.4.1; 14.9 (flag-default cleanup) needs 14.8; 14.10 (evidence-
+quality lift fix) and 14.11 (qwen3_32b v4) both need 14.8 (the fix specs) + 14.9 (file overlap in
+agents/memory + orchestrator/game.py) and are parallel to each other (disjoint scopes); 14.12 (baseline 2,
+the phase close) needs both.
+Operator-run / spend gates: 14.4 (model sweep, $0 marginal), 14.7 (baseline 1 — DONE, measured ~5h with 2
+parallel seed workers), and 14.12 (baseline 2, the final re-record).
+Design-thread (no agent dispatch): 14.6 (lock decision) and 14.8 (baseline-1 characterization + fix specs).
+Track with `python3 scripts/compute_next_task.py --phase 14`.
 
 Merge Criteria (end-of-phase): the phase's success criterion is a new full-sim baseline recorded on the new
 model. Concretely Phase 14 merges when (1) `FeatherlessClient` is a Protocol-conformant provider selectable
@@ -74,6 +80,17 @@ that baseline — a flat or down R1 (information ceiling held) closes the phase 
 only thing that blocks the baseline is a VALIDITY failure at 14.6/14.7 (no candidate model drives a valid
 sim), a real NO-GO that pauses the phase rather than papering over the gate. After the R-gate measurement,
 Task 14.9 makes the adopted levers default-ON and retires the vestigial flag-OFF path.
+
+AMENDED (owner decision 2026-07-01, after baseline 1 landed R1 27/50 / ejection accuracy 0.566): the phase
+does NOT close on baseline 1. Its characterization (14.8) exposed an over-conviction defect class — the crew
+railroad (the 10.1 lift cap defeated at 4× flag density; 3 innocents ejected) and measurable dialogue-craft
+defects (greedy self-contradicting alibis, dead-target ballots, flat-1.0 confidences, template rationales) —
+that the phase fixes IN-PHASE before the final record: (6) 14.10 closes the railroad-cap bypass behind a
+default-OFF lever and 14.11 hardens the locked set to v4 against the measured defect counts; and (7) THE
+FINAL CRITERION — baseline 2 (14.12) is re-recorded with the lever ON + v4, passes the same HARD validity
+gate, RESTORES the railroad tripwire (zero railroaded crew rows), reports the per-defect deltas vs baseline 1,
+and closes the phase. Baseline 1 remains the committed canonical set until 14.12 replaces it. Re-record cost
+is measured, not estimated: ~5h for both 50-seed sets with 2 parallel seed workers (14.7 datapoint).
 
 ### Task 14.1 — FeatherlessClient adapter (OpenAI-compatible, $0, thinking policy)
 **Branch:** `phase-14-featherless-client`
@@ -586,7 +603,15 @@ baseline, verify byte-identical reconstruction from the new recordings WITH the 
 roster.json present, and pass the HARD validity gate. This new baseline replaces the final-9B one as
 canonical. Win split moves in any direction and is REPORTED, not gated (the R-gate is 14.8).
 
-**STATUS (2026-07-01) — infra LANDED; RESUME at the re-smoke:**
+**STATUS (2026-07-01) — COMPLETE (PR #213).** The v3 re-smoke cleared the gate (parse 99.19%, ZERO
+1024-truncations), both sets re-recorded on the locked tuple, HARD validity gate PASS, byte-identical
+flag-aware reconstruction holds; the baseline is canonical. Headline: R1 eject-decided 27/50 (9B: 3/50),
+impostor win 0.32 (9B: 0.84). Measured wall time: **~5h for both 50-seed sets with 2 parallel seed workers**
+(each worker running the next available seed) — far under the 13–30h projection; use ~5h for future re-record
+planning (14.12). Carried findings → 14.8: ejection accuracy 0.566, the 5-row crew railroad (10.1 cap defeated
+at 4× flag density; tripwire downgraded to a regression pin), 23 missed-deadline markers. History below.
+
+**STATUS (2026-06-30, historical) — infra landed; resumed at the re-smoke:**
 - The 14.7 flag-stamping infrastructure is MERGED to main (PR #209): the MANIFEST `flags` column
   (`scripts/_manifest_writer.py`), the additive-optional substrate stamp on the replay `game_over` record
   (`orchestrator/replay.py`), the flag-aware loader guard (`api/replay_loader.py`,
@@ -645,7 +670,9 @@ ONE atomic PR — an intermediate commit is un-reconstructable. Time expectation
 non-thinking is ~27.1s/turn isolated — roughly 2× the local 9B's per-call latency, offset by the plan's 32B
 concurrency cap of 2 (a 32B request = 2 of 4 units), so the full 50-seed × 2-format re-record lands in the
 SAME ~13–30h ballpark as the 9B (the win is offloading the operator's machine, NOT wall-clock); do NOT assume
-"far faster." The smoke (3–5 seeds) MUST project the real wall time before the full run. The report regeneration +
+"far faster." The smoke (3–5 seeds) MUST project the real wall time before the full run. (MEASURED OUTCOME,
+2026-07-01: the projection was over — the run took ~5h for both sets with 2 parallel seed workers each pulling
+the next available seed; seed-level parallelism amortizes the per-turn latency. Plan future re-records at ~5h.) The report regeneration +
 MANIFEST update + fixture refresh all happen through `scripts/build_sample_report.py` +
 `scripts/_manifest_writer.py` (which already emits the `flags` column, PR #209) exactly as the 9.5 operator
 workflow documents. Hosted non-determinism means FRESH generation won't byte-reproduce, but the recordings replay
@@ -670,45 +697,49 @@ again — never raise the caps.
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-7-rerecord.md`
 
-### Task 14.8 — Characterize the new baseline (R-gate as measurement) + phase close
+### Task 14.8 — Characterize baseline 1 (R-gate as measurement) + fix recommendations
 **Branch:** `phase-14-baseline-characterize-close`
 **Depends on:** 14.7
-**Section refs:** audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py
+**Section refs:** audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py; PR #213 (baseline-1 findings)
 **Complexity:** Medium
 
-Design-thread close: compute the Phase-13 R-gate as a MEASUREMENT over the committed 14.7 flags-ON baseline —
-R1 (games decided by ejection), R4 floor, R7, impostor win rate, and the rubric geomean ranking (eject-decided
-> stopwatch) — and compare to the final-9B baseline (R1 3/50, impostor 84%, eject 9%). Also run a per-lever
-ABLATION (offline, $0): toggle each of the 4 substrate flags during re-derivation over the baseline replays to
-characterize each lever's contribution, and recommend the default set for 14.9 (note the kill-scene flag fired
-0× in the 9B smoke — flag it as UNMEASURED / needing a richer scenario, not a negative result). Write the
-close audit framing the result as an honest finding: state whether the stronger model raised R1 — the sharper
-hypothesis is can the NEW model DRIVE the corrected substrate where the 9B couldn't (the 9B's voter sat at
-suspicion 1.00 over the 0.60 gate yet the meeting SKIPPED) — and, if not, whether the evidence supports the
-information-ceiling hypothesis (single-room vision → ~45% detector precision → correct SKIP) even with the
-corrected substrate ON, recommending Phase 15 (asymmetric visibility / information richness; and
-heterogeneous-model games — per-agent model routing — enabled by the 14.5 bespoke same-schema sets). This is
-characterization, not a gate — the phase already merged on the valid new baseline (14.7); a flat or down R1 is
-a recorded finding.
+Design-thread characterization (the phase CLOSE moves to 14.12, after the evidence-quality fixes and the
+baseline-2 re-record). The headline is already known: R1 eject-decided **27/50** vs the 9B's 3/50, impostor
+win 0.32 vs 0.84 — the new model DRIVES the corrected substrate, so the Phase-13 information-ceiling
+hypothesis is REVISED, not confirmed: the ceiling bound impostor CONCEALMENT (the 14.4 tell persists) but the
+live binding constraint was crew CONVERSION, and that broke. The problem has INVERTED to OVER-conviction:
+ejection accuracy 0.566 (~43% of ejections take out crew), a 5-row crew railroad (2–9 stacked same-meeting
+contradiction flags defeat the Phase-10.1 lift cap at the new model's 4× flag density; 3 innocents ejected —
+the downgraded tripwire in `tests/meetings/test_manager.py` pins the exact set), and dialogue-level
+self-sabotage measured on the committed bytes: ~10% of self-alibis are contradicted by the speaker's OWN
+same-turn task observation (greedy tick spans — the railroad's fuel), 47/891 ballots guard-normalized (invalid
+dead targets / bad `primary_reason_id`), 64 accusations at confidence 1.0, 33% of ballots sharing one literal
+rationale template, 23 missed-deadline turns. This task: (1) compute the full R-gate measurement (R1, R4
+floor, R7, impostor win rate, rubric geomean) vs the final-9B baseline; (2) quantify how much of R1=27
+survives DISCOUNTING the railroad rows (genuine deduction vs pile-on); (3) run the per-lever ablation of the
+4 substrate flags (offline, $0; kill-scene fired 0× in the 9B smoke — UNMEASURED, not negative); (4) write
+the characterization audit whose deliverable is the CONCRETE fix specs for 14.10 (the 10.1 cap defeat —
+diagnose the exact bypass mechanism) and 14.11 (the v4 prompt fixes, with the per-defect counts above as the
+baseline the re-record must beat).
 
 **Files in scope:**
-- audits/audit-2026-06-25-phase-14-close.md (new: the R-gate measurement + the per-lever ablation + the hypothesis-test verdict + the Phase 15 recommendation)
+- audits/audit-2026-07-01-phase-14-baseline1-characterization.md (new: the R-gate measurement + railroad-discounted R1 + the per-lever ablation + the REVISED hypothesis verdict + the 14.10/14.11 fix specs)
 - experiments/lab/results-substrate-ablation.jsonl (new: per-lever ablation — each of the 4 flags toggled offline over the baseline replays, R-gate / conversion metrics per cell; $0)
-- tasks/phase-14.md (a STATUS banner recording the R-gate outcome, the recommended default flag set, and the next step)
-- experiments/lab/results-rubric-score.json (re-ranked offline over the new committed replays — data regen, no code change)
-- experiments/lab/report-rubric-interestingness.md (re-ranked offline — data regen)
+- tasks/phase-14.md (a STATUS banner recording the measurement outcome and the confirmed 14.10/14.11 targets)
+- experiments/lab/report-rubric-interestingness.md (re-ranked offline — data regen; the score json was already regenerated by the 14.7 refresh)
 
 **Files NOT in scope:**
-- llm/ + agents/ + meetings/ + engine/ (no behavior change at close)
-- replays/samples/ (the 14.7 bytes are the baseline; close READS them)
+- llm/ + agents/ + meetings/ + engine/ (no behavior change here; the fixes are 14.10/14.11)
+- replays/samples/ (the 14.7 bytes are baseline 1; this READS them)
 - eval/ source (the analyzers are reused as-is; this folds, it does not change them)
 
 **Definition of done:**
 - [ ] The R-gate is computed offline over the 14.7 flags-ON baseline (R1, R4 floor, R7, impostor win rate, rubric geomean ranking) and compared to the final-9B baseline (R1 3/50, impostor 84%, eject 9%).
-- [ ] A per-lever ablation (each of the 4 13.5 flags toggled offline over the baseline replays) characterizes each lever's contribution and recommends the default set for 14.9; the kill-scene flag's 0× firing is noted as UNMEASURED (needs a richer scenario), not a negative result.
-- [ ] The close audit frames the verdict as an HONEST hypothesis test: it states whether the model raised R1, and if not, whether the evidence supports the information-ceiling hypothesis (even with the corrected substrate ON); a null result is recorded as a valid finding, never a blocker.
-- [ ] The close audit recommends the next phase (asymmetric visibility / information richness if the ceiling is confirmed; prompt/tactical work if a gap remains).
-- [ ] The rubric data is re-ranked offline over the new committed replays ($0, no code change); no number is retrofit to pass.
+- [ ] The railroad-discounted R1 is computed (R-gate with the 5 pinned railroad rows' meetings discounted) so 14.12 can tell genuine-deduction gains from pile-on gains.
+- [ ] A per-lever ablation (each of the 4 13.5 flags toggled offline over the baseline replays) characterizes each lever's contribution and confirms the 14.9 default-ON set; the kill-scene flag's 0× firing is noted as UNMEASURED (needs a richer scenario), not a negative result.
+- [ ] The audit states the REVISED hypothesis verdict honestly: the ceiling bound concealment, not conversion; the live problem is now over-conviction (ejection accuracy 0.566) — with the evidence for each claim.
+- [ ] The audit specifies the 14.10 fix (the exact mechanism by which ≥2 same-meeting flags defeat the 10.1 cap, from the pinned rows) and the 14.11 targets (the measured per-defect counts: 10% self-contradicted alibis, 47 guard-normalized ballots, 64 conf-1.0 accusations, 33% template rationales, 23 missed-deadline turns).
+- [ ] The rubric interestingness report is re-ranked offline over the committed replays ($0, no code change); no number is retrofit to pass.
 - [ ] `uv run python scripts/generate_prompts.py --check` passes.
 - [ ] `uv run python scripts/validate_task_docs.py` passes.
 - [ ] `uv run pytest` passes.
@@ -719,9 +750,12 @@ a recorded finding.
 Pure offline folds over the new `TournamentReport`: `eval/vote_correctness.py` (`ejection_accuracy`,
 `compute_genuine_class_conversion`), `eval/accusation_calibration.py` (ECE), `eval/alibi_fabrication.py`
 (survival_rate), assembled by `eval/meeting_quality.py`, plus the rubric geomean from
-`experiments/lab/rubric_score.py` — all $0, no provider. The framing is the deliverable: per the Phase-13
-audit the bottleneck may be INFORMATION not the model, so "R1 did not rise even on a Qwen3-32B-class model" is
-a genuine finding that redirects Phase 15, not a Phase-14 failure. Do not retrofit any number.
+`experiments/lab/rubric_score.py` — all $0, no provider. The 5 railroad rows to discount are pinned in
+`tests/meetings/test_manager.py` (`known_railroad`: seed-13 m0 p-7, seed-16 m0 p-6, seed-28 m0 p-3/p-6,
+seed-44 m1 p-1); seed-44 m1 is the worked example of the fuel — crew p-1's greedy alibi (`CAFETERIA t5-14`
+spanning their own recorded `STORAGE t14` task) minted the contradictions the pile-on ran on. The framing is
+the deliverable: the audit's job is a MEASUREMENT plus two actionable fix specs, so 14.10/14.11 dispatch
+against precise targets instead of vibes. Do not retrofit any number.
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-8-baseline-characterize-close.md`
 
@@ -744,7 +778,8 @@ flags-ON (14.7), so reconstruction no longer needs the env vars set and the dete
 - observation/service.py (`movement_perception_enabled` gate retired; the empty-tuple OFF branch removed)
 - orchestrator/game.py (`unfreeze_memory_enabled` gate retired; the `rerender_memory is None` OFF branch removed)
 - agents/memory/beliefs.py (the witnessed-kill suspicion read becomes unconditional)
-- api/replay_loader.py (reconstruction no longer reads the flags — the corrected derivation is unconditional)
+- api/replay_loader.py (reconstruction no longer reads the flags — the corrected derivation is unconditional; the substrate-mismatch guard stays coherent for legacy stamped replays)
+- orchestrator/replay.py (`substrate_flag_snapshot()` lazy-imports the four `*_enabled()` resolvers this task deletes — rework it to report the retired levers as unconditionally ON, keeping the stamp machinery generic for future levers like 14.10's)
 - tests/ (the flag-OFF byte-identity / flag-toggle tests across tests/agents/ + tests/meetings/ + tests/observation/ + tests/orchestrator/ retargeted onto the flags-ON baseline)
 - .env.example (remove the now-defunct flag knobs)
 
@@ -757,6 +792,7 @@ flags-ON (14.7), so reconstruction no longer needs the env vars set and the dete
 **Definition of done:**
 - [ ] The 4 adopted levers are DEFAULT behavior (the `*_enabled()` env gates default-ON or removed); the now-dead flag-OFF branches and env constants are deleted, not left vestigial.
 - [ ] The committed flags-ON baseline (14.7) reconstructs byte-identically WITHOUT any env vars set (`scripts/verify_samples.sh` under a bare environment); the MANIFEST/replay `flags` stamp reads "all 4 ON" and is consistent with the now-unconditional behavior.
+- [ ] `orchestrator/replay.py`'s `substrate_flag_snapshot()` no longer imports the retired resolvers (the four levers report unconditionally ON); the loader's substrate-mismatch guard still validates legacy stamped replays; the stamp machinery stays generic so 14.10 can register its new lever.
 - [ ] The former flag-OFF byte-identity tests are retargeted onto the flags-ON baseline (or deleted with rationale); no test asserts the retired OFF behavior; the leak suite stays green at 4p1i and 9p2i.
 - [ ] `.env.example` no longer advertises the retired flag knobs.
 - [ ] `uv run mypy .` passes.
@@ -775,7 +811,9 @@ unconditional, so the `*_enabled()` resolvers + their OFF branches + the env con
 `ENV_UNFREEZE_MEMORY`) can be deleted. Do it lever-by-lever, re-running `scripts/verify_samples.sh` under a
 BARE environment after each so any residual flag-read is caught immediately. The `flags` MANIFEST column
 (14.7) stays as provenance even though the flags are no longer toggleable — it records that this baseline was
-generated on the corrected substrate.
+generated on the corrected substrate. Note the tail of the phase: 14.12 re-records baseline 2 after the
+14.10/14.11 fixes and re-pins the byte tests once more — keep this task's retargeting mechanical so that
+second re-pin is cheap.
 
 **Integration risk:**
 
@@ -787,3 +825,214 @@ dropping it — the owner adopted all 4). The reconstruction must be byte-identi
 once the gates are removed — that is the acceptance bar; verify it explicitly.
 
 **Ready-to-paste prompt:** `agent_prompts/task-14-9-substrate-default-on.md`
+
+### Task 14.10 — Evidence-quality lift fix: close the 10.1 railroad-cap bypass (default-OFF lever)
+**Branch:** `phase-14-evidence-quality-lift`
+**Depends on:** 14.8, 14.9
+**Section refs:** tests/meetings/test_manager.py (the downgraded railroad tripwire + the pinned 5-row known set); audits/audit-2026-07-01-phase-14-baseline1-characterization.md (the 14.8 fix spec: the exact cap-bypass mechanism); agents/memory/beliefs.py (the Phase-10.1 same-meeting lift cap); tasks/phase-13-5.md (the default-OFF-lever + stamp pattern this task reuses)
+**Complexity:** Integration
+
+Fix the crew-railroad defect baseline 1 exposed: the new model's ~4× contradiction-flag density (702 vs the
+9B's 173 set-wide) DEFEATS the Phase-10.1 same-meeting lift cap — 5 crew rows rendered at certain-guilt 1.0
+from 2–9 stacked same-meeting flags and 3 innocents were ejected. Using 14.8's diagnosis of the exact bypass
+mechanism, change the belief fold so that NO count of same-meeting contradiction flags can drive a crew
+render to 1.0 by stacking alone — bound the aggregate same-meeting contradiction lift (and, where 14.8's spec
+supports it, weight flags by evidence class: a self-inconsistency or third-party-refuted alibi is worth more
+than a proximity grumble — so evidence QUALITY, not flag COUNT, moves suspicion). The change alters belief
+re-derivation, so committed baseline-1 replays would no longer reconstruct byte-identically under it — gate it
+behind a NEW default-OFF env lever (the proven 13.5 pattern): OFF preserves baseline-1 byte-identity and every
+committed-bytes test; 14.12 records baseline 2 with it ON and stamps it. Register the lever in the
+`substrate_flag_snapshot()` stamp machinery (kept generic by 14.9) so the recording self-describes.
+
+**Files in scope:**
+- agents/memory/beliefs.py (the aggregate same-meeting lift bound + optional evidence-class weighting, behind the new `*_enabled()` resolver; the 10.1 cap logic is corrected, not bypassed)
+- orchestrator/replay.py (register the new lever key in `SUBSTRATE_FLAG_KEYS` / `substrate_flag_snapshot()` so 14.12's recording stamps it — additive)
+- .env.example (document the new default-OFF lever)
+- tests/agents/test_beliefs.py (unit tests: a synthetic 9-flag same-meeting stack renders BELOW certain-guilt with the lever ON; byte-identity of the fold with it OFF; evidence-class weighting cases if implemented)
+- tests/orchestrator/test_replay.py (the stamp round-trips the new lever)
+
+**Files NOT in scope:**
+- replays/samples/ (baseline 1 is untouched; the lever defaults OFF so it still byte-verifies — the re-record is 14.12)
+- tests/meetings/test_manager.py (the railroad regression pin walks baseline-1 bytes and stays green as-is; RESTORING it to a tripwire happens at 14.12 when the bytes change)
+- agents/strategic/prompts/ (the prompt-side fuel fix is 14.11)
+- meetings/transcript.py detector logic (flags are still DETECTED the same; this task changes how the belief fold WEIGHS them)
+
+**Definition of done:**
+- [ ] With the lever ON, no crew render can reach 1.0 from same-meeting contradiction flags alone: the aggregate same-meeting contradiction lift is bounded per 14.8's spec, demonstrated by a unit test stacking ≥9 synthetic same-meeting flags (the seed-44 worst case) that renders below certain-guilt.
+- [ ] With the lever OFF (the default), the belief fold is byte-identical to pre-task behavior: committed baseline-1 reconstructs byte-identically and every committed-bytes test stays green unmodified.
+- [ ] If 14.8's spec includes evidence-class weighting, flags are weighted by class (self-inconsistency / third-party-refuted / proximity) with tests per class; if deferred, the audit records why.
+- [ ] The new lever is registered in `substrate_flag_snapshot()` / `SUBSTRATE_FLAG_KEYS` and round-trips through the replay stamp + MANIFEST `flags` cell (so the 14.12 recording self-describes).
+- [ ] `.env.example` documents the lever as default-OFF pending the 14.12 baseline-2 re-record.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Public types introduced:**
+- agents.memory.beliefs.evidence_quality_lift_enabled
+
+**Implementation hint:**
+
+Start from 14.8's diagnosis, not from scratch — the audit names the exact mechanism by which ≥2 same-meeting
+flags defeat the 10.1 cap (the pinned rows in `tests/meetings/test_manager.py` are the reproduction corpus:
+seed-44 m1 p-1 with 9 flags is the worst case). The 13.5 lever pattern is the template for the gate: a module
+constant `ENV_EVIDENCE_QUALITY_LIFT` + an `evidence_quality_lift_enabled()` resolver read ad-hoc from
+`os.environ`, OFF branch byte-identical. The likely fix shape: the 10.1 cap bounds the lift PER FLAG (or per
+detector kind) and stacking distinct flags each contributes — replace with an aggregate per-(meeting, subject)
+contradiction-lift budget of one strong flag's worth (0.3), optionally allocated by evidence class. Re-run the
+railroad walk from `test_manager.py` locally with the lever ON over baseline-1 bytes to confirm all 5 pinned
+rows fall below 1.0 — that offline re-derivation is the cheapest proof the fix lands before 14.12 spends.
+
+**Integration risk:**
+
+This is a belief-fold change on the exact code path 13.5/14.9 just reshaped — the OFF-branch byte-identity
+bullet is the guard against regressing the committed baseline; run `scripts/verify_samples.sh` (bare env)
+before and after. Do NOT weaken the §4.6 vote gate or the detectors to make the numbers move — the fix is in
+the FOLD's weighting, so genuine multi-witness evidence must still convict (the seed-44 m0 TRUE-impostor
+catch, driven by real cross-referencing, must still convert with the lever ON; add it as a fixture if cheap).
+Over-damping is the failure mode to watch: if the lever ON drops genuine-class conversion materially in the
+14.12 smoke, the bound is too tight — iterate the weighting, do not ship a crew that can't convict.
+
+**Ready-to-paste prompt:** `agent_prompts/task-14-10-evidence-quality-lift.md`
+
+### Task 14.11 — qwen3_32b v4: alibi discipline, ballot craft, and voice (the measured-defect batch)
+**Branch:** `phase-14-qwen3-32b-v4`
+**Depends on:** 14.8, 14.9
+**Section refs:** audits/audit-2026-07-01-phase-14-baseline1-characterization.md (the per-defect counts + targets); agents/strategic/prompts/qwen3_32b/ (the v3 set); meetings/schemas.py (the frozen output contract); replays/samples/9p2i/replay-seed-44.jsonl (the worked railroad-fuel example)
+**Complexity:** Medium
+
+Harden the locked `qwen3_32b` set v3 → v4 against the six defects MEASURED on baseline 1, so baseline 2's
+dialogue is both more correct and more watchable. The fixes, each tied to its measured count: (1) ALIBI
+DISCIPLINE — the alibi must match the speaker's own memory rows exactly, never spanning rooms they moved
+between (10% of self-alibis were contradicted by the speaker's OWN same-turn task observation — the greedy
+spans that fuel the railroad; seed-44 m1 p-1 is the worked example); (2) DEAD-ROSTER SALIENCE — move the
+do-not-accuse/vote list adjacent to target selection with an explicit "naming an ejected/dead player wastes
+your vote" (27 invalid-target ballots); (3) a REAL `turn_id` worked example for `primary_reason_id` — copy a
+turn id verbatim from the transcript lines (20 invalid-id nulls); (4) CONFIDENCE CALIBRATION — a rubric (1.0
+only for a first-hand witnessed kill; ~0.7 corroborated; ~0.5 hunch; 64 accusations sat at 1.0); (5)
+OBSERVATION CURATION — put the 3–5 most probative observations on the record, not the whole movement log
+(30+-row dumps bloat turns and feed the 23 missed-deadline rambles); (6) VOICED RATIONALE — the ballot
+rationale states the argument in the agent's own words, referencing the specific turn that convinced them (33%
+of ballots shared one literal template sentence). The output JSON schema is FROZEN (the same-schema
+invariant); only instruction prose and examples change. In-place template edits are SAFE for baseline-1
+byte-identity — reconstruction replays RECORDED prompt bytes and never re-renders templates (the 14.2
+determinism contract); recorded `prompt_versions` rows stay `…​.v3` while the registry moves to v4 for future
+recordings.
+
+**Files in scope:**
+- agents/strategic/prompts/qwen3_32b/crewmate_report.j2 (fixes 1, 4, 5; header → v4)
+- agents/strategic/prompts/qwen3_32b/impostor_report.j2 (fixes 1, 4, 5; header → v4)
+- agents/strategic/prompts/qwen3_32b/accusation_round.j2 (fixes 1, 2, 4, 5; header → v4)
+- agents/strategic/prompts/qwen3_32b/vote_ballot.j2 (fixes 2, 3, 6; header → v4)
+- orchestrator/game.py (registry bump: `qwen3_32b` → `_bespoke_versions("qwen3_32b", version="v4")`)
+- tests/agents/test_bespoke_prompt_sets.py (render + cross-set parse stay green; add pins for the new directives — alibi-discipline present, dead-roster adjacency, confidence rubric — mirroring the cover-directive gating pins)
+
+**Files NOT in scope:**
+- the other bespoke sets + `qwen3_5_9b/` (frozen; this iterates ONLY the locked set)
+- replays/samples/ (recorded v3 bytes verify unchanged; baseline 2 is 14.12)
+- meetings/schemas.py + the graders (the output contract is the invariant)
+- llm/ + agents/memory/ (the belief-side fix is 14.10)
+
+**Definition of done:**
+- [ ] All six measured defects are addressed in the templates, each traceable to its 14.8 count (the audit's targets are quoted in the template header comments where the directive lands).
+- [ ] The registry maps `qwen3_32b` → v4; template headers read v4; recorded baseline-1 rows (…​.v3) are untouched and `scripts/verify_samples.sh` stays green on the committed sets (reconstruction replays recorded bytes — prove it, don't assume it).
+- [ ] Every template renders under `StrictUndefined` with the existing loader kwargs; the cross-set parse check holds; the cover directive stays gated on `is_impostor`; the anti-meta-leak directive is preserved.
+- [ ] A cheap offline validation pass runs the v4 set over reconstructed contexts (the 14.5 `--prompt-set` harness) and reports parse-success + the mechanical grades vs the v3 rows — a regression in either is a stop-and-iterate, not a ship.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+Iterate on the v3 bodies (this is a hardening pass, not a ground-up rewrite — v3's response-shape checklist
+and worked examples fixed the smoke failures; keep them). Fix 1 is the highest-leverage line in the phase
+tail: the alibi bullet should read like "your `alibi` must quote your own memory exactly — one room, the tick
+range you were ACTUALLY there; if you moved during the window, alibi only the room you were in at the relevant
+tick; a range that spans rooms you moved between contradicts your own record and gets you ejected." For fix 6,
+give two contrasting example rationales (one evidence-citing, one gut-read) so the model stops converging on a
+single template sentence. Watch fix 5 vs the graders: curation must not drop the found_body/saw observations
+`eval/vote_correctness.py` reads off the opening turn — say "always include the body report and the sightings
+naming your suspect." Validate with `AILIBI_PROMPT_SET=qwen3_32b` + the featherless_sweep `--prompt-set`
+axis on the same pinned contexts (operator, $0, fast); the LIVE proof is 14.12's smoke.
+
+**Ready-to-paste prompt:** `agent_prompts/task-14-11-qwen3-32b-v4.md`
+
+### Task 14.12 — Baseline 2: atomic re-record on the evidence-quality lever + v4 prompts + phase close
+**Branch:** `phase-14-baseline-2-rerecord`
+**Depends on:** 14.10, 14.11
+**Section refs:** tasks/phase-14.md §14.7 (the proven smoke → re-record → validity-gate shape + the landed stamp infra); audits/audit-2026-07-01-phase-14-baseline1-characterization.md (the targets baseline 2 must beat); scripts/refresh_samples.sh; tests/meetings/test_manager.py (the railroad pin to RESTORE to a tripwire)
+**Complexity:** Integration
+
+Operator-run spend/time gate, and the PHASE CLOSE. Re-record BOTH committed sets (50 × 4p1i + 50 × 9p2i) on
+the locked tuple + the v4 prompt set + the 14.10 evidence-quality lever ON (stamped; the four 13.5 levers are
+unconditional after 14.9), in ONE atomic PR, exactly the 14.7 shape: smoke first (3–5 seeds at 9p2i; parse
+≈ 100%, zero 1024-truncation, wall-time projection — measured 14.7 datapoint: ~5h for both sets with 2
+parallel seed workers), STOP for operator go, then the full runs, the HARD validity gate, and byte-identical
+flag-aware reconstruction. Baseline 2 replaces baseline 1 as canonical. BECAUSE the fixes were specified
+against measured defects, this close also measures them: restore the railroad REGRESSION PIN to the original
+TRIPWIRE (zero crew rows at 1.0 from same-meeting flag stacks), and report the per-defect deltas vs baseline 1
+(ejection accuracy vs 0.566, self-contradicted alibis vs 10%, guard-normalized ballots vs 47, conf-1.0
+accusations vs 64, template-rationale share vs 33%, missed-deadline vs 23) plus the re-measured R-gate (R1 vs
+27/50, impostor win vs 0.32). Better CONVICTIONS, not just more: R1 holding near baseline 1 with ejection
+accuracy up is the win condition; R1 collapsing means 14.10 over-damped (stop, iterate the weighting, re-smoke
+— never weaken the gate). Close the phase with the final audit + STATUS banner.
+
+**Files in scope:**
+- replays/samples/4p1i/ (50 replays + report + MANIFEST re-recorded; `flags` rows now stamp the 14.10 lever)
+- replays/samples/9p2i/ (50 replays + report + MANIFEST re-recorded; roster sidecar unchanged)
+- tests/meetings/test_manager.py (the railroad pin RESTORED to the zero-railroad tripwire on the new bytes)
+- tests/ committed-bytes pins (the #213-style mechanical re-pin across the byte-coupled tests — value pins re-derived, coordinates re-anchored property-preservingly)
+- scripts/refresh_samples.sh (the locked-substrate preflight guard updated to require the 14.10 lever ON alongside the existing tuple)
+- audits/audit-phase-14-close.md (new: the phase-close audit — per-defect deltas, the re-measured R-gate, the honest verdict + Phase 15 recommendation)
+- tasks/phase-14.md (final STATUS banner: phase CLOSED on baseline 2)
+
+**Files NOT in scope:**
+- engine/ + meetings/ + agents/ + llm/ + eval/ source (behavior landed in 14.10/14.11; this records + regenerates + re-pins only)
+- meetings/manager.py token caps (FROZEN — turn 2048 / vote 1024, unchanged through the whole phase)
+- agents/strategic/prompts/ (v4 landed in 14.11; recording only)
+- tests/fixtures/prompt_regression/ (stays frozen — the self-contained two-version A/B harness, per the #213 decision)
+
+**Definition of done:**
+- [ ] Smoke first (3–5 seeds at 9p2i, lever ON + v4): thinking policy holds, parse-success ≈ 100%, zero ballot truncation, genuine-class conversion has NOT collapsed (the 14.10 over-damping check), wall-time projection reported; STOP for operator go.
+- [ ] Both sets re-recorded in ONE atomic PR on the locked tuple + v4 + the 14.10 lever ON; MANIFESTs/reports regenerated; the `flags` stamp records the lever; byte-identical flag-aware reconstruction holds.
+- [ ] HARD validity gate passes (the 14.7 criteria: friendly-fire 0, all game_over, betrayal 0, leak suite green, meeting_rate ≥ 0.60 with ≥ 30 resolved at 9p2i, zero tick-1 kills, zero dangling primary_reason_id, cost rows 0, provenance rows exact).
+- [ ] The railroad TRIPWIRE is restored (zero crew rows at 1.0 from ≥2 same-meeting flags on the new bytes) — the regression-pin era ends with the defect, not around it.
+- [ ] The close audit reports the per-defect deltas vs baseline 1 (ejection accuracy / self-contradicted alibis / guard-normalized ballots / conf-1.0 accusations / template-rationale share / missed-deadline count) and the re-measured R-gate vs baseline 1 AND the 9B — no number retrofit.
+- [ ] The phase STATUS banner records the close; the audit recommends Phase 15 (persona/voice layer; tactical/ML between-meeting play) with the evidence for each.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Implementation hint:**
+
+The operator env is the 14.7 recipe plus the new lever: `AILIBI_LLM_PROVIDER=featherless` +
+`FEATHERLESS_API_KEY` + `AILIBI_PROMPT_SET=qwen3_32b` + `AILIBI_EVIDENCE_QUALITY_LIFT=1` (the four 13.5 vars
+are gone after 14.9 — the substrate is unconditional). Update the refresh-script preflight guard to require
+the lever alongside the prompt set BEFORE any seed stages (the same fail-loud shape PR #209 added). Run the
+two sets with 2 parallel seed workers — the measured 14.7 wall time was ~5h total; smoke-project anyway. The
+per-defect delta measurements are cheap offline folds over the new bytes (the same greps/folds 14.8
+documented); put them in the close audit next to their baseline-1 numbers. The #213 PR is the template for
+the mechanical test re-pin — expect the same byte-coupled test files; re-anchor property-preservingly and say
+so per test.
+
+**Integration risk:**
+
+The phase's final spend gate, with a two-sided failure mode: the railroad tripwire must be RESTORABLE (14.10
+under-fixed if any new railroad row appears) AND genuine conviction must survive (14.10 over-damped if R1 or
+genuine-class conversion collapses — the seed-44-m0-style true-impostor catches are the canary). Either
+failure is a stop-and-iterate on 14.10's weighting (or 14.11's prompts), re-smoke, and only then the full
+spend — never weaken the §4.6 gate, never raise the caps, never ship a baseline that papers a defect the
+phase set out to fix.
+
+**Ready-to-paste prompt:** `agent_prompts/task-14-12-baseline-2-rerecord.md`

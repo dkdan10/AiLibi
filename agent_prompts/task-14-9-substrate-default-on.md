@@ -29,7 +29,8 @@ flags-ON (14.7), so reconstruction no longer needs the env vars set and the dete
 - observation/service.py (`movement_perception_enabled` gate retired; the empty-tuple OFF branch removed)
 - orchestrator/game.py (`unfreeze_memory_enabled` gate retired; the `rerender_memory is None` OFF branch removed)
 - agents/memory/beliefs.py (the witnessed-kill suspicion read becomes unconditional)
-- api/replay_loader.py (reconstruction no longer reads the flags — the corrected derivation is unconditional)
+- api/replay_loader.py (reconstruction no longer reads the flags — the corrected derivation is unconditional; the substrate-mismatch guard stays coherent for legacy stamped replays)
+- orchestrator/replay.py (`substrate_flag_snapshot()` lazy-imports the four `*_enabled()` resolvers this task deletes — rework it to report the retired levers as unconditionally ON, keeping the stamp machinery generic for future levers like 14.10's)
 - tests/ (the flag-OFF byte-identity / flag-toggle tests across tests/agents/ + tests/meetings/ + tests/observation/ + tests/orchestrator/ retargeted onto the flags-ON baseline)
 - .env.example (remove the now-defunct flag knobs)
 
@@ -42,6 +43,7 @@ flags-ON (14.7), so reconstruction no longer needs the env vars set and the dete
 **Definition of done:**
 - [ ] The 4 adopted levers are DEFAULT behavior (the `*_enabled()` env gates default-ON or removed); the now-dead flag-OFF branches and env constants are deleted, not left vestigial.
 - [ ] The committed flags-ON baseline (14.7) reconstructs byte-identically WITHOUT any env vars set (`scripts/verify_samples.sh` under a bare environment); the MANIFEST/replay `flags` stamp reads "all 4 ON" and is consistent with the now-unconditional behavior.
+- [ ] `orchestrator/replay.py`'s `substrate_flag_snapshot()` no longer imports the retired resolvers (the four levers report unconditionally ON); the loader's substrate-mismatch guard still validates legacy stamped replays; the stamp machinery stays generic so 14.10 can register its new lever.
 - [ ] The former flag-OFF byte-identity tests are retargeted onto the flags-ON baseline (or deleted with rationale); no test asserts the retired OFF behavior; the leak suite stays green at 4p1i and 9p2i.
 - [ ] `.env.example` no longer advertises the retired flag knobs.
 - [ ] `uv run mypy .` passes.
@@ -60,7 +62,9 @@ unconditional, so the `*_enabled()` resolvers + their OFF branches + the env con
 `ENV_UNFREEZE_MEMORY`) can be deleted. Do it lever-by-lever, re-running `scripts/verify_samples.sh` under a
 BARE environment after each so any residual flag-read is caught immediately. The `flags` MANIFEST column
 (14.7) stays as provenance even though the flags are no longer toggleable — it records that this baseline was
-generated on the corrected substrate.
+generated on the corrected substrate. Note the tail of the phase: 14.12 re-records baseline 2 after the
+14.10/14.11 fixes and re-pins the byte tests once more — keep this task's retargeting mechanical so that
+second re-pin is cheap.
 
 ## Integration risk
 

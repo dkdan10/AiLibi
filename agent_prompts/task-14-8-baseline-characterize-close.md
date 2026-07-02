@@ -1,4 +1,4 @@
-# Agent Prompt — 14.8 Characterize the new baseline (R-gate as measurement) + phase close
+# Agent Prompt — 14.8 Characterize baseline 1 (R-gate as measurement) + fix recommendations
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-14.md.
 
@@ -6,49 +6,53 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 14.8 — Characterize the new baseline (R-gate as measurement) + phase close, anchored to audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py. Do not implement work outside these references.
+Implement Task 14.8 — Characterize baseline 1 (R-gate as measurement) + fix recommendations, anchored to audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py; PR #213 (baseline-1 findings). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-14.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-14-baseline-characterize-close`
 **Depends on:** 14.7
-**Section refs:** audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py
+**Section refs:** audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py; PR #213 (baseline-1 findings)
 **Complexity:** Medium
 
-Design-thread close: compute the Phase-13 R-gate as a MEASUREMENT over the committed 14.7 flags-ON baseline —
-R1 (games decided by ejection), R4 floor, R7, impostor win rate, and the rubric geomean ranking (eject-decided
-> stopwatch) — and compare to the final-9B baseline (R1 3/50, impostor 84%, eject 9%). Also run a per-lever
-ABLATION (offline, $0): toggle each of the 4 substrate flags during re-derivation over the baseline replays to
-characterize each lever's contribution, and recommend the default set for 14.9 (note the kill-scene flag fired
-0× in the 9B smoke — flag it as UNMEASURED / needing a richer scenario, not a negative result). Write the
-close audit framing the result as an honest finding: state whether the stronger model raised R1 — the sharper
-hypothesis is can the NEW model DRIVE the corrected substrate where the 9B couldn't (the 9B's voter sat at
-suspicion 1.00 over the 0.60 gate yet the meeting SKIPPED) — and, if not, whether the evidence supports the
-information-ceiling hypothesis (single-room vision → ~45% detector precision → correct SKIP) even with the
-corrected substrate ON, recommending Phase 15 (asymmetric visibility / information richness; and
-heterogeneous-model games — per-agent model routing — enabled by the 14.5 bespoke same-schema sets). This is
-characterization, not a gate — the phase already merged on the valid new baseline (14.7); a flat or down R1 is
-a recorded finding.
+Design-thread characterization (the phase CLOSE moves to 14.12, after the evidence-quality fixes and the
+baseline-2 re-record). The headline is already known: R1 eject-decided **27/50** vs the 9B's 3/50, impostor
+win 0.32 vs 0.84 — the new model DRIVES the corrected substrate, so the Phase-13 information-ceiling
+hypothesis is REVISED, not confirmed: the ceiling bound impostor CONCEALMENT (the 14.4 tell persists) but the
+live binding constraint was crew CONVERSION, and that broke. The problem has INVERTED to OVER-conviction:
+ejection accuracy 0.566 (~43% of ejections take out crew), a 5-row crew railroad (2–9 stacked same-meeting
+contradiction flags defeat the Phase-10.1 lift cap at the new model's 4× flag density; 3 innocents ejected —
+the downgraded tripwire in `tests/meetings/test_manager.py` pins the exact set), and dialogue-level
+self-sabotage measured on the committed bytes: ~10% of self-alibis are contradicted by the speaker's OWN
+same-turn task observation (greedy tick spans — the railroad's fuel), 47/891 ballots guard-normalized (invalid
+dead targets / bad `primary_reason_id`), 64 accusations at confidence 1.0, 33% of ballots sharing one literal
+rationale template, 23 missed-deadline turns. This task: (1) compute the full R-gate measurement (R1, R4
+floor, R7, impostor win rate, rubric geomean) vs the final-9B baseline; (2) quantify how much of R1=27
+survives DISCOUNTING the railroad rows (genuine deduction vs pile-on); (3) run the per-lever ablation of the
+4 substrate flags (offline, $0; kill-scene fired 0× in the 9B smoke — UNMEASURED, not negative); (4) write
+the characterization audit whose deliverable is the CONCRETE fix specs for 14.10 (the 10.1 cap defeat —
+diagnose the exact bypass mechanism) and 14.11 (the v4 prompt fixes, with the per-defect counts above as the
+baseline the re-record must beat).
 
 **Files in scope:**
-- audits/audit-2026-06-25-phase-14-close.md (new: the R-gate measurement + the per-lever ablation + the hypothesis-test verdict + the Phase 15 recommendation)
+- audits/audit-2026-07-01-phase-14-baseline1-characterization.md (new: the R-gate measurement + railroad-discounted R1 + the per-lever ablation + the REVISED hypothesis verdict + the 14.10/14.11 fix specs)
 - experiments/lab/results-substrate-ablation.jsonl (new: per-lever ablation — each of the 4 flags toggled offline over the baseline replays, R-gate / conversion metrics per cell; $0)
-- tasks/phase-14.md (a STATUS banner recording the R-gate outcome, the recommended default flag set, and the next step)
-- experiments/lab/results-rubric-score.json (re-ranked offline over the new committed replays — data regen, no code change)
-- experiments/lab/report-rubric-interestingness.md (re-ranked offline — data regen)
+- tasks/phase-14.md (a STATUS banner recording the measurement outcome and the confirmed 14.10/14.11 targets)
+- experiments/lab/report-rubric-interestingness.md (re-ranked offline — data regen; the score json was already regenerated by the 14.7 refresh)
 
 **Files NOT in scope:**
-- llm/ + agents/ + meetings/ + engine/ (no behavior change at close)
-- replays/samples/ (the 14.7 bytes are the baseline; close READS them)
+- llm/ + agents/ + meetings/ + engine/ (no behavior change here; the fixes are 14.10/14.11)
+- replays/samples/ (the 14.7 bytes are baseline 1; this READS them)
 - eval/ source (the analyzers are reused as-is; this folds, it does not change them)
 
 **Definition of done:**
 - [ ] The R-gate is computed offline over the 14.7 flags-ON baseline (R1, R4 floor, R7, impostor win rate, rubric geomean ranking) and compared to the final-9B baseline (R1 3/50, impostor 84%, eject 9%).
-- [ ] A per-lever ablation (each of the 4 13.5 flags toggled offline over the baseline replays) characterizes each lever's contribution and recommends the default set for 14.9; the kill-scene flag's 0× firing is noted as UNMEASURED (needs a richer scenario), not a negative result.
-- [ ] The close audit frames the verdict as an HONEST hypothesis test: it states whether the model raised R1, and if not, whether the evidence supports the information-ceiling hypothesis (even with the corrected substrate ON); a null result is recorded as a valid finding, never a blocker.
-- [ ] The close audit recommends the next phase (asymmetric visibility / information richness if the ceiling is confirmed; prompt/tactical work if a gap remains).
-- [ ] The rubric data is re-ranked offline over the new committed replays ($0, no code change); no number is retrofit to pass.
+- [ ] The railroad-discounted R1 is computed (R-gate with the 5 pinned railroad rows' meetings discounted) so 14.12 can tell genuine-deduction gains from pile-on gains.
+- [ ] A per-lever ablation (each of the 4 13.5 flags toggled offline over the baseline replays) characterizes each lever's contribution and confirms the 14.9 default-ON set; the kill-scene flag's 0× firing is noted as UNMEASURED (needs a richer scenario), not a negative result.
+- [ ] The audit states the REVISED hypothesis verdict honestly: the ceiling bound concealment, not conversion; the live problem is now over-conviction (ejection accuracy 0.566) — with the evidence for each claim.
+- [ ] The audit specifies the 14.10 fix (the exact mechanism by which ≥2 same-meeting flags defeat the 10.1 cap, from the pinned rows) and the 14.11 targets (the measured per-defect counts: 10% self-contradicted alibis, 47 guard-normalized ballots, 64 conf-1.0 accusations, 33% template rationales, 23 missed-deadline turns).
+- [ ] The rubric interestingness report is re-ranked offline over the committed replays ($0, no code change); no number is retrofit to pass.
 - [ ] `uv run python scripts/generate_prompts.py --check` passes.
 - [ ] `uv run python scripts/validate_task_docs.py` passes.
 - [ ] `uv run pytest` passes.
@@ -59,9 +63,12 @@ a recorded finding.
 Pure offline folds over the new `TournamentReport`: `eval/vote_correctness.py` (`ejection_accuracy`,
 `compute_genuine_class_conversion`), `eval/accusation_calibration.py` (ECE), `eval/alibi_fabrication.py`
 (survival_rate), assembled by `eval/meeting_quality.py`, plus the rubric geomean from
-`experiments/lab/rubric_score.py` — all $0, no provider. The framing is the deliverable: per the Phase-13
-audit the bottleneck may be INFORMATION not the model, so "R1 did not rise even on a Qwen3-32B-class model" is
-a genuine finding that redirects Phase 15, not a Phase-14 failure. Do not retrofit any number.
+`experiments/lab/rubric_score.py` — all $0, no provider. The 5 railroad rows to discount are pinned in
+`tests/meetings/test_manager.py` (`known_railroad`: seed-13 m0 p-7, seed-16 m0 p-6, seed-28 m0 p-3/p-6,
+seed-44 m1 p-1); seed-44 m1 is the worked example of the fuel — crew p-1's greedy alibi (`CAFETERIA t5-14`
+spanning their own recorded `STORAGE t14` task) minted the contradictions the pile-on ran on. The framing is
+the deliverable: the audit's job is a MEASUREMENT plus two actionable fix specs, so 14.10/14.11 dispatch
+against precise targets instead of vibes. Do not retrofit any number.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
@@ -90,5 +97,5 @@ Do not implement work outside this task.
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-14-baseline-characterize-close` with a title like `task 14.8: characterize the new baseline (r-gate as measurement) + phase close`.
-The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
+Open a PR from branch `phase-14-baseline-characterize-close` with a title like `task 14.8: characterize baseline 1 (r-gate as measurement) + fix recommendations`.
+The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/audit-2026-06-25-0859-phase-13-close.md (the R-gate definition); tasks/phase-13.md (R1/R4/R7 + impostor win rate + rubric geomean); eval/meeting_quality.py; experiments/lab/rubric_score.py; PR #213 (baseline-1 findings)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
