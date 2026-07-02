@@ -348,7 +348,12 @@ def _recorded_substrate_flags(
     return flags
 
 
-def _assert_substrate_matches(game_id: str, entries: Sequence[object]) -> None:
+def _assert_substrate_matches(
+    game_id: str,
+    entries: Sequence[object],
+    *,
+    allow_substrate_mismatch: bool = False,
+) -> None:
     """Fail loud if a stamped replay is reconstructed under a different substrate.
 
     The honoring half of the Task-14.7 stamp: a flag-ON recording's memory
@@ -356,18 +361,40 @@ def _assert_substrate_matches(game_id: str, entries: Sequence[object]) -> None:
     only faithful when the ambient substrate matches the one stamped at record
     time. An unstamped (legacy / flag-OFF) replay is never checked, so the
     committed baseline reconstructs unchanged.
+
+    ``allow_substrate_mismatch`` is the ANALYSIS-ONLY override (Task 14.8): the
+    per-lever substrate ablation DELIBERATELY re-derives the stamped all-ON
+    baseline under toggled levers, which this guard otherwise (correctly)
+    refuses. Default ``False`` so the serving/verify paths keep failing loud; an
+    actually-mismatched reconstruction permitted by the override is logged at
+    WARNING (never silent) naming the divergent levers.
     """
 
     recorded = _recorded_substrate_flags(entries)
     if recorded is None:
         return
     ambient = substrate_flag_snapshot()
-    if any(
-        bool(recorded.get(key)) != bool(ambient.get(key)) for key in SUBSTRATE_FLAG_KEYS
-    ):
-        raise ReplaySubstrateMismatchError(
-            game_id=game_id, recorded=recorded, ambient=ambient
+    differing = sorted(
+        key
+        for key in SUBSTRATE_FLAG_KEYS
+        if bool(recorded.get(key)) != bool(ambient.get(key))
+    )
+    if not differing:
+        return
+    if allow_substrate_mismatch:
+        _LOGGER.warning(
+            "Deliberate substrate mismatch permitted for %r (analysis-only "
+            "override, Task 14.8): recorded %r, reconstructing under %r "
+            "(differing levers: %r).",
+            game_id,
+            dict(recorded),
+            dict(ambient),
+            differing,
         )
+        return
+    raise ReplaySubstrateMismatchError(
+        game_id=game_id, recorded=recorded, ambient=ambient
+    )
 
 
 @dataclass(frozen=True)
@@ -421,8 +448,20 @@ class ReplayLoader:
         game_map: Map | None = None,
         cache_size: int = _DEFAULT_CACHE_SIZE,
         metadata_cache_size: int = _DEFAULT_METADATA_CACHE_SIZE,
+        allow_substrate_mismatch: bool = False,
     ) -> None:
+        # ``allow_substrate_mismatch`` is the ANALYSIS-ONLY override (Task 14.8):
+        # the per-lever substrate ablation deliberately re-derives the stamped
+        # all-ON baseline under toggled levers, which the Task-14.7 guard
+        # otherwise correctly refuses. Default False — the serving/verify paths
+        # keep failing loud; the ablation harness passes True explicitly and a
+        # permitted mismatched (re)construction is logged at WARNING, never
+        # silent. An override loader additionally folds the ambient substrate
+        # snapshot into its reconstruction cache keys (``_substrate_cache_key``)
+        # so flipping the ``AILIBI_*`` levers between loads re-derives instead
+        # of silently serving the previous substrate's cached reconstruction.
         self._replay_dir = replay_dir
+        self._allow_substrate_mismatch = allow_substrate_mismatch
         self._game_map = game_map if game_map is not None else load_canonical_map()
         self._map_view = self._build_map_view()
         self._cached_load = lru_cache(maxsize=cache_size)(self._load_replay)
@@ -477,7 +516,13 @@ class ReplayLoader:
         """
 
         path, seed = self._resolve(game_id)
-        return self._cached_load(seed, path, _mtime_ns(path), self._roster_mtime())
+        return self._cached_load(
+            seed,
+            path,
+            _mtime_ns(path),
+            self._roster_mtime(),
+            self._substrate_cache_key(),
+        )
 
     def cost_summary(self) -> EvalCostSummaryView:
         """Aggregate LLM cost + decisive-outcome split across every replay.
@@ -544,7 +589,11 @@ class ReplayLoader:
 
         path, seed = self._resolve(game_id)
         memories = self._cached_memories(
-            seed, path, _mtime_ns(path), self._roster_mtime()
+            seed,
+            path,
+            _mtime_ns(path),
+            self._roster_mtime(),
+            self._substrate_cache_key(),
         )
         known_meetings = {meeting for meeting, _ in memories}
         if meeting_id not in known_meetings:
@@ -566,7 +615,11 @@ class ReplayLoader:
 
         path, seed = self._resolve(game_id)
         return self._cached_belief_frames(
-            seed, path, _mtime_ns(path), self._roster_mtime()
+            seed,
+            path,
+            _mtime_ns(path),
+            self._roster_mtime(),
+            self._substrate_cache_key(),
         )
 
     def rubric(self) -> RubricView:
@@ -640,8 +693,30 @@ class ReplayLoader:
 
     # -- cached implementations ------------------------------------------
 
+    def _substrate_cache_key(self) -> tuple[tuple[str, bool], ...] | None:
+        """The ambient substrate's contribution to the reconstruction cache key.
+
+        ``None`` (a constant) for a default loader — its guard raises on any
+        mismatch before a wrong-substrate reconstruction could be cached, so the
+        key stays byte-identical to the pre-14.8 shape. An ANALYSIS-ONLY
+        override loader (``allow_substrate_mismatch=True``) deliberately walks
+        under whatever ``AILIBI_*`` levers are ambient, so the snapshot must
+        participate in the key: flipping levers between loads on the same
+        instance re-derives (a cache miss) instead of silently serving the
+        previous substrate's reconstruction (AGENTS.md "no silent fallbacks").
+        """
+
+        if not self._allow_substrate_mismatch:
+            return None
+        return tuple(sorted(substrate_flag_snapshot().items()))
+
     def _load_replay(
-        self, seed: int, path: Path, _mtime_key: int, _roster_mtime_key: int
+        self,
+        seed: int,
+        path: Path,
+        _mtime_key: int,
+        _roster_mtime_key: int,
+        _substrate_key: tuple[tuple[str, bool], ...] | None = None,
     ) -> ReplayView:
         # ``_mtime_key`` / ``_roster_mtime_key`` participate in the LRU key only
         # (Audit H-H-2): an in-place rewrite of the replay OR the per-set
@@ -669,18 +744,31 @@ class ReplayLoader:
         )
 
     def _reconstruct_meeting_memories(
-        self, seed: int, path: Path, _mtime_key: int, _roster_mtime_key: int
+        self,
+        seed: int,
+        path: Path,
+        _mtime_key: int,
+        _roster_mtime_key: int,
+        _substrate_key: tuple[tuple[str, bool], ...] | None = None,
     ) -> Mapping[tuple[str, str], AgentMemoryView]:
-        # ``_mtime_key`` / ``_roster_mtime_key`` key the cache only (Audit H-H-2);
-        # see ``_load_replay``.
+        # ``_mtime_key`` / ``_roster_mtime_key`` / ``_substrate_key`` key the
+        # cache only (Audit H-H-2; ``_substrate_cache_key``); see ``_load_replay``.
         return self._walk(path, seed, collect_memory=True).memories
 
     def _compute_belief_frames(
-        self, seed: int, path: Path, _mtime_key: int, _roster_mtime_key: int
+        self,
+        seed: int,
+        path: Path,
+        _mtime_key: int,
+        _roster_mtime_key: int,
+        _substrate_key: tuple[tuple[str, bool], ...] | None = None,
     ) -> tuple[BeliefFrameView, ...]:
         # Reshapes the (separately cached) meeting-memory walk; no second walk.
-        # ``_mtime_key`` / ``_roster_mtime_key`` key the cache only (Audit H-H-2).
-        memories = self._cached_memories(seed, path, _mtime_key, _roster_mtime_key)
+        # ``_mtime_key`` / ``_roster_mtime_key`` / ``_substrate_key`` key the
+        # cache only (Audit H-H-2; ``_substrate_cache_key``).
+        memories = self._cached_memories(
+            seed, path, _mtime_key, _roster_mtime_key, _substrate_key
+        )
         return _belief_frames_from_memories(memories)
 
     # -- engine playback --------------------------------------------------
@@ -713,8 +801,12 @@ class ReplayLoader:
         # reads, so refuse to reconstruct it under a mismatched ambient substrate
         # rather than silently producing a memory view the recording never made.
         # Unstamped (legacy / flag-OFF) replays are not checked — the committed
-        # final-9B baseline reconstructs unchanged.
-        _assert_substrate_matches(game_id, entries)
+        # final-9B baseline reconstructs unchanged. The 14.8 analysis-only
+        # override permits a DELIBERATE mismatch (per-lever ablation) — logged,
+        # never silent; serving/verify construct the loader with the default.
+        _assert_substrate_matches(
+            game_id, entries, allow_substrate_mismatch=self._allow_substrate_mismatch
+        )
         replay_entries = [e for e in entries if isinstance(e, ReplayEntry)]
         meeting_entries = tuple(e for e in entries if isinstance(e, MeetingReplayEntry))
         failed_calls = tuple(e for e in entries if isinstance(e, FailedCallReplayEntry))
