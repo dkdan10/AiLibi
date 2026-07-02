@@ -32,6 +32,7 @@ flags-ON (14.7), so reconstruction no longer needs the env vars set and the dete
 - api/replay_loader.py (reconstruction no longer reads the flags — the corrected derivation is unconditional; the substrate-mismatch guard stays coherent for legacy stamped replays)
 - orchestrator/replay.py (`substrate_flag_snapshot()` lazy-imports the four `*_enabled()` resolvers this task deletes — rework it to report the retired levers as unconditionally ON, keeping the stamp machinery generic for future levers like 14.10's)
 - tests/ (the flag-OFF byte-identity / flag-toggle tests across tests/agents/ + tests/meetings/ + tests/observation/ + tests/orchestrator/ retargeted onto the flags-ON baseline)
+- scripts/refresh_samples.sh (the locked-substrate preflight guard drops the four retired flag requirements — after this task those env vars no longer exist, and a guard demanding them would fail every Featherless refresh; the `AILIBI_PROMPT_SET=qwen3_32b` requirement stays)
 - .env.example (remove the now-defunct flag knobs)
 
 **Files NOT in scope:**
@@ -44,6 +45,8 @@ flags-ON (14.7), so reconstruction no longer needs the env vars set and the dete
 - [ ] The 4 adopted levers are DEFAULT behavior (the `*_enabled()` env gates default-ON or removed); the now-dead flag-OFF branches and env constants are deleted, not left vestigial.
 - [ ] The committed flags-ON baseline (14.7) reconstructs byte-identically WITHOUT any env vars set (`scripts/verify_samples.sh` under a bare environment); the MANIFEST/replay `flags` stamp reads "all 4 ON" and is consistent with the now-unconditional behavior.
 - [ ] `orchestrator/replay.py`'s `substrate_flag_snapshot()` no longer imports the retired resolvers (the four levers report unconditionally ON); the loader's substrate-mismatch guard still validates legacy stamped replays; the stamp machinery stays generic so 14.10 can register its new lever.
+- [ ] The spectator serves the committed baseline under a BARE environment: `ReplayLoader(replay_dir=replays/samples/9p2i).load_replay(...)` succeeds with no `AILIBI_*` vars set (this closes the known `run_spectator.sh` 500 — the stamped all-ON baseline vs the launcher's bare env — reported 2026-07-01; a test pins it).
+- [ ] The `refresh_samples.sh` Featherless preflight no longer demands the retired flag env vars (the prompt-set requirement stays); its guard test is updated accordingly.
 - [ ] The former flag-OFF byte-identity tests are retargeted onto the flags-ON baseline (or deleted with rationale); no test asserts the retired OFF behavior; the leak suite stays green at 4p1i and 9p2i.
 - [ ] `.env.example` no longer advertises the retired flag knobs.
 - [ ] `uv run mypy .` passes.

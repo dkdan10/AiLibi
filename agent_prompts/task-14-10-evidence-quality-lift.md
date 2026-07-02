@@ -63,9 +63,11 @@ seed-44 m1 p-1 with 9 flags is the worst case). The 13.5 lever pattern is the te
 constant `ENV_EVIDENCE_QUALITY_LIFT` + an `evidence_quality_lift_enabled()` resolver read ad-hoc from
 `os.environ`, OFF branch byte-identical. The likely fix shape: the 10.1 cap bounds the lift PER FLAG (or per
 detector kind) and stacking distinct flags each contributes — replace with an aggregate per-(meeting, subject)
-contradiction-lift budget of one strong flag's worth (0.3), optionally allocated by evidence class. Re-run the
-railroad walk from `test_manager.py` locally with the lever ON over baseline-1 bytes to confirm all 5 pinned
-rows fall below 1.0 — that offline re-derivation is the cheapest proof the fix lands before 14.12 spends.
+contradiction-lift budget of one strong flag's worth (0.3), optionally allocated by evidence class. Prove the
+fix offline before 14.12 spends: re-derive the 5 pinned railroad meetings from baseline-1 bytes with the lever
+ON and confirm every pinned row now renders below 1.0. Note the stamp: baseline 1's stamp lacks the new lever
+key, so re-deriving with it ON is a substrate mismatch — use the 14.8 analysis-only override
+(`allow_substrate_mismatch=True`) for exactly this comparison; that is what it exists for.
 
 ## Public types this task introduces
 - `agents.memory.beliefs.evidence_quality_lift_enabled`
