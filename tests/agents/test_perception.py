@@ -341,9 +341,9 @@ class TestIngestPacketMovement:
         assert {e.tick for e in move_events} == {5}
 
     def test_no_move_events_when_moved_players_empty(self) -> None:
-        # The flag-OFF boundary: ``observation/service.py`` leaves
-        # ``moved_players`` empty, so ingestion appends no movement row and the
-        # episodic store is byte-identical to pre-task HEAD.
+        # A packet with no witnessed transition (``observation/service.py``
+        # leaves ``moved_players`` empty for an observer who saw none) appends
+        # no movement row.
         store = MemoryStore()
 
         ingest_packet(packet=_packet(), memory=store)

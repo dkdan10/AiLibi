@@ -62,7 +62,6 @@ from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
 from orchestrator.game import (
-    ENV_UNFREEZE_MEMORY,
     DefaultMeetingRunner,
     HeadlessGame,
     MeetingArtifacts,
@@ -73,7 +72,6 @@ from orchestrator.game import (
     apply_meeting_result,
     build_default_agent_factory,
     build_default_meeting_runner,
-    unfreeze_memory_enabled,
 )
 from orchestrator.replay import (
     MeetingReplayEntry,
@@ -735,9 +733,14 @@ class TestHeadlessGameMeetingDispatch:
             def role(self) -> Role:
                 return self._role
 
-            def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+            def render_memory_for_meeting(
+                self,
+                *,
+                token_budget: int = 1500,
+                suspicion_override: Mapping[PlayerId, float] | None = None,
+            ) -> str:
                 return self._delegate.render_memory_for_meeting(
-                    token_budget=token_budget
+                    token_budget=token_budget, suspicion_override=suspicion_override
                 )
 
             def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
@@ -1049,9 +1052,14 @@ class TestDefaultMeetingRunner:
                     {"type": "wait", "actor": packet.agent_id, "payload": {}}
                 )
 
-            def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+            def render_memory_for_meeting(
+                self,
+                *,
+                token_budget: int = 1500,
+                suspicion_override: Mapping[PlayerId, float] | None = None,
+            ) -> str:
                 return self._delegate.render_memory_for_meeting(
-                    token_budget=token_budget
+                    token_budget=token_budget, suspicion_override=suspicion_override
                 )
 
             def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
@@ -1214,9 +1222,14 @@ class TestDefaultMeetingRunner:
             def role(self) -> Role:
                 return self._delegate.role
 
-            def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+            def render_memory_for_meeting(
+                self,
+                *,
+                token_budget: int = 1500,
+                suspicion_override: Mapping[PlayerId, float] | None = None,
+            ) -> str:
                 return self._delegate.render_memory_for_meeting(
-                    token_budget=token_budget
+                    token_budget=token_budget, suspicion_override=suspicion_override
                 )
 
             def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
@@ -1581,11 +1594,11 @@ class TestBuildParticipantsFellowImpostorIds:
 
 
 # ---------------------------------------------------------------------------
-# Task 13.5.5 — unfreeze rendered memory mid-meeting (AILIBI_UNFREEZE_MEMORY).
-# The orchestrator attaches a BALLOT re-render hook only when the flag is ON;
-# the hook substitutes the pre-vote-folded suspicion into the belief lines so
-# the ballot's belief lines match the suspicion_graph it consumes. Turns and
-# the flag-OFF default keep the frozen open-tick render (byte-identical).
+# Task 13.5.5 — unfreeze rendered memory mid-meeting (unconditional since Task
+# 14.9). The orchestrator always attaches a BALLOT re-render hook; the hook
+# substitutes the pre-vote-folded suspicion into the belief lines so the
+# ballot's belief lines match the suspicion_graph it consumes. Turns keep the
+# frozen open-tick render.
 # ---------------------------------------------------------------------------
 
 
@@ -1618,27 +1631,12 @@ def _agent_with_standing_suspicion(
     return agent
 
 
-class TestUnfreezeMemoryFlag:
-    """``unfreeze_memory_enabled`` parses ``AILIBI_UNFREEZE_MEMORY`` the same
-    way the sibling Wave-C levers parse theirs: default OFF, truthy tokens ON."""
-
-    def test_default_is_off_when_unset(self) -> None:
-        assert unfreeze_memory_enabled(env={}) is False
-
-    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "Yes", "on", " on "])
-    def test_truthy_tokens_enable(self, value: str) -> None:
-        assert unfreeze_memory_enabled(env={ENV_UNFREEZE_MEMORY: value}) is True
-
-    @pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "nope"])
-    def test_falsey_tokens_stay_off(self, value: str) -> None:
-        assert unfreeze_memory_enabled(env={ENV_UNFREEZE_MEMORY: value}) is False
-
-
 class TestBuildParticipantsUnfreezeMemory:
-    """``_build_participants`` attaches a ballot re-render hook only with the
-    flag ON; the frozen open-tick render is the byte-identical default."""
+    """``_build_participants`` always attaches a ballot re-render hook
+    (unconditional since Task 14.9); the frozen open-tick render stays the
+    value every TURN prompt reads."""
 
-    def test_flag_off_carries_no_rerender_hook(self) -> None:
+    def test_participants_carry_a_ballot_hook_and_the_frozen_render(self) -> None:
         state = seed_initial_state(
             seed=2026, game_map=load_canonical_map(), num_players=4
         )
@@ -1647,22 +1645,10 @@ class TestBuildParticipantsUnfreezeMemory:
             agents=_stub_agents_for(state),  # type: ignore[arg-type]
             token_budget=1500,
         )
-        # Frozen default: no hook, and the open-tick render is the frozen field.
-        assert all(p.rerender_memory is None for p in participants)
-        assert all(p.rendered_memory for p in participants)
-
-    def test_flag_on_attaches_a_ballot_hook(self) -> None:
-        state = seed_initial_state(
-            seed=2026, game_map=load_canonical_map(), num_players=4
-        )
-        participants = _build_participants(
-            state=state,
-            agents=_stub_agents_for(state),  # type: ignore[arg-type]
-            token_budget=1500,
-            unfreeze_memory=True,
-        )
-        # Every participant carries a callable ballot hook (taking the override).
+        # Every participant carries a callable ballot hook (taking the
+        # override) AND the frozen open-tick render the turn prompts read.
         assert all(p.rerender_memory is not None for p in participants)
+        assert all(p.rendered_memory for p in participants)
 
 
 class TestBallotSuspicionOverrideRender:
@@ -1697,8 +1683,8 @@ class TestBallotSuspicionOverrideRender:
         assert hook({"p-2": 0.72}) == hook({"p-2": 0.72})
 
     def test_render_without_override_is_byte_identical(self) -> None:
-        # The additive override parameter is byte-identical to pre-task HEAD
-        # when absent: the flag-OFF / non-ballot boundary at the renderer.
+        # The additive override parameter is a no-op when absent: the
+        # non-ballot (turn-prompt) boundary at the renderer.
         agent = _agent_with_standing_suspicion(agent_id="p-1", beliefs={"p-2": 0.58})
         assert agent.render_memory_for_meeting() == (
             agent.render_memory_for_meeting(suspicion_override=None)
@@ -2133,8 +2119,15 @@ class _MeetingAwareScriptedAgent:
     def role(self) -> Role:
         return self._inner.role
 
-    def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
-        return self._inner.render_memory_for_meeting(token_budget=token_budget)
+    def render_memory_for_meeting(
+        self,
+        *,
+        token_budget: int = 1500,
+        suspicion_override: Mapping[PlayerId, float] | None = None,
+    ) -> str:
+        return self._inner.render_memory_for_meeting(
+            token_budget=token_budget, suspicion_override=suspicion_override
+        )
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
         return self._inner.suspicion_graph_for_meeting()

@@ -23,11 +23,6 @@ from agents.memory.store import (
     absorb_reported_testimony,
     render_for_prompt,
 )
-from agents.memory.store import (
-    # Aliased so pytest does not collect the ``testimony_…`` import as a test
-    # (its name starts with "test").
-    testimony_as_content_enabled as _flag_enabled,
-)
 from agents.perception import EVENT_REPORTED_TESTIMONY, PROVENANCE_REPORTED
 from meetings.manager import derive_reported_testimony
 from meetings.schemas import (
@@ -368,12 +363,17 @@ class TestReportedTestimonyRender:
         else:  # pragma: no cover - defensive
             raise AssertionError("reported line never dropped as budget shrank")
 
-    def test_flag_off_render_carries_no_reported_or_alibi_artifacts(self) -> None:
-        # With the flag OFF the content fold is never called, so a memory built
-        # exactly as pre-task renders with no reported / alibi artifacts -- the
-        # byte-identity boundary (the full guarantee is verify_samples.sh).
+    def test_render_without_ingested_testimony_carries_no_reported_or_alibi_artifacts(
+        self,
+    ) -> None:
+        # A memory into which no testimony was ever folded (e.g. a meeting with
+        # no structured claims) renders with no reported / alibi artifacts --
+        # the artifacts come only from absorb_reported_testimony's input, never
+        # from the scalar fold. (Retargeted from the retired flag-OFF
+        # byte-identity test; the lever is unconditional since Task 14.9.)
         memory = _memory_for(agent_id="p-1")
         absorb_meeting_evidence(memory, accused=("p-5",))
+        absorb_reported_testimony(memory, statements=())
 
         view = render_for_prompt(memory)
         assert "CLAIM by" not in view
@@ -407,19 +407,6 @@ class TestReportedTestimonyRender:
         for line in claim_lines:
             assert "IMPOSTOR" not in line
             assert "CREWMATE" not in line
-
-
-class TestTestimonyFlag:
-    def test_default_is_off(self) -> None:
-        assert _flag_enabled(env={}) is False
-
-    def test_unrecognised_values_are_off(self) -> None:
-        assert _flag_enabled(env={"AILIBI_TESTIMONY_AS_CONTENT": ""}) is False
-        assert _flag_enabled(env={"AILIBI_TESTIMONY_AS_CONTENT": "maybe"}) is False
-
-    def test_truthy_values_are_on(self) -> None:
-        for value in ("1", "true", "TRUE", "yes", "on", "On"):
-            assert _flag_enabled(env={"AILIBI_TESTIMONY_AS_CONTENT": value}) is True
 
 
 class TestReviewFixes:

@@ -979,7 +979,12 @@ class _MeetingAwareReporter:
             )
         return _intent({"type": "wait", "actor": self._agent_id, "payload": {}})
 
-    def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
+    def render_memory_for_meeting(
+        self,
+        *,
+        token_budget: int = 1500,
+        suspicion_override: Mapping[PlayerId, float] | None = None,
+    ) -> str:
         return f"## Your role: {self._role}\nstub memory for {self._agent_id}"
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:

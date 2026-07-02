@@ -1110,10 +1110,9 @@ class TestMovementPerceptionRender:
 
     A ``saw_player_move`` row renders as a first-hand sighting-class line and,
     via the render-time ``record_sighting`` wiring, populates ``last_seen`` so the
-    §6.6 belief-line suffix finally appears. Flag-OFF byte-identity holds because
-    no ``saw_player_move`` row exists when ``AILIBI_MOVEMENT_PERCEPTION`` is OFF
-    (gated in ``observation/service.py``); these tests inject the rows directly to
-    exercise the render path independent of the observation flag.
+    §6.6 belief-line suffix finally appears. These tests inject the rows directly
+    to exercise the render path independent of the observation layer (which
+    derives them unconditionally since Task 14.9).
     """
 
     def test_witnessed_move_renders_first_hand_line(self) -> None:
@@ -1261,10 +1260,10 @@ class TestMovementPerceptionRender:
         assert "You saw p-1 move" not in view
         assert memory.working.last_seen("p-1") is None
 
-    def test_flag_off_shape_is_byte_identical_without_movement_rows(self) -> None:
-        # Two stores identical except one carries a (flag-ON) movement row. With
-        # no movement row, the render must be byte-identical to a pre-task store
-        # (no movement line, no last_seen suffix).
+    def test_render_without_movement_rows_carries_no_movement_artifacts(self) -> None:
+        # A store with no ``saw_player_move`` row (the observer witnessed no
+        # transition) renders with no movement line and no last_seen suffix --
+        # the artifacts come only from witnessed-movement rows.
         baseline = AgentMemory()
         baseline.episodic.append(_self_state_event(tick=0, agent_id="p-1"))
         baseline.beliefs.adjust_suspicion("p-3", delta=0.3)

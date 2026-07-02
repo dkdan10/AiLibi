@@ -47,7 +47,6 @@ from agents.memory.store import (
     absorb_meeting_evidence,
     absorb_reported_testimony,
     render_for_prompt,
-    testimony_as_content_enabled,
 )
 from agents.perception import EVENT_SAW_BODY, EVENT_SAW_PLAYER, ingest_packet
 from api.schemas import (
@@ -291,14 +290,17 @@ class ReplaySubstrateMismatchError(RuntimeError):
     A replay recorded with the corrected Phase-13.5 substrate stamps its lever
     config onto its ``game_over`` record (``orchestrator.replay.GameEndReplayEntry
     .substrate_flags``). The loader HONORS that stamp: reconstruction re-derives
-    agent memory / testimony / movement / belief through the four ``*_enabled()``
-    env reads, so playing a flag-ON recording back under a flag-OFF environment
-    (or vice versa) would silently reconstruct a memory view the recording never
-    produced. Rather than fall back silently (AGENTS.md "no silent fallbacks"),
-    the loader fails loud here and names the divergent levers + the exact env vars
-    to export. A legacy / flag-OFF replay carries NO stamp and is never checked,
-    so the committed final-9B baseline reconstructs unchanged. Surfaced as HTTP
-    500 with the offending game id in the response body.
+    agent memory / testimony / movement / belief under the active substrate
+    (:func:`orchestrator.replay.substrate_flag_snapshot`), so playing back a
+    recording stamped with a different lever config would silently reconstruct
+    a memory view the recording never produced. Rather than fall back silently
+    (AGENTS.md "no silent fallbacks"), the loader fails loud here and names the
+    divergent levers. Since Task 14.9 the four 13.5 levers are unconditionally
+    ON (their env gates are retired), so this fires only for a legacy stamp
+    recording one of them OFF — a substrate this build can no longer reproduce.
+    A legacy replay carrying NO stamp is never checked, so the committed
+    final-9B baseline reconstructs unchanged. Surfaced as HTTP 500 with the
+    offending game id in the response body.
     """
 
     def __init__(
@@ -319,13 +321,11 @@ class ReplaySubstrateMismatchError(RuntimeError):
         super().__init__(
             f"replay substrate mismatch for {game_id!r}: recorded with "
             f"{self.recorded!r} but reconstructing under {self.ambient!r} "
-            f"(differing levers: {differing}). Export the recorded substrate "
-            "before reconstruction, e.g. "
-            "AILIBI_TESTIMONY_AS_CONTENT=1 AILIBI_WITNESSED_KILL_EVIDENCE=1 "
-            "AILIBI_MOVEMENT_PERCEPTION=1 AILIBI_UNFREEZE_MEMORY=1, so the "
-            "memory reconstruction matches the substrate the replay was recorded "
-            "under (this is not a determinism break — the per-tick state hash is "
-            "substrate-independent)."
+            f"(differing levers: {differing}). The four Phase-13.5 levers are "
+            "unconditionally ON since Task 14.9 (their env gates are retired), "
+            "so a replay stamped with one of them OFF cannot be faithfully "
+            "reconstructed by this build (this is not a determinism break — the "
+            "per-tick state hash is substrate-independent)."
         )
 
 
@@ -336,7 +336,7 @@ def _recorded_substrate_flags(
 
     Mirrors :func:`orchestrator.replay.read_substrate_flags` but reads the
     already-loaded ``entries`` (the walk reads the file once) instead of
-    re-opening the path. Returns ``None`` for a legacy / flag-OFF replay that
+    re-opening the path. Returns ``None`` for a legacy (pre-14.7) replay that
     carries no stamp — the committed final-9B baseline — so the caller skips the
     substrate check entirely for unstamped replays.
     """
@@ -356,11 +356,13 @@ def _assert_substrate_matches(
 ) -> None:
     """Fail loud if a stamped replay is reconstructed under a different substrate.
 
-    The honoring half of the Task-14.7 stamp: a flag-ON recording's memory
-    reconstruction re-derives through the four ``*_enabled()`` env reads, so it is
-    only faithful when the ambient substrate matches the one stamped at record
-    time. An unstamped (legacy / flag-OFF) replay is never checked, so the
-    committed baseline reconstructs unchanged.
+    The honoring half of the Task-14.7 stamp: a recording's memory
+    reconstruction re-derives under the active substrate
+    (:func:`orchestrator.replay.substrate_flag_snapshot` — the four 13.5 levers
+    unconditionally ON since Task 14.9), so it is only faithful when that
+    substrate matches the one stamped at record time. An unstamped (legacy)
+    replay is never checked, so the committed final-9B baseline reconstructs
+    unchanged.
 
     ``allow_substrate_mismatch`` is the ANALYSIS-ONLY override (Task 14.8): the
     per-lever substrate ablation DELIBERATELY re-derives the stamped all-ON
@@ -796,14 +798,15 @@ class ReplayLoader:
 
         game_id = _game_id_for_seed(seed)
         entries = read_all_entries(path)
-        # Honor the stamped substrate (Task 14.7): a flag-ON recording's memory
-        # reconstruction below re-derives through the four ``*_enabled()`` env
-        # reads, so refuse to reconstruct it under a mismatched ambient substrate
-        # rather than silently producing a memory view the recording never made.
-        # Unstamped (legacy / flag-OFF) replays are not checked — the committed
-        # final-9B baseline reconstructs unchanged. The 14.8 analysis-only
-        # override permits a DELIBERATE mismatch (per-lever ablation) — logged,
-        # never silent; serving/verify construct the loader with the default.
+        # Honor the stamped substrate (Task 14.7): the memory reconstruction
+        # below re-derives under the active substrate (the four 13.5 levers
+        # unconditionally ON since Task 14.9), so refuse to reconstruct a
+        # replay stamped with a different lever config rather than silently
+        # producing a memory view the recording never made. Unstamped (legacy)
+        # replays are not checked — the committed final-9B baseline
+        # reconstructs unchanged. The 14.8 analysis-only override permits a
+        # DELIBERATE mismatch (per-lever ablation) — logged, never silent;
+        # serving/verify construct the loader with the default.
         _assert_substrate_matches(
             game_id, entries, allow_substrate_mismatch=self._allow_substrate_mismatch
         )
@@ -1035,16 +1038,14 @@ class ReplayLoader:
                     # engine state and its hash checks are untouched.
                     evidence = extract_belief_evidence(result)
                     # Task 13.5.2: mirror the live loop's reported-testimony
-                    # content fold in the SAME per-living-agent loop, gated on
-                    # ``AILIBI_TESTIMONY_AS_CONTENT`` (default OFF -> byte-identical
-                    # reconstruction). The derivation is the SAME pure function of
-                    # the recorded ``result`` the orchestrator uses, so the live
-                    # and replay reconstructions are identical. Memory-side only --
-                    # engine state and its hash checks are untouched.
-                    testimony_enabled = testimony_as_content_enabled()
-                    statements = (
-                        derive_reported_testimony(result) if testimony_enabled else ()
-                    )
+                    # content fold in the SAME per-living-agent loop,
+                    # unconditionally since Task 14.9 (the adopted lever is the
+                    # default substrate). The derivation is the SAME pure
+                    # function of the recorded ``result`` the orchestrator
+                    # uses, so the live and replay reconstructions are
+                    # identical. Memory-side only -- engine state and its hash
+                    # checks are untouched.
+                    statements = derive_reported_testimony(result)
                     for pid in sorted(state.players):
                         if not state.players[pid].alive:
                             continue
@@ -1054,10 +1055,7 @@ class ReplayLoader:
                             corroborated=evidence.corroborated,
                             contradicted=evidence.contradicted,
                         )
-                        if testimony_enabled:
-                            absorb_reported_testimony(
-                                memories[pid], statements=statements
-                            )
+                        absorb_reported_testimony(memories[pid], statements=statements)
                 meeting_index += 1
                 if state.phase == "GAME_OVER":
                     break

@@ -214,7 +214,6 @@ class TestTeamInternalFirewallContract:
 
 
 _GATE = 0.60  # DESIGN.md §4.6 eject gate
-_FLAG_ON: Mapping[str, str] = {"AILIBI_WITNESSED_KILL_EVIDENCE": "1"}
 
 
 def _kill_packet(
@@ -253,9 +252,9 @@ class TestWitnessedKillBelief:
     """Task 13.5.3 (a) -- a witnessed kill becomes near-certain belief.
 
     A ``PlayerView`` carrying ``action == "kill"`` (the witness-gated kill stamp)
-    lifts the killer's suspicion over the §4.6 gate, behind
-    ``AILIBI_WITNESSED_KILL_EVIDENCE``. Teammate-firewalled (§4.7) and >= the
-    vent weight by construction.
+    lifts the killer's suspicion over the §4.6 gate, unconditionally since Task
+    14.9 (the adopted 13.5.3 lever is the default substrate). Teammate-
+    firewalled (§4.7) and >= the vent weight by construction.
     """
 
     def test_witnessed_kill_lifts_killer_over_gate(self) -> None:
@@ -264,23 +263,10 @@ class TestWitnessedKillBelief:
             observation=_kill_packet(killer="killer"),
             previous_visible_bodies=set(),
             recent_co_presence={},
-            env=_FLAG_ON,
         )
         # Near-certain: the delta pins to the 1.0 clamp, well over the gate.
         assert result.view("killer").suspicion == pytest.approx(1.0)
         assert result.view("killer").suspicion > _GATE
-
-    def test_kill_stamp_is_inert_when_flag_off(self) -> None:
-        # Default OFF (no env) -> byte-identical to pre-task HEAD: the kill stamp
-        # moves no belief and the killer is not even materialised.
-        result = apply_observation_rules(
-            BeliefState(),
-            observation=_kill_packet(killer="killer"),
-            previous_visible_bodies=set(),
-            recent_co_presence={},
-        )
-        assert result.known_players() == ()
-        assert result.view("killer").suspicion == _DEFAULT_SUSPICION
 
     def test_teammate_kill_is_firewalled(self) -> None:
         # §4.7: an impostor that witnesses a TEAMMATE's kill accrues NO suspicion
@@ -294,7 +280,6 @@ class TestWitnessedKillBelief:
             ),
             previous_visible_bodies=set(),
             recent_co_presence={},
-            env=_FLAG_ON,
         )
         assert result.known_players() == ()
         assert result.view("teammate").suspicion == _DEFAULT_SUSPICION
@@ -312,7 +297,6 @@ class TestWitnessedKillBelief:
             ),
             previous_visible_bodies=set(),
             recent_co_presence={},
-            env=_FLAG_ON,
         )
         assert result.view("stranger").suspicion == pytest.approx(1.0)
         assert result.view("stranger").suspicion > _GATE
@@ -327,7 +311,6 @@ class TestWitnessedKillBelief:
             observation=_kill_packet(killer="x"),
             previous_visible_bodies=set(),
             recent_co_presence={},
-            env=_FLAG_ON,
         )
         vent = apply_observation_rules(
             BeliefState(),
@@ -352,7 +335,6 @@ class TestWitnessedKillBelief:
             observation=_kill_packet(killer="killer"),
             previous_visible_bodies=set(),
             recent_co_presence={},
-            env=_FLAG_ON,
         )
         assert result.view("killer").suspicion > _GATE
 

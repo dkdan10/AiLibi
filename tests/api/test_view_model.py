@@ -118,27 +118,6 @@ def nine_p_two_i_loader() -> ReplayLoader:
     return ReplayLoader(replay_dir=_NINE_P_TWO_I)
 
 
-# The four Phase-13.5 substrate flags stamped into the committed 9p2i/4p1i sets
-# at record time (provider Featherless, Qwen/Qwen3-32B, prompts qwen3_32b.v3).
-# A flag-ON recording's memory reconstruction re-derives through the four
-# ``*_enabled()`` env reads, so replaying it back under the bare CI env (flags
-# UNSET) trips ``ReplaySubstrateMismatchError``; a test that reconstructs the
-# committed set must export the recorded substrate first.
-_SUBSTRATE_FLAG_ENV_VARS = (
-    "AILIBI_TESTIMONY_AS_CONTENT",
-    "AILIBI_WITNESSED_KILL_EVIDENCE",
-    "AILIBI_MOVEMENT_PERCEPTION",
-    "AILIBI_UNFREEZE_MEMORY",
-)
-
-
-def _set_substrate_flags_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Export the recorded flag-ON substrate for THIS test only (not module-wide)."""
-
-    for var in _SUBSTRATE_FLAG_ENV_VARS:
-        monkeypatch.setenv(var, "1")
-
-
 # ---------------------------------------------------------------------------
 # Versioned contract + identity palette (firewall-neutral)
 # ---------------------------------------------------------------------------
@@ -243,7 +222,6 @@ def test_gate_consistency_across_committed_9p2i_set(
     # The committed 9p2i set was re-recorded on the Phase-13.5 substrate (all four
     # flags ON); reconstruct it under the stamped substrate so the loader does not
     # raise ReplaySubstrateMismatchError under the bare CI env.
-    _set_substrate_flags_on(monkeypatch)
 
     meetings_checked = 0
     for meta in nine_p_two_i_loader.list_replays():
@@ -290,7 +268,6 @@ def test_fabricated_emergency_opening_marker_stripped_and_flagged(
     # mapping itself stays covered hermetically in tests/meetings/test_manager.py.
     from meetings.manager import EMERGENCY_BODY_STRIP_MARKER
 
-    _set_substrate_flags_on(monkeypatch)
     flagged = 0
     for meta in nine_p_two_i_loader.list_replays():
         replay = nine_p_two_i_loader.load_replay(meta.game_id)
@@ -355,7 +332,6 @@ def test_ballot_markers_parse_on_the_real_9p2i_set(
     nine_p_two_i_loader: ReplayLoader,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _set_substrate_flags_on(monkeypatch)
     saw_rewrite = False
     for meta in nine_p_two_i_loader.list_replays():
         replay = nine_p_two_i_loader.load_replay(meta.game_id)
@@ -403,7 +379,6 @@ def test_contradiction_weak_strong_class() -> None:
 def test_vent_events_projected_on_9p2i(
     nine_p_two_i_loader: ReplayLoader, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _set_substrate_flags_on(monkeypatch)
     found = False
     replay = nine_p_two_i_loader.load_replay("headless-seed-12")
     for tick in replay.ticks:
@@ -461,7 +436,6 @@ def test_advantage_required_total_is_fixed_across_ticks(
     # fixed game-start total is identical on every tick, even as the live
     # ``tasks_required`` shrinks when crewmates die. tasks_completed never
     # exceeds the fixed total, so the displayed meter is monotonic + bounded.
-    _set_substrate_flags_on(monkeypatch)
     replay = nine_p_two_i_loader.load_replay("headless-seed-12")
     totals = {tick.advantage.tasks_required_total for tick in replay.ticks}
     assert len(totals) == 1, "fixed display total drifted across ticks"
@@ -478,7 +452,6 @@ def test_advantage_required_total_is_fixed_across_ticks(
 def test_advantage_in_bounds_on_real_set(
     nine_p_two_i_loader: ReplayLoader, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _set_substrate_flags_on(monkeypatch)
     replay = nine_p_two_i_loader.load_replay("headless-seed-12")
     # Ejection meeting ticks carry POST-resolution advantage (the ejected player
     # is gone) while their agent_states are PRE-resolution, so the strict
@@ -504,7 +477,6 @@ def test_advantage_reflects_post_meeting_ejection(
     # agent_states (the meeting roster) still show them alive.
     # Task 13.12 redistribute re-record: seed-12 no longer ejects (all SKIP);
     # re-pointed to seed-16, which carries an EJECTED meeting on the new bytes.
-    _set_substrate_flags_on(monkeypatch)
     replay = nine_p_two_i_loader.load_replay("headless-seed-16")
     ejection = next(m for m in replay.meetings if m.outcome == "EJECTED")
     tick = next(t for t in replay.ticks if t.tick == ejection.tick)
@@ -580,7 +552,6 @@ def test_agent_visibility_served_living_only_and_cached(
     """Every living agent carries a field of view; dead agents carry None; and the
     projection is LRU-cached (the expensive solve runs once per game)."""
 
-    _set_substrate_flags_on(monkeypatch)
     first = nine_p_two_i_loader.load_replay("headless-seed-12")
     second = nine_p_two_i_loader.load_replay("headless-seed-12")
     # Cost-bounded: the served payload is memoized, never recomputed per request.
@@ -684,7 +655,6 @@ def test_report_tick_fog_keeps_the_reported_body(
     agent could see at the meeting frame rather than dropping it.
     """
 
-    _set_substrate_flags_on(monkeypatch)
     saw_report = False
     for meta in nine_p_two_i_loader.list_replays():
         replay = nine_p_two_i_loader.load_replay(meta.game_id)

@@ -104,9 +104,9 @@ class MovedPlayerView(_FrozenModel):
     are all leak-allowed (ids and rooms). It is NOT named ``player_id`` because
     the leak scanner forbids that key anywhere in the packet
     (``eval/leak_test.py``), matching the ``PlayerView`` / ``BodyView`` ``id``
-    convention. Surfaced only behind ``AILIBI_MOVEMENT_PERCEPTION`` (default OFF
-    → the ``moved_players`` tuple is empty and every downstream store/render is
-    byte-identical to pre-task HEAD).
+    convention. Surfaced unconditionally since Task 14.9 (the adopted 13.5.4
+    lever is the default substrate; the ``AILIBI_MOVEMENT_PERCEPTION`` gate is
+    retired).
     """
 
     id: PlayerId
@@ -166,24 +166,22 @@ class ObservationPacket(_FrozenModel):
     global_state: GlobalView
     cooldown: int | None
     # Room→room transitions the observer DIRECTLY witnessed this tick (Task
-    # 13.5.4), derived from the engine ``MovedEvent`` and WITNESS-gated to actors
-    # the observer can see (see :class:`MovedPlayerView`). Default empty, so a
-    # build that never sets ``AILIBI_MOVEMENT_PERCEPTION`` carries no movement
-    # signal and every downstream episodic store / memory render is byte-identical
-    # to pre-task HEAD. Carried as a top-level packet field (not a ``PlayerView``
+    # 13.5.4; unconditional since Task 14.9), derived from the engine
+    # ``MovedEvent`` and WITNESS-gated to actors the observer can see (see
+    # :class:`MovedPlayerView`). Default empty (no witnessed transition).
+    # Carried as a top-level packet field (not a ``PlayerView``
     # key) because the leak suite pins ``PlayerView``'s key set exactly.
     moved_players: tuple[MovedPlayerView, ...] = ()
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        # Flag-OFF byte-identity (Task 13.5.4, Codex P2). The audit log writes
+        # Empty-field byte-identity (Task 13.5.4, Codex P2). The audit log writes
         # ``packet.model_dump(mode="json")`` verbatim (observation/audit.py), so an
         # always-present ``moved_players`` default would add ``"moved_players": []``
-        # to every packet/audit line and committed replay even when
-        # ``AILIBI_MOVEMENT_PERCEPTION`` is OFF -- a byte-level divergence from
-        # pre-task HEAD with NO re-record. Omit the field when empty so a flag-OFF
-        # packet serializes byte-identically; when the lever is ON and a transition
-        # was witnessed the non-empty tuple is dumped normally.
+        # to every no-witnessed-transition packet/audit line -- a byte-level
+        # divergence from the recorded format with NO re-record. Omit the field
+        # when empty; when a transition was witnessed the non-empty tuple is
+        # dumped normally.
         data: dict[str, Any] = handler(self)
         if not self.moved_players:
             data.pop("moved_players", None)

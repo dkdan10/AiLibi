@@ -42,12 +42,12 @@ instead.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import fields, is_dataclass
 import hashlib
 import json
 from pathlib import Path
-from typing import Annotated, Any, Literal, TextIO, TypeAlias
+from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -164,19 +164,20 @@ class GameEndReplayEntry(BaseModel):
     tick: int | None = None
     winner: WinnerSide | None
     reason: str
-    # The Phase-13.5 substrate-flag config the game was recorded under (Task
-    # 14.7; DESIGN.md §11.4 replay provenance). Stamps which of the four merged
-    # levers (``testimony_as_content`` / ``witnessed_kill_evidence`` /
-    # ``movement_perception`` / ``unfreeze_memory``) were ON, so a replay
-    # SELF-DESCRIBES which substrate generated it instead of relying on the
-    # operator remembering the env. ADDITIVE and OPTIONAL, mirroring
+    # The substrate-lever config the game was recorded under (Task 14.7;
+    # DESIGN.md §11.4 replay provenance). Stamps which levers
+    # (``testimony_as_content`` / ``witnessed_kill_evidence`` /
+    # ``movement_perception`` / ``unfreeze_memory``, all unconditionally ON
+    # since Task 14.9) were active, so a replay SELF-DESCRIBES which substrate
+    # generated it instead of relying on the operator remembering the env.
+    # ADDITIVE and OPTIONAL, mirroring
     # ``FailedCallReplayEntry.rendered_vote_max``: it is ``None`` for every
-    # legacy / flag-OFF replay (the committed final-9B baseline predates the
-    # field, and a flag-OFF run omits it entirely — see
-    # :meth:`ReplayLog.record_game_end`), so the reader tolerates its absence and
-    # those bytes reconstruct unchanged. The loader honors it
-    # (``api.replay_loader``) by refusing to reconstruct a stamped replay under a
-    # DIFFERENT ambient substrate — no silent cross-substrate replay.
+    # legacy pre-stamp replay (the committed final-9B baseline predates the
+    # field), so the reader tolerates its absence and those bytes reconstruct
+    # unchanged; every post-14.9 recording stamps the full snapshot. The loader
+    # honors it (``api.replay_loader``) by refusing to reconstruct a stamped
+    # replay under a DIFFERENT ambient substrate — no silent cross-substrate
+    # replay.
     substrate_flags: Mapping[str, bool] | None = None
 
 
@@ -231,42 +232,56 @@ ReplayLogEntry: TypeAlias = Annotated[
 # The canonical key order for a substrate-flag snapshot (Task 14.7). Mirrors
 # ``experiments.lab.probe_backends.active_substrate_flags`` exactly so the
 # recorded MANIFEST ``flags`` column, the sweep result rows, and the replay
-# stamp all describe the same four merged Phase-13.5 levers with identical keys.
-SUBSTRATE_FLAG_KEYS: tuple[str, ...] = (
+# stamp all describe the same substrate levers with identical keys. The four
+# merged Phase-13.5 levers are RETIRED as toggles (Task 14.9: unconditionally
+# ON, env gates deleted) but stay in the snapshot as provenance; a future
+# toggleable lever (e.g. Task 14.10's) registers its key here and its resolver
+# in ``_TOGGLEABLE_LEVER_RESOLVERS`` below.
+_RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
     "movement_perception",
     "unfreeze_memory",
 )
 
+# (key, resolver) pairs for levers that still consult an ``AILIBI_*`` env var.
+# Empty since Task 14.9 retired the 13.5 gates; Task 14.10's default-OFF lever
+# is the next registrant — added HERE in source, never mutated at runtime (an
+# immutable ``Final`` tuple, per AGENTS.md "no module-level mutable state", so
+# nothing can silently change replay stamps or the loader's mismatch check
+# mid-process). Each resolver takes the optional ``env`` mapping and returns
+# the lever's active state (the 13.5 ``*_enabled()`` signature).
+_TOGGLEABLE_LEVER_RESOLVERS: Final[
+    tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
+] = ()
+
+SUBSTRATE_FLAG_KEYS: Final[tuple[str, ...]] = (
+    *_RETIRED_ALWAYS_ON_LEVERS,
+    *(key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS),
+)
+
 
 def substrate_flag_snapshot(
     env: Mapping[str, str] | None = None,
 ) -> dict[str, bool]:
-    """Snapshot the four merged Phase-13.5 substrate levers (Task 14.7).
+    """Snapshot the active substrate-lever config (Task 14.7).
 
-    Reads the four ``*_enabled()`` resolvers (each consulting its ``AILIBI_*``
-    env var, default OFF) WITHOUT modifying the flag logic — Task 14.7 only
-    *records* the config; making the levers default-ON and retiring the env
-    gates is Task 14.9. The resolvers are imported lazily because
-    :func:`unfreeze_memory_enabled` lives in :mod:`orchestrator.game`, which
-    imports this module — a module-level import would be circular. The other
-    three are imported in the same block for one obvious read path. ``env`` is
-    threaded through so a caller can snapshot a specific mapping deterministically
-    (tests) instead of the live process environment.
+    The four merged Phase-13.5 levers report unconditionally ``True``: Task
+    14.9 made them the DEFAULT behavior and retired their ``*_enabled()``
+    resolvers + ``AILIBI_*`` env gates, so the corrected derivation is the only
+    substrate this build can produce. They stay in the snapshot so the MANIFEST
+    ``flags`` column and the replay stamp keep self-describing recordings (and
+    so the loader's substrate-mismatch guard can still validate legacy stamped
+    replays). A future toggleable lever's resolver is read from the immutable
+    ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through
+    (defaulting to the live process environment), preserving the
+    deterministic-snapshot seam tests and sweep configs rely on.
     """
 
-    from agents.memory.store import testimony_as_content_enabled
-    from meetings.transcript import witnessed_kill_evidence_enabled
-    from observation.service import movement_perception_enabled
-    from orchestrator.game import unfreeze_memory_enabled
-
-    return {
-        "testimony_as_content": testimony_as_content_enabled(env),
-        "witnessed_kill_evidence": witnessed_kill_evidence_enabled(env),
-        "movement_perception": movement_perception_enabled(env),
-        "unfreeze_memory": unfreeze_memory_enabled(env),
-    }
+    snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)
+    for key, resolver in _TOGGLEABLE_LEVER_RESOLVERS:
+        snapshot[key] = resolver(env)
+    return snapshot
 
 
 class ReplayLog:
@@ -393,28 +408,22 @@ class ReplayLog:
         game-over tick.
         """
 
-        # Stamp the active Phase-13.5 substrate config (Task 14.7) so the replay
-        # self-describes which levers generated it. ONLY when at least one lever
-        # is ON: a flag-OFF run (the default, and every fake-provider CI run)
-        # writes NO ``substrate_flags`` key, byte-identical to the pre-14.7
-        # game_over record — so the committed final-9B baseline and every
-        # determinism/byte-identity test stay green untouched. A flag-ON
-        # re-record (the 14.7 baseline: all four ON) carries the full snapshot.
-        snapshot = substrate_flag_snapshot()
-        substrate_flags = snapshot if any(snapshot.values()) else None
+        # Stamp the active substrate config (Task 14.7) so the replay
+        # self-describes which levers generated it. Since Task 14.9 the four
+        # 13.5 levers are unconditionally ON, so every new recording carries a
+        # full snapshot (matching the committed 14.7 baseline's stamp); the
+        # omit-when-all-OFF branch that kept a flag-OFF run byte-identical to
+        # the pre-14.7 format is retired with the flags. Legacy unstamped
+        # replays are a READ-side concern only (the loader tolerates the
+        # field's absence).
         entry = GameEndReplayEntry(
             game_id=self._game_id,
             tick=tick,
             winner=winner,
             reason=reason,
-            substrate_flags=substrate_flags,
+            substrate_flags=substrate_flag_snapshot(),
         )
-        payload = entry.model_dump(mode="json")
-        if substrate_flags is None:
-            # Omit the key entirely (not ``null``) so a flag-OFF replay is
-            # byte-identical to the pre-14.7 format.
-            payload.pop("substrate_flags", None)
-        self._append(payload)
+        self._append(entry.model_dump(mode="json"))
 
     def record_failed_call(
         self,
@@ -606,11 +615,11 @@ def read_substrate_flags(path: Path) -> dict[str, bool] | None:
 
     Reads the ``substrate_flags`` stamp off the game's ``game_over`` record (the
     last one wins, mirroring :func:`read_game_outcome`). Returns ``None`` for a
-    legacy / flag-OFF replay that carries no stamp — the committed final-9B
-    baseline and every flag-OFF run — so callers (the MANIFEST ``flags`` column,
-    the loader's substrate guard) treat an unstamped replay as "substrate
-    unspecified" rather than misreporting it as all-OFF. A stamped replay returns
-    its full four-key snapshot.
+    legacy (pre-14.7) replay that carries no stamp — the committed final-9B
+    baseline — so callers (the MANIFEST ``flags`` column, the loader's
+    substrate guard) treat an unstamped replay as "substrate unspecified"
+    rather than misreporting it as all-OFF. A stamped replay returns its full
+    snapshot.
     """
 
     flags: dict[str, bool] | None = None

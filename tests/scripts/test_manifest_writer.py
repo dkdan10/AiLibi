@@ -110,19 +110,11 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     assert winner in {"CREWMATES", "IMPOSTORS", "null"}
 
 
-def test_provenance_reads_stamped_substrate_flags(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # A flag-ON re-record (the Task-14.7 baseline) stamps its substrate config
-    # onto the replay's game_over record; the MANIFEST flags column reports the
-    # ON levers, sorted. This is the stamp -> manifest provenance path.
-    for var in (
-        "AILIBI_TESTIMONY_AS_CONTENT",
-        "AILIBI_WITNESSED_KILL_EVIDENCE",
-        "AILIBI_MOVEMENT_PERCEPTION",
-        "AILIBI_UNFREEZE_MEMORY",
-    ):
-        monkeypatch.setenv(var, "1")
+def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
+    # A re-record stamps its substrate config onto the replay's game_over
+    # record (all four 13.5 levers unconditionally ON since Task 14.9 — no env
+    # export needed); the MANIFEST flags column reports the ON levers, sorted.
+    # This is the stamp -> manifest provenance path.
     samples = tmp_path / "samples"
     samples.mkdir()
     log = ReplayLog(samples / "replay-seed-5.jsonl", game_id="headless-seed-5")

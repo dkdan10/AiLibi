@@ -25,7 +25,7 @@ existing pin.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 
@@ -326,8 +326,15 @@ def _report_then_default_factory(
         def role(self) -> Role:
             return self._delegate.role
 
-        def render_memory_for_meeting(self, *, token_budget: int = 1500) -> str:
-            return self._delegate.render_memory_for_meeting(token_budget=token_budget)
+        def render_memory_for_meeting(
+            self,
+            *,
+            token_budget: int = 1500,
+            suspicion_override: Mapping[PlayerId, float] | None = None,
+        ) -> str:
+            return self._delegate.render_memory_for_meeting(
+                token_budget=token_budget, suspicion_override=suspicion_override
+            )
 
         def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
             return self._delegate.suspicion_graph_for_meeting()

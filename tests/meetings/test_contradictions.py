@@ -43,9 +43,6 @@ from meetings.transcript import (
     is_weak_contradiction,
 )
 
-_FLAG_ON = {"AILIBI_WITNESSED_KILL_EVIDENCE": "1"}
-
-
 # --- Builders --------------------------------------------------------------
 
 
@@ -950,9 +947,13 @@ class TestAlibiVsPhysical:
     def test_emergency_trigger_kind_drops_kill_scene_exclusion(self) -> None:
         # An emergency opening carries a (fabricated) found_body in EAST_HALL.
         # With trigger_kind="emergency" the reconstruction does NOT treat that
-        # room as a kill scene, so the co-presence placements there still count
-        # and the conjunction fires; trigger_kind="report" (default) would gate
-        # them out as kill-scene sightings.
+        # room as a kill scene, so the co-presence placements there count as
+        # REGULAR physical placements (no kill-scene marker). Under
+        # trigger_kind="report" the same placements are relevance-gated as
+        # kill-scene sightings and re-enter only through the 13.5.3 kill-scene
+        # recovery (unconditional since Task 14.9), so they carry the
+        # kill-scene marker -- the Task 10.11 emergency/report distinction now
+        # shows up in the flag CLASS, not in suppression.
         transcript = MeetingTranscript(
             turns=(
                 _turn(
@@ -998,10 +999,20 @@ class TestAlibiVsPhysical:
                 ),
             )
         )
-        report = detect_contradictions(transcript, trigger_kind="report")
-        assert not [f for f in report if f.kind == "alibi_vs_physical"]
-        emergency = detect_contradictions(transcript, trigger_kind="emergency")
-        assert [f for f in emergency if f.kind == "alibi_vs_physical"]
+        report = [
+            f
+            for f in detect_contradictions(transcript, trigger_kind="report")
+            if f.kind == "alibi_vs_physical"
+        ]
+        assert report
+        assert all("kill scene" in f.description for f in report)
+        emergency = [
+            f
+            for f in detect_contradictions(transcript, trigger_kind="emergency")
+            if f.kind == "alibi_vs_physical"
+        ]
+        assert emergency
+        assert all("kill scene" not in f.description for f in emergency)
 
     def test_physical_detection_is_deterministic(self) -> None:
         transcript = self._two_voice_conjunction()
@@ -1016,9 +1027,10 @@ class TestKillSceneStrongFlag:
 
     A co-presence placing the accused at the BODY's room within the kill window
     (normally DROPPED by the relevance gate -- presence at the scene must never
-    exonerate) is RECOVERED behind ``AILIBI_WITNESSED_KILL_EVIDENCE`` and made to
-    CONTRADICT an alibi placed elsewhere. STRICT (owner-LOCKED): a lone
-    kill-scene placement is sub-gate; STRONG needs a second independent source.
+    exonerate) is RECOVERED (unconditionally since Task 14.9 -- the adopted
+    13.5.3 lever is the default substrate) and made to CONTRADICT an alibi
+    placed elsewhere. STRICT (owner-LOCKED): a lone kill-scene placement is
+    sub-gate; STRONG needs a second independent source.
     """
 
     def _body(self, *, room: str = "REACTOR") -> FoundBodyObservation:
@@ -1059,27 +1071,19 @@ class TestKillSceneStrongFlag:
             )
         return MeetingTranscript(turns=tuple(turns))
 
-    def test_two_kill_scene_voices_strong_only_when_flag_on(self) -> None:
+    def test_two_kill_scene_voices_are_strong(self) -> None:
         # Two independent co-presence placements of p-3 at the REACTOR kill scene
-        # contradict p-3's STORAGE alibi.
+        # contradict p-3's STORAGE alibi: both placements recovered -> two-source
+        # conjunction STRONG.
         transcript = self._scene(
             placements=(
                 ("p-5", "p-8", 150, "REACTOR"),
                 ("p-7", "p-2", 160, "REACTOR"),
             )
         )
-        # Flag OFF (default): the kill-scene placements are dropped -> no flag,
-        # byte-identical to HEAD.
-        off = [
-            f
-            for f in detect_contradictions(transcript)
-            if f.kind == "alibi_vs_physical"
-        ]
-        assert off == []
-        # Flag ON: both placements recovered -> two-source conjunction STRONG.
         on = [
             f
-            for f in detect_contradictions(transcript, env=_FLAG_ON)
+            for f in detect_contradictions(transcript)
             if f.kind == "alibi_vs_physical"
         ]
         assert len(on) == 2
@@ -1096,7 +1100,7 @@ class TestKillSceneStrongFlag:
         transcript = self._scene(placements=(("p-5", "p-8", 150, "REACTOR"),))
         on = [
             f
-            for f in detect_contradictions(transcript, env=_FLAG_ON)
+            for f in detect_contradictions(transcript)
             if f.kind == "alibi_vs_physical"
         ]
         assert len(on) == 1
@@ -1104,12 +1108,6 @@ class TestKillSceneStrongFlag:
         assert is_weak_contradiction(flag) is True
         assert WEAK_REASON_KILL_SCENE in flag.description
         assert flag.subjects == ("p-3",)
-        # And OFF it is not even emitted.
-        assert not [
-            f
-            for f in detect_contradictions(transcript)
-            if f.kind == "alibi_vs_physical"
-        ]
 
     def test_body_placement_two_source_conjunction_is_strong(self) -> None:
         # The second independent source can be a REGULAR (non-kill-scene)
@@ -1123,7 +1121,7 @@ class TestKillSceneStrongFlag:
         )
         on = [
             f
-            for f in detect_contradictions(transcript, env=_FLAG_ON)
+            for f in detect_contradictions(transcript)
             if f.kind == "alibi_vs_physical"
         ]
         assert len(on) == 2
@@ -1145,14 +1143,14 @@ class TestKillSceneStrongFlag:
         )
         assert not [
             f
-            for f in detect_contradictions(transcript, env=_FLAG_ON)
+            for f in detect_contradictions(transcript)
             if f.kind == "alibi_vs_physical"
         ]
 
-    def test_flag_on_without_a_body_is_unchanged(self) -> None:
-        # Flag ON but the meeting has NO kill scene (no opening found_body): the
-        # kill-scene path is inert and the detector is byte-identical to flag OFF
-        # (the regular 13.4 two-voice conjunction still fires STRONG).
+    def test_without_a_body_the_kill_scene_path_is_inert(self) -> None:
+        # The meeting has NO kill scene (no opening found_body): the kill-scene
+        # path is inert and the detector emits exactly the regular 13.4 set
+        # (the two-voice conjunction still fires STRONG).
         transcript = MeetingTranscript(
             turns=(
                 _turn(
@@ -1190,9 +1188,14 @@ class TestKillSceneStrongFlag:
                 ),
             )
         )
-        assert detect_contradictions(transcript) == detect_contradictions(
-            transcript, env=_FLAG_ON
-        )
+        flags = [
+            f
+            for f in detect_contradictions(transcript)
+            if f.kind == "alibi_vs_physical"
+        ]
+        assert len(flags) == 2
+        assert all(is_weak_contradiction(f) is False for f in flags)
+        assert all("kill scene" not in f.description for f in flags)
 
 
 # --- Mixed cases / determinism / surface contract --------------------------

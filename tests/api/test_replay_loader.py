@@ -853,11 +853,11 @@ def test_committed_9p2i_set_reconstructs_byte_identically(
     #
     # The committed set was re-recorded on the Featherless / Qwen/Qwen3-32B
     # substrate with all four Phase-13.5 levers ON, so each game_over record is
-    # stamped with that lever config. The loader's memory reconstruction honors the
-    # stamp (Task 14.7), refusing to reconstruct under a divergent ambient
-    # substrate; export the recorded flags for the walk so the reconstruction
-    # matches the substrate the set was recorded under.
-    _set_substrate_env(monkeypatch, on=True)
+    # stamped with that lever config. The loader's memory reconstruction honors
+    # the stamp (Task 14.7); since Task 14.9 the levers are unconditionally ON,
+    # so the walk needs NO env vars — run under a genuinely bare environment
+    # (the Task-14.9 acceptance bar).
+    _delete_ailibi_env(monkeypatch)
     assert replay_loader._load_roster_config(_COMMITTED_9P2I_DIR) == RosterConfig(
         num_players=9, num_impostors=2, tasks_per_crewmate=2
     )
@@ -930,12 +930,15 @@ def test_committed_9p2i_set_holds_crew_firewall(tmp_path: Path) -> None:
 
 # -- Task 14.7: the loader HONORS the stamped substrate-flag config -----------
 #
-# A flag-ON re-record stamps its Phase-13.5 lever config onto the game_over
-# record. The loader's memory reconstruction re-derives through the four
-# ``*_enabled()`` env reads, so it refuses to reconstruct a stamped replay under
-# a DIFFERENT ambient substrate (no silent cross-substrate replay). An unstamped
-# (legacy / flag-OFF) replay is never checked, so the committed final-9B baseline
-# reconstructs unchanged.
+# A re-record stamps its substrate-lever config onto the game_over record. The
+# loader's memory reconstruction re-derives under the active substrate (the
+# four Phase-13.5 levers unconditionally ON since Task 14.9 — no env reads), so
+# it refuses to reconstruct a replay stamped with a DIFFERENT lever config (no
+# silent cross-substrate replay); with the gates retired that means a legacy
+# stamp recording a lever OFF. An unstamped (legacy) replay is never checked,
+# so the committed final-9B baseline reconstructs unchanged. NO env vars are
+# needed anywhere — the committed flags-ON baseline serves under a BARE
+# environment (the Task-14.9 acceptance bar).
 
 _ALL_FLAGS_ON = {
     "testimony_as_content": True,
@@ -943,39 +946,33 @@ _ALL_FLAGS_ON = {
     "movement_perception": True,
     "unfreeze_memory": True,
 }
-_FLAG_ENV_VARS = (
-    "AILIBI_TESTIMONY_AS_CONTENT",
-    "AILIBI_WITNESSED_KILL_EVIDENCE",
-    "AILIBI_MOVEMENT_PERCEPTION",
-    "AILIBI_UNFREEZE_MEMORY",
-)
+# A legacy stamp this build can no longer reproduce: the movement lever
+# recorded OFF (its OFF derivation was deleted by Task 14.9).
+_LEGACY_MOVEMENT_OFF = {**_ALL_FLAGS_ON, "movement_perception": False}
 
 
-def _set_substrate_env(monkeypatch: pytest.MonkeyPatch, *, on: bool) -> None:
-    for var in _FLAG_ENV_VARS:
-        if on:
-            monkeypatch.setenv(var, "1")
-        else:
+def _delete_ailibi_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Strip every ``AILIBI_*`` var so the test runs under a genuinely bare env."""
+
+    for var in list(os.environ):
+        if var.startswith("AILIBI_"):
             monkeypatch.delenv(var, raising=False)
 
 
-def test_assert_substrate_matches_skips_unstamped_replay(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # An unstamped game_over (the committed final-9B baseline) is never checked,
-    # regardless of the ambient substrate.
+def test_assert_substrate_matches_skips_unstamped_replay() -> None:
+    # An unstamped game_over (the committed final-9B baseline) is never checked.
     entries = [
         GameEndReplayEntry(game_id="g", tick=1, winner="CREWMATES", reason="TASKS")
     ]
-    _set_substrate_env(monkeypatch, on=True)
-    replay_loader._assert_substrate_matches("g", entries)  # no raise
-    _set_substrate_env(monkeypatch, on=False)
     replay_loader._assert_substrate_matches("g", entries)  # no raise
 
 
-def test_assert_substrate_matches_passes_when_env_matches_stamp(
+def test_assert_substrate_matches_passes_for_all_on_stamp_under_bare_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The committed baseline's all-ON stamp matches the unconditional substrate
+    # with NO env vars set — reconstruction needs no AILIBI_* export.
+    _delete_ailibi_env(monkeypatch)
     entries = [
         GameEndReplayEntry(
             game_id="g",
@@ -985,27 +982,28 @@ def test_assert_substrate_matches_passes_when_env_matches_stamp(
             substrate_flags=_ALL_FLAGS_ON,
         )
     ]
-    _set_substrate_env(monkeypatch, on=True)
     replay_loader._assert_substrate_matches("g", entries)  # no raise
 
 
-def test_assert_substrate_matches_raises_on_mismatch(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_assert_substrate_matches_raises_on_legacy_off_stamp() -> None:
+    # A legacy stamp recording a lever OFF names the divergent lever and the
+    # Task-14.9 retirement (there is no env remediation any more — the OFF
+    # derivation no longer exists in this build).
     entries = [
         GameEndReplayEntry(
             game_id="g",
             tick=1,
             winner="CREWMATES",
             reason="TASKS",
-            substrate_flags=_ALL_FLAGS_ON,
+            substrate_flags=_LEGACY_MOVEMENT_OFF,
         )
     ]
-    _set_substrate_env(monkeypatch, on=False)
     with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
         replay_loader._assert_substrate_matches("g", entries)
-    # The error names the divergent levers + the env-var remediation.
-    assert "AILIBI_TESTIMONY_AS_CONTENT=1" in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "movement_perception" in message
+    assert "14.9" in message
+    assert "AILIBI_" not in message
 
 
 def _stamp_committed_9p2i_seed(dst: Path, seed: int, flags: dict[str, bool]) -> str:
@@ -1034,27 +1032,43 @@ def _stamp_committed_9p2i_seed(dst: Path, seed: int, flags: dict[str, bool]) -> 
     return f"headless-seed-{seed}"
 
 
-def test_stamped_replay_reconstructs_under_matching_substrate(
+def test_stamped_replay_reconstructs_under_bare_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A flag-ON recording reconstructs byte-identically when the ambient substrate
-    # matches the stamp AND roster.json is present (the FLAG-AWARE verify the 14.7
-    # gate requires). The state hash is substrate-independent, so the tick/meeting
-    # bytes (verbatim) still reconstruct; the guard passes because env == stamp.
+    # An all-ON recording reconstructs with NO env vars set: the stamp matches
+    # the unconditional substrate. The state hash is substrate-independent, so
+    # the tick/meeting bytes (verbatim) still reconstruct.
     game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
-    _set_substrate_env(monkeypatch, on=True)
+    _delete_ailibi_env(monkeypatch)
     loader = ReplayLoader(replay_dir=tmp_path)
     replay = loader.load_replay(game_id)  # no raise — reconstructs
     assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 10)}
 
 
-def test_stamped_replay_under_wrong_substrate_fails_loud(
+def test_committed_baseline_serves_under_bare_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Pins the Task-14.9 spectator fix (the ``run_spectator.sh`` 500 reported
+    # 2026-07-01): the committed 9p2i baseline is stamped all-ON, and the
+    # launcher exports no AILIBI_* vars — before 14.9 the guard read a bare env
+    # as all-OFF and refused with HTTP 500. With the levers unconditional, the
+    # loader serves the committed set under a genuinely bare environment.
+    if not _COMMITTED_9P2I_DIR.is_dir():
+        pytest.skip("committed 9p2i sample set not present")
+    _delete_ailibi_env(monkeypatch)
+    loader = ReplayLoader(replay_dir=_COMMITTED_9P2I_DIR)
+    replay = loader.load_replay("headless-seed-0")  # no raise — serves
+    assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 10)}
+
+
+def test_legacy_off_stamped_replay_fails_loud(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The same stamped recording reconstructed under a flag-OFF environment fails
-    # loud (no silent cross-substrate replay), naming the env-var remediation.
-    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
-    _set_substrate_env(monkeypatch, on=False)
+    # A recording stamped with a lever OFF (a pre-14.9 flag-OFF/ablation
+    # artifact) fails loud — this build's unconditional substrate cannot
+    # faithfully re-derive it (no silent cross-substrate replay).
+    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_LEGACY_MOVEMENT_OFF))
+    _delete_ailibi_env(monkeypatch)
     loader = ReplayLoader(replay_dir=tmp_path)
     with pytest.raises(ReplaySubstrateMismatchError):
         loader.load_replay(game_id)
@@ -1062,27 +1076,31 @@ def test_stamped_replay_under_wrong_substrate_fails_loud(
 
 # -- Task 14.8: the ANALYSIS-ONLY substrate-mismatch override ------------------
 #
-# The per-lever substrate ablation deliberately re-derives the stamped all-ON
-# baseline under toggled levers, which the Task-14.7 guard otherwise (correctly)
-# refuses. ``allow_substrate_mismatch`` (default OFF) is the explicit opt-in for
-# exactly that analysis path; the serving/verify default keeps failing loud.
+# The 14.8 per-lever ablation deliberately re-derived the stamped all-ON
+# baseline under toggled levers, which the Task-14.7 guard otherwise
+# (correctly) refuses. ``allow_substrate_mismatch`` (default OFF) remains the
+# explicit opt-in for reconstructing a mismatch-stamped replay — since Task
+# 14.9 that means a legacy stamp recording a lever OFF (the OFF derivation
+# itself no longer exists, so the override reconstructs it under the
+# unconditional all-ON substrate, logged, never silent). The former
+# env-flip-between-loads cache test is DELETED with rationale: with the four
+# gates retired the ambient snapshot is constant, so no env flip can change the
+# derivation; the ``_substrate_cache_key`` machinery stays for the next
+# toggleable lever (14.10) to exercise.
 
 
-def test_assert_substrate_matches_default_still_raises_on_mismatch(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # The override's DEFAULT position changes nothing: a mismatched stamped
-    # replay still fails loud (the Task-14.7 guard behavior, byte-unchanged).
+def test_assert_substrate_matches_default_still_raises_on_mismatch() -> None:
+    # The override's DEFAULT position changes nothing: a mismatch-stamped
+    # replay still fails loud (the Task-14.7 guard behavior).
     entries = [
         GameEndReplayEntry(
             game_id="g",
             tick=1,
             winner="CREWMATES",
             reason="TASKS",
-            substrate_flags=_ALL_FLAGS_ON,
+            substrate_flags=_LEGACY_MOVEMENT_OFF,
         )
     ]
-    _set_substrate_env(monkeypatch, on=False)
     with pytest.raises(ReplaySubstrateMismatchError):
         replay_loader._assert_substrate_matches(
             "g", entries, allow_substrate_mismatch=False
@@ -1090,21 +1108,19 @@ def test_assert_substrate_matches_default_still_raises_on_mismatch(
 
 
 def test_assert_substrate_matches_override_permits_deliberate_mismatch(
-    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    # ``allow_substrate_mismatch=True`` permits the deliberate re-derivation the
-    # per-lever ablation needs — and is logged at WARNING, never silent.
+    # ``allow_substrate_mismatch=True`` permits the deliberate re-derivation an
+    # analysis pass needs — and is logged at WARNING, never silent.
     entries = [
         GameEndReplayEntry(
             game_id="g",
             tick=1,
             winner="CREWMATES",
             reason="TASKS",
-            substrate_flags=_ALL_FLAGS_ON,
+            substrate_flags=_LEGACY_MOVEMENT_OFF,
         )
     ]
-    _set_substrate_env(monkeypatch, on=False)
     with caplog.at_level(logging.WARNING, logger="api.replay_loader"):
         replay_loader._assert_substrate_matches(
             "g", entries, allow_substrate_mismatch=True
@@ -1112,16 +1128,15 @@ def test_assert_substrate_matches_override_permits_deliberate_mismatch(
     assert any("Deliberate substrate mismatch" in rec.message for rec in caplog.records)
 
 
-def test_loader_override_reconstructs_stamped_replay_under_toggled_substrate(
+def test_loader_override_reconstructs_legacy_off_stamped_replay(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The ablation entry: a stamped all-ON recording reconstructs under a
-    # toggled ambient substrate when (and only when) the loader is constructed
-    # with the analysis-only override. The per-tick state hash is
-    # substrate-independent, so the walk still verifies; only the memory
-    # re-derivation differs — which is exactly what the ablation measures.
-    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
-    _set_substrate_env(monkeypatch, on=False)
+    # The analysis entry: a legacy OFF-stamped recording reconstructs when (and
+    # only when) the loader is constructed with the analysis-only override. The
+    # per-tick state hash is substrate-independent, so the walk still verifies;
+    # the memory re-derivation runs under the unconditional all-ON substrate.
+    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_LEGACY_MOVEMENT_OFF))
+    _delete_ailibi_env(monkeypatch)
     loader = ReplayLoader(replay_dir=tmp_path, allow_substrate_mismatch=True)
     replay = loader.load_replay(game_id)  # no raise — deliberate mismatch
     assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 10)}
@@ -1131,9 +1146,9 @@ def test_loader_default_still_refuses_mismatch_after_override_landed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The default-constructed loader (the serving/verify path) is unchanged by
-    # the 14.8 override: same stamped recording, same flag-OFF env → still loud.
-    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
-    _set_substrate_env(monkeypatch, on=False)
+    # the 14.8 override: an OFF-stamped recording is still refused loud.
+    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_LEGACY_MOVEMENT_OFF))
+    _delete_ailibi_env(monkeypatch)
     loader = ReplayLoader(replay_dir=tmp_path)
     with pytest.raises(ReplaySubstrateMismatchError):
         loader.load_replay(game_id)
@@ -1144,45 +1159,15 @@ def test_override_loader_is_silent_when_substrate_matches_stamp(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    # The override only PERMITS a mismatch — it does not manufacture one. Under
-    # a matching ambient substrate the guard passes normally and NO deliberate-
-    # mismatch warning is emitted (the WARNING is scoped to an actual mismatch).
+    # The override only PERMITS a mismatch — it does not manufacture one. For
+    # an all-ON stamp (matching the unconditional substrate) the guard passes
+    # normally and NO deliberate-mismatch warning is emitted (the WARNING is
+    # scoped to an actual mismatch).
     game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
-    _set_substrate_env(monkeypatch, on=True)
+    _delete_ailibi_env(monkeypatch)
     loader = ReplayLoader(replay_dir=tmp_path, allow_substrate_mismatch=True)
     with caplog.at_level(logging.WARNING, logger="api.replay_loader"):
         loader.load_replay(game_id)  # no raise
     assert not any(
         "Deliberate substrate mismatch" in rec.message for rec in caplog.records
     )
-
-
-def test_override_loader_rederives_when_env_flips_between_loads(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # An override loader's reconstruction caches fold in the ambient substrate
-    # snapshot (``_substrate_cache_key``): flipping the levers between loads on
-    # the SAME instance is a cache miss that re-derives under the new substrate,
-    # not a silent stale hit of the previous substrate's memory view. The two
-    # reconstructions must genuinely differ — the flag-OFF walk derives no
-    # movement/testimony rows, the flag-ON walk does.
-    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
-    loader = ReplayLoader(replay_dir=tmp_path, allow_substrate_mismatch=True)
-    _set_substrate_env(monkeypatch, on=False)
-    frames_off = loader.belief_frames(game_id)
-    _set_substrate_env(monkeypatch, on=True)
-    frames_on = loader.belief_frames(game_id)
-    meeting_id = frames_on[0].meeting_id
-    texts_off = {
-        pid: loader.get_meeting_memory(game_id, meeting_id, pid).rendered_memory_text
-        for pid in (f"p-{n}" for n in range(1, 10))
-    }
-    _set_substrate_env(monkeypatch, on=False)
-    texts_off_again = {
-        pid: loader.get_meeting_memory(game_id, meeting_id, pid).rendered_memory_text
-        for pid in (f"p-{n}" for n in range(1, 10))
-    }
-    # The ON-substrate render is served under ON env... and flipping back to OFF
-    # re-serves the OFF derivation — not the ON one cached moments earlier.
-    assert frames_off != frames_on or texts_off != texts_off_again
-    assert texts_off != texts_off_again
