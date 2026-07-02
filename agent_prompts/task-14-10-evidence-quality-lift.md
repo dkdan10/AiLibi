@@ -38,7 +38,7 @@ generic by 14.9) so the recording self-describes.
 
 **Files in scope:**
 - agents/memory/beliefs.py (the render-ceiling extension of the 13.14 joint cap + the self-refuted-alibi WEAK downgrade, behind the new `*_enabled()` resolver; the existing caps are extended, not rewritten)
-- orchestrator/replay.py (register the new lever key in `SUBSTRATE_FLAG_KEYS` / `substrate_flag_snapshot()` so 14.12's recording stamps it — additive)
+- orchestrator/replay.py (register the new lever as the first entry in `_TOGGLEABLE_LEVER_RESOLVERS` — the registration point 14.9 built for exactly this, whose docstring names 14.10 as "the next registrant"; `SUBSTRATE_FLAG_KEYS` and `substrate_flag_snapshot()` derive from the table automatically)
 - .env.example (document the new default-OFF lever)
 - tests/agents/test_beliefs.py (unit tests: a synthetic 9-flag same-meeting stack renders BELOW certain-guilt with the lever ON; byte-identity of the fold with it OFF; evidence-class weighting cases if implemented)
 - tests/orchestrator/test_replay.py (the stamp round-trips the new lever)
@@ -72,9 +72,13 @@ its spec is measured, not hypothesized. Both bounds are small extensions at the 
 `agents/memory/beliefs.py`: bound 1 adds a third term to the min (`CONTRADICTION_RENDER_CEIL`, ~0.97, applied
 only to flag/testimony-driven lift — the first-hand witnessed-kill pin path stays exempt); bound 2 needs the
 self-refutation signal at fold time, which is mechanically derivable from the transcript (the subject's own
-same-turn `completed_task` room/tick inside the refuted alibi span — the same check the audit ran). The 13.5
-lever pattern is the template for the gate: a module constant `ENV_EVIDENCE_QUALITY_LIFT` + an
-`evidence_quality_lift_enabled()` resolver read ad-hoc from `os.environ`, OFF branch byte-identical. Prove the
+same-turn `completed_task` room/tick inside the refuted alibi span — the same check the audit ran). The gate:
+a module constant `ENV_EVIDENCE_QUALITY_LIFT` + an `evidence_quality_lift_enabled(env=None)` resolver — NOTE
+the signature: 14.9's `_TOGGLEABLE_LEVER_RESOLVERS` table expects
+`Callable[[Mapping[str, str] | None], bool]` (env threaded, defaulting to the process environment, like
+`resolve_prompt_set`), not a no-arg reader. OFF branch byte-identical. The relevant constants already exist in
+`agents/memory/beliefs.py` (`CONTRADICTION_SUSPICION_DELTA` 0.3 / `WEAK_CONTRADICTION_SUSPICION_DELTA` 0.08 /
+`MEETING_CONTRADICTION_LIFT_CAP`) — extend that machinery, do not duplicate it. Prove the
 fix offline before 14.12 spends: re-derive the 5 pinned railroad meetings from baseline-1 bytes with the lever
 ON and confirm every pinned row renders below 1.0 AND the seed-44 m0 true-impostor catch still converts. Note
 the stamp: baseline 1's stamp lacks the new lever key, so re-deriving with it ON is a substrate mismatch — use
