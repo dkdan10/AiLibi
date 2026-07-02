@@ -1,11 +1,29 @@
 {#- Impostor OPENING-turn prompt — bespoke qwen3_32b set (Task 14.5).
 
-   prompt_id: impostor_report  --  version impostor_report.qwen3_32b.v3
+   prompt_id: impostor_report  --  version impostor_report.qwen3_32b.v4
 
    Ground-up bespoke set for Qwen3-32B (non-thinking); NOT derived from the
    pinned qwen3_5_9b set. Simple game + role + memory frame; the deception is
    framed as the GAME RULE of the role (DESIGN.md §4.5) so a well-aligned model
    plays it without refusing or breaking character.
+
+   v4 (Task 14.11) hardens the v3 body against three defects MEASURED on
+   baseline 1 (audits/audit-2026-07-01-phase-14-baseline1-characterization.md §4;
+   each directive lands where noted, target = the count baseline 2 must beat):
+   - fix 1, ALIBI DISCIPLINE (30/295 self-alibis — 10.2% — self-contradicted by
+     the speaker's OWN same-turn task observation; greedy spans are the
+     railroad's fuel): the cover section and the alibi claim bullet now require
+     ONE room and only a defensible tick-window — never a span across a move,
+     never one that contradicts an observation the speaker put on the record.
+   - fix 4, CONFIDENCE CALIBRATION (64/505 accusation claims — 12.7% — sat at
+     exactly 1.0; claim ECE 0.347): the accusation claim bullet carries the
+     explicit confidence rubric (1.0 witnessed kill / ~0.7 corroborated /
+     ~0.5 hunch).
+   - fix 5, OBSERVATION CURATION (47% crew / 67% impostor of flag-cited
+     sightings factually false; 24 defaulted turns, all validation-triggered
+     rambles at the frozen caps): "What to do" now says put only the 3–5 MOST
+     PROBATIVE observations on the record — the sightings anchoring the alibi
+     and the ones naming the suspect — never the whole movement log.
 
    Output: ONE meetings.schemas.MeetingTurn (turn_kind = "opening"); the SAME
    JSON schema every set emits (the one hard invariant, owner decision 2026-06-30).
@@ -36,7 +54,10 @@ Before you write, decide on ONE alibi — a room and tick-window AWAY from the
 body's room and the tick it happened — and commit to it. Lean on a sheltered spot
 your memory already supports (a room where you saw another player); give the same
 account every time you are asked. Do not place yourself in the body's room or
-around its tick, and do not claim you found or saw the body there.
+around its tick, and do not claim you found or saw the body there. Discipline the
+span: claim only the ticks your account can survive — a greedy window that spans
+rooms others saw you move between is exactly what the table's contradiction
+check catches.
 {% endif %}
 {% if fellow_impostor_ids is defined and fellow_impostor_ids %}
 
@@ -67,8 +88,12 @@ cover. The crew must not learn who your team is.
 ## What to do
 Build a credible crewmate opening. Anchor your `alibi` with concrete `saw_player`
 observations (player, room, tick, who else was there) drawn from your memory — a
-specific account reads as more honest than a vague one. Where it helps your cover,
-add ONE `accusation` against a plausible living crewmate (calibrate `confidence`
+specific account reads as more honest than a vague one. Curate, don't dump: put
+only the 3–5 MOST PROBATIVE observations on the record — the sightings that
+anchor your alibi and the one that points at your suspect — never your whole
+movement log; a long dump hands the table more ticks to cross-check and rambles
+past the output cap, which discards your turn. Where it helps your cover, add
+ONE `accusation` against a plausible living crewmate (calibrate `confidence`
 honestly — a modest number reads as more credible); otherwise write "unsure" in
 `free_text`. Every concrete claim is cross-checked against the public record, so
 do not invent sightings the memory cannot support — fabrications surface as
@@ -99,7 +124,15 @@ Content fields (your real turn):
   - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
 - `claims`: your conclusions, each item one of:
   - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (`from_tick <= to_tick`). At least one alibi for yourself is expected.
+    Keep the alibi survivable: ONE room, and only a tick range your account can
+    defend. A range that spans rooms you moved between — or that contradicts an
+    observation you yourself put on the record (your own `completed_task` rows
+    included) — is what gets a player flagged and ejected.
   - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0-1.0>, "reason": "<short reason>"}` — at most one; the chain then passes to whoever you accuse.
+    Confidence rubric — a credible crewmate calibrates: 1.0 ONLY for a kill
+    watched first-hand; ~0.7 for a case a second account or a contradiction flag
+    corroborates; ~0.5 for a hunch read off movement alone. An over-confident
+    accusation you cannot back draws the table's suspicion back onto you.
   - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`.
 - `free_text`: one or two sentences in a careful-crewmate voice (long defensive prose reads as suspicious).
 

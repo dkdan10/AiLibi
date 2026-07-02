@@ -1,6 +1,6 @@
 {#- Vote-ballot prompt — bespoke qwen3_32b set (Task 14.5).
 
-   prompt_id: vote_ballot  --  version vote_ballot.qwen3_32b.v3
+   prompt_id: vote_ballot  --  version vote_ballot.qwen3_32b.v4
 
    Ground-up bespoke set for Qwen3-32B (non-thinking); NOT derived from the
    pinned qwen3_5_9b set. Output: ONE meetings.schemas.VoteBallot (the shared JSON
@@ -9,6 +9,25 @@
    ("maximum suspicion among the living ejection targets is **X**") so a recorded
    ballot stays analyzable; the §4.6 threshold is shown as EVIDENCE, not a command
    (the deterministic tally in meetings.voting is the anti-cascade backstop).
+
+   v4 (Task 14.11) hardens the v3 body against three defects MEASURED on
+   baseline 1 (audits/audit-2026-07-01-phase-14-baseline1-characterization.md §4;
+   each directive lands where noted, target = the count baseline 2 must beat):
+   - fix 2, DEAD-ROSTER SALIENCE (27 invalid-target ballots hit the
+     INVALID_VOTE_TARGET_MARKER guard): the valid-targets section carries an
+     explicit "naming an ejected or dead player wastes your vote" line adjacent
+     to the roster, and the `target` field bullet repeats the roster verbatim at
+     the point of choice.
+   - fix 3, REAL `turn_id` WORKED EXAMPLE (20 ballots hit the
+     INVALID_REASON_ID_MARKER guard; #2 + #3 = the 47/891 guard-normalized
+     headline): the `primary_reason_id` example is copied verbatim from the live
+     transcript's turn ids (DESIGN.md §5.5 — never a hardcoded id), guarded on a
+     non-empty transcript.
+   - fix 6, VOICED RATIONALE (320/891 ballots — 35.9% — opened with one literal
+     "p-N's alibi …" template family): the rationale bullet demands the agent's
+     own words referencing the specific turn that convinced them, with two
+     contrasting register examples (one evidence-citing, one gut-read) so the
+     model stops converging on a single template sentence.
 
    Inputs (loader kwargs only): voter_id, rendered_memory, transcript,
    contradiction_flags, suspicion_graph, candidate_targets (optional),
@@ -48,6 +67,10 @@ actually reach.
 
 ## Valid ejection targets
 {% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %}
+
+These are the ONLY names a ballot may carry. Every other player is already out of
+the game — ejected or dead — and naming one wastes your vote: an invalid target
+is struck to SKIP. Pick your target from this list, or SKIP.
 {% endif %}
 {% if fellow_impostor_ids is defined and fellow_impostor_ids %}
 
@@ -87,15 +110,30 @@ contradiction flag rather than a specific turn.
   "voter": "{{ voter_id }}",
   "target": "<player_id or \"SKIP\">",
   "confidence": <float 0.0-1.0>,
-  "primary_reason_id": "<turn id from the transcript, or null>",
+  "primary_reason_id": {% if transcript.turns %}"{{ transcript.turns[-1].turn_id }}"{% else %}null{% endif %},
   "considered_alternatives": ["<player_id>", ...],
-  "rationale_text": "<ONE short sentence, ~20 words max>"
+  "rationale_text": "<ONE short sentence in your own voice, ~20 words max>"
 }
 ```
 - `voter` MUST equal `"{{ voter_id }}"`.
-- `target` is `"SKIP"` or one living player other than yourself{% if candidate_targets is defined and candidate_targets %} (one of the valid targets above){% endif %}.
-- `primary_reason_id` is a turn id copied exactly from the transcript, or `null` if your decision rests on your own memory / a contradiction flag.
+- `target` is `"SKIP"` or one living player other than yourself{% if candidate_targets is defined and candidate_targets %} — exactly one of {% for target in candidate_targets %}`{{ target }}`{% if not loop.last %}, {% endif %}{% endfor %}; any other name is an ejected/dead player and wastes your vote{% endif %}.
+- `primary_reason_id` is a turn id copied VERBATIM from one of the bracketed
+  transcript lines above{% if transcript.turns %} — the example shows `{{ transcript.turns[-1].turn_id }}`, this
+  meeting's latest turn; keep it only if that truly is the turn that convinced
+  you, otherwise substitute the convincing turn's id{% endif %}. Use `null` when your call
+  rests on your own memory or a contradiction flag. Never invent or abbreviate an
+  id — anything not in this meeting's transcript is nulled.
 - `considered_alternatives` lists at most two or three other players you weighed (empty if none).
-- `rationale_text` is ONE short sentence — the vote and its single strongest reason, nothing more. Keep the whole object compact: a long rationale can overrun the output limit and truncate the JSON, which DISCARDS your vote.
+- `rationale_text` is ONE short sentence (~20 words) IN YOUR OWN VOICE: say what
+  actually convinced you, pointing at the specific turn or moment, the way you
+  would say it at the table. Do not open with the stock formula "p-N's alibi
+  contradicts multiple sightings ..." — half the table says exactly that. Two
+  contrasting examples of the register (write your OWN, with your own ids):
+  - evidence-citing: "Turn 3 settled it — they claimed STORAGE, but two of us
+    watched them walk out of ENGINEERING at tick 12."
+  - gut-read: "Nobody vouched for them all meeting and their story kept
+    shifting; that silence is my reason."
+  Keep the whole object compact: a long rationale can overrun the output limit
+  and truncate the JSON, which DISCARDS your vote.
 
 Output ONLY the JSON object — no preamble or trailing commentary.
