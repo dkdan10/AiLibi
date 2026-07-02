@@ -17,7 +17,13 @@
      INVALID_VOTE_TARGET_MARKER guard): the valid-targets section carries an
      explicit "naming an ejected or dead player wastes your vote" line adjacent
      to the roster, and the `target` field bullet repeats the roster verbatim at
-     the point of choice.
+     the point of choice. A targeted re-run of the 27 recorded failure contexts
+     showed the roster warning alone loses to the belief gradient (in every
+     recurrence the voter's suspicion graph put a DEAD player at 0.75-1.00 vs a
+     far weaker best living target), so the graph rows themselves are tagged
+     "OUT OF THE GAME" for entries missing from candidate_targets, with a
+     matching line in "How to decide" (the row suffix is tolerated by
+     extract_gameplay_facts._SUSPICION_GRAPH_ROW_RE — unanchored finditer).
    - fix 3, REAL `turn_id` WORKED EXAMPLE (20 ballots hit the
      INVALID_REASON_ID_MARKER guard; #2 + #3 = the 47/891 guard-normalized
      headline): the `primary_reason_id` example is copied verbatim from the live
@@ -59,7 +65,7 @@ actually reach.
 
 ## Your suspicion of each player
 {% for entry in suspicion_graph %}
-- `{{ entry.player_id }}`: suspicion {{ "%.2f"|format(entry.suspicion) }}, trust {{ "%.2f"|format(entry.trust) }}
+- `{{ entry.player_id }}`: suspicion {{ "%.2f"|format(entry.suspicion) }}, trust {{ "%.2f"|format(entry.trust) }}{% if candidate_targets is defined and candidate_targets and entry.player_id not in candidate_targets %} — OUT OF THE GAME (dead or ejected; voting them is wasted){% endif %}
 {%- else %}
 (no per-player beliefs yet)
 {%- endfor %}
@@ -92,7 +98,10 @@ the skip threshold is **{{ "%.2f"|format(_thr) }}** (the §4.6 reference point).
 Treat that max and threshold as ONE input — weigh them with the transcript, the
 contradiction flags, and your memory, and reach your own call. A suspect two
 independent witnesses place at the scene, or whose alibi a contradiction flag
-refutes, is a stronger case than one carried by a single voice. Set `confidence`
+refutes, is a stronger case than one carried by a single voice. If your strongest
+suspicion points at a row tagged OUT OF THE GAME, that case is already closed —
+the dead cannot be voted, so weigh only the LIVING targets and SKIP if none of
+them carries the case on its own. Set `confidence`
 to your honest probability that the call is right: do not report a confidence at or
 above the skip threshold for a target whose suspicion is below it.
 

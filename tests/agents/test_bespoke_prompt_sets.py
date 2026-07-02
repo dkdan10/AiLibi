@@ -287,6 +287,34 @@ class TestQwen332bV4Directives:
         assert _ACCUSE_WASTE_MARKER in _flat(rendered["reply/imp=False/body=True"])
         assert _ACCUSE_WASTE_MARKER not in _flat(rendered["opt_in"])  # dead_ids=()
 
+    def test_ballot_dead_graph_rows_are_tagged_out_of_game(self) -> None:
+        # Fix 2, second directive: the recurrence shape on the 27 recorded
+        # failure contexts was a DEAD player carrying the graph's top suspicion
+        # (0.75-1.00) while the roster warning sat elsewhere — so the graph rows
+        # themselves are tagged where the model reads its strongest signal. A
+        # graph entry missing from candidate_targets gets the tag; valid
+        # entries stay untagged (and ad-hoc renders without targets skip it).
+        r = build_prompt_renderers("qwen3_32b")
+        dead_susp = _SUSP + (
+            SuspicionEntry(player_id="p-9", suspicion=0.95, trust=0.2),
+        )
+        vote = r.vote(
+            voter_id="p-2",
+            rendered_memory=_MEMORY,
+            transcript=_TRANSCRIPT,
+            contradiction_flags=_CONTRAS,
+            suspicion_graph=dead_susp,
+            candidate_targets=("p-3", "p-5"),
+            skip_confidence_threshold=0.6,
+            fellow_impostor_ids=(),
+        )
+        # Exactly the dead entry is tagged; the tag sits AFTER the trust field
+        # so the eval-side row parser keeps reading tagged rows (the regex in
+        # extract_gameplay_facts is an unanchored finditer over the row shape).
+        assert "`p-9`: suspicion 0.95, trust 0.20 — OUT OF THE GAME" in vote
+        assert vote.count(" — OUT OF THE GAME (dead or ejected") == 1
+        assert "`p-3`: suspicion 0.80, trust 0.50 —" not in vote  # valid: no tag
+
     def test_ballot_reason_id_example_is_a_real_transcript_turn_id(self) -> None:
         # Fix 3 (20 invalid primary_reason_id nulls): the worked example copies
         # a turn id VERBATIM from the live transcript (DESIGN.md §5.5 — never a
