@@ -723,6 +723,29 @@ the characterization audit whose deliverable is the CONCRETE fix specs for 14.10
 diagnose the exact bypass mechanism) and 14.11 (the v4 prompt fixes, with the per-defect counts above as the
 baseline the re-record must beat).
 
+**STATUS (2026-07-02) — MEASURED (audit: `audits/audit-2026-07-01-phase-14-baseline1-characterization.md`).**
+R-gate on baseline 1 (9p2i): R1 **27/50** (9B 3/50), R4 wrong-ejection games **39** (9B 4 — the inversion
+headline), impostor win **0.32** (floor ✓), R7 **43/152 (28%)** (9B 13/195), geomean eject-decided median
+61.3 vs stopwatch max 43.5 with 25/27 above every stopwatch (the 2 exceptions are the rubric's own railroad
+floor firing — seeds 12/21 at 0.0). **Railroad-discounted R1 = 25/50** (only seeds 13/16 of the 27 run
+through a pinned railroad meeting). Hypothesis verdict: REVISED as charted — the ceiling bound concealment,
+conversion OVERSHOT into over-conviction (ejection accuracy 0.566). Cap-bypass diagnosis (exact fold
+reproduction, 2482/2482 recorded render rows matched): the 10.1/13.14 caps HOLD — one STRONG
+`alibi_vs_sighting` lift-key group saturates the +0.30 budget and gate-crosses the WHOLE roster at 0.80,
+and the pre-13.5 Rule-1 body-proximity prior (0.70) compounds to the 1.00 clamp for at-scene voters
+(impostors, in all 5 pinned rows); fuel = factually-false testimony (97–100% of flagged ejectee alibis
+false vs engine truth; 47–67% of refuting sightings false). Per-lever ablation committed
+(`experiments/lab/results-substrate-ablation.jsonl`): no lever harmful, none causes the railroad (5 rows in
+every cell) — **14.9 default-ON set confirmed**; kill-scene detector fired 1×/152 meetings (effectively
+UNMEASURED, not negative); unfreeze verified 554/554 on recorded bytes. **Confirmed 14.10 targets:**
+certain-guilt exclusion (transient flag lift never renders 1.0 absent first-hand conclusive evidence) +
+sloppy-testimony downgrade (self-refuted alibi group → WEAK delta; 0/57 impostor vs 6/31 crew flagged
+ejections — zero conversion cost); witness-count weighting and ≥2-strong-group gating are measured
+ANTI-signals (do not implement). **Confirmed 14.11 targets (the counts v4 must beat):** 30/295 (10.2%)
+self-contradicted self-alibis, 27 invalid-target + 20 invalid-reason-id ballots (= the 47 guard-normalized),
+64/505 conf-1.0 accusations, 320/891 (35.9%) "p-N's alibi …" template-family rationales, 23 missed-deadline
+turn markers (all 27 `deadline_default` rows validation-triggered — output discipline, caps stay FROZEN).
+
 **Files in scope:**
 - audits/audit-2026-07-01-phase-14-baseline1-characterization.md (new: the R-gate measurement + railroad-discounted R1 + the per-lever ablation + the REVISED hypothesis verdict + the 14.10/14.11 fix specs)
 - api/replay_loader.py (a small ANALYSIS-ONLY override on the reconstruction entry — e.g. `allow_substrate_mismatch: bool = False` threaded to `_assert_substrate_matches` — because the per-lever ablation DELIBERATELY re-derives the stamped all-ON baseline under toggled levers, which the Task-14.7 guard otherwise correctly refuses; default False so the serving/verify paths keep failing loud, additive only)

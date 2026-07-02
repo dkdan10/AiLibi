@@ -1058,3 +1058,131 @@ def test_stamped_replay_under_wrong_substrate_fails_loud(
     loader = ReplayLoader(replay_dir=tmp_path)
     with pytest.raises(ReplaySubstrateMismatchError):
         loader.load_replay(game_id)
+
+
+# -- Task 14.8: the ANALYSIS-ONLY substrate-mismatch override ------------------
+#
+# The per-lever substrate ablation deliberately re-derives the stamped all-ON
+# baseline under toggled levers, which the Task-14.7 guard otherwise (correctly)
+# refuses. ``allow_substrate_mismatch`` (default OFF) is the explicit opt-in for
+# exactly that analysis path; the serving/verify default keeps failing loud.
+
+
+def test_assert_substrate_matches_default_still_raises_on_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The override's DEFAULT position changes nothing: a mismatched stamped
+    # replay still fails loud (the Task-14.7 guard behavior, byte-unchanged).
+    entries = [
+        GameEndReplayEntry(
+            game_id="g",
+            tick=1,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=_ALL_FLAGS_ON,
+        )
+    ]
+    _set_substrate_env(monkeypatch, on=False)
+    with pytest.raises(ReplaySubstrateMismatchError):
+        replay_loader._assert_substrate_matches(
+            "g", entries, allow_substrate_mismatch=False
+        )
+
+
+def test_assert_substrate_matches_override_permits_deliberate_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # ``allow_substrate_mismatch=True`` permits the deliberate re-derivation the
+    # per-lever ablation needs — and is logged at WARNING, never silent.
+    entries = [
+        GameEndReplayEntry(
+            game_id="g",
+            tick=1,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=_ALL_FLAGS_ON,
+        )
+    ]
+    _set_substrate_env(monkeypatch, on=False)
+    with caplog.at_level(logging.WARNING, logger="api.replay_loader"):
+        replay_loader._assert_substrate_matches(
+            "g", entries, allow_substrate_mismatch=True
+        )  # no raise
+    assert any("Deliberate substrate mismatch" in rec.message for rec in caplog.records)
+
+
+def test_loader_override_reconstructs_stamped_replay_under_toggled_substrate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The ablation entry: a stamped all-ON recording reconstructs under a
+    # toggled ambient substrate when (and only when) the loader is constructed
+    # with the analysis-only override. The per-tick state hash is
+    # substrate-independent, so the walk still verifies; only the memory
+    # re-derivation differs — which is exactly what the ablation measures.
+    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
+    _set_substrate_env(monkeypatch, on=False)
+    loader = ReplayLoader(replay_dir=tmp_path, allow_substrate_mismatch=True)
+    replay = loader.load_replay(game_id)  # no raise — deliberate mismatch
+    assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 10)}
+
+
+def test_loader_default_still_refuses_mismatch_after_override_landed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The default-constructed loader (the serving/verify path) is unchanged by
+    # the 14.8 override: same stamped recording, same flag-OFF env → still loud.
+    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
+    _set_substrate_env(monkeypatch, on=False)
+    loader = ReplayLoader(replay_dir=tmp_path)
+    with pytest.raises(ReplaySubstrateMismatchError):
+        loader.load_replay(game_id)
+
+
+def test_override_loader_is_silent_when_substrate_matches_stamp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # The override only PERMITS a mismatch — it does not manufacture one. Under
+    # a matching ambient substrate the guard passes normally and NO deliberate-
+    # mismatch warning is emitted (the WARNING is scoped to an actual mismatch).
+    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
+    _set_substrate_env(monkeypatch, on=True)
+    loader = ReplayLoader(replay_dir=tmp_path, allow_substrate_mismatch=True)
+    with caplog.at_level(logging.WARNING, logger="api.replay_loader"):
+        loader.load_replay(game_id)  # no raise
+    assert not any(
+        "Deliberate substrate mismatch" in rec.message for rec in caplog.records
+    )
+
+
+def test_override_loader_rederives_when_env_flips_between_loads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An override loader's reconstruction caches fold in the ambient substrate
+    # snapshot (``_substrate_cache_key``): flipping the levers between loads on
+    # the SAME instance is a cache miss that re-derives under the new substrate,
+    # not a silent stale hit of the previous substrate's memory view. The two
+    # reconstructions must genuinely differ — the flag-OFF walk derives no
+    # movement/testimony rows, the flag-ON walk does.
+    game_id = _stamp_committed_9p2i_seed(tmp_path, 0, dict(_ALL_FLAGS_ON))
+    loader = ReplayLoader(replay_dir=tmp_path, allow_substrate_mismatch=True)
+    _set_substrate_env(monkeypatch, on=False)
+    frames_off = loader.belief_frames(game_id)
+    _set_substrate_env(monkeypatch, on=True)
+    frames_on = loader.belief_frames(game_id)
+    meeting_id = frames_on[0].meeting_id
+    texts_off = {
+        pid: loader.get_meeting_memory(game_id, meeting_id, pid).rendered_memory_text
+        for pid in (f"p-{n}" for n in range(1, 10))
+    }
+    _set_substrate_env(monkeypatch, on=False)
+    texts_off_again = {
+        pid: loader.get_meeting_memory(game_id, meeting_id, pid).rendered_memory_text
+        for pid in (f"p-{n}" for n in range(1, 10))
+    }
+    # The ON-substrate render is served under ON env... and flipping back to OFF
+    # re-serves the OFF derivation — not the ON one cached moments earlier.
+    assert frames_off != frames_on or texts_off != texts_off_again
+    assert texts_off != texts_off_again
