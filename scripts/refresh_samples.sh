@@ -322,6 +322,26 @@ if [[ ! "$REFRESH_WORKERS" =~ ^[0-9]+$ ]] || [[ "$((10#$REFRESH_WORKERS))" -lt 1
 fi
 REFRESH_WORKERS="$((10#$REFRESH_WORKERS))"
 
+# Per-seed crash-retry budget (Task 14.12). A game aborts on a TRANSPORT-level
+# error (httpx.ConnectError / read timeout) that the client's HTTP-status retry
+# (429/5xx) does not cover -- a transient blip that a re-run clears. Over a
+# multi-hour HOSTED Featherless run these are near-inevitable, so retry a crashed
+# seed a few times before failing loud. Local Ollama / metered Anthropic default
+# to 1 attempt (a crash there is a real, fail-fast error, not a network blip).
+# Overridable via AILIBI_SEED_MAX_ATTEMPTS. A recorded parse/schema failure is
+# NOT a crash (it lands as a FailedCallReplayEntry and the game continues), so
+# this budget only ever spends on genuine transport/unhandled errors.
+if [[ "$PROVIDER" == "featherless" ]]; then
+  SEED_MAX_ATTEMPTS="${AILIBI_SEED_MAX_ATTEMPTS:-4}"
+else
+  SEED_MAX_ATTEMPTS="${AILIBI_SEED_MAX_ATTEMPTS:-1}"
+fi
+if [[ ! "$SEED_MAX_ATTEMPTS" =~ ^[0-9]+$ ]] || [[ "$((10#$SEED_MAX_ATTEMPTS))" -lt 1 ]]; then
+  echo "Error: AILIBI_SEED_MAX_ATTEMPTS must be a positive integer, got '$SEED_MAX_ATTEMPTS'." >&2
+  exit 1
+fi
+SEED_MAX_ATTEMPTS="$((10#$SEED_MAX_ATTEMPTS))"
+
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
   echo "[dry-run] seeds: $seeds_csv"
@@ -359,6 +379,7 @@ if [[ "$dry_run" -eq 1 ]]; then
   else
     echo "[dry-run] seed workers: 1 (sequential)"
   fi
+  echo "[dry-run] seed crash-retry: up to $SEED_MAX_ATTEMPTS attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)"
   echo "[dry-run] per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
   echo "[dry-run]   AILIBI_LLM_PROVIDER=$PROVIDER uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $NUM_PLAYERS --num-impostors $NUM_IMPOSTORS --tasks-per-crewmate $TASKS_PER_CREWMATE --force"
   if [[ "$mode" == "full" ]]; then
@@ -551,22 +572,43 @@ claim_next_seed() {
 record_one_seed() {
   local seed="$1" worker="$2"
   local seed_stage seed_start now seed_secs elapsed eta rate completed meetings seed_meeting
+  local attempt max_attempts
+  max_attempts="$SEED_MAX_ATTEMPTS"
   seed_start="$(date +%s)"
   echo "--- [worker $worker] recording seed $seed ---"
   seed_stage="$(mktemp -d "$stage_dir/seed-${seed}-XXXXXX")"
-  if ! uv run python "$REPO_ROOT/scripts/run_tournament.py" \
-    --start-seed "$seed" \
-    --num-games 1 \
-    --output-dir "$seed_stage" \
-    --num-players "$NUM_PLAYERS" \
-    --num-impostors "$NUM_IMPOSTORS" \
-    --tasks-per-crewmate "$TASKS_PER_CREWMATE" \
-    --force; then
-    echo "ERROR: seed $seed run_tournament failed (worker $worker)." >&2
-    touch "$stage_dir/.failed"
-    rm -rf "$seed_stage"
-    return 1
-  fi
+  # Bounded retry on a run_tournament CRASH (non-zero exit): the recorded LLM
+  # baseline is a multi-hour hosted run, and a game aborts on a TRANSPORT-level
+  # error (httpx.ConnectError / read timeout) that the client's HTTP-status retry
+  # (429/5xx) does not cover -- a transient network blip that a re-run clears.
+  # A recorded parse/schema failure is NOT a crash (it lands as a
+  # FailedCallReplayEntry and the game continues), so only genuine transport /
+  # unhandled errors reach here. A PERSISTENT failure (bad key, endpoint down,
+  # reproducible crash) exhausts the attempts and fails loud -- resilience to
+  # blips, never a silent paper-over (AGENTS.md). --force overwrites the partial
+  # stage replay each attempt. Tunable via AILIBI_SEED_MAX_ATTEMPTS.
+  attempt=0
+  while :; do
+    attempt=$((attempt + 1))
+    if uv run python "$REPO_ROOT/scripts/run_tournament.py" \
+      --start-seed "$seed" \
+      --num-games 1 \
+      --output-dir "$seed_stage" \
+      --num-players "$NUM_PLAYERS" \
+      --num-impostors "$NUM_IMPOSTORS" \
+      --tasks-per-crewmate "$TASKS_PER_CREWMATE" \
+      --force; then
+      break
+    fi
+    if [[ "$attempt" -ge "$max_attempts" ]]; then
+      echo "ERROR: seed $seed run_tournament failed after $attempt attempts (worker $worker)." >&2
+      touch "$stage_dir/.failed"
+      rm -rf "$seed_stage"
+      return 1
+    fi
+    echo "WARN: seed $seed attempt $attempt/$max_attempts failed (worker $worker); retrying after $((attempt * 15))s (transient provider/network error)." >&2
+    sleep "$((attempt * 15))"
+  done
   # Atomic replace on success so the live sample never drifts to a partial write.
   if ! mv -f "$seed_stage/replay-seed-$seed.jsonl" \
     "$SAMPLE_DIR/replay-seed-$seed.jsonl"; then

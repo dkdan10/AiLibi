@@ -257,6 +257,48 @@ def test_dry_run_non_featherless_is_sequential_by_default() -> None:
         assert "[dry-run] seed workers: 1 (sequential)" in proc.stdout, provider
 
 
+def test_dry_run_seed_crash_retry_scoped_to_featherless() -> None:
+    # Task 14.12: a multi-hour hosted Featherless run retries a seed that CRASHES
+    # on a transport error (httpx.ConnectError / timeout the client's 429/5xx
+    # retry does not cover) up to 4 attempts; local Ollama / Anthropic default to
+    # 1 (a crash there is a real, fail-fast error, not a network blip). Overridable
+    # via AILIBI_SEED_MAX_ATTEMPTS. The dry-run surfaces the budget (never silent).
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_EVIDENCE_QUALITY_LIFT="1",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed crash-retry: up to 4 attempt(s)" in proc.stdout
+
+    env["AILIBI_SEED_MAX_ATTEMPTS"] = "6"
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed crash-retry: up to 6 attempt(s)" in proc.stdout
+
+    env2 = dict(_clean_env(), AILIBI_LLM_PROVIDER="ollama")
+    proc = _run("--seeds", "0", "--dry-run", env=env2)
+    assert proc.returncode == 0
+    assert "[dry-run] seed crash-retry: up to 1 attempt(s)" in proc.stdout
+
+
+def test_invalid_seed_max_attempts_fails_loud() -> None:
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_EVIDENCE_QUALITY_LIFT="1",
+        AILIBI_SEED_MAX_ATTEMPTS="lots",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode != 0
+    assert "AILIBI_SEED_MAX_ATTEMPTS must be a positive integer" in (
+        proc.stdout + proc.stderr
+    )
+
+
 def test_invalid_worker_count_fails_loud() -> None:
     # A garbage AILIBI_REFRESH_WORKERS must fail loud, not silently fall back to a
     # default -- a mis-set worker count could over-subscribe the plan.
