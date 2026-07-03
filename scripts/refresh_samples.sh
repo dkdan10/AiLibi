@@ -529,15 +529,50 @@ printf '0' >"$stage_dir/.next_idx"
 printf '0' >"$stage_dir/.state/completed"
 printf '0' >"$stage_dir/.state/meetings"
 _lockdir="$stage_dir/.lock"
-_acquire_lock() { while ! mkdir "$_lockdir" 2>/dev/null; do sleep 0.1; done; }
-_release_lock() { rmdir "$_lockdir" 2>/dev/null || true; }
+# Portable mkdir mutex with DEAD-OWNER detection (PR #218 Codex review). A mkdir
+# lock is not auto-released when its holder dies, so a worker SIGKILLed/OOMed
+# mid-critical-section (e.g. during the lock-held MANIFEST update) would leave the
+# lock held forever: every other worker would spin here, and the parent -- blocked
+# in `wait` on those stuck workers -- would HANG instead of failing loud. Guard
+# it: the holder records its PID in the lock; a waiter that finds the lock owned
+# by a process that no longer exists marks the refresh failed (the half-written
+# MANIFEST is unsafe to canonicalize) and gives up, so the pool tears down and the
+# `.failed` check fails loud. A waiter also bails the instant any worker flags a
+# failure. Returns non-zero when the lock was NOT acquired -- callers must not
+# enter the critical section on a non-zero return.
+_acquire_lock() {
+  local owner
+  # Give up the moment any worker has flagged a failure -- even if the lock is
+  # free right now -- so a doomed baseline stops touching MANIFEST.md.
+  [[ -e "$stage_dir/.failed" ]] && return 1
+  while ! mkdir "$_lockdir" 2>/dev/null; do
+    if [[ -e "$stage_dir/.failed" ]]; then
+      return 1
+    fi
+    owner="$(cat "$_lockdir/owner" 2>/dev/null || true)"
+    if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then
+      echo "ERROR: refresh lock owner (pid $owner) died holding the lock" \
+        "(killed/crashed mid critical section); the baseline is incomplete." >&2
+      touch "$stage_dir/.failed"
+      return 1
+    fi
+    sleep 0.1
+  done
+  printf '%s' "$BASHPID" >"$_lockdir/owner"
+  return 0
+}
+# rm -rf (not rmdir): the lock dir now holds the owner-pid file.
+_release_lock() { rm -rf "$_lockdir" 2>/dev/null || true; }
 
 # Atomically claim the next unclaimed seed (the queue). Echoes the seed, or
 # nothing when the queue is drained. Lock-guarded so no seed is double-recorded
 # (double spend) and none is skipped.
 claim_next_seed() {
   local idx
-  _acquire_lock
+  # A non-zero acquire (a dead lock owner / an already-flagged failure) echoes no
+  # seed, so the worker drains as if the queue were empty and the .failed check
+  # fails loud.
+  _acquire_lock || return 1
   idx="$(cat "$stage_dir/.next_idx")"
   if [[ "$idx" -ge "$total_seeds" ]]; then
     _release_lock
@@ -562,7 +597,17 @@ record_one_seed() {
   max_attempts="$SEED_MAX_ATTEMPTS"
   seed_start="$(date +%s)"
   echo "--- [worker $worker] recording seed $seed ---"
-  seed_stage="$(mktemp -d "$stage_dir/seed-${seed}-XXXXXX")"
+  # Guard the stage mktemp explicitly (PR #218 Codex review): record_one_seed runs
+  # with set -e disabled (it is called in a `||` context), so a failed assignment
+  # would otherwise leave seed_stage EMPTY and run_tournament would spend provider
+  # calls with a bogus --output-dir instead of failing before spend. Mark the seed
+  # failed and bail BEFORE the tournament runs.
+  if ! seed_stage="$(mktemp -d "$stage_dir/seed-${seed}-XXXXXX")"; then
+    echo "ERROR: seed $seed stage mktemp failed (worker $worker; staging fs out" \
+      "of space/inodes?); nothing was spent." >&2
+    touch "$stage_dir/.failed"
+    return 1
+  fi
   # Bounded retry on a run_tournament CRASH (non-zero exit): the recorded LLM
   # baseline is a multi-hour hosted run, and a game aborts on a TRANSPORT-level
   # error (httpx.ConnectError / read timeout) that the client's HTTP-status retry
@@ -613,7 +658,13 @@ record_one_seed() {
   fi
   # Serialize the MANIFEST update + tally bump + progress print: MANIFEST.md is a
   # read-modify-write, and interleaved printf from two workers would garble lines.
-  _acquire_lock
+  # A non-zero acquire (dead lock owner / already-flagged failure) has set .failed
+  # already; the seed's replay is on disk but its MANIFEST row is not synced, and
+  # the baseline is rejected as INCOMPLETE below.
+  if ! _acquire_lock; then
+    echo "ERROR: seed $seed could not acquire the manifest lock (worker $worker)." >&2
+    return 1
+  fi
   if ! uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
     --seeds "$seed" \
     --git-sha "$git_sha" \

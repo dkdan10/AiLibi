@@ -1512,7 +1512,15 @@ def decompose_ejection_channels(
     if naming_flags:
         beliefs = BeliefState()
         beliefs.seed_player(ejected, suspicion=0.5, trust=0.5)
-        lifted = apply_contradiction_rule(beliefs, naming_flags)
+        # Thread THIS meeting's transcript so the offline flag-mass fold applies
+        # the SAME self-refuted-alibi downgrade the vote-time render did (the
+        # evidence-quality lever is unconditional since the Task-14.12 close; PR
+        # #218 Codex review). Without it a self-refuted alibi would be scored at
+        # full STRONG mass here while production rendered it WEAK, over-crediting
+        # the contradiction channel and under-reading the persistent carry-in.
+        lifted = apply_contradiction_rule(
+            beliefs, naming_flags, transcript=meeting.transcript
+        )
         flag_mass = lifted.view(ejected).suspicion - 0.5
     if flag_mass > _CHANNEL_EPS:
         channels.add(CHANNEL_CONTRADICTION_FLAG)
