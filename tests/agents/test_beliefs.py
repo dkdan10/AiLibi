@@ -2321,19 +2321,18 @@ class TestRelevanceGatedFoldOnCommittedBytes:
     vouches die, so the re-derived cross-meeting fold stays ELEVATED across
     the accused meetings instead of netting back to the prior.
 
-    Re-anchored to the Qwen/Qwen3-32B qwen3_32b.v3 re-record (was seed-45 p-8,
-    whose gate stopped being load-bearing on the new bytes -- the trajectory went
-    flat both ways). The witnessed coordinate is now seed-28, impostor p-4, four
-    committed meetings -- a repeat-accused impostor (accused at m0 and again at
-    m3) exhibiting the property. WITH the relevance gate the kill-scene presence
-    vouches are dropped, so the accusation carry survives and stays elevated above
-    the 0.5 prior (the trajectory sits at 0.55 then decays only to 0.528, never
-    back to the prior); WITHOUT the gate (re-derived below) those vouches
-    corroborate p-4 and cancel EVERY accusation bump back to 0.5 (flat across all
-    four meetings) -- the gate is load-bearing.
+    Re-anchored AGAIN on the baseline-2 (qwen3_32b.v4) re-record: seed-28 p-4's
+    gate stopped being load-bearing (both trajectories rise, the ungated no longer
+    flattens). The witnessed coordinate is now seed-46, impostor p-8, two committed
+    meetings -- a repeat-accused impostor exhibiting the property. WITH the
+    relevance gate the kill-scene presence vouches are dropped, so the accusation
+    carry survives and stays elevated above the 0.5 prior (the trajectory sits at
+    0.55 then decays only to 0.5375, never back to the prior); WITHOUT the gate
+    (re-derived below) those vouches corroborate p-8 and cancel EVERY accusation
+    bump back to 0.5 (flat across both meetings) -- the gate is load-bearing.
     """
 
-    def _seed28_trajectory(self, *, gate_killscene_vouches: bool = True) -> list[float]:
+    def _seed46_trajectory(self, *, gate_killscene_vouches: bool = True) -> list[float]:
         from pathlib import Path
 
         import meetings.transcript as transcript_mod
@@ -2346,7 +2345,7 @@ class TestRelevanceGatedFoldOnCommittedBytes:
             / "replays"
             / "samples"
             / "9p2i"
-            / "replay-seed-28.jsonl"
+            / "replay-seed-46.jsonl"
         )
 
         # The ungated comparison disables ONLY the relevance predicate (a
@@ -2390,55 +2389,54 @@ class TestRelevanceGatedFoldOnCommittedBytes:
                     corroborated=evidence.corroborated,
                     contradicted=evidence.contradicted,
                 )
-                trajectory.append(beliefs.view("p-4").suspicion)
+                trajectory.append(beliefs.view("p-8").suspicion)
         finally:
             setattr(transcript_mod, "is_relevant_sighting", original_gate)
         return trajectory
 
-    def test_seed28_subject_is_a_true_impostor(self) -> None:
+    def test_seed46_subject_is_a_true_impostor(self) -> None:
         # The property is only meaningful for a true impostor: re-derive the
         # roster via the seeder (as the other committed-bytes tests do) at the
-        # recorded 9p/2i config and confirm p-4 is an IMPOSTOR.
+        # recorded 9p/2i config and confirm p-8 is an IMPOSTOR.
         from engine.world import load_canonical_map
         from orchestrator.seeder import seed_initial_state
 
         state = seed_initial_state(
-            seed=28,
+            seed=46,
             game_map=load_canonical_map(),
             num_players=9,
             num_impostors=2,
             tasks_per_crewmate=2,
         )
-        assert state.players["p-4"].role == "IMPOSTOR"
+        assert state.players["p-8"].role == "IMPOSTOR"
 
-    def test_seed28_p4_trajectory_rises_instead_of_rendering_flat(self) -> None:
-        trajectory = self._seed28_trajectory()
+    def test_seed46_p8_trajectory_rises_instead_of_rendering_flat(self) -> None:
+        trajectory = self._seed46_trajectory()
 
-        # Four committed meetings; impostor p-4 is repeat-accused (m0 and m3). The
-        # relevance gate lets the carry stay elevated rather than cancelling it
-        # in-meeting with evidence-free kill-scene vouches: the carry lands at 0.55
-        # on the m0 accusation and then decays only to 0.528 over the later
-        # meetings -- it stays ABOVE the 0.5 prior the whole way, because the
-        # kill-scene presence vouches that would cancel it are dropped by the gate.
-        assert len(trajectory) == 4
-        assert trajectory == pytest.approx([0.55, 0.5375, 0.528125, 0.528125])
-        # Climbs above the prior and never settles back to it -- the m3
-        # re-accusation is exactly cancelled by a gated-away vouch so the carry
-        # holds at 0.528, still elevated (contrast the ungated flat below).
+        # Two committed meetings; impostor p-8 is repeat-accused. The relevance
+        # gate lets the carry stay elevated rather than cancelling it in-meeting
+        # with evidence-free kill-scene vouches: the carry lands at 0.55 on the
+        # accusation and then decays only to 0.5375 -- it stays ABOVE the 0.5 prior
+        # the whole way, because the kill-scene presence vouches that would cancel
+        # it are dropped by the gate.
+        assert len(trajectory) == 2
+        assert trajectory == pytest.approx([0.55, 0.5375])
+        # Climbs above the prior and never settles back to it (contrast the
+        # ungated flat below).
         assert trajectory[-1] > _DEFAULT_SUSPICION  # stays above prior, not flat
 
-    def test_seed28_gate_is_load_bearing_at_the_kill_scene_meeting(self) -> None:
+    def test_seed46_gate_is_load_bearing_at_the_kill_scene_meeting(self) -> None:
         # The gate's contribution, isolated: WITHOUT the relevance predicate the
-        # detector re-derives presence-at-the-kill-scene corroborations for p-4
-        # from p-4's own body-room alibi confirmed by third parties' sightings,
-        # which corroborate p-4 and cancel EVERY accusation bump -- flattening the
-        # trajectory to the 0.5 prior across all four meetings. The gate dropping
-        # those vouches is the whole difference between a carry that stays elevated
-        # and one cancelled to the prior.
-        gated = self._seed28_trajectory()
-        ungated = self._seed28_trajectory(gate_killscene_vouches=False)
+        # detector re-derives presence-at-the-kill-scene corroborations for p-8
+        # from p-8's own body-room alibi confirmed by third parties' sightings,
+        # which corroborate p-8 and cancel EVERY accusation bump -- flattening the
+        # trajectory to the 0.5 prior across both meetings. The gate dropping those
+        # vouches is the whole difference between a carry that stays elevated and
+        # one cancelled to the prior.
+        gated = self._seed46_trajectory()
+        ungated = self._seed46_trajectory(gate_killscene_vouches=False)
 
-        assert ungated == pytest.approx([0.5, 0.5, 0.5, 0.5])
+        assert ungated == pytest.approx([0.5, 0.5])
         assert ungated[-1] == pytest.approx(0.5)  # cancelled back to the prior
         assert gated[-1] > ungated[-1]  # the gate is what keeps it elevated
 
@@ -3261,39 +3259,35 @@ class TestSelfRefutedAlibiDowngrade:
 
 
 class TestEvidenceQualityLiftOnCommittedBytes:
-    """The Task-14.10 offline proof over baseline-1 bytes (the DoD bullet).
+    """The Task-14.10 lever on the committed BASELINE-2 bytes (Task 14.12).
 
-    Re-derives the production vote-time fold for the 5 pinned railroad rows
-    (tests/meetings/test_manager.py ``known_railroad``) and the seed-44 m0
-    true-impostor catch, seeded from the ReplayLoader memory walk via the
-    Task-14.8 ``allow_substrate_mismatch`` analysis-only override (the lever
-    is absent from baseline 1's stamp, so an ON re-derivation is a deliberate
-    substrate mismatch — exactly what the override exists for):
+    Baseline 2 was re-recorded with the lever ON (stamped), so this class was
+    re-anchored from the baseline-1 offline proof (which re-derived the 5 pinned
+    baseline-1 railroad rows) to the baseline-2 reality: the committed bytes ARE
+    the lever-ON fold, and the railroad is eliminated. Re-derives the production
+    vote-time fold seeded from the ReplayLoader memory walk (the walk is
+    lever-neutral; the ``allow_substrate_mismatch`` override lets the lever-OFF
+    counterfactual re-derive the lever-ON-stamped baseline — exactly what the
+    Task-14.8 override exists for):
 
-    * lever OFF reproduces the RECORDED vote-prompt suspicion rows exactly
-      (the audit §6 method, restricted to the meetings under test) — the
-      harness IS the production fold, and the OFF branch is byte-identical;
-    * lever ON renders every pinned railroad row below the 1.0 clamp —
-      seeds 13/28 ceil at ``CONTRADICTION_RENDER_CEIL`` (bound 1), seeds
-      16/44 drop further on the self-refuted-alibi downgrade (bound 2, the
-      audit's 2/5 self-refuted pinned rows);
-    * the seed-44 m0 TRUE-impostor catch (the over-damping canary) is
-      byte-unchanged: genuine cross-referenced evidence still convicts.
+    * lever ON reproduces the RECORDED vote-prompt suspicion rows exactly (the
+      audit §6 method; set-wide it is 3046/3046) — the harness IS the production
+      fold AND baseline 2 was recorded with the lever ON;
+    * the lever is LOAD-BEARING and no crew row reaches certain guilt: with the
+      lever OFF exactly one crew row (seed-16 m0 p-6, 2 flags) would clamp to the
+      1.0 railroad; with the lever ON it ceils at ``CONTRADICTION_RENDER_CEIL``
+      (bound 1). The other baseline-1 railroad coordinates (13/28/44) no longer
+      clamp even lever-OFF — v4's alibi discipline thinned their flag density
+      below the prior+cap certain-guilt path — so the load-bearing proof
+      re-anchors to the surviving counterfactual row;
+    * the seed-44 m0 TRUE-impostor catch (the over-damping canary) still
+      convicts: genuine cross-referenced evidence is unaffected by the lever.
     """
 
-    # (seed, meeting_id, railroaded crew subject, self_refuted) — the pinned
-    # known set. ``self_refuted`` is the audit §3a measured classification:
-    # seeds 16/44 (both worst-by-flag-count) carry a self-refuted alibi, so
-    # bound 2 drops them BELOW the ceiling; 13/28 are the honest-looking-but-
-    # false shape (no self-refutation — 14.11's fuel target) and stop exactly
-    # AT the bound-1 ceiling.
-    _PINNED = (
-        (13, "headless-seed-13:meeting-0", "p-7", False),
-        (16, "headless-seed-16:meeting-0", "p-6", True),
-        (28, "headless-seed-28:meeting-0", "p-3", False),
-        (28, "headless-seed-28:meeting-0", "p-6", False),
-        (44, "headless-seed-44:meeting-1", "p-1", True),
-    )
+    # The surviving counterfactual on baseline 2: (seed, meeting_id, crew subject).
+    # Re-derived lever-OFF this crew row clamps to 1.0 (the railroad returns);
+    # lever-ON it ceils at CONTRADICTION_RENDER_CEIL — the whole load-bearing proof.
+    _COUNTERFACTUAL = (16, "headless-seed-16:meeting-0", "p-6")
     # seed-44 m0 ejected a TRUE impostor on the contradiction_flag channel
     # (tests/fixtures/phase10/corrected_w2_baseline.json) — the canary.
     _CANARY = (44, "headless-seed-44:meeting-0")
@@ -3409,23 +3403,23 @@ class TestEvidenceQualityLiftOnCommittedBytes:
             rows[voter] = {e.player_id: e.suspicion for e in graph}
         return rows
 
-    def test_lever_off_reproduces_the_recorded_rows_exactly(
+    def test_lever_on_reproduces_the_recorded_rows_exactly(
         self,
         loader: ReplayLoader,
         roles_by_seed: dict[int, dict[str, str]],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # The exactness anchor (audit §6: 2482/2482 set-wide; here the five
-        # meetings under test): with the lever OFF the re-derived fold must
-        # match every recorded vote-prompt row — proving both that this
-        # harness IS the production fold and that the OFF branch left the
-        # committed baseline's fold byte-identical.
-        meetings = sorted({(s, m) for (s, m, _, _) in self._PINNED} | {self._CANARY})
+        # The exactness anchor, INVERTED for baseline 2 (recorded lever-ON;
+        # set-wide it is 3046/3046): with the lever ON the re-derived fold must
+        # match every recorded vote-prompt row — proving both that this harness
+        # IS the production fold and that baseline 2 was recorded with the lever
+        # ON. Restricted here to the counterfactual + canary meetings for speed.
+        meetings = sorted({self._COUNTERFACTUAL[:2], self._CANARY})
         compared = 0
         for seed, meeting_id in meetings:
             entry = self._meeting_entry(seed, meeting_id)
             derived = self._rederived_rows(
-                loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=False
+                loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=True
             )
             for voter, recorded in self._recorded_rows(entry).items():
                 for subject, suspicion in recorded.items():
@@ -3433,40 +3427,45 @@ class TestEvidenceQualityLiftOnCommittedBytes:
                     assert f"{derived[voter][subject]:.2f}" == f"{suspicion:.2f}", (
                         f"{meeting_id} voter={voter} subject={subject}"
                     )
-        assert compared > 100  # non-vacuous: the five meetings' full rosters
+        assert compared > 40  # non-vacuous: the two meetings' full rosters
 
-    def test_pinned_railroad_rows_render_below_certain_guilt_with_lever_on(
+    def test_lever_ceils_the_counterfactual_railroad_row(
         self,
         loader: ReplayLoader,
         roles_by_seed: dict[int, dict[str, str]],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        for seed, meeting_id, subject, self_refuted in self._PINNED:
-            entry = self._meeting_entry(seed, meeting_id)
-            rows = self._rederived_rows(
-                loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=True
-            )
-            rendered = [row[subject] for row in rows.values() if subject in row]
-            assert rendered, f"{meeting_id}: no voter renders {subject}"
-            assert max(rendered) < 1.0, (
-                f"{meeting_id} {subject} still renders certain guilt "
-                f"(max {max(rendered)})"
-            )
-            # Discriminate WHICH bound fired (so a broken bound 2 cannot
-            # hide behind the ceiling): the audit's self-refuted rows
-            # (seeds 16/44) must land strictly BELOW the ceiling on the
-            # WEAK-downgraded lift, while the no-self-refutation rows
-            # (13/28) stop exactly AT the bound-1 ceiling.
-            if self_refuted:
-                assert max(rendered) < CONTRADICTION_RENDER_CEIL, (
-                    f"{meeting_id} {subject}: bound 2 did not fire "
-                    f"(max {max(rendered)} not below the ceiling)"
-                )
-            else:
-                assert max(rendered) == pytest.approx(CONTRADICTION_RENDER_CEIL), (
-                    f"{meeting_id} {subject}: expected the bound-1 ceiling, "
-                    f"got {max(rendered)}"
-                )
+        # The load-bearing proof re-anchored to baseline 2's surviving
+        # counterfactual: the lever ON ceils the one crew row that would still
+        # railroad (seed-16 m0 p-6 at 2 flags) at CONTRADICTION_RENDER_CEIL, while
+        # OFF it clamps to the 1.0 railroad. This is bound 1 (the certain-guilt
+        # exclusion) firing on the committed bytes — turning the lever off
+        # resurrects the railroad, so the lever is load-bearing, not cosmetic.
+        seed, meeting_id, subject = self._COUNTERFACTUAL
+        entry = self._meeting_entry(seed, meeting_id)
+
+        on_rows = self._rederived_rows(
+            loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=True
+        )
+        on_rendered = [row[subject] for row in on_rows.values() if subject in row]
+        assert on_rendered, f"{meeting_id}: no voter renders {subject}"
+        assert max(on_rendered) < 1.0, (
+            f"{meeting_id} {subject} still renders certain guilt with the lever ON "
+            f"(max {max(on_rendered)})"
+        )
+        assert max(on_rendered) == pytest.approx(CONTRADICTION_RENDER_CEIL), (
+            f"{meeting_id} {subject}: expected the bound-1 ceiling, "
+            f"got {max(on_rendered)}"
+        )
+
+        off_rows = self._rederived_rows(
+            loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=False
+        )
+        off_rendered = [row[subject] for row in off_rows.values() if subject in row]
+        assert max(off_rendered) == pytest.approx(1.0), (
+            f"{meeting_id} {subject}: lever-OFF counterfactual should resurrect the "
+            f"1.0 railroad, got {max(off_rendered)} — the lever is not load-bearing"
+        )
 
     def test_seed44_m0_true_impostor_catch_still_gate_crosses(
         self,

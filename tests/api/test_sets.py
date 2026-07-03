@@ -266,14 +266,16 @@ def test_unknown_set_is_404_on_replays(monkeypatch: pytest.MonkeyPatch) -> None:
         assert client.get("/replays", params={"set": "../9p2i"}).status_code == 404
 
 
-def test_determinism_holds_per_set() -> None:
+def test_determinism_holds_per_set(monkeypatch: pytest.MonkeyPatch) -> None:
     # The determinism gate runs PER SET (Task 12.12 DoD): each committed set
     # reconstructs byte-identically through its own per-set loader. A divergence
     # raises ReplayStateMismatchError inside load_replay.
     #
-    # The committed sets were re-recorded with all four Phase-13.5 levers ON —
-    # the unconditional default since Task 14.9, so the stamped substrate
-    # matches the bare CI env and no flag export is needed.
+    # The committed sets were re-recorded (Task 14.12 baseline 2) with all four
+    # Phase-13.5 levers ON (unconditional since Task 14.9) plus the Task-14.10
+    # evidence_quality_lift lever ON. That lever is still default-OFF, so
+    # flag-aware reconstruction of the committed sets requires it exported.
+    monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
     registry = SetLoaderRegistry(_PARENT)
     for set_name in registry.available_sets():
         loader = registry.get(set_name)

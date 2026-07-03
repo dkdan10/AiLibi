@@ -27,10 +27,19 @@ _SEED = 0  # smallest committed sample: fast to reconstruct
 _MEETING_SEED = 22  # a committed sample that contains a meeting
 
 # The canonical samples were re-recorded on the Featherless / Qwen/Qwen3-32B
-# substrate (prompt set qwen3_32b v3) with all four Phase-13.5 levers ON — the
-# unconditional default since Task 14.9, so reconstructing the committed bytes
-# needs NO flag export: verification runs under a BARE environment (the
-# Task-14.9 acceptance bar).
+# substrate (prompt set qwen3_32b v4, Task 14.12 baseline 2) with all four
+# Phase-13.5 levers ON (the unconditional default since Task 14.9) PLUS the
+# Task-14.10 evidence_quality_lift lever ON (stamped into game_over). That lever
+# is still default-OFF, so flag-aware reconstruction of baseline 2 requires it
+# exported — else the loader's substrate guard (correctly) refuses the mismatch.
+# The _lever_on autouse fixture sets it for every reconstruction here. (Making the
+# lever unconditional so the committed set serves bare — the 14.9 move for the
+# 13.5 levers — is a deferred follow-up, out of the 14.12 record-only scope.)
+
+
+@pytest.fixture(autouse=True)
+def _lever_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
 
 
 def _copy_seed(dst_dir: Path, seed: int) -> Path:

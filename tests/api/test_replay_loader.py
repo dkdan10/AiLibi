@@ -852,12 +852,16 @@ def test_committed_9p2i_set_reconstructs_byte_identically(
     # is correct — making this both the determinism gate and a roster.json check.
     #
     # The committed set was re-recorded on the Featherless / Qwen/Qwen3-32B
-    # substrate with all four Phase-13.5 levers ON, so each game_over record is
-    # stamped with that lever config. The loader's memory reconstruction honors
-    # the stamp (Task 14.7); since Task 14.9 the levers are unconditionally ON,
-    # so the walk needs NO env vars — run under a genuinely bare environment
-    # (the Task-14.9 acceptance bar).
+    # substrate (Task 14.12 baseline 2) with all four Phase-13.5 levers ON PLUS
+    # the Task-14.10 evidence_quality_lift lever ON, stamped on each game_over
+    # record. The 13.5 levers are unconditional (Task 14.9), but the 14.10 lever
+    # is still default-OFF, so flag-aware reconstruction requires it exported —
+    # else the loader's substrate guard refuses the mismatch. (The state_hash
+    # chain is substrate-independent, but the guard blocks the load before the
+    # walk; making the lever unconditional so the set serves bare is a deferred
+    # 14.9-style follow-up, out of the 14.12 record-only scope.)
     _delete_ailibi_env(monkeypatch)
+    monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
     assert replay_loader._load_roster_config(_COMMITTED_9P2I_DIR) == RosterConfig(
         num_players=9, num_impostors=2, tasks_per_crewmate=2
     )
@@ -1072,19 +1076,30 @@ def test_stamped_replay_reconstructs_under_bare_environment(
     assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 10)}
 
 
-def test_committed_baseline_serves_under_bare_environment(
+def test_committed_baseline_requires_evidence_quality_lift_to_serve(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Pins the Task-14.9 spectator fix (the ``run_spectator.sh`` 500 reported
-    # 2026-07-01): the committed 9p2i baseline is stamped all-ON, and the
-    # launcher exports no AILIBI_* vars — before 14.9 the guard read a bare env
-    # as all-OFF and refused with HTTP 500. With the levers unconditional, the
-    # loader serves the committed set under a genuinely bare environment.
+    # Task 14.12 baseline 2 restamps every game_over with the Task-14.10
+    # evidence_quality_lift lever ON. That lever is still default-OFF (14.10 kept
+    # it gated), so unlike the four unconditional 13.5 levers it does NOT serve
+    # under a bare environment: the loader guard reads a bare env as lift-OFF and
+    # refuses the mismatch. Exporting AILIBI_EVIDENCE_QUALITY_LIFT=1 (flag-aware
+    # reconstruction, the 14.12 acceptance bar) serves it.
+    #
+    # This RE-PINS the Task-14.9 bare-env spectator pin (the run_spectator.sh 500):
+    # the 13.5 half is preserved (they stay unconditional), but baseline 2's
+    # default-OFF 14.10 lever reintroduces the export requirement until a 14.9-style
+    # follow-up makes the lever unconditional (out of the 14.12 record-only scope;
+    # tracked in the close audit). Both halves are pinned below so the regression is
+    # explicit, not silent.
     if not _COMMITTED_9P2I_DIR.is_dir():
         pytest.skip("committed 9p2i sample set not present")
     _delete_ailibi_env(monkeypatch)
     loader = ReplayLoader(replay_dir=_COMMITTED_9P2I_DIR)
-    replay = loader.load_replay("headless-seed-0")  # no raise — serves
+    with pytest.raises(ReplaySubstrateMismatchError):
+        loader.load_replay("headless-seed-0")  # bare env → lift-OFF mismatch
+    monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
+    replay = loader.load_replay("headless-seed-0")  # flag-aware → serves
     assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 10)}
 
 
