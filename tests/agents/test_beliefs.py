@@ -2321,19 +2321,18 @@ class TestRelevanceGatedFoldOnCommittedBytes:
     vouches die, so the re-derived cross-meeting fold stays ELEVATED across
     the accused meetings instead of netting back to the prior.
 
-    Re-anchored to the Qwen/Qwen3-32B qwen3_32b.v3 re-record (was seed-45 p-8,
-    whose gate stopped being load-bearing on the new bytes -- the trajectory went
-    flat both ways). The witnessed coordinate is now seed-28, impostor p-4, four
-    committed meetings -- a repeat-accused impostor (accused at m0 and again at
-    m3) exhibiting the property. WITH the relevance gate the kill-scene presence
-    vouches are dropped, so the accusation carry survives and stays elevated above
-    the 0.5 prior (the trajectory sits at 0.55 then decays only to 0.528, never
-    back to the prior); WITHOUT the gate (re-derived below) those vouches
-    corroborate p-4 and cancel EVERY accusation bump back to 0.5 (flat across all
-    four meetings) -- the gate is load-bearing.
+    Re-anchored AGAIN on the baseline-2 (qwen3_32b.v4) re-record: seed-28 p-4's
+    gate stopped being load-bearing (both trajectories rise, the ungated no longer
+    flattens). The witnessed coordinate is now seed-46, impostor p-8, two committed
+    meetings -- a repeat-accused impostor exhibiting the property. WITH the
+    relevance gate the kill-scene presence vouches are dropped, so the accusation
+    carry survives and stays elevated above the 0.5 prior (the trajectory sits at
+    0.55 then decays only to 0.5375, never back to the prior); WITHOUT the gate
+    (re-derived below) those vouches corroborate p-8 and cancel EVERY accusation
+    bump back to 0.5 (flat across both meetings) -- the gate is load-bearing.
     """
 
-    def _seed28_trajectory(self, *, gate_killscene_vouches: bool = True) -> list[float]:
+    def _seed46_trajectory(self, *, gate_killscene_vouches: bool = True) -> list[float]:
         from pathlib import Path
 
         import meetings.transcript as transcript_mod
@@ -2346,7 +2345,7 @@ class TestRelevanceGatedFoldOnCommittedBytes:
             / "replays"
             / "samples"
             / "9p2i"
-            / "replay-seed-28.jsonl"
+            / "replay-seed-46.jsonl"
         )
 
         # The ungated comparison disables ONLY the relevance predicate (a
@@ -2390,55 +2389,54 @@ class TestRelevanceGatedFoldOnCommittedBytes:
                     corroborated=evidence.corroborated,
                     contradicted=evidence.contradicted,
                 )
-                trajectory.append(beliefs.view("p-4").suspicion)
+                trajectory.append(beliefs.view("p-8").suspicion)
         finally:
             setattr(transcript_mod, "is_relevant_sighting", original_gate)
         return trajectory
 
-    def test_seed28_subject_is_a_true_impostor(self) -> None:
+    def test_seed46_subject_is_a_true_impostor(self) -> None:
         # The property is only meaningful for a true impostor: re-derive the
         # roster via the seeder (as the other committed-bytes tests do) at the
-        # recorded 9p/2i config and confirm p-4 is an IMPOSTOR.
+        # recorded 9p/2i config and confirm p-8 is an IMPOSTOR.
         from engine.world import load_canonical_map
         from orchestrator.seeder import seed_initial_state
 
         state = seed_initial_state(
-            seed=28,
+            seed=46,
             game_map=load_canonical_map(),
             num_players=9,
             num_impostors=2,
             tasks_per_crewmate=2,
         )
-        assert state.players["p-4"].role == "IMPOSTOR"
+        assert state.players["p-8"].role == "IMPOSTOR"
 
-    def test_seed28_p4_trajectory_rises_instead_of_rendering_flat(self) -> None:
-        trajectory = self._seed28_trajectory()
+    def test_seed46_p8_trajectory_rises_instead_of_rendering_flat(self) -> None:
+        trajectory = self._seed46_trajectory()
 
-        # Four committed meetings; impostor p-4 is repeat-accused (m0 and m3). The
-        # relevance gate lets the carry stay elevated rather than cancelling it
-        # in-meeting with evidence-free kill-scene vouches: the carry lands at 0.55
-        # on the m0 accusation and then decays only to 0.528 over the later
-        # meetings -- it stays ABOVE the 0.5 prior the whole way, because the
-        # kill-scene presence vouches that would cancel it are dropped by the gate.
-        assert len(trajectory) == 4
-        assert trajectory == pytest.approx([0.55, 0.5375, 0.528125, 0.528125])
-        # Climbs above the prior and never settles back to it -- the m3
-        # re-accusation is exactly cancelled by a gated-away vouch so the carry
-        # holds at 0.528, still elevated (contrast the ungated flat below).
+        # Two committed meetings; impostor p-8 is repeat-accused. The relevance
+        # gate lets the carry stay elevated rather than cancelling it in-meeting
+        # with evidence-free kill-scene vouches: the carry lands at 0.55 on the
+        # accusation and then decays only to 0.5375 -- it stays ABOVE the 0.5 prior
+        # the whole way, because the kill-scene presence vouches that would cancel
+        # it are dropped by the gate.
+        assert len(trajectory) == 2
+        assert trajectory == pytest.approx([0.55, 0.5375])
+        # Climbs above the prior and never settles back to it (contrast the
+        # ungated flat below).
         assert trajectory[-1] > _DEFAULT_SUSPICION  # stays above prior, not flat
 
-    def test_seed28_gate_is_load_bearing_at_the_kill_scene_meeting(self) -> None:
+    def test_seed46_gate_is_load_bearing_at_the_kill_scene_meeting(self) -> None:
         # The gate's contribution, isolated: WITHOUT the relevance predicate the
-        # detector re-derives presence-at-the-kill-scene corroborations for p-4
-        # from p-4's own body-room alibi confirmed by third parties' sightings,
-        # which corroborate p-4 and cancel EVERY accusation bump -- flattening the
-        # trajectory to the 0.5 prior across all four meetings. The gate dropping
-        # those vouches is the whole difference between a carry that stays elevated
-        # and one cancelled to the prior.
-        gated = self._seed28_trajectory()
-        ungated = self._seed28_trajectory(gate_killscene_vouches=False)
+        # detector re-derives presence-at-the-kill-scene corroborations for p-8
+        # from p-8's own body-room alibi confirmed by third parties' sightings,
+        # which corroborate p-8 and cancel EVERY accusation bump -- flattening the
+        # trajectory to the 0.5 prior across both meetings. The gate dropping those
+        # vouches is the whole difference between a carry that stays elevated and
+        # one cancelled to the prior.
+        gated = self._seed46_trajectory()
+        ungated = self._seed46_trajectory(gate_killscene_vouches=False)
 
-        assert ungated == pytest.approx([0.5, 0.5, 0.5, 0.5])
+        assert ungated == pytest.approx([0.5, 0.5])
         assert ungated[-1] == pytest.approx(0.5)  # cancelled back to the prior
         assert gated[-1] > ungated[-1]  # the gate is what keeps it elevated
 
@@ -2492,33 +2490,29 @@ def _same_claim_flag_stack(
 
 
 class TestEvidenceQualityLiftResolver:
-    """The Task-14.10 lever resolver (the retired 13.5 ``*_enabled`` pattern)."""
+    """The Task-14.10 lever resolver — UNCONDITIONAL since the Task-14.12 close.
 
-    def test_default_is_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        assert evidence_quality_lift_enabled(env={}) is False
+    Retired to the always-ON substrate (the 14.9 move for the 13.5 levers,
+    applied after baseline 2 adopted the lever): the resolver ignores its ``env``
+    argument and always returns ``True``, so the certain-guilt exclusion and the
+    self-refuted-alibi downgrade are the default fold behavior.
+    """
+
+    def test_is_unconditionally_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No env can turn it off any more — every mapping, and the ambient
+        # process environment, resolves ON.
+        assert evidence_quality_lift_enabled() is True
+        assert evidence_quality_lift_enabled(env={}) is True
         monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
-        assert evidence_quality_lift_enabled() is False
-
-    def test_process_environment_is_the_default_source(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
         assert evidence_quality_lift_enabled() is True
 
-    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "On", " on "])
-    def test_truthy_values_enable(self, value: str) -> None:
+    @pytest.mark.parametrize("value", ["1", "true", "", "0", "false", "off", "maybe"])
+    def test_env_value_is_ignored(self, value: str) -> None:
+        # The ``env`` argument is accepted and ignored (retained for signature
+        # stability); any value — truthy, falsy, or junk — reads ON.
         assert (
             evidence_quality_lift_enabled(env={ENV_EVIDENCE_QUALITY_LIFT: value})
             is True
-        )
-
-    @pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "maybe"])
-    def test_everything_else_is_off(self, value: str) -> None:
-        # No silent surprise-ON: unset / empty / unrecognised all read OFF
-        # (the byte-identity default pending the 14.12 re-record).
-        assert (
-            evidence_quality_lift_enabled(env={ENV_EVIDENCE_QUALITY_LIFT: value})
-            is False
         )
 
 
@@ -2552,24 +2546,21 @@ class TestCertainGuiltRenderCeiling:
         assert _GATE < lever_on.view("p-1").suspicion < CONTRADICTION_RENDER_CEIL
 
     def test_body_proximity_prior_ceils_below_the_clamp(self) -> None:
-        # The audit's compounding 1.0 path: prior 0.70 + saturated +0.30
-        # clamped at 1.00 (lever OFF — the pinned defect) now CEILS at ~0.97
-        # (lever ON) — still a MUST-vote, never "certain guilt" on flag fuel.
+        # The audit's compounding 1.0 path: prior 0.70 + saturated +0.30 would
+        # clamp at 1.00 (the pinned baseline-1 defect); the now-unconditional
+        # lever CEILS it at ~0.97 — still a MUST-vote, never "certain guilt" on
+        # flag fuel.
         flags = _same_claim_flag_stack(subject="p-1", count=9)
 
-        lever_off = apply_contradiction_rule(
-            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR), flags, env=_LEVER_OFF
-        )
-        lever_on = apply_contradiction_rule(
-            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR), flags, env=_LEVER_ON
+        rendered = apply_contradiction_rule(
+            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR), flags
         )
 
-        assert lever_off.view("p-1").suspicion == pytest.approx(1.0)
-        assert lever_on.view("p-1").suspicion == pytest.approx(
+        assert rendered.view("p-1").suspicion == pytest.approx(
             CONTRADICTION_RENDER_CEIL
         )
-        assert lever_on.view("p-1").suspicion < 1.0
-        assert lever_on.view("p-1").suspicion > _GATE
+        assert rendered.view("p-1").suspicion < 1.0
+        assert rendered.view("p-1").suspicion > _GATE
 
     def test_ceiling_bounds_the_lift_never_the_prior(self) -> None:
         # A standing prior already OVER the ceiling (cross-meeting 9.8
@@ -2608,19 +2599,17 @@ class TestCertainGuiltRenderCeiling:
         # the 3+-voice +0.15 spread clamps at 1.0 with the lever OFF and
         # ceils at ~0.97 with it ON — "flag/testimony-driven" covers BOTH
         # channels, which stack on one graph at vote time.
-        def spread(env: Mapping[str, str]) -> BeliefState:
-            return apply_meeting_evidence_rules(
-                _seeded("p-2", suspicion=0.9),
-                own_id="observer",
-                accused=("p-2",),
-                phase="pre_vote",
-                pre_vote_folded=frozenset({"p-2"}),
-                pre_vote_voice_counts={"p-2": 3},
-                env=env,
-            )
+        rendered = apply_meeting_evidence_rules(
+            _seeded("p-2", suspicion=0.9),
+            own_id="observer",
+            accused=("p-2",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-2"}),
+            pre_vote_voice_counts={"p-2": 3},
+        )
 
-        assert spread(_LEVER_OFF).view("p-2").suspicion == pytest.approx(1.0)
-        assert spread(_LEVER_ON).view("p-2").suspicion == pytest.approx(
+        # Would clamp at 1.0 pre-lever; the unconditional lever ceils it at ~0.97.
+        assert rendered.view("p-2").suspicion == pytest.approx(
             CONTRADICTION_RENDER_CEIL
         )
 
@@ -2656,19 +2645,32 @@ class TestCertainGuiltRenderCeiling:
 
         assert lever_on.view("p-2").suspicion == pytest.approx(1.0)
 
-    def test_off_branch_is_byte_identical_to_the_no_env_call(self) -> None:
-        # The OFF guard for the committed baseline: a bare-env fold equals
-        # the pre-task call shape (no env argument) on the compounding path.
+    def test_env_argument_is_ignored_the_lever_is_unconditional(self) -> None:
+        # The lever is unconditional since the 14.12 close: passing a
+        # would-be-OFF env, a would-be-ON env, or no env argument at all all
+        # produce the SAME ceiled render — the fold no longer consults the env.
         flags = _same_claim_flag_stack(subject="p-1", count=9)
 
-        bare = apply_contradiction_rule(
-            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR), flags, env=_LEVER_OFF
-        )
-        legacy_shape = apply_contradiction_rule(
-            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR), flags
-        )
+        def render(
+            env: Mapping[str, str] | None = None, *, pass_env: bool = True
+        ) -> float:
+            state = _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR)
+            folded = (
+                apply_contradiction_rule(state, flags, env=env)
+                if pass_env
+                else apply_contradiction_rule(state, flags)
+            )
+            return folded.view("p-1").suspicion
 
-        assert bare.view("p-1").suspicion == legacy_shape.view("p-1").suspicion == 1.0
+        no_env = render(pass_env=False)
+        would_be_off = render(env={})
+        would_be_on = render(env={ENV_EVIDENCE_QUALITY_LIFT: "1"})
+        assert (
+            no_env
+            == would_be_off
+            == would_be_on
+            == pytest.approx(CONTRADICTION_RENDER_CEIL)
+        )
 
 
 def _alibi_with_own_task_turn(
@@ -2770,20 +2772,6 @@ class TestSelfRefutedAlibiDowngrade:
         )
 
         assert lifted.view("p-1").suspicion == pytest.approx(0.78)
-
-    def test_lever_off_keeps_the_strong_delta(self) -> None:
-        transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(),))
-
-        lifted = apply_contradiction_rule(
-            BeliefState(),
-            [_flag_on_self_alibi()],
-            transcript=transcript,
-            env=_LEVER_OFF,
-        )
-
-        assert lifted.view("p-1").suspicion == pytest.approx(
-            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
-        )
 
     def test_no_transcript_applies_no_downgrade(self) -> None:
         # The analysis-caller default (transcript=None) has no signal to
@@ -3205,23 +3193,21 @@ class TestSelfRefutedAlibiDowngrade:
             _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
         )
 
-    def test_lever_on_contradiction_fold_without_transcript_fails_loud(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # PR #217 review (Codex P2): a lever-ON contradiction fold without
-        # the transcript would silently skip the self-refuted-alibi
-        # downgrade — rendering a graph the run's stamped substrate says
-        # cannot exist. The manager-seam helper fails loud instead (AGENTS.md
-        # "no silent fallbacks"); analysis callers that fold recorded flags
-        # (e.g. experiments/model_probe/corpus.py) must thread the recorded
-        # transcript, exactly like the production ballot path.
+    def test_contradiction_fold_without_transcript_fails_loud(self) -> None:
+        # PR #217 review (Codex P2), now UNCONDITIONAL (the 14.12 close): a
+        # contradiction fold without the transcript would silently skip the
+        # self-refuted-alibi downgrade — rendering a graph the substrate says
+        # cannot exist. The manager-seam helper fails loud regardless of any env
+        # (the lever is always ON; AGENTS.md "no silent fallbacks"); analysis
+        # callers that fold recorded flags (e.g. experiments/model_probe/corpus.py)
+        # must thread the recorded transcript, exactly like the production path.
         from meetings.manager import (
             _suspicion_graph_with_contradictions,  # noqa: PLC2701
         )
 
-        monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
-
-        with pytest.raises(ValueError, match="evidence_quality_lift is ON"):
+        with pytest.raises(
+            ValueError, match="contradiction fold was requested without the meeting"
+        ):
             _suspicion_graph_with_contradictions(
                 voter_id="p-2",
                 suspicion_graph=(),
@@ -3229,7 +3215,7 @@ class TestSelfRefutedAlibiDowngrade:
             )
 
         # No contradictions to fold -> nothing the downgrade could miss ->
-        # the transcript-less shape stays valid even with the lever ON.
+        # the transcript-less shape stays valid.
         assert (
             _suspicion_graph_with_contradictions(
                 voter_id="p-2", suspicion_graph=(), contradictions=()
@@ -3237,63 +3223,37 @@ class TestSelfRefutedAlibiDowngrade:
             == ()
         )
 
-    def test_lever_off_contradiction_fold_without_transcript_stays_valid(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # The pre-14.10 analysis/test call shape is untouched under the
-        # default: the fold runs and the flag lands its STRONG delta.
-        from meetings.manager import (
-            _suspicion_graph_with_contradictions,  # noqa: PLC2701
-        )
-
-        monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
-
-        graph = _suspicion_graph_with_contradictions(
-            voter_id="p-2",
-            suspicion_graph=(),
-            contradictions=(_flag_on_self_alibi(),),
-        )
-
-        rendered = {entry.player_id: entry.suspicion for entry in graph}
-        assert rendered["p-1"] == pytest.approx(
-            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
-        )
-
 
 class TestEvidenceQualityLiftOnCommittedBytes:
-    """The Task-14.10 offline proof over baseline-1 bytes (the DoD bullet).
+    """The Task-14.10 lever on the committed BASELINE-2 bytes (Task 14.12).
 
-    Re-derives the production vote-time fold for the 5 pinned railroad rows
-    (tests/meetings/test_manager.py ``known_railroad``) and the seed-44 m0
-    true-impostor catch, seeded from the ReplayLoader memory walk via the
-    Task-14.8 ``allow_substrate_mismatch`` analysis-only override (the lever
-    is absent from baseline 1's stamp, so an ON re-derivation is a deliberate
-    substrate mismatch — exactly what the override exists for):
+    Baseline 2 was re-recorded with the lever ON (stamped), so this class was
+    re-anchored from the baseline-1 offline proof (which re-derived the 5 pinned
+    baseline-1 railroad rows) to the baseline-2 reality: the committed bytes ARE
+    the lever-ON fold, and the railroad is eliminated. Re-derives the production
+    vote-time fold seeded from the ReplayLoader memory walk (the walk is
+    lever-neutral; the ``allow_substrate_mismatch`` override lets the lever-OFF
+    counterfactual re-derive the lever-ON-stamped baseline — exactly what the
+    Task-14.8 override exists for):
 
-    * lever OFF reproduces the RECORDED vote-prompt suspicion rows exactly
-      (the audit §6 method, restricted to the meetings under test) — the
-      harness IS the production fold, and the OFF branch is byte-identical;
-    * lever ON renders every pinned railroad row below the 1.0 clamp —
-      seeds 13/28 ceil at ``CONTRADICTION_RENDER_CEIL`` (bound 1), seeds
-      16/44 drop further on the self-refuted-alibi downgrade (bound 2, the
-      audit's 2/5 self-refuted pinned rows);
-    * the seed-44 m0 TRUE-impostor catch (the over-damping canary) is
-      byte-unchanged: genuine cross-referenced evidence still convicts.
+    * lever ON reproduces the RECORDED vote-prompt suspicion rows exactly (the
+      audit §6 method; set-wide it is 3046/3046) — the harness IS the production
+      fold AND baseline 2 was recorded with the lever ON;
+    * the lever is LOAD-BEARING and no crew row reaches certain guilt: with the
+      lever OFF exactly one crew row (seed-16 m0 p-6, 2 flags) would clamp to the
+      1.0 railroad; with the lever ON it ceils at ``CONTRADICTION_RENDER_CEIL``
+      (bound 1). The other baseline-1 railroad coordinates (13/28/44) no longer
+      clamp even lever-OFF — v4's alibi discipline thinned their flag density
+      below the prior+cap certain-guilt path — so the load-bearing proof
+      re-anchors to the surviving counterfactual row;
+    * the seed-44 m0 TRUE-impostor catch (the over-damping canary) still
+      convicts: genuine cross-referenced evidence is unaffected by the lever.
     """
 
-    # (seed, meeting_id, railroaded crew subject, self_refuted) — the pinned
-    # known set. ``self_refuted`` is the audit §3a measured classification:
-    # seeds 16/44 (both worst-by-flag-count) carry a self-refuted alibi, so
-    # bound 2 drops them BELOW the ceiling; 13/28 are the honest-looking-but-
-    # false shape (no self-refutation — 14.11's fuel target) and stop exactly
-    # AT the bound-1 ceiling.
-    _PINNED = (
-        (13, "headless-seed-13:meeting-0", "p-7", False),
-        (16, "headless-seed-16:meeting-0", "p-6", True),
-        (28, "headless-seed-28:meeting-0", "p-3", False),
-        (28, "headless-seed-28:meeting-0", "p-6", False),
-        (44, "headless-seed-44:meeting-1", "p-1", True),
-    )
+    # The surviving counterfactual on baseline 2: (seed, meeting_id, crew subject).
+    # Re-derived lever-OFF this crew row clamps to 1.0 (the railroad returns);
+    # lever-ON it ceils at CONTRADICTION_RENDER_CEIL — the whole load-bearing proof.
+    _COUNTERFACTUAL = (16, "headless-seed-16:meeting-0", "p-6")
     # seed-44 m0 ejected a TRUE impostor on the contradiction_flag channel
     # (tests/fixtures/phase10/corrected_w2_baseline.json) — the canary.
     _CANARY = (44, "headless-seed-44:meeting-0")
@@ -3353,25 +3313,20 @@ class TestEvidenceQualityLiftOnCommittedBytes:
         seed: int,
         entry: MeetingReplayEntry,
         roles: dict[str, str],
-        monkeypatch: pytest.MonkeyPatch,
-        *,
-        lever_on: bool,
     ) -> dict[str, dict[str, float]]:
-        """Re-run the production vote-time fold per recorded voter."""
+        """Re-run the production vote-time fold per recorded voter.
+
+        The Task-14.10 lever is unconditional (the 14.12 close), so the fold
+        always applies the certain-guilt ceiling + self-refuted downgrade — no
+        env toggle. This IS the substrate baseline 2 was recorded under, so the
+        re-derivation reproduces the recorded vote-prompt rows.
+        """
 
         from meetings.manager import (
             SuspicionEntry,
             _suspicion_graph_with_contradictions,  # noqa: PLC2701
             derive_belief_evidence,
         )
-
-        # The production fold resolves the lever from the process
-        # environment (the manager threads data, never env — the 13.5.5
-        # convention), so each cell exports/clears the var.
-        if lever_on:
-            monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
-        else:
-            monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
 
         game_id = f"headless-seed-{seed}"
         voters = sorted({ballot.voter for ballot in entry.ballots})
@@ -3409,92 +3364,71 @@ class TestEvidenceQualityLiftOnCommittedBytes:
             rows[voter] = {e.player_id: e.suspicion for e in graph}
         return rows
 
-    def test_lever_off_reproduces_the_recorded_rows_exactly(
+    def test_lever_reproduces_the_recorded_rows_exactly(
         self,
         loader: ReplayLoader,
         roles_by_seed: dict[int, dict[str, str]],
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # The exactness anchor (audit §6: 2482/2482 set-wide; here the five
-        # meetings under test): with the lever OFF the re-derived fold must
-        # match every recorded vote-prompt row — proving both that this
-        # harness IS the production fold and that the OFF branch left the
-        # committed baseline's fold byte-identical.
-        meetings = sorted({(s, m) for (s, m, _, _) in self._PINNED} | {self._CANARY})
+        # The exactness anchor (set-wide it is 3046/3046): the unconditional-lever
+        # re-derived fold must match every recorded vote-prompt row — proving both
+        # that this harness IS the production fold and that baseline 2 was recorded
+        # under it. Restricted here to the counterfactual + canary meetings for
+        # speed.
+        meetings = sorted({self._COUNTERFACTUAL[:2], self._CANARY})
         compared = 0
         for seed, meeting_id in meetings:
             entry = self._meeting_entry(seed, meeting_id)
-            derived = self._rederived_rows(
-                loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=False
-            )
+            derived = self._rederived_rows(loader, seed, entry, roles_by_seed[seed])
             for voter, recorded in self._recorded_rows(entry).items():
                 for subject, suspicion in recorded.items():
                     compared += 1
                     assert f"{derived[voter][subject]:.2f}" == f"{suspicion:.2f}", (
                         f"{meeting_id} voter={voter} subject={subject}"
                     )
-        assert compared > 100  # non-vacuous: the five meetings' full rosters
+        assert compared > 40  # non-vacuous: the two meetings' full rosters
 
-    def test_pinned_railroad_rows_render_below_certain_guilt_with_lever_on(
+    def test_lever_ceils_the_would_be_railroad_row(
         self,
         loader: ReplayLoader,
         roles_by_seed: dict[int, dict[str, str]],
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        for seed, meeting_id, subject, self_refuted in self._PINNED:
-            entry = self._meeting_entry(seed, meeting_id)
-            rows = self._rederived_rows(
-                loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=True
-            )
-            rendered = [row[subject] for row in rows.values() if subject in row]
-            assert rendered, f"{meeting_id}: no voter renders {subject}"
-            assert max(rendered) < 1.0, (
-                f"{meeting_id} {subject} still renders certain guilt "
-                f"(max {max(rendered)})"
-            )
-            # Discriminate WHICH bound fired (so a broken bound 2 cannot
-            # hide behind the ceiling): the audit's self-refuted rows
-            # (seeds 16/44) must land strictly BELOW the ceiling on the
-            # WEAK-downgraded lift, while the no-self-refutation rows
-            # (13/28) stop exactly AT the bound-1 ceiling.
-            if self_refuted:
-                assert max(rendered) < CONTRADICTION_RENDER_CEIL, (
-                    f"{meeting_id} {subject}: bound 2 did not fire "
-                    f"(max {max(rendered)} not below the ceiling)"
-                )
-            else:
-                assert max(rendered) == pytest.approx(CONTRADICTION_RENDER_CEIL), (
-                    f"{meeting_id} {subject}: expected the bound-1 ceiling, "
-                    f"got {max(rendered)}"
-                )
+        # The load-bearing proof re-anchored to baseline 2's surviving would-be
+        # railroad: the certain-guilt exclusion (bound 1) ceils the one crew row
+        # that would otherwise clamp to 1.0 (seed-16 m0 p-6 at 2 flags) at exactly
+        # CONTRADICTION_RENDER_CEIL. That the render lands on the ceiling CONSTANT
+        # (not a natural fold value) is the fingerprint of bound 1 firing on the
+        # committed bytes — the lever is load-bearing, not cosmetic. (The lever is
+        # unconditional since the 14.12 close, so the OFF counterfactual — which
+        # showed this row clamping to 1.0 — is no longer a live code path; it lives
+        # in the baseline-1 git history + the close audit.)
+        seed, meeting_id, subject = self._COUNTERFACTUAL
+        entry = self._meeting_entry(seed, meeting_id)
+
+        rows = self._rederived_rows(loader, seed, entry, roles_by_seed[seed])
+        rendered = [row[subject] for row in rows.values() if subject in row]
+        assert rendered, f"{meeting_id}: no voter renders {subject}"
+        assert max(rendered) < 1.0, (
+            f"{meeting_id} {subject} still renders certain guilt (max {max(rendered)})"
+        )
+        assert max(rendered) == pytest.approx(CONTRADICTION_RENDER_CEIL), (
+            f"{meeting_id} {subject}: expected the bound-1 ceiling, got {max(rendered)}"
+        )
 
     def test_seed44_m0_true_impostor_catch_still_gate_crosses(
         self,
         loader: ReplayLoader,
         roles_by_seed: dict[int, dict[str, str]],
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         # The over-damping canary: genuine multi-witness evidence must still
-        # convict with the lever ON. seed-44 m0's ejectee is a TRUE impostor
-        # caught on the contradiction channel; its rendered rows must be
-        # byte-unchanged (the catch is a clean lie, not a self-refuted alibi,
-        # and its voters carry no compounding prior).
+        # convict under the lever. seed-44 m0's ejectee is a TRUE impostor caught
+        # on the contradiction channel (a clean lie, not a self-refuted alibi, and
+        # its voters carry no compounding prior), so it still rides the gate.
         seed, meeting_id = self._CANARY
         entry = self._meeting_entry(seed, meeting_id)
         ejected = entry.ejected_player_id
         assert ejected is not None
         assert roles_by_seed[seed][ejected] == "IMPOSTOR"
 
-        off = self._rederived_rows(
-            loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=False
-        )
-        on = self._rederived_rows(
-            loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=True
-        )
-
-        crossers_off = {v for v, row in off.items() if row.get(ejected, 0.0) >= _GATE}
-        crossers_on = {v for v, row in on.items() if row.get(ejected, 0.0) >= _GATE}
-        assert crossers_off  # the recorded catch really rode the gate
-        assert crossers_on >= crossers_off  # no voter lost the MUST-vote
-        for voter in off:
-            assert on[voter].get(ejected) == off[voter].get(ejected)
+        rows = self._rederived_rows(loader, seed, entry, roles_by_seed[seed])
+        crossers = {v for v, row in rows.items() if row.get(ejected, 0.0) >= _GATE}
+        assert crossers  # the genuine catch still rides the §4.6 gate

@@ -264,13 +264,16 @@ done
 # The resolved provider is echoed (dry-run + real path) and EXPORTED below, so it
 # is never silent and never falls through to build_default_client()'s fake default.
 #   featherless                    -> featherless (hosted flat-rate provider, Task
-#                                     14.7 baseline re-record; $0 provider-keyed
-#                                     cost, key required, the locked
+#                                     14.7 / 14.12 baseline re-record; $0
+#                                     provider-keyed cost, key required, the locked
 #                                     Qwen/Qwen3-32B model + qwen3_32b prompt set
 #                                     exported by the operator — see the hint in
-#                                     tasks/phase-14.md Task 14.7. The four 13.5
-#                                     substrate levers are unconditionally ON
-#                                     since Task 14.9; no flag export needed.)
+#                                     tasks/phase-14.md Task 14.12. All five
+#                                     substrate levers are unconditionally ON —
+#                                     the four Phase-13.5 levers since Task 14.9,
+#                                     the Task-14.10 evidence_quality_lift lever
+#                                     since the 14.12 close — so no flag export is
+#                                     needed.)
 DEFAULT_OLLAMA_HOST="localhost:11434"
 DEFAULT_OLLAMA_MODEL="qwen3.5:9b"
 # The locked Featherless baseline model (Task 14.6); mirrors
@@ -293,6 +296,50 @@ esac
 # model than the tournament records with.
 OLLAMA_HOST="${AILIBI_OLLAMA_HOST:-$DEFAULT_OLLAMA_HOST}"
 OLLAMA_MODEL="${AILIBI_LLM_MEETING_MODEL:-$DEFAULT_OLLAMA_MODEL}"
+
+# Seed-level parallelism (Task 14.12). The hosted Featherless plan permits 4
+# concurrent inference units and a 32B request consumes 2 of them, so TWO seed
+# workers saturate the plan without exceeding it. Each worker records exactly one
+# seed at a time and pulls the NEXT available seed from a shared queue (a
+# lock-guarded claim counter), so a fast seed's worker immediately starts the next
+# unclaimed seed rather than idling — the "next available seed in queue" model.
+# This is the DEFAULT for Featherless refreshes; local Ollama (a single-GPU model
+# server) and metered Anthropic stay sequential (1 worker), where seed
+# parallelism thrashes the GPU or multiplies the metered burst. Overridable for
+# any provider via AILIBI_REFRESH_WORKERS (a positive integer) — an operator who
+# knows their backend can absorb more (or wants a Featherless run pinned to 1 for
+# clean per-seed latency) sets it explicitly; the value is never silently
+# derived (AGENTS.md "no silent fallbacks").
+if [[ "$PROVIDER" == "featherless" ]]; then
+  REFRESH_WORKERS="${AILIBI_REFRESH_WORKERS:-2}"
+else
+  REFRESH_WORKERS="${AILIBI_REFRESH_WORKERS:-1}"
+fi
+if [[ ! "$REFRESH_WORKERS" =~ ^[0-9]+$ ]] || [[ "$((10#$REFRESH_WORKERS))" -lt 1 ]]; then
+  echo "Error: AILIBI_REFRESH_WORKERS must be a positive integer, got '$REFRESH_WORKERS'." >&2
+  exit 1
+fi
+REFRESH_WORKERS="$((10#$REFRESH_WORKERS))"
+
+# Per-seed crash-retry budget (Task 14.12). A game aborts on a TRANSPORT-level
+# error (httpx.ConnectError / read timeout) that the client's HTTP-status retry
+# (429/5xx) does not cover -- a transient blip that a re-run clears. Over a
+# multi-hour HOSTED Featherless run these are near-inevitable, so retry a crashed
+# seed a few times before failing loud. Local Ollama / metered Anthropic default
+# to 1 attempt (a crash there is a real, fail-fast error, not a network blip).
+# Overridable via AILIBI_SEED_MAX_ATTEMPTS. A recorded parse/schema failure is
+# NOT a crash (it lands as a FailedCallReplayEntry and the game continues), so
+# this budget only ever spends on genuine transport/unhandled errors.
+if [[ "$PROVIDER" == "featherless" ]]; then
+  SEED_MAX_ATTEMPTS="${AILIBI_SEED_MAX_ATTEMPTS:-4}"
+else
+  SEED_MAX_ATTEMPTS="${AILIBI_SEED_MAX_ATTEMPTS:-1}"
+fi
+if [[ ! "$SEED_MAX_ATTEMPTS" =~ ^[0-9]+$ ]] || [[ "$((10#$SEED_MAX_ATTEMPTS))" -lt 1 ]]; then
+  echo "Error: AILIBI_SEED_MAX_ATTEMPTS must be a positive integer, got '$SEED_MAX_ATTEMPTS'." >&2
+  exit 1
+fi
+SEED_MAX_ATTEMPTS="$((10#$SEED_MAX_ATTEMPTS))"
 
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] mode: $mode"
@@ -320,11 +367,18 @@ if [[ "$dry_run" -eq 1 ]]; then
   # Provenance the recorded replay self-describes (Task 14.7): the prompt set is
   # read from the ambient env by the game (AILIBI_PROMPT_SET) and the substrate
   # levers are stamped into each replay's game_over record + the MANIFEST flags
-  # column (the four Phase-13.5 levers are unconditionally ON since Task 14.9 —
-  # no env vars to export). Echo the config so the substrate is never silent
-  # (AGENTS.md "no silent fallbacks").
+  # column (all five levers are unconditionally ON — the four Phase-13.5 levers
+  # since Task 14.9, the Task-14.10 evidence_quality_lift lever since the 14.12
+  # close — so there are NO substrate env vars to export). Echo the config so the
+  # substrate is never silent (AGENTS.md "no silent fallbacks").
   echo "[dry-run] prompt set: ${AILIBI_PROMPT_SET:-(default qwen3_5_9b)}"
-  echo "[dry-run] substrate flags: all four 13.5 levers ON (unconditional since Task 14.9)"
+  echo "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 since Task 14.9, evidence_quality_lift since the 14.12 close)"
+  if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
+    echo "[dry-run] seed workers: $REFRESH_WORKERS parallel (each records one seed, then pulls the next available seed from the queue; Featherless: 2 units per 32B request → 4-unit cap)"
+  else
+    echo "[dry-run] seed workers: 1 (sequential)"
+  fi
+  echo "[dry-run] seed crash-retry: up to $SEED_MAX_ATTEMPTS attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)"
   echo "[dry-run] per seed, would run via a temp stage (then move the replay in and update that seed's manifest row):"
   echo "[dry-run]   AILIBI_LLM_PROVIDER=$PROVIDER uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players $NUM_PLAYERS --num-impostors $NUM_IMPOSTORS --tasks-per-crewmate $TASKS_PER_CREWMATE --force"
   if [[ "$mode" == "full" ]]; then
@@ -358,24 +412,25 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
     exit 1
   fi
   echo "Using Featherless API key prefix: ${FEATHERLESS_API_KEY:0:8}"
-  # Task 14.7: refresh_samples.sh records the CANONICAL baseline into
+  # Task 14.7 / 14.12: refresh_samples.sh records the CANONICAL baseline into
   # replays/samples/, and the only sanctioned Featherless baseline is the
-  # 14.6-locked tuple — prompt set qwen3_32b (the four 13.5 substrate levers
-  # are unconditionally ON since Task 14.9, so they need no export and cannot
-  # be mis-set). The game reads the prompt set from the ambient env; if it is
-  # unset the run would SILENTLY record the default 9B set and only reveal it
-  # in the MANIFEST afterward, wasting the whole (multi-hour) spend. Fail loud
-  # HERE, before any seed is staged (AGENTS.md "no silent fallbacks"). A future
-  # re-lock of the baseline updates REQUIRED_PROMPT_SET to match
-  # tasks/phase-14.md §14.6.
+  # 14.6-locked prompt set qwen3_32b. The substrate levers are ALL unconditionally
+  # ON (the four Phase-13.5 levers since Task 14.9, the Task-14.10
+  # evidence_quality_lift lever since the 14.12 close), so they need no export and
+  # cannot be mis-set — the guard only pins the prompt set. The game reads the
+  # prompt set from the ambient env; if it is unset the run would SILENTLY record
+  # the wrong substrate (the default 9B set) and only reveal it in the MANIFEST
+  # afterward, wasting the whole (multi-hour) spend. Fail loud HERE, before any
+  # seed is staged (AGENTS.md "no silent fallbacks"). A future re-lock of the
+  # baseline updates REQUIRED_PROMPT_SET to match tasks/phase-14.md §14.6.
   REQUIRED_PROMPT_SET="qwen3_32b"
   if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
-    echo "Error: a featherless refresh must run the 14.6-locked substrate (Task 14.7)." >&2
-    echo "       Export the locked tuple before re-running; nothing was staged:" >&2
+    echo "Error: a featherless refresh must run the locked substrate (Task 14.6)." >&2
+    echo "       Export the locked prompt set before re-running; nothing was staged:" >&2
     echo "  - AILIBI_PROMPT_SET must be '$REQUIRED_PROMPT_SET' (got '${AILIBI_PROMPT_SET:-<unset>}')" >&2
     exit 1
   fi
-  echo "Locked 14.7 substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (13.5 levers unconditionally ON)."
+  echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (all five levers unconditionally ON)."
 else
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2
@@ -447,72 +502,251 @@ echo "Attributing no-meeting seeds to model: $active_model"
 # unconditionally ON since Task 14.9) are stamped into each replay's game_over
 # record + the MANIFEST flags column; this script does not set them.
 echo "Prompt set: ${AILIBI_PROMPT_SET:-(default qwen3_5_9b)}"
-echo "Substrate flags: all four 13.5 levers ON (unconditional since Task 14.9)"
+echo "Substrate flags: all five levers ON (unconditional; 13.5 since Task 14.9, evidence_quality_lift since the 14.12 close)"
 
 # Stage each per-seed run in a temp dir on the same filesystem as the sample dir
 # so the replay can be moved into place atomically, and only after the run
 # succeeds. A mid-write provider/schema failure then leaves the live
 # replay-seed-N.jsonl and its MANIFEST row untouched (the partial write hit the
-# stage, which set -e + the trap discard) -- exactly the stale/partial-sample
-# state this workflow exists to prevent. It also keeps replays/samples/ to just
-# replay JSONLs: run_balance_eval writes a sibling <stem>.audit.jsonl that stays
-# behind in the stage.
+# stage, which the trap discards) -- exactly the stale/partial-sample state this
+# workflow exists to prevent. Each seed gets its OWN sub-stage (mktemp -d inside
+# $stage_dir), so parallel workers never collide on run_tournament's per-run
+# tournament-eval-report.json / <stem>.audit.jsonl sidecars.
 stage_dir="$(mktemp -d "$(dirname "$SAMPLE_DIR")/.ailibi-refresh-stage-XXXXXX")"
 trap 'rm -rf "$stage_dir"' EXIT
 
 IFS=',' read -ra seed_list <<<"$seeds_csv"
-# Progress tracker (cosmetic, terminal-only). A local Ollama --full run is slow
-# (tens of minutes to hours), so stream a per-seed line: count, per-seed and
-# cumulative wall-clock, a rough ETA, and a running meeting tally -- meeting_rate
-# is the 7.8 gate, so seeing it converge live is the point. This reads only the
-# just-written replay and prints; it never touches the recorded replay, the
-# manifest, or determinism. The meeting probe is guarded in an `if` so a
-# no-meeting seed's non-zero grep cannot trip `set -e` and abort the refresh.
 total_seeds="${#seed_list[@]}"
-seed_idx=0
-meetings_seen=0
 refresh_start="$(date +%s)"
-for seed in "${seed_list[@]}"; do
-  seed_idx=$((seed_idx + 1))
+
+# Shared cross-worker state (Task 14.12 parallel seed workers). Files on the
+# stage filesystem, mutated only under a portable mkdir-based lock so two workers
+# never corrupt MANIFEST.md (a read-modify-write) or garble the progress stream.
+# .next_idx is the claim counter (the queue cursor); .failed is the fail-loud
+# sentinel; .state/{completed,meetings} back the live tally + ETA.
+mkdir -p "$stage_dir/.state"
+printf '0' >"$stage_dir/.next_idx"
+printf '0' >"$stage_dir/.state/completed"
+printf '0' >"$stage_dir/.state/meetings"
+_lockdir="$stage_dir/.lock"
+# Portable mkdir mutex with DEAD-OWNER detection (PR #218 Codex review). A mkdir
+# lock is not auto-released when its holder dies, so a worker SIGKILLed/OOMed
+# mid-critical-section (e.g. during the lock-held MANIFEST update) would leave the
+# lock held forever: every other worker would spin here, and the parent -- blocked
+# in `wait` on those stuck workers -- would HANG instead of failing loud. Guard
+# it: the holder records its PID in the lock; a waiter that finds the lock owned
+# by a process that no longer exists marks the refresh failed (the half-written
+# MANIFEST is unsafe to canonicalize) and gives up, so the pool tears down and the
+# `.failed` check fails loud. A waiter also bails the instant any worker flags a
+# failure. Returns non-zero when the lock was NOT acquired -- callers must not
+# enter the critical section on a non-zero return.
+_acquire_lock() {
+  local owner
+  # Give up the moment any worker has flagged a failure -- even if the lock is
+  # free right now -- so a doomed baseline stops touching MANIFEST.md.
+  [[ -e "$stage_dir/.failed" ]] && return 1
+  while ! mkdir "$_lockdir" 2>/dev/null; do
+    if [[ -e "$stage_dir/.failed" ]]; then
+      return 1
+    fi
+    owner="$(cat "$_lockdir/owner" 2>/dev/null || true)"
+    if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then
+      echo "ERROR: refresh lock owner (pid $owner) died holding the lock" \
+        "(killed/crashed mid critical section); the baseline is incomplete." >&2
+      touch "$stage_dir/.failed"
+      return 1
+    fi
+    sleep 0.1
+  done
+  printf '%s' "$BASHPID" >"$_lockdir/owner"
+  return 0
+}
+# rm -rf (not rmdir): the lock dir now holds the owner-pid file.
+_release_lock() { rm -rf "$_lockdir" 2>/dev/null || true; }
+
+# Atomically claim the next unclaimed seed (the queue). Echoes the seed, or
+# nothing when the queue is drained. Lock-guarded so no seed is double-recorded
+# (double spend) and none is skipped.
+claim_next_seed() {
+  local idx
+  # A non-zero acquire (a dead lock owner / an already-flagged failure) echoes no
+  # seed, so the worker drains as if the queue were empty and the .failed check
+  # fails loud.
+  _acquire_lock || return 1
+  idx="$(cat "$stage_dir/.next_idx")"
+  if [[ "$idx" -ge "$total_seeds" ]]; then
+    _release_lock
+    return 0
+  fi
+  printf '%s' "$((idx + 1))" >"$stage_dir/.next_idx"
+  _release_lock
+  printf '%s' "${seed_list[$idx]}"
+}
+
+# Record ONE seed end to end: stage the run, atomically move the replay into the
+# sample dir, then (serialized) sync its MANIFEST row + the shared tally + a
+# progress line. Any failure touches .failed and returns non-zero so the pool
+# stops claiming and the script exits non-zero -- the baseline must be COMPLETE or
+# not committed (AGENTS.md "no silent fallbacks"; the 4.17 partial-sample guard).
+# Always invoked in a `||`/`if` context, so set -e is disabled inside it and the
+# explicit checks below are what gate each step.
+record_one_seed() {
+  local seed="$1" worker="$2"
+  local seed_stage seed_start now seed_secs elapsed eta rate completed meetings seed_meeting
+  local attempt max_attempts
+  max_attempts="$SEED_MAX_ATTEMPTS"
   seed_start="$(date +%s)"
-  echo "--- [$seed_idx/$total_seeds] Refreshing seed $seed ---"
-  uv run python "$REPO_ROOT/scripts/run_tournament.py" \
-    --start-seed "$seed" \
-    --num-games 1 \
-    --output-dir "$stage_dir" \
-    --num-players "$NUM_PLAYERS" \
-    --num-impostors "$NUM_IMPOSTORS" \
-    --tasks-per-crewmate "$TASKS_PER_CREWMATE" \
-    --force
-  # Atomic replace on success, THEN sync this seed's manifest row, so the live
-  # sample and its provenance never drift. Per-seed (rather than one update
-  # after the loop) keeps earlier seeds consistent if a later one fails.
-  mv -f "$stage_dir/replay-seed-$seed.jsonl" "$SAMPLE_DIR/replay-seed-$seed.jsonl"
-  uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
+  echo "--- [worker $worker] recording seed $seed ---"
+  # Guard the stage mktemp explicitly (PR #218 Codex review): record_one_seed runs
+  # with set -e disabled (it is called in a `||` context), so a failed assignment
+  # would otherwise leave seed_stage EMPTY and run_tournament would spend provider
+  # calls with a bogus --output-dir instead of failing before spend. Mark the seed
+  # failed and bail BEFORE the tournament runs.
+  if ! seed_stage="$(mktemp -d "$stage_dir/seed-${seed}-XXXXXX")"; then
+    echo "ERROR: seed $seed stage mktemp failed (worker $worker; staging fs out" \
+      "of space/inodes?); nothing was spent." >&2
+    touch "$stage_dir/.failed"
+    return 1
+  fi
+  # Bounded retry on a run_tournament CRASH (non-zero exit): the recorded LLM
+  # baseline is a multi-hour hosted run, and a game aborts on a TRANSPORT-level
+  # error (httpx.ConnectError / read timeout) that the client's HTTP-status retry
+  # (429/5xx) does not cover -- a transient network blip that a re-run clears.
+  # A recorded parse/schema failure is NOT a crash (it lands as a
+  # FailedCallReplayEntry and the game continues), so only genuine transport /
+  # unhandled errors reach here. A PERSISTENT failure (bad key, endpoint down,
+  # reproducible crash) exhausts the attempts and fails loud -- resilience to
+  # blips, never a silent paper-over (AGENTS.md). --force overwrites the partial
+  # stage replay each attempt. Tunable via AILIBI_SEED_MAX_ATTEMPTS.
+  attempt=0
+  while :; do
+    attempt=$((attempt + 1))
+    if uv run python "$REPO_ROOT/scripts/run_tournament.py" \
+      --start-seed "$seed" \
+      --num-games 1 \
+      --output-dir "$seed_stage" \
+      --num-players "$NUM_PLAYERS" \
+      --num-impostors "$NUM_IMPOSTORS" \
+      --tasks-per-crewmate "$TASKS_PER_CREWMATE" \
+      --force; then
+      break
+    fi
+    if [[ "$attempt" -ge "$max_attempts" ]]; then
+      echo "ERROR: seed $seed run_tournament failed after $attempt attempts (worker $worker)." >&2
+      touch "$stage_dir/.failed"
+      rm -rf "$seed_stage"
+      return 1
+    fi
+    echo "WARN: seed $seed attempt $attempt/$max_attempts failed (worker $worker); retrying after $((attempt * 15))s (transient provider/network error)." >&2
+    sleep "$((attempt * 15))"
+  done
+  # Atomic replace on success so the live sample never drifts to a partial write.
+  if ! mv -f "$seed_stage/replay-seed-$seed.jsonl" \
+    "$SAMPLE_DIR/replay-seed-$seed.jsonl"; then
+    echo "ERROR: seed $seed replay move failed (worker $worker)." >&2
+    touch "$stage_dir/.failed"
+    rm -rf "$seed_stage"
+    return 1
+  fi
+  rm -rf "$seed_stage"
+  # `meeting_id` appears only in a meeting record, so this guarded grep flags
+  # whether the seed reached a meeting without parsing it.
+  if grep -q 'meeting_id' "$SAMPLE_DIR/replay-seed-$seed.jsonl"; then
+    seed_meeting="yes"
+  else
+    seed_meeting="no "
+  fi
+  # Serialize the MANIFEST update + tally bump + progress print: MANIFEST.md is a
+  # read-modify-write, and interleaved printf from two workers would garble lines.
+  # A non-zero acquire (dead lock owner / already-flagged failure) has set .failed
+  # already; the seed's replay is on disk but its MANIFEST row is not synced, and
+  # the baseline is rejected as INCOMPLETE below.
+  if ! _acquire_lock; then
+    echo "ERROR: seed $seed could not acquire the manifest lock (worker $worker)." >&2
+    return 1
+  fi
+  if ! uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
     --seeds "$seed" \
     --git-sha "$git_sha" \
     --refreshed-at "$refreshed_at" \
     --model "$active_model" \
     --sample-dir "$SAMPLE_DIR" \
-    --manifest "$MANIFEST"
-  # `meeting_id` appears only in a meeting record, so this guarded grep of the
-  # just-written replay flags whether the seed reached a meeting without parsing
-  # it. The `if` consumes grep's non-zero exit, keeping it `set -e`-safe.
-  if grep -q 'meeting_id' "$SAMPLE_DIR/replay-seed-$seed.jsonl"; then
-    meetings_seen=$((meetings_seen + 1))
-    seed_meeting="yes"
-  else
-    seed_meeting="no "
+    --manifest "$MANIFEST"; then
+    _release_lock
+    echo "ERROR: seed $seed manifest update failed (worker $worker)." >&2
+    touch "$stage_dir/.failed"
+    return 1
+  fi
+  completed="$(($(cat "$stage_dir/.state/completed") + 1))"
+  printf '%s' "$completed" >"$stage_dir/.state/completed"
+  meetings="$(cat "$stage_dir/.state/meetings")"
+  if [[ "$seed_meeting" == "yes" ]]; then
+    meetings=$((meetings + 1))
+    printf '%s' "$meetings" >"$stage_dir/.state/meetings"
   fi
   now="$(date +%s)"
   seed_secs=$((now - seed_start))
-  elapsed_secs=$((now - refresh_start))
-  rate_pct=$((meetings_seen * 100 / seed_idx))
-  eta_secs=$((elapsed_secs * (total_seeds - seed_idx) / seed_idx))
-  printf '    seed %s done in %3ds | meeting: %s | meetings %d/%d (%d%%) | elapsed %dm%02ds | ETA ~%dm\n' \
-    "$seed" "$seed_secs" "$seed_meeting" "$meetings_seen" "$seed_idx" "$rate_pct" \
-    "$((elapsed_secs / 60))" "$((elapsed_secs % 60))" "$((eta_secs / 60))"
-done
+  elapsed=$((now - refresh_start))
+  rate=$((meetings * 100 / completed))
+  # Throughput-based ETA: elapsed/completed already folds in the worker count, so
+  # this stays honest whether 1 or N workers are draining the queue.
+  eta=$((elapsed * (total_seeds - completed) / completed))
+  printf '    seed %s done in %3ds | meeting: %s | meetings %d/%d (%d%%) | done %d/%d | elapsed %dm%02ds | ETA ~%dm\n' \
+    "$seed" "$seed_secs" "$seed_meeting" "$meetings" "$completed" "$rate" \
+    "$completed" "$total_seeds" "$((elapsed / 60))" "$((elapsed % 60))" "$((eta / 60))"
+  _release_lock
+  return 0
+}
+
+# One worker: pull the next seed from the queue and record it until the queue is
+# drained or any worker has flagged a failure. Returns 0 even on a recorded
+# failure -- the .failed sentinel (checked after the pool joins) is the fail-loud
+# signal, so the pool tears down cleanly rather than orphaning in-flight workers.
+run_worker() {
+  local worker="$1" seed
+  while :; do
+    [[ -e "$stage_dir/.failed" ]] && return 0
+    seed="$(claim_next_seed)"
+    [[ -z "$seed" ]] && return 0
+    record_one_seed "$seed" "$worker" || return 0
+  done
+}
+
+if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
+  echo "Recording $total_seeds seeds with $REFRESH_WORKERS parallel workers" \
+    "(each records one seed, then pulls the next available seed from the queue)."
+  worker_pids=()
+  for ((w = 1; w <= REFRESH_WORKERS; w++)); do
+    run_worker "$w" &
+    worker_pids+=("$!")
+  done
+  # Join every worker and record ANY non-zero exit as a refresh failure (PR #218
+  # Codex review): a worker killed or crashing OUTSIDE record_one_seed's handled
+  # path (SIGKILL / OOM after claiming a seed) never writes .failed, so without
+  # this a multi-hour baseline could silently canonicalize a mixed old/new set
+  # (the skipped seed keeps its stale replay + MANIFEST row). We still wait on the
+  # rest of the pool (never `set -e`-abort mid-join), then the .failed check below
+  # fails loud. A normally-finishing worker returns 0 (record_one_seed handles its
+  # own failures via .failed), so this only fires on an abnormal exit.
+  for pid in "${worker_pids[@]}"; do
+    if ! wait "$pid"; then
+      touch "$stage_dir/.failed"
+      echo "ERROR: refresh worker (pid $pid) exited non-zero (killed/crashed" \
+        "outside a seed's handled failure path); the baseline is incomplete." >&2
+    fi
+  done
+else
+  run_worker 1
+fi
+
+if [[ -e "$stage_dir/.failed" ]]; then
+  echo "Error: a seed failed during the refresh; the baseline is INCOMPLETE and must NOT be committed." >&2
+  echo "       Already-recorded seeds + their MANIFEST rows are preserved on disk; fix the failure and re-run." >&2
+  exit 1
+fi
+
+# Hydrate the summary from the shared tally the workers accumulated.
+meetings_seen="$(cat "$stage_dir/.state/meetings")"
 
 # Full mode = the canonical 0-49 set, now all regenerated in place. Reconcile the
 # directory to exactly those canonical files and prune any orphaned manifest

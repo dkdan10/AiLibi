@@ -12,7 +12,6 @@ in Phase 3 (Task 3.3).
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
@@ -144,41 +143,35 @@ never the prior. Applied only to the transient render channels
 spread); the persistent absorb is untouched, so the across-meeting 9.8
 accumulator stays the allowed channel."""
 
-# Task 14.10 evidence-quality lift lever (the 13.5 default-OFF pattern).
-# Resolved like ``AILIBI_LLM_PROVIDER`` (``llm/provider.py``): OFF by default,
-# so a build that never sets it folds BYTE-IDENTICALLY to pre-task HEAD and
-# the committed baseline-1 bytes keep verifying. Registered in
-# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` so recordings stamp it
-# (the 14.7 provenance machinery); the 14.12 baseline-2 re-record runs it ON.
+# Task 14.10 evidence-quality lift lever — UNCONDITIONAL since the Task-14.12
+# phase close (PR follow-up). The lever was adopted by the baseline-2 re-record,
+# so — mirroring the Task-14.9 move for the four Phase-13.5 levers — it is now the
+# default substrate rather than an env-gated toggle: the certain-guilt exclusion
+# and self-refuted-alibi downgrade always apply. This is byte-identical to the
+# baseline-2 recording (which ran the lever ON), and it lets the committed set
+# reconstruct/serve under a BARE environment (no AILIBI_* export). The lever is
+# stamped unconditionally ON via ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``;
+# a stamp recording it OFF is a legacy artifact that fails loud (no cross-substrate
+# replay). ``ENV_EVIDENCE_QUALITY_LIFT`` is retained (no longer read) for the stamp
+# key's naming provenance and backward-compatible imports.
 ENV_EVIDENCE_QUALITY_LIFT: Final[str] = "AILIBI_EVIDENCE_QUALITY_LIFT"
-_EVIDENCE_QUALITY_LIFT_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 
 def evidence_quality_lift_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 14.10 evidence-quality lift lever is ON.
+    """Whether the Task 14.10 evidence-quality lift lever is ON — now always True.
 
-    Reads :data:`ENV_EVIDENCE_QUALITY_LIFT` from ``env`` (defaulting to the
-    real process environment), mirroring the retired 13.5 resolvers and
-    :func:`agents.strategic.prompts.loader.resolve_prompt_set`. Default OFF:
-    an unset / empty / unrecognised value is ``False`` so the belief fold is
-    byte-identical to pre-task behavior and the committed baseline-1 bytes
-    keep verifying (the re-record under the lever is Task 14.12). Accepts
-    ``1/true/yes/on`` (case-insensitive). The ``env`` argument lets tests
-    toggle the lever deterministically without mutating ``os.environ``.
-
-    ON gates the audit §3a bounds inside the fold: the
+    Retired to UNCONDITIONAL at the Task-14.12 close (the 14.9 move for the 13.5
+    levers, applied to this lever after baseline 2 adopted it): the
     :data:`CONTRADICTION_RENDER_CEIL` certain-guilt exclusion and the
-    self-refuted-alibi WEAK downgrade in :func:`apply_contradiction_rule`,
-    plus the same ceiling on the ``pre_vote`` testimony spread in
-    :func:`apply_meeting_evidence_rules`.
+    self-refuted-alibi WEAK downgrade in :func:`apply_contradiction_rule`, plus
+    the ceiling on the ``pre_vote`` testimony spread in
+    :func:`apply_meeting_evidence_rules`, are the default substrate. The ``env``
+    argument is accepted and ignored (retained so the belief-fold call sites and
+    the substrate stamp read one source of truth without a signature churn).
     """
 
-    environment = env if env is not None else os.environ
-    return environment.get(ENV_EVIDENCE_QUALITY_LIFT, "").strip().lower() in (
-        _EVIDENCE_QUALITY_LIFT_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 ACCUSATION_SUSPICION_DELTA: Final[float] = 0.05

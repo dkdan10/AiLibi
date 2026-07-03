@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import pytest
 
-from agents.memory.beliefs import ENV_EVIDENCE_QUALITY_LIFT
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
 
 
@@ -38,18 +37,7 @@ def _force_fake_llm_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_PROVIDER, PROVIDER_FAKE)
 
 
-@pytest.fixture(autouse=True)
-def _clear_evidence_quality_lift_lever(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin the Task-14.10 belief-fold lever to its default OFF for every test.
-
-    The same hermeticity guard as ``_force_fake_llm_provider``: the suite's
-    committed-bytes pins and fold-arithmetic expectations are recorded under
-    the default-OFF substrate, so a shell that exports
-    ``AILIBI_EVIDENCE_QUALITY_LIFT=1`` (the Task-14.12 recording
-    configuration) must not silently flip the fold under them. Tests that
-    exercise the lever ON set the variable explicitly (``monkeypatch.setenv``
-    after this fixture, or an explicit ``env=`` mapping into the resolver),
-    so they are unaffected.
-    """
-
-    monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
+# The Task-14.10 evidence-quality lift lever is UNCONDITIONAL since the Task-14.12
+# close (the 14.9 move, applied after baseline 2 adopted it), so there is no env
+# gate to clear for hermeticity — the belief fold always applies the bounds and
+# the committed baseline-2 pins are recorded under that (only) substrate.

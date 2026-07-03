@@ -16,6 +16,21 @@ The authoritative task contract is copied below from tasks/phase-14.md. Follow i
 **Section refs:** tasks/phase-14.md §14.7 (the proven smoke → re-record → validity-gate shape + the landed stamp infra); audits/audit-2026-07-01-phase-14-baseline1-characterization.md (the targets baseline 2 must beat); scripts/refresh_samples.sh; tests/meetings/test_manager.py (the railroad pin to RESTORE to a tripwire)
 **Complexity:** Integration
 
+**STATUS (2026-07-03) — COMPLETE. Phase CLOSED on baseline 2.** Smoke (5 seeds @ 9p2i, lever ON + v4) cleared
+the gate (parse 100%, zero truncation, conversion not collapsed, zero railroad) → operator GO. Both sets
+re-recorded in ONE atomic PR on the locked tuple + `qwen3_32b.v4` + the 14.10 lever ON (2 parallel Featherless
+workers, measured ~3.85h); MANIFESTs/reports/fixtures regenerated; the `flags` stamp records the lever;
+byte-identical BARE reconstruction holds; HARD validity gate PASS both sets. The railroad TRIPWIRE is
+RESTORED (0 crew rows at 1.0 from ≥2 same-meeting flags). Per-defect deltas vs baseline 1: ejection accuracy
+0.566→0.525 (flat — the zero-flag channel rose 22→31, a Phase-15 target; flag-driven mis-ejects fell 31→25),
+self-contradicted alibis 10.2%→2.9%, guard-normalized ballots 47→10, conf-1.0 accusations 64→27,
+template-rationale share 32.9%→14.8%, missed-deadline 23→6. R-gate (railroad-discounted anchor): R1 25→24
+(held), genuine-class conversion 0.667→0.625 (no over-damping), impostor win 0.32→0.40 (vs 9B 3/50 & 0.84).
+4p1i ejection accuracy 0.788→0.923. Close audit: `audits/audit-phase-14-close.md`. Post-close (Codex PR
+review): the 14.10 lever was made UNCONDITIONAL in this PR (its `AILIBI_EVIDENCE_QUALITY_LIFT` env gate
+retired — the 14.9 move), so the committed set reconstructs and serves BARE; baseline 2 stays byte-identical
+because it was recorded lever-ON.
+
 Operator-run spend/time gate, and the PHASE CLOSE. Re-record BOTH committed sets (50 × 4p1i + 50 × 9p2i) on
 the locked tuple + the v4 prompt set + the 14.10 evidence-quality lever ON (stamped; the four 13.5 levers are
 unconditional after 14.9), in ONE atomic PR, exactly the 14.7 shape: smoke first (3–5 seeds at 9p2i; parse

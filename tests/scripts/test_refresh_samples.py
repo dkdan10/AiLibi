@@ -181,9 +181,10 @@ def test_dry_run_featherless_provider_echoes_substrate() -> None:
     # Task 14.7: AILIBI_LLM_PROVIDER=featherless is an accepted provider; the
     # dry-run echoes it, its FEATHERLESS_API_KEY preflight, the prompt set, and
     # the substrate provenance so the locked tuple is never silent (AGENTS.md
-    # "no silent fallbacks"). The four 13.5 levers are unconditionally ON since
-    # Task 14.9, so no flag env vars are exported and the echo states the
-    # unconditional substrate.
+    # "no silent fallbacks"). All five levers are unconditionally ON (the four
+    # 13.5 levers since Task 14.9, the Task-14.10 evidence_quality_lift lever
+    # since the 14.12 close), so no substrate env vars are exported and the echo
+    # states the unconditional substrate.
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
@@ -195,8 +196,111 @@ def test_dry_run_featherless_provider_echoes_substrate() -> None:
     assert "[dry-run] preflight: would require FEATHERLESS_API_KEY" in proc.stdout
     assert "[dry-run] prompt set: qwen3_32b" in proc.stdout
     assert (
-        "[dry-run] substrate flags: all four 13.5 levers ON "
-        "(unconditional since Task 14.9)" in proc.stdout
+        "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 "
+        "since Task 14.9, evidence_quality_lift since the 14.12 close)" in proc.stdout
+    )
+
+
+def test_dry_run_featherless_defaults_to_two_seed_workers() -> None:
+    # Task 14.12: a Featherless refresh records seeds with TWO parallel workers by
+    # default (the hosted plan permits 4 concurrent units and a 32B request uses
+    # 2, so 2 workers saturate it), each pulling the next available seed from the
+    # queue. The dry-run surfaces the worker count so the parallelism is never
+    # silent (AGENTS.md "no silent fallbacks").
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+    )
+    proc = _run("--full", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed workers: 2 parallel" in proc.stdout
+    assert "pulls the next available seed from the queue" in proc.stdout
+
+
+def test_dry_run_worker_count_is_overridable() -> None:
+    # An operator who knows their backend can absorb more (or wants a Featherless
+    # run pinned to 1 for clean per-seed latency) overrides AILIBI_REFRESH_WORKERS.
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_REFRESH_WORKERS="3",
+    )
+    proc = _run("--seeds", "0,1,2", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed workers: 3 parallel" in proc.stdout
+
+    env["AILIBI_REFRESH_WORKERS"] = "1"
+    proc = _run("--seeds", "0,1,2", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed workers: 1 (sequential)" in proc.stdout
+
+
+def test_dry_run_non_featherless_is_sequential_by_default() -> None:
+    # Local Ollama (single GPU) and metered Anthropic stay sequential (1 worker):
+    # seed parallelism there thrashes the GPU or multiplies the metered burst. The
+    # 2-worker default is scoped to the hosted Featherless plan.
+    for provider in ("ollama", "anthropic"):
+        env = dict(_clean_env(), AILIBI_LLM_PROVIDER=provider)
+        proc = _run("--seeds", "0,1", "--dry-run", env=env)
+        assert proc.returncode == 0, provider
+        assert "[dry-run] seed workers: 1 (sequential)" in proc.stdout, provider
+
+
+def test_dry_run_seed_crash_retry_scoped_to_featherless() -> None:
+    # Task 14.12: a multi-hour hosted Featherless run retries a seed that CRASHES
+    # on a transport error (httpx.ConnectError / timeout the client's 429/5xx
+    # retry does not cover) up to 4 attempts; local Ollama / Anthropic default to
+    # 1 (a crash there is a real, fail-fast error, not a network blip). Overridable
+    # via AILIBI_SEED_MAX_ATTEMPTS. The dry-run surfaces the budget (never silent).
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed crash-retry: up to 4 attempt(s)" in proc.stdout
+
+    env["AILIBI_SEED_MAX_ATTEMPTS"] = "6"
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed crash-retry: up to 6 attempt(s)" in proc.stdout
+
+    env2 = dict(_clean_env(), AILIBI_LLM_PROVIDER="ollama")
+    proc = _run("--seeds", "0", "--dry-run", env=env2)
+    assert proc.returncode == 0
+    assert "[dry-run] seed crash-retry: up to 1 attempt(s)" in proc.stdout
+
+
+def test_invalid_seed_max_attempts_fails_loud() -> None:
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_SEED_MAX_ATTEMPTS="lots",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode != 0
+    assert "AILIBI_SEED_MAX_ATTEMPTS must be a positive integer" in (
+        proc.stdout + proc.stderr
+    )
+
+
+def test_invalid_worker_count_fails_loud() -> None:
+    # A garbage AILIBI_REFRESH_WORKERS must fail loud, not silently fall back to a
+    # default -- a mis-set worker count could over-subscribe the plan.
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_REFRESH_WORKERS="two",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode != 0
+    assert "AILIBI_REFRESH_WORKERS must be a positive integer" in (
+        proc.stdout + proc.stderr
     )
 
 
@@ -212,13 +316,13 @@ def test_featherless_preflight_requires_api_key_before_spend() -> None:
 
 
 def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
-    # Task 14.7 (PR #209 review): a real featherless refresh WITH a key but
-    # WITHOUT the 14.6-locked prompt set (qwen3_32b) must fail loud at
-    # preflight, before any seed is staged -- so an operator cannot spend a
-    # multi-hour run recording the wrong (default 9B) prompt set and only learn
-    # afterward from the MANIFEST. The four retired 13.5 flag requirements are
-    # gone (Task 14.9: those env vars no longer exist, and a guard demanding
-    # them would fail every refresh); the prompt-set requirement stays.
+    # Task 14.7 / 14.12 (PR #209 review): a real featherless refresh WITH a key
+    # but WITHOUT the locked prompt set (qwen3_32b) must fail loud at preflight,
+    # before any seed is staged -- so an operator cannot spend a multi-hour run
+    # recording the wrong (default 9B) set and only learn afterward from the
+    # MANIFEST. The substrate LEVERS need no env: all five are unconditionally ON
+    # (the four 13.5 levers since Task 14.9, the Task-14.10 evidence_quality_lift
+    # lever since the 14.12 close), so the guard only pins the prompt set.
     # _clean_env strips every AILIBI_* var, so the locked prompt set is absent
     # here; the dummy key clears the key check so the substrate guard (which
     # follows it) is what fires.
@@ -228,9 +332,27 @@ def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
     proc = _run("--seeds", "0", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "14.6-locked substrate" in out
+    assert "locked substrate" in out
     assert "AILIBI_PROMPT_SET must be 'qwen3_32b'" in out
+    # No substrate-lever env is required any more (they are all unconditional).
+    assert "AILIBI_EVIDENCE_QUALITY_LIFT" not in out
     assert "AILIBI_TESTIMONY_AS_CONTENT" not in out
+
+
+def test_featherless_refresh_accepts_locked_substrate() -> None:
+    # Task 14.12: with the locked prompt set, the substrate guard passes -- no
+    # lever env needed (all five levers are unconditional). Use --dry-run so the
+    # test never spends.
+    env = _clean_env()
+    env["AILIBI_LLM_PROVIDER"] = "featherless"
+    env["AILIBI_PROMPT_SET"] = "qwen3_32b"
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] prompt set: qwen3_32b" in proc.stdout
+    assert (
+        "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 "
+        "since Task 14.9, evidence_quality_lift since the 14.12 close)" in proc.stdout
+    )
 
 
 def test_unknown_provider_lists_featherless_in_error() -> None:

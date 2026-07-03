@@ -22,15 +22,21 @@ from api.replay_loader import ReplayLoader
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
 _REAL_SAMPLES = _REPO_ROOT / "replays" / "samples" / "4p1i"
+_REAL_9P2I = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _VERIFY_SH = _REPO_ROOT / "scripts" / "verify_samples.sh"
 _SEED = 0  # smallest committed sample: fast to reconstruct
 _MEETING_SEED = 22  # a committed sample that contains a meeting
 
 # The canonical samples were re-recorded on the Featherless / Qwen/Qwen3-32B
-# substrate (prompt set qwen3_32b v3) with all four Phase-13.5 levers ON — the
-# unconditional default since Task 14.9, so reconstructing the committed bytes
-# needs NO flag export: verification runs under a BARE environment (the
-# Task-14.9 acceptance bar).
+# substrate (prompt set qwen3_32b v4, Task 14.12 baseline 2) with ALL FIVE
+# levers unconditionally ON: the four Phase-13.5 levers (the default since Task
+# 14.9) plus the Task-14.10 evidence_quality_lift lever (stamped into game_over),
+# whose env gate was retired at the Task-14.12 close. Because every lever is now
+# env-independent, reconstruction matches the stamp under a BARE environment —
+# no AILIBI_* export — so these reconstruction tests need no lever fixture (that
+# is the whole point of the retirement; PR #218 Codex review). The wrapper test
+# below drives scripts/verify_samples.sh under the ambient (bare) env, pinning
+# that the MANIFEST-documented `bash scripts/verify_samples.sh` works clean.
 
 
 def _copy_seed(dst_dir: Path, seed: int) -> Path:
@@ -135,9 +141,9 @@ def test_verify_sh_is_executable() -> None:
 def test_verify_sh_detects_corruption(tmp_path: Path) -> None:
     path = _copy_seed(tmp_path, _SEED)
     tick = _corrupt_first_tick_hash(path)
-    # The committed bytes are flag-ON, so the shell wrapper's reconstruction only
-    # matches the recorded substrate when the four levers are exported to the
-    # subprocess env (this test's own env is bare under CI).
+    # An explicit SAMPLE_DIR arg verifies just that set. Every lever is
+    # unconditional (Task-14.12 close), so reconstruction matches the recorded
+    # substrate under the bare subprocess env — no lever export needed.
     proc = subprocess.run(
         ["bash", str(_VERIFY_SH), str(tmp_path)],
         cwd=_REPO_ROOT,
@@ -147,6 +153,71 @@ def test_verify_sh_detects_corruption(tmp_path: Path) -> None:
     )
     assert proc.returncode == 1
     assert f"tick {tick}" in proc.stdout
+
+
+@pytest.mark.skipif(
+    shutil.which("uv") is None or shutil.which("bash") is None,
+    reason="needs uv + bash for the end-to-end shell wrapper",
+)
+def test_verify_sh_no_arg_walks_every_committed_set(tmp_path: Path) -> None:
+    # The documented bare gate `bash scripts/verify_samples.sh` (no argument) must
+    # verify EVERY committed set, not just the old 4p1i default — else a stale or
+    # corrupted 9p2i replay slips through (PR #218 Codex review). Point
+    # AILIBI_SAMPLES_ROOT at a tmp root holding one copied seed (+ its roster
+    # sidecar) from each committed set and assert both are walked and pass clean.
+    root = tmp_path / "samples"
+    for name, src in (("4p1i", _REAL_SAMPLES), ("9p2i", _REAL_9P2I)):
+        dst = root / name
+        dst.mkdir(parents=True)
+        (dst / f"replay-seed-{_SEED}.jsonl").write_bytes(
+            (src / f"replay-seed-{_SEED}.jsonl").read_bytes()
+        )
+        # 9p2i reconstruction reads the roster sidecar; copy it so the seed
+        # reconstructs (its absence is a divergence, not a wrapper concern).
+        (dst / "roster.json").write_bytes((src / "roster.json").read_bytes())
+
+    proc = subprocess.run(
+        ["bash", str(_VERIFY_SH)],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "AILIBI_SAMPLES_ROOT": str(root)},
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    # Both sets are walked (a header each) and both verify clean.
+    assert "4p1i" in proc.stdout
+    assert "9p2i" in proc.stdout
+    assert proc.stdout.count("samples verified clean") == 2
+
+
+def test_verify_sh_no_arg_fails_when_a_set_drifts(tmp_path: Path) -> None:
+    # The aggregate exit status must be non-zero if ANY committed set drifts, so
+    # the no-arg gate cannot pass while one set is corrupt.
+    if shutil.which("uv") is None or shutil.which("bash") is None:
+        pytest.skip("needs uv + bash for the end-to-end shell wrapper")
+    root = tmp_path / "samples"
+    # Set A: clean. Set B: one corrupted hash.
+    clean = root / "4p1i"
+    clean.mkdir(parents=True)
+    (clean / f"replay-seed-{_SEED}.jsonl").write_bytes(
+        (_REAL_SAMPLES / f"replay-seed-{_SEED}.jsonl").read_bytes()
+    )
+    (clean / "roster.json").write_bytes((_REAL_SAMPLES / "roster.json").read_bytes())
+    drift = root / "9p2i"
+    drift.mkdir(parents=True)
+    drift_path = drift / f"replay-seed-{_SEED}.jsonl"
+    drift_path.write_bytes((_REAL_9P2I / f"replay-seed-{_SEED}.jsonl").read_bytes())
+    (drift / "roster.json").write_bytes((_REAL_9P2I / "roster.json").read_bytes())
+    _corrupt_first_tick_hash(drift_path)
+
+    proc = subprocess.run(
+        ["bash", str(_VERIFY_SH)],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "AILIBI_SAMPLES_ROOT": str(root)},
+    )
+    assert proc.returncode == 1, proc.stdout + proc.stderr
 
 
 def _corrupt_meeting_before_hash(path: Path) -> int:

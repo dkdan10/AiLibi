@@ -21,11 +21,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
 _REAL_SAMPLES = _REPO_ROOT / "replays" / "samples" / "4p1i"
 # Task 14.7 Featherless re-record: the 4p/1i set is re-recorded on Qwen/Qwen3-32B
-# + the qwen3_32b.v3 prompt set with all four Phase-13.5 substrate flags ON. It
+# + the qwen3_32b.v4 prompt set with all four Phase-13.5 substrate flags ON. It
 # stays meeting-dense (39/50 seeds carry a meeting), so _NO_MEETING_SEED is seed 12
 # (still meeting-free) and seed 22 stays meeting-bearing. The recorded prompt
-# versions are now the bespoke set: accusation_round.qwen3_32b.v3 /
-# crewmate_report.qwen3_32b.v3 / impostor_report.qwen3_32b.v3 / vote_ballot.qwen3_32b.v3.
+# versions are now the bespoke set: accusation_round.qwen3_32b.v4 /
+# crewmate_report.qwen3_32b.v4 / impostor_report.qwen3_32b.v4 / vote_ballot.qwen3_32b.v4.
 _MEETING_SEED = 22
 _NO_MEETING_SEED = 12
 
@@ -69,16 +69,17 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     )
     assert model == "Qwen/Qwen3-32B"
     # The union of the recorded prompt-version *values*, sorted — using the
-    # actual recorded values (e.g. "vote_ballot.qwen3_32b.v3"), not the hint.
-    assert "accusation_round.qwen3_32b.v3" in prompt_versions
-    assert "vote_ballot.qwen3_32b.v3" in prompt_versions
+    # actual recorded values (e.g. "vote_ballot.qwen3_32b.v4"), not the hint.
+    assert "accusation_round.qwen3_32b.v4" in prompt_versions
+    assert "vote_ballot.qwen3_32b.v4" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
     # The Task-14.7 Featherless re-record runs with all four Phase-13.5 substrate
-    # levers ON, stamped onto the replay's game_over record, so the flags column
-    # reports the four ON levers (sorted).
+    # levers ON, plus the Task-14.10 evidence_quality_lift lever (baseline 2 is
+    # recorded with it ON, Task 14.12), stamped onto the replay's game_over
+    # record, so the flags column reports all five ON levers (sorted).
     assert flags == (
-        "movement_perception, testimony_as_content, "
+        "evidence_quality_lift, movement_perception, testimony_as_content, "
         "unfreeze_memory, witnessed_kill_evidence"
     )
     # The Task-14.7 baseline runs on the hosted Featherless provider with $0
@@ -99,9 +100,10 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     assert prompt_versions == mw._NO_MEETINGS
     # A no-meeting seed records no prompt versions, but the Task-14.7 substrate
     # stamp lives on the game_over record (not a meeting), so a flag-ON re-record
-    # still reports the four ON levers in the flags column.
+    # still reports all five ON levers (the four 13.5 levers + the Task-14.10
+    # evidence_quality_lift lever baseline 2 records ON) in the flags column.
     assert flags == (
-        "movement_perception, testimony_as_content, "
+        "evidence_quality_lift, movement_perception, testimony_as_content, "
         "unfreeze_memory, witnessed_kill_evidence"
     )
     assert cost == "0.0000"
@@ -112,11 +114,11 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
 
 def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
     # A re-record stamps its substrate config onto the replay's game_over
-    # record (all four 13.5 levers unconditionally ON since Task 14.9 — no env
-    # export needed); the MANIFEST flags column reports the ON levers, sorted.
-    # This is the stamp -> manifest provenance path. The Task-14.10
-    # evidence_quality_lift lever stamps its default OFF under the (suite-
-    # pinned) bare env, so it does not appear in the ON-levers cell.
+    # record; the MANIFEST flags column reports the ON levers, sorted. This is
+    # the stamp -> manifest provenance path. ALL FIVE levers are unconditionally
+    # ON (the four 13.5 levers since Task 14.9, the Task-14.10
+    # evidence_quality_lift lever since the Task-14.12 close), so a bare-env
+    # recording stamps every one of them — no env export needed.
     samples = tmp_path / "samples"
     samples.mkdir()
     log = ReplayLog(samples / "replay-seed-5.jsonl", game_id="headless-seed-5")
@@ -127,7 +129,7 @@ def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
         samples, 5, "Qwen/Qwen3-32B"
     )
     assert flags == (
-        "movement_perception, testimony_as_content, "
+        "evidence_quality_lift, movement_perception, testimony_as_content, "
         "unfreeze_memory, witnessed_kill_evidence"
     )
     assert winner == "CREWMATES"
@@ -170,7 +172,7 @@ def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None
         _NO_MEETING_SEED,
         _MEETING_SEED,
     ]  # parsed in file order -> ascending
-    assert rows[22].prompt_versions.startswith("accusation_round.qwen3_32b.v3")
+    assert rows[22].prompt_versions.startswith("accusation_round.qwen3_32b.v4")
     assert rows[_NO_MEETING_SEED].prompt_versions == mw._NO_MEETINGS
 
 
@@ -182,9 +184,9 @@ def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     assert set(rows) == set(range(50))
     # Meeting-bearing seeds in the Task 14.7 Featherless flat 4p/1i re-record
     # (39/50 seeds carry a meeting; 22/24/26/39 are all meeting-bearing, recording
-    # the qwen3_32b.v3 bespoke prompt versions).
+    # the qwen3_32b.v4 bespoke prompt versions).
     for seed in (22, 24, 26, 39):
-        assert "accusation_round.qwen3_32b.v3" in rows[seed].prompt_versions
+        assert "accusation_round.qwen3_32b.v4" in rows[seed].prompt_versions
         assert rows[seed].git_sha  # non-empty provenance
     assert rows[_NO_MEETING_SEED].prompt_versions == mw._NO_MEETINGS
 

@@ -1,5 +1,19 @@
 # Phase 14 — Integrate Featherless AI: provider + model/prompt migration
 
+> **STATUS: CLOSED 2026-07-03 on baseline 2 (Task 14.12).** The canonical baseline is re-recorded on
+> `Qwen/Qwen3-32B` (Featherless, `qwen3_32b.v4`, all five levers unconditionally ON — the four 13.5 levers
+> plus the 14.10 evidence-quality lever, whose env gate this PR retired) and passes the HARD validity gate +
+> byte-identical BARE reconstruction (no `AILIBI_*` export). The crew railroad is
+> ELIMINATED (5→0; the `test_manager` tripwire is restored to `railroaded == set()`) and all six v4 dialogue
+> defects fell sharply (self-contradicted alibis 10.2%→2.9%, guard-normalized ballots 47→10, conf-1.0
+> accusations 12.7%→5.5%, template rationales 32.9%→14.8%, missed-deadline 23→6). R1 held near its honest
+> railroad-discounted anchor (25→24) and genuine-class conversion held (0.667→0.625 — no over-damping). The
+> one soft miss is 9p2i ejection accuracy (0.566→0.525, flat within variance): the fixes thinned the
+> flag-driven mis-ejects (31→25) but the zero-flag / voice-driven channel (untouched by 14.10 by design) rose
+> (22→31) and now dominates the residual — the clean Phase-15 target. 4p1i improved cleanly (accuracy
+> 0.788→0.923). Full close: `audits/audit-phase-14-close.md`. Phase 15 recommended: persona/voice layer +
+> the zero-flag mis-eject channel; tactical/ML between-meeting play + structural information levers.
+
 Goal: migrate the canonical agent-intelligence provider from local Ollama `qwen3.5:9b` to a hosted
 **Featherless AI** model. The 9B's 50-seed tournament takes ~13h and Phase 13 closed concluding
 "mechanism built, the 9B can't drive it" (R1 = 3/50 games decided by ejection, eject-rate 9%, 177/195
@@ -1023,6 +1037,21 @@ axis on the same pinned contexts (operator, $0, fast); the LIVE proof is 14.12's
 **Depends on:** 14.10, 14.11
 **Section refs:** tasks/phase-14.md §14.7 (the proven smoke → re-record → validity-gate shape + the landed stamp infra); audits/audit-2026-07-01-phase-14-baseline1-characterization.md (the targets baseline 2 must beat); scripts/refresh_samples.sh; tests/meetings/test_manager.py (the railroad pin to RESTORE to a tripwire)
 **Complexity:** Integration
+
+**STATUS (2026-07-03) — COMPLETE. Phase CLOSED on baseline 2.** Smoke (5 seeds @ 9p2i, lever ON + v4) cleared
+the gate (parse 100%, zero truncation, conversion not collapsed, zero railroad) → operator GO. Both sets
+re-recorded in ONE atomic PR on the locked tuple + `qwen3_32b.v4` + the 14.10 lever ON (2 parallel Featherless
+workers, measured ~3.85h); MANIFESTs/reports/fixtures regenerated; the `flags` stamp records the lever;
+byte-identical BARE reconstruction holds; HARD validity gate PASS both sets. The railroad TRIPWIRE is
+RESTORED (0 crew rows at 1.0 from ≥2 same-meeting flags). Per-defect deltas vs baseline 1: ejection accuracy
+0.566→0.525 (flat — the zero-flag channel rose 22→31, a Phase-15 target; flag-driven mis-ejects fell 31→25),
+self-contradicted alibis 10.2%→2.9%, guard-normalized ballots 47→10, conf-1.0 accusations 64→27,
+template-rationale share 32.9%→14.8%, missed-deadline 23→6. R-gate (railroad-discounted anchor): R1 25→24
+(held), genuine-class conversion 0.667→0.625 (no over-damping), impostor win 0.32→0.40 (vs 9B 3/50 & 0.84).
+4p1i ejection accuracy 0.788→0.923. Close audit: `audits/audit-phase-14-close.md`. Post-close (Codex PR
+review): the 14.10 lever was made UNCONDITIONAL in this PR (its `AILIBI_EVIDENCE_QUALITY_LIFT` env gate
+retired — the 14.9 move), so the committed set reconstructs and serves BARE; baseline 2 stays byte-identical
+because it was recorded lever-ON.
 
 Operator-run spend/time gate, and the PHASE CLOSE. Re-record BOTH committed sets (50 × 4p1i + 50 × 9p2i) on
 the locked tuple + the v4 prompt set + the 14.10 evidence-quality lever ON (stamped; the four 13.5 levers are

@@ -36,6 +36,7 @@ from pydantic import BaseModel, ValidationError
 
 from agents.memory.beliefs import (
     ACCUSATION_SUSPICION_DELTA,
+    CONTRADICTION_RENDER_CEIL,
     CORROBORATION_SUSPICION_DELTA,
     TESTIMONY_INDEPENDENCE_BAR,
     BeliefState,
@@ -1330,9 +1331,11 @@ class TestDetectorPrecisionGraduatedSuspicion:
         # A voter whose persistent beliefs already hold a Rule-1 body-proximity
         # prior (0.5 + 0.2 = 0.7) sees the now-STRONG flag (Task 13.14) land on
         # it. The joint cap bounds the per-meeting lift at one strong flag's
-        # worth above the prior: 0.7 + 0.3 = 1.0 (clamped). A prior-free voter
-        # also crosses now (0.5 + 0.3 = 0.80) -- pre-13.14 the prior-free voter
-        # stayed at 0.58 and only the prior crossed (at 0.78).
+        # worth above the prior: 0.7 + 0.3 = 1.0 -- but the unconditional
+        # evidence-quality lever (Task 14.12) ceils a single-flag certain-guilt
+        # render at CONTRADICTION_RENDER_CEIL (0.97) instead of the flat 1.0
+        # clamp, so p-1 renders at 0.97. A prior-free voter still crosses at
+        # 0.5 + 0.3 = 0.80 (below the ceiling, untouched).
         participants = (
             _participant("p-1"),
             _participant("p-2"),
@@ -1371,7 +1374,7 @@ class TestDetectorPrecisionGraduatedSuspicion:
         _, client = _run_meeting(responder, participants=participants)
 
         with_prior = _vote_prompt_suspicion(client, voter="p-4", of="p-1")
-        assert with_prior == pytest.approx(1.0)
+        assert with_prior == pytest.approx(CONTRADICTION_RENDER_CEIL)
         assert with_prior >= 0.6
 
         prior_free = _vote_prompt_suspicion(client, voter="p-3", of="p-1")
@@ -1444,6 +1447,12 @@ class TestDetectorPrecisionGraduatedSuspicion:
             voter_id="p-1",
             suspicion_graph=(),
             contradictions=contradictions,
+            # The lever is unconditional (Task 14.12), so a contradiction fold
+            # always requires the transcript the self-refuted-alibi signal is
+            # derived from. These synthetic flags carry no alibi turn, so an
+            # empty transcript yields no downgrade -- the graduated-weight math
+            # under test is untouched.
+            transcript=MeetingTranscript(turns=()),
         )
 
         by_id = {entry.player_id: entry.suspicion for entry in graph}
@@ -1484,6 +1493,10 @@ class TestDetectorPrecisionGraduatedSuspicion:
             suspicion_graph=(),
             contradictions=contradictions,
             evidence=evidence,
+            # Unconditional lever (Task 14.12): thread the transcript; the lone
+            # synthetic flag carries no self-refuted alibi, so the joint-cap
+            # math under test is unchanged.
+            transcript=MeetingTranscript(turns=()),
         )
 
         by_id = {entry.player_id: entry.suspicion for entry in graph}
@@ -1792,11 +1805,17 @@ class TestSuspicionGraphTeammateMask:
                 description="other flagged",
             ),
         )
+        # Unconditional lever (Task 14.12): the fold requires the transcript.
+        # These synthetic flags carry no alibi turn, so an empty transcript
+        # yields no self-refuted-alibi downgrade -- the teammate-mask behaviour
+        # under test is untouched.
+        empty_transcript = MeetingTranscript(turns=())
         impostor_graph = _suspicion_graph_with_contradictions(
             voter_id="p-4",
             suspicion_graph=(),
             contradictions=contradictions,
             fellow_impostor_ids=("p-5",),
+            transcript=empty_transcript,
         )
         # Teammate p-5 masked even though it was contradicted; p-3 lifted.
         assert all(entry.player_id != "p-5" for entry in impostor_graph)
@@ -1808,6 +1827,7 @@ class TestSuspicionGraphTeammateMask:
             suspicion_graph=(),
             contradictions=contradictions,
             fellow_impostor_ids=(),
+            transcript=empty_transcript,
         )
         assert any(entry.player_id == "p-5" for entry in crew_graph)
 
@@ -3915,38 +3935,33 @@ def _recorded_rendered_suspicions(entry: MeetingReplayEntry, *, of: str) -> list
 
 
 class TestCommittedBytesLiftPins:
-    """The 10.1 lift invariant on the RECORDED bytes (gp-2 C-C-3).
+    """The 10.1 lift invariant on the RECORDED bytes (gp-2 C-C-3), RESTORED to a
+    zero-railroad TRIPWIRE on the baseline-2 re-record (Task 14.12).
 
     Set-wide successor to the per-scenario era pins. On the 9B-era bytes the
     repaired 10.1 lift cap held: no crew member rendered at a clamped 1.0 off
-    stacked same-meeting contradiction flags. On the Task-14.7 Featherless/
-    Qwen3-32B re-record the cap is DEFEATED by the new model's ~4x denser
-    accusation flags, so this tripwire is DOWNGRADED to a REGRESSION PIN of the
-    exact known railroad set (see the test's NOTE) — it still fails if the
-    railroad worsens, and the underlying source-cap fix is a Task-14.8 item.
+    stacked same-meeting contradiction flags. The Task-14.7 Featherless/Qwen3-32B
+    baseline-1 re-record DEFEATED the cap at the new model's ~4x flag density —
+    FIVE crew rows at a clamped 1.0, three innocent ejects — so this pin was
+    temporarily DOWNGRADED to a regression pin of that exact known set while Task
+    14.8 diagnosed the mechanism (audit 2026-07-01 §3: not an arithmetic cap
+    failure but a saturated strong lift-key group compounding with the Rule-1
+    body-proximity prior to certain-guilt) and Task 14.10 built the fix.
+
+    Task 14.12 records baseline 2 with the 14.10 certain-guilt-exclusion lever ON
+    (`AILIBI_EVIDENCE_QUALITY_LIFT=1`, stamped), which caps flag/testimony-driven
+    lift below the 1.0 clamp — so the invariant HOLDS again and the pin is
+    RESTORED to its original TRIPWIRE: ZERO crew rows may render at a clamped 1.0
+    driven by >=2 same-meeting contradiction flags. The regression-pin era ends
+    WITH the defect, not around it.
     """
 
-    def test_committed_crew_railroad_rows_are_the_pinned_known_set(self) -> None:
+    def test_no_crew_row_is_railroaded_to_certain_guilt(self) -> None:
         # Roles come from the committed report's per-game role map (derived
         # from the same bytes at report-build time; the eval-layer pins in
         # tests/eval/test_gate_metrics.py hold the report to those bytes), so
         # this stays a meetings-layer walk: every meeting's vote prompts, every
         # rendered crew row.
-        #
-        # NOTE (Task 14.7 — KNOWN DEFECT, pinned not eliminated): on the
-        # Featherless/Qwen3-32B qwen3_32b.v3 re-record the crew belief system
-        # produces ~4x the contradiction-flag density of the 9B (702 vs 173 flags
-        # set-wide), and that density DEFEATS the Phase-10.1 lift cap. FIVE crew
-        # rows render at a clamped 1.0 driven by >=2 same-meeting contradiction
-        # flags — the railroad signature this tripwire was built to assert away —
-        # and THREE of them are ejected (an innocent mis-eject). This is a REAL
-        # regression exposed by the stronger model, NOT a recording error: the
-        # re-record faithfully captures the model's dense-accusation behavior, and
-        # the fix (tightening the 10.1 same-meeting lift cap in agents/memory) is a
-        # SOURCE change out of Task 14.7's record-only scope. It is characterized
-        # in Task 14.8 and slated for a belief-system fix. Until then the tripwire
-        # is a REGRESSION PIN of the exact known set, so it still fails loudly if
-        # any NEW crew row is railroaded beyond these five.
         report = json.loads(
             (_COMMITTED_9P2I_DIR / "tournament-eval-report.json").read_text(
                 encoding="utf-8"
@@ -3954,17 +3969,6 @@ class TestCommittedBytesLiftPins:
         )
         roles_by_seed: dict[int, dict[str, str]] = {
             game["seed"]: game["roles"] for game in report["report"]["games"]
-        }
-        # The known railroad set on the committed bytes: (seed, meeting_id, crew).
-        # Ejected (innocent mis-eject): seed-13 m0 p-7 (2 flags), seed-16 m0 p-6
-        # (4 flags), seed-44 m1 p-1 (9 flags). Railroaded to 1.0 but the meeting
-        # still SKIPPED (no eject): seed-28 m0 p-3 (5 flags), seed-28 m0 p-6 (2).
-        known_railroad = {
-            (13, "headless-seed-13:meeting-0", "p-7"),
-            (16, "headless-seed-16:meeting-0", "p-6"),
-            (28, "headless-seed-28:meeting-0", "p-3"),
-            (28, "headless-seed-28:meeting-0", "p-6"),
-            (44, "headless-seed-44:meeting-1", "p-1"),
         }
         railroaded: set[tuple[int, str, str]] = set()
         prompts_scanned = 0
@@ -3984,18 +3988,27 @@ class TestCommittedBytesLiftPins:
                     # A crew 1.0 is the railroad defect only if SAME-MEETING
                     # flag-stacked past the 10.1 cap (>=2 flags naming them in
                     # this meeting); a 1.0 with <2 is the legitimate across-
-                    # meeting (9.8) accumulator, which stays allowed.
+                    # meeting (9.8) accumulator, which stays allowed (the
+                    # 14.10 certain-guilt exclusion targets transient
+                    # same-meeting lift, not the across-meeting scalar).
                     same_meeting_flags = sum(
                         1 for flag in entry.contradictions if player_id in flag.subjects
                     )
                     if same_meeting_flags >= 2:
                         railroaded.add((seed, entry.meeting_id, player_id))
-        # Regression pin: the railroad set must not grow beyond the known defect.
-        assert railroaded == known_railroad, (
-            f"crew railroad set changed: NEW={sorted(railroaded - known_railroad)}, "
-            f"GONE={sorted(known_railroad - railroaded)} "
-            f"(Task 14.7 known 10.1-cap breach on the dense-flag re-record; the "
-            f"fix is a source cap change tracked in Task 14.8)"
+        # Tripwire (RESTORED, Task 14.12): no crew row may render at a clamped 1.0
+        # driven by >=2 same-meeting contradiction flags. Baseline 2 records the
+        # 14.10 certain-guilt-exclusion lever ON, which ceils flag/testimony lift
+        # below the clamp, so this set MUST be empty. A non-empty set means the
+        # railroad REGRESSED — the 14.10 lever under-fixed or was not recorded ON.
+        # Never weaken this gate to make it pass; iterate the weighting and
+        # re-record (Task 14.12 integration-risk contract).
+        assert railroaded == set(), (
+            f"crew railroad REGRESSED on baseline 2: {sorted(railroaded)} render at "
+            f"a clamped 1.0 off >=2 same-meeting contradiction flags. The 14.10 "
+            f"certain-guilt-exclusion lever under-fixed the defect (or was not "
+            f"recorded ON). Iterate the weighting and re-record; do not weaken this "
+            f"tripwire."
         )
         # Non-vacuous: the walk actually read rendered crew rows.
         assert prompts_scanned > 0
@@ -5183,16 +5196,16 @@ class TestCommittedBytes107FoldPins:
 
     The two-witness fold, replayed over the recorded per-voter rendered
     suspicion graphs, lifts additional listeners over the §4.6 gate on the
-    converting meetings (seed 27 m0 on the Qwen/Qwen3-32B qwen3_32b.v3
-    Phase-13.5-flags-ON re-record), and the lone bare pile-on (seed 15 m1, p-2:
-    two accusers, no observation-backed voice) still folds nothing -- the fold
-    leaves p-2 byte-unchanged, so the voiceless pile-on drives no conversion (the
-    STOP-pin tripwire holds; the owner principle was re-verified set-wide -- no
-    voiceless subject is folded in any committed meeting). Re-anchored across
-    successive canonical re-records (prior coordinates kept in git history as
-    stable identifiers) to the meeting now exhibiting each shape: the
-    mechanism-level invariant the tripwire actually guards is preserved on the
-    substrate the committed bytes were recorded under.
+    converting meetings (seed 27 m1 on the baseline-2 re-record -- Qwen/Qwen3-32B
+    qwen3_32b.v4, Task 14.12, with the 14.10 evidence_quality_lift lever ON), and
+    the lone bare pile-on (seed 27 m0, p-1: two accusers, no observation-backed
+    voice) still folds nothing -- the fold leaves p-1 byte-unchanged, so the
+    voiceless pile-on drives no conversion (the STOP-pin tripwire holds; the owner
+    principle was re-verified set-wide -- no voiceless subject is folded in any
+    committed meeting). Re-anchored across successive canonical re-records (prior
+    coordinates kept in git history as stable identifiers) to the meeting now
+    exhibiting each shape: the mechanism-level invariant the tripwire actually
+    guards is preserved on the substrate the committed bytes were recorded under.
     """
 
     @staticmethod
@@ -5248,63 +5261,66 @@ class TestCommittedBytes107FoldPins:
         return evidence, recorded, folded
 
     def test_seed29_m0_pile_on_stop_pin(self) -> None:
-        # THE owner-principle tripwire, re-anchored to the Qwen/Qwen3-32B
-        # (qwen3_32b.v3, Phase-13.5-flags-ON) re-record (the prior seed-29 m0 p-4
-        # pile-on dissolved with the bytes -- only one accuser survives there now).
-        # seed 15 m1, subject p-2: TWO accusers (p-3, p-9), NEITHER an
-        # observation-backed voice -- so independent voices counts ZERO for p-2 and
-        # the rule must fold nothing. The owner principle scoped to p-2: NO pre-vote
-        # fold and no corroboration for p-2, and the fold leaves p-2's rendered
-        # value BYTE-UNCHANGED for every voter -- the voiceless pile-on adds nothing
-        # through the fold, so it creates no new gate-crossing, and the meeting
-        # ejects nobody (the bare pile-on converts nothing). (The owner-principle
-        # invariant was re-verified set-wide: no voiceless subject is folded in any
-        # committed meeting.) A qualifying second VOICE folding p-2 here is the
-        # STOP-and-escalate condition of the task contract.
-        entry = _committed_meeting(15, 1)
+        # THE owner-principle tripwire, re-anchored to the baseline-2 re-record
+        # (Qwen/Qwen3-32B qwen3_32b.v4, Task 14.12, evidence_quality_lift lever ON).
+        # The prior seed-15 m1 p-2 pile-on dissolved with the bytes (p-2 no longer
+        # carries two accusers there). Its analog here is seed 27 m0, subject p-1
+        # (a crewmate): TWO accusers (p-3, p-9), NEITHER an observation-backed
+        # voice -- so independent voices counts ZERO for p-1 and the rule must fold
+        # nothing. The owner principle scoped to p-1: NO pre-vote fold and no
+        # corroboration for p-1, and the fold leaves p-1's rendered value
+        # BYTE-UNCHANGED for every voter that renders it (here no vote prompt
+        # renders p-1, so that clause holds vacuously) -- the voiceless pile-on
+        # adds nothing through the fold, so it creates no new gate-crossing, and
+        # the meeting ejects nobody (the bare pile-on converts nothing). (The
+        # owner-principle invariant was re-verified set-wide: no voiceless subject
+        # is folded in any committed meeting.) A qualifying second VOICE folding
+        # p-1 here is the STOP-and-escalate condition of the task contract.
+        entry = _committed_meeting(27, 0)
         roster = frozenset(ballot.voter for ballot in entry.ballots)
         rederived_flags = detect_contradictions(entry.transcript, roster=roster)
         evidence = derive_belief_evidence(
             entry.transcript, contradictions=rederived_flags, roster=roster
         )
-        # p-2 is a bona-fide bare pile-on: two distinct accusers, zero voices.
+        # p-1 is a bona-fide bare pile-on: two distinct accusers, zero voices.
         accusers = sorted(
             {
                 turn.speaker
                 for turn in entry.transcript.turns
                 for claim in turn.claims
                 if isinstance(claim, AccusationClaim)
-                and claim.against == "p-2"
-                and turn.speaker != "p-2"
+                and claim.against == "p-1"
+                and turn.speaker != "p-1"
             }
         )
         assert accusers == ["p-3", "p-9"]
         voices = independent_voices(entry.transcript, roster=roster)
-        assert voices.get("p-2", ()) == ()
+        assert voices.get("p-1", ()) == ()
 
         _, recorded, folded = self._replay_pre_vote_fold(entry)
-        assert "p-2" not in evidence.pre_vote_folded
-        assert "p-2" not in evidence.corroborated
+        assert "p-1" not in evidence.pre_vote_folded
+        assert "p-1" not in evidence.corroborated
         assert recorded and folded
         for voter, graph in folded.items():
-            if "p-2" in recorded[voter]:
-                # The fold leaves p-2 byte-unchanged: the voiceless pile-on adds
-                # nothing and the fold creates no NEW gate-crossing on p-2.
-                assert graph["p-2"] == pytest.approx(recorded[voter]["p-2"])
-                assert (graph["p-2"] >= 0.60) == (recorded[voter]["p-2"] >= 0.60)
+            if "p-1" in recorded[voter]:
+                # The fold leaves p-1 byte-unchanged: the voiceless pile-on adds
+                # nothing and the fold creates no NEW gate-crossing on p-1.
+                assert graph["p-1"] == pytest.approx(recorded[voter]["p-1"])
+                assert (graph["p-1"] >= 0.60) == (recorded[voter]["p-1"] >= 0.60)
         # The recorded meeting ejected nobody: the bare pile-on converted nothing.
         assert entry.ejected_player_id is None
 
     def test_seed29_m1_fold_lifts_listeners_over_gate_and_converts(self) -> None:
-        # The two-witness fold's conversion on the Qwen/Qwen3-32B (qwen3_32b.v3,
-        # Phase-13.5-flags-ON) re-record. NOTE: the fold is LIVE at record time, so
-        # the recorded vote graphs are ALREADY post-fold -- read them directly
-        # (replaying the fold over them would double-apply). The prior seed-29 m1 row
-        # moved with the bytes; its analog here is seed 27 m0: a two-voice fold on
-        # impostor p-4 (voices p-1/p-3) lifts the three LISTENERS p-2/p-8/p-9 over
-        # the §4.6 gate in the recorded graphs; all three target p-4, and p-4 is
-        # ejected. The §6.3 fold conversion, end to end on real bytes.
-        entry = _committed_meeting(27, 0)
+        # The two-witness fold's conversion on the baseline-2 re-record
+        # (Qwen/Qwen3-32B qwen3_32b.v4, Task 14.12, evidence_quality_lift lever
+        # ON). NOTE: the fold is LIVE at record time, so the recorded vote graphs
+        # are ALREADY post-fold -- read them directly (replaying the fold over them
+        # would double-apply). The prior seed-27 m0 row moved with the bytes; its
+        # analog here is seed 27 m1: a two-voice fold on impostor p-4 (voices
+        # p-1/p-9) lifts the three LISTENERS p-2/p-3/p-8 over the §4.6 gate in the
+        # recorded graphs; all three target p-4, and p-4 is ejected. The §6.3 fold
+        # conversion, end to end on real bytes.
+        entry = _committed_meeting(27, 1)
         assert entry.ejected_player_id == "p-4"
         _, recorded, _ = self._replay_pre_vote_fold(entry)
         voices = set(
@@ -5322,21 +5338,21 @@ class TestCommittedBytes107FoldPins:
             and graph.get("p-4", 0.0) >= 0.60
             and ballots.get(voter) == "p-4"
         )
-        assert listeners_over_gate == ["p-2", "p-8", "p-9"]
+        assert listeners_over_gate == ["p-2", "p-3", "p-8"]
 
     def test_seed7_m2_defended_subject_corroborated_not_folded(self) -> None:
-        # Same-phase symmetry (re-anchored to the Qwen/Qwen3-32B (qwen3_32b.v3,
-        # Phase-13.5-flags-ON) re-record): a defended subject's vouches are ingested
-        # as a CORROBORATION (which lowers its suspicion same-phase), never as a
-        # pile-on fold. The prior seed-7 m2 row moved with the bytes; its analog
-        # here is seed 16 m0: the corroborated subject p-8 (a crewmate, with ZERO
-        # accusation voices, so it can only reach the corroboration channel) is
-        # never folded, while a separate impostor p-1 takes the fold. The audited
-        # suspicion-math (a corroboration drops the defended subject below the §4.6
-        # gate) is covered by the synthetic corroboration-delta tests; here we pin
-        # that the bytes route the defended subject to the corroboration channel,
-        # not the fold.
-        entry = _committed_meeting(16, 0)
+        # Same-phase symmetry (re-anchored to the baseline-2 re-record --
+        # Qwen/Qwen3-32B qwen3_32b.v4, Task 14.12, evidence_quality_lift lever ON):
+        # a defended subject's vouches are ingested as a CORROBORATION (which
+        # lowers its suspicion same-phase), never as a pile-on fold. The prior
+        # seed-16 m0 row moved with the bytes; its analog here is seed 4 m0: the
+        # corroborated subject p-1 (a crewmate, with ZERO accusation voices, so it
+        # can only reach the corroboration channel) is never folded, while a
+        # separate impostor p-3 takes the fold. The audited suspicion-math (a
+        # corroboration drops the defended subject below the §4.6 gate) is covered
+        # by the synthetic corroboration-delta tests; here we pin that the bytes
+        # route the defended subject to the corroboration channel, not the fold.
+        entry = _committed_meeting(4, 0)
         roster = frozenset(ballot.voter for ballot in entry.ballots)
         rederived_flags = detect_contradictions(entry.transcript, roster=roster)
         evidence = derive_belief_evidence(
@@ -5345,10 +5361,10 @@ class TestCommittedBytes107FoldPins:
 
         # The defended subject reaches the corroboration channel with no
         # accusation voice of its own, so the fold could never have claimed it.
-        assert independent_voices(entry.transcript, roster=roster).get("p-8", ()) == ()
-        assert "p-8" in evidence.corroborated
-        assert "p-8" not in evidence.pre_vote_folded
-        assert evidence.pre_vote_folded == ("p-1",)
+        assert independent_voices(entry.transcript, roster=roster).get("p-1", ()) == ()
+        assert "p-1" in evidence.corroborated
+        assert "p-1" not in evidence.pre_vote_folded
+        assert evidence.pre_vote_folded == ("p-3",)
 
 
 # ---------------------------------------------------------------------------
@@ -6271,45 +6287,53 @@ def _derive_inform_yield() -> _InformYield:
 
 
 class TestSingleWitnessInformYieldOnCommittedBytes:
-    """The Task 10.15 inform-yield bloc, walked offline over the W2 bytes.
+    """The Task 10.15 inform-yield bloc, walked offline over the committed bytes.
 
-    The deliverable number, re-anchored to the phase-11 Wave-3 re-record. The
-    derivation first reproduces the §4(3) partition EXACTLY off the committed
-    bytes (W2: 75 accused living-impostor meeting-subjects the ballots did not
-    eject; 63 of them rendered over the §4.6 gate yet lost plurality -- the W1
-    audit-2026-06-13-1816 read 59 / 37), which validates the offline oracle,
-    then counts how many the single-witness inform converts WITHOUT any tally
-    change.
+    The deliverable number, re-anchored to the baseline-2 re-record
+    (Qwen/Qwen3-32B qwen3_32b.v4, Task 14.12, evidence_quality_lift lever ON).
+    The derivation first reproduces the §4(3) partition EXACTLY off the committed
+    bytes (baseline 2: 72 accused living-impostor meeting-subjects the ballots did
+    not eject; 38 of them rendered over the §4.6 gate yet lost plurality -- the
+    prior qwen3_32b.v3 re-record read 71 / 50, the W1 audit-2026-06-13-1816 read
+    59 / 37), which validates the offline oracle, then counts how many the
+    single-witness inform converts WITHOUT any tally change (baseline 2: none).
     """
 
     def test_methodology_reproduces_the_audit_partition(self) -> None:
         result = _derive_inform_yield()
 
-        # The §4(3) partition, re-derived from the Qwen/Qwen3-32B (qwen3_32b.v3,
-        # Phase-13.5-flags-ON) committed bytes. The prior redistribute read 119
-        # accused-not-ejected / 97 over-gate-lost-plurality; the qwen3_32b.v3
-        # re-record moved both (71 / 50) -- a legitimate era move (pure functions of
-        # the bytes, re-derived by the SAME offline oracle). The accused-not-ejected
-        # 71 cross-checks the effective-deflection survivals (test_wave2_metrics)
-        # exactly.
-        assert result.accused_not_ejected == 71
-        assert result.over_gate_lost_plurality == 50
+        # The §4(3) partition, re-derived from the baseline-2 committed bytes
+        # (Qwen/Qwen3-32B qwen3_32b.v4, Task 14.12, evidence_quality_lift lever
+        # ON). The prior qwen3_32b.v3 re-record read 71 accused-not-ejected / 50
+        # over-gate-lost-plurality; baseline 2 moved both (72 / 38) -- a legitimate
+        # era move (pure functions of the bytes, re-derived by the SAME offline
+        # oracle). The accused-not-ejected 72 cross-checks the effective-deflection
+        # survivals (accused_impostor_survivals in the eval-layer metrics) exactly.
+        assert result.accused_not_ejected == 72
+        assert result.over_gate_lost_plurality == 38
 
     def test_single_witness_inform_converts_fourteen_of_the_ninety_seven(self) -> None:
         result = _derive_inform_yield()
 
-        # 28 of the 50 over-gate-lost-plurality subjects are
-        # single-witness-informed (one observation-backed voice under echo-dedup);
-        # the inform lifts a plurality of listeners over 0.60 in 1 of them on the
-        # Qwen/Qwen3-32B (qwen3_32b.v3, Phase-13.5-flags-ON) re-record (prior
-        # redistribute: 14 of 97), flipping a SKIP-plurality to an impostor-eject
-        # with the frozen equal-votes + tie->SKIP tally. The flip set is still the
-        # conservative one (only recorded SKIP voters whose rendered value sits in
-        # [gate - inform, gate) -- a baseline below that band still cannot cross on
-        # the inform alone, the owner principle).
-        assert result.informed_candidates == 28
-        assert len(result.conversions) == 1
-        assert result.conversions == ((46, "headless-seed-46:meeting-1", "p-8"),)
+        # 29 of the 38 over-gate-lost-plurality subjects are
+        # single-witness-informed (one observation-backed voice under echo-dedup)
+        # on the baseline-2 re-record (Qwen/Qwen3-32B qwen3_32b.v4, Task 14.12,
+        # evidence_quality_lift lever ON; prior qwen3_32b.v3: 28 of 50). The
+        # conservative single-witness inform CONVERTS NONE of them on these bytes:
+        # exactly one candidate (seed 27 meeting-0, p-4) carries a qualifying SKIP
+        # flip, but the +0.05 inform lifts p-4 to only 2 ballots against a standing
+        # 3 on a rival target -- it never becomes the strict plurality, so the
+        # frozen equal-votes + tie->SKIP tally yields no eject. The yield is thus
+        # ZERO (prior qwen3_32b.v3: 1 of 50; the earliest redistribute era: 14 of
+        # 97). The flip set is still the conservative one (only recorded SKIP
+        # voters whose rendered value sits in [gate - inform, gate) -- a baseline
+        # below that band still cannot cross on the inform alone, the owner
+        # principle), and it produces NO spurious conversion: the property this
+        # pins is that the inform never manufactures a conversion the bytes do not
+        # support.
+        assert result.informed_candidates == 29
+        assert len(result.conversions) == 0
+        assert result.conversions == ()
 
     def test_derivation_is_deterministic(self) -> None:
         assert _derive_inform_yield() == _derive_inform_yield()

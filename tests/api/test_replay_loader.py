@@ -852,11 +852,11 @@ def test_committed_9p2i_set_reconstructs_byte_identically(
     # is correct — making this both the determinism gate and a roster.json check.
     #
     # The committed set was re-recorded on the Featherless / Qwen/Qwen3-32B
-    # substrate with all four Phase-13.5 levers ON, so each game_over record is
-    # stamped with that lever config. The loader's memory reconstruction honors
-    # the stamp (Task 14.7); since Task 14.9 the levers are unconditionally ON,
-    # so the walk needs NO env vars — run under a genuinely bare environment
-    # (the Task-14.9 acceptance bar).
+    # substrate (Task 14.12 baseline 2) with all four Phase-13.5 levers ON PLUS
+    # the Task-14.10 evidence_quality_lift lever ON, stamped on each game_over
+    # record. Every lever is unconditional (the 13.5 four since Task 14.9, the
+    # 14.10 lever since the 14.12 close follow-up), so the committed set
+    # reconstructs under a genuinely BARE environment — no AILIBI_* export.
     _delete_ailibi_env(monkeypatch)
     assert replay_loader._load_roster_config(_COMMITTED_9P2I_DIR) == RosterConfig(
         num_players=9, num_impostors=2, tasks_per_crewmate=2
@@ -945,10 +945,17 @@ _ALL_FLAGS_ON = {
     "witnessed_kill_evidence": True,
     "movement_perception": True,
     "unfreeze_memory": True,
+    # Task 14.12 close follow-up: the Task-14.10 evidence_quality_lift lever is
+    # now unconditional too (the 14.9 move, applied after baseline 2 adopted it),
+    # so a fully-ON stamp carries it as well.
+    "evidence_quality_lift": True,
 }
 # A legacy stamp this build can no longer reproduce: the movement lever
 # recorded OFF (its OFF derivation was deleted by Task 14.9).
 _LEGACY_MOVEMENT_OFF = {**_ALL_FLAGS_ON, "movement_perception": False}
+# A legacy stamp recording the (now unconditional) evidence_quality_lift OFF —
+# equally unreproducible on this build (retired at the 14.12 close).
+_LEGACY_EVIDENCE_QUALITY_LIFT_OFF = {**_ALL_FLAGS_ON, "evidence_quality_lift": False}
 
 
 def _delete_ailibi_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1006,31 +1013,30 @@ def test_assert_substrate_matches_raises_on_legacy_off_stamp() -> None:
     assert "AILIBI_" not in message
 
 
-def test_assert_substrate_matches_names_env_remediation_for_toggleable_lever(
+def test_assert_substrate_matches_raises_on_legacy_evidence_quality_lift_off_stamp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Task 14.10: a baseline-1-shaped stamp (no evidence_quality_lift key,
-    # which reads as OFF) reconstructed with the lever exported ON is a
-    # mismatch on the TOGGLEABLE lever. Unlike the retired-lever mode above,
-    # this one IS env-remediable, so the error names the lever and points at
-    # the AILIBI_* remediation — never at the 14.9 retirement.
+    # Task 14.12 close: the evidence_quality_lift lever is now RETIRED to
+    # unconditional (like the four 13.5 levers), so a legacy stamp recording it
+    # OFF is a cross-substrate replay this build cannot reproduce. It fails loud,
+    # names the lever and the retirement, and offers NO env remediation (the OFF
+    # derivation no longer exists) — the same mode as the retired 13.5 levers.
     _delete_ailibi_env(monkeypatch)
-    monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
     entries = [
         GameEndReplayEntry(
             game_id="g",
             tick=1,
             winner="CREWMATES",
             reason="TASKS",
-            substrate_flags=_ALL_FLAGS_ON,
+            substrate_flags=_LEGACY_EVIDENCE_QUALITY_LIFT_OFF,
         )
     ]
     with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
         replay_loader._assert_substrate_matches("g", entries)
     message = str(excinfo.value)
     assert "evidence_quality_lift" in message
-    assert "AILIBI_" in message
-    assert "Retired" not in message
+    assert "Retired" in message
+    assert "14.12" in message
 
 
 def _stamp_committed_9p2i_seed(dst: Path, seed: int, flags: dict[str, bool]) -> str:
@@ -1076,15 +1082,17 @@ def test_committed_baseline_serves_under_bare_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Pins the Task-14.9 spectator fix (the ``run_spectator.sh`` 500 reported
-    # 2026-07-01): the committed 9p2i baseline is stamped all-ON, and the
-    # launcher exports no AILIBI_* vars — before 14.9 the guard read a bare env
-    # as all-OFF and refused with HTTP 500. With the levers unconditional, the
-    # loader serves the committed set under a genuinely bare environment.
+    # 2026-07-01), now covering baseline 2: the committed 9p2i baseline is stamped
+    # all-ON (the four 13.5 levers + the Task-14.10 evidence_quality_lift lever),
+    # and the launcher exports no AILIBI_* vars. Every one of those levers is
+    # unconditional (the 13.5 four since 14.9, the 14.10 lever since the 14.12
+    # close follow-up), so the loader serves the committed set under a genuinely
+    # bare environment.
     if not _COMMITTED_9P2I_DIR.is_dir():
         pytest.skip("committed 9p2i sample set not present")
     _delete_ailibi_env(monkeypatch)
     loader = ReplayLoader(replay_dir=_COMMITTED_9P2I_DIR)
-    replay = loader.load_replay("headless-seed-0")  # no raise — serves
+    replay = loader.load_replay("headless-seed-0")  # no raise — serves bare
     assert {p.agent_id for p in replay.players} == {f"p-{n}" for n in range(1, 10)}
 
 

@@ -24,5 +24,12 @@ replays/tournament-eval-report.json
 # Internal leak-test packet logs from the observation firewall — never commit.
 **/*.audit.jsonl
 
+# Transient per-refresh staging dir (scripts/refresh_samples.sh): the atomic
+# stage + parallel-worker queue/state live here and are removed by the script's
+# EXIT trap. A Featherless re-record now runs for hours with 2 workers (Task
+# 14.12), so this dir lingers long enough to surface as untracked — ignore it so
+# it is never accidentally committed with the re-recorded samples.
+replays/samples/.ailibi-refresh-stage-*/
+
 # Design-thread local working docs (not committed; the canonical plan lives in tasks/ + memory)
 *.local.md

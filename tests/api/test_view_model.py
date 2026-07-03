@@ -112,9 +112,14 @@ def meeting_loader(tmp_path: Path) -> ReplayLoader:
 
 
 @pytest.fixture
-def nine_p_two_i_loader() -> ReplayLoader:
+def nine_p_two_i_loader(monkeypatch: pytest.MonkeyPatch) -> ReplayLoader:
     if not _NINE_P_TWO_I.is_dir():
         pytest.skip("committed 9p2i sample set not present")
+    # Baseline 2 (Task 14.12) stamps the default-OFF Task-14.10
+    # evidence_quality_lift lever ON, so flag-aware reconstruction of the
+    # committed set requires it exported (else the loader's substrate guard
+    # refuses the mismatch).
+    monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
     return ReplayLoader(replay_dir=_NINE_P_TWO_I)
 
 

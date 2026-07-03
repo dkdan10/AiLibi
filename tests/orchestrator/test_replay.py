@@ -143,32 +143,23 @@ class TestGameEndRecording:
 class TestSubstrateFlagStamp:
     """The Task-14.7 substrate-flag stamp on the game_over record.
 
-    A replay self-describes which substrate levers generated it. Since Task
-    14.9 the four 13.5 levers are unconditionally ON (their env gates are
-    retired) and always stamp True; Task 14.10's ``evidence_quality_lift``
-    is the first registrant of the generic ``_TOGGLEABLE_LEVER_RESOLVERS``
-    table — default OFF, resolved from
-    :data:`agents.memory.beliefs.ENV_EVIDENCE_QUALITY_LIFT` — and rides the
-    same snapshot/stamp/guard path, so the Task-14.12 baseline-2 recording
-    self-describes the lever it ran under.
+    A replay self-describes which substrate levers generated it. All five levers
+    are unconditionally ON with their env gates retired: the four 13.5 levers
+    since Task 14.9, and Task 14.10's ``evidence_quality_lift`` since the
+    Task-14.12 close (once baseline 2 adopted it). The generic
+    ``_TOGGLEABLE_LEVER_RESOLVERS`` table is empty today but stays for a future
+    lever; every recording stamps all five levers True.
     """
 
-    def test_substrate_flag_snapshot_retired_levers_on_new_lever_resolves(
-        self,
-    ) -> None:
-        # The four retired levers report True under ANY env — a bare mapping,
-        # an explicit legacy "0", or the legacy all-ON export all read
-        # identically. The 14.10 lever is the toggleable one: OFF in a bare
-        # env (the default that keeps baseline-1 byte-verifying), ON when its
-        # AILIBI_ var is set truthy.
-        default = {**dict.fromkeys(SUBSTRATE_FLAG_KEYS, True)}
-        default[ENV_EVIDENCE_QUALITY_LIFT_KEY] = False
-        assert substrate_flag_snapshot({}) == default
-        assert substrate_flag_snapshot({"AILIBI_TESTIMONY_AS_CONTENT": "0"}) == default
-        assert substrate_flag_snapshot({ENV_EVIDENCE_QUALITY_LIFT: "1"}) == {
-            **default,
-            ENV_EVIDENCE_QUALITY_LIFT_KEY: True,
-        }
+    def test_substrate_flag_snapshot_is_all_on_and_env_independent(self) -> None:
+        # Every lever reports True under ANY env — a bare mapping, an explicit
+        # legacy "0", or the (retired) AILIBI_EVIDENCE_QUALITY_LIFT export all
+        # read identically. No lever is env-gated anymore.
+        all_on = dict.fromkeys(SUBSTRATE_FLAG_KEYS, True)
+        assert substrate_flag_snapshot({}) == all_on
+        assert substrate_flag_snapshot({"AILIBI_TESTIMONY_AS_CONTENT": "0"}) == all_on
+        assert substrate_flag_snapshot({ENV_EVIDENCE_QUALITY_LIFT: "0"}) == all_on
+        assert substrate_flag_snapshot({ENV_EVIDENCE_QUALITY_LIFT: "1"}) == all_on
         assert set(SUBSTRATE_FLAG_KEYS) == {
             "testimony_as_content",
             "witnessed_kill_evidence",
@@ -177,18 +168,19 @@ class TestSubstrateFlagStamp:
             "evidence_quality_lift",
         }
 
-    def test_snapshot_without_env_reads_the_process_environment(
+    def test_snapshot_is_independent_of_the_process_environment(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # The lever no longer reads any env (unconditional since the 14.12
+        # close): the process-environment snapshot is all-ON either way.
         monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
-        assert substrate_flag_snapshot()[ENV_EVIDENCE_QUALITY_LIFT_KEY] is False
-        monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
+        assert substrate_flag_snapshot()[ENV_EVIDENCE_QUALITY_LIFT_KEY] is True
+        monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "0")
         assert substrate_flag_snapshot()[ENV_EVIDENCE_QUALITY_LIFT_KEY] is True
 
     def test_every_recording_stamps_the_full_snapshot(self, tmp_path: Path) -> None:
-        # No env vars needed: recording under a bare environment stamps the
-        # four retired levers ON (consistent with the committed 14.7 baseline)
-        # and the 14.10 lever at its default OFF.
+        # No env vars needed: recording under a bare environment stamps ALL five
+        # levers ON (consistent with the committed baseline-2 set).
         path = tmp_path / "on.jsonl"
         ReplayLog(path, game_id="g-on").record_game_end(
             winner="IMPOSTORS", reason="IMPOSTOR_PARITY", tick=41
@@ -200,7 +192,7 @@ class TestSubstrateFlagStamp:
             "witnessed_kill_evidence": True,
             "movement_perception": True,
             "unfreeze_memory": True,
-            "evidence_quality_lift": False,
+            "evidence_quality_lift": True,
         }
         assert read_substrate_flags(path) == dict(entry.substrate_flags)
 

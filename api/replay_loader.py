@@ -324,11 +324,12 @@ class ReplaySubstrateMismatchError(RuntimeError):
             if bool(recorded.get(key)) != bool(ambient.get(key))
         )
         # The remediation hint depends on WHICH lever diverged: a toggleable
-        # lever (Task 14.10's evidence_quality_lift) is env-remediable —
-        # match the AILIBI_* environment to the stamp (a stamp without the
-        # key reads as OFF) — while a retired 13.5 lever has no env any more
-        # (unconditionally ON since Task 14.9), so that stamp is a substrate
-        # this build can no longer produce.
+        # lever (env-gated; NONE today — the machinery stays for a future lever)
+        # is env-remediable — match the AILIBI_* environment to the stamp (a
+        # stamp without the key reads as OFF) — while a RETIRED lever has no env
+        # any more (unconditionally ON: the four Phase-13.5 levers since Task
+        # 14.9, the Task-14.10 evidence_quality_lift lever since the Task-14.12
+        # close), so that stamp is a substrate this build can no longer produce.
         toggleable = sorted(set(differing) & set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
         retired = sorted(set(differing) - set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
         hints: list[str] = []
@@ -340,9 +341,10 @@ class ReplaySubstrateMismatchError(RuntimeError):
             )
         if retired:
             hints.append(
-                f"Retired Phase-13.5 lever(s) {retired} are unconditionally ON "
-                "since Task 14.9 (their env gates are deleted), so this stamp "
-                "records a substrate the build can no longer reproduce."
+                f"Retired lever(s) {retired} are unconditionally ON (their env "
+                "gates are deleted — Phase-13.5 at Task 14.9, evidence_quality_lift "
+                "at the Task-14.12 close), so this stamp records a substrate the "
+                "build can no longer reproduce."
             )
         super().__init__(
             f"replay substrate mismatch for {game_id!r}: recorded with "
