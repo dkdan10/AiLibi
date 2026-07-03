@@ -208,6 +208,72 @@ def test_dry_run_featherless_provider_echoes_substrate() -> None:
     )
 
 
+def test_dry_run_featherless_defaults_to_two_seed_workers() -> None:
+    # Task 14.12: a Featherless refresh records seeds with TWO parallel workers by
+    # default (the hosted plan permits 4 concurrent units and a 32B request uses
+    # 2, so 2 workers saturate it), each pulling the next available seed from the
+    # queue. The dry-run surfaces the worker count so the parallelism is never
+    # silent (AGENTS.md "no silent fallbacks").
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_EVIDENCE_QUALITY_LIFT="1",
+    )
+    proc = _run("--full", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed workers: 2 parallel" in proc.stdout
+    assert "pulls the next available seed from the queue" in proc.stdout
+
+
+def test_dry_run_worker_count_is_overridable() -> None:
+    # An operator who knows their backend can absorb more (or wants a Featherless
+    # run pinned to 1 for clean per-seed latency) overrides AILIBI_REFRESH_WORKERS.
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_EVIDENCE_QUALITY_LIFT="1",
+        AILIBI_REFRESH_WORKERS="3",
+    )
+    proc = _run("--seeds", "0,1,2", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed workers: 3 parallel" in proc.stdout
+
+    env["AILIBI_REFRESH_WORKERS"] = "1"
+    proc = _run("--seeds", "0,1,2", "--dry-run", env=env)
+    assert proc.returncode == 0
+    assert "[dry-run] seed workers: 1 (sequential)" in proc.stdout
+
+
+def test_dry_run_non_featherless_is_sequential_by_default() -> None:
+    # Local Ollama (single GPU) and metered Anthropic stay sequential (1 worker):
+    # seed parallelism there thrashes the GPU or multiplies the metered burst. The
+    # 2-worker default is scoped to the hosted Featherless plan.
+    for provider in ("ollama", "anthropic"):
+        env = dict(_clean_env(), AILIBI_LLM_PROVIDER=provider)
+        proc = _run("--seeds", "0,1", "--dry-run", env=env)
+        assert proc.returncode == 0, provider
+        assert "[dry-run] seed workers: 1 (sequential)" in proc.stdout, provider
+
+
+def test_invalid_worker_count_fails_loud() -> None:
+    # A garbage AILIBI_REFRESH_WORKERS must fail loud, not silently fall back to a
+    # default -- a mis-set worker count could over-subscribe the plan.
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_EVIDENCE_QUALITY_LIFT="1",
+        AILIBI_REFRESH_WORKERS="two",
+    )
+    proc = _run("--seeds", "0", "--dry-run", env=env)
+    assert proc.returncode != 0
+    assert "AILIBI_REFRESH_WORKERS must be a positive integer" in (
+        proc.stdout + proc.stderr
+    )
+
+
 def test_featherless_preflight_requires_api_key_before_spend() -> None:
     # A real (non-dry-run) featherless mode with no key must fail at preflight,
     # before any tournament invocation -- so this test never spends, even with a
