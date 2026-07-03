@@ -27,19 +27,15 @@ _SEED = 0  # smallest committed sample: fast to reconstruct
 _MEETING_SEED = 22  # a committed sample that contains a meeting
 
 # The canonical samples were re-recorded on the Featherless / Qwen/Qwen3-32B
-# substrate (prompt set qwen3_32b v4, Task 14.12 baseline 2) with all four
-# Phase-13.5 levers ON (the unconditional default since Task 14.9) PLUS the
-# Task-14.10 evidence_quality_lift lever ON (stamped into game_over). That lever
-# is still default-OFF, so flag-aware reconstruction of baseline 2 requires it
-# exported — else the loader's substrate guard (correctly) refuses the mismatch.
-# The _lever_on autouse fixture sets it for every reconstruction here. (Making the
-# lever unconditional so the committed set serves bare — the 14.9 move for the
-# 13.5 levers — is a deferred follow-up, out of the 14.12 record-only scope.)
-
-
-@pytest.fixture(autouse=True)
-def _lever_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
+# substrate (prompt set qwen3_32b v4, Task 14.12 baseline 2) with ALL FIVE
+# levers unconditionally ON: the four Phase-13.5 levers (the default since Task
+# 14.9) plus the Task-14.10 evidence_quality_lift lever (stamped into game_over),
+# whose env gate was retired at the Task-14.12 close. Because every lever is now
+# env-independent, reconstruction matches the stamp under a BARE environment —
+# no AILIBI_* export — so these reconstruction tests need no lever fixture (that
+# is the whole point of the retirement; PR #218 Codex review). The wrapper test
+# below drives scripts/verify_samples.sh under the ambient (bare) env, pinning
+# that the MANIFEST-documented `bash scripts/verify_samples.sh` works clean.
 
 
 def _copy_seed(dst_dir: Path, seed: int) -> Path:
