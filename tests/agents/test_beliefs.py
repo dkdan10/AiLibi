@@ -3205,6 +3205,60 @@ class TestSelfRefutedAlibiDowngrade:
             _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
         )
 
+    def test_lever_on_contradiction_fold_without_transcript_fails_loud(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # PR #217 review (Codex P2): a lever-ON contradiction fold without
+        # the transcript would silently skip the self-refuted-alibi
+        # downgrade — rendering a graph the run's stamped substrate says
+        # cannot exist. The manager-seam helper fails loud instead (AGENTS.md
+        # "no silent fallbacks"); analysis callers that fold recorded flags
+        # (e.g. experiments/model_probe/corpus.py) must thread the recorded
+        # transcript, exactly like the production ballot path.
+        from meetings.manager import (
+            _suspicion_graph_with_contradictions,  # noqa: PLC2701
+        )
+
+        monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
+
+        with pytest.raises(ValueError, match="evidence_quality_lift is ON"):
+            _suspicion_graph_with_contradictions(
+                voter_id="p-2",
+                suspicion_graph=(),
+                contradictions=(_flag_on_self_alibi(),),
+            )
+
+        # No contradictions to fold -> nothing the downgrade could miss ->
+        # the transcript-less shape stays valid even with the lever ON.
+        assert (
+            _suspicion_graph_with_contradictions(
+                voter_id="p-2", suspicion_graph=(), contradictions=()
+            )
+            == ()
+        )
+
+    def test_lever_off_contradiction_fold_without_transcript_stays_valid(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The pre-14.10 analysis/test call shape is untouched under the
+        # default: the fold runs and the flag lands its STRONG delta.
+        from meetings.manager import (
+            _suspicion_graph_with_contradictions,  # noqa: PLC2701
+        )
+
+        monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
+
+        graph = _suspicion_graph_with_contradictions(
+            voter_id="p-2",
+            suspicion_graph=(),
+            contradictions=(_flag_on_self_alibi(),),
+        )
+
+        rendered = {entry.player_id: entry.suspicion for entry in graph}
+        assert rendered["p-1"] == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+
 
 class TestEvidenceQualityLiftOnCommittedBytes:
     """The Task-14.10 offline proof over baseline-1 bytes (the DoD bullet).

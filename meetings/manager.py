@@ -91,6 +91,7 @@ from agents.memory.beliefs import (
     BeliefState,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
+    evidence_quality_lift_enabled,
 )
 from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
@@ -1977,9 +1978,26 @@ def _suspicion_graph_with_contradictions(
     (:func:`agents.memory.beliefs.evidence_quality_lift_enabled`, default
     OFF), so the manager stays env-free (the 13.5.5 convention) and this
     threading is inert -- byte-identical -- until the lever is switched ON.
-    ``None`` (the pre-14.10 call shape, kept by analysis/test callers)
-    applies no downgrade.
+    ``None`` (the pre-14.10 call shape) stays valid for analysis/test callers
+    under the lever-OFF default only: folding contradictions WITHOUT a
+    transcript while the lever is ON fails loud below (PR #217 review) --
+    the graph would silently skip the self-refuted-alibi downgrade and
+    render values the run's stamped substrate says cannot exist (AGENTS.md
+    "no silent fallbacks").
     """
+
+    # Task 14.10 fail-loud seam guard (PR #217 review): every lever-ON
+    # contradiction fold must carry the transcript the downgrade signal is
+    # derived from. This also hardens the production seam -- a refactor that
+    # drops the ``_collect_one_ballot`` threading now raises on the first
+    # flagged ballot instead of silently shipping bound 2 half-implemented.
+    if contradictions and transcript is None and evidence_quality_lift_enabled():
+        raise ValueError(
+            "evidence_quality_lift is ON but a contradiction fold was "
+            "requested without the meeting transcript; thread the recorded "
+            "transcript (the self-refuted-alibi downgrade is derived from "
+            "it at fold time) or run with the lever OFF"
+        )
 
     teammates = frozenset(fellow_impostor_ids)
     folds = evidence is not None and bool(
