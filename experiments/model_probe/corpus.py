@@ -195,6 +195,14 @@ def build_corpus(
                     suspicion_graph=raw_graph,
                     contradictions=meeting.contradictions,
                     fellow_impostor_ids=fellow,
+                    # Task 14.10 (PR #217 review): the recorded transcript
+                    # carries the self-refuted-alibi signal, so a lever-ON
+                    # corpus rebuild folds the same evidence-quality
+                    # downgrade the production ballot fold applied — without
+                    # it the reconstruction would silently diverge from the
+                    # substrate the replay's stamp names (the helper fails
+                    # loud on that shape).
+                    transcript=meeting.transcript,
                 )
                 candidate_targets = tuple(pid for pid in living if pid != voter)
                 context = VoteContext(

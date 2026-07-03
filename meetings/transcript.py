@@ -140,6 +140,7 @@ from typing import Final, Literal
 from meetings.schemas import (
     AccusationClaim,
     AlibiClaim,
+    CompletedTaskObservation,
     ContradictionRef,
     CorroborationClaim,
     FoundBodyObservation,
@@ -703,6 +704,96 @@ def contradiction_lift_key(flag: ContradictionRef) -> str:
     if claim_ids:
         return "|".join(claim_ids)
     return f"{flag.event_a_id}|{flag.event_b_id}"
+
+
+def self_refuted_alibi_claim_ids(transcript: MeetingTranscript) -> frozenset[str]:
+    """Claim event ids of self-alibis refuted in their OWN turn (Task 14.10).
+
+    The evidence-quality classification behind the belief fold's
+    sloppy-testimony downgrade (audit 2026-07-01 §3a bound 2): a self-stated
+    :class:`~meetings.schemas.AlibiClaim` (``turn.speaker == claim.subject``)
+    whose SAME turn carries the speaker's own ``completed_task`` observation
+    at a tick inside the alibi span (inclusive, the
+    :class:`~meetings.schemas.AlibiClaim` range contract) but in a
+    contradictory room is self-refuted testimony -- the speaker disproved
+    their own account within one turn (the audited greedy-span defect;
+    10.2% of baseline-1 self-alibis). Room comparison is the detector's:
+    :func:`canonical_rooms` sets that are both non-empty and disjoint
+    contradict; a non-spatial label is not comparable and refutes nothing.
+    A ``completed_task`` observation carries no subject by schema -- it is
+    definitionally the turn speaker's own task -- so the speaker-equals-
+    subject guard is what makes the observation "the subject's OWN".
+
+    Returns the ids in the :func:`_turn_claim_id` format
+    (``turn:{turn_id}:claim:{index}``), i.e. the exact event ids a detector
+    flag references and :func:`contradiction_lift_key` keys groups on --
+    kept in this module beside the id writers so the formats can never
+    drift (the :func:`is_weak_contradiction` precedent: fold-side
+    classification lives next to what it classifies). Detector behavior is
+    untouched: flags are still detected and recorded identically; only the
+    Rule-2 WEIGHT read by
+    :func:`agents.memory.beliefs.apply_contradiction_rule` (behind the
+    Task-14.10 default-OFF lever) consumes this. Pure and deterministic --
+    a function of the transcript alone, so the replay-side re-derivation
+    folds the identical classification.
+
+    The classification is a function of the ACCOUNT, never the copy: once
+    a self-stated copy is refuted by its own turn's observation, EVERY
+    restatement of that account -- same ``(subject, canonical rooms, tick
+    range)``, the :func:`_dedupe_echo_alibis` echo key -- is marked,
+    whichever speaker or turn stated it. The detector dedups echoes
+    FIRST-statement-wins before pairing, so a flag may reference an
+    earlier copy than the one stated beside the refuting observation (a
+    subject re-asserting their alibi after an accusation, or a proxy
+    stating it first -- the seed-24/seed-26 turn-order shapes); marking
+    all copies keeps the fold's membership check turn-order-independent,
+    the same bug class the detector's own echo handling guards against.
+    """
+
+    refuted_accounts: set[tuple[PlayerId, frozenset[str], int, int]] = set()
+    for turn in transcript.turns:
+        own_task_observations = [
+            observation
+            for observation in turn.observations
+            if isinstance(observation, CompletedTaskObservation)
+        ]
+        if not own_task_observations:
+            continue
+        for claim in turn.claims:
+            if not isinstance(claim, AlibiClaim) or claim.subject != turn.speaker:
+                continue
+            alibi_rooms = canonical_rooms(claim.room)
+            if not alibi_rooms:
+                continue
+            for observation in own_task_observations:
+                if not claim.from_tick <= observation.tick <= claim.to_tick:
+                    continue
+                observed_rooms = canonical_rooms(observation.room)
+                if observed_rooms and not (observed_rooms & alibi_rooms):
+                    refuted_accounts.add(
+                        (
+                            claim.subject,
+                            alibi_rooms,
+                            claim.from_tick,
+                            claim.to_tick,
+                        )
+                    )
+                    break
+    if not refuted_accounts:
+        return frozenset()
+    return frozenset(
+        _turn_claim_id(turn=turn, index=index)
+        for turn in transcript.turns
+        for index, claim in enumerate(turn.claims)
+        if isinstance(claim, AlibiClaim)
+        and (
+            claim.subject,
+            canonical_rooms(claim.room),
+            claim.from_tick,
+            claim.to_tick,
+        )
+        in refuted_accounts
+    )
 
 
 def is_relevant_sighting(
@@ -2458,6 +2549,7 @@ __all__ = [
     "is_weak_contradiction",
     "next_chain_step",
     "reconstruct_stated_paths",
+    "self_refuted_alibi_claim_ids",
     "sort_turns_canonically",
     "triggering_body_rooms",
     "walk_chain",

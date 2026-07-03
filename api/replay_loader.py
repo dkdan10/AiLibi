@@ -144,6 +144,7 @@ from orchestrator.game import (
 )
 from orchestrator.replay import (
     SUBSTRATE_FLAG_KEYS,
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
@@ -295,12 +296,16 @@ class ReplaySubstrateMismatchError(RuntimeError):
     recording stamped with a different lever config would silently reconstruct
     a memory view the recording never produced. Rather than fall back silently
     (AGENTS.md "no silent fallbacks"), the loader fails loud here and names the
-    divergent levers. Since Task 14.9 the four 13.5 levers are unconditionally
-    ON (their env gates are retired), so this fires only for a legacy stamp
-    recording one of them OFF — a substrate this build can no longer reproduce.
-    A legacy replay carrying NO stamp is never checked, so the committed
-    final-9B baseline reconstructs unchanged. Surfaced as HTTP 500 with the
-    offending game id in the response body.
+    divergent levers. Two firing modes: a legacy stamp recording one of the
+    four retired 13.5 levers OFF (unconditionally ON since Task 14.9 — a
+    substrate this build can no longer reproduce), or a TOGGLEABLE lever
+    (Task 14.10's ``evidence_quality_lift``) whose ambient ``AILIBI_*`` state
+    differs from the stamp — recoverable by matching the environment to the
+    stamp (a stamp that predates the lever's key reads as OFF, so baseline 1
+    loads under the default-OFF env and mismatches only when the lever is
+    exported ON). A legacy replay carrying NO stamp is never checked, so the
+    committed final-9B baseline reconstructs unchanged. Surfaced as HTTP 500
+    with the offending game id in the response body.
     """
 
     def __init__(
@@ -318,14 +323,33 @@ class ReplaySubstrateMismatchError(RuntimeError):
             for key in SUBSTRATE_FLAG_KEYS
             if bool(recorded.get(key)) != bool(ambient.get(key))
         )
+        # The remediation hint depends on WHICH lever diverged: a toggleable
+        # lever (Task 14.10's evidence_quality_lift) is env-remediable —
+        # match the AILIBI_* environment to the stamp (a stamp without the
+        # key reads as OFF) — while a retired 13.5 lever has no env any more
+        # (unconditionally ON since Task 14.9), so that stamp is a substrate
+        # this build can no longer produce.
+        toggleable = sorted(set(differing) & set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
+        retired = sorted(set(differing) - set(TOGGLEABLE_SUBSTRATE_FLAG_KEYS))
+        hints: list[str] = []
+        if toggleable:
+            hints.append(
+                f"Toggleable lever(s) {toggleable} differ: match the AILIBI_* "
+                "environment to the stamp — a stamp recorded before a lever "
+                "existed reads as OFF, so unset its env var to load it."
+            )
+        if retired:
+            hints.append(
+                f"Retired Phase-13.5 lever(s) {retired} are unconditionally ON "
+                "since Task 14.9 (their env gates are deleted), so this stamp "
+                "records a substrate the build can no longer reproduce."
+            )
         super().__init__(
             f"replay substrate mismatch for {game_id!r}: recorded with "
             f"{self.recorded!r} but reconstructing under {self.ambient!r} "
-            f"(differing levers: {differing}). The four Phase-13.5 levers are "
-            "unconditionally ON since Task 14.9 (their env gates are retired), "
-            "so a replay stamped with one of them OFF cannot be faithfully "
-            "reconstructed by this build (this is not a determinism break — the "
-            "per-tick state hash is substrate-independent)."
+            f"(differing levers: {differing}). " + " ".join(hints) + " (This is "
+            "not a determinism break — the per-tick state hash is "
+            "substrate-independent.)"
         )
 
 

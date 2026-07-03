@@ -12,15 +12,18 @@ in Phase 3 (Task 3.3).
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import Final, Literal, TypeAlias
 
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
+from meetings.schemas import MeetingTranscript
 from meetings.transcript import (
     contradiction_lift_key,
     is_weak_contradiction,
+    self_refuted_alibi_claim_ids,
 )
 from observation.packet import ObservationPacket
 
@@ -114,6 +117,69 @@ strong contradiction still lands its full weight (the cap never bites a
 lone flag), while no volume of flags can exceed it. Transient: the cap
 applies inside one ``apply_contradiction_rule`` call (the per-meeting
 vote-time lift); cross-meeting accumulation stays the 9.8 channel."""
+
+CONTRADICTION_RENDER_CEIL: Final[float] = 0.97
+"""Certain-guilt exclusion ceiling for flag/testimony-driven lift
+(Task 14.10 bound 1; audit 2026-07-01 §3/§3a).
+
+The 14.8 measurement reproduced the production vote-time fold exactly
+(2482/2482 recorded rows) and found the caps HOLD -- the crew-railroad
+mechanism is that one saturated STRONG contradiction group (+0.30)
+lands in every voter's graph in lockstep, and the voters carrying the
+Phase-10 Rule-1 body-proximity prior (0.70 = 0.50 +
+:data:`BODY_PROXIMITY_SUSPICION_DELTA`) clamp to certain-guilt 1.00 --
+in all 5 pinned railroad rows the 1.00-renderers are the impostors,
+handed a false "certain guilt" row on an innocent. This ceiling, just
+below the clamp, extends the 13.14 joint-cap discipline with a third
+bound: with the :data:`ENV_EVIDENCE_QUALITY_LIFT` lever ON, a subject's
+flag/testimony-driven transient lift renders at most
+``min(lifted, prior + 0.3, max(prior, CONTRADICTION_RENDER_CEIL))`` --
+no same-meeting stack can reach the 1.0 clamp. Zero conversion cost:
+every 0.97 stays a §4.6 MUST-vote (the gate is 0.60). The ``max(prior,
+...)`` term is the first-hand-conclusive exemption -- a witnessed
+kill/vent pin (or any standing prior already at the clamp) legitimately
+reads ~1.0 and is never dragged down; the ceiling bounds the LIFT,
+never the prior. Applied only to the transient render channels
+(:func:`apply_contradiction_rule` and the ``pre_vote`` testimony
+spread); the persistent absorb is untouched, so the across-meeting 9.8
+accumulator stays the allowed channel."""
+
+# Task 14.10 evidence-quality lift lever (the 13.5 default-OFF pattern).
+# Resolved like ``AILIBI_LLM_PROVIDER`` (``llm/provider.py``): OFF by default,
+# so a build that never sets it folds BYTE-IDENTICALLY to pre-task HEAD and
+# the committed baseline-1 bytes keep verifying. Registered in
+# ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS`` so recordings stamp it
+# (the 14.7 provenance machinery); the 14.12 baseline-2 re-record runs it ON.
+ENV_EVIDENCE_QUALITY_LIFT: Final[str] = "AILIBI_EVIDENCE_QUALITY_LIFT"
+_EVIDENCE_QUALITY_LIFT_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def evidence_quality_lift_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 14.10 evidence-quality lift lever is ON.
+
+    Reads :data:`ENV_EVIDENCE_QUALITY_LIFT` from ``env`` (defaulting to the
+    real process environment), mirroring the retired 13.5 resolvers and
+    :func:`agents.strategic.prompts.loader.resolve_prompt_set`. Default OFF:
+    an unset / empty / unrecognised value is ``False`` so the belief fold is
+    byte-identical to pre-task behavior and the committed baseline-1 bytes
+    keep verifying (the re-record under the lever is Task 14.12). Accepts
+    ``1/true/yes/on`` (case-insensitive). The ``env`` argument lets tests
+    toggle the lever deterministically without mutating ``os.environ``.
+
+    ON gates the audit §3a bounds inside the fold: the
+    :data:`CONTRADICTION_RENDER_CEIL` certain-guilt exclusion and the
+    self-refuted-alibi WEAK downgrade in :func:`apply_contradiction_rule`,
+    plus the same ceiling on the ``pre_vote`` testimony spread in
+    :func:`apply_meeting_evidence_rules`.
+    """
+
+    environment = env if env is not None else os.environ
+    return environment.get(ENV_EVIDENCE_QUALITY_LIFT, "").strip().lower() in (
+        _EVIDENCE_QUALITY_LIFT_FLAG_TRUE
+    )
+
 
 ACCUSATION_SUSPICION_DELTA: Final[float] = 0.05
 """Accusation-driven suspicion bump (Tasks 9.8, 10.7; audit gp-1 recall).
@@ -652,6 +718,9 @@ def apply_observation_rules(
 def apply_contradiction_rule(
     beliefs: BeliefState,
     contradictions: Sequence[MeetingContradictionRef],
+    *,
+    transcript: MeetingTranscript | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> BeliefState:
     """Apply DESIGN.md §6.3 Rule 2 for detected meeting contradictions.
 
@@ -732,10 +801,46 @@ def apply_contradiction_rule(
     about the score, never the information (§5.4 "flags are
     information").
 
+    Evidence-quality bounds (Task 14.10; audit 2026-07-01 §3a). Behind the
+    default-OFF :func:`evidence_quality_lift_enabled` lever (``env``-resolved,
+    defaulting to the process environment -- the retired 13.5 pattern), two
+    MEASURED bounds tighten the lift; OFF is byte-identical to the pre-14.10
+    fold:
+
+    * **Self-refuted-alibi downgrade (bound 2).** A flag whose referenced
+      alibi claim is self-refuted -- the subject's OWN same-turn
+      ``completed_task`` observation places them in a contradictory room at a
+      tick inside the alibi span
+      (:func:`meetings.transcript.self_refuted_alibi_claim_ids`, derived from
+      ``transcript`` at fold time) -- contributes the WEAK delta (0.08), not
+      STRONG (0.30): testimony the speaker disproved within their own turn is
+      sloppy, not probative. Measured on baseline 1: the class costs 0/57
+      flagged impostor ejections while keeping the seed-16/44 railroad
+      rosters sub-gate (0.50 + 0.08 = 0.58 < 0.60). ``transcript=None`` (the
+      analysis-caller default) applies no downgrade -- the production vote
+      path threads the meeting transcript.
+    * **Certain-guilt exclusion (bound 1).** A subject's lifted suspicion is
+      additionally bounded by ``max(prior, CONTRADICTION_RENDER_CEIL)``, so
+      flag-driven lift can never reach the 1.0 clamp (0.70 body-proximity
+      prior + 0.30 now renders ~0.97, still a §4.6 MUST-vote) while a
+      first-hand conclusive prior already at the clamp -- the witnessed-kill
+      pin -- keeps rendering 1.0 (the ``max`` exemption; the ceiling bounds
+      the lift, never the prior).
+
+    The audit REJECTED witness-count weighting (an anti-signal: honest greedy
+    alibis attract MORE independent refuting witnesses) and >=2-group gating
+    (over-damps: 54/57 flagged impostor ejections ride exactly ONE group) --
+    neither is implemented, by measurement, not oversight.
+
     Subjects are processed in sorted order so the resulting state is
     deterministic regardless of input ordering -- a precondition for
     replay-stable belief snapshots.
     """
+
+    lift_enabled = evidence_quality_lift_enabled(env)
+    self_refuted: frozenset[str] = frozenset()
+    if lift_enabled and transcript is not None:
+        self_refuted = self_refuted_alibi_claim_ids(transcript)
 
     result = beliefs.copy()
     lift_groups: dict[tuple[PlayerId, str], float] = {}
@@ -750,6 +855,16 @@ def apply_contradiction_rule(
             if is_weak_contradiction(contradiction)
             else CONTRADICTION_SUSPICION_DELTA
         )
+        # Task 14.10 bound 2: a flag riding a self-refuted alibi claim is
+        # downgraded to the WEAK delta. ``self_refuted`` holds claim event
+        # ids only, so an ``:obs:``-side id can never match; the flag is
+        # still recorded on the inconsistency list below (§5.4 "flags are
+        # information" -- the downgrade is about the score, never the flag).
+        if self_refuted and (
+            contradiction.event_a_id in self_refuted
+            or contradiction.event_b_id in self_refuted
+        ):
+            delta = WEAK_CONTRADICTION_SUSPICION_DELTA
         lift_key = contradiction_lift_key(contradiction)
         for subject in sorted(contradiction.subjects):
             result.record_contradiction(subject, belief_ref)
@@ -760,10 +875,16 @@ def apply_contradiction_rule(
     for (subject, _), delta in lift_groups.items():
         lift_by_subject[subject] = lift_by_subject.get(subject, 0.0) + delta
     for subject in sorted(lift_by_subject):
-        result.adjust_suspicion(
-            subject,
-            delta=min(lift_by_subject[subject], MEETING_CONTRADICTION_LIFT_CAP),
-        )
+        capped = min(lift_by_subject[subject], MEETING_CONTRADICTION_LIFT_CAP)
+        if lift_enabled:
+            # Task 14.10 bound 1: never lift a subject INTO the 1.0 clamp --
+            # the render ceiling caps the delta so the result stays at or
+            # under max(prior, CONTRADICTION_RENDER_CEIL). A prior already at
+            # the clamp (the witnessed-kill pin) is exempt by the max: its
+            # ceiling equals the prior, so the value holds rather than drops.
+            prior = result.view(subject).suspicion
+            capped = min(capped, max(prior, CONTRADICTION_RENDER_CEIL) - prior)
+        result.adjust_suspicion(subject, delta=capped)
     return result
 
 
@@ -780,6 +901,7 @@ def apply_meeting_evidence_rules(
     pre_vote_folded: AbstractSet[PlayerId] = frozenset(),
     pre_vote_informed: AbstractSet[PlayerId] = frozenset(),
     pre_vote_voice_counts: Mapping[PlayerId, int] | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> BeliefState:
     """Fold one meeting's public evidence into persistent beliefs (Tasks 9.8, 10.7, 10.15).
 
@@ -930,6 +1052,20 @@ def apply_meeting_evidence_rules(
     impostor listener never takes a pre-vote bump against a fellow
     impostor.
 
+    **Certain-guilt exclusion on the spread (Task 14.10 bound 1; audit
+    2026-07-01 §3a).** With the default-OFF
+    :func:`evidence_quality_lift_enabled` lever ON (``env``-resolved,
+    defaulting to the process environment), the ``pre_vote`` bump is
+    additionally bounded so a bumped subject renders at or under
+    ``max(prior, CONTRADICTION_RENDER_CEIL)`` -- testimony-driven transient
+    lift can never reach the 1.0 clamp, mirroring the contradiction-lift
+    ceiling in :func:`apply_contradiction_rule` (the two channels stack on
+    one graph at vote time, so both must respect the render bound). ONLY the
+    ``pre_vote`` half is ceilinged: the ``post_vote`` and composed halves are
+    the persistent absorb, whose flat +0.05 across-meeting accumulation is
+    the legitimate 9.8 channel and stays untouched (lever ON or OFF). OFF is
+    byte-identical to the pre-14.10 fold.
+
     All subject sets are processed in sorted order; the result is a
     deterministic function of its arguments (replay-stable).
     """
@@ -1009,6 +1145,11 @@ def apply_meeting_evidence_rules(
         for player_id in result.known_players():
             if player_id not in roster:
                 result.drop_player(player_id)
+    # Task 14.10 bound 1: the render ceiling applies to the TRANSIENT
+    # pre-vote half only (the graph the ballot reads); the persistent
+    # halves never consult the lever, so the 9.8 across-meeting
+    # accumulator -- and the OFF-branch byte-identity -- are untouched.
+    ceil_lift = phase == "pre_vote" and evidence_quality_lift_enabled(env)
     for subject in sorted(bump_now):
         # Graduated testimony spread (Task 13.7): the PRE-VOTE half lifts a
         # voiced subject by its voice-count delta (1->+0.05, 2->+0.12,
@@ -1019,6 +1160,12 @@ def apply_meeting_evidence_rules(
             delta = graduated_spread_delta(voice_counts[subject])
         else:
             delta = ACCUSATION_SUSPICION_DELTA
+        if ceil_lift:
+            # Never bump a subject INTO the 1.0 clamp (mirrors the
+            # contradiction-lift ceiling); a prior already at the clamp is
+            # exempt via the max -- the ceiling bounds the lift, not the prior.
+            prior = result.view(subject).suspicion
+            delta = min(delta, max(prior, CONTRADICTION_RENDER_CEIL) - prior)
         result.adjust_suspicion(subject, delta=delta)
     for subject in sorted(lower_now):
         result.adjust_suspicion(subject, delta=-CORROBORATION_SUSPICION_DELTA)
@@ -1034,8 +1181,10 @@ __all__ = [
     "ACCUSATION_SUSPICION_DELTA",
     "BODY_PROXIMITY_SUSPICION_DELTA",
     "BODY_PROXIMITY_WINDOW_TICKS",
+    "CONTRADICTION_RENDER_CEIL",
     "CONTRADICTION_SUSPICION_DELTA",
     "CORROBORATION_SUSPICION_DELTA",
+    "ENV_EVIDENCE_QUALITY_LIFT",
     "MEETING_CONTRADICTION_LIFT_CAP",
     "MEETING_SUSPICION_DECAY_RATE",
     "OBSERVED_KILL_ACTION",
@@ -1055,5 +1204,6 @@ __all__ = [
     "apply_contradiction_rule",
     "apply_meeting_evidence_rules",
     "apply_observation_rules",
+    "evidence_quality_lift_enabled",
     "graduated_spread_delta",
 ]

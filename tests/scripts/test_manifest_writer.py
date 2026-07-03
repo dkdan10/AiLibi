@@ -114,7 +114,9 @@ def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
     # A re-record stamps its substrate config onto the replay's game_over
     # record (all four 13.5 levers unconditionally ON since Task 14.9 — no env
     # export needed); the MANIFEST flags column reports the ON levers, sorted.
-    # This is the stamp -> manifest provenance path.
+    # This is the stamp -> manifest provenance path. The Task-14.10
+    # evidence_quality_lift lever stamps its default OFF under the (suite-
+    # pinned) bare env, so it does not appear in the ON-levers cell.
     samples = tmp_path / "samples"
     samples.mkdir()
     log = ReplayLog(samples / "replay-seed-5.jsonl", game_id="headless-seed-5")
@@ -132,6 +134,28 @@ def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
     # No meeting recorded -> attributed to the active model, no prompt versions.
     assert model == "Qwen/Qwen3-32B"
     assert prompt_versions == mw._NO_MEETINGS
+
+
+def test_provenance_reports_the_evidence_quality_lever_when_stamped_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Task 14.10: the lever round-trips stamp -> read_substrate_flags ->
+    # MANIFEST flags cell, so the Task-14.12 lever-ON recording
+    # self-describes. With AILIBI_EVIDENCE_QUALITY_LIFT exported at record
+    # time the game_over stamp carries it ON and the cell lists it alongside
+    # the four retired levers.
+    monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
+    samples = tmp_path / "samples"
+    samples.mkdir()
+    log = ReplayLog(samples / "replay-seed-7.jsonl", game_id="headless-seed-7")
+    log.record_game_end(winner="CREWMATES", reason="TASKS_COMPLETE", tick=10)
+    log.close()
+
+    _, _, flags, _, _ = mw.sample_provenance(samples, 7, "Qwen/Qwen3-32B")
+    assert flags == (
+        "evidence_quality_lift, movement_perception, testimony_as_content, "
+        "unfreeze_memory, witnessed_kill_evidence"
+    )
 
 
 def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None:
