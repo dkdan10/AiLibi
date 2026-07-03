@@ -114,11 +114,11 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
 
 def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
     # A re-record stamps its substrate config onto the replay's game_over
-    # record (all four 13.5 levers unconditionally ON since Task 14.9 — no env
-    # export needed); the MANIFEST flags column reports the ON levers, sorted.
-    # This is the stamp -> manifest provenance path. The Task-14.10
-    # evidence_quality_lift lever stamps its default OFF under the (suite-
-    # pinned) bare env, so it does not appear in the ON-levers cell.
+    # record; the MANIFEST flags column reports the ON levers, sorted. This is
+    # the stamp -> manifest provenance path. ALL FIVE levers are unconditionally
+    # ON (the four 13.5 levers since Task 14.9, the Task-14.10
+    # evidence_quality_lift lever since the Task-14.12 close), so a bare-env
+    # recording stamps every one of them — no env export needed.
     samples = tmp_path / "samples"
     samples.mkdir()
     log = ReplayLog(samples / "replay-seed-5.jsonl", game_id="headless-seed-5")
@@ -129,7 +129,7 @@ def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
         samples, 5, "Qwen/Qwen3-32B"
     )
     assert flags == (
-        "movement_perception, testimony_as_content, "
+        "evidence_quality_lift, movement_perception, testimony_as_content, "
         "unfreeze_memory, witnessed_kill_evidence"
     )
     assert winner == "CREWMATES"

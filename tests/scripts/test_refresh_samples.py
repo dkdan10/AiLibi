@@ -181,14 +181,14 @@ def test_dry_run_featherless_provider_echoes_substrate() -> None:
     # Task 14.7: AILIBI_LLM_PROVIDER=featherless is an accepted provider; the
     # dry-run echoes it, its FEATHERLESS_API_KEY preflight, the prompt set, and
     # the substrate provenance so the locked tuple is never silent (AGENTS.md
-    # "no silent fallbacks"). The four 13.5 levers are unconditionally ON since
-    # Task 14.9, so no flag env vars are exported and the echo states the
-    # unconditional substrate.
+    # "no silent fallbacks"). All five levers are unconditionally ON (the four
+    # 13.5 levers since Task 14.9, the Task-14.10 evidence_quality_lift lever
+    # since the 14.12 close), so no substrate env vars are exported and the echo
+    # states the unconditional substrate.
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         AILIBI_PROMPT_SET="qwen3_32b",
-        AILIBI_EVIDENCE_QUALITY_LIFT="1",
     )
     proc = _run("--seeds", "0", "--dry-run", env=env)
     assert proc.returncode == 0
@@ -196,15 +196,8 @@ def test_dry_run_featherless_provider_echoes_substrate() -> None:
     assert "[dry-run] preflight: would require FEATHERLESS_API_KEY" in proc.stdout
     assert "[dry-run] prompt set: qwen3_32b" in proc.stdout
     assert (
-        "[dry-run] substrate flags: all four 13.5 levers ON "
-        "(unconditional since Task 14.9)" in proc.stdout
-    )
-    # Task 14.12: the baseline-2 substrate adds the 14.10 evidence-quality-lift
-    # lever; the dry-run echoes its ambient value so the locked tuple is never
-    # silent.
-    assert (
-        "[dry-run] evidence-quality lift (14.10 lever): 1 "
-        "(baseline 2 requires '1')" in proc.stdout
+        "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 "
+        "since Task 14.9, evidence_quality_lift since the 14.12 close)" in proc.stdout
     )
 
 
@@ -218,7 +211,6 @@ def test_dry_run_featherless_defaults_to_two_seed_workers() -> None:
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         AILIBI_PROMPT_SET="qwen3_32b",
-        AILIBI_EVIDENCE_QUALITY_LIFT="1",
     )
     proc = _run("--full", "--dry-run", env=env)
     assert proc.returncode == 0
@@ -233,7 +225,6 @@ def test_dry_run_worker_count_is_overridable() -> None:
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         AILIBI_PROMPT_SET="qwen3_32b",
-        AILIBI_EVIDENCE_QUALITY_LIFT="1",
         AILIBI_REFRESH_WORKERS="3",
     )
     proc = _run("--seeds", "0,1,2", "--dry-run", env=env)
@@ -267,7 +258,6 @@ def test_dry_run_seed_crash_retry_scoped_to_featherless() -> None:
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         AILIBI_PROMPT_SET="qwen3_32b",
-        AILIBI_EVIDENCE_QUALITY_LIFT="1",
     )
     proc = _run("--seeds", "0", "--dry-run", env=env)
     assert proc.returncode == 0
@@ -289,7 +279,6 @@ def test_invalid_seed_max_attempts_fails_loud() -> None:
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         AILIBI_PROMPT_SET="qwen3_32b",
-        AILIBI_EVIDENCE_QUALITY_LIFT="1",
         AILIBI_SEED_MAX_ATTEMPTS="lots",
     )
     proc = _run("--seeds", "0", "--dry-run", env=env)
@@ -306,7 +295,6 @@ def test_invalid_worker_count_fails_loud() -> None:
         _clean_env(),
         AILIBI_LLM_PROVIDER="featherless",
         AILIBI_PROMPT_SET="qwen3_32b",
-        AILIBI_EVIDENCE_QUALITY_LIFT="1",
         AILIBI_REFRESH_WORKERS="two",
     )
     proc = _run("--seeds", "0", "--dry-run", env=env)
@@ -329,59 +317,41 @@ def test_featherless_preflight_requires_api_key_before_spend() -> None:
 
 def test_featherless_refresh_requires_locked_substrate_before_spend() -> None:
     # Task 14.7 / 14.12 (PR #209 review): a real featherless refresh WITH a key
-    # but WITHOUT the baseline-2 locked substrate (prompt set qwen3_32b + the
-    # 14.10 evidence-quality-lift lever) must fail loud at preflight, before any
-    # seed is staged -- so an operator cannot spend a multi-hour run recording
-    # the wrong substrate (default 9B set / lever OFF) and only learn afterward
-    # from the MANIFEST. The four retired 13.5 flag requirements are gone (Task
-    # 14.9: those env vars no longer exist, and a guard demanding them would fail
-    # every refresh); the prompt-set + 14.10-lever requirements stay.
-    # _clean_env strips every AILIBI_* var, so both the locked prompt set and the
-    # 14.10 lever are absent here; the dummy key clears the key check so the
-    # substrate guard (which follows it) is what fires.
+    # but WITHOUT the locked prompt set (qwen3_32b) must fail loud at preflight,
+    # before any seed is staged -- so an operator cannot spend a multi-hour run
+    # recording the wrong (default 9B) set and only learn afterward from the
+    # MANIFEST. The substrate LEVERS need no env: all five are unconditionally ON
+    # (the four 13.5 levers since Task 14.9, the Task-14.10 evidence_quality_lift
+    # lever since the 14.12 close), so the guard only pins the prompt set.
+    # _clean_env strips every AILIBI_* var, so the locked prompt set is absent
+    # here; the dummy key clears the key check so the substrate guard (which
+    # follows it) is what fires.
     env = _clean_env()
     env["AILIBI_LLM_PROVIDER"] = "featherless"
     env["FEATHERLESS_API_KEY"] = "test-key-unused"  # guard exits before any call
     proc = _run("--seeds", "0", env=env)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "14.12-locked substrate" in out
+    assert "locked substrate" in out
     assert "AILIBI_PROMPT_SET must be 'qwen3_32b'" in out
-    assert "AILIBI_EVIDENCE_QUALITY_LIFT must be '1'" in out
+    # No substrate-lever env is required any more (they are all unconditional).
+    assert "AILIBI_EVIDENCE_QUALITY_LIFT" not in out
     assert "AILIBI_TESTIMONY_AS_CONTENT" not in out
 
 
-def test_featherless_refresh_requires_evidence_quality_lift_before_spend() -> None:
-    # Task 14.12: even with the 14.6 prompt set correct, a real featherless
-    # refresh WITHOUT the 14.10 evidence-quality-lift lever (default-OFF) must
-    # fail loud -- baseline 2 is defined by that lever being ON, and a run with
-    # it OFF would silently reproduce baseline-1 belief-fold behavior. The guard
-    # names the missing lever so the operator can fix exactly it.
-    env = _clean_env()
-    env["AILIBI_LLM_PROVIDER"] = "featherless"
-    env["FEATHERLESS_API_KEY"] = "test-key-unused"  # guard exits before any call
-    env["AILIBI_PROMPT_SET"] = "qwen3_32b"  # prompt set OK; lever still missing
-    proc = _run("--seeds", "0", env=env)
-    assert proc.returncode != 0
-    out = proc.stdout + proc.stderr
-    assert "14.12-locked substrate" in out
-    assert "AILIBI_EVIDENCE_QUALITY_LIFT must be '1'" in out
-
-
-def test_featherless_refresh_accepts_baseline2_substrate() -> None:
-    # Task 14.12: with BOTH the locked prompt set and the 14.10 lever ON, the
-    # substrate guard passes. Use --dry-run so the test never spends: the dry-run
-    # path echoes the resolved substrate (including the lever) and exits 0
-    # without touching the API, samples, or manifest.
+def test_featherless_refresh_accepts_locked_substrate() -> None:
+    # Task 14.12: with the locked prompt set, the substrate guard passes -- no
+    # lever env needed (all five levers are unconditional). Use --dry-run so the
+    # test never spends.
     env = _clean_env()
     env["AILIBI_LLM_PROVIDER"] = "featherless"
     env["AILIBI_PROMPT_SET"] = "qwen3_32b"
-    env["AILIBI_EVIDENCE_QUALITY_LIFT"] = "1"
     proc = _run("--seeds", "0", "--dry-run", env=env)
     assert proc.returncode == 0
+    assert "[dry-run] prompt set: qwen3_32b" in proc.stdout
     assert (
-        "[dry-run] evidence-quality lift (14.10 lever): 1 "
-        "(baseline 2 requires '1')" in proc.stdout
+        "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 "
+        "since Task 14.9, evidence_quality_lift since the 14.12 close)" in proc.stdout
     )
 
 

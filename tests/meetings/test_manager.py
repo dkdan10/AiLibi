@@ -36,6 +36,7 @@ from pydantic import BaseModel, ValidationError
 
 from agents.memory.beliefs import (
     ACCUSATION_SUSPICION_DELTA,
+    CONTRADICTION_RENDER_CEIL,
     CORROBORATION_SUSPICION_DELTA,
     TESTIMONY_INDEPENDENCE_BAR,
     BeliefState,
@@ -1330,9 +1331,11 @@ class TestDetectorPrecisionGraduatedSuspicion:
         # A voter whose persistent beliefs already hold a Rule-1 body-proximity
         # prior (0.5 + 0.2 = 0.7) sees the now-STRONG flag (Task 13.14) land on
         # it. The joint cap bounds the per-meeting lift at one strong flag's
-        # worth above the prior: 0.7 + 0.3 = 1.0 (clamped). A prior-free voter
-        # also crosses now (0.5 + 0.3 = 0.80) -- pre-13.14 the prior-free voter
-        # stayed at 0.58 and only the prior crossed (at 0.78).
+        # worth above the prior: 0.7 + 0.3 = 1.0 -- but the unconditional
+        # evidence-quality lever (Task 14.12) ceils a single-flag certain-guilt
+        # render at CONTRADICTION_RENDER_CEIL (0.97) instead of the flat 1.0
+        # clamp, so p-1 renders at 0.97. A prior-free voter still crosses at
+        # 0.5 + 0.3 = 0.80 (below the ceiling, untouched).
         participants = (
             _participant("p-1"),
             _participant("p-2"),
@@ -1371,7 +1374,7 @@ class TestDetectorPrecisionGraduatedSuspicion:
         _, client = _run_meeting(responder, participants=participants)
 
         with_prior = _vote_prompt_suspicion(client, voter="p-4", of="p-1")
-        assert with_prior == pytest.approx(1.0)
+        assert with_prior == pytest.approx(CONTRADICTION_RENDER_CEIL)
         assert with_prior >= 0.6
 
         prior_free = _vote_prompt_suspicion(client, voter="p-3", of="p-1")
@@ -1444,6 +1447,12 @@ class TestDetectorPrecisionGraduatedSuspicion:
             voter_id="p-1",
             suspicion_graph=(),
             contradictions=contradictions,
+            # The lever is unconditional (Task 14.12), so a contradiction fold
+            # always requires the transcript the self-refuted-alibi signal is
+            # derived from. These synthetic flags carry no alibi turn, so an
+            # empty transcript yields no downgrade -- the graduated-weight math
+            # under test is untouched.
+            transcript=MeetingTranscript(turns=()),
         )
 
         by_id = {entry.player_id: entry.suspicion for entry in graph}
@@ -1484,6 +1493,10 @@ class TestDetectorPrecisionGraduatedSuspicion:
             suspicion_graph=(),
             contradictions=contradictions,
             evidence=evidence,
+            # Unconditional lever (Task 14.12): thread the transcript; the lone
+            # synthetic flag carries no self-refuted alibi, so the joint-cap
+            # math under test is unchanged.
+            transcript=MeetingTranscript(turns=()),
         )
 
         by_id = {entry.player_id: entry.suspicion for entry in graph}
@@ -1792,11 +1805,17 @@ class TestSuspicionGraphTeammateMask:
                 description="other flagged",
             ),
         )
+        # Unconditional lever (Task 14.12): the fold requires the transcript.
+        # These synthetic flags carry no alibi turn, so an empty transcript
+        # yields no self-refuted-alibi downgrade -- the teammate-mask behaviour
+        # under test is untouched.
+        empty_transcript = MeetingTranscript(turns=())
         impostor_graph = _suspicion_graph_with_contradictions(
             voter_id="p-4",
             suspicion_graph=(),
             contradictions=contradictions,
             fellow_impostor_ids=("p-5",),
+            transcript=empty_transcript,
         )
         # Teammate p-5 masked even though it was contradicted; p-3 lifted.
         assert all(entry.player_id != "p-5" for entry in impostor_graph)
@@ -1808,6 +1827,7 @@ class TestSuspicionGraphTeammateMask:
             suspicion_graph=(),
             contradictions=contradictions,
             fellow_impostor_ids=(),
+            transcript=empty_transcript,
         )
         assert any(entry.player_id == "p-5" for entry in crew_graph)
 

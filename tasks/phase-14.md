@@ -1,8 +1,9 @@
 # Phase 14 — Integrate Featherless AI: provider + model/prompt migration
 
 > **STATUS: CLOSED 2026-07-03 on baseline 2 (Task 14.12).** The canonical baseline is re-recorded on
-> `Qwen/Qwen3-32B` (Featherless, `qwen3_32b.v4`, the four 13.5 levers + the 14.10 evidence-quality lever ON)
-> and passes the HARD validity gate + byte-identical flag-aware reconstruction. The crew railroad is
+> `Qwen/Qwen3-32B` (Featherless, `qwen3_32b.v4`, all five levers unconditionally ON — the four 13.5 levers
+> plus the 14.10 evidence-quality lever, whose env gate this PR retired) and passes the HARD validity gate +
+> byte-identical BARE reconstruction (no `AILIBI_*` export). The crew railroad is
 > ELIMINATED (5→0; the `test_manager` tripwire is restored to `railroaded == set()`) and all six v4 dialogue
 > defects fell sharply (self-contradicted alibis 10.2%→2.9%, guard-normalized ballots 47→10, conf-1.0
 > accusations 12.7%→5.5%, template rationales 32.9%→14.8%, missed-deadline 23→6). R1 held near its honest
@@ -1041,14 +1042,16 @@ axis on the same pinned contexts (operator, $0, fast); the LIVE proof is 14.12's
 the gate (parse 100%, zero truncation, conversion not collapsed, zero railroad) → operator GO. Both sets
 re-recorded in ONE atomic PR on the locked tuple + `qwen3_32b.v4` + the 14.10 lever ON (2 parallel Featherless
 workers, measured ~3.85h); MANIFESTs/reports/fixtures regenerated; the `flags` stamp records the lever;
-byte-identical flag-aware reconstruction holds; HARD validity gate PASS both sets. The railroad TRIPWIRE is
+byte-identical BARE reconstruction holds; HARD validity gate PASS both sets. The railroad TRIPWIRE is
 RESTORED (0 crew rows at 1.0 from ≥2 same-meeting flags). Per-defect deltas vs baseline 1: ejection accuracy
 0.566→0.525 (flat — the zero-flag channel rose 22→31, a Phase-15 target; flag-driven mis-ejects fell 31→25),
 self-contradicted alibis 10.2%→2.9%, guard-normalized ballots 47→10, conf-1.0 accusations 64→27,
 template-rationale share 32.9%→14.8%, missed-deadline 23→6. R-gate (railroad-discounted anchor): R1 25→24
 (held), genuine-class conversion 0.667→0.625 (no over-damping), impostor win 0.32→0.40 (vs 9B 3/50 & 0.84).
-4p1i ejection accuracy 0.788→0.923. Close audit: `audits/audit-phase-14-close.md`. One follow-up (out of the
-record-only scope): make the 14.10 lever unconditional (the 14.9 move) so the committed set serves bare again.
+4p1i ejection accuracy 0.788→0.923. Close audit: `audits/audit-phase-14-close.md`. Post-close (Codex PR
+review): the 14.10 lever was made UNCONDITIONAL in this PR (its `AILIBI_EVIDENCE_QUALITY_LIFT` env gate
+retired — the 14.9 move), so the committed set reconstructs and serves BARE; baseline 2 stays byte-identical
+because it was recorded lever-ON.
 
 Operator-run spend/time gate, and the PHASE CLOSE. Re-record BOTH committed sets (50 × 4p1i + 50 × 9p2i) on
 the locked tuple + the v4 prompt set + the 14.10 evidence-quality lever ON (stamped; the four 13.5 levers are

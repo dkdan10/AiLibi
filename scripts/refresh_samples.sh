@@ -266,15 +266,14 @@ done
 #   featherless                    -> featherless (hosted flat-rate provider, Task
 #                                     14.7 / 14.12 baseline re-record; $0
 #                                     provider-keyed cost, key required, the locked
-#                                     Qwen/Qwen3-32B model + qwen3_32b prompt set +
-#                                     the 14.10 evidence-quality-lift lever
-#                                     (AILIBI_EVIDENCE_QUALITY_LIFT=1) exported by
-#                                     the operator — see the hint in
-#                                     tasks/phase-14.md Task 14.12. The four 13.5
-#                                     substrate levers are unconditionally ON
-#                                     since Task 14.9; no flag export needed. The
-#                                     14.10 lever is default-OFF, so it MUST be
-#                                     exported ON for the baseline-2 record.)
+#                                     Qwen/Qwen3-32B model + qwen3_32b prompt set
+#                                     exported by the operator — see the hint in
+#                                     tasks/phase-14.md Task 14.12. All five
+#                                     substrate levers are unconditionally ON —
+#                                     the four Phase-13.5 levers since Task 14.9,
+#                                     the Task-14.10 evidence_quality_lift lever
+#                                     since the 14.12 close — so no flag export is
+#                                     needed.)
 DEFAULT_OLLAMA_HOST="localhost:11434"
 DEFAULT_OLLAMA_MODEL="qwen3.5:9b"
 # The locked Featherless baseline model (Task 14.6); mirrors
@@ -368,12 +367,12 @@ if [[ "$dry_run" -eq 1 ]]; then
   # Provenance the recorded replay self-describes (Task 14.7): the prompt set is
   # read from the ambient env by the game (AILIBI_PROMPT_SET) and the substrate
   # levers are stamped into each replay's game_over record + the MANIFEST flags
-  # column (the four Phase-13.5 levers are unconditionally ON since Task 14.9 —
-  # no env vars to export). Echo the config so the substrate is never silent
-  # (AGENTS.md "no silent fallbacks").
+  # column (all five levers are unconditionally ON — the four Phase-13.5 levers
+  # since Task 14.9, the Task-14.10 evidence_quality_lift lever since the 14.12
+  # close — so there are NO substrate env vars to export). Echo the config so the
+  # substrate is never silent (AGENTS.md "no silent fallbacks").
   echo "[dry-run] prompt set: ${AILIBI_PROMPT_SET:-(default qwen3_5_9b)}"
-  echo "[dry-run] substrate flags: all four 13.5 levers ON (unconditional since Task 14.9)"
-  echo "[dry-run] evidence-quality lift (14.10 lever): ${AILIBI_EVIDENCE_QUALITY_LIFT:-<unset>} (baseline 2 requires '1')"
+  echo "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 since Task 14.9, evidence_quality_lift since the 14.12 close)"
   if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
     echo "[dry-run] seed workers: $REFRESH_WORKERS parallel (each records one seed, then pulls the next available seed from the queue; Featherless: 2 units per 32B request → 4-unit cap)"
   else
@@ -414,34 +413,24 @@ elif [[ "$PROVIDER" == "featherless" ]]; then
   fi
   echo "Using Featherless API key prefix: ${FEATHERLESS_API_KEY:0:8}"
   # Task 14.7 / 14.12: refresh_samples.sh records the CANONICAL baseline into
-  # replays/samples/, and the only sanctioned Featherless baseline is now the
-  # baseline-2 tuple — the 14.6-locked prompt set qwen3_32b PLUS the 14.10
-  # evidence-quality-lift lever ON (AILIBI_EVIDENCE_QUALITY_LIFT=1). The four
-  # 13.5 substrate levers are unconditionally ON since Task 14.9, so they need
-  # no export and cannot be mis-set; the 14.10 lever is default-OFF, so it MUST
-  # be exported ON for the baseline-2 re-record. The game reads both the prompt
-  # set and the 14.10 lever from the ambient env; if either is unset the run
-  # would SILENTLY record the wrong substrate (default 9B set / lever OFF) and
-  # only reveal it in the MANIFEST afterward, wasting the whole (multi-hour)
-  # spend. Fail loud HERE, before any seed is staged (AGENTS.md "no silent
-  # fallbacks"). A future re-lock of the baseline updates these REQUIRED_* pins
-  # to match tasks/phase-14.md §14.12.
+  # replays/samples/, and the only sanctioned Featherless baseline is the
+  # 14.6-locked prompt set qwen3_32b. The substrate levers are ALL unconditionally
+  # ON (the four Phase-13.5 levers since Task 14.9, the Task-14.10
+  # evidence_quality_lift lever since the 14.12 close), so they need no export and
+  # cannot be mis-set — the guard only pins the prompt set. The game reads the
+  # prompt set from the ambient env; if it is unset the run would SILENTLY record
+  # the wrong substrate (the default 9B set) and only reveal it in the MANIFEST
+  # afterward, wasting the whole (multi-hour) spend. Fail loud HERE, before any
+  # seed is staged (AGENTS.md "no silent fallbacks"). A future re-lock of the
+  # baseline updates REQUIRED_PROMPT_SET to match tasks/phase-14.md §14.6.
   REQUIRED_PROMPT_SET="qwen3_32b"
-  REQUIRED_EVIDENCE_QUALITY_LIFT="1"
-  _substrate_errs=()
   if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
-    _substrate_errs+=("  - AILIBI_PROMPT_SET must be '$REQUIRED_PROMPT_SET' (got '${AILIBI_PROMPT_SET:-<unset>}')")
-  fi
-  if [[ "${AILIBI_EVIDENCE_QUALITY_LIFT:-}" != "$REQUIRED_EVIDENCE_QUALITY_LIFT" ]]; then
-    _substrate_errs+=("  - AILIBI_EVIDENCE_QUALITY_LIFT must be '$REQUIRED_EVIDENCE_QUALITY_LIFT' (the 14.10 lever; got '${AILIBI_EVIDENCE_QUALITY_LIFT:-<unset>}')")
-  fi
-  if [[ ${#_substrate_errs[@]} -gt 0 ]]; then
-    echo "Error: a featherless refresh must run the 14.12-locked substrate (Task 14.12)." >&2
-    echo "       Export the locked tuple before re-running; nothing was staged:" >&2
-    printf '%s\n' "${_substrate_errs[@]}" >&2
+    echo "Error: a featherless refresh must run the locked substrate (Task 14.6)." >&2
+    echo "       Export the locked prompt set before re-running; nothing was staged:" >&2
+    echo "  - AILIBI_PROMPT_SET must be '$REQUIRED_PROMPT_SET' (got '${AILIBI_PROMPT_SET:-<unset>}')" >&2
     exit 1
   fi
-  echo "Locked 14.12 substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET, AILIBI_EVIDENCE_QUALITY_LIFT=$REQUIRED_EVIDENCE_QUALITY_LIFT (13.5 levers unconditionally ON)."
+  echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (all five levers unconditionally ON)."
 else
   if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "Error: ANTHROPIC_API_KEY must be set for an anthropic sample refresh (real-provider spend)." >&2
@@ -513,10 +502,7 @@ echo "Attributing no-meeting seeds to model: $active_model"
 # unconditionally ON since Task 14.9) are stamped into each replay's game_over
 # record + the MANIFEST flags column; this script does not set them.
 echo "Prompt set: ${AILIBI_PROMPT_SET:-(default qwen3_5_9b)}"
-echo "Substrate flags: all four 13.5 levers ON (unconditional since Task 14.9)"
-if [[ "$PROVIDER" == "featherless" ]]; then
-  echo "Evidence-quality lift (14.10 lever): AILIBI_EVIDENCE_QUALITY_LIFT=${AILIBI_EVIDENCE_QUALITY_LIFT:-<unset>} (baseline 2 records it ON)"
-fi
+echo "Substrate flags: all five levers ON (unconditional; 13.5 since Task 14.9, evidence_quality_lift since the 14.12 close)"
 
 # Stage each per-seed run in a temp dir on the same filesystem as the sample dir
 # so the replay can be moved into place atomically, and only after the run
@@ -683,10 +669,20 @@ if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
     run_worker "$w" &
     worker_pids+=("$!")
   done
-  # Join every worker (do not let a single non-zero worker exit trip set -e before
-  # the .failed check below prints the actionable message).
+  # Join every worker and record ANY non-zero exit as a refresh failure (PR #218
+  # Codex review): a worker killed or crashing OUTSIDE record_one_seed's handled
+  # path (SIGKILL / OOM after claiming a seed) never writes .failed, so without
+  # this a multi-hour baseline could silently canonicalize a mixed old/new set
+  # (the skipped seed keeps its stale replay + MANIFEST row). We still wait on the
+  # rest of the pool (never `set -e`-abort mid-join), then the .failed check below
+  # fails loud. A normally-finishing worker returns 0 (record_one_seed handles its
+  # own failures via .failed), so this only fires on an abnormal exit.
   for pid in "${worker_pids[@]}"; do
-    wait "$pid" || true
+    if ! wait "$pid"; then
+      touch "$stage_dir/.failed"
+      echo "ERROR: refresh worker (pid $pid) exited non-zero (killed/crashed" \
+        "outside a seed's handled failure path); the baseline is incomplete." >&2
+    fi
   done
 else
   run_worker 1

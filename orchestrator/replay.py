@@ -51,7 +51,6 @@ from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agents.memory.beliefs import evidence_quality_lift_enabled
 from engine.actions import Action
 from engine.world import WorldState
 from meetings.schemas import (
@@ -234,33 +233,30 @@ ReplayLogEntry: TypeAlias = Annotated[
 # ``experiments.lab.probe_backends.active_substrate_flags`` exactly so the
 # recorded MANIFEST ``flags`` column, the sweep result rows, and the replay
 # stamp all describe the same substrate levers with identical keys. The four
-# merged Phase-13.5 levers are RETIRED as toggles (Task 14.9: unconditionally
-# ON, env gates deleted) but stay in the snapshot as provenance; toggleable
-# levers (Task 14.10's ``evidence_quality_lift`` today) register their key +
-# resolver in ``_TOGGLEABLE_LEVER_RESOLVERS`` below.
+# merged Phase-13.5 levers (Task 14.9) AND the Task-14.10 ``evidence_quality_lift``
+# lever (retired to unconditional at the Task-14.12 close, once baseline 2 adopted
+# it) are RETIRED as toggles — unconditionally ON, env gates deleted — but stay in
+# the snapshot as provenance. Any future toggleable lever registers its key +
+# resolver in ``_TOGGLEABLE_LEVER_RESOLVERS`` below (empty today).
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
     "movement_perception",
     "unfreeze_memory",
+    "evidence_quality_lift",
 )
 
 # (key, resolver) pairs for levers that still consult an ``AILIBI_*`` env var.
-# Added HERE in source, never mutated at runtime (an immutable ``Final``
-# tuple, per AGENTS.md "no module-level mutable state", so nothing can
-# silently change replay stamps or the loader's mismatch check mid-process).
-# Each resolver takes the optional ``env`` mapping and returns the lever's
-# active state (the 13.5 ``*_enabled()`` signature).
-#
-# ``evidence_quality_lift`` (Task 14.10; ``AILIBI_EVIDENCE_QUALITY_LIFT``,
-# default OFF) gates the audit-2026-07-01 §3a belief-fold bounds — the
-# certain-guilt render ceiling and the self-refuted-alibi downgrade in
-# ``agents.memory.beliefs``. Stamping it keeps recordings self-describing:
-# baseline 1 predates the key (its stamp reads as OFF, matching the default),
-# and the Task-14.12 baseline-2 re-record runs — and stamps — it ON.
+# Added HERE in source, never mutated at runtime (an immutable ``Final`` tuple,
+# per AGENTS.md "no module-level mutable state", so nothing can silently change
+# replay stamps or the loader's mismatch check mid-process). Each resolver takes
+# the optional ``env`` mapping and returns the lever's active state (the 13.5
+# ``*_enabled()`` signature). EMPTY today: ``evidence_quality_lift`` (Task 14.10)
+# graduated to ``_RETIRED_ALWAYS_ON_LEVERS`` at the 14.12 close, so no lever is
+# env-gated anymore. The machinery stays generic for the next toggleable lever.
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = (("evidence_quality_lift", evidence_quality_lift_enabled),)
+] = ()
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -289,9 +285,10 @@ def substrate_flag_snapshot(
     substrate this build can produce. They stay in the snapshot so the MANIFEST
     ``flags`` column and the replay stamp keep self-describing recordings (and
     so the loader's substrate-mismatch guard can still validate legacy stamped
-    replays). Each toggleable lever's resolver — Task 14.10's
-    ``evidence_quality_lift`` today — is read from the immutable
-    ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through
+    replays). Task 14.10's ``evidence_quality_lift`` joined them at the Task-14.12
+    close (its env gate retired after baseline 2 adopted it), so no lever is
+    env-gated today. Any FUTURE toggleable lever's resolver is read from the
+    immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through
     (defaulting to the live process environment), preserving the
     deterministic-snapshot seam tests and sweep configs rely on.
     """

@@ -6,9 +6,9 @@ set) + the PHASE CLOSE.
 **Set:** `replays/samples/9p2i` (50 games / 142 meetings / 844 ballots) + `replays/samples/4p1i`
 (50 games / 39 meetings), this re-record.
 **Model:** `Qwen/Qwen3-32B` (Featherless, both call kinds, non-thinking, `fail_loud`, `json_object`, $0).
-**Substrate:** the four Phase-13.5 levers (unconditional since 14.9) + the Task-14.10
-`evidence_quality_lift` lever ON — stamped into MANIFEST `flags` + each replay's
-`game_over.substrate_flags`; prompt set `qwen3_32b.v4`.
+**Substrate:** all five levers unconditionally ON — the four Phase-13.5 levers (unconditional since 14.9)
+and the Task-14.10 `evidence_quality_lift` lever (made unconditional in this PR, retiring its env gate) —
+stamped into MANIFEST `flags` + each replay's `game_over.substrate_flags`; prompt set `qwen3_32b.v4`.
 **Recording:** 2 parallel Featherless seed workers (a 32B request = 2 of the 4 permitted units, so 2 workers
 saturate the plan); measured wall **231 min (~3.85h)** for both sets. One transient `httpx.ConnectError`
 auto-recovered on retry (the re-record's new per-seed crash-retry).
@@ -40,9 +40,11 @@ DESIGN) rose (22→31) and now dominates the residual — the clean Phase-15 tar
 | provenance rows (`Qwen/Qwen3-32B`, `qwen3_32b.v4`, lever + 4 levers stamped) | exact | exact |
 | parse-success / 1024-truncations | 99.21% / 1 | 100% / 0 |
 
-Byte-identical FLAG-AWARE reconstruction holds: `verify_samples.sh` reconstructs all 50+50 samples clean
-with `AILIBI_EVIDENCE_QUALITY_LIFT=1` set + roster.json present (the 14.10 lever is still default-OFF, so
-baseline 2 reconstructs flag-aware, not bare — see §6, the one follow-up).
+Byte-identical reconstruction holds BARE: `verify_samples.sh` reconstructs all 50+50 samples clean under a
+bare environment (roster.json present, no `AILIBI_*` lever export). The 14.10 lever was made UNCONDITIONAL
+in this PR (§6) — the same 14.9 move applied to the 13.5 levers — so, exactly like the four 13.5 levers,
+the committed set serves without any env flag. Because baseline 2 was recorded lever-ON, the resolver now
+returning a constant `True` keeps the belief fold byte-identical to the recorded stamp.
 
 ## 2. The railroad TRIPWIRE — RESTORED (zero rows)
 
@@ -119,16 +121,16 @@ exactly before folding baseline 2):
 4p1i moves the same direction (self-contra 3/59, guard 1, conf-1.0 6, template 3/117, missed-deadline 0).
 Every measured v4 target improved; none regressed.
 
-## 6. Decisions + the one follow-up
+## 6. Decisions
 
-- **Baseline 2 reconstructs FLAG-AWARE, not bare.** The 14.10 lever is still default-OFF (14.10 kept it
-  gated), so — unlike the four unconditional 13.5 levers — the committed set requires
-  `AILIBI_EVIDENCE_QUALITY_LIFT=1` exported to reconstruct/serve (the loader's substrate guard correctly
-  refuses a bare-env lift-OFF mismatch). The byte-coupled tests were re-pinned to set it; the 14.9 bare-env
-  spectator pin (`run_spectator.sh`) is re-pinned to the honest two-sided form (bare → raises; lever env →
-  serves). **Recommended immediate follow-up (out of 14.12's record-only scope):** make the 14.10 lever
-  unconditional — the exact 14.9 move for the 13.5 levers — so the committed set serves bare again. Until
-  then, the spectator launcher must export the lever.
+- **The 14.10 lever is now UNCONDITIONAL — baseline 2 reconstructs BARE.** The lever shipped default-OFF at
+  14.10; this PR retired its `AILIBI_EVIDENCE_QUALITY_LIFT` env gate (the resolver returns a constant `True`;
+  the flag graduated from `_TOGGLEABLE_LEVER_RESOLVERS` to `_RETIRED_ALWAYS_ON_LEVERS`), the exact 14.9 move
+  applied to the four 13.5 levers. Because baseline 2 was recorded lever-ON, the resolver's constant `True`
+  keeps the belief fold byte-identical to the recorded stamp, so the committed set now reconstructs and serves
+  under a bare environment — no `AILIBI_*` export required (`verify_samples.sh` clean bare on both 50+50 sets;
+  §1). The spectator launcher (`run_spectator.sh`) and the byte-coupled tests were re-pinned to the bare form.
+  This resolves the review's flag-aware-serving follow-up in-PR; no lever env remains for an operator to forget.
 - **The R-gate is reported as a measurement, not gated.** No number was retrofit; the folds reproduce
   baseline-1's characterization exactly before folding baseline 2.
 
@@ -153,7 +155,7 @@ Every measured v4 target improved; none regressed.
   census) — validated to reproduce every baseline-1 characterization number exactly, then folded over
   baseline 2.
 - Validity gate: `validity_gate.py` (all-game_over / meeting-rate+resolved / betrayal / tick-1 kills /
-  dangling reason-id / cost / provenance incl. the lever stamp) + `verify_samples.sh` (flag-aware
+  dangling reason-id / cost / provenance incl. the lever stamp) + `verify_samples.sh` (bare-env
   reconstruction) + `bash scripts/check.sh`.
 - The lever counterfactual (§2): the production vote-time fold re-derived lever-ON vs lever-OFF over the
   committed bytes via the Task-14.8 `allow_substrate_mismatch` analysis-only override (lever-ON 3046/3046
