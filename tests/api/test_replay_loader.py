@@ -1006,6 +1006,33 @@ def test_assert_substrate_matches_raises_on_legacy_off_stamp() -> None:
     assert "AILIBI_" not in message
 
 
+def test_assert_substrate_matches_names_env_remediation_for_toggleable_lever(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Task 14.10: a baseline-1-shaped stamp (no evidence_quality_lift key,
+    # which reads as OFF) reconstructed with the lever exported ON is a
+    # mismatch on the TOGGLEABLE lever. Unlike the retired-lever mode above,
+    # this one IS env-remediable, so the error names the lever and points at
+    # the AILIBI_* remediation — never at the 14.9 retirement.
+    _delete_ailibi_env(monkeypatch)
+    monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
+    entries = [
+        GameEndReplayEntry(
+            game_id="g",
+            tick=1,
+            winner="CREWMATES",
+            reason="TASKS",
+            substrate_flags=_ALL_FLAGS_ON,
+        )
+    ]
+    with pytest.raises(ReplaySubstrateMismatchError) as excinfo:
+        replay_loader._assert_substrate_matches("g", entries)
+    message = str(excinfo.value)
+    assert "evidence_quality_lift" in message
+    assert "AILIBI_" in message
+    assert "Retired" not in message
+
+
 def _stamp_committed_9p2i_seed(dst: Path, seed: int, flags: dict[str, bool]) -> str:
     """Copy a committed 9p2i replay into ``dst`` with ``flags`` stamped on its
     game_over record (tick/meeting bytes verbatim, so the state_hash chain is

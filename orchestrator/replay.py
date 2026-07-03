@@ -51,6 +51,7 @@ from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from agents.memory.beliefs import evidence_quality_lift_enabled
 from engine.actions import Action
 from engine.world import WorldState
 from meetings.schemas import (
@@ -234,9 +235,9 @@ ReplayLogEntry: TypeAlias = Annotated[
 # recorded MANIFEST ``flags`` column, the sweep result rows, and the replay
 # stamp all describe the same substrate levers with identical keys. The four
 # merged Phase-13.5 levers are RETIRED as toggles (Task 14.9: unconditionally
-# ON, env gates deleted) but stay in the snapshot as provenance; a future
-# toggleable lever (e.g. Task 14.10's) registers its key here and its resolver
-# in ``_TOGGLEABLE_LEVER_RESOLVERS`` below.
+# ON, env gates deleted) but stay in the snapshot as provenance; toggleable
+# levers (Task 14.10's ``evidence_quality_lift`` today) register their key +
+# resolver in ``_TOGGLEABLE_LEVER_RESOLVERS`` below.
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
@@ -245,19 +246,35 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 )
 
 # (key, resolver) pairs for levers that still consult an ``AILIBI_*`` env var.
-# Empty since Task 14.9 retired the 13.5 gates; Task 14.10's default-OFF lever
-# is the next registrant — added HERE in source, never mutated at runtime (an
-# immutable ``Final`` tuple, per AGENTS.md "no module-level mutable state", so
-# nothing can silently change replay stamps or the loader's mismatch check
-# mid-process). Each resolver takes the optional ``env`` mapping and returns
-# the lever's active state (the 13.5 ``*_enabled()`` signature).
+# Added HERE in source, never mutated at runtime (an immutable ``Final``
+# tuple, per AGENTS.md "no module-level mutable state", so nothing can
+# silently change replay stamps or the loader's mismatch check mid-process).
+# Each resolver takes the optional ``env`` mapping and returns the lever's
+# active state (the 13.5 ``*_enabled()`` signature).
+#
+# ``evidence_quality_lift`` (Task 14.10; ``AILIBI_EVIDENCE_QUALITY_LIFT``,
+# default OFF) gates the audit-2026-07-01 §3a belief-fold bounds — the
+# certain-guilt render ceiling and the self-refuted-alibi downgrade in
+# ``agents.memory.beliefs``. Stamping it keeps recordings self-describing:
+# baseline 1 predates the key (its stamp reads as OFF, matching the default),
+# and the Task-14.12 baseline-2 re-record runs — and stamps — it ON.
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = ()
+] = (("evidence_quality_lift", evidence_quality_lift_enabled),)
+
+# The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
+# levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
+# mismatch on one of THESE is remediable by matching the environment to the
+# stamp — unlike the retired four, whose OFF derivation no longer exists.
+# The loader's substrate-mismatch error branches its remediation hint on
+# this split.
+TOGGLEABLE_SUBSTRATE_FLAG_KEYS: Final[tuple[str, ...]] = tuple(
+    key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS
+)
 
 SUBSTRATE_FLAG_KEYS: Final[tuple[str, ...]] = (
     *_RETIRED_ALWAYS_ON_LEVERS,
-    *(key for key, _ in _TOGGLEABLE_LEVER_RESOLVERS),
+    *TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
 )
 
 
@@ -272,7 +289,8 @@ def substrate_flag_snapshot(
     substrate this build can produce. They stay in the snapshot so the MANIFEST
     ``flags`` column and the replay stamp keep self-describing recordings (and
     so the loader's substrate-mismatch guard can still validate legacy stamped
-    replays). A future toggleable lever's resolver is read from the immutable
+    replays). Each toggleable lever's resolver — Task 14.10's
+    ``evidence_quality_lift`` today — is read from the immutable
     ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through
     (defaulting to the live process environment), preserving the
     deterministic-snapshot seam tests and sweep configs rely on.
@@ -787,6 +805,7 @@ def _stable_json(data: Any) -> str:
 
 __all__ = [
     "SUBSTRATE_FLAG_KEYS",
+    "TOGGLEABLE_SUBSTRATE_FLAG_KEYS",
     "FailedCallReplayEntry",
     "GameEndReplayEntry",
     "LLMCallRecord",

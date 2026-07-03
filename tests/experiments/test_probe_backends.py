@@ -65,11 +65,15 @@ _FLAGS_OFF = {
     "movement_perception": False,
     "unfreeze_memory": False,
 }
+# The live snapshot under a bare env: the four retired 13.5 levers
+# unconditionally ON (Task 14.9) and the Task-14.10 evidence-quality lever at
+# its default OFF (its recording flips it via AILIBI_EVIDENCE_QUALITY_LIFT).
 _FLAGS_ON = {
     "testimony_as_content": True,
     "witnessed_kill_evidence": True,
     "movement_perception": True,
     "unfreeze_memory": True,
+    "evidence_quality_lift": False,
 }
 
 
@@ -384,8 +388,9 @@ def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_substrate_flags_default_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     # No explicit substrate_flags: call_turn snapshots the live substrate. The
-    # four 13.5 levers are unconditionally ON since Task 14.9, so the snapshot
-    # reads all-True regardless of the (bare CI) environment.
+    # four 13.5 levers are unconditionally ON since Task 14.9, and the 14.10
+    # evidence-quality lever reads its default OFF under a bare environment.
+    monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
     send = _RecordingOllama(text=_VALID)
     monkeypatch.setattr(pb, "_ollama_send", send)
     result = asyncio.run(
@@ -486,9 +491,19 @@ def test_featherless_explicit_base_url_wins(
     assert send.seen["base_url"] == "http://explicit.local/v1"
 
 
-def test_active_substrate_flags_is_unconditionally_all_on() -> None:
-    # Task 14.9 retired the four env gates: the snapshot reads all-True under
-    # any env — bare, legacy all-ON export, or a legacy "0".
+def test_active_substrate_flags_retired_on_and_lever_default_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Task 14.9 retired the four env gates: those keys read all-True under
+    # any env — bare, legacy all-ON export, or a legacy "0". The Task-14.10
+    # evidence-quality lever is toggleable: default OFF, flipped by its
+    # AILIBI_ var (the delegation to orchestrator.replay.substrate_flag_snapshot
+    # carries the registration for free).
+    monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
     assert active_substrate_flags(env={}) == _FLAGS_ON
     assert active_substrate_flags() == _FLAGS_ON
     assert active_substrate_flags(env={"AILIBI_TESTIMONY_AS_CONTENT": "0"}) == _FLAGS_ON
+    assert active_substrate_flags(env={"AILIBI_EVIDENCE_QUALITY_LIFT": "1"}) == {
+        **_FLAGS_ON,
+        "evidence_quality_lift": True,
+    }

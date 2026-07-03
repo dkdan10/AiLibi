@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from api.replay_loader import ReplayLoader
+    from orchestrator.replay import MeetingReplayEntry
 
 from agents.memory.beliefs import (
     ACCUSATION_SUSPICION_DELTA,
     BODY_PROXIMITY_SUSPICION_DELTA,
+    CONTRADICTION_RENDER_CEIL,
     CONTRADICTION_SUSPICION_DELTA,
     CORROBORATION_SUSPICION_DELTA,
+    ENV_EVIDENCE_QUALITY_LIFT,
     MEETING_CONTRADICTION_LIFT_CAP,
     MEETING_SUSPICION_DECAY_RATE,
     OBSERVED_KILL_ACTION,
@@ -24,11 +34,13 @@ from agents.memory.beliefs import (
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
     apply_observation_rules,
+    evidence_quality_lift_enabled,
     graduated_spread_delta,
 )
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
 from meetings.schemas import (
+    CompletedTaskObservation,
     MeetingTranscript,
     MeetingTurn,
     SawPlayerObservation,
@@ -40,6 +52,7 @@ from meetings.transcript import (
     WEAK_REASON_SELF_STATED,
     detect_contradictions,
     is_weak_contradiction,
+    self_refuted_alibi_claim_ids,
 )
 from observation.packet import (
     BodyView,
@@ -2434,3 +2447,1000 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         # the §6.3 weights (freeze-during-measurement).
         assert CORROBORATION_SUSPICION_DELTA == 0.05
         assert ACCUSATION_SUSPICION_DELTA == 0.05
+
+
+# ---------------------------------------------------------------------------
+# Task 14.10 evidence-quality lift (audit 2026-07-01 §3/§3a): the certain-
+# guilt render ceiling + the self-refuted-alibi downgrade, behind the
+# default-OFF AILIBI_EVIDENCE_QUALITY_LIFT lever.
+# ---------------------------------------------------------------------------
+
+_LEVER_ON: Mapping[str, str] = {ENV_EVIDENCE_QUALITY_LIFT: "1"}
+_LEVER_OFF: Mapping[str, str] = {}
+
+# The Phase-10 Rule-1 body-proximity prior of the audit's compounding path:
+# 0.50 + BODY_PROXIMITY_SUSPICION_DELTA — the meeting-open suspicion the
+# 1.00-renderers (the impostors, at the scenes they created) carried into
+# every pinned railroad row.
+_BODY_PROXIMITY_PRIOR = _DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
+
+
+def _seeded(player_id: str, *, suspicion: float) -> BeliefState:
+    state = BeliefState()
+    state.seed_player(player_id, suspicion=suspicion, trust=0.5)
+    return state
+
+
+def _same_claim_flag_stack(
+    *, subject: str, count: int
+) -> list[MeetingContradictionRef]:
+    """``count`` STRONG flags all pairing ONE alibi claim against N sightings.
+
+    The seed-44 m1 shape (audit §3 part 1): one greedy alibi vs 9 sightings
+    mints 9 flags that all share the alibi's claim event id, so the Rule-2
+    ``contradiction_lift_key`` dedup folds them to ONE group worth +0.30.
+    """
+
+    return [
+        _meeting_flag(
+            subject=subject,
+            weak=False,
+            pair=f"turn:m-1:turn-0:claim:0|turn:m-1:turn-{index + 1}:obs:0",
+        )
+        for index in range(count)
+    ]
+
+
+class TestEvidenceQualityLiftResolver:
+    """The Task-14.10 lever resolver (the retired 13.5 ``*_enabled`` pattern)."""
+
+    def test_default_is_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert evidence_quality_lift_enabled(env={}) is False
+        monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
+        assert evidence_quality_lift_enabled() is False
+
+    def test_process_environment_is_the_default_source(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
+        assert evidence_quality_lift_enabled() is True
+
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "On", " on "])
+    def test_truthy_values_enable(self, value: str) -> None:
+        assert (
+            evidence_quality_lift_enabled(env={ENV_EVIDENCE_QUALITY_LIFT: value})
+            is True
+        )
+
+    @pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "maybe"])
+    def test_everything_else_is_off(self, value: str) -> None:
+        # No silent surprise-ON: unset / empty / unrecognised all read OFF
+        # (the byte-identity default pending the 14.12 re-record).
+        assert (
+            evidence_quality_lift_enabled(env={ENV_EVIDENCE_QUALITY_LIFT: value})
+            is False
+        )
+
+
+class TestCertainGuiltRenderCeiling:
+    """Bound 1 (audit §3a): flag/testimony lift never renders at the 1.0 clamp.
+
+    The measured railroad mechanism: the caps HOLD (one saturated STRONG
+    group = +0.30), but a voter whose meeting-open prior carries the Rule-1
+    body-proximity bump (0.70) clamps to certain-guilt 1.00 — in all 5
+    pinned rows the 1.00-renderers are the impostors. With the lever ON the
+    combined bound is ``min(lifted, prior + 0.3, max(prior,
+    CONTRADICTION_RENDER_CEIL))``: the neutral-prior gate-cross is unchanged
+    (zero conversion cost) while the compounding path ceils just below the
+    clamp; a first-hand witnessed-kill pin stays ~1.0 (the exemption).
+    """
+
+    def test_neutral_prior_nine_flag_stack_renders_below_certain_guilt(self) -> None:
+        # The synthetic 9-flag same-meeting stack (the seed-44 signature).
+        # Neutral prior: 0.50 + the one deduped group's +0.30 = 0.80 — over
+        # the §4.6 gate (conversion intact), under the ceiling, and
+        # BYTE-IDENTICAL to the lever-OFF fold (the audit's zero-cost bound).
+        flags = _same_claim_flag_stack(subject="p-1", count=9)
+
+        lever_on = apply_contradiction_rule(BeliefState(), flags, env=_LEVER_ON)
+        lever_off = apply_contradiction_rule(BeliefState(), flags, env=_LEVER_OFF)
+
+        assert lever_on.view("p-1").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+        assert lever_on.view("p-1").suspicion == lever_off.view("p-1").suspicion
+        assert _GATE < lever_on.view("p-1").suspicion < CONTRADICTION_RENDER_CEIL
+
+    def test_body_proximity_prior_ceils_below_the_clamp(self) -> None:
+        # The audit's compounding 1.0 path: prior 0.70 + saturated +0.30
+        # clamped at 1.00 (lever OFF — the pinned defect) now CEILS at ~0.97
+        # (lever ON) — still a MUST-vote, never "certain guilt" on flag fuel.
+        flags = _same_claim_flag_stack(subject="p-1", count=9)
+
+        lever_off = apply_contradiction_rule(
+            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR), flags, env=_LEVER_OFF
+        )
+        lever_on = apply_contradiction_rule(
+            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR), flags, env=_LEVER_ON
+        )
+
+        assert lever_off.view("p-1").suspicion == pytest.approx(1.0)
+        assert lever_on.view("p-1").suspicion == pytest.approx(
+            CONTRADICTION_RENDER_CEIL
+        )
+        assert lever_on.view("p-1").suspicion < 1.0
+        assert lever_on.view("p-1").suspicion > _GATE
+
+    def test_ceiling_bounds_the_lift_never_the_prior(self) -> None:
+        # A standing prior already OVER the ceiling (cross-meeting 9.8
+        # accumulation) is not dragged down — the flag simply cannot lift it
+        # further, so the render stays strictly below the clamp.
+        flags = [_meeting_flag(subject="p-1", weak=False)]
+
+        lever_on = apply_contradiction_rule(
+            _seeded("p-1", suspicion=0.98), flags, env=_LEVER_ON
+        )
+
+        assert lever_on.view("p-1").suspicion == pytest.approx(0.98)
+
+    def test_witnessed_kill_pin_is_exempt(self) -> None:
+        # The first-hand-conclusive exemption: a witnessed kill pins the
+        # killer at the 1.0 clamp at perception time (the real §6.3 path,
+        # not a synthetic seed), and a same-meeting contradiction stack with
+        # the lever ON leaves that certain-guilt row untouched — a witnessed
+        # kill legitimately reads ~1.0.
+        pinned = apply_observation_rules(
+            BeliefState(),
+            observation=_kill_packet(killer="p-1"),
+            previous_visible_bodies=set(),
+            recent_co_presence={},
+        )
+        assert pinned.view("p-1").suspicion == pytest.approx(1.0)
+
+        lever_on = apply_contradiction_rule(
+            pinned, _same_claim_flag_stack(subject="p-1", count=3), env=_LEVER_ON
+        )
+
+        assert lever_on.view("p-1").suspicion == pytest.approx(1.0)
+
+    def test_pre_vote_spread_ceils_below_the_clamp(self) -> None:
+        # The testimony half of the transient render lift: a 0.90 prior plus
+        # the 3+-voice +0.15 spread clamps at 1.0 with the lever OFF and
+        # ceils at ~0.97 with it ON — "flag/testimony-driven" covers BOTH
+        # channels, which stack on one graph at vote time.
+        def spread(env: Mapping[str, str]) -> BeliefState:
+            return apply_meeting_evidence_rules(
+                _seeded("p-2", suspicion=0.9),
+                own_id="observer",
+                accused=("p-2",),
+                phase="pre_vote",
+                pre_vote_folded=frozenset({"p-2"}),
+                pre_vote_voice_counts={"p-2": 3},
+                env=env,
+            )
+
+        assert spread(_LEVER_OFF).view("p-2").suspicion == pytest.approx(1.0)
+        assert spread(_LEVER_ON).view("p-2").suspicion == pytest.approx(
+            CONTRADICTION_RENDER_CEIL
+        )
+
+    def test_pre_vote_spread_below_ceiling_is_unchanged(self) -> None:
+        # Zero conversion cost on the spread too: a two-voice gate-cross from
+        # the neutral prior is byte-identical with the lever ON.
+        lever_on = apply_meeting_evidence_rules(
+            BeliefState(),
+            own_id="observer",
+            accused=("p-2",),
+            phase="pre_vote",
+            pre_vote_folded=frozenset({"p-2"}),
+            pre_vote_voice_counts={"p-2": 2},
+            env=_LEVER_ON,
+        )
+
+        assert lever_on.view("p-2").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + TESTIMONY_SPREAD_TWO_VOICE_DELTA
+        )
+
+    def test_persistent_absorb_is_never_ceilinged(self) -> None:
+        # The boundary of the bound: the composed (persistent) fold is the
+        # across-meeting 9.8 accumulator — deliberately NOT a render channel
+        # — so with the lever ON a 0.96 prior still absorbs the flat +0.05
+        # to the clamp. Cross-meeting accumulation stays the allowed path;
+        # only the same-meeting transient lift is excluded from 1.0.
+        lever_on = apply_meeting_evidence_rules(
+            _seeded("p-2", suspicion=0.96),
+            own_id="observer",
+            accused=("p-2",),
+            env=_LEVER_ON,
+        )
+
+        assert lever_on.view("p-2").suspicion == pytest.approx(1.0)
+
+    def test_off_branch_is_byte_identical_to_the_no_env_call(self) -> None:
+        # The OFF guard for the committed baseline: a bare-env fold equals
+        # the pre-task call shape (no env argument) on the compounding path.
+        flags = _same_claim_flag_stack(subject="p-1", count=9)
+
+        bare = apply_contradiction_rule(
+            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR), flags, env=_LEVER_OFF
+        )
+        legacy_shape = apply_contradiction_rule(
+            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR), flags
+        )
+
+        assert bare.view("p-1").suspicion == legacy_shape.view("p-1").suspicion == 1.0
+
+
+def _alibi_with_own_task_turn(
+    *,
+    speaker: str = "p-1",
+    alibi_subject: str = "p-1",
+    alibi_room: str = "CAFETERIA",
+    task_room: str = "STORAGE",
+    task_tick: int = 9,
+    with_task: bool = True,
+) -> MeetingTurn:
+    """One turn stating an alibi (ticks 5-14) beside the speaker's own
+    ``completed_task`` observation — the audited greedy-span shape."""
+
+    observations = (
+        (
+            CompletedTaskObservation(
+                type="completed_task", tick=task_tick, task_id="t-1", room=task_room
+            ),
+        )
+        if with_task
+        else ()
+    )
+    return MeetingTurn(
+        turn_id="m-1:turn-0",
+        turn_index=0,
+        speaker=speaker,
+        turn_kind="opening",
+        reply_to=None,
+        observations=observations,
+        claims=(
+            SchemaAlibiClaim(
+                type="alibi",
+                subject=alibi_subject,
+                from_tick=5,
+                to_tick=14,
+                room=alibi_room,
+            ),
+        ),
+        free_text="I was in the cafeteria the whole time.",
+    )
+
+
+# The claim event id of ``_alibi_with_own_task_turn``'s alibi, in the detector's
+# ``_turn_claim_id`` format — the id a real flag's ``event_a_id`` carries and
+# ``contradiction_lift_key`` groups on.
+_SELF_ALIBI_CLAIM_ID = "turn:m-1:turn-0:claim:0"
+
+
+def _flag_on_self_alibi(subject: str = "p-1") -> MeetingContradictionRef:
+    """A STRONG ``alibi_vs_sighting`` flag referencing the self-alibi claim."""
+
+    return _meeting_flag(
+        subject=subject,
+        weak=False,
+        pair=f"{_SELF_ALIBI_CLAIM_ID}|turn:m-1:turn-1:obs:0",
+    )
+
+
+class TestSelfRefutedAlibiDowngrade:
+    """Bound 2 (audit §3a): a self-refuted alibi's group folds WEAK, not STRONG.
+
+    A contradiction group whose refuted alibi is contradicted by the
+    subject's OWN same-turn ``completed_task`` observation contributes 0.08
+    instead of 0.30 — testimony the speaker disproved within their own turn
+    is sloppy, not probative. Measured on baseline 1: 0/57 flagged impostor
+    ejections cost, while the seed-16/44 railroad rosters land sub-gate
+    (0.50 + 0.08 = 0.58 < 0.60).
+    """
+
+    def test_self_refuted_group_contributes_the_weak_delta(self) -> None:
+        transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(),))
+
+        lifted = apply_contradiction_rule(
+            BeliefState(),
+            [_flag_on_self_alibi()],
+            transcript=transcript,
+            env=_LEVER_ON,
+        )
+
+        suspicion = lifted.view("p-1").suspicion
+        assert suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+        # The audit's roster arithmetic: sub-gate from the neutral prior.
+        assert suspicion < _GATE
+
+    def test_body_proximity_prior_with_downgrade_lands_at_078(self) -> None:
+        # The audit's other measured row: only the 0.70-prior voters reach
+        # 0.78 — over the gate individually but short of the roster-wide
+        # lockstep that railroaded the pinned meetings.
+        transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(),))
+
+        lifted = apply_contradiction_rule(
+            _seeded("p-1", suspicion=_BODY_PROXIMITY_PRIOR),
+            [_flag_on_self_alibi()],
+            transcript=transcript,
+            env=_LEVER_ON,
+        )
+
+        assert lifted.view("p-1").suspicion == pytest.approx(0.78)
+
+    def test_lever_off_keeps_the_strong_delta(self) -> None:
+        transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(),))
+
+        lifted = apply_contradiction_rule(
+            BeliefState(),
+            [_flag_on_self_alibi()],
+            transcript=transcript,
+            env=_LEVER_OFF,
+        )
+
+        assert lifted.view("p-1").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+
+    def test_no_transcript_applies_no_downgrade(self) -> None:
+        # The analysis-caller default (transcript=None) has no signal to
+        # derive from; only the production vote path threads the transcript.
+        lifted = apply_contradiction_rule(
+            BeliefState(), [_flag_on_self_alibi()], env=_LEVER_ON
+        )
+
+        assert lifted.view("p-1").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+
+    @pytest.mark.parametrize(
+        ("turn_kwargs", "reason"),
+        [
+            ({"task_room": "CAFETERIA"}, "task in the SAME room confirms the alibi"),
+            ({"task_tick": 20}, "task tick outside the alibi span"),
+            ({"task_room": "the hallway"}, "non-canonical room is not comparable"),
+            ({"with_task": False}, "no completed_task observation at all"),
+            (
+                {"speaker": "p-2"},
+                "proxy alibi: the same-turn task is the PROXY's own, not the subject's",
+            ),
+        ],
+    )
+    def test_not_self_refuted_variants_keep_strong(
+        self, turn_kwargs: dict[str, object], reason: str
+    ) -> None:
+        transcript = MeetingTranscript(
+            turns=(_alibi_with_own_task_turn(**turn_kwargs),)  # type: ignore[arg-type]
+        )
+
+        lifted = apply_contradiction_rule(
+            BeliefState(),
+            [_flag_on_self_alibi()],
+            transcript=transcript,
+            env=_LEVER_ON,
+        )
+
+        assert lifted.view("p-1").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        ), reason
+
+    def test_task_in_a_different_turn_is_not_same_turn(self) -> None:
+        # The signal is SAME-TURN by definition (the speaker disproving their
+        # own account within one turn); the same speaker's task observation a
+        # turn later does not reclassify the alibi.
+        alibi_turn = _alibi_with_own_task_turn(with_task=False)
+        task_turn = MeetingTurn(
+            turn_id="m-1:turn-1",
+            turn_index=1,
+            speaker="p-1",
+            turn_kind="reply",
+            reply_to="m-1:turn-0",
+            observations=(
+                CompletedTaskObservation(
+                    type="completed_task", tick=9, task_id="t-1", room="STORAGE"
+                ),
+            ),
+            claims=(),
+            free_text="I did the storage task.",
+        )
+        transcript = MeetingTranscript(turns=(alibi_turn, task_turn))
+
+        assert self_refuted_alibi_claim_ids(transcript) == frozenset()
+
+        lifted = apply_contradiction_rule(
+            BeliefState(),
+            [_flag_on_self_alibi()],
+            transcript=transcript,
+            env=_LEVER_ON,
+        )
+        assert lifted.view("p-1").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        )
+
+    def test_helper_returns_the_detector_format_claim_id(self) -> None:
+        # The id format is the load-bearing joint: it must equal what the
+        # detector writes into flag event ids (turn:{turn_id}:claim:{index}),
+        # or the fold-side membership check can never match a real flag.
+        transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(),))
+
+        assert self_refuted_alibi_claim_ids(transcript) == frozenset(
+            {_SELF_ALIBI_CLAIM_ID}
+        )
+
+    def test_span_endpoints_are_inclusive(self) -> None:
+        # AlibiClaim's "tick ranges are inclusive" contract: a completed_task
+        # AT the span boundary still self-refutes.
+        transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(task_tick=5),))
+
+        assert self_refuted_alibi_claim_ids(transcript) == frozenset(
+            {_SELF_ALIBI_CLAIM_ID}
+        )
+
+    def test_echoed_account_is_downgraded_via_the_first_stated_copy(self) -> None:
+        # The turn-order guard (the seed-24/26 bug class): the detector
+        # dedups echo alibis FIRST-statement-wins before pairing, so a flag
+        # references the account's first copy even when the self-refuting
+        # completed_task rides a LATER restatement (a subject re-asserting
+        # their alibi after an accusation). The classification is per
+        # ACCOUNT — same (subject, canonical rooms, tick range) — so the
+        # first copy's claim id is marked too and the downgrade still fires.
+        # End-to-end through the production detector, not synthetic flags.
+        first_statement = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-1",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(),
+            claims=(
+                SchemaAlibiClaim(
+                    type="alibi",
+                    subject="p-1",
+                    from_tick=5,
+                    to_tick=14,
+                    room="CAFETERIA",
+                ),
+            ),
+            free_text="I was in the cafeteria the whole time.",
+        )
+        witness = MeetingTurn(
+            turn_id="m-1:turn-1",
+            turn_index=1,
+            speaker="p-2",
+            turn_kind="reply",
+            reply_to="m-1:turn-0",
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=8, subject="p-1", room="STORAGE"
+                ),
+            ),
+            claims=(),
+            free_text="I saw p-1 in storage.",
+        )
+        echo_with_task = MeetingTurn(
+            turn_id="m-1:turn-2",
+            turn_index=2,
+            speaker="p-1",
+            turn_kind="reply",
+            reply_to="m-1:turn-1",
+            observations=(
+                CompletedTaskObservation(
+                    type="completed_task", tick=9, task_id="t-1", room="STORAGE"
+                ),
+            ),
+            claims=(
+                SchemaAlibiClaim(
+                    type="alibi",
+                    subject="p-1",
+                    from_tick=5,
+                    to_tick=14,
+                    room="CAFETERIA",
+                ),
+            ),
+            free_text="No — cafeteria, like I said.",
+        )
+        transcript = MeetingTranscript(turns=(first_statement, witness, echo_with_task))
+
+        flags = detect_contradictions(transcript)
+        assert len(flags) == 1  # the echo minted no second flag (10.1 dedup)
+        assert flags[0].kind == "alibi_vs_sighting"
+        assert not is_weak_contradiction(flags[0])
+        # The flag references the FIRST-stated copy, not the echo that
+        # carried the refuting observation…
+        assert "turn:m-1:turn-0:claim:0" in (
+            flags[0].event_a_id,
+            flags[0].event_b_id,
+        )
+        # …and the account-level classification marks BOTH copies.
+        assert self_refuted_alibi_claim_ids(transcript) == frozenset(
+            {"turn:m-1:turn-0:claim:0", "turn:m-1:turn-2:claim:0"}
+        )
+
+        lifted = apply_contradiction_rule(
+            BeliefState(), flags, transcript=transcript, env=_LEVER_ON
+        )
+        assert lifted.view("p-1").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+
+    def test_proxy_first_copy_inherits_the_subjects_self_refutation(self) -> None:
+        # The proxy-first variant of the same turn-order class: someone else
+        # states the subject's alibi BEFORE the subject restates it beside
+        # their own refuting completed_task. The echo dedup keys flags on the
+        # proxy's copy; the account-level walk marks it too, so the sighting
+        # channel and the (separately self-deduped) physical channel classify
+        # the account consistently.
+        proxy_statement = MeetingTurn(
+            turn_id="m-1:turn-0",
+            turn_index=0,
+            speaker="p-2",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(),
+            claims=(
+                SchemaAlibiClaim(
+                    type="alibi",
+                    subject="p-1",
+                    from_tick=5,
+                    to_tick=14,
+                    room="CAFETERIA",
+                ),
+            ),
+            free_text="p-1 was in the cafeteria.",
+        )
+        witness = MeetingTurn(
+            turn_id="m-1:turn-1",
+            turn_index=1,
+            speaker="p-3",
+            turn_kind="reply",
+            reply_to="m-1:turn-0",
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=8, subject="p-1", room="STORAGE"
+                ),
+            ),
+            claims=(),
+            free_text="I saw p-1 in storage.",
+        )
+        self_restatement = MeetingTurn(
+            turn_id="m-1:turn-2",
+            turn_index=2,
+            speaker="p-1",
+            turn_kind="reply",
+            reply_to="m-1:turn-1",
+            observations=(
+                CompletedTaskObservation(
+                    type="completed_task", tick=9, task_id="t-1", room="STORAGE"
+                ),
+            ),
+            claims=(
+                SchemaAlibiClaim(
+                    type="alibi",
+                    subject="p-1",
+                    from_tick=5,
+                    to_tick=14,
+                    room="CAFETERIA",
+                ),
+            ),
+            free_text="Right, I was in the cafeteria.",
+        )
+        transcript = MeetingTranscript(
+            turns=(proxy_statement, witness, self_restatement)
+        )
+
+        marked = self_refuted_alibi_claim_ids(transcript)
+        assert "turn:m-1:turn-0:claim:0" in marked  # the proxy's copy
+        assert "turn:m-1:turn-2:claim:0" in marked  # the subject's own copy
+
+        flags = detect_contradictions(transcript)
+        strong_sightings = [
+            flag
+            for flag in flags
+            if flag.kind == "alibi_vs_sighting" and not is_weak_contradiction(flag)
+        ]
+        assert strong_sightings  # the witness sighting minted the flag
+        lifted = apply_contradiction_rule(
+            BeliefState(), flags, transcript=transcript, env=_LEVER_ON
+        )
+        # Every group riding the self-refuted account folds WEAK; nothing
+        # accumulates past the weak band from this one account.
+        assert lifted.view("p-1").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+
+    def test_a_different_account_is_not_marked_by_propagation(self) -> None:
+        # Propagation is per ACCOUNT: an alibi by the same subject with a
+        # DIFFERENT room or window is new information, not an echo of the
+        # refuted account, and keeps its own classification.
+        refuted = _alibi_with_own_task_turn()
+        different_account = MeetingTurn(
+            turn_id="m-1:turn-1",
+            turn_index=1,
+            speaker="p-1",
+            turn_kind="reply",
+            reply_to="m-1:turn-0",
+            observations=(),
+            claims=(
+                SchemaAlibiClaim(
+                    type="alibi",
+                    subject="p-1",
+                    from_tick=20,
+                    to_tick=25,
+                    room="REACTOR",
+                ),
+            ),
+            free_text="Later I was in reactor.",
+        )
+        transcript = MeetingTranscript(turns=(refuted, different_account))
+
+        assert self_refuted_alibi_claim_ids(transcript) == frozenset(
+            {_SELF_ALIBI_CLAIM_ID}
+        )
+
+    def test_downgrade_is_score_only_flag_still_recorded(self) -> None:
+        # §5.4 "flags are information": the downgraded flag still lands on
+        # the subject's inconsistency list — only the lift weight changes.
+        transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(),))
+
+        lifted = apply_contradiction_rule(
+            BeliefState(),
+            [_flag_on_self_alibi()],
+            transcript=transcript,
+            env=_LEVER_ON,
+        )
+
+        assert len(lifted.view("p-1").inconsistencies) == 1
+
+    def test_downgraded_group_still_accumulates_with_clean_groups(self) -> None:
+        # Group semantics survive the downgrade: a self-refuted group (0.08)
+        # plus an independent clean STRONG group (0.30) sums to 0.38 and the
+        # 10.1 per-meeting cap bounds it at +0.30 — the existing machinery is
+        # extended, not bypassed.
+        transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(),))
+        clean_strong = _meeting_flag(
+            subject="p-1",
+            weak=False,
+            pair="turn:m-1:turn-2:claim:0|turn:m-1:turn-3:obs:0",
+        )
+
+        lifted = apply_contradiction_rule(
+            BeliefState(),
+            [_flag_on_self_alibi(), clean_strong],
+            transcript=transcript,
+            env=_LEVER_ON,
+        )
+
+        assert lifted.view("p-1").suspicion == pytest.approx(
+            _DEFAULT_SUSPICION + MEETING_CONTRADICTION_LIFT_CAP
+        )
+
+    def test_manager_vote_path_threads_the_transcript_into_the_fold(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The production-seam pin (mutation-tested gap): the ONE line where
+        # bound 2 becomes live is MeetingManager._collect_one_ballot passing
+        # ``transcript=transcript`` into the suspicion-graph fold. Drive the
+        # REAL manager ballot path — a capturing vote renderer + the fake
+        # provider — with the lever ON and a self-refuted-alibi transcript:
+        # the graph the ballot renders must carry the WEAK-downgraded 0.58,
+        # not the STRONG 0.80. Mutating the manager's kwarg to
+        # ``transcript=None`` (or dropping it) fails this test; every other
+        # test supplies the transcript itself and would stay green.
+        import asyncio
+
+        from llm.fake_provider import FakeProvider
+        from meetings.manager import (
+            MeetingConfig,
+            MeetingDeadlines,
+            MeetingManager,
+            MeetingParticipant,
+            MeetingTrigger,
+            SuspicionEntry,
+            derive_belief_evidence,
+        )
+
+        monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
+
+        transcript = MeetingTranscript(turns=(_alibi_with_own_task_turn(),))
+        flags = (_flag_on_self_alibi(),)
+        voters = ("p-1", "p-2", "p-3")
+        evidence = derive_belief_evidence(
+            transcript, contradictions=flags, roster=frozenset(voters)
+        )
+        captured: dict[str, tuple[SuspicionEntry, ...]] = {}
+
+        def capture_vote_prompt(
+            *,
+            voter_id: str,
+            rendered_memory: str,
+            transcript: MeetingTranscript,
+            contradiction_flags: tuple[MeetingContradictionRef, ...],
+            suspicion_graph: tuple[SuspicionEntry, ...],
+            candidate_targets: tuple[str, ...],
+            skip_confidence_threshold: float,
+            fellow_impostor_ids: tuple[str, ...] = (),
+        ) -> str:
+            captured[voter_id] = suspicion_graph
+            return "cast your ballot"
+
+        def unused_prompt(*args: object, **kwargs: object) -> str:
+            raise AssertionError("only the ballot path should render")
+
+        manager = MeetingManager(
+            llm_client=FakeProvider(),
+            crewmate_report_prompt=unused_prompt,
+            impostor_report_prompt=unused_prompt,
+            statement_prompt=unused_prompt,
+            vote_prompt=capture_vote_prompt,
+            config=MeetingConfig(
+                deadlines=MeetingDeadlines(turn_seconds=None, vote_seconds=None)
+            ),
+        )
+        participants = [
+            MeetingParticipant(
+                agent_id=voter, role="CREWMATE", rendered_memory="(memory)"
+            )
+            for voter in voters
+        ]
+        asyncio.run(
+            manager._collect_one_ballot(  # noqa: PLC2701
+                trigger=MeetingTrigger(
+                    triggered_by="p-2",
+                    trigger_tick=1,
+                    description="p-2 called an emergency meeting",
+                ),
+                participant=participants[1],
+                participants=participants,
+                transcript=transcript,
+                contradictions=flags,
+                evidence=evidence,
+            )
+        )
+
+        rendered = {entry.player_id: entry.suspicion for entry in captured["p-2"]}
+        assert rendered["p-1"] == pytest.approx(
+            _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+
+
+class TestEvidenceQualityLiftOnCommittedBytes:
+    """The Task-14.10 offline proof over baseline-1 bytes (the DoD bullet).
+
+    Re-derives the production vote-time fold for the 5 pinned railroad rows
+    (tests/meetings/test_manager.py ``known_railroad``) and the seed-44 m0
+    true-impostor catch, seeded from the ReplayLoader memory walk via the
+    Task-14.8 ``allow_substrate_mismatch`` analysis-only override (the lever
+    is absent from baseline 1's stamp, so an ON re-derivation is a deliberate
+    substrate mismatch — exactly what the override exists for):
+
+    * lever OFF reproduces the RECORDED vote-prompt suspicion rows exactly
+      (the audit §6 method, restricted to the meetings under test) — the
+      harness IS the production fold, and the OFF branch is byte-identical;
+    * lever ON renders every pinned railroad row below the 1.0 clamp —
+      seeds 13/28 ceil at ``CONTRADICTION_RENDER_CEIL`` (bound 1), seeds
+      16/44 drop further on the self-refuted-alibi downgrade (bound 2, the
+      audit's 2/5 self-refuted pinned rows);
+    * the seed-44 m0 TRUE-impostor catch (the over-damping canary) is
+      byte-unchanged: genuine cross-referenced evidence still convicts.
+    """
+
+    # (seed, meeting_id, railroaded crew subject, self_refuted) — the pinned
+    # known set. ``self_refuted`` is the audit §3a measured classification:
+    # seeds 16/44 (both worst-by-flag-count) carry a self-refuted alibi, so
+    # bound 2 drops them BELOW the ceiling; 13/28 are the honest-looking-but-
+    # false shape (no self-refutation — 14.11's fuel target) and stop exactly
+    # AT the bound-1 ceiling.
+    _PINNED = (
+        (13, "headless-seed-13:meeting-0", "p-7", False),
+        (16, "headless-seed-16:meeting-0", "p-6", True),
+        (28, "headless-seed-28:meeting-0", "p-3", False),
+        (28, "headless-seed-28:meeting-0", "p-6", False),
+        (44, "headless-seed-44:meeting-1", "p-1", True),
+    )
+    # seed-44 m0 ejected a TRUE impostor on the contradiction_flag channel
+    # (tests/fixtures/phase10/corrected_w2_baseline.json) — the canary.
+    _CANARY = (44, "headless-seed-44:meeting-0")
+
+    _SET_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
+    _SUSPICION_GRAPH_HEADER = "## Your suspicion of each player"
+    _ROW_RE = re.compile(
+        r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
+        r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+    )
+
+    @pytest.fixture(scope="class")
+    def loader(self) -> ReplayLoader:
+        from api.replay_loader import ReplayLoader
+
+        # One loader per class: the memory walks LRU-cache across the tests.
+        # The walk itself is lever-neutral (reconstruction never runs the
+        # vote-time fold), so one loader serves both env cells.
+        return ReplayLoader(self._SET_DIR, allow_substrate_mismatch=True)
+
+    @pytest.fixture(scope="class")
+    def roles_by_seed(self) -> dict[int, dict[str, str]]:
+        report = json.loads(
+            (self._SET_DIR / "tournament-eval-report.json").read_text(encoding="utf-8")
+        )
+        return {game["seed"]: game["roles"] for game in report["report"]["games"]}
+
+    def _meeting_entry(self, seed: int, meeting_id: str) -> MeetingReplayEntry:
+        from orchestrator.replay import MeetingReplayEntry, read_all_entries
+
+        for entry in read_all_entries(self._SET_DIR / f"replay-seed-{seed}.jsonl"):
+            if isinstance(entry, MeetingReplayEntry) and entry.meeting_id == meeting_id:
+                return entry
+        raise KeyError(meeting_id)
+
+    def _recorded_rows(self, entry: MeetingReplayEntry) -> dict[str, dict[str, float]]:
+        """{voter: {subject: rendered suspicion}} off the recorded prompts."""
+
+        rows: dict[str, dict[str, float]] = {}
+        for call in entry.llm_calls:
+            if self._SUSPICION_GRAPH_HEADER not in call.prompt or (
+                call.agent_id is None
+            ):
+                continue
+            block = call.prompt.split(self._SUSPICION_GRAPH_HEADER, 1)[1].split(
+                "## ", 1
+            )[0]
+            rows[call.agent_id] = {
+                match.group("pid"): float(match.group("sus"))
+                for match in self._ROW_RE.finditer(block)
+            }
+        return rows
+
+    def _rederived_rows(
+        self,
+        loader: ReplayLoader,
+        seed: int,
+        entry: MeetingReplayEntry,
+        roles: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        lever_on: bool,
+    ) -> dict[str, dict[str, float]]:
+        """Re-run the production vote-time fold per recorded voter."""
+
+        from meetings.manager import (
+            SuspicionEntry,
+            _suspicion_graph_with_contradictions,  # noqa: PLC2701
+            derive_belief_evidence,
+        )
+
+        # The production fold resolves the lever from the process
+        # environment (the manager threads data, never env — the 13.5.5
+        # convention), so each cell exports/clears the var.
+        if lever_on:
+            monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
+        else:
+            monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
+
+        game_id = f"headless-seed-{seed}"
+        voters = sorted({ballot.voter for ballot in entry.ballots})
+        impostors = sorted(pid for pid, role in roles.items() if role == "IMPOSTOR")
+        evidence = derive_belief_evidence(
+            entry.transcript,
+            contradictions=entry.contradictions,
+            roster=frozenset(voters),
+        )
+        rows: dict[str, dict[str, float]] = {}
+        for voter in voters:
+            view = loader.get_meeting_memory(game_id, entry.meeting_id, voter)
+            # Trust does not participate in the fold's suspicion arithmetic
+            # (only suspicion is compared below), so the seed uses a neutral
+            # 0.5 — the view projects trust into ``confidence``.
+            seeded = tuple(
+                SuspicionEntry(
+                    player_id=belief.subject, suspicion=belief.suspicion, trust=0.5
+                )
+                for belief in view.beliefs
+            )
+            fellow = (
+                tuple(pid for pid in impostors if pid != voter)
+                if roles.get(voter) == "IMPOSTOR"
+                else ()
+            )
+            graph = _suspicion_graph_with_contradictions(
+                voter_id=voter,
+                suspicion_graph=seeded,
+                contradictions=entry.contradictions,
+                fellow_impostor_ids=fellow,
+                evidence=evidence,
+                transcript=entry.transcript,
+            )
+            rows[voter] = {e.player_id: e.suspicion for e in graph}
+        return rows
+
+    def test_lever_off_reproduces_the_recorded_rows_exactly(
+        self,
+        loader: ReplayLoader,
+        roles_by_seed: dict[int, dict[str, str]],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The exactness anchor (audit §6: 2482/2482 set-wide; here the five
+        # meetings under test): with the lever OFF the re-derived fold must
+        # match every recorded vote-prompt row — proving both that this
+        # harness IS the production fold and that the OFF branch left the
+        # committed baseline's fold byte-identical.
+        meetings = sorted({(s, m) for (s, m, _, _) in self._PINNED} | {self._CANARY})
+        compared = 0
+        for seed, meeting_id in meetings:
+            entry = self._meeting_entry(seed, meeting_id)
+            derived = self._rederived_rows(
+                loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=False
+            )
+            for voter, recorded in self._recorded_rows(entry).items():
+                for subject, suspicion in recorded.items():
+                    compared += 1
+                    assert f"{derived[voter][subject]:.2f}" == f"{suspicion:.2f}", (
+                        f"{meeting_id} voter={voter} subject={subject}"
+                    )
+        assert compared > 100  # non-vacuous: the five meetings' full rosters
+
+    def test_pinned_railroad_rows_render_below_certain_guilt_with_lever_on(
+        self,
+        loader: ReplayLoader,
+        roles_by_seed: dict[int, dict[str, str]],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        for seed, meeting_id, subject, self_refuted in self._PINNED:
+            entry = self._meeting_entry(seed, meeting_id)
+            rows = self._rederived_rows(
+                loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=True
+            )
+            rendered = [row[subject] for row in rows.values() if subject in row]
+            assert rendered, f"{meeting_id}: no voter renders {subject}"
+            assert max(rendered) < 1.0, (
+                f"{meeting_id} {subject} still renders certain guilt "
+                f"(max {max(rendered)})"
+            )
+            # Discriminate WHICH bound fired (so a broken bound 2 cannot
+            # hide behind the ceiling): the audit's self-refuted rows
+            # (seeds 16/44) must land strictly BELOW the ceiling on the
+            # WEAK-downgraded lift, while the no-self-refutation rows
+            # (13/28) stop exactly AT the bound-1 ceiling.
+            if self_refuted:
+                assert max(rendered) < CONTRADICTION_RENDER_CEIL, (
+                    f"{meeting_id} {subject}: bound 2 did not fire "
+                    f"(max {max(rendered)} not below the ceiling)"
+                )
+            else:
+                assert max(rendered) == pytest.approx(CONTRADICTION_RENDER_CEIL), (
+                    f"{meeting_id} {subject}: expected the bound-1 ceiling, "
+                    f"got {max(rendered)}"
+                )
+
+    def test_seed44_m0_true_impostor_catch_still_gate_crosses(
+        self,
+        loader: ReplayLoader,
+        roles_by_seed: dict[int, dict[str, str]],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The over-damping canary: genuine multi-witness evidence must still
+        # convict with the lever ON. seed-44 m0's ejectee is a TRUE impostor
+        # caught on the contradiction channel; its rendered rows must be
+        # byte-unchanged (the catch is a clean lie, not a self-refuted alibi,
+        # and its voters carry no compounding prior).
+        seed, meeting_id = self._CANARY
+        entry = self._meeting_entry(seed, meeting_id)
+        ejected = entry.ejected_player_id
+        assert ejected is not None
+        assert roles_by_seed[seed][ejected] == "IMPOSTOR"
+
+        off = self._rederived_rows(
+            loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=False
+        )
+        on = self._rederived_rows(
+            loader, seed, entry, roles_by_seed[seed], monkeypatch, lever_on=True
+        )
+
+        crossers_off = {v for v, row in off.items() if row.get(ejected, 0.0) >= _GATE}
+        crossers_on = {v for v, row in on.items() if row.get(ejected, 0.0) >= _GATE}
+        assert crossers_off  # the recorded catch really rode the gate
+        assert crossers_on >= crossers_off  # no voter lost the MUST-vote
+        for voter in off:
+            assert on[voter].get(ejected) == off[voter].get(ejected)
