@@ -307,7 +307,7 @@ def _bespoke_versions(set_name: str, version: str = "v1") -> Mapping[str, str]:
 # ``agents/strategic/prompts/<set>/`` (the loader fails loud otherwise).
 PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     DEFAULT_PROMPT_SET: DEFAULT_PROMPT_VERSIONS,
-    "qwen3_32b": _bespoke_versions("qwen3_32b", version="v3"),
+    "qwen3_32b": _bespoke_versions("qwen3_32b", version="v4"),
     "qwen3_32b_thinking": _bespoke_versions("qwen3_32b_thinking", version="v2"),
     "qwen3_30b_a3b": _bespoke_versions("qwen3_30b_a3b", version="v2"),
     "glm_4_32b": _bespoke_versions("glm_4_32b", version="v3"),
