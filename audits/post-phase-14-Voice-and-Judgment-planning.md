@@ -65,11 +65,14 @@ antidotes both point the same way: **per-claim citation of a concrete source/tur
 claim to count**, and **not weighting conviction by raw self-reported confidence**. [INFERRED from §5 research
 + §2 measurements]
 
-Recommendation (§7): a measurement-first Phase 15 with a **Judgment track** (a measured, default-OFF
-hard-evidence gate lever + a provenance-aware, citation-gated vote surface) and a **Voice track**
-(deterministic per-seed persona cards threaded as a render input) running as **disjoint-region parallel
-tracks**, converging on **one atomic re-record (baseline 3)** — with the evidence-linkage bound landing *with
-or before* persona realization so we never ship a louder voice channel without the evidence gate that tames it.
+Recommendation (§7): a measurement-first Phase 15 that first lands a **shared foundation** (per-subject
+suspicion *provenance* + a widened render-input contract — both the Judgment surface and the Voice personas
+need it, and recording it is a prerequisite the belief store's aggregate scalar can't skip), then runs a
+**Judgment track** (a measured, default-OFF hard-evidence gate lever + a provenance-aware, citation-gated vote
+surface) and a **Voice track** (deterministic per-seed persona cards threaded as a render input) as parallel
+disjoint tracks *downstream of that foundation*, converging on **one atomic re-record (baseline 3)** — with the
+evidence-linkage bound landing *with or before* persona realization so we never ship a louder voice channel
+without the evidence gate that tames it.
 
 ---
 
@@ -190,6 +193,16 @@ ejectee across convicting voters:
 The 4 HARD-backed crew mis-ejects are innocents who drew body-proximity (`0.50 + 0.20 = 0.70`) with zero flags
 — a hard-evidence gate would *not* fix these; they need a separate look at whether co-presence with a body
 should alone gate-cross (§3.4, option J1b). [VERIFIED]
+
+**Second caveat — the hard/soft split is a rendered-VALUE proxy, not true provenance.** The belief store keeps
+only an aggregate `suspicion` scalar per subject (§3.1; `PlayerBelief`), with no record of *which* deltas built
+it. I classified "hard-backed" as max rendered suspicion ≥0.70, which is a good proxy (a single body/kill/vent
+pin is the fastest way to ≥0.70) but not exact: the soft accumulation path C (`+0.05`/reinforced meeting) can
+in principle climb a carried prior into the ≥0.70 band across several meetings, and a hard pin can later mix
+with soft deltas. So some of the "4 hard / 10 hard" cells could be soft priors that reached the hard band by
+value. The corollary for J1 (§3.4): the actual clamp cannot classify soft-vs-hard from the aggregate scalar
+either — it needs **per-subject suspicion provenance** (the composition by source) recorded first, which is why
+the staged sketch makes that a shared foundation task (15.0). [VERIFIED store shape; INFERRED proxy error bound]
 
 ### 2.4 The "used a vent" hallucination — REFUTED as stated; a smaller firewall question remains
 
@@ -336,8 +349,15 @@ same-meeting contradiction flag on the subject, body-proximity, or a witnessed k
 render ≥0.60. Concretely: in the `pre_vote` render, if a subject's suspicion is composed entirely of
 testimony-spread + accusation + carried prior (no flag, no perception pin), clamp its rendered value to
 `< 0.60` (e.g. `0.59`).
+- *Hard prerequisite — evidence provenance (§2.3 caveat 2):* the clamp must know *what built* a subject's
+  suspicion, but the belief store keeps only an aggregate `suspicion` scalar (§3.1) — a carried soft prior at
+  0.70 is indistinguishable from a body-proximity pin at 0.70. So J1 cannot be implemented on the current
+  state: it depends on **recording per-subject suspicion provenance** (a source-tagged decomposition —
+  flag-lift / body / kill-vent / testimony-spread / accusation-carry) first. That provenance is the shared
+  foundation task 15.0 (§7), which J2's rendering (below) also needs.
 - *Measured effect (static, §2.3):* neutralizes **24/31** crew mis-ejects; risks **6/16** impostor catches
-  (10 hard-backed preserved). ≈4:1 favorable.
+  (10 hard-backed preserved) — subject to the value-proxy caveat above; the provenance record makes the split
+  exact. ≈4:1 favorable.
 - *Over-damping:* the failure mode to watch is genuine-class conversion (the 14.10 canary). Because the
   exemption keeps flags + kill/vent pins fully potent, the primary conversion fuel (R1) is untouched; the
   6 at-risk impostor catches are soft-only and recoverable downstream. Prove it on the committed bytes with
@@ -352,19 +372,31 @@ testimony-spread + accusation + carried prior (no flag, no perception pin), clam
 
 **J2 — Provenance-aware, evidence-linked vote surface (prompt-side + gate-side; where Voice and Judgment
 meet).**
-Two coordinated changes: (a) render the suspicion scalar **with its provenance** — split "carried prior" from
-"this-meeting evidence," or annotate rows whose suspicion is soft-only ("0.60 — no flag; carried/soft") — so
-the model (and a human reader) can see a bare-carry number for what it is; (b) require an EJECT ballot against
-a **zero-flag** target to carry a non-null `primary_reason_id` citing a concrete turn/observation, and have
-the tally/guard **enforce** it (today `primary_reason_id` is decorative). This is the direct implementation of
-the research's load-bearing finding (§5): *a claim counts toward conviction only if it cites a specific
-in-game source*.
+Two coordinated changes: (a) render the suspicion scalar **with its provenance** (the same source-tagged
+decomposition J1 records, foundation task 15.0) — split "carried prior" from "this-meeting evidence," or
+annotate rows whose suspicion is soft-only ("0.60 — no flag; carried/soft") — so the model (and a human
+reader) can see a bare-carry number for what it is; (b) require an EJECT ballot against a **zero-flag** target
+to cite a concrete in-game source, and have the tally/guard **enforce** it (today the citation field is
+decorative). This is the direct implementation of the research's load-bearing finding (§5): *a claim counts
+toward conviction only if it cites a specific in-game source*.
+- **Citation schema must be widened first — the current field cannot cite private evidence (VERIFIED, the C3
+  catch).** Today `primary_reason_id: TurnId | None` (`schemas.py:268`) is validated *only* against this
+  meeting's transcript turn-ids (`valid_reason_ids = frozenset(turn.turn_id ...)`, `manager.py:1676`), and a
+  dangling id is nulled. A witnessed kill/vent lives in the voter's **private** memory, not the transcript, so
+  it has no `TurnId` — the seed-9 vent votes correctly carried `primary_reason_id: null`. Enforcing a non-null
+  `primary_reason_id` on zero-flag ejects *as-is* would therefore **block** exactly the private hard-evidence
+  catches the exemption is meant to protect (an over-damp of correct impostor ejections). J2b must first
+  extend the ballot schema with an **observation-citation path** — e.g. a `primary_reason_observation_id`
+  (an `ObservationRef` into the voter's reconstructed memory) alongside the turn-id — and a validator for it,
+  so "cite a source" admits *both* a transcript turn *and* a private observation. Without that path the gate
+  is unsound.
 - *Measured target:* the 82% soft-band convictions (§2.2) and the "gut-read null-reason" sanction (§3.2).
-- *Over-damping:* citation-gating an EJECT does not stop convicting flagged impostors (they have flags) or
-  witnessed kill/vent (a citable observation); the risk is that a legitimate but *inferential* crew catch
-  ("nobody vouched for them") can't cite a single turn — measure how many correct impostor ejections would
-  fail a citation requirement before enforcing it (a `zeroflag_render`-style pass restricted to impostor
-  ejections).
+- *Over-damping:* with the observation-citation path in place, citation-gating an EJECT does not stop
+  convicting flagged impostors (they have flags), witnessed kill/vent (now a citable observation), or a
+  transcript-cited catch; the residual risk is a legitimate but *inferential* crew read ("nobody vouched for
+  them") that cites nothing — measure how many correct impostor ejections would fail the citation requirement
+  before enforcing it (a `zeroflag_render`-style pass restricted to impostor ejections, counting how many have
+  *any* citable turn or observation).
 - *Determinism/replay:* variant **J2a (prompt-only)** changes rendered prompt bytes but *not* the belief fold
   → a new prompt-set version (v5) and a re-record to take effect, but does **not** retroactively break
   reconstruction of baseline 2. Variant **J2b (gate-side)** — tally/guard requires an over-gate zero-flag
@@ -582,71 +614,113 @@ prompt`). They are sketches to be filled at phase authoring time, sized by file 
   scope:* any belief-fold or prompt change (this task only measures). This is the foundation so every later
   fix is specified against a number, per project discipline.
 
-- **15.2 — Hard-evidence gate lever (J1; default-OFF).** *Depends on:* 15.1. *Complexity:* Integration.
-  Cap soft-accumulator-only rendered suspicion below the 0.60 gate, exempting flags + body-proximity +
-  witnessed kill/vent, behind a new `*_enabled()` resolver registered in `substrate_flag_snapshot()`.
-  *Files in scope:* `agents/memory/beliefs.py` (the pre-vote render clamp), `orchestrator/replay.py` (lever
-  registration), `.env.example`, `tests/agents/test_beliefs.py`, `tests/orchestrator/test_replay.py`. *Not in
-  scope:* `replays/samples/` (re-record is 15.7), prompt sets, the detectors. *DoD (measured):* OFF =
-  byte-identical to baseline 2; offline over committed bytes (via `allow_substrate_mismatch`) the 24 soft-only
-  crew mis-ejects fall below gate while the 10 hard-backed impostor catches still gate-cross (the over-damping
-  canary); the CI tail. *Integration risk:* over-damping genuine conversion — watch the 6 soft-only impostor
+- **15.0 — Shared foundation: suspicion provenance + render-input plumbing (byte-identical).** *Depends on:*
+  15.1. *Complexity:* Integration. This is the seam **both** the Judgment surface (15.3) and the Voice persona
+  layer (15.4) need, landed once so they don't collide (the C4/C5 review catch). Two parts, both proven
+  byte-identical to baseline 2: (a) **record per-subject suspicion provenance** — a source-tagged
+  decomposition (flag-lift / body-proximity / kill-vent pin / testimony-spread / accusation-carry) recorded
+  *alongside* the aggregate `suspicion` scalar in `BeliefState` / `PlayerBelief`, **without changing the scalar
+  value or any rendered byte** (so it reconstructs baseline 2 exactly). This is what J1's clamp classifies on
+  and what J2's surface renders — neither can be built on today's aggregate-only scalar (§3.1, §2.3 caveat 2).
+  (b) **Widen the render-input contract once** — add the `persona` and `suspicion_provenance` render kwargs
+  through the 3-layer contract (Protocol sigs `manager.py:697-796`, the four wrapper sigs + `.render` bodies
+  `loader.py:162-386`, the manager render seams `manager.py:1430-1558`), plus the `MeetingParticipant.persona`
+  and `SuspicionEntry` provenance fields — all **inert/defaulted so no template references them yet** and every
+  render stays byte-identical. *Files in scope:* `agents/memory/beliefs.py` + `agents/memory/store.py`
+  (provenance record), `agents/strategic/prompts/loader.py` + `meetings/manager.py` (the contract widening +
+  the two DTO fields), tests. *Not in scope:* `orchestrator/replay.py` levers, any template text, any gate
+  logic (those are 15.2–15.5). *DoD:* `verify_samples.sh` bare reconstructs baseline 2 byte-identically (the
+  provenance record + inert kwargs change nothing rendered); the CI tail. *Why it de-conflicts the tracks:*
+  after 15.0 the render-contract functions in `loader.py`/`manager.py` are already widened, so 15.3 edits only
+  `vote_ballot.j2` + the gate and 15.4 edits only the persona assignment + template text — no shared function.
+
+- **15.2 — Hard-evidence gate lever (J1; default-OFF).** *Depends on:* 15.1, **15.0** (uses its per-subject
+  provenance to classify soft-only vs hard-backed — the clamp cannot read that off the aggregate scalar).
+  *Complexity:* Integration. Cap soft-accumulator-only rendered suspicion below the 0.60 gate, exempting flags
+  + body-proximity + witnessed kill/vent, behind a new `*_enabled()` resolver registered in
+  `substrate_flag_snapshot()`. *Files in scope:* `agents/memory/beliefs.py` (the pre-vote render clamp, reading
+  15.0's provenance), `orchestrator/replay.py` (lever registration), `.env.example`, **`scripts/refresh_samples.sh`
+  + `tests/scripts/` (wire the new lever ON for the baseline-3 record — see below), `tests/agents/test_beliefs.py`,
+  `tests/orchestrator/test_replay.py`. *Not in scope:* `replays/samples/` (re-record is 15.7), prompt sets, the
+  detectors. *Recording preflight (the C6 catch):* since 14.12 the refresh/verify scripts assume every
+  substrate lever is unconditional and export **no** lever env (`refresh_samples.sh:270-275`); a new default-OFF
+  lever must be exported ON for the baseline-3 recording, or the operator silently records it OFF and only finds
+  out from the stamped MANIFEST afterward. So this task must add the lever's `AILIBI_*` export to
+  `refresh_samples.sh` (and a test asserting the stamp comes out ON) — or, mirroring 14.12, graduate the lever
+  to unconditional-ON *at* 15.7. *DoD (measured):* OFF = byte-identical to baseline 2; offline over committed
+  bytes (via `allow_substrate_mismatch`) the 24 soft-only crew mis-ejects fall below gate while the 10
+  hard-backed impostor catches still gate-cross (the over-damping canary); the record preflight stamps the
+  lever ON; the CI tail. *Integration risk:* over-damping genuine conversion — watch the 6 soft-only impostor
   catches; do not weaken the detectors.
 
-- **15.3 — Provenance-aware, citation-gated vote surface (J2, +optionally J3).** *Depends on:* 15.1;
-  **parallelism is variant-dependent** (see below). *Complexity:* Integration. (a) Render suspicion provenance
-  in `vote_ballot.j2` (split carried vs same-meeting; annotate soft-only rows) via a new `SuspicionEntry`
-  provenance field + render input; (b, the J2b gate-side variant) require a non-null cited turn for a zero-flag
-  EJECT ballot and enforce it in the tally/guard behind a default-OFF lever. *Files in scope:* prompt sets (a
-  v5 bump), `meetings/manager.py` (surface + optional gate), `agents/strategic/prompts/loader.py` (render
-  input); **plus `orchestrator/replay.py` + `.env.example` + `tests/orchestrator/test_replay.py` ONLY if J2b
-  (gate-side lever) is taken.** *Parallelism caveat:* the J2a (prompt-only surface) part touches no belief/gate
-  file and runs parallel to 15.2. But the J2b lever registration edits the **same** `_TOGGLEABLE_LEVER_RESOLVERS`
-  / `substrate_flag_snapshot()` seam in `orchestrator/replay.py` that 15.2 reserves — a same-function
-  collision, exactly the reason 14.10 stayed sequential behind 14.9. So if J2b is in scope, **either serialize
-  15.3 behind 15.2, or split the shared lever-registration into one dedicated task that registers both levers**
-  (recommended: a tiny `15.2r` registration task both depend on). *DoD:* measure, before enforcing, how many
-  *correct impostor* ejections would fail a citation requirement (must be near-zero); the CI tail.
+- **15.3 — Provenance-aware, citation-gated vote surface (J2, +optionally J3).** *Depends on:* 15.1, **15.0**
+  (consumes its render-input seam + suspicion provenance); **J2b parallelism is variant-dependent** (below).
+  *Complexity:* Integration. (a, J2a) Render the provenance 15.0 records in `vote_ballot.j2` (split carried vs
+  same-meeting; annotate soft-only rows) — no signature edits, since 15.0 already widened the contract.
+  (b, J2b gate-side) require a zero-flag EJECT ballot to **cite a concrete in-game source** and enforce it in
+  the tally/guard behind a default-OFF lever. **Citation-schema extension is mandatory for J2b (the C3 catch):**
+  today `primary_reason_id: TurnId` is validated only against transcript turn-ids (`manager.py:1676`), so a
+  **private** witnessed kill/vent (no transcript turn) cannot be cited and a naive non-null gate would block
+  the very hard-evidence catches the exemption protects (seed-9's vent votes carried `reason_id: null`). J2b
+  must add an **observation-citation path** — a `primary_reason_observation_id` (`ObservationRef` into the
+  voter's reconstructed memory) + validator — so "cite a source" admits a transcript turn *or* a private
+  observation. *Files in scope:* prompt sets (a v5 bump), `meetings/manager.py` (surface + optional gate),
+  `meetings/schemas.py` (the observation-citation field/validator, J2b), `vote_ballot.j2`; **plus
+  `orchestrator/replay.py` + `.env.example` + `tests/orchestrator/test_replay.py` ONLY if J2b (gate-side lever)
+  is taken.** *Parallelism caveat:* J2a touches no belief/gate/replay file and runs parallel to 15.2. But the
+  J2b lever registration edits the **same** `_TOGGLEABLE_LEVER_RESOLVERS` / `substrate_flag_snapshot()` seam in
+  `orchestrator/replay.py` that 15.2 reserves — a same-function collision (the reason 14.10 stayed sequential
+  behind 14.9). So if J2b is in scope, **either serialize 15.3 behind 15.2, or register both levers in one
+  shared `15.2r` task both depend on.** *DoD:* the observation-citation path lands *before* any enforcement;
+  measure how many *correct impostor* ejections would fail the citation requirement (must be near-zero,
+  counting either a citable turn or a citable observation); the CI tail.
 
-- **15.4 — Persona registry + render-input threading (plumbing).** *Depends on:* none (may run parallel to
-  15.2/15.3 — disjoint files from beliefs/gate). *Complexity:* Integration. A committed persona bank + a
-  deterministic `game_seed`-keyed permutation (sampling without replacement, §4.1) assignment at setup; a
-  `MeetingParticipant.persona` field threaded
-  through the 3-layer render contract (§4.1). Land it **inert first** — plumbing with templates not yet
-  referencing `{{ persona }}`, so renders stay byte-identical — then opt sets in per template. *Files in
-  scope:* `agents/strategic/prompts/loader.py`, `meetings/manager.py` (Protocols + seams + participant),
-  `orchestrator/game.py`/`seeder.py` (assignment), a `personas/` data file, tests. *Not in scope:* the
-  templates' persona *text* (that's 15.5).
+- **15.4 — Persona registry + deterministic assignment.** *Depends on:* 15.1, **15.0** (the
+  `MeetingParticipant.persona` field + render-input seam already exist, inert). *Complexity:* Integration.
+  A committed persona bank + the deterministic `game_seed`-keyed permutation (sampling without replacement,
+  §4.1) assignment at setup. Because 15.0 owns the render-contract widening, this task no longer touches the
+  `loader.py`/`manager.py` render signatures — it is now **genuinely disjoint** from 15.3. *Files in scope:*
+  `orchestrator/game.py` / `seeder.py` (the assignment that fills `participant.persona`), a `personas/` data
+  file, tests. *Not in scope:* the render-contract signatures (15.0), the templates' persona *text* (15.5).
 
 - **15.5 — Persona-conditioned prompt additions (v5) + A/B on voice metrics.** *Depends on:* 15.1, 15.4.
   *Complexity:* Integration. Author disposition-varied persona cards + speech-style exemplars into each set's
   preamble (guarded, byte-identical when persona empty); A/B new-vs-pinned on the same model, scored on the
   15.1 voice metrics **and** the zero-flag conviction rate (the anti-collapse guard: a louder voice must not
-  raise zero-flag convictions). *Files in scope:* prompt sets. *Ready-to-paste prompt* per set.
+  raise zero-flag convictions). *Files in scope:* prompt sets; **plus `orchestrator/game.py` — the
+  `PROMPT_VERSION_SETS` registry bump `qwen3_32b` v4 → v5 (the C7 catch).** Replay provenance is stamped from
+  that static registry (`prompt_versions_for_set`, `game.py:308-314`), *not* derived from the `.j2` files, so
+  editing templates without the one-line registry bump would render v5 text while `MeetingReplayEntry.prompt_versions`
+  + the MANIFEST still report v4 — breaking provenance and the version-assertion tests (14.11 bumped the
+  registry for exactly this reason). *Ready-to-paste prompt* per set.
 
 - **15.6 — (Deferred/optional) Heterogeneous-model routing.** *Depends on:* — . *Complexity:* Integration
   (large). R1/R2 routing + P1/P2 per-agent provenance schema + C1/C2 cost + D1/D2 determinism (§4.3). Only if
   the owner wants the capability in Phase 15; least-measured value.
 
 - **15.7 — Baseline 3: atomic re-record + phase close.** *Depends on:* 15.2, 15.3, 15.5 (and 15.6 if taken).
-  *Complexity:* Integration (operator-run / spend gate). Re-record both sets on the chosen levers ON + v5
-  persona prompts, HARD validity gate + bare reconstruction, re-measure the §2 channel split and §2.5 voice
-  metrics as the close finding. Same shape as 14.12.
+  *Complexity:* Integration (operator-run / spend gate). Re-record both sets with the chosen levers exported ON
+  (verify the `refresh_samples.sh` preflight from 15.2 stamps every new lever ON *before* spending — the C6
+  guard) + v5 persona prompts (registry bumped, 15.5), HARD validity gate + bare reconstruction, re-measure the
+  §2 channel split and §2.5 voice metrics as the close finding. Same shape as 14.12.
 
 ### Sequencing options
 
-- **Option A — Judgment-first.** 15.1 → 15.2 → 15.3 → (15.4 → 15.5) → 15.7. *Rationale:* fix the measured,
-  highest-value defect first; the evidence gate is in place before louder voices land.
-- **Option B — Voice-first.** 15.1 → 15.4 → 15.5 → (15.2/15.3) → 15.7. *Rationale:* personas may themselves
-  shift the channel (disposition variety reduces sycophantic cascade) — measure that before belief-side
-  surgery. *Risk:* ships a louder voice channel before the evidence gate (the §0 thesis warns against this).
-- **Option C — Parallel disjoint tracks (RECOMMENDED).** 15.1 first (foundation); then the **Judgment track**
-  and the **Voice track** (15.4 → 15.5) run in parallel — the two *tracks* are genuinely disjoint
-  (`beliefs.py` / gate / `orchestrator/replay.py` vs `loader.py` / participant / prompt text — no shared
-  function). *Within* the Judgment track, 15.2 and 15.3's prompt-only surface (J2a) are disjoint and may run
-  parallel, but 15.3's J2b gate-side lever shares the `orchestrator/replay.py` registration seam with 15.2, so
-  it **serializes behind 15.2** (or both depend on a shared `15.2r` lever-registration task). 15.5 follows
-  15.4. Converge on the single re-record 15.7. Defer 15.6.
+- **Option A — Judgment-first.** 15.1 → 15.0 → 15.2 → 15.3 → (15.4 → 15.5) → 15.7. *Rationale:* fix the
+  measured, highest-value defect first; the evidence gate is in place before louder voices land.
+- **Option B — Voice-first.** 15.1 → 15.0 → 15.4 → 15.5 → (15.2/15.3) → 15.7. *Rationale:* personas may
+  themselves shift the channel (disposition variety reduces sycophantic cascade) — measure that before
+  belief-side surgery. *Risk:* ships a louder voice channel before the evidence gate (the §0 thesis warns
+  against this).
+- **Option C — Shared foundation, then parallel disjoint tracks (RECOMMENDED).** 15.1 (measurement) → 15.0
+  (the shared provenance + render-input foundation, landed once so the tracks don't collide on the
+  render-contract functions — the C4 fix); *then* the **Judgment track** and the **Voice track** (15.4 → 15.5)
+  run in parallel, now genuinely disjoint (`beliefs.py` / gate / `orchestrator/replay.py` / `schemas.py` vs
+  the persona assignment + prompt text — 15.0 already absorbed the shared `loader.py`/`manager.py` seam).
+  *Within* the Judgment track, 15.2 and 15.3's J2a surface may run parallel, but 15.3's J2b gate-side lever
+  shares the `orchestrator/replay.py` registration seam with 15.2, so it **serializes behind 15.2** (or both
+  depend on a shared `15.2r` lever-registration task). 15.5 follows 15.4. Converge on the single re-record
+  15.7. Defer 15.6.
 
 **Recommendation: Option C, with the evidence-linkage bound (15.3) required to land in the same re-record as
 the persona prompts (15.5).** This honors the mission's "design them together," gets the measured 4:1 Judgment
@@ -654,9 +728,10 @@ win (15.2) moving immediately, and structurally prevents shipping personas witho
 persuasion literature says they need. The whole phase costs **one** atomic re-record (baseline 3), proven
 offline first.
 
-DAG (the shared lever-registration seam made explicit): `15.1 → { [ 15.2 → 15.3(J2b) ]  ∥  [ 15.4 → 15.5 ] } →
-15.7`. 15.3's prompt-only surface (J2a) may instead run `∥ 15.2`; only its gate-side lever (J2b) is
-order-constrained behind 15.2. (15.6 deferred.)
+DAG (shared foundation + the two same-function seams made explicit): `15.1 → 15.0 → { [ 15.2 → 15.3(J2b) ]  ∥
+[ 15.4 → 15.5 ] } → 15.7`. 15.3's J2a surface may instead run `∥ 15.2`; only its gate-side lever (J2b) is
+order-constrained behind 15.2. 15.0 is what makes the `[Judgment] ∥ [Voice]` split real — without it, 15.3 and
+15.4 would both edit the `loader.py`/`manager.py` render contract (the C4 collision). (15.6 deferred.)
 
 ---
 
