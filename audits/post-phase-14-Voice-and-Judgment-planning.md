@@ -419,12 +419,17 @@ frozen. Personas shape only `free_text` / `rationale_text` diction — the struc
 preamble* only; it never touches `rendered_memory`. The render inputs already cleanly separate the two, so a
 persona is orthogonal to the firewall by construction. [INFERRED from the verified separation]
 
-**Determinism per seed (PROPOSED, matching research #2):** assign
-`persona_id = bank[stable_hash(game_seed, seat_index) % len(bank)]` at game setup (where roster roles are
-seeded, `orchestrator/seeder.py`), guaranteeing (a) reproducibility — a replay reconstructs the same nine
-voices — and (b) disjointness — no persona is drawn twice in a nine-seat game (the structural fix for "one
-analyst times nine"). The persona bank is a committed data file; the assignment is a pure function of the
-seed, so it is part of provenance but *not* a belief-fold change (it changes prompt bytes only).
+**Determinism per seed (PROPOSED, matching research #2):** at game setup (where roster roles are seeded,
+`orchestrator/seeder.py`), draw personas by **sampling without replacement** — a deterministic
+`game_seed`-keyed permutation of the persona-bank indices (a seeded Fisher–Yates shuffle), assigning seat `i`
+the `i`-th entry of the shuffled order. This *guarantees* (a) reproducibility — a replay reconstructs the same
+nine voices — and (b) disjointness: **no persona is drawn twice in a nine-seat game** (the structural fix for
+"one analyst times nine"). Note the naive `bank[hash(game_seed, seat_index) % len(bank)]` does **not**
+guarantee (b) — independent per-seat hashes collide (birthday problem), handing two seats the same persona and
+re-introducing the very homogeneity we are removing — so the without-replacement/permutation scheme is
+load-bearing, and the bank must hold at least the max seat count (≥9). The persona bank is a committed data
+file; the assignment is a pure function of the seed, so it is part of provenance but *not* a belief-fold
+change (it changes prompt bytes only).
 
 ### 4.2 Persona design techniques (from the literature, mapped to a frozen-schema game)
 
@@ -588,18 +593,25 @@ prompt`). They are sketches to be filled at phase authoring time, sized by file 
   canary); the CI tail. *Integration risk:* over-damping genuine conversion — watch the 6 soft-only impostor
   catches; do not weaken the detectors.
 
-- **15.3 — Provenance-aware, citation-gated vote surface (J2, +optionally J3).** *Depends on:* 15.1 (may run
-  parallel to 15.2 — disjoint files). *Complexity:* Integration. (a) Render suspicion provenance in
-  `vote_ballot.j2` (split carried vs same-meeting; annotate soft-only rows) via a new `SuspicionEntry`
-  provenance field + render input; (b) require a non-null cited turn for a zero-flag EJECT ballot and enforce
-  it in the tally/guard (default-OFF lever if it changes outcomes). *Files in scope:* prompt sets (a v5 bump),
-  `meetings/manager.py` (surface + optional gate), `agents/strategic/prompts/loader.py` (render input),
-  `orchestrator/replay.py` (lever if gate-side). *DoD:* measure, before enforcing, how many *correct impostor*
-  ejections would fail a citation requirement (must be near-zero); the CI tail.
+- **15.3 — Provenance-aware, citation-gated vote surface (J2, +optionally J3).** *Depends on:* 15.1;
+  **parallelism is variant-dependent** (see below). *Complexity:* Integration. (a) Render suspicion provenance
+  in `vote_ballot.j2` (split carried vs same-meeting; annotate soft-only rows) via a new `SuspicionEntry`
+  provenance field + render input; (b, the J2b gate-side variant) require a non-null cited turn for a zero-flag
+  EJECT ballot and enforce it in the tally/guard behind a default-OFF lever. *Files in scope:* prompt sets (a
+  v5 bump), `meetings/manager.py` (surface + optional gate), `agents/strategic/prompts/loader.py` (render
+  input); **plus `orchestrator/replay.py` + `.env.example` + `tests/orchestrator/test_replay.py` ONLY if J2b
+  (gate-side lever) is taken.** *Parallelism caveat:* the J2a (prompt-only surface) part touches no belief/gate
+  file and runs parallel to 15.2. But the J2b lever registration edits the **same** `_TOGGLEABLE_LEVER_RESOLVERS`
+  / `substrate_flag_snapshot()` seam in `orchestrator/replay.py` that 15.2 reserves — a same-function
+  collision, exactly the reason 14.10 stayed sequential behind 14.9. So if J2b is in scope, **either serialize
+  15.3 behind 15.2, or split the shared lever-registration into one dedicated task that registers both levers**
+  (recommended: a tiny `15.2r` registration task both depend on). *DoD:* measure, before enforcing, how many
+  *correct impostor* ejections would fail a citation requirement (must be near-zero); the CI tail.
 
 - **15.4 — Persona registry + render-input threading (plumbing).** *Depends on:* none (may run parallel to
   15.2/15.3 — disjoint files from beliefs/gate). *Complexity:* Integration. A committed persona bank + a
-  deterministic `stable_hash(seed, seat)` assignment at setup; a `MeetingParticipant.persona` field threaded
+  deterministic `game_seed`-keyed permutation (sampling without replacement, §4.1) assignment at setup; a
+  `MeetingParticipant.persona` field threaded
   through the 3-layer render contract (§4.1). Land it **inert first** — plumbing with templates not yet
   referencing `{{ persona }}`, so renders stay byte-identical — then opt sets in per template. *Files in
   scope:* `agents/strategic/prompts/loader.py`, `meetings/manager.py` (Protocols + seams + participant),
@@ -628,10 +640,13 @@ prompt`). They are sketches to be filled at phase authoring time, sized by file 
 - **Option B — Voice-first.** 15.1 → 15.4 → 15.5 → (15.2/15.3) → 15.7. *Rationale:* personas may themselves
   shift the channel (disposition variety reduces sycophantic cascade) — measure that before belief-side
   surgery. *Risk:* ships a louder voice channel before the evidence gate (the §0 thesis warns against this).
-- **Option C — Parallel disjoint tracks (RECOMMENDED).** 15.1 first (foundation); then **Judgment
-  (15.2 ∥ 15.3)** and **Voice (15.4)** run in parallel as disjoint-region tracks (`beliefs.py`/gate vs
-  `loader.py`/participant/prompt text — no shared function), with 15.5 following 15.4; converge on the single
-  re-record 15.7. Defer 15.6.
+- **Option C — Parallel disjoint tracks (RECOMMENDED).** 15.1 first (foundation); then the **Judgment track**
+  and the **Voice track** (15.4 → 15.5) run in parallel — the two *tracks* are genuinely disjoint
+  (`beliefs.py` / gate / `orchestrator/replay.py` vs `loader.py` / participant / prompt text — no shared
+  function). *Within* the Judgment track, 15.2 and 15.3's prompt-only surface (J2a) are disjoint and may run
+  parallel, but 15.3's J2b gate-side lever shares the `orchestrator/replay.py` registration seam with 15.2, so
+  it **serializes behind 15.2** (or both depend on a shared `15.2r` lever-registration task). 15.5 follows
+  15.4. Converge on the single re-record 15.7. Defer 15.6.
 
 **Recommendation: Option C, with the evidence-linkage bound (15.3) required to land in the same re-record as
 the persona prompts (15.5).** This honors the mission's "design them together," gets the measured 4:1 Judgment
@@ -639,15 +654,18 @@ win (15.2) moving immediately, and structurally prevents shipping personas witho
 persuasion literature says they need. The whole phase costs **one** atomic re-record (baseline 3), proven
 offline first.
 
-DAG: `15.1 → { (15.2 ∥ 15.3)  ∥  (15.4 → 15.5) } → 15.7`  (15.6 deferred).
+DAG (the shared lever-registration seam made explicit): `15.1 → { [ 15.2 → 15.3(J2b) ]  ∥  [ 15.4 → 15.5 ] } →
+15.7`. 15.3's prompt-only surface (J2a) may instead run `∥ 15.2`; only its gate-side lever (J2b) is
+order-constrained behind 15.2. (15.6 deferred.)
 
 ---
 
 ## 8. Open questions for the owner
 
 1. **Persona scope & shape.** Full persona cards (background + exemplars + disposition) per seat, or
-   lightweight disposition tags only to start? Assignment source = `stable_hash(seed, seat)` into a committed
-   bank (my proposal) — acceptable as provenance? Bank size / who authors it?
+   lightweight disposition tags only to start? Assignment source = a `game_seed`-keyed permutation (sampling
+   without replacement, §4.1) over a committed bank (my proposal) — acceptable as provenance? Bank size (must
+   be ≥ the max seat count) / who authors it?
 2. **Sequencing the two faces.** Do you accept the §0 thesis that a persona layer without an evidence gate
    risks *worsening* the zero-flag channel — i.e. that 15.3 (evidence-linkage) must land with/before 15.5
    (persona text)? Or ship personas first and measure?
