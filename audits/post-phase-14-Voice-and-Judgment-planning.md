@@ -390,6 +390,17 @@ toward conviction only if it cites a specific in-game source*.
   (an `ObservationRef` into the voter's reconstructed memory) alongside the turn-id — and a validator for it,
   so "cite a source" admits *both* a transcript turn *and* a private observation. Without that path the gate
   is unsound.
+  - **And the observation must first be *citable* — the C8 catch (deeper than the schema field).** Today
+    observations have **no stable id** for the model to copy or the validator to check: `EpisodicEvent` carries
+    only `(tick, type, payload, provenance)`, no id (`agents/memory/episodic.py:19-30`), and the memory is
+    handed to `MeetingManager` as a **rendered prose string** (`render_for_prompt`, `agents/memory/store.py:155`)
+    — e.g. "[tick …] You witnessed …" — with nothing to reference. So a `primary_reason_observation_id`
+    validator would have nothing visible, and the gate would still reject the seed-9 vent votes it is meant to
+    preserve. J2b's real prerequisite chain is therefore: (i) give observations a **stable id** (`EpisodicEvent`
+    + the perception writers), (ii) **render that id** in the memory prompt so the model can copy it, and (iii)
+    thread it to the manager for validation — *all before any enforcement*. Steps (i)–(iii) change rendered
+    memory bytes, so they are **prompt-changing** (v5 + re-record), not part of 15.0's byte-identical
+    foundation.
 - *Measured target:* the 82% soft-band convictions (§2.2) and the "gut-read null-reason" sanction (§3.2).
 - *Over-damping:* with the observation-citation path in place, citation-gating an EJECT does not stop
   convicting flagged impostors (they have flags), witnessed kill/vent (now a citable observation), or a
@@ -629,10 +640,16 @@ prompt`). They are sketches to be filled at phase authoring time, sized by file 
   render stays byte-identical. *Files in scope:* `agents/memory/beliefs.py` + `agents/memory/store.py`
   (provenance record), `agents/strategic/prompts/loader.py` + `meetings/manager.py` (the contract widening +
   the two DTO fields), tests. *Not in scope:* `orchestrator/replay.py` levers, any template text, any gate
-  logic (those are 15.2–15.5). *DoD:* `verify_samples.sh` bare reconstructs baseline 2 byte-identically (the
-  provenance record + inert kwargs change nothing rendered); the CI tail. *Why it de-conflicts the tracks:*
-  after 15.0 the render-contract functions in `loader.py`/`manager.py` are already widened, so 15.3 edits only
-  `vote_ballot.j2` + the gate and 15.4 edits only the persona assignment + template text — no shared function.
+  logic (those are 15.2–15.5). *DoD:* `verify_samples.sh` bare reconstructs baseline 2 byte-identically; **plus
+  an explicit prompt-byte golden — the C9 catch.** `verify_samples.sh` / `scripts/_verify_samples.py` only
+  re-check engine `state_hash_before`/`state_hash_after`; they **never re-render prompt text or compare it to
+  `llm_calls[].prompt`**, and the state hashes are belief/prompt-blind (§6). So `verify_samples` passing does
+  **not** prove the render-contract widening left rendered bytes unchanged — a drifted prompt byte would slip
+  through. This task must add a golden that **re-renders every recorded meeting's turn/ballot prompts and
+  asserts equality with the committed `llm_calls[].prompt`** (and `rendered_memory`), run before and after; the
+  CI tail. *Why it de-conflicts the tracks:* after 15.0 the render-contract functions in `loader.py`/`manager.py`
+  are already widened, so 15.3 edits only `vote_ballot.j2` + the gate and 15.4 edits only the persona
+  assignment + template text — no shared function.
 
 - **15.2 — Hard-evidence gate lever (J1; default-OFF).** *Depends on:* 15.1, **15.0** (uses its per-subject
   provenance to classify soft-only vs hard-backed — the clamp cannot read that off the aggregate scalar).
@@ -664,10 +681,15 @@ prompt`). They are sketches to be filled at phase authoring time, sized by file 
   the very hard-evidence catches the exemption protects (seed-9's vent votes carried `reason_id: null`). J2b
   must add an **observation-citation path** — a `primary_reason_observation_id` (`ObservationRef` into the
   voter's reconstructed memory) + validator — so "cite a source" admits a transcript turn *or* a private
-  observation. *Files in scope:* prompt sets (a v5 bump), `meetings/manager.py` (surface + optional gate),
-  `meetings/schemas.py` (the observation-citation field/validator, J2b), `vote_ballot.j2`; **plus
-  `orchestrator/replay.py` + `.env.example` + `tests/orchestrator/test_replay.py` ONLY if J2b (gate-side lever)
-  is taken.** *Parallelism caveat:* J2a touches no belief/gate/replay file and runs parallel to 15.2. But the
+  observation. **But the observation needs a stable id to cite first (the C8 catch):** `EpisodicEvent` has no
+  id (`episodic.py:19-30`) and memory reaches the manager as rendered prose (`store.py:155`), so J2b must also
+  give observations stable ids, render them in the memory prompt, and thread them for validation — a
+  prompt-changing prerequisite (§3.4). *Files in scope:* prompt sets (a v5 bump), `meetings/manager.py`
+  (surface + optional gate), `meetings/schemas.py` (the observation-citation field/validator, J2b),
+  `agents/memory/episodic.py` + `agents/memory/store.py` + the perception writers (stable observation id +
+  render it, J2b), `vote_ballot.j2`; **plus `orchestrator/replay.py` + `.env.example` +
+  `tests/orchestrator/test_replay.py` ONLY if J2b (gate-side lever) is taken.** *Parallelism caveat:* J2a
+  touches no belief/gate/replay file and runs parallel to 15.2. But the
   J2b lever registration edits the **same** `_TOGGLEABLE_LEVER_RESOLVERS` / `substrate_flag_snapshot()` seam in
   `orchestrator/replay.py` that 15.2 reserves — a same-function collision (the reason 14.10 stayed sequential
   behind 14.9). So if J2b is in scope, **either serialize 15.3 behind 15.2, or register both levers in one
@@ -683,16 +705,24 @@ prompt`). They are sketches to be filled at phase authoring time, sized by file 
   `orchestrator/game.py` / `seeder.py` (the assignment that fills `participant.persona`), a `personas/` data
   file, tests. *Not in scope:* the render-contract signatures (15.0), the templates' persona *text* (15.5).
 
-- **15.5 — Persona-conditioned prompt additions (v5) + A/B on voice metrics.** *Depends on:* 15.1, 15.4.
-  *Complexity:* Integration. Author disposition-varied persona cards + speech-style exemplars into each set's
-  preamble (guarded, byte-identical when persona empty); A/B new-vs-pinned on the same model, scored on the
-  15.1 voice metrics **and** the zero-flag conviction rate (the anti-collapse guard: a louder voice must not
-  raise zero-flag convictions). *Files in scope:* prompt sets; **plus `orchestrator/game.py` — the
-  `PROMPT_VERSION_SETS` registry bump `qwen3_32b` v4 → v5 (the C7 catch).** Replay provenance is stamped from
-  that static registry (`prompt_versions_for_set`, `game.py:308-314`), *not* derived from the `.j2` files, so
-  editing templates without the one-line registry bump would render v5 text while `MeetingReplayEntry.prompt_versions`
-  + the MANIFEST still report v4 — breaking provenance and the version-assertion tests (14.11 bumped the
-  registry for exactly this reason). *Ready-to-paste prompt* per set.
+- **15.5 — Persona-conditioned prompt additions (v5) + A/B on voice metrics.** *Depends on:* 15.1, 15.4,
+  **15.3 (the C10 catch — two reasons).** *Complexity:* Integration. Author disposition-varied persona cards +
+  speech-style exemplars into each set's preamble (guarded, byte-identical when persona empty); A/B
+  new-vs-pinned on the same model, scored on the 15.1 voice metrics **and** the zero-flag conviction rate (the
+  anti-collapse guard: a louder voice must not raise zero-flag convictions). **Why it depends on 15.3, not just
+  15.4:** (i) *shared prompt-version seam* — 15.3's J2a vote-surface changes and this task's persona text both
+  land in the **same v5 `qwen3_32b` prompt set** and both need the **single** `orchestrator/game.py`
+  `PROMPT_VERSION_SETS` v4 → v5 bump; running them in parallel collides on the prompt files + that one registry
+  line, and would double-bump the version. The v5 bump is therefore **one shared edit** (owned by whichever
+  prompt-set task lands last — sequence 15.5 after 15.3 so it carries it). (ii) *the evidence-before-voice
+  thesis (§0)* — if 15.5 could complete on only 15.4, `main` would carry persona-conditioned (louder) prompts
+  **before** the citation gate (15.3) lands: exactly the louder-voice-without-evidence-bound state this plan
+  warns against. Serializing 15.5 behind 15.3 enforces the thesis structurally. *Files in scope:* prompt sets
+  (the v5 persona text, layered on 15.3's v5 surface), **plus the single `orchestrator/game.py`
+  `PROMPT_VERSION_SETS` v4 → v5 bump (the C7 catch — one edit, shared with 15.3).** Provenance is stamped from
+  that static registry (`prompt_versions_for_set`, `game.py:308-314`), *not* the `.j2` files, so editing
+  templates without the bump renders v5 while `prompt_versions` + MANIFEST report v4 (14.11 bumped it for
+  exactly this). *Ready-to-paste prompt* per set.
 
 - **15.6 — (Deferred/optional) Heterogeneous-model routing.** *Depends on:* — . *Complexity:* Integration
   (large). R1/R2 routing + P1/P2 per-agent provenance schema + C1/C2 cost + D1/D2 determinism (§4.3). Only if
@@ -710,28 +740,35 @@ prompt`). They are sketches to be filled at phase authoring time, sized by file 
   measured, highest-value defect first; the evidence gate is in place before louder voices land.
 - **Option B — Voice-first.** 15.1 → 15.0 → 15.4 → 15.5 → (15.2/15.3) → 15.7. *Rationale:* personas may
   themselves shift the channel (disposition variety reduces sycophantic cascade) — measure that before
-  belief-side surgery. *Risk:* ships a louder voice channel before the evidence gate (the §0 thesis warns
-  against this).
-- **Option C — Shared foundation, then parallel disjoint tracks (RECOMMENDED).** 15.1 (measurement) → 15.0
-  (the shared provenance + render-input foundation, landed once so the tracks don't collide on the
-  render-contract functions — the C4 fix); *then* the **Judgment track** and the **Voice track** (15.4 → 15.5)
-  run in parallel, now genuinely disjoint (`beliefs.py` / gate / `orchestrator/replay.py` / `schemas.py` vs
-  the persona assignment + prompt text — 15.0 already absorbed the shared `loader.py`/`manager.py` seam).
-  *Within* the Judgment track, 15.2 and 15.3's J2a surface may run parallel, but 15.3's J2b gate-side lever
-  shares the `orchestrator/replay.py` registration seam with 15.2, so it **serializes behind 15.2** (or both
-  depend on a shared `15.2r` lever-registration task). 15.5 follows 15.4. Converge on the single re-record
-  15.7. Defer 15.6.
+  belief-side surgery. *Now precluded:* the C10 dependency (15.5 depends on 15.3) makes this ordering
+  **invalid** — 15.5 cannot precede 15.3 — which is the point: the plan structurally forbids activating persona
+  prompts before the citation gate (the §0 thesis, now enforced by a task edge rather than a warning). Retained
+  only as the rejected alternative.
+- **Option C — Shared foundation, then parallel disjoint tracks, joined at the prompt set (RECOMMENDED).**
+  15.1 (measurement) → 15.0 (the shared provenance + render-input foundation, landed once so the tracks don't
+  collide on the render-contract functions — the C4 fix); *then* the **Judgment track** (15.2, then 15.3) and
+  the **Voice track** (15.4) run in parallel, disjoint at the *code* seam (`beliefs.py` / gate /
+  `orchestrator/replay.py` / `schemas.py` / memory-id emission vs the persona assignment — 15.0 already
+  absorbed the shared `loader.py`/`manager.py` render contract). *Within* the Judgment track, 15.2 and 15.3's
+  J2a surface may run parallel, but 15.3's J2b gate-side lever shares the `orchestrator/replay.py` registration
+  seam with 15.2, so it **serializes behind 15.2** (or both depend on a shared `15.2r` task). The tracks then
+  **rejoin at 15.5** (the C10 fix): the persona *prompt text* and 15.3's *vote-surface prompt text* land in the
+  same v5 `qwen3_32b` set and share the single `game.py` v4 → v5 registry bump, so **15.5 follows 15.3** (not
+  just 15.4) — which also enforces the evidence-before-voice thesis (personas can't activate before the
+  citation gate). Converge on the single re-record 15.7. Defer 15.6.
 
-**Recommendation: Option C, with the evidence-linkage bound (15.3) required to land in the same re-record as
-the persona prompts (15.5).** This honors the mission's "design them together," gets the measured 4:1 Judgment
-win (15.2) moving immediately, and structurally prevents shipping personas without the evidence gate the
-persuasion literature says they need. The whole phase costs **one** atomic re-record (baseline 3), proven
-offline first.
+**Recommendation: Option C, with the evidence-linkage bound (15.3) required to land before/with the persona
+prompts (15.5) and in the same re-record.** This honors the mission's "design them together," gets the measured
+4:1 Judgment win (15.2) moving immediately, and structurally prevents shipping personas without the evidence
+gate the persuasion literature says they need. The whole phase costs **one** atomic re-record (baseline 3),
+proven offline first.
 
-DAG (shared foundation + the two same-function seams made explicit): `15.1 → 15.0 → { [ 15.2 → 15.3(J2b) ]  ∥
-[ 15.4 → 15.5 ] } → 15.7`. 15.3's J2a surface may instead run `∥ 15.2`; only its gate-side lever (J2b) is
-order-constrained behind 15.2. 15.0 is what makes the `[Judgment] ∥ [Voice]` split real — without it, 15.3 and
-15.4 would both edit the `loader.py`/`manager.py` render contract (the C4 collision). (15.6 deferred.)
+DAG (shared foundation + the three same-function seams made explicit): `15.1 → 15.0 → { [ 15.2 → 15.3(J2b) ]
+∥ 15.4 } → 15.5 → 15.7`. Three constraints beyond the tree: 15.3's J2a surface may run `∥ 15.2` (only its
+gate-side lever J2b is order-constrained behind 15.2); 15.0 makes the `[Judgment] ∥ 15.4` split real (without
+it, 15.3 and 15.4 would both edit the `loader.py`/`manager.py` render contract — the C4 collision); and 15.5
+joins **after 15.3**, because both write the v5 prompt set + the one registry bump and persona text must not
+precede the citation gate (the C10 collision + the §0 thesis). (15.6 deferred.)
 
 ---
 
