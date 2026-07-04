@@ -300,7 +300,9 @@ selection over FSM-proposed options**:
   **fake-task (pretend `do_task` in a task room — the `action="task"` camouflage submission, §4.3/§5.1)**,
   wait/hold, reposition-during-cooldown-toward *k*}. The FSM's `_scored_targets` already enumerates ranked kill
   targets (`impostor_policy.py:936-1009`); the learner scores/chooses among them.
-- **Crew options:** {continue-to-task, buddy-toward nearest crew group, patrol-toward last-seen suspect,
+- **Crew options:** {continue-to-task, buddy-toward the nearest **visible / belief-trusted** group (NOT "crew
+  group" — `PlayerView` exposes only `{id, room, action}`, roles are hidden, so grouping must key on visible
+  co-presence + low belief-suspicion, never role), patrol-toward last-seen suspect,
   report, call-emergency, repair, hold}. The engine-fed `pending_task_id` plus the visible roster give the
   candidate set — **but see the blocker below.**
 - [VERIFIED, blocker for crew task-ordering] The observation exposes only a **single** `pending_task_id` (the
@@ -479,7 +481,12 @@ provider, then scoring:
 - **The R-gate (a measurement, not a pass/fail)** — [OPEN] `scripts/measure_baseline.py` **does not exist**
   either. Its metrics have live homes — ejection accuracy (`vote_correctness.py:302`), genuine-class conversion
   (`vote_correctness.py:558`), impostor win rate (`balance_eval.py:894`), accusation calibration
-  (`accusation_calibration.py`) — **except R1 eject-decided win share, which has no live fold at all.**
+  (`accusation_calibration.py`), and **R1 eject-decided win share — which DOES have a live fold** (I earlier
+  mis-stated this): `audits/workflows/extract_gameplay_facts.py:611` emits `r1_eject_decided_wins` (=
+  CREWMATE_EJECT-reason wins = the R-gate's 24/50), and `experiments/lab/rubric_score.py:85-91` emits an
+  `"R1 ejection-driven win share"` from `reason_counts`. So the gate should **wire these**, not re-implement
+  them. (The fuller rubric.md R1 — "CREWMATE_EJECT wins **plus** parity wins materially shaped by a crew
+  ejection" — is a possible refinement beyond the CREWMATE_EJECT count, but the headline 24/50 already exists.)
 - **The interestingness rubric** — the D1–D4 geomean referee (§9/§12) + `rubric_score.py` + the
   `audits/workflows/extract_gameplay_facts.py` fact extractor.
 - **The firewall check** — [VERIFIED] `eval/leak_test.py` runs on scripted fixtures and takes **no
@@ -572,15 +579,23 @@ Each stage is one contract-shaped PR (branch, in/out-of-scope files, definition-
 existing style. Stages S0–S3 are algorithm-agnostic; they pay off no matter which optimizer wins.
 
 - **S0 — Productize the gate (NO learning).** Turn the audit-only "validity gate" + "R-gate" into committed,
-  reusable code that scores any `run_tournament_eval` output: assemble the criteria in §8.3 from the existing
-  `eval/` folds; add the missing **R1 eject-decided win-share** fold; wire the D1–D4 geomean referee. *DoD:* a
-  one-command gate that reproduces every baseline-2 number from the committed bytes. This is the acceptance
-  test every later stage runs against.
+  reusable code that scores any `run_tournament_eval` output: assemble the criteria in §8.3 by **wiring the
+  existing folds** (`eval/*`, plus `audits/workflows/extract_gameplay_facts.py`'s `r1_eject_decided_wins` and
+  `experiments/lab/rubric_score.py`'s `"R1 ejection-driven win share"` — reuse, don't re-implement); wire the
+  D1–D4 geomean referee. Much of this lives in `experiments/lab/`/`audits/workflows/` today, so S0 is largely a
+  *promotion + consolidation* into a committed `eval/` gate, not new metric code. *DoD:* a one-command gate
+  that reproduces every baseline-2 number from the committed bytes. This is the acceptance test every later
+  stage runs against.
 - **S1 — Gym-style env wrapper + `legal_actions` mask + policy-id provenance.** A thin
   Gymnasium/PettingZoo-Parallel-shaped wrapper around `HeadlessGame` via `agent_factory` (zero engine edits);
-  a `legal_actions(packet, public_map)` mask refactored from the pure `rules.py`/`tick.py` predicates; a
-  policy-id + weights-hash stamp in the replay/MANIFEST mirroring `substrate_flags`. *DoD:* a random-genome
-  policy runs through the wrapper and its replays reconstruct byte-identically and carry the policy stamp.
+  a `legal_actions` mask refactored from the pure `rules.py`/`tick.py` predicates. **Per the §5.1 caveats the
+  mask cannot be exact from `(packet, public_map)` alone** — S1 must *also* either surface the two missing
+  legality inputs (the actor's emergency-uses-remaining and the map's sabotage kinds) into the observation
+  surface, or define an explicit policy-side side-tracker for them; and it must keep the engine-legal /
+  observation-meaningful-submission split (pretend-`do_task`). Plus a policy-id + weights-hash stamp in the
+  replay/MANIFEST mirroring `substrate_flags`. *DoD:* a random-genome policy runs through the wrapper, the mask
+  admits exactly the engine-legal set (incl. legal emergency/sabotage, no illegal ones), and its replays
+  reconstruct byte-identically and carry the policy stamp.
 - **S2 — Memory-carrying feature encoder + determinism harness.** Extend the spike's 34-dim encoder with the
   belief/last-seen memory features (§6.3); re-run Check-1 hashing the **encoder-vector + logits** (not just
   WorldState); apply quantize + lexical tie-break; **extend `eval/leak_test.py` to accept an `agent_factory`**
@@ -624,7 +639,12 @@ by leverage. All are [PROPOSED].
 2. **Speed: replace the vestigial per-tick RNG snapshot.** [VERIFIED] it eats ~43% of engine-core cost
    (`engine/rng.py:31-38`) and the drawn value is discarded — a counter/Philox RNG (or dropping the per-tick
    draw) is a ~1.7× engine-core speedup. Combined with multiprocessing over seeds (as ES already does), this
-   lifts the effective training throughput materially on a multi-core host.
+   lifts the effective training throughput materially on a multi-core host. **[VERIFIED] load-bearing caveat:**
+   the per-tick `state_hash` serializes the entire `WorldState` including `rng_state` (`replay.py:766-782`),
+   so changing/dropping the RNG cursor **changes every state_hash and invalidates byte-identical reconstruction
+   of all committed replays**. So this speedup must be **scoped to a training-only fast path** (non-recorded
+   rollouts), OR shipped behind a replay-format version bump + a full re-record + a migration guard — it is
+   NOT a free in-place edit to the production tick.
 3. **Reward instrumentation.** [VERIFIED] the typed event log (`engine/events.py`, 14 event types incl.
    `Killed.witnesses`, `Moved`, `TaskCompleted`, `MeetingTriggered`) already carries every signal a dense proxy
    reward needs — surface a per-tick reward vector (kills, witnessed-ness, task progress, co-presence coverage)
