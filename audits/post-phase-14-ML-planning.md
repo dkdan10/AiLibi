@@ -232,10 +232,17 @@ when co-located *this tick* with `co_present==0` and not deferring to a lower-id
 - **48% of ejections hit an innocent** (CREW 56 / IMP 62 of 118 ejections). The close audit's clean Phase-15
   target — the **zero-flag / voice-driven mis-eject channel** — rose 22→31 (`audit-phase-14-close.md:§4`); it is
   outside every belief-fold lever and is *why* the FO-6 surrogate regressed (§8).
-- **`compute_indistinguishability` fingerprint** ([VERIFIED] `eval/meeting_quality.py:2371-2411`): impostor
-  wait-share ~52% vs crew ~10% — the scripted impostor is trivially distinguishable by idling. A learned
-  impostor that *mimics crew task-traffic* (indistinguishability) is a rich, watchable tactical target — and
-  the "impostor never does tasks" branch is currently dormant.
+- **Behavioral fingerprint** ([VERIFIED] direct recount of the committed 9p2i action stream — this
+  **supersedes** a stale figure): the scripted impostor is **not** dormant on tasks — it already fakes
+  task-traffic. Measured impostor action mix (2,462 actions): move 60%, **`do_task` 16% (396 pretend-task
+  submissions**, engine-rejected but rendered as `action="task"` camouflage — §5.1), vent 9%, kill 8%,
+  **wait 5.3%**, sabotage 1.4%; crew mix (7,521): `do_task` 47%, move 35%, **wait 15%**. So the impostor idles
+  *less* than the crew, and the earlier "~52% impostor wait / dormant `do_task` branch" reading is [STALE] /
+  mis-sourced for baseline-2 (the ~52% appears to be a pre-baseline figure, not the committed bytes). The real
+  tells a learned impostor would smooth are structural, not idling: its faked tasks **never complete**
+  (`impostor_do_task` = 0 *completed* instances, `eval/meeting_quality.py:2371-2411` — impostors own none),
+  it moves ~2× as often as crew, and it never reports/repairs. Indistinguishability (task-completion cadence,
+  movement rate) is still a rich, watchable target — but the camouflage is already partial, not absent.
 
 ---
 
@@ -253,16 +260,30 @@ single agent on a single tick the *legal* set is tiny and enumerable:
 | `report` | `body_id` | body in current room | `rules.py:182-197` |
 | `emergency` | — | not in vent; uses < cap; in the emergency-button room | `rules.py:200-222` |
 | `sabotage` | `kind` | impostor; none already active; kind exists (no location req.) | `rules.py:225-245` |
-| `repair_sabotage` | `kind` | active gating sabotage matches; in a repair room | `rules.py:248-265` |
+| `repair_sabotage` | `kind` | **any** active sabotage of the same kind (incl. `lights`, not gating-only); in that kind's repair room | `rules.py:248-265` |
 | `wait` | — | always legal for a live actor | `tick.py:530-536` |
 
 - [INFERRED] **A `legal_actions(packet, public_map) -> mask` is low-medium effort** because every predicate is a
-  pure boolean of `(state, map, params)` with zero RNG/hidden state. Two build paths: (a) refactor the
-  `resolve_*`/`_apply_*` checks into pure `is_legal_*` helpers the resolvers also call (clean, ~1 day; touches
-  both `engine/rules.py` and `engine/tick.py` since Move/DoTask validate in `tick.py`); (b) try/except each
-  candidate through the resolver (works today, allocates wastefully). **Masking is standard and load-bearing at
-  scale** — the masked policy gradient is valid, matters more as the invalid space grows, and a masked policy
-  degrades if the mask is dropped at inference (Huang & Ontañón 2020, arXiv:2006.14171). [PROPOSED]
+  pure boolean of `(state, map, params)` with zero RNG. Two build paths: (a) refactor the `resolve_*`/`_apply_*`
+  checks into pure `is_legal_*` helpers the resolvers also call (clean, ~1 day; touches both `engine/rules.py`
+  and `engine/tick.py` since Move/DoTask validate in `tick.py`); (b) try/except each candidate through the
+  resolver (works today, allocates wastefully). **Masking is standard and load-bearing at scale** — the masked
+  policy gradient is valid, matters more as the invalid space grows, and a masked policy degrades if the mask is
+  dropped at inference (Huang & Ontañón 2020, arXiv:2006.14171). [PROPOSED]
+- [VERIFIED, two caveats that make a *stateless packet-only* mask non-exact — S1 must resolve them]:
+  1. **Not all legality state is in the firewall surface.** Emergency legality needs the actor's *spent-use
+     count* (`rules.py:211-213`) and sabotage emission needs the *map's sabotage kinds* even when none is active
+     (`rules.py:234`) — neither is in `ObservationPacket` or `PublicMapView` (§6). So a mask computed purely
+     from `(packet, public_map)` will either hide a legal emergency/sabotage or admit an illegal one. Fix:
+     either add those two fields to the observation surface, or let the policy carry a small side-tracker
+     (exactly what the crew FSM already does via `EmergencyPacingTracker`).
+  2. **Engine-legal ≠ strategically-meaningful submission.** The impostor's pretend `do_task` is *engine-illegal*
+     (it owns no instance) yet is a deliberate, load-bearing lever: `ImpostorPolicy._idle` submits it and
+     `ObservationService` renders the rejected submission as `action="task"` camouflage to witnesses
+     (`service.py:370-371`; 396 such submissions in 9p2i — §4.3). A strict engine-legal mask would delete this
+     camouflage and regress task-traffic mimicry. Fix: the mask/option vocabulary must **split "engine-legal
+     resolved actions" from "observation-meaningful submissions"** and keep pretend-`do_task` in the impostor's
+     legal *submission* set (see §5.2).
 
 **5.2 — The recommended action interface: a high-level OPTION vocabulary, not the raw grid. [PROPOSED]**
 Learning directly over `{move-to-each-room} ∪ …` is a ~10-way-per-tick masked head (the spike's `mlp_pick_room`
@@ -271,11 +292,19 @@ decisions, and the FSM already generates good candidates. So the first-cut actio
 selection over FSM-proposed options**:
 
 - **Impostor options:** {kill best target, stalk-toward target *k*, vent (which exit), cover-move, sabotage now,
+  **fake-task (pretend `do_task` in a task room — the `action="task"` camouflage submission, §4.3/§5.1)**,
   wait/hold, reposition-during-cooldown-toward *k*}. The FSM's `_scored_targets` already enumerates ranked kill
   targets (`impostor_policy.py:936-1009`); the learner scores/chooses among them.
 - **Crew options:** {continue-to-task, buddy-toward nearest crew group, patrol-toward last-seen suspect,
   report, call-emergency, repair, hold}. The engine-fed `pending_task_id` plus the visible roster give the
-  candidate set.
+  candidate set — **but see the blocker below.**
+- [VERIFIED, blocker for crew task-ordering] The observation exposes only a **single** `pending_task_id` (the
+  crewmate's next owned unfinished task), and `PublicMapView.task_locations` lists *all* map tasks with **no
+  ownership** (`observation/service.py`, `public_map.py`). So a learned scorer literally **cannot** choose the
+  nearest of several owned tasks or batch same-room owned tasks from today's surface — "no task ordering" (§4.1)
+  is not merely un-learned, it is **un-observable**. [PROPOSED] Task-ordering is learnable only after an
+  observation/memory change exposes the crewmate's *set* of owned unfinished task ids (a firewall-clean addition
+  — task ownership for one's own tasks is already self-channel information). Sequence this before S4's crew work.
 
 [INFERRED] This bounds the learner to *legal, sensible* actions (it cannot emit illegal moves or wander off
 into un-watchable degeneracy), makes behavior-cloning trivial (the FSM's own choice is a label), and keeps
@@ -315,8 +344,10 @@ the only signal the crew has, so raw stealth optimization is exactly what un-mak
 
 **6.3 — Encoder shape and the memory problem. [VERIFIED] + [PROPOSED].**
 
-- **Fixed-cardinality** (stable one-hot/embedding tables from `PublicMapView`): 10 rooms, 6 vents, 12 map
-  tasks, sabotage kinds. **Roster-dependent** (variable-length, up to roster size; needs set-invariant or
+- **Fixed-cardinality** (stable one-hot/embedding tables): 10 rooms, 6 vents, 12 map tasks from `PublicMapView`;
+  the sabotage kinds are map-fixed but **not currently exposed** in `PublicMapView` (only `sabotage_kind` appears
+  in `GlobalView` while one is active — the §5.1 caveat). **Roster-dependent** (variable-length, up to roster
+  size; needs set-invariant or
   fixed-slot encoding): player ids in `visible_players`/`moved_players`/`visible_bodies`/`fellow_impostor_ids`,
   and the per-player-instance task counts. `role` is a 2-way self-only categorical. [VERIFIED] `observation/
   service.py`, `boundary.py`.
@@ -348,9 +379,15 @@ the only signal the crew has, so raw stealth optimization is exactly what un-mak
 player at `game.py:1447-1453`, and a **first-class keyword param** on `run_tournament_eval` /
 `run_balance_eval` / `run_throughput_benchmark` (`eval/balance_eval.py:227-238`, `:411`; `eval/benchmark.py:70`).
 The only mandatory method is `decide(packet, public_map) -> ActionIntent` (`agents/base.py:19-23`); to take part
-in meetings the agent additionally needs the two `MeetingAwareAgent` methods (`render_memory_for_meeting`,
-`suspicion_graph_for_meeting`, `game.py:426-450`) — three belief-fold hooks are optional. The spike proves the
-swap works by wrapping the real `TacticalAgent` and delegating the whole meeting protocol via `__getattr__`
+in meetings the agent must satisfy the **full** `MeetingAwareAgent` protocol — [VERIFIED] all four members:
+the `agent_id` and `role` **properties** plus `render_memory_for_meeting` and `suspicion_graph_for_meeting`
+(`game.py:426-450`), checked at `isinstance(agent, MeetingAwareAgent)` before a meeting builds participants
+(`game.py:863-865`). An agent that implements only `decide()` + the two methods (omitting the `agent_id`/`role`
+properties) will fail meeting-enabled `run_tournament_eval` at that check. Three belief-fold hooks
+(`absorb_meeting_evidence`, `absorb_reported_testimony`, `note_meeting_concluded`) are optional. **Recommended:
+wrap and delegate the whole `TacticalAgent` interface** (the spike's approach) so all four required members —
+and the optional folds — come for free. The spike proves the swap works by wrapping the real `TacticalAgent`
+and delegating the whole meeting protocol via `__getattr__`
 (`ml_spike/core.py:148-200`). [VERIFIED] **A learned policy is a drop-in `agent_factory`; no engine, orchestrator,
 or meeting code changes.**
 
@@ -547,10 +584,14 @@ existing style. Stages S0–S3 are algorithm-agnostic; they pay off no matter wh
   against the frozen FSM crew.** Watchability guard baked in: reject any champion that drops meeting-rate below
   the S0 validity bar or lowers R5/R7 (anti-perfect-stealth). *DoD:* beats the FSM impostor on take-rate/win
   without failing S0.
-- **S5 — Rubric-in-the-loop ES + eyeball (closes the open FO-3 Goodhart check).** Optimize against the literal
-  D1–D4 geomean referee with a periodic real-LLM meeting gate; manually review the top champion's games for
-  Goodhart (the charter's mandated guardrail, never actually run). *DoD:* a champion whose geomean rises with no
-  eyeballed degeneracy.
+- **S5 — Referee-as-selection + a bounded Goodhart probe (closes the open FO-3 check).** Keep the ES **objective**
+  the tactically-reachable proxy fitness from S3/S4 (the geomean stays *out* of the inner loop — §12.1); use the
+  D1–D4 geomean **only to SELECT/rank** ES candidates on a periodic real-LLM meeting gate, and eyeball the top
+  champion for Goodhart. Separately, run **ES directly on the literal geomean as a deliberate adversarial probe**
+  (the charter's gap-3 de-risk, never actually run): if a genome games the referee, that surfaces the exploit
+  *before* trusting the referee as a gate — it is a red-team, not the production objective. *DoD:* the
+  proxy-trained champion ranks well on the referee with no eyeballed degeneracy, AND the adversarial probe finds
+  no cheap geomean exploit (or documents the one it finds).
 - **S6 — Bounded co-evolution (the FO-2 blocker).** Shared role-conditioned policy + Hall-of-Fame + PFSP +
   reduced virulence + ELO monitoring + QD diversity (§9). *DoD:* stable, non-degenerate, watchability held vs a
   fixed held-out opponent.
