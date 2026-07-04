@@ -193,8 +193,10 @@ Vent/Sabotage/Kill (`:87-96`).
   `WaitIntent`s (`:411-412`, `:667-689`), which the docstring admits exists only to force headless termination,
   "not because it's good play." Empirically: crew waits are **13% of all 9p2i actions**, concentrated late-game
   (seed 5: p-6 and p-9 idle in CAFETERIA ticks 22→45 — free bodies, zero patrol/alibi value). [V-ran]
-- [VERIFIED] Reports only *same-room* bodies (ignores an adjacent-room body it can see), picks the
-  alphabetically-first body, ignores positional info in sightings, ignores non-gating (`lights`) sabotage.
+- [VERIFIED] Reports the **alphabetically-first** co-located body (arbitrary tie-break, ignores information
+  value), ignores the positional content of sightings, and ignores non-gating (`lights`) sabotage. (There is
+  no adjacent-body blind spot to chase — crew vision is `same_room_only` and `report` requires
+  `body.room == actor.room`, so a crewmate never sees or could report an off-room body; §6.2.)
 
 **4.2 — Impostor FSM** (`agents/tactical/impostor_policy.py`): priority
 `VENT_EXIT > COVER/vent > SABOTAGE > KILL/opportunity > STALK > IDLE` (`:261`). Kill target scoring
@@ -239,10 +241,13 @@ when co-located *this tick* with `co_present==0` and not deferring to a lower-id
   **wait 5.3%**, sabotage 1.4%; crew mix (7,521): `do_task` 47%, move 35%, **wait 15%**. So the impostor idles
   *less* than the crew, and the earlier "~52% impostor wait / dormant `do_task` branch" reading is [STALE] /
   mis-sourced for baseline-2 (the ~52% appears to be a pre-baseline figure, not the committed bytes). The real
-  tells a learned impostor would smooth are structural, not idling: its faked tasks **never complete**
-  (`impostor_do_task` = 0 *completed* instances, `eval/meeting_quality.py:2371-2411` — impostors own none),
-  it moves ~2× as often as crew, and it never reports/repairs. Indistinguishability (task-completion cadence,
-  movement rate) is still a rich, watchable target — but the camouflage is already partial, not absent.
+  tells a learned impostor would smooth are structural, not idling: its faked `do_task`s are engine-rejected
+  so they **never advance to a `TaskCompleted` event** (no completion cadence), it moves ~2× as often as crew,
+  and it never reports/repairs. **Caveat on the existing fold:** `impostor_do_task` in `compute_indistinguishability`
+  (`eval/meeting_quality.py:2371-2411`) counts do_task **emissions** (= the 396 above, via
+  `eval.action_ingest.tally_actions_by_role`), NOT completions — so a *new* completion/cadence metric is needed
+  to measure the never-completes tell; today's indistinguishability fold only measures emissions. Indistinguishability
+  (task-completion cadence, movement rate) is still a rich, watchable target — but the camouflage is already partial.
 
 ---
 
@@ -254,7 +259,7 @@ single agent on a single tick the *legal* set is tiny and enumerable:
 | Action | Payload | Legality (pure boolean of `state,map,actor`) | file:line |
 |---|---|---|---|
 | `move` | `to_room` | not in vent; `to_room ∈ {room} ∪ neighbors(room)` (~2–5 options) | `tick.py:239-268` |
-| `do_task` | `task_id` (map id) | crew only owns instances; not gated by sabotage; in the task's room; not done | `tick.py:271-311` |
+| `do_task` | `task_id` (map id) | crew only owns instances; **no task-gating sabotage active** (a live `reactor` rejects task init, `_tasks_gated`); in the task's room; not done | `tick.py:271-311` |
 | `kill` | `target` | impostor; target is crew; same room; cooldown 0 | `rules.py:56-99` |
 | `vent` | `vent_id` | impostor; enter = vent in current room; exit = connected vent | `rules.py:102-179` |
 | `report` | `body_id` | body in current room | `rules.py:182-197` |
@@ -426,13 +431,17 @@ re-record* is exposed to float nondeterminism, and it shares that exposure with 
 LLM-free (grep `agents/tactical/` for llm → none; `FakeProvider` cost 0.0). Two knobs make a fully LLM-free
 training loop:
 
-- **Stubbed meetings.** [VERIFIED] `meeting_runner=None` makes `HeadlessGame` return `MEETING_PHASE_REACHED` at
-  the first meeting (`game.py:1266-1270`) — an engine-only rollout that never reaches an LLM. But the win is
-  then decided only by kills/tasks, which starves the *social* reward. [PROPOSED] Instead, plug a **surrogate
-  meeting runner** (satisfies the runner protocol, no LLM): it computes each meeting's ejection from a cheap
-  model of the vote, feeds the deterministic tally (`meetings/voting.py::tally_ballots`, [VERIFIED] pure,
-  LLM-free), and returns a normal `MeetingResult`. The tally is already deterministic given ballots, so a
-  surrogate only has to predict *ballots* (or the suspicion-rank that drives plurality).
+- **`meeting_runner=None` is a TRUNCATION mode, not a fitness path.** [VERIFIED] it makes `HeadlessGame` return
+  `MEETING_PHASE_REACHED` **immediately** at the first report/emergency (`game.py:1266-1270`) — it does **not**
+  continue to decide a winner. So it is a byte-identity/determinism harness up to the first meeting (and scores
+  only the rare games that never trigger one); it is **not** a usable LLM-free terminal fitness — it would drop
+  or mis-score every meeting-triggering game. The training loop therefore needs a real surrogate runner:
+- **Surrogate meeting runner (the LLM-free path). [PROPOSED]** Implement the runner protocol with no LLM: compute
+  each meeting's ejection from a cheap model of the vote, feed the deterministic tally
+  (`meetings/voting.py::tally_ballots`, [VERIFIED] pure, LLM-free), and return a **`MeetingArtifacts`** wrapping
+  that `MeetingResult` with empty LLM metadata (the orchestrator dereferences `artifacts.result`, `game.py:1375`
+  — a bare `MeetingResult` would fail). The tally is deterministic given ballots, so a surrogate only has to
+  predict *ballots* (or the suspicion-rank that drives plurality).
 - **The surrogate is the linchpin — and it has REGRESSED.** [V-ran] The spike's LLM-free physical suspicion-
   rank surrogate (reconstructed sightings + proximity-to-kill + reporter → rank the likely ejectee) was reported
   at top-1 64% / top-2 82% and is the entire basis for "the impostor side is cheaply trainable offline." On the
