@@ -1,4 +1,4 @@
-# Agent Prompt — 15.3.1 Training-only RNG hash fast path (opt-in; committed paths byte-unchanged)
+# Agent Prompt — 15.8.1 Training-only RNG hash fast path (opt-in; committed paths byte-unchanged)
 
 You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the task section in tasks/phase-15.md.
 
@@ -6,29 +6,29 @@ You are working on AiLibi. Before starting, read AGENTS.md, DESIGN.md, and the t
 You are an AI coding agent working on the AiLibi project. Follow AGENTS.md exactly. DESIGN.md is the source of truth and the task contract below is the implementation contract for this PR. AGENT_IMPLEMENTATION.md is the provider-neutral build plan and is read once during onboarding (see AGENTS.md), not per task.
 
 ## Exact section reference
-Implement Task 15.3.1 — Training-only RNG hash fast path (opt-in; committed paths byte-unchanged), anchored to audits/post-phase-14-ML-planning.md §3.5, §11.2 (the 43% measurement + the training-only scoping); audits/post-phase-14-pause.md §4 (the "do not touch in place" verifier note); engine/rng.py:31-38; orchestrator/replay.py (state-hash serialization). Do not implement work outside these references.
+Implement Task 15.8.1 — Training-only RNG hash fast path (opt-in; committed paths byte-unchanged), anchored to audits/post-phase-14-ML-planning.md §3.5, §11.2 (the 43% measurement + the training-only scoping); audits/post-phase-14-pause.md §4 (the "do not touch in place" verifier note); engine/rng.py:31-38; orchestrator/replay.py (state-hash serialization). Do not implement work outside these references.
 
 ## Task contract
 The authoritative task contract is copied below from tasks/phase-15.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-15-rng-fast-path`
-**Depends on:** 15.3
+**Depends on:** 15.8
 **Section refs:** audits/post-phase-14-ML-planning.md §3.5, §11.2 (the 43% measurement + the training-only scoping); audits/post-phase-14-pause.md §4 (the "do not touch in place" verifier note); engine/rng.py:31-38; orchestrator/replay.py (state-hash serialization)
 **Complexity:** Medium
 
 `engine/rng.py` re-serializes the full 625-int Mersenne state via `json.dumps` on every tick (~43% of
-bare-engine cost) and the drawn value is discarded — but that serialization is hashed into every committed
-`state_hash`, so it is load-bearing for replay byte-identity and must NEVER be changed in place. This task
-adds an explicit, opt-in hash policy (a typed policy object threaded `HeadlessGame → engine`, no env-var
-magic) that skips the per-tick rng-state serialization for non-recorded training rollouts only. The default
-is byte-identical to today; anything that records or verifies a replay refuses the fast path loudly. The
-RNG draws themselves are untouched — trajectories are identical under both modes, so training results
-transfer to the recording path exactly.
+bare-engine cost) and the drawn value is discarded — but that serialization is hashed into every
+committed `state_hash`, so it is load-bearing for replay byte-identity and must NEVER be changed in
+place. This task adds an explicit, opt-in hash policy (a typed policy object threaded `HeadlessGame →
+engine`, no env-var magic) that skips the per-tick rng-state serialization for non-recorded training
+rollouts only. The default is byte-identical to today; anything that records or verifies a replay
+refuses the fast path loudly. The RNG draws themselves are untouched — trajectories are identical under
+both modes, so training results transfer to the recording path exactly.
 
 **Files in scope:**
 - engine/rng.py (the opt-in fast-path region; default behavior byte-identical)
 - orchestrator/game.py (rng-hash policy plumbing region only)
-- training/env.py (fast-path knob region — 15.3 owns the rest of the module)
+- training/env.py (fast-path knob region — 15.8 owns the rest of the module)
 - tests/engine/test_rng_fast_path.py (new)
 - tests/training/test_env_fast_path.py (new)
 
@@ -55,8 +55,8 @@ transfer to the recording path exactly.
 The loosening the owner approved is exactly this shape: skip the `json.dumps` snapshot of the Mersenne
 state per tick, never the draws. Keep the policy object explicit in signatures (the repo's no-silent-
 fallbacks doctrine): a recording constructor that receives a fast-path policy raises; nothing infers the
-mode from the environment. The state-hash serializer in `orchestrator/replay.py` is not edited — the fast
-path simply never reaches it, because recording refuses the policy up front.
+mode from the environment. The state-hash serializer in `orchestrator/replay.py` is not edited — the
+fast path simply never reaches it, because recording refuses the policy up front.
 
 ## Public types this task introduces
 - `engine.rng.RngStateHashPolicy`
@@ -91,5 +91,5 @@ Do not implement work outside this task.
 - If something is **ambiguous but resolvable by judgment** (a default value, a tie-break, a naming choice): document the choice in a `## Decisions` section in the PR description and proceed.
 
 ## Output expectation
-Open a PR from branch `phase-15-rng-fast-path` with a title like `task 15.3.1: training-only rng hash fast path (opt-in; committed paths byte-unchanged)`.
+Open a PR from branch `phase-15-rng-fast-path` with a title like `task 15.8.1: training-only rng hash fast path (opt-in; committed paths byte-unchanged)`.
 The PR description must follow `.github/pull_request_template.md` and include `## Summary` (1–3 bullets referencing audits/post-phase-14-ML-planning.md §3.5, §11.2 (the 43% measurement + the training-only scoping); audits/post-phase-14-pause.md §4 (the "do not touch in place" verifier note); engine/rng.py:31-38; orchestrator/replay.py (state-hash serialization)), `## Definition of done` (the checklist from this contract, ticked), `## Decisions` (every judgment call), and (only when blocking) `## Questions`.
