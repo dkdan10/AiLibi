@@ -32,5 +32,16 @@ export function ObservationLine({ obs }: { obs: ObservationClaimView }) {
           {obs.body_of} in {obs.room} at tick {obs.tick}
         </span>
       );
+    case "saw_vent":
+      // Task 15.4.1: the role-proving vent sighting. Role-neutral wording (no
+      // hue) — the "impostor-only" meaning is carried by the vent_sighting
+      // contradiction badge, not this line (firewall discipline).
+      return (
+        <span className="min-w-0 break-words">
+          <span className="font-semibold text-ink-900">saw</span> {obs.subject}{" "}
+          <span className="font-semibold text-ink-900">vent</span> in {obs.room} at
+          tick {obs.tick}
+        </span>
+      );
   }
 }

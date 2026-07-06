@@ -87,6 +87,8 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "SawPlayerView",
         "CompletedTaskObsView",
         "FoundBodyObsView",
+        # Task 15.4.1 — spectator mirror of the Task 15.4 vent sighting:
+        "SawVentObservationView",
         "AlibiClaimView",
         "AccusationClaimView",
         "CorroborationClaimView",

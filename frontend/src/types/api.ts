@@ -18,7 +18,7 @@ export type AgentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT
 export type Winner = "CREWMATES" | "IMPOSTORS";
 export type TriggerKind = "body" | "emergency";
 export type MeetingOutcome = "EJECTED" | "SKIPPED";
-export type ContradictionKind = "alibi_conflict" | "alibi_vs_sighting" | "alibi_vs_physical";
+export type ContradictionKind = "alibi_conflict" | "alibi_vs_sighting" | "alibi_vs_physical" | "vent_sighting";
 export type TurnKind = "opening" | "reply" | "opt_in";
 
 export interface ReplayView {
@@ -250,6 +250,13 @@ export interface FoundBodyObsView {
   type: "found_body";
   tick: number;
   body_of: string;
+  room: string;
+}
+
+export interface SawVentObservationView {
+  type: "saw_vent";
+  tick: number;
+  subject: string;
   room: string;
 }
 
@@ -521,7 +528,7 @@ export interface GenuineClassConversionReport {
 }
 
 export type TickEventView = KillEventView | ReportBodyEventView | SabotageEventView | TaskCompletedEventView | MeetingTriggeredEventView | VentEventView;
-export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView;
+export type ObservationClaimView = SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView;
 export type StatementClaimView = AlibiClaimView | AccusationClaimView | CorroborationClaimView;
 
 export interface GameReport {
