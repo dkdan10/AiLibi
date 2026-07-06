@@ -118,16 +118,20 @@ def _render_flags(flags: dict[str, bool] | None) -> str:
 def _render_policy(policy_id: str | None) -> str:
     """Render a replay's stamped tactical policy for the MANIFEST ``policy`` cell.
 
-    Renders the stamp's ``policy_id`` (Task 15.9). An unstamped replay (``None`` —
-    the committed canonical sets, which predate the stamp) renders as the
-    scripted-FSM-default label :data:`_FSM_DEFAULT_POLICY`, which equals the
+    Renders the stamp's ``policy_id`` (Task 15.9). Only an ABSENT stamp
+    (``None`` — the committed canonical sets, which predate the stamp) renders as
+    the scripted-FSM-default label :data:`_FSM_DEFAULT_POLICY`, which equals the
     explicit ``fsm-default`` stamp's ``policy_id``, so a stamped-FSM replay and an
-    unstamped one render IDENTICALLY (the "FSM default everywhere" invariant). A
-    single value with no commas or pipes keeps the cell unambiguous for
-    :func:`parse_manifest`.
+    unstamped one render IDENTICALLY (the "FSM default everywhere" invariant). The
+    default fires strictly on ``None``, never on a present-but-blank ``policy_id``:
+    a blank field would MISATTRIBUTE a stamped recording as the FSM default, so it
+    is rejected upstream at the stamp boundary
+    (:class:`orchestrator.replay.TacticalPolicyStamp`) — this ``is None`` check is
+    the belt-and-suspenders half of that guard. A single value with no commas or
+    pipes keeps the cell unambiguous for :func:`parse_manifest`.
     """
 
-    return policy_id if policy_id else _FSM_DEFAULT_POLICY
+    return _FSM_DEFAULT_POLICY if policy_id is None else policy_id
 
 
 _HEADER = (

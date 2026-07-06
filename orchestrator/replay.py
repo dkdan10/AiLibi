@@ -209,24 +209,37 @@ class TacticalPolicyStamp(BaseModel):
 
     @field_validator("*")
     @classmethod
-    def _reject_table_breaking_chars(cls, value: str) -> str:
-        """Fail loud on characters that would corrupt a line/table artifact.
+    def _reject_malformed_stamp_field(cls, value: str) -> str:
+        """Fail loud on a blank or line/table-breaking stamp field.
 
         A stamp is a single-line provenance token rendered into line-based
         artifacts — the JSONL replay row and the Markdown MANIFEST ``policy``
-        cell (``scripts/_manifest_writer.py``). A ``"|"`` in ``policy_id`` would
-        emit an unescaped extra table column, and a newline would split the row —
-        either of which makes ``parse_manifest`` see the wrong cell count and
-        SILENTLY DROP the row on the next manifest merge, losing that seed's
-        provenance (AGENTS.md "no silent fallbacks"). Rejecting these at the
-        stamp boundary (model construction / ``--tactical-policy-stamp`` JSON
-        parse / replay read-back) fails loud BEFORE any bad bytes are written or
-        a manifest row is silently lost. Every legitimate value — the
-        ``fsm-default`` label, a champion id, a hex weights hash, a method /
-        encoder / anchor label — is single-line and pipe-free, so nothing valid
-        is rejected.
+        cell (``scripts/_manifest_writer.py``). Two malformed shapes are rejected
+        at the stamp boundary (model construction / ``--tactical-policy-stamp``
+        JSON parse / replay read-back) so they fail loud BEFORE any bad bytes are
+        written (AGENTS.md "no silent fallbacks"):
+
+        * a ``"|"`` / newline / carriage-return — a pipe emits an unescaped extra
+          MANIFEST column and a newline splits the row, so ``parse_manifest`` sees
+          the wrong cell count and SILENTLY DROPS the row on the next manifest
+          merge, losing that seed's provenance;
+        * an EMPTY / whitespace-only field — an empty ``policy_id`` is
+          indistinguishable from an ABSENT stamp at the MANIFEST renderer
+          (``_render_policy`` would misattribute it as the ``fsm-default`` label
+          even though the recording DID carry a stamp), and a whitespace-only cell
+          round-trips to empty through ``parse_manifest``'s ``.strip()``. A
+          well-formed stamp field is always a non-blank token.
+
+        Every legitimate value — the ``fsm-default`` label, a champion id, a hex
+        weights hash, a method / encoder / anchor label — is a single-line,
+        non-blank, pipe-free token, so nothing valid is rejected.
         """
 
+        if not value.strip():
+            raise ValueError(
+                "tactical-policy stamp fields must be non-empty tokens; a blank / "
+                f"whitespace-only value is forbidden (got {value!r})"
+            )
         for forbidden, name in (
             ("|", "pipe"),
             ("\n", "newline"),

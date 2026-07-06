@@ -130,6 +130,23 @@ class TestTacticalPolicyStampSchema:
                 }
             )
 
+    @pytest.mark.parametrize("blank", ["", "   ", "\t"])
+    def test_blank_fields_are_rejected(self, blank: str) -> None:
+        # An empty policy_id is indistinguishable from an ABSENT stamp at the
+        # MANIFEST renderer, so it would misattribute a stamped recording as the
+        # FSM default. A well-formed stamp field is always a non-blank token, so
+        # blanks fail loud at the stamp boundary.
+        with pytest.raises(ValidationError):
+            TacticalPolicyStamp.model_validate(
+                {
+                    "policy_id": blank,
+                    "method": "m",
+                    "encoder_version": "e",
+                    "weights_sha256": "h",
+                    "anchor_policy": "a",
+                }
+            )
+
     def test_fsm_default_factory_shape(self) -> None:
         stamp = fsm_default_tactical_policy_stamp()
         assert stamp.policy_id == FSM_DEFAULT_POLICY_ID == "fsm-default"
