@@ -83,7 +83,7 @@ from agents.perception import (
     EVENT_SELF_STATE,
 )
 from agents.tactical.pathing import find_path
-from meetings.manager import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
+from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from observation.action_intent import (
     ActionIntent,
     DoTaskIntent,
@@ -137,7 +137,7 @@ class EmergencyButtonView:
 
     * ``over_gate`` -- the agent's private max suspicion over presumed-living
       players is at or above the §4.6 eject gate
-      (:data:`meetings.manager.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`) at this
+      (:data:`meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`) at this
       tick.
     * ``crossed_since_meeting`` -- that belief crossed the gate from below
       AFTER the last meeting ended (a high prior carried through a meeting
@@ -274,7 +274,7 @@ class EmergencyPacingTracker:
         """Max suspicion over presumed-living players is at/above the §4.6 gate.
 
         The gate constant is read from its one home
-        (:data:`meetings.manager.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`) and the
+        (:data:`meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`) and the
         comparison is inclusive at the cutoff, matching the vote tally's
         "exactly the threshold ejects" semantics. Players the agent presumes
         dead -- meeting-announced dead plus first-hand-seen body victims --

@@ -16,10 +16,9 @@ meeting produces under the reactive accusation-chain protocol (DESIGN.md
   returns to the orchestrator after voting resolves (§5.1).
 
 Every model is frozen, forbids extra fields, and is suitable for
-structured LLM output (Pydantic v2 JSON-schema generation). Agent-side
-re-exports live in ``agents/strategic/output_schemas.py``; downstream
-code must import from one of these two locations and never duplicate a
-schema definition.
+structured LLM output (Pydantic v2 JSON-schema generation). This module
+is the single home for these shapes: downstream code imports them from
+here and never duplicates a schema definition.
 
 Record-shape note (Task 8.7). The parallel-reports + fixed-round
 ``Statement`` record was replaced by the single ordered ``turns`` list:

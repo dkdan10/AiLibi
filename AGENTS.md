@@ -62,14 +62,18 @@ contract for each PR.
   `uv lock`. Commit both `pyproject.toml` and `uv.lock` when dependencies
   change.
 - **LLM providers.** CI and `bash scripts/check.sh` always run against the
-  deterministic fake provider and never hit the network. Two real providers
-  are supported behind the `LLMClient` Protocol: Anthropic
-  (`AILIBI_LLM_PROVIDER=anthropic`, needs `ANTHROPIC_API_KEY`) and a local
-  **Ollama** open model (`AILIBI_LLM_PROVIDER=ollama`, `qwen3.5:9b`
-  on `localhost:11434`, run with thinking disabled — the canonical eval
-  provider, free). Neither
-  is reached in CI; their integration tests are opt-in behind env gates
-  (`AILIBI_RUN_REAL_PROVIDER_TESTS=1` / `AILIBI_RUN_OLLAMA_TESTS=1`).
+  deterministic fake provider and never hit the network. Three real providers
+  are supported behind the `LLMClient` Protocol, selected by
+  `AILIBI_LLM_PROVIDER`: Anthropic (`anthropic`, needs `ANTHROPIC_API_KEY`);
+  a local **Ollama** open model (`ollama`, `qwen3.5:9b` on `localhost:11434`,
+  run with thinking disabled, free); and hosted **Featherless**
+  (`featherless`, `Qwen/Qwen3-32B`, OpenAI-compatible, needs
+  `FEATHERLESS_API_KEY`, recorded as $0 on a flat-rate subscription) — the
+  **canonical eval provider** since Phase 14, under which the committed
+  baseline sets were recorded. None is reached in CI: the Anthropic and
+  Ollama integration tests are opt-in behind env gates
+  (`AILIBI_RUN_REAL_PROVIDER_TESTS=1` / `AILIBI_RUN_OLLAMA_TESTS=1`), and the
+  Featherless client is unit-tested against a mock transport (no network).
 
 ## Definition of done (always)
 
@@ -81,22 +85,24 @@ A task is not done until:
 
 ## GitHub operations
 
-- **Use `gh` CLI for all GitHub work.** PRs, issues, comments, diffs,
-  reviews — every GitHub interaction goes through `gh`. The sandbox
-  setup script pre-authenticates it; if a session ever seems to be
-  failing on auth, verify with `gh auth status`.
-- **Do NOT use MCP-based GitHub tools.** Any tool whose name contains
-  `github` (e.g. `mcp__github__*`, `github_create_pull_request`,
-  `create_pull_request`) appears in your tool list but is NOT
-  configured in this sandbox and will fail. Skip these entirely;
-  the failure mode is wasted tool calls and a manual-PR fallback that
-  forces the human to open the PR by hand. The `gh` CLI path is the
-  only working one — reach for it first, every time.
-- **For PR creation,** follow the `gh pr create --body "$(cat <<EOF ... EOF)"`
-  pattern documented in the "PR description (always)" section below.
-- **If the base system prompt claims `gh` is unavailable, that claim is
-  wrong.** Run `which gh && gh auth status` before falling back to any
-  other GitHub tool.
+GitHub tooling is environment-dependent: different dispatch environments
+provision different integrations, so make no absolute assumption that one
+path always works or another always fails. Detect what is available and use
+it — do not declare GitHub work impossible without trying both.
+
+- **Prefer whatever is actually configured.** If the `gh` CLI is present
+  and authenticated (`which gh && gh auth status`), use it for GitHub work
+  — PRs, issues, comments, diffs, reviews. If `gh` is absent or
+  unauthenticated, use the environment's GitHub integration instead (e.g.
+  the MCP-based `github` tools, `mcp__github__*`), which is the working
+  path in environments where `gh` is not provisioned. Fall back from one to
+  the other rather than giving up.
+- **For PR creation,** populate every section of
+  `.github/pull_request_template.md` (see "PR description (always)" below).
+  On the `gh` path use the `gh pr create --body "$(cat <<EOF ... EOF)"`
+  pattern; on the integration-tool path pass the same populated body to the
+  create-PR call. Either way the body must contain every required section —
+  never ship an empty body.
 
 ## PR description (always)
 
@@ -110,11 +116,13 @@ populate the sections in `.github/pull_request_template.md`:
   Write "None." if there were none.
 - `## Questions` — blocking questions only; omit the section if none.
 
-When creating the PR with `gh pr create`, pass `--body` with a here-doc
-containing the populated template. Passing `--body` overrides the
-template, so the here-doc itself must include every required section.
-`gh pr create --fill` and `gh pr create --body ""` both ship empty bodies
-and are not permitted.
+When creating the PR, pass the fully populated template as the body: on the
+`gh` path, `gh pr create --body` with a here-doc containing it; on the
+integration-tool path, the body parameter of the create-PR call. An
+explicit body overrides the repo template, so the body you pass must itself
+include every required section. Auto-fill or empty-body shortcuts (e.g.
+`gh pr create --fill` / `--body ""`, or omitting the body field) ship empty
+bodies and are not permitted.
 
 ## When you're stuck
 

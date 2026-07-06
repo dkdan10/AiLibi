@@ -2,8 +2,7 @@
 
 The four Jinja2 templates next to this module are loaded by
 :mod:`agents.strategic.prompts.loader` and exposed as named callables —
-one per template — that consumers (``MeetingManager``,
-``StrategicReasoner``) import from here.
+one per template — that ``MeetingManager`` imports from here.
 """
 
 from __future__ import annotations
