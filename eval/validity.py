@@ -1,0 +1,893 @@
+"""The HARD validity gate — composed pass/fail checks over a replay-set dir.
+
+Task 15.1 (tasks/phase-15.md) productizes the audit-cited ``validity_gate.py``
+(audits/audit-phase-14-close.md §1, §3, §8; audits/post-phase-14-pause.md §2.1;
+tasks/post-phase-14-clean-up.md H1). This module is the LIBRARY FOLD behind the
+two CLIs — ``scripts/validity_gate.py`` (hard pass/fail) and
+``scripts/measure_baseline.py`` (the R-gate measurement, which reuses the
+loaders here). It WIRES the existing committed folds; it never re-implements a
+metric that already has a tested home:
+
+* meeting rate — :func:`eval.meeting_quality.compute_meeting_rate`
+* win-condition self-check — :mod:`eval.win_condition_selfcheck`
+* tournament assembly — :func:`eval.balance_eval.load_tournament_report`
+* byte-identity walk — ``scripts/_verify_samples.py`` (the machinery behind it)
+
+Every check is PURE and OFFLINE: the whole gate runs on a fresh clone with no
+network and no ``AILIBI_*`` env. Roles ground truth is recovered by re-seeding
+the engine from each replay's seed (the deterministic recipe
+``scripts/build_sample_report.py`` uses to BUILD the committed report), so the
+gate depends only on the committed ``replay-seed-*.jsonl`` + ``roster.json`` and
+does not read the committed ``tournament-eval-report.json`` at all.
+
+The eight gate checks (each named + individually reported), per the Task-15.1
+Definition of Done:
+
+1. ``all_games_reach_game_over`` — every recorded game wrote a ``game_over`` row
+   AND the §6.3 win-condition invariant holds (:mod:`eval.win_condition_selfcheck`).
+2. ``meeting_rate_and_resolution`` — ``meeting_rate >= 0.60`` and every triggered
+   meeting resolved (no failed call aborted a meeting without a resolved entry).
+3. ``no_tick_1_kills`` — zero resolved kills at tick <= 1 (the spawn-cooldown
+   guard; :func:`orchestrator.seeder.seed_initial_state` makes a tick-1 kill
+   impossible, so any is a regression).
+4. ``no_friendly_fire_kills`` — zero resolved kills whose victim is an impostor
+   (the engine role-aware kill guard held).
+5. ``no_railroaded_crew_ejections`` — the restored Task-14.12 tripwire: no crew
+   member's vote-prompt suspicion rendered at a clamped 1.0 driven by >= 2
+   same-meeting contradiction flags.
+6. ``no_dangling_primary_reason_id`` — every ballot ``primary_reason_id``
+   references a real transcript turn id in its meeting.
+7. ``cost_and_provenance_exact`` — every game's substrate-flag stamp equals the
+   canonical snapshot with the canonical key set; a single coherent model +
+   prompt set across the run; well-formed (finite, non-negative) cost rows.
+8. ``byte_identical_reconstruction`` — the recorded state-hash chain reconstructs
+   byte-identically under the current engine (``scripts/_verify_samples.py``).
+
+JSON report schema (``ValidityGateReport.model_dump()`` / ``--json``), consumed
+by the 15.15 harness and the 15.7 / 15.18 audits — STABLE::
+
+    {
+      "replay_set_dir": str,          # the directory that was gated
+      "passed": bool,                 # AND over every check.passed
+      "games_total": int,             # number of replay-seed-*.jsonl games
+      "checks": [                     # one entry per named check, in gate order
+        {
+          "name": str,                # stable check slug (see the list above)
+          "passed": bool,
+          "summary": str,             # one-line human-readable result
+          "violations": [str, ...],   # per-item detail; empty iff passed
+          "facts": {str: (bool|int|float|str|null), ...}  # surfaced metrics
+        },
+        ...
+      ]
+    }
+
+The library public surface (stable — downstream tasks import these):
+:class:`ValidityCheck`, :class:`ValidityGateReport`, :func:`run_validity_gate`.
+"""
+
+from __future__ import annotations
+
+import math
+import re
+import sys
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final, TypeAlias
+
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+
+from api import replay_loader
+from engine.actions import Action
+from engine.entities import PlayerId, Role
+from engine.events import KilledEvent, MeetingTriggeredEvent
+from engine.tick import advance_tick
+from engine.world import Map, load_canonical_map
+from eval.balance_eval import load_tournament_report
+from eval.meeting_quality import compute_meeting_rate
+from eval.report_schema import MeetingReport, TournamentReport
+from eval.win_condition_selfcheck import WinConditionSelfCheck
+from meetings.schemas import MeetingResult
+from orchestrator.game import apply_meeting_result
+from orchestrator.replay import (
+    GameEndReplayEntry,
+    MeetingReplayEntry,
+    ReplayEntry,
+    SUBSTRATE_FLAG_KEYS,
+    _state_hash,
+    read_all_entries,
+    read_substrate_flags,
+    substrate_flag_snapshot,
+)
+from orchestrator.seeder import seed_initial_state
+
+# ``scripts/`` is on ``mypy_path`` (pyproject) but is not an importable package;
+# ``_verify_samples`` is explicitly "importable for unit tests" (its docstring),
+# and its ``verify_samples`` IS the tested machinery behind the byte-identity
+# walk this gate must call rather than shelling out. Put ``scripts/`` on
+# ``sys.path`` the same guarded way the scripts themselves bootstrap the repo
+# root, then import the tool. Kept local + commented so the one backwards
+# (eval -> scripts) edge is explicit and swappable.
+_SCRIPTS_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from _verify_samples import verify_samples  # noqa: E402
+
+FactValue: TypeAlias = bool | int | float | str | None
+"""A JSON scalar surfaced on a :class:`ValidityCheck` ``facts`` map."""
+
+# The Stage-A meeting-enablement floor (audits/audit-phase-14-close.md §1;
+# eval.meeting_quality docstring): the HARD threshold this gate enforces.
+MEETING_RATE_FLOOR: Final[float] = 0.60
+# The audit's supporting statistical-power floor on resolved meetings. Reported
+# on the meeting check's facts but NOT hard-gated: the CLIs accept an arbitrary
+# (possibly small) replay set, whereas >= 30 is a power note about the canonical
+# baseline sets specifically (see the module ## Decisions in the PR).
+MIN_RESOLVED_MEETINGS_NOTE: Final[int] = 30
+
+# A resolved kill at or below this tick is the spawn-rush regression the
+# kill-cooldown guard should make impossible (orchestrator.seeder).
+TICK_1_KILL_BAR: Final[int] = 1
+
+# The Task-14.12 railroad tripwire (tests/meetings/test_manager.py::
+# test_no_crew_row_is_railroaded_to_certain_guilt). A crew row rendered at a
+# clamped certain-guilt suspicion driven by >= this many same-meeting
+# contradiction flags is the railroad defect.
+CERTAIN_GUILT_SUSPICION: Final[float] = 1.0
+SAME_MEETING_FLAG_BAR: Final[int] = 2
+# The committed vote_ballot.j2 renders the voter's suspicion graph under this
+# header as "- `p-N`: suspicion X, trust Y" rows (the same parse the 14.12
+# tripwire test uses to read the recorded rendered values).
+_SUSPICION_GRAPH_HEADER: Final[str] = "## Your suspicion of each player"
+_SUSPICION_GRAPH_ROW_RE: Final[re.Pattern[str]] = re.compile(
+    r"`(?P<pid>p-\d+)`: suspicion (?P<sus>[0-9]*\.?[0-9]+), "
+    r"trust (?P<trust>[0-9]*\.?[0-9]+)"
+)
+
+_ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
+
+# The flat 4p/1i MVP baseline is the only committed set without a roster.json
+# (mirrors scripts/build_sample_report.py). A dir with no descriptor defaults
+# to these knobs; every other set ships roster.json.
+_FLAT_DEFAULT_KNOBS: Final[tuple[int, int, int]] = (4, 1, 1)
+
+
+class ValidityCheck(BaseModel):
+    """One named validity-gate check's result (frozen value object).
+
+    ``violations`` holds a per-item description for each failing row (empty iff
+    ``passed``); ``facts`` surfaces the machine-readable metrics a downstream
+    audit reads (e.g. the meeting rate, the ejection split). See the module JSON
+    schema.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    passed: bool
+    summary: str
+    violations: tuple[str, ...] = ()
+    facts: Mapping[str, FactValue] = Field(default_factory=dict)
+
+
+class ValidityGateReport(BaseModel):
+    """The composed gate verdict over one replay-set directory (frozen).
+
+    ``passed`` is the AND over every ``check.passed``. A gate CLI exits non-zero
+    when this is ``False`` and names the failing checks (:meth:`failing_checks`).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    replay_set_dir: str
+    passed: bool
+    games_total: int
+    checks: tuple[ValidityCheck, ...]
+
+    def failing_checks(self) -> tuple[str, ...]:
+        """The ``name`` of every check that did not pass, in gate order."""
+
+        return tuple(check.name for check in self.checks if not check.passed)
+
+
+@dataclass(frozen=True)
+class _KillFact:
+    """One resolved kill recovered from engine reconstruction of a replay."""
+
+    seed: int
+    tick: int
+    killer: PlayerId
+    killer_role: Role | None
+    victim: PlayerId
+    victim_role: Role | None
+
+
+@dataclass(frozen=True)
+class _GameReconstruction:
+    """The engine-derived facts for one recorded game (one reconstruction walk)."""
+
+    seed: int
+    win_check: WinConditionSelfCheck
+    kills: tuple[_KillFact, ...]
+
+
+# --------------------------------------------------------------------------- #
+# Set loaders (shared with scripts/measure_baseline.py)                        #
+# --------------------------------------------------------------------------- #
+
+
+def resolve_roster_knobs(sample_dir: Path) -> tuple[int, int, int]:
+    """``(num_players, num_impostors, tasks_per_crewmate)`` for a replay set.
+
+    Reuses :func:`api.replay_loader._load_roster_config` (the single fail-loud
+    ``roster.json`` parser, exactly as ``scripts/build_sample_report.py`` does),
+    so a malformed roster raises here; a missing descriptor is the flat 4p/1i
+    default.
+    """
+
+    roster = replay_loader._load_roster_config(sample_dir)
+    if roster is None:
+        return _FLAT_DEFAULT_KNOBS
+    return (roster.num_players, roster.num_impostors, roster.tasks_per_crewmate)
+
+
+def seeds_on_disk(sample_dir: Path) -> list[int]:
+    """Seeds with a committed ``replay-seed-{n}.jsonl``, sorted and de-duplicated."""
+
+    return sorted(
+        {
+            int(path.stem.rsplit("-", 1)[1])
+            for path in sample_dir.glob("replay-seed-*.jsonl")
+        }
+    )
+
+
+def roles_by_seed(
+    sample_dir: Path,
+    *,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+    game_map: Map | None = None,
+) -> dict[int, dict[PlayerId, Role]]:
+    """Recover per-seed role ground truth by re-seeding the engine.
+
+    Roles are firewalled out of the replay JSONL, so this re-runs
+    :func:`orchestrator.seeder.seed_initial_state` for each committed seed — the
+    same deterministic recipe ``scripts/build_sample_report.py`` uses to build
+    the committed report. The reconstruction walks (and the byte-identity check)
+    verify every ``state_hash``, so a wrong roster fails loud rather than
+    silently mislabelling roles.
+    """
+
+    resolved_map = game_map if game_map is not None else load_canonical_map()
+    out: dict[int, dict[PlayerId, Role]] = {}
+    for seed in seeds_on_disk(sample_dir):
+        state = seed_initial_state(
+            seed=seed,
+            game_map=resolved_map,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+        )
+        out[seed] = {pid: player.role for pid, player in state.players.items()}
+    return out
+
+
+def assemble_tournament_report(sample_dir: Path) -> TournamentReport:
+    """Fold a replay set's committed bytes into a typed :class:`TournamentReport`.
+
+    The shared loader for both CLIs: resolve the roster, recover roles by
+    re-seeding, then call :func:`eval.balance_eval.load_tournament_report` with
+    ``derive_kill_gift=False`` (the R-gate folds and the report-based validity
+    checks never consume the kill-gift fields, so this does NO engine re-run — it
+    folds the frozen recorded outcomes). Pure and offline.
+    """
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    per_seed_roles = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+    if not per_seed_roles:
+        raise ValueError(f"no replay-seed-*.jsonl found under {sample_dir}")
+    return load_tournament_report(
+        sample_dir,
+        roles_by_seed=per_seed_roles,
+        tasks_per_crewmate=tasks_per_crewmate,
+        derive_kill_gift=False,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Engine reconstruction (kills + win-condition) — one walk per game            #
+# --------------------------------------------------------------------------- #
+
+
+def _reconstruct_game(
+    replay_path: Path,
+    *,
+    seed: int,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+    roles: Mapping[PlayerId, Role],
+    game_map: Map,
+) -> _GameReconstruction:
+    """Re-seed + replay one game to recover its resolved kills + §6.3 self-check.
+
+    A single read-only engine playback (the same reconstruction
+    :func:`eval.win_condition_selfcheck.check_replay_win_condition` documents)
+    that additionally collects every resolved :class:`~engine.events.KilledEvent`
+    — kills have no importable metric home, so they are recovered here. Every
+    reconstructed ``state_hash`` is verified against the recording, so a wrong
+    roster or a determinism break raises :class:`ValueError`. The produced
+    :class:`~eval.win_condition_selfcheck.WinConditionSelfCheck` uses the tested
+    :func:`~eval.win_condition_selfcheck.win_condition_is_consistent` predicate
+    (a unit test cross-checks it against ``check_replay_win_condition``).
+    """
+
+    game_id = f"headless-seed-{seed}"
+    entries = read_all_entries(replay_path)
+    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
+    meeting_by_tick: Mapping[int, MeetingReplayEntry] = {
+        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+    }
+    game_end = next(
+        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
+    )
+
+    state = seed_initial_state(
+        seed=seed,
+        game_map=game_map,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+
+    kills: list[_KillFact] = []
+    first_zero_impostor_tick: int | None = None
+
+    def _record_zero(tick: int) -> None:
+        nonlocal first_zero_impostor_tick
+        if first_zero_impostor_tick is not None:
+            return
+        alive_impostors = sum(
+            1
+            for player in state.players.values()
+            if player.alive and player.role == "IMPOSTOR"
+        )
+        if alive_impostors == 0:
+            first_zero_impostor_tick = tick
+
+    for entry in tick_entries:
+        actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
+        state, events = advance_tick(state, actions, game_map=game_map)
+        _verify_reconstruction(
+            game_id, entry.tick, entry.state_hash, _state_hash(state)
+        )
+        for event in events:
+            if isinstance(event, KilledEvent):
+                kills.append(
+                    _KillFact(
+                        seed=seed,
+                        tick=event.tick,
+                        killer=event.actor,
+                        killer_role=roles.get(event.actor),
+                        victim=event.target,
+                        victim_role=roles.get(event.target),
+                    )
+                )
+        _record_zero(entry.tick)
+
+        if state.phase == "GAME_OVER":
+            break
+        if state.phase != "MEETING":
+            continue
+
+        meeting_entry = meeting_by_tick.get(entry.tick)
+        if meeting_entry is None:
+            # Partial replay: a meeting opened but never resolved (the run
+            # crashed mid-meeting). Stop the walk, matching the loader.
+            break
+        body_id = next(
+            (
+                event.body_id
+                for event in events
+                if isinstance(event, MeetingTriggeredEvent)
+            ),
+            None,
+        )
+        result = MeetingResult(
+            meeting_id=meeting_entry.meeting_id,
+            triggered_by=meeting_entry.triggered_by,
+            trigger_tick=meeting_entry.tick,
+            outcome=meeting_entry.outcome,
+            ejected_player_id=meeting_entry.ejected_player_id,
+            ballots=meeting_entry.ballots,
+            contradictions=meeting_entry.contradictions,
+            transcript=meeting_entry.transcript,
+        )
+        state, _ = apply_meeting_result(
+            state, result, game_map=game_map, triggering_body_id=body_id
+        )
+        _verify_reconstruction(
+            game_id, entry.tick, meeting_entry.state_hash_after, _state_hash(state)
+        )
+        _record_zero(meeting_entry.tick)
+        if state.phase == "GAME_OVER":
+            break
+
+    win_check = WinConditionSelfCheck(
+        game_id=game_id,
+        seed=seed,
+        winner=game_end.winner if game_end is not None else None,
+        reason=game_end.reason if game_end is not None else None,
+        first_zero_impostor_tick=first_zero_impostor_tick,
+        game_over_tick=game_end.tick if game_end is not None else None,
+    )
+    return _GameReconstruction(seed=seed, win_check=win_check, kills=tuple(kills))
+
+
+def _verify_reconstruction(game_id: str, tick: int, expected: str, actual: str) -> None:
+    if actual != expected:
+        raise ValueError(
+            f"validity-gate reconstruction diverged for {game_id!r} at tick "
+            f"{tick}: recorded {expected!r}, reconstructed {actual!r}. The roster "
+            "does not match the recording, or engine playback is non-deterministic."
+        )
+
+
+def _reconstruct_set(sample_dir: Path) -> list[_GameReconstruction]:
+    """Reconstruct every game in the set (roster + re-seeded roles)."""
+
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
+    game_map = load_canonical_map()
+    per_seed_roles = roles_by_seed(
+        sample_dir,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=game_map,
+    )
+    return [
+        _reconstruct_game(
+            sample_dir / f"replay-seed-{seed}.jsonl",
+            seed=seed,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            roles=per_seed_roles[seed],
+            game_map=game_map,
+        )
+        for seed in seeds_on_disk(sample_dir)
+    ]
+
+
+# --------------------------------------------------------------------------- #
+# Individual checks (pure over their minimal inputs — unit-testable)           #
+# --------------------------------------------------------------------------- #
+
+
+def check_all_games_reach_game_over(
+    reconstructions: Sequence[_GameReconstruction],
+) -> ValidityCheck:
+    """Every game wrote a ``game_over`` row AND holds the §6.3 win invariant."""
+
+    violations: list[str] = []
+    for game in reconstructions:
+        check = game.win_check
+        if check.game_over_tick is None:
+            violations.append(
+                f"seed {game.seed}: no game_over row (game never reached game_over)"
+            )
+        elif not check.is_consistent:
+            violations.append(
+                f"seed {game.seed}: §6.3 regression — last impostor eliminated at "
+                f"tick {check.first_zero_impostor_tick} but game_over at tick "
+                f"{check.game_over_tick}"
+            )
+    total = len(reconstructions)
+    reached = sum(1 for g in reconstructions if g.win_check.game_over_tick is not None)
+    return ValidityCheck(
+        name="all_games_reach_game_over",
+        passed=not violations,
+        summary=(
+            f"{reached}/{total} games reached game_over with a consistent win condition"
+        ),
+        violations=tuple(violations),
+        facts={"games_total": total, "games_reached_game_over": reached},
+    )
+
+
+def check_meeting_rate_and_resolution(report: TournamentReport) -> ValidityCheck:
+    """``meeting_rate >= 0.60`` and every triggered meeting resolved.
+
+    Wires :func:`eval.meeting_quality.compute_meeting_rate` for the rate. A
+    meeting is unresolved when a game recorded a failed call for a meeting id that
+    never produced a resolved :class:`~eval.report_schema.MeetingReport`.
+    """
+
+    meeting = compute_meeting_rate(report)
+    rate = meeting.meeting_rate
+
+    unresolved: list[str] = []
+    for game in report.games:
+        resolved_ids = {m.meeting_id for m in game.meetings}
+        for failed in game.failed_calls:
+            if failed.meeting_id not in resolved_ids:
+                unresolved.append(
+                    f"{game.game_id}: meeting {failed.meeting_id} aborted "
+                    f"({failed.error_type}) without a resolved entry"
+                )
+
+    rate_ok = rate is not None and rate >= MEETING_RATE_FLOOR
+    violations: list[str] = []
+    if not rate_ok:
+        shown = "undefined" if rate is None else f"{rate:.3f}"
+        violations.append(f"meeting_rate {shown} < floor {MEETING_RATE_FLOOR:.2f}")
+    violations.extend(sorted(set(unresolved)))
+    return ValidityCheck(
+        name="meeting_rate_and_resolution",
+        passed=not violations,
+        summary=(
+            f"meeting_rate {rate if rate is None else round(rate, 4)} "
+            f"(floor {MEETING_RATE_FLOOR:.2f}); {meeting.meetings_total} resolved "
+            f"meetings; {len(set(unresolved))} unresolved"
+        ),
+        violations=tuple(violations),
+        facts={
+            "meeting_rate": rate,
+            "resolved_meetings": meeting.meetings_total,
+            "games_with_meeting": meeting.games_with_meeting,
+            "unresolved_meetings": len(set(unresolved)),
+            "min_resolved_meetings_note": MIN_RESOLVED_MEETINGS_NOTE,
+        },
+    )
+
+
+def check_no_tick_1_kills(kills: Sequence[_KillFact]) -> ValidityCheck:
+    """Zero resolved kills at tick <= 1 (the spawn-cooldown regression)."""
+
+    offenders = [k for k in kills if k.tick <= TICK_1_KILL_BAR]
+    violations = [
+        f"seed {k.seed}: {k.killer} killed {k.victim} at tick {k.tick} "
+        "(kill cooldown should make an opening-tick kill impossible)"
+        for k in offenders
+    ]
+    return ValidityCheck(
+        name="no_tick_1_kills",
+        passed=not offenders,
+        summary=f"{len(offenders)} kills at tick <= {TICK_1_KILL_BAR} (want 0)",
+        violations=tuple(violations),
+        facts={"tick_1_kills": len(offenders), "total_kills": len(kills)},
+    )
+
+
+def check_no_friendly_fire_kills(kills: Sequence[_KillFact]) -> ValidityCheck:
+    """Zero resolved kills whose VICTIM is an impostor (the role-aware guard)."""
+
+    offenders = [k for k in kills if k.victim_role == "IMPOSTOR"]
+    violations = [
+        f"seed {k.seed}: {k.killer} ({k.killer_role}) killed impostor {k.victim} "
+        f"at tick {k.tick}"
+        for k in offenders
+    ]
+    return ValidityCheck(
+        name="no_friendly_fire_kills",
+        passed=not offenders,
+        summary=f"{len(offenders)} impostor-on-impostor kills (want 0)",
+        violations=tuple(violations),
+        facts={"friendly_fire_kills": len(offenders), "total_kills": len(kills)},
+    )
+
+
+def _rendered_suspicions(meeting: MeetingReport, subject: PlayerId) -> list[float]:
+    """Every suspicion value the meeting's vote prompts rendered for ``subject``.
+
+    Reads ``meeting.llm_calls[].prompt`` and parses the committed suspicion-graph
+    block — the same parse the Task-14.12 tripwire test uses.
+    """
+
+    values: list[float] = []
+    for call in meeting.llm_calls:
+        prompt = call.prompt
+        if _SUSPICION_GRAPH_HEADER not in prompt:
+            continue
+        block = prompt.split(_SUSPICION_GRAPH_HEADER, 1)[1].split("## ", 1)[0]
+        values.extend(
+            float(match.group("sus"))
+            for match in _SUSPICION_GRAPH_ROW_RE.finditer(block)
+            if match.group("pid") == subject
+        )
+    return values
+
+
+def check_no_railroaded_crew_ejections(report: TournamentReport) -> ValidityCheck:
+    """The restored Task-14.12 tripwire: zero railroaded crew rows.
+
+    A crew member is railroaded when a vote prompt rendered their suspicion at a
+    clamped 1.0 driven by >= 2 same-meeting contradiction flags naming them (a
+    1.0 with < 2 flags is the legitimate across-meeting accumulator, which stays
+    allowed). Mirrors ``tests/meetings/test_manager.py::
+    test_no_crew_row_is_railroaded_to_certain_guilt``.
+    """
+
+    violations: list[str] = []
+    rendered_rows = 0
+    for game in report.games:
+        for meeting in game.meetings:
+            for player_id, role in game.roles.items():
+                if role != "CREWMATE":
+                    continue
+                rendered = _rendered_suspicions(meeting, player_id)
+                rendered_rows += len(rendered)
+                if not any(value >= CERTAIN_GUILT_SUSPICION for value in rendered):
+                    continue
+                same_meeting_flags = sum(
+                    1 for flag in meeting.contradictions if player_id in flag.subjects
+                )
+                if same_meeting_flags >= SAME_MEETING_FLAG_BAR:
+                    violations.append(
+                        f"seed {game.seed} meeting {meeting.meeting_id}: crew "
+                        f"{player_id} rendered at clamped 1.0 off "
+                        f"{same_meeting_flags} same-meeting flags"
+                    )
+    return ValidityCheck(
+        name="no_railroaded_crew_ejections",
+        passed=not violations,
+        summary=(
+            f"{len(violations)} railroaded crew rows over {rendered_rows} rendered "
+            "crew suspicions (want 0)"
+        ),
+        violations=tuple(violations),
+        facts={
+            "railroaded_crew_rows": len(violations),
+            "rendered_crew_rows": rendered_rows,
+        },
+    )
+
+
+def check_no_dangling_primary_reason_id(report: TournamentReport) -> ValidityCheck:
+    """Every ballot ``primary_reason_id`` references a real transcript turn id."""
+
+    violations: list[str] = []
+    ballots_total = 0
+    for game in report.games:
+        for meeting in game.meetings:
+            turn_ids = {turn.turn_id for turn in meeting.transcript.turns}
+            for ballot in meeting.ballots:
+                ballots_total += 1
+                reason = ballot.primary_reason_id
+                if reason is not None and reason not in turn_ids:
+                    violations.append(
+                        f"seed {game.seed} meeting {meeting.meeting_id}: ballot by "
+                        f"{ballot.voter} cites turn {reason!r}, absent from the "
+                        "transcript"
+                    )
+    return ValidityCheck(
+        name="no_dangling_primary_reason_id",
+        passed=not violations,
+        summary=(
+            f"{len(violations)} dangling primary_reason_id over {ballots_total} "
+            "ballots (want 0)"
+        ),
+        violations=tuple(violations),
+        facts={"dangling_reason_ids": len(violations), "ballots_total": ballots_total},
+    )
+
+
+def check_cost_and_provenance(
+    report: TournamentReport,
+    substrate_by_seed: Mapping[int, Mapping[str, bool] | None],
+) -> ValidityCheck:
+    """Substrate-flag stamp, model, prompt set, and cost rows all coherent.
+
+    * Every game's ``game_over`` substrate stamp equals the canonical build
+      snapshot with the canonical key set (the "exact" anchor; the same match the
+      replay loader enforces to refuse cross-substrate reconstruction).
+    * A single model + a single prompt-version set across the whole run.
+    * Every cost row is present, finite, and non-negative.
+    """
+
+    snapshot = substrate_flag_snapshot()
+    canonical_keys = set(SUBSTRATE_FLAG_KEYS)
+    violations: list[str] = []
+
+    for seed in sorted(substrate_by_seed):
+        stamp = substrate_by_seed[seed]
+        if stamp is None:
+            violations.append(f"seed {seed}: no substrate_flags stamp on game_over")
+            continue
+        if set(stamp) != canonical_keys:
+            violations.append(
+                f"seed {seed}: substrate keys {sorted(stamp)} != canonical "
+                f"{sorted(canonical_keys)}"
+            )
+        elif dict(stamp) != snapshot:
+            violations.append(
+                f"seed {seed}: substrate stamp {dict(stamp)} != build snapshot "
+                f"{snapshot}"
+            )
+
+    # A game with no meeting records no LLM call, so its prompt_versions / by_model
+    # are legitimately empty. Coherence is over the NON-EMPTY stamps only: every
+    # game that DID call the model must share one model SET (a coherent mixed-tier
+    # set — e.g. a meeting model + a trigger model — is valid, drift is not) and
+    # one prompt-version set.
+    model_sets: set[tuple[str, ...]] = set()
+    prompt_sets: set[tuple[tuple[str, str], ...]] = set()
+    for game in report.games:
+        if game.cost.by_model:
+            model_sets.add(tuple(sorted(game.cost.by_model.keys())))
+        if game.prompt_versions:
+            prompt_sets.add(tuple(sorted(game.prompt_versions.items())))
+        total = game.cost.total_cost_usd
+        if not _is_finite_nonneg(total):
+            violations.append(
+                f"{game.game_id}: total_cost_usd {total!r} is not finite / >= 0"
+            )
+        if game.cost.total_input_tokens < 0 or game.cost.total_output_tokens < 0:
+            violations.append(f"{game.game_id}: negative token count")
+
+    if len(model_sets) > 1:
+        violations.append(f"inconsistent model sets across games: {sorted(model_sets)}")
+    if len(prompt_sets) > 1:
+        violations.append(
+            f"multiple prompt-version sets across the set ({len(prompt_sets)} distinct)"
+        )
+    if not model_sets:
+        violations.append("no model recorded on any game cost row")
+
+    models = next(iter(model_sets), ())
+    model_name = ", ".join(models) if models else None
+    prompt_set = next(iter(prompt_sets), ())
+    return ValidityCheck(
+        name="cost_and_provenance_exact",
+        passed=not violations,
+        summary=(
+            f"model={model_name!r}, {len(prompt_set)} prompt versions, substrate "
+            f"stamped exact on {len(substrate_by_seed)} games"
+        ),
+        violations=tuple(violations),
+        facts={
+            "model": model_name,
+            "prompt_versions": len(prompt_set),
+            "substrate_stamp_ok": not any("substrate" in v for v in violations),
+            "games_total": len(report.games),
+        },
+    )
+
+
+def _is_finite_nonneg(value: float) -> bool:
+    return math.isfinite(value) and value >= 0.0
+
+
+def check_byte_identical_reconstruction(sample_dir: Path) -> ValidityCheck:
+    """The recorded state-hash chain reconstructs byte-identically.
+
+    Calls ``scripts/_verify_samples.py::verify_samples`` (the tested machinery
+    behind ``verify_samples.sh``), which engine-replays every sample through
+    :class:`api.replay_loader.ReplayLoader` and checks the state-hash chain,
+    the meeting pre-hashes, and MANIFEST completeness.
+    """
+
+    failures = verify_samples(sample_dir)
+    violations = tuple(failure.render() for failure in failures)
+    return ValidityCheck(
+        name="byte_identical_reconstruction",
+        passed=not failures,
+        summary=(
+            f"{len(failures)} samples drifted from byte-identical reconstruction "
+            "(want 0)"
+        ),
+        violations=violations,
+        facts={"drifted_samples": len(failures)},
+    )
+
+
+# --------------------------------------------------------------------------- #
+# The composed gate                                                            #
+# --------------------------------------------------------------------------- #
+
+
+def run_validity_gate(replay_set_dir: Path) -> ValidityGateReport:
+    """Run every HARD validity check over ``replay_set_dir`` and compose the verdict.
+
+    Pure and offline. Assembles the typed report (roster + re-seeded roles +
+    frozen-outcome fold), reconstructs each game once (kills + win-condition),
+    reads each game's substrate stamp, and folds the eight named checks into a
+    :class:`ValidityGateReport` whose ``passed`` is the AND over all of them.
+    """
+
+    if not replay_set_dir.is_dir():
+        raise NotADirectoryError(f"replay-set directory not found: {replay_set_dir}")
+    seeds = seeds_on_disk(replay_set_dir)
+    if not seeds:
+        raise ValueError(f"no replay-seed-*.jsonl found under {replay_set_dir}")
+
+    report = assemble_tournament_report(replay_set_dir)
+    substrate_by_seed = {
+        seed: read_substrate_flags(replay_set_dir / f"replay-seed-{seed}.jsonl")
+        for seed in seeds
+    }
+
+    # The state-hash chain check must never crash the gate: a corrupted hash makes
+    # _reconstruct_set raise, so run it defensively and, when reconstruction is
+    # impossible, fail the three reconstruction-dependent checks rather than
+    # letting the exception escape (byte_identical_reconstruction reports the
+    # concrete drift). Reconstruction is safe when the chain reconstructs.
+    try:
+        reconstructions = _reconstruct_set(replay_set_dir)
+    except ValueError as exc:
+        reconstruction_error: str | None = str(exc)
+        all_kills: list[_KillFact] = []
+        game_over_check = _reconstruction_unavailable(
+            "all_games_reach_game_over", reconstruction_error
+        )
+        tick_1_check = _reconstruction_unavailable(
+            "no_tick_1_kills", reconstruction_error
+        )
+        friendly_fire_check = _reconstruction_unavailable(
+            "no_friendly_fire_kills", reconstruction_error
+        )
+    else:
+        all_kills = [kill for game in reconstructions for kill in game.kills]
+        game_over_check = check_all_games_reach_game_over(reconstructions)
+        tick_1_check = check_no_tick_1_kills(all_kills)
+        friendly_fire_check = check_no_friendly_fire_kills(all_kills)
+
+    checks = (
+        game_over_check,
+        check_meeting_rate_and_resolution(report),
+        tick_1_check,
+        friendly_fire_check,
+        check_no_railroaded_crew_ejections(report),
+        check_no_dangling_primary_reason_id(report),
+        check_cost_and_provenance(report, substrate_by_seed),
+        check_byte_identical_reconstruction(replay_set_dir),
+    )
+    return ValidityGateReport(
+        replay_set_dir=str(replay_set_dir),
+        passed=all(check.passed for check in checks),
+        games_total=len(seeds),
+        checks=checks,
+    )
+
+
+def _reconstruction_unavailable(name: str, error: str | None) -> ValidityCheck:
+    """A reconstruction-dependent check that failed because replay didn't rebuild."""
+
+    detail = error or "engine reconstruction unavailable"
+    return ValidityCheck(
+        name=name,
+        passed=False,
+        summary="engine reconstruction unavailable (state-hash chain did not rebuild)",
+        violations=(detail,),
+        facts={"reconstruction_available": False},
+    )
+
+
+__all__ = [
+    "FactValue",
+    "MEETING_RATE_FLOOR",
+    "ValidityCheck",
+    "ValidityGateReport",
+    "assemble_tournament_report",
+    "check_all_games_reach_game_over",
+    "check_byte_identical_reconstruction",
+    "check_cost_and_provenance",
+    "check_meeting_rate_and_resolution",
+    "check_no_dangling_primary_reason_id",
+    "check_no_friendly_fire_kills",
+    "check_no_railroaded_crew_ejections",
+    "check_no_tick_1_kills",
+    "resolve_roster_knobs",
+    "roles_by_seed",
+    "run_validity_gate",
+    "seeds_on_disk",
+]
