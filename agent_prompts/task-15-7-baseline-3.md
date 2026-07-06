@@ -12,7 +12,7 @@ Implement Task 15.7 — Baseline 3: atomic re-record + the Wave-0 close finding 
 The authoritative task contract is copied below from tasks/phase-15.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-15-baseline-3`
-**Depends on:** 15.1, 15.2, 15.3, 15.4, 15.5, 15.6
+**Depends on:** 15.1, 15.2, 15.3, 15.4, 15.4.1, 15.5, 15.6
 **Section refs:** tasks/post-phase-14-clean-up.md H7 + §3 (the target sheet); tasks/phase-14.md 14.12 (the atomic re-record + close pattern); audits/audit-phase-14-close.md §1 (the gate this record must pass); scripts/refresh_samples.sh (the recording harness)
 **Complexity:** Integration
 
@@ -107,6 +107,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import meetings.render_contract"`
 - `uv run python -c "import meetings.schemas"`
 - `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import api.schemas"`
 - `uv run python -c "import eval.funnel"`
 - `uv run python -c "import eval.validity"`
 - `uv run python -c "import eval.watchability"`

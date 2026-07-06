@@ -21,16 +21,24 @@ bare-engine cost) and the drawn value is discarded — but that serialization is
 committed `state_hash`, so it is load-bearing for replay byte-identity and must NEVER be changed in
 place. This task adds an explicit, opt-in hash policy (a typed policy object threaded `HeadlessGame →
 engine`, no env-var magic) that skips the per-tick rng-state serialization for non-recorded training
-rollouts only. The default is byte-identical to today; anything that records or verifies a replay
-refuses the fast path loudly. The RNG draws themselves are untouched — trajectories are identical under
-both modes, so training results transfer to the recording path exactly.
+rollouts only. Two enabling facts make the scope wider than `engine/rng.py` alone: (a) the per-tick
+snapshot is INVOKED from `engine.tick.advance_tick` (the `EngineRng.from_state(...).randint(...)` draw
+that writes `next_rng_state`), so the policy threads through `engine/tick.py` — in scope, with the
+default path pinned byte-identical there; and (b) `HeadlessGame` today REQUIRES a `replay_path` and
+constructs a `ReplayLog` unconditionally, which would make "non-recorded rollouts" unreachable — so
+this task also adds an explicit NO-REPLAY training mode (`replay_path=None` → no `ReplayLog`, nothing
+written), which is the only construction that accepts the fast-path policy; any replay-writing
+construction refuses it loudly. The RNG draws themselves are untouched — trajectories are identical
+under both modes, so training results transfer to the recording path exactly.
 
 **Files in scope:**
 - engine/rng.py (the opt-in fast-path region; default behavior byte-identical)
-- orchestrator/game.py (rng-hash policy plumbing region only)
-- training/env.py (fast-path knob region — 15.8 owns the rest of the module)
+- engine/tick.py (the per-tick rng-snapshot invocation region — policy-aware, default byte-identical)
+- orchestrator/game.py (rng-hash policy plumbing + optional no-replay training-mode region — disjoint from 15.4's registry/protocol regions, 15.5's vote entry, and 15.9's stamp region)
+- training/env.py (fast-path + no-replay knob region — 15.8 owns the rest of the module)
 - tests/engine/test_rng_fast_path.py (new)
 - tests/training/test_env_fast_path.py (new)
+- tests/orchestrator/test_no_replay_mode.py (new)
 
 **Files NOT in scope:**
 - orchestrator/replay.py + api/replay_loader.py (recording/verification never accepts the fast path — refusal at construction, not silent downgrade)
@@ -40,7 +48,7 @@ both modes, so training results transfer to the recording path exactly.
 **Definition of done:**
 - [ ] Default path byte-identical: `bash scripts/verify_samples.sh` reconstructs all 100 committed samples clean with the change merged.
 - [ ] Fast path measurably faster: the engine-core speedup ratio is measured and documented (target ≥1.3×; report the actual).
-- [ ] Constructing a recording/replay-writing game with the fast path active raises a descriptive error (tested); the training env exposes the knob and defaults it OFF.
+- [ ] The no-replay training mode is real: `replay_path=None` constructs a game that writes NOTHING to disk (asserted), runs to completion, and is the ONLY construction that accepts the fast-path policy; every replay-writing construction with the fast path active raises a descriptive error (tested); the training env exposes both knobs and defaults them OFF.
 - [ ] Trajectory equivalence proven: for a frozen policy on a fixed seed set, the full action/event streams are IDENTICAL under both modes (only hashing cost differs), asserted by test.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

@@ -93,8 +93,9 @@ Parallelism: four independent roots dispatch immediately: `15.1 ∥ 15.4 ∥ 15.
 measurement + evidence tracks run in parallel with Wave 1's layer-independent foundations). Then
 `15.1 → (15.2 ∥ 15.3)`; `15.4 → 15.6 → 15.5` (the meeting-layer chain — shared `meetings/manager.py`,
 render-contract, and v5 prompt-set regions, serialized by design: vent observability first, then the
-re-homing hygiene 15.5's render plumbing builds on, then the reporter lever);
-`(15.1, 15.2, 15.3, 15.4, 15.5, 15.6) → 15.7`
+re-homing hygiene 15.5's render plumbing builds on, then the reporter lever); `15.4 → 15.4.1` (the
+spectator mirror, ∥ the 15.6 → 15.5 chain — disjoint files);
+`(15.1, 15.2, 15.3, 15.4, 15.4.1, 15.5, 15.6) → 15.7`
 [operator: baseline-3 record]; `15.8 → (15.8.1 ∥ 15.10)`; `(15.7, 15.8) → 15.11`;
 `(15.1, 15.7, 15.9) → 15.12` [operator: corpus record — may share the 15.7 operator session];
 `(15.11, 15.12) → 15.13`; `(15.2, 15.7, 15.10) → 15.14`; `(15.8.1, 15.10, 15.13, 15.14) → 15.15`;
@@ -104,10 +105,15 @@ lands in 15.15 and is consumed read-only — the edge guarantees it exists);
 `(15.12, 15.15, 15.16, 15.17) → 15.18`. The critical path is
 `15.4 → 15.6 → 15.5 → 15.7 → 15.12 → 15.13 → 15.15 → 15.18`. Shared-file overlaps are all covered by
 dependency edges or disjoint-region annotations (`scripts/measure_baseline.py` core/watchability/funnel
-regions; `meetings/manager.py` validation/vote-surface/guard-band regions; `orchestrator/replay.py`
-registration/graduation/stamp regions; `orchestrator/game.py` prompt-registry vs rng-plumbing lines;
-`training/env.py` between 15.8/15.8.1; `training/surrogate/fidelity.py` between 15.11/15.13;
-`training/bakeoff/es.py` between 15.14/15.15; `pyproject.toml` dependencies vs mypy-exclude regions).
+regions; `meetings/manager.py` validation/vote-surface/guard-band regions; `meetings/schemas.py`
+vent-types vs docstring-pointer regions; `orchestrator/replay.py` registration/graduation/stamp
+regions; `orchestrator/game.py` split five ways — 15.4's registry line + protocol/accessor region,
+15.5's vote_ballot entry, 15.8.1's rng/no-replay plumbing, 15.9's stamp kwarg; `api/replay_loader.py`
+observation-view (15.4.1) vs policy-guard (15.9) regions; `eval/balance_eval.py` stamp-kwarg (15.9) vs
+meeting-runner-kwarg (15.13) regions; `training/env.py` between 15.8/15.8.1;
+`training/surrogate/fidelity.py` between 15.11/15.13; `training/bakeoff/es.py` between 15.14/15.15;
+`pyproject.toml` dependencies vs mypy-exclude regions; `.importlinter` firewall-contracts (15.6) vs
+training-root (15.8) regions).
 Operator-run / spend gates: **15.7** (baseline-3 record, $0, ~4h), **15.12** (corpus record, $0, ~7h),
 **15.15/15.16** (local CPU training, $0, hours-scale), **15.17** (opt-in torch), **15.18** (owner
 decisions + a real-LLM finalist evaluation). Everything else is agent-dispatchable and CI-green on the
@@ -362,24 +368,30 @@ normalization in `meetings/manager.py` mirroring the existing observation paths;
 contradiction rule with a GROUNDING chokepoint: a structured vent observation naming a subject is
 role-proving (only impostors can vent) — but speech alone must never mint hard evidence (a model that
 hallucinates a vent sighting against an innocent would otherwise fabricate a STRONG flag, re-opening
-the railroad class Phase 14 eliminated). The STRONG flag therefore fires only when the manager's
-deterministic reconstruction confirms the SPEAKER'S OWN memory contains a matching witnessed-vent
-event (subject + room, tick within a small tolerance — the same replay-deterministic fold
-`derive_belief_evidence` already runs); a grounded observation feeds the same strong-flag path a
-witnessed kill uses and is citable, since `primary_reason_id` already validates against transcript
-turn ids and the observation now lives in a turn. An UNGROUNDED vent claim is accepted as ordinary
-testimony (speech the voters may weigh) but raises NO flag; (d) the `qwen3_32b` set's turn/opening
+the railroad class Phase 14 eliminated). The grounding input is TYPED, because the meeting boundary
+today hands the manager only rendered-memory prose + a suspicion graph — nothing a validator could
+check a vent claim against without parsing prompt text: the `MeetingAwareAgent` protocol gains ONE
+self-channel accessor, `vent_witness_records_for_meeting() -> tuple[VentWitnessRecord, ...]` (the
+agent's OWN witnessed-vent episodic records — subject, room, tick — typed in `meetings/schemas.py`
+and implemented by `TacticalAgent` straight off episodic memory; firewall-clean, since an agent
+reporting its own witnessed events leaks nothing). The STRONG flag fires only when the speaker's
+spoken observation matches one of the speaker's own typed records (subject + room, tick within a
+small tolerance) — the chokepoint NEVER parses rendered prose; a grounded observation feeds the same
+strong-flag path a witnessed kill uses and is citable, since `primary_reason_id` already validates
+against transcript turn ids and the observation now lives in a turn. An UNGROUNDED vent claim is
+accepted as ordinary testimony (speech the voters may weigh) but raises NO flag; (d) the `qwen3_32b` set's turn/opening
 templates edited IN PLACE to explicitly elicit the vent observations the rendered memory already
 contains, with the version recorded by the single `PROMPT_VERSION_SETS` registry bump (`
 _bespoke_versions("qwen3_32b", version="v4")` → `"v5"`) owned HERE (the Phase-14 C7 lesson: one shared
 edit, owned by exactly one task; 15.5 layers onto v5 behind its dependency edge).
 
 **Files in scope:**
-- meetings/schemas.py (SawVentObservation + union registration; additive)
+- meetings/schemas.py (SawVentObservation + VentWitnessRecord + union registration; additive)
 - meetings/transcript.py (vent hard-flag contradiction rule + chain/opt-in relevance treating a vent observation as relevant)
-- meetings/manager.py (turn validation + observation normalization seams region)
+- meetings/manager.py (turn validation + observation normalization + grounding chokepoint seams region)
 - agents/strategic/prompts/qwen3_32b/ (v5 set: turn/opening templates elicit structured vent observations)
-- orchestrator/game.py (PROMPT_VERSION_SETS registry line only — the single v4 → v5 bump)
+- orchestrator/game.py (PROMPT_VERSION_SETS registry line — the v4 → v5 SET bump)
+- orchestrator/game.py (MeetingAwareAgent protocol + TacticalAgent vent-witness accessor region — the typed grounding input; disjoint from the registry line above and from 15.8.1/15.9's regions)
 - tests/meetings/test_schemas_vent.py (new)
 - tests/meetings/test_transcript_vent_flag.py (new)
 - tests/meetings/test_manager.py (validation-path extensions)
@@ -393,10 +405,11 @@ edit, owned by exactly one task; 15.5 layers onto v5 behind its dependency edge)
 
 **Definition of done:**
 - [ ] `SawVentObservation` round-trips through the turn schema; every committed v4 replay still parses (backward-compat pinned by a test loading a committed meeting entry).
-- [ ] A fixture meeting where a voter's rendered memory contains a witnessed vent produces an accepted structured vent observation through the validation path, the grounding chokepoint confirms it against the speaker's reconstructed memory, and the transcript layer raises the role-proving STRONG flag against the subject.
-- [ ] Grounding is load-bearing: a fixture where a speaker FABRICATES a structured vent observation (no matching witnessed-vent event in their own memory) is accepted as testimony but raises NO flag and leaves the subject's hard-evidence state unchanged — speech alone cannot mint hard evidence.
+- [ ] A fixture meeting where a voter's witnessed-vent episodic record exists produces an accepted structured vent observation through the validation path, the grounding chokepoint confirms it against the speaker's TYPED `vent_witness_records_for_meeting()` (never rendered prose), and the transcript layer raises the role-proving STRONG flag against the subject.
+- [ ] Grounding is load-bearing: a fixture where a speaker FABRICATES a structured vent observation (no matching record in their own typed vent-witness channel) is accepted as testimony but raises NO flag and leaves the subject's hard-evidence state unchanged — speech alone cannot mint hard evidence.
+- [ ] The `MeetingAwareAgent` protocol extension is implemented by `TacticalAgent` from episodic memory, is covered by the isinstance meeting-participant check, and is exercised by the leak suite (an agent reports only its OWN witnessed events).
 - [ ] The grounded flag feeds the belief fold exactly like the witnessed-kill strong flag (same cap semantics — no new stacking channel), and a ballot's `primary_reason_id` citing the vent turn validates.
-- [ ] The v5 templates elicit vent observations (prompt-fixture test: memory-with-vent renders → template output contains the elicitation instruction); `PROMPT_VERSION_SETS` maps the set to v5 in this task and nowhere else.
+- [ ] The v5 templates elicit vent observations (prompt-fixture test: memory-with-vent renders → template output contains the elicitation instruction); this task owns the v4 → v5 SET bump in `PROMPT_VERSION_SETS` — the only later registry edit is 15.5's single vote_ballot v6 entry.
 - [ ] The opt-in eligibility path treats a spoken vent observation as a relevance source (a non-speaker who was placed at the vent scene becomes eligible), consistent with the existing co-presence gate.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -408,6 +421,7 @@ edit, owned by exactly one task; 15.5 layers onto v5 behind its dependency edge)
 
 **Public types introduced:**
 - meetings.schemas.SawVentObservation
+- meetings.schemas.VentWitnessRecord
 
 **Implementation hint:**
 
@@ -425,9 +439,10 @@ instrument — this task's DoD is the mechanism, fixture-proven, not the model's
 
 **Integration risk:**
 
-Three coupling points. (a) Prompt-version provenance: the v4 → v5 bump is a single registry edit — a
-second task bumping it double-writes provenance (the 14.11 lesson); 15.5 therefore layers onto v5 behind
-its dependency edge and never touches the registry. (b) Schema compat: the observation union is
+Three coupling points. (a) Prompt-version provenance: the v4 → v5 SET bump is a single registry edit
+owned here (the 14.11 lesson: never double-write the same entry); 15.5's later vote_ballot v6 entry is
+a DIFFERENT, deliberate per-template bump behind its dependency edge — the two edits never touch the
+same registry value twice. (b) Schema compat: the observation union is
 additive; a strict validator change that rejects unknown types would break committed-replay loading —
 the backward-compat pin is the guard. (c) Flag semantics: the vent flag must ride the EXISTING strong-
 contradiction cap (`MEETING_CONTRADICTION_LIFT_CAP` + the joint cap), not add a new uncapped lift
@@ -438,6 +453,60 @@ the fabricated-observation fixture as the task's most important test, and make t
 comparison deterministic (reconstructed memory, not LLM judgment).
 
 **Ready-to-paste prompt:** `agent_prompts/task-15-4-vent-observability.md`
+
+### Task 15.4.1 — Spectator mirror for vent observations (API DTO + generated types + renderer)
+**Branch:** `phase-15-vent-spectator-mirror`
+**Depends on:** 15.4
+**Section refs:** tasks/post-phase-14-clean-up.md H4; api/replay_loader.py:1890-1915 (`_observation_claim_view` raises TypeError on an unsupported claim); api/schemas.py (ObservationClaimView); scripts/gen_frontend_types.py (DTO → frontend type generation)
+**Complexity:** Medium
+
+Mirror 15.4's schema extension through the privileged spectator path — without this, the first
+baseline-3 replay containing a structured vent turn CRASHES the replay API: `_observation_claim_view`
+is deliberately exhaustive and raises `TypeError` on any observation type it does not know
+(`api/replay_loader.py:1915` — the no-silent-fallbacks doctrine working as designed, which is exactly
+why the mirror must land before the re-record). Add the vent variant to `api/schemas.py`'s
+`ObservationClaimView` union, extend the loader's observation-claim view mapping, regenerate
+`frontend/src/types/api.ts` via `scripts/gen_frontend_types.py`, and extend the meeting-transcript
+observation renderer (the exhaustive ObservationLine switch) so a vent sighting displays in the
+spectator UI. Committed v4 replays contain no vent observations and must serve byte-identically.
+
+**Files in scope:**
+- api/schemas.py (ObservationClaimView vent variant — additive)
+- api/replay_loader.py (observation-claim view mapping region — disjoint from 15.9's policy-stamp guard region)
+- frontend/src/types/api.ts (regenerated via scripts/gen_frontend_types.py — mechanical output)
+- frontend/src/ (the meeting-transcript observation renderer — the exhaustive ObservationLine switch gains the vent variant)
+- tests/api/test_replay_loader_vent_view.py (new: fixture replay with a structured vent turn serves end-to-end)
+
+**Files NOT in scope:**
+- meetings/ (the source schema landed in 15.4)
+- scripts/gen_frontend_types.py (run, not edited)
+- replays/samples/ (v4 sets untouched; the first real vent turns arrive with 15.7)
+
+**Definition of done:**
+- [ ] A fixture replay containing a structured `SawVentObservation` turn loads and serves through the replay API without error (the pre-fix TypeError is pinned by a regression test against the old behavior's input).
+- [ ] `frontend/src/types/api.ts` is regenerated (not hand-edited) and committed; `npm run tsc:check` and the build pass with the renderer extension.
+- [ ] The observation renderer displays the vent sighting (subject, room, tick) in the meeting transcript view; the three existing observation variants render byte-identically.
+- [ ] Committed v4 sets still load, byte-verify, and serve unchanged.
+- [ ] `uv run mypy .` passes.
+- [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
+- [ ] `uv run lint-imports` passes.
+- [ ] `uv run python scripts/generate_prompts.py --check` passes.
+- [ ] `uv run python scripts/validate_task_docs.py` passes.
+- [ ] `uv run pytest` passes.
+- [ ] `bash scripts/check.sh` passes locally.
+
+**Public types introduced:**
+- api.schemas.SawVentObservationView
+
+**Implementation hint:**
+
+Follow the existing three variants end-to-end as the template: `meetings.schemas` type →
+`api.schemas.*View` → `_observation_claim_view` branch → generated TS type → renderer case. The
+generator (`scripts/gen_frontend_types.py`) owns the TS file; run it and commit the output. Keep the
+loader mapping exhaustive-with-raise (do not add a silent default branch — the TypeError doctrine
+stays; this task just teaches it the fourth variant).
+
+**Ready-to-paste prompt:** `agent_prompts/task-15-4-1-vent-spectator-mirror.md`
 
 ### Task 15.5 — Reporter exculpation: stop convicting the messenger (default-OFF lever)
 **Branch:** `phase-15-reporter-exculpation`
@@ -455,7 +524,12 @@ testimony-spread and accusation-carry channels), while leaving hard-flag-backed 
 reporter caught by a real contradiction or a vent/kill flag is still convictable; no immunity, only
 removal of the proximity prior; (b) RENDER-side — the vote surface names the reporter and states the
 base rate ("p-N reported the body; self-report is weakly exculpatory in this game"), layered onto the
-v5 vote template 15.4 versioned. The render plumbing is explicit and inert-when-OFF: the vote
+vote template — WITH its own per-template provenance bump: this task edits `vote_ballot.j2` after 15.4
+already stamped the set v5 while keeping that template byte-identical, so without a distinct version
+two different vote-prompt bodies would both stamp `vote_ballot.qwen3_32b.v5` and any recording made
+between the two merges would be unattributable; this task therefore bumps ONLY the `vote_ballot`
+registry entry to v6 (per-template versioning is exactly what the provenance mapping exists for). The
+render plumbing is explicit and inert-when-OFF: the vote
 renderer's contract (in `meetings/render_contract.py`, the leaf home 15.6 creates) and
 `agents/strategic/prompts/loader.py` gain a DEFAULTED reporter/lever render input (the Voice-doc 15.0
 widen-the-contract-inert pattern), and the template renders the annotation only when the lever supplies
@@ -470,7 +544,8 @@ every documented delta combination that is designed to cross the 0.60 gate actua
 - meetings/manager.py (vote-surface reporter annotation region — reporter identity into the render inputs)
 - meetings/render_contract.py (vote-renderer contract widening region — the DEFAULTED reporter/lever render input; 15.6 creates the module)
 - agents/strategic/prompts/loader.py (vote-renderer reporter kwarg region — defaulted/inert pass-through)
-- agents/strategic/prompts/qwen3_32b/ (v5 vote_ballot template reporter line — layered on 15.4's v5 set; no registry edit)
+- agents/strategic/prompts/qwen3_32b/ (vote_ballot template reporter line — layered on 15.4's v5 set)
+- orchestrator/game.py (PROMPT_VERSION_SETS vote_ballot entry only — the v5 → v6 per-template bump; disjoint from 15.4's set-bump line)
 - .env.example (the lever env)
 - tests/agents/test_beliefs.py (boundary-sum pins + damp-rule tests)
 - tests/orchestrator/test_replay.py (lever stamp)
@@ -480,7 +555,7 @@ every documented delta combination that is designed to cross the 0.60 gate actua
 - meetings/voting.py (tally untouched — this is a belief/render lever, not a tally change)
 - replays/samples/ (the re-record is 15.7; OFF must be byte-identical)
 - eval/ (the 22/106 instrument is 15.3's)
-- orchestrator/game.py (no registry edit — 15.4 owns the v5 bump)
+- orchestrator/game.py outside the single vote_ballot registry entry (15.4 owns the set bump; 15.8.1/15.9 own their plumbing regions)
 
 **Definition of done:**
 - [ ] Lever OFF = byte-identical: `bash scripts/verify_samples.sh` reconstructs both committed sets clean with the lever merged OFF.
@@ -488,6 +563,7 @@ every documented delta combination that is designed to cross the 0.60 gate actua
 - [ ] The offline counterfactual (the 14.8 `allow_substrate_mismatch` analysis-only machinery) reports, over the committed baseline-2 bytes: how many of the 22 innocent-reporter convictions' deciding lifts the damp keeps below the gate, and that ZERO hard-flag-backed convictions (vent/kill/contradiction-flagged subjects) change outcome — the over-damping canary.
 - [ ] The measured impostor self-report rate on the committed corpus is computed and cited in the rule's docstring (the empirical justification for treating self-report as weakly exculpatory).
 - [ ] The lever is registered and stamped (`substrate_flag_snapshot` + MANIFEST provenance path), and the vote-surface annotation renders ONLY lever-ON (OFF renders byte-identical prompts).
+- [ ] The `vote_ballot` registry entry is bumped to v6 in this task (the other three templates stay v5), so the pre-15.5 and post-15.5 vote-prompt bodies can never share a provenance stamp.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
@@ -560,7 +636,8 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - agents/strategic/reasoner.py (DELETE)
 - agents/strategic/output_schemas.py (DELETE)
 - tests/agents/test_strategic_reasoner.py (DELETE)
-- .importlinter (two firewall contracts region)
+- .importlinter (two firewall contracts + the root/config change they require — `meetings` and `llm` must become checkable via root_packages or include_external_packages, else lint-imports errors before evaluating the contracts; disjoint from 15.8's training-root region)
+- meetings/schemas.py (stale output_schemas docstring pointer region at :20 — behind the 15.4 edge; the doc currently directs contributors to re-export new strategic types in the module this task deletes)
 - AGENTS.md (provider + GitHub-tooling de-stale)
 - tests/meetings/test_manager_gate_band.py (new: the [0.595, 0.60) fixtures)
 - tests/eval/test_suspicion_parse_pin.py (new: the eval-constant pin)
@@ -590,7 +667,12 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - [ ] `uv run lint-imports` reports every configured contract KEPT, including the two added here
   (`observation ↛ agents/meetings/llm`, `agents ↛ meetings.manager`) — three contracts alongside the
   pre-existing `agents ↛ engine` if 15.8's training contract has not landed yet, four once it has (no
-  ordering assumption between 15.6 and 15.8).
+  ordering assumption between 15.6 and 15.8). The config change this requires is part of the task:
+  today's root_packages (`agents, engine, observation`) cannot express a forbidden `meetings.manager` /
+  `llm` target — lint-imports errors on external forbidden modules — so `meetings` and `llm` join
+  root_packages (or `include_external_packages` is set), verified by the KEPT run.
+- [ ] `meetings/schemas.py`'s module docstring no longer directs contributors to re-export strategic
+  output types in the deleted `agents/strategic/output_schemas.py`.
 - [ ] AGENTS.md names Featherless/`Qwen/Qwen3-32B` as the canonical eval provider and describes GitHub
   tooling capability-neutrally (try `gh`, fall back to the environment's GitHub integration; no absolute
   claims about either).
@@ -617,8 +699,9 @@ mechanical; `meetings/manager.py` may import them back and re-export for interna
 dependency direction `agents → leaf` is what makes the `agents ↛ meetings.manager` contract
 satisfiable). For the band fix, prefer quantize-then-compare (round the raw float to the rendered 2dp
 grid before the gate comparison) over widening the gate — it makes guard and model read the same number
-by construction. The deletion is mechanical but verify the island's edges first: `grep -rn
-"StrategicReasoner\|output_schemas"` across the tree, including docs and task-doc Public-types claims
+by construction. The deletion is mechanical but verify the island's edges first: `rg -n
+"StrategicReasoner|output_schemas"` across the tree (ripgrep, per the repo tooling doctrine — not
+recursive grep), including docs and task-doc Public-types claims
 from old phases (historical claims in closed phase docs stay — only live code references must go to
 zero).
 
@@ -636,7 +719,7 @@ assume it.
 
 ### Task 15.7 — Baseline 3: atomic re-record + the Wave-0 close finding (operator-run, $0)
 **Branch:** `phase-15-baseline-3`
-**Depends on:** 15.1, 15.2, 15.3, 15.4, 15.5, 15.6
+**Depends on:** 15.1, 15.2, 15.3, 15.4, 15.4.1, 15.5, 15.6
 **Section refs:** tasks/post-phase-14-clean-up.md H7 + §3 (the target sheet); tasks/phase-14.md 14.12 (the atomic re-record + close pattern); audits/audit-phase-14-close.md §1 (the gate this record must pass); scripts/refresh_samples.sh (the recording harness)
 **Complexity:** Integration
 
@@ -836,16 +919,24 @@ bare-engine cost) and the drawn value is discarded — but that serialization is
 committed `state_hash`, so it is load-bearing for replay byte-identity and must NEVER be changed in
 place. This task adds an explicit, opt-in hash policy (a typed policy object threaded `HeadlessGame →
 engine`, no env-var magic) that skips the per-tick rng-state serialization for non-recorded training
-rollouts only. The default is byte-identical to today; anything that records or verifies a replay
-refuses the fast path loudly. The RNG draws themselves are untouched — trajectories are identical under
-both modes, so training results transfer to the recording path exactly.
+rollouts only. Two enabling facts make the scope wider than `engine/rng.py` alone: (a) the per-tick
+snapshot is INVOKED from `engine.tick.advance_tick` (the `EngineRng.from_state(...).randint(...)` draw
+that writes `next_rng_state`), so the policy threads through `engine/tick.py` — in scope, with the
+default path pinned byte-identical there; and (b) `HeadlessGame` today REQUIRES a `replay_path` and
+constructs a `ReplayLog` unconditionally, which would make "non-recorded rollouts" unreachable — so
+this task also adds an explicit NO-REPLAY training mode (`replay_path=None` → no `ReplayLog`, nothing
+written), which is the only construction that accepts the fast-path policy; any replay-writing
+construction refuses it loudly. The RNG draws themselves are untouched — trajectories are identical
+under both modes, so training results transfer to the recording path exactly.
 
 **Files in scope:**
 - engine/rng.py (the opt-in fast-path region; default behavior byte-identical)
-- orchestrator/game.py (rng-hash policy plumbing region only)
-- training/env.py (fast-path knob region — 15.8 owns the rest of the module)
+- engine/tick.py (the per-tick rng-snapshot invocation region — policy-aware, default byte-identical)
+- orchestrator/game.py (rng-hash policy plumbing + optional no-replay training-mode region — disjoint from 15.4's registry/protocol regions, 15.5's vote entry, and 15.9's stamp region)
+- training/env.py (fast-path + no-replay knob region — 15.8 owns the rest of the module)
 - tests/engine/test_rng_fast_path.py (new)
 - tests/training/test_env_fast_path.py (new)
+- tests/orchestrator/test_no_replay_mode.py (new)
 
 **Files NOT in scope:**
 - orchestrator/replay.py + api/replay_loader.py (recording/verification never accepts the fast path — refusal at construction, not silent downgrade)
@@ -855,7 +946,7 @@ both modes, so training results transfer to the recording path exactly.
 **Definition of done:**
 - [ ] Default path byte-identical: `bash scripts/verify_samples.sh` reconstructs all 100 committed samples clean with the change merged.
 - [ ] Fast path measurably faster: the engine-core speedup ratio is measured and documented (target ≥1.3×; report the actual).
-- [ ] Constructing a recording/replay-writing game with the fast path active raises a descriptive error (tested); the training env exposes the knob and defaults it OFF.
+- [ ] The no-replay training mode is real: `replay_path=None` constructs a game that writes NOTHING to disk (asserted), runs to completion, and is the ONLY construction that accepts the fast-path policy; every replay-writing construction with the fast path active raises a descriptive error (tested); the training env exposes both knobs and defaults them OFF.
 - [ ] Trajectory equivalence proven: for a frozen policy on a fixed seed set, the full action/event streams are IDENTICAL under both modes (only hashing cost differs), asserted by test.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -891,7 +982,12 @@ method, encoder_version, weights_sha256, anchor_policy}` (plain strings; no impo
 — exactly beside the existing `substrate_flags` stamp; `scripts/_manifest_writer.py` adds a policy
 column so every recorded set's MANIFEST attributes each seed; `api/replay_loader.py` gains a mismatch
 guard mirroring `ReplaySubstrateMismatchError` that refuses to serve a stamped replay under a
-conflicting policy claim. An ABSENT stamp means "scripted FSM default" and stays fully valid — the
+conflicting policy claim. The stamp also needs a PRODUCTION injection seam, not just a writer-level
+API: `HeadlessGame` constructs its `ReplayLog` internally and every recorder (run_tournament, the
+corpus wrapper, Wave-2 champion recordings) reaches replay-writing only through that constructor — so
+`HeadlessGame` gains an optional `tactical_policy_stamp` keyword (default `None` = absent = FSM)
+passed through to the writer, and `run_tournament_eval` gains the matching optional pass-through, so a
+learned-policy recording can actually be stamped without a later out-of-scope edit. An ABSENT stamp means "scripted FSM default" and stays fully valid — the
 committed canonical sets are untouched and must keep loading, byte-verifying, and serving with zero
 edits (this holds across the 15.7 re-record: baseline 3 is recorded with the FSM default and may carry
 the explicit stamp if this task lands first, or none — both are valid). Replay reconstruction re-feeds
@@ -900,7 +996,9 @@ what keeps learned-policy replays byte-identical regardless of inference-float q
 
 **Files in scope:**
 - orchestrator/replay.py (tactical-policy stamp region, alongside the substrate-flags stamp — disjoint from 15.5's registration region and 15.7's graduation region)
-- api/replay_loader.py (policy-stamp read + mismatch guard region)
+- orchestrator/game.py (HeadlessGame tactical_policy_stamp pass-through kwarg region — disjoint from 15.4's registry/protocol regions, 15.5's vote entry, and 15.8.1's rng/no-replay region)
+- eval/balance_eval.py (run_tournament_eval policy-stamp pass-through kwarg region — additive-optional; disjoint from 15.13's meeting-runner kwarg region, edge exists transitively via 15.12)
+- api/replay_loader.py (policy-stamp read + mismatch guard region — disjoint from 15.4.1's observation-view region)
 - scripts/_manifest_writer.py (policy column)
 - tests/orchestrator/test_replay_policy_stamp.py (new)
 - tests/api/test_replay_loader_policy_stamp.py (new)
@@ -908,12 +1006,13 @@ what keeps learned-policy replays byte-identical regardless of inference-float q
 
 **Files NOT in scope:**
 - replays/samples/ (committed bytes untouched; absent stamp = FSM default)
-- orchestrator/game.py + agents/ + training/ (no coupling: the stamp is strings, set by the recorder)
+- agents/ + training/ (no coupling: the stamp is strings, set by the recorder)
 - scripts/refresh_samples.sh (the canonical-sample refresh flow is frozen; the corpus recorder 15.12 consumes the stamp)
 
 **Definition of done:**
 - [ ] The committed canonical sets load, byte-verify (`bash scripts/verify_samples.sh` clean), and serve with zero edits — absent stamp renders as the FSM default everywhere.
 - [ ] A stamped recording round-trips writer → loader with all five fields intact; the stamp appears in the game_over entry beside `substrate_flags`.
+- [ ] The production seam works end-to-end: a game recorded through `HeadlessGame(tactical_policy_stamp=…)` and one through `run_tournament_eval(..., tactical_policy_stamp=…)` both land stamped on disk (not just a writer-level unit round-trip); omitting the kwarg records absent-stamp = FSM default, byte-identical to today's path.
 - [ ] A deliberately mismatched stamp raises the new loader guard (fail-loud, mirroring the substrate guard's shape and error quality).
 - [ ] The MANIFEST writer emits the policy column; existing manifest tests pin the FSM-default rendering for unstamped rows.
 - [ ] The stamp schema is documented (module docstring) for 15.12 (corpus rows stamp the FSM default explicitly) and Wave 2 (champion weights hash).

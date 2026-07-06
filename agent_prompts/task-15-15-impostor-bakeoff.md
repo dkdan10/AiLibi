@@ -116,6 +116,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import meetings.render_contract"`
 - `uv run python -c "import meetings.schemas"`
 - `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import api.schemas"`
 - `uv run python -c "import eval.funnel"`
 - `uv run python -c "import eval.validity"`
 - `uv run python -c "import eval.watchability"`

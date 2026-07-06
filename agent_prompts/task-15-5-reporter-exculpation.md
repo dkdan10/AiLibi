@@ -26,7 +26,12 @@ testimony-spread and accusation-carry channels), while leaving hard-flag-backed 
 reporter caught by a real contradiction or a vent/kill flag is still convictable; no immunity, only
 removal of the proximity prior; (b) RENDER-side — the vote surface names the reporter and states the
 base rate ("p-N reported the body; self-report is weakly exculpatory in this game"), layered onto the
-v5 vote template 15.4 versioned. The render plumbing is explicit and inert-when-OFF: the vote
+vote template — WITH its own per-template provenance bump: this task edits `vote_ballot.j2` after 15.4
+already stamped the set v5 while keeping that template byte-identical, so without a distinct version
+two different vote-prompt bodies would both stamp `vote_ballot.qwen3_32b.v5` and any recording made
+between the two merges would be unattributable; this task therefore bumps ONLY the `vote_ballot`
+registry entry to v6 (per-template versioning is exactly what the provenance mapping exists for). The
+render plumbing is explicit and inert-when-OFF: the vote
 renderer's contract (in `meetings/render_contract.py`, the leaf home 15.6 creates) and
 `agents/strategic/prompts/loader.py` gain a DEFAULTED reporter/lever render input (the Voice-doc 15.0
 widen-the-contract-inert pattern), and the template renders the annotation only when the lever supplies
@@ -41,7 +46,8 @@ every documented delta combination that is designed to cross the 0.60 gate actua
 - meetings/manager.py (vote-surface reporter annotation region — reporter identity into the render inputs)
 - meetings/render_contract.py (vote-renderer contract widening region — the DEFAULTED reporter/lever render input; 15.6 creates the module)
 - agents/strategic/prompts/loader.py (vote-renderer reporter kwarg region — defaulted/inert pass-through)
-- agents/strategic/prompts/qwen3_32b/ (v5 vote_ballot template reporter line — layered on 15.4's v5 set; no registry edit)
+- agents/strategic/prompts/qwen3_32b/ (vote_ballot template reporter line — layered on 15.4's v5 set)
+- orchestrator/game.py (PROMPT_VERSION_SETS vote_ballot entry only — the v5 → v6 per-template bump; disjoint from 15.4's set-bump line)
 - .env.example (the lever env)
 - tests/agents/test_beliefs.py (boundary-sum pins + damp-rule tests)
 - tests/orchestrator/test_replay.py (lever stamp)
@@ -51,7 +57,7 @@ every documented delta combination that is designed to cross the 0.60 gate actua
 - meetings/voting.py (tally untouched — this is a belief/render lever, not a tally change)
 - replays/samples/ (the re-record is 15.7; OFF must be byte-identical)
 - eval/ (the 22/106 instrument is 15.3's)
-- orchestrator/game.py (no registry edit — 15.4 owns the v5 bump)
+- orchestrator/game.py outside the single vote_ballot registry entry (15.4 owns the set bump; 15.8.1/15.9 own their plumbing regions)
 
 **Definition of done:**
 - [ ] Lever OFF = byte-identical: `bash scripts/verify_samples.sh` reconstructs both committed sets clean with the lever merged OFF.
@@ -59,6 +65,7 @@ every documented delta combination that is designed to cross the 0.60 gate actua
 - [ ] The offline counterfactual (the 14.8 `allow_substrate_mismatch` analysis-only machinery) reports, over the committed baseline-2 bytes: how many of the 22 innocent-reporter convictions' deciding lifts the damp keeps below the gate, and that ZERO hard-flag-backed convictions (vent/kill/contradiction-flagged subjects) change outcome — the over-damping canary.
 - [ ] The measured impostor self-report rate on the committed corpus is computed and cited in the rule's docstring (the empirical justification for treating self-report as weakly exculpatory).
 - [ ] The lever is registered and stamped (`substrate_flag_snapshot` + MANIFEST provenance path), and the vote-surface annotation renders ONLY lever-ON (OFF renders byte-identical prompts).
+- [ ] The `vote_ballot` registry entry is bumped to v6 in this task (the other three templates stay v5), so the pre-15.5 and post-15.5 vote-prompt bodies can never share a provenance stamp.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.

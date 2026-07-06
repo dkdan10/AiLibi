@@ -52,7 +52,8 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - agents/strategic/reasoner.py (DELETE)
 - agents/strategic/output_schemas.py (DELETE)
 - tests/agents/test_strategic_reasoner.py (DELETE)
-- .importlinter (two firewall contracts region)
+- .importlinter (two firewall contracts + the root/config change they require — `meetings` and `llm` must become checkable via root_packages or include_external_packages, else lint-imports errors before evaluating the contracts; disjoint from 15.8's training-root region)
+- meetings/schemas.py (stale output_schemas docstring pointer region at :20 — behind the 15.4 edge; the doc currently directs contributors to re-export new strategic types in the module this task deletes)
 - AGENTS.md (provider + GitHub-tooling de-stale)
 - tests/meetings/test_manager_gate_band.py (new: the [0.595, 0.60) fixtures)
 - tests/eval/test_suspicion_parse_pin.py (new: the eval-constant pin)
@@ -82,7 +83,12 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - [ ] `uv run lint-imports` reports every configured contract KEPT, including the two added here
   (`observation ↛ agents/meetings/llm`, `agents ↛ meetings.manager`) — three contracts alongside the
   pre-existing `agents ↛ engine` if 15.8's training contract has not landed yet, four once it has (no
-  ordering assumption between 15.6 and 15.8).
+  ordering assumption between 15.6 and 15.8). The config change this requires is part of the task:
+  today's root_packages (`agents, engine, observation`) cannot express a forbidden `meetings.manager` /
+  `llm` target — lint-imports errors on external forbidden modules — so `meetings` and `llm` join
+  root_packages (or `include_external_packages` is set), verified by the KEPT run.
+- [ ] `meetings/schemas.py`'s module docstring no longer directs contributors to re-export strategic
+  output types in the deleted `agents/strategic/output_schemas.py`.
 - [ ] AGENTS.md names Featherless/`Qwen/Qwen3-32B` as the canonical eval provider and describes GitHub
   tooling capability-neutrally (try `gh`, fall back to the environment's GitHub integration; no absolute
   claims about either).
@@ -102,8 +108,9 @@ mechanical; `meetings/manager.py` may import them back and re-export for interna
 dependency direction `agents → leaf` is what makes the `agents ↛ meetings.manager` contract
 satisfiable). For the band fix, prefer quantize-then-compare (round the raw float to the rendered 2dp
 grid before the gate comparison) over widening the gate — it makes guard and model read the same number
-by construction. The deletion is mechanical but verify the island's edges first: `grep -rn
-"StrategicReasoner\|output_schemas"` across the tree, including docs and task-doc Public-types claims
+by construction. The deletion is mechanical but verify the island's edges first: `rg -n
+"StrategicReasoner|output_schemas"` across the tree (ripgrep, per the repo tooling doctrine — not
+recursive grep), including docs and task-doc Public-types claims
 from old phases (historical claims in closed phase docs stay — only live code references must go to
 zero).
 
