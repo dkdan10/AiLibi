@@ -336,6 +336,82 @@ def test_missing_meeting_row_is_an_integrity_breach(tmp_path: Path) -> None:
     assert all(game.score == 0.0 for game in report.per_game)
 
 
+def _write_one_game_set(tmp_path: Path, lines: list[str]) -> None:
+    """Write a single-game 4p1i-rostered replay set (the given lines) into tmp."""
+
+    import shutil
+
+    (tmp_path / "replay-seed-0.jsonl").write_text("\n".join(lines) + "\n")
+    shutil.copy(_FOUR / "roster.json", tmp_path / "roster.json")
+
+
+def test_corrupted_meeting_pre_hash_is_an_integrity_breach(tmp_path: Path) -> None:
+    """A tampered ``state_hash_before`` (that verify-samples rejects) floors the set.
+
+    The trigger-tick hash and ``state_hash_after`` still reconstruct, so only the
+    pre-hash cross-check catches the corrupted meeting metadata.
+    """
+
+    import json
+
+    from eval.watchability import _reconstruct_kills
+
+    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    corrupted: list[str] = []
+    changed = False
+    for line in lines:
+        row = json.loads(line)
+        if "state_hash_before" in row:
+            row["state_hash_before"] = "0" * 64  # a valid-shaped but wrong hash
+            changed = True
+            corrupted.append(json.dumps(row))
+        else:
+            corrupted.append(line)
+    assert changed  # this game has a meeting row carrying a pre-hash
+    _write_one_game_set(tmp_path, corrupted)
+
+    assert _reconstruct_kills(tmp_path).integrity_ok is False
+    report = compute_watchability(tmp_path)
+    assert report.integrity_ok is False
+    assert report.referee_passed is False
+
+
+def test_forged_game_over_reason_is_an_integrity_breach(tmp_path: Path) -> None:
+    """A forged ``game_over`` reason (not hash-covered) is caught before it inflates D1.
+
+    Every tick + meeting hash still reconstructs, but the recorded reason no longer
+    matches the reconstructed terminal GameOverEvent, so the set is floored rather
+    than scored on the tampered (D1-inflating) label.
+    """
+
+    import json
+
+    from eval.watchability import _reconstruct_kills
+
+    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    forged: list[str] = []
+    changed = False
+    for line in lines:
+        row = json.loads(line)
+        if row.get("kind") == "game_over":
+            assert row["reason"] != "CREWMATE_EJECT"  # seed 0 is an impostor win
+            row["reason"] = (
+                "CREWMATE_EJECT"  # forge a play-decided label (D1 0.6 -> 1.0)
+            )
+            changed = True
+            forged.append(json.dumps(row))
+        else:
+            forged.append(line)
+    assert changed
+    _write_one_game_set(tmp_path, forged)
+
+    assert _reconstruct_kills(tmp_path).integrity_ok is False
+    report = compute_watchability(tmp_path)
+    assert report.integrity_ok is False
+    assert report.referee_passed is False
+    assert all(game.score == 0.0 for game in report.per_game)
+
+
 def test_baseline_2_witnessed_event_rate_is_the_measured_anchor() -> None:
     """The 9p2i witnessed-event rate is the §6 6/160 = 3.75% crew-witnessed anchor."""
 

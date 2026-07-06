@@ -164,7 +164,7 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from engine.actions import Action
 from engine.entities import PlayerId, Role
-from engine.events import KilledEvent, MeetingTriggeredEvent
+from engine.events import GameOverEvent, KilledEvent, MeetingTriggeredEvent
 from engine.tick import advance_tick
 from engine.world import Map, load_canonical_map
 from eval._suspicion_parse import SKIP_SUSPICION_THRESHOLD
@@ -191,8 +191,10 @@ from meetings.schemas import (
 from meetings.transcript import detect_contradictions, is_weak_contradiction
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
+    GameEndReplayEntry,
     MeetingReplayEntry,
     ReplayEntry,
+    WinnerSide,
     _state_hash,
     read_all_entries,
 )
@@ -491,11 +493,22 @@ def _reconstruct_kills(sample_dir: Path) -> _SetReconstruction:
 class _IntegrityBreach(Exception):
     """A game did not reconstruct cleanly (integrity breach — the set scores 0).
 
-    Raised on a state-hash mismatch (determinism/firewall breach) OR a game that
-    reached a meeting with no recorded meeting row (a truncated / crashed-
-    mid-meeting replay): either means the recorded bytes are not a trustworthy,
-    complete deduction game, so the referee floors the whole set rather than
-    scoring on partial data or silently certifying a corrupt candidate.
+    Raised on ANY corruption that the referee must not certify:
+
+    * a per-tick or ``state_hash_after`` mismatch (determinism/firewall breach);
+    * a meeting ``state_hash_before`` that does not equal the trigger tick's hash
+      (corrupted meeting metadata the byte-identity walk rejects — mirrors
+      ``scripts/_verify_samples.py::_check_meeting_pre_hashes``);
+    * a recorded ``game_over`` winner/reason that does not match the reconstructed
+      terminal :class:`~engine.events.GameOverEvent` (a FORGED outcome label — the
+      state-hash chain does not cover it, so D1/mean_score could otherwise be
+      inflated on a tampered set; mirrors ``eval.validity`` check 1);
+    * a game that reached a meeting with no recorded meeting row (a truncated /
+      crashed-mid-meeting replay).
+
+    Any of these means the recorded bytes are not a trustworthy, complete
+    deduction game, so the referee floors the whole set rather than scoring on
+    partial / tampered data or silently certifying a corrupt candidate.
     """
 
 
@@ -516,6 +529,9 @@ def _reconstruct_game_kills(
     meeting_by_tick: Mapping[int, MeetingReplayEntry] = {
         entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
     }
+    game_end = next(
+        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
+    )
 
     state = seed_initial_state(
         seed=seed,
@@ -526,13 +542,18 @@ def _reconstruct_game_kills(
     )
 
     kills: list[_KillWitnessFact] = []
+    reconstructed_winner: WinnerSide | None = None
+    reconstructed_reason: str | None = None
     for entry in tick_entries:
         actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
         state, events = advance_tick(state, actions, game_map=game_map)
         if _state_hash(state) != entry.state_hash:
             raise _IntegrityBreach
         for event in events:
-            if isinstance(event, KilledEvent):
+            if isinstance(event, GameOverEvent):
+                reconstructed_winner = event.winner
+                reconstructed_reason = event.reason
+            elif isinstance(event, KilledEvent):
                 kills.append(
                     _KillWitnessFact(
                         seed=seed,
@@ -556,6 +577,12 @@ def _reconstruct_game_kills(
             # the remaining hashes unchecked (which would certify a truncated
             # candidate as clean).
             raise _IntegrityBreach
+        # The recorded pre-meeting hash must equal the state the meeting ran on
+        # (this trigger tick's verified state) — a corrupted state_hash_before is
+        # a byte-identity failure the verify-samples walk rejects, so it must not
+        # silently certify here either.
+        if meeting_entry.state_hash_before != entry.state_hash:
+            raise _IntegrityBreach
         body_id = next(
             (e.body_id for e in events if isinstance(e, MeetingTriggeredEvent)), None
         )
@@ -569,13 +596,33 @@ def _reconstruct_game_kills(
             contradictions=meeting_entry.contradictions,
             transcript=meeting_entry.transcript,
         )
-        state, _ = apply_meeting_result(
+        state, meeting_events = apply_meeting_result(
             state, result, game_map=game_map, triggering_body_id=body_id
         )
+        for event in meeting_events:
+            if isinstance(event, GameOverEvent):
+                reconstructed_winner = event.winner
+                reconstructed_reason = event.reason
         if _state_hash(state) != meeting_entry.state_hash_after:
             raise _IntegrityBreach
         if state.phase == "GAME_OVER":
             break
+
+    # The recorded game_over winner/reason are NOT covered by the state-hash chain
+    # (eval.validity check 1), so a forged outcome label reconstructs byte-clean
+    # yet inflates D1/mean_score. Compare against the reconstructed terminal
+    # GameOverEvent and floor a mismatch (only when reconstruction reached game
+    # over — a genuinely partial reconstruction has no reconstructed label to
+    # check against, and is already floored by its unresolved meeting / hash).
+    if (
+        reconstructed_reason is not None
+        and game_end is not None
+        and (
+            game_end.winner != reconstructed_winner
+            or game_end.reason != reconstructed_reason
+        )
+    ):
+        raise _IntegrityBreach
     return kills
 
 
