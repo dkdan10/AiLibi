@@ -436,17 +436,35 @@ def _assert_policy_matches(
     The honoring half of the Task-15.9 stamp. When the loader is constructed with
     an ``expected_tactical_policy`` (a caller asserting which policy's output it
     intends to serve), a recording whose stamp conflicts with that claim is
-    refused via :class:`ReplayPolicyMismatchError`. An UNSTAMPED replay reads as
-    the scripted FSM default (:func:`orchestrator.replay.fsm_default_tactical_policy_stamp`),
-    so it matches an ``fsm-default`` claim and conflicts with a learned-policy
-    claim. When ``expected_tactical_policy`` is ``None`` (the default), the guard
-    is inert — the committed canonical sets, and every ordinary serve, are
-    unaffected. Unlike the substrate guard there is no ambient policy and no
-    reconstruction difference: this is a provenance assertion, so it neither
-    reads env nor participates in the reconstruction cache key.
+    refused via :class:`ReplayPolicyMismatchError`. A COMPLETED but UNSTAMPED
+    replay reads as the scripted FSM default
+    (:func:`orchestrator.replay.fsm_default_tactical_policy_stamp`), so it matches
+    an ``fsm-default`` claim and conflicts with a learned-policy claim. When
+    ``expected_tactical_policy`` is ``None`` (the default), the guard is inert —
+    the committed canonical sets, and every ordinary serve, are unaffected.
+    Unlike the substrate guard there is no ambient policy and no reconstruction
+    difference: this is a provenance assertion, so it neither reads env nor
+    participates in the reconstruction cache key.
+
+    A PARTIAL replay — one with no ``game_over`` row — is a crashed / aborted
+    recording whose provenance footer (the stamp lives on the ``game_over`` entry
+    beside ``substrate_flags``) was never written, so its policy is UNKNOWN, not
+    the FSM default: the claim is NOT enforced against it, mirroring
+    :func:`_assert_substrate_matches`, which likewise skips an unstamped replay.
+    Only a COMPLETED replay (``game_over`` present) with no stamp is definitively
+    the FSM default (absent = FSM default), so only then is the claim enforced.
     """
 
     if expected_tactical_policy is None:
+        return
+    # A replay with no game_over footer never wrote its provenance stamp — the
+    # policy is UNKNOWN, not the FSM default — so skip the claim (see docstring):
+    # the tournament harness intentionally keeps such partials (a seed that
+    # aborted on an LLM parse failure has a FailedCallReplayEntry but no
+    # game_over), and enforcing "absent = FSM default" on them would wrongly
+    # reject a learned-policy partial. Mirrors _assert_substrate_matches, which
+    # likewise skips an unstamped replay.
+    if not any(isinstance(entry, GameEndReplayEntry) for entry in entries):
         return
     recorded = _recorded_tactical_policy(entries)
     effective = (
@@ -2758,6 +2776,7 @@ def get_replay_loader(
 __all__ = [
     "DEFAULT_SET",
     "ReplayLoader",
+    "ReplayPolicyMismatchError",
     "ReplayStateMismatchError",
     "ReplaySubstrateMismatchError",
     "RosterConfig",

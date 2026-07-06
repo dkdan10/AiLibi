@@ -48,12 +48,16 @@ def _write_stamped_replay(
     seed: int = 0,
     ticks: int = 3,
     stamp: TacticalPolicyStamp | None = None,
+    game_over: bool = True,
 ) -> None:
     """Write a no-op 4p/1i game (like ``write_sample_replay``) with an optional stamp.
 
     The game is descriptor-less at the loader default (num_impostors=1,
     tasks_per_crewmate=1), so ``ReplayLoader`` reconstructs it without a
     ``roster.json`` and the per-tick ``state_hash`` chain verifies clean.
+    ``game_over=False`` omits the game_over footer (a partial / crashed replay),
+    so no provenance stamp is ever written — the policy is UNKNOWN, not the FSM
+    default.
     """
 
     game_map = load_canonical_map()
@@ -67,7 +71,10 @@ def _write_stamped_replay(
         input_tick = state.tick
         state, _events = advance_tick(state, [], game_map=game_map)
         log.record_tick(input_tick, [], state)
-    log.record_game_end(winner="CREWMATES", reason="all_tasks_complete", tick=ticks - 1)
+    if game_over:
+        log.record_game_end(
+            winner="CREWMATES", reason="all_tasks_complete", tick=ticks - 1
+        )
     log.close()
 
 
@@ -139,3 +146,22 @@ class TestPolicyClaimEnforced:
             expected_tactical_policy=fsm_default_tactical_policy_stamp(),
         )
         assert loader.load_replay("headless-seed-0").ticks
+
+    def test_partial_replay_is_not_enforced_under_a_learned_claim(
+        self, tmp_path: Path
+    ) -> None:
+        # A partial replay (no game_over footer) never wrote its provenance stamp
+        # — the policy is UNKNOWN, not the FSM default — so a learned-policy claim
+        # does NOT reject it. This is the tournament harness's aborted-seed case:
+        # a learned-policy run that crashes mid-meeting keeps a partial replay,
+        # and the guard must not falsely reject it (mirrors the substrate guard
+        # skipping an unstamped replay).
+        _write_stamped_replay(
+            tmp_path / "replay-seed-0.jsonl", game_over=False, stamp=None
+        )
+        loader = ReplayLoader(replay_dir=tmp_path, expected_tactical_policy=_CHAMPION)
+        # Serves without raising (a partial replay has no winner but an intact
+        # timeline).
+        assert loader.load_replay("headless-seed-0").metadata.game_id == (
+            "headless-seed-0"
+        )

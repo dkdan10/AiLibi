@@ -98,6 +98,38 @@ class TestTacticalPolicyStampSchema:
         with pytest.raises(ValidationError):
             TacticalPolicyStamp.model_validate(fields)
 
+    @pytest.mark.parametrize(
+        "bad_value",
+        ["champ|x", "champ\nx", "champ\rx"],
+    )
+    def test_table_breaking_chars_are_rejected(self, bad_value: str) -> None:
+        # A pipe or newline in a stamp field would corrupt the JSONL replay line
+        # or the Markdown MANIFEST policy cell (silently dropping the row on the
+        # next manifest merge). It must fail loud at the stamp boundary instead.
+        with pytest.raises(ValidationError):
+            TacticalPolicyStamp.model_validate(
+                {
+                    "policy_id": bad_value,
+                    "method": "m",
+                    "encoder_version": "e",
+                    "weights_sha256": "h",
+                    "anchor_policy": "a",
+                }
+            )
+
+    def test_table_breaking_chars_rejected_in_any_field(self) -> None:
+        # The guard covers every field, not just policy_id.
+        with pytest.raises(ValidationError):
+            TacticalPolicyStamp.model_validate(
+                {
+                    "policy_id": "p",
+                    "method": "m",
+                    "encoder_version": "e",
+                    "weights_sha256": "abc|def",
+                    "anchor_policy": "a",
+                }
+            )
+
     def test_fsm_default_factory_shape(self) -> None:
         stamp = fsm_default_tactical_policy_stamp()
         assert stamp.policy_id == FSM_DEFAULT_POLICY_ID == "fsm-default"

@@ -68,7 +68,7 @@ import json
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.actions import Action
 from engine.world import WorldState
@@ -206,6 +206,38 @@ class TacticalPolicyStamp(BaseModel):
     encoder_version: str
     weights_sha256: str
     anchor_policy: str
+
+    @field_validator("*")
+    @classmethod
+    def _reject_table_breaking_chars(cls, value: str) -> str:
+        """Fail loud on characters that would corrupt a line/table artifact.
+
+        A stamp is a single-line provenance token rendered into line-based
+        artifacts — the JSONL replay row and the Markdown MANIFEST ``policy``
+        cell (``scripts/_manifest_writer.py``). A ``"|"`` in ``policy_id`` would
+        emit an unescaped extra table column, and a newline would split the row —
+        either of which makes ``parse_manifest`` see the wrong cell count and
+        SILENTLY DROP the row on the next manifest merge, losing that seed's
+        provenance (AGENTS.md "no silent fallbacks"). Rejecting these at the
+        stamp boundary (model construction / ``--tactical-policy-stamp`` JSON
+        parse / replay read-back) fails loud BEFORE any bad bytes are written or
+        a manifest row is silently lost. Every legitimate value — the
+        ``fsm-default`` label, a champion id, a hex weights hash, a method /
+        encoder / anchor label — is single-line and pipe-free, so nothing valid
+        is rejected.
+        """
+
+        for forbidden, name in (
+            ("|", "pipe"),
+            ("\n", "newline"),
+            ("\r", "carriage return"),
+        ):
+            if forbidden in value:
+                raise ValueError(
+                    "tactical-policy stamp fields must be single-line and "
+                    f"MANIFEST-table-safe; a {name} is forbidden (got {value!r})"
+                )
+        return value
 
 
 # The ``policy_id`` of the canonical scripted-FSM stamp (Task 15.9). It doubles
