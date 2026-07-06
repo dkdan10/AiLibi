@@ -66,7 +66,7 @@ MVP (phases 0–5) is complete. Everything since has pushed agent-reasoning qual
 | 13.5 | Memory-substrate correctness (truth-up → substrate) |
 | 14 | Featherless AI integration: hosted-provider + model/prompt migration |
 
-Phase 15 (agent voice & judgment / ML training signal) is in planning.
+The post-Phase-14 roadmap is laid out in [tasks/post-phase-14-plan.md](tasks/post-phase-14-plan.md): Phase 15 ([tasks/phase-15.md](tasks/phase-15.md)) runs an evidence-substrate cleanup wave (charter: [tasks/post-phase-14-clean-up.md](tasks/post-phase-14-clean-up.md)) closing on baseline 3, then the machine-learned tactical-policy program — measurement harness, training environment, calibration corpus, rebuilt meeting surrogate, and a multi-method training bake-off — with a mid-phase pause that picks the winning method on measured numbers before a productization wave is authored. Voice & Judgment (Phase 16), co-adaptation retraining (Phase 17), and presentation (Phase 18) follow.
 
 ---
 
