@@ -118,6 +118,7 @@ from meetings.schemas import (
 from meetings.transcript import (
     MeetingTriggerKind,
     accusation_target,
+    canonical_rooms,
     detect_contradictions,
     detect_corroborations,
     independent_voices,
@@ -1894,15 +1895,25 @@ def _opt_in_eligible_ids(
     a sighting of them is relevant). A vent observation also places its OWN
     subject at the vent scene, so an unspoken subject becomes eligible to
     answer the incrimination, mirroring how a ``saw_player`` at the body
-    room makes its subject eligible today.
+    room makes its subject eligible today. The VENT-scene prong compares
+    CANONICAL room sets (:func:`meetings.transcript.canonical_rooms` -- the
+    same normalisation the grounding chokepoint applies, so a compound
+    spoken label like ``"LABS/MEDBAY"`` still places a ``MEDBAY`` sighting
+    at the scene, and a non-spatial label locates nothing); the body-room
+    prong keeps its standing raw comparison byte-identically.
     """
 
-    scene_rooms = {
+    body_rooms = {
         observation.room
         for turn in transcript.turns
         for observation in turn.observations
-        if isinstance(observation, (FoundBodyObservation, SawVentObservation))
+        if isinstance(observation, FoundBodyObservation)
     }
+    vent_scene_rooms: frozenset[str] = frozenset()
+    for turn in transcript.turns:
+        for observation in turn.observations:
+            if isinstance(observation, SawVentObservation):
+                vent_scene_rooms |= canonical_rooms(observation.room)
     accused: set[PlayerId] = set()
     for turn in transcript.turns:
         target = accusation_target(turn)
@@ -1918,11 +1929,10 @@ def _opt_in_eligible_ids(
                 group = {observation.subject}
             else:
                 continue
-            if (
-                observation.room in scene_rooms
-                or observation.subject in accused
-                or (group & accused)
-            ):
+            at_scene = observation.room in body_rooms or bool(
+                canonical_rooms(observation.room) & vent_scene_rooms
+            )
+            if at_scene or observation.subject in accused or (group & accused):
                 relevant |= group
 
     return tuple(

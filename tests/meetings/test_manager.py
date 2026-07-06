@@ -6921,3 +6921,83 @@ class TestVentSceneOptInEligibility:
             for turn in result.transcript.turns
             if turn.turn_kind == "opt_in"
         ] == []
+
+    def test_compound_vent_room_label_still_places_a_sighting_at_the_scene(
+        self,
+    ) -> None:
+        # PR #227 review (Codex P2): the vent-scene prong compares CANONICAL
+        # room sets, matching the grounding chokepoint's normalisation — a
+        # compound spoken label ("LABS/MEDBAY") that grounds against a MEDBAY
+        # witness record must also make a non-speaker SEEN in MEDBAY
+        # opt-in-eligible, not just players matching the raw string.
+        responder = _make_responder(
+            accusations={"p-1": "p-3", "p-3": None, "p-4": None},
+            observations={
+                "p-1": (
+                    _vent_observation(room="LABS/MEDBAY"),
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=101,
+                        subject="p-4",
+                        room="MEDBAY",
+                    ),
+                ),
+            },
+        )
+        result, _client = _run_meeting(
+            responder,
+            participants=(
+                _participant(
+                    "p-1", vent_witness_records=(_vent_record(room="MEDBAY"),)
+                ),
+                _participant("p-2"),
+                _participant("p-3"),
+                _participant("p-4"),
+            ),
+        )
+
+        # The compound label grounded (the same canonicalisation the
+        # chokepoint applies)...
+        assert [
+            flag.kind for flag in result.contradictions if flag.kind == "vent_sighting"
+        ] == ["vent_sighting"]
+        # ...and the MEDBAY sighting counts as placed at the vent scene.
+        assert [
+            turn.speaker
+            for turn in result.transcript.turns
+            if turn.turn_kind == "opt_in"
+        ] == ["p-4"]
+
+    def test_non_spatial_vent_room_label_grants_no_scene(self) -> None:
+        # A placeholder vent room canonicalises to nothing (the detector's
+        # allowlist doctrine): it grounds no flag and mints no scene, so the
+        # MEDBAY sighting stays irrelevant.
+        responder = _make_responder(
+            accusations={"p-1": "p-3", "p-3": None},
+            observations={
+                "p-1": (
+                    _vent_observation(room="SOMEWHERE"),
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=101,
+                        subject="p-4",
+                        room="MEDBAY",
+                    ),
+                ),
+            },
+        )
+        result, _client = _run_meeting(
+            responder,
+            participants=(
+                _participant("p-1", vent_witness_records=(_vent_record(),)),
+                _participant("p-2"),
+                _participant("p-3"),
+                _participant("p-4"),
+            ),
+        )
+
+        assert [
+            turn.speaker
+            for turn in result.transcript.turns
+            if turn.turn_kind == "opt_in"
+        ] == []
