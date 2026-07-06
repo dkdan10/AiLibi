@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import _manifest_writer as mw
-from orchestrator.replay import ReplayLog
+from orchestrator.replay import ReplayLog, TacticalPolicyStamp
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
@@ -64,10 +64,14 @@ def test_discover_seeds_sorted(small_samples: Path) -> None:
 
 def test_provenance_meeting_seed(small_samples: Path) -> None:
     fallback = mw.fallback_model(small_samples)
-    model, prompt_versions, flags, cost, winner = mw.sample_provenance(
+    model, prompt_versions, flags, policy, cost, winner = mw.sample_provenance(
         small_samples, _MEETING_SEED, fallback
     )
     assert model == "Qwen/Qwen3-32B"
+    # The committed 4p/1i baseline predates the Task-15.9 tactical-policy stamp,
+    # so an unstamped replay renders the scripted-FSM-default label (absent =
+    # FSM default).
+    assert policy == mw._FSM_DEFAULT_POLICY == "fsm-default"
     # The union of the recorded prompt-version *values*, sorted — using the
     # actual recorded values (e.g. "vote_ballot.qwen3_32b.v4"), not the hint.
     assert "accusation_round.qwen3_32b.v4" in prompt_versions
@@ -94,10 +98,12 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
 
 def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     fallback = mw.fallback_model(small_samples)
-    model, prompt_versions, flags, cost, winner = mw.sample_provenance(
+    model, prompt_versions, flags, policy, cost, winner = mw.sample_provenance(
         small_samples, _NO_MEETING_SEED, fallback
     )
     assert prompt_versions == mw._NO_MEETINGS
+    # No stamp on the committed baseline -> FSM-default label.
+    assert policy == "fsm-default"
     # A no-meeting seed records no prompt versions, but the Task-14.7 substrate
     # stamp lives on the game_over record (not a meeting), so a flag-ON re-record
     # still reports all five ON levers (the four 13.5 levers + the Task-14.10
@@ -125,13 +131,16 @@ def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
     log.record_game_end(winner="CREWMATES", reason="TASKS_COMPLETE", tick=10)
     log.close()
 
-    model, prompt_versions, flags, cost, winner = mw.sample_provenance(
+    model, prompt_versions, flags, policy, cost, winner = mw.sample_provenance(
         samples, 5, "Qwen/Qwen3-32B"
     )
     assert flags == (
         "evidence_quality_lift, movement_perception, testimony_as_content, "
         "unfreeze_memory, witnessed_kill_evidence"
     )
+    # This game_end row carries the substrate stamp but no tactical-policy stamp,
+    # so the policy cell reads the FSM-default label.
+    assert policy == "fsm-default"
     assert winner == "CREWMATES"
     # No meeting recorded -> attributed to the active model, no prompt versions.
     assert model == "Qwen/Qwen3-32B"
@@ -153,7 +162,7 @@ def test_provenance_reports_the_evidence_quality_lever_when_stamped_on(
     log.record_game_end(winner="CREWMATES", reason="TASKS_COMPLETE", tick=10)
     log.close()
 
-    _, _, flags, _, _ = mw.sample_provenance(samples, 7, "Qwen/Qwen3-32B")
+    _, _, flags, _, _, _ = mw.sample_provenance(samples, 7, "Qwen/Qwen3-32B")
     assert flags == (
         "evidence_quality_lift, movement_perception, testimony_as_content, "
         "unfreeze_memory, witnessed_kill_evidence"
@@ -199,6 +208,7 @@ def test_header_uses_contracted_snake_case_column_names() -> None:
         "model",
         "prompt_versions",
         "flags",
+        "policy",
         "refreshed_at",
         "git_sha",
         "cost_usd",
@@ -238,6 +248,79 @@ def test_parse_manifest_tolerates_legacy_7_column_rows() -> None:
     assert rows[7].model == "qwen3.5:9b"
     assert rows[7].winner == "IMPOSTORS"
     assert rows[7].flags == mw._NO_FLAGS
+
+
+def test_provenance_reads_stamped_tactical_policy(tmp_path: Path) -> None:
+    # A learned-policy re-record stamps its tactical policy onto the replay's
+    # game_over record (Task 15.9); the MANIFEST policy column reports its
+    # policy_id — the stamp -> manifest provenance path, mirroring the flags cell.
+    samples = tmp_path / "samples"
+    samples.mkdir()
+    stamp = TacticalPolicyStamp(
+        policy_id="wave2-champion-7",
+        method="neuroevolution",
+        encoder_version="encoder.v3",
+        weights_sha256="a" * 64,
+        anchor_policy="fsm-default",
+    )
+    log = ReplayLog(
+        samples / "replay-seed-5.jsonl",
+        game_id="headless-seed-5",
+        tactical_policy_stamp=stamp,
+    )
+    log.record_game_end(winner="CREWMATES", reason="TASKS_COMPLETE", tick=10)
+    log.close()
+
+    _, _, _, policy, _, _ = mw.sample_provenance(samples, 5, "Qwen/Qwen3-32B")
+    assert policy == "wave2-champion-7"
+
+
+def test_provenance_reports_fsm_default_for_explicit_fsm_stamp(tmp_path: Path) -> None:
+    # An explicit fsm-default stamp (the Task-15.12 corpus path) renders the SAME
+    # policy cell as an absent stamp — the "FSM default everywhere" invariant.
+    from orchestrator.replay import fsm_default_tactical_policy_stamp
+
+    samples = tmp_path / "samples"
+    samples.mkdir()
+    log = ReplayLog(
+        samples / "replay-seed-6.jsonl",
+        game_id="headless-seed-6",
+        tactical_policy_stamp=fsm_default_tactical_policy_stamp(),
+    )
+    log.record_game_end(winner="IMPOSTORS", reason="PARITY", tick=8)
+    log.close()
+
+    _, _, _, policy, _, _ = mw.sample_provenance(samples, 6, "Qwen/Qwen3-32B")
+    assert policy == mw._FSM_DEFAULT_POLICY == "fsm-default"
+
+
+def test_parse_manifest_tolerates_pre_policy_8_column_rows() -> None:
+    # A pre-Task-15.9 MANIFEST.md (the committed baseline-2 sets) has the ``flags``
+    # column but no ``policy`` column. The parser must still read those rows so a
+    # committed 8-column MANIFEST merges/updates without a re-record; the missing
+    # policy reads the FSM-default label.
+    eight_col = (
+        "| seed | model | prompt_versions | flags | refreshed_at | git_sha "
+        "| cost_usd | winner |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        "| 3 | Qwen/Qwen3-32B | crewmate_report.v4 | testimony_as_content "
+        "| 2026-07-03 | a6e8783 | 0.0000 | CREWMATES |\n"
+    )
+    rows = mw.parse_manifest(eight_col)
+    assert set(rows) == {3}
+    assert rows[3].flags == "testimony_as_content"
+    assert rows[3].git_sha == "a6e8783"
+    assert rows[3].winner == "CREWMATES"
+    assert rows[3].policy == mw._FSM_DEFAULT_POLICY
+
+
+def test_committed_manifest_parses_with_fsm_default_policy() -> None:
+    # The committed 9p2i MANIFEST.md is an 8-column (pre-15.9) table; it must keep
+    # parsing with zero edits, every row reading the FSM-default policy label.
+    manifest = _REPO_ROOT / "replays" / "samples" / "9p2i" / "MANIFEST.md"
+    rows = mw.parse_manifest(manifest.read_text())
+    assert rows  # non-empty
+    assert all(row.policy == "fsm-default" for row in rows.values())
 
 
 def test_render_parse_round_trip(small_samples: Path) -> None:

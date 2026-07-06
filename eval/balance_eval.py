@@ -93,6 +93,7 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLogEntry,
+    TacticalPolicyStamp,
     _state_hash,
     compute_cost_usd,
     read_all_entries,
@@ -235,6 +236,7 @@ def run_tournament_eval(
     tasks_per_crewmate: int = DEFAULT_TASKS_PER_CREWMATE,
     max_ticks: int = DEFAULT_MAX_TICKS,
     force: bool = False,
+    tactical_policy_stamp: TacticalPolicyStamp | None = None,
 ) -> TournamentReport:
     """Run one :class:`HeadlessGame` per seed and assemble a typed report.
 
@@ -291,6 +293,15 @@ def run_tournament_eval(
     and continues. One crashed meeting therefore does not discard the whole
     tournament, and the failed-call spend still appears in the report.
 
+    ``tactical_policy_stamp`` is the additive-optional tactical-policy provenance
+    stamp (Task 15.9): the pass-through that lets a learned-policy recording stamp
+    every game's ``game_over`` record without a later out-of-scope edit. It is
+    forwarded verbatim to each per-seed :class:`HeadlessGame`; the default
+    (``None``) records the absent = scripted-FSM-default stamp, byte-identical to
+    the pre-15.9 path. ``scripts/run_tournament.py`` exposes it as the
+    ``--tactical-policy-stamp`` CLI flag (the seam the Task-15.12 corpus wrapper
+    drives).
+
     Raises ``RuntimeError`` if any game ends at ``MEETING_PHASE_REACHED`` (the
     Task 3.13 runner wire-up regressed). Re-raises any non-parse-failure
     exception from a game unchanged (AGENTS.md "no silent fallbacks").
@@ -325,6 +336,7 @@ def run_tournament_eval(
                 budget=_resolve_game_budget(num_players=num_players)
             ),
             force=force,
+            tactical_policy_stamp=tactical_policy_stamp,
         )
         try:
             result = game.run()

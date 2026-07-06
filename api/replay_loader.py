@@ -151,8 +151,10 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
     ReplayLog,
+    TacticalPolicyStamp,
     WinnerSide,
     _state_hash,
+    fsm_default_tactical_policy_stamp,
     read_all_entries,
     substrate_flag_snapshot,
 )
@@ -355,6 +357,109 @@ class ReplaySubstrateMismatchError(RuntimeError):
         )
 
 
+class ReplayPolicyMismatchError(RuntimeError):
+    """A stamped replay is being SERVED under a conflicting policy claim (Task 15.9).
+
+    Mirrors :class:`ReplaySubstrateMismatchError` on the tactical-policy
+    provenance surface (audit post-phase-14-ML-planning.md §7.2-7.3). A replay
+    recorded with a tactical policy stamps its identity onto the ``game_over``
+    record (:attr:`orchestrator.replay.GameEndReplayEntry.tactical_policy`).
+    Unlike the substrate, there is NO "ambient" policy to reconstruct against —
+    replay re-feeds the recorded actions and never re-invokes a policy (§3.4;
+    §7.2), so the stamp is provenance, not a replay input. The mismatch instead
+    fires when a caller ASSERTS which policy it expects to serve
+    (:class:`ReplayLoader`'s ``expected_tactical_policy``) and the recording's
+    stamp conflicts with that claim — an unstamped replay reads as the scripted
+    FSM default (:func:`orchestrator.replay.fsm_default_tactical_policy_stamp`).
+    Rather than serve a replay mislabeled as some other policy's output (AGENTS.md
+    "no silent fallbacks"), the loader fails loud here and names the divergent
+    fields. When no ``expected_tactical_policy`` is set (the default) the guard is
+    inert, so the committed canonical sets serve unchanged. Surfaced as HTTP 500
+    with the offending game id in the response body.
+    """
+
+    def __init__(
+        self,
+        *,
+        game_id: str,
+        recorded: TacticalPolicyStamp,
+        expected: TacticalPolicyStamp,
+    ) -> None:
+        self.game_id = game_id
+        self.recorded = recorded
+        self.expected = expected
+        differing = sorted(
+            field
+            for field in TacticalPolicyStamp.model_fields
+            if getattr(recorded, field) != getattr(expected, field)
+        )
+        super().__init__(
+            f"replay tactical-policy mismatch for {game_id!r}: recorded "
+            f"{recorded.model_dump()!r} but the loader is serving under a "
+            f"conflicting policy claim {expected.model_dump()!r} (differing "
+            f"fields: {differing}). Replay reconstruction re-feeds the recorded "
+            "actions and never re-invokes a policy, so the stamp is provenance, "
+            "not a replay input; this guard refuses to SERVE a stamped replay "
+            "under a conflicting policy claim (an unstamped replay reads as the "
+            "scripted FSM default). This is not a determinism break — the "
+            "per-tick state hash is policy-independent."
+        )
+
+
+def _recorded_tactical_policy(
+    entries: Sequence[object],
+) -> TacticalPolicyStamp | None:
+    """Extract the stamped tactical policy from a replay's ``game_over`` record.
+
+    Mirrors :func:`orchestrator.replay.read_tactical_policy_stamp` but reads the
+    already-loaded ``entries`` (the walk reads the file once) instead of
+    re-opening the path. Returns ``None`` for a replay that carries no stamp — a
+    legacy / FSM-default recording (the committed canonical sets) — so the caller
+    treats it as the scripted FSM default.
+    """
+
+    stamp: TacticalPolicyStamp | None = None
+    for entry in entries:
+        if isinstance(entry, GameEndReplayEntry) and entry.tactical_policy is not None:
+            stamp = entry.tactical_policy
+    return stamp
+
+
+def _assert_policy_matches(
+    game_id: str,
+    entries: Sequence[object],
+    *,
+    expected_tactical_policy: TacticalPolicyStamp | None,
+) -> None:
+    """Fail loud if a replay is served under a conflicting tactical-policy claim.
+
+    The honoring half of the Task-15.9 stamp. When the loader is constructed with
+    an ``expected_tactical_policy`` (a caller asserting which policy's output it
+    intends to serve), a recording whose stamp conflicts with that claim is
+    refused via :class:`ReplayPolicyMismatchError`. An UNSTAMPED replay reads as
+    the scripted FSM default (:func:`orchestrator.replay.fsm_default_tactical_policy_stamp`),
+    so it matches an ``fsm-default`` claim and conflicts with a learned-policy
+    claim. When ``expected_tactical_policy`` is ``None`` (the default), the guard
+    is inert — the committed canonical sets, and every ordinary serve, are
+    unaffected. Unlike the substrate guard there is no ambient policy and no
+    reconstruction difference: this is a provenance assertion, so it neither
+    reads env nor participates in the reconstruction cache key.
+    """
+
+    if expected_tactical_policy is None:
+        return
+    recorded = _recorded_tactical_policy(entries)
+    effective = (
+        recorded if recorded is not None else fsm_default_tactical_policy_stamp()
+    )
+    if effective != expected_tactical_policy:
+        raise ReplayPolicyMismatchError(
+            game_id=game_id,
+            recorded=effective,
+            expected=expected_tactical_policy,
+        )
+
+
 def _recorded_substrate_flags(
     entries: Sequence[object],
 ) -> dict[str, bool] | None:
@@ -477,6 +582,7 @@ class ReplayLoader:
         cache_size: int = _DEFAULT_CACHE_SIZE,
         metadata_cache_size: int = _DEFAULT_METADATA_CACHE_SIZE,
         allow_substrate_mismatch: bool = False,
+        expected_tactical_policy: TacticalPolicyStamp | None = None,
     ) -> None:
         # ``allow_substrate_mismatch`` is the ANALYSIS-ONLY override (Task 14.8):
         # the per-lever substrate ablation deliberately re-derives the stamped
@@ -488,8 +594,17 @@ class ReplayLoader:
         # snapshot into its reconstruction cache keys (``_substrate_cache_key``)
         # so flipping the ``AILIBI_*`` levers between loads re-derives instead
         # of silently serving the previous substrate's cached reconstruction.
+        # ``expected_tactical_policy`` is the Task-15.9 policy claim: when set, the
+        # walk refuses to serve a replay whose tactical-policy stamp conflicts with
+        # it (:func:`_assert_policy_matches`). Default ``None`` leaves the guard
+        # inert, so the committed canonical sets and every ordinary serve are
+        # unaffected. It is fixed per loader instance (not env-derived) and changes
+        # nothing about the reconstruction output — only whether the walk raises —
+        # so, unlike ``allow_substrate_mismatch``, it does NOT fold into the
+        # reconstruction cache key.
         self._replay_dir = replay_dir
         self._allow_substrate_mismatch = allow_substrate_mismatch
+        self._expected_tactical_policy = expected_tactical_policy
         self._game_map = game_map if game_map is not None else load_canonical_map()
         self._map_view = self._build_map_view()
         self._cached_load = lru_cache(maxsize=cache_size)(self._load_replay)
@@ -835,6 +950,17 @@ class ReplayLoader:
         # serving/verify construct the loader with the default.
         _assert_substrate_matches(
             game_id, entries, allow_substrate_mismatch=self._allow_substrate_mismatch
+        )
+        # Honor the tactical-policy stamp (Task 15.9): when the loader is serving
+        # under a specific policy claim, refuse a recording whose stamp conflicts
+        # with it. Inert by default (``expected_tactical_policy=None``), so the
+        # committed canonical sets serve unchanged. Provenance-only — no
+        # reconstruction difference, no ambient policy, so it neither reads env nor
+        # keys the cache.
+        _assert_policy_matches(
+            game_id,
+            entries,
+            expected_tactical_policy=self._expected_tactical_policy,
         )
         replay_entries = [e for e in entries if isinstance(e, ReplayEntry)]
         meeting_entries = tuple(e for e in entries if isinstance(e, MeetingReplayEntry))

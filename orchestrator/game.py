@@ -85,7 +85,12 @@ from orchestrator.boundary import (
     public_map_from_engine_map,
     translate_action_intents_for_tick,
 )
-from orchestrator.replay import LLMCallRecord, ReplayLog, _state_hash
+from orchestrator.replay import (
+    LLMCallRecord,
+    ReplayLog,
+    TacticalPolicyStamp,
+    _state_hash,
+)
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
 from pydantic import BaseModel
@@ -1135,11 +1140,20 @@ class HeadlessGame:
         scheduler: TickScheduler | None = None,
         meeting_runner: MeetingRunner | None = None,
         force: bool = False,
+        tactical_policy_stamp: TacticalPolicyStamp | None = None,
     ) -> None:
         self._seed = seed
         self._game_map = game_map
         self._agent_factory = agent_factory
         self._replay_path = replay_path
+        # The tactical-policy provenance stamp (Task 15.9): the PRODUCTION
+        # injection seam. Every recorder (run_tournament, the 15.12 corpus
+        # wrapper, Wave-2 champion recordings) reaches replay-writing ONLY through
+        # this constructor, so a learned-policy recording can be stamped without a
+        # later out-of-scope edit. Default ``None`` = absent = scripted FSM
+        # default, byte-identical to today's path; the stamp is threaded straight
+        # into the per-game ``ReplayLog`` (the writer) in :meth:`run`.
+        self._tactical_policy_stamp = tactical_policy_stamp
         # Passed through to ReplayLog: force=True truncates a pre-existing
         # replay file at construction (just before this game writes it),
         # force=False (default) makes a re-run against an existing path fail
@@ -1197,7 +1211,10 @@ class HeadlessGame:
             audit_log_path=self._audit_log_path,
         )
         replay = ReplayLog(
-            self._replay_path, game_id=self._game_id(), force=self._force
+            self._replay_path,
+            game_id=self._game_id(),
+            force=self._force,
+            tactical_policy_stamp=self._tactical_policy_stamp,
         )
         agents = self._build_agents(state.players)
 
