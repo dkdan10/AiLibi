@@ -1,6 +1,20 @@
 {#- Reactive accusation-chain turn (reply / opt_in) — bespoke qwen3_32b set (Task 14.5).
 
-   prompt_id: accusation_round  --  version accusation_round.qwen3_32b.v4
+   prompt_id: accusation_round  --  version accusation_round.qwen3_32b.v5
+
+   v5 (Task 15.4) makes the game's hardest evidence speakable: witnessed
+   impostor vents were held in 74/129 baseline-2 report meetings but reached
+   the transcript only 36/74 times, as unciteable free text. The reply and
+   info-share instructions now explicitly elicit a structured `saw_vent`
+   observation for every "You witnessed <player> vent in <room>." memory
+   line, the observations union advertises the new shape (subject / room /
+   tick — no enter/exit phase field; the memory line carries none), the
+   transcript loop renders other speakers' spoken vents, and the confidence
+   rubric extends the 1.0 band to a first-hand witnessed vent. The meeting
+   layer grounds every spoken `saw_vent` against the speaker's own typed
+   witnessed-vent records before it can raise a hard flag
+   (meetings/transcript.py), so a fabricated sighting records as ordinary
+   testimony, never hard evidence.
 
    v4 (Task 14.11) hardens the v3 body against four defects MEASURED on
    baseline 1 (audits/audit-2026-07-01-phase-14-baseline1-characterization.md §4;
@@ -58,6 +72,12 @@ yourself** with a structured `alibi` placing you elsewhere (not just an assertio
 in `free_text`), and **redirect** — if anything you saw points at a living player,
 name them in one `accusation` so the chain follows the real suspect. Stay purely
 defensive only if you genuinely have no one to point at.
+If your memory contains a witnessed vent — a line like "You witnessed p-3 vent
+in MEDBAY." — ALWAYS put it on the record as a structured `saw_vent`
+observation, copying the player, room, and tick from that line exactly: only
+the impostor can vent, so one witnessed vent identifies the impostor outright.
+Never emit `saw_vent` for a vent you merely heard or suspect — only for one
+your memory says you witnessed.
 Your `alibi` must quote your own memory exactly: ONE room, and only the tick range
 you were ACTUALLY in it. If you moved during the window you are accused over,
 alibi only the room you were in at the tick that matters — a range that spans
@@ -86,7 +106,13 @@ what exposes an impostor.
 This terminal turn does not extend the chain — it is your chance to put evidence on
 the record before the vote. If your memory backs an accusation already on the table
 (especially against a suspected killer), SECOND it with a `corroboration` or state
-the observation that implicates them. Share only the few rows that matter — not
+the observation that implicates them. If your memory contains a witnessed vent —
+a line like "You witnessed p-3 vent in MEDBAY." — ALWAYS put it on the record as
+a structured `saw_vent` observation, copying the player, room, and tick from
+that line exactly: only the impostor can vent, so one witnessed vent identifies
+the impostor outright. Never emit `saw_vent` for a vent you merely heard or
+suspect — only for one your memory says you witnessed. Share only the few rows
+that matter — not
 your whole movement log. Pass only if you recorded nothing relevant.
 {% endif %}
 
@@ -122,6 +148,8 @@ record. Aim only at the living list above.
     - tick {{ obs.tick }}: task {{ obs.task_id }} in {{ obs.room }}.
     {%- elif obs.type == "found_body" %}
     - tick {{ obs.tick }}: body of {{ obs.body_of }} in {{ obs.room }}.
+    {%- elif obs.type == "saw_vent" %}
+    - tick {{ obs.tick }}: witnessed {{ obs.subject }} VENT in {{ obs.room }} (only the impostor can vent).
     {%- endif %}
     {%- endfor %}
   {%- endif %}
@@ -179,12 +207,16 @@ Content fields (your real turn):
   - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
   - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
   - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
+  - `{"type": "saw_vent", "tick": <int>, "subject": "<player_id>", "room": "<room_id>"}` — ONLY
+    for a vent your memory says you WITNESSED ("You witnessed ... vent in ...");
+    copy its player, room, and tick exactly.
 - `claims`: your conclusions, each item one of:
   - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (`from_tick <= to_tick`).
     ONE room, and only the tick range you were ACTUALLY in it — a range that spans
     rooms you moved between contradicts your own record and gets you ejected.
   - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0-1.0>, "reason": "<short reason>"}` — at most one, and `against` must come from the valid-targets list; the chain follows whoever you accuse.
-    Confidence rubric — calibrate honestly: 1.0 ONLY for a kill you watched happen
+    Confidence rubric — calibrate honestly: 1.0 ONLY for a kill or a vent you
+    watched happen
     first-hand; ~0.7 for a case a second account or a contradiction flag
     corroborates; ~0.5 for a hunch read off movement alone.
   - `{"type": "corroboration", "supports": "<player_id>", "on_tick": <int>, "reason": "<short reason>"}`.

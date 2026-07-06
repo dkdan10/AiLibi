@@ -43,6 +43,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     TurnKind,
+    VentWitnessRecord,
     VoteBallot,
 )
 from observation.action_intent import ActionIntent
@@ -338,6 +339,9 @@ def _report_then_default_factory(
 
         def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
             return self._delegate.suspicion_graph_for_meeting()
+
+        def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]:
+            return self._delegate.vent_witness_records_for_meeting()
 
     def factory(agent_id: PlayerId, role: Role) -> _ReportThenDefault:
         return _ReportThenDefault(agent_id, role)

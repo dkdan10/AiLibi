@@ -1,11 +1,22 @@
 {#- Impostor OPENING-turn prompt — bespoke qwen3_32b set (Task 14.5).
 
-   prompt_id: impostor_report  --  version impostor_report.qwen3_32b.v4
+   prompt_id: impostor_report  --  version impostor_report.qwen3_32b.v5
 
    Ground-up bespoke set for Qwen3-32B (non-thinking); NOT derived from the
    pinned qwen3_5_9b set. Simple game + role + memory frame; the deception is
    framed as the GAME RULE of the role (DESIGN.md §4.5) so a well-aligned model
    plays it without refusing or breaking character.
+
+   v5 (Task 15.4) advertises the new `saw_vent` observation shape in the
+   union bullets (the output schema is the one hard cross-set invariant, so
+   every turn/opening template documents the same union) and extends the
+   confidence rubric's 1.0 band to a first-hand witnessed vent. Deliberately
+   NO vent-elicitation ask here: vents are impostor-only, so the only
+   witnessed-vent rows an impostor's memory can hold name a TEAMMATE — the
+   meeting layer's 7.12 observation guard drops those, and asking for them
+   would only invite fabricated sightings (which ground nothing and read as
+   the fabrications they are). The standing own-vent secrecy line already
+   covers the speaker's own vents.
 
    v4 (Task 14.11) hardens the v3 body against three defects MEASURED on
    baseline 1 (audits/audit-2026-07-01-phase-14-baseline1-characterization.md §4;
@@ -122,6 +133,10 @@ Content fields (your real turn):
   - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
   - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
   - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
+  - `{"type": "saw_vent", "tick": <int>, "subject": "<player_id>", "room": "<room_id>"}` — ONLY
+    for a vent your memory says you WITNESSED ("You witnessed ... vent in ...");
+    a vent sighting you invent is checked against witness records and reads as
+    the fabrication it is.
 - `claims`: your conclusions, each item one of:
   - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (`from_tick <= to_tick`). At least one alibi for yourself is expected.
     Keep the alibi survivable: ONE room, and only a tick range your account can
@@ -130,6 +145,7 @@ Content fields (your real turn):
     included) — is what gets a player flagged and ejected.
   - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0-1.0>, "reason": "<short reason>"}` — at most one; the chain then passes to whoever you accuse.
     Confidence rubric — a credible crewmate calibrates: 1.0 ONLY for a kill
+    or a vent
     watched first-hand; ~0.7 for a case a second account or a contradiction flag
     corroborates; ~0.5 for a hunch read off movement alone. An over-confident
     accusation you cannot back draws the table's suspicion back onto you.

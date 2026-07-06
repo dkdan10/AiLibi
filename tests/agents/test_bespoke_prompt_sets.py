@@ -36,6 +36,7 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     SawPlayerObservation,
+    SawVentObservation,
     VoteBallot,
 )
 from orchestrator.game import (
@@ -340,6 +341,143 @@ class TestQwen332bV4Directives:
             for text in rendered.values():
                 assert _ALIBI_DISCIPLINE_MARKER not in _flat(text), set_name
                 assert _CONFIDENCE_RUBRIC_MARKER not in _flat(text), set_name
+
+
+class TestQwen332bV5VentElicitation:
+    """Task 15.4 v5 pins, mirroring the 14.11 v4 directive pins.
+
+    The v5 revision makes witnessed vents speakable: the turn/opening
+    templates elicit a structured ``saw_vent`` observation for the
+    "You witnessed <player> vent in <room>." rendered-memory line and
+    advertise the new union shape. qwen3_32b ONLY — the other bespoke sets
+    stay frozen, and ``vote_ballot.j2`` is byte-identical (its next edit is
+    Task 15.5's per-template v6 bump).
+    """
+
+    # The elicitation instruction (crewmate opening + reply + opt_in) and the
+    # union-shape advert (every turn/opening template).
+    _ELICITATION_MARKER = "put it on the record as a structured `saw_vent`"
+    _SHAPE_MARKER = '"type": "saw_vent"'
+    # A rendered memory carrying the exact store.py witnessed-vent line the
+    # elicitation keys on (agents/memory/store.py::_render_saw_player).
+    _VENT_MEMORY = (
+        "## Your role\nCREWMATE\n"
+        "## Recent observations (most salient first):\n"
+        "- [tick 405] You witnessed p-3 vent in ELECTRICAL.\n"
+    )
+
+    def _render_crewmate_with_vent_memory(self) -> str:
+        r = build_prompt_renderers("qwen3_32b")
+        return r.crewmate_report(
+            agent_id="p-2",
+            current_tick=410,
+            meeting_trigger="p-2 reported body of p-7 at tick 410",
+            rendered_memory=self._VENT_MEMORY,
+            public_transcript="",
+            living_ids=("p-3", "p-5"),
+            dead_ids=("p-7",),
+        )
+
+    def test_memory_with_vent_renders_the_elicitation_instruction(self) -> None:
+        # The DoD's prompt-fixture shape: a memory-with-vent render carries
+        # BOTH the witnessed-vent memory line and the instruction to speak it
+        # as a structured saw_vent observation.
+        rendered = self._render_crewmate_with_vent_memory()
+        assert "You witnessed p-3 vent in ELECTRICAL." in rendered
+        assert self._ELICITATION_MARKER in _flat(rendered)
+
+    def test_elicitation_present_in_crewmate_and_chain_templates(self) -> None:
+        rendered = _render_all("qwen3_32b")
+        for label in (
+            "crewmate_report/body",
+            "crewmate_report/emergency",
+            "reply/imp=True/body=True",
+            "reply/imp=False/body=False",
+            "opt_in",
+        ):
+            assert self._ELICITATION_MARKER in _flat(rendered[label]), label
+
+    def test_saw_vent_shape_advertised_in_every_turn_template(self) -> None:
+        rendered = _render_all("qwen3_32b")
+        for label in (
+            "crewmate_report/body",
+            "crewmate_report/emergency",
+            "impostor_report/body",
+            "impostor_report/emergency",
+            "reply/imp=True/body=False",
+            "reply/imp=False/body=True",
+            "opt_in",
+        ):
+            assert self._SHAPE_MARKER in rendered[label], label
+
+    def test_impostor_opening_carries_no_elicitation_ask(self) -> None:
+        # Deliberate: vents are impostor-only, so the only witnessed-vent
+        # rows an impostor's memory can hold name a TEAMMATE (dropped by the
+        # 7.12 observation guard) — eliciting them would only invite
+        # fabrication. The shape advert stays (schema completeness).
+        rendered = _render_all("qwen3_32b")
+        for label in ("impostor_report/body", "impostor_report/emergency"):
+            assert self._ELICITATION_MARKER not in _flat(rendered[label]), label
+
+    def test_vote_ballot_carries_no_vent_directive(self) -> None:
+        # vote_ballot.j2 is byte-identical at this task (15.5 owns its edit),
+        # so no v5 vent marker may appear in the ballot render.
+        vote = _render_all("qwen3_32b")["vote"]
+        assert self._ELICITATION_MARKER not in _flat(vote)
+        assert self._SHAPE_MARKER not in vote
+
+    def test_transcript_loop_renders_spoken_vents(self) -> None:
+        # A later speaker must SEE an earlier speaker's structured vent
+        # observation (the opt-in eligibility DoD's prompt surface).
+        vent_turn = MeetingTurn(
+            turn_id="m-1:turn-2",
+            turn_index=2,
+            speaker="p-5",
+            turn_kind="opt_in",
+            reply_to=None,
+            observations=(
+                SawVentObservation(
+                    type="saw_vent", tick=406, subject="p-3", room="ELECTRICAL"
+                ),
+            ),
+            claims=(),
+            free_text="I watched p-3 vent.",
+        )
+        r = build_prompt_renderers("qwen3_32b")
+        rendered = r.statement(
+            agent_id="p-2",
+            rendered_memory=_MEMORY,
+            transcript=MeetingTranscript(turns=(_OPENING, _PRIOR, vent_turn)),
+            contradictions=(),
+            prior_turn=None,
+            turn_kind="opt_in",
+            fellow_impostor_ids=(),
+            living_ids=("p-3", "p-5"),
+            dead_ids=(),
+            is_impostor=False,
+            is_body_report=True,
+        )
+        assert "witnessed p-3 VENT in ELECTRICAL" in rendered
+
+    def test_registry_stamps_the_set_v5(self) -> None:
+        # Task 15.4 owns the single v4 -> v5 SET bump; the only later registry
+        # edit is 15.5's per-template vote_ballot v6 entry.
+        versions = prompt_versions_for_set("qwen3_32b")
+        assert versions == {
+            "crewmate_report": "crewmate_report.qwen3_32b.v5",
+            "impostor_report": "impostor_report.qwen3_32b.v5",
+            "accusation_round": "accusation_round.qwen3_32b.v5",
+            "vote_ballot": "vote_ballot.qwen3_32b.v5",
+        }
+
+    def test_frozen_sets_do_not_carry_the_v5_markers(self) -> None:
+        for set_name in BESPOKE_SETS:
+            if set_name == "qwen3_32b":
+                continue
+            rendered = _render_all(set_name)
+            for text in rendered.values():
+                assert self._ELICITATION_MARKER not in _flat(text), set_name
+                assert self._SHAPE_MARKER not in text, set_name
 
 
 def test_cross_set_parse_invariant_is_shared() -> None:

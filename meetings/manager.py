@@ -109,13 +109,16 @@ from meetings.schemas import (
     PlayerId,
     ReportedStatement,
     SawPlayerObservation,
+    SawVentObservation,
     TurnId,
     TurnKind,
+    VentWitnessRecord,
     VoteBallot,
 )
 from meetings.transcript import (
     MeetingTriggerKind,
     accusation_target,
+    canonical_rooms,
     detect_contradictions,
     detect_corroborations,
     independent_voices,
@@ -516,6 +519,18 @@ class MeetingParticipant:
     its argument + the deterministic belief snapshot (it re-invokes the §6.6
     renderer with the additive override), so a replay rebuilds the identical
     ballot string and ``verify_samples.sh`` stays byte-identical.
+
+    ``vent_witness_records`` (Task 15.4) is the participant's OWN typed
+    witnessed-vent channel -- the grounding input behind the ``vent_sighting``
+    hard flag. The orchestrator populates it from
+    ``MeetingAwareAgent.vent_witness_records_for_meeting()`` (episodic
+    memory, self-channel only, so it is firewall-clean); the manager threads
+    the per-speaker mapping into every
+    :func:`meetings.transcript.detect_contradictions` call and NOTHING else
+    reads it -- in particular it never reaches a prompt surface. The default
+    ``()`` keeps every existing construction site valid and means "this
+    speaker grounds nothing": a spoken vent observation from such a
+    participant records as ordinary testimony and raises no flag.
     """
 
     agent_id: PlayerId
@@ -524,6 +539,7 @@ class MeetingParticipant:
     suspicion_graph: tuple[SuspicionEntry, ...] = ()
     fellow_impostor_ids: tuple[PlayerId, ...] = ()
     rerender_memory: Callable[[Mapping[PlayerId, float]], str] | None = None
+    vent_witness_records: tuple[VentWitnessRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -955,6 +971,17 @@ class MeetingManager:
         ordered_participants = tuple(sorted(participants, key=lambda p: p.agent_id))
         by_id = {p.agent_id: p for p in ordered_participants}
         roster = frozenset(by_id)
+        # Task 15.4: the per-speaker typed vent-witness channel -- the
+        # grounding chokepoint's input, threaded into EVERY contradiction
+        # detection below so a mid-chain turn prompt and the final recorded
+        # flag set read one grounding source. A meeting-open snapshot like
+        # ``rendered_memory``; participants with no records are omitted (the
+        # detector treats an absent speaker as grounding nothing).
+        vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]] = {
+            participant.agent_id: participant.vent_witness_records
+            for participant in ordered_participants
+            if participant.vent_witness_records
+        }
 
         # Phase 1: opening turn (turn 0, role-dispatched). The opening is a
         # single point of failure for the whole meeting -- an empty opening
@@ -1005,7 +1032,9 @@ class MeetingManager:
                 break
             transcript_so_far = MeetingTranscript(turns=tuple(turns))
             contradictions_so_far = detect_contradictions(
-                transcript_so_far, roster=roster
+                transcript_so_far,
+                roster=roster,
+                vent_witness_records=vent_witness_records,
             )
             reply_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1035,7 +1064,9 @@ class MeetingManager:
         ):
             transcript_so_far = MeetingTranscript(turns=tuple(turns))
             contradictions_so_far = detect_contradictions(
-                transcript_so_far, roster=roster
+                transcript_so_far,
+                roster=roster,
+                vent_witness_records=vent_witness_records,
             )
             opt_in_turn = await self._collect_turn(
                 meeting_id=meeting_id,
@@ -1074,7 +1105,10 @@ class MeetingManager:
             "emergency" if _trigger_is_emergency(trigger) else "report"
         )
         contradictions = detect_contradictions(
-            transcript, roster=roster, trigger_kind=meeting_trigger_kind
+            transcript,
+            roster=roster,
+            trigger_kind=meeting_trigger_kind,
+            vent_witness_records=vent_witness_records,
         )
         evidence = derive_belief_evidence(
             transcript, contradictions=contradictions, roster=roster
@@ -1242,6 +1276,23 @@ class MeetingManager:
             guarded_claims = _guard_teammate_turn_claims(
                 normalized_claims, fellow_impostor_ids=participant.fellow_impostor_ids
             )
+            # Task 15.4: the teammate firewall's observation-side twin. A
+            # structured vent observation naming a fellow impostor is
+            # role-proving incrimination (grounded, it would mint a STRONG
+            # ``vent_sighting`` flag against the teammate), so it drops at the
+            # same per-turn chokepoint the teammate accusation does -- BEFORE
+            # the turn records, so it never reaches detection, the fold, or a
+            # prompt surface. Silent like the claims guard (the 7.12
+            # convention); a deterministic no-op for every crewmate and a sole
+            # impostor, so replay reconstruction is unaffected.
+            guarded_observations = exclude_teammate_vent_observations(
+                parsed.observations,
+                fellow_impostor_ids=participant.fellow_impostor_ids,
+            )
+            if len(guarded_observations) != len(parsed.observations):
+                parsed = parsed.model_copy(
+                    update={"observations": guarded_observations}
+                )
             # Drop claims whose subject-bearing field names no living
             # participant: accusation targets (the fb3cfa5 guard) plus
             # alibi subjects and corroboration supports (Task 10.2, audit
@@ -1836,6 +1887,20 @@ def _opt_in_eligible_ids(
     first-hand observation -- so the transcript is a sufficient, leak-safe
     source for the gate. Returned in ascending player-id order (DESIGN.md
     §5.2 PHASE 3 "in player-id order").
+
+    Task 15.4: a spoken ``saw_vent`` observation is a relevance source in
+    exactly the co-presence gate's terms -- its room is a scene (like the
+    body's room: a non-speaker placed there holds first-hand context worth
+    voicing), and its subject is implicated testimony-side (like an accused:
+    a sighting of them is relevant). A vent observation also places its OWN
+    subject at the vent scene, so an unspoken subject becomes eligible to
+    answer the incrimination, mirroring how a ``saw_player`` at the body
+    room makes its subject eligible today. The VENT-scene prong compares
+    CANONICAL room sets (:func:`meetings.transcript.canonical_rooms` -- the
+    same normalisation the grounding chokepoint applies, so a compound
+    spoken label like ``"LABS/MEDBAY"`` still places a ``MEDBAY`` sighting
+    at the scene, and a non-spatial label locates nothing); the body-room
+    prong keeps its standing raw comparison byte-identically.
     """
 
     body_rooms = {
@@ -1844,6 +1909,11 @@ def _opt_in_eligible_ids(
         for observation in turn.observations
         if isinstance(observation, FoundBodyObservation)
     }
+    vent_scene_rooms: frozenset[str] = frozenset()
+    for turn in transcript.turns:
+        for observation in turn.observations:
+            if isinstance(observation, SawVentObservation):
+                vent_scene_rooms |= canonical_rooms(observation.room)
     accused: set[PlayerId] = set()
     for turn in transcript.turns:
         target = accusation_target(turn)
@@ -1853,14 +1923,16 @@ def _opt_in_eligible_ids(
     relevant: set[PlayerId] = set()
     for turn in transcript.turns:
         for observation in turn.observations:
-            if not isinstance(observation, SawPlayerObservation):
+            if isinstance(observation, SawPlayerObservation):
+                group = {observation.subject, *observation.co_present}
+            elif isinstance(observation, SawVentObservation):
+                group = {observation.subject}
+            else:
                 continue
-            group = {observation.subject, *observation.co_present}
-            if (
-                observation.room in body_rooms
-                or observation.subject in accused
-                or (group & accused)
-            ):
+            at_scene = observation.room in body_rooms or bool(
+                canonical_rooms(observation.room) & vent_scene_rooms
+            )
+            if at_scene or observation.subject in accused or (group & accused):
                 relevant |= group
 
     return tuple(
@@ -2367,6 +2439,41 @@ def exclude_teammate_accusation_claims(
         claim
         for claim in claims
         if not (isinstance(claim, AccusationClaim) and claim.against in teammates)
+    )
+
+
+def exclude_teammate_vent_observations(
+    observations: tuple[ObservationClaim, ...],
+    *,
+    fellow_impostor_ids: tuple[PlayerId, ...],
+) -> tuple[ObservationClaim, ...]:
+    """Drop every :class:`SawVentObservation` naming a fellow impostor (Task 15.4).
+
+    The observation-side twin of :func:`exclude_teammate_accusation_claims`,
+    made necessary by the same 7.12 doctrine the moment vents became
+    speakable: a structured vent observation is role-PROVING incrimination
+    (and, grounded, mints a STRONG ``vent_sighting`` flag), so without this
+    guard 15.4 would open the first path by which an impostor's structured
+    output can hard-flag its own teammate -- the render layer does NOT
+    suppress a witnessed teammate vent (``_sighting_is_suppressed`` covers
+    only kill-window sightings), so the elicitation can surface one. Returns
+    ``observations`` unchanged when ``fellow_impostor_ids`` is empty (every
+    crewmate and a sole impostor), so the no-coordination path is
+    byte-identical; only vent observations are filtered -- the three existing
+    observation kinds pass through untouched, exactly as the claims guard
+    retains teammate alibis and corroborations.
+    """
+
+    if not fellow_impostor_ids:
+        return observations
+    teammates = frozenset(fellow_impostor_ids)
+    return tuple(
+        observation
+        for observation in observations
+        if not (
+            isinstance(observation, SawVentObservation)
+            and observation.subject in teammates
+        )
     )
 
 
@@ -3079,6 +3186,7 @@ __all__ = [
     "derive_reported_testimony",
     "drop_teammate_statement_target",
     "exclude_teammate_accusation_claims",
+    "exclude_teammate_vent_observations",
     "extract_belief_evidence",
     "guard_ballot_target_graph",
 ]

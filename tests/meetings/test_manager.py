@@ -100,6 +100,8 @@ from meetings.schemas import (
     ObservationClaim,
     PlayerId,
     SawPlayerObservation,
+    SawVentObservation,
+    VentWitnessRecord,
     VoteBallot,
 )
 from meetings.transcript import (
@@ -421,6 +423,7 @@ def _participant(
     role: str = "CREWMATE",
     suspicion_graph: tuple[SuspicionEntry, ...] = (),
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    vent_witness_records: tuple[VentWitnessRecord, ...] = (),
 ) -> MeetingParticipant:
     return MeetingParticipant(
         agent_id=agent_id,
@@ -428,6 +431,7 @@ def _participant(
         rendered_memory=f"## Your role: {role}\n{agent_id} memory",
         suspicion_graph=suspicion_graph,
         fellow_impostor_ids=fellow_impostor_ids,
+        vent_witness_records=vent_witness_records,
     )
 
 
@@ -6660,3 +6664,340 @@ class TestUnfreezeRenderedMemory:
             return [c.prompt for c in client.calls]
 
         assert _make_run() == _make_run()
+
+
+# --- Task 15.4: vent observability through the validation path --------------
+
+
+def _vent_observation(
+    *, tick: int = 100, subject: str = "p-3", room: str = "MEDBAY"
+) -> SawVentObservation:
+    return SawVentObservation(type="saw_vent", tick=tick, subject=subject, room=room)
+
+
+def _vent_record(
+    *, tick: int = 100, subject: str = "p-3", room: str = "MEDBAY"
+) -> VentWitnessRecord:
+    return VentWitnessRecord(subject=subject, room=room, tick=tick)
+
+
+class TestVentObservabilityEndToEnd:
+    """Task 15.4: the grounded ``vent_sighting`` hard flag through the
+    production path — validation chokepoint -> grounding chokepoint ->
+    recorded flag -> Rule-2 fold -> ballot suspicion graph -> citable
+    ``primary_reason_id``. The fabricated twin (no matching typed record)
+    is the task's most important test: speech alone must never mint hard
+    evidence.
+    """
+
+    def _grounded_participants(self) -> tuple[MeetingParticipant, ...]:
+        # p-1 (the reporter) holds a typed witnessed-vent record naming p-3;
+        # everyone else holds none.
+        return (
+            _participant("p-1", vent_witness_records=(_vent_record(),)),
+            _participant("p-2"),
+            _participant("p-3"),
+            _participant("p-4"),
+        )
+
+    def _vent_responder(
+        self,
+        *,
+        vote_reason_ids: dict[str, str] | None = None,
+    ) -> Callable[[str, type[BaseModel] | None], str]:
+        # p-1 opens with the structured vent observation and accuses p-3;
+        # p-3 replies without counter-accusing, terminating the chain.
+        return _make_responder(
+            accusations={"p-1": "p-3", "p-3": None},
+            observations={"p-1": (_vent_observation(),)},
+            vote_reason_ids=vote_reason_ids,
+        )
+
+    def test_grounded_vent_observation_raises_strong_flag(self) -> None:
+        result, client = _run_meeting(
+            self._vent_responder(), participants=self._grounded_participants()
+        )
+
+        # The observation survived the validation path onto the recorded turn.
+        opening = result.transcript.turns[0]
+        assert opening.speaker == "p-1"
+        assert any(
+            isinstance(observation, SawVentObservation)
+            for observation in opening.observations
+        )
+        # The grounding chokepoint confirmed it against p-1's TYPED records
+        # and the transcript layer raised the role-proving STRONG flag.
+        vent_flags = [
+            flag for flag in result.contradictions if flag.kind == "vent_sighting"
+        ]
+        assert len(vent_flags) == 1
+        flag = vent_flags[0]
+        assert flag.subjects == ("p-3",)
+        assert WEAK_CONTRADICTION_MARKER_PREFIX not in flag.description
+        # The grounded flag feeds the belief fold exactly like a strong flag:
+        # every other voter's ballot graph reads p-3 at 0.5 + 0.3 = 0.80
+        # (Rule 2 full delta under the joint cap), across the 0.60 gate.
+        for voter in ("p-1", "p-2", "p-4"):
+            assert _vote_prompt_suspicion(client, voter=voter, of="p-3") == (
+                pytest.approx(0.80)
+            )
+
+    def test_grounded_vent_turn_is_citable_by_primary_reason_id(self) -> None:
+        # The vent observation lives on turn 0, so a ballot citing that
+        # turn's id validates through the standing §5.5 reason-id check.
+        result, _client = _run_meeting(
+            self._vent_responder(
+                vote_reason_ids={"p-2": "m-1:turn-0", "p-4": "m-1:turn-0"}
+            ),
+            participants=self._grounded_participants(),
+        )
+
+        cited = {
+            ballot.voter: ballot.primary_reason_id
+            for ballot in result.ballots
+            if ballot.voter in ("p-2", "p-4")
+        }
+        assert cited == {"p-2": "m-1:turn-0", "p-4": "m-1:turn-0"}
+
+    def test_fabricated_vent_observation_raises_no_flag(self) -> None:
+        # THE task's most important test: p-1 speaks the same structured vent
+        # observation but holds NO matching typed record — the observation is
+        # accepted as testimony (it stays on the recorded turn) but no flag
+        # fires and p-3's hard-evidence state is unchanged (graph reads the
+        # 0.5 default, not a 0.30-lifted value).
+        result, client = _run_meeting(
+            self._vent_responder(),
+            participants=(
+                _participant("p-1"),
+                _participant("p-2"),
+                _participant("p-3"),
+                _participant("p-4"),
+            ),
+        )
+
+        opening = result.transcript.turns[0]
+        assert any(
+            isinstance(observation, SawVentObservation)
+            for observation in opening.observations
+        )
+        assert [
+            flag for flag in result.contradictions if flag.kind == "vent_sighting"
+        ] == []
+        # No hard evidence minted: p-3 appears in the voters' graphs only
+        # through the accusation-side testimony fold (the single-voice
+        # +0.05 inform), never the 0.30 STRONG lift.
+        for voter in ("p-2", "p-4"):
+            assert _vote_prompt_suspicion(client, voter=voter, of="p-3") == (
+                pytest.approx(0.55)
+            )
+
+    def test_mismatched_record_raises_no_flag(self) -> None:
+        # A typed record exists but does not match the spoken observation
+        # (different subject): grounding is a per-observation comparison, not
+        # a "speaker holds some record" bit.
+        result, _client = _run_meeting(
+            self._vent_responder(),
+            participants=(
+                _participant(
+                    "p-1", vent_witness_records=(_vent_record(subject="p-4"),)
+                ),
+                _participant("p-2"),
+                _participant("p-3"),
+                _participant("p-4"),
+            ),
+        )
+
+        assert [
+            flag for flag in result.contradictions if flag.kind == "vent_sighting"
+        ] == []
+
+    def test_impostor_teammate_vent_observation_is_dropped(self) -> None:
+        # The 7.12 firewall's observation-side twin: an impostor speaker's
+        # structured vent observation naming a fellow impostor drops at the
+        # per-turn chokepoint — even when genuinely witnessed (a matching
+        # typed record exists), it never records and never flags.
+        responder = _make_responder(
+            accusations={"p-1": "p-3", "p-3": None},
+            observations={"p-1": (_vent_observation(),)},
+        )
+        result, _client = _run_meeting(
+            responder,
+            participants=(
+                _participant(
+                    "p-1",
+                    role="IMPOSTOR",
+                    fellow_impostor_ids=("p-3",),
+                    vent_witness_records=(_vent_record(),),
+                ),
+                _participant("p-2"),
+                _participant("p-3", role="IMPOSTOR", fellow_impostor_ids=("p-1",)),
+                _participant("p-4"),
+            ),
+        )
+
+        opening = result.transcript.turns[0]
+        assert not any(
+            isinstance(observation, SawVentObservation)
+            for observation in opening.observations
+        )
+        assert [
+            flag for flag in result.contradictions if flag.kind == "vent_sighting"
+        ] == []
+
+    def test_crewmate_vent_observation_of_non_teammate_is_kept(self) -> None:
+        # The guard is a no-op for every crewmate (empty fellow_impostor_ids):
+        # the same observation records untouched.
+        result, _client = _run_meeting(
+            self._vent_responder(), participants=self._grounded_participants()
+        )
+
+        assert any(
+            isinstance(observation, SawVentObservation)
+            for observation in result.transcript.turns[0].observations
+        )
+
+
+class TestVentSceneOptInEligibility:
+    """Task 15.4: a spoken vent observation is an opt-in relevance source —
+    a non-speaker placed at the vent scene becomes eligible, consistent with
+    the existing co-presence gate."""
+
+    def test_non_speaker_placed_at_vent_scene_becomes_eligible(self) -> None:
+        # p-1 opens: a grounded vent observation (p-3 vented in MEDBAY) plus
+        # a sighting placing p-4 in MEDBAY. p-3 replies (chain), p-2 is never
+        # accused and never placed anywhere relevant; p-4 was placed at the
+        # vent scene, so p-4 — and only p-4 — takes an opt-in turn.
+        responder = _make_responder(
+            accusations={"p-1": "p-3", "p-3": None, "p-4": None},
+            observations={
+                "p-1": (
+                    _vent_observation(),
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=101,
+                        subject="p-4",
+                        room="MEDBAY",
+                    ),
+                ),
+            },
+        )
+        result, _client = _run_meeting(
+            responder,
+            participants=(
+                _participant("p-1", vent_witness_records=(_vent_record(),)),
+                _participant("p-2"),
+                _participant("p-3"),
+                _participant("p-4"),
+            ),
+        )
+
+        opt_in_speakers = [
+            turn.speaker
+            for turn in result.transcript.turns
+            if turn.turn_kind == "opt_in"
+        ]
+        assert opt_in_speakers == ["p-4"]
+
+    def test_without_the_vent_observation_the_scene_grants_nothing(self) -> None:
+        # The non-vacuity control: the same sighting of p-4 in MEDBAY, with
+        # no vent observation and no body there, makes nobody eligible.
+        responder = _make_responder(
+            accusations={"p-1": "p-3", "p-3": None},
+            observations={
+                "p-1": (
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=101,
+                        subject="p-4",
+                        room="MEDBAY",
+                    ),
+                ),
+            },
+        )
+        result, _client = _run_meeting(responder)
+
+        assert [
+            turn.speaker
+            for turn in result.transcript.turns
+            if turn.turn_kind == "opt_in"
+        ] == []
+
+    def test_compound_vent_room_label_still_places_a_sighting_at_the_scene(
+        self,
+    ) -> None:
+        # PR #227 review (Codex P2): the vent-scene prong compares CANONICAL
+        # room sets, matching the grounding chokepoint's normalisation — a
+        # compound spoken label ("LABS/MEDBAY") that grounds against a MEDBAY
+        # witness record must also make a non-speaker SEEN in MEDBAY
+        # opt-in-eligible, not just players matching the raw string.
+        responder = _make_responder(
+            accusations={"p-1": "p-3", "p-3": None, "p-4": None},
+            observations={
+                "p-1": (
+                    _vent_observation(room="LABS/MEDBAY"),
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=101,
+                        subject="p-4",
+                        room="MEDBAY",
+                    ),
+                ),
+            },
+        )
+        result, _client = _run_meeting(
+            responder,
+            participants=(
+                _participant(
+                    "p-1", vent_witness_records=(_vent_record(room="MEDBAY"),)
+                ),
+                _participant("p-2"),
+                _participant("p-3"),
+                _participant("p-4"),
+            ),
+        )
+
+        # The compound label grounded (the same canonicalisation the
+        # chokepoint applies)...
+        assert [
+            flag.kind for flag in result.contradictions if flag.kind == "vent_sighting"
+        ] == ["vent_sighting"]
+        # ...and the MEDBAY sighting counts as placed at the vent scene.
+        assert [
+            turn.speaker
+            for turn in result.transcript.turns
+            if turn.turn_kind == "opt_in"
+        ] == ["p-4"]
+
+    def test_non_spatial_vent_room_label_grants_no_scene(self) -> None:
+        # A placeholder vent room canonicalises to nothing (the detector's
+        # allowlist doctrine): it grounds no flag and mints no scene, so the
+        # MEDBAY sighting stays irrelevant.
+        responder = _make_responder(
+            accusations={"p-1": "p-3", "p-3": None},
+            observations={
+                "p-1": (
+                    _vent_observation(room="SOMEWHERE"),
+                    SawPlayerObservation(
+                        type="saw_player",
+                        tick=101,
+                        subject="p-4",
+                        room="MEDBAY",
+                    ),
+                ),
+            },
+        )
+        result, _client = _run_meeting(
+            responder,
+            participants=(
+                _participant("p-1", vent_witness_records=(_vent_record(),)),
+                _participant("p-2"),
+                _participant("p-3"),
+                _participant("p-4"),
+            ),
+        )
+
+        assert [
+            turn.speaker
+            for turn in result.transcript.turns
+            if turn.turn_kind == "opt_in"
+        ] == []
