@@ -78,16 +78,29 @@ def main(argv: list[str] | None = None) -> int:
             "omitted, provenance is checked for coherence only (the generic default)"
         ),
     )
+    parser.add_argument(
+        "--require-zero-cost",
+        action="store_true",
+        help=(
+            "require every cost row to be exactly $0 (the audit's flat-rate "
+            "baselines); omitted, any finite non-negative cost is accepted"
+        ),
+    )
     args = parser.parse_args(argv)
     replay_set_dir: Path = args.replay_set_dir
     emit_json: bool = args.json
     expected_model: str | None = args.expected_model
+    require_zero_cost: bool = args.require_zero_cost
 
     if not replay_set_dir.is_dir():
         print(f"Replay-set directory not found: {replay_set_dir}", file=sys.stderr)
         return 2
     try:
-        report = run_validity_gate(replay_set_dir, expected_model=expected_model)
+        report = run_validity_gate(
+            replay_set_dir,
+            expected_model=expected_model,
+            require_zero_cost=require_zero_cost,
+        )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2

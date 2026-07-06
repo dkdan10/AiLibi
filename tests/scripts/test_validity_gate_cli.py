@@ -81,6 +81,7 @@ def test_json_output_is_machine_readable(
     assert [c["name"] for c in payload["checks"]] == [
         "all_games_reach_game_over",
         "meeting_rate_and_resolution",
+        "no_duplicate_meeting_rows",
         "no_tick_1_kills",
         "no_friendly_fire_kills",
         "no_betrayal_ballots_or_accusations",
@@ -242,7 +243,15 @@ def _synthetic_reconstruction(
         victim="p-2",
         victim_role=victim_role,  # type: ignore[arg-type]
     )
-    return [_GameReconstruction(seed=seed, win_check=win, kills=(kill,))]
+    return [
+        _GameReconstruction(
+            seed=seed,
+            win_check=win,
+            kills=(kill,),
+            reconstructed_winner="CREWMATES",
+            reconstructed_reason="CREWMATE_EJECT",
+        )
+    ]
 
 
 def test_fails_on_tick_1_kill(
@@ -393,6 +402,79 @@ def test_expected_model_flag_pins_provenance(
     assert "cost_and_provenance_exact" in {
         c["name"] for c in payload["checks"] if not c["passed"]
     }
+
+
+def test_corrupt_file_reported_not_raised(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A doubled game_over row makes assembly raise CorruptedFileError before the
+    # defensive byte-identity path; the gate must still exit 1 with valid JSON.
+    mini = _mini(tmp_path, seeds=(0,))
+    path = mini / "replay-seed-0.jsonl"
+    go = next(
+        line
+        for line in path.read_text().splitlines()
+        if json.loads(line).get("kind") == "game_over"
+    )
+    path.write_text(path.read_text() + go + "\n")
+    payload = _fail_and_get_check(mini, capsys)
+    assert "byte_identical_reconstruction" in _failing_names(payload)
+
+
+def test_fails_on_duplicate_meeting_row(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # ReplayLoader dedups meetings by tick (byte-identity clean) but the report
+    # double-counts, so the structural check must catch it.
+    mini = _mini(tmp_path, seeds=(0,))
+    path = mini / "replay-seed-0.jsonl"
+    lines = path.read_text().splitlines()
+    meeting_line = next(
+        line for line in lines if json.loads(line).get("kind") == "meeting"
+    )
+    idx = lines.index(meeting_line)
+    lines.insert(idx + 1, meeting_line)
+    path.write_text("\n".join(lines) + "\n")
+    payload = _fail_and_get_check(mini, capsys)
+    assert "no_duplicate_meeting_rows" in _failing_names(payload)
+
+
+def test_fails_on_forged_game_over_outcome(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Editing winner/reason keeps the state hashes valid, so only the outcome
+    # cross-check against the reconstructed GameOverEvent catches it.
+    mini = _mini(tmp_path, seeds=(0,))
+
+    def forge(obj: dict[str, Any]) -> dict[str, Any]:
+        if obj.get("kind") == "game_over":
+            obj["winner"] = "CREWMATES" if obj["winner"] == "IMPOSTORS" else "IMPOSTORS"
+            obj["reason"] = "CREWMATE_TASKS"
+        return obj
+
+    _rewrite_lines(mini / "replay-seed-0.jsonl", forge)
+    payload = _fail_and_get_check(mini, capsys)
+    assert "all_games_reach_game_over" in _failing_names(payload)
+
+
+def test_require_zero_cost_flag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The committed Featherless baseline is $0, so the flag passes.
+    assert validity_gate.main([str(_NINE), "--require-zero-cost"]) == 0
+    capsys.readouterr()
+    # A meeting recorded with positive per-call spend fails the flag.
+    mini = _mini(tmp_path, seeds=(0,))
+
+    def add_cost(obj: dict[str, Any]) -> dict[str, Any]:
+        if obj.get("kind") == "meeting" and obj.get("llm_calls"):
+            obj["llm_calls"][0]["cost_usd"] = 0.42
+        return obj
+
+    _rewrite_lines(mini / "replay-seed-0.jsonl", add_cost)
+    assert validity_gate.main([str(mini), "--require-zero-cost", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert "cost_and_provenance_exact" in _failing_names(payload)
 
 
 def test_json_failure_names_failing_checks(

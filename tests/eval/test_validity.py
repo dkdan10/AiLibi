@@ -28,6 +28,7 @@ from eval.validity import (
     check_meeting_rate_and_resolution,
     check_no_betrayal,
     check_no_dangling_primary_reason_id,
+    check_no_duplicate_meeting_rows,
     check_no_friendly_fire_kills,
     check_no_railroaded_crew_ejections,
     check_no_tick_1_kills,
@@ -81,11 +82,20 @@ def _recon(
     *,
     win_check: WinConditionSelfCheck | None = None,
     kills: Sequence[_KillFact] = (),
+    reconstructed_winner: str | None = "__match__",
+    reconstructed_reason: str | None = "__match__",
 ) -> _GameReconstruction:
+    check = win_check if win_check is not None else _win_check(seed)
+    # Default the reconstructed outcome to MATCH the recorded one so a plain
+    # _recon is a clean game; pass explicit values to forge a mismatch.
+    rw = check.winner if reconstructed_winner == "__match__" else reconstructed_winner
+    rr = check.reason if reconstructed_reason == "__match__" else reconstructed_reason
     return _GameReconstruction(
         seed=seed,
-        win_check=win_check if win_check is not None else _win_check(seed),
+        win_check=check,
         kills=tuple(kills),
+        reconstructed_winner=rw,  # type: ignore[arg-type]
+        reconstructed_reason=rr,
     )
 
 
@@ -149,6 +159,16 @@ def test_all_games_reach_game_over_fails_on_win_condition_regression() -> None:
     assert any("§6.3" in v for v in check.violations)
 
 
+def test_all_games_reach_game_over_fails_on_forged_outcome() -> None:
+    # Recorded winner CREWMATES but engine reconstructed IMPOSTORS/IMPOSTOR_PARITY.
+    forged = _recon(
+        3, reconstructed_winner="IMPOSTORS", reconstructed_reason="IMPOSTOR_PARITY"
+    )
+    check = check_all_games_reach_game_over([forged])
+    assert not check.passed
+    assert any("forged game_over label" in v for v in check.violations)
+
+
 # --------------------------------------------------------------------------- #
 # 2. meeting_rate_and_resolution                                              #
 # --------------------------------------------------------------------------- #
@@ -197,6 +217,21 @@ def test_meeting_resolution_fails_on_unresolved_meeting(
     )
     assert not check.passed
     assert any("unresolved" in v or "aborted" in v for v in check.violations)
+
+
+def test_no_duplicate_meeting_rows_passes(nine_report: TournamentReport) -> None:
+    check = check_no_duplicate_meeting_rows(nine_report)
+    assert check.passed
+    assert int(check.facts["meetings_total"]) == 142  # type: ignore[arg-type]
+
+
+def test_no_duplicate_meeting_rows_fails(nine_report: TournamentReport) -> None:
+    game = _first_game_with_meeting(nine_report)
+    dup = game.meetings[0]
+    bad_game = game.model_copy(update={"meetings": (dup, *game.meetings)})
+    check = check_no_duplicate_meeting_rows(_replace_first_game(nine_report, bad_game))
+    assert not check.passed
+    assert any("duplicate meeting row" in v for v in check.violations)
 
 
 # --------------------------------------------------------------------------- #
@@ -535,6 +570,44 @@ def test_provenance_exact_prompt_versions_pin(nine_report: TournamentReport) -> 
     assert any("prompt-version provenance" in v for v in wrong.violations)
 
 
+def test_provenance_fails_on_stripped_prompt_versions(
+    nine_report: TournamentReport,
+) -> None:
+    # A game that called the model but carries NO prompt stamp is stripped
+    # provenance — and an expected-pin over it must not vacuously pass.
+    stripped = nine_report.model_copy(
+        update={
+            "games": tuple(
+                g.model_copy(update={"prompt_versions": {}}) for g in nine_report.games
+            )
+        }
+    )
+    subs = _substrate_by_seed(_NINE)
+    plain = check_cost_and_provenance(stripped, subs)
+    assert not plain.passed
+    assert any("stripped prompt provenance" in v for v in plain.violations)
+    pinned = check_cost_and_provenance(
+        stripped, subs, expected_prompt_versions={"accusation_round": "x"}
+    )
+    assert not pinned.passed
+    assert any("records none" in v for v in pinned.violations)
+
+
+def test_provenance_require_zero_cost(nine_report: TournamentReport) -> None:
+    subs = _substrate_by_seed(_NINE)
+    # The committed Featherless baseline is $0, so the pin passes.
+    assert check_cost_and_provenance(nine_report, subs, require_zero_cost=True).passed
+    # A game with positive spend fails the pin.
+    game = nine_report.games[0]
+    paid = game.cost.model_copy(update={"total_cost_usd": 1.5})
+    bad_game = game.model_copy(update={"cost": paid})
+    check = check_cost_and_provenance(
+        _replace_first_game(nine_report, bad_game), subs, require_zero_cost=True
+    )
+    assert not check.passed
+    assert any("--require-zero-cost" in v for v in check.violations)
+
+
 # --------------------------------------------------------------------------- #
 # 8. byte_identical_reconstruction                                           #
 # --------------------------------------------------------------------------- #
@@ -653,6 +726,27 @@ def test_run_validity_gate_reproduces_4p1i_close() -> None:
     assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 39
 
 
+def test_run_validity_gate_never_crashes_on_corrupt_input(tmp_path: Path) -> None:
+    # A doubled game_over row makes read_all_entries raise CorruptedFileError; the
+    # gate must emit a failed report, not a traceback.
+    mini = _mini_set(tmp_path, seeds=(0,))
+    path = mini / "replay-seed-0.jsonl"
+    go = next(
+        line
+        for line in path.read_text().splitlines()
+        if json.loads(line).get("kind") == "game_over"
+    )
+    path.write_text(path.read_text() + go + "\n")
+    report = run_validity_gate(mini)  # must not raise
+    assert not report.passed
+    assert "byte_identical_reconstruction" in report.failing_checks()
+    # The report-based checks that could not read the corrupt file fail closed.
+    unavailable = {
+        c.name for c in report.checks if c.facts.get("input_available") is False
+    }
+    assert "meeting_rate_and_resolution" in unavailable
+
+
 def test_gate_report_json_round_trips() -> None:
     report = run_validity_gate(_FOUR)
     text = report.model_dump_json()
@@ -668,6 +762,7 @@ def test_every_check_is_individually_reported() -> None:
     assert names == [
         "all_games_reach_game_over",
         "meeting_rate_and_resolution",
+        "no_duplicate_meeting_rows",
         "no_tick_1_kills",
         "no_friendly_fire_kills",
         "no_betrayal_ballots_or_accusations",

@@ -20,32 +20,42 @@ the engine from each replay's seed (the deterministic recipe
 gate depends only on the committed ``replay-seed-*.jsonl`` + ``roster.json`` and
 does not read the committed ``tournament-eval-report.json`` at all.
 
-The nine gate checks (each named + individually reported), per the Task-15.1
+The ten gate checks (each named + individually reported), per the Task-15.1
 Definition of Done plus the Phase-14-close §1 betrayal row:
 
-1. ``all_games_reach_game_over`` — every recorded game wrote a ``game_over`` row
-   AND the §6.3 win-condition invariant holds (:mod:`eval.win_condition_selfcheck`).
+1. ``all_games_reach_game_over`` — every recorded game wrote a ``game_over`` row,
+   the §6.3 win-condition invariant holds (:mod:`eval.win_condition_selfcheck`),
+   and the recorded ``winner`` / ``reason`` match the engine's reconstructed
+   ``GameOverEvent`` (a forged outcome label survives byte-identity otherwise).
 2. ``meeting_rate_and_resolution`` — ``meeting_rate >= 0.60`` and every triggered
    meeting resolved (no failed call aborted a meeting without a resolved entry).
-3. ``no_tick_1_kills`` — zero resolved kills at tick <= 1 (the spawn-cooldown
+3. ``no_duplicate_meeting_rows`` — no game records two meeting rows for the same
+   meeting id / tick (``ReplayLoader`` dedups by tick, so byte-identity misses the
+   double-count the report fold would otherwise absorb).
+4. ``no_tick_1_kills`` — zero resolved kills at tick <= 1 (the spawn-cooldown
    guard; :func:`orchestrator.seeder.seed_initial_state` makes a tick-1 kill
    impossible, so any is a regression).
-4. ``no_friendly_fire_kills`` — zero resolved kills whose victim is an impostor
+5. ``no_friendly_fire_kills`` — zero resolved kills whose victim is an impostor
    (the engine role-aware kill guard held).
-5. ``no_betrayal_ballots_or_accusations`` — no impostor ballot or accusation names
+6. ``no_betrayal_ballots_or_accusations`` — no impostor ballot or accusation names
    a fellow impostor (the §7.12 firewall row on the audit's §1 table).
-6. ``no_railroaded_crew_ejections`` — the restored Task-14.12 tripwire: no crew
+7. ``no_railroaded_crew_ejections`` — the restored Task-14.12 tripwire: no crew
    member's vote-prompt suspicion rendered at a clamped 1.0 driven by >= 2
    same-meeting contradiction flags.
-7. ``no_dangling_primary_reason_id`` — every ballot ``primary_reason_id``
+8. ``no_dangling_primary_reason_id`` — every ballot ``primary_reason_id``
    references a real transcript turn id in its meeting.
-8. ``cost_and_provenance_exact`` — every game's substrate-flag stamp equals the
+9. ``cost_and_provenance_exact`` — every game's substrate-flag stamp equals the
    canonical snapshot with the canonical key set; a single coherent model +
-   prompt set across the run (optionally pinned to exact expected values); every
-   aggregate AND per-call cost row finite and non-negative.
-9. ``byte_identical_reconstruction`` — the recorded state-hash chain reconstructs
+   prompt set across the run (optionally pinned to exact expected values); a game
+   that called the model carries a prompt-version stamp; every aggregate AND
+   per-call cost row finite and non-negative (optionally required to be $0).
+10. ``byte_identical_reconstruction`` — the recorded state-hash chain reconstructs
    byte-identically under the current engine (``scripts/_verify_samples.py``);
    a verifier that raises on malformed input is reported as a failure, not a crash.
+
+The whole gate is crash-proof on untrusted input: a corrupt replay that raises
+out of report assembly / substrate reads / reconstruction fails the affected
+checks (closed) rather than escaping — the report is always emitted.
 
 JSON report schema (``ValidityGateReport.model_dump()`` / ``--json``), consumed
 by the 15.15 harness and the 15.7 / 15.18 audits — STABLE::
@@ -80,12 +90,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from api import replay_loader
 from engine.actions import Action
 from engine.entities import PlayerId, Role
-from engine.events import KilledEvent, MeetingTriggeredEvent
+from engine.events import GameOverEvent, KilledEvent, MeetingTriggeredEvent
 from engine.tick import advance_tick
 from engine.world import Map, load_canonical_map
 from eval.balance_eval import load_tournament_report
@@ -98,13 +108,25 @@ from orchestrator.replay import (
     GameEndReplayEntry,
     MeetingReplayEntry,
     ReplayEntry,
+    ReplayLog,
     SUBSTRATE_FLAG_KEYS,
+    WinnerSide,
     _state_hash,
     read_all_entries,
     read_substrate_flags,
     substrate_flag_snapshot,
 )
 from orchestrator.seeder import seed_initial_state
+
+# Malformed-input raises that the resilient gate converts into failed checks
+# rather than letting escape (a corrupted candidate dir must never crash the CLI).
+_MALFORMED_INPUT_ERRORS: Final[tuple[type[Exception], ...]] = (
+    ReplayLog.CorruptedFileError,
+    ValidationError,
+    ValueError,
+    KeyError,
+    FileNotFoundError,
+)
 
 # ``scripts/`` is on ``mypy_path`` (pyproject) but is not an importable package;
 # ``_verify_samples`` is explicitly "importable for unit tests" (its docstring),
@@ -215,6 +237,13 @@ class _GameReconstruction:
     seed: int
     win_check: WinConditionSelfCheck
     kills: tuple[_KillFact, ...]
+    # The winner/reason the ENGINE emitted at the reconstructed terminal state
+    # (from the ``GameOverEvent``), independent of the recorded ``game_over`` row
+    # — ``None`` if reconstruction never reached game over. Compared against the
+    # recorded outcome to catch a forged winner/reason (state hashes do not cover
+    # the recorded label).
+    reconstructed_winner: WinnerSide | None
+    reconstructed_reason: str | None
 
 
 # --------------------------------------------------------------------------- #
@@ -355,6 +384,8 @@ def _reconstruct_game(
 
     kills: list[_KillFact] = []
     first_zero_impostor_tick: int | None = None
+    reconstructed_winner: WinnerSide | None = None
+    reconstructed_reason: str | None = None
 
     def _record_zero(tick: int) -> None:
         nonlocal first_zero_impostor_tick
@@ -375,7 +406,10 @@ def _reconstruct_game(
             game_id, entry.tick, entry.state_hash, _state_hash(state)
         )
         for event in events:
-            if isinstance(event, KilledEvent):
+            if isinstance(event, GameOverEvent):
+                reconstructed_winner = event.winner
+                reconstructed_reason = event.reason
+            elif isinstance(event, KilledEvent):
                 kills.append(
                     _KillFact(
                         seed=seed,
@@ -416,9 +450,13 @@ def _reconstruct_game(
             contradictions=meeting_entry.contradictions,
             transcript=meeting_entry.transcript,
         )
-        state, _ = apply_meeting_result(
+        state, meeting_events = apply_meeting_result(
             state, result, game_map=game_map, triggering_body_id=body_id
         )
+        for event in meeting_events:
+            if isinstance(event, GameOverEvent):
+                reconstructed_winner = event.winner
+                reconstructed_reason = event.reason
         _verify_reconstruction(
             game_id, entry.tick, meeting_entry.state_hash_after, _state_hash(state)
         )
@@ -434,7 +472,13 @@ def _reconstruct_game(
         first_zero_impostor_tick=first_zero_impostor_tick,
         game_over_tick=game_end.tick if game_end is not None else None,
     )
-    return _GameReconstruction(seed=seed, win_check=win_check, kills=tuple(kills))
+    return _GameReconstruction(
+        seed=seed,
+        win_check=win_check,
+        kills=tuple(kills),
+        reconstructed_winner=reconstructed_winner,
+        reconstructed_reason=reconstructed_reason,
+    )
 
 
 def _verify_reconstruction(game_id: str, tick: int, expected: str, actual: str) -> None:
@@ -480,7 +524,15 @@ def _reconstruct_set(sample_dir: Path) -> list[_GameReconstruction]:
 def check_all_games_reach_game_over(
     reconstructions: Sequence[_GameReconstruction],
 ) -> ValidityCheck:
-    """Every game wrote a ``game_over`` row AND holds the §6.3 win invariant."""
+    """Every game wrote a ``game_over`` row, holds the §6.3 win invariant, and
+    records the outcome the engine actually reconstructs.
+
+    The recorded ``game_over`` ``winner`` / ``reason`` are metadata NOT covered by
+    the state-hash chain, so a forged label survives byte-identity. This check
+    compares them against the engine's reconstructed :class:`GameOverEvent`
+    (which ``scripts/measure_baseline.py`` folds into the win split + R1), so a
+    tampered outcome fails here.
+    """
 
     violations: list[str] = []
     for game in reconstructions:
@@ -494,6 +546,15 @@ def check_all_games_reach_game_over(
                 f"seed {game.seed}: §6.3 regression — last impostor eliminated at "
                 f"tick {check.first_zero_impostor_tick} but game_over at tick "
                 f"{check.game_over_tick}"
+            )
+        if game.reconstructed_winner is not None and (
+            check.winner != game.reconstructed_winner
+            or check.reason != game.reconstructed_reason
+        ):
+            violations.append(
+                f"seed {game.seed}: recorded outcome {check.winner}/{check.reason} "
+                f"!= reconstructed {game.reconstructed_winner}/"
+                f"{game.reconstructed_reason} (forged game_over label)"
             )
     total = len(reconstructions)
     reached = sum(1 for g in reconstructions if g.win_check.game_over_tick is not None)
@@ -550,6 +611,46 @@ def check_meeting_rate_and_resolution(report: TournamentReport) -> ValidityCheck
             "games_with_meeting": meeting.games_with_meeting,
             "unresolved_meetings": len(set(unresolved)),
             "min_resolved_meetings_note": MIN_RESOLVED_MEETINGS_NOTE,
+        },
+    )
+
+
+def check_no_duplicate_meeting_rows(report: TournamentReport) -> ValidityCheck:
+    """No game records two meeting rows for the same meeting id or tick.
+
+    ``api.replay_loader.ReplayLoader`` collapses duplicate meeting rows by tick,
+    so the byte-identity check reports clean while
+    :func:`eval.balance_eval.load_tournament_report` counts BOTH — double-counting
+    resolved meetings, ballots, and cost. This structural check catches the
+    duplication byte-identity cannot (each ``meeting_id`` is unique per game and
+    at most one meeting resolves per tick).
+    """
+
+    violations: list[str] = []
+    meetings_total = 0
+    for game in report.games:
+        seen_ids: set[str] = set()
+        seen_ticks: set[int] = set()
+        for meeting in game.meetings:
+            meetings_total += 1
+            if meeting.meeting_id in seen_ids:
+                violations.append(
+                    f"seed {game.seed}: duplicate meeting row {meeting.meeting_id}"
+                )
+            seen_ids.add(meeting.meeting_id)
+            if meeting.tick in seen_ticks:
+                violations.append(
+                    f"seed {game.seed}: two meetings recorded at tick {meeting.tick}"
+                )
+            seen_ticks.add(meeting.tick)
+    return ValidityCheck(
+        name="no_duplicate_meeting_rows",
+        passed=not violations,
+        summary=f"{len(violations)} duplicate meeting rows over {meetings_total} (want 0)",
+        violations=tuple(violations),
+        facts={
+            "duplicate_meeting_rows": len(violations),
+            "meetings_total": meetings_total,
         },
     )
 
@@ -748,6 +849,7 @@ def check_cost_and_provenance(
     *,
     expected_model: str | None = None,
     expected_prompt_versions: Mapping[str, str] | None = None,
+    require_zero_cost: bool = False,
 ) -> ValidityCheck:
     """Substrate-flag stamp, model, prompt set, and cost rows all coherent (+ exact).
 
@@ -758,11 +860,15 @@ def check_cost_and_provenance(
       coherent mixed-tier set is valid, drift is not). Because the CLIs gate an
       ARBITRARY dir, the model / prompt-set VALUES are not hard-coded; pass
       ``expected_model`` / ``expected_prompt_versions`` (from the recording config,
-      e.g. the 15.7 / 15.12 re-records) to additionally pin them EXACTLY.
+      e.g. the 15.7 / 15.12 re-records) to additionally pin them EXACTLY. A game
+      that recorded model calls (non-empty ``by_model``) but carries NO
+      prompt-version stamp is a stripped-provenance failure.
     * Every cost row is finite and non-negative — both the per-game
       :class:`~eval.report_schema.GameCostSummary` AND each per-call
       ``llm_calls`` / ``failed_calls`` row (a corrupt per-call figure can hide
-      inside a still-positive aggregate).
+      inside a still-positive aggregate). ``require_zero_cost`` (opt-in, for the
+      audit's ``cost rows = 0`` flat-rate baselines) additionally demands every
+      row be exactly ``0.0``.
     """
 
     snapshot = substrate_flag_snapshot()
@@ -796,7 +902,15 @@ def check_cost_and_provenance(
             all_models.update(game.cost.by_model)
         if game.prompt_versions:
             prompt_sets.add(tuple(sorted(game.prompt_versions.items())))
-        _fold_cost_row_violations(game, violations)
+        # A game that called the model MUST carry a prompt-version stamp; an empty
+        # map on a game with recorded calls is stripped provenance, not the
+        # legitimately-empty no-meeting case.
+        if game.cost.by_model and not game.prompt_versions:
+            violations.append(
+                f"{game.game_id}: recorded model calls but empty prompt_versions "
+                "(stripped prompt provenance)"
+            )
+        _fold_cost_row_violations(game, violations, require_zero_cost=require_zero_cost)
 
     if len(model_sets) > 1:
         violations.append(f"inconsistent model sets across games: {sorted(model_sets)}")
@@ -814,7 +928,12 @@ def check_cost_and_provenance(
         )
     if expected_prompt_versions is not None:
         want = tuple(sorted(expected_prompt_versions.items()))
-        if any(recorded != want for recorded in prompt_sets):
+        if not prompt_sets:
+            violations.append(
+                "expected prompt-version provenance "
+                f"{dict(expected_prompt_versions)} but the set records none"
+            )
+        elif any(recorded != want for recorded in prompt_sets):
             violations.append(
                 "prompt-version provenance does not match expected "
                 f"{dict(expected_prompt_versions)}"
@@ -840,14 +959,25 @@ def check_cost_and_provenance(
     )
 
 
-def _fold_cost_row_violations(game: GameReport, violations: list[str]) -> None:
-    """Validate a game's aggregate AND per-call cost rows (finite, non-negative)."""
+def _fold_cost_row_violations(
+    game: GameReport, violations: list[str], *, require_zero_cost: bool = False
+) -> None:
+    """Validate a game's aggregate AND per-call cost rows (finite, non-negative).
+
+    With ``require_zero_cost`` every cost figure must additionally be exactly
+    ``0.0`` (the audit's flat-rate ``cost rows = 0`` row, opt-in per set).
+    """
 
     cost = game.cost
     if not _is_finite_nonneg(cost.total_cost_usd):
         violations.append(
             f"{game.game_id}: total_cost_usd {cost.total_cost_usd!r} is not "
             "finite / >= 0"
+        )
+    elif require_zero_cost and cost.total_cost_usd != 0.0:
+        violations.append(
+            f"{game.game_id}: total_cost_usd {cost.total_cost_usd} != 0 "
+            "(--require-zero-cost)"
         )
     if cost.total_input_tokens < 0 or cost.total_output_tokens < 0:
         violations.append(f"{game.game_id}: negative aggregate token count")
@@ -863,6 +993,11 @@ def _fold_cost_row_violations(game: GameReport, violations: list[str]) -> None:
                     f"llm_call cost row (in={call.input_tokens}, "
                     f"out={call.output_tokens}, usd={call.cost_usd!r})"
                 )
+            elif require_zero_cost and call.cost_usd != 0.0:
+                violations.append(
+                    f"{game.game_id} meeting {meeting.meeting_id}: llm_call "
+                    f"cost_usd {call.cost_usd} != 0 (--require-zero-cost)"
+                )
     for failed in game.failed_calls:
         if (
             failed.input_tokens < 0
@@ -873,6 +1008,11 @@ def _fold_cost_row_violations(game: GameReport, violations: list[str]) -> None:
                 f"{game.game_id}: malformed failed_call cost row "
                 f"(in={failed.input_tokens}, out={failed.output_tokens}, "
                 f"usd={failed.cost_usd!r})"
+            )
+        elif require_zero_cost and failed.cost_usd != 0.0:
+            violations.append(
+                f"{game.game_id}: failed_call cost_usd {failed.cost_usd} != 0 "
+                "(--require-zero-cost)"
             )
 
 
@@ -928,18 +1068,27 @@ def run_validity_gate(
     *,
     expected_model: str | None = None,
     expected_prompt_versions: Mapping[str, str] | None = None,
+    require_zero_cost: bool = False,
 ) -> ValidityGateReport:
     """Run every HARD validity check over ``replay_set_dir`` and compose the verdict.
 
     Pure and offline. Assembles the typed report (roster + re-seeded roles +
-    frozen-outcome fold), reconstructs each game once (kills + win-condition),
-    reads each game's substrate stamp, and folds the nine named checks into a
-    :class:`ValidityGateReport` whose ``passed`` is the AND over all of them.
+    frozen-outcome fold), reconstructs each game once (kills + win-condition +
+    engine outcome), reads each game's substrate stamp, and folds the ten named
+    checks into a :class:`ValidityGateReport` whose ``passed`` is the AND over all
+    of them.
 
-    ``expected_model`` / ``expected_prompt_versions`` optionally pin the provenance
-    row to EXACT values (the recording config, e.g. the 15.7 / 15.12 re-records);
-    omitted, the provenance check enforces coherence only (the generic default so
-    an arbitrary candidate dir on a different model is not falsely rejected).
+    Crash-proof on ARBITRARY input: the gate accepts untrusted candidate dirs, so
+    a corrupt replay (duplicate tick / doubled ``game_over``) that raises out of
+    report assembly, substrate reads, or reconstruction is converted into a failed
+    check (``byte_identical_reconstruction`` reports the concrete corruption)
+    rather than a traceback — downstream automation always receives the report.
+
+    ``expected_model`` / ``expected_prompt_versions`` / ``require_zero_cost``
+    optionally pin the provenance row to EXACT values / $0 cost (the recording
+    config, e.g. the 15.7 / 15.12 re-records); omitted, the provenance check
+    enforces coherence + well-formedness only (the generic default so an arbitrary
+    candidate dir on a different model / paid provider is not falsely rejected).
     """
 
     if not replay_set_dir.is_dir():
@@ -948,52 +1097,93 @@ def run_validity_gate(
     if not seeds:
         raise ValueError(f"no replay-seed-*.jsonl found under {replay_set_dir}")
 
-    report = assemble_tournament_report(replay_set_dir)
-    substrate_by_seed = {
-        seed: read_substrate_flags(replay_set_dir / f"replay-seed-{seed}.jsonl")
-        for seed in seeds
-    }
+    # Byte-identity is independent and already crash-proof — it names the concrete
+    # corruption behind any assembly/reconstruction failure below.
+    byte_check = check_byte_identical_reconstruction(replay_set_dir)
 
-    # The state-hash chain check must never crash the gate: a corrupted hash makes
-    # _reconstruct_set raise, so run it defensively and, when reconstruction is
-    # impossible, fail the three reconstruction-dependent checks rather than
-    # letting the exception escape (byte_identical_reconstruction reports the
-    # concrete drift). Reconstruction is safe when the chain reconstructs.
+    report: TournamentReport | None = None
+    report_error: str | None = None
+    try:
+        report = assemble_tournament_report(replay_set_dir)
+    except _MALFORMED_INPUT_ERRORS as exc:
+        report_error = f"{type(exc).__name__}: {exc}"
+
+    substrate_by_seed: dict[int, Mapping[str, bool] | None] | None = None
+    substrate_error: str | None = None
+    try:
+        substrate_by_seed = {
+            seed: read_substrate_flags(replay_set_dir / f"replay-seed-{seed}.jsonl")
+            for seed in seeds
+        }
+    except _MALFORMED_INPUT_ERRORS as exc:
+        substrate_error = f"{type(exc).__name__}: {exc}"
+
+    reconstructions: list[_GameReconstruction] | None = None
+    reconstruction_error: str | None = None
     try:
         reconstructions = _reconstruct_set(replay_set_dir)
-    except ValueError as exc:
-        reconstruction_error: str | None = str(exc)
-        all_kills: list[_KillFact] = []
-        game_over_check = _reconstruction_unavailable(
-            "all_games_reach_game_over", reconstruction_error
-        )
-        tick_1_check = _reconstruction_unavailable(
-            "no_tick_1_kills", reconstruction_error
-        )
-        friendly_fire_check = _reconstruction_unavailable(
-            "no_friendly_fire_kills", reconstruction_error
-        )
-    else:
+    except _MALFORMED_INPUT_ERRORS as exc:
+        reconstruction_error = f"{type(exc).__name__}: {exc}"
+
+    if reconstructions is not None:
         all_kills = [kill for game in reconstructions for kill in game.kills]
         game_over_check = check_all_games_reach_game_over(reconstructions)
         tick_1_check = check_no_tick_1_kills(all_kills)
         friendly_fire_check = check_no_friendly_fire_kills(all_kills)
+    else:
+        game_over_check = _check_unavailable(
+            "all_games_reach_game_over", reconstruction_error
+        )
+        tick_1_check = _check_unavailable("no_tick_1_kills", reconstruction_error)
+        friendly_fire_check = _check_unavailable(
+            "no_friendly_fire_kills", reconstruction_error
+        )
 
-    checks = (
-        game_over_check,
-        check_meeting_rate_and_resolution(report),
-        tick_1_check,
-        friendly_fire_check,
-        check_no_betrayal(report),
-        check_no_railroaded_crew_ejections(report),
-        check_no_dangling_primary_reason_id(report),
-        check_cost_and_provenance(
+    if report is not None:
+        meeting_check = check_meeting_rate_and_resolution(report)
+        dup_meeting_check = check_no_duplicate_meeting_rows(report)
+        betrayal_check = check_no_betrayal(report)
+        railroad_check = check_no_railroaded_crew_ejections(report)
+        dangling_check = check_no_dangling_primary_reason_id(report)
+    else:
+        meeting_check = _check_unavailable("meeting_rate_and_resolution", report_error)
+        dup_meeting_check = _check_unavailable(
+            "no_duplicate_meeting_rows", report_error
+        )
+        betrayal_check = _check_unavailable(
+            "no_betrayal_ballots_or_accusations", report_error
+        )
+        railroad_check = _check_unavailable(
+            "no_railroaded_crew_ejections", report_error
+        )
+        dangling_check = _check_unavailable(
+            "no_dangling_primary_reason_id", report_error
+        )
+
+    if report is not None and substrate_by_seed is not None:
+        provenance_check = check_cost_and_provenance(
             report,
             substrate_by_seed,
             expected_model=expected_model,
             expected_prompt_versions=expected_prompt_versions,
-        ),
-        check_byte_identical_reconstruction(replay_set_dir),
+            require_zero_cost=require_zero_cost,
+        )
+    else:
+        provenance_check = _check_unavailable(
+            "cost_and_provenance_exact", report_error or substrate_error
+        )
+
+    checks = (
+        game_over_check,
+        meeting_check,
+        dup_meeting_check,
+        tick_1_check,
+        friendly_fire_check,
+        betrayal_check,
+        railroad_check,
+        dangling_check,
+        provenance_check,
+        byte_check,
     )
     return ValidityGateReport(
         replay_set_dir=str(replay_set_dir),
@@ -1003,16 +1193,21 @@ def run_validity_gate(
     )
 
 
-def _reconstruction_unavailable(name: str, error: str | None) -> ValidityCheck:
-    """A reconstruction-dependent check that failed because replay didn't rebuild."""
+def _check_unavailable(name: str, error: str | None) -> ValidityCheck:
+    """A check that could not run because its input replay data was malformed.
 
-    detail = error or "engine reconstruction unavailable"
+    Fails closed (``passed=False``): if the bytes cannot be read/reconstructed the
+    gate must not PASS. ``byte_identical_reconstruction`` reports the concrete
+    corruption; this records that the dependent check was skipped because of it.
+    """
+
+    detail = error or "replay data unavailable (malformed input)"
     return ValidityCheck(
         name=name,
         passed=False,
-        summary="engine reconstruction unavailable (state-hash chain did not rebuild)",
+        summary="check unavailable — replay data could not be read/reconstructed",
         violations=(detail,),
-        facts={"reconstruction_available": False},
+        facts={"input_available": False},
     )
 
 
@@ -1028,6 +1223,7 @@ __all__ = [
     "check_meeting_rate_and_resolution",
     "check_no_betrayal",
     "check_no_dangling_primary_reason_id",
+    "check_no_duplicate_meeting_rows",
     "check_no_friendly_fire_kills",
     "check_no_railroaded_crew_ejections",
     "check_no_tick_1_kills",
