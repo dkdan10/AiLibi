@@ -74,6 +74,10 @@ from eval.vote_correctness import (  # noqa: E402
     compute_genuine_class_conversion,
     compute_vote_correctness,
 )
+from eval.watchability import (  # noqa: E402
+    WatchabilityReport,
+    compute_watchability,
+)
 
 # The two canonical committed baseline-2 sets measured when no dir is given.
 _CANONICAL_SETS: tuple[Path, ...] = (
@@ -210,6 +214,49 @@ def _emit_json(reports: Sequence[BaselineMeasurementReport]) -> str:
     return json.dumps([report.model_dump() for report in reports], indent=2)
 
 
+# --------------------------------------------------------------------------- #
+# Task 15.2 watchability fold region (disjoint from the 15.1 core-folds region  #
+# above and the 15.3 funnel region): the selection referee's per-game +         #
+# aggregate results, emitted under `--watchability` for the 15.15 harness and    #
+# the 15.7 / 15.18 audits (see eval.watchability for the doctrine + schema).     #
+# --------------------------------------------------------------------------- #
+
+
+def _render_watchability(report: WatchabilityReport) -> str:
+    gauges = "\n".join(
+        f"    {g.name}: measured "
+        f"{g.measured if g.measured is None else round(g.measured, 4)} "
+        f">= floor {g.floor} -> {'PASS' if g.passed else 'FAIL'}"
+        for g in report.supply_gauges
+    )
+    top = report.per_game[0] if report.per_game else None
+    top_line = (
+        f"  top game: seed {top.seed} ({top.reason}) score {top.score}"
+        if top is not None
+        else "  (no games)"
+    )
+    return "\n".join(
+        [
+            f"Watchability referee over {report.replay_set_dir} "
+            f"({report.games_total} games; baseline {report.baseline_id} / "
+            f"{report.roster_key}):",
+            f"  referee: {'PASS' if report.referee_passed else 'FAIL'} "
+            f"(supply floors {'PASS' if report.supply_floors_passed else 'FAIL'}, "
+            f"integrity {'OK' if report.integrity_ok else 'BREACH'})",
+            "  evidence-supply floors:",
+            gauges,
+            f"  geomean: mean {report.mean_score} / median {report.median_score}",
+            top_line,
+        ]
+    )
+
+
+def _emit_watchability_json(reports: Sequence[WatchabilityReport]) -> str:
+    import json
+
+    return json.dumps([report.model_dump() for report in reports], indent=2)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -232,6 +279,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="emit the machine-readable BaselineMeasurementReport JSON array",
     )
+    parser.add_argument(
+        "--watchability",
+        action="store_true",
+        help=(
+            "emit the Task-15.2 selection-referee fold (evidence-supply floors + "
+            "the D1-D4 geomean) instead of the core R-gate folds"
+        ),
+    )
+    parser.add_argument(
+        "--baseline-id",
+        default="baseline-2",
+        help=(
+            "the per-baseline supply-floor block the referee reads "
+            "(default: baseline-2; Task 15.7 pins baseline-3)"
+        ),
+    )
     args = parser.parse_args(argv)
     explicit_dir: Path | None = args.replay_set_dir
     emit_json: bool = args.json
@@ -241,7 +304,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         targets = list(_CANONICAL_SETS)
 
-    reports: list[BaselineMeasurementReport] = []
     for sample_dir in targets:
         if not sample_dir.is_dir():
             print(f"Replay-set directory not found: {sample_dir}", file=sys.stderr)
@@ -249,8 +311,23 @@ def main(argv: list[str] | None = None) -> int:
         if not seeds_on_disk(sample_dir):
             print(f"No replay-seed-*.jsonl files in {sample_dir}", file=sys.stderr)
             return 2
-        reports.append(measure_baseline(sample_dir))
 
+    if args.watchability:
+        watchability_reports = [
+            compute_watchability(sample_dir, baseline_id=args.baseline_id)
+            for sample_dir in targets
+        ]
+        if emit_json:
+            print(_emit_watchability_json(watchability_reports))
+        else:
+            print(
+                "\n\n".join(
+                    _render_watchability(report) for report in watchability_reports
+                )
+            )
+        return 0
+
+    reports = [measure_baseline(sample_dir) for sample_dir in targets]
     if emit_json:
         print(_emit_json(reports))
     else:
