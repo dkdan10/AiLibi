@@ -97,6 +97,8 @@ for the before/after close finding — STABLE::
       "killer_at_scene": int, "kill_witnessed": int,
       # -- Stage 3 --
       "vent_mentioned": int, "vent_meetings": int,          # e.g. 36 / 74
+      "killer_placement_observed": int,   # structured saw_player places killer at scene
+      "killer_accused": int,              # an accusation names the killer
       "votes_outside_small_set": int, "small_set_ejections": int,  # e.g. 42 / 73
       "reporter_ejected": int, "reporter_ejected_innocent": int,   # e.g. 22 / 22
       "report_ejections": int,                                     # e.g. 106
@@ -612,12 +614,20 @@ def _holds_scene(meeting: _ReportMeeting, walk: _GameWalk) -> bool:
     transition touching the scene). The move channel is what raw co-location misses:
     a crew member who watched the killer walk into the kill room has placed them
     there just as surely as one standing in it.
+
+    The window is capped at the meeting-trigger tick: when the body is reported on
+    the very next tick (``meeting.tick == kill_tick + 1``), the ``kill_tick + 2``
+    packet is a post-meeting resumed-play frame — not evidence anyone held going
+    INTO the meeting — so it must not count (Stage-2 possession is what the crew
+    brought to the vote).
     """
 
     crew = _living_crew(meeting, walk.roles)
     killer = meeting.killer
     room = meeting.kill_room
     for packet_tick in (meeting.kill_tick + 1, meeting.kill_tick + 2):
+        if packet_tick > meeting.tick:
+            continue
         seen = walk.sight.get(packet_tick, {})
         transitions = walk.moved.get(packet_tick, {})
         for observer in crew:
@@ -641,6 +651,11 @@ def _holds_last_seen_with_killer(
     from the kill tick to that crew member's most recent co-location with the
     still-alive victim; the clue is held iff the killer shared that room. A single
     crew member whose last look at the victim caught the killer beside them suffices.
+
+    A killer hidden IN A VENT in that room does not count: a vented player is
+    invisible to same-room observers (:mod:`engine.visibility`), so the observer
+    only ever saw the victim, never the vent-concealed killer. (Only the killer can
+    be vented here — vents are impostor-only and kill targets/observers are crew.)
     """
 
     crew = _living_crew(meeting, roles) - {meeting.reporter}
@@ -654,7 +669,7 @@ def _holds_last_seen_with_killer(
                 continue
             if frame.room.get(observer) != frame.room.get(V):
                 continue
-            if frame.room.get(K) == frame.room.get(V):
+            if frame.room.get(K) == frame.room.get(V) and not frame.in_vent.get(K):
                 return True
             break  # only this crew member's LAST co-location with the victim counts
     return False

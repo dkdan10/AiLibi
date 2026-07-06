@@ -23,6 +23,7 @@ from eval.funnel import (
     _candidate_set_exact,
     _Frame,
     _GameWalk,
+    _has_killer_placement_observation,
     _holds_kill_witnessed,
     _holds_last_seen_with_killer,
     _holds_scene,
@@ -43,6 +44,7 @@ from meetings.schemas import (
     Claim,
     MeetingTurn,
     ObservationClaim,
+    SawPlayerObservation,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -99,11 +101,12 @@ def _meeting(
     kill_witnesses: frozenset[PlayerId] = frozenset(),
     living: frozenset[PlayerId] = frozenset({"p-1", "p-2", "p-3", "p-4"}),
     turns: tuple[MeetingTurn, ...] = (),
+    meeting_tick: int | None = None,
 ) -> _ReportMeeting:
     return _ReportMeeting(
         seed=0,
         meeting_id="m",
-        tick=kill_tick + 3,
+        tick=meeting_tick if meeting_tick is not None else kill_tick + 3,
         reporter=reporter,
         outcome=outcome,
         ejected=ejected,
@@ -301,6 +304,24 @@ def test_holds_scene_by_witnessed_move_touching_kill_room() -> None:
     assert _holds_scene(meeting, walk_off) is False
 
 
+def test_holds_scene_window_capped_at_meeting_tick() -> None:
+    # The body is reported immediately (meeting.tick == kill_tick + 1), so the
+    # kill_tick+2 packet is a POST-meeting resumed-play frame: a sighting there is
+    # not evidence held going INTO the meeting and must not count.
+    meeting = _meeting(
+        killer="p-2", victim="p-9", kill_room="STORAGE", kill_tick=5, meeting_tick=6
+    )
+    walk_post = _walk(
+        roles=_ROLES, sight={7: {"p-3": {"p-2": "STORAGE"}}}, meetings=(meeting,)
+    )
+    assert _holds_scene(meeting, walk_post) is False
+    # The kill-result frame itself (kill_tick+1 == meeting.tick) still counts.
+    walk_at = _walk(
+        roles=_ROLES, sight={6: {"p-3": {"p-2": "STORAGE"}}}, meetings=(meeting,)
+    )
+    assert _holds_scene(meeting, walk_at) is True
+
+
 def test_holds_last_seen_with_killer() -> None:
     # p-3's last co-location with the still-alive victim p-9 also held the killer p-2.
     frames = {
@@ -319,6 +340,14 @@ def test_holds_last_seen_with_killer() -> None:
         )
     }
     assert _holds_last_seen_with_killer(meeting, frames_no_killer, _ROLES) is False
+    # A killer hidden IN A VENT in the victim's room is invisible — not "seen with".
+    frames_vented_killer = {
+        5: _frame(
+            {"p-1": "CAFETERIA", "p-2": "STORAGE", "p-3": "STORAGE", "p-9": "STORAGE"},
+            vented=frozenset({"p-2"}),
+        )
+    }
+    assert _holds_last_seen_with_killer(meeting, frames_vented_killer, _ROLES) is False
 
 
 # --------------------------------------------------------------------------- #
@@ -331,6 +360,37 @@ def test_mentions_vent_scans_free_text() -> None:
         _mentions_vent((_turn("p-1", free_text="I saw p-2 VENT in storage"),)) is True
     )
     assert _mentions_vent((_turn("p-1", free_text="nothing suspicious"),)) is False
+
+
+def test_has_killer_placement_observation() -> None:
+    def obs(subject: str, room: str) -> SawPlayerObservation:
+        return SawPlayerObservation(
+            type="saw_player", tick=5, subject=subject, room=room
+        )
+
+    # A structured saw_player naming the killer IN the kill room counts...
+    at_scene = _turn("p-3", observations=(obs("p-2", "STORAGE"),))
+    assert (
+        _has_killer_placement_observation(
+            _meeting(killer="p-2", kill_room="STORAGE", turns=(at_scene,))
+        )
+        is True
+    )
+    # ...but the wrong subject or the wrong room does not.
+    wrong_subject = _turn("p-3", observations=(obs("p-4", "STORAGE"),))
+    wrong_room = _turn("p-3", observations=(obs("p-2", "ADMIN"),))
+    assert (
+        _has_killer_placement_observation(
+            _meeting(killer="p-2", kill_room="STORAGE", turns=(wrong_subject,))
+        )
+        is False
+    )
+    assert (
+        _has_killer_placement_observation(
+            _meeting(killer="p-2", kill_room="STORAGE", turns=(wrong_room,))
+        )
+        is False
+    )
 
 
 def test_killer_accused() -> None:
@@ -393,6 +453,47 @@ def test_walk_raises_on_corrupted_state_hash(tmp_path: Path) -> None:
         )
 
 
+def test_walk_raises_on_corrupted_meeting_hash(tmp_path: Path) -> None:
+    """A tampered meeting ``state_hash_after`` fails loud too (the second verify).
+
+    Distinct from the per-tick check: this is the hash verified after
+    ``apply_meeting_result``, so a meeting outcome that no longer reconstructs
+    (e.g. a drifted tally/ejection rule) is caught, never silently mis-measured.
+    """
+
+    import json
+
+    seed: int | None = None
+    lines: list[str] = []
+    for candidate in sorted(_FOUR.glob("replay-seed-*.jsonl")):
+        text = candidate.read_text(encoding="utf-8").splitlines()
+        if any('"kind":"meeting"' in ln for ln in text):
+            seed = int(candidate.stem.rsplit("-", 1)[1])
+            lines = text
+            break
+    assert seed is not None, "no committed 4p1i replay carries a meeting row"
+    for i, ln in enumerate(lines):
+        row = json.loads(ln)
+        if row.get("kind") == "meeting":
+            row["state_hash_after"] = "0" * 64
+            lines[i] = json.dumps(row)
+            break
+    dst = tmp_path / f"replay-seed-{seed}.jsonl"
+    dst.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    game_map = load_canonical_map()
+    with pytest.raises(FunnelReconstructionError):
+        _walk_game(
+            dst,
+            seed=seed,
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            roles={f"p-{i}": "CREWMATE" for i in range(1, 5)},
+            game_map=game_map,
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Baseline-2 reproduction pins (charter §2)                                    #
 # --------------------------------------------------------------------------- #
@@ -434,6 +535,10 @@ def test_funnel_reproduces_transmission_stage(
     assert nine_funnel.reporter_ejected == 22
     assert nine_funnel.reporter_ejected_innocent == 22
     assert nine_funnel.report_ejections == 106
+    # Not charter-cited, but pinned so the structured-observation folds cannot
+    # silently drift before 15.7's before/after reading.
+    assert nine_funnel.killer_placement_observed == 51
+    assert nine_funnel.killer_accused == 76
 
 
 def test_funnel_coherent_values_for_charter_divergent_figures(
@@ -471,5 +576,6 @@ def test_funnel_runs_on_4p1i_preset() -> None:
     assert report.num_players == 4
     assert report.num_impostors == 1
     assert report.games_total == 50
-    # 4p1i has no committed charter pins; the fold must simply run clean.
-    assert report.report_meetings >= 0
+    # 4p1i has no charter table; pin the meeting count so the roster-keyed walk
+    # (flat-default knobs) cannot silently drift on the committed bytes.
+    assert report.report_meetings == 35
