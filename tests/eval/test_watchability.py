@@ -238,7 +238,7 @@ def test_honest_mistaken_crew_ejection_is_not_railroaded() -> None:
 _BASELINE_2_9P2I_FLOORS = SupplyFloors(
     witnessed_event_rate=0.0375,
     flags_per_meeting=2.007042253521127,
-    testimony_backed_conversion=0.5042016806722689,
+    testimony_backed_conversion=0.4375,
 )
 
 
@@ -249,6 +249,91 @@ def test_baseline_2_supply_floors_pass() -> None:
         report = compute_watchability(sample_dir)
         assert report.supply_floors_passed is True
         assert all(gauge.passed for gauge in report.supply_gauges)
+
+
+def test_testimony_backed_conversion_requires_observation_backing() -> None:
+    """The conversion floor counts only OBSERVATION-BACKED accusations, not vibes.
+
+    An unbacked accusation that happens to eject an impostor must NOT count toward
+    ``testimony_backed_conversion`` (else the "backed" floor could be cleared by
+    ungrounded vibe-convictions), matching the geomean's D2 conversion predicate.
+    """
+
+    from eval.watchability import _observation_backed_conversion
+
+    def _game(*, backed: bool) -> _GameFacts:
+        return _GameFacts(
+            seed=0,
+            reason="CREWMATE_EJECT",
+            roles={"p-0": "IMPOSTOR", "p-1": "CREWMATE"},
+            meetings=(
+                _MeetingFacts(
+                    meeting_index=0,
+                    ejected_player_id="p-0",  # the impostor was ejected
+                    ejected_role="IMPOSTOR",
+                    suspicion_graph_by_voter={},
+                    rendered_suspicion_by_target={},
+                    testimony_records=(
+                        _TestimonyRecord(
+                            subject="p-0",
+                            subject_role="IMPOSTOR",
+                            testimony_turns=(
+                                _TestimonyTurn(
+                                    vehicle="accusation", observation_backed=backed
+                                ),
+                            ),
+                        ),
+                    ),
+                    accusations=(_Accusation(speaker="p-1", accused="p-0"),),
+                    plurality_target="p-0",
+                    plurality_margin=1,
+                    ejected_rendered_suspicion_among_ejectors=0.9,
+                    contradictions_by_subject={},
+                ),
+            ),
+            kill_victim_roles=(),
+            trajectories={},
+        )
+
+    # UNBACKED accusation → not a backed conversion attempt at all.
+    rate, attempted, converted = _observation_backed_conversion([_game(backed=False)])
+    assert (attempted, converted) == (0, 0)
+    assert rate is None
+
+    # BACKED accusation that ejected the impostor → a converted attempt.
+    rate2, attempted2, converted2 = _observation_backed_conversion([_game(backed=True)])
+    assert (attempted2, converted2) == (1, 1)
+    assert rate2 == 1.0
+
+
+def test_missing_meeting_row_is_an_integrity_breach(tmp_path: Path) -> None:
+    """A truncated replay (a MEETING reached but no recorded meeting row) is floored.
+
+    Codex repro: deleting one meeting row left ``integrity_ok=True`` /
+    ``referee_passed=True`` — the walk silently stopped without checking the rest.
+    Reconstruction now flags the missing row as an integrity breach so the set is
+    REJECTED, never silently certified.
+    """
+
+    import json
+    import shutil
+
+    source = _FOUR / "replay-seed-0.jsonl"
+    lines = source.read_text().splitlines()
+    kept = [line for line in lines if "meeting_id" not in json.loads(line)]
+    assert len(kept) < len(lines)  # a meeting row was dropped (this game has one)
+
+    (tmp_path / "replay-seed-0.jsonl").write_text("\n".join(kept) + "\n")
+    shutil.copy(_FOUR / "roster.json", tmp_path / "roster.json")
+
+    from eval.watchability import _reconstruct_kills
+
+    assert _reconstruct_kills(tmp_path).integrity_ok is False
+
+    report = compute_watchability(tmp_path)
+    assert report.integrity_ok is False
+    assert report.referee_passed is False
+    assert all(game.score == 0.0 for game in report.per_game)
 
 
 def test_baseline_2_witnessed_event_rate_is_the_measured_anchor() -> None:
@@ -273,8 +358,8 @@ def test_evidence_starved_set_fails_the_referee() -> None:
         persisted_vent_flags=0,
         meetings_total=150,  # high meeting rate — bodies still trigger meetings
         testimony_backed_conversion=0.0,
-        impostor_accused_meetings=50,
-        impostor_accused_conversions=0,
+        backed_conversion_attempted=50,
+        backed_conversion_converted=0,
     )
     passed, gauges = evaluate_supply_floors(starved, _BASELINE_2_9P2I_FLOORS)
     assert passed is False
@@ -293,8 +378,8 @@ def test_none_measured_gauge_fails_a_numeric_floor() -> None:
         persisted_vent_flags=0,
         meetings_total=120,
         testimony_backed_conversion=0.6,
-        impostor_accused_meetings=40,
-        impostor_accused_conversions=24,
+        backed_conversion_attempted=40,
+        backed_conversion_converted=24,
     )
     passed, gauges = evaluate_supply_floors(no_kills, _BASELINE_2_9P2I_FLOORS)
     assert passed is False
@@ -346,8 +431,8 @@ def test_flags_per_meeting_is_vent_aware() -> None:
     )
 
     assert _persisted_vent_flag_count(report_with_vent) == 1
-    before = _supply_gauge_values(report, [])
-    after = _supply_gauge_values(report_with_vent, [])
+    before = _supply_gauge_values(report, [], [])
+    after = _supply_gauge_values(report_with_vent, [], [])
     assert after.persisted_vent_flags == 1
     assert after.total_flags == before.total_flags + 1
     assert after.flags_per_meeting is not None and before.flags_per_meeting is not None
@@ -423,8 +508,8 @@ def test_none_conversion_floor_is_vacuously_cleared() -> None:
         persisted_vent_flags=0,
         meetings_total=10,
         testimony_backed_conversion=None,
-        impostor_accused_meetings=0,
-        impostor_accused_conversions=0,
+        backed_conversion_attempted=0,
+        backed_conversion_converted=0,
     )
     passed, gauge_reports = evaluate_supply_floors(gauges, floors)
     assert passed is True

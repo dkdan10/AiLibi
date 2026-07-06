@@ -36,10 +36,15 @@ evidence than the baseline FAILS the referee even when meeting-rate stays high
     cannot be re-derived from a transcript (its grounding channel carries no
     transcript id), so the persisted vent flags are merged in — else a vent-rich
     candidate's strongest evidence is undercounted (:func:`_persisted_vent_flag_count`).
-  * ``testimony_backed_conversion`` — verbally-accused-true-impostor meetings that
-    converted to an impostor ejection, wired from
-    :func:`eval.meeting_quality.compute_conversion_report`
-    (``impostor_accused_conversion_rate``).
+  * ``testimony_backed_conversion`` — the fraction of (meeting, OBSERVATION-BACKED-
+    accused true impostor) pairs the meeting ejected, using the SAME
+    evidence-grounded predicate as the geomean's D2 conversion
+    (:func:`_observation_backed_impostors` — an accusation whose accuser also
+    logged a first-hand sighting). Deliberately NOT
+    ``compute_conversion_report``'s ``impostor_accused_conversion_rate``, which
+    counts ANY verbal accusation of a true impostor: a "testimony-BACKED" floor
+    that accepts ungrounded vibe-convictions would let a candidate that ejects
+    impostors on unbacked accusations clear the evidence floor.
 
 The floors are PARAMETERIZED PER BASELINE (:data:`_BASELINE_SUPPLY_FLOORS`, keyed
 by baseline id then roster). This task measures + pins the baseline-2 values (the
@@ -165,7 +170,6 @@ from engine.world import Map, load_canonical_map
 from eval._suspicion_parse import SKIP_SUSPICION_THRESHOLD
 from eval.meeting_quality import (
     _parse_suspicion_graph,
-    compute_conversion_report,
     compute_supply_gauges,
 )
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
@@ -253,17 +257,17 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         # the values are the baseline's OWN supply, so it passes at equality):
         #   witnessed_event_rate        = 6/160  = 0.0375 (crew-witnessed kills; §6)
         #   flags_per_meeting           = 285/142 = 2.007042253521127
-        #   testimony_backed_conversion = 60/119 = 0.5042016806722689
+        #   testimony_backed_conversion = 56/128 = 0.4375 (OBSERVATION-BACKED)
         "9p2i": SupplyFloors(
             witnessed_event_rate=0.0375,
             flags_per_meeting=2.007042253521127,
-            testimony_backed_conversion=0.5042016806722689,
+            testimony_backed_conversion=0.4375,
         ),
         # Measured on replays/samples/4p1i (the flat determinism/leak reference —
         # 4 players, 1 impostor, short games; supply is naturally sparse):
         #   witnessed_event_rate        = 1/64  = 0.015625
         #   flags_per_meeting           = 29/39 = 0.7435897435897436
-        #   testimony_backed_conversion = 12/37 = 0.32432432432432434
+        #   testimony_backed_conversion = 12/37 = 0.32432432432432434 (OBSERVATION-BACKED)
         "4p1i": SupplyFloors(
             witnessed_event_rate=0.015625,
             flags_per_meeting=0.7435897435897436,
@@ -279,9 +283,12 @@ _DEFAULT_BASELINE_ID: Final[str] = "baseline-2"
 class SupplyGaugeValues:
     """The three measured Layer-1 gauges over a replay set (pre-floor).
 
-    ``testimony_backed_conversion`` is ``None`` when no meeting verbally accused a
-    true impostor (undefined, not 0.0). ``witnessed_event_rate`` is ``None`` when
-    the set recorded zero kills.
+    ``testimony_backed_conversion`` is the fraction of (meeting, OBSERVATION-BACKED-
+    accused true impostor) pairs the meeting EJECTED — the SAME evidence-grounded
+    predicate the geomean's D2 conversion uses (a turn whose accuser also logged a
+    first-hand sighting), NOT any verbal accusation. It is ``None`` when no meeting
+    carried an observation-backed accusation of a true impostor (undefined, not
+    0.0). ``witnessed_event_rate`` is ``None`` when the set recorded zero kills.
     """
 
     witnessed_event_rate: float | None
@@ -292,8 +299,8 @@ class SupplyGaugeValues:
     persisted_vent_flags: int
     meetings_total: int
     testimony_backed_conversion: float | None
-    impostor_accused_meetings: int
-    impostor_accused_conversions: int
+    backed_conversion_attempted: int
+    backed_conversion_converted: int
 
 
 class SupplyFloorGauge(BaseModel):
@@ -444,10 +451,12 @@ def _reconstruct_kills(sample_dir: Path) -> _SetReconstruction:
     Mirrors the read-only playback in :func:`eval.validity._reconstruct_game`,
     but collects each :class:`~engine.events.KilledEvent`'s crew-witness status
     (``KilledEvent.witnesses`` filtered to CREWMATE roles — the witnessed-event
-    supply gauge) rather than the kill split. A recorded ``state_hash`` that does
-    not reconstruct is a firewall/determinism breach: it flips ``integrity_ok``
-    (the geomean floor then zeroes EVERY game in the set) instead of raising, so
-    a drifted candidate is REJECTED, never crashes the referee.
+    supply gauge) rather than the kill split. An integrity breach — a recorded
+    ``state_hash`` that does not reconstruct, OR a game that reached a meeting with
+    no recorded meeting row (a truncated / crashed-mid-meeting replay) — flips
+    ``integrity_ok`` (the geomean floor then zeroes EVERY game in the set) instead
+    of raising, so a drifted / truncated candidate is REJECTED, never crashes or
+    silently certifies the referee.
     """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
@@ -474,13 +483,20 @@ def _reconstruct_kills(sample_dir: Path) -> _SetReconstruction:
                     game_map=game_map,
                 )
             )
-        except _DeterminismBreach:
+        except _IntegrityBreach:
             result.integrity_ok = False
     return result
 
 
-class _DeterminismBreach(Exception):
-    """A recorded state hash did not reconstruct (integrity breach — score 0)."""
+class _IntegrityBreach(Exception):
+    """A game did not reconstruct cleanly (integrity breach — the set scores 0).
+
+    Raised on a state-hash mismatch (determinism/firewall breach) OR a game that
+    reached a meeting with no recorded meeting row (a truncated / crashed-
+    mid-meeting replay): either means the recorded bytes are not a trustworthy,
+    complete deduction game, so the referee floors the whole set rather than
+    scoring on partial data or silently certifying a corrupt candidate.
+    """
 
 
 def _reconstruct_game_kills(
@@ -514,7 +530,7 @@ def _reconstruct_game_kills(
         actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
         state, events = advance_tick(state, actions, game_map=game_map)
         if _state_hash(state) != entry.state_hash:
-            raise _DeterminismBreach
+            raise _IntegrityBreach
         for event in events:
             if isinstance(event, KilledEvent):
                 kills.append(
@@ -533,7 +549,13 @@ def _reconstruct_game_kills(
             continue
         meeting_entry = meeting_by_tick.get(entry.tick)
         if meeting_entry is None:
-            break
+            # A game reached MEETING phase but no resolved meeting row was
+            # recorded (a truncated / crashed-mid-meeting replay). For a valid
+            # complete recording every entered meeting resolves, so this is a
+            # corruption — floor the set rather than silently stop the walk with
+            # the remaining hashes unchecked (which would certify a truncated
+            # candidate as clean).
+            raise _IntegrityBreach
         body_id = next(
             (e.body_id for e in events if isinstance(e, MeetingTriggeredEvent)), None
         )
@@ -551,7 +573,7 @@ def _reconstruct_game_kills(
             state, result, game_map=game_map, triggering_body_id=body_id
         )
         if _state_hash(state) != meeting_entry.state_hash_after:
-            raise _DeterminismBreach
+            raise _IntegrityBreach
         if state.phase == "GAME_OVER":
             break
     return kills
@@ -1179,10 +1201,37 @@ def _persisted_vent_flag_count(report: TournamentReport) -> int:
     )
 
 
+def _observation_backed_conversion(
+    games: Sequence[_GameFacts],
+) -> tuple[float | None, int, int]:
+    """Set-level OBSERVATION-BACKED conversion — the D2 conversion, aggregated.
+
+    Returns ``(rate, attempted, converted)``. Over every (meeting,
+    observation-backed-accused true impostor) pair (:func:`_observation_backed_impostors`
+    — the SAME evidence-grounded predicate the per-game D2 conversion uses), the
+    fraction the meeting EJECTED. ``rate`` is ``None`` when no such pair exists
+    (undefined, not 0.0). This is deliberately the backed predicate, not any verbal
+    accusation, so the "testimony-BACKED" floor cannot be cleared by ungrounded
+    vibe-convictions.
+    """
+
+    attempted = converted = 0
+    for game in games:
+        for meeting in game.meetings:
+            for subject in _observation_backed_impostors(meeting):
+                attempted += 1
+                if meeting.ejected_player_id == subject:
+                    converted += 1
+    rate = (converted / attempted) if attempted else None
+    return rate, attempted, converted
+
+
 def _supply_gauge_values(
-    report: TournamentReport, kills: Sequence[_KillWitnessFact]
+    report: TournamentReport,
+    kills: Sequence[_KillWitnessFact],
+    games: Sequence[_GameFacts],
 ) -> SupplyGaugeValues:
-    """The three Layer-1 gauges over a report + reconstructed kill witnesses.
+    """The three Layer-1 gauges over a report + reconstructed kills + game facts.
 
     ``flags_per_meeting`` is VENT-AWARE: :func:`eval.meeting_quality.compute_supply_gauges`
     re-derives flags from the transcript and cannot reproduce the grounded
@@ -1193,14 +1242,20 @@ def _supply_gauge_values(
     baseline-2 floors are unchanged; the persisted census and the re-derived
     non-vent flags are disjoint (re-derivation never mints ``vent_sighting``), so no
     double count.
+
+    ``testimony_backed_conversion`` is the OBSERVATION-BACKED conversion
+    (:func:`_observation_backed_conversion`), consistent with the geomean's D2 —
+    NOT the unbacked ``impostor_accused_conversion_rate``.
     """
 
     total_kills = len(kills)
     crew_witnessed = sum(1 for kill in kills if kill.crew_witnessed)
     supply = compute_supply_gauges(report)
-    conversion = compute_conversion_report(report)
     persisted_vent_flags = _persisted_vent_flag_count(report)
     total_flags = supply.total_flags + persisted_vent_flags
+    backed_rate, backed_attempted, backed_converted = _observation_backed_conversion(
+        games
+    )
     return SupplyGaugeValues(
         witnessed_event_rate=(crew_witnessed / total_kills if total_kills else None),
         total_kills=total_kills,
@@ -1211,9 +1266,9 @@ def _supply_gauge_values(
         total_flags=total_flags,
         persisted_vent_flags=persisted_vent_flags,
         meetings_total=supply.meetings_total,
-        testimony_backed_conversion=conversion.impostor_accused_conversion_rate,
-        impostor_accused_meetings=conversion.impostor_accused_meetings,
-        impostor_accused_conversions=conversion.impostor_accused_conversions,
+        testimony_backed_conversion=backed_rate,
+        backed_conversion_attempted=backed_attempted,
+        backed_conversion_converted=backed_converted,
     )
 
 
@@ -1270,18 +1325,21 @@ def compute_watchability(
     for kill in reconstruction.kills:
         kills_by_seed.setdefault(kill.seed, []).append(kill)
 
-    scores: list[WatchabilityGameScore] = []
-    for game in report.games:
-        facts = _game_facts(
+    all_facts = [
+        _game_facts(
             game,
             per_seed_roles[game.seed],
             [kill.victim_role for kill in kills_by_seed.get(game.seed, [])],
             integrity_ok=reconstruction.integrity_ok,
         )
-        scores.append(compute_game_score(facts))
-
-    scores.sort(key=lambda s: s.score, reverse=True)
-    gauges = _supply_gauge_values(report, reconstruction.kills)
+        for game in report.games
+    ]
+    scores = sorted(
+        (compute_game_score(facts) for facts in all_facts),
+        key=lambda s: s.score,
+        reverse=True,
+    )
+    gauges = _supply_gauge_values(report, reconstruction.kills, all_facts)
     supply_passed, gauge_reports = evaluate_supply_floors(gauges, floors)
 
     return WatchabilityReport(
