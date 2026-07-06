@@ -40,6 +40,11 @@ from orchestrator.game import (  # noqa: E402
     DEFAULT_TASKS_PER_CREWMATE,
     ROSTER_PRESETS,
 )
+from orchestrator.replay import (  # noqa: E402
+    FSM_DEFAULT_POLICY_ID,
+    TacticalPolicyStamp,
+    fsm_default_tactical_policy_stamp,
+)
 
 _DEFAULT_REPORT_FILENAME = "tournament-eval-report.json"
 
@@ -128,7 +133,56 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "replay reads in Phase 4 (DESIGN.md §11.4)."
         ),
     )
+    parser.add_argument(
+        "--tactical-policy-stamp",
+        default=None,
+        metavar="fsm-default|PATH.json",
+        help=(
+            "stamp a tactical-policy provenance block onto every game's "
+            "game_over record (Task 15.9). Accepts the literal 'fsm-default' for "
+            "the canonical scripted-FSM stamp, or a path to a JSON file with the "
+            "five TacticalPolicyStamp fields (policy_id, method, encoder_version, "
+            "weights_sha256, anchor_policy) for a Wave-2 champion stamp. Omitted "
+            "records the absent = FSM-default stamp, byte-identical to today."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _resolve_tactical_policy_stamp(value: str | None) -> TacticalPolicyStamp | None:
+    """Parse ``--tactical-policy-stamp`` into a stamp (Task 15.9).
+
+    ``None`` (the flag omitted) yields ``None`` — the absent = scripted-FSM
+    default, byte-identical to the pre-15.9 recorder. The literal
+    ``fsm-default`` yields :func:`fsm_default_tactical_policy_stamp`, so the
+    Task-15.12 corpus wrapper can stamp the FSM default explicitly. Any other
+    value is a path to a JSON file carrying exactly the five
+    :class:`TacticalPolicyStamp` fields (a Wave-2 champion stamp); a missing file,
+    unreadable JSON, or a schema mismatch is fail-loud
+    (``SystemExit``) rather than silently recording an FSM default (AGENTS.md "no
+    silent fallbacks").
+    """
+
+    if value is None:
+        return None
+    if value == FSM_DEFAULT_POLICY_ID:
+        return fsm_default_tactical_policy_stamp()
+    path = Path(value)
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SystemExit(
+            f"--tactical-policy-stamp: cannot read stamp file {path!r}: {exc}. "
+            f"Pass the literal {FSM_DEFAULT_POLICY_ID!r} or a readable JSON file."
+        ) from exc
+    try:
+        return TacticalPolicyStamp.model_validate_json(raw)
+    except ValueError as exc:
+        raise SystemExit(
+            f"--tactical-policy-stamp: {path} is not a valid TacticalPolicyStamp "
+            f"(need the five string fields policy_id/method/encoder_version/"
+            f"weights_sha256/anchor_policy): {exc}"
+        ) from exc
 
 
 def _format_summary(eval_report: TournamentEvalReport) -> str:
@@ -249,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.num_games < 1:
         raise SystemExit(f"--num-games must be at least 1, got {args.num_games}")
     num_players, num_impostors, tasks_per_crewmate = _resolve_roster(args)
+    tactical_policy_stamp = _resolve_tactical_policy_stamp(args.tactical_policy_stamp)
     seeds = range(args.start_seed, args.start_seed + args.num_games)
     # ``force`` is threaded into each per-seed ReplayLog construction inside
     # run_tournament_eval, so a conflicting replay-seed-{seed}.jsonl is truncated
@@ -264,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
         tasks_per_crewmate=tasks_per_crewmate,
         max_ticks=args.max_ticks,
         force=args.force,
+        tactical_policy_stamp=tactical_policy_stamp,
     )
     eval_report = build_tournament_eval_report(report)
 

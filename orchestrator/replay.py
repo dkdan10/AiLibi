@@ -38,6 +38,25 @@ set was recorded at. The fail-loud version gate lives only on the offline
 eval **report** (:data:`eval.report_schema.CURRENT_FORMAT_VERSION`), whose
 shape is a fresh artifact; the replay bytes rely on the hash + sidecar
 instead.
+
+Provenance stamps on the ``game_over`` record (Task 15.9; audit
+post-phase-14-ML-planning.md §7.2-7.3). Two ADDITIVE, OPTIONAL blocks
+self-describe what generated a recording, so a replay answers *which* substrate
+and *which* tactical policy produced its bytes without the operator remembering
+the environment: :attr:`GameEndReplayEntry.substrate_flags` (Task 14.7) stamps
+the substrate levers, and :attr:`GameEndReplayEntry.tactical_policy` (a
+:class:`TacticalPolicyStamp`) stamps the tactical policy — ``{policy_id, method,
+encoder_version, weights_sha256, anchor_policy}``, five plain strings set by the
+recorder (no import of any training / agent code, keeping ``orchestrator/``'s
+dependency direction clean for the phase-15 import-linter contracts). An ABSENT
+tactical stamp means "scripted FSM default" and stays fully valid — the
+committed canonical sets carry no stamp and reconstruct unchanged. Because
+reconstruction re-feeds the recorded actions and never re-invokes a policy
+(§3.4), the stamp is provenance, not a replay input — which keeps learned-policy
+replays byte-identical regardless of inference-float questions. Task 15.12
+corpus rows stamp the FSM default explicitly (:func:`fsm_default_tactical_policy_stamp`)
+and Wave 2 stamps a champion's weights hash; the loader honors the stamp via
+:class:`api.replay_loader.ReplayPolicyMismatchError`.
 """
 
 from __future__ import annotations
@@ -49,7 +68,7 @@ import json
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.actions import Action
 from engine.world import WorldState
@@ -143,6 +162,126 @@ class MeetingReplayEntry(BaseModel):
 WinnerSide: TypeAlias = Literal["CREWMATES", "IMPOSTORS"]
 
 
+class TacticalPolicyStamp(BaseModel):
+    """Provenance stamp for the tactical policy that produced a game's actions.
+
+    Answers "which tactical policy produced these bytes" (Task 15.9; audit
+    post-phase-14-ML-planning.md §7.2-7.3) the same way
+    :attr:`GameEndReplayEntry.substrate_flags` answers "which substrate levers":
+    a small block stamped onto the ``game_over`` record, beside the substrate
+    stamp. Five plain-string fields, set by the RECORDER — no import of any
+    training or agent code — so ``orchestrator/`` never gains a dependency on
+    ``agents/`` or ``training/`` and the phase-15 import-linter contracts' clean
+    dependency direction is preserved:
+
+    * ``policy_id`` — the human identifier of the policy that decided the
+      recorded tactical actions (``"fsm-default"`` for the scripted FSM, or a
+      Wave-2 champion's id).
+    * ``method`` — how the policy was produced (``"scripted-fsm"``, or a training
+      method label such as ``"neuroevolution"`` / ``"ppo"``).
+    * ``encoder_version`` — the observation-featurization version the policy
+      consumes (``"none"`` for the FSM, which reads the typed packet directly).
+    * ``weights_sha256`` — the content hash of the policy's committed weights
+      artifact (``"none"`` for the FSM, which has no weights); for a learned
+      policy this is the sha256 sidecar Task 15.11 commits under
+      ``training/artifacts/surrogate/`` (or a champion's weights hash).
+    * ``anchor_policy`` — the reference policy the learner stayed near (the
+      piKL/CICERO anchor; ``"fsm-default"`` for the FSM, which is its own anchor).
+
+    ADDITIVE and OPTIONAL on the replay (:attr:`GameEndReplayEntry.tactical_policy`
+    defaults to ``None``): an ABSENT stamp means "scripted FSM default" and is
+    fully valid — the committed canonical sets carry no stamp and keep loading,
+    byte-verifying, and serving unchanged. Reconstruction re-feeds the recorded
+    actions and NEVER re-invokes a policy (§3.4; §7.2), so the stamp is
+    provenance, not a replay input — which is what keeps learned-policy replays
+    byte-identical regardless of inference-float questions. The loader honors it
+    (:class:`api.replay_loader.ReplayPolicyMismatchError`) by refusing to SERVE a
+    stamped replay under a conflicting policy claim.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    policy_id: str
+    method: str
+    encoder_version: str
+    weights_sha256: str
+    anchor_policy: str
+
+    @field_validator("*")
+    @classmethod
+    def _reject_malformed_stamp_field(cls, value: str) -> str:
+        """Fail loud on a blank or line/table-breaking stamp field.
+
+        A stamp is a single-line provenance token rendered into line-based
+        artifacts — the JSONL replay row and the Markdown MANIFEST ``policy``
+        cell (``scripts/_manifest_writer.py``). Two malformed shapes are rejected
+        at the stamp boundary (model construction / ``--tactical-policy-stamp``
+        JSON parse / replay read-back) so they fail loud BEFORE any bad bytes are
+        written (AGENTS.md "no silent fallbacks"):
+
+        * a ``"|"`` / newline / carriage-return — a pipe emits an unescaped extra
+          MANIFEST column and a newline splits the row, so ``parse_manifest`` sees
+          the wrong cell count and SILENTLY DROPS the row on the next manifest
+          merge, losing that seed's provenance;
+        * an EMPTY / whitespace-only field — an empty ``policy_id`` is
+          indistinguishable from an ABSENT stamp at the MANIFEST renderer
+          (``_render_policy`` would misattribute it as the ``fsm-default`` label
+          even though the recording DID carry a stamp), and a whitespace-only cell
+          round-trips to empty through ``parse_manifest``'s ``.strip()``. A
+          well-formed stamp field is always a non-blank token.
+
+        Every legitimate value — the ``fsm-default`` label, a champion id, a hex
+        weights hash, a method / encoder / anchor label — is a single-line,
+        non-blank, pipe-free token, so nothing valid is rejected.
+        """
+
+        if not value.strip():
+            raise ValueError(
+                "tactical-policy stamp fields must be non-empty tokens; a blank / "
+                f"whitespace-only value is forbidden (got {value!r})"
+            )
+        for forbidden, name in (
+            ("|", "pipe"),
+            ("\n", "newline"),
+            ("\r", "carriage return"),
+        ):
+            if forbidden in value:
+                raise ValueError(
+                    "tactical-policy stamp fields must be single-line and "
+                    f"MANIFEST-table-safe; a {name} is forbidden (got {value!r})"
+                )
+        return value
+
+
+# The ``policy_id`` of the canonical scripted-FSM stamp (Task 15.9). It doubles
+# as the MANIFEST ``policy`` column's label for an unstamped row, so a
+# stamped-FSM replay and an unstamped one render IDENTICALLY — the "FSM default
+# everywhere" invariant. An ABSENT stamp already means FSM default; an explicit
+# ``--tactical-policy-stamp fsm-default`` recording stamps the full block below
+# so a Task-15.12 corpus row can attribute the FSM default the SAME way a learned
+# recording attributes a champion.
+FSM_DEFAULT_POLICY_ID: Final[str] = "fsm-default"
+
+
+def fsm_default_tactical_policy_stamp() -> TacticalPolicyStamp:
+    """The canonical scripted-FSM :class:`TacticalPolicyStamp` (Task 15.9).
+
+    The explicit stand-in for an absent stamp: the FSM has no encoder and no
+    weights, so those two fields carry the ``"none"`` sentinel, and the FSM is its
+    own piKL anchor. A recording made with ``--tactical-policy-stamp fsm-default``
+    stamps exactly this (Task 15.12), so a corpus row attributes the FSM default
+    the same way a Wave-2 champion recording attributes its weights hash.
+    """
+
+    return TacticalPolicyStamp(
+        policy_id=FSM_DEFAULT_POLICY_ID,
+        method="scripted-fsm",
+        encoder_version="none",
+        weights_sha256="none",
+        anchor_policy=FSM_DEFAULT_POLICY_ID,
+    )
+
+
 class GameEndReplayEntry(BaseModel):
     """One game-outcome replay record (DESIGN.md §11.4; Task 3.19 finding 3).
 
@@ -179,6 +318,19 @@ class GameEndReplayEntry(BaseModel):
     # replay under a DIFFERENT ambient substrate — no silent cross-substrate
     # replay.
     substrate_flags: Mapping[str, bool] | None = None
+    # The tactical-policy provenance stamp (Task 15.9; DESIGN.md §11.4; audit
+    # post-phase-14-ML-planning.md §7.2-7.3). Answers "which tactical policy
+    # produced these bytes" the same way ``substrate_flags`` answers "which
+    # substrate levers" — a five-string block set by the recorder, sitting beside
+    # the substrate stamp. ADDITIVE and OPTIONAL: ``None`` means the scripted FSM
+    # default (every committed canonical replay, which predates the stamp), so the
+    # reader tolerates its absence and those bytes reconstruct unchanged; the
+    # writer OMITS the key entirely when ``None`` (``ReplayLog.record_game_end``)
+    # so an unstamped re-record stays byte-identical to the pre-15.9 game_over
+    # row. A learned-policy (or explicit ``fsm-default``) recording stamps the
+    # full block. The loader honors it (``api.replay_loader``) by refusing to
+    # serve a stamped replay under a CONFLICTING policy claim.
+    tactical_policy: TacticalPolicyStamp | None = None
 
 
 class FailedCallReplayEntry(BaseModel):
@@ -329,7 +481,22 @@ class ReplayLog:
         than one ``kind="game_over"`` row in a single replay file.
         """
 
-    def __init__(self, path: Path, game_id: str, *, force: bool = False) -> None:
+    def __init__(
+        self,
+        path: Path,
+        game_id: str,
+        *,
+        force: bool = False,
+        tactical_policy_stamp: TacticalPolicyStamp | None = None,
+    ) -> None:
+        # ``tactical_policy_stamp`` is the recorder-supplied provenance stamp
+        # (Task 15.9) written onto the ``game_over`` record by
+        # :meth:`record_game_end`. Default ``None`` = absent = scripted FSM
+        # default, byte-identical to the pre-15.9 writer. The stamp rides the
+        # WRITER (not ``record_game_end``'s signature) so the many direct
+        # ``record_game_end`` callers (unit tests, eval/determinism_test.py) stay
+        # untouched and record the FSM default.
+        self._tactical_policy_stamp = tactical_policy_stamp
         # Assigned first so __del__ is safe even if construction raises below
         # (e.g. AlreadyExistsError on an existing path).
         self._handle: TextIO | None = None
@@ -437,8 +604,20 @@ class ReplayLog:
             winner=winner,
             reason=reason,
             substrate_flags=substrate_flag_snapshot(),
+            tactical_policy=self._tactical_policy_stamp,
         )
-        self._append(entry.model_dump(mode="json"))
+        payload = entry.model_dump(mode="json")
+        # Byte-identity carve-out for the tactical-policy stamp (Task 15.9): an
+        # ABSENT stamp is the FSM default and MUST record byte-identically to the
+        # pre-15.9 game_over row, so the optional field is OMITTED from the JSON
+        # when ``None`` rather than written as ``"tactical_policy": null`` (which
+        # would perturb the committed-sample bytes and every unstamped re-record).
+        # A present stamp is written as the nested five-string block beside
+        # ``substrate_flags``; ``_stable_json`` sorts keys, so field order never
+        # matters.
+        if entry.tactical_policy is None:
+            del payload["tactical_policy"]
+        self._append(payload)
 
     def record_failed_call(
         self,
@@ -644,6 +823,25 @@ def read_substrate_flags(path: Path) -> dict[str, bool] | None:
     return flags
 
 
+def read_tactical_policy_stamp(path: Path) -> TacticalPolicyStamp | None:
+    """Return the stamped tactical policy of a replay (Task 15.9).
+
+    Reads the ``tactical_policy`` block off the game's ``game_over`` record (the
+    last one wins, mirroring :func:`read_substrate_flags`). Returns ``None`` for a
+    replay that carries no stamp — a legacy / FSM-default recording (the committed
+    canonical sets) — so callers (the MANIFEST ``policy`` column, the loader's
+    policy guard) treat an unstamped replay as the scripted FSM default rather
+    than inventing an identity. A stamped replay returns its full five-field
+    :class:`TacticalPolicyStamp`.
+    """
+
+    stamp: TacticalPolicyStamp | None = None
+    for entry in read_all_entries(path):
+        if isinstance(entry, GameEndReplayEntry) and entry.tactical_policy is not None:
+            stamp = entry.tactical_policy
+    return stamp
+
+
 def compute_cost_usd(path: Path) -> float:
     """Sum LLM cost (USD) across a replay log (DESIGN.md §11.4; Task 3.19).
 
@@ -801,6 +999,7 @@ def _stable_json(data: Any) -> str:
 
 
 __all__ = [
+    "FSM_DEFAULT_POLICY_ID",
     "SUBSTRATE_FLAG_KEYS",
     "TOGGLEABLE_SUBSTRATE_FLAG_KEYS",
     "FailedCallReplayEntry",
@@ -810,13 +1009,16 @@ __all__ = [
     "ReplayEntry",
     "ReplayLog",
     "ReplayLogEntry",
+    "TacticalPolicyStamp",
     "WinnerSide",
     "compute_cost_usd",
+    "fsm_default_tactical_policy_stamp",
     "read_all_entries",
     "read_failed_call_entries",
     "read_game_outcome",
     "read_meeting_entries",
     "read_replay_entries",
     "read_substrate_flags",
+    "read_tactical_policy_stamp",
     "substrate_flag_snapshot",
 ]

@@ -51,12 +51,14 @@ if str(_REPO_ROOT) not in sys.path:
 
 from llm.provider import DEFAULT_MEETING_MODEL  # noqa: E402
 from orchestrator.replay import (  # noqa: E402
+    FSM_DEFAULT_POLICY_ID,
     ReplayEntry,
     compute_cost_usd,
     read_all_entries,
     read_game_outcome,
     read_meeting_entries,
     read_substrate_flags,
+    read_tactical_policy_stamp,
 )
 
 _FILENAME_PREFIX = "replay-seed-"
@@ -88,6 +90,13 @@ _NULL_WINNER = "null"
 # ``game_over`` record, so its rows list the ON levers instead (Task 14.7;
 # DESIGN.md §11.4 replay provenance).
 _NO_FLAGS = "(none)"
+# Label for the ``policy`` column of a replay that carries NO tactical-policy
+# stamp (Task 15.9): the committed canonical sets, recorded before the stamp
+# existed, and every unstamped re-record. It equals the explicit ``fsm-default``
+# stamp's ``policy_id`` (:data:`orchestrator.replay.FSM_DEFAULT_POLICY_ID`), so an
+# absent stamp and an explicit FSM stamp render the SAME — "FSM default
+# everywhere". A learned recording stamps its own ``policy_id`` here instead.
+_FSM_DEFAULT_POLICY = FSM_DEFAULT_POLICY_ID
 
 
 def _render_flags(flags: dict[str, bool] | None) -> str:
@@ -106,6 +115,25 @@ def _render_flags(flags: dict[str, bool] | None) -> str:
     return ", ".join(on) if on else _NO_FLAGS
 
 
+def _render_policy(policy_id: str | None) -> str:
+    """Render a replay's stamped tactical policy for the MANIFEST ``policy`` cell.
+
+    Renders the stamp's ``policy_id`` (Task 15.9). Only an ABSENT stamp
+    (``None`` — the committed canonical sets, which predate the stamp) renders as
+    the scripted-FSM-default label :data:`_FSM_DEFAULT_POLICY`, which equals the
+    explicit ``fsm-default`` stamp's ``policy_id``, so a stamped-FSM replay and an
+    unstamped one render IDENTICALLY (the "FSM default everywhere" invariant). The
+    default fires strictly on ``None``, never on a present-but-blank ``policy_id``:
+    a blank field would MISATTRIBUTE a stamped recording as the FSM default, so it
+    is rejected upstream at the stamp boundary
+    (:class:`orchestrator.replay.TacticalPolicyStamp`) — this ``is None`` check is
+    the belt-and-suspenders half of that guard. A single value with no commas or
+    pipes keeps the cell unambiguous for :func:`parse_manifest`.
+    """
+
+    return _FSM_DEFAULT_POLICY if policy_id is None else policy_id
+
+
 _HEADER = (
     "# Sample Replay Manifest\n"
     "\n"
@@ -118,18 +146,27 @@ _HEADER = (
     "byte-identically under the current engine.\n"
 )
 _COLUMNS = (
-    "| seed | model | prompt_versions | flags | refreshed_at | git_sha "
+    "| seed | model | prompt_versions | flags | policy | refreshed_at | git_sha "
     "| cost_usd | winner |"
 )
 _SEPARATOR = (
-    "|------|-------|-----------------|-------|--------------|---------"
+    "|------|-------|-----------------|-------|--------|--------------|---------"
     "|----------|--------|"
 )
-_NUM_COLUMNS = 8
-# A pre-Task-14.7 manifest had no ``flags`` column. ``parse_manifest`` still
+# Current width: the Task-15.9 ``policy`` column sits between ``flags`` and
+# ``refreshed_at`` — kept BEFORE the tail so ``git_sha`` stays the 4th cell from
+# the end that ``api.replay_loader._manifest_git_sha`` reads (``cells[-4]``), so
+# the loader's freshness guard needs no change.
+_NUM_COLUMNS = 9
+# A pre-Task-15.9 manifest had no ``policy`` column (Task 14.7 shape).
+# ``parse_manifest`` still accepts that width so a committed 8-column MANIFEST.md
+# (the baseline-2 sets, not re-recorded here) keeps parsing — its rows read back
+# with the ``_FSM_DEFAULT_POLICY`` label.
+_FLAGS_NUM_COLUMNS = 8
+# A pre-Task-14.7 manifest had no ``flags`` column either. ``parse_manifest`` still
 # accepts that legacy width so a committed 7-column MANIFEST.md (the final-9B
-# baseline, not re-recorded here) keeps parsing — its rows read back with the
-# ``_NO_FLAGS`` sentinel.
+# baseline) keeps parsing — its rows read back with the ``_NO_FLAGS`` and
+# ``_FSM_DEFAULT_POLICY`` sentinels.
 _LEGACY_NUM_COLUMNS = 7
 
 
@@ -141,6 +178,7 @@ class ManifestRow:
     model: str
     prompt_versions: str
     flags: str
+    policy: str
     refreshed_at: str
     git_sha: str
     cost_usd: str
@@ -149,8 +187,8 @@ class ManifestRow:
     def render(self) -> str:
         return (
             f"| {self.seed} | {self.model} | {self.prompt_versions} | "
-            f"{self.flags} | {self.refreshed_at} | {self.git_sha} | "
-            f"{self.cost_usd} | {self.winner} |"
+            f"{self.flags} | {self.policy} | {self.refreshed_at} | "
+            f"{self.git_sha} | {self.cost_usd} | {self.winner} |"
         )
 
 
@@ -203,15 +241,18 @@ def fallback_model(sample_dir: Path) -> str:
 
 def sample_provenance(
     sample_dir: Path, seed: int, fallback: str
-) -> tuple[str, str, str, str, str]:
-    """Return ``(model, prompt_versions, flags, cost_usd, winner)`` for one sample.
+) -> tuple[str, str, str, str, str, str]:
+    """Return ``(model, prompt_versions, flags, policy, cost_usd, winner)``.
 
-    Derived entirely from the replay JSONL: the union of every meeting's
-    ``prompt_versions`` values, the distinct models its LLM calls used, the
-    Phase-13.5 substrate config stamped on the ``game_over`` record (Task 14.7),
-    the summed cost, and the decisive outcome. The ``flags`` stamp lives on the
-    game-end record (not a meeting), so a no-meeting seed recorded under a
-    flag-ON substrate still reports its levers.
+    Provenance for one sample, derived entirely from the replay JSONL: the union
+    of every meeting's ``prompt_versions`` values, the distinct models its LLM
+    calls used, the Phase-13.5 substrate config stamped on the ``game_over``
+    record (Task 14.7), the tactical-policy stamp on that same record (Task 15.9),
+    the summed cost, and the decisive outcome. Both the ``flags`` and ``policy``
+    stamps live on the game-end record (not a meeting), so a no-meeting seed
+    recorded under a flag-ON substrate / a learned policy still reports them. An
+    unstamped replay (the committed canonical sets) reports the ``fsm-default``
+    policy label — absent = FSM default.
     """
 
     path = _sample_path(sample_dir, seed)
@@ -223,9 +264,11 @@ def sample_provenance(
     model = ", ".join(sorted(models)) if models else fallback
     prompt_versions = ", ".join(sorted(versions)) if versions else _NO_MEETINGS
     flags = _render_flags(read_substrate_flags(path))
+    stamp = read_tactical_policy_stamp(path)
+    policy = _render_policy(stamp.policy_id if stamp is not None else None)
     cost_usd = f"{compute_cost_usd(path):.4f}"
     winner = read_game_outcome(path) or _NULL_WINNER
-    return model, prompt_versions, flags, cost_usd, winner
+    return model, prompt_versions, flags, policy, cost_usd, winner
 
 
 def _git_short_sha() -> str | None:
@@ -291,7 +334,7 @@ def build_row(
     override_sha: str | None,
     override_date: str | None,
 ) -> ManifestRow:
-    model, prompt_versions, flags, cost_usd, winner = sample_provenance(
+    model, prompt_versions, flags, policy, cost_usd, winner = sample_provenance(
         sample_dir, seed, fallback
     )
     sha, date = _resolve_sha_date(
@@ -302,6 +345,7 @@ def build_row(
         model=model,
         prompt_versions=prompt_versions,
         flags=flags,
+        policy=policy,
         refreshed_at=date,
         git_sha=sha,
         cost_usd=cost_usd,
@@ -343,13 +387,15 @@ def _atomic_write_text(path: Path, text: str) -> None:
 def parse_manifest(text: str) -> dict[int, ManifestRow]:
     """Parse a rendered manifest back into ``{seed: ManifestRow}``.
 
-    Tolerant by design: any line that is not a pipe-delimited row with the
-    current eight cells (or the legacy seven, pre-Task-14.7, before the ``flags``
-    column) whose first cell is an integer is skipped (title, prose, header, and
-    separator rows all fall away). Prompt-version and flags cells contain commas
-    but never pipes, so the split is unambiguous. A legacy 7-column row reads back
-    with the :data:`_NO_FLAGS` sentinel, so a committed pre-14.7 MANIFEST.md still
-    parses and merges.
+    Tolerant by design: any line that is not a pipe-delimited row with the current
+    nine cells (or a legacy width — eight, pre-Task-15.9 before the ``policy``
+    column; seven, pre-Task-14.7 before the ``flags`` column) whose first cell is
+    an integer is skipped (title, prose, header, and separator rows all fall
+    away). Prompt-version, flags, and policy cells contain commas but never pipes,
+    so the split is unambiguous. A legacy 8-column row reads back with the
+    :data:`_FSM_DEFAULT_POLICY` label and a legacy 7-column row additionally with
+    the :data:`_NO_FLAGS` sentinel, so a committed pre-15.9 / pre-14.7 MANIFEST.md
+    still parses and merges.
     """
 
     rows: dict[int, ManifestRow] = {}
@@ -361,12 +407,24 @@ def parse_manifest(text: str) -> dict[int, ManifestRow]:
         if not cells or not cells[0].isdigit():
             continue
         if len(cells) == _NUM_COLUMNS:
+            model, prompt_versions, flags, policy = (
+                cells[1],
+                cells[2],
+                cells[3],
+                cells[4],
+            )
+            refreshed_at, git_sha, cost_usd, winner = cells[5:9]
+        elif len(cells) == _FLAGS_NUM_COLUMNS:
+            # Pre-15.9 row: has ``flags`` but no ``policy``. The tail shifts left;
+            # the missing policy reads the FSM-default label (absent = FSM default).
             model, prompt_versions, flags = cells[1], cells[2], cells[3]
+            policy = _FSM_DEFAULT_POLICY
             refreshed_at, git_sha, cost_usd, winner = cells[4:8]
         elif len(cells) == _LEGACY_NUM_COLUMNS:
-            # Pre-14.7 row: no ``flags`` column. The remaining cells shift left.
+            # Pre-14.7 row: no ``flags`` and no ``policy`` column.
             model, prompt_versions = cells[1], cells[2]
             flags = _NO_FLAGS
+            policy = _FSM_DEFAULT_POLICY
             refreshed_at, git_sha, cost_usd, winner = cells[3:7]
         else:
             continue
@@ -376,6 +434,7 @@ def parse_manifest(text: str) -> dict[int, ManifestRow]:
             model=model,
             prompt_versions=prompt_versions,
             flags=flags,
+            policy=policy,
             refreshed_at=refreshed_at,
             git_sha=git_sha,
             cost_usd=cost_usd,

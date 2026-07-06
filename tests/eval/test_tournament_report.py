@@ -426,6 +426,7 @@ class _AbortingHeadlessGame:
         scheduler: object,
         meeting_runner: object,
         force: bool,
+        tactical_policy_stamp: object = None,
     ) -> None:
         self._seed = seed
         self._replay_path = replay_path
