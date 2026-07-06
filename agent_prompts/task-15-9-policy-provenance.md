@@ -27,8 +27,11 @@ conflicting policy claim. The stamp also needs a PRODUCTION injection seam, not 
 API: `HeadlessGame` constructs its `ReplayLog` internally and every recorder (run_tournament, the
 corpus wrapper, Wave-2 champion recordings) reaches replay-writing only through that constructor — so
 `HeadlessGame` gains an optional `tactical_policy_stamp` keyword (default `None` = absent = FSM)
-passed through to the writer, and `run_tournament_eval` gains the matching optional pass-through, so a
-learned-policy recording can actually be stamped without a later out-of-scope edit. An ABSENT stamp means "scripted FSM default" and stays fully valid — the
+passed through to the writer, `run_tournament_eval` gains the matching optional pass-through, and
+`scripts/run_tournament.py` exposes it as a CLI flag (`--tactical-policy-stamp`, accepting the
+literal `fsm-default` for the canonical scripted stamp or a JSON-file path for Wave-2 champion
+stamps) — so a learned-policy recording can actually be stamped without a later out-of-scope edit,
+and the 15.12 corpus wrapper (a shell composer of that CLI) can stamp explicitly. An ABSENT stamp means "scripted FSM default" and stays fully valid — the
 committed canonical sets are untouched and must keep loading, byte-verifying, and serving with zero
 edits (this holds across the 15.7 re-record: baseline 3 is recorded with the FSM default and may carry
 the explicit stamp if this task lands first, or none — both are valid). Replay reconstruction re-feeds
@@ -37,10 +40,11 @@ what keeps learned-policy replays byte-identical regardless of inference-float q
 
 **Files in scope:**
 - orchestrator/replay.py (tactical-policy stamp region, alongside the substrate-flags stamp — disjoint from 15.5's registration region and 15.7's graduation region)
-- orchestrator/game.py (HeadlessGame tactical_policy_stamp pass-through kwarg region — disjoint from 15.4's registry/protocol regions, 15.5's vote entry, and 15.8.1's rng/no-replay region)
+- orchestrator/game.py (HeadlessGame tactical_policy_stamp pass-through kwarg region — disjoint from 15.4's registry/protocol regions and 15.5's vote entry; 15.8.1 later edits the same constructor behind its dependency edge on this task)
 - eval/balance_eval.py (run_tournament_eval policy-stamp pass-through kwarg region — additive-optional; disjoint from 15.13's meeting-runner kwarg region, edge exists transitively via 15.12)
 - api/replay_loader.py (policy-stamp read + mismatch guard region — disjoint from 15.4.1's observation-view region)
 - scripts/_manifest_writer.py (policy column)
+- scripts/run_tournament.py (the `--tactical-policy-stamp` CLI flag region — plumbed to `run_tournament_eval`'s new kwarg; no other CLI behavior changes)
 - tests/orchestrator/test_replay_policy_stamp.py (new)
 - tests/api/test_replay_loader_policy_stamp.py (new)
 - tests/scripts/test_manifest_writer.py (extend: FSM-default rendering pinned)
@@ -53,7 +57,7 @@ what keeps learned-policy replays byte-identical regardless of inference-float q
 **Definition of done:**
 - [ ] The committed canonical sets load, byte-verify (`bash scripts/verify_samples.sh` clean), and serve with zero edits — absent stamp renders as the FSM default everywhere.
 - [ ] A stamped recording round-trips writer → loader with all five fields intact; the stamp appears in the game_over entry beside `substrate_flags`.
-- [ ] The production seam works end-to-end: a game recorded through `HeadlessGame(tactical_policy_stamp=…)` and one through `run_tournament_eval(..., tactical_policy_stamp=…)` both land stamped on disk (not just a writer-level unit round-trip); omitting the kwarg records absent-stamp = FSM default, byte-identical to today's path.
+- [ ] The production seam works end-to-end: a game recorded through `HeadlessGame(tactical_policy_stamp=…)`, one through `run_tournament_eval(..., tactical_policy_stamp=…)`, and one through the `scripts/run_tournament.py --tactical-policy-stamp fsm-default` CLI (the seam 15.12's shell wrapper drives) all land stamped on disk (not just a writer-level unit round-trip); omitting the kwarg/flag records absent-stamp = FSM default, byte-identical to today's path.
 - [ ] A deliberately mismatched stamp raises the new loader guard (fail-loud, mirroring the substrate guard's shape and error quality).
 - [ ] The MANIFEST writer emits the policy column; existing manifest tests pin the FSM-default rendering for unstamped rows.
 - [ ] The stamp schema is documented (module docstring) for 15.12 (corpus rows stamp the FSM default explicitly) and Wave 2 (champion weights hash).

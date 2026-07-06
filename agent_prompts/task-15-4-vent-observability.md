@@ -59,6 +59,8 @@ edit, owned by exactly one task; 15.5 layers onto v5 behind its dependency edge)
 - tests/meetings/test_schemas_vent.py (new)
 - tests/meetings/test_transcript_vent_flag.py (new)
 - tests/meetings/test_manager.py (validation-path extensions)
+- tests/orchestrator/test_replay_meetings.py (meeting-double protocol completion — the delegating double gains the vent-witness accessor)
+- tests/orchestrator/test_meeting_integration.py (meeting-double protocol completion — every double that crosses the `_build_participants` gate gains the accessor)
 
 **Files NOT in scope:**
 - observation/ + engine/ (the packet already carries witnessed vents; no firewall-surface change)
@@ -71,7 +73,7 @@ edit, owned by exactly one task; 15.5 layers onto v5 behind its dependency edge)
 - [ ] `SawVentObservation` round-trips through the turn schema; every committed v4 replay still parses (backward-compat pinned by a test loading a committed meeting entry).
 - [ ] A fixture meeting where a voter's witnessed-vent episodic record exists produces an accepted structured vent observation through the validation path, the grounding chokepoint confirms it against the speaker's TYPED `vent_witness_records_for_meeting()` (never rendered prose), and the transcript layer raises the role-proving STRONG flag against the subject.
 - [ ] Grounding is load-bearing: a fixture where a speaker FABRICATES a structured vent observation (no matching record in their own typed vent-witness channel) is accepted as testimony but raises NO flag and leaves the subject's hard-evidence state unchanged — speech alone cannot mint hard evidence.
-- [ ] The `MeetingAwareAgent` protocol extension is implemented by `TacticalAgent` from episodic memory, is covered by the isinstance meeting-participant check, and is exercised by the leak suite (an agent reports only its OWN witnessed events).
+- [ ] The `MeetingAwareAgent` protocol extension is implemented by `TacticalAgent` from episodic memory, is covered by the isinstance meeting-participant check, and is exercised by the leak suite (an agent reports only its OWN witnessed events). Because the protocol is `@runtime_checkable` and `_build_participants` gates on attribute presence, every meeting-enabled test double that crosses that gate gains the accessor (one-line delegation in `tests/orchestrator/test_replay_meetings.py` / `tests/orchestrator/test_meeting_integration.py`; `tests/orchestrator/test_game.py`'s doubles ride custom runners that never call `_build_participants` and need no change) — a green `uv run pytest` on the final tree proves the sweep found them all.
 - [ ] The grounded flag feeds the belief fold exactly like the witnessed-kill strong flag (same cap semantics — no new stacking channel), and a ballot's `primary_reason_id` citing the vent turn validates.
 - [ ] The v5 templates elicit vent observations (prompt-fixture test: memory-with-vent renders → template output contains the elicitation instruction); this task owns the v4 → v5 SET bump in `PROMPT_VERSION_SETS` — the only later registry edit is 15.5's single vote_ballot v6 entry.
 - [ ] The opt-in eligibility path treats a spoken vent observation as a relevance source (a non-speaker who was placed at the vent scene becomes eligible), consistent with the existing co-presence gate.
@@ -94,7 +96,7 @@ the prompt-set layout is FLAT — the four `.j2` templates live directly in
 `agents/strategic/prompts/qwen3_32b/` and the version is a REGISTRY property, not a directory; edit the
 turn/opening templates in place and bump `_bespoke_versions("qwen3_32b", version=…)` to `"v5"` in
 `PROMPT_VERSION_SETS` (exactly how 14.11 shipped v4). Keep `vote_ballot.j2` byte-identical here (15.5
-owns its v5 edits). The live behavioral effect (transmission 36/74 → ?) is measured at 15.7 by the 15.3
+owns its edit, under its own per-template v6 bump). The live behavioral effect (transmission 36/74 → ?) is measured at 15.7 by the 15.3
 instrument — this task's DoD is the mechanism, fixture-proven, not the model's uptake.
 
 ## Public types this task introduces

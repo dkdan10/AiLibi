@@ -27,8 +27,10 @@ wrap as `SurrogateMeetingRunner` conforming to the runtime-checkable `MeetingRun
 returned `MeetingArtifacts` echoes `meeting_id`/`triggered_by`/`trigger_tick` (validated at
 `game.py:905-943`), carries a full-roster ballot set, and empty LLM metadata. The GO/NO-GO bar is
 written BEFORE training, against the 15.11 honest ceiling; the fallback ladder is in-contract: (a) the
-fake-provider MeetingManager as the training-time runner, (b) meeting-boundary episode truncation with
-meeting-free fitness terms, (c) periodic real-LLM re-grounding recordings (operator, $0). Whatever the
+fake-provider MeetingManager as the training-time runner, (b) the 15.8 env's explicit
+`episode_boundary="first_meeting"` opt-in with meeting-free fitness terms (the env marks those
+episodes truncated and no full-game term reads them — the deliberate boundary mode 15.8 contracts,
+not silent truncation), (c) periodic real-LLM re-grounding recordings (operator, $0). Whatever the
 verdict, the staleness doctrine ships: a use-counter/config cap the bake-off must respect, so no trainer
 optimizes indefinitely against a frozen surrogate. Additively, `run_tournament_eval` gains an optional
 per-game meeting-runner factory keyword (mirroring its existing per-game default-runner construction) so

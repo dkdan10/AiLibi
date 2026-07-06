@@ -12,7 +12,7 @@ Implement Task 15.8 — The `training/` package: rollout env, legal-action mask,
 The authoritative task contract is copied below from tasks/phase-15.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-15-training-env`
-**Depends on:** none
+**Depends on:** 15.6
 **Section refs:** audits/post-phase-14-ML-planning.md §5, §7, §11 (action space, injection seam, env wrapper); orchestrator/game.py (AgentFactory :93, HeadlessGame :1121, MeetingAwareAgent :425-450); experiments/lab/ml_spike/core.py (the SpikeAgent interposition pattern :148-200); engine/rules.py + engine/tick.py (the legality predicates); engine/events.py (the reward-source event types)
 **Complexity:** Integration
 
@@ -33,9 +33,15 @@ the side-specific tactically-reachable terms from the typed event log (kills, wi
 `Killed.witnesses`, task progress, survival, report/coverage events) so trainers never re-derive rewards
 from replay bytes; (3) **per-episode rollout records** carrying the behavioral descriptors the QD
 entrant and the pause audit need (kill-timing distribution, witness-exposure rate, vent usage,
-meeting-trigger rate, do_task-emission cadence, win shape). `uv add numpy` (exact pin) lands in this
-task, confined to `training/` by a new import-linter contract (`agents` must not import `training`) with
-`training` added to the linter's root packages.
+meeting-trigger rate, do_task-emission cadence, win shape). Episode horizon: a meeting runner is
+always installed and episodes run FULL games by default; the env additionally exposes an explicit
+`episode_boundary="first_meeting"` opt-in (the seam 15.13's fallback (b) rides) whose episodes end at
+the meeting trigger and are MARKED truncated in the rollout record — silent truncation stays
+structurally unreachable, and no fitness term ever reads a truncated episode as a full game. `uv add
+numpy` (exact pin) lands in this task, confined to `training/` by a new import-linter contract
+(`agents` must not import `training`) with `training` added to the linter's root packages — an edit
+to the SAME root_packages block 15.6 rewrites, which is the whole reason for this task's 15.6
+dependency edge (config serialization; nothing semantic).
 
 **Files in scope:**
 - training/__init__.py (new)
@@ -44,7 +50,7 @@ task, confined to `training/` by a new import-linter contract (`agents` must not
 - training/rollout.py (new: episode records + behavioral descriptors)
 - pyproject.toml (project dependencies region — the numpy exact pin; the mypy exclude regex is 15.17's disjoint region)
 - uv.lock (numpy resolution)
-- .importlinter (training root + agents-must-not-import-training contract region)
+- .importlinter (training root + agents-must-not-import-training contract — extends the root_packages block 15.6 rewrote; the dependency edge on 15.6 serializes the shared block)
 - tests/training/__init__.py (new)
 - tests/training/test_env.py (new)
 - tests/training/test_rewards.py (new)
@@ -59,11 +65,11 @@ task, confined to `training/` by a new import-linter contract (`agents` must not
 
 **Definition of done:**
 - [ ] The env runs full fake-provider games through an injected factory at or above the measured floor (≥5 games/s at 9p2i on the check host; the actual figure is documented in the module docstring).
-- [ ] A meeting runner is ALWAYS installed: `meeting_runner=None` truncation (`MEETING_PHASE_REACHED`) is structurally unreachable from the env, asserted by test — truncation is never a fitness path.
+- [ ] A meeting runner is ALWAYS installed and `meeting_runner=None` truncation (`MEETING_PHASE_REACHED`) is structurally unreachable from the DEFAULT env, asserted by test. The explicit `episode_boundary="first_meeting"` opt-in is the ONE deliberate boundary mode (15.13's fallback (b)): its episodes are marked truncated in the rollout record, and a test asserts the reward channel refuses to score a truncated episode as a full game — silent truncation is never a fitness path.
 - [ ] Mask legality is property-tested against the engine: across randomized seeds/ticks, every masked-legal engine action resolves without rejection and every unmasked action is engine-rejected — with the pretend-`do_task` camouflage carried in the impostor SUBMISSION set and excluded from the engine-legal set (both asserted).
 - [ ] The reward channel is potential-based: a telescoping test shows shaping sums to Φ(terminal) − Φ(initial) over any episode, so shaping cannot change the optimal policy.
 - [ ] A frozen-policy episode is byte-deterministic: same seed → identical per-tick state-hash sequence across two runs (the spike's check-1 reproduced inside the committed package).
-- [ ] numpy imports are confined to `training/`: `uv run lint-imports` keeps every existing contract AND the new `agents ↛ training` contract; `training` is in root_packages.
+- [ ] numpy imports are confined to `training/`: `uv run lint-imports` keeps every existing contract (including 15.6's two, already landed behind the dependency edge) AND the new `agents ↛ training` contract; `training` is in root_packages.
 - [ ] Episode records carry all named behavioral descriptors; a fixture pins their values on a scripted game.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -106,6 +112,13 @@ machines/thread counts, which is exactly why numpy stays training-side and the p
 Third: the mask must not delete the pretend-`do_task` camouflage lever — a strict engine-legal-only
 vocabulary regresses the impostor's task-traffic mimicry, which is measured behavior on the committed
 baseline.
+
+## Dependency contract check
+Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
+
+- `uv run python -c "import meetings.constants"`
+- `uv run python -c "import meetings.render_contract"`
+- `uv run python -c "import meetings.schemas"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

@@ -94,6 +94,9 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.env"`
 - `uv run python -c "import training.rollout"`
 - `uv run python -c "import training.rewards"`
+- `uv run python -c "import meetings.constants"`
+- `uv run python -c "import meetings.render_contract"`
+- `uv run python -c "import meetings.schemas"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

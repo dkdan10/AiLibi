@@ -39,7 +39,8 @@ attributable. Anything that records training data or trains a policy binds to th
 baseline 2 (committed today)   scripted movers · current meeting layer
         │
         │   Phase 15, Wave 0 — evidence substrate & cleanup (post-phase-14-clean-up.md)
-        │   ∥ Phase 15, Wave 1 foundations (training env, encoder, gates — layer-independent)
+        │   ∥ Phase 15, Wave 1 foundations (gates + policy stamp — layer-independent; the training
+        │     env and encoder follow the cleanup's shared-config edits, still meeting-layer-neutral)
         ▼
 baseline 3                      scripted movers · FIXED meeting substrate
         │                       → the cleanup's effect measured cleanly (funnel metrics before/after)

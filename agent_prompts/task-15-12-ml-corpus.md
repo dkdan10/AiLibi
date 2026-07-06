@@ -18,7 +18,7 @@ The authoritative task contract is copied below from tasks/phase-15.md. Follow i
 
 Record the frozen training/calibration corpus the surrogate and the bake-off consume, at EXACT
 **baseline-3** config (the 15.7 substrate: `Qwen/Qwen3-32B` Featherless non-thinking `fail_loud`
-`json_object`, the `qwen3_32b` set at v5, all levers unconditional, $0 flat-rate): **9p2i × 150 seeds
+`json_object`, the `qwen3_32b` set at v5 with `vote_ballot` at v6, all levers unconditional, $0 flat-rate): **9p2i × 150 seeds
 (1000–1149)** primary and **4p1i × 50 seeds (1000–1049)** secondary — fresh seed ranges so a corpus game
 can never be confused with the canonical 0–49 sets (~3× the canonical 9p2i meeting/ejection volume, ~7h
 wall with 2 Featherless seed workers; may share the 15.7 operator session, landing as a separate PR).
@@ -42,6 +42,7 @@ validity gate + byte-verification, run per set before the PR merges.
 **Files NOT in scope:**
 - replays/samples/ (the canonical baseline is untouched — the corpus is a SEPARATE release artifact)
 - scripts/refresh_samples.sh (frozen; the new wrapper composes the same underlying tooling, never edits it)
+- scripts/run_tournament.py (consumed via the `--tactical-policy-stamp` flag 15.9 added, never edited)
 - api/replay_loader.py + api/main.py (discovery semantics are pinned by test, not changed)
 - training/ (no Python here — the splits loader is 15.11's)
 
@@ -62,8 +63,8 @@ validity gate + byte-verification, run per set before the PR merges.
 
 ## Implementation hint
 
-Compose, don't fork: `scripts/run_tournament.py --num-games … --output-dir …` with the roster env/args
-per set is the underlying recorder (the same one `refresh_samples.sh` drives); clone refresh_samples'
+Compose, don't fork: `scripts/run_tournament.py --num-games … --output-dir … --tactical-policy-stamp
+fsm-default` (the 15.9 CLI seam) with the roster env/args per set is the underlying recorder (the same one `refresh_samples.sh` drives); clone refresh_samples'
 worker queue + crash-retry shape for the 2-worker Featherless saturation and its MANIFEST/report
 emission patterns via `scripts/_manifest_writer.py` + `scripts/build_sample_report.py`. Hosted models do
 not byte-reproduce FRESH generation — recordings replay byte-identically (the loosened contract the

@@ -48,11 +48,12 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - meetings/manager.py (redirect-guard band region + constant/render-contract re-home — disjoint from 15.4's validation region and 15.5's vote-surface region)
 - agents/strategic/prompts/loader.py (import the render contract from meetings.render_contract + scrub the stale StrategicReasoner docstring reference at :5; 15.5's kwarg region comes later)
 - agents/strategic/prompts/__init__.py (scrub the stale StrategicReasoner docstring reference at :6)
+- llm/budgeted_client.py (module docstring reference at :3 only — the last live `StrategicReasoner` mention outside the island and the two prompt-module docstrings)
 - agents/tactical/crewmate_policy.py (import the constant from meetings.constants)
 - agents/strategic/reasoner.py (DELETE)
 - agents/strategic/output_schemas.py (DELETE)
 - tests/agents/test_strategic_reasoner.py (DELETE)
-- .importlinter (two firewall contracts + the root/config change they require — `meetings` and `llm` must become checkable via root_packages or include_external_packages, else lint-imports errors before evaluating the contracts; disjoint from 15.8's training-root region)
+- .importlinter (two firewall contracts + the root/config change they require — `meetings` and `llm` must become checkable via root_packages or include_external_packages, else lint-imports errors before evaluating the contracts; 15.8 extends the SAME root_packages block later, strictly behind its dependency edge on this task)
 - meetings/schemas.py (stale output_schemas docstring pointer region at :20 — behind the 15.4 edge; the doc currently directs contributors to re-export new strategic types in the module this task deletes)
 - AGENTS.md (provider + GitHub-tooling de-stale)
 - tests/meetings/test_manager_gate_band.py (new: the [0.595, 0.60) fixtures)
@@ -62,7 +63,7 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - eval/_suspicion_parse.py (the re-declaration is deliberate and stays; it gets a PIN TEST, not an import)
 - meetings/voting.py (tally untouched; it receives the threshold as a parameter already)
 - DESIGN.md + AGENT_IMPLEMENTATION.md (owner-side; the generator bars task agents from them)
-- agents/strategic/prompts/qwen3_32b/ and the other template-set directories (template text belongs to 15.4/15.5; only the two named module docstrings are touched here)
+- agents/strategic/prompts/qwen3_32b/ and the other template-set directories (template text belongs to 15.4/15.5, and template bodies are provenance-versioned — the retired `qwen3_5_9b` set's stale prose comments (its vote_ballot.j2 mentions the deleted `output_schemas` module; its impostor_report.j2 says "strategic reasoner" in lowercase prose) stay frozen rather than forcing a pointless version bump on a retired set; the grep-zero DoD is on the literal `StrategicReasoner` symbol, which no template contains)
 
 **Definition of done:**
 - [ ] Guard-vs-render agreement: for raw suspicion values across `[0.55, 0.65]` including the
@@ -78,12 +79,15 @@ always available and MCP GitHub tools always fail — false in at least one acti
   contract).
 - [ ] The StrategicReasoner island is deleted; a repo-wide grep for `StrategicReasoner` returns zero
   references in LIVE code — imports, instantiations, and the stale docstring mentions in
-  `agents/strategic/prompts/loader.py:5` / `agents/strategic/prompts/__init__.py:6` (historical
-  mentions in closed task docs and audits stay); the suite passes without it.
+  `agents/strategic/prompts/loader.py:5` / `agents/strategic/prompts/__init__.py:6` /
+  `llm/budgeted_client.py:3` (historical mentions in closed task docs and audits stay, and the
+  provenance-frozen template bodies contain only lowercase prose, never the symbol); the suite
+  passes without it.
 - [ ] `uv run lint-imports` reports every configured contract KEPT, including the two added here
   (`observation ↛ agents/meetings/llm`, `agents ↛ meetings.manager`) — three contracts alongside the
-  pre-existing `agents ↛ engine` if 15.8's training contract has not landed yet, four once it has (no
-  ordering assumption between 15.6 and 15.8). The config change this requires is part of the task:
+  pre-existing `agents ↛ engine`; 15.8 adds the fourth (`agents ↛ training`) strictly AFTER this task
+  lands, behind the dependency edge that exists to serialize the shared root_packages
+  block. The config change this requires is part of the task:
   today's root_packages (`agents, engine, observation`) cannot express a forbidden `meetings.manager` /
   `llm` target — lint-imports errors on external forbidden modules — so `meetings` and `llm` join
   root_packages (or `include_external_packages` is set), verified by the KEPT run.

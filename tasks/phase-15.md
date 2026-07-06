@@ -89,14 +89,18 @@ Locked decisions (owner, 2026-07-05):
   setup provably collapses here (FO-2, re-run on current HEAD), so any co-evolution runs behind the
   Hall-of-Fame/PFSP/reduced-virulence stabilizer stack or not at all.
 
-Parallelism: four independent roots dispatch immediately: `15.1 ∥ 15.4 ∥ 15.8 ∥ 15.9` (Wave 0's
-measurement + evidence tracks run in parallel with Wave 1's layer-independent foundations). Then
+Parallelism: three independent roots dispatch immediately: `15.1 ∥ 15.4 ∥ 15.9` (Wave 0's
+measurement + evidence tracks run in parallel with Wave 1's layer-independent stamp plumbing; 15.8
+follows 15.6 only because both edit the same `.importlinter` root_packages block — config
+serialization, nothing semantic). Then
 `15.1 → (15.2 ∥ 15.3)`; `15.4 → 15.6 → 15.5` (the meeting-layer chain — shared `meetings/manager.py`,
 render-contract, and v5 prompt-set regions, serialized by design: vent observability first, then the
 re-homing hygiene 15.5's render plumbing builds on, then the reporter lever); `15.4 → 15.4.1` (the
 spectator mirror, ∥ the 15.6 → 15.5 chain — disjoint files);
 `(15.1, 15.2, 15.3, 15.4, 15.4.1, 15.5, 15.6) → 15.7`
-[operator: baseline-3 record]; `15.8 → (15.8.1 ∥ 15.10)`; `(15.7, 15.8) → 15.11`;
+[operator: baseline-3 record]; `15.6 → 15.8` (the shared `.importlinter` root_packages block,
+serialized); `(15.8, 15.9) → 15.8.1` (the shared `HeadlessGame` constructor — 15.9's stamp kwarg
+lands first); `15.8 → 15.10`; `(15.7, 15.8) → 15.11`;
 `(15.1, 15.7, 15.9) → 15.12` [operator: corpus record — may share the 15.7 operator session];
 `(15.11, 15.12) → 15.13`; `(15.2, 15.7, 15.10) → 15.14`; `(15.8.1, 15.10, 15.13, 15.14) → 15.15`;
 `(15.10, 15.13, 15.14, 15.15) → 15.16` (files disjoint from 15.15, but the shared bake-off harness
@@ -107,13 +111,14 @@ lands in 15.15 and is consumed read-only — the edge guarantees it exists);
 dependency edges or disjoint-region annotations (`scripts/measure_baseline.py` core/watchability/funnel
 regions; `meetings/manager.py` validation/vote-surface/guard-band regions; `meetings/schemas.py`
 vent-types vs docstring-pointer regions; `orchestrator/replay.py` registration/graduation/stamp
-regions; `orchestrator/game.py` split five ways — 15.4's registry line + protocol/accessor region,
-15.5's vote_ballot entry, 15.8.1's rng/no-replay plumbing, 15.9's stamp kwarg; `api/replay_loader.py`
+regions; `orchestrator/game.py` — 15.4's registry line + protocol/accessor region and 15.5's vote_ballot
+entry (serialized by the 15.4 → 15.6 → 15.5 chain), plus the `HeadlessGame` constructor shared by
+15.9's stamp kwarg and 15.8.1's no-replay mode, serialized by 15.8.1's edge on 15.9; `api/replay_loader.py`
 observation-view (15.4.1) vs policy-guard (15.9) regions; `eval/balance_eval.py` stamp-kwarg (15.9) vs
 meeting-runner-kwarg (15.13) regions; `training/env.py` between 15.8/15.8.1;
 `training/surrogate/fidelity.py` between 15.11/15.13; `training/bakeoff/es.py` between 15.14/15.15;
-`pyproject.toml` dependencies vs mypy-exclude regions; `.importlinter` firewall-contracts (15.6) vs
-training-root (15.8) regions).
+`pyproject.toml` dependencies vs mypy-exclude regions; `.importlinter`'s shared root_packages
+block, serialized by 15.8's edge on 15.6).
 Operator-run / spend gates: **15.7** (baseline-3 record, $0, ~4h), **15.12** (corpus record, $0, ~7h),
 **15.15/15.16** (local CPU training, $0, hours-scale), **15.17** (opt-in torch), **15.18** (owner
 decisions + a real-LLM finalist evaluation). Everything else is agent-dispatchable and CI-green on the
@@ -395,6 +400,8 @@ edit, owned by exactly one task; 15.5 layers onto v5 behind its dependency edge)
 - tests/meetings/test_schemas_vent.py (new)
 - tests/meetings/test_transcript_vent_flag.py (new)
 - tests/meetings/test_manager.py (validation-path extensions)
+- tests/orchestrator/test_replay_meetings.py (meeting-double protocol completion — the delegating double gains the vent-witness accessor)
+- tests/orchestrator/test_meeting_integration.py (meeting-double protocol completion — every double that crosses the `_build_participants` gate gains the accessor)
 
 **Files NOT in scope:**
 - observation/ + engine/ (the packet already carries witnessed vents; no firewall-surface change)
@@ -407,7 +414,7 @@ edit, owned by exactly one task; 15.5 layers onto v5 behind its dependency edge)
 - [ ] `SawVentObservation` round-trips through the turn schema; every committed v4 replay still parses (backward-compat pinned by a test loading a committed meeting entry).
 - [ ] A fixture meeting where a voter's witnessed-vent episodic record exists produces an accepted structured vent observation through the validation path, the grounding chokepoint confirms it against the speaker's TYPED `vent_witness_records_for_meeting()` (never rendered prose), and the transcript layer raises the role-proving STRONG flag against the subject.
 - [ ] Grounding is load-bearing: a fixture where a speaker FABRICATES a structured vent observation (no matching record in their own typed vent-witness channel) is accepted as testimony but raises NO flag and leaves the subject's hard-evidence state unchanged — speech alone cannot mint hard evidence.
-- [ ] The `MeetingAwareAgent` protocol extension is implemented by `TacticalAgent` from episodic memory, is covered by the isinstance meeting-participant check, and is exercised by the leak suite (an agent reports only its OWN witnessed events).
+- [ ] The `MeetingAwareAgent` protocol extension is implemented by `TacticalAgent` from episodic memory, is covered by the isinstance meeting-participant check, and is exercised by the leak suite (an agent reports only its OWN witnessed events). Because the protocol is `@runtime_checkable` and `_build_participants` gates on attribute presence, every meeting-enabled test double that crosses that gate gains the accessor (one-line delegation in `tests/orchestrator/test_replay_meetings.py` / `tests/orchestrator/test_meeting_integration.py`; `tests/orchestrator/test_game.py`'s doubles ride custom runners that never call `_build_participants` and need no change) — a green `uv run pytest` on the final tree proves the sweep found them all.
 - [ ] The grounded flag feeds the belief fold exactly like the witnessed-kill strong flag (same cap semantics — no new stacking channel), and a ballot's `primary_reason_id` citing the vent turn validates.
 - [ ] The v5 templates elicit vent observations (prompt-fixture test: memory-with-vent renders → template output contains the elicitation instruction); this task owns the v4 → v5 SET bump in `PROMPT_VERSION_SETS` — the only later registry edit is 15.5's single vote_ballot v6 entry.
 - [ ] The opt-in eligibility path treats a spoken vent observation as a relevance source (a non-speaker who was placed at the vent scene becomes eligible), consistent with the existing co-presence gate.
@@ -434,7 +441,7 @@ the prompt-set layout is FLAT — the four `.j2` templates live directly in
 `agents/strategic/prompts/qwen3_32b/` and the version is a REGISTRY property, not a directory; edit the
 turn/opening templates in place and bump `_bespoke_versions("qwen3_32b", version=…)` to `"v5"` in
 `PROMPT_VERSION_SETS` (exactly how 14.11 shipped v4). Keep `vote_ballot.j2` byte-identical here (15.5
-owns its v5 edits). The live behavioral effect (transmission 36/74 → ?) is measured at 15.7 by the 15.3
+owns its edit, under its own per-template v6 bump). The live behavioral effect (transmission 36/74 → ?) is measured at 15.7 by the 15.3
 instrument — this task's DoD is the mechanism, fixture-proven, not the model's uptake.
 
 **Integration risk:**
@@ -632,11 +639,12 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - meetings/manager.py (redirect-guard band region + constant/render-contract re-home — disjoint from 15.4's validation region and 15.5's vote-surface region)
 - agents/strategic/prompts/loader.py (import the render contract from meetings.render_contract + scrub the stale StrategicReasoner docstring reference at :5; 15.5's kwarg region comes later)
 - agents/strategic/prompts/__init__.py (scrub the stale StrategicReasoner docstring reference at :6)
+- llm/budgeted_client.py (module docstring reference at :3 only — the last live `StrategicReasoner` mention outside the island and the two prompt-module docstrings)
 - agents/tactical/crewmate_policy.py (import the constant from meetings.constants)
 - agents/strategic/reasoner.py (DELETE)
 - agents/strategic/output_schemas.py (DELETE)
 - tests/agents/test_strategic_reasoner.py (DELETE)
-- .importlinter (two firewall contracts + the root/config change they require — `meetings` and `llm` must become checkable via root_packages or include_external_packages, else lint-imports errors before evaluating the contracts; disjoint from 15.8's training-root region)
+- .importlinter (two firewall contracts + the root/config change they require — `meetings` and `llm` must become checkable via root_packages or include_external_packages, else lint-imports errors before evaluating the contracts; 15.8 extends the SAME root_packages block later, strictly behind its dependency edge on this task)
 - meetings/schemas.py (stale output_schemas docstring pointer region at :20 — behind the 15.4 edge; the doc currently directs contributors to re-export new strategic types in the module this task deletes)
 - AGENTS.md (provider + GitHub-tooling de-stale)
 - tests/meetings/test_manager_gate_band.py (new: the [0.595, 0.60) fixtures)
@@ -646,7 +654,7 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - eval/_suspicion_parse.py (the re-declaration is deliberate and stays; it gets a PIN TEST, not an import)
 - meetings/voting.py (tally untouched; it receives the threshold as a parameter already)
 - DESIGN.md + AGENT_IMPLEMENTATION.md (owner-side; the generator bars task agents from them)
-- agents/strategic/prompts/qwen3_32b/ and the other template-set directories (template text belongs to 15.4/15.5; only the two named module docstrings are touched here)
+- agents/strategic/prompts/qwen3_32b/ and the other template-set directories (template text belongs to 15.4/15.5, and template bodies are provenance-versioned — the retired `qwen3_5_9b` set's stale prose comments (its vote_ballot.j2 mentions the deleted `output_schemas` module; its impostor_report.j2 says "strategic reasoner" in lowercase prose) stay frozen rather than forcing a pointless version bump on a retired set; the grep-zero DoD is on the literal `StrategicReasoner` symbol, which no template contains)
 
 **Definition of done:**
 - [ ] Guard-vs-render agreement: for raw suspicion values across `[0.55, 0.65]` including the
@@ -662,12 +670,15 @@ always available and MCP GitHub tools always fail — false in at least one acti
   contract).
 - [ ] The StrategicReasoner island is deleted; a repo-wide grep for `StrategicReasoner` returns zero
   references in LIVE code — imports, instantiations, and the stale docstring mentions in
-  `agents/strategic/prompts/loader.py:5` / `agents/strategic/prompts/__init__.py:6` (historical
-  mentions in closed task docs and audits stay); the suite passes without it.
+  `agents/strategic/prompts/loader.py:5` / `agents/strategic/prompts/__init__.py:6` /
+  `llm/budgeted_client.py:3` (historical mentions in closed task docs and audits stay, and the
+  provenance-frozen template bodies contain only lowercase prose, never the symbol); the suite
+  passes without it.
 - [ ] `uv run lint-imports` reports every configured contract KEPT, including the two added here
   (`observation ↛ agents/meetings/llm`, `agents ↛ meetings.manager`) — three contracts alongside the
-  pre-existing `agents ↛ engine` if 15.8's training contract has not landed yet, four once it has (no
-  ordering assumption between 15.6 and 15.8). The config change this requires is part of the task:
+  pre-existing `agents ↛ engine`; 15.8 adds the fourth (`agents ↛ training`) strictly AFTER this task
+  lands, behind the dependency edge that exists to serialize the shared root_packages
+  block. The config change this requires is part of the task:
   today's root_packages (`agents, engine, observation`) cannot express a forbidden `meetings.manager` /
   `llm` target — lint-imports errors on external forbidden modules — so `meetings` and `llm` join
   root_packages (or `include_external_packages` is set), verified by the KEPT run.
@@ -724,8 +735,10 @@ assume it.
 **Complexity:** Integration
 
 Record **baseline 3** — both canonical sets (50 + 50 seeds) on the unchanged model/provider
-(`Qwen/Qwen3-32B`, Featherless, $0) with the Wave-0 substrate: the `qwen3_32b` set at v5 (15.4's vent
-elicitation + 15.5's reporter line; provenance rows render `*.qwen3_32b.v5`) and the
+(`Qwen/Qwen3-32B`, Featherless, $0) with the Wave-0 substrate: the `qwen3_32b` set at v5 with
+`vote_ballot` at v6 (15.4's vent elicitation + 15.5's reporter line; provenance rows render
+`*.qwen3_32b.v5` for the three 15.4-owned templates and `vote_ballot.qwen3_32b.v6` — 15.5's
+per-template bump) and the
 `reporter_exculpation` lever ON — one atomic PR replacing `replays/samples/`, exactly the 14.12
 pattern. Graduate the lever at the record — BOTH halves of the 14.9/14.12 move: the resolver itself
 (`agents/memory/beliefs.py::reporter_exculpation_enabled`, 15.5's home) returns constant `True`, and
@@ -765,15 +778,16 @@ pauses the phase for an owner call. Finally, pin the baseline-3 evidence-supply 
 - [ ] Both sets recorded at the Wave-0 config and committed in one atomic PR; `scripts/validity_gate.py`
   PASSES both sets from committed bytes; `bash scripts/verify_samples.sh` reconstructs all 100 samples
   clean under a BARE environment (lever graduated, no `AILIBI_*` export).
-- [ ] MANIFEST provenance exact per seed: model, `qwen3_32b.v5`, all six flags (five retired + the
-  graduated reporter lever), git_sha, $0 cost, winner.
+- [ ] MANIFEST provenance exact per seed: model, the mixed Wave-0 prompt versions (three templates at
+  `qwen3_32b.v5`, `vote_ballot` at `qwen3_32b.v6` — 15.5's per-template bump), all six flags (five
+  retired + the graduated reporter lever), git_sha, $0 cost, winner.
 - [ ] The wave0-close audit reports the funnel before/after table (15.3's instrument on baseline 2 vs
   baseline 3), the R-gate measurement, and the canaries — every number regenerated by the committed
   CLIs, zero hand-computed figures. The BEFORE column regenerates from the committed
   `audits/baseline2-final-measure.json` (captured pre-replacement and named in the audit with the tip
   commit it was measured at — the baseline-2 bytes themselves survive only in git history).
-- [ ] README's sample-provenance paragraph reflects baseline 3 (recorded date, the v5 prompt set, the
-  measured impostor win rates) — the public quickstart never describes replaced samples.
+- [ ] README's sample-provenance paragraph reflects baseline 3 (recorded date, the v5 prompt set with
+  `vote_ballot` at v6, the measured impostor win rates) — the public quickstart never describes replaced samples.
 - [ ] Every byte-coupled test that pins recorded rows or committed-report aggregates is re-pinned in
   this PR (`tests/scripts/test_manifest_writer.py`, `tests/api/test_eval.py`,
   `tests/meetings/test_manager.py`, `tests/orchestrator/test_replay.py` — plus a sweep for any other
@@ -813,7 +827,7 @@ reason to iterate prompts inside this task (record-only discipline).
 
 ### Task 15.8 — The `training/` package: rollout env, legal-action mask, reward channel (numpy lands here)
 **Branch:** `phase-15-training-env`
-**Depends on:** none
+**Depends on:** 15.6
 **Section refs:** audits/post-phase-14-ML-planning.md §5, §7, §11 (action space, injection seam, env wrapper); orchestrator/game.py (AgentFactory :93, HeadlessGame :1121, MeetingAwareAgent :425-450); experiments/lab/ml_spike/core.py (the SpikeAgent interposition pattern :148-200); engine/rules.py + engine/tick.py (the legality predicates); engine/events.py (the reward-source event types)
 **Complexity:** Integration
 
@@ -834,9 +848,15 @@ the side-specific tactically-reachable terms from the typed event log (kills, wi
 `Killed.witnesses`, task progress, survival, report/coverage events) so trainers never re-derive rewards
 from replay bytes; (3) **per-episode rollout records** carrying the behavioral descriptors the QD
 entrant and the pause audit need (kill-timing distribution, witness-exposure rate, vent usage,
-meeting-trigger rate, do_task-emission cadence, win shape). `uv add numpy` (exact pin) lands in this
-task, confined to `training/` by a new import-linter contract (`agents` must not import `training`) with
-`training` added to the linter's root packages.
+meeting-trigger rate, do_task-emission cadence, win shape). Episode horizon: a meeting runner is
+always installed and episodes run FULL games by default; the env additionally exposes an explicit
+`episode_boundary="first_meeting"` opt-in (the seam 15.13's fallback (b) rides) whose episodes end at
+the meeting trigger and are MARKED truncated in the rollout record — silent truncation stays
+structurally unreachable, and no fitness term ever reads a truncated episode as a full game. `uv add
+numpy` (exact pin) lands in this task, confined to `training/` by a new import-linter contract
+(`agents` must not import `training`) with `training` added to the linter's root packages — an edit
+to the SAME root_packages block 15.6 rewrites, which is the whole reason for this task's 15.6
+dependency edge (config serialization; nothing semantic).
 
 **Files in scope:**
 - training/__init__.py (new)
@@ -845,7 +865,7 @@ task, confined to `training/` by a new import-linter contract (`agents` must not
 - training/rollout.py (new: episode records + behavioral descriptors)
 - pyproject.toml (project dependencies region — the numpy exact pin; the mypy exclude regex is 15.17's disjoint region)
 - uv.lock (numpy resolution)
-- .importlinter (training root + agents-must-not-import-training contract region)
+- .importlinter (training root + agents-must-not-import-training contract — extends the root_packages block 15.6 rewrote; the dependency edge on 15.6 serializes the shared block)
 - tests/training/__init__.py (new)
 - tests/training/test_env.py (new)
 - tests/training/test_rewards.py (new)
@@ -860,11 +880,11 @@ task, confined to `training/` by a new import-linter contract (`agents` must not
 
 **Definition of done:**
 - [ ] The env runs full fake-provider games through an injected factory at or above the measured floor (≥5 games/s at 9p2i on the check host; the actual figure is documented in the module docstring).
-- [ ] A meeting runner is ALWAYS installed: `meeting_runner=None` truncation (`MEETING_PHASE_REACHED`) is structurally unreachable from the env, asserted by test — truncation is never a fitness path.
+- [ ] A meeting runner is ALWAYS installed and `meeting_runner=None` truncation (`MEETING_PHASE_REACHED`) is structurally unreachable from the DEFAULT env, asserted by test. The explicit `episode_boundary="first_meeting"` opt-in is the ONE deliberate boundary mode (15.13's fallback (b)): its episodes are marked truncated in the rollout record, and a test asserts the reward channel refuses to score a truncated episode as a full game — silent truncation is never a fitness path.
 - [ ] Mask legality is property-tested against the engine: across randomized seeds/ticks, every masked-legal engine action resolves without rejection and every unmasked action is engine-rejected — with the pretend-`do_task` camouflage carried in the impostor SUBMISSION set and excluded from the engine-legal set (both asserted).
 - [ ] The reward channel is potential-based: a telescoping test shows shaping sums to Φ(terminal) − Φ(initial) over any episode, so shaping cannot change the optimal policy.
 - [ ] A frozen-policy episode is byte-deterministic: same seed → identical per-tick state-hash sequence across two runs (the spike's check-1 reproduced inside the committed package).
-- [ ] numpy imports are confined to `training/`: `uv run lint-imports` keeps every existing contract AND the new `agents ↛ training` contract; `training` is in root_packages.
+- [ ] numpy imports are confined to `training/`: `uv run lint-imports` keeps every existing contract (including 15.6's two, already landed behind the dependency edge) AND the new `agents ↛ training` contract; `training` is in root_packages.
 - [ ] Episode records carry all named behavioral descriptors; a fixture pins their values on a scripted game.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -910,7 +930,7 @@ baseline.
 
 ### Task 15.8.1 — Training-only RNG hash fast path (opt-in; committed paths byte-unchanged)
 **Branch:** `phase-15-rng-fast-path`
-**Depends on:** 15.8
+**Depends on:** 15.8, 15.9
 **Section refs:** audits/post-phase-14-ML-planning.md §3.5, §11.2 (the 43% measurement + the training-only scoping); audits/post-phase-14-pause.md §4 (the "do not touch in place" verifier note); engine/rng.py:31-38; orchestrator/replay.py (state-hash serialization)
 **Complexity:** Medium
 
@@ -926,13 +946,16 @@ default path pinned byte-identical there; and (b) `HeadlessGame` today REQUIRES 
 constructs a `ReplayLog` unconditionally, which would make "non-recorded rollouts" unreachable — so
 this task also adds an explicit NO-REPLAY training mode (`replay_path=None` → no `ReplayLog`, nothing
 written), which is the only construction that accepts the fast-path policy; any replay-writing
-construction refuses it loudly. The RNG draws themselves are untouched — trajectories are identical
+construction refuses it loudly, and a no-replay construction that receives 15.9's
+`tactical_policy_stamp` also raises (a stamp with nothing to record it is a caller bug). This task
+edits the SAME `HeadlessGame` constructor 15.9 stamps — the 15.9 dependency edge serializes the two,
+so rebase on the stamped signature. The RNG draws themselves are untouched — trajectories are identical
 under both modes, so training results transfer to the recording path exactly.
 
 **Files in scope:**
 - engine/rng.py (the opt-in fast-path region; default behavior byte-identical)
 - engine/tick.py (the per-tick rng-snapshot invocation region — policy-aware, default byte-identical)
-- orchestrator/game.py (rng-hash policy plumbing + optional no-replay training-mode region — disjoint from 15.4's registry/protocol regions, 15.5's vote entry, and 15.9's stamp region)
+- orchestrator/game.py (rng-hash policy plumbing + optional no-replay training-mode region — disjoint from 15.4's registry/protocol regions and 15.5's vote entry; shares the `HeadlessGame` constructor with 15.9's stamp kwarg, serialized by this task's dependency edge on 15.9)
 - training/env.py (fast-path + no-replay knob region — 15.8 owns the rest of the module)
 - tests/engine/test_rng_fast_path.py (new)
 - tests/training/test_env_fast_path.py (new)
@@ -946,7 +969,7 @@ under both modes, so training results transfer to the recording path exactly.
 **Definition of done:**
 - [ ] Default path byte-identical: `bash scripts/verify_samples.sh` reconstructs all 100 committed samples clean with the change merged.
 - [ ] Fast path measurably faster: the engine-core speedup ratio is measured and documented (target ≥1.3×; report the actual).
-- [ ] The no-replay training mode is real: `replay_path=None` constructs a game that writes NOTHING to disk (asserted), runs to completion, and is the ONLY construction that accepts the fast-path policy; every replay-writing construction with the fast path active raises a descriptive error (tested); the training env exposes both knobs and defaults them OFF.
+- [ ] The no-replay training mode is real: `replay_path=None` constructs a game that writes NOTHING to disk (asserted), runs to completion, and is the ONLY construction that accepts the fast-path policy; every replay-writing construction with the fast path active raises a descriptive error (tested); a no-replay construction combined with 15.9's `tactical_policy_stamp` raises (tested); the training env exposes both knobs and defaults them OFF.
 - [ ] Trajectory equivalence proven: for a frozen policy on a fixed seed set, the full action/event streams are IDENTICAL under both modes (only hashing cost differs), asserted by test.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -986,8 +1009,11 @@ conflicting policy claim. The stamp also needs a PRODUCTION injection seam, not 
 API: `HeadlessGame` constructs its `ReplayLog` internally and every recorder (run_tournament, the
 corpus wrapper, Wave-2 champion recordings) reaches replay-writing only through that constructor — so
 `HeadlessGame` gains an optional `tactical_policy_stamp` keyword (default `None` = absent = FSM)
-passed through to the writer, and `run_tournament_eval` gains the matching optional pass-through, so a
-learned-policy recording can actually be stamped without a later out-of-scope edit. An ABSENT stamp means "scripted FSM default" and stays fully valid — the
+passed through to the writer, `run_tournament_eval` gains the matching optional pass-through, and
+`scripts/run_tournament.py` exposes it as a CLI flag (`--tactical-policy-stamp`, accepting the
+literal `fsm-default` for the canonical scripted stamp or a JSON-file path for Wave-2 champion
+stamps) — so a learned-policy recording can actually be stamped without a later out-of-scope edit,
+and the 15.12 corpus wrapper (a shell composer of that CLI) can stamp explicitly. An ABSENT stamp means "scripted FSM default" and stays fully valid — the
 committed canonical sets are untouched and must keep loading, byte-verifying, and serving with zero
 edits (this holds across the 15.7 re-record: baseline 3 is recorded with the FSM default and may carry
 the explicit stamp if this task lands first, or none — both are valid). Replay reconstruction re-feeds
@@ -996,10 +1022,11 @@ what keeps learned-policy replays byte-identical regardless of inference-float q
 
 **Files in scope:**
 - orchestrator/replay.py (tactical-policy stamp region, alongside the substrate-flags stamp — disjoint from 15.5's registration region and 15.7's graduation region)
-- orchestrator/game.py (HeadlessGame tactical_policy_stamp pass-through kwarg region — disjoint from 15.4's registry/protocol regions, 15.5's vote entry, and 15.8.1's rng/no-replay region)
+- orchestrator/game.py (HeadlessGame tactical_policy_stamp pass-through kwarg region — disjoint from 15.4's registry/protocol regions and 15.5's vote entry; 15.8.1 later edits the same constructor behind its dependency edge on this task)
 - eval/balance_eval.py (run_tournament_eval policy-stamp pass-through kwarg region — additive-optional; disjoint from 15.13's meeting-runner kwarg region, edge exists transitively via 15.12)
 - api/replay_loader.py (policy-stamp read + mismatch guard region — disjoint from 15.4.1's observation-view region)
 - scripts/_manifest_writer.py (policy column)
+- scripts/run_tournament.py (the `--tactical-policy-stamp` CLI flag region — plumbed to `run_tournament_eval`'s new kwarg; no other CLI behavior changes)
 - tests/orchestrator/test_replay_policy_stamp.py (new)
 - tests/api/test_replay_loader_policy_stamp.py (new)
 - tests/scripts/test_manifest_writer.py (extend: FSM-default rendering pinned)
@@ -1012,7 +1039,7 @@ what keeps learned-policy replays byte-identical regardless of inference-float q
 **Definition of done:**
 - [ ] The committed canonical sets load, byte-verify (`bash scripts/verify_samples.sh` clean), and serve with zero edits — absent stamp renders as the FSM default everywhere.
 - [ ] A stamped recording round-trips writer → loader with all five fields intact; the stamp appears in the game_over entry beside `substrate_flags`.
-- [ ] The production seam works end-to-end: a game recorded through `HeadlessGame(tactical_policy_stamp=…)` and one through `run_tournament_eval(..., tactical_policy_stamp=…)` both land stamped on disk (not just a writer-level unit round-trip); omitting the kwarg records absent-stamp = FSM default, byte-identical to today's path.
+- [ ] The production seam works end-to-end: a game recorded through `HeadlessGame(tactical_policy_stamp=…)`, one through `run_tournament_eval(..., tactical_policy_stamp=…)`, and one through the `scripts/run_tournament.py --tactical-policy-stamp fsm-default` CLI (the seam 15.12's shell wrapper drives) all land stamped on disk (not just a writer-level unit round-trip); omitting the kwarg/flag records absent-stamp = FSM default, byte-identical to today's path.
 - [ ] A deliberately mismatched stamp raises the new loader guard (fail-loud, mirroring the substrate guard's shape and error quality).
 - [ ] The MANIFEST writer emits the policy column; existing manifest tests pin the FSM-default rendering for unstamped rows.
 - [ ] The stamp schema is documented (module docstring) for 15.12 (corpus rows stamp the FSM default explicitly) and Wave 2 (champion weights hash).
@@ -1203,7 +1230,7 @@ spike. Row grain is one row per (meeting, voter) — the roster the cross-meetin
 
 Record the frozen training/calibration corpus the surrogate and the bake-off consume, at EXACT
 **baseline-3** config (the 15.7 substrate: `Qwen/Qwen3-32B` Featherless non-thinking `fail_loud`
-`json_object`, the `qwen3_32b` set at v5, all levers unconditional, $0 flat-rate): **9p2i × 150 seeds
+`json_object`, the `qwen3_32b` set at v5 with `vote_ballot` at v6, all levers unconditional, $0 flat-rate): **9p2i × 150 seeds
 (1000–1149)** primary and **4p1i × 50 seeds (1000–1049)** secondary — fresh seed ranges so a corpus game
 can never be confused with the canonical 0–49 sets (~3× the canonical 9p2i meeting/ejection volume, ~7h
 wall with 2 Featherless seed workers; may share the 15.7 operator session, landing as a separate PR).
@@ -1227,6 +1254,7 @@ validity gate + byte-verification, run per set before the PR merges.
 **Files NOT in scope:**
 - replays/samples/ (the canonical baseline is untouched — the corpus is a SEPARATE release artifact)
 - scripts/refresh_samples.sh (frozen; the new wrapper composes the same underlying tooling, never edits it)
+- scripts/run_tournament.py (consumed via the `--tactical-policy-stamp` flag 15.9 added, never edited)
 - api/replay_loader.py + api/main.py (discovery semantics are pinned by test, not changed)
 - training/ (no Python here — the splits loader is 15.11's)
 
@@ -1247,8 +1275,8 @@ validity gate + byte-verification, run per set before the PR merges.
 
 **Implementation hint:**
 
-Compose, don't fork: `scripts/run_tournament.py --num-games … --output-dir …` with the roster env/args
-per set is the underlying recorder (the same one `refresh_samples.sh` drives); clone refresh_samples'
+Compose, don't fork: `scripts/run_tournament.py --num-games … --output-dir … --tactical-policy-stamp
+fsm-default` (the 15.9 CLI seam) with the roster env/args per set is the underlying recorder (the same one `refresh_samples.sh` drives); clone refresh_samples'
 worker queue + crash-retry shape for the 2-worker Featherless saturation and its MANIFEST/report
 emission patterns via `scripts/_manifest_writer.py` + `scripts/build_sample_report.py`. Hosted models do
 not byte-reproduce FRESH generation — recordings replay byte-identically (the loosened contract the
@@ -1276,8 +1304,10 @@ wrap as `SurrogateMeetingRunner` conforming to the runtime-checkable `MeetingRun
 returned `MeetingArtifacts` echoes `meeting_id`/`triggered_by`/`trigger_tick` (validated at
 `game.py:905-943`), carries a full-roster ballot set, and empty LLM metadata. The GO/NO-GO bar is
 written BEFORE training, against the 15.11 honest ceiling; the fallback ladder is in-contract: (a) the
-fake-provider MeetingManager as the training-time runner, (b) meeting-boundary episode truncation with
-meeting-free fitness terms, (c) periodic real-LLM re-grounding recordings (operator, $0). Whatever the
+fake-provider MeetingManager as the training-time runner, (b) the 15.8 env's explicit
+`episode_boundary="first_meeting"` opt-in with meeting-free fitness terms (the env marks those
+episodes truncated and no full-game term reads them — the deliberate boundary mode 15.8 contracts,
+not silent truncation), (c) periodic real-LLM re-grounding recordings (operator, $0). Whatever the
 verdict, the staleness doctrine ships: a use-counter/config cap the bake-off must respect, so no trainer
 optimizes indefinitely against a frozen surrogate. Additively, `run_tournament_eval` gains an optional
 per-game meeting-runner factory keyword (mirroring its existing per-game default-runner construction) so

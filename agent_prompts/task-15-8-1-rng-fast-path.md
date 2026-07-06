@@ -12,7 +12,7 @@ Implement Task 15.8.1 — Training-only RNG hash fast path (opt-in; committed pa
 The authoritative task contract is copied below from tasks/phase-15.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-15-rng-fast-path`
-**Depends on:** 15.8
+**Depends on:** 15.8, 15.9
 **Section refs:** audits/post-phase-14-ML-planning.md §3.5, §11.2 (the 43% measurement + the training-only scoping); audits/post-phase-14-pause.md §4 (the "do not touch in place" verifier note); engine/rng.py:31-38; orchestrator/replay.py (state-hash serialization)
 **Complexity:** Medium
 
@@ -28,13 +28,16 @@ default path pinned byte-identical there; and (b) `HeadlessGame` today REQUIRES 
 constructs a `ReplayLog` unconditionally, which would make "non-recorded rollouts" unreachable — so
 this task also adds an explicit NO-REPLAY training mode (`replay_path=None` → no `ReplayLog`, nothing
 written), which is the only construction that accepts the fast-path policy; any replay-writing
-construction refuses it loudly. The RNG draws themselves are untouched — trajectories are identical
+construction refuses it loudly, and a no-replay construction that receives 15.9's
+`tactical_policy_stamp` also raises (a stamp with nothing to record it is a caller bug). This task
+edits the SAME `HeadlessGame` constructor 15.9 stamps — the 15.9 dependency edge serializes the two,
+so rebase on the stamped signature. The RNG draws themselves are untouched — trajectories are identical
 under both modes, so training results transfer to the recording path exactly.
 
 **Files in scope:**
 - engine/rng.py (the opt-in fast-path region; default behavior byte-identical)
 - engine/tick.py (the per-tick rng-snapshot invocation region — policy-aware, default byte-identical)
-- orchestrator/game.py (rng-hash policy plumbing + optional no-replay training-mode region — disjoint from 15.4's registry/protocol regions, 15.5's vote entry, and 15.9's stamp region)
+- orchestrator/game.py (rng-hash policy plumbing + optional no-replay training-mode region — disjoint from 15.4's registry/protocol regions and 15.5's vote entry; shares the `HeadlessGame` constructor with 15.9's stamp kwarg, serialized by this task's dependency edge on 15.9)
 - training/env.py (fast-path + no-replay knob region — 15.8 owns the rest of the module)
 - tests/engine/test_rng_fast_path.py (new)
 - tests/training/test_env_fast_path.py (new)
@@ -48,7 +51,7 @@ under both modes, so training results transfer to the recording path exactly.
 **Definition of done:**
 - [ ] Default path byte-identical: `bash scripts/verify_samples.sh` reconstructs all 100 committed samples clean with the change merged.
 - [ ] Fast path measurably faster: the engine-core speedup ratio is measured and documented (target ≥1.3×; report the actual).
-- [ ] The no-replay training mode is real: `replay_path=None` constructs a game that writes NOTHING to disk (asserted), runs to completion, and is the ONLY construction that accepts the fast-path policy; every replay-writing construction with the fast path active raises a descriptive error (tested); the training env exposes both knobs and defaults them OFF.
+- [ ] The no-replay training mode is real: `replay_path=None` constructs a game that writes NOTHING to disk (asserted), runs to completion, and is the ONLY construction that accepts the fast-path policy; every replay-writing construction with the fast path active raises a descriptive error (tested); a no-replay construction combined with 15.9's `tactical_policy_stamp` raises (tested); the training env exposes both knobs and defaults them OFF.
 - [ ] Trajectory equivalence proven: for a frozen policy on a fixed seed set, the full action/event streams are IDENTICAL under both modes (only hashing cost differs), asserted by test.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -74,9 +77,14 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import api.replay_loader"`
 - `uv run python -c "import training.env"`
 - `uv run python -c "import training.rollout"`
 - `uv run python -c "import training.rewards"`
+- `uv run python -c "import meetings.constants"`
+- `uv run python -c "import meetings.render_contract"`
+- `uv run python -c "import meetings.schemas"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
