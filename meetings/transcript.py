@@ -128,6 +128,34 @@ CONTRADICTED, uncorroborated alibi does not. Perception-time absence/last-seen
 forms are DROPPED: the firewall exposes no per-player liveness channel, so all
 such inference lives in the meeting layer over public testimony
 (:func:`_detect_alibi_vs_physical`).
+
+Task 15.4 (vent observability): the ``vent_sighting`` kind -- the game's
+hardest evidence made speakable. A spoken
+:class:`~meetings.schemas.SawVentObservation` is role-proving (vents are
+impostor-only, DESIGN.md §3.4) but speech alone must NEVER mint hard
+evidence: a model that hallucinates a vent sighting against an innocent
+would otherwise fabricate a STRONG flag, re-opening the railroad class
+Phase 14 eliminated. The GROUNDING chokepoint is the whole defense:
+:func:`detect_contradictions` takes the speakers' own typed
+:class:`~meetings.schemas.VentWitnessRecord` channels
+(``vent_witness_records``, threaded by the manager from the
+``MeetingAwareAgent.vent_witness_records_for_meeting()`` accessor) and a
+STRONG flag fires only when the spoken observation matches one of the
+SPEAKER'S OWN records (same subject, canonically intersecting room, tick
+within :data:`VENT_GROUNDING_TICK_TOLERANCE`) -- a deterministic comparison
+against reconstructed memory, never LLM judgment and never rendered prose.
+An ungrounded spoken vent claim records as ordinary testimony and raises NO
+flag. A grounded flag can only name a genuine venter (engine event ->
+witness-gated packet -> episodic record -> typed channel), so the
+"a STRONG flag naming a CREWMATE is a false positive" crux is satisfied by
+construction. The flag's description quotes the RECORD (the deterministic
+memory), while both event ids reference the spoken observation -- the
+public, citable surface ``VoteBallot.primary_reason_id`` reaches through
+the turn id. Vent flags are appended AFTER the 10.10 proxy-intra-turn
+guard by design: that guard re-targets one narrator's two conflicting
+proxy CLAIMS, while a grounded vent flag is a single memory-confirmed
+observation, not a claim pair -- gutting it there would delete exactly the
+evidence this rule exists to carry.
 """
 
 from __future__ import annotations
@@ -148,9 +176,13 @@ from meetings.schemas import (
     MeetingTurn,
     PlayerId,
     SawPlayerObservation,
+    SawVentObservation,
+    VentWitnessRecord,
 )
 
-_ContradictionKind = Literal["alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"]
+_ContradictionKind = Literal[
+    "alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical", "vent_sighting"
+]
 
 # Why a meeting opened (DESIGN.md §5.1). The orchestrator derives this from the
 # engine's MeetingTriggeredEvent (Task 10.8). Threaded into the Rule-3 relevance
@@ -535,6 +567,20 @@ WEAK_REASON_KILL_SCENE: Final[str] = "single-voice kill-scene placement"
 # ``alibi_vs_sighting`` band, the audited seed-3 shape behind 8/13 wrong
 # ejections -- and is excluded from the physical detector entirely.)
 PHYSICAL_CONTRADICTION_MIN_VOICES: Final[int] = 2
+
+# Task 15.4 (vent observability): the tick tolerance of the vent grounding
+# chokepoint. A spoken :class:`~meetings.schemas.SawVentObservation` grounds
+# against one of the SPEAKER'S OWN typed
+# :class:`~meetings.schemas.VentWitnessRecord` rows only when the subject
+# matches, the canonical room sets intersect, and the spoken tick sits within
+# this many ticks of the record's tick. The rendered memory line quotes the
+# exact tick ("[tick N] You witnessed p-3 vent in X."), so a faithful model
+# copies it verbatim; the tolerance absorbs small transcription slips without
+# opening the window wide enough for a speaker to re-time a genuine record
+# into a materially different account. Sized to match
+# :data:`NARROW_ALIBI_WINDOW_TICKS` -- the detector's existing notion of a
+# tick-scale rounding error.
+VENT_GROUNDING_TICK_TOLERANCE: Final[int] = 2
 
 # The map's canonical room ids -- a frozen ALLOWLIST (Task 10.6; audit
 # gp-1 C-C-5). The 10.1 placeholder DENYLIST ("VARIOUS", "UNKNOWN", ...)
@@ -1051,6 +1097,8 @@ def detect_contradictions(
     *,
     roster: frozenset[PlayerId] | None = None,
     trigger_kind: MeetingTriggerKind | None = None,
+    vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]]
+    | None = None,
 ) -> tuple[ContradictionRef, ...]:
     """Flag incompatible alibi and saw-player claims (DESIGN.md §5.4, §6.4).
 
@@ -1086,6 +1134,22 @@ def detect_contradictions(
       CONTRADICT an alibi placed elsewhere, STRICT -- a lone kill-scene
       placement is sub-gate (:data:`WEAK_REASON_KILL_SCENE`) and crosses to
       STRONG only under the same two-source conjunction.
+    * ``vent_sighting`` (Task 15.4) -- the role-proving kind: a spoken
+      :class:`~meetings.schemas.SawVentObservation` GROUNDED against the
+      speaker's own typed :class:`~meetings.schemas.VentWitnessRecord`
+      channel (``vent_witness_records``, keyed by speaker id -- the live
+      path threads each participant's
+      ``vent_witness_records_for_meeting()`` output). Always STRONG (vents
+      are impostor-only, so a grounded sighting proves the subject's role);
+      an UNGROUNDED spoken vent claim -- no matching record in the
+      speaker's own channel -- raises NO flag at all and stays ordinary
+      testimony, so speech alone can never mint hard evidence. ``None`` /
+      an absent speaker entry (legacy callers, replay re-derivation without
+      the typed channel, non-witnesses) grounds nothing: committed
+      transcripts re-derive byte-identically. The grounding comparison is
+      deterministic (:data:`VENT_GROUNDING_TICK_TOLERANCE`); the flag is
+      exempt from the 10.10 proxy-intra-turn guard by construction (it is
+      one grounded observation, not one narrator's conflicting claim pair).
 
     Flags are *information*, not verdicts. The returned tuple is sorted
     by ``contradiction_id`` so the detector is deterministic across calls
@@ -1218,6 +1282,21 @@ def detect_contradictions(
     guarded = _apply_proxy_intra_turn_guard(
         flags, event_speakers=_event_speaker_index(transcript)
     )
+    # Task 15.4: grounded vent flags join AFTER the proxy-intra-turn guard --
+    # deliberately, not incidentally. Both of a vent flag's event ids resolve
+    # to the one spoken observation (same speaker, subject a third party), so
+    # the 10.10 guard would re-target it WEAK at the speaker; but that guard
+    # exists for one narrator's two CONFLICTING proxy claims, while a grounded
+    # vent flag is a single observation confirmed against the speaker's own
+    # typed memory channel -- exactly the evidence the guard must not delete.
+    if vent_witness_records:
+        guarded.extend(
+            _detect_grounded_vent_flags(
+                transcript,
+                vent_witness_records=vent_witness_records,
+                roster=effective_roster,
+            )
+        )
     return tuple(sorted(guarded, key=lambda flag: flag.contradiction_id))
 
 
@@ -1505,11 +1584,23 @@ def _carries_relevant_observation(
     :func:`is_relevant_sighting` against the meeting's kill scene. The
     triggering body's own ``found_body`` observation sits at the scene
     by construction and therefore never backs a voice on its own.
+
+    Task 15.4: a :class:`~meetings.schemas.SawVentObservation` is
+    relevance-grade WITHOUT the kill-scene prong -- that prong exists
+    because "presence at the scene must never EXONERATE" (a vouch-side
+    rule), while a witnessed vent is incrimination, and an impostor
+    venting at the kill scene is exactly the shape the evidence must
+    reach. The spawn-window prong still applies, matching every other
+    observation kind.
     """
 
     for observation in turn.observations:
         rooms = canonical_rooms(observation.room)
         if not rooms:
+            continue
+        if isinstance(observation, SawVentObservation):
+            if observation.tick > SPAWN_WINDOW_LAST_TICK:
+                return True
             continue
         if is_relevant_sighting(
             tick=observation.tick,
@@ -2133,6 +2224,91 @@ def _detect_alibi_vs_physical(
             )
 
 
+def _vent_observation_matches_record(
+    observation: SawVentObservation,
+    record: VentWitnessRecord,
+) -> bool:
+    """Whether one spoken vent observation matches one typed record (Task 15.4).
+
+    The deterministic grounding comparison: same ``subject``, canonically
+    intersecting rooms (:func:`canonical_rooms` -- the detector's one room
+    normalisation point, so a compound spoken label like ``"LABS/MEDBAY"``
+    still matches the record's canonical engine room, while a non-spatial
+    label matches nothing), and a spoken tick within
+    :data:`VENT_GROUNDING_TICK_TOLERANCE` of the record's tick. Pure function
+    of its two arguments -- no prose parsing, no LLM judgment.
+    """
+
+    if observation.subject != record.subject:
+        return False
+    if abs(observation.tick - record.tick) > VENT_GROUNDING_TICK_TOLERANCE:
+        return False
+    observation_rooms = canonical_rooms(observation.room)
+    record_rooms = canonical_rooms(record.room)
+    return bool(observation_rooms and record_rooms & observation_rooms)
+
+
+def _detect_grounded_vent_flags(
+    transcript: MeetingTranscript,
+    *,
+    vent_witness_records: Mapping[PlayerId, tuple[VentWitnessRecord, ...]],
+    roster: frozenset[PlayerId],
+) -> Iterator[ContradictionRef]:
+    """Yield one STRONG ``vent_sighting`` flag per grounded vent observation.
+
+    Task 15.4's hard-flag rule -- the grounding chokepoint. For every spoken
+    :class:`~meetings.schemas.SawVentObservation` whose subject is in the
+    roster, the SPEAKER'S OWN typed records are searched for a match
+    (:func:`_vent_observation_matches_record`); the first matching record (in
+    the accessor's append/tick order -- deterministic) grounds the flag. The
+    description quotes the RECORD, never the spoken values: the hard evidence
+    derives from what the witness's own deterministic memory holds, with the
+    spoken observation as the public, citable surface (both event ids
+    reference it, so ``VoteBallot.primary_reason_id`` reaches the flag
+    through the observation's turn id).
+
+    No weak band exists for this kind: an unmatched observation yields
+    NOTHING (testimony, not evidence), and a matched one is STRONG -- the
+    grounding chain (engine event -> witness-gated packet -> episodic record
+    -> typed channel) means a grounded flag can only name a genuine venter,
+    so the "STRONG flag naming a CREWMATE" false-positive class is
+    structurally unreachable. Score-side, the flag rides the standard Rule-2
+    path (:func:`contradiction_lift_key` falls back to the event-id pair, one
+    key per observation) under ``MEETING_CONTRADICTION_LIFT_CAP`` and the
+    manager's joint cap -- no new stacking channel.
+    """
+
+    for turn in transcript.turns:
+        records = vent_witness_records.get(turn.speaker, ())
+        if not records:
+            continue
+        for index, observation in enumerate(turn.observations):
+            if not isinstance(observation, SawVentObservation):
+                continue
+            if not _subject_in_roster(observation.subject, roster):
+                continue
+            matched = next(
+                (
+                    record
+                    for record in records
+                    if _vent_observation_matches_record(observation, record)
+                ),
+                None,
+            )
+            if matched is None:
+                continue
+            event_id = _turn_observation_id(turn=turn, index=index)
+            yield _build_contradiction(
+                kind="vent_sighting",
+                event_a_id=event_id,
+                event_b_id=event_id,
+                subjects=(observation.subject,),
+                description=_describe_vent_sighting(
+                    speaker=turn.speaker, record=matched
+                ),
+            )
+
+
 def _weak_signal_reasons(
     alibi: _IndexedAlibi, *, include_self_stated: bool = True
 ) -> tuple[str, ...]:
@@ -2324,6 +2500,19 @@ def _describe_alibi_vs_physical(
     if not weak_reasons:
         return base
     return f"{base} {WEAK_CONTRADICTION_MARKER_PREFIX}{'; '.join(weak_reasons)}]"
+
+
+def _describe_vent_sighting(*, speaker: PlayerId, record: VentWitnessRecord) -> str:
+    # Quote the RECORD (the witness's deterministic memory), never the spoken
+    # observation's values: the flag's factual content must be exactly what
+    # the grounding chokepoint confirmed. No weak-marker branch exists for
+    # this kind -- a vent flag is only ever minted grounded, and grounded is
+    # STRONG (:func:`_detect_grounded_vent_flags`).
+    return (
+        f"{speaker} witnessed {record.subject} vent in {record.room} at tick "
+        f"{record.tick}; venting is impostor-only, and the spoken observation "
+        f"matches the witness's own record."
+    )
 
 
 def _describe_retargeted_proxy(
@@ -2522,6 +2711,7 @@ __all__ = [
     "NARROW_ALIBI_WINDOW_TICKS",
     "PHYSICAL_CONTRADICTION_MIN_VOICES",
     "SPAWN_WINDOW_LAST_TICK",
+    "VENT_GROUNDING_TICK_TOLERANCE",
     "WEAK_CONTRADICTION_MARKER_PREFIX",
     "WEAK_REASON_ADVERSARIAL",
     "WEAK_REASON_BOUNDARY_OVERLAP",

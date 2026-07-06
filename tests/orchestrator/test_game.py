@@ -23,6 +23,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    VentWitnessRecord,
     VoteBallot,
 )
 from observation.action_intent import ActionIntent
@@ -988,6 +989,12 @@ class _MeetingAwareReporter:
         return f"## Your role: {self._role}\nstub memory for {self._agent_id}"
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+        return ()
+
+    def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]:
+        # Task 15.4: this double DOES cross ``_build_participants`` (it runs
+        # under ``build_default_meeting_runner``), so the runtime-checkable
+        # protocol requires the accessor; a canned stub grounds nothing.
         return ()
 
     @property

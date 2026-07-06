@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Final, Literal, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 from agents.base import AgentInterface
+from agents.memory.beliefs import OBSERVED_VENT_ACTION
 from agents.memory.store import (
     DEFAULT_TOKEN_BUDGET,
     AgentMemory,
@@ -33,7 +34,7 @@ from agents.memory.store import (
     absorb_reported_testimony,
     render_for_prompt,
 )
-from agents.perception import ingest_packet
+from agents.perception import EVENT_SAW_PLAYER, PROVENANCE_OBSERVED, ingest_packet
 from agents.strategic.prompts import (
     DEFAULT_PROMPT_SET,
     build_prompt_renderers,
@@ -75,6 +76,7 @@ from meetings.schemas import (
     FoundBodyObservation,
     MeetingResult,
     ReportedStatement,
+    VentWitnessRecord,
 )
 from meetings.transcript import MeetingTriggerKind
 from observation.action_intent import ActionIntent
@@ -307,7 +309,10 @@ def _bespoke_versions(set_name: str, version: str = "v1") -> Mapping[str, str]:
 # ``agents/strategic/prompts/<set>/`` (the loader fails loud otherwise).
 PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     DEFAULT_PROMPT_SET: DEFAULT_PROMPT_VERSIONS,
-    "qwen3_32b": _bespoke_versions("qwen3_32b", version="v4"),
+    # Task 15.4 (vent observability): v5 = the vent-elicitation revision of the
+    # turn/opening templates (vote_ballot.j2 byte-identical; its own next edit
+    # is Task 15.5's per-template v6 entry).
+    "qwen3_32b": _bespoke_versions("qwen3_32b", version="v5"),
     "qwen3_32b_thinking": _bespoke_versions("qwen3_32b_thinking", version="v2"),
     "qwen3_30b_a3b": _bespoke_versions("qwen3_30b_a3b", version="v2"),
     "glm_4_32b": _bespoke_versions("glm_4_32b", version="v3"),
@@ -432,6 +437,18 @@ class MeetingAwareAgent(Protocol):
     :func:`build_default_agent_factory` satisfy this protocol; tests
     that do not exercise meetings can use any
     :class:`AgentInterface` implementer.
+
+    ``vent_witness_records_for_meeting`` (Task 15.4) is the ONE typed
+    self-channel accessor on this protocol: the agent's OWN witnessed-vent
+    episodic records, the grounding input behind the meeting layer's
+    ``vent_sighting`` hard flag. It is a REQUIRED protocol member (not an
+    optional sibling capability like :class:`BeliefPersistingAgent`) because
+    the grounding chokepoint is load-bearing -- a meeting run without the
+    channel would silently accept every spoken vent claim as ungroundable
+    testimony, an advisory-grounding failure mode the task contract forbids.
+    Firewall-clean: an agent reporting its own witnessed events leaks
+    nothing (the packet stamp the records derive from is witness-gated,
+    ``eval/leak_test.py``); a canned test double may return ``()``.
     """
 
     @property
@@ -448,6 +465,8 @@ class MeetingAwareAgent(Protocol):
     ) -> str: ...
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]: ...
+
+    def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]: ...
 
 
 @runtime_checkable
@@ -864,7 +883,8 @@ def _build_participants(
             raise TypeError(
                 f"agent for {player_id!r} does not implement MeetingAwareAgent; "
                 "meeting-enabled HeadlessGame requires agents that expose "
-                "render_memory_for_meeting() and suspicion_graph_for_meeting()"
+                "render_memory_for_meeting(), suspicion_graph_for_meeting(), "
+                "and vent_witness_records_for_meeting()"
             )
         # Crewmates (and a sole impostor) get ``()``; an impostor gets the
         # other impostors' ids, never its own. This is the meeting-side
@@ -892,6 +912,10 @@ def _build_participants(
                 suspicion_graph=agent.suspicion_graph_for_meeting(),
                 fellow_impostor_ids=fellow_impostor_ids,
                 rerender_memory=rerender_memory,
+                # Task 15.4: the typed grounding channel -- pulled per living
+                # agent exactly like ``suspicion_graph``, a meeting-open
+                # snapshot of the agent's OWN witnessed-vent episodic records.
+                vent_witness_records=agent.vent_witness_records_for_meeting(),
             )
         )
     return tuple(participants)
@@ -2032,6 +2056,42 @@ class TacticalAgent:
                 )
             )
         return tuple(entries)
+
+    def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]:
+        """The agent's OWN witnessed-vent episodic records, typed (Task 15.4).
+
+        The grounding input behind the meeting layer's ``vent_sighting``
+        hard flag: a straight read of the episodic log --
+        first-hand (``provenance == "observed"``) ``saw_player`` rows whose
+        witness-gated action stamp is ``"vent"`` -- projected into
+        :class:`~meetings.schemas.VentWitnessRecord` rows. Reads the SAME
+        rows the §6.6 renderer turns into "You witnessed {player} vent in
+        {room}." lines, so the typed channel and the rendered prose the
+        model speaks from can never drift. Firewall-clean: every row was
+        witness-gated by the engine before it reached this agent's packet
+        (``eval/leak_test.py``), and the accessor reports only this agent's
+        own log. Payload reads are defensive per the store convention -- a
+        malformed row contributes nothing. Append order is non-decreasing
+        in tick (the episodic-store invariant), so the returned tuple is
+        deterministic and tick-sorted.
+        """
+
+        records: list[VentWitnessRecord] = []
+        for event in self._memory.episodic.recent(since_tick=0):
+            if event.type != EVENT_SAW_PLAYER:
+                continue
+            if event.provenance != PROVENANCE_OBSERVED:
+                continue
+            if event.payload.get("action") != OBSERVED_VENT_ACTION:
+                continue
+            player_id = event.payload.get("player_id")
+            room = event.payload.get("room")
+            if not isinstance(player_id, str) or not isinstance(room, str):
+                continue
+            records.append(
+                VentWitnessRecord(subject=player_id, room=room, tick=event.tick)
+            )
+        return tuple(records)
 
     def absorb_meeting_evidence(
         self,

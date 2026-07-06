@@ -82,10 +82,71 @@ class FoundBodyObservation(_FrozenModel):
     room: RoomId
 
 
+class SawVentObservation(_FrozenModel):
+    """First-hand witnessed impostor vent (Task 15.4).
+
+    Role-proving testimony: vents are impostor-only (DESIGN.md §3.4), so a
+    witnessed vent names its ``subject`` as an impostor. Deliberately NO
+    enter/exit phase field: the perception layer collapses both vent engine
+    events into a single witnessed "vent" action
+    (``observation/service.py::_vent_observation_for_agent``) and episodic
+    memory persists only player/room/action, so a phase field would be
+    unobservable fabrication.
+
+    Speech alone never mints hard evidence from this shape: the STRONG
+    ``vent_sighting`` flag fires only when the meeting layer grounds the
+    spoken observation against the speaker's OWN typed
+    :class:`VentWitnessRecord` channel
+    (:func:`meetings.transcript.detect_contradictions`); an ungrounded
+    claim records as ordinary testimony and raises no flag. Deliberately
+    NOT reduced to a :class:`ReportedStatement` either — the Task 13.5.2
+    reported-testimony scope is owner-locked to its four kinds.
+    """
+
+    type: Literal["saw_vent"]
+    tick: int
+    subject: PlayerId
+    room: RoomId
+
+
 ObservationClaim: TypeAlias = Annotated[
-    SawPlayerObservation | CompletedTaskObservation | FoundBodyObservation,
+    SawPlayerObservation
+    | CompletedTaskObservation
+    | FoundBodyObservation
+    | SawVentObservation,
     Field(discriminator="type"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# Typed vent-witness grounding channel (Task 15.4)
+# ---------------------------------------------------------------------------
+
+
+class VentWitnessRecord(_FrozenModel):
+    """One of an agent's OWN witnessed-vent episodic records (Task 15.4).
+
+    The typed grounding input behind the ``vent_sighting`` hard flag: the
+    meeting boundary otherwise hands the manager only rendered-memory prose
+    plus a suspicion graph — nothing a validator could check a spoken vent
+    claim against without parsing prompt text. The
+    ``MeetingAwareAgent.vent_witness_records_for_meeting()`` accessor
+    (``orchestrator/game.py``) surfaces these straight off episodic memory
+    (``saw_player`` rows with ``action == "vent"``,
+    ``provenance == "observed"``), and
+    :func:`meetings.transcript.detect_contradictions` confirms a speaker's
+    spoken :class:`SawVentObservation` ONLY against the speaker's own
+    records (subject + room, tick within
+    :data:`meetings.transcript.VENT_GROUNDING_TICK_TOLERANCE`) — the
+    chokepoint never parses rendered prose. Firewall-clean by construction:
+    an agent reporting its own witnessed events leaks nothing, and the
+    packet stamp the records derive from is witness-gated by the engine
+    (``eval/leak_test.py``).
+    """
+
+    subject: PlayerId
+    room: RoomId
+    tick: int
 
 
 # ---------------------------------------------------------------------------
@@ -293,10 +354,22 @@ class ContradictionRef(_FrozenModel):
     can carry it; the served ``api.schemas.ContradictionView`` and the frontend
     ``ContradictionKind`` union both accept it (rendered like the other alibi
     kinds).
+
+    Task 15.4: ``vent_sighting`` is the role-proving kind -- a spoken
+    :class:`SawVentObservation` GROUNDED against the speaker's own typed
+    :class:`VentWitnessRecord` channel (vents are impostor-only, DESIGN.md
+    §3.4). Always STRONG (no weak marker): the grounding chokepoint is the
+    precision gate, so an ungrounded spoken vent claim raises no flag at
+    all rather than a weak one. Both event ids reference the SAME spoken
+    observation (the single public artifact; the private grounding record
+    has no transcript id by design). Committed v4 replays predate the kind
+    and never carry it; the spectator-view mirror is Task 15.4.1.
     """
 
     contradiction_id: ContradictionId
-    kind: Literal["alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"]
+    kind: Literal[
+        "alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical", "vent_sighting"
+    ]
     event_a_id: str
     event_b_id: str
     subjects: tuple[PlayerId, ...]
@@ -393,8 +466,10 @@ __all__ = [
     "ReportedStatementKind",
     "RoomId",
     "SawPlayerObservation",
+    "SawVentObservation",
     "TaskId",
     "TurnId",
     "TurnKind",
+    "VentWitnessRecord",
     "VoteBallot",
 ]

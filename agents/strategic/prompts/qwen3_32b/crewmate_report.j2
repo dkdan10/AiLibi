@@ -1,11 +1,24 @@
 {#- Crewmate OPENING-turn prompt — bespoke qwen3_32b set (Task 14.5).
 
-   prompt_id: crewmate_report  --  version crewmate_report.qwen3_32b.v4
+   prompt_id: crewmate_report  --  version crewmate_report.qwen3_32b.v5
 
    Built from the ground up for Qwen3-32B (non-thinking), NOT derived from the
    pinned qwen3_5_9b set: a simple "game + role + memory -> deduction" frame that
    trusts a strong instruct model instead of the 9B's stacked-imperative
    guard-rails (the v8 wall that buried the 9B's attention; tasks/phase-13.md).
+
+   v5 (Task 15.4) makes the game's hardest evidence speakable: witnessed
+   impostor vents were held in 74/129 baseline-2 report meetings but reached
+   the transcript only 36/74 times, as unciteable free text. "What to do" now
+   explicitly elicits a structured `saw_vent` observation for every
+   "You witnessed <player> vent in <room>." memory line, the observations
+   union advertises the new shape (subject / room / tick — no enter/exit
+   phase field; the memory line carries none), and the confidence rubric
+   extends the 1.0 band to a first-hand witnessed vent. The meeting layer
+   grounds every spoken `saw_vent` against the speaker's own typed
+   witnessed-vent records before it can raise a hard flag
+   (meetings/transcript.py), so a fabricated sighting records as ordinary
+   testimony, never hard evidence.
 
    v4 (Task 14.11) hardens the v3 body against three defects MEASURED on
    baseline 1 (audits/audit-2026-07-01-phase-14-baseline1-characterization.md §4;
@@ -77,9 +90,16 @@ Decide who is most likely the impostor and commit to it. The crew catches the
 impostor by establishing who was WHERE and WHEN, so put the sightings that matter
 on the record as structured `saw_player` observations (player, room, tick, and who
 else was there) — a player's path is what exposes an impossible alibi later.
+If your memory contains a witnessed vent — a line like "You witnessed p-3 vent
+in MEDBAY." — ALWAYS put it on the record as a structured `saw_vent`
+observation, copying the player, room, and tick from that line exactly: only
+the impostor can vent, so one witnessed vent identifies the impostor outright
+and outweighs every path inference. Never emit `saw_vent` for a vent you
+merely heard or suspect — only for one your memory says you witnessed.
 Curate, don't dump: pick the 3–5 MOST PROBATIVE observations — always the
-`found_body` report if you found it, and always the sightings that name your
-suspect — and leave the rest of your movement log out. Copying dozens of rows
+`found_body` report if you found it, always a witnessed vent, and always the
+sightings that name your suspect — and leave the rest of your movement log out.
+Copying dozens of rows
 into `observations` buries the signal and rambles past the output cap, which
 discards your whole turn. Then either name your single best suspect in one
 `accusation` claim, or, only if nothing you recorded points at anyone, write the
@@ -111,6 +131,9 @@ Content fields (your real turn):
   - `{"type": "saw_player", "tick": <int>, "subject": "<player_id>", "room": "<room_id>", "co_present": ["<player_id>", ...]}`
   - `{"type": "completed_task", "tick": <int>, "task_id": "<task_id>", "room": "<room_id>"}`
   - `{"type": "found_body", "tick": <int>, "body_of": "<player_id>", "room": "<room_id>"}`
+  - `{"type": "saw_vent", "tick": <int>, "subject": "<player_id>", "room": "<room_id>"}` — ONLY
+    for a vent your memory says you WITNESSED ("You witnessed ... vent in ...");
+    copy its player, room, and tick exactly.
 - `claims`: your conclusions, each item one of:
   - `{"type": "alibi", "subject": "{{ agent_id }}", "from_tick": <int>, "to_tick": <int>, "room": "<room_id>", "evidence": ["<short ref>", ...]}` (`from_tick <= to_tick`).
     Your `alibi` must quote your own memory exactly: ONE room, and only the tick
@@ -119,7 +142,8 @@ Content fields (your real turn):
     between contradicts your own record (your own `completed_task` rows included)
     and gets you ejected.
   - `{"type": "accusation", "against": "<player_id>", "confidence": <0.0-1.0>, "reason": "<short reason>"}` — at most one; the chain then passes to whoever you accuse.
-    Confidence rubric — calibrate honestly: 1.0 ONLY for a kill you watched happen
+    Confidence rubric — calibrate honestly: 1.0 ONLY for a kill or a vent you
+    watched happen
     first-hand; ~0.7 for a case a second account or a contradiction flag
     corroborates; ~0.5 for a hunch read off movement alone. Almost nothing you
     infer from paths deserves 1.0.

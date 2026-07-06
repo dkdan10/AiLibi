@@ -56,15 +56,23 @@ from meetings.schemas import (
     ObservationClaim,
     SawPlayerObservation,
     TurnKind,
+    VentWitnessRecord,
     VoteBallot,
 )
 from observation.action_intent import ActionIntent
-from observation.packet import ObservationPacket
+from observation.packet import (
+    AudibleEvent,
+    GlobalView,
+    ObservationPacket,
+    PlayerView,
+    SelfView,
+)
 from observation.public_map import PublicMapView
 from orchestrator.game import (
     DefaultMeetingRunner,
     HeadlessGame,
     MeetingArtifacts,
+    MeetingAwareAgent,
     TacticalAgent,
     _assert_no_emergency_opening_body,  # noqa: PLC2701
     _build_participants,  # noqa: PLC2701
@@ -746,6 +754,11 @@ class TestHeadlessGameMeetingDispatch:
             def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
                 return self._delegate.suspicion_graph_for_meeting()
 
+            def vent_witness_records_for_meeting(
+                self,
+            ) -> tuple[VentWitnessRecord, ...]:
+                return self._delegate.vent_witness_records_for_meeting()
+
         def factory(agent_id: PlayerId, role: Role):  # type: ignore[no-untyped-def]
             if agent_id == "p-1":
                 return _ScriptedAgent(
@@ -1065,6 +1078,11 @@ class TestDefaultMeetingRunner:
             def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
                 return self._delegate.suspicion_graph_for_meeting()
 
+            def vent_witness_records_for_meeting(
+                self,
+            ) -> tuple[VentWitnessRecord, ...]:
+                return self._delegate.vent_witness_records_for_meeting()
+
             @property
             def agent_id(self) -> PlayerId:
                 return self._delegate.agent_id
@@ -1234,6 +1252,11 @@ class TestDefaultMeetingRunner:
 
             def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
                 return self._delegate.suspicion_graph_for_meeting()
+
+            def vent_witness_records_for_meeting(
+                self,
+            ) -> tuple[VentWitnessRecord, ...]:
+                return self._delegate.vent_witness_records_for_meeting()
 
         agents: dict[PlayerId, object] = {
             pid: _MinimalAware(pid, players.role)
@@ -1516,6 +1539,9 @@ class _MeetingAwareStub:
         return f"## Your role: {self._role}\nmemory for {self._agent_id}"
 
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+        return ()
+
+    def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]:
         return ()
 
 
@@ -2132,6 +2158,9 @@ class _MeetingAwareScriptedAgent:
     def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
         return self._inner.suspicion_graph_for_meeting()
 
+    def vent_witness_records_for_meeting(self) -> tuple[VentWitnessRecord, ...]:
+        return self._inner.vent_witness_records_for_meeting()
+
 
 class _EmergencyChainLLMClient:
     """Deterministic LLM stub for the Task 10.8 emergency meeting.
@@ -2621,3 +2650,188 @@ class TestEmergencyOpeningNoBodySelfCheck:
             transcript=MeetingTranscript(),
         )
         _assert_no_emergency_opening_body(trigger_kind="emergency", result=result)
+
+
+# ---------------------------------------------------------------------------
+# Task 15.4 — the typed vent-witness self-channel accessor.
+# ---------------------------------------------------------------------------
+
+
+def _witness_packet(
+    *,
+    agent_id: str,
+    tick: int,
+    subject: str = "p-5",
+    room: str = "MEDBAY",
+    action: str | None = "vent",
+) -> ObservationPacket:
+    """A packet whose ``visible_players`` carries one witness-gated stamp."""
+
+    return ObservationPacket(
+        tick=tick,
+        agent_id=agent_id,
+        self_state=SelfView(room=room, role="CREWMATE", pending_task_id=None),
+        visible_players=(PlayerView(id=subject, room=room, action=action),),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+
+
+class TestVentWitnessRecordsAccessor:
+    """Task 15.4: ``TacticalAgent.vent_witness_records_for_meeting`` reports
+    the agent's OWN witnessed vents from episodic memory — nothing more (the
+    leak-suite posture: the packet stamps it reads are themselves
+    witness-gated, ``eval/leak_test.py``), and the protocol member is
+    load-bearing at the ``_build_participants`` isinstance gate."""
+
+    def _crew_agent(self, agent_id: str = "p-2") -> TacticalAgent:
+        return TacticalAgent(
+            agent_id=agent_id,
+            role="CREWMATE",
+            policy=CrewmatePolicy(agent_id=agent_id),
+        )
+
+    def test_reports_exactly_the_agents_own_witnessed_vents(self) -> None:
+        from agents.perception import ingest_packet
+
+        agent = self._crew_agent()
+        ingest_packet(
+            packet=_witness_packet(agent_id="p-2", tick=5),
+            memory=agent.memory.episodic,
+        )
+        ingest_packet(
+            # An ordinary sighting (no vent stamp) contributes no record.
+            packet=_witness_packet(agent_id="p-2", tick=7, action=None),
+            memory=agent.memory.episodic,
+        )
+        ingest_packet(
+            packet=_witness_packet(
+                agent_id="p-2", tick=9, subject="p-6", room="REACTOR"
+            ),
+            memory=agent.memory.episodic,
+        )
+
+        assert agent.vent_witness_records_for_meeting() == (
+            VentWitnessRecord(subject="p-5", room="MEDBAY", tick=5),
+            VentWitnessRecord(subject="p-6", room="REACTOR", tick=9),
+        )
+
+    def test_heard_vent_use_grounds_nothing(self) -> None:
+        # The room-only audible channel carries no player attribution and
+        # must never mint a record (only the witnessed "vent" action stamp).
+        from agents.perception import ingest_packet
+
+        agent = self._crew_agent()
+        packet = _witness_packet(agent_id="p-2", tick=5, action=None).model_copy(
+            update={
+                "audible_events": (AudibleEvent(kind="vent_use_heard", room="MEDBAY"),)
+            }
+        )
+        ingest_packet(packet=packet, memory=agent.memory.episodic)
+
+        assert agent.vent_witness_records_for_meeting() == ()
+
+    def test_reported_testimony_never_enters_the_channel(self) -> None:
+        # Another speaker's public saw_player statement lands in episodic
+        # memory as provenance="reported" content (Task 13.5.2); the typed
+        # grounding channel reads only first-hand observed vent stamps, so
+        # someone ELSE's speech can never become this agent's "own record".
+        from agents.perception import ingest_packet
+        from meetings.schemas import ReportedStatement
+
+        agent = self._crew_agent()
+        # Perception must run once before testimony folds (store contract);
+        # a stamp-free packet contributes no record of its own.
+        ingest_packet(
+            packet=_witness_packet(agent_id="p-2", tick=4, action=None),
+            memory=agent.memory.episodic,
+        )
+        agent.absorb_reported_testimony(
+            statements=(
+                ReportedStatement(
+                    speaker="p-3",
+                    kind="saw_player",
+                    subject="p-5",
+                    from_tick=5,
+                    to_tick=5,
+                    room="MEDBAY",
+                ),
+            )
+        )
+
+        assert agent.vent_witness_records_for_meeting() == ()
+
+    def test_fresh_agent_reports_nothing(self) -> None:
+        assert self._crew_agent().vent_witness_records_for_meeting() == ()
+
+    def test_build_participants_threads_the_accessor(self) -> None:
+        from agents.perception import ingest_packet
+
+        state = seed_initial_state(seed=1, game_map=load_canonical_map(), num_players=4)
+        agents: dict[PlayerId, object] = {}
+        for pid, player in state.players.items():
+            policy = CrewmatePolicy(agent_id=pid)
+            agent = TacticalAgent(agent_id=pid, role=player.role, policy=policy)
+            # Perception must run once per agent before the participant
+            # render (store contract); a stamp-free packet grounds nothing.
+            ingest_packet(
+                packet=_witness_packet(agent_id=pid, tick=4, action=None),
+                memory=agent.memory.episodic,
+            )
+            agents[pid] = agent
+        witness = agents[sorted(state.players)[0]]
+        assert isinstance(witness, TacticalAgent)
+        ingest_packet(
+            packet=_witness_packet(agent_id=witness.agent_id, tick=5),
+            memory=witness.memory.episodic,
+        )
+
+        participants = _build_participants(
+            state=state,
+            agents=agents,  # type: ignore[arg-type]
+            token_budget=1500,
+        )
+
+        by_id = {participant.agent_id: participant for participant in participants}
+        assert by_id[witness.agent_id].vent_witness_records == (
+            VentWitnessRecord(subject="p-5", room="MEDBAY", tick=5),
+        )
+        for pid, participant in by_id.items():
+            if pid != witness.agent_id:
+                assert participant.vent_witness_records == ()
+
+    def test_isinstance_gate_requires_the_accessor(self) -> None:
+        # The protocol member is load-bearing: a meeting double carrying only
+        # the pre-15.4 surface no longer satisfies MeetingAwareAgent, so it
+        # can never cross _build_participants and silently run a meeting
+        # without the grounding channel.
+        class _PreVentDouble:
+            @property
+            def agent_id(self) -> PlayerId:
+                return "p-1"
+
+            @property
+            def role(self) -> Role:
+                return "CREWMATE"
+
+            def render_memory_for_meeting(
+                self,
+                *,
+                token_budget: int = 1500,
+                suspicion_override: Mapping[PlayerId, float] | None = None,
+            ) -> str:
+                return "## Your role: CREWMATE\nmemory"
+
+            def suspicion_graph_for_meeting(self) -> tuple[SuspicionEntry, ...]:
+                return ()
+
+        assert not isinstance(_PreVentDouble(), MeetingAwareAgent)
+        assert isinstance(self._crew_agent(), MeetingAwareAgent)

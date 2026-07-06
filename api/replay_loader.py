@@ -1976,6 +1976,16 @@ def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
     # ``kind`` passes through verbatim -- the Task 13.4 ``alibi_vs_physical`` kind
     # a recorded ``MeetingResult`` carries (the manager persists
     # ``detect_contradictions`` at close) renders like the other alibi kinds.
+    # The Task 15.4 ``vent_sighting`` kind fails loud here until the Task
+    # 15.4.1 spectator mirror teaches the view layer the fourth kind -- the
+    # same deliberate exhaustive-with-raise doctrine as
+    # ``_observation_claim_view`` (no committed replay carries it; the first
+    # recordings that can arrive with 15.7, behind 15.4.1's edge).
+    if contradiction.kind == "vent_sighting":
+        raise TypeError(
+            "unsupported contradiction kind for the spectator view: "
+            "'vent_sighting' (the view mirror is Task 15.4.1)"
+        )
     weak = is_weak_contradiction(contradiction)
     return ContradictionView(
         contradiction_id=contradiction.contradiction_id,
