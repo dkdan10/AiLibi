@@ -270,6 +270,7 @@ def test_evidence_starved_set_fails_the_referee() -> None:
         crew_witnessed_kills=0,
         flags_per_meeting=0.0,  # zero flags
         total_flags=0,
+        persisted_vent_flags=0,
         meetings_total=150,  # high meeting rate — bodies still trigger meetings
         testimony_backed_conversion=0.0,
         impostor_accused_meetings=50,
@@ -289,6 +290,7 @@ def test_none_measured_gauge_fails_a_numeric_floor() -> None:
         crew_witnessed_kills=0,
         flags_per_meeting=2.5,
         total_flags=300,
+        persisted_vent_flags=0,
         meetings_total=120,
         testimony_backed_conversion=0.6,
         impostor_accused_meetings=40,
@@ -298,6 +300,58 @@ def test_none_measured_gauge_fails_a_numeric_floor() -> None:
     assert passed is False
     witnessed = next(g for g in gauges if g.name == "witnessed_event_rate")
     assert witnessed.passed is False
+
+
+def test_flags_per_meeting_is_vent_aware() -> None:
+    """A persisted role-proving vent_sighting flag is MERGED into the flag census.
+
+    ``compute_supply_gauges`` re-derives flags from the transcript and cannot
+    reproduce a grounded ``vent_sighting`` flag (its grounding channel has no
+    transcript id, Task 15.4), so the referee merges the persisted vent flags —
+    else a vent-rich baseline-3 candidate's strongest evidence reads as starved.
+    The committed v4 sets carry none, so the pinned baseline-2 floors are unchanged.
+    """
+
+    from eval.validity import assemble_tournament_report
+    from eval.watchability import _persisted_vent_flag_count, _supply_gauge_values
+    from meetings.schemas import ContradictionRef
+
+    report = assemble_tournament_report(_FOUR)
+    # The committed set is v4 — zero vent flags, so nothing is double-counted and
+    # the pinned floor stays put.
+    assert _persisted_vent_flag_count(report) == 0
+
+    game = next(g for g in report.games if g.meetings)
+    subject = next(iter(game.roles))
+    vent = ContradictionRef(
+        contradiction_id="c-vent-test",
+        kind="vent_sighting",
+        event_a_id=game.meetings[0].transcript.turns[0].turn_id
+        if game.meetings[0].transcript.turns
+        else "m:turn-0",
+        event_b_id="m:turn-0",
+        subjects=(subject,),
+        description="witnessed impostor vent",
+    )
+    meeting_with_vent = game.meetings[0].model_copy(
+        update={"contradictions": game.meetings[0].contradictions + (vent,)}
+    )
+    game_with_vent = game.model_copy(
+        update={"meetings": (meeting_with_vent, *game.meetings[1:])}
+    )
+    report_with_vent = report.model_copy(
+        update={
+            "games": tuple(game_with_vent if g is game else g for g in report.games)
+        }
+    )
+
+    assert _persisted_vent_flag_count(report_with_vent) == 1
+    before = _supply_gauge_values(report, [])
+    after = _supply_gauge_values(report_with_vent, [])
+    assert after.persisted_vent_flags == 1
+    assert after.total_flags == before.total_flags + 1
+    assert after.flags_per_meeting is not None and before.flags_per_meeting is not None
+    assert after.flags_per_meeting > before.flags_per_meeting
 
 
 def test_none_conversion_floor_is_vacuously_cleared() -> None:
@@ -314,6 +368,7 @@ def test_none_conversion_floor_is_vacuously_cleared() -> None:
         crew_witnessed_kills=1,
         flags_per_meeting=1.0,
         total_flags=10,
+        persisted_vent_flags=0,
         meetings_total=10,
         testimony_backed_conversion=None,
         impostor_accused_meetings=0,

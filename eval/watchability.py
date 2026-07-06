@@ -30,8 +30,12 @@ evidence than the baseline FAILS the referee even when meeting-rate stays high
   * ``witnessed_event_rate`` — crew-witnessed kills / total kills, recovered from
     the engine ``KilledEvent.witnesses`` on the reconstruction walk (baseline 2:
     6/160 = 3.75% crew-witnessed in 9p2i — the §6 perfect-stealth anchor).
-  * ``flags_per_meeting`` — re-derived contradiction flags per meeting, wired from
-    :func:`eval.meeting_quality.compute_supply_gauges` (``total_flags`` census).
+  * ``flags_per_meeting`` — contradiction flags per meeting, wired from
+    :func:`eval.meeting_quality.compute_supply_gauges` (``total_flags`` census) and
+    made VENT-AWARE: the grounded role-proving ``vent_sighting`` flag (Task 15.4)
+    cannot be re-derived from a transcript (its grounding channel carries no
+    transcript id), so the persisted vent flags are merged in — else a vent-rich
+    candidate's strongest evidence is undercounted (:func:`_persisted_vent_flag_count`).
   * ``testimony_backed_conversion`` — verbally-accused-true-impostor meetings that
     converted to an impostor ejection, wired from
     :func:`eval.meeting_quality.compute_conversion_report`
@@ -284,6 +288,7 @@ class SupplyGaugeValues:
     crew_witnessed_kills: int
     flags_per_meeting: float | None
     total_flags: int
+    persisted_vent_flags: int
     meetings_total: int
     testimony_backed_conversion: float | None
     impostor_accused_meetings: int
@@ -1138,25 +1143,60 @@ def _game_facts(
     )
 
 
+def _persisted_vent_flag_count(report: TournamentReport) -> int:
+    """Count the persisted role-proving ``vent_sighting`` flags across a report.
+
+    The grounded ``vent_sighting`` flag (Task 15.4 — the game's HARDEST evidence,
+    a witnessed impostor vent) is minted only when the live meeting layer holds the
+    speaker's private :class:`~meetings.schemas.VentWitnessRecord` grounding
+    channel, which carries no transcript id by design. So the re-derivation
+    :func:`~meetings.transcript.detect_contradictions` runs from a recorded
+    transcript alone (with no grounding channel) can NEVER reproduce it — see
+    ``meetings/transcript.py``'s ``if vent_witness_records`` gate. The flag is
+    instead persisted on the recorded :attr:`~eval.report_schema.MeetingReport.contradictions`;
+    this reads it from there.
+    """
+
+    return sum(
+        1
+        for game in report.games
+        for meeting in game.meetings
+        for flag in meeting.contradictions
+        if flag.kind == "vent_sighting"
+    )
+
+
 def _supply_gauge_values(
     report: TournamentReport, kills: Sequence[_KillWitnessFact]
 ) -> SupplyGaugeValues:
-    """The three Layer-1 gauges over a report + reconstructed kill witnesses."""
+    """The three Layer-1 gauges over a report + reconstructed kill witnesses.
+
+    ``flags_per_meeting`` is VENT-AWARE: :func:`eval.meeting_quality.compute_supply_gauges`
+    re-derives flags from the transcript and cannot reproduce the grounded
+    ``vent_sighting`` flag (the grounding channel is not in the transcript), so the
+    persisted vent flags are MERGED in (:func:`_persisted_vent_flag_count`) — else a
+    vent-rich baseline-3 candidate's strongest evidence would be undercounted as
+    evidence-starved. Zero on the committed v4 sets (no vent turns), so the pinned
+    baseline-2 floors are unchanged; the persisted census and the re-derived
+    non-vent flags are disjoint (re-derivation never mints ``vent_sighting``), so no
+    double count.
+    """
 
     total_kills = len(kills)
     crew_witnessed = sum(1 for kill in kills if kill.crew_witnessed)
     supply = compute_supply_gauges(report)
     conversion = compute_conversion_report(report)
+    persisted_vent_flags = _persisted_vent_flag_count(report)
+    total_flags = supply.total_flags + persisted_vent_flags
     return SupplyGaugeValues(
         witnessed_event_rate=(crew_witnessed / total_kills if total_kills else None),
         total_kills=total_kills,
         crew_witnessed_kills=crew_witnessed,
         flags_per_meeting=(
-            supply.total_flags / supply.meetings_total
-            if supply.meetings_total
-            else None
+            total_flags / supply.meetings_total if supply.meetings_total else None
         ),
-        total_flags=supply.total_flags,
+        total_flags=total_flags,
+        persisted_vent_flags=persisted_vent_flags,
         meetings_total=supply.meetings_total,
         testimony_backed_conversion=conversion.impostor_accused_conversion_rate,
         impostor_accused_meetings=conversion.impostor_accused_meetings,
