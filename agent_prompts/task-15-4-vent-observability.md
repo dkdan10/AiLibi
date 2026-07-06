@@ -22,8 +22,12 @@ reach the transcript only 36/74 times as unciteable free text, invisible to the 
 and the ballot reason-id linkage. The substrate below the meeting layer already carries everything
 needed (the engine witnesses vent events; the packet surfaces them witness-gated; `agents/memory/store`
 records and renders them at high salience) — this task adds the missing top half: (a) a
-`SawVentObservation` type in the turn observation union (subject, room, tick; enter/exit phase),
-additive and backward-compatible so committed v4 transcripts still parse; (b) turn validation +
+`SawVentObservation` type in the turn observation union (subject, room, tick — deliberately NO
+enter/exit phase field: the perception layer collapses both vent events into a single witnessed "vent"
+action (`observation/service.py::_vent_observation_for_agent`) and memory persists only
+player/room/action, so a phase field would be unobservable fabrication, and widening
+`observation/`/`agents/memory/` stays out of scope), additive and backward-compatible so committed v4
+transcripts still parse; (b) turn validation +
 normalization in `meetings/manager.py` mirroring the existing observation paths; (c) a HARD
 contradiction rule with a GROUNDING chokepoint: a structured vent observation naming a subject is
 role-proving (only impostors can vent) — but speech alone must never mint hard evidence (a model that

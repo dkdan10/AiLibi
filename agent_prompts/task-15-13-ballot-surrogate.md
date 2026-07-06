@@ -40,6 +40,7 @@ always uses a real meeting path.
 - training/surrogate/runner.py (new: the MeetingRunner implementation)
 - training/surrogate/fidelity.py (GO/NO-GO wiring region — 15.11 owns the metrics core)
 - eval/balance_eval.py (additive optional meeting-runner-factory keyword on run_tournament_eval)
+- training/artifacts/surrogate/ (new: the fitted ballot-predictor weights, float-hex JSON + sha256 sidecar — the exact artifact the bake-off reloads and the 15.9 stamp schema references)
 - training/reports/report-ballot-surrogate.md (new: fidelity vs ceiling, the verdict, the chosen fallback, the re-grounding cadence)
 - tests/training/test_surrogate_runner.py (new)
 - tests/eval/test_balance_eval_meeting_runner.py (new)
@@ -54,7 +55,7 @@ always uses a real meeting path.
 - [ ] The predicted-ballot path feeds the real `tally_ballots` with the explicit constants-home threshold; no re-implemented tally logic exists anywhere in `training/`.
 - [ ] The GO/NO-GO bar is stated in the report and in code BEFORE training (e.g. GO ⇔ held-out top-1 ≥ 0.75 × the honest ceiling AND SKIP-vs-eject ≥ 0.80 — the implementer finalizes the exact bar, but it must be committed before the training run), and the verdict is reported against it with by-game-CV numbers from the 15.11 harness.
 - [ ] The fallback path is exercised by test regardless of verdict: the training env runs under fallback (a) today, proving the bake-off cannot be blocked by a NO-GO.
-- [ ] Surrogate inference is deterministic under a fixed weights artifact (double-run hash test); the weights artifact carries a sha256 the 15.9 stamp schema can reference.
+- [ ] Surrogate inference is deterministic under a fixed weights artifact (double-run hash test); the fitted weights are COMMITTED under `training/artifacts/surrogate/` with a sha256 sidecar the 15.9 stamp schema can reference, and the bake-off reloads exactly that artifact (a round-trip test loads it and reproduces the reported fidelity numbers).
 - [ ] The staleness cap is real code the bake-off consumes (exceeding it raises), and the re-grounding recipe (record fresh real-LLM meetings, rebuild the table, re-fit, re-measure) is documented step-by-step in the report.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.

@@ -12,7 +12,7 @@ Implement Task 15.17 — The torch PPO+recurrent probe (experiment-tier, opt-in)
 The authoritative task contract is copied below from tasks/phase-15.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-15-torch-probe`
-**Depends on:** 15.8, 15.10
+**Depends on:** 15.8, 15.10, 15.15
 **Section refs:** audits/post-phase-14-ML-training-signal.md §9 (the staged-escalation dependency posture); audits/post-phase-14-ML-planning.md §9 Option 3 (PPO/recurrent: strongest asymptotics, heavy costs); owner decision 2026-07-05 (torch as probe only; promotion is a pause decision)
 **Complexity:** Medium
 
@@ -22,7 +22,9 @@ torch` — torch never enters `pyproject.toml` dependencies or `uv.lock` this ph
 question for the pause: does gradient RL with real POMDP memory beat the pure-Python ES ceiling by
 enough to justify torch's costs (dependency weight, cross-machine float determinism, CI story)?
 Comparability is the design constraint: the probe trains through the SAME `TacticalRolloutEnv` and
-encoder-v2 features, evaluates on the SAME fixed seed set, and reports in the 15.15 metric-tuple shape —
+encoder-v2 features, and evaluates through 15.15's COMMITTED harness protocol and fixed seed config,
+consumed read-only (the 15.15 dependency edge exists so the protocol is real code the probe invokes,
+never a hand-copied tuple shape or self-chosen seeds), reporting in the 15.15 metric-tuple shape —
 with the honest exception that the determinism-harness hash is expected to FAIL for a torch policy, so
 the probe reports a seeded-run variance story (N repeats, spread of every metric) instead of pretending.
 It also measures the escape hatch: distillability — behavior-clone the torch policy into the pure-Python
@@ -44,7 +46,7 @@ region is 15.8's).
 
 **Definition of done:**
 - [ ] The probe trains an impostor policy through `training.env.TacticalRolloutEnv` + `agents.tactical.features.TacticalFeatureEncoder` (same env, same features — comparability asserted in the report, with any deviation documented).
-- [ ] Results reported in the 15.15 tuple shape on the same fixed eval seed set, plus the reproducibility story: N seeded repeats with the spread of validity/referee/fitness/win-rate (no single-run claims).
+- [ ] Results are emitted through 15.15's committed harness protocol on its fixed eval seed config (the harness consumed read-only — asserted by the report naming the harness entrypoint + seed-config artifact it invoked), plus the reproducibility story: N seeded repeats with the spread of validity/referee/fitness/win-rate (no single-run claims).
 - [ ] Distillability measured: a pure-Python student cloned from the torch policy, with student-teacher intent agreement and the student's own tuple row reported.
 - [ ] `pyproject.toml` mypy exclude covers the probe dir; `uv run mypy .` is green WITHOUT torch installed; the test pins that no production package imports the probe.
 - [ ] The report ends with a promotion recommendation for the pause — promote / keep experiment-tier / retire — priced against dependency weight, determinism doctrine, and the measured gain (or its absence), with wall-clock + hardware documented.
@@ -69,11 +71,28 @@ CPU (or the operator's own GPU, documented).
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import training.bakeoff.harness"`
+- `uv run python -c "import training.bakeoff.es"`
+- `uv run python -c "import training.bakeoff.goodhart"`
 - `uv run python -c "import agents.tactical.features"`
 - `uv run python -c "import training.determinism"`
 - `uv run python -c "import training.env"`
 - `uv run python -c "import training.rollout"`
 - `uv run python -c "import training.rewards"`
+- `uv run python -c "import meetings.constants"`
+- `uv run python -c "import meetings.render_contract"`
+- `uv run python -c "import meetings.schemas"`
+- `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import eval.funnel"`
+- `uv run python -c "import eval.validity"`
+- `uv run python -c "import eval.watchability"`
+- `uv run python -c "import training.surrogate.ballots"`
+- `uv run python -c "import training.surrogate.runner"`
+- `uv run python -c "import orchestrator.replay"`
+- `uv run python -c "import api.replay_loader"`
+- `uv run python -c "import training.surrogate.dataset"`
+- `uv run python -c "import training.surrogate.fidelity"`
+- `uv run python -c "import engine.rng"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

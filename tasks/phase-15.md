@@ -100,7 +100,8 @@ re-homing hygiene 15.5's render plumbing builds on, then the reporter lever);
 `(15.11, 15.12) → 15.13`; `(15.2, 15.7, 15.10) → 15.14`; `(15.8.1, 15.10, 15.13, 15.14) → 15.15`;
 `(15.10, 15.13, 15.14, 15.15) → 15.16` (files disjoint from 15.15, but the shared bake-off harness
 lands in 15.15 and is consumed read-only — the edge guarantees it exists);
-`(15.8, 15.10) → 15.17`; `(15.12, 15.15, 15.16, 15.17) → 15.18`. The critical path is
+`(15.8, 15.10, 15.15) → 15.17` (the probe consumes 15.15's committed eval protocol);
+`(15.12, 15.15, 15.16, 15.17) → 15.18`. The critical path is
 `15.4 → 15.6 → 15.5 → 15.7 → 15.12 → 15.13 → 15.15 → 15.18`. Shared-file overlaps are all covered by
 dependency edges or disjoint-region annotations (`scripts/measure_baseline.py` core/watchability/funnel
 regions; `meetings/manager.py` validation/vote-surface/guard-band regions; `orchestrator/replay.py`
@@ -351,8 +352,12 @@ reach the transcript only 36/74 times as unciteable free text, invisible to the 
 and the ballot reason-id linkage. The substrate below the meeting layer already carries everything
 needed (the engine witnesses vent events; the packet surfaces them witness-gated; `agents/memory/store`
 records and renders them at high salience) — this task adds the missing top half: (a) a
-`SawVentObservation` type in the turn observation union (subject, room, tick; enter/exit phase),
-additive and backward-compatible so committed v4 transcripts still parse; (b) turn validation +
+`SawVentObservation` type in the turn observation union (subject, room, tick — deliberately NO
+enter/exit phase field: the perception layer collapses both vent events into a single witnessed "vent"
+action (`observation/service.py::_vent_observation_for_agent`) and memory persists only
+player/room/action, so a phase field would be unobservable fabrication, and widening
+`observation/`/`agents/memory/` stays out of scope), additive and backward-compatible so committed v4
+transcripts still parse; (b) turn validation +
 normalization in `meetings/manager.py` mirroring the existing observation paths; (c) a HARD
 contradiction rule with a GROUNDING chokepoint: a structured vent observation naming a subject is
 role-proving (only impostors can vent) — but speech alone must never mint hard evidence (a model that
@@ -549,7 +554,8 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - meetings/constants.py (new: the gate constant's single home)
 - meetings/render_contract.py (new: the render-Protocol + SuspicionEntry leaf home)
 - meetings/manager.py (redirect-guard band region + constant/render-contract re-home — disjoint from 15.4's validation region and 15.5's vote-surface region)
-- agents/strategic/prompts/loader.py (import the render contract from meetings.render_contract — import lines only; 15.5's kwarg region comes later)
+- agents/strategic/prompts/loader.py (import the render contract from meetings.render_contract + scrub the stale StrategicReasoner docstring reference at :5; 15.5's kwarg region comes later)
+- agents/strategic/prompts/__init__.py (scrub the stale StrategicReasoner docstring reference at :6)
 - agents/tactical/crewmate_policy.py (import the constant from meetings.constants)
 - agents/strategic/reasoner.py (DELETE)
 - agents/strategic/output_schemas.py (DELETE)
@@ -563,7 +569,7 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - eval/_suspicion_parse.py (the re-declaration is deliberate and stays; it gets a PIN TEST, not an import)
 - meetings/voting.py (tally untouched; it receives the threshold as a parameter already)
 - DESIGN.md + AGENT_IMPLEMENTATION.md (owner-side; the generator bars task agents from them)
-- agents/strategic/prompts/ (the live prompt loader path is unrelated to the dead reasoner island)
+- agents/strategic/prompts/qwen3_32b/ and the other template-set directories (template text belongs to 15.4/15.5; only the two named module docstrings are touched here)
 
 **Definition of done:**
 - [ ] Guard-vs-render agreement: for raw suspicion values across `[0.55, 0.65]` including the
@@ -578,9 +584,13 @@ always available and MCP GitHub tools always fail — false in at least one acti
   imports NOTHING from `meetings.manager` (a grep-zero assertion in the test suite, plus the KEPT
   contract).
 - [ ] The StrategicReasoner island is deleted; a repo-wide grep for `StrategicReasoner` returns zero
-  production/test references; the suite passes without it.
-- [ ] `uv run lint-imports` reports all FOUR contracts KEPT (the existing two + `observation ↛
-  agents/meetings/llm` + `agents ↛ meetings.manager`).
+  references in LIVE code — imports, instantiations, and the stale docstring mentions in
+  `agents/strategic/prompts/loader.py:5` / `agents/strategic/prompts/__init__.py:6` (historical
+  mentions in closed task docs and audits stay); the suite passes without it.
+- [ ] `uv run lint-imports` reports every configured contract KEPT, including the two added here
+  (`observation ↛ agents/meetings/llm`, `agents ↛ meetings.manager`) — three contracts alongside the
+  pre-existing `agents ↛ engine` if 15.8's training contract has not landed yet, four once it has (no
+  ordering assumption between 15.6 and 15.8).
 - [ ] AGENTS.md names Featherless/`Qwen/Qwen3-32B` as the canonical eval provider and describes GitHub
   tooling capability-neutrally (try `gh`, fall back to the environment's GitHub integration; no absolute
   claims about either).
@@ -656,8 +666,12 @@ pauses the phase for an owner call. Finally, pin the baseline-3 evidence-supply 
 - orchestrator/replay.py (lever graduation region — registry entry to retired-always-on; disjoint from 15.9's stamp region)
 - eval/watchability.py (baseline-3 floor values in the per-baseline constants block region)
 - audits/audit-phase-15-wave0-close.md (new: the close finding)
+- audits/baseline2-final-measure.json (new: the committed BEFORE column — `measure_baseline.py --json` incl. `--watchability --funnel` captured on the baseline-2 bytes immediately before replacement)
+- README.md (sample-provenance paragraph region — refresh recorded date / prompt set / measured win rates to baseline 3)
 - tests/orchestrator/test_replay.py (graduation re-pins)
 - tests/meetings/test_manager.py (byte-coupled re-pins to the new recorded bytes, where tests pin recorded rows)
+- tests/scripts/test_manifest_writer.py (byte-coupled v4-row re-pins to the new recorded bytes)
+- tests/api/test_eval.py (byte-coupled committed-report re-pins)
 
 **Files NOT in scope:**
 - scripts/refresh_samples.sh (drives the record as-is; graduation-at-record makes a lever export unnecessary)
@@ -672,7 +686,15 @@ pauses the phase for an owner call. Finally, pin the baseline-3 evidence-supply 
   graduated reporter lever), git_sha, $0 cost, winner.
 - [ ] The wave0-close audit reports the funnel before/after table (15.3's instrument on baseline 2 vs
   baseline 3), the R-gate measurement, and the canaries — every number regenerated by the committed
-  CLIs, zero hand-computed figures.
+  CLIs, zero hand-computed figures. The BEFORE column regenerates from the committed
+  `audits/baseline2-final-measure.json` (captured pre-replacement and named in the audit with the tip
+  commit it was measured at — the baseline-2 bytes themselves survive only in git history).
+- [ ] README's sample-provenance paragraph reflects baseline 3 (recorded date, the v5 prompt set, the
+  measured impostor win rates) — the public quickstart never describes replaced samples.
+- [ ] Every byte-coupled test that pins recorded rows or committed-report aggregates is re-pinned in
+  this PR (`tests/scripts/test_manifest_writer.py`, `tests/api/test_eval.py`,
+  `tests/meetings/test_manager.py`, `tests/orchestrator/test_replay.py` — plus a sweep for any other
+  pin the replacement breaks); `bash scripts/check.sh` green on the final tree is the proof.
 - [ ] Genuine-class conversion and R1 are reported against their baseline-2 anchors; a canary regression
   is flagged as the phase's NO-GO for an owner decision, not absorbed silently.
 - [ ] The baseline-3 evidence-supply floors are pinned in `eval/watchability.py`'s per-baseline block
@@ -1168,6 +1190,7 @@ always uses a real meeting path.
 - training/surrogate/runner.py (new: the MeetingRunner implementation)
 - training/surrogate/fidelity.py (GO/NO-GO wiring region — 15.11 owns the metrics core)
 - eval/balance_eval.py (additive optional meeting-runner-factory keyword on run_tournament_eval)
+- training/artifacts/surrogate/ (new: the fitted ballot-predictor weights, float-hex JSON + sha256 sidecar — the exact artifact the bake-off reloads and the 15.9 stamp schema references)
 - training/reports/report-ballot-surrogate.md (new: fidelity vs ceiling, the verdict, the chosen fallback, the re-grounding cadence)
 - tests/training/test_surrogate_runner.py (new)
 - tests/eval/test_balance_eval_meeting_runner.py (new)
@@ -1182,7 +1205,7 @@ always uses a real meeting path.
 - [ ] The predicted-ballot path feeds the real `tally_ballots` with the explicit constants-home threshold; no re-implemented tally logic exists anywhere in `training/`.
 - [ ] The GO/NO-GO bar is stated in the report and in code BEFORE training (e.g. GO ⇔ held-out top-1 ≥ 0.75 × the honest ceiling AND SKIP-vs-eject ≥ 0.80 — the implementer finalizes the exact bar, but it must be committed before the training run), and the verdict is reported against it with by-game-CV numbers from the 15.11 harness.
 - [ ] The fallback path is exercised by test regardless of verdict: the training env runs under fallback (a) today, proving the bake-off cannot be blocked by a NO-GO.
-- [ ] Surrogate inference is deterministic under a fixed weights artifact (double-run hash test); the weights artifact carries a sha256 the 15.9 stamp schema can reference.
+- [ ] Surrogate inference is deterministic under a fixed weights artifact (double-run hash test); the fitted weights are COMMITTED under `training/artifacts/surrogate/` with a sha256 sidecar the 15.9 stamp schema can reference, and the bake-off reloads exactly that artifact (a round-trip test loads it and reproduces the reported fidelity numbers).
 - [ ] The staleness cap is real code the bake-off consumes (exceeding it raises), and the re-grounding recipe (record fresh real-LLM meetings, rebuild the table, re-fit, re-measure) is documented step-by-step in the report.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -1437,7 +1460,7 @@ harness needs for crew is documented as an ask, not edited here.
 
 ### Task 15.17 — The torch PPO+recurrent probe (experiment-tier, opt-in)
 **Branch:** `phase-15-torch-probe`
-**Depends on:** 15.8, 15.10
+**Depends on:** 15.8, 15.10, 15.15
 **Section refs:** audits/post-phase-14-ML-training-signal.md §9 (the staged-escalation dependency posture); audits/post-phase-14-ML-planning.md §9 Option 3 (PPO/recurrent: strongest asymptotics, heavy costs); owner decision 2026-07-05 (torch as probe only; promotion is a pause decision)
 **Complexity:** Medium
 
@@ -1447,7 +1470,9 @@ torch` — torch never enters `pyproject.toml` dependencies or `uv.lock` this ph
 question for the pause: does gradient RL with real POMDP memory beat the pure-Python ES ceiling by
 enough to justify torch's costs (dependency weight, cross-machine float determinism, CI story)?
 Comparability is the design constraint: the probe trains through the SAME `TacticalRolloutEnv` and
-encoder-v2 features, evaluates on the SAME fixed seed set, and reports in the 15.15 metric-tuple shape —
+encoder-v2 features, and evaluates through 15.15's COMMITTED harness protocol and fixed seed config,
+consumed read-only (the 15.15 dependency edge exists so the protocol is real code the probe invokes,
+never a hand-copied tuple shape or self-chosen seeds), reporting in the 15.15 metric-tuple shape —
 with the honest exception that the determinism-harness hash is expected to FAIL for a torch policy, so
 the probe reports a seeded-run variance story (N repeats, spread of every metric) instead of pretending.
 It also measures the escape hatch: distillability — behavior-clone the torch policy into the pure-Python
@@ -1469,7 +1494,7 @@ region is 15.8's).
 
 **Definition of done:**
 - [ ] The probe trains an impostor policy through `training.env.TacticalRolloutEnv` + `agents.tactical.features.TacticalFeatureEncoder` (same env, same features — comparability asserted in the report, with any deviation documented).
-- [ ] Results reported in the 15.15 tuple shape on the same fixed eval seed set, plus the reproducibility story: N seeded repeats with the spread of validity/referee/fitness/win-rate (no single-run claims).
+- [ ] Results are emitted through 15.15's committed harness protocol on its fixed eval seed config (the harness consumed read-only — asserted by the report naming the harness entrypoint + seed-config artifact it invoked), plus the reproducibility story: N seeded repeats with the spread of validity/referee/fitness/win-rate (no single-run claims).
 - [ ] Distillability measured: a pure-Python student cloned from the torch policy, with student-teacher intent agreement and the student's own tuple row reported.
 - [ ] `pyproject.toml` mypy exclude covers the probe dir; `uv run mypy .` is green WITHOUT torch installed; the test pins that no production package imports the probe.
 - [ ] The report ends with a promotion recommendation for the pause — promote / keep experiment-tier / retire — priced against dependency weight, determinism doctrine, and the measured gain (or its absence), with wall-clock + hardware documented.
@@ -1511,8 +1536,11 @@ measurement this task runs: the operator-run REAL-LLM finalist evaluation — th
 candidates re-recorded on the canonical 50-seed 9p2i set against `Qwen/Qwen3-32B` (Featherless $0,
 ~2.5h per finalist), scored by `scripts/validity_gate.py` + `scripts/measure_baseline.py
 --watchability --funnel`, so the method decision rests on at least one real-meeting-path measurement,
-not only fake-provider/surrogate numbers (finalist recordings are working artifacts quoted in the audit
-— they do NOT replace or join `replays/samples/` or `replays/ml_corpus/`). The audit
+not only fake-provider/surrogate numbers. The RAW finalist recordings stay uncommitted working
+artifacts (they do NOT replace or join `replays/samples/` or `replays/ml_corpus/`, and they are
+re-recordable from the documented recipe); what IS committed is their measurement: the per-finalist
+gate/referee/funnel CLI outputs land as `training/reports/results-finalist-eval.jsonl`, the artifact
+every audit number traces to. The audit
 (`audits/audit-phase-15-pause.md`) tabulates every entrant on the single protocol and records the SEVEN
 owner decisions with rationale: (1) winning method + champion candidate; (2) deployment end-state —
 opt-in factory beside the FSM default vs new default + baseline-4 re-record; (3) torch — promote / keep
@@ -1526,17 +1554,18 @@ merge-criteria placeholder with the real criteria for the chosen deployment bran
 
 **Files in scope:**
 - audits/audit-phase-15-pause.md (new)
+- training/reports/results-finalist-eval.jsonl (new: the committed per-finalist gate/referee/funnel CLI outputs — measurement data, not code)
 - tasks/phase-15.md (Wave-2 contracts + STATUS banner update + end-of-phase merge criteria)
 - agent_prompts/ (mechanically regenerated task-15-* prompts for the new Wave-2 contracts — generator output, never hand-edited)
 
 **Files NOT in scope:**
-- training/ + eval/ + agents/ + engine/ + orchestrator/ (measurement is read-only; any referee patch the Goodhart findings demand becomes a Wave-2 contract, never a pause edit)
+- training/ code + eval/ + agents/ + engine/ + orchestrator/ (measurement is read-only — the finalist jsonl above is CLI output data, not code; any referee patch the Goodhart findings demand becomes a Wave-2 contract, never a pause edit)
 - replays/samples/ + replays/ml_corpus/ (untouched; finalist recordings live outside both)
 - DESIGN.md + AGENT_IMPLEMENTATION.md (owner-side; any design amendment the decisions imply is recorded as an ask in the audit)
 
 **Definition of done:**
 - [ ] The audit tabulates every entrant (bake-off, crew, torch, distilled student) on the single metric tuple, with every quoted number regenerated from the committed CLIs/jsonl — zero hand-computed figures (each table cites its source artifact).
-- [ ] The real-LLM finalist evaluation is run, its gate + referee + funnel results quoted, and its divergence (if any) from the fake-provider/surrogate numbers analyzed — the method decision explicitly cites it.
+- [ ] The real-LLM finalist evaluation is run; its gate + referee + funnel results are committed as `training/reports/results-finalist-eval.jsonl` and quoted from there (the recording recipe — seeds, config, exact commands — documented in the audit for full re-derivation), and its divergence (if any) from the fake-provider/surrogate numbers is analyzed — the method decision explicitly cites it.
 - [ ] All seven decisions are recorded with owner sign-off and rationale, including the NO paths (what was rejected and why).
 - [ ] The Wave-2 contracts are authored into this file per the chosen branch, `uv run python scripts/validate_task_docs.py` + `uv run python scripts/generate_prompts.py --check` pass with the new contracts, and the STATUS banner + end-of-phase merge criteria reflect the decisions.
 - [ ] The pause explicitly re-verdicts the referee: the Goodhart probe's findings (both runs) either cleared or their floors are contracted into Wave 2 before any champion selection uses the referee.

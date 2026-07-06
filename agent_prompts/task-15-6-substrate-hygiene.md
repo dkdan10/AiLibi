@@ -46,7 +46,8 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - meetings/constants.py (new: the gate constant's single home)
 - meetings/render_contract.py (new: the render-Protocol + SuspicionEntry leaf home)
 - meetings/manager.py (redirect-guard band region + constant/render-contract re-home — disjoint from 15.4's validation region and 15.5's vote-surface region)
-- agents/strategic/prompts/loader.py (import the render contract from meetings.render_contract — import lines only; 15.5's kwarg region comes later)
+- agents/strategic/prompts/loader.py (import the render contract from meetings.render_contract + scrub the stale StrategicReasoner docstring reference at :5; 15.5's kwarg region comes later)
+- agents/strategic/prompts/__init__.py (scrub the stale StrategicReasoner docstring reference at :6)
 - agents/tactical/crewmate_policy.py (import the constant from meetings.constants)
 - agents/strategic/reasoner.py (DELETE)
 - agents/strategic/output_schemas.py (DELETE)
@@ -60,7 +61,7 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - eval/_suspicion_parse.py (the re-declaration is deliberate and stays; it gets a PIN TEST, not an import)
 - meetings/voting.py (tally untouched; it receives the threshold as a parameter already)
 - DESIGN.md + AGENT_IMPLEMENTATION.md (owner-side; the generator bars task agents from them)
-- agents/strategic/prompts/ (the live prompt loader path is unrelated to the dead reasoner island)
+- agents/strategic/prompts/qwen3_32b/ and the other template-set directories (template text belongs to 15.4/15.5; only the two named module docstrings are touched here)
 
 **Definition of done:**
 - [ ] Guard-vs-render agreement: for raw suspicion values across `[0.55, 0.65]` including the
@@ -75,9 +76,13 @@ always available and MCP GitHub tools always fail — false in at least one acti
   imports NOTHING from `meetings.manager` (a grep-zero assertion in the test suite, plus the KEPT
   contract).
 - [ ] The StrategicReasoner island is deleted; a repo-wide grep for `StrategicReasoner` returns zero
-  production/test references; the suite passes without it.
-- [ ] `uv run lint-imports` reports all FOUR contracts KEPT (the existing two + `observation ↛
-  agents/meetings/llm` + `agents ↛ meetings.manager`).
+  references in LIVE code — imports, instantiations, and the stale docstring mentions in
+  `agents/strategic/prompts/loader.py:5` / `agents/strategic/prompts/__init__.py:6` (historical
+  mentions in closed task docs and audits stay); the suite passes without it.
+- [ ] `uv run lint-imports` reports every configured contract KEPT, including the two added here
+  (`observation ↛ agents/meetings/llm`, `agents ↛ meetings.manager`) — three contracts alongside the
+  pre-existing `agents ↛ engine` if 15.8's training contract has not landed yet, four once it has (no
+  ordering assumption between 15.6 and 15.8).
 - [ ] AGENTS.md names Featherless/`Qwen/Qwen3-32B` as the canonical eval provider and describes GitHub
   tooling capability-neutrally (try `gh`, fall back to the environment's GitHub integration; no absolute
   claims about either).

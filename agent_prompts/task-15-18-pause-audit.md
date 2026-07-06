@@ -26,8 +26,11 @@ measurement this task runs: the operator-run REAL-LLM finalist evaluation — th
 candidates re-recorded on the canonical 50-seed 9p2i set against `Qwen/Qwen3-32B` (Featherless $0,
 ~2.5h per finalist), scored by `scripts/validity_gate.py` + `scripts/measure_baseline.py
 --watchability --funnel`, so the method decision rests on at least one real-meeting-path measurement,
-not only fake-provider/surrogate numbers (finalist recordings are working artifacts quoted in the audit
-— they do NOT replace or join `replays/samples/` or `replays/ml_corpus/`). The audit
+not only fake-provider/surrogate numbers. The RAW finalist recordings stay uncommitted working
+artifacts (they do NOT replace or join `replays/samples/` or `replays/ml_corpus/`, and they are
+re-recordable from the documented recipe); what IS committed is their measurement: the per-finalist
+gate/referee/funnel CLI outputs land as `training/reports/results-finalist-eval.jsonl`, the artifact
+every audit number traces to. The audit
 (`audits/audit-phase-15-pause.md`) tabulates every entrant on the single protocol and records the SEVEN
 owner decisions with rationale: (1) winning method + champion candidate; (2) deployment end-state —
 opt-in factory beside the FSM default vs new default + baseline-4 re-record; (3) torch — promote / keep
@@ -41,17 +44,18 @@ merge-criteria placeholder with the real criteria for the chosen deployment bran
 
 **Files in scope:**
 - audits/audit-phase-15-pause.md (new)
+- training/reports/results-finalist-eval.jsonl (new: the committed per-finalist gate/referee/funnel CLI outputs — measurement data, not code)
 - tasks/phase-15.md (Wave-2 contracts + STATUS banner update + end-of-phase merge criteria)
 - agent_prompts/ (mechanically regenerated task-15-* prompts for the new Wave-2 contracts — generator output, never hand-edited)
 
 **Files NOT in scope:**
-- training/ + eval/ + agents/ + engine/ + orchestrator/ (measurement is read-only; any referee patch the Goodhart findings demand becomes a Wave-2 contract, never a pause edit)
+- training/ code + eval/ + agents/ + engine/ + orchestrator/ (measurement is read-only — the finalist jsonl above is CLI output data, not code; any referee patch the Goodhart findings demand becomes a Wave-2 contract, never a pause edit)
 - replays/samples/ + replays/ml_corpus/ (untouched; finalist recordings live outside both)
 - DESIGN.md + AGENT_IMPLEMENTATION.md (owner-side; any design amendment the decisions imply is recorded as an ask in the audit)
 
 **Definition of done:**
 - [ ] The audit tabulates every entrant (bake-off, crew, torch, distilled student) on the single metric tuple, with every quoted number regenerated from the committed CLIs/jsonl — zero hand-computed figures (each table cites its source artifact).
-- [ ] The real-LLM finalist evaluation is run, its gate + referee + funnel results quoted, and its divergence (if any) from the fake-provider/surrogate numbers analyzed — the method decision explicitly cites it.
+- [ ] The real-LLM finalist evaluation is run; its gate + referee + funnel results are committed as `training/reports/results-finalist-eval.jsonl` and quoted from there (the recording recipe — seeds, config, exact commands — documented in the audit for full re-derivation), and its divergence (if any) from the fake-provider/surrogate numbers is analyzed — the method decision explicitly cites it.
 - [ ] All seven decisions are recorded with owner sign-off and rationale, including the NO paths (what was rejected and why).
 - [ ] The Wave-2 contracts are authored into this file per the chosen branch, `uv run python scripts/validate_task_docs.py` + `uv run python scripts/generate_prompts.py --check` pass with the new contracts, and the STATUS banner + end-of-phase merge criteria reflect the decisions.
 - [ ] The pause explicitly re-verdicts the referee: the Goodhart probe's findings (both runs) either cleared or their floors are contracted into Wave 2 before any champion selection uses the referee.
@@ -86,16 +90,14 @@ attributable.
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import training.bakeoff.harness"`
+- `uv run python -c "import training.bakeoff.es"`
+- `uv run python -c "import training.bakeoff.goodhart"`
 - `uv run python -c "import agents.tactical.features"`
 - `uv run python -c "import training.determinism"`
 - `uv run python -c "import training.env"`
 - `uv run python -c "import training.rollout"`
 - `uv run python -c "import training.rewards"`
-- `uv run python -c "import training.crew.options"`
-- `uv run python -c "import training.crew.scorer"`
-- `uv run python -c "import training.bakeoff.harness"`
-- `uv run python -c "import training.bakeoff.es"`
-- `uv run python -c "import training.bakeoff.goodhart"`
 - `uv run python -c "import meetings.constants"`
 - `uv run python -c "import meetings.render_contract"`
 - `uv run python -c "import meetings.schemas"`
@@ -110,6 +112,8 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.surrogate.dataset"`
 - `uv run python -c "import training.surrogate.fidelity"`
 - `uv run python -c "import engine.rng"`
+- `uv run python -c "import training.crew.options"`
+- `uv run python -c "import training.crew.scorer"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.
