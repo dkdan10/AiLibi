@@ -26,6 +26,7 @@ from eval.validity import (
     check_byte_identical_reconstruction,
     check_cost_and_provenance,
     check_meeting_rate_and_resolution,
+    check_no_betrayal,
     check_no_dangling_primary_reason_id,
     check_no_friendly_fire_kills,
     check_no_railroaded_crew_ejections,
@@ -39,7 +40,7 @@ from eval.win_condition_selfcheck import (
     WinConditionSelfCheck,
     check_replay_win_condition,
 )
-from meetings.schemas import ContradictionRef
+from meetings.schemas import AccusationClaim, ContradictionRef
 from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -227,6 +228,104 @@ def test_no_friendly_fire_fails_on_impostor_victim() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# no_betrayal_ballots_or_accusations (§7.12 firewall; audit §1 hard row)       #
+# --------------------------------------------------------------------------- #
+
+
+def _first_multi_impostor_game(report: TournamentReport) -> GameReport:
+    for game in report.games:
+        impostors = {p for p, r in game.roles.items() if r == "IMPOSTOR"}
+        if len(impostors) >= 2 and game.meetings:
+            return game
+    raise AssertionError("fixture set has no multi-impostor game with a meeting")
+
+
+def test_betrayal_passes_on_committed(nine_report: TournamentReport) -> None:
+    check = check_no_betrayal(nine_report)
+    assert check.passed
+    # Non-vacuous: 9p2i is multi-impostor, so ballots were actually inspected.
+    assert int(check.facts["multi_impostor_ballots"]) > 0  # type: ignore[arg-type]
+
+
+def test_betrayal_fails_on_impostor_voting_teammate(
+    nine_report: TournamentReport,
+) -> None:
+    game = _first_multi_impostor_game(nine_report)
+    impostors = sorted(pid for pid, role in game.roles.items() if role == "IMPOSTOR")
+    meeting = next(m for m in game.meetings if m.ballots)
+    bad_ballot = meeting.ballots[0].model_copy(
+        update={"voter": impostors[0], "target": impostors[1]}
+    )
+    bad_meeting = meeting.model_copy(
+        update={"ballots": (bad_ballot, *meeting.ballots[1:])}
+    )
+    bad_game = game.model_copy(
+        update={
+            "meetings": tuple(
+                bad_meeting if m.meeting_id == meeting.meeting_id else m
+                for m in game.meetings
+            )
+        }
+    )
+    bad_report = nine_report.model_copy(
+        update={
+            "games": tuple(
+                bad_game if g.game_id == game.game_id else g for g in nine_report.games
+            )
+        }
+    )
+    check = check_no_betrayal(bad_report)
+    assert not check.passed
+    assert any("voted against teammate" in v for v in check.violations)
+
+
+def test_betrayal_fails_on_impostor_accusing_teammate(
+    nine_report: TournamentReport,
+) -> None:
+    game = _first_multi_impostor_game(nine_report)
+    impostors = sorted(pid for pid, role in game.roles.items() if role == "IMPOSTOR")
+    meeting = next(m for m in game.meetings if m.transcript.turns)
+    turn = meeting.transcript.turns[0]
+    betrayal = AccusationClaim(
+        type="accusation",
+        against=impostors[1],
+        confidence=0.9,
+        reason="synthetic betrayal",
+    )
+    bad_turn = turn.model_copy(update={"speaker": impostors[0], "claims": (betrayal,)})
+    bad_transcript = meeting.transcript.model_copy(
+        update={"turns": (bad_turn, *meeting.transcript.turns[1:])}
+    )
+    bad_meeting = meeting.model_copy(update={"transcript": bad_transcript})
+    bad_game = game.model_copy(
+        update={
+            "meetings": tuple(
+                bad_meeting if m.meeting_id == meeting.meeting_id else m
+                for m in game.meetings
+            )
+        }
+    )
+    bad_report = nine_report.model_copy(
+        update={
+            "games": tuple(
+                bad_game if g.game_id == game.game_id else g for g in nine_report.games
+            )
+        }
+    )
+    check = check_no_betrayal(bad_report)
+    assert not check.passed
+    assert any("accused teammate" in v for v in check.violations)
+
+
+def test_betrayal_vacuous_on_single_impostor(nine_report: TournamentReport) -> None:
+    # 4p1i is single-impostor: no teammate exists, so the check is vacuously clean.
+    four_report = assemble_tournament_report(_FOUR)
+    check = check_no_betrayal(four_report)
+    assert check.passed
+    assert check.facts["multi_impostor_ballots"] == 0
+
+
+# --------------------------------------------------------------------------- #
 # 5. no_railroaded_crew_ejections                                            #
 # --------------------------------------------------------------------------- #
 
@@ -394,6 +493,48 @@ def test_provenance_fails_on_multiple_models(nine_report: TournamentReport) -> N
     assert any("inconsistent model sets" in v for v in check.violations)
 
 
+def test_provenance_fails_on_negative_per_call_tokens(
+    nine_report: TournamentReport,
+) -> None:
+    # A corrupt per-call row can hide inside a still-positive game aggregate.
+    game = _first_game_with_meeting(nine_report)
+    meeting = game.meetings[0]
+    bad_call = meeting.llm_calls[0].model_copy(update={"input_tokens": -1})
+    bad_meeting = meeting.model_copy(
+        update={"llm_calls": (bad_call, *meeting.llm_calls[1:])}
+    )
+    bad_game = game.model_copy(update={"meetings": (bad_meeting, *game.meetings[1:])})
+    check = check_cost_and_provenance(
+        _replace_first_game(nine_report, bad_game), _substrate_by_seed(_NINE)
+    )
+    assert not check.passed
+    assert any("llm_call cost row" in v for v in check.violations)
+
+
+def test_provenance_exact_model_pins(nine_report: TournamentReport) -> None:
+    subs = _substrate_by_seed(_NINE)
+    assert check_cost_and_provenance(
+        nine_report, subs, expected_model="Qwen/Qwen3-32B"
+    ).passed
+    wrong = check_cost_and_provenance(nine_report, subs, expected_model="WrongModel")
+    assert not wrong.passed
+    assert any("expected" in v for v in wrong.violations)
+
+
+def test_provenance_exact_prompt_versions_pin(nine_report: TournamentReport) -> None:
+    subs = _substrate_by_seed(_NINE)
+    game = _first_game_with_meeting(nine_report)
+    real_versions = dict(game.prompt_versions)
+    assert check_cost_and_provenance(
+        nine_report, subs, expected_prompt_versions=real_versions
+    ).passed
+    wrong = check_cost_and_provenance(
+        nine_report, subs, expected_prompt_versions={"accusation_round": "v0.wrong"}
+    )
+    assert not wrong.passed
+    assert any("prompt-version provenance" in v for v in wrong.violations)
+
+
 # --------------------------------------------------------------------------- #
 # 8. byte_identical_reconstruction                                           #
 # --------------------------------------------------------------------------- #
@@ -425,6 +566,26 @@ def test_byte_identity_fails_on_corrupted_hash(tmp_path: Path) -> None:
     check = check_byte_identical_reconstruction(mini)
     assert not check.passed
     assert check.facts["drifted_samples"] == 1
+
+
+def test_byte_identity_reports_verifier_crash_as_failure(tmp_path: Path) -> None:
+    # A replay malformed so the verifier RAISES (a dropped meeting row a later
+    # tick still references) is reported as a failed check, not a crash.
+    mini = _mini_set(tmp_path, seeds=(0,))
+    path = mini / "replay-seed-0.jsonl"
+    lines = path.read_text().splitlines()
+    out: list[str] = []
+    dropped = False
+    for line in lines:
+        obj = json.loads(line)
+        if not dropped and obj.get("kind") == "meeting":
+            dropped = True
+            continue
+        out.append(line)
+    path.write_text("\n".join(out) + "\n")
+    check = check_byte_identical_reconstruction(mini)  # must not raise
+    assert not check.passed
+    assert check.facts["raised"] is True
 
 
 # --------------------------------------------------------------------------- #
@@ -509,6 +670,7 @@ def test_every_check_is_individually_reported() -> None:
         "meeting_rate_and_resolution",
         "no_tick_1_kills",
         "no_friendly_fire_kills",
+        "no_betrayal_ballots_or_accusations",
         "no_railroaded_crew_ejections",
         "no_dangling_primary_reason_id",
         "cost_and_provenance_exact",

@@ -70,15 +70,24 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="emit the machine-readable ValidityGateReport JSON instead of text",
     )
+    parser.add_argument(
+        "--expected-model",
+        default=None,
+        help=(
+            "pin the provenance row to this exact model id (e.g. Qwen/Qwen3-32B); "
+            "omitted, provenance is checked for coherence only (the generic default)"
+        ),
+    )
     args = parser.parse_args(argv)
     replay_set_dir: Path = args.replay_set_dir
     emit_json: bool = args.json
+    expected_model: str | None = args.expected_model
 
     if not replay_set_dir.is_dir():
         print(f"Replay-set directory not found: {replay_set_dir}", file=sys.stderr)
         return 2
     try:
-        report = run_validity_gate(replay_set_dir)
+        report = run_validity_gate(replay_set_dir, expected_model=expected_model)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2

@@ -83,6 +83,7 @@ def test_json_output_is_machine_readable(
         "meeting_rate_and_resolution",
         "no_tick_1_kills",
         "no_friendly_fire_kills",
+        "no_betrayal_ballots_or_accusations",
         "no_railroaded_crew_ejections",
         "no_dangling_primary_reason_id",
         "cost_and_provenance_exact",
@@ -318,6 +319,80 @@ def test_fails_on_railroaded_crew_row(
     monkeypatch.setattr(validity, "assemble_tournament_report", lambda _d: bad_report)
     payload = _fail_and_get_check(mini, capsys)
     assert "no_railroaded_crew_ejections" in _failing_names(payload)
+
+
+def test_fails_on_teammate_betrayal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mini = _mini(tmp_path, seeds=(0, 1, 2))
+    real = validity.assemble_tournament_report(mini)
+    game = next(
+        g
+        for g in real.games
+        if len({p for p, r in g.roles.items() if r == "IMPOSTOR"}) >= 2 and g.meetings
+    )
+    impostors = sorted(p for p, r in game.roles.items() if r == "IMPOSTOR")
+    meeting = next(m for m in game.meetings if m.ballots)
+    bad_ballot = meeting.ballots[0].model_copy(
+        update={"voter": impostors[0], "target": impostors[1]}
+    )
+    bad_meeting = meeting.model_copy(
+        update={"ballots": (bad_ballot, *meeting.ballots[1:])}
+    )
+    bad_game = game.model_copy(
+        update={
+            "meetings": tuple(
+                bad_meeting if m.meeting_id == meeting.meeting_id else m
+                for m in game.meetings
+            )
+        }
+    )
+    bad_report = real.model_copy(
+        update={
+            "games": tuple(
+                bad_game if g.game_id == game.game_id else g for g in real.games
+            )
+        }
+    )
+    monkeypatch.setattr(validity, "assemble_tournament_report", lambda _d: bad_report)
+    payload = _fail_and_get_check(mini, capsys)
+    assert "no_betrayal_ballots_or_accusations" in _failing_names(payload)
+
+
+def test_verifier_crash_reported_not_raised(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A malformed replay that makes the verifier RAISE must still exit 1 and emit
+    # the machine-readable report (the gate accepts arbitrary candidate dirs).
+    mini = _mini(tmp_path, seeds=(0,))
+    dropped = {"done": False}
+
+    def drop_first_meeting(obj: dict[str, Any]) -> dict[str, Any] | None:
+        if not dropped["done"] and obj.get("kind") == "meeting":
+            dropped["done"] = True
+            return None
+        return obj
+
+    _rewrite_lines(mini / "replay-seed-0.jsonl", drop_first_meeting)
+    payload = _fail_and_get_check(mini, capsys)  # asserts exit 1 + valid JSON
+    assert "byte_identical_reconstruction" in _failing_names(payload)
+
+
+def test_expected_model_flag_pins_provenance(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert validity_gate.main([str(_NINE), "--expected-model", "Qwen/Qwen3-32B"]) == 0
+    capsys.readouterr()
+    assert (
+        validity_gate.main([str(_NINE), "--expected-model", "WrongModel", "--json"])
+        == 1
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert "cost_and_provenance_exact" in {
+        c["name"] for c in payload["checks"] if not c["passed"]
+    }
 
 
 def test_json_failure_names_failing_checks(
