@@ -18,7 +18,7 @@ The authoritative task contract is copied below from tasks/phase-15.md. Follow i
 
 Record the frozen training/calibration corpus the surrogate and the bake-off consume, at EXACT
 **baseline-3** config (the 15.7 substrate: `Qwen/Qwen3-32B` Featherless non-thinking `fail_loud`
-`json_object`, prompt set `qwen3_32b.v5`, all levers unconditional, $0 flat-rate): **9p2i × 150 seeds
+`json_object`, the `qwen3_32b` set at v5, all levers unconditional, $0 flat-rate): **9p2i × 150 seeds
 (1000–1149)** primary and **4p1i × 50 seeds (1000–1049)** secondary — fresh seed ranges so a corpus game
 can never be confused with the canonical 0–49 sets (~3× the canonical 9p2i meeting/ejection volume, ~7h
 wall with 2 Featherless seed workers; may share the 15.7 operator session, landing as a separate PR).
@@ -78,8 +78,9 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import orchestrator.replay"`
 - `uv run python -c "import api.replay_loader"`
 - `uv run python -c "import meetings.constants"`
-- `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import meetings.render_contract"`
 - `uv run python -c "import meetings.schemas"`
+- `uv run python -c "import agents.memory.beliefs"`
 - `uv run python -c "import eval.funnel"`
 - `uv run python -c "import eval.validity"`
 - `uv run python -c "import eval.watchability"`

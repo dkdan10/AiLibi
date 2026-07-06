@@ -12,7 +12,7 @@ Implement Task 15.6 — Substrate hygiene: latent hazards, dead code, single-hom
 The authoritative task contract is copied below from tasks/phase-15.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-15-substrate-hygiene`
-**Depends on:** 15.4, 15.5
+**Depends on:** 15.4
 **Section refs:** tasks/post-phase-14-clean-up.md H6; audits/post-phase-14-pause.md §3 (dead StrategicReasoner, constant homing, import contracts), §4.1 (the raw-vs-rendered [0.595, 0.60) band); meetings/manager.py:2486-2498 (the redirect guard); eval/_suspicion_parse.py:54 (the deliberate re-declaration)
 **Complexity:** Integration
 
@@ -21,11 +21,17 @@ small, bundled because they share files with each other and nothing else. (1) **
 raw-vs-rendered gate band:** the ballot-redirect guard recomputes the §4.6 verdict from RAW suspicion
 floats while the prompt renders `"%.2f"` — a raw value in `[0.595, 0.60)` displays as 0.60 (the model
 reads MUST-vote) while the guard reads MUST-skip; make guard and render agree (compare on the rendered
-2dp value), pinned by fixtures across the band. (2) **Single-home the 0.60 gate constant:**
+2dp value), pinned by fixtures across the band. (2) **Single-home the manager surface `agents/` imports:**
 `DEFAULT_SKIP_CONFIDENCE_THRESHOLD` lives inside 3-KLoC `meetings/manager.py` and is imported UPWARD by
-`agents/` (`crewmate_policy.py:86`); move it to a new leaf `meetings/constants.py`, update importers,
-and add the pin test the pause audit asked for: eval's deliberately re-declared
-`SKIP_SUSPICION_THRESHOLD` must equal the threshold the current baseline was recorded under. (3)
+`agents/` (`crewmate_policy.py:86`) — and so are the render-contract types: `agents/strategic/prompts/
+loader.py:76-81` imports `ReportPromptRenderer`, `StatementPromptRenderer`, `SuspicionEntry`, and
+`VotePromptRenderer` from `meetings.manager`, so re-homing the constant alone would NOT make the
+`agents ↛ meetings.manager` contract satisfiable. Move the constant to a new leaf
+`meetings/constants.py` AND the four render-contract types to a new leaf `meetings/render_contract.py`
+(pure typing/pydantic surface, no manager import), update both importers (`manager.py` re-exports may
+remain for internal use; `agents/` must import only the leaves), and add the pin test the pause audit
+asked for: eval's deliberately re-declared `SKIP_SUSPICION_THRESHOLD` must equal the threshold the
+current baseline was recorded under. (3)
 **Delete the dead `StrategicReasoner` island** (~2.7 KLoC: `agents/strategic/reasoner.py`,
 `agents/strategic/output_schemas.py`, its 1820-line test) — instantiated only by its own test, never by
 production, and it reads as a live alternate meeting path to every explorer; the triggered-LLM design
@@ -38,7 +44,9 @@ always available and MCP GitHub tools always fail — false in at least one acti
 
 **Files in scope:**
 - meetings/constants.py (new: the gate constant's single home)
-- meetings/manager.py (redirect-guard band region + constant import — disjoint from 15.4's validation region and 15.5's vote-surface region)
+- meetings/render_contract.py (new: the render-Protocol + SuspicionEntry leaf home)
+- meetings/manager.py (redirect-guard band region + constant/render-contract re-home — disjoint from 15.4's validation region and 15.5's vote-surface region)
+- agents/strategic/prompts/loader.py (import the render contract from meetings.render_contract — import lines only; 15.5's kwarg region comes later)
 - agents/tactical/crewmate_policy.py (import the constant from meetings.constants)
 - agents/strategic/reasoner.py (DELETE)
 - agents/strategic/output_schemas.py (DELETE)
@@ -62,6 +70,10 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - [ ] `DEFAULT_SKIP_CONFIDENCE_THRESHOLD` has exactly one definition home (`meetings/constants.py`);
   `meetings/manager.py` and `agents/tactical/crewmate_policy.py` import it; the eval pin test fails if
   eval's re-declared threshold ever diverges from the constants home.
+- [ ] The render-contract types (`ReportPromptRenderer`, `StatementPromptRenderer`, `SuspicionEntry`,
+  `VotePromptRenderer`) live in `meetings/render_contract.py`; `agents/strategic/prompts/loader.py`
+  imports NOTHING from `meetings.manager` (a grep-zero assertion in the test suite, plus the KEPT
+  contract).
 - [ ] The StrategicReasoner island is deleted; a repo-wide grep for `StrategicReasoner` returns zero
   production/test references; the suite passes without it.
 - [ ] `uv run lint-imports` reports all FOUR contracts KEPT (the existing two + `observation ↛
@@ -79,16 +91,23 @@ always available and MCP GitHub tools always fail — false in at least one acti
 
 ## Implementation hint
 
-Keep `meetings/constants.py` a leaf (stdlib-only imports) so the new `agents ↛ meetings.manager`
-contract is satisfiable — the constant is the only thing `agents/` needs from the meetings package. For
-the band fix, prefer quantize-then-compare (round the raw float to the rendered 2dp grid before the gate
-comparison) over widening the gate — it makes guard and model read the same number by construction. The
-deletion is mechanical but verify the island's edges first: `grep -rn "StrategicReasoner\|output_schemas"`
-across the tree, including docs and task-doc Public-types claims from old phases (historical claims in
-closed phase docs stay — only live code references must go to zero).
+Keep both new modules leaves: `meetings/constants.py` stdlib-only, `meetings/render_contract.py`
+typing/pydantic/schemas-only (Protocols and the `SuspicionEntry` DTO are pure surface — moving them is
+mechanical; `meetings/manager.py` may import them back and re-export for internal callers, but the
+dependency direction `agents → leaf` is what makes the `agents ↛ meetings.manager` contract
+satisfiable). For the band fix, prefer quantize-then-compare (round the raw float to the rendered 2dp
+grid before the gate comparison) over widening the gate — it makes guard and model read the same number
+by construction. The deletion is mechanical but verify the island's edges first: `grep -rn
+"StrategicReasoner\|output_schemas"` across the tree, including docs and task-doc Public-types claims
+from old phases (historical claims in closed phase docs stay — only live code references must go to
+zero).
 
 ## Public types this task introduces
 - `meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`
+- `meetings.render_contract.ReportPromptRenderer`
+- `meetings.render_contract.StatementPromptRenderer`
+- `meetings.render_contract.SuspicionEntry`
+- `meetings.render_contract.VotePromptRenderer`
 
 These are the symbols downstream tasks will import. Keep their signatures stable.
 
@@ -97,14 +116,14 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 The band fix changes LIVE meeting behavior only inside the band (recorded replays reconstruct from
 recorded actions, so committed bytes are safe), but any test that pins redirect-guard behavior on
 synthetic mid-band values must be re-pinned deliberately, not silently. The manager edit sits in a file
-15.4 and 15.5 also touch — the dependency edges serialize the three tasks, so land this one last and
-rebase carefully. Deleting 2.7 KLoC is low-risk precisely because nothing imports it — but confirm that
-with the grep, don't assume it.
+15.4 also touches and 15.5 will touch after this task — the dependency chain (15.4 → this → 15.5)
+serializes the three, so rebase on 15.4 and leave the vote-surface region clean for 15.5. Deleting
+2.7 KLoC is low-risk precisely because nothing imports it — but confirm that with the grep, don't
+assume it.
 
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
-- `uv run python -c "import agents.memory.beliefs"`
 - `uv run python -c "import meetings.schemas"`
 
 ## Pre-flight checklist

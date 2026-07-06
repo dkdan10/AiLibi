@@ -25,13 +25,20 @@ records and renders them at high salience) — this task adds the missing top ha
 `SawVentObservation` type in the turn observation union (subject, room, tick; enter/exit phase),
 additive and backward-compatible so committed v4 transcripts still parse; (b) turn validation +
 normalization in `meetings/manager.py` mirroring the existing observation paths; (c) a HARD
-contradiction rule in `meetings/transcript.py`: a structured vent observation naming a subject is
-role-proving (only impostors can vent), feeding the same strong-flag path a witnessed kill uses — which
-also makes it citable, since `primary_reason_id` already validates against transcript turn ids, and the
-observation now lives in a turn; (d) a v5 prompt set (`qwen3_32b.v5`) whose turn/opening templates
-explicitly elicit the vent observations the rendered memory already contains, with the single
-`PROMPT_VERSION_SETS` v4 → v5 registry bump owned HERE (the Phase-14 C7 lesson: one shared edit, owned
-by exactly one task; 15.5 layers onto v5 behind its dependency edge).
+contradiction rule with a GROUNDING chokepoint: a structured vent observation naming a subject is
+role-proving (only impostors can vent) — but speech alone must never mint hard evidence (a model that
+hallucinates a vent sighting against an innocent would otherwise fabricate a STRONG flag, re-opening
+the railroad class Phase 14 eliminated). The STRONG flag therefore fires only when the manager's
+deterministic reconstruction confirms the SPEAKER'S OWN memory contains a matching witnessed-vent
+event (subject + room, tick within a small tolerance — the same replay-deterministic fold
+`derive_belief_evidence` already runs); a grounded observation feeds the same strong-flag path a
+witnessed kill uses and is citable, since `primary_reason_id` already validates against transcript
+turn ids and the observation now lives in a turn. An UNGROUNDED vent claim is accepted as ordinary
+testimony (speech the voters may weigh) but raises NO flag; (d) the `qwen3_32b` set's turn/opening
+templates edited IN PLACE to explicitly elicit the vent observations the rendered memory already
+contains, with the version recorded by the single `PROMPT_VERSION_SETS` registry bump (`
+_bespoke_versions("qwen3_32b", version="v4")` → `"v5"`) owned HERE (the Phase-14 C7 lesson: one shared
+edit, owned by exactly one task; 15.5 layers onto v5 behind its dependency edge).
 
 **Files in scope:**
 - meetings/schemas.py (SawVentObservation + union registration; additive)
@@ -52,8 +59,9 @@ by exactly one task; 15.5 layers onto v5 behind its dependency edge).
 
 **Definition of done:**
 - [ ] `SawVentObservation` round-trips through the turn schema; every committed v4 replay still parses (backward-compat pinned by a test loading a committed meeting entry).
-- [ ] A fixture meeting where a voter's rendered memory contains a witnessed vent produces an accepted structured vent observation through the validation path, and the transcript layer raises the role-proving STRONG flag against the subject.
-- [ ] The flag feeds the belief fold exactly like the witnessed-kill strong flag (same cap semantics — no new stacking channel), and a ballot's `primary_reason_id` citing the vent turn validates.
+- [ ] A fixture meeting where a voter's rendered memory contains a witnessed vent produces an accepted structured vent observation through the validation path, the grounding chokepoint confirms it against the speaker's reconstructed memory, and the transcript layer raises the role-proving STRONG flag against the subject.
+- [ ] Grounding is load-bearing: a fixture where a speaker FABRICATES a structured vent observation (no matching witnessed-vent event in their own memory) is accepted as testimony but raises NO flag and leaves the subject's hard-evidence state unchanged — speech alone cannot mint hard evidence.
+- [ ] The grounded flag feeds the belief fold exactly like the witnessed-kill strong flag (same cap semantics — no new stacking channel), and a ballot's `primary_reason_id` citing the vent turn validates.
 - [ ] The v5 templates elicit vent observations (prompt-fixture test: memory-with-vent renders → template output contains the elicitation instruction); `PROMPT_VERSION_SETS` maps the set to v5 in this task and nowhere else.
 - [ ] The opt-in eligibility path treats a spoken vent observation as a relevance source (a non-speaker who was placed at the vent scene becomes eligible), consistent with the existing co-presence gate.
 - [ ] `uv run mypy .` passes.
@@ -67,12 +75,16 @@ by exactly one task; 15.5 layers onto v5 behind its dependency edge).
 ## Implementation hint
 
 Model the schema/validation/flag path on the witnessed-kill lever (Task 13.5.3) — it walked the same
-route from engine event to STRONG flag. The memory side is already done: `_SALIENCE_VENT_WITNESSED`
-renders witnessed vents above routine sightings, so elicitation is a prompt-template ask, not a memory
-change. Template work: clone the v4 set to `qwen3_32b/v5/` per the loader's set/version layout and edit
-the turn/opening templates; keep the vote template byte-identical here (15.5 owns its v5 edits). The
-live behavioral effect (transmission 36/74 → ?) is measured at 15.7 by the 15.3 instrument — this task's
-DoD is the mechanism, fixture-proven, not the model's uptake.
+route from engine event to STRONG flag, and its grounding posture is the template: the hard evidence
+derives from what a witness's own deterministic memory holds, with the spoken observation as the public,
+citable surface. The memory side is already done: `_SALIENCE_VENT_WITNESSED` renders witnessed vents
+above routine sightings, so elicitation is a prompt-template ask, not a memory change. Template work:
+the prompt-set layout is FLAT — the four `.j2` templates live directly in
+`agents/strategic/prompts/qwen3_32b/` and the version is a REGISTRY property, not a directory; edit the
+turn/opening templates in place and bump `_bespoke_versions("qwen3_32b", version=…)` to `"v5"` in
+`PROMPT_VERSION_SETS` (exactly how 14.11 shipped v4). Keep `vote_ballot.j2` byte-identical here (15.5
+owns its v5 edits). The live behavioral effect (transmission 36/74 → ?) is measured at 15.7 by the 15.3
+instrument — this task's DoD is the mechanism, fixture-proven, not the model's uptake.
 
 ## Public types this task introduces
 - `meetings.schemas.SawVentObservation`
@@ -87,7 +99,11 @@ its dependency edge and never touches the registry. (b) Schema compat: the obser
 additive; a strict validator change that rejects unknown types would break committed-replay loading —
 the backward-compat pin is the guard. (c) Flag semantics: the vent flag must ride the EXISTING strong-
 contradiction cap (`MEETING_CONTRADICTION_LIFT_CAP` + the joint cap), not add a new uncapped lift
-channel — otherwise Wave 0 reintroduces the railroad class Phase 14 just eliminated.
+channel — otherwise Wave 0 reintroduces the railroad class Phase 14 just eliminated. (d) The grounding
+chokepoint is the whole defense against evidence-minting: if it is skipped or made advisory, a single
+hallucinated observation converts speech into role-proving hard evidence against an innocent — treat
+the fabricated-observation fixture as the task's most important test, and make the grounding
+comparison deterministic (reconstructed memory, not LLM judgment).
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

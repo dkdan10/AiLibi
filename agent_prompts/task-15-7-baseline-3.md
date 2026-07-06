@@ -17,12 +17,16 @@ The authoritative task contract is copied below from tasks/phase-15.md. Follow i
 **Complexity:** Integration
 
 Record **baseline 3** — both canonical sets (50 + 50 seeds) on the unchanged model/provider
-(`Qwen/Qwen3-32B`, Featherless, $0) with the Wave-0 substrate: prompt set `qwen3_32b.v5` (15.4's vent
-elicitation + 15.5's reporter line) and the `reporter_exculpation` lever ON — one atomic PR replacing
-`replays/samples/`, exactly the 14.12 pattern. Graduate the lever at the record (the resolver returns
-constant `True`, `_TOGGLEABLE_LEVER_RESOLVERS` → `_RETIRED_ALWAYS_ON_LEVERS` — the 14.9/14.12 move), so
-the committed sets reconstruct BARE with no env export (this also discharges the C6 recording-preflight
-hazard: no lever env for an operator to forget). Close the wave with
+(`Qwen/Qwen3-32B`, Featherless, $0) with the Wave-0 substrate: the `qwen3_32b` set at v5 (15.4's vent
+elicitation + 15.5's reporter line; provenance rows render `*.qwen3_32b.v5`) and the
+`reporter_exculpation` lever ON — one atomic PR replacing `replays/samples/`, exactly the 14.12
+pattern. Graduate the lever at the record — BOTH halves of the 14.9/14.12 move: the resolver itself
+(`agents/memory/beliefs.py::reporter_exculpation_enabled`, 15.5's home) returns constant `True`, and
+the registry entry moves `_TOGGLEABLE_LEVER_RESOLVERS` → `_RETIRED_ALWAYS_ON_LEVERS` in
+`orchestrator/replay.py` — so the belief damp and the vote-surface annotation are UNCONDITIONAL under a
+bare environment and the committed sets reconstruct BARE with no env export (this also discharges the
+C6 recording-preflight hazard: no lever env for an operator to forget, and no gap between the stamped
+flags and the code's bare behavior). Close the wave with
 `audits/audit-phase-15-wave0-close.md`: the full validity gate, the R-gate measurement, and — the
 wave's own instrument — the 15.3 funnel table re-measured against the charter's baseline-2 column
 (vent transmission 36/74 → ?, structured vent observations 0 → ?, innocent-reporter ejections 22 → ?,
@@ -34,7 +38,8 @@ pauses the phase for an owner call. Finally, pin the baseline-3 evidence-supply 
 **Files in scope:**
 - replays/samples/9p2i/ (the baseline-3 set: replays + MANIFEST + tournament-eval-report + rubric artifacts)
 - replays/samples/4p1i/ (the baseline-3 set)
-- orchestrator/replay.py (lever graduation region — resolver to constant True; disjoint from 15.9's stamp region)
+- agents/memory/beliefs.py (reporter-exculpation resolver graduation region — constant True; behind the 15.5 dependency edge)
+- orchestrator/replay.py (lever graduation region — registry entry to retired-always-on; disjoint from 15.9's stamp region)
 - eval/watchability.py (baseline-3 floor values in the per-baseline constants block region)
 - audits/audit-phase-15-wave0-close.md (new: the close finding)
 - tests/orchestrator/test_replay.py (graduation re-pins)
@@ -42,7 +47,7 @@ pauses the phase for an owner call. Finally, pin the baseline-3 evidence-supply 
 
 **Files NOT in scope:**
 - scripts/refresh_samples.sh (drives the record as-is; graduation-at-record makes a lever export unnecessary)
-- meetings/ + agents/ (all substrate changes landed in 15.4–15.6; this task records and measures)
+- meetings/ + agents/ outside the named resolver-graduation region (all behavioral substrate changes landed in 15.4–15.6; this task graduates, records, and measures — no new behavior)
 - replays/ml_corpus/ (that is 15.12's artifact, recorded against THIS baseline)
 
 **Definition of done:**
@@ -87,8 +92,9 @@ reason to iterate prompts inside this task (record-only discipline).
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
 - `uv run python -c "import meetings.constants"`
-- `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import meetings.render_contract"`
 - `uv run python -c "import meetings.schemas"`
+- `uv run python -c "import agents.memory.beliefs"`
 - `uv run python -c "import eval.funnel"`
 - `uv run python -c "import eval.validity"`
 - `uv run python -c "import eval.watchability"`
@@ -103,6 +109,9 @@ Do not modify DESIGN.md.
 Do not modify AGENT_IMPLEMENTATION.md.
 Do not modify tasks/phase-*.md unless this task explicitly lists those files in scope.
 Do not implement work outside this task.
+Do not add LLM calls inside agents/tactical/.
+Do not import engine/ from agents/.
+If the task mentions engine-free boundary schemas, keep agents/ free of engine imports and put engine translation only in orchestrator-owned code.
 
 ## Verification checklist
 - Run every command listed in the Definition of done.

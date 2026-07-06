@@ -12,12 +12,13 @@ Implement Task 15.16 — The crew track: a learned scorer over observable crew o
 The authoritative task contract is copied below from tasks/phase-15.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-15-crew-track`
-**Depends on:** 15.10, 15.13, 15.14
+**Depends on:** 15.10, 15.13, 15.14, 15.15
 **Section refs:** audits/post-phase-14-ML-planning.md §4.1, §5.2 (crew FSM gaps + the observability blocker); audits/post-phase-14-ML-training-signal.md §3.2 (crew reward terms); agents/tactical/crewmate_policy.py (the ladder :343-423; EmergencyPacingTracker); experiments/lab/ml_spike/fo8_crew_buddy.py (the small-gain prior)
 **Complexity:** Medium
 
-The secondary track, run in parallel with 15.15 on the shared machinery: a learned utility scorer over a
-FIXED, observable-only crew option set — continue-to-task, buddy-toward the nearest
+The secondary track, run on 15.15's shared machinery (files disjoint from the bake-off; the harness +
+ES core consumed strictly read-only — the 15.15 edge exists so the harness is present, not because
+files collide): a learned utility scorer over a FIXED, observable-only crew option set — continue-to-task, buddy-toward the nearest
 visible/belief-trusted group (co-presence + low own-suspicion keyed, never role — roles are hidden),
 patrol-toward last-seen suspect, report, emergency (through the existing `EmergencyPacingTracker` gate
 semantics, not bypassing them), repair, hold. Trained with the 15.14 ES core against the frozen scripted
@@ -64,8 +65,9 @@ The crew reward terms are the tactically-reachable set from the training-signal 
 survival, correctly-routed reports, buddy/patrol coverage of last-seen suspects — through the 15.8
 reward channel, plus the terminal win. "Belief-trusted group" keys on the crew agent's OWN
 suspicion/trust floats (quantized, via the encoder) — the same information class that already reaches
-crew tactics through the emergency gate; nothing role-derived. Run truly parallel to 15.15: disjoint
-files by construction, the shared ES core consumed read-only.
+crew tactics through the emergency gate; nothing role-derived. Files are disjoint from 15.15 by
+construction; the harness and ES core are consumed strictly read-only, and any generalization the
+harness needs for crew is documented as an ask, not edited here.
 
 ## Public types this task introduces
 - `training.crew.options.CrewOption`
@@ -76,6 +78,7 @@ These are the symbols downstream tasks will import. Keep their signatures stable
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.bakeoff.es"`
 - `uv run python -c "import training.bakeoff.goodhart"`
 - `uv run python -c "import agents.tactical.features"`
@@ -84,8 +87,9 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.rollout"`
 - `uv run python -c "import training.rewards"`
 - `uv run python -c "import meetings.constants"`
-- `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import meetings.render_contract"`
 - `uv run python -c "import meetings.schemas"`
+- `uv run python -c "import agents.memory.beliefs"`
 - `uv run python -c "import eval.funnel"`
 - `uv run python -c "import eval.validity"`
 - `uv run python -c "import eval.watchability"`
@@ -95,6 +99,7 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.replay_loader"`
 - `uv run python -c "import training.surrogate.dataset"`
 - `uv run python -c "import training.surrogate.fidelity"`
+- `uv run python -c "import engine.rng"`
 
 ## Pre-flight checklist
 - Read AGENTS.md, DESIGN.md, and the task section before editing.

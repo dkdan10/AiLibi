@@ -12,7 +12,7 @@ Implement Task 15.5 — Reporter exculpation: stop convicting the messenger (def
 The authoritative task contract is copied below from tasks/phase-15.md. Follow it exactly, including branch, dependencies, section refs, files in scope, files not in scope, and definition of done.
 
 **Branch:** `phase-15-reporter-exculpation`
-**Depends on:** 15.4
+**Depends on:** 15.4, 15.6
 **Section refs:** tasks/post-phase-14-clean-up.md H5; audits/audit-phase-14-close.md §4 (the zero-flag channel this hole dominates); agents/memory/beliefs.py (the accumulator/cap structure); audits/post-phase-14-pause.md §4.3 (the boundary-sum IEEE hazard, pinned here before deltas are touched)
 **Complexity:** Integration
 
@@ -26,15 +26,21 @@ testimony-spread and accusation-carry channels), while leaving hard-flag-backed 
 reporter caught by a real contradiction or a vent/kill flag is still convictable; no immunity, only
 removal of the proximity prior; (b) RENDER-side — the vote surface names the reporter and states the
 base rate ("p-N reported the body; self-report is weakly exculpatory in this game"), layered onto the
-v5 vote template 15.4 created. Because this task edits belief deltas' surroundings, it FIRST pins the
-boundary-sum hazard: tests asserting every documented delta combination that is designed to cross the
-0.60 gate actually crosses it (the `0.5 + 0.05 + 0.05` IEEE-luck case), so a later retune cannot
-silently break the two-signal eject.
+v5 vote template 15.4 versioned. The render plumbing is explicit and inert-when-OFF: the vote
+renderer's contract (in `meetings/render_contract.py`, the leaf home 15.6 creates) and
+`agents/strategic/prompts/loader.py` gain a DEFAULTED reporter/lever render input (the Voice-doc 15.0
+widen-the-contract-inert pattern), and the template renders the annotation only when the lever supplies
+it — so lever-OFF prompts stay byte-identical and no template edit leaks into the OFF path. Because
+this task edits belief deltas' surroundings, it FIRST pins the boundary-sum hazard: tests asserting
+every documented delta combination that is designed to cross the 0.60 gate actually crosses it (the
+`0.5 + 0.05 + 0.05` IEEE-luck case), so a later retune cannot silently break the two-signal eject.
 
 **Files in scope:**
 - agents/memory/beliefs.py (reporter-damp rule + `reporter_exculpation_enabled` resolver)
 - orchestrator/replay.py (lever registration region — `_TOGGLEABLE_LEVER_RESOLVERS` + `substrate_flag_snapshot`)
 - meetings/manager.py (vote-surface reporter annotation region — reporter identity into the render inputs)
+- meetings/render_contract.py (vote-renderer contract widening region — the DEFAULTED reporter/lever render input; 15.6 creates the module)
+- agents/strategic/prompts/loader.py (vote-renderer reporter kwarg region — defaulted/inert pass-through)
 - agents/strategic/prompts/qwen3_32b/ (v5 vote_ballot template reporter line — layered on 15.4's v5 set; no registry edit)
 - .env.example (the lever env)
 - tests/agents/test_beliefs.py (boundary-sum pins + damp-rule tests)
@@ -86,6 +92,8 @@ interacts with any new damp — the damp must compose with the existing caps, no
 ## Dependency contract check
 Run these before editing. If any fail, stop and report — your dependencies are not where this task expects them.
 
+- `uv run python -c "import meetings.constants"`
+- `uv run python -c "import meetings.render_contract"`
 - `uv run python -c "import meetings.schemas"`
 
 ## Pre-flight checklist

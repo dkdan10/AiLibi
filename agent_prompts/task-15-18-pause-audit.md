@@ -93,11 +93,13 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import training.rewards"`
 - `uv run python -c "import training.crew.options"`
 - `uv run python -c "import training.crew.scorer"`
+- `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import training.bakeoff.es"`
 - `uv run python -c "import training.bakeoff.goodhart"`
 - `uv run python -c "import meetings.constants"`
-- `uv run python -c "import agents.memory.beliefs"`
+- `uv run python -c "import meetings.render_contract"`
 - `uv run python -c "import meetings.schemas"`
+- `uv run python -c "import agents.memory.beliefs"`
 - `uv run python -c "import eval.funnel"`
 - `uv run python -c "import eval.validity"`
 - `uv run python -c "import eval.watchability"`
@@ -107,7 +109,6 @@ Run these before editing. If any fail, stop and report — your dependencies are
 - `uv run python -c "import api.replay_loader"`
 - `uv run python -c "import training.surrogate.dataset"`
 - `uv run python -c "import training.surrogate.fidelity"`
-- `uv run python -c "import training.bakeoff.harness"`
 - `uv run python -c "import engine.rng"`
 
 ## Pre-flight checklist

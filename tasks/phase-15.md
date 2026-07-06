@@ -91,14 +91,17 @@ Locked decisions (owner, 2026-07-05):
 
 Parallelism: four independent roots dispatch immediately: `15.1 ∥ 15.4 ∥ 15.8 ∥ 15.9` (Wave 0's
 measurement + evidence tracks run in parallel with Wave 1's layer-independent foundations). Then
-`15.1 → (15.2 ∥ 15.3)`; `15.4 → 15.5 → 15.6` (the meeting-layer chain — shared `meetings/manager.py`
-and v5 prompt-set regions, serialized by design); `(15.1, 15.2, 15.3, 15.4, 15.5, 15.6) → 15.7`
+`15.1 → (15.2 ∥ 15.3)`; `15.4 → 15.6 → 15.5` (the meeting-layer chain — shared `meetings/manager.py`,
+render-contract, and v5 prompt-set regions, serialized by design: vent observability first, then the
+re-homing hygiene 15.5's render plumbing builds on, then the reporter lever);
+`(15.1, 15.2, 15.3, 15.4, 15.5, 15.6) → 15.7`
 [operator: baseline-3 record]; `15.8 → (15.8.1 ∥ 15.10)`; `(15.7, 15.8) → 15.11`;
 `(15.1, 15.7, 15.9) → 15.12` [operator: corpus record — may share the 15.7 operator session];
 `(15.11, 15.12) → 15.13`; `(15.2, 15.7, 15.10) → 15.14`; `(15.8.1, 15.10, 15.13, 15.14) → 15.15`;
-`(15.10, 15.13, 15.14) → 15.16` (runs ∥ 15.15 — disjoint files, shared ES core consumed read-only);
+`(15.10, 15.13, 15.14, 15.15) → 15.16` (files disjoint from 15.15, but the shared bake-off harness
+lands in 15.15 and is consumed read-only — the edge guarantees it exists);
 `(15.8, 15.10) → 15.17`; `(15.12, 15.15, 15.16, 15.17) → 15.18`. The critical path is
-`15.4 → 15.5 → 15.6 → 15.7 → 15.12 → 15.13 → 15.15 → 15.18`. Shared-file overlaps are all covered by
+`15.4 → 15.6 → 15.5 → 15.7 → 15.12 → 15.13 → 15.15 → 15.18`. Shared-file overlaps are all covered by
 dependency edges or disjoint-region annotations (`scripts/measure_baseline.py` core/watchability/funnel
 regions; `meetings/manager.py` validation/vote-surface/guard-band regions; `orchestrator/replay.py`
 registration/graduation/stamp regions; `orchestrator/game.py` prompt-registry vs rng-plumbing lines;
@@ -114,10 +117,12 @@ Merge criteria (Wave 0 → the ML tail): (1) `scripts/validity_gate.py` + `scrip
 exist as committed code and reproduce the Phase-14 close numbers from the committed baseline-2 bytes
 ($0, offline); (2) the selection referee and the information-funnel diagnostics are committed in `eval/`
 and reproduce the clean-up charter's figures; (3) vent evidence is structurally speakable end-to-end
-(schema → turn → hard flag → citable turn-id) and the reporter-exculpation lever is proven byte-identical
-OFF with its offline counterfactual reported; (4) the hygiene hazards (guard-band disagreement,
-boundary sums, dead `StrategicReasoner`, single-homed gate constant, missing import contracts, stale
-AGENTS.md) are closed with pinning tests; (5) **baseline 3 is recorded, validity-gated, byte-verified,
+(schema → turn → memory-GROUNDED hard flag → citable turn-id; an ungrounded spoken vent claim never
+mints a flag) and the reporter-exculpation lever is proven byte-identical OFF with its offline
+counterfactual reported; (4) the hygiene hazards (guard-band disagreement,
+boundary sums, dead `StrategicReasoner`, the manager-homed constant + render-contract surface that
+blocked the `agents ↛ meetings.manager` contract, missing import contracts, stale AGENTS.md) are
+closed with pinning tests; (5) **baseline 3 is recorded, validity-gated, byte-verified,
 and committed as the canonical sets**, with the funnel table re-measured before/after as the wave's
 close finding (directions are findings, not pass bars — the Phase-14 doctrine).
 
@@ -349,13 +354,20 @@ records and renders them at high salience) — this task adds the missing top ha
 `SawVentObservation` type in the turn observation union (subject, room, tick; enter/exit phase),
 additive and backward-compatible so committed v4 transcripts still parse; (b) turn validation +
 normalization in `meetings/manager.py` mirroring the existing observation paths; (c) a HARD
-contradiction rule in `meetings/transcript.py`: a structured vent observation naming a subject is
-role-proving (only impostors can vent), feeding the same strong-flag path a witnessed kill uses — which
-also makes it citable, since `primary_reason_id` already validates against transcript turn ids, and the
-observation now lives in a turn; (d) a v5 prompt set (`qwen3_32b.v5`) whose turn/opening templates
-explicitly elicit the vent observations the rendered memory already contains, with the single
-`PROMPT_VERSION_SETS` v4 → v5 registry bump owned HERE (the Phase-14 C7 lesson: one shared edit, owned
-by exactly one task; 15.5 layers onto v5 behind its dependency edge).
+contradiction rule with a GROUNDING chokepoint: a structured vent observation naming a subject is
+role-proving (only impostors can vent) — but speech alone must never mint hard evidence (a model that
+hallucinates a vent sighting against an innocent would otherwise fabricate a STRONG flag, re-opening
+the railroad class Phase 14 eliminated). The STRONG flag therefore fires only when the manager's
+deterministic reconstruction confirms the SPEAKER'S OWN memory contains a matching witnessed-vent
+event (subject + room, tick within a small tolerance — the same replay-deterministic fold
+`derive_belief_evidence` already runs); a grounded observation feeds the same strong-flag path a
+witnessed kill uses and is citable, since `primary_reason_id` already validates against transcript
+turn ids and the observation now lives in a turn. An UNGROUNDED vent claim is accepted as ordinary
+testimony (speech the voters may weigh) but raises NO flag; (d) the `qwen3_32b` set's turn/opening
+templates edited IN PLACE to explicitly elicit the vent observations the rendered memory already
+contains, with the version recorded by the single `PROMPT_VERSION_SETS` registry bump (`
+_bespoke_versions("qwen3_32b", version="v4")` → `"v5"`) owned HERE (the Phase-14 C7 lesson: one shared
+edit, owned by exactly one task; 15.5 layers onto v5 behind its dependency edge).
 
 **Files in scope:**
 - meetings/schemas.py (SawVentObservation + union registration; additive)
@@ -376,8 +388,9 @@ by exactly one task; 15.5 layers onto v5 behind its dependency edge).
 
 **Definition of done:**
 - [ ] `SawVentObservation` round-trips through the turn schema; every committed v4 replay still parses (backward-compat pinned by a test loading a committed meeting entry).
-- [ ] A fixture meeting where a voter's rendered memory contains a witnessed vent produces an accepted structured vent observation through the validation path, and the transcript layer raises the role-proving STRONG flag against the subject.
-- [ ] The flag feeds the belief fold exactly like the witnessed-kill strong flag (same cap semantics — no new stacking channel), and a ballot's `primary_reason_id` citing the vent turn validates.
+- [ ] A fixture meeting where a voter's rendered memory contains a witnessed vent produces an accepted structured vent observation through the validation path, the grounding chokepoint confirms it against the speaker's reconstructed memory, and the transcript layer raises the role-proving STRONG flag against the subject.
+- [ ] Grounding is load-bearing: a fixture where a speaker FABRICATES a structured vent observation (no matching witnessed-vent event in their own memory) is accepted as testimony but raises NO flag and leaves the subject's hard-evidence state unchanged — speech alone cannot mint hard evidence.
+- [ ] The grounded flag feeds the belief fold exactly like the witnessed-kill strong flag (same cap semantics — no new stacking channel), and a ballot's `primary_reason_id` citing the vent turn validates.
 - [ ] The v5 templates elicit vent observations (prompt-fixture test: memory-with-vent renders → template output contains the elicitation instruction); `PROMPT_VERSION_SETS` maps the set to v5 in this task and nowhere else.
 - [ ] The opt-in eligibility path treats a spoken vent observation as a relevance source (a non-speaker who was placed at the vent scene becomes eligible), consistent with the existing co-presence gate.
 - [ ] `uv run mypy .` passes.
@@ -394,12 +407,16 @@ by exactly one task; 15.5 layers onto v5 behind its dependency edge).
 **Implementation hint:**
 
 Model the schema/validation/flag path on the witnessed-kill lever (Task 13.5.3) — it walked the same
-route from engine event to STRONG flag. The memory side is already done: `_SALIENCE_VENT_WITNESSED`
-renders witnessed vents above routine sightings, so elicitation is a prompt-template ask, not a memory
-change. Template work: clone the v4 set to `qwen3_32b/v5/` per the loader's set/version layout and edit
-the turn/opening templates; keep the vote template byte-identical here (15.5 owns its v5 edits). The
-live behavioral effect (transmission 36/74 → ?) is measured at 15.7 by the 15.3 instrument — this task's
-DoD is the mechanism, fixture-proven, not the model's uptake.
+route from engine event to STRONG flag, and its grounding posture is the template: the hard evidence
+derives from what a witness's own deterministic memory holds, with the spoken observation as the public,
+citable surface. The memory side is already done: `_SALIENCE_VENT_WITNESSED` renders witnessed vents
+above routine sightings, so elicitation is a prompt-template ask, not a memory change. Template work:
+the prompt-set layout is FLAT — the four `.j2` templates live directly in
+`agents/strategic/prompts/qwen3_32b/` and the version is a REGISTRY property, not a directory; edit the
+turn/opening templates in place and bump `_bespoke_versions("qwen3_32b", version=…)` to `"v5"` in
+`PROMPT_VERSION_SETS` (exactly how 14.11 shipped v4). Keep `vote_ballot.j2` byte-identical here (15.5
+owns its v5 edits). The live behavioral effect (transmission 36/74 → ?) is measured at 15.7 by the 15.3
+instrument — this task's DoD is the mechanism, fixture-proven, not the model's uptake.
 
 **Integration risk:**
 
@@ -409,13 +426,17 @@ its dependency edge and never touches the registry. (b) Schema compat: the obser
 additive; a strict validator change that rejects unknown types would break committed-replay loading —
 the backward-compat pin is the guard. (c) Flag semantics: the vent flag must ride the EXISTING strong-
 contradiction cap (`MEETING_CONTRADICTION_LIFT_CAP` + the joint cap), not add a new uncapped lift
-channel — otherwise Wave 0 reintroduces the railroad class Phase 14 just eliminated.
+channel — otherwise Wave 0 reintroduces the railroad class Phase 14 just eliminated. (d) The grounding
+chokepoint is the whole defense against evidence-minting: if it is skipped or made advisory, a single
+hallucinated observation converts speech into role-proving hard evidence against an innocent — treat
+the fabricated-observation fixture as the task's most important test, and make the grounding
+comparison deterministic (reconstructed memory, not LLM judgment).
 
 **Ready-to-paste prompt:** `agent_prompts/task-15-4-vent-observability.md`
 
 ### Task 15.5 — Reporter exculpation: stop convicting the messenger (default-OFF lever)
 **Branch:** `phase-15-reporter-exculpation`
-**Depends on:** 15.4
+**Depends on:** 15.4, 15.6
 **Section refs:** tasks/post-phase-14-clean-up.md H5; audits/audit-phase-14-close.md §4 (the zero-flag channel this hole dominates); agents/memory/beliefs.py (the accumulator/cap structure); audits/post-phase-14-pause.md §4.3 (the boundary-sum IEEE hazard, pinned here before deltas are touched)
 **Complexity:** Integration
 
@@ -429,15 +450,21 @@ testimony-spread and accusation-carry channels), while leaving hard-flag-backed 
 reporter caught by a real contradiction or a vent/kill flag is still convictable; no immunity, only
 removal of the proximity prior; (b) RENDER-side — the vote surface names the reporter and states the
 base rate ("p-N reported the body; self-report is weakly exculpatory in this game"), layered onto the
-v5 vote template 15.4 created. Because this task edits belief deltas' surroundings, it FIRST pins the
-boundary-sum hazard: tests asserting every documented delta combination that is designed to cross the
-0.60 gate actually crosses it (the `0.5 + 0.05 + 0.05` IEEE-luck case), so a later retune cannot
-silently break the two-signal eject.
+v5 vote template 15.4 versioned. The render plumbing is explicit and inert-when-OFF: the vote
+renderer's contract (in `meetings/render_contract.py`, the leaf home 15.6 creates) and
+`agents/strategic/prompts/loader.py` gain a DEFAULTED reporter/lever render input (the Voice-doc 15.0
+widen-the-contract-inert pattern), and the template renders the annotation only when the lever supplies
+it — so lever-OFF prompts stay byte-identical and no template edit leaks into the OFF path. Because
+this task edits belief deltas' surroundings, it FIRST pins the boundary-sum hazard: tests asserting
+every documented delta combination that is designed to cross the 0.60 gate actually crosses it (the
+`0.5 + 0.05 + 0.05` IEEE-luck case), so a later retune cannot silently break the two-signal eject.
 
 **Files in scope:**
 - agents/memory/beliefs.py (reporter-damp rule + `reporter_exculpation_enabled` resolver)
 - orchestrator/replay.py (lever registration region — `_TOGGLEABLE_LEVER_RESOLVERS` + `substrate_flag_snapshot`)
 - meetings/manager.py (vote-surface reporter annotation region — reporter identity into the render inputs)
+- meetings/render_contract.py (vote-renderer contract widening region — the DEFAULTED reporter/lever render input; 15.6 creates the module)
+- agents/strategic/prompts/loader.py (vote-renderer reporter kwarg region — defaulted/inert pass-through)
 - agents/strategic/prompts/qwen3_32b/ (v5 vote_ballot template reporter line — layered on 15.4's v5 set; no registry edit)
 - .env.example (the lever env)
 - tests/agents/test_beliefs.py (boundary-sum pins + damp-rule tests)
@@ -488,7 +515,7 @@ interacts with any new damp — the damp must compose with the existing caps, no
 
 ### Task 15.6 — Substrate hygiene: latent hazards, dead code, single-homed constants, firewall contracts
 **Branch:** `phase-15-substrate-hygiene`
-**Depends on:** 15.4, 15.5
+**Depends on:** 15.4
 **Section refs:** tasks/post-phase-14-clean-up.md H6; audits/post-phase-14-pause.md §3 (dead StrategicReasoner, constant homing, import contracts), §4.1 (the raw-vs-rendered [0.595, 0.60) band); meetings/manager.py:2486-2498 (the redirect guard); eval/_suspicion_parse.py:54 (the deliberate re-declaration)
 **Complexity:** Integration
 
@@ -497,11 +524,17 @@ small, bundled because they share files with each other and nothing else. (1) **
 raw-vs-rendered gate band:** the ballot-redirect guard recomputes the §4.6 verdict from RAW suspicion
 floats while the prompt renders `"%.2f"` — a raw value in `[0.595, 0.60)` displays as 0.60 (the model
 reads MUST-vote) while the guard reads MUST-skip; make guard and render agree (compare on the rendered
-2dp value), pinned by fixtures across the band. (2) **Single-home the 0.60 gate constant:**
+2dp value), pinned by fixtures across the band. (2) **Single-home the manager surface `agents/` imports:**
 `DEFAULT_SKIP_CONFIDENCE_THRESHOLD` lives inside 3-KLoC `meetings/manager.py` and is imported UPWARD by
-`agents/` (`crewmate_policy.py:86`); move it to a new leaf `meetings/constants.py`, update importers,
-and add the pin test the pause audit asked for: eval's deliberately re-declared
-`SKIP_SUSPICION_THRESHOLD` must equal the threshold the current baseline was recorded under. (3)
+`agents/` (`crewmate_policy.py:86`) — and so are the render-contract types: `agents/strategic/prompts/
+loader.py:76-81` imports `ReportPromptRenderer`, `StatementPromptRenderer`, `SuspicionEntry`, and
+`VotePromptRenderer` from `meetings.manager`, so re-homing the constant alone would NOT make the
+`agents ↛ meetings.manager` contract satisfiable. Move the constant to a new leaf
+`meetings/constants.py` AND the four render-contract types to a new leaf `meetings/render_contract.py`
+(pure typing/pydantic surface, no manager import), update both importers (`manager.py` re-exports may
+remain for internal use; `agents/` must import only the leaves), and add the pin test the pause audit
+asked for: eval's deliberately re-declared `SKIP_SUSPICION_THRESHOLD` must equal the threshold the
+current baseline was recorded under. (3)
 **Delete the dead `StrategicReasoner` island** (~2.7 KLoC: `agents/strategic/reasoner.py`,
 `agents/strategic/output_schemas.py`, its 1820-line test) — instantiated only by its own test, never by
 production, and it reads as a live alternate meeting path to every explorer; the triggered-LLM design
@@ -514,7 +547,9 @@ always available and MCP GitHub tools always fail — false in at least one acti
 
 **Files in scope:**
 - meetings/constants.py (new: the gate constant's single home)
-- meetings/manager.py (redirect-guard band region + constant import — disjoint from 15.4's validation region and 15.5's vote-surface region)
+- meetings/render_contract.py (new: the render-Protocol + SuspicionEntry leaf home)
+- meetings/manager.py (redirect-guard band region + constant/render-contract re-home — disjoint from 15.4's validation region and 15.5's vote-surface region)
+- agents/strategic/prompts/loader.py (import the render contract from meetings.render_contract — import lines only; 15.5's kwarg region comes later)
 - agents/tactical/crewmate_policy.py (import the constant from meetings.constants)
 - agents/strategic/reasoner.py (DELETE)
 - agents/strategic/output_schemas.py (DELETE)
@@ -538,6 +573,10 @@ always available and MCP GitHub tools always fail — false in at least one acti
 - [ ] `DEFAULT_SKIP_CONFIDENCE_THRESHOLD` has exactly one definition home (`meetings/constants.py`);
   `meetings/manager.py` and `agents/tactical/crewmate_policy.py` import it; the eval pin test fails if
   eval's re-declared threshold ever diverges from the constants home.
+- [ ] The render-contract types (`ReportPromptRenderer`, `StatementPromptRenderer`, `SuspicionEntry`,
+  `VotePromptRenderer`) live in `meetings/render_contract.py`; `agents/strategic/prompts/loader.py`
+  imports NOTHING from `meetings.manager` (a grep-zero assertion in the test suite, plus the KEPT
+  contract).
 - [ ] The StrategicReasoner island is deleted; a repo-wide grep for `StrategicReasoner` returns zero
   production/test references; the suite passes without it.
 - [ ] `uv run lint-imports` reports all FOUR contracts KEPT (the existing two + `observation ↛
@@ -555,25 +594,33 @@ always available and MCP GitHub tools always fail — false in at least one acti
 
 **Public types introduced:**
 - meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD
+- meetings.render_contract.ReportPromptRenderer
+- meetings.render_contract.StatementPromptRenderer
+- meetings.render_contract.SuspicionEntry
+- meetings.render_contract.VotePromptRenderer
 
 **Implementation hint:**
 
-Keep `meetings/constants.py` a leaf (stdlib-only imports) so the new `agents ↛ meetings.manager`
-contract is satisfiable — the constant is the only thing `agents/` needs from the meetings package. For
-the band fix, prefer quantize-then-compare (round the raw float to the rendered 2dp grid before the gate
-comparison) over widening the gate — it makes guard and model read the same number by construction. The
-deletion is mechanical but verify the island's edges first: `grep -rn "StrategicReasoner\|output_schemas"`
-across the tree, including docs and task-doc Public-types claims from old phases (historical claims in
-closed phase docs stay — only live code references must go to zero).
+Keep both new modules leaves: `meetings/constants.py` stdlib-only, `meetings/render_contract.py`
+typing/pydantic/schemas-only (Protocols and the `SuspicionEntry` DTO are pure surface — moving them is
+mechanical; `meetings/manager.py` may import them back and re-export for internal callers, but the
+dependency direction `agents → leaf` is what makes the `agents ↛ meetings.manager` contract
+satisfiable). For the band fix, prefer quantize-then-compare (round the raw float to the rendered 2dp
+grid before the gate comparison) over widening the gate — it makes guard and model read the same number
+by construction. The deletion is mechanical but verify the island's edges first: `grep -rn
+"StrategicReasoner\|output_schemas"` across the tree, including docs and task-doc Public-types claims
+from old phases (historical claims in closed phase docs stay — only live code references must go to
+zero).
 
 **Integration risk:**
 
 The band fix changes LIVE meeting behavior only inside the band (recorded replays reconstruct from
 recorded actions, so committed bytes are safe), but any test that pins redirect-guard behavior on
 synthetic mid-band values must be re-pinned deliberately, not silently. The manager edit sits in a file
-15.4 and 15.5 also touch — the dependency edges serialize the three tasks, so land this one last and
-rebase carefully. Deleting 2.7 KLoC is low-risk precisely because nothing imports it — but confirm that
-with the grep, don't assume it.
+15.4 also touches and 15.5 will touch after this task — the dependency chain (15.4 → this → 15.5)
+serializes the three, so rebase on 15.4 and leave the vote-surface region clean for 15.5. Deleting
+2.7 KLoC is low-risk precisely because nothing imports it — but confirm that with the grep, don't
+assume it.
 
 **Ready-to-paste prompt:** `agent_prompts/task-15-6-substrate-hygiene.md`
 
@@ -584,12 +631,16 @@ with the grep, don't assume it.
 **Complexity:** Integration
 
 Record **baseline 3** — both canonical sets (50 + 50 seeds) on the unchanged model/provider
-(`Qwen/Qwen3-32B`, Featherless, $0) with the Wave-0 substrate: prompt set `qwen3_32b.v5` (15.4's vent
-elicitation + 15.5's reporter line) and the `reporter_exculpation` lever ON — one atomic PR replacing
-`replays/samples/`, exactly the 14.12 pattern. Graduate the lever at the record (the resolver returns
-constant `True`, `_TOGGLEABLE_LEVER_RESOLVERS` → `_RETIRED_ALWAYS_ON_LEVERS` — the 14.9/14.12 move), so
-the committed sets reconstruct BARE with no env export (this also discharges the C6 recording-preflight
-hazard: no lever env for an operator to forget). Close the wave with
+(`Qwen/Qwen3-32B`, Featherless, $0) with the Wave-0 substrate: the `qwen3_32b` set at v5 (15.4's vent
+elicitation + 15.5's reporter line; provenance rows render `*.qwen3_32b.v5`) and the
+`reporter_exculpation` lever ON — one atomic PR replacing `replays/samples/`, exactly the 14.12
+pattern. Graduate the lever at the record — BOTH halves of the 14.9/14.12 move: the resolver itself
+(`agents/memory/beliefs.py::reporter_exculpation_enabled`, 15.5's home) returns constant `True`, and
+the registry entry moves `_TOGGLEABLE_LEVER_RESOLVERS` → `_RETIRED_ALWAYS_ON_LEVERS` in
+`orchestrator/replay.py` — so the belief damp and the vote-surface annotation are UNCONDITIONAL under a
+bare environment and the committed sets reconstruct BARE with no env export (this also discharges the
+C6 recording-preflight hazard: no lever env for an operator to forget, and no gap between the stamped
+flags and the code's bare behavior). Close the wave with
 `audits/audit-phase-15-wave0-close.md`: the full validity gate, the R-gate measurement, and — the
 wave's own instrument — the 15.3 funnel table re-measured against the charter's baseline-2 column
 (vent transmission 36/74 → ?, structured vent observations 0 → ?, innocent-reporter ejections 22 → ?,
@@ -601,7 +652,8 @@ pauses the phase for an owner call. Finally, pin the baseline-3 evidence-supply 
 **Files in scope:**
 - replays/samples/9p2i/ (the baseline-3 set: replays + MANIFEST + tournament-eval-report + rubric artifacts)
 - replays/samples/4p1i/ (the baseline-3 set)
-- orchestrator/replay.py (lever graduation region — resolver to constant True; disjoint from 15.9's stamp region)
+- agents/memory/beliefs.py (reporter-exculpation resolver graduation region — constant True; behind the 15.5 dependency edge)
+- orchestrator/replay.py (lever graduation region — registry entry to retired-always-on; disjoint from 15.9's stamp region)
 - eval/watchability.py (baseline-3 floor values in the per-baseline constants block region)
 - audits/audit-phase-15-wave0-close.md (new: the close finding)
 - tests/orchestrator/test_replay.py (graduation re-pins)
@@ -609,7 +661,7 @@ pauses the phase for an owner call. Finally, pin the baseline-3 evidence-supply 
 
 **Files NOT in scope:**
 - scripts/refresh_samples.sh (drives the record as-is; graduation-at-record makes a lever export unnecessary)
-- meetings/ + agents/ (all substrate changes landed in 15.4–15.6; this task records and measures)
+- meetings/ + agents/ outside the named resolver-graduation region (all behavioral substrate changes landed in 15.4–15.6; this task graduates, records, and measures — no new behavior)
 - replays/ml_corpus/ (that is 15.12's artifact, recorded against THIS baseline)
 
 **Definition of done:**
@@ -1030,7 +1082,7 @@ spike. Row grain is one row per (meeting, voter) — the roster the cross-meetin
 
 Record the frozen training/calibration corpus the surrogate and the bake-off consume, at EXACT
 **baseline-3** config (the 15.7 substrate: `Qwen/Qwen3-32B` Featherless non-thinking `fail_loud`
-`json_object`, prompt set `qwen3_32b.v5`, all levers unconditional, $0 flat-rate): **9p2i × 150 seeds
+`json_object`, the `qwen3_32b` set at v5, all levers unconditional, $0 flat-rate): **9p2i × 150 seeds
 (1000–1149)** primary and **4p1i × 50 seeds (1000–1049)** secondary — fresh seed ranges so a corpus game
 can never be confused with the canonical 0–49 sets (~3× the canonical 9p2i meeting/ejection volume, ~7h
 wall with 2 Featherless seed workers; may share the 15.7 operator session, landing as a separate PR).
@@ -1320,12 +1372,13 @@ Wave-2 productization must be able to reload the exact artifact.
 
 ### Task 15.16 — The crew track: a learned scorer over observable crew options
 **Branch:** `phase-15-crew-track`
-**Depends on:** 15.10, 15.13, 15.14
+**Depends on:** 15.10, 15.13, 15.14, 15.15
 **Section refs:** audits/post-phase-14-ML-planning.md §4.1, §5.2 (crew FSM gaps + the observability blocker); audits/post-phase-14-ML-training-signal.md §3.2 (crew reward terms); agents/tactical/crewmate_policy.py (the ladder :343-423; EmergencyPacingTracker); experiments/lab/ml_spike/fo8_crew_buddy.py (the small-gain prior)
 **Complexity:** Medium
 
-The secondary track, run in parallel with 15.15 on the shared machinery: a learned utility scorer over a
-FIXED, observable-only crew option set — continue-to-task, buddy-toward the nearest
+The secondary track, run on 15.15's shared machinery (files disjoint from the bake-off; the harness +
+ES core consumed strictly read-only — the 15.15 edge exists so the harness is present, not because
+files collide): a learned utility scorer over a FIXED, observable-only crew option set — continue-to-task, buddy-toward the nearest
 visible/belief-trusted group (co-presence + low own-suspicion keyed, never role — roles are hidden),
 patrol-toward last-seen suspect, report, emergency (through the existing `EmergencyPacingTracker` gate
 semantics, not bypassing them), repair, hold. Trained with the 15.14 ES core against the frozen scripted
@@ -1376,8 +1429,9 @@ The crew reward terms are the tactically-reachable set from the training-signal 
 survival, correctly-routed reports, buddy/patrol coverage of last-seen suspects — through the 15.8
 reward channel, plus the terminal win. "Belief-trusted group" keys on the crew agent's OWN
 suspicion/trust floats (quantized, via the encoder) — the same information class that already reaches
-crew tactics through the emergency gate; nothing role-derived. Run truly parallel to 15.15: disjoint
-files by construction, the shared ES core consumed read-only.
+crew tactics through the emergency gate; nothing role-derived. Files are disjoint from 15.15 by
+construction; the harness and ES core are consumed strictly read-only, and any generalization the
+harness needs for crew is documented as an ask, not edited here.
 
 **Ready-to-paste prompt:** `agent_prompts/task-15-16-crew-track.md`
 
