@@ -182,6 +182,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTurn,
     SawPlayerObservation,
+    SawVentObservation,
 )
 from meetings.transcript import detect_contradictions, is_weak_contradiction
 from orchestrator.game import apply_meeting_result
@@ -567,14 +568,25 @@ def _testimony_vehicle(turn: MeetingTurn, subject: PlayerId) -> tuple[str | None
     Mirrors ``audits/workflows/extract_gameplay_facts.py::_testimony_vehicle``:
     ``"accusation"`` if the turn carries an :class:`AccusationClaim` against the
     subject, else ``"sighting"`` for a :class:`SawPlayerObservation` /
-    other-player :class:`AlibiClaim` naming them, else ``"free_text_only"`` if the
-    id appears only in prose, else ``None``. ``observation_backed`` is True iff the
-    turn carries a first-hand :class:`SawPlayerObservation` /
-    :class:`FoundBodyObservation` — the D2-conversion evidence-grounding bit.
+    :class:`SawVentObservation` / other-player :class:`AlibiClaim` naming them,
+    else ``"free_text_only"`` if the id appears only in prose, else ``None``.
+    ``observation_backed`` is True iff the turn carries a first-hand structured
+    observation — the D2-conversion evidence-grounding bit.
+
+    VENT-AWARE (Task 15.4): a :class:`SawVentObservation` is a first-hand,
+    role-proving structured sighting (a witnessed impostor vent — the game's
+    HARDEST evidence), so it counts as observation-backing and as a sighting of
+    its subject, exactly like a :class:`SawPlayerObservation`. The audit extractor
+    this mirrors predates 15.4 and omits the type; recognizing it here keeps a
+    vent-backed accusation from being scored as an unbacked vibe (which would
+    undercount D2 conversion on baseline-3+). No effect on the committed v4 sets
+    (no vent observations), so the geomean parity is unchanged.
     """
 
     has_observation = any(
-        isinstance(obs, (SawPlayerObservation, FoundBodyObservation))
+        isinstance(
+            obs, (SawPlayerObservation, FoundBodyObservation, SawVentObservation)
+        )
         for obs in turn.observations
     )
     accuses = any(
@@ -582,7 +594,8 @@ def _testimony_vehicle(turn: MeetingTurn, subject: PlayerId) -> tuple[str | None
         for claim in turn.claims
     )
     sights = any(
-        isinstance(obs, SawPlayerObservation) and obs.subject == subject
+        isinstance(obs, (SawPlayerObservation, SawVentObservation))
+        and obs.subject == subject
         for obs in turn.observations
     ) or any(
         isinstance(claim, AlibiClaim) and claim.subject == subject

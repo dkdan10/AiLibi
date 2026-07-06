@@ -354,6 +354,58 @@ def test_flags_per_meeting_is_vent_aware() -> None:
     assert after.flags_per_meeting > before.flags_per_meeting
 
 
+def test_saw_vent_observation_counts_as_backed_evidence() -> None:
+    """A witnessed impostor vent is first-hand role-proving evidence (Task 15.4).
+
+    ``_testimony_vehicle`` must treat a :class:`SawVentObservation` like a
+    :class:`SawPlayerObservation` — observation-backing, and a sighting of its
+    subject — so a vent-backed accusation converts in D2 without a redundant
+    player-sighting. (The pre-15.4 audit extractor omits the type; the referee
+    recognizes it. Committed v4 sets carry none, so parity is unchanged.)
+    """
+
+    from eval.watchability import _testimony_vehicle
+    from meetings.schemas import AccusationClaim, MeetingTurn, SawVentObservation
+
+    vent = SawVentObservation(
+        type="saw_vent", tick=100, subject="p-0", room="Cafeteria"
+    )
+
+    # An accusation of the vent subject, backed ONLY by the vent sighting.
+    accuse_turn = MeetingTurn(
+        turn_id="m:turn-1",
+        turn_index=1,
+        speaker="p-1",
+        turn_kind="reply",
+        reply_to=None,
+        observations=(vent,),
+        claims=(
+            AccusationClaim(
+                type="accusation", against="p-0", confidence=0.9, reason="vent"
+            ),
+        ),
+        free_text="I watched p-0 drop into the vent.",
+    )
+    vehicle, backed = _testimony_vehicle(accuse_turn, "p-0")
+    assert vehicle == "accusation"
+    assert backed is True
+
+    # A bare vent sighting (no accusation) still names its subject as a sighting.
+    sight_turn = MeetingTurn(
+        turn_id="m:turn-2",
+        turn_index=2,
+        speaker="p-2",
+        turn_kind="opt_in",
+        reply_to=None,
+        observations=(vent,),
+        claims=(),
+        free_text="",
+    )
+    vehicle2, backed2 = _testimony_vehicle(sight_turn, "p-0")
+    assert vehicle2 == "sighting"
+    assert backed2 is True
+
+
 def test_none_conversion_floor_is_vacuously_cleared() -> None:
     """A None conversion floor (baseline supplied no accused-impostor meeting) passes."""
 
