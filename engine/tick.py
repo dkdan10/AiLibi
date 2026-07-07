@@ -40,7 +40,7 @@ from engine.events import (
     VentExitedEvent,
     WaitedEvent,
 )
-from engine.rng import EngineRng
+from engine.rng import EngineRng, RngStateHashPolicy
 from engine.rules import (
     ActionRejectedError,
     resolve_emergency_meeting,
@@ -563,9 +563,22 @@ def _apply_action(
 
 
 def advance_tick(
-    state: WorldState, actions: Sequence[Action], *, game_map: Map
+    state: WorldState,
+    actions: Sequence[Action],
+    *,
+    game_map: Map,
+    rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
 ) -> tuple[WorldState, list[EngineEvent]]:
-    """Advance one engine tick using the DESIGN.md §3.1 seven-step loop."""
+    """Advance one engine tick using the DESIGN.md §3.1 seven-step loop.
+
+    ``rng_hash_policy`` selects the per-tick rng-state serialization (Task
+    15.8.1). It DEFAULTS to :attr:`RngStateHashPolicy.FULL`, which is
+    byte-identical to the pre-15.8.1 tick — every recorder, reconstructor, and
+    committed-replay path uses it, so ``state_hash`` chains stay stable. The
+    opt-in :attr:`RngStateHashPolicy.TRAINING_FAST` skips the ~43%-of-engine-cost
+    ``json.dumps`` snapshot for non-recorded training rollouts; the DRAW is
+    unchanged, so the action / event stream is identical under either policy
+    (only the ``rng_state`` encoding, and hence any hash of it, differs)."""
 
     if state.phase != "PLAY":
         raise ValueError(f"cannot advance tick during {state.phase}")
@@ -622,9 +635,12 @@ def advance_tick(
         )
         return game_over_state, events
 
-    # RNG state is explicitly threaded through the tick transition.
+    # RNG state is explicitly threaded through the tick transition. The DRAW
+    # happens under either policy (the cursor advances identically); only the
+    # snapshot encoding of the advanced state differs (Task 15.8.1). Under the
+    # default FULL policy this is byte-identical to the pre-15.8.1 tick.
     rng = EngineRng.from_state(state.rng_state)
-    _, next_rng_state = rng.randint(0, 2**31 - 1)
+    _, next_rng_state = rng.randint(0, 2**31 - 1, hash_policy=rng_hash_policy)
 
     next_state = replace(working_state, tick=state.tick + 1, rng_state=next_rng_state)
 
