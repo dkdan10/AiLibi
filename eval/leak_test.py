@@ -15,13 +15,15 @@ from engine.entities import PlayerId, Role
 from engine.events import (
     EngineEvent,
     KilledEvent,
+    MeetingTriggeredEvent,
     VentEnteredEvent,
     VentExitedEvent,
 )
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
-from observation.action_intent import ActionIntent, MoveIntent
+from meetings.schemas import MeetingResult
+from observation.action_intent import ActionIntent, MoveIntent, WaitIntent
 from observation.packet import (
     GlobalView,
     ObservationPacket,
@@ -34,12 +36,14 @@ from orchestrator.game import (
     DEFAULT_MAX_TICKS,
     AgentFactory,
     HeadlessGame,
+    apply_meeting_result,
     build_default_agent_factory,
     build_default_meeting_runner,
 )
+from orchestrator.replay import MeetingReplayEntry, ReplayEntry, read_all_entries
 from orchestrator.scheduler import TickScheduler
+from orchestrator.seeder import seed_initial_state
 from tests._helpers.world_state import scripted_initial_world_state
-from training.env import MaskedDecision, build_interposition_factory
 
 _SCRIPTED_GAMES = (
     "scripted_game_basic_tasks.json",
@@ -337,79 +341,140 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
 # parameter. A learned mover (Encoder v2 + a policy head) drives the engine into
 # regions those fixtures never reach — so packets from those regions were
 # UNSCANNED (the ml-spike Gap #7). This region adds a factory mode: run
-# factory-built agents through FULL production games and apply the SAME recursive
-# role-leak scanners (:func:`_assert_no_recursive_hidden_fields` +
-# :func:`_assert_no_role_bearing_values`) to every packet the encoder consumes.
-# The 3 scripted fixtures above stay byte-identical; this is purely additive.
+# factory-built agents through FULL production games and apply the SAME leak
+# scanners — the recursive role-leak scanners
+# (:func:`_assert_no_recursive_hidden_fields` + :func:`_assert_no_role_bearing_values`)
+# AND the witness-permission check (:func:`_action_is_permitted_by_witness_event`)
+# — to every packet the encoder consumes. To run the witness check, each factory
+# game is RECONSTRUCTED (re-seeded + re-fed its recorded actions) so the per-tick
+# engine events are recovered alongside the packets; the reconstructed packets are
+# byte-identical to the ones the live game handed the agents (the engine is a
+# deterministic function of state + actions). The 3 scripted fixtures above stay
+# byte-identical; this is purely additive.
 # --------------------------------------------------------------------------- #
 
-# 4p/1i keeps the games fast while still reaching meetings, kills, vents, and
-# emergency calls (the regions the scripted fixtures under-cover).
+# 9p/2i is the primary preset the committed corpora use: two impostors reliably
+# reach kills → bodies → reports → meetings → vents (the leak-prone regions), so
+# the scan actually covers what it claims to. A coverage assertion fails the test
+# loud if the games never reach a body.
 _FACTORY_MODE_SEEDS: tuple[int, ...] = (0, 1)
-_FACTORY_NUM_PLAYERS = 4
-_FACTORY_NUM_IMPOSTORS = 1
-_FACTORY_TASKS_PER_CREWMATE = 1
+_FACTORY_NUM_PLAYERS = 9
+_FACTORY_NUM_IMPOSTORS = 2
+_FACTORY_TASKS_PER_CREWMATE = 2
+
+# A factory-consumed packet paired with the engine events of the tick it was
+# built on (needed for the witness-permission check).
+PacketRecord: TypeAlias = tuple[ObservationPacket, list[EngineEvent]]
 
 
-class _PacketCapturingAgent:
-    """Wrap a factory-built agent and record every packet its ``decide`` sees.
+def _meeting_result_from_entry(entry: MeetingReplayEntry) -> MeetingResult:
+    return MeetingResult(
+        meeting_id=entry.meeting_id,
+        triggered_by=entry.triggered_by,
+        trigger_tick=entry.tick,
+        outcome=entry.outcome,
+        ejected_player_id=entry.ejected_player_id,
+        ballots=entry.ballots,
+        contradictions=entry.contradictions,
+        transcript=entry.transcript,
+    )
 
-    The packet handed to ``decide`` IS the packet the encoder consumes, so
-    capturing here scans exactly the encoder's input surface. The full
-    ``MeetingAwareAgent`` protocol (both properties, both render methods, the
-    belief-fold hooks) delegates to the wrapped agent via ``__getattr__`` — so a
-    meeting-enabled game still builds participants through the wrapper.
+
+def _reconstruct_factory_records(
+    replay_path: Path,
+    *,
+    game_map: Map,
+    seed: int,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+    audit_dir: Path,
+) -> list[PacketRecord]:
+    """Re-seed + replay one factory game, yielding (packet, engine_events) records.
+
+    Mirrors the ``training.rollout`` / ``eval.funnel`` reconstruction recipe
+    (re-seed, advance over the recorded actions, apply meetings) but ALSO builds
+    every living agent's packet at each PLAY tick — paired with that tick's engine
+    events so the witness-permission check has the events it needs. The
+    reconstructed packets are byte-identical to the ones the live game handed the
+    agents.
     """
 
-    def __init__(self, inner: AgentInterface, sink: list[ObservationPacket]) -> None:
-        self._inner = inner
-        self._sink = sink
+    entries = read_all_entries(replay_path)
+    meeting_by_tick = {
+        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+    }
+    state = seed_initial_state(
+        seed=seed,
+        game_map=game_map,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+    records: list[PacketRecord] = []
+    audit_path = audit_dir / f"_leak_audit_{replay_path.stem}.jsonl"
+    service = ObservationService(game_map=game_map, audit_log_path=audit_path)
+    try:
+        for entry in entries:
+            if not isinstance(entry, ReplayEntry):
+                continue
+            actions = [
+                _ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions
+            ]
+            state, events = advance_tick(state, actions, game_map=game_map)
+            event_list = list(events)
+            for player_id, player in state.players.items():
+                if player.alive:
+                    packet = service.build_packet(
+                        world_state=state, agent_id=player_id, engine_events=events
+                    )
+                    records.append((packet, event_list))
+            if state.phase == "GAME_OVER":
+                break
+            if state.phase != "MEETING":
+                continue
+            trigger = next(e for e in events if isinstance(e, MeetingTriggeredEvent))
+            state, _ = apply_meeting_result(
+                state,
+                _meeting_result_from_entry(meeting_by_tick[entry.tick]),
+                game_map=game_map,
+                triggering_body_id=trigger.body_id,
+            )
+            if state.phase == "GAME_OVER":
+                break
+    finally:
+        service.close()
+        audit_path.unlink(missing_ok=True)
+    return records
 
-    def decide(
-        self, packet: ObservationPacket, public_map: PublicMapView
-    ) -> ActionIntent:
-        self._sink.append(packet)
-        return self._inner.decide(packet, public_map)
 
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
-
-
-def _capturing_factory(
-    inner_factory: AgentFactory, sink: list[ObservationPacket]
-) -> AgentFactory:
-    def factory(agent_id: PlayerId, role: Role) -> AgentInterface:
-        return _PacketCapturingAgent(inner_factory(agent_id, role), sink)
-
-    return factory
-
-
-def collect_factory_packets(
+def collect_factory_packet_records(
     agent_factory: AgentFactory,
     *,
     seeds: Sequence[int] = _FACTORY_MODE_SEEDS,
     num_players: int = _FACTORY_NUM_PLAYERS,
     num_impostors: int = _FACTORY_NUM_IMPOSTORS,
     tasks_per_crewmate: int = _FACTORY_TASKS_PER_CREWMATE,
-) -> list[ObservationPacket]:
-    """Run ``agent_factory`` through full games and return every packet it consumed.
+) -> list[PacketRecord]:
+    """Run ``agent_factory`` through full games; return (packet, events) records.
 
-    Drives the REAL production loop (:class:`orchestrator.game.HeadlessGame` on
-    the deterministic fake provider) with the factory wrapped so each agent's
-    ``decide`` packet is captured. No engine or observation code is special-cased
-    — the packets are exactly what the observation service handed the agents.
+    Each game runs the REAL production loop (:class:`orchestrator.game.HeadlessGame`
+    on the deterministic fake provider) to write a replay reflecting the factory's
+    trajectory, then reconstructs that replay to recover the per-tick packets +
+    engine events.
     """
 
     game_map = load_canonical_map()
-    sink: list[ObservationPacket] = []
+    records: list[PacketRecord] = []
     with tempfile.TemporaryDirectory(prefix="ailibi-leak-factory-") as tmp:
         directory = Path(tmp)
         for seed in seeds:
+            replay_path = directory / f"replay-seed-{seed}.jsonl"
             game = HeadlessGame(
                 seed=seed,
                 game_map=game_map,
-                agent_factory=_capturing_factory(agent_factory, sink),
-                replay_path=directory / f"replay-seed-{seed}.jsonl",
+                agent_factory=agent_factory,
+                replay_path=replay_path,
                 num_players=num_players,
                 num_impostors=num_impostors,
                 tasks_per_crewmate=tasks_per_crewmate,
@@ -420,27 +485,52 @@ def collect_factory_packets(
                 force=True,
             )
             game.run()
-    return sink
+            records.extend(
+                _reconstruct_factory_records(
+                    replay_path,
+                    game_map=game_map,
+                    seed=seed,
+                    num_players=num_players,
+                    num_impostors=num_impostors,
+                    tasks_per_crewmate=tasks_per_crewmate,
+                    audit_dir=directory,
+                )
+            )
+    return records
 
 
-def assert_packet_is_leak_clean(packet: ObservationPacket) -> None:
-    """Apply the recursive role-leak scanners (+ structural checks) to one packet.
+def assert_packet_is_leak_clean(
+    packet: ObservationPacket, engine_events: Sequence[EngineEvent] = ()
+) -> None:
+    """Apply the full leak scan to one packet — the SAME checks the scripted sweep runs.
 
-    The SAME scanners the scripted-fixture sweep applies: the recursive
-    hidden-field scanner, the role-bearing value scanner, the ``visible_players``
-    key-set pin, and the crew ``fellow_impostor_ids`` firewall. Raises
-    ``AssertionError`` on any leak, so a factory whose learned mover reaches a
-    leaky packet fails loud.
+    The recursive hidden-field scanner, the role-bearing value scanner, the
+    ``visible_players`` key-set + forbidden-action pin, the ``visible_bodies``
+    key-set pin, the crew ``fellow_impostor_ids`` firewall, AND — critically for
+    the factory extension — the witness-permission check: a ``PlayerView`` stamped
+    with a ``kill`` / ``vent`` action must be backed by a witness-permitted engine
+    event for THIS observer. Raises ``AssertionError`` on any leak.
     """
 
     packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
     _assert_no_recursive_hidden_fields(packet_dump)
     _assert_no_role_bearing_values(packet_dump)
+    events = list(engine_events)
     for visible_player in packet.visible_players:
         visible_player_dump = visible_player.model_dump(mode="json")
         assert set(visible_player_dump.keys()) == {"id", "room", "action"}
         assert _FORBIDDEN_VISIBLE_PLAYER_FIELDS.isdisjoint(visible_player_dump.keys())
         assert visible_player.action not in _FORBIDDEN_VISIBLE_PLAYER_ACTIONS
+        if visible_player.action in {"kill", "vent"}:
+            assert _action_is_permitted_by_witness_event(
+                action=visible_player.action,
+                actor_id=visible_player.id,
+                agent_id=packet.agent_id,
+                engine_events=events,
+            ), (
+                f"unwitnessed {visible_player.action!r} action stamped on "
+                f"{visible_player.id!r} in {packet.agent_id!r}'s packet"
+            )
     for visible_body in packet.visible_bodies:
         visible_body_dump = visible_body.model_dump(mode="json")
         assert set(visible_body_dump.keys()) == {"id", "room", "victim_id"}
@@ -450,11 +540,11 @@ def assert_packet_is_leak_clean(packet: ObservationPacket) -> None:
         assert packet.self_state.fellow_impostor_ids == ()
 
 
-def assert_no_factory_packet_leaks(packets: Sequence[ObservationPacket]) -> None:
-    """Scan a captured packet stream; raise on the first leak."""
+def assert_no_factory_packet_leaks(records: Sequence[PacketRecord]) -> None:
+    """Scan a reconstructed (packet, events) stream; raise on the first leak."""
 
-    for packet in packets:
-        assert_packet_is_leak_clean(packet)
+    for packet, engine_events in records:
+        assert_packet_is_leak_clean(packet, engine_events)
 
 
 def scan_factory_packets(
@@ -467,62 +557,105 @@ def scan_factory_packets(
 ) -> int:
     """Run a factory through full games and leak-scan every packet it consumed.
 
-    Returns the number of packets scanned so a caller can assert the factory was
-    actually exercised (no silently-empty scan). Raises ``AssertionError`` on a
-    leak.
+    Returns the number of packets scanned. Asserts COVERAGE — the games must reach
+    at least one body (proof they got past task-rush into the kill → body → report
+    → meeting → vent regions the scan claims to cover), so a config that
+    task-rushes to a win cannot pass on thin early-game packets. Raises
+    ``AssertionError`` on a leak.
     """
 
-    packets = collect_factory_packets(
+    records = collect_factory_packet_records(
         agent_factory,
         seeds=seeds,
         num_players=num_players,
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
     )
-    assert_no_factory_packet_leaks(packets)
-    return len(packets)
+    assert records, "factory mode captured no packets"
+    assert_no_factory_packet_leaks(records)
+    bodies_seen = sum(len(packet.visible_bodies) for packet, _ in records)
+    assert bodies_seen > 0, (
+        "factory games never reached a body — the kill → body → meeting regions "
+        "the factory leak scan exists to cover went unexercised"
+    )
+    return len(records)
 
 
-def _leak_probe_selector(decision: MaskedDecision) -> ActionIntent:
-    """A learned-style mover: prefer a legal room CHANGE, lexical tie-break.
+class _IdleExploreAgent:
+    """A learned-style wrapper that turns a crew's idle WAIT into exploration.
 
-    Overriding the FSM's move with a different legal destination drives the
-    engine into rooms/regions the scripted fixtures never reach — the whole point
-    of the factory extension. Falls back to the FSM's intent when no non-stay move
-    is legal (e.g. inside a vent), so every returned intent is submission-legal.
+    Gently perturbs the FSM: only when a CREWMATE would otherwise idle (the FSM
+    returns a ``Wait`` — ~13% of crew actions, concentrated late-game) does this
+    redirect it to an always-legal adjacent-room move, spread deterministically
+    per-agent so idle crew WALK into rooms the FSM would leave unvisited. Active
+    crew (routing to tasks, fleeing, reporting, calling meetings) and the whole
+    IMPOSTOR side keep their FSM intent, so the game still produces the kills →
+    bodies → meetings → vents the scan must cover. The full ``MeetingAwareAgent``
+    protocol delegates to the wrapped agent via ``__getattr__``.
+
+    Self-contained rather than built on ``training.env.build_interposition_factory``:
+    that 15.8 seam validates a selector's returned intent against
+    ``build_action_mask``, whose ``EmergencyMeetingIntent`` carries a DEFAULT
+    payload and so does not equal the crew FSM's emergency (which carries
+    ``reason='suspicion_accumulation'``), making any selector that delegates a
+    crew emergency raise — a latent 15.8 mask gap out of scope for this task. This
+    wrapper emits only always-legal moves and delegates everything else, so it
+    exercises the learned-interposition shape without tripping that gap.
     """
 
-    own_room = decision.packet.self_state.room
-    moves = [
-        intent
-        for intent in decision.mask.engine_legal
-        if isinstance(intent, MoveIntent) and intent.payload.to_room != own_room
-    ]
-    if not moves:
-        return decision.fsm_intent
-    return max(moves, key=lambda move: move.payload.to_room)
+    def __init__(self, inner: AgentInterface) -> None:
+        self._inner = inner
+
+    def decide(
+        self, packet: ObservationPacket, public_map: PublicMapView
+    ) -> ActionIntent:
+        intent = self._inner.decide(packet, public_map)
+        if (
+            packet.self_state.role == "CREWMATE"
+            and isinstance(intent, WaitIntent)
+            and not packet.self_state.in_vent
+        ):
+            neighbors = sorted(
+                set(public_map.room_neighbors.get(packet.self_state.room, ()))
+            )
+            if neighbors:
+                spread = sum(ord(char) for char in packet.agent_id) % len(neighbors)
+                return MoveIntent.model_validate(
+                    {
+                        "type": "move",
+                        "actor": packet.agent_id,
+                        "payload": {"to_room": neighbors[spread]},
+                    }
+                )
+        return intent
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
 
 
-def _learned_wrapper_factory(game_map: Map) -> AgentFactory:
-    """The 15.8 interposition seam with a learned-style mover (the bake-off shape)."""
+def _learned_wrapper_factory() -> AgentFactory:
+    """A learned-wrapper factory: real agents wrapped with the idle-explore policy."""
 
-    return build_interposition_factory(
-        game_map=game_map, intent_selector=_leak_probe_selector
-    )
+    inner_factory = build_default_agent_factory()
+
+    def factory(agent_id: PlayerId, role: Role) -> AgentInterface:
+        return _IdleExploreAgent(inner_factory(agent_id, role))
+
+    return factory
 
 
 def test_leak_factory_mode_fsm_default_factory_is_clean() -> None:
     # The FSM default factory (the anchor / BC oracle) driven through full games:
-    # every packet it consumes must be leak-clean.
+    # every packet it consumes must be leak-clean, and the games must reach the
+    # leak-prone regions (asserted inside scan_factory_packets).
     scanned = scan_factory_packets(build_default_agent_factory())
     assert scanned > 0, "factory mode captured no packets"
 
 
 def test_leak_factory_mode_learned_wrapper_factory_is_clean() -> None:
-    # A learned-wrapper factory (the 15.8 interposition seam + a mover that drives
-    # the engine into new regions) must be just as leak-clean as the FSM default.
-    factory = _learned_wrapper_factory(load_canonical_map())
-    scanned = scan_factory_packets(factory)
+    # A learned-wrapper factory (a policy interposition that drives idle crew into
+    # new regions) must be just as leak-clean as the FSM default.
+    scanned = scan_factory_packets(_learned_wrapper_factory())
     assert scanned > 0, "learned-wrapper factory mode captured no packets"
 
 
@@ -550,4 +683,38 @@ def test_leak_factory_mode_planted_role_leak_trips() -> None:
         cooldown=None,
     )
     with pytest.raises(AssertionError, match=r"\$\.visible_players\[0\]\.id"):
-        assert_no_factory_packet_leaks([poisoned])
+        assert_no_factory_packet_leaks([(poisoned, [])])
+
+
+def test_leak_factory_mode_witness_check_trips_on_unwitnessed_kill() -> None:
+    # The witness-permission check bites in factory mode too: a PlayerView stamped
+    # with a `kill` action for an observer who is NOT in the KilledEvent's
+    # witnesses must trip, catching an unwitnessed-kill leak a learned mover could
+    # reach. (Real packets never do this; it is planted here.)
+    poisoned = ObservationPacket(
+        tick=3,
+        agent_id="p-2",
+        self_state=SelfView(room="STORAGE", role="CREWMATE", pending_task_id=None),
+        visible_players=(PlayerView(id="p-3", room="STORAGE", action="kill"),),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+    # A KilledEvent by p-3 whose witnesses do NOT include the observer p-2.
+    kill_event = KilledEvent(
+        type="Killed",
+        tick=3,
+        actor="p-3",
+        target="p-1",
+        room="STORAGE",
+        witnesses=("p-4",),
+    )
+    with pytest.raises(AssertionError, match="unwitnessed 'kill'"):
+        assert_no_factory_packet_leaks([(poisoned, [kill_event])])

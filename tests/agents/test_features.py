@@ -72,7 +72,7 @@ _GOLDEN_LAYOUT: tuple[tuple[str, int], ...] = (
 # sha256 over the golden fixture's encoded vector (float-hex serialized). Pins the
 # VALUES, not just the shape — a change in any feature computation trips this.
 _GOLDEN_VECTOR_SHA256 = (
-    "36d79360f806b39e5d45670425a8f066838a0968c0bdfc43c4a32c31f273f4c5"
+    "4e91130e43efef34d2304691cbf19f7ef9e5de52fbd07d05db2a3ce81f4129e3"
 )
 
 
@@ -145,6 +145,17 @@ def _golden_fixture(
                 provenance="observed",
             )
         )
+    # p-6 is a NEUTRAL player: seen (episodic) but never suspected, so it has no
+    # belief row. It must still occupy a roster slot with its last-seen — the
+    # encoder keys last-seen on all SEEN players, not just belief-known ones.
+    episodic.append(
+        EpisodicEvent(
+            tick=12,
+            type="saw_player_move",
+            payload={"player_id": "p-6", "from_room": r0, "to_room": r2},
+            provenance="observed",
+        )
+    )
     memory = AgentMemory(episodic=episodic, working=working, beliefs=beliefs)
     return packet, memory
 
@@ -260,6 +271,51 @@ def test_encode_is_deterministic_on_repeat() -> None:
     assert encoder.encode(packet, public_map, memory) == encoder.encode(
         packet, public_map, memory
     )
+
+
+def test_neutral_seen_player_is_encoded_from_episodic() -> None:
+    # A player the agent merely SAW (episodic saw_player) but never suspected —
+    # perception mints no belief row for a plain sighting — must still occupy a
+    # roster slot with its last-seen, rather than being dropped because it has no
+    # belief entry (the memory-carrying vector would otherwise be blind to
+    # routine movement history).
+    encoder = TacticalFeatureEncoder()
+    public_map = _canonical_public_map()
+    rooms = sorted(public_map.room_ids)
+    packet = ObservationPacket(
+        tick=5,
+        agent_id="p-1",
+        self_state=SelfView(room=rooms[0], role="CREWMATE", pending_task_id=None),
+        visible_players=(),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+    # A neutral player seen at tick 4 in rooms[1], NO belief row anywhere.
+    episodic = MemoryStore()
+    episodic.append(
+        EpisodicEvent(
+            tick=4,
+            type="saw_player",
+            payload={"player_id": "p-7", "room": rooms[1]},
+            provenance="observed",
+        )
+    )
+    memory = AgentMemory(episodic=episodic)
+    assert memory.beliefs.known_players() == ()  # no belief row for p-7
+
+    empty = encoder.encode(packet, public_map, AgentMemory())
+    with_neutral = encoder.encode(packet, public_map, memory)
+    # The neutral seen player changed the vector (a slot filled + last-seen set +
+    # the known-players / last-seen-occupancy aggregates moved).
+    assert empty != with_neutral
 
 
 def test_memory_carrying_changes_features() -> None:

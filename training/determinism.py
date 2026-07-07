@@ -72,7 +72,7 @@ from orchestrator.game import (
     TacticalAgent,
     build_default_meeting_runner,
 )
-from orchestrator.replay import ReplayEntry, read_all_entries
+from orchestrator.replay import MeetingReplayEntry, ReplayEntry, read_all_entries
 from orchestrator.scheduler import TickScheduler
 
 
@@ -423,10 +423,28 @@ def _run_once(
                 frame_hasher.update(_serialize_frame(seed, frame).encode("utf-8"))
                 num_frames += 1
 
+            # Hash the COMPLETE recorded state-hash chain in entry order: per-tick
+            # rows AND the meeting rows' before/after hashes. For a game that ENDS
+            # on a meeting ejection (or a post-meeting game-over), the final engine
+            # mutation's only hash is the ``MeetingReplayEntry.state_hash_after`` —
+            # no later tick row exists — so hashing tick rows alone would report
+            # full-game equality while ignoring the final meeting-applied state.
             for entry in read_all_entries(replay_path):
                 if isinstance(entry, ReplayEntry):
-                    state_hasher.update(f"{seed}:{entry.state_hash}".encode("utf-8"))
+                    state_hasher.update(
+                        f"{seed}:tick:{entry.tick}:{entry.state_hash}".encode()
+                    )
                     num_state_hashes += 1
+                elif isinstance(entry, MeetingReplayEntry):
+                    state_hasher.update(
+                        f"{seed}:meeting_before:{entry.tick}:"
+                        f"{entry.state_hash_before}".encode()
+                    )
+                    state_hasher.update(
+                        f"{seed}:meeting_after:{entry.tick}:"
+                        f"{entry.state_hash_after}".encode()
+                    )
+                    num_state_hashes += 2
     return _RunArtifacts(
         frame_digest=frame_hasher.hexdigest(),
         state_hash_digest=state_hasher.hexdigest(),

@@ -37,10 +37,13 @@ Doctrine (all four are load-bearing and enforced by tests):
 
 Firewall note for the leak review (the one place role-blind observation and
 role-private memory meet). The encoder reads ONLY the agent's OWN
-:class:`~agents.memory.store.AgentMemory` — its own episodic log, its own
-working-memory last-seen, and its own :class:`~agents.memory.beliefs.BeliefState`
-suspicion / trust. It NEVER reaches another agent's memory or private state, so a
-feature can never fold in another agent's role-private information. The belief
+:class:`~agents.memory.store.AgentMemory` — its own episodic sighting log (the
+per-tick source of the last-seen ``(tick, room)`` ages, keyed on EVERY seen
+player rather than only the ones perception minted a belief row for; the
+render-time ``WorkingMemory.last_seen`` cache is merged in as a secondary
+source), and its own :class:`~agents.memory.beliefs.BeliefState` suspicion /
+trust. It NEVER reaches another agent's memory or private state, so a feature can
+never fold in another agent's role-private information. The belief
 suspicion / trust it consumes are the SAME self-held signals the crew tactical
 layer already uses — ``EmergencyPacingTracker._over_gate``
 (``agents/tactical/crewmate_policy.py``) reads the agent's own max suspicion over
@@ -71,7 +74,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from agents.memory.store import AgentMemory
+from agents.memory.store import AgentMemory, MemoryStore
+from agents.memory.working import WorkingMemory
+from agents.perception import EVENT_SAW_PLAYER, EVENT_SAW_PLAYER_MOVE
 from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from observation.packet import ObservationPacket
 from observation.public_map import PublicMapView
@@ -282,26 +287,42 @@ class TacticalFeatureEncoder:
             if room_idx is not None:
                 bodies_by_room[room_idx] += 1.0 / _COUNT_NORM
 
-        # Last-seen occupancy: which rooms the agent's own working memory places a
-        # recently-seen player in. ``last_seen`` fills at render time (Task
-        # 13.5.4), so it may be empty mid-play — the encoder stays total.
+        # The roster the memory blocks are keyed on: EVERY player the agent has
+        # memory of, sorted lexically. It is the union of belief-known players and
+        # players the agent has SEEN (from the per-tick episodic log), so a
+        # neutral player the agent merely saw — one perception never minted a
+        # belief row for — still gets a last-seen slot (it would otherwise be
+        # dropped, blinding the vector to routine movement history).
         beliefs = memory.beliefs
-        working = memory.working
-        known_players = sorted(beliefs.known_players())
+        episodic_last_seen = _episodic_last_seen(memory.episodic)
+        roster = sorted(set(beliefs.known_players()) | set(episodic_last_seen))
+        # Per-player last-seen (tick, room), taken from the FRESHER of the per-tick
+        # episodic sighting and the render-time ``WorkingMemory.last_seen`` cache
+        # (the latter is only written at meeting-render time, so the episodic log
+        # is what keeps the signal fresh between meetings).
+        last_seen_map: dict[str, tuple[int, str]] = {}
+        for player_id in roster:
+            combined = _combined_last_seen(
+                player_id, episodic_last_seen, memory.working
+            )
+            if combined is not None:
+                last_seen_map[player_id] = combined
+
         lastseen_by_room = _block(num_rooms)
-        for player_id in known_players:
-            seen = working.last_seen(player_id)
+        for player_id in roster:
+            seen = last_seen_map.get(player_id)
             if seen is None:
                 continue
-            age = packet.tick - seen.tick
+            tick, room = seen
+            age = packet.tick - tick
             if 0 <= age <= self._recency_window:
-                room_idx = room_index.get(seen.room)
+                room_idx = room_index.get(room)
                 if room_idx is not None:
                     lastseen_by_room[room_idx] += 1.0 / _COUNT_NORM
 
-        scalars = self._scalar_features(packet, memory, known_players)
+        scalars = self._scalar_features(packet, memory, roster)
         belief_slots, lastseen_slots = self._roster_slot_features(
-            packet, memory, known_players
+            packet, roster, last_seen_map, memory
         )
 
         return tuple(
@@ -318,7 +339,7 @@ class TacticalFeatureEncoder:
         self,
         packet: ObservationPacket,
         memory: AgentMemory,
-        known_players: Sequence[str],
+        roster: Sequence[str],
     ) -> list[float]:
         cooldown = packet.cooldown
         cooldown_norm = (
@@ -337,7 +358,7 @@ class TacticalFeatureEncoder:
         # integer comparison against the quantized gate, never a raw-float ``>=``.
         max_susp_quantum = 0
         count_over_gate = 0
-        for player_id in known_players:
+        for player_id in roster:
             susp_quantum = quantize_unit_interval(beliefs_suspicion(memory, player_id))
             if susp_quantum > max_susp_quantum:
                 max_susp_quantum = susp_quantum
@@ -361,7 +382,7 @@ class TacticalFeatureEncoder:
             _clamp_unit(len(packet.moved_players) / _COUNT_NORM),
             1.0 if heard_vent else 0.0,
             1.0 if heard_sabotage else 0.0,
-            _clamp_unit(len(known_players) / self._roster_slots),
+            _clamp_unit(len(roster) / self._roster_slots),
             max_susp_quantum / BELIEF_QUANT_LEVELS,
             _clamp_unit(count_over_gate / self._roster_slots),
             _clamp_unit(len(recent_events) / _EVENT_COUNT_NORM),
@@ -371,15 +392,15 @@ class TacticalFeatureEncoder:
     def _roster_slot_features(
         self,
         packet: ObservationPacket,
+        roster: Sequence[str],
+        last_seen_map: dict[str, tuple[int, str]],
         memory: AgentMemory,
-        known_players: Sequence[str],
     ) -> tuple[list[float], list[float]]:
         belief_slots: list[float] = []
         lastseen_slots: list[float] = []
-        working = memory.working
         for slot in range(self._roster_slots):
-            if slot < len(known_players):
-                player_id = known_players[slot]
+            if slot < len(roster):
+                player_id = roster[slot]
                 susp_quantum = quantize_unit_interval(
                     beliefs_suspicion(memory, player_id)
                 )
@@ -392,11 +413,11 @@ class TacticalFeatureEncoder:
                         1.0,  # filled
                     )
                 )
-                seen = working.last_seen(player_id)
+                seen = last_seen_map.get(player_id)
                 if seen is None:
                     lastseen_slots.extend((0.0, 0.0))
                 else:
-                    age = max(0, packet.tick - seen.tick)
+                    age = max(0, packet.tick - seen[0])
                     lastseen_slots.extend((_clamp_unit(age / _LASTSEEN_AGE_NORM), 1.0))
             else:
                 belief_slots.extend((0.0, 0.0, 0.0, 0.0))
@@ -406,6 +427,61 @@ class TacticalFeatureEncoder:
 
 def _block(size: int) -> list[float]:
     return [0.0] * size
+
+
+def _episodic_last_seen(episodic: MemoryStore) -> dict[str, tuple[int, str]]:
+    """Per-player most-recent (tick, room) from the agent's OWN episodic sightings.
+
+    Scans the agent's ``saw_player`` / ``saw_player_move`` rows — appended
+    per-tick by :func:`agents.perception.ingest_packet` for every visible /
+    witnessed-moving player — and keeps the latest sighting per player. Events
+    are stored in non-decreasing tick order, so iterating in append order and
+    overwriting leaves the freshest sighting; a ``saw_player_move`` records the
+    player's CURRENT room (``to_room``). This is the per-tick source of the
+    last-seen signal that ``WorkingMemory.last_seen`` only caches at render time,
+    and it covers EVERY seen player, not just the ones perception minted a belief
+    row for. Reads only the agent's own memory — no leak.
+    """
+
+    last_seen: dict[str, tuple[int, str]] = {}
+    for event in episodic.recent(since_tick=0):
+        if event.type == EVENT_SAW_PLAYER:
+            player_id = event.payload.get("player_id")
+            room = event.payload.get("room")
+        elif event.type == EVENT_SAW_PLAYER_MOVE:
+            player_id = event.payload.get("player_id")
+            room = event.payload.get("to_room")
+        else:
+            continue
+        if isinstance(player_id, str) and isinstance(room, str):
+            last_seen[player_id] = (event.tick, room)
+    return last_seen
+
+
+def _combined_last_seen(
+    player_id: str,
+    episodic_last_seen: dict[str, tuple[int, str]],
+    working: WorkingMemory,
+) -> tuple[int, str] | None:
+    """The fresher of the episodic-derived and render-cached last-seen (tick, room).
+
+    Consumes both the per-tick episodic sighting and the contract's
+    ``WorkingMemory.last_seen`` cache, keeping whichever is more recent (the
+    episodic-derived is always at least as fresh, since the cache is derived from
+    the same log at render time, but merging honors both sources deterministically
+    — the episodic value wins a tie).
+    """
+
+    candidates: list[tuple[int, str]] = []
+    episodic = episodic_last_seen.get(player_id)
+    if episodic is not None:
+        candidates.append(episodic)
+    cached = working.last_seen(player_id)
+    if cached is not None:
+        candidates.append((cached.tick, cached.room))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda entry: entry[0])
 
 
 def beliefs_suspicion(memory: AgentMemory, player_id: str) -> float:
