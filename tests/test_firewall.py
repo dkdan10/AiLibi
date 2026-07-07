@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 from pathlib import Path
@@ -73,6 +74,87 @@ def test_agent_visible_observation_schemas_have_no_engine_imports() -> None:
         source = schema_path.read_text(encoding="utf-8")
         assert "from engine" not in source
         assert "import engine" not in source
+
+
+# The pure-Python inference doctrine (Task 15.10, tasks/phase-15.md locked
+# decision 2): production inference under ``agents/`` is pure-Python, so no
+# ``numpy`` / ``torch`` import may appear anywhere under ``agents/``. BLAS
+# reductions are not bit-stable across machines / thread counts, which is exactly
+# why ``numpy`` stays confined to ``training/`` (its own import-linter contract)
+# and the Encoder-v2 inference path (``agents/tactical/features.py``) is stdlib
+# ``math`` + lists. numpy/torch are external packages, so this is a SOURCE scan
+# (the ``test_agent_visible_observation_schemas_have_no_engine_imports``
+# mechanism), not an import-linter contract — but it uses AST rather than a
+# substring so a docstring that legitimately NAMES ``import numpy`` (the encoder
+# module documents this very ban) does not false-positive.
+_FORBIDDEN_AGENT_INFERENCE_MODULES = frozenset({"numpy", "torch"})
+
+
+def _agent_source_files() -> list[Path]:
+    repo_root = Path(__file__).resolve().parents[1]
+    return sorted((repo_root / "agents").rglob("*.py"))
+
+
+def _imported_top_level_modules(source: str) -> set[str]:
+    """The set of top-level module names imported by ``source`` (AST, not substring).
+
+    ``import a.b.c`` and ``from a.b import c`` both contribute ``"a"``. Relative
+    imports (``from . import x``) contribute nothing. Docstrings and comments are
+    ignored — only real ``import`` statements are inspected.
+    """
+
+    tree = ast.parse(source)
+    roots: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                roots.add(alias.name.split(".", 1)[0])
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0 and node.module is not None:
+                roots.add(node.module.split(".", 1)[0])
+    return roots
+
+
+def test_agents_have_no_numpy_or_torch_import() -> None:
+    offenders: list[tuple[str, list[str]]] = []
+    for path in _agent_source_files():
+        banned = (
+            _imported_top_level_modules(path.read_text(encoding="utf-8"))
+            & _FORBIDDEN_AGENT_INFERENCE_MODULES
+        )
+        if banned:
+            offenders.append((str(path), sorted(banned)))
+    assert not offenders, (
+        "pure-Python inference doctrine: agents/ must not import numpy/torch; "
+        f"offenders: {offenders}"
+    )
+
+
+def test_numpy_torch_source_scan_rejects_planted_import() -> None:
+    """A synthetic ``import numpy`` planted under ``agents/`` trips the scan.
+
+    Mirrors :func:`test_agents_cannot_import_engine`'s plant-detect-cleanup shape
+    but via the AST source-scan mechanism (numpy/torch are external packages, so
+    the ban is a source scan, not an import-linter contract). A gate that cannot
+    fail is not a gate.
+    """
+
+    repo_root = Path(__file__).resolve().parents[1]
+    planted = repo_root / "agents" / "_firewall_numpy_bad_import.py"
+    planted.write_text("import numpy\n", encoding="utf-8")
+    try:
+        assert "numpy" in _imported_top_level_modules(
+            planted.read_text(encoding="utf-8")
+        )
+        offenders = [
+            path
+            for path in _agent_source_files()
+            if _imported_top_level_modules(path.read_text(encoding="utf-8"))
+            & _FORBIDDEN_AGENT_INFERENCE_MODULES
+        ]
+        assert planted in offenders
+    finally:
+        planted.unlink(missing_ok=True)
 
 
 def test_own_kill_rides_only_the_killers_self_channel(tmp_path: Path) -> None:
