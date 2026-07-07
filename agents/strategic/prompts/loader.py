@@ -2,11 +2,10 @@
 
 The four ``.j2`` templates under ``agents/strategic/prompts/`` are the
 canonical phase-1 report, accusation-round, and vote-ballot prompts
-consumed by :class:`agents.strategic.reasoner.StrategicReasoner` and
-:class:`meetings.manager.MeetingManager`. This module wraps them in a
-single strict-undefined :class:`jinja2.Environment` and exposes one named
-Python callable per template so the wider codebase never touches the
-filesystem directly.
+consumed by :class:`meetings.manager.MeetingManager`. This module wraps
+them in a single strict-undefined :class:`jinja2.Environment` and exposes
+one named Python callable per template so the wider codebase never touches
+the filesystem directly.
 
 Strict-undefined behavior
 =========================
@@ -54,10 +53,10 @@ in-process after this module is imported (PR #203 review).
 Per-template wrapper signatures
 ===============================
 
-Each wrapper conforms to the :class:`~meetings.manager.ReportPromptRenderer`,
-:class:`~meetings.manager.StatementPromptRenderer`, or
-:class:`~meetings.manager.VotePromptRenderer` Protocol from
-:mod:`meetings.manager` so the loader-built callables can be passed
+Each wrapper conforms to the :class:`~meetings.render_contract.ReportPromptRenderer`,
+:class:`~meetings.render_contract.StatementPromptRenderer`, or
+:class:`~meetings.render_contract.VotePromptRenderer` Protocol from
+:mod:`meetings.render_contract` so the loader-built callables can be passed
 straight into :class:`~meetings.manager.MeetingManager` without an
 intermediate adapter layer.
 """
@@ -73,7 +72,7 @@ from typing import Final
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from meetings.manager import (
+from meetings.render_contract import (
     ReportPromptRenderer,
     StatementPromptRenderer,
     SuspicionEntry,
@@ -174,7 +173,7 @@ def crewmate_report_prompt(
     """Render the Phase-1 crewmate report prompt (DESIGN.md §5.3).
 
     ``fellow_impostor_ids`` (Task 7.12) is accepted so this wrapper
-    conforms to the same :class:`~meetings.manager.ReportPromptRenderer`
+    conforms to the same :class:`~meetings.render_contract.ReportPromptRenderer`
     Protocol as :func:`impostor_report_prompt` and the meeting manager
     can dispatch by role without an adapter. A crewmate has no teammate
     list (the value is always ``()``) and the crewmate template never
@@ -220,7 +219,7 @@ def impostor_report_prompt(
 ) -> str:
     """Render the Phase-1 impostor report prompt (DESIGN.md §4.5, §5.3).
 
-    Conforms to the same :class:`~meetings.manager.ReportPromptRenderer`
+    Conforms to the same :class:`~meetings.render_contract.ReportPromptRenderer`
     Protocol as :func:`crewmate_report_prompt` so the meeting manager
     can dispatch by role without an extra adapter. The impostor
     template itself does not reference ``agent_id``, ``current_tick``,
@@ -274,7 +273,7 @@ def accusation_round_prompt(
 ) -> str:
     """Render a reactive ``reply`` / ``opt_in`` turn prompt (DESIGN.md §5.2).
 
-    Conforms to the :class:`~meetings.manager.StatementPromptRenderer`
+    Conforms to the :class:`~meetings.render_contract.StatementPromptRenderer`
     Protocol so the meeting manager and strategic reasoner can invoke it
     for every reactive-chain and opt-in turn without an adapter.
 
@@ -360,7 +359,7 @@ def vote_ballot_prompt(
 ) -> str:
     """Render a vote-ballot prompt (DESIGN.md §5.5).
 
-    Conforms to the :class:`~meetings.manager.VotePromptRenderer`
+    Conforms to the :class:`~meetings.render_contract.VotePromptRenderer`
     Protocol; the meeting manager invokes this callable verbatim per
     voter to produce the ballot-phase prompt.
 

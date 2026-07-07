@@ -40,7 +40,7 @@ is this task's reproduction gate.
 - replays/samples/ (read-only input)
 
 **Definition of done:**
-- [ ] On the committed baseline-2 9p2i bytes, the folds reproduce the charter §2 figures EXACTLY: oracle candidate-set median 3 (mean 2.86), unique-killer 45/129 under the ±1-tick window, killer-in-set 122/129; hard clue held in 94/129 (vent 74, last-seen-with 37, scene 32, witnessed 6); vent mentioned 36/74; votes outside a ≤3 candidate set 42/73; reporter ejected 22/106 with 22 innocent. Any mismatch is a task failure.
+- [ ] On the committed baseline-2 9p2i bytes, the folds reproduce the charter §2 figures EXACTLY: oracle candidate-set median 3 (mean 2.86), ±1-tick-window mean 2.29 / single-candidate 38/129 (killer-unique 36/129) / ≤2 84/129, killer-in-set 122/129; hard clue held in 98/129 (vent 74, last-seen-with 37, scene 32, witnessed 6); vent mentioned 36/74; votes outside a ≤3 candidate set 37/68; reporter ejected 22/106 with 22 innocent. Any mismatch is a task failure. (Figures per the charter §2 as corrected 2026-07-07 — the one-off script's ±1/hard/votes cells were proven mutually inconsistent with its own exact-tick row; see the charter's §2 preamble.)
 - [ ] Every recorded state hash is verified during the walk (a corrupted or drifted set fails loud, never silently mis-measures).
 - [ ] The oracle's assumptions (upper bound: honest pooling, kill-time knowledge, crew-only witnesses) and the known same-tick move+kill frame artifact are documented in the module docstring — this is a diagnostic ceiling, not a claim about achievable play.
 - [ ] The folds run on any replay-set directory and on both roster presets (4p1i included), keyed by the set's roster/report artifacts.

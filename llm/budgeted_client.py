@@ -1,11 +1,10 @@
 """Budget-enforcing :class:`~llm.client.LLMClient` adapter (Task 3.9 C-5).
 
-``MeetingManager`` (Task 3.8) and ``StrategicReasoner`` (Task 3.9) both
-accept an :class:`~llm.client.LLMClient` Protocol implementation. This
-module adds a provider-neutral adapter that wraps any
-:class:`~llm.client.LLMClient` plus a :class:`~llm.budget.GameBudget`
-and enforces :meth:`GameBudget.preflight` + :meth:`GameBudget.charge`
-around every :meth:`complete` call.
+``MeetingManager`` (Task 3.8) accepts an :class:`~llm.client.LLMClient`
+Protocol implementation. This module adds a provider-neutral adapter that
+wraps any :class:`~llm.client.LLMClient` plus a
+:class:`~llm.budget.GameBudget` and enforces :meth:`GameBudget.preflight` +
+:meth:`GameBudget.charge` around every :meth:`complete` call.
 
 Failure semantics
 =================

@@ -32,7 +32,7 @@ flags and the code's bare behavior). Close the wave with
 `audits/audit-phase-15-wave0-close.md`: the full validity gate, the R-gate measurement, and — the
 wave's own instrument — the 15.3 funnel table re-measured against the charter's baseline-2 column
 (vent transmission 36/74 → ?, structured vent observations 0 → ?, innocent-reporter ejections 22 → ?,
-votes-outside-the-set 42/73 → ?), with the Phase-14 canaries (genuine-class conversion, R1) reported
+votes-outside-the-set 37/68 → ?), with the Phase-14 canaries (genuine-class conversion, R1) reported
 alongside. Directions are findings, not pass bars; a regression on a canary is the one result that
 pauses the phase for an owner call. Finally, pin the baseline-3 evidence-supply floor values into the
 15.2 per-baseline constants block.

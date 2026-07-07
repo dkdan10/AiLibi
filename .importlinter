@@ -2,6 +2,8 @@
 root_packages =
     agents
     engine
+    llm
+    meetings
     observation
 
 [importlinter:agents_must_not_import_engine]
@@ -11,3 +13,21 @@ source_modules =
     agents
 forbidden_modules =
     engine
+
+[importlinter:agents_must_not_import_meetings_manager]
+name = Agents must not import meetings.manager
+type = forbidden
+source_modules =
+    agents
+forbidden_modules =
+    meetings.manager
+
+[importlinter:observation_must_not_import_agents_meetings_llm]
+name = Observation must not import agents, meetings, or llm
+type = forbidden
+source_modules =
+    observation
+forbidden_modules =
+    agents
+    meetings
+    llm

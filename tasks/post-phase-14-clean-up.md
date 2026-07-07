@@ -26,9 +26,17 @@ cheap, and doing it first protects both later programs:
 
 Reproduction: re-seed via `orchestrator.seeder.seed_initial_state`, replay recorded actions through
 `engine.tick.advance_tick` + `orchestrator.game.apply_meeting_result`, verify every tick against the
-recorded `state_hash` (the `api/replay_loader.py::_walk` recipe). Task 15.3 commits these folds to
-`eval/` with the exact figures below as its reproduction gate; until it lands, the numbers are
-charter-tier.
+recorded `state_hash` (the `api/replay_loader.py::_walk` recipe). Task 15.3 committed these folds to
+`eval/funnel.py` (PR #231); the figures below are the committed instrument's values and its pinned
+reproduction gate. Four cells were CORRECTED (owner decision, 2026-07-07) from the 2026-07-05 one-off
+measurement, whose ±1-window / hard-clue-union / votes-outside numbers were shown mutually inconsistent
+with its own exact-tick row by two independent exhaustive reconstructions (the only ±1 rule reaching
+the old mean 2.0 wrongly alibis a killer in transit, collapsing killer-in-set 122 → 110; the old
+hard-union 94 sits below the floor its own components 74+6+32+37 permit; the old 42/73 needs the ≤3
+gate and the membership test to read different candidate sets). Corrected: ±1 window mean 2.0 → 2.29 /
+single-candidate 45 → 38 (killer-unique 36) / ≤2 85 → 84; hard clue held 94 → 98 (73% → 76%, killer-accused denominator 56/94 →
+60/98); votes outside a ≤3 set 42/73 → 37/68 (58% → 54%). Every other figure reproduced exactly; no
+conclusion changes direction.
 
 **Stage 1 — the information EXISTS.** A pooled-testimony oracle (perfect sharing of every living crew
 member's legitimate same-room sightings, alibi-elimination at the kill tick):
@@ -36,12 +44,12 @@ member's legitimate same-room sightings, alibi-elimination at the kill tick):
 | measure | value |
 |---|---|
 | killer-candidate set, median (of ~7–8 living) | **3** (mean 2.86) |
-| with a ±1-tick kill window | mean **2.0**; unique killer in **45/129**; ≤2 in 85/129 |
+| with a ±1-tick kill window | mean **2.29**; narrowed to a single candidate in **38/129** (that lone candidate IS the killer in 36 — both misses are dead-killer late reports); ≤2 in 84/129 |
 | killer inside the set | 122/129 (7 misses are a same-tick move+kill frame artifact of the method) |
 | crew alone-time / sighting volume | alone only 34% of living ticks; ~23 sighting-frames per crew per game |
 | body-discovery delay | 66% of reported kills found within 3 ticks (the kill window is knowable) |
 
-**Stage 2 — individuals HOLD hard clues.** In **94/129** report meetings (73%) at least one living crew
+**Stage 2 — individuals HOLD hard clues.** In **98/129** report meetings (76%) at least one living crew
 member holds hard evidence: an impostor vent witnessed (**74/129** — vents are impostor-only, i.e.
 role-proving), victim-last-seen-with-the-killer (37), killer placed at the scene (32), the kill itself
 witnessed (6).
@@ -52,8 +60,8 @@ witnessed (6).
 |---|---|
 | meetings where a crew-witnessed impostor vent is even MENTIONED in any turn | **36/74** |
 | structured observation types in `meetings/schemas.py` | `SawPlayer`, `CompletedTask`, `FoundBody` — **no vent type exists**; vent evidence is free-text-only, invisible to the contradiction detector and the ballot reason-id linkage |
-| clue-holding meetings where the killer even gets accused | 56/94 |
-| ejections landing OUTSIDE the pooled-knowledge candidate set, when that set was ≤3 | **42/73 (58%)** |
+| clue-holding meetings where the killer even gets accused | 60/98 |
+| ejections landing OUTSIDE the pooled-knowledge candidate set, when that set was ≤3 | **37/68 (54%)** |
 | ejections that removed the meeting's own REPORTER | **22/106 — all 22 innocent** (~40% of all crew mis-ejects; impostors essentially never self-report in this corpus) |
 
 Conclusion: at current play quality the binding constraint is **aggregation, not generation**. New
