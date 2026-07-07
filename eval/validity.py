@@ -853,9 +853,12 @@ def check_cost_and_provenance(
 ) -> ValidityCheck:
     """Substrate-flag stamp, model, prompt set, and cost rows all coherent (+ exact).
 
-    * Every game's ``game_over`` substrate stamp equals the canonical build
-      snapshot with the canonical key set (the always-on "exact" anchor; the same
-      match the replay loader enforces to refuse cross-substrate reconstruction).
+    * Every game's ``game_over`` substrate stamp agrees with the canonical build
+      snapshot on every canonical lever's boolean (the same tolerant match the
+      replay loader's ``_assert_substrate_matches`` enforces to refuse
+      cross-substrate reconstruction): an always-on lever must be present and
+      True, a DEFAULT-OFF toggleable lever a recording predates may be absent
+      (reads False on both sides), and an unknown key is a stripped/foreign stamp.
     * A single coherent per-game model set + prompt-version set across the run (a
       coherent mixed-tier set is valid, drift is not). Because the CLIs gate an
       ARBITRARY dir, the model / prompt-set VALUES are not hard-coded; pass
@@ -880,15 +883,30 @@ def check_cost_and_provenance(
         if stamp is None:
             violations.append(f"seed {seed}: no substrate_flags stamp on game_over")
             continue
-        if set(stamp) != canonical_keys:
+        # Mirror the replay loader's ``_assert_substrate_matches`` (the "same
+        # match" this check claims): compare each canonical lever's BOOLEAN
+        # against the build snapshot rather than demanding an exact key SET. A
+        # recording predating a DEFAULT-OFF toggleable lever (Task 15.5's
+        # ``reporter_exculpation``) omits that key, which reads as ``False`` on
+        # both sides -- so the committed baseline stays coherent while OFF -- yet
+        # an always-on lever's key must still be present and True, and a wrong
+        # value still fails. An unknown key NOT in the canonical set is a
+        # stripped / foreign stamp.
+        unknown = sorted(set(stamp) - canonical_keys)
+        if unknown:
             violations.append(
-                f"seed {seed}: substrate keys {sorted(stamp)} != canonical "
-                f"{sorted(canonical_keys)}"
+                f"seed {seed}: unknown substrate keys {unknown} "
+                f"(canonical {sorted(canonical_keys)})"
             )
-        elif dict(stamp) != snapshot:
+        differing = sorted(
+            key
+            for key in canonical_keys
+            if bool(stamp.get(key)) != bool(snapshot.get(key))
+        )
+        if differing:
             violations.append(
-                f"seed {seed}: substrate stamp {dict(stamp)} != build snapshot "
-                f"{snapshot}"
+                f"seed {seed}: substrate stamp {dict(stamp)} disagrees with build "
+                f"snapshot {snapshot} on {differing}"
             )
 
     # A game with no meeting records no LLM call, so its prompt_versions / by_model
