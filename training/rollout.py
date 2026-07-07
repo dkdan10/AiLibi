@@ -1,0 +1,597 @@
+"""Per-episode rollout records + behavioral descriptors (Task 15.8).
+
+The training env (:mod:`training.env`) drives the REAL production loop
+(:class:`orchestrator.game.HeadlessGame`) and writes a replay. This module turns
+one such replay back into a TYPED :class:`EpisodeRollout`: a re-seeded,
+state-hash-verified walk over the recorded actions through
+:func:`engine.tick.advance_tick` (and, on a meeting tick,
+:func:`orchestrator.game.apply_meeting_result`) that recovers the typed engine
+event log, per-tick engine-state scalars, and the behavioral descriptors the QD
+entrant and the pause audit need.
+
+Why reconstruct rather than parse the replay bytes: the recorded actions are the
+ground truth of what happened, but the reward-source events
+(``KilledEvent.witnesses``, ``TaskProgressed``, vent events, meeting triggers,
+the terminal ``GameOverEvent``) are NOT in the replay rows — only the submitted
+actions and the per-tick ``state_hash`` are (``orchestrator/replay.py``). Feeding
+the recorded actions back through the pure engine re-derives the exact typed
+events (the engine is a deterministic function of state + actions, DESIGN.md §0),
+so :class:`training.rewards.ShapedReward` scores from the TYPED log and a trainer
+never re-derives rewards from replay bytes. Roles come from the re-seeded state
+(replays are role-free by firewall design), never from the replay.
+
+Episode horizon (Task 15.8 definition of done): a meeting runner is ALWAYS
+installed by the env, so ``meeting_runner=None`` truncation
+(``MEETING_PHASE_REACHED``) is structurally unreachable. The ONE deliberate
+boundary mode is the explicit ``episode_boundary="first_meeting"`` opt-in (the
+seam 15.13's fallback (b) rides): its episodes end at the first meeting trigger
+and are MARKED ``truncated``. A ``full_game`` episode is ``truncated`` only when
+the game never reached ``GAME_OVER`` (the tick budget capped it). Silent
+truncation is structurally unreachable, and :func:`EpisodeRollout.complete`
+(``winner is not None and not truncated``) is the single gate the reward channel
+reads so no fitness term ever scores a truncated episode as a full game.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal, TypeAlias
+
+import numpy as np
+from numpy.typing import NDArray
+from pydantic import TypeAdapter
+
+from engine.actions import Action
+from engine.entities import PlayerId, Role
+from engine.events import (
+    EngineEvent,
+    GameOverEvent,
+    KilledEvent,
+    MeetingTriggeredEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
+)
+from engine.tick import advance_tick
+from engine.world import Map, WorldState
+from meetings.schemas import MeetingOutcome, MeetingResult
+from orchestrator.game import apply_meeting_result
+from orchestrator.replay import (
+    GameEndReplayEntry,
+    MeetingReplayEntry,
+    ReplayEntry,
+    WinnerSide,
+    _state_hash,
+    read_all_entries,
+)
+from orchestrator.seeder import seed_initial_state
+
+# The one deliberate boundary mode plus the full-game default (Task 15.8).
+EpisodeBoundary: TypeAlias = Literal["full_game", "first_meeting"]
+
+# Terminal shape of one episode. ``FIRST_MEETING`` marks the explicit
+# first-meeting opt-in truncation; ``TICK_BUDGET`` marks a full-game episode the
+# scheduler capped before ``GAME_OVER``. Both are non-terminal for fitness.
+EpisodeOutcome: TypeAlias = Literal[
+    "CREWMATES", "IMPOSTORS", "TICK_BUDGET", "FIRST_MEETING"
+]
+
+_ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
+
+# The behavioral-descriptor vector's fixed column order (the QD map's feature
+# axes). Stable so a downstream reader indexes by position, not by dict order;
+# :meth:`BehavioralDescriptors.vector` builds the vector in this order.
+DESCRIPTOR_VECTOR_FIELDS: tuple[str, ...] = (
+    "kill_count",
+    "witness_exposure_rate",
+    "vent_usage",
+    "meeting_count",
+    "meeting_trigger_rate",
+    "do_task_emissions",
+    "do_task_cadence",
+    "median_kill_tick",
+)
+
+
+class RolloutReconstructionError(RuntimeError):
+    """Raised when a replay fails to reconstruct byte-identically.
+
+    A per-tick ``state_hash`` (or a meeting row's ``state_hash_before`` /
+    ``state_hash_after``) disagreeing with the engine reconstruction means the
+    replay is corrupted, drifted, or was recorded under a different roster /
+    engine — a fitness number computed off it would be silently wrong, so the
+    walk fails loud (AGENTS.md "no silent fallbacks") instead of measuring a
+    drifted stream.
+    """
+
+
+@dataclass(frozen=True)
+class EpisodeFrame:
+    """Engine-state scalars at one reconstructed step (Task 15.8).
+
+    One frame per ``advance_tick`` (``kind="tick"``) plus one per applied meeting
+    (``kind="meeting"``, carrying the post-``apply_meeting_result`` state). The
+    scalars are exactly what the potential-based reward channel's side-specific
+    potential Φ reads (:mod:`training.rewards`) — no float belief state, so the
+    potential is a pure integer/ratio function and the telescoping identity is
+    exact.
+
+    ``state_hash`` is the recorded, verified hash for this step; the ordered
+    tuple of frame hashes is the byte-determinism chain the env's frozen-policy
+    test pins.
+    """
+
+    tick: int
+    kind: Literal["tick", "meeting"]
+    phase: Literal["PLAY", "MEETING", "GAME_OVER"]
+    state_hash: str
+    tasks_completed: int
+    tasks_total: int
+    alive_crew: int
+    alive_impostors: int
+    cumulative_kills: int
+
+
+@dataclass(frozen=True)
+class MeetingRecord:
+    """One resolved (or truncated-at) meeting in an episode (Task 15.8)."""
+
+    tick: int
+    meeting_id: str
+    trigger: Literal["report", "emergency"]
+    triggered_by: PlayerId
+    outcome: MeetingOutcome | None
+    ejected_player_id: PlayerId | None
+
+
+@dataclass(frozen=True)
+class BehavioralDescriptors:
+    """The named behavioral descriptors the QD entrant + pause audit need (15.8).
+
+    Every field named in the task contract: ``kill_ticks`` (kill-timing
+    distribution), ``witness_exposure_rate`` (fraction of impostor kills the crew
+    witnessed, via ``KilledEvent.witnesses``), ``vent_usage``, ``meeting_count`` /
+    ``meeting_trigger_rate``, ``do_task_emissions`` / ``do_task_cadence`` (the
+    ``do_task`` submission cadence — includes the impostor's engine-rejected
+    pretend ``do_task`` camouflage, counted from submitted actions), and
+    ``win_shape``. :meth:`vector` projects the numeric descriptors into a fixed-
+    order numpy feature vector for the QD map.
+    """
+
+    kill_ticks: tuple[int, ...]
+    witness_exposure_rate: float
+    vent_usage: int
+    meeting_count: int
+    meeting_trigger_rate: float
+    do_task_emissions: int
+    do_task_cadence: float
+    win_shape: str
+
+    @property
+    def kill_count(self) -> int:
+        return len(self.kill_ticks)
+
+    @property
+    def median_kill_tick(self) -> float:
+        """Median resolved-kill tick (0.0 when no kills landed).
+
+        The kill-timing distribution's central tendency, computed with numpy so
+        the QD descriptor axis matches the rest of the training-side math (numpy
+        is training-confined, DESIGN.md locked dependency posture)."""
+
+        if not self.kill_ticks:
+            return 0.0
+        return float(np.median(np.asarray(self.kill_ticks, dtype=np.float64)))
+
+    def vector(self) -> NDArray[np.float64]:
+        """Fixed-order numeric feature vector for the QD map (numpy lands here).
+
+        Built in :data:`DESCRIPTOR_VECTOR_FIELDS` order, so the constant is the
+        single source of truth for the axis layout downstream QD code indexes by.
+        """
+
+        return np.asarray(
+            [float(getattr(self, name)) for name in DESCRIPTOR_VECTOR_FIELDS],
+            dtype=np.float64,
+        )
+
+
+@dataclass(frozen=True)
+class EpisodeRollout:
+    """One reconstructed, typed episode record (Task 15.8 public type).
+
+    Carries the typed engine event log, per-step engine-state frames, meeting
+    records, the roster's roles (from the re-seeded state), the terminal shape,
+    and the behavioral descriptors. Downstream trainers import THIS — never the
+    replay bytes. Signature is stable per the task contract.
+    """
+
+    seed: int
+    num_players: int
+    num_impostors: int
+    tasks_per_crewmate: int
+    episode_boundary: EpisodeBoundary
+    truncated: bool
+    outcome: EpisodeOutcome
+    winner: WinnerSide | None
+    win_reason: str | None
+    final_tick: int
+    roles: Mapping[PlayerId, Role]
+    frames: tuple[EpisodeFrame, ...]
+    events: tuple[EngineEvent, ...]
+    meetings: tuple[MeetingRecord, ...]
+    descriptors: BehavioralDescriptors
+
+    @property
+    def state_hashes(self) -> tuple[str, ...]:
+        """The ordered per-step state-hash chain (byte-determinism pin)."""
+
+        return tuple(frame.state_hash for frame in self.frames)
+
+    @property
+    def complete(self) -> bool:
+        """Whether this episode is a scoreable FULL game (Task 15.8).
+
+        The single gate the reward channel reads: a terminal winner AND not
+        truncated. A first-meeting opt-in episode, or a tick-budget-capped
+        full-game episode, is NOT complete — so no fitness term ever scores a
+        truncated episode as a full game.
+        """
+
+        return self.winner is not None and not self.truncated
+
+    def impostor_ids(self) -> tuple[PlayerId, ...]:
+        return tuple(
+            sorted(pid for pid, role in self.roles.items() if role == "IMPOSTOR")
+        )
+
+    def crew_ids(self) -> tuple[PlayerId, ...]:
+        return tuple(
+            sorted(pid for pid, role in self.roles.items() if role == "CREWMATE")
+        )
+
+
+def _deserialize_actions(raw_actions: Sequence[Mapping[str, object]]) -> list[Action]:
+    return [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in raw_actions]
+
+
+def _count_do_task_submissions(raw_actions: Sequence[Mapping[str, object]]) -> int:
+    """Count submitted ``do_task`` actions this tick (the camouflage cadence).
+
+    Reads the SUBMITTED actions, so an impostor's engine-rejected pretend
+    ``do_task`` (it owns no instance) is counted exactly like a crew task — the
+    ``action="task"`` camouflage the observation service renders to witnesses
+    (Task 15.8; ``observation/service.py``). Counting resolved task events would
+    silently drop the 396 pretend submissions in the committed baseline-2 stream.
+    """
+
+    return sum(1 for raw in raw_actions if raw.get("type") == "do_task")
+
+
+def _frame(
+    state: WorldState,
+    *,
+    tick: int,
+    kind: Literal["tick", "meeting"],
+    state_hash: str,
+    roles: Mapping[PlayerId, Role],
+    cumulative_kills: int,
+) -> EpisodeFrame:
+    tasks_completed = sum(1 for task in state.tasks.values() if task.completed)
+    alive_crew = sum(
+        1
+        for pid, player in state.players.items()
+        if player.alive and roles.get(pid) == "CREWMATE"
+    )
+    alive_impostors = sum(
+        1
+        for pid, player in state.players.items()
+        if player.alive and roles.get(pid) == "IMPOSTOR"
+    )
+    return EpisodeFrame(
+        tick=tick,
+        kind=kind,
+        phase=state.phase,
+        state_hash=state_hash,
+        tasks_completed=tasks_completed,
+        tasks_total=len(state.tasks),
+        alive_crew=alive_crew,
+        alive_impostors=alive_impostors,
+        cumulative_kills=cumulative_kills,
+    )
+
+
+def _meeting_result_from_entry(entry: MeetingReplayEntry) -> MeetingResult:
+    return MeetingResult(
+        meeting_id=entry.meeting_id,
+        triggered_by=entry.triggered_by,
+        trigger_tick=entry.tick,
+        outcome=entry.outcome,
+        ejected_player_id=entry.ejected_player_id,
+        ballots=entry.ballots,
+        contradictions=entry.contradictions,
+        transcript=entry.transcript,
+    )
+
+
+def _build_descriptors(
+    *,
+    events: Sequence[EngineEvent],
+    meetings: Sequence[MeetingRecord],
+    do_task_emissions: int,
+    final_tick: int,
+    roles: Mapping[PlayerId, Role],
+    outcome: EpisodeOutcome,
+    winner: WinnerSide | None,
+    win_reason: str | None,
+) -> BehavioralDescriptors:
+    kill_ticks = tuple(event.tick for event in events if isinstance(event, KilledEvent))
+    kills = [event for event in events if isinstance(event, KilledEvent)]
+    witnessed = sum(1 for event in kills if event.witnesses)
+    witness_exposure_rate = witnessed / len(kills) if kills else 0.0
+    vent_usage = sum(
+        1
+        for event in events
+        if isinstance(event, (VentEnteredEvent, VentExitedEvent))
+        and roles.get(event.actor) == "IMPOSTOR"
+    )
+    denominator = max(1, final_tick)
+    meeting_count = len(meetings)
+    if winner is not None:
+        win_shape = f"{winner}:{win_reason}" if win_reason else winner
+    else:
+        win_shape = outcome
+    return BehavioralDescriptors(
+        kill_ticks=kill_ticks,
+        witness_exposure_rate=witness_exposure_rate,
+        vent_usage=vent_usage,
+        meeting_count=meeting_count,
+        meeting_trigger_rate=meeting_count / denominator,
+        do_task_emissions=do_task_emissions,
+        do_task_cadence=do_task_emissions / denominator,
+        win_shape=win_shape,
+    )
+
+
+def reconstruct_episode(
+    replay_path: Path,
+    *,
+    game_map: Map,
+    seed: int,
+    num_players: int,
+    num_impostors: int,
+    tasks_per_crewmate: int,
+    episode_boundary: EpisodeBoundary = "full_game",
+) -> EpisodeRollout:
+    """Re-seed + replay one recorded game into a typed :class:`EpisodeRollout`.
+
+    Mirrors the ``api/replay_loader.py::_walk`` / ``eval.funnel._walk_game``
+    reconstruction recipe (never importing the API-tier loader): re-seed, feed
+    the recorded actions through :func:`engine.tick.advance_tick`, verify every
+    ``state_hash``, and on a MEETING tick rebuild the
+    :class:`~meetings.schemas.MeetingResult` from the recorded meeting row and
+    apply it via :func:`orchestrator.game.apply_meeting_result` (verifying
+    ``state_hash_after``). The typed events, per-step frames, and descriptors are
+    collected along the way.
+
+    ``episode_boundary="first_meeting"`` stops at the first meeting TRIGGER
+    (before applying it) and marks the episode ``truncated`` — the deliberate
+    15.13 fallback-(b) seam. A game that reaches ``GAME_OVER`` before any meeting
+    is a genuine full game under either boundary (``truncated=False``).
+    """
+
+    entries = read_all_entries(replay_path)
+    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
+    meeting_by_tick: dict[int, MeetingReplayEntry] = {
+        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+    }
+    game_end = next(
+        (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
+    )
+
+    state = seed_initial_state(
+        seed=seed,
+        game_map=game_map,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+    roles: dict[PlayerId, Role] = {
+        pid: player.role for pid, player in state.players.items()
+    }
+
+    frames: list[EpisodeFrame] = []
+    events: list[EngineEvent] = []
+    meetings: list[MeetingRecord] = []
+    cumulative_kills = 0
+    do_task_emissions = 0
+    winner: WinnerSide | None = None
+    win_reason: str | None = None
+    truncated = False
+    outcome: EpisodeOutcome
+    final_tick = 0
+
+    for entry in tick_entries:
+        do_task_emissions += _count_do_task_submissions(entry.actions)
+        actions = _deserialize_actions(entry.actions)
+        state, tick_events = advance_tick(state, actions, game_map=game_map)
+        actual = _state_hash(state)
+        if actual != entry.state_hash:
+            raise RolloutReconstructionError(
+                f"seed {seed}: tick {entry.tick} reconstructed {actual!r} != "
+                f"recorded {entry.state_hash!r} (roster mismatch or drift)"
+            )
+        final_tick = state.tick
+        for event in tick_events:
+            events.append(event)
+            if isinstance(event, KilledEvent):
+                cumulative_kills += 1
+            elif isinstance(event, GameOverEvent):
+                winner = event.winner
+                win_reason = event.reason
+        frames.append(
+            _frame(
+                state,
+                tick=entry.tick,
+                kind="tick",
+                state_hash=actual,
+                roles=roles,
+                cumulative_kills=cumulative_kills,
+            )
+        )
+
+        if state.phase == "GAME_OVER":
+            break
+        if state.phase != "MEETING":
+            continue
+
+        trigger_event = next(
+            (e for e in tick_events if isinstance(e, MeetingTriggeredEvent)), None
+        )
+        if trigger_event is None:
+            raise RolloutReconstructionError(
+                f"seed {seed}: tick {entry.tick} entered MEETING with no "
+                "MeetingTriggeredEvent in the reconstructed events"
+            )
+        meeting_entry = meeting_by_tick.get(entry.tick)
+
+        if episode_boundary == "first_meeting":
+            # The deliberate 15.13 fallback-(b) boundary: end at the first
+            # meeting trigger, MARK truncated, do NOT apply the meeting.
+            meetings.append(
+                MeetingRecord(
+                    tick=entry.tick,
+                    meeting_id=meeting_entry.meeting_id
+                    if meeting_entry is not None
+                    else f"seed-{seed}:meeting-{entry.tick}",
+                    trigger=trigger_event.trigger,
+                    triggered_by=trigger_event.actor,
+                    outcome=meeting_entry.outcome
+                    if meeting_entry is not None
+                    else None,
+                    ejected_player_id=meeting_entry.ejected_player_id
+                    if meeting_entry is not None
+                    else None,
+                )
+            )
+            truncated = True
+            break
+
+        if meeting_entry is None:
+            raise RolloutReconstructionError(
+                f"seed {seed}: tick {entry.tick} entered MEETING but the replay "
+                "carries no meeting row for that tick (partial recording)"
+            )
+        if meeting_entry.state_hash_before != actual:
+            raise RolloutReconstructionError(
+                f"seed {seed}: meeting at tick {entry.tick} recorded "
+                f"state_hash_before {meeting_entry.state_hash_before!r} != "
+                f"reconstructed pre-meeting state {actual!r}"
+            )
+        result = _meeting_result_from_entry(meeting_entry)
+        state, post_events = apply_meeting_result(
+            state,
+            result,
+            game_map=game_map,
+            triggering_body_id=trigger_event.body_id,
+        )
+        after = _state_hash(state)
+        if after != meeting_entry.state_hash_after:
+            raise RolloutReconstructionError(
+                f"seed {seed}: meeting at tick {entry.tick} reconstructed "
+                f"{after!r} != recorded {meeting_entry.state_hash_after!r}"
+            )
+        for event in post_events:
+            events.append(event)
+            if isinstance(event, GameOverEvent):
+                winner = event.winner
+                win_reason = event.reason
+        meetings.append(
+            MeetingRecord(
+                tick=entry.tick,
+                meeting_id=meeting_entry.meeting_id,
+                trigger=trigger_event.trigger,
+                triggered_by=meeting_entry.triggered_by,
+                outcome=meeting_entry.outcome,
+                ejected_player_id=meeting_entry.ejected_player_id,
+            )
+        )
+        final_tick = state.tick
+        frames.append(
+            _frame(
+                state,
+                tick=entry.tick,
+                kind="meeting",
+                state_hash=after,
+                roles=roles,
+                cumulative_kills=cumulative_kills,
+            )
+        )
+        if state.phase == "GAME_OVER":
+            break
+
+    if truncated:
+        outcome = "FIRST_MEETING"
+    elif winner is not None:
+        outcome = winner
+    else:
+        # No GameOverEvent and no first-meeting cut: the scheduler capped the
+        # game. A full-game episode that never terminated is not complete.
+        outcome = "TICK_BUDGET"
+        truncated = True
+
+    # Cross-check the winner against the recorded game_over row when present (the
+    # reconstruction is authoritative; a mismatch is a corrupted replay).
+    if (
+        game_end is not None
+        and not truncated
+        and game_end.winner is not None
+        and game_end.winner != winner
+    ):
+        raise RolloutReconstructionError(
+            f"seed {seed}: reconstructed winner {winner!r} != recorded "
+            f"game_over winner {game_end.winner!r}"
+        )
+
+    descriptors = _build_descriptors(
+        events=events,
+        meetings=meetings,
+        do_task_emissions=do_task_emissions,
+        final_tick=final_tick,
+        roles=roles,
+        outcome=outcome,
+        winner=winner,
+        win_reason=win_reason,
+    )
+
+    return EpisodeRollout(
+        seed=seed,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        episode_boundary=episode_boundary,
+        truncated=truncated,
+        outcome=outcome,
+        winner=None if truncated else winner,
+        win_reason=None if truncated else win_reason,
+        final_tick=final_tick,
+        roles=roles,
+        frames=tuple(frames),
+        events=tuple(events),
+        meetings=tuple(meetings),
+        descriptors=descriptors,
+    )
+
+
+__all__ = [
+    "DESCRIPTOR_VECTOR_FIELDS",
+    "BehavioralDescriptors",
+    "EpisodeBoundary",
+    "EpisodeFrame",
+    "EpisodeOutcome",
+    "EpisodeRollout",
+    "MeetingRecord",
+    "RolloutReconstructionError",
+    "reconstruct_episode",
+]
