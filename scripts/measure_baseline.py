@@ -24,9 +24,15 @@ Usage::
     uv run python scripts/measure_baseline.py               # both canonical sets
     uv run python scripts/measure_baseline.py replays/samples/9p2i
     uv run python scripts/measure_baseline.py --json
+    uv run python scripts/measure_baseline.py --funnel --json   # Task-15.3 funnel
 
 ``--json`` emits a JSON array of :class:`BaselineMeasurementReport` (schema below),
 the machine-readable report the 15.15 harness and the 15.7 / 15.18 audits consume.
+``--funnel`` selects the Task-15.3 information-funnel diagnostics instead — a JSON
+array of :class:`eval.funnel.InformationFunnelReport` (schema in that module),
+consumed by Task 15.7 for the before/after close finding. The flag is the funnel
+fold region's entry point; the 15.1 core folds and the 15.2 watchability folds are
+disjoint regions selected by their own (absence of a) flag.
 
 JSON report schema (one object per measured set) — STABLE::
 
@@ -67,6 +73,14 @@ if str(_REPO_ROOT) not in sys.path:
 
 from eval.accusation_calibration import compute_accusation_calibration  # noqa: E402
 from eval.balance_eval import _balance_report_from_tournament  # noqa: E402
+
+# Task-15.3 information-funnel fold region (disjoint from the 15.1 core folds and
+# the 15.2 watchability folds): the oracle / possession / transmission diagnostics,
+# emitted under ``--funnel``.
+from eval.funnel import (  # noqa: E402
+    InformationFunnelReport,
+    compute_information_funnel,
+)
 from eval.meeting_quality import compute_meeting_rate  # noqa: E402
 from eval.report_schema import TournamentReport  # noqa: E402
 from eval.validity import assemble_tournament_report, seeds_on_disk  # noqa: E402
@@ -210,6 +224,53 @@ def _emit_json(reports: Sequence[BaselineMeasurementReport]) -> str:
     return json.dumps([report.model_dump() for report in reports], indent=2)
 
 
+# --------------------------------------------------------------------------- #
+# Task-15.3 --funnel fold region                                              #
+# --------------------------------------------------------------------------- #
+
+
+def _render_funnel_human(report: InformationFunnelReport) -> str:
+    n = report.report_meetings
+    med = report.candidate_set_median
+    mean = report.candidate_set_mean
+    pm1 = report.candidate_set_pm1_mean
+    return "\n".join(
+        [
+            f"Information-funnel diagnostics over {report.replay_set_dir} "
+            f"({report.games_total} games, {n} body-report meetings):",
+            "  Stage 1 (oracle): candidate-set median "
+            f"{med if med is None else round(med, 2)}"
+            f" / mean {mean if mean is None else round(mean, 2)};"
+            f" ±1-window mean {pm1 if pm1 is None else round(pm1, 2)},"
+            f" singleton {report.candidate_singleton_pm1}/{n}"
+            f" (killer-unique {report.unique_killer_pm1}),"
+            f" <=2 {report.candidate_le2_pm1}/{n};"
+            f" killer-in-set {report.killer_in_set}/{n}",
+            "  Stage 2 (possession): hard clue held "
+            f"{report.hard_clue_held}/{n}"
+            f" (vent {report.vent_witnessed}, last-seen-with "
+            f"{report.last_seen_with_killer}, scene {report.killer_at_scene},"
+            f" kill witnessed {report.kill_witnessed})",
+            "  Stage 3 (transmission): vent mentioned "
+            f"{report.vent_mentioned}/{report.vent_meetings};"
+            f" structured vent observations "
+            f"{report.structured_vent_observed}/{report.vent_meetings};"
+            f" killer accused {report.killer_accused}/{n};"
+            f" votes outside a <=3 set {report.votes_outside_small_set}/"
+            f"{report.small_set_ejections};"
+            f" reporter ejected {report.reporter_ejected}/{report.report_ejections}"
+            f" ({report.reporter_ejected_innocent} innocent);"
+            f" killer self-reported {report.killer_self_reported}",
+        ]
+    )
+
+
+def _emit_funnel_json(reports: Sequence[InformationFunnelReport]) -> str:
+    import json
+
+    return json.dumps([report.model_dump() for report in reports], indent=2)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -230,18 +291,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--json",
         action="store_true",
-        help="emit the machine-readable BaselineMeasurementReport JSON array",
+        help="emit the machine-readable JSON array",
+    )
+    parser.add_argument(
+        "--funnel",
+        action="store_true",
+        help=(
+            "emit the Task-15.3 information-funnel diagnostics (oracle / possession "
+            "/ transmission) instead of the core R-gate folds; 15.7 consumes the "
+            "--funnel --json rows for the before/after close finding"
+        ),
     )
     args = parser.parse_args(argv)
     explicit_dir: Path | None = args.replay_set_dir
     emit_json: bool = args.json
+    funnel: bool = args.funnel
 
     if explicit_dir is not None:
         targets = [explicit_dir]
     else:
         targets = list(_CANONICAL_SETS)
 
-    reports: list[BaselineMeasurementReport] = []
     for sample_dir in targets:
         if not sample_dir.is_dir():
             print(f"Replay-set directory not found: {sample_dir}", file=sys.stderr)
@@ -249,8 +319,16 @@ def main(argv: list[str] | None = None) -> int:
         if not seeds_on_disk(sample_dir):
             print(f"No replay-seed-*.jsonl files in {sample_dir}", file=sys.stderr)
             return 2
-        reports.append(measure_baseline(sample_dir))
 
+    if funnel:
+        funnel_reports = [compute_information_funnel(d) for d in targets]
+        if emit_json:
+            print(_emit_funnel_json(funnel_reports))
+        else:
+            print("\n\n".join(_render_funnel_human(r) for r in funnel_reports))
+        return 0
+
+    reports = [measure_baseline(sample_dir) for sample_dir in targets]
     if emit_json:
         print(_emit_json(reports))
     else:
