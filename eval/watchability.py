@@ -496,15 +496,22 @@ class _IntegrityBreach(Exception):
     Raised on ANY corruption that the referee must not certify:
 
     * a per-tick or ``state_hash_after`` mismatch (determinism/firewall breach);
+    * a duplicate meeting row (two ``MeetingReplayEntry`` for the same tick or
+      meeting id) — the report loader double-counts them into D2 / the supply
+      floors while the reconstruction dict would silently keep one (mirrors
+      ``eval.validity.check_no_duplicate_meeting_rows``);
     * a meeting ``state_hash_before`` that does not equal the trigger tick's hash
       (corrupted meeting metadata the byte-identity walk rejects — mirrors
       ``scripts/_verify_samples.py::_check_meeting_pre_hashes``);
-    * a recorded ``game_over`` winner/reason that does not match the reconstructed
-      terminal :class:`~engine.events.GameOverEvent` (a FORGED outcome label — the
-      state-hash chain does not cover it, so D1/mean_score could otherwise be
-      inflated on a tampered set; mirrors ``eval.validity`` check 1);
     * a game that reached a meeting with no recorded meeting row (a truncated /
-      crashed-mid-meeting replay).
+      crashed-mid-meeting replay);
+    * a MISSING terminal outcome — no recorded ``game_over`` row, or a playback
+      that never reconstructs a terminal :class:`~engine.events.GameOverEvent`
+      (an incomplete recording; a valid game has both);
+    * a recorded ``game_over`` winner/reason that does not match the reconstructed
+      terminal ``GameOverEvent`` (a FORGED outcome label — the state-hash chain
+      does not cover it, so D1/mean_score could otherwise be inflated on a
+      tampered set; mirrors ``eval.validity`` check 1).
 
     Any of these means the recorded bytes are not a trustworthy, complete
     deduction game, so the referee floors the whole set rather than scoring on
@@ -526,9 +533,19 @@ def _reconstruct_game_kills(
 
     entries = read_all_entries(replay_path)
     tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
+    meeting_entries = [
+        entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+    ]
     meeting_by_tick: Mapping[int, MeetingReplayEntry] = {
-        entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
+        entry.tick: entry for entry in meeting_entries
     }
+    # A duplicate meeting row (same tick or meeting id) makes the report loader
+    # double-count it into D2 / the supply floors while this reconstruction dict
+    # silently keeps one — floor the set (mirrors the validity gate's dedup check).
+    if len(meeting_by_tick) != len(meeting_entries) or len(
+        {entry.meeting_id for entry in meeting_entries}
+    ) != len(meeting_entries):
+        raise _IntegrityBreach
     game_end = next(
         (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
     )
@@ -608,19 +625,19 @@ def _reconstruct_game_kills(
         if state.phase == "GAME_OVER":
             break
 
+    # A valid, complete game has BOTH a recorded game_over row and a reconstructed
+    # terminal GameOverEvent. A set missing either — the game_over line deleted, or
+    # a playback that never reaches a terminal event — is incomplete/corrupt and is
+    # floored, not silently certified (a partial replay that broke mid-walk already
+    # raised above on its unresolved meeting / hash).
+    if game_end is None or reconstructed_reason is None:
+        raise _IntegrityBreach
     # The recorded game_over winner/reason are NOT covered by the state-hash chain
     # (eval.validity check 1), so a forged outcome label reconstructs byte-clean
-    # yet inflates D1/mean_score. Compare against the reconstructed terminal
-    # GameOverEvent and floor a mismatch (only when reconstruction reached game
-    # over — a genuinely partial reconstruction has no reconstructed label to
-    # check against, and is already floored by its unresolved meeting / hash).
+    # yet inflates D1/mean_score. Floor a mismatch against the reconstructed event.
     if (
-        reconstructed_reason is not None
-        and game_end is not None
-        and (
-            game_end.winner != reconstructed_winner
-            or game_end.reason != reconstructed_reason
-        )
+        game_end.winner != reconstructed_winner
+        or game_end.reason != reconstructed_reason
     ):
         raise _IntegrityBreach
     return kills

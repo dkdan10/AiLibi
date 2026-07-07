@@ -412,6 +412,47 @@ def test_forged_game_over_reason_is_an_integrity_breach(tmp_path: Path) -> None:
     assert all(game.score == 0.0 for game in report.per_game)
 
 
+def test_missing_game_over_row_is_an_integrity_breach(tmp_path: Path) -> None:
+    """A set whose terminal ``game_over`` row is deleted is floored, not certified.
+
+    Every tick + meeting hash still reconstructs and the supply floors still pass,
+    but the recorded terminal outcome is gone — an incomplete recording.
+    """
+
+    import json
+
+    from eval.watchability import _reconstruct_kills
+
+    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    kept = [line for line in lines if json.loads(line).get("kind") != "game_over"]
+    assert len(kept) == len(lines) - 1  # exactly the game_over row was dropped
+    _write_one_game_set(tmp_path, kept)
+
+    assert _reconstruct_kills(tmp_path).integrity_ok is False
+    report = compute_watchability(tmp_path)
+    assert report.integrity_ok is False
+    assert report.referee_passed is False
+
+
+def test_duplicate_meeting_row_is_an_integrity_breach(tmp_path: Path) -> None:
+    """A doubled meeting row (which the report loader double-counts) floors the set."""
+
+    import json
+
+    from eval.watchability import _reconstruct_kills
+
+    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    meeting_line = next(line for line in lines if "meeting_id" in json.loads(line))
+    # Insert a second copy of the meeting row (same tick + meeting id).
+    doubled = [*lines, meeting_line]
+    _write_one_game_set(tmp_path, doubled)
+
+    assert _reconstruct_kills(tmp_path).integrity_ok is False
+    report = compute_watchability(tmp_path)
+    assert report.integrity_ok is False
+    assert report.referee_passed is False
+
+
 def test_baseline_2_witnessed_event_rate_is_the_measured_anchor() -> None:
     """The 9p2i witnessed-event rate is the §6 6/160 = 3.75% crew-witnessed anchor."""
 
