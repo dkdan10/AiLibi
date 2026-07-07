@@ -121,9 +121,10 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
 def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
     # A re-record stamps its substrate config onto the replay's game_over
     # record; the MANIFEST flags column reports the ON levers, sorted. This is
-    # the stamp -> manifest provenance path. ALL FIVE levers are unconditionally
+    # the stamp -> manifest provenance path. ALL SIX levers are unconditionally
     # ON (the four 13.5 levers since Task 14.9, the Task-14.10
-    # evidence_quality_lift lever since the Task-14.12 close), so a bare-env
+    # evidence_quality_lift lever since the Task-14.12 close, and Task 15.5's
+    # reporter_exculpation since the Task-15.7 baseline-3 record), so a bare-env
     # recording stamps every one of them — no env export needed.
     samples = tmp_path / "samples"
     samples.mkdir()
@@ -135,8 +136,8 @@ def test_provenance_reads_stamped_substrate_flags(tmp_path: Path) -> None:
         samples, 5, "Qwen/Qwen3-32B"
     )
     assert flags == (
-        "evidence_quality_lift, movement_perception, testimony_as_content, "
-        "unfreeze_memory, witnessed_kill_evidence"
+        "evidence_quality_lift, movement_perception, reporter_exculpation, "
+        "testimony_as_content, unfreeze_memory, witnessed_kill_evidence"
     )
     # This game_end row carries the substrate stamp but no tactical-policy stamp,
     # so the policy cell reads the FSM-default label.
@@ -152,9 +153,10 @@ def test_provenance_reports_the_evidence_quality_lever_when_stamped_on(
 ) -> None:
     # Task 14.10: the lever round-trips stamp -> read_substrate_flags ->
     # MANIFEST flags cell, so the Task-14.12 lever-ON recording
-    # self-describes. With AILIBI_EVIDENCE_QUALITY_LIFT exported at record
-    # time the game_over stamp carries it ON and the cell lists it alongside
-    # the four retired levers.
+    # self-describes. The AILIBI_EVIDENCE_QUALITY_LIFT export is a no-op (the
+    # lever is unconditional), and the bare-env stamp lists all six retired
+    # levers — including reporter_exculpation, graduated at the Task-15.7
+    # baseline-3 record.
     monkeypatch.setenv("AILIBI_EVIDENCE_QUALITY_LIFT", "1")
     samples = tmp_path / "samples"
     samples.mkdir()
@@ -164,8 +166,8 @@ def test_provenance_reports_the_evidence_quality_lever_when_stamped_on(
 
     _, _, flags, _, _, _ = mw.sample_provenance(samples, 7, "Qwen/Qwen3-32B")
     assert flags == (
-        "evidence_quality_lift, movement_perception, testimony_as_content, "
-        "unfreeze_memory, witnessed_kill_evidence"
+        "evidence_quality_lift, movement_perception, reporter_exculpation, "
+        "testimony_as_content, unfreeze_memory, witnessed_kill_evidence"
     )
 
 

@@ -65,19 +65,18 @@ _FLAGS_OFF = {
     "movement_perception": False,
     "unfreeze_memory": False,
 }
-# The live snapshot under a bare env: all five levers unconditionally ON --
-# the four 13.5 levers since Task 14.9, and the Task-14.10 evidence-quality
-# lever since the Task-14.12 close (its env gate retired after baseline 2
-# adopted it, so the snapshot no longer reads an AILIBI_* var for it).
+# The live snapshot under a bare env: all six levers unconditionally ON --
+# the four 13.5 levers since Task 14.9, the Task-14.10 evidence-quality lever
+# since the Task-14.12 close, and Task 15.5's reporter_exculpation since the
+# Task-15.7 baseline-3 record (each env gate retired once the baseline adopted
+# it, so the snapshot no longer reads an AILIBI_* var for any of them).
 _FLAGS_ON = {
     "testimony_as_content": True,
     "witnessed_kill_evidence": True,
     "movement_perception": True,
     "unfreeze_memory": True,
     "evidence_quality_lift": True,
-    # Task 15.5's live toggle: DEFAULT-OFF, so the bare/default snapshot stamps
-    # it False alongside the five unconditional levers.
-    "reporter_exculpation": False,
+    "reporter_exculpation": True,
 }
 
 
@@ -392,10 +391,11 @@ def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_substrate_flags_default_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     # No explicit substrate_flags: call_turn snapshots the live substrate. All
-    # five levers are unconditionally ON -- the four 13.5 levers since Task 14.9
-    # and the 14.10 evidence-quality lever since the Task-14.12 close -- so the
-    # snapshot is env-independent (a stray AILIBI_EVIDENCE_QUALITY_LIFT export
-    # cannot flip it).
+    # six levers are unconditionally ON -- the four 13.5 levers since Task 14.9,
+    # the 14.10 evidence-quality lever since the Task-14.12 close, and Task 15.5's
+    # reporter_exculpation since the Task-15.7 baseline-3 record -- so the snapshot
+    # is env-independent (a stray AILIBI_EVIDENCE_QUALITY_LIFT export cannot flip
+    # it).
     monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
     send = _RecordingOllama(text=_VALID)
     monkeypatch.setattr(pb, "_ollama_send", send)
@@ -501,10 +501,11 @@ def test_active_substrate_flags_every_lever_unconditional(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Every substrate lever is unconditionally ON: the four 13.5 gates retired
-    # at Task 14.9, and the Task-14.10 evidence-quality gate at the Task-14.12
-    # close. So active_substrate_flags reads all-True under ANY env — bare, a
-    # legacy all-ON export, a legacy "0", or a stray lever export — and no
-    # AILIBI_* var can flip any of them (the delegation to
+    # at Task 14.9, the Task-14.10 evidence-quality gate at the Task-14.12 close,
+    # and Task 15.5's reporter_exculpation gate at the Task-15.7 baseline-3 record.
+    # So active_substrate_flags reads all-True under ANY env — bare, a legacy
+    # all-ON export, a legacy "0", or a stray lever export — and no AILIBI_* var
+    # can flip any of them (the delegation to
     # orchestrator.replay.substrate_flag_snapshot carries this for free).
     monkeypatch.delenv("AILIBI_EVIDENCE_QUALITY_LIFT", raising=False)
     assert active_substrate_flags(env={}) == _FLAGS_ON
@@ -516,3 +517,7 @@ def test_active_substrate_flags_every_lever_unconditional(
     assert (
         active_substrate_flags(env={"AILIBI_EVIDENCE_QUALITY_LIFT": "1"}) == _FLAGS_ON
     )
+    # The graduated reporter_exculpation lever is likewise env-independent: a
+    # stray AILIBI_REPORTER_EXCULPATION export (either polarity) cannot flip it.
+    assert active_substrate_flags(env={"AILIBI_REPORTER_EXCULPATION": "0"}) == _FLAGS_ON
+    assert active_substrate_flags(env={"AILIBI_REPORTER_EXCULPATION": "1"}) == _FLAGS_ON

@@ -70,7 +70,6 @@ from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from agents.memory.beliefs import reporter_exculpation_enabled
 from engine.actions import Action
 from engine.world import WorldState
 from meetings.schemas import (
@@ -386,18 +385,20 @@ ReplayLogEntry: TypeAlias = Annotated[
 # ``experiments.lab.probe_backends.active_substrate_flags`` exactly so the
 # recorded MANIFEST ``flags`` column, the sweep result rows, and the replay
 # stamp all describe the same substrate levers with identical keys. The four
-# merged Phase-13.5 levers (Task 14.9) AND the Task-14.10 ``evidence_quality_lift``
+# merged Phase-13.5 levers (Task 14.9), the Task-14.10 ``evidence_quality_lift``
 # lever (retired to unconditional at the Task-14.12 close, once baseline 2 adopted
-# it) are RETIRED as toggles — unconditionally ON, env gates deleted — but stay in
-# the snapshot as provenance. A live toggleable lever registers its key +
-# resolver in ``_TOGGLEABLE_LEVER_RESOLVERS`` below (Task 15.5's default-OFF
-# ``reporter_exculpation``).
+# it), AND Task 15.5's ``reporter_exculpation`` (graduated to unconditional at the
+# Task-15.7 baseline-3 record, once baseline 3 adopted it) are ALL RETIRED as
+# toggles — unconditionally ON, env gates deleted — but stay in the snapshot as
+# provenance. ``_TOGGLEABLE_LEVER_RESOLVERS`` below is now empty; a future live
+# toggleable lever would register its key + resolver there.
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
     "movement_perception",
     "unfreeze_memory",
     "evidence_quality_lift",
+    "reporter_exculpation",
 )
 
 # (key, resolver) pairs for levers that still consult an ``AILIBI_*`` env var.
@@ -405,15 +406,16 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # per AGENTS.md "no module-level mutable state", so nothing can silently change
 # replay stamps or the loader's mismatch check mid-process). Each resolver takes
 # the optional ``env`` mapping and returns the lever's active state (the 13.5
-# ``*_enabled()`` signature). Task 15.5's ``reporter_exculpation`` is the live
-# toggle: DEFAULT-OFF, so a bare-environment snapshot stamps it ``False`` and the
-# committed baseline-2 replays (recorded before the key existed) reconstruct
-# byte-identically -- ``_assert_substrate_matches`` reads a missing key as
-# ``False`` on both sides. ``evidence_quality_lift`` (Task 14.10) graduated to
-# ``_RETIRED_ALWAYS_ON_LEVERS`` at the 14.12 close and is no longer env-gated.
+# ``*_enabled()`` signature). This table is currently EMPTY: every substrate lever
+# has graduated to unconditional-ON. Task 15.5's ``reporter_exculpation`` was the
+# last live toggle; it joined ``_RETIRED_ALWAYS_ON_LEVERS`` at the Task-15.7
+# baseline-3 record (``evidence_quality_lift`` graduated the same way at the 14.12
+# close). The typed-empty form is retained so a future live lever registers here
+# with no structural change, and so ``substrate_flag_snapshot`` keeps one uniform
+# snapshot path.
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = (("reporter_exculpation", reporter_exculpation_enabled),)
+] = ()
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -436,20 +438,18 @@ def substrate_flag_snapshot(
 ) -> dict[str, bool]:
     """Snapshot the active substrate-lever config (Task 14.7).
 
-    The four merged Phase-13.5 levers report unconditionally ``True``: Task
-    14.9 made them the DEFAULT behavior and retired their ``*_enabled()``
-    resolvers + ``AILIBI_*`` env gates, so the corrected derivation is the only
-    substrate this build can produce. They stay in the snapshot so the MANIFEST
-    ``flags`` column and the replay stamp keep self-describing recordings (and
-    so the loader's substrate-mismatch guard can still validate legacy stamped
-    replays). Task 14.10's ``evidence_quality_lift`` joined them at the Task-14.12
-    close (its env gate retired after baseline 2 adopted it). Task 15.5's
-    ``reporter_exculpation`` is the one LIVE env-gated toggle: its resolver is read
-    from the immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded
-    through (defaulting to the live process environment), so a bare environment
-    stamps it ``False`` (DEFAULT-OFF, byte-identical to baseline 2) while an
-    ``AILIBI_REPORTER_EXCULPATION`` export stamps it ``True`` -- preserving the
-    deterministic-snapshot seam tests and sweep configs rely on.
+    Every substrate lever now reports unconditionally ``True``. The four merged
+    Phase-13.5 levers (Task 14.9), Task 14.10's ``evidence_quality_lift`` (retired
+    at the Task-14.12 close once baseline 2 adopted it), and Task 15.5's
+    ``reporter_exculpation`` (graduated at the Task-15.7 baseline-3 record once
+    baseline 3 adopted it) all had their ``*_enabled()`` env gates retired, so the
+    unconditional derivation is the only substrate this build can produce. They
+    stay in the snapshot so the MANIFEST ``flags`` column and the replay stamp keep
+    self-describing recordings (and so the loader's substrate-mismatch guard can
+    still validate legacy stamped replays — a baseline-2 stamp recording
+    ``reporter_exculpation`` OFF now fails loud, no cross-substrate replay). ``env``
+    is still threaded to the (currently empty) ``_TOGGLEABLE_LEVER_RESOLVERS`` loop
+    so a future live lever can resolve a specific mapping without a signature churn.
     """
 
     snapshot = dict.fromkeys(_RETIRED_ALWAYS_ON_LEVERS, True)
