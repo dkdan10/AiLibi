@@ -12,6 +12,7 @@ in Phase 3 (Task 3.3).
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
@@ -172,6 +173,77 @@ def evidence_quality_lift_enabled(env: Mapping[str, str] | None = None) -> bool:
 
     del env  # retired: the lever is unconditional, no environment is consulted
     return True
+
+
+# Task 15.5 reporter-exculpation lever — DEFAULT-OFF (the 13.5/14.10 toggle
+# pattern, still env-gated, NOT retired). Unlike the five levers above, this one
+# stays a live toggle registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``
+# and stamped per-recording: OFF (the default) is byte-identical to the committed
+# baseline-2 substrate, and 15.7 records baseline 3 with it measured live.
+ENV_REPORTER_EXCULPATION: Final[str] = "AILIBI_REPORTER_EXCULPATION"
+_REPORTER_EXCULPATION_FLAG_TRUE: Final[frozenset[str]] = frozenset(
+    {"1", "true", "yes", "on"}
+)
+
+
+def reporter_exculpation_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the Task 15.5 reporter-exculpation lever is ON. DEFAULT OFF.
+
+    Reads :data:`ENV_REPORTER_EXCULPATION` from ``env`` (defaulting to the real
+    process environment), mirroring the retired 13.5 / 14.10 resolvers and
+    :func:`agents.strategic.prompts.loader.resolve_prompt_set`. Default OFF: an
+    unset / empty / unrecognised value is ``False`` so the belief fold and the
+    vote-ballot render stay byte-identical to the committed baseline-2 substrate
+    (``scripts/verify_samples.sh`` reconstructs clean) — the live re-record under
+    the lever is Task 15.7. Accepts ``1/true/yes/on`` (case-insensitive). The
+    ``env`` argument lets tests + the offline counterfactual toggle the lever
+    deterministically without mutating ``os.environ``.
+
+    ON gates the reporter-damp in :func:`apply_meeting_evidence_rules` (the
+    ``pre_vote`` soft accusation lift against a body-report meeting's own reporter
+    is capped at :data:`REPORTER_EXCULPATION_SOFT_LIFT_CAP`) and, on the render
+    side, the base-rate annotation the vote-ballot template surfaces. The HARD
+    channels (:func:`apply_contradiction_rule` strong flags; the witnessed
+    vent/kill perception pins) are never gated by it — a reporter caught by a real
+    contradiction or a vent/kill flag stays convictable.
+    """
+
+    environment = env if env is not None else os.environ
+    return (
+        environment.get(ENV_REPORTER_EXCULPATION, "").strip().lower()
+        in _REPORTER_EXCULPATION_FLAG_TRUE
+    )
+
+
+REPORTER_EXCULPATION_SOFT_LIFT_CAP: Final[float] = 0.0
+"""Per-meeting cap on the SOFT accusation-driven suspicion lift against a
+body-report meeting's own REPORTER (Task 15.5; tasks/post-phase-14-clean-up.md
+H5; audit-phase-14-close.md §4).
+
+Applied only behind the default-OFF :func:`reporter_exculpation_enabled` lever,
+and only in the ``pre_vote`` half of the fold (the transient vote-time graph the
+ballot reads — the deciding-lift channel), so OFF and the persistent across-meeting
+absorb are both byte-identical. When ON, a reporter's accusation-driven pre-vote
+bump -- the flat single-voice :data:`ACCUSATION_SUSPICION_DELTA` accusation-carry
+AND the graduated :func:`graduated_spread_delta` testimony-spread -- is capped at
+this value. At ``0.0`` the reporter takes NO soft lift: proximity-at-discovery no
+longer reads as guilt on its own. The HARD channels are untouched by construction
+(this cap lives in the accusation-bump loop; :func:`apply_contradiction_rule` and
+the witnessed vent/kill perception pins never pass through it), so a reporter
+caught by a real contradiction or a vent/kill flag still crosses the §4.6 gate --
+no immunity, only removal of the proximity prior.
+
+The empirical justification is the measured base rate: on the committed
+baseline-2 corpus the impostor self-report rate is EXACTLY ZERO -- 0 of the 164
+report meetings (129 in ``9p2i`` + 35 in ``4p1i``) had the killer as the reporter
+(``eval.funnel`` ``killer_self_reported`` = 0 on both sets), while 22 of ``9p2i``'s
+106 report-meeting ejections (and 1 of ``4p1i``'s 10) removed the meeting's own --
+always innocent -- reporter. Self-report is therefore weakly exculpatory in this
+game, and zeroing the reporter's soft lift is safe against the only over-damping
+risk (a self-reporting impostor laundering suspicion): such a game does not occur
+in the corpus, and the over-damping canary (zero hard-flag-backed conviction
+outcomes change) is the contract's hard line. The magnitude is a single tuning
+point should 15.7's live measurement warrant a non-zero cap."""
 
 
 ACCUSATION_SUSPICION_DELTA: Final[float] = 0.05
@@ -894,6 +966,7 @@ def apply_meeting_evidence_rules(
     pre_vote_folded: AbstractSet[PlayerId] = frozenset(),
     pre_vote_informed: AbstractSet[PlayerId] = frozenset(),
     pre_vote_voice_counts: Mapping[PlayerId, int] | None = None,
+    reporter: PlayerId | None = None,
     env: Mapping[str, str] | None = None,
 ) -> BeliefState:
     """Fold one meeting's public evidence into persistent beliefs (Tasks 9.8, 10.7, 10.15).
@@ -1059,6 +1132,28 @@ def apply_meeting_evidence_rules(
     the legitimate 9.8 channel and stays untouched (lever ON or OFF). OFF is
     byte-identical to the pre-14.10 fold.
 
+    **Reporter exculpation (Task 15.5; default-OFF; H5 / audit-phase-14-close
+    §4).** ``reporter`` names the body-report meeting's own reporter (the
+    manager threads :attr:`meetings.manager.MeetingTrigger.triggered_by` for a
+    body report; ``None`` for an emergency call or any non-vote-time caller).
+    With the default-OFF :func:`reporter_exculpation_enabled` lever ON
+    (``env``-resolved) the reporter's ``pre_vote`` accusation-driven bump -- the
+    flat single-voice accusation-carry AND the graduated testimony-spread -- is
+    capped at :data:`REPORTER_EXCULPATION_SOFT_LIFT_CAP` (0.0), removing the
+    proximity-at-discovery prior that read the always-at-the-body reporter as
+    guilty (22/106 innocent-reporter ejections on baseline 2). ONLY the
+    ``pre_vote`` transient half is damped -- the persistent post-vote / composed
+    absorb never receives a ``reporter`` (the game.py absorb passes none), so the
+    across-meeting channel is untouched and OFF is byte-identical. The damp is
+    the accusation-bump loop's tightest cap, applied AFTER the 14.10 ceiling, so
+    it composes with (never bypasses) the existing caps and the downstream
+    :func:`meetings.manager._joint_capped_suspicion`. The HARD channels are
+    structurally out of reach: :func:`apply_contradiction_rule` runs before this
+    fold on a separate call, and a witnessed vent/kill pin lands at perception
+    time in the seeded prior -- neither passes through this loop, so a reporter
+    caught by a real flag still crosses the §4.6 gate (the over-damping canary:
+    zero hard-flag-backed conviction outcomes change).
+
     All subject sets are processed in sorted order; the result is a
     deterministic function of its arguments (replay-stable).
     """
@@ -1143,6 +1238,16 @@ def apply_meeting_evidence_rules(
     # halves never consult the lever, so the 9.8 across-meeting
     # accumulator -- and the OFF-branch byte-identity -- are untouched.
     ceil_lift = phase == "pre_vote" and evidence_quality_lift_enabled(env)
+    # Task 15.5 reporter exculpation (default-OFF): cap the soft accusation lift
+    # against a body-report meeting's own reporter, TRANSIENT pre-vote half only.
+    # ``reporter=None`` (every caller but the manager's vote-time fold) or the
+    # lever OFF makes this a no-op, so the persistent absorb and the OFF path
+    # stay byte-identical.
+    exculpate_reporter = (
+        phase == "pre_vote"
+        and reporter is not None
+        and reporter_exculpation_enabled(env)
+    )
     for subject in sorted(bump_now):
         # Graduated testimony spread (Task 13.7): the PRE-VOTE half lifts a
         # voiced subject by its voice-count delta (1->+0.05, 2->+0.12,
@@ -1159,6 +1264,11 @@ def apply_meeting_evidence_rules(
             # exempt via the max -- the ceiling bounds the lift, not the prior.
             prior = result.view(subject).suspicion
             delta = min(delta, max(prior, CONTRADICTION_RENDER_CEIL) - prior)
+        if exculpate_reporter and subject == reporter:
+            # Task 15.5: the reporter's accusation-driven soft lift is capped
+            # (0.0 -> zeroed). Applied AFTER the 14.10 ceiling so it is the
+            # tightest bound, composing with -- never bypassing -- the caps.
+            delta = min(delta, REPORTER_EXCULPATION_SOFT_LIFT_CAP)
         result.adjust_suspicion(subject, delta=delta)
     for subject in sorted(lower_now):
         result.adjust_suspicion(subject, delta=-CORROBORATION_SUSPICION_DELTA)
@@ -1178,10 +1288,12 @@ __all__ = [
     "CONTRADICTION_SUSPICION_DELTA",
     "CORROBORATION_SUSPICION_DELTA",
     "ENV_EVIDENCE_QUALITY_LIFT",
+    "ENV_REPORTER_EXCULPATION",
     "MEETING_CONTRADICTION_LIFT_CAP",
     "MEETING_SUSPICION_DECAY_RATE",
     "OBSERVED_KILL_ACTION",
     "OBSERVED_VENT_ACTION",
+    "REPORTER_EXCULPATION_SOFT_LIFT_CAP",
     "TESTIMONY_INDEPENDENCE_BAR",
     "TESTIMONY_SPREAD_CAP_DELTA",
     "TESTIMONY_SPREAD_TWO_VOICE_DELTA",
@@ -1199,4 +1311,5 @@ __all__ = [
     "apply_observation_rules",
     "evidence_quality_lift_enabled",
     "graduated_spread_delta",
+    "reporter_exculpation_enabled",
 ]

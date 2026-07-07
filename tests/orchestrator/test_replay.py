@@ -24,9 +24,10 @@ from pathlib import Path
 
 import pytest
 
-from agents.memory.beliefs import ENV_EVIDENCE_QUALITY_LIFT
+from agents.memory.beliefs import ENV_EVIDENCE_QUALITY_LIFT, ENV_REPORTER_EXCULPATION
 from orchestrator.replay import (
     SUBSTRATE_FLAG_KEYS,
+    TOGGLEABLE_SUBSTRATE_FLAG_KEYS,
     FailedCallReplayEntry,
     GameEndReplayEntry,
     LLMCallRecord,
@@ -41,10 +42,14 @@ from orchestrator.replay import (
 )
 from tests._helpers.world_state import scripted_initial_world_state
 
-# The Task-14.10 lever's snapshot key (the ``_TOGGLEABLE_LEVER_RESOLVERS``
-# registration in orchestrator.replay); its env var is
-# ``ENV_EVIDENCE_QUALITY_LIFT`` above.
+# The Task-14.10 lever's snapshot key (retired to ``_RETIRED_ALWAYS_ON_LEVERS``
+# at the 14.12 close); its env var is ``ENV_EVIDENCE_QUALITY_LIFT`` above.
 ENV_EVIDENCE_QUALITY_LIFT_KEY = "evidence_quality_lift"
+
+# The Task-15.5 reporter-exculpation lever's snapshot key — the one LIVE
+# ``_TOGGLEABLE_LEVER_RESOLVERS`` registration; its env var is
+# ``ENV_REPORTER_EXCULPATION`` above. DEFAULT-OFF.
+ENV_REPORTER_EXCULPATION_KEY = "reporter_exculpation"
 
 # The committed 9p2i sample set the gp-4 audit measured; read-only here (the
 # re-record itself is Task 9.11).
@@ -143,44 +148,80 @@ class TestGameEndRecording:
 class TestSubstrateFlagStamp:
     """The Task-14.7 substrate-flag stamp on the game_over record.
 
-    A replay self-describes which substrate levers generated it. All five levers
-    are unconditionally ON with their env gates retired: the four 13.5 levers
-    since Task 14.9, and Task 14.10's ``evidence_quality_lift`` since the
-    Task-14.12 close (once baseline 2 adopted it). The generic
-    ``_TOGGLEABLE_LEVER_RESOLVERS`` table is empty today but stays for a future
-    lever; every recording stamps all five levers True.
+    A replay self-describes which substrate levers generated it. The five
+    ORIGINAL levers are unconditionally ON with their env gates retired: the
+    four 13.5 levers since Task 14.9, and Task 14.10's ``evidence_quality_lift``
+    since the Task-14.12 close. Task 15.5 adds the one LIVE env-gated toggle,
+    ``reporter_exculpation`` (``_TOGGLEABLE_LEVER_RESOLVERS``), DEFAULT-OFF: a
+    bare-environment recording stamps the five retired levers True and the new
+    lever False — byte-identical to the committed baseline-2 substrate, which
+    predates the key (``_assert_substrate_matches`` reads a missing key as
+    ``False`` on both sides).
     """
 
-    def test_substrate_flag_snapshot_is_all_on_and_env_independent(self) -> None:
-        # Every lever reports True under ANY env — a bare mapping, an explicit
-        # legacy "0", or the (retired) AILIBI_EVIDENCE_QUALITY_LIFT export all
-        # read identically. No lever is env-gated anymore.
-        all_on = dict.fromkeys(SUBSTRATE_FLAG_KEYS, True)
-        assert substrate_flag_snapshot({}) == all_on
-        assert substrate_flag_snapshot({"AILIBI_TESTIMONY_AS_CONTENT": "0"}) == all_on
-        assert substrate_flag_snapshot({ENV_EVIDENCE_QUALITY_LIFT: "0"}) == all_on
-        assert substrate_flag_snapshot({ENV_EVIDENCE_QUALITY_LIFT: "1"}) == all_on
-        assert set(SUBSTRATE_FLAG_KEYS) == {
+    def test_retired_levers_are_all_on_and_env_independent(self) -> None:
+        # The five retired levers report True under ANY env — a bare mapping, an
+        # explicit legacy "0", or the (retired) AILIBI_EVIDENCE_QUALITY_LIFT
+        # export all read identically. Only reporter_exculpation reads env.
+        retired = SUBSTRATE_FLAG_KEYS[: -len(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)]
+        for env in (
+            {},
+            {"AILIBI_TESTIMONY_AS_CONTENT": "0"},
+            {ENV_EVIDENCE_QUALITY_LIFT: "0"},
+            {ENV_EVIDENCE_QUALITY_LIFT: "1"},
+        ):
+            snapshot = substrate_flag_snapshot(env)
+            assert all(snapshot[key] is True for key in retired)
+        assert set(retired) == {
             "testimony_as_content",
             "witnessed_kill_evidence",
             "movement_perception",
             "unfreeze_memory",
             "evidence_quality_lift",
         }
+        assert TOGGLEABLE_SUBSTRATE_FLAG_KEYS == (ENV_REPORTER_EXCULPATION_KEY,)
 
-    def test_snapshot_is_independent_of_the_process_environment(
+    def test_reporter_exculpation_toggle_reads_env_default_off(self) -> None:
+        # The live toggle: OFF (unset / bare / unrecognised) and ON (a truthy
+        # export), env-passed so no os.environ mutation. DEFAULT-OFF is the
+        # byte-identical baseline-2 substrate.
+        assert substrate_flag_snapshot({})[ENV_REPORTER_EXCULPATION_KEY] is False
+        assert (
+            substrate_flag_snapshot({ENV_REPORTER_EXCULPATION: "nope"})[
+                ENV_REPORTER_EXCULPATION_KEY
+            ]
+            is False
+        )
+        assert (
+            substrate_flag_snapshot({ENV_REPORTER_EXCULPATION: "1"})[
+                ENV_REPORTER_EXCULPATION_KEY
+            ]
+            is True
+        )
+        assert (
+            substrate_flag_snapshot({ENV_REPORTER_EXCULPATION: "true"})[
+                ENV_REPORTER_EXCULPATION_KEY
+            ]
+            is True
+        )
+
+    def test_snapshot_retired_lever_independent_of_the_process_environment(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # The lever no longer reads any env (unconditional since the 14.12
-        # close): the process-environment snapshot is all-ON either way.
+        # The retired lever no longer reads any env (unconditional since the
+        # 14.12 close): the process-environment snapshot is ON either way.
         monkeypatch.delenv(ENV_EVIDENCE_QUALITY_LIFT, raising=False)
         assert substrate_flag_snapshot()[ENV_EVIDENCE_QUALITY_LIFT_KEY] is True
         monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "0")
         assert substrate_flag_snapshot()[ENV_EVIDENCE_QUALITY_LIFT_KEY] is True
 
-    def test_every_recording_stamps_the_full_snapshot(self, tmp_path: Path) -> None:
-        # No env vars needed: recording under a bare environment stamps ALL five
-        # levers ON (consistent with the committed baseline-2 set).
+    def test_every_recording_stamps_the_full_snapshot(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Recording under a bare environment stamps the five retired levers ON
+        # and reporter_exculpation OFF (byte-identical to the committed
+        # baseline-2 set, which the lever leaves untouched).
+        monkeypatch.delenv(ENV_REPORTER_EXCULPATION, raising=False)
         path = tmp_path / "on.jsonl"
         ReplayLog(path, game_id="g-on").record_game_end(
             winner="IMPOSTORS", reason="IMPOSTOR_PARITY", tick=41
@@ -193,16 +234,38 @@ class TestSubstrateFlagStamp:
             "movement_perception": True,
             "unfreeze_memory": True,
             "evidence_quality_lift": True,
+            "reporter_exculpation": False,
         }
         assert read_substrate_flags(path) == dict(entry.substrate_flags)
 
-    def test_lever_on_recording_round_trips_the_stamp(
+    def test_reporter_exculpation_on_recording_round_trips_the_stamp(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # The 14.12 recording shape: with the lever exported, record_game_end
-        # stamps it ON and the file-reader round-trips it — the recording
-        # self-describes the substrate it ran under (the MANIFEST ``flags``
-        # cell renders from this same read_substrate_flags value).
+        # With the lever exported, record_game_end stamps it ON and the file
+        # reader round-trips it — the recording self-describes the substrate it
+        # ran under (the future baseline-3 shape; the MANIFEST ``flags`` cell
+        # renders from this same read_substrate_flags value). The five retired
+        # levers stay ON alongside it.
+        monkeypatch.setenv(ENV_REPORTER_EXCULPATION, "1")
+        path = tmp_path / "reporter-on.jsonl"
+        ReplayLog(path, game_id="g-reporter").record_game_end(
+            winner="CREWMATES", reason="CREWMATE_EJECT", tick=17
+        )
+        flags = read_substrate_flags(path)
+        assert flags is not None
+        assert flags[ENV_REPORTER_EXCULPATION_KEY] is True
+        assert all(
+            flags[key]
+            for key in SUBSTRATE_FLAG_KEYS[: -len(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)]
+        )
+
+    def test_retired_evidence_quality_lift_export_still_stamps_on(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The retired evidence_quality_lift env export is a no-op stamp (the
+        # lever is unconditional since the 14.12 close): exported or not it
+        # records ON, and the reader round-trips it. The other retired levers
+        # stay ON alongside it.
         monkeypatch.setenv(ENV_EVIDENCE_QUALITY_LIFT, "1")
         path = tmp_path / "lever-on.jsonl"
         ReplayLog(path, game_id="g-lever").record_game_end(
@@ -211,8 +274,10 @@ class TestSubstrateFlagStamp:
         flags = read_substrate_flags(path)
         assert flags is not None
         assert flags[ENV_EVIDENCE_QUALITY_LIFT_KEY] is True
-        # The four retired levers stay stamped ON alongside it.
-        assert all(flags[key] for key in SUBSTRATE_FLAG_KEYS[:-1])
+        assert all(
+            flags[key]
+            for key in SUBSTRATE_FLAG_KEYS[: -len(TOGGLEABLE_SUBSTRATE_FLAG_KEYS)]
+        )
 
     def test_legacy_game_over_without_stamp_deserializes(self) -> None:
         # A pre-14.7 game_over record (no substrate_flags key) still validates,
