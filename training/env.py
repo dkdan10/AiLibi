@@ -58,6 +58,7 @@ from agents.tactical.crewmate_policy import CrewmatePolicy
 from agents.tactical.impostor_policy import ImpostorPolicy
 from engine.entities import PlayerId, Role
 from engine.world import Map, load_canonical_map
+from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from observation.action_intent import (
     ActionIntent,
     DoTaskIntent,
@@ -511,12 +512,20 @@ class TacticalRolloutEnv:
         return tuple(sorted(self._game_map.sabotages))
 
     def _build_meeting_runner(self) -> MeetingRunner:
-        # ALWAYS installed (Task 15.8): the default fake-provider runner, or the
-        # surrogate factory once 15.13 lands. A fresh runner per game — runners
-        # carry per-game recording/budget state.
+        # ALWAYS installed (Task 15.8): the default runner, or the surrogate
+        # factory once 15.13 lands. A fresh runner per game — runners carry
+        # per-game recording/budget state.
         if self._meeting_runner_factory is not None:
             return self._meeting_runner_factory()
-        return build_default_meeting_runner()
+        # Force the deterministic FAKE provider (ignore the ambient
+        # ``AILIBI_LLM_PROVIDER``): Phase-15 self-play must stay $0 / offline /
+        # byte-deterministic. In an eval/dev shell that exports a real provider,
+        # the env-selected default client would otherwise send every training
+        # meeting to Anthropic/Featherless. A caller who genuinely wants a real
+        # (or surrogate) meeting layer opts in via ``meeting_runner_factory``.
+        return build_default_meeting_runner(
+            llm_client=build_default_client(env={ENV_PROVIDER: PROVIDER_FAKE})
+        )
 
     def rollout(self, seed: int) -> EpisodeRollout:
         """Run one full production game and return its typed episode record.

@@ -302,6 +302,25 @@ def _frame(
     )
 
 
+def crew_witnesses(
+    event: KilledEvent, roles: Mapping[PlayerId, Role]
+) -> tuple[PlayerId, ...]:
+    """The CREWMATE witnesses of a kill (Task 15.8).
+
+    ``KilledEvent.witnesses`` (``engine/rules.py`` ``_witnesses_in_room``) excludes
+    only the killer and the victim, so in a multi-impostor game it can include a
+    co-located FELLOW impostor — who generates NO crew testimony (a teammate never
+    reports its own team). "Witnessed-ness" in the training-signal doctrine is
+    about crew EVIDENCE, so both the ``witness_exposure_rate`` descriptor and the
+    reward channel's un-witnessed-ness term count only crew witnesses; a kill seen
+    solely by a teammate is un-witnessed from the crew's (deduction) perspective.
+    """
+
+    return tuple(
+        witness for witness in event.witnesses if roles.get(witness) == "CREWMATE"
+    )
+
+
 def _meeting_result_from_entry(entry: MeetingReplayEntry) -> MeetingResult:
     return MeetingResult(
         meeting_id=entry.meeting_id,
@@ -328,7 +347,9 @@ def _build_descriptors(
 ) -> BehavioralDescriptors:
     kill_ticks = tuple(event.tick for event in events if isinstance(event, KilledEvent))
     kills = [event for event in events if isinstance(event, KilledEvent)]
-    witnessed = sum(1 for event in kills if event.witnesses)
+    # CREW-witnessed only: a kill seen solely by a fellow impostor generated no
+    # crew evidence and is not "exposure" (see :func:`crew_witnesses`).
+    witnessed = sum(1 for event in kills if crew_witnesses(event, roles))
     witness_exposure_rate = witnessed / len(kills) if kills else 0.0
     vent_usage = sum(
         1
@@ -458,7 +479,12 @@ def reconstruct_episode(
 
         if episode_boundary == "first_meeting":
             # The deliberate 15.13 fallback-(b) boundary: end at the first
-            # meeting trigger, MARK truncated, do NOT apply the meeting.
+            # meeting trigger, MARK truncated, do NOT apply the meeting. The
+            # meeting has NOT resolved within this episode's horizon, so its
+            # outcome / ejection stay ``None`` — copying them from the full
+            # replay would leak a post-boundary result (who was ejected) into a
+            # pre-meeting training record. Only the trigger facts known at the
+            # trigger tick are recorded.
             meetings.append(
                 MeetingRecord(
                     tick=entry.tick,
@@ -467,12 +493,8 @@ def reconstruct_episode(
                     else f"seed-{seed}:meeting-{entry.tick}",
                     trigger=trigger_event.trigger,
                     triggered_by=trigger_event.actor,
-                    outcome=meeting_entry.outcome
-                    if meeting_entry is not None
-                    else None,
-                    ejected_player_id=meeting_entry.ejected_player_id
-                    if meeting_entry is not None
-                    else None,
+                    outcome=None,
+                    ejected_player_id=None,
                 )
             )
             truncated = True

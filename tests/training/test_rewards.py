@@ -8,8 +8,12 @@ side-specific tactically-reachable terms are read from the typed event log.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 import pytest
 
+from engine.entities import Role
+from engine.events import EngineEvent, KilledEvent
 from training.env import TacticalRolloutEnv
 from training.rewards import (
     PotentialShaper,
@@ -20,7 +24,9 @@ from training.rewards import (
 )
 from training.rollout import (
     BehavioralDescriptors,
+    EpisodeFrame,
     EpisodeRollout,
+    MeetingRecord,
 )
 
 _NUM_PLAYERS = 9
@@ -54,6 +60,38 @@ def _empty_descriptors() -> BehavioralDescriptors:
 def _rollout(*, truncated: bool, winner: str | None) -> EpisodeRollout:
     """A minimal hand-built rollout for the truncation-guard unit tests."""
 
+    return _make_rollout(
+        truncated=truncated,
+        winner=winner,
+        roles={"p0": "IMPOSTOR"},
+    )
+
+
+def _frame(
+    *, tasks_completed: int, alive_crew: int, alive_impostors: int
+) -> EpisodeFrame:
+    return EpisodeFrame(
+        tick=1,
+        kind="tick",
+        phase="GAME_OVER",
+        state_hash="0" * 64,
+        tasks_completed=tasks_completed,
+        tasks_total=max(1, tasks_completed),
+        alive_crew=alive_crew,
+        alive_impostors=alive_impostors,
+        cumulative_kills=0,
+    )
+
+
+def _make_rollout(
+    *,
+    truncated: bool,
+    winner: str | None,
+    roles: Mapping[str, Role],
+    events: Sequence[EngineEvent] = (),
+    meetings: Sequence[MeetingRecord] = (),
+    frames: Sequence[EpisodeFrame] = (),
+) -> EpisodeRollout:
     return EpisodeRollout(
         seed=0,
         num_players=_NUM_PLAYERS,
@@ -64,12 +102,34 @@ def _rollout(*, truncated: bool, winner: str | None) -> EpisodeRollout:
         outcome="FIRST_MEETING" if truncated else "IMPOSTORS",
         winner=winner,  # type: ignore[arg-type]
         win_reason=None if winner is None else "IMPOSTOR_PARITY",
-        final_tick=0,
-        roles={"p0": "IMPOSTOR"},
-        frames=(),
-        events=(),
-        meetings=(),
+        final_tick=1,
+        roles=roles,
+        frames=tuple(frames),
+        events=tuple(events),
+        meetings=tuple(meetings),
         descriptors=_empty_descriptors(),
+    )
+
+
+def _kill(actor: str, target: str, witnesses: tuple[str, ...]) -> KilledEvent:
+    return KilledEvent(
+        type="Killed",
+        tick=3,
+        actor=actor,
+        target=target,
+        room="CAFETERIA",
+        witnesses=witnesses,
+    )
+
+
+def _meeting(*, trigger: str, triggered_by: str, ejected: str | None) -> MeetingRecord:
+    return MeetingRecord(
+        tick=4,
+        meeting_id="m",
+        trigger=trigger,  # type: ignore[arg-type]
+        triggered_by=triggered_by,
+        outcome="EJECTED" if ejected is not None else "SKIPPED",
+        ejected_player_id=ejected,
     )
 
 
@@ -177,3 +237,66 @@ def test_shaped_reward_total_combines_terminal_dense_and_shaping() -> None:
     assert reward.total() == pytest.approx(
         reward.terminal_reward + dense + reward.shaping_sum
     )
+
+
+# --------------------------------------------------------------------------- #
+# Reward scoping: teammate witnesses + crew-only report credit                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_impostor_unwitnessed_kills_ignore_teammate_witnesses() -> None:
+    """A kill seen only by a fellow impostor produced no crew evidence, so it
+    counts as un-witnessed — not withheld from stealth credit."""
+
+    roles: dict[str, Role] = {
+        "p0": "IMPOSTOR",
+        "p1": "IMPOSTOR",
+        "p2": "CREWMATE",
+        "p3": "CREWMATE",
+    }
+    rollout = _make_rollout(
+        truncated=False,
+        winner="IMPOSTORS",
+        roles=roles,
+        events=(
+            _kill("p0", "p2", ("p1",)),  # teammate-only witness -> un-witnessed
+            _kill("p0", "p3", ("p1", "p3b")),  # no real crew witness id -> un-witnessed
+            _kill("p1", "p2", ("p3",)),  # a crew witness -> witnessed
+        ),
+        frames=(_frame(tasks_completed=0, alive_crew=0, alive_impostors=2),),
+    )
+    terms = side_specific_terms(rollout, "IMPOSTOR")
+    assert terms["kills"] == 3.0
+    # Only the third kill has a crew witness (p3), so two are crew-un-witnessed.
+    assert terms["unwitnessed_kills"] == 2.0
+
+
+def test_crew_reports_count_only_crew_triggered_body_reports() -> None:
+    """``correct_reports`` / ``report_coverage`` credit only meetings a crewmate
+    routed via a body report — never an emergency or an impostor-triggered one."""
+
+    roles: dict[str, Role] = {
+        "p0": "IMPOSTOR",
+        "p1": "IMPOSTOR",
+        "c1": "CREWMATE",
+        "c2": "CREWMATE",
+    }
+    rollout = _make_rollout(
+        truncated=False,
+        winner="CREWMATES",
+        roles=roles,
+        meetings=(
+            # A crew body-report that ejected an impostor: counts for both.
+            _meeting(trigger="report", triggered_by="c1", ejected="p0"),
+            # A crew body-report that ejected a crewmate: coverage only.
+            _meeting(trigger="report", triggered_by="c2", ejected="c1"),
+            # An impostor-triggered body report that ejected an impostor: neither.
+            _meeting(trigger="report", triggered_by="p1", ejected="p1"),
+            # An emergency meeting that ejected an impostor: neither.
+            _meeting(trigger="emergency", triggered_by="c1", ejected="p1"),
+        ),
+        frames=(_frame(tasks_completed=1, alive_crew=1, alive_impostors=0),),
+    )
+    terms = side_specific_terms(rollout, "CREWMATE")
+    assert terms["report_coverage"] == 2.0  # the two crew body-reports
+    assert terms["correct_reports"] == 1.0  # only the crew report that got an impostor

@@ -41,7 +41,7 @@ from numpy.typing import NDArray
 
 from engine.entities import Role
 from engine.events import KilledEvent
-from training.rollout import EpisodeFrame, EpisodeRollout
+from training.rollout import EpisodeFrame, EpisodeRollout, crew_witnesses
 
 # A reward is always scored for one side (Task 15.8): the impostor is the
 # primary/deeper track, the crew rides the shared machinery once.
@@ -156,7 +156,10 @@ class ShapedReward:
 
 def _impostor_terms(rollout: EpisodeRollout) -> dict[str, float]:
     kills = [event for event in rollout.events if isinstance(event, KilledEvent)]
-    unwitnessed = sum(1 for event in kills if not event.witnesses)
+    # Un-witnessed-ness is CREW evidence (the stealth signal): a kill seen only by
+    # a fellow impostor produced no crew testimony, so it counts as un-witnessed
+    # (see :func:`training.rollout.crew_witnesses`).
+    unwitnessed = sum(1 for event in kills if not crew_witnesses(event, rollout.roles))
     last = rollout.frames[-1] if rollout.frames else None
     impostors_alive = last.alive_impostors if last is not None else 0
     meetings_survived = sum(
@@ -180,15 +183,23 @@ def _crew_terms(rollout: EpisodeRollout) -> dict[str, float]:
     )
     crew_alive = last.alive_crew if last is not None else 0
     initial_crew = max(1, rollout.num_players - rollout.num_impostors)
+    # This is the CREW tactical-reporting reward, so both terms count only
+    # meetings a crewmate ROUTED via a body report — never an emergency or an
+    # impostor-triggered report, which credit the crew for outcomes it did not
+    # produce and would skew the optimizer toward meeting-layer/opponent behavior.
+    crew_reports = [
+        meeting
+        for meeting in rollout.meetings
+        if meeting.trigger == "report"
+        and rollout.roles.get(meeting.triggered_by) == "CREWMATE"
+    ]
     correct_reports = sum(
         1
-        for meeting in rollout.meetings
+        for meeting in crew_reports
         if meeting.ejected_player_id is not None
         and rollout.roles.get(meeting.ejected_player_id) == "IMPOSTOR"
     )
-    report_coverage = sum(
-        1 for meeting in rollout.meetings if meeting.trigger == "report"
-    )
+    report_coverage = len(crew_reports)
     return {
         "task_progress": task_progress,
         "survival": crew_alive / initial_crew,

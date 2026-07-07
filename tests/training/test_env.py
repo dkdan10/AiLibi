@@ -197,6 +197,26 @@ def test_meeting_runner_always_installed_meeting_phase_unreachable() -> None:
         assert rollout.outcome in ("CREWMATES", "IMPOSTORS", "TICK_BUDGET")
 
 
+def test_default_meeting_runner_forces_fake_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Phase-15 self-play stays $0 / offline even in a real-provider shell.
+
+    The default meeting runner forces the deterministic fake client regardless of
+    the ambient ``AILIBI_LLM_PROVIDER``, so a rollout never routes a training
+    meeting to a paid/network provider unless a caller opts in via
+    ``meeting_runner_factory``. Set a real provider (and clear its key): if the
+    env leaked to that provider the rollout would fail; forcing fake keeps it
+    offline and deterministic.
+    """
+
+    monkeypatch.setenv("AILIBI_LLM_PROVIDER", "anthropic")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    rollout = _env().rollout(0)
+    assert rollout.complete
+    assert rollout.meetings  # meetings resolved through the forced fake path
+
+
 def test_first_meeting_boundary_marks_truncated_and_reward_refuses() -> None:
     env = _env(episode_boundary="first_meeting")
     rollout = env.rollout(0)

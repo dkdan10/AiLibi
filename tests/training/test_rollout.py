@@ -15,11 +15,14 @@ from pathlib import Path
 
 import pytest
 
+from engine.entities import Role
+from engine.events import KilledEvent
 from engine.world import load_canonical_map
 from orchestrator.replay import ReplayEntry, read_all_entries
 from training.env import TacticalRolloutEnv
 from training.rollout import (
     RolloutReconstructionError,
+    crew_witnesses,
     reconstruct_episode,
 )
 
@@ -176,3 +179,52 @@ def test_meeting_records_capture_trigger_and_outcome() -> None:
     for meeting in rollout.meetings:
         assert meeting.trigger in ("report", "emergency")
         assert meeting.triggered_by in rollout.roles
+
+
+def test_first_meeting_record_hides_the_unresolved_outcome() -> None:
+    """A first-meeting episode ends BEFORE the meeting resolves, so its record
+    must not leak the post-boundary outcome/ejection from the full replay."""
+
+    rollout = _env(episode_boundary="first_meeting").rollout(0)
+    assert rollout.truncated
+    assert len(rollout.meetings) == 1
+    meeting = rollout.meetings[0]
+    # Only the trigger facts known at the trigger tick are recorded.
+    assert meeting.trigger in ("report", "emergency")
+    assert meeting.triggered_by in rollout.roles
+    # The meeting has NOT resolved within the episode horizon — no leaked result.
+    assert meeting.outcome is None
+    assert meeting.ejected_player_id is None
+
+
+# --------------------------------------------------------------------------- #
+# crew_witnesses: teammate witnesses are not crew evidence                     #
+# --------------------------------------------------------------------------- #
+
+
+def _kill(actor: str, target: str, witnesses: tuple[str, ...]) -> KilledEvent:
+    return KilledEvent(
+        type="Killed",
+        tick=3,
+        actor=actor,
+        target=target,
+        room="CAFETERIA",
+        witnesses=witnesses,
+    )
+
+
+def test_crew_witnesses_excludes_teammate_only_witnesses() -> None:
+    roles: dict[str, Role] = {
+        "p0": "IMPOSTOR",
+        "p1": "IMPOSTOR",
+        "p2": "CREWMATE",
+        "p3": "CREWMATE",
+    }
+    # Seen only by the fellow impostor -> no crew evidence.
+    teammate_only = _kill("p0", "p2", ("p1",))
+    assert crew_witnesses(teammate_only, roles) == ()
+    # Mixed: only the crewmate counts.
+    mixed = _kill("p0", "p3", ("p1", "p2"))
+    assert crew_witnesses(mixed, roles) == ("p2",)
+    # Unseen entirely.
+    assert crew_witnesses(_kill("p0", "p2", ()), roles) == ()
