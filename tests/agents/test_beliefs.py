@@ -229,6 +229,131 @@ class TestTeamInternalFirewallContract:
 _GATE = 0.60  # DESIGN.md §4.6 eject gate
 
 
+class TestBoundarySumGateCrossings:
+    """Pin every documented belief-delta combination against the §4.6 gate.
+
+    The IEEE-754 boundary hazard (audit post-phase-14-pause.md §4.3): the
+    design intent is that a subject accused across two meetings reaches the
+    0.60 eject gate and becomes ejectable, and ``0.5 + 0.05 + 0.05 ==
+    0.6000000000000001`` clears the inclusive ``>=`` gate ONLY because the
+    residue rounds *up*. Had it rounded down (as other delta combinations do),
+    the second accusation would silently fail to reach the gate and the
+    two-signal eject would break with no test catching it. These pins land
+    BEFORE Task 15.5 touches the belief-fold deltas (separate commit) so a
+    later retune of the accusation / spread / weak deltas cannot silently move
+    an intended gate-crossing a hair under 0.60 (or an intended sub-gate signal
+    over it). Exact float comparisons, never ``pytest.approx`` — the boundary
+    IS the thing under test.
+
+    Each combination is asserted two ways: the raw constant arithmetic (which
+    a constant retune breaks directly) and the realized :class:`BeliefState`
+    fold (which a clamp / ordering change breaks), so both the values and the
+    machinery are pinned.
+    """
+
+    @staticmethod
+    def _accumulated(*deltas: float) -> float:
+        """Realized suspicion after applying ``deltas`` sequentially (clamped)."""
+
+        beliefs = BeliefState()
+        for delta in deltas:
+            beliefs.adjust_suspicion("subject", delta=delta)
+        return beliefs.view("subject").suspicion
+
+    # -- combinations DESIGNED to cross the 0.60 gate ------------------------
+
+    def test_two_accusations_cross_the_gate_the_ieee_case(self) -> None:
+        # The audit §4.3 headline: 0.5 + 0.05 + 0.05 == 0.6000000000000001,
+        # ejectable only by IEEE luck. The whole reason these pins exist.
+        raw = (
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA + ACCUSATION_SUSPICION_DELTA
+        )
+        assert raw == 0.6000000000000001  # noqa: PLR2004 — the exact residue
+        assert raw >= _GATE
+        assert (
+            self._accumulated(ACCUSATION_SUSPICION_DELTA, ACCUSATION_SUSPICION_DELTA)
+            >= _GATE
+        )
+
+    def test_three_accusations_cross_the_gate(self) -> None:
+        raw = _DEFAULT_SUSPICION + 3 * ACCUSATION_SUSPICION_DELTA
+        assert raw >= _GATE  # 0.65
+        assert (
+            self._accumulated(
+                ACCUSATION_SUSPICION_DELTA,
+                ACCUSATION_SUSPICION_DELTA,
+                ACCUSATION_SUSPICION_DELTA,
+            )
+            >= _GATE
+        )
+
+    def test_two_voice_testimony_spread_crosses_the_gate(self) -> None:
+        # TESTIMONY_SPREAD_TWO_VOICE_DELTA docstring: 0.50 -> 0.62, the first
+        # §4.6 gate-cross for two corroborating observation-backed voices.
+        raw = _DEFAULT_SUSPICION + TESTIMONY_SPREAD_TWO_VOICE_DELTA
+        assert raw >= _GATE  # 0.62
+        assert self._accumulated(TESTIMONY_SPREAD_TWO_VOICE_DELTA) >= _GATE
+
+    def test_three_voice_spread_cap_crosses_the_gate(self) -> None:
+        # TESTIMONY_SPREAD_CAP_DELTA docstring: 0.50 -> 0.65 (capped).
+        raw = _DEFAULT_SUSPICION + TESTIMONY_SPREAD_CAP_DELTA
+        assert raw >= _GATE  # 0.65
+        assert self._accumulated(TESTIMONY_SPREAD_CAP_DELTA) >= _GATE
+
+    def test_two_weak_flags_cross_the_gate(self) -> None:
+        # WEAK_CONTRADICTION_SUSPICION_DELTA docstring: a second independent
+        # weak flag reaches 0.66 (0.5 + 0.08 + 0.08), across the gate.
+        raw = (
+            _DEFAULT_SUSPICION
+            + WEAK_CONTRADICTION_SUSPICION_DELTA
+            + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+        assert raw >= _GATE  # 0.66
+        assert (
+            self._accumulated(
+                WEAK_CONTRADICTION_SUSPICION_DELTA,
+                WEAK_CONTRADICTION_SUSPICION_DELTA,
+            )
+            >= _GATE
+        )
+
+    def test_single_strong_contradiction_crosses_the_gate(self) -> None:
+        # CONTRADICTION_SUSPICION_DELTA docstring: the LONE-STRONG outcome
+        # 0.5 -> 0.80, well over the gate.
+        raw = _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        assert raw >= _GATE  # 0.80
+        assert self._accumulated(CONTRADICTION_SUSPICION_DELTA) >= _GATE
+
+    def test_body_proximity_prior_crosses_the_gate(self) -> None:
+        # CONTRADICTION_RENDER_CEIL docstring names the Rule-1 body-proximity
+        # prior 0.70 (0.5 + 0.2) as a standing over-gate prior.
+        raw = _DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
+        assert raw >= _GATE  # 0.70
+        assert self._accumulated(BODY_PROXIMITY_SUSPICION_DELTA) >= _GATE
+
+    def test_meeting_contradiction_lift_cap_crosses_the_gate(self) -> None:
+        # The per-subject cap equals CONTRADICTION_SUSPICION_DELTA (0.30), so a
+        # capped stack still crosses: 0.5 + 0.30 = 0.80.
+        raw = _DEFAULT_SUSPICION + MEETING_CONTRADICTION_LIFT_CAP
+        assert raw >= _GATE  # 0.80
+
+    # -- combinations DESIGNED to stay UNDER the gate ------------------------
+
+    def test_lone_accusation_stays_under_the_gate(self) -> None:
+        # ACCUSATION_SUSPICION_DELTA docstring: one meeting lands at 0.55, well
+        # under the gate (a lone verbal accusation never ejects).
+        raw = _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        assert raw < _GATE  # 0.55
+        assert self._accumulated(ACCUSATION_SUSPICION_DELTA) < _GATE
+
+    def test_lone_weak_flag_stays_under_the_gate(self) -> None:
+        # WEAK_CONTRADICTION_SUSPICION_DELTA docstring: a lone weak flag lands
+        # at 0.58, inside [0.5, 0.60) — suspicious but below the gate.
+        raw = _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        assert raw < _GATE  # 0.58
+        assert self._accumulated(WEAK_CONTRADICTION_SUSPICION_DELTA) < _GATE
+
+
 def _kill_packet(
     *,
     killer: str,
