@@ -20,6 +20,7 @@ orchestrator's job (DESIGN.md §1.3).
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -42,13 +43,14 @@ from agents.strategic.prompts import (
 )
 from agents.tactical.crewmate_policy import CrewmatePolicy, EmergencyPacingTracker
 from agents.tactical.impostor_policy import ImpostorPolicy
+from engine.actions import Action
 from engine.entities import BodyId, PlayerId, PlayerState, Role
 from engine.events import (
     EngineEvent,
     GameOverEvent,
     MeetingTriggeredEvent,
 )
-from engine.rng import EngineRng
+from engine.rng import EngineRng, RngStateHashPolicy
 from engine.rules import resolve_win_conditions
 from engine.tick import advance_tick, redistribute_dead_tasks
 from engine.world import Map, WorldState
@@ -983,8 +985,17 @@ def apply_meeting_result(
     *,
     game_map: Map,
     triggering_body_id: BodyId | None = None,
+    rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
 ) -> tuple[WorldState, list[EngineEvent]]:
     """Apply a :class:`MeetingResult` to engine-owned state (DESIGN.md §3.1, §5.1).
+
+    ``rng_hash_policy`` (Task 15.8.1) selects the meeting-tick rng-state
+    serialization, mirroring :func:`engine.tick.advance_tick`. It DEFAULTS to
+    :attr:`RngStateHashPolicy.FULL` (byte-identical to the pre-15.8.1 apply, so
+    every recorded / reconstructed meeting keeps its committed ``state_hash``);
+    the opt-in :attr:`RngStateHashPolicy.TRAINING_FAST` skips the ``json.dumps``
+    snapshot for non-recorded training rollouts. The draw is unchanged, so the
+    resumed state is trajectory-identical under either policy.
 
     Lives in the orchestrator (not ``engine/``) because applying a
     meeting outcome is an orchestration concern: the engine remains a
@@ -1111,8 +1122,10 @@ def apply_meeting_result(
     # :func:`advance_tick`. Without this step the rng cursor would
     # stall across the meeting boundary and a replay that ran with a
     # different meeting outcome could re-sync rng state by accident.
+    # The draw is policy-invariant (Task 15.8.1); only the snapshot encoding
+    # of the advanced state differs, and FULL is byte-identical to before.
     rng = EngineRng.from_state(working.rng_state)
-    _, next_rng_state = rng.randint(0, 2**31 - 1)
+    _, next_rng_state = rng.randint(0, 2**31 - 1, hash_policy=rng_hash_policy)
     next_state = replace(
         working,
         phase="PLAY",
@@ -1153,6 +1166,111 @@ class HeadlessGameResult:
     replay_path: Path
 
 
+@dataclass(frozen=True)
+class UnrecordedTickStep:
+    """One ``advance_tick`` step captured live in no-replay mode (Task 15.8.1).
+
+    The no-replay training path writes NO replay, so there is nothing on disk to
+    reconstruct an episode from. Instead the game surfaces each tick's submitted
+    actions, the post-``advance_tick`` engine state, and the typed events the
+    training env turns into an :class:`~training.rollout.EpisodeRollout` WITHOUT a
+    reconstruction re-walk. ``state`` is the engine truth after the tick — the
+    same object the recorder would have hashed — so the descriptors and reward
+    channel read identical scalars.
+    """
+
+    input_tick: int
+    actions: tuple[Action, ...]
+    state: WorldState
+    events: tuple[EngineEvent, ...]
+
+
+@dataclass(frozen=True)
+class UnrecordedMeetingStep:
+    """One applied meeting captured live in no-replay mode (Task 15.8.1).
+
+    Mirrors :class:`UnrecordedTickStep` for the meeting boundary: the resolved
+    :class:`~meetings.schemas.MeetingResult`, the corpse that triggered a body
+    report (``None`` for an emergency), the post-:func:`apply_meeting_result`
+    state (resumed at ``trigger_tick + 1``), and the post-meeting events.
+    """
+
+    trigger_tick: int
+    result: MeetingResult
+    triggering_body_id: BodyId | None
+    state: WorldState
+    post_events: tuple[EngineEvent, ...]
+
+
+class _EpisodeTraceCollector:
+    """Accumulates the live trajectory of a no-replay game (Task 15.8.1).
+
+    Populated ONLY on the no-replay path (:meth:`HeadlessGame.run_unrecorded`);
+    the recorded path (:meth:`HeadlessGame.run`) passes ``None`` so its byte
+    output is untouched. Holds engine / orchestrator types only — the training
+    env owns turning it into a typed rollout, keeping ``orchestrator/`` free of
+    any ``training/`` dependency.
+    """
+
+    def __init__(self) -> None:
+        self.tick_steps: list[UnrecordedTickStep] = []
+        self.meeting_steps: list[UnrecordedMeetingStep] = []
+
+    def record_tick(
+        self,
+        *,
+        input_tick: int,
+        actions: Sequence[Action],
+        state: WorldState,
+        events: Sequence[EngineEvent],
+    ) -> None:
+        self.tick_steps.append(
+            UnrecordedTickStep(
+                input_tick=input_tick,
+                actions=tuple(actions),
+                state=state,
+                events=tuple(events),
+            )
+        )
+
+    def record_meeting(
+        self,
+        *,
+        trigger_tick: int,
+        result: MeetingResult,
+        triggering_body_id: BodyId | None,
+        state: WorldState,
+        post_events: Sequence[EngineEvent],
+    ) -> None:
+        self.meeting_steps.append(
+            UnrecordedMeetingStep(
+                trigger_tick=trigger_tick,
+                result=result,
+                triggering_body_id=triggering_body_id,
+                state=state,
+                post_events=tuple(post_events),
+            )
+        )
+
+
+@dataclass(frozen=True)
+class UnrecordedGameResult:
+    """Outcome bundle returned by :meth:`HeadlessGame.run_unrecorded` (Task 15.8.1).
+
+    The no-replay counterpart of :class:`HeadlessGameResult`: it carries the same
+    ``final_state`` / ``outcome`` but NO ``replay_path`` (nothing was written) and
+    adds the live-captured trajectory — the seeded ``initial_state`` plus the tick
+    and meeting steps — that the training env assembles into a typed
+    :class:`~training.rollout.EpisodeRollout` without a replay file.
+    """
+
+    final_state: WorldState
+    outcome: Outcome
+    initial_state: WorldState
+    tick_steps: tuple[UnrecordedTickStep, ...]
+    meeting_steps: tuple[UnrecordedMeetingStep, ...]
+
+
 class HeadlessGame:
     """Run one deterministic headless game from a seed."""
 
@@ -1162,7 +1280,7 @@ class HeadlessGame:
         seed: int,
         game_map: Map,
         agent_factory: AgentFactory,
-        replay_path: Path,
+        replay_path: Path | None,
         audit_log_path: Path | None = None,
         num_players: int = DEFAULT_NUM_PLAYERS,
         num_impostors: int = DEFAULT_NUM_IMPOSTORS,
@@ -1171,11 +1289,47 @@ class HeadlessGame:
         meeting_runner: MeetingRunner | None = None,
         force: bool = False,
         tactical_policy_stamp: TacticalPolicyStamp | None = None,
+        rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
     ) -> None:
+        # No-replay training mode (Task 15.8.1): ``replay_path=None`` runs the
+        # game through :meth:`run_unrecorded` writing NOTHING to disk (no
+        # ReplayLog, no audit file), and is the ONLY construction that accepts the
+        # opt-in :attr:`RngStateHashPolicy.TRAINING_FAST` fast path. The two loud
+        # guards below keep the fast bytes off every committed / attributable
+        # surface (AGENTS.md "no silent fallbacks"):
+        #   1. the fast path serializes ``rng_state`` with a codec that is NOT the
+        #      committed JSON encoding, so a replay-WRITING construction (any
+        #      ``replay_path``) must refuse it rather than silently record
+        #      un-verifiable bytes;
+        #   2. a provenance stamp (Task 15.9) exists to attribute a RECORDED game,
+        #      so a no-replay construction that receives one is a caller bug — there
+        #      is nothing to stamp.
+        records_replay = replay_path is not None
+        if rng_hash_policy is not RngStateHashPolicy.FULL and records_replay:
+            raise ValueError(
+                "the training-only RNG hash fast path "
+                f"({rng_hash_policy!r}) is refused by a replay-writing "
+                "HeadlessGame: it serializes rng_state with a non-committed codec, "
+                "so it must run with replay_path=None (no-replay training mode). "
+                "Pass replay_path=None to opt into the fast path, or keep "
+                "RngStateHashPolicy.FULL to record."
+            )
+        if not records_replay and tactical_policy_stamp is not None:
+            raise ValueError(
+                "a no-replay HeadlessGame (replay_path=None) writes no game_over "
+                "record, so a tactical_policy_stamp has nothing to attribute; drop "
+                "the stamp, or pass a replay_path to record and stamp the game."
+            )
         self._seed = seed
         self._game_map = game_map
         self._agent_factory = agent_factory
         self._replay_path = replay_path
+        self._records_replay = records_replay
+        # The training-only RNG hash policy (Task 15.8.1). FULL (default) keeps
+        # every recorded/committed path byte-identical; TRAINING_FAST is only
+        # reachable in no-replay mode (guarded above) and skips the per-tick
+        # json.dumps snapshot of the Mersenne state.
+        self._rng_hash_policy = rng_hash_policy
         # The tactical-policy provenance stamp (Task 15.9): the PRODUCTION
         # injection seam. Every recorder (run_tournament, the 15.12 corpus
         # wrapper, Wave-2 champion recordings) reaches replay-writing ONLY through
@@ -1190,11 +1344,30 @@ class HeadlessGame:
         # loud (DESIGN.md §11.4; Task 4.16). run() keeps its existing
         # signature; the flag rides the constructor.
         self._force = force
-        self._audit_log_path = (
-            audit_log_path
-            if audit_log_path is not None
-            else replay_path.parent / f"{replay_path.stem}.audit.jsonl"
-        )
+        # No-replay mode writes nothing, so the observation audit log (which the
+        # ObservationService writes a row to per packet) is routed to the null
+        # device: the service requires a Path, and os.devnull discards every write
+        # so the "nothing on disk" contract holds without widening the
+        # out-of-scope service surface. An EXPLICIT audit_log_path contradicts
+        # that contract, so it is refused rather than silently honoured (a
+        # no-replay run must never leave an audit JSONL behind) -- AGENTS.md "no
+        # silent fallbacks".
+        if not records_replay:
+            if audit_log_path is not None:
+                raise ValueError(
+                    "a no-replay HeadlessGame (replay_path=None) writes NOTHING to "
+                    "disk, so an explicit audit_log_path is refused; omit it (the "
+                    "audit is routed to the null device) or pass a replay_path to "
+                    "record."
+                )
+            self._audit_log_path = Path(os.devnull)
+        else:
+            assert replay_path is not None  # records_replay == replay_path is not None
+            self._audit_log_path = (
+                audit_log_path
+                if audit_log_path is not None
+                else replay_path.parent / f"{replay_path.stem}.audit.jsonl"
+            )
         self._num_players = num_players
         self._num_impostors = num_impostors
         self._tasks_per_crewmate = tasks_per_crewmate
@@ -1211,7 +1384,9 @@ class HeadlessGame:
         return self._public_map
 
     @property
-    def replay_path(self) -> Path:
+    def replay_path(self) -> Path | None:
+        """The replay file this game writes, or ``None`` in no-replay mode (15.8.1)."""
+
         return self._replay_path
 
     def run(self) -> HeadlessGameResult:
@@ -1227,7 +1402,20 @@ class HeadlessGame:
         :func:`apply_meeting_result`, and continue. When no runner
         is configured the loop returns ``MEETING_PHASE_REACHED`` as
         in Phase 2.
+
+        This is the RECORDING path and requires a ``replay_path`` (Task
+        15.8.1); a no-replay training game (``replay_path=None``) is run through
+        :meth:`run_unrecorded` instead — fail loud rather than silently record
+        under a mismatched construction.
         """
+
+        replay_path = self._replay_path
+        if replay_path is None:
+            raise ValueError(
+                "HeadlessGame.run() records a replay and requires a replay_path; "
+                "a no-replay training game (replay_path=None) must use "
+                "run_unrecorded()."
+            )
 
         state = seed_initial_state(
             seed=self._seed,
@@ -1241,7 +1429,7 @@ class HeadlessGame:
             audit_log_path=self._audit_log_path,
         )
         replay = ReplayLog(
-            self._replay_path,
+            replay_path,
             game_id=self._game_id(),
             force=self._force,
             tactical_policy_stamp=self._tactical_policy_stamp,
@@ -1254,40 +1442,101 @@ class HeadlessGame:
         # descriptors (Task 5.9 write-cadence pass); the recorded bytes — and
         # therefore the determinism contract — are unchanged.
         try:
-            return self._run_loop(
+            final_state, outcome = self._run_loop(
                 state=state,
                 observation_service=observation_service,
                 replay=replay,
                 agents=agents,
+                trace=None,
             )
         finally:
             replay.close()
             observation_service.close()
+        return HeadlessGameResult(
+            final_state=final_state, outcome=outcome, replay_path=replay_path
+        )
+
+    def run_unrecorded(self) -> UnrecordedGameResult:
+        """Run a no-replay training game, writing NOTHING to disk (Task 15.8.1).
+
+        The training-only counterpart of :meth:`run`: same engine, same
+        observation firewall, same meeting manager, but no :class:`ReplayLog` is
+        constructed and the observation audit is routed to the null device, so
+        the whole run leaves nothing on disk. This is the ONLY entry point that
+        honours the opt-in :attr:`RngStateHashPolicy.TRAINING_FAST` fast path (the
+        constructor already refused a fast policy on any replay-writing
+        construction). Because nothing is recorded, the run surfaces its live
+        trajectory in an :class:`UnrecordedGameResult` — the seeded initial state
+        plus every tick / meeting step — that the training env turns into a typed
+        rollout WITHOUT a reconstruction re-walk. Requires ``replay_path=None``;
+        a recording construction uses :meth:`run`.
+        """
+
+        if self._records_replay:
+            raise ValueError(
+                "HeadlessGame.run_unrecorded() runs the no-replay training mode "
+                "and requires replay_path=None; a recording game uses run()."
+            )
+
+        state = seed_initial_state(
+            seed=self._seed,
+            game_map=self._game_map,
+            num_players=self._num_players,
+            num_impostors=self._num_impostors,
+            tasks_per_crewmate=self._tasks_per_crewmate,
+        )
+        initial_state = state
+        observation_service = ObservationService(
+            game_map=self._game_map,
+            audit_log_path=self._audit_log_path,
+        )
+        agents = self._build_agents(state.players)
+        trace = _EpisodeTraceCollector()
+        try:
+            final_state, outcome = self._run_loop(
+                state=state,
+                observation_service=observation_service,
+                replay=None,
+                agents=agents,
+                trace=trace,
+            )
+        finally:
+            observation_service.close()
+        return UnrecordedGameResult(
+            final_state=final_state,
+            outcome=outcome,
+            initial_state=initial_state,
+            tick_steps=tuple(trace.tick_steps),
+            meeting_steps=tuple(trace.meeting_steps),
+        )
 
     def _run_loop(
         self,
         *,
         state: WorldState,
         observation_service: ObservationService,
-        replay: ReplayLog,
+        replay: ReplayLog | None,
         agents: dict[PlayerId, AgentInterface],
-    ) -> HeadlessGameResult:
+        trace: _EpisodeTraceCollector | None,
+    ) -> tuple[WorldState, Outcome]:
         """Drive the tick loop until terminate, meeting, or tick budget.
 
-        Extracted from :meth:`run` so the handle close lives in a single
-        ``finally`` around every loop exit (Task 5.9). The replay log and
-        observation service are owned by :meth:`run`, which closes them.
+        Shared by the recorded path (:meth:`run`: ``replay`` set, ``trace``
+        ``None``) and the no-replay training path (:meth:`run_unrecorded`:
+        ``replay`` ``None``, ``trace`` set). Every ``replay`` write is guarded so
+        the no-replay run persists nothing and skips the per-tick state-hash
+        entirely (Task 15.8.1); ``trace`` captures the live trajectory the
+        training env reconstructs from. The recorded path is byte-identical to
+        before: with ``replay`` set and ``trace`` ``None`` and the default FULL
+        rng policy, every recorded row is unchanged. Returns
+        ``(final_state, outcome)``; the caller wraps it in the appropriate result.
         """
 
         last_events: tuple[EngineEvent, ...] = ()
         meeting_counter = 0
         while state.phase != "GAME_OVER":
             if not self._scheduler.should_continue(state.tick):
-                return HeadlessGameResult(
-                    final_state=state,
-                    outcome="TICK_BUDGET_REACHED",
-                    replay_path=self._replay_path,
-                )
+                return state, "TICK_BUDGET_REACHED"
 
             packets = self._build_packets(
                 state=state,
@@ -1297,9 +1546,22 @@ class HeadlessGame:
             intents = self._collect_intents(packets=packets, agents=agents)
             actions = list(translate_action_intents_for_tick(intents))
             input_tick = state.tick
-            state, events = advance_tick(state, actions, game_map=self._game_map)
+            state, events = advance_tick(
+                state,
+                actions,
+                game_map=self._game_map,
+                rng_hash_policy=self._rng_hash_policy,
+            )
             last_events = tuple(events)
-            replay.record_tick(input_tick, actions, state)
+            if replay is not None:
+                replay.record_tick(input_tick, actions, state)
+            if trace is not None:
+                trace.record_tick(
+                    input_tick=input_tick,
+                    actions=actions,
+                    state=state,
+                    events=events,
+                )
 
             if state.phase == "MEETING":
                 if self._meeting_runner is None:
@@ -1310,17 +1572,14 @@ class HeadlessGame:
                     # build_default_meeting_runner and never reach this
                     # branch; only callers that explicitly pass
                     # meeting_runner=None (engine-only replay) land here.
-                    return HeadlessGameResult(
-                        final_state=state,
-                        outcome="MEETING_PHASE_REACHED",
-                        replay_path=self._replay_path,
-                    )
+                    return state, "MEETING_PHASE_REACHED"
                 pre_meeting_events = last_events
                 state, post_events = self._run_and_apply_meeting(
                     state=state,
                     events=pre_meeting_events,
                     agents=agents,
                     replay=replay,
+                    trace=trace,
                     meeting_index=meeting_counter,
                 )
                 meeting_counter += 1
@@ -1340,16 +1599,13 @@ class HeadlessGame:
         # including a partial tournament that crashed mid-run (Task 3.19
         # finding 3).
         game_over_event = self._game_over_event(last_events)
-        replay.record_game_end(
-            winner=game_over_event.winner,
-            reason=game_over_event.reason,
-            tick=game_over_event.tick,
-        )
-        return HeadlessGameResult(
-            final_state=state,
-            outcome=game_over_event.winner,
-            replay_path=self._replay_path,
-        )
+        if replay is not None:
+            replay.record_game_end(
+                winner=game_over_event.winner,
+                reason=game_over_event.reason,
+                tick=game_over_event.tick,
+            )
+        return state, game_over_event.winner
 
     def _run_and_apply_meeting(
         self,
@@ -1357,7 +1613,8 @@ class HeadlessGame:
         state: WorldState,
         events: Sequence[EngineEvent],
         agents: Mapping[PlayerId, AgentInterface],
-        replay: ReplayLog,
+        replay: ReplayLog | None,
+        trace: _EpisodeTraceCollector | None,
         meeting_index: int,
     ) -> tuple[WorldState, list[EngineEvent]]:
         if self._meeting_runner is None:
@@ -1385,9 +1642,11 @@ class HeadlessGame:
             # crash propagates so per-meeting cost is auditable for the
             # meeting that broke the run (Task 3.19 finding 2). The meeting
             # still aborts — the caller cannot proceed without a valid
-            # response — so the exception is re-raised unchanged.
+            # response — so the exception is re-raised unchanged. On the
+            # no-replay path (``replay`` None) there is nothing to persist, so
+            # the guarded writes are skipped and the exception still propagates.
             failure = extract_parse_failure(exc)
-            if failure is not None:
+            if failure is not None and replay is not None:
                 replay.record_failed_call(
                     meeting_id=meeting_id,
                     tick=trigger.trigger_tick,
@@ -1423,14 +1682,19 @@ class HeadlessGame:
             expected_meeting_id=meeting_id,
             expected_trigger=trigger,
         )
-        state_hash_before = _state_hash(state)
+        # The before/after state hashes are RECORDING artifacts only, so the
+        # no-replay path (``replay`` None) skips them entirely (Task 15.8.1) —
+        # the whole point of the fast training mode is to not serialize state.
+        # ``state`` is frozen and ``apply_meeting_result`` returns a new state,
+        # so computing ``state_hash_before`` after the apply is byte-equivalent
+        # to before it (kept here to guard both computations under one branch).
         next_state, post_events = apply_meeting_result(
             state,
             artifacts.result,
             game_map=self._game_map,
             triggering_body_id=triggering_body_id,
+            rng_hash_policy=self._rng_hash_policy,
         )
-        state_hash_after = _state_hash(next_state)
         # Task 10.11 self-check (audit-2026-06-13-1816 B-B-1): an EMERGENCY
         # meeting has NO kill scene by design (§5.2 PHASE 1) -- the caller
         # pressed the button on suspicion, no body was reported. The 10.8
@@ -1442,14 +1706,15 @@ class HeadlessGame:
         _assert_no_emergency_opening_body(
             trigger_kind=trigger_kind, result=artifacts.result
         )
-        replay.record_meeting(
-            meeting_id=meeting_id,
-            result=artifacts.result,
-            llm_calls=artifacts.llm_calls,
-            prompt_versions=artifacts.prompt_versions,
-            state_hash_before=state_hash_before,
-            state_hash_after=state_hash_after,
-        )
+        if replay is not None:
+            replay.record_meeting(
+                meeting_id=meeting_id,
+                result=artifacts.result,
+                llm_calls=artifacts.llm_calls,
+                prompt_versions=artifacts.prompt_versions,
+                state_hash_before=_state_hash(state),
+                state_hash_after=_state_hash(next_state),
+            )
         # Persist the meeting's side-records: a visible ``deadline_default``
         # marker per fired default (audit gp-2), and the recovered provider
         # parse-failures whose burned spend is absent from llm_calls.
@@ -1465,6 +1730,17 @@ class HeadlessGame:
             tick=trigger.trigger_tick,
             failures=artifacts.recovered_call_failures,
         )
+        # Surface the applied meeting to the no-replay trace (Task 15.8.1) so the
+        # training env can rebuild the episode's meeting records + post-meeting
+        # frames without a replay file.
+        if trace is not None:
+            trace.record_meeting(
+                trigger_tick=trigger.trigger_tick,
+                result=artifacts.result,
+                triggering_body_id=triggering_body_id,
+                state=next_state,
+                post_events=post_events,
+            )
         # Post-meeting belief fold (Task 9.8, DESIGN.md §4.4 step 4; audit
         # gp-1 recall): write the meeting's public evidence into each living
         # agent's PERSISTENT belief state so suspicion accumulates across
@@ -1574,7 +1850,7 @@ def _extract_meeting_side_records(exc: BaseException) -> _MeetingSideRecords:
 
 def _record_recovered_failures(
     *,
-    replay: ReplayLog,
+    replay: ReplayLog | None,
     meeting_id: str,
     tick: int,
     failures: Sequence[LLMCallFailure],
@@ -1588,8 +1864,13 @@ def _record_recovered_failures(
     channel with its REAL model / response / tokens / cost -- the same fields
     the meeting-abort path records for the aborting call, since both are genuine
     provider parse-failures -- so call count and cost stay accurate.
+
+    A ``None`` ``replay`` is the no-replay training path (Task 15.8.1): nothing
+    is recorded, so this is a no-op.
     """
 
+    if replay is None:
+        return
     for failure in failures:
         replay.record_failed_call(
             meeting_id=meeting_id,
@@ -1607,12 +1888,15 @@ def _record_recovered_failures(
 
 def _record_deadline_defaults(
     *,
-    replay: ReplayLog,
+    replay: ReplayLog | None,
     meeting_id: str,
     tick: int,
     defaulted_calls: Sequence[DefaultedCall],
 ) -> None:
     """Record each fired meeting default as a visible replay entry (audit gp-2).
+
+    A ``None`` ``replay`` is the no-replay training path (Task 15.8.1): nothing
+    is recorded, so this is a no-op.
 
     A turn / ballot that fell back to its placeholder is written into the
     EXISTING failed-call channel as a
@@ -1641,6 +1925,8 @@ def _record_deadline_defaults(
     ``error_message`` names its participant -- records exactly once.
     """
 
+    if replay is None:
+        return
     for default in defaulted_calls:
         # The rendered §4.6 verdict max rides ONLY a defaulted vote (Task 10.12,
         # audit H-H-2): it is the sole telemetry that recovers a defaulted
@@ -2232,6 +2518,9 @@ __all__ = [
     "ReportedTestimonyAgent",
     "RosterPreset",
     "TacticalAgent",
+    "UnrecordedGameResult",
+    "UnrecordedMeetingStep",
+    "UnrecordedTickStep",
     "apply_meeting_result",
     "build_default_agent_factory",
     "build_default_meeting_runner",

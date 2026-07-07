@@ -43,6 +43,17 @@ Throughput (Task 15.8 definition of done): measured on the check host at
 ~5.9 games/s (above the ≥5 games/s floor). The figure is a full-game rollout
 INCLUDING the typed state-hash-verified reconstruction pass (the live game plus a
 cheap bare-engine walk); it is a floor, not a benchmark, and varies with host.
+
+Two DEFAULT-OFF training knobs (Task 15.8.1): ``no_replay`` drives each rollout
+through :meth:`orchestrator.game.HeadlessGame.run_unrecorded`, writing NOTHING to
+disk and assembling the episode from the live trajectory instead of a replay file
+(so it skips the record-side + reconstruct-side state serialization entirely); and
+``rng_hash_policy`` selects the per-tick rng-state serialization, whose opt-in
+:attr:`~engine.rng.RngStateHashPolicy.TRAINING_FAST` skips the ~43%-of-engine-cost
+``json.dumps`` snapshot (~1.3-1.4x engine-core speedup). The fast path serializes
+``rng_state`` with a non-committed codec, so it is REFUSED unless ``no_replay`` is
+set — trajectories are identical under either mode, so training on the fast path
+transfers to the recording path exactly.
 """
 
 from __future__ import annotations
@@ -56,8 +67,11 @@ from typing import TypeAlias
 from agents.base import AgentInterface
 from agents.tactical.crewmate_policy import CrewmatePolicy
 from agents.tactical.impostor_policy import ImpostorPolicy
+from engine.actions import DoTaskAction
 from engine.entities import PlayerId, Role
-from engine.world import Map, load_canonical_map
+from engine.events import EngineEvent, GameOverEvent, KilledEvent, MeetingTriggeredEvent
+from engine.rng import RngStateHashPolicy
+from engine.world import Map, WorldState, load_canonical_map
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from observation.action_intent import (
     ActionIntent,
@@ -83,12 +97,20 @@ from orchestrator.game import (
     HeadlessGame,
     MeetingRunner,
     TacticalAgent,
+    UnrecordedGameResult,
     build_default_meeting_runner,
 )
+from orchestrator.replay import WinnerSide, _state_hash
 from orchestrator.scheduler import TickScheduler
 from training.rollout import (
     EpisodeBoundary,
+    EpisodeFrame,
+    EpisodeOutcome,
     EpisodeRollout,
+    MeetingRecord,
+    RolloutReconstructionError,
+    _build_descriptors,
+    _frame,
     _validate_episode_boundary,
     reconstruct_episode,
 )
@@ -494,10 +516,32 @@ class TacticalRolloutEnv:
         meeting_runner_factory: Callable[[], MeetingRunner] | None = None,
         max_ticks: int = DEFAULT_MAX_TICKS,
         output_dir: Path | None = None,
+        no_replay: bool = False,
+        rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
     ) -> None:
         # Fail loud at construction on a bad boundary from config/CLI, rather
         # than silently scoring a truncated-intent episode as a full game later.
         _validate_episode_boundary(episode_boundary)
+        # Task 15.8.1 knobs, both DEFAULT-OFF so the env is byte-identical to the
+        # 15.8 baseline unless a caller opts in:
+        #   * ``no_replay`` drives each rollout through the no-replay training
+        #     mode (:meth:`HeadlessGame.run_unrecorded`), writing NOTHING to disk
+        #     and reconstructing the episode from the live trajectory instead of a
+        #     replay file;
+        #   * ``rng_hash_policy`` selects the per-tick rng-state serialization; its
+        #     opt-in :attr:`RngStateHashPolicy.TRAINING_FAST` skips the ~43%-of-
+        #     engine-cost json.dumps snapshot. The fast path serializes rng_state
+        #     with a non-committed codec, so — mirroring the HeadlessGame guard —
+        #     it is REFUSED unless ``no_replay`` is set, fail-loud rather than
+        #     silently recording un-verifiable bytes (AGENTS.md no silent
+        #     fallbacks).
+        if rng_hash_policy is not RngStateHashPolicy.FULL and not no_replay:
+            raise ValueError(
+                "the training-only RNG hash fast path "
+                f"({rng_hash_policy!r}) requires no_replay=True: the fast codec is "
+                "not the committed rng_state encoding, so a recorded rollout must "
+                "keep RngStateHashPolicy.FULL. Set no_replay=True to opt in."
+            )
         self._game_map = game_map if game_map is not None else load_canonical_map()
         self._num_players = num_players
         self._num_impostors = num_impostors
@@ -507,6 +551,8 @@ class TacticalRolloutEnv:
         self._meeting_runner_factory = meeting_runner_factory
         self._max_ticks = max_ticks
         self._output_dir = output_dir
+        self._no_replay = no_replay
+        self._rng_hash_policy = rng_hash_policy
         self._public_map = public_map_from_engine_map(self._game_map)
 
     @property
@@ -520,6 +566,18 @@ class TacticalRolloutEnv:
     @property
     def episode_boundary(self) -> EpisodeBoundary:
         return self._episode_boundary
+
+    @property
+    def no_replay(self) -> bool:
+        """Whether rollouts run the no-replay training mode (Task 15.8.1)."""
+
+        return self._no_replay
+
+    @property
+    def rng_hash_policy(self) -> RngStateHashPolicy:
+        """The per-tick rng-state serialization policy for rollouts (Task 15.8.1)."""
+
+        return self._rng_hash_policy
 
     @property
     def sabotage_kinds(self) -> tuple[str, ...]:
@@ -544,11 +602,19 @@ class TacticalRolloutEnv:
     def rollout(self, seed: int) -> EpisodeRollout:
         """Run one full production game and return its typed episode record.
 
-        Writes the replay to ``output_dir`` (or a throwaway temp dir), then
-        reconstructs it — state-hash-verified — into an
+        In the DEFAULT (recording) mode, writes the replay to ``output_dir`` (or a
+        throwaway temp dir), then reconstructs it — state-hash-verified — into an
         :class:`~training.rollout.EpisodeRollout`.
+
+        With ``no_replay=True`` (Task 15.8.1) the game runs through
+        :meth:`HeadlessGame.run_unrecorded`, writing NOTHING to disk, and the
+        episode is assembled from the live trajectory instead of a replay file —
+        the path that carries the opt-in
+        :attr:`~engine.rng.RngStateHashPolicy.TRAINING_FAST` rng fast path.
         """
 
+        if self._no_replay:
+            return self._rollout_no_replay(seed)
         if self._output_dir is not None:
             self._output_dir.mkdir(parents=True, exist_ok=True)
             return self._rollout_into(self._output_dir, seed)
@@ -594,6 +660,250 @@ class TacticalRolloutEnv:
             num_impostors=self._num_impostors,
             tasks_per_crewmate=self._tasks_per_crewmate,
             episode_boundary=self._episode_boundary,
+        )
+
+    def _rollout_no_replay(self, seed: int) -> EpisodeRollout:
+        """Run one no-replay training game and assemble it live (Task 15.8.1).
+
+        Drives :meth:`HeadlessGame.run_unrecorded` — the real production loop with
+        NO replay written — and turns the live-captured trajectory into an
+        :class:`~training.rollout.EpisodeRollout` WITHOUT a reconstruction re-walk.
+        Carries the opt-in fast rng policy; nothing touches disk.
+        """
+
+        factory = build_interposition_factory(
+            game_map=self._game_map, intent_selector=self._intent_selector
+        )
+        game = HeadlessGame(
+            seed=seed,
+            game_map=self._game_map,
+            agent_factory=factory,
+            replay_path=None,
+            num_players=self._num_players,
+            num_impostors=self._num_impostors,
+            tasks_per_crewmate=self._tasks_per_crewmate,
+            scheduler=TickScheduler(max_ticks=self._max_ticks),
+            meeting_runner=self._build_meeting_runner(),
+            rng_hash_policy=self._rng_hash_policy,
+        )
+        result = game.run_unrecorded()
+        if result.outcome == "MEETING_PHASE_REACHED":
+            # Structurally unreachable: a runner is ALWAYS installed. Fail loud if
+            # the invariant is ever violated rather than silently truncate.
+            raise RuntimeError(
+                "TacticalRolloutEnv reached MEETING_PHASE_REACHED with a meeting "
+                "runner installed; the always-installed-runner invariant is broken"
+            )
+        return self._episode_from_unrecorded(result, seed)
+
+    def _episode_from_unrecorded(
+        self, result: UnrecordedGameResult, seed: int
+    ) -> EpisodeRollout:
+        """Assemble a typed :class:`EpisodeRollout` from a no-replay live trace.
+
+        The no-replay path (Task 15.8.1) writes no replay, so there is nothing for
+        :func:`training.rollout.reconstruct_episode` to walk. This mirrors that
+        walk's ASSEMBLY — the ``initial`` / ``tick`` / ``meeting`` frame chain, the
+        typed event log, the meeting records, the behavioral descriptors, and the
+        terminal-shape logic — but reads the already-captured live trajectory
+        instead of re-running ``advance_tick`` and verifying recorded hashes: the
+        captured states ARE the engine truth.
+
+        The per-frame ``state_hash`` is SKIPPED on the fast path: the fast rng
+        rollout never verifies these hashes (there is no replay to verify
+        against), so stable-JSON-serializing the full ``WorldState`` per frame
+        would re-pay exactly the per-tick serialization cost the fast path exists
+        to avoid, and the reward channel / descriptors read frame SCALARS + events
+        rather than the hash. Fast-path frames therefore carry an empty
+        ``state_hash`` placeholder. The FULL no-replay path keeps a real hash, so
+        it stays byte-identical to :func:`reconstruct_episode` (including the
+        state-hash chain).
+        """
+
+        episode_boundary = self._episode_boundary
+        # Skip the full-WorldState serialization on the fast training path (see
+        # docstring); FULL no-replay keeps real, reconstruct-comparable hashes.
+        skip_state_hash = self._rng_hash_policy is RngStateHashPolicy.TRAINING_FAST
+
+        def _frame_hash(state: WorldState) -> str:
+            return "" if skip_state_hash else _state_hash(state)
+
+        initial_state = result.initial_state
+        roles: dict[PlayerId, Role] = {
+            pid: player.role for pid, player in initial_state.players.items()
+        }
+        meeting_by_trigger = {step.trigger_tick: step for step in result.meeting_steps}
+
+        events: list[EngineEvent] = []
+        meetings: list[MeetingRecord] = []
+        cumulative_kills = 0
+        do_task_emissions = 0
+        winner: WinnerSide | None = None
+        win_reason: str | None = None
+        truncated = False
+        outcome: EpisodeOutcome
+        final_tick = 0
+
+        # The seeded pre-action state opens the frame chain (kind="initial"),
+        # exactly like reconstruct_episode, so the potential series telescopes
+        # over the real episode start.
+        frames: list[EpisodeFrame] = [
+            _frame(
+                initial_state,
+                tick=initial_state.tick,
+                kind="initial",
+                state_hash=_frame_hash(initial_state),
+                roles=roles,
+                cumulative_kills=cumulative_kills,
+            )
+        ]
+
+        for step in result.tick_steps:
+            do_task_emissions += sum(
+                1 for action in step.actions if isinstance(action, DoTaskAction)
+            )
+            for event in step.events:
+                events.append(event)
+                if isinstance(event, KilledEvent):
+                    cumulative_kills += 1
+                elif isinstance(event, GameOverEvent):
+                    winner = event.winner
+                    win_reason = event.reason
+            final_tick = step.state.tick
+            frames.append(
+                _frame(
+                    step.state,
+                    tick=step.input_tick,
+                    kind="tick",
+                    state_hash=_frame_hash(step.state),
+                    roles=roles,
+                    cumulative_kills=cumulative_kills,
+                )
+            )
+
+            if step.state.phase == "GAME_OVER":
+                break
+            if step.state.phase != "MEETING":
+                continue
+
+            trigger_event = next(
+                (e for e in step.events if isinstance(e, MeetingTriggeredEvent)),
+                None,
+            )
+            if trigger_event is None:
+                raise RolloutReconstructionError(
+                    f"seed {seed}: tick {step.input_tick} entered MEETING with no "
+                    "MeetingTriggeredEvent in the captured events"
+                )
+
+            if episode_boundary == "first_meeting":
+                # The deliberate 15.13 fallback-(b) boundary: stop at the first
+                # meeting trigger, MARK truncated, do NOT record the (already
+                # applied) outcome — a pre-meeting training record must not leak a
+                # post-boundary ejection.
+                boundary_step = meeting_by_trigger.get(step.input_tick)
+                meetings.append(
+                    MeetingRecord(
+                        tick=step.input_tick,
+                        meeting_id=boundary_step.result.meeting_id
+                        if boundary_step is not None
+                        else f"seed-{seed}:meeting-{step.input_tick}",
+                        trigger=trigger_event.trigger,
+                        triggered_by=trigger_event.actor,
+                        outcome=None,
+                        ejected_player_id=None,
+                    )
+                )
+                truncated = True
+                break
+
+            meeting_step = meeting_by_trigger.get(step.input_tick)
+            if meeting_step is None:
+                raise RolloutReconstructionError(
+                    f"seed {seed}: tick {step.input_tick} entered MEETING but the "
+                    "captured trace carries no meeting step for that tick"
+                )
+            for event in meeting_step.post_events:
+                events.append(event)
+                if isinstance(event, GameOverEvent):
+                    winner = event.winner
+                    win_reason = event.reason
+            meetings.append(
+                MeetingRecord(
+                    tick=step.input_tick,
+                    meeting_id=meeting_step.result.meeting_id,
+                    trigger=trigger_event.trigger,
+                    triggered_by=meeting_step.result.triggered_by,
+                    outcome=meeting_step.result.outcome,
+                    ejected_player_id=meeting_step.result.ejected_player_id,
+                )
+            )
+            final_tick = meeting_step.state.tick
+            frames.append(
+                _frame(
+                    meeting_step.state,
+                    # apply_meeting_result resumes at trigger_tick + 1, so the
+                    # post-meeting frame is stamped with the RESUMED tick.
+                    tick=meeting_step.state.tick,
+                    kind="meeting",
+                    state_hash=_frame_hash(meeting_step.state),
+                    roles=roles,
+                    cumulative_kills=cumulative_kills,
+                )
+            )
+            if meeting_step.state.phase == "GAME_OVER":
+                break
+
+        if truncated:
+            outcome = "FIRST_MEETING"
+        elif winner is not None:
+            outcome = winner
+        else:
+            # No GameOverEvent and no first-meeting cut: the scheduler capped it.
+            outcome = "TICK_BUDGET"
+            truncated = True
+
+        # Cross-check the reconstructed winner against the game's own terminal
+        # outcome (both derive from the SAME GameOverEvent, so a mismatch is a
+        # capture bug, not a drift — there is no recorded row to compare against).
+        if (
+            not truncated
+            and winner is not None
+            and result.outcome in ("CREWMATES", "IMPOSTORS")
+            and result.outcome != winner
+        ):
+            raise RolloutReconstructionError(
+                f"seed {seed}: captured winner {winner!r} != game outcome "
+                f"{result.outcome!r}"
+            )
+
+        descriptors = _build_descriptors(
+            events=events,
+            meetings=meetings,
+            do_task_emissions=do_task_emissions,
+            final_tick=final_tick,
+            roles=roles,
+            outcome=outcome,
+            winner=winner,
+            win_reason=win_reason,
+        )
+
+        return EpisodeRollout(
+            seed=seed,
+            num_players=self._num_players,
+            num_impostors=self._num_impostors,
+            tasks_per_crewmate=self._tasks_per_crewmate,
+            episode_boundary=episode_boundary,
+            truncated=truncated,
+            outcome=outcome,
+            winner=None if truncated else winner,
+            win_reason=None if truncated else win_reason,
+            final_tick=final_tick,
+            roles=roles,
+            frames=tuple(frames),
+            events=tuple(events),
+            meetings=tuple(meetings),
+            descriptors=descriptors,
         )
 
 
