@@ -252,6 +252,8 @@ def _render_funnel_human(report: InformationFunnelReport) -> str:
             f" kill witnessed {report.kill_witnessed})",
             "  Stage 3 (transmission): vent mentioned "
             f"{report.vent_mentioned}/{report.vent_meetings};"
+            f" structured vent observations "
+            f"{report.structured_vent_observed}/{report.vent_meetings};"
             f" killer accused {report.killer_accused}/{n};"
             f" votes outside a <=3 set {report.votes_outside_small_set}/"
             f"{report.small_set_ejections};"

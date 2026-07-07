@@ -24,6 +24,7 @@ from eval.funnel import (
     _Frame,
     _GameWalk,
     _has_killer_placement_observation,
+    _has_structured_vent_observation,
     _holds_kill_witnessed,
     _holds_last_seen_with_killer,
     _holds_scene,
@@ -45,6 +46,7 @@ from meetings.schemas import (
     MeetingTurn,
     ObservationClaim,
     SawPlayerObservation,
+    SawVentObservation,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -359,16 +361,25 @@ def test_mentions_vent_scans_free_text() -> None:
     assert (
         _mentions_vent((_turn("p-1", free_text="I saw p-2 VENT in storage"),)) is True
     )
+    assert _mentions_vent((_turn("p-1", free_text="p-2 vented into medbay"),)) is True
     assert _mentions_vent((_turn("p-1", free_text="nothing suspicious"),)) is False
+    # A word merely CONTAINING "vent" is not a vent mention.
+    assert (
+        _mentions_vent(
+            (_turn("p-1", free_text="in any event, we should prevent chaos"),)
+        )
+        is False
+    )
 
 
 def test_has_killer_placement_observation() -> None:
-    def obs(subject: str, room: str) -> SawPlayerObservation:
+    def obs(subject: str, room: str, tick: int = 5) -> SawPlayerObservation:
         return SawPlayerObservation(
-            type="saw_player", tick=5, subject=subject, room=room
+            type="saw_player", tick=tick, subject=subject, room=room
         )
 
-    # A structured saw_player naming the killer IN the kill room counts...
+    # A structured saw_player naming the killer IN the kill room AROUND the kill
+    # counts (fixture: kill_tick=5, meeting tick=8 => window [4, 8])...
     at_scene = _turn("p-3", observations=(obs("p-2", "STORAGE"),))
     assert (
         _has_killer_placement_observation(
@@ -391,6 +402,35 @@ def test_has_killer_placement_observation() -> None:
         )
         is False
     )
+    # ...and neither does an out-of-window tick: a STALE pre-kill sighting of the
+    # killer in that room, or a tick after the meeting fired.
+    stale = _turn("p-3", observations=(obs("p-2", "STORAGE", tick=1),))
+    future = _turn("p-3", observations=(obs("p-2", "STORAGE", tick=20),))
+    assert (
+        _has_killer_placement_observation(
+            _meeting(killer="p-2", kill_room="STORAGE", turns=(stale,))
+        )
+        is False
+    )
+    assert (
+        _has_killer_placement_observation(
+            _meeting(killer="p-2", kill_room="STORAGE", turns=(future,))
+        )
+        is False
+    )
+
+
+def test_has_structured_vent_observation() -> None:
+    vent_turn = _turn(
+        "p-3",
+        observations=(
+            SawVentObservation(type="saw_vent", tick=6, subject="p-2", room="STORAGE"),
+        ),
+    )
+    assert _has_structured_vent_observation(_meeting(turns=(vent_turn,))) is True
+    # A free-text vent mention alone is NOT a structured observation.
+    text_only = _turn("p-3", free_text="I saw p-2 vent in storage")
+    assert _has_structured_vent_observation(_meeting(turns=(text_only,))) is False
 
 
 def test_killer_accused() -> None:
@@ -453,12 +493,14 @@ def test_walk_raises_on_corrupted_state_hash(tmp_path: Path) -> None:
         )
 
 
-def test_walk_raises_on_corrupted_meeting_hash(tmp_path: Path) -> None:
-    """A tampered meeting ``state_hash_after`` fails loud too (the second verify).
+@pytest.mark.parametrize("field", ["state_hash_before", "state_hash_after"])
+def test_walk_raises_on_corrupted_meeting_hash(tmp_path: Path, field: str) -> None:
+    """A tampered meeting-row hash fails loud too (both meeting-side verifies).
 
-    Distinct from the per-tick check: this is the hash verified after
-    ``apply_meeting_result``, so a meeting outcome that no longer reconstructs
-    (e.g. a drifted tally/ejection rule) is caught, never silently mis-measured.
+    Distinct from the per-tick check: ``state_hash_before`` pins the state the
+    meeting resolved against (the tick row's hash does not cover the meeting
+    row's own copy), and ``state_hash_after`` pins the applied outcome — a
+    drifted tally/ejection rule is caught, never silently mis-measured.
     """
 
     import json
@@ -475,7 +517,7 @@ def test_walk_raises_on_corrupted_meeting_hash(tmp_path: Path) -> None:
     for i, ln in enumerate(lines):
         row = json.loads(ln)
         if row.get("kind") == "meeting":
-            row["state_hash_after"] = "0" * 64
+            row[field] = "0" * 64
             lines[i] = json.dumps(row)
             break
     dst = tmp_path / f"replay-seed-{seed}.jsonl"
@@ -553,8 +595,10 @@ def test_funnel_reproduces_transmission_stage(
     assert nine_funnel.votes_outside_small_set == 37
     assert nine_funnel.small_set_ejections == 68
     # Not charter-cited, but pinned so the structured-observation folds cannot
-    # silently drift before 15.7's before/after reading.
-    assert nine_funnel.killer_placement_observed == 51
+    # silently drift before 15.7's before/after reading. The v4 baselines predate
+    # 15.4's SawVentObservation type, so the structured-vent uptake (H4) is 0/74.
+    assert nine_funnel.structured_vent_observed == 0
+    assert nine_funnel.killer_placement_observed == 46
     assert nine_funnel.killer_accused == 76
 
 

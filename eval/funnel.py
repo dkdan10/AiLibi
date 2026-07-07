@@ -11,9 +11,10 @@ The reconstruction MIRRORS ``api/replay_loader.py::_walk`` (the loader is API-ti
 and carries serving concerns, so the seed/advance/apply/hash-verify loop is
 mirrored directly against :mod:`orchestrator.seeder` + :mod:`engine.tick` +
 :func:`orchestrator.game.apply_meeting_result`, NOT imported). Every recorded
-``state_hash`` (per tick) and ``state_hash_after`` (per meeting) is verified during
-the walk, so a corrupted or drifted set fails loud
-(:class:`FunnelReconstructionError`) rather than silently mis-measuring.
+state hash is verified during the walk — the per-tick ``state_hash`` and each
+meeting row's ``state_hash_before`` / ``state_hash_after`` — so a corrupted or
+drifted set fails loud (:class:`FunnelReconstructionError`) rather than silently
+mis-measuring.
 
 Three stages, each a fold over the game's BODY-REPORT meetings (emergency meetings
 carry no body and are excluded):
@@ -34,10 +35,11 @@ carry no body and are excluded):
   the killer, the killer placed at the scene, or the kill itself witnessed.
 
 * **Stage 3 — TRANSMISSION (what reached the meeting).** Per meeting: structured
-  killer-placement observations, vent mentions in the free-text turns, whether the
-  killer was accused, speakers-vs-holders, votes landing inside/outside the oracle
-  candidate set, and the reporter-ejection census (the meeting ejecting its own —
-  always innocent — reporter).
+  killer-placement observations, vent mentions in the free-text turns, structured
+  ``SawVentObservation`` uptake (the H4 gauge — 0 on the v4 baselines that predate
+  the type), whether the killer was accused, votes landing inside/outside the
+  oracle candidate set, and the reporter-ejection census (the meeting ejecting its
+  own — always innocent — reporter).
 
 Oracle assumptions (this is a DIAGNOSTIC CEILING, an upper bound on what pooled
 crew testimony could resolve — NOT a claim about achievable play):
@@ -96,7 +98,10 @@ for the before/after close finding — STABLE::
       "killer_at_scene": int, "kill_witnessed": int,
       # -- Stage 3 --
       "vent_mentioned": int, "vent_meetings": int,          # e.g. 36 / 74
-      "killer_placement_observed": int,   # structured saw_player places killer at scene
+      "structured_vent_observed": int,    # witnessed-vent meetings w/ a structured
+                                          # SawVentObservation (H4 uptake; 0 on v4)
+      "killer_placement_observed": int,   # structured saw_player places killer at
+                                          # scene within [kill_tick-1, meeting tick]
       "killer_accused": int,              # an accusation names the killer
       "votes_outside_small_set": int, "small_set_ejections": int,  # e.g. 42 / 73
       "reporter_ejected": int, "reporter_ejected_innocent": int,   # e.g. 22 / 22
@@ -111,6 +116,7 @@ Pure + offline: no network, no ``AILIBI_*`` env, no LLM. The public surface
 
 from __future__ import annotations
 
+import re
 import statistics
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -137,6 +143,7 @@ from meetings.schemas import (
     MeetingResult,
     MeetingTurn,
     SawPlayerObservation,
+    SawVentObservation,
     VoteBallot,
 )
 from orchestrator.game import apply_meeting_result
@@ -153,6 +160,11 @@ _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
 # The candidate-set band the "votes landing outside the pooled-knowledge set"
 # transmission leak is measured over (charter §2 Stage 3: "when that set was <=3").
 _SMALL_SET_BAR = 3
+
+# A vent MENTION is a word starting with "vent" (vent / vents / vented / venting),
+# never a mere substring hit inside "event" / "prevent" / "eventually" — those
+# would overstate the transmission metric on corpora that phrase around the word.
+_VENT_MENTION_RE = re.compile(r"\bvent", re.IGNORECASE)
 
 
 class FunnelReconstructionError(RuntimeError):
@@ -401,6 +413,19 @@ def _walk_game(
                             ballots=tuple(meeting_entry.ballots),
                         )
                     )
+
+            # The meeting row's OWN pre-hash must also match the reconstruction
+            # (``actual`` is the just-verified post-advance hash — the state a
+            # meeting resolves against). The tick row's hash does not cover it:
+            # a tampered/drifted ``state_hash_before`` on the meeting row alone
+            # would otherwise pass silently ("every recorded state hash is
+            # verified during the walk").
+            if meeting_entry.state_hash_before != actual:
+                raise FunnelReconstructionError(
+                    f"{game_id}: meeting at tick {entry.tick} recorded "
+                    f"state_hash_before {meeting_entry.state_hash_before!r} != "
+                    f"reconstructed pre-meeting state {actual!r}"
+                )
 
             result = MeetingResult(
                 meeting_id=meeting_entry.meeting_id,
@@ -689,18 +714,48 @@ def _holds_hard_clue(meeting: _ReportMeeting, walk: _GameWalk) -> bool:
 
 
 def _mentions_vent(turns: Sequence[MeetingTurn]) -> bool:
-    """Any turn's free text names a vent (the only channel a v4 vent claim has)."""
+    """Any turn's free text names a vent (the only channel a v4 vent claim has).
 
-    return any("vent" in (turn.free_text or "").lower() for turn in turns)
+    Word-prefix match (:data:`_VENT_MENTION_RE`): "vent" / "vents" / "vented" /
+    "venting" count; a substring hit inside "event" / "prevent" never does.
+    Reproduces 36/74 on the committed baseline-2 bytes identically to a raw
+    substring scan (no corpus meeting turns on the difference) while staying
+    robust on future recordings.
+    """
+
+    return any(_VENT_MENTION_RE.search(turn.free_text or "") for turn in turns)
+
+
+def _has_structured_vent_observation(meeting: _ReportMeeting) -> bool:
+    """Any turn carries a STRUCTURED :class:`SawVentObservation` (Task 15.4's type).
+
+    The H4 uptake gauge: the charter's target is the share of witnessed-vent
+    meetings carrying a structured vent observation (0% on the v4 baselines,
+    which predate the type; Task 15.7 measures the v5 uptake from this fold).
+    """
+
+    return any(
+        isinstance(obs, SawVentObservation)
+        for turn in meeting.turns
+        for obs in turn.observations
+    )
 
 
 def _has_killer_placement_observation(meeting: _ReportMeeting) -> bool:
-    """A structured ``saw_player`` observation places the killer in the kill room."""
+    """A structured ``saw_player`` places the killer in the kill room AROUND the kill.
+
+    The observation's spoken tick must fall in ``[kill_tick - 1, meeting tick]`` —
+    at or just before the kill (the same ±1-tick kill-window knowledge the oracle's
+    window variant grants) through the report. A sighting of the killer in that
+    room from well BEFORE the kill is a stale placement, not scene testimony, and a
+    tick after the meeting fired is not something the speaker could have seen.
+    """
 
     return any(
         isinstance(obs, SawPlayerObservation)
         and obs.subject == meeting.killer
         and obs.room == meeting.kill_room
+        and (meeting.kill_tick - 1) <= obs.tick <= meeting.tick
         for turn in meeting.turns
         for obs in turn.observations
     )
@@ -762,6 +817,7 @@ class MeetingFunnelRow(BaseModel):
     hard_clue_held: bool
     # Stage 3
     vent_mentioned: bool
+    structured_vent_observed: bool
     killer_placement_observed: bool
     killer_accused: bool
     reporter_ejected: bool
@@ -802,6 +858,7 @@ class InformationFunnelReport(BaseModel):
     # Stage 3
     vent_mentioned: int
     vent_meetings: int
+    structured_vent_observed: int
     killer_placement_observed: int
     killer_accused: int
     votes_outside_small_set: int
@@ -848,6 +905,7 @@ def _meeting_row(
         holds_kill_witnessed=_holds_kill_witnessed(meeting, roles),
         hard_clue_held=_holds_hard_clue(meeting, walk),
         vent_mentioned=_mentions_vent(meeting.turns),
+        structured_vent_observed=_has_structured_vent_observation(meeting),
         killer_placement_observed=_has_killer_placement_observation(meeting),
         killer_accused=_killer_accused(meeting),
         reporter_ejected=_reporter_ejected(meeting),
@@ -921,6 +979,12 @@ def compute_information_funnel(sample_dir: Path) -> InformationFunnelReport:
         kill_witnessed=sum(1 for r in rows if r.holds_kill_witnessed),
         vent_mentioned=sum(1 for r in vent_rows if r.vent_mentioned),
         vent_meetings=len(vent_rows),
+        # The H4 uptake share's numerator: witnessed-vent meetings carrying a
+        # structured SawVentObservation (denominator = vent_meetings, exactly as
+        # vent_mentioned).
+        structured_vent_observed=sum(
+            1 for r in vent_rows if r.structured_vent_observed
+        ),
         killer_placement_observed=sum(1 for r in rows if r.killer_placement_observed),
         killer_accused=sum(1 for r in rows if r.killer_accused),
         votes_outside_small_set=sum(
