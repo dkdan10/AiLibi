@@ -37,7 +37,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypeAlias
+from typing import Literal, TypeAlias, get_args
 
 import numpy as np
 from numpy.typing import NDArray
@@ -69,6 +69,24 @@ from orchestrator.seeder import seed_initial_state
 
 # The one deliberate boundary mode plus the full-game default (Task 15.8).
 EpisodeBoundary: TypeAlias = Literal["full_game", "first_meeting"]
+
+# The runtime-valid boundary set, derived from the Literal so it never drifts.
+_VALID_EPISODE_BOUNDARIES: frozenset[str] = frozenset(get_args(EpisodeBoundary))
+
+
+def _validate_episode_boundary(boundary: str) -> None:
+    """Fail loud on an unknown ``episode_boundary`` (AGENTS.md no silent fallbacks).
+
+    ``episode_boundary`` gates whether an episode is scoreable as a full game, so
+    a typo arriving from config/CLI (``"first-meeting"``) must NOT fall through to
+    the full-game path and silently mark a truncated-intent episode complete."""
+
+    if boundary not in _VALID_EPISODE_BOUNDARIES:
+        raise ValueError(
+            f"unknown episode_boundary {boundary!r}; expected one of "
+            f"{sorted(_VALID_EPISODE_BOUNDARIES)}"
+        )
+
 
 # Terminal shape of one episode. ``FIRST_MEETING`` marks the explicit
 # first-meeting opt-in truncation; ``TICK_BUDGET`` marks a full-game episode the
@@ -110,20 +128,24 @@ class RolloutReconstructionError(RuntimeError):
 class EpisodeFrame:
     """Engine-state scalars at one reconstructed step (Task 15.8).
 
-    One frame per ``advance_tick`` (``kind="tick"``) plus one per applied meeting
-    (``kind="meeting"``, carrying the post-``apply_meeting_result`` state). The
-    scalars are exactly what the potential-based reward channel's side-specific
-    potential Φ reads (:mod:`training.rewards`) — no float belief state, so the
-    potential is a pure integer/ratio function and the telescoping identity is
-    exact.
+    The frame chain opens with ONE ``kind="initial"`` frame for the seeded
+    pre-action state s0 (so the potential series starts at Φ(s0) and the shaping
+    telescopes over the ACTUAL episode from the real start), then one frame per
+    ``advance_tick`` (``kind="tick"``) plus one per applied meeting
+    (``kind="meeting"``, carrying the post-``apply_meeting_result`` state, stamped
+    with the RESUMED tick ``trigger_tick + 1``). The scalars are exactly what the
+    potential-based reward channel's side-specific potential Φ reads
+    (:mod:`training.rewards`) — no float belief state, so the potential is a pure
+    integer/ratio function and the telescoping identity is exact.
 
     ``state_hash`` is the recorded, verified hash for this step; the ordered
     tuple of frame hashes is the byte-determinism chain the env's frozen-policy
-    test pins.
+    test pins. Only ``kind="tick"`` frames correspond to recorded replay tick
+    rows (the ``initial`` / ``meeting`` frames have no tick row).
     """
 
     tick: int
-    kind: Literal["tick", "meeting"]
+    kind: Literal["initial", "tick", "meeting"]
     phase: Literal["PLAY", "MEETING", "GAME_OVER"]
     state_hash: str
     tasks_completed: int
@@ -273,7 +295,7 @@ def _frame(
     state: WorldState,
     *,
     tick: int,
-    kind: Literal["tick", "meeting"],
+    kind: Literal["initial", "tick", "meeting"],
     state_hash: str,
     roles: Mapping[PlayerId, Role],
     cumulative_kills: int,
@@ -411,6 +433,8 @@ def reconstruct_episode(
         (entry for entry in entries if isinstance(entry, GameEndReplayEntry)), None
     )
 
+    _validate_episode_boundary(episode_boundary)
+
     state = seed_initial_state(
         seed=seed,
         game_map=game_map,
@@ -422,7 +446,6 @@ def reconstruct_episode(
         pid: player.role for pid, player in state.players.items()
     }
 
-    frames: list[EpisodeFrame] = []
     events: list[EngineEvent] = []
     meetings: list[MeetingRecord] = []
     cumulative_kills = 0
@@ -432,6 +455,23 @@ def reconstruct_episode(
     truncated = False
     outcome: EpisodeOutcome
     final_tick = 0
+
+    # The seeded pre-action state s0 opens the frame chain so the potential
+    # series starts at Φ(s0): the shaping then telescopes over the ACTUAL episode
+    # from the real start, and a first-tick change to the potential (an immediate
+    # kill / task progress) is scored identically to the same change later. It is
+    # kind="initial" (not "tick"): the seeded state has no recorded replay tick
+    # row, so it is excluded from the tick-hash chain that maps to the replay.
+    frames: list[EpisodeFrame] = [
+        _frame(
+            state,
+            tick=state.tick,
+            kind="initial",
+            state_hash=_state_hash(state),
+            roles=roles,
+            cumulative_kills=cumulative_kills,
+        )
+    ]
 
     for entry in tick_entries:
         do_task_emissions += _count_do_task_submissions(entry.actions)
@@ -543,7 +583,12 @@ def reconstruct_episode(
         frames.append(
             _frame(
                 state,
-                tick=entry.tick,
+                # apply_meeting_result resumes gameplay at trigger_tick + 1, so
+                # the post-meeting frame is stamped with the RESUMED state.tick,
+                # not the trigger tick — otherwise two frames share the trigger
+                # tick and the resumed tick has none (an off-by-one in any
+                # time-based feature around meetings).
+                tick=state.tick,
                 kind="meeting",
                 state_hash=after,
                 roles=roles,

@@ -217,6 +217,13 @@ def test_default_meeting_runner_forces_fake_provider(
     assert rollout.meetings  # meetings resolved through the forced fake path
 
 
+def test_env_rejects_unknown_episode_boundary() -> None:
+    # A typo from config/CLI must fail loud at construction, not silently run as
+    # a full-game episode (which would then be scoreable).
+    with pytest.raises(ValueError, match="unknown episode_boundary"):
+        TacticalRolloutEnv(episode_boundary="first-meeting")  # type: ignore[arg-type]
+
+
 def test_first_meeting_boundary_marks_truncated_and_reward_refuses() -> None:
     env = _env(episode_boundary="first_meeting")
     rollout = env.rollout(0)

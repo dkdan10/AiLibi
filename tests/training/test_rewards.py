@@ -191,6 +191,20 @@ def test_reward_refuses_tick_budget_episode_without_winner() -> None:
         compute_shaped_reward(incomplete, "IMPOSTOR")
 
 
+def test_reward_rejects_unknown_side() -> None:
+    """A side from config/CLI — especially the PLURAL winner literal — must fail
+    loud rather than silently fall through to the crew branch."""
+
+    complete = _rollout(truncated=False, winner="IMPOSTORS")
+    for bad in ("IMPOSTORS", "CREWMATES", "crew", "impostor", ""):
+        with pytest.raises(ValueError, match="unknown reward side"):
+            compute_shaped_reward(complete, bad)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="unknown reward side"):
+            side_specific_terms(complete, bad)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="unknown reward side"):
+            PotentialShaper(side=bad)  # type: ignore[arg-type]
+
+
 def test_reward_scores_a_complete_episode() -> None:
     complete = _rollout(truncated=False, winner="IMPOSTORS")
     assert complete.complete

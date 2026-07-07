@@ -89,6 +89,7 @@ from orchestrator.scheduler import TickScheduler
 from training.rollout import (
     EpisodeBoundary,
     EpisodeRollout,
+    _validate_episode_boundary,
     reconstruct_episode,
 )
 
@@ -484,6 +485,9 @@ class TacticalRolloutEnv:
         max_ticks: int = DEFAULT_MAX_TICKS,
         output_dir: Path | None = None,
     ) -> None:
+        # Fail loud at construction on a bad boundary from config/CLI, rather
+        # than silently scoring a truncated-intent episode as a full game later.
+        _validate_episode_boundary(episode_boundary)
         self._game_map = game_map if game_map is not None else load_canonical_map()
         self._num_players = num_players
         self._num_impostors = num_impostors

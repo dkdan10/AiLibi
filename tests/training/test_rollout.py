@@ -181,6 +181,60 @@ def test_meeting_records_capture_trigger_and_outcome() -> None:
         assert meeting.triggered_by in rollout.roles
 
 
+def test_initial_frame_opens_the_potential_chain() -> None:
+    """The seeded pre-action state s0 opens the frame chain so the potential
+    series starts at Φ(s0) and shaping telescopes over the real episode."""
+
+    rollout = _env().rollout(0)
+    first = rollout.frames[0]
+    assert first.kind == "initial"
+    assert first.tick == 0
+    assert first.phase == "PLAY"
+    assert first.cumulative_kills == 0
+    assert first.tasks_completed == 0
+    # Exactly one initial frame, and it is the only non-("tick"/"meeting") frame;
+    # the seeded s0 has no recorded replay tick row (kept out of the tick chain).
+    assert [frame.kind for frame in rollout.frames].count("initial") == 1
+    assert rollout.frames[1].kind == "tick"  # s1 (post-tick-0) is a tick frame
+
+
+def test_post_meeting_frame_uses_the_resumed_tick() -> None:
+    """apply_meeting_result resumes at trigger_tick + 1, so the post-meeting
+    frame is stamped with the resumed tick (no off-by-one around meetings)."""
+
+    rollout = _env().rollout(0)
+    meeting_frames = [
+        (index, frame)
+        for index, frame in enumerate(rollout.frames)
+        if frame.kind == "meeting"
+    ]
+    assert meeting_frames  # seed 0 reaches meetings
+    for index, frame in meeting_frames:
+        previous = rollout.frames[index - 1]
+        assert previous.kind == "tick"
+        assert previous.phase == "MEETING"  # the meeting occupied the trigger tick
+        assert frame.tick == previous.tick + 1  # gameplay resumes at trigger + 1
+        assert frame.phase in ("PLAY", "GAME_OVER")
+
+
+def test_reconstruct_rejects_unknown_boundary() -> None:
+    game_map = load_canonical_map()
+    with tempfile.TemporaryDirectory(prefix="ailibi-badbound-") as tmp:
+        env = _env(output_dir=Path(tmp))
+        env.rollout(0)
+        replay_path = Path(tmp) / "replay-seed-0.jsonl"
+        with pytest.raises(ValueError, match="unknown episode_boundary"):
+            reconstruct_episode(
+                replay_path,
+                game_map=game_map,
+                seed=0,
+                num_players=_NUM_PLAYERS,
+                num_impostors=_NUM_IMPOSTORS,
+                tasks_per_crewmate=_TASKS,
+                episode_boundary="first-meeting",  # type: ignore[arg-type]
+            )
+
+
 def test_first_meeting_record_hides_the_unresolved_outcome() -> None:
     """A first-meeting episode ends BEFORE the meeting resolves, so its record
     must not leak the post-boundary outcome/ejection from the full replay."""

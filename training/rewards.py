@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TypeAlias
+from typing import TypeAlias, get_args
 
 import numpy as np
 from numpy.typing import NDArray
@@ -46,6 +46,27 @@ from training.rollout import EpisodeFrame, EpisodeRollout, crew_witnesses
 # A reward is always scored for one side (Task 15.8): the impostor is the
 # primary/deeper track, the crew rides the shared machinery once.
 RewardSide: TypeAlias = Role
+
+# The runtime-valid reward sides, derived from the ``Role`` Literal so they never
+# drift. Deliberately distinct from the PLURAL winner literals
+# (``IMPOSTORS`` / ``CREWMATES``) — a common typo that must not silently score.
+_VALID_REWARD_SIDES: frozenset[str] = frozenset(get_args(Role))
+
+
+def _validate_side(side: str) -> None:
+    """Fail loud on an unknown reward side (AGENTS.md no silent fallbacks).
+
+    A side deserialized from config/CLI as a plain string — especially the plural
+    winner literal ``"IMPOSTORS"`` — would otherwise fall through the ``side ==
+    "IMPOSTOR"`` branch and be scored with CREW dense terms + a loss terminal,
+    silently corrupting the selected side's results."""
+
+    if side not in _VALID_REWARD_SIDES:
+        raise ValueError(
+            f"unknown reward side {side!r}; expected one of "
+            f"{sorted(_VALID_REWARD_SIDES)} (the plural winner literals "
+            "'IMPOSTORS'/'CREWMATES' are NOT valid sides)"
+        )
 
 
 class TruncatedEpisodeError(ValueError):
@@ -81,6 +102,7 @@ class PotentialShaper:
     """
 
     def __init__(self, *, side: Role, gamma: float = 1.0) -> None:
+        _validate_side(side)
         self._side = side
         self._gamma = gamma
 
@@ -217,6 +239,7 @@ def side_specific_terms(rollout: EpisodeRollout, side: Role) -> dict[str, float]
     completeness (see :func:`compute_shaped_reward`).
     """
 
+    _validate_side(side)
     if side == "IMPOSTOR":
         return _impostor_terms(rollout)
     return _crew_terms(rollout)
@@ -246,6 +269,7 @@ def compute_shaped_reward(
     guard that keeps silent truncation off every fitness path.
     """
 
+    _validate_side(side)
     if not rollout.complete:
         raise TruncatedEpisodeError(
             f"refusing to score a non-terminal episode as a full game "
