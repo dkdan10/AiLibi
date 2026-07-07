@@ -34,7 +34,7 @@ with its own exact-tick row by two independent exhaustive reconstructions (the o
 the old mean 2.0 wrongly alibis a killer in transit, collapsing killer-in-set 122 → 110; the old
 hard-union 94 sits below the floor its own components 74+6+32+37 permit; the old 42/73 needs the ≤3
 gate and the membership test to read different candidate sets). Corrected: ±1 window mean 2.0 → 2.29 /
-unique 45 → 38 / ≤2 85 → 84; hard clue held 94 → 98 (73% → 76%, killer-accused denominator 56/94 →
+single-candidate 45 → 38 (killer-unique 36) / ≤2 85 → 84; hard clue held 94 → 98 (73% → 76%, killer-accused denominator 56/94 →
 60/98); votes outside a ≤3 set 42/73 → 37/68 (58% → 54%). Every other figure reproduced exactly; no
 conclusion changes direction.
 
@@ -44,7 +44,7 @@ member's legitimate same-room sightings, alibi-elimination at the kill tick):
 | measure | value |
 |---|---|
 | killer-candidate set, median (of ~7–8 living) | **3** (mean 2.86) |
-| with a ±1-tick kill window | mean **2.29**; unique killer in **38/129**; ≤2 in 84/129 |
+| with a ±1-tick kill window | mean **2.29**; narrowed to a single candidate in **38/129** (that lone candidate IS the killer in 36 — both misses are dead-killer late reports); ≤2 in 84/129 |
 | killer inside the set | 122/129 (7 misses are a same-tick move+kill frame artifact of the method) |
 | crew alone-time / sighting volume | alone only 34% of living ticks; ~23 sighting-frames per crew per game |
 | body-discovery delay | 66% of reported kills found within 3 ticks (the kill window is knowable) |

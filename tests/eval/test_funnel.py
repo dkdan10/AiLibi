@@ -536,6 +536,42 @@ def test_walk_raises_on_corrupted_meeting_hash(tmp_path: Path, field: str) -> No
         )
 
 
+def test_walk_raises_on_missing_meeting_row(tmp_path: Path) -> None:
+    """A MEETING tick with no meeting row fails loud, never silently truncates.
+
+    Deliberate divergence from the serving loader (which shows a crashed run's
+    prefix): an instrument that quietly dropped every meeting after a missing /
+    tick-drifted meeting row would under-count the folds while exiting 0.
+    """
+
+    seed: int | None = None
+    lines: list[str] = []
+    for candidate in sorted(_FOUR.glob("replay-seed-*.jsonl")):
+        text = candidate.read_text(encoding="utf-8").splitlines()
+        if any('"kind":"meeting"' in ln for ln in text):
+            seed = int(candidate.stem.rsplit("-", 1)[1])
+            lines = text
+            break
+    assert seed is not None, "no committed 4p1i replay carries a meeting row"
+    dst = tmp_path / f"replay-seed-{seed}.jsonl"
+    dst.write_text(
+        "\n".join(ln for ln in lines if '"kind":"meeting"' not in ln) + "\n",
+        encoding="utf-8",
+    )
+
+    game_map = load_canonical_map()
+    with pytest.raises(FunnelReconstructionError, match="no meeting row"):
+        _walk_game(
+            dst,
+            seed=seed,
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            roles={f"p-{i}": "CREWMATE" for i in range(1, 5)},
+            game_map=game_map,
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Baseline-2 reproduction pins (charter §2)                                    #
 # --------------------------------------------------------------------------- #
@@ -564,7 +600,11 @@ def test_funnel_reproduces_oracle_stage(nine_funnel: InformationFunnelReport) ->
     # (never wrongly alibis the killer) via one-hop reachability.
     assert nine_funnel.candidate_set_pm1_mean is not None
     assert round(nine_funnel.candidate_set_pm1_mean, 2) == 2.29
-    assert nine_funnel.unique_killer_pm1 == 38
+    # 38 singleton sets, of which 36 hold EXACTLY the killer — the 2 misses are
+    # the dead-killer late reports (unique_killer never over-counts a singleton
+    # that convicted the wrong player).
+    assert nine_funnel.candidate_singleton_pm1 == 38
+    assert nine_funnel.unique_killer_pm1 == 36
     assert nine_funnel.candidate_le2_pm1 == 84
 
 
@@ -594,6 +634,8 @@ def test_funnel_reproduces_transmission_stage(
     # test to read DIFFERENT candidate sets).
     assert nine_funnel.votes_outside_small_set == 37
     assert nine_funnel.small_set_ejections == 68
+    # The messenger-innocent-prior tripwire: no committed killer self-reports.
+    assert nine_funnel.killer_self_reported == 0
     # Not charter-cited, but pinned so the structured-observation folds cannot
     # silently drift before 15.7's before/after reading. The v4 baselines predate
     # 15.4's SawVentObservation type, so the structured-vent uptake (H4) is 0/74.

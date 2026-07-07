@@ -16,8 +16,8 @@ baseline 2 (`replays/samples/{9p2i,4p1i}`, `Qwen/Qwen3-32B` Featherless $0, `qwe
 substrate levers unconditionally ON — `audits/audit-phase-14-close.md`). A first-principles measurement
 of those committed bytes (2026-07-05, reproduced by Task 15.3; full table in
 `tasks/post-phase-14-clean-up.md` §2) found the game is information-RICH but aggregation-LOSSY: pooled
-crew sightings narrow ~8 suspects to a median of 3 (unique to 1 in 38/129 report meetings under the
-±1-tick window), hard clues exist in 76% of report meetings — yet witnessed impostor vents (the most abundant hard evidence, 74/129
+crew sightings narrow ~8 suspects to a median of 3 (narrowed to one candidate in 38/129 report
+meetings under the ±1-tick window), hard clues exist in 76% of report meetings — yet witnessed impostor vents (the most abundant hard evidence, 74/129
 meetings) have NO structured representation and reach the transcript only 36/74 times, votes land
 outside the pooled-knowledge candidate set 54% of the time when that set is ≤3, and 22 of 106 ejections
 removed the meeting's own (always innocent) reporter. Wave 0 closes those holes and records **baseline
@@ -320,7 +320,7 @@ is this task's reproduction gate.
 - replays/samples/ (read-only input)
 
 **Definition of done:**
-- [ ] On the committed baseline-2 9p2i bytes, the folds reproduce the charter §2 figures EXACTLY: oracle candidate-set median 3 (mean 2.86), ±1-tick-window mean 2.29 / unique-killer 38/129 / ≤2 84/129, killer-in-set 122/129; hard clue held in 98/129 (vent 74, last-seen-with 37, scene 32, witnessed 6); vent mentioned 36/74; votes outside a ≤3 candidate set 37/68; reporter ejected 22/106 with 22 innocent. Any mismatch is a task failure. (Figures per the charter §2 as corrected 2026-07-07 — the one-off script's ±1/hard/votes cells were proven mutually inconsistent with its own exact-tick row; see the charter's §2 preamble.)
+- [ ] On the committed baseline-2 9p2i bytes, the folds reproduce the charter §2 figures EXACTLY: oracle candidate-set median 3 (mean 2.86), ±1-tick-window mean 2.29 / single-candidate 38/129 (killer-unique 36/129) / ≤2 84/129, killer-in-set 122/129; hard clue held in 98/129 (vent 74, last-seen-with 37, scene 32, witnessed 6); vent mentioned 36/74; votes outside a ≤3 candidate set 37/68; reporter ejected 22/106 with 22 innocent. Any mismatch is a task failure. (Figures per the charter §2 as corrected 2026-07-07 — the one-off script's ±1/hard/votes cells were proven mutually inconsistent with its own exact-tick row; see the charter's §2 preamble.)
 - [ ] Every recorded state hash is verified during the walk (a corrupted or drifted set fails loud, never silently mis-measures).
 - [ ] The oracle's assumptions (upper bound: honest pooling, kill-time knowledge, crew-only witnesses) and the known same-tick move+kill frame artifact are documented in the module docstring — this is a diagnostic ceiling, not a claim about achievable play.
 - [ ] The folds run on any replay-set directory and on both roster presets (4p1i included), keyed by the set's roster/report artifacts.

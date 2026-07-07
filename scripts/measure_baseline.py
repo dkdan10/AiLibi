@@ -242,7 +242,8 @@ def _render_funnel_human(report: InformationFunnelReport) -> str:
             f"{med if med is None else round(med, 2)}"
             f" / mean {mean if mean is None else round(mean, 2)};"
             f" ±1-window mean {pm1 if pm1 is None else round(pm1, 2)},"
-            f" unique-killer {report.unique_killer_pm1}/{n},"
+            f" singleton {report.candidate_singleton_pm1}/{n}"
+            f" (killer-unique {report.unique_killer_pm1}),"
             f" <=2 {report.candidate_le2_pm1}/{n};"
             f" killer-in-set {report.killer_in_set}/{n}",
             "  Stage 2 (possession): hard clue held "
@@ -258,7 +259,8 @@ def _render_funnel_human(report: InformationFunnelReport) -> str:
             f" votes outside a <=3 set {report.votes_outside_small_set}/"
             f"{report.small_set_ejections};"
             f" reporter ejected {report.reporter_ejected}/{report.report_ejections}"
-            f" ({report.reporter_ejected_innocent} innocent)",
+            f" ({report.reporter_ejected_innocent} innocent);"
+            f" killer self-reported {report.killer_self_reported}",
         ]
     )
 

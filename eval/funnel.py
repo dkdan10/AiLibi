@@ -63,7 +63,7 @@ The artifact is a property of the reconstruction frame, not of the play.
 Reproduction status (committed baseline-2 9p2i — pinned in
 ``tests/eval/test_funnel.py``): this instrument reproduces every charter §2 figure
 EXACTLY — report-meeting count (129), the exact-tick candidate set (median 3, mean
-2.86, killer-in-set 122), the ±1-window aggregates (mean 2.29, unique 38, ≤2 84),
+2.86, killer-in-set 122), the ±1-window aggregates (mean 2.29, singleton 38 of which killer-unique 36, ≤2 84),
 kill-witnessed (6), vent-witnessed (74), killer-at-scene (32),
 last-seen-with-killer (37), hard-clue-held (98), vent-mentioned (36/74),
 votes-outside-a-≤3-set (37/68), and the reporter-ejection census (22/106, all
@@ -89,7 +89,8 @@ for the before/after close finding — STABLE::
       "candidate_set_median": float | null,
       "candidate_set_mean": float | null,
       "candidate_set_pm1_mean": float | null,
-      "unique_killer_pm1": int,               # |set|==1 under the ±1 window
+      "candidate_singleton_pm1": int,         # |set|==1 under the ±1 window
+      "unique_killer_pm1": int,               # |set|=={killer} under the ±1 window
       "candidate_le2_pm1": int,               # |set|<=2 under the ±1 window
       "killer_in_set": int,
       # -- Stage 2 (over report_meetings) --
@@ -106,6 +107,9 @@ for the before/after close finding — STABLE::
       "votes_outside_small_set": int, "small_set_ejections": int,  # e.g. 42 / 73
       "reporter_ejected": int, "reporter_ejected_innocent": int,   # e.g. 22 / 22
       "report_ejections": int,                                     # e.g. 106
+      "killer_self_reported": int,        # messenger-innocent-prior tripwire (0 on
+                                          # baseline 2; non-zero => do not read the
+                                          # Stage-1 rows naively)
       "per_meeting": [ MeetingFunnelRow, ... ]
     }
 
@@ -375,9 +379,17 @@ def _walk_game(
 
             meeting_entry = meeting_by_tick.get(entry.tick)
             if meeting_entry is None:
-                # Partial replay: a meeting opened but never resolved (crashed
-                # mid-meeting). Stop the walk, matching the loader.
-                break
+                # DELIBERATE divergence from the loader here: the loader SERVES a
+                # partial replay (a run that crashed mid-meeting) by truncating the
+                # timeline, but a measurement instrument must never silently
+                # under-count — a MEETING tick with no (or a tick-drifted) meeting
+                # row would drop every later body-report meeting from the folds
+                # while the CLI exits 0. Fail loud instead.
+                raise FunnelReconstructionError(
+                    f"{game_id}: tick {entry.tick} entered MEETING but the replay "
+                    "carries no meeting row for that tick (partial recording or "
+                    "drifted meeting tick) — refusing to silently under-measure"
+                )
 
             body_id = next(
                 (
@@ -479,6 +491,13 @@ def _pooled_sightings(
     testifies to no one and self-alibi is not a sighting). Crew vision is
     same-room-only (:mod:`engine.visibility`), so co-location in the recorded frame
     IS the sighting; a vented player is invisible and never placed.
+
+    Witness liveness is evaluated AT THE SIGHTING FRAME, deliberately: a witness
+    who saw the suspect and later died before the report meeting still contributes
+    — Stage 1 measures what information EXISTED in the world (the diagnostic
+    ceiling), not what survived to the vote; survival-to-meeting is exactly what
+    the Stage-2 possession census filters on. This is the charter-ratified
+    definition behind the pinned §2 Stage-1 figures.
     """
 
     crew_by_room: dict[RoomId, list[PlayerId]] = {}
@@ -503,6 +522,15 @@ def _candidate_universe(meeting: _ReportMeeting) -> frozenset[PlayerId]:
     late-reported body may already be dead here (see the same-tick move+kill frame
     note in the module docstring), which is exactly why ``killer_in_set`` is
     ``122/129`` rather than ``129/129`` on baseline 2.
+
+    The messenger-innocent exclusion is a PRIOR calibrated on the measured corpus
+    (impostors essentially never self-report on baseline 2 — the H5 base rate),
+    not a rule of the game: the engine permits a killer to report their own
+    victim, and a future learned impostor could game the prior by self-reporting
+    to exit every candidate set. That failure is made LOUD, not silent — the
+    ``killer_self_reported`` aggregate (0 on both committed sets) trips on any
+    such meeting, and the per-meeting rows carry ``reporter``/``killer`` so every
+    Stage-1 figure can be recomputed under a no-exclusion variant.
     """
 
     return meeting.living_at_meeting - {meeting.victim, meeting.reporter}
@@ -680,6 +708,13 @@ def _holds_last_seen_with_killer(
     invisible to same-room observers (:mod:`engine.visibility`), so the observer
     only ever saw the victim, never the vent-concealed killer. (Only the killer can
     be vented here — vents are impostor-only and kill targets/observers are crew.)
+
+    The reporter exclusion is the charter-ratified definition behind the pinned
+    37/129 (the reporter's evidence still counts through every OTHER possession
+    channel — scene, vent, kill-witnessed): this channel isolates third-party
+    "last seen with" testimony from the reporter's discovery-adjacent knowledge,
+    the signal the reporter-ejection leak shows meetings already over-weight. A
+    reporter-inclusive variant is recomputable from the per-meeting rows.
     """
 
     crew = _living_crew(meeting, roles) - {meeting.reporter}
@@ -808,6 +843,9 @@ class MeetingFunnelRow(BaseModel):
     candidate_set_pm1_size: int
     killer_in_set: bool
     killer_in_set_pm1: bool
+    # The ±1-window set narrowed to EXACTLY the killer (a singleton that misses
+    # the killer — a dead-killer late report — is NOT unique-killer; the size-1
+    # census is derivable from candidate_set_pm1_size).
     unique_killer_pm1: bool
     # Stage 2
     holds_vent: bool
@@ -846,6 +884,7 @@ class InformationFunnelReport(BaseModel):
     candidate_set_median: float | None
     candidate_set_mean: float | None
     candidate_set_pm1_mean: float | None
+    candidate_singleton_pm1: int
     unique_killer_pm1: int
     candidate_le2_pm1: int
     killer_in_set: int
@@ -866,6 +905,12 @@ class InformationFunnelReport(BaseModel):
     reporter_ejected: int
     reporter_ejected_innocent: int
     report_ejections: int
+    # Tripwire for the oracle's messenger-innocent prior (see
+    # :func:`_candidate_universe`): meetings whose reporter IS the killer. 0 on
+    # both committed baseline-2 sets; a non-zero reading on a future (e.g.
+    # learned-policy) set means the reporter-exclusion prior is being gamed and
+    # the Stage-1 rows must not be read naively.
+    killer_self_reported: int
     per_meeting: tuple[MeetingFunnelRow, ...]
 
 
@@ -896,7 +941,7 @@ def _meeting_row(
         candidate_set_pm1_size=len(pm1),
         killer_in_set=meeting.killer in exact,
         killer_in_set_pm1=meeting.killer in pm1,
-        unique_killer_pm1=len(pm1) == 1,
+        unique_killer_pm1=len(pm1) == 1 and meeting.killer in pm1,
         holds_vent=_holds_vent(meeting, walk),
         holds_last_seen_with_killer=_holds_last_seen_with_killer(
             meeting, frames, roles
@@ -969,6 +1014,7 @@ def compute_information_funnel(sample_dir: Path) -> InformationFunnelReport:
         candidate_set_median=statistics.median(sizes) if sizes else None,
         candidate_set_mean=statistics.fmean(sizes) if sizes else None,
         candidate_set_pm1_mean=statistics.fmean(pm1_sizes) if pm1_sizes else None,
+        candidate_singleton_pm1=sum(1 for r in rows if r.candidate_set_pm1_size == 1),
         unique_killer_pm1=sum(1 for r in rows if r.unique_killer_pm1),
         candidate_le2_pm1=sum(1 for r in rows if r.candidate_set_pm1_size <= 2),
         killer_in_set=sum(1 for r in rows if r.killer_in_set),
@@ -994,6 +1040,7 @@ def compute_information_funnel(sample_dir: Path) -> InformationFunnelReport:
         reporter_ejected=sum(1 for r in rows if r.reporter_ejected),
         reporter_ejected_innocent=sum(1 for r in rows if r.reporter_ejected_innocent),
         report_ejections=report_ejections,
+        killer_self_reported=sum(1 for r in rows if r.killer == r.reporter),
         per_meeting=tuple(rows),
     )
 
