@@ -287,15 +287,22 @@ class TacticalFeatureEncoder:
             if room_idx is not None:
                 bodies_by_room[room_idx] += 1.0 / _COUNT_NORM
 
-        # The roster the memory blocks are keyed on: EVERY player the agent has
-        # memory of, sorted lexically. It is the union of belief-known players and
-        # players the agent has SEEN (from the per-tick episodic log), so a
+        # The roster the memory blocks are keyed on: every OTHER player the agent
+        # has memory of, sorted lexically. It is the union of belief-known players
+        # and players the agent has SEEN (from the per-tick episodic log), so a
         # neutral player the agent merely saw — one perception never minted a
         # belief row for — still gets a last-seen slot (it would otherwise be
-        # dropped, blinding the vector to routine movement history).
+        # dropped, blinding the vector to routine movement history). The agent's
+        # OWN id is excluded: an impostor's own move can pass the movement-witness
+        # gate (its departure room is adjacent to its arrival), minting a
+        # ``saw_player_move`` row for itself — the store render self-suppresses for
+        # the same reason. A self belief/last-seen slot is meaningless (no agent
+        # suspects itself) and would skew the roster aggregates.
         beliefs = memory.beliefs
         episodic_last_seen = _episodic_last_seen(memory.episodic)
-        roster = sorted(set(beliefs.known_players()) | set(episodic_last_seen))
+        roster = sorted(
+            (set(beliefs.known_players()) | set(episodic_last_seen)) - {packet.agent_id}
+        )
         # Per-player last-seen (tick, room), taken from the FRESHER of the per-tick
         # episodic sighting and the render-time ``WorkingMemory.last_seen`` cache
         # (the latter is only written at meeting-render time, so the episodic log

@@ -21,6 +21,7 @@ from agents.tactical.features import (
     ENCODER_VERSION,
     FeatureSegment,
     TacticalFeatureEncoder,
+    _SCALAR_FEATURE_NAMES,
     mlp_forward,
     mlp_genome_length,
     quantize_unit_interval,
@@ -316,6 +317,51 @@ def test_neutral_seen_player_is_encoded_from_episodic() -> None:
     # The neutral seen player changed the vector (a slot filled + last-seen set +
     # the known-players / last-seen-occupancy aggregates moved).
     assert empty != with_neutral
+
+
+def test_observer_own_move_excluded_from_roster() -> None:
+    # An impostor's OWN move can pass the movement-witness gate, minting a
+    # saw_player_move row for itself. That self-row must NOT create a roster slot
+    # (an agent does not suspect itself): a memory whose ONLY sighting is the
+    # observer's own move yields an EMPTY roster — no filled belief/last-seen slot,
+    # zero known-player aggregate.
+    encoder = TacticalFeatureEncoder()
+    public_map = _canonical_public_map()
+    rooms = sorted(public_map.room_ids)
+    num_rooms = len(rooms)
+    packet = ObservationPacket(
+        tick=5,
+        agent_id="p-1",
+        self_state=SelfView(room=rooms[1], role="IMPOSTOR", pending_task_id=None),
+        visible_players=(),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=0,
+    )
+    episodic = MemoryStore()
+    episodic.append(
+        EpisodicEvent(
+            tick=5,
+            type="saw_player_move",
+            payload={"player_id": "p-1", "from_room": rooms[0], "to_room": rooms[1]},
+            provenance="observed",
+        )
+    )
+    vector = encoder.encode(packet, public_map, AgentMemory(episodic=episodic))
+    scalar_start = 4 * num_rooms  # four room-indexed blocks precede the scalars
+    # known_players_norm must be 0.0 (roster empty, self out).
+    known_index = scalar_start + _SCALAR_FEATURE_NAMES.index("known_players_norm")
+    assert vector[known_index] == 0.0
+    # The belief + last-seen slot blocks (after the scalars) must be all zeros.
+    slots_start = scalar_start + len(_SCALAR_FEATURE_NAMES)
+    assert all(value == 0.0 for value in vector[slots_start:])
 
 
 def test_memory_carrying_changes_features() -> None:

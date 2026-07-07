@@ -392,15 +392,20 @@ def _reconstruct_factory_records(
 ) -> list[PacketRecord]:
     """Re-seed + replay one factory game, yielding (packet, engine_events) records.
 
-    Mirrors the ``training.rollout`` / ``eval.funnel`` reconstruction recipe
-    (re-seed, advance over the recorded actions, apply meetings) but ALSO builds
-    every living agent's packet at each PLAY tick — paired with that tick's engine
-    events so the witness-permission check has the events it needs. The
-    reconstructed packets are byte-identical to the ones the live game handed the
-    agents.
+    Mirrors ``HeadlessGame._run_loop`` EXACTLY (``orchestrator/game.py``): each
+    iteration builds every living agent's packet from the CURRENT (pre-advance)
+    state plus the PRIOR tick's events (``last_events``) — the same
+    ``build_packet(engine_events=last_events)`` the live loop hands the agents —
+    THEN translates and advances that tick's recorded actions, THEN applies any
+    meeting. So the scanned stream is exactly the packets the encoder consumed:
+    it includes the tick-0 opening packet and every post-meeting resume packet,
+    and excludes the terminal GAME_OVER state (no agent decides there). Each packet
+    is paired with the events it was BUILT with, so the witness-permission check
+    reads the right events.
     """
 
     entries = read_all_entries(replay_path)
+    tick_entries = [entry for entry in entries if isinstance(entry, ReplayEntry)]
     meeting_by_tick = {
         entry.tick: entry for entry in entries if isinstance(entry, MeetingReplayEntry)
     }
@@ -414,32 +419,39 @@ def _reconstruct_factory_records(
     records: list[PacketRecord] = []
     audit_path = audit_dir / f"_leak_audit_{replay_path.stem}.jsonl"
     service = ObservationService(game_map=game_map, audit_log_path=audit_path)
+    last_events: tuple[EngineEvent, ...] = ()
     try:
-        for entry in entries:
-            if not isinstance(entry, ReplayEntry):
-                continue
+        for entry in tick_entries:
+            # Build packets from the PRE-advance state + prior events (the live
+            # loop's exact contract), before applying this tick's actions.
+            events_for_packets = list(last_events)
+            for player_id in sorted(state.players):
+                if state.players[player_id].alive:
+                    packet = service.build_packet(
+                        world_state=state,
+                        agent_id=player_id,
+                        engine_events=last_events,
+                    )
+                    records.append((packet, events_for_packets))
             actions = [
                 _ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions
             ]
             state, events = advance_tick(state, actions, game_map=game_map)
-            event_list = list(events)
-            for player_id, player in state.players.items():
-                if player.alive:
-                    packet = service.build_packet(
-                        world_state=state, agent_id=player_id, engine_events=events
-                    )
-                    records.append((packet, event_list))
-            if state.phase == "GAME_OVER":
-                break
-            if state.phase != "MEETING":
-                continue
-            trigger = next(e for e in events if isinstance(e, MeetingTriggeredEvent))
-            state, _ = apply_meeting_result(
-                state,
-                _meeting_result_from_entry(meeting_by_tick[entry.tick]),
-                game_map=game_map,
-                triggering_body_id=trigger.body_id,
-            )
+            last_events = tuple(events)
+            if state.phase == "MEETING":
+                trigger = next(
+                    e for e in events if isinstance(e, MeetingTriggeredEvent)
+                )
+                pre_meeting_events = last_events
+                state, post_events = apply_meeting_result(
+                    state,
+                    _meeting_result_from_entry(meeting_by_tick[entry.tick]),
+                    game_map=game_map,
+                    triggering_body_id=trigger.body_id,
+                )
+                # Mirror the live loop: the resume packet sees the pre-meeting
+                # events (a same-tick kill) plus the meeting's post events.
+                last_events = pre_meeting_events + tuple(post_events)
             if state.phase == "GAME_OVER":
                 break
     finally:
