@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+import tempfile
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TypeAlias, cast
 
 import pytest
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
+from agents.base import AgentInterface
 from engine.actions import Action
+from engine.entities import PlayerId, Role
 from engine.events import (
     EngineEvent,
     KilledEvent,
@@ -16,10 +19,27 @@ from engine.events import (
     VentExitedEvent,
 )
 from engine.tick import advance_tick
-from engine.world import WorldState, load_canonical_map
-from observation.packet import ObservationPacket
+from engine.world import Map, WorldState, load_canonical_map
+from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
+from observation.action_intent import ActionIntent, MoveIntent
+from observation.packet import (
+    GlobalView,
+    ObservationPacket,
+    PlayerView,
+    SelfView,
+)
+from observation.public_map import PublicMapView
 from observation.service import ObservationService
+from orchestrator.game import (
+    DEFAULT_MAX_TICKS,
+    AgentFactory,
+    HeadlessGame,
+    build_default_agent_factory,
+    build_default_meeting_runner,
+)
+from orchestrator.scheduler import TickScheduler
 from tests._helpers.world_state import scripted_initial_world_state
+from training.env import MaskedDecision, build_interposition_factory
 
 _SCRIPTED_GAMES = (
     "scripted_game_basic_tasks.json",
@@ -308,3 +328,226 @@ def test_no_observation_leaks_hidden_information(tmp_path: Path) -> None:
                 # crew-misroute are exercised by tests/observation/test_service
                 # .py and the extended property sweep in test_leak_property.py.
                 assert packet.self_state.fellow_impostor_ids == ()
+
+
+# --------------------------------------------------------------------------- #
+# Agent-factory mode (Task 15.10).
+#
+# The scripted-fixture sweep above walks 3 hand-authored games with NO factory
+# parameter. A learned mover (Encoder v2 + a policy head) drives the engine into
+# regions those fixtures never reach — so packets from those regions were
+# UNSCANNED (the ml-spike Gap #7). This region adds a factory mode: run
+# factory-built agents through FULL production games and apply the SAME recursive
+# role-leak scanners (:func:`_assert_no_recursive_hidden_fields` +
+# :func:`_assert_no_role_bearing_values`) to every packet the encoder consumes.
+# The 3 scripted fixtures above stay byte-identical; this is purely additive.
+# --------------------------------------------------------------------------- #
+
+# 4p/1i keeps the games fast while still reaching meetings, kills, vents, and
+# emergency calls (the regions the scripted fixtures under-cover).
+_FACTORY_MODE_SEEDS: tuple[int, ...] = (0, 1)
+_FACTORY_NUM_PLAYERS = 4
+_FACTORY_NUM_IMPOSTORS = 1
+_FACTORY_TASKS_PER_CREWMATE = 1
+
+
+class _PacketCapturingAgent:
+    """Wrap a factory-built agent and record every packet its ``decide`` sees.
+
+    The packet handed to ``decide`` IS the packet the encoder consumes, so
+    capturing here scans exactly the encoder's input surface. The full
+    ``MeetingAwareAgent`` protocol (both properties, both render methods, the
+    belief-fold hooks) delegates to the wrapped agent via ``__getattr__`` — so a
+    meeting-enabled game still builds participants through the wrapper.
+    """
+
+    def __init__(self, inner: AgentInterface, sink: list[ObservationPacket]) -> None:
+        self._inner = inner
+        self._sink = sink
+
+    def decide(
+        self, packet: ObservationPacket, public_map: PublicMapView
+    ) -> ActionIntent:
+        self._sink.append(packet)
+        return self._inner.decide(packet, public_map)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+def _capturing_factory(
+    inner_factory: AgentFactory, sink: list[ObservationPacket]
+) -> AgentFactory:
+    def factory(agent_id: PlayerId, role: Role) -> AgentInterface:
+        return _PacketCapturingAgent(inner_factory(agent_id, role), sink)
+
+    return factory
+
+
+def collect_factory_packets(
+    agent_factory: AgentFactory,
+    *,
+    seeds: Sequence[int] = _FACTORY_MODE_SEEDS,
+    num_players: int = _FACTORY_NUM_PLAYERS,
+    num_impostors: int = _FACTORY_NUM_IMPOSTORS,
+    tasks_per_crewmate: int = _FACTORY_TASKS_PER_CREWMATE,
+) -> list[ObservationPacket]:
+    """Run ``agent_factory`` through full games and return every packet it consumed.
+
+    Drives the REAL production loop (:class:`orchestrator.game.HeadlessGame` on
+    the deterministic fake provider) with the factory wrapped so each agent's
+    ``decide`` packet is captured. No engine or observation code is special-cased
+    — the packets are exactly what the observation service handed the agents.
+    """
+
+    game_map = load_canonical_map()
+    sink: list[ObservationPacket] = []
+    with tempfile.TemporaryDirectory(prefix="ailibi-leak-factory-") as tmp:
+        directory = Path(tmp)
+        for seed in seeds:
+            game = HeadlessGame(
+                seed=seed,
+                game_map=game_map,
+                agent_factory=_capturing_factory(agent_factory, sink),
+                replay_path=directory / f"replay-seed-{seed}.jsonl",
+                num_players=num_players,
+                num_impostors=num_impostors,
+                tasks_per_crewmate=tasks_per_crewmate,
+                scheduler=TickScheduler(max_ticks=DEFAULT_MAX_TICKS),
+                meeting_runner=build_default_meeting_runner(
+                    llm_client=build_default_client(env={ENV_PROVIDER: PROVIDER_FAKE})
+                ),
+                force=True,
+            )
+            game.run()
+    return sink
+
+
+def assert_packet_is_leak_clean(packet: ObservationPacket) -> None:
+    """Apply the recursive role-leak scanners (+ structural checks) to one packet.
+
+    The SAME scanners the scripted-fixture sweep applies: the recursive
+    hidden-field scanner, the role-bearing value scanner, the ``visible_players``
+    key-set pin, and the crew ``fellow_impostor_ids`` firewall. Raises
+    ``AssertionError`` on any leak, so a factory whose learned mover reaches a
+    leaky packet fails loud.
+    """
+
+    packet_dump = cast(JsonValue, packet.model_dump(mode="json"))
+    _assert_no_recursive_hidden_fields(packet_dump)
+    _assert_no_role_bearing_values(packet_dump)
+    for visible_player in packet.visible_players:
+        visible_player_dump = visible_player.model_dump(mode="json")
+        assert set(visible_player_dump.keys()) == {"id", "room", "action"}
+        assert _FORBIDDEN_VISIBLE_PLAYER_FIELDS.isdisjoint(visible_player_dump.keys())
+        assert visible_player.action not in _FORBIDDEN_VISIBLE_PLAYER_ACTIONS
+    for visible_body in packet.visible_bodies:
+        visible_body_dump = visible_body.model_dump(mode="json")
+        assert set(visible_body_dump.keys()) == {"id", "room", "victim_id"}
+        assert _FORBIDDEN_BODY_FIELDS.isdisjoint(visible_body_dump.keys())
+    if packet.self_state.role == "CREWMATE":
+        assert packet.cooldown is None
+        assert packet.self_state.fellow_impostor_ids == ()
+
+
+def assert_no_factory_packet_leaks(packets: Sequence[ObservationPacket]) -> None:
+    """Scan a captured packet stream; raise on the first leak."""
+
+    for packet in packets:
+        assert_packet_is_leak_clean(packet)
+
+
+def scan_factory_packets(
+    agent_factory: AgentFactory,
+    *,
+    seeds: Sequence[int] = _FACTORY_MODE_SEEDS,
+    num_players: int = _FACTORY_NUM_PLAYERS,
+    num_impostors: int = _FACTORY_NUM_IMPOSTORS,
+    tasks_per_crewmate: int = _FACTORY_TASKS_PER_CREWMATE,
+) -> int:
+    """Run a factory through full games and leak-scan every packet it consumed.
+
+    Returns the number of packets scanned so a caller can assert the factory was
+    actually exercised (no silently-empty scan). Raises ``AssertionError`` on a
+    leak.
+    """
+
+    packets = collect_factory_packets(
+        agent_factory,
+        seeds=seeds,
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+    )
+    assert_no_factory_packet_leaks(packets)
+    return len(packets)
+
+
+def _leak_probe_selector(decision: MaskedDecision) -> ActionIntent:
+    """A learned-style mover: prefer a legal room CHANGE, lexical tie-break.
+
+    Overriding the FSM's move with a different legal destination drives the
+    engine into rooms/regions the scripted fixtures never reach — the whole point
+    of the factory extension. Falls back to the FSM's intent when no non-stay move
+    is legal (e.g. inside a vent), so every returned intent is submission-legal.
+    """
+
+    own_room = decision.packet.self_state.room
+    moves = [
+        intent
+        for intent in decision.mask.engine_legal
+        if isinstance(intent, MoveIntent) and intent.payload.to_room != own_room
+    ]
+    if not moves:
+        return decision.fsm_intent
+    return max(moves, key=lambda move: move.payload.to_room)
+
+
+def _learned_wrapper_factory(game_map: Map) -> AgentFactory:
+    """The 15.8 interposition seam with a learned-style mover (the bake-off shape)."""
+
+    return build_interposition_factory(
+        game_map=game_map, intent_selector=_leak_probe_selector
+    )
+
+
+def test_leak_factory_mode_fsm_default_factory_is_clean() -> None:
+    # The FSM default factory (the anchor / BC oracle) driven through full games:
+    # every packet it consumes must be leak-clean.
+    scanned = scan_factory_packets(build_default_agent_factory())
+    assert scanned > 0, "factory mode captured no packets"
+
+
+def test_leak_factory_mode_learned_wrapper_factory_is_clean() -> None:
+    # A learned-wrapper factory (the 15.8 interposition seam + a mover that drives
+    # the engine into new regions) must be just as leak-clean as the FSM default.
+    factory = _learned_wrapper_factory(load_canonical_map())
+    scanned = scan_factory_packets(factory)
+    assert scanned > 0, "learned-wrapper factory mode captured no packets"
+
+
+def test_leak_factory_mode_planted_role_leak_trips() -> None:
+    # The scanner still bites: a factory-consumed packet carrying the impostor's
+    # role inside a visible-player id (the class the recursive value scanner
+    # exists for) must trip the factory-mode scan. Real games never mint such a
+    # packet, so it is planted here as a real ObservationPacket the scan sees.
+    poisoned = ObservationPacket(
+        tick=0,
+        agent_id="p-1",
+        self_state=SelfView(room="STORAGE", role="CREWMATE", pending_task_id=None),
+        visible_players=(
+            PlayerView(id="crew_role_leak_fixture", room="STORAGE", action=None),
+        ),
+        visible_bodies=(),
+        audible_events=(),
+        global_state=GlobalView(
+            tasks_completed=0,
+            tasks_total=1,
+            task_completion_percent=0.0,
+            sabotage_active=False,
+            sabotage_kind=None,
+        ),
+        cooldown=None,
+    )
+    with pytest.raises(AssertionError, match=r"\$\.visible_players\[0\]\.id"):
+        assert_no_factory_packet_leaks([poisoned])
