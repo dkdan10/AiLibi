@@ -516,6 +516,14 @@ def test_funnel_reproduces_oracle_stage(nine_funnel: InformationFunnelReport) ->
     assert nine_funnel.candidate_set_mean is not None
     assert round(nine_funnel.candidate_set_mean, 2) == 2.86
     assert nine_funnel.killer_in_set == 122
+    # The ±1-tick window (charter §2 as corrected 2026-07-07: the one-off script's
+    # 2.0 / 45 / 85 was mutually inconsistent with the exact-tick row — see the
+    # module docstring "Reproduction status"). This model preserves killer-in-set
+    # (never wrongly alibis the killer) via one-hop reachability.
+    assert nine_funnel.candidate_set_pm1_mean is not None
+    assert round(nine_funnel.candidate_set_pm1_mean, 2) == 2.29
+    assert nine_funnel.unique_killer_pm1 == 38
+    assert nine_funnel.candidate_le2_pm1 == 84
 
 
 def test_funnel_reproduces_possession_stage(
@@ -525,6 +533,10 @@ def test_funnel_reproduces_possession_stage(
     assert nine_funnel.kill_witnessed == 6
     assert nine_funnel.killer_at_scene == 32
     assert nine_funnel.last_seen_with_killer == 37
+    # The union vent ∪ kill-witnessed ∪ scene ∪ last-seen (charter §2 as corrected
+    # 2026-07-07; the one-off script's 94 sat below the floor its own components
+    # 74+6+32+37 permit).
+    assert nine_funnel.hard_clue_held == 98
 
 
 def test_funnel_reproduces_transmission_stage(
@@ -535,40 +547,15 @@ def test_funnel_reproduces_transmission_stage(
     assert nine_funnel.reporter_ejected == 22
     assert nine_funnel.reporter_ejected_innocent == 22
     assert nine_funnel.report_ejections == 106
+    # Votes outside the ≤3 exact-tick candidate set (charter §2 as corrected
+    # 2026-07-07; the one-off script's 42/73 required the gate and the membership
+    # test to read DIFFERENT candidate sets).
+    assert nine_funnel.votes_outside_small_set == 37
+    assert nine_funnel.small_set_ejections == 68
     # Not charter-cited, but pinned so the structured-observation folds cannot
     # silently drift before 15.7's before/after reading.
     assert nine_funnel.killer_placement_observed == 51
     assert nine_funnel.killer_accused == 76
-
-
-def test_funnel_coherent_values_for_charter_divergent_figures(
-    nine_funnel: InformationFunnelReport,
-) -> None:
-    """Regression-pin the figures where this coherent oracle DIVERGES from charter §2.
-
-    Each of these charter §2 figures was shown (by two independent exhaustive
-    reconstructions) to be UNREACHABLE by the coherent oracle that reproduces every
-    other §2 figure exactly — the charter's own rows are mutually inconsistent (the
-    ±1-window row needs a different reconstruction base than the exact-tick row it
-    reproduces; ``hard_clue_held``'s 94 is below the proven floor of 95 given
-    scene 32 + last-seen 37). These assertions pin what THIS oracle produces, so the
-    folds cannot silently drift while the figures are reconciled with the owner (see
-    the module docstring "Reproduction status" and the PR ``## Questions``); charter
-    §2 targets are in the comments.
-    """
-
-    # ±1-tick window (charter: mean 2.0 / unique 45 / ≤2 85). This model preserves
-    # killer-in-set (never wrongly alibis the killer) via one-hop reachability.
-    assert nine_funnel.candidate_set_pm1_mean is not None
-    assert round(nine_funnel.candidate_set_pm1_mean, 2) == 2.29
-    assert nine_funnel.unique_killer_pm1 == 38
-    assert nine_funnel.candidate_le2_pm1 == 84
-    # Hard clue held is the union vent ∪ kill-witnessed ∪ scene ∪ last-seen; with the
-    # exactly-reproduced scene 32 + last-seen 37 the union floor is 95 (charter: 94).
-    assert nine_funnel.hard_clue_held == 98
-    # Votes outside the ≤3 exact-tick set (charter: 42/73).
-    assert nine_funnel.votes_outside_small_set == 37
-    assert nine_funnel.small_set_ejections == 68
 
 
 def test_funnel_runs_on_4p1i_preset() -> None:

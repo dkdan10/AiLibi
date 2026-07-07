@@ -58,22 +58,21 @@ the reconstructed set. On the committed baseline-2 9p2i bytes this leaves the
 killer inside the candidate set in 122/129 meetings (7 such late-report frames).
 The artifact is a property of the reconstruction frame, not of the play.
 
-Reproduction status (committed baseline-2 9p2i — see ``tests/eval/test_funnel.py``
-and the Task-15.3 PR ``## Questions``): this instrument reproduces the charter §2
-figures EXACTLY for report-meeting count (129), the exact-tick candidate set
-(median 3, mean 2.86, killer-in-set 122), kill-witnessed (6), vent-witnessed (74),
-**killer-at-scene (32)**, **last-seen-with-killer (37)**, vent-mentioned (36/74),
-and the reporter-ejection census (22/106, all innocent). Three charter §2 figures do
-NOT reproduce, and the evidence is that the charter's own rows are MUTUALLY
-INCONSISTENT: (1) the ±1-window aggregates (this oracle mean 2.29 / unique 38 / ≤2 84
-vs charter 2.0 / 45 / 85) — two independent exhaustive reconstructions found the
-charter's row is only reachable from a move-augmented base whose OWN exact-tick set
-is not 369, so no single oracle produces both the exact-tick row it reproduces and
-the ±1 row; (2) hard-clue-held (98 vs 94) — with the exactly-reproduced scene 32 and
-last-seen 37 the union's proven floor is 95, so 94 is below what its own component
-figures allow; (3) votes-outside-a-≤3-set (37/68 vs 42/73). These are surfaced for
-owner review rather than reverse-fit to an incoherent instrument; the per-meeting
-rows expose the raw inputs so the figures can be re-derived under any definition.
+Reproduction status (committed baseline-2 9p2i — pinned in
+``tests/eval/test_funnel.py``): this instrument reproduces every charter §2 figure
+EXACTLY — report-meeting count (129), the exact-tick candidate set (median 3, mean
+2.86, killer-in-set 122), the ±1-window aggregates (mean 2.29, unique 38, ≤2 84),
+kill-witnessed (6), vent-witnessed (74), killer-at-scene (32),
+last-seen-with-killer (37), hard-clue-held (98), vent-mentioned (36/74),
+votes-outside-a-≤3-set (37/68), and the reporter-ejection census (22/106, all
+innocent). Provenance note: the charter's ±1-window / hard-clue-union /
+votes-outside cells were CORRECTED to these values (owner decision, 2026-07-07 —
+see the charter §2 preamble) after two independent exhaustive reconstructions
+proved the 2026-07-05 one-off script's cells (2.0 / 45 / 85, 94, 42/73) mutually
+inconsistent with its own exact-tick row — e.g. the only ±1 rule reaching mean 2.0
+wrongly alibis a killer in transit (killer-in-set 122 → 110). The committed
+instrument is authoritative; the per-meeting rows expose the raw inputs so any
+figure can be re-derived under an alternative definition without another walk.
 
 JSON report schema (``InformationFunnelReport.model_dump()`` / the
 ``scripts/measure_baseline.py --funnel`` ``--json`` rows), consumed by Task 15.7
