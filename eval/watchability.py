@@ -70,6 +70,22 @@ promoted verbatim from ``rubric_score.py`` (the geomean composition,
     below the §4.6 gate, or an evidence-free conviction with no observation-backed
     accusation and no contradiction flag). Punish-only; never a tradeable dimension.
 
+INTEGRITY BOUNDARY (the referee's ``integrity_ok`` vs the validity gate). The
+DOCTRINE (audits/post-phase-14-ML-training-signal.md §3.2/§6) splits the two jobs:
+the HARD validity gate (``scripts/validity_gate.py`` / :func:`eval.validity.run_validity_gate`,
+Task 15.1) is the AUTHORITATIVE integrity stage and is meant to PASS before a set
+reaches this referee. This module's ``integrity_ok`` is a defense-in-depth
+self-check that floors the geomean on the tamper vectors the geomean's own inputs
+depend on — determinism / pre-hash / post-hash breaches, a forged or missing
+``game_over`` label (feeds D1), a missing / duplicate / trailing meeting row and a
+ballots-vs-outcome tally mismatch (feed D2/D3/D4/the railroad floor) — and fails
+CLOSED on unreadable bytes. It deliberately does NOT re-implement the validity
+gate's full check set (tick-1 kills, betrayal ballots, dangling reason ids, cost /
+provenance, the meeting-rate floor): those are the gate's remit, run first, not
+duplicated here. Run the validity gate for a complete integrity verdict; this
+self-check exists so a champion is never SELECTED on bytes that would corrupt its
+own score.
+
 The four dimensions (report-rubric-design.md §3; weights/mappings are the lab's
 pre-fix calibration, KEPT byte-identical so the committed
 ``experiments/lab/results-rubric-geomean.json`` is an exact parity fixture — the
@@ -160,7 +176,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from engine.actions import Action
 from engine.entities import PlayerId, Role
@@ -189,11 +205,13 @@ from meetings.schemas import (
     SawVentObservation,
 )
 from meetings.transcript import detect_contradictions, is_weak_contradiction
+from meetings.voting import tally_ballots
 from orchestrator.game import apply_meeting_result
 from orchestrator.replay import (
     GameEndReplayEntry,
     MeetingReplayEntry,
     ReplayEntry,
+    ReplayLog,
     WinnerSide,
     _state_hash,
     read_all_entries,
@@ -224,6 +242,19 @@ _RAILROAD_GATE: Final[float] = SKIP_SUSPICION_THRESHOLD
 _D2_SEPARATION_SCALE: Final[float] = 0.30
 
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
+
+# Malformed-candidate errors that must FAIL CLOSED (integrity_ok=False) rather
+# than escape as a traceback — the referee is a machine-readable bake-off gate
+# (``scripts/measure_baseline.py --watchability --json``), so one corrupt
+# candidate must produce a failing report, not abort the run. Mirrors
+# ``eval.validity._MALFORMED_INPUT_ERRORS``.
+_MALFORMED_INPUT_ERRORS: Final[tuple[type[Exception], ...]] = (
+    ReplayLog.CorruptedFileError,
+    ValidationError,
+    ValueError,
+    KeyError,
+    FileNotFoundError,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -485,7 +516,10 @@ def _reconstruct_kills(sample_dir: Path) -> _SetReconstruction:
                     game_map=game_map,
                 )
             )
-        except _IntegrityBreach:
+        except _RECON_CATCH:
+            # An integrity breach OR malformed bytes the reconstruction cannot
+            # read (a corrupt action row, a truncated file) both mean the set is
+            # not a trustworthy recording — floor it, never crash the referee.
             result.integrity_ok = False
     return result
 
@@ -505,6 +539,12 @@ class _IntegrityBreach(Exception):
       ``scripts/_verify_samples.py::_check_meeting_pre_hashes``);
     * a game that reached a meeting with no recorded meeting row (a truncated /
       crashed-mid-meeting replay);
+    * a recorded meeting whose ballots do NOT tally (:func:`meetings.voting.tally_ballots`)
+      to its recorded ``outcome`` / ``ejected_player_id`` — ``apply_meeting_result``
+      consumes only the outcome fields, so tampered ballots pass the hash chain yet
+      drive ``plurality_margin`` / ejecting-voters into D3/D4/the railroad floor;
+    * a trailing replay row after the terminal event (a fabricated post-game tick /
+      meeting the report loader would still fold into D2 / the supply floors);
     * a MISSING terminal outcome — no recorded ``game_over`` row, or a playback
       that never reconstructs a terminal :class:`~engine.events.GameOverEvent`
       (an incomplete recording; a valid game has both);
@@ -517,6 +557,14 @@ class _IntegrityBreach(Exception):
     deduction game, so the referee floors the whole set rather than scoring on
     partial / tampered data or silently certifying a corrupt candidate.
     """
+
+
+# The per-game reconstruction catch: an integrity breach OR malformed bytes both
+# floor the set (named so the ``except`` is a statically-checkable tuple).
+_RECON_CATCH: Final[tuple[type[BaseException], ...]] = (
+    _IntegrityBreach,
+    *_MALFORMED_INPUT_ERRORS,
+)
 
 
 def _reconstruct_game_kills(
@@ -561,6 +609,7 @@ def _reconstruct_game_kills(
     kills: list[_KillWitnessFact] = []
     reconstructed_winner: WinnerSide | None = None
     reconstructed_reason: str | None = None
+    terminal_tick: int | None = None
     for entry in tick_entries:
         actions = [_ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions]
         state, events = advance_tick(state, actions, game_map=game_map)
@@ -582,6 +631,7 @@ def _reconstruct_game_kills(
                     )
                 )
         if state.phase == "GAME_OVER":
+            terminal_tick = entry.tick
             break
         if state.phase != "MEETING":
             continue
@@ -599,6 +649,14 @@ def _reconstruct_game_kills(
         # a byte-identity failure the verify-samples walk rejects, so it must not
         # silently certify here either.
         if meeting_entry.state_hash_before != entry.state_hash:
+            raise _IntegrityBreach
+        # The recorded ballots must tally (the frozen §5.2/§4.6 rule) to the
+        # recorded outcome + ejected player. apply_meeting_result consumes only
+        # outcome / ejected_player_id, so tampered ballots pass the hash chain yet
+        # feed plurality_margin / ejecting-voters into D3/D4/the railroad floor.
+        if tally_ballots(
+            meeting_entry.ballots, skip_confidence_threshold=SKIP_SUSPICION_THRESHOLD
+        ) != (meeting_entry.outcome, meeting_entry.ejected_player_id):
             raise _IntegrityBreach
         body_id = next(
             (e.body_id for e in events if isinstance(e, MeetingTriggeredEvent)), None
@@ -623,6 +681,7 @@ def _reconstruct_game_kills(
         if _state_hash(state) != meeting_entry.state_hash_after:
             raise _IntegrityBreach
         if state.phase == "GAME_OVER":
+            terminal_tick = entry.tick
             break
 
     # A valid, complete game has BOTH a recorded game_over row and a reconstructed
@@ -630,7 +689,14 @@ def _reconstruct_game_kills(
     # a playback that never reaches a terminal event — is incomplete/corrupt and is
     # floored, not silently certified (a partial replay that broke mid-walk already
     # raised above on its unresolved meeting / hash).
-    if game_end is None or reconstructed_reason is None:
+    if game_end is None or reconstructed_reason is None or terminal_tick is None:
+        raise _IntegrityBreach
+    # No replay row may follow the terminal event: a fabricated post-game tick /
+    # meeting is unvalidated by the walk (it breaks at game over) yet the report
+    # loader still folds every meeting row into D2 / the supply floors.
+    if any(e.tick > terminal_tick for e in tick_entries) or any(
+        e.tick > terminal_tick for e in meeting_entries
+    ):
         raise _IntegrityBreach
     # The recorded game_over winner/reason are NOT covered by the state-hash chain
     # (eval.validity check 1), so a forged outcome label reconstructs byte-clean
@@ -1374,17 +1440,30 @@ def compute_watchability(
             f"{roster_key!r} (known: {sorted(baseline_floors)})"
         )
 
-    report = assemble_tournament_report(sample_dir)
-    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)
-    game_map = load_canonical_map()
-    per_seed_roles = roles_by_seed(
-        sample_dir,
-        num_players=num_players,
-        num_impostors=num_impostors,
-        tasks_per_crewmate=tasks_per_crewmate,
-        game_map=game_map,
-    )
-    reconstruction = _reconstruct_kills(sample_dir)
+    # Fail CLOSED on malformed candidate bytes: the report loader / reconstruction
+    # rejecting a corrupt set (duplicate ticks, an unrecoverable meeting trigger, a
+    # bad action row) must produce a FAILING report, not abort the bake-off's
+    # ``--watchability --json`` run with a traceback. (The dir / seed / baseline
+    # resolution above are caller errors and still propagate.)
+    try:
+        report = assemble_tournament_report(sample_dir)
+        num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(
+            sample_dir
+        )
+        game_map = load_canonical_map()
+        per_seed_roles = roles_by_seed(
+            sample_dir,
+            num_players=num_players,
+            num_impostors=num_impostors,
+            tasks_per_crewmate=tasks_per_crewmate,
+            game_map=game_map,
+        )
+        reconstruction = _reconstruct_kills(sample_dir)
+    except _MALFORMED_INPUT_ERRORS:
+        return _fail_closed_report(
+            sample_dir, baseline_id, roster_key, floors, games_total=len(seeds)
+        )
+
     kills_by_seed: dict[int, list[_KillWitnessFact]] = {}
     for kill in reconstruction.kills:
         kills_by_seed.setdefault(kill.seed, []).append(kill)
@@ -1424,6 +1503,49 @@ def compute_watchability(
             round(statistics.median(s.score for s in scores), 2) if scores else 0.0
         ),
         per_game=tuple(scores),
+    )
+
+
+def _fail_closed_report(
+    sample_dir: Path,
+    baseline_id: str,
+    roster_key: str,
+    floors: SupplyFloors,
+    *,
+    games_total: int,
+) -> WatchabilityReport:
+    """A rejecting :class:`WatchabilityReport` for a set the loader can't read.
+
+    Every gauge is ``None`` (so every numeric floor fails), ``integrity_ok`` and
+    ``referee_passed`` are False, and there are no scored games — the fail-closed
+    verdict a bake-off consumer reads instead of a traceback.
+    """
+
+    unreadable = SupplyGaugeValues(
+        witnessed_event_rate=None,
+        total_kills=0,
+        crew_witnessed_kills=0,
+        flags_per_meeting=None,
+        total_flags=0,
+        persisted_vent_flags=0,
+        meetings_total=0,
+        testimony_backed_conversion=None,
+        backed_conversion_attempted=0,
+        backed_conversion_converted=0,
+    )
+    _, gauge_reports = evaluate_supply_floors(unreadable, floors)
+    return WatchabilityReport(
+        replay_set_dir=str(sample_dir),
+        baseline_id=baseline_id,
+        roster_key=roster_key,
+        games_total=games_total,
+        integrity_ok=False,
+        referee_passed=False,
+        supply_floors_passed=False,
+        supply_gauges=gauge_reports,
+        mean_score=0.0,
+        median_score=0.0,
+        per_game=(),
     )
 
 

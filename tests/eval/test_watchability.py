@@ -453,6 +453,78 @@ def test_duplicate_meeting_row_is_an_integrity_breach(tmp_path: Path) -> None:
     assert report.referee_passed is False
 
 
+def test_ballots_not_tallying_to_outcome_is_an_integrity_breach(
+    tmp_path: Path,
+) -> None:
+    """Tampered ballots that don't tally to the recorded ejection floor the set.
+
+    ``apply_meeting_result`` consumes only ``outcome`` / ``ejected_player_id``, so
+    emptying a recorded EJECTED meeting's ballots leaves every hash valid — only the
+    tally cross-check catches that the ballots no longer imply the ejection.
+    """
+
+    import json
+
+    from eval.validity import assemble_tournament_report
+    from eval.watchability import _reconstruct_kills
+
+    # Find a 4p1i seed whose game has an EJECTED meeting (a recorded ejection).
+    report = assemble_tournament_report(_FOUR)
+    eject_seed = next(
+        game.seed
+        for game in report.games
+        for meeting in game.meetings
+        if meeting.outcome == "EJECTED" and meeting.ejected_player_id is not None
+    )
+    lines = (_FOUR / f"replay-seed-{eject_seed}.jsonl").read_text().splitlines()
+    tampered: list[str] = []
+    changed = False
+    for line in lines:
+        row = json.loads(line)
+        if row.get("outcome") == "EJECTED" and "ballots" in row:
+            row["ballots"] = []  # empty ballots tally to SKIPPED, not the ejection
+            changed = True
+            tampered.append(json.dumps(row))
+        else:
+            tampered.append(line)
+    assert changed
+    _write_one_game_set(tmp_path, tampered)
+
+    assert _reconstruct_kills(tmp_path).integrity_ok is False
+
+
+def test_trailing_row_after_game_over_is_an_integrity_breach(tmp_path: Path) -> None:
+    """A fabricated replay row after the terminal event floors the set."""
+
+    import json
+
+    from eval.watchability import _reconstruct_kills
+
+    lines = (_FOUR / "replay-seed-0.jsonl").read_text().splitlines()
+    rows = [json.loads(line) for line in lines]
+    terminal_tick = next(r["tick"] for r in rows if r.get("kind") == "game_over")
+    tick_row = next(dict(r) for r in rows if "actions" in r)  # a per-tick ReplayEntry
+    tick_row["tick"] = terminal_tick + 1  # a fabricated post-game tick
+    _write_one_game_set(tmp_path, [*lines, json.dumps(tick_row)])
+
+    assert _reconstruct_kills(tmp_path).integrity_ok is False
+
+
+def test_malformed_bytes_fail_closed_not_crash(tmp_path: Path) -> None:
+    """A corrupt candidate the loader rejects yields a FAILING report, not a crash."""
+
+    import shutil
+
+    (tmp_path / "replay-seed-0.jsonl").write_text("this is not valid replay json\n")
+    shutil.copy(_FOUR / "roster.json", tmp_path / "roster.json")
+
+    report = compute_watchability(tmp_path)  # must NOT raise
+    assert report.integrity_ok is False
+    assert report.referee_passed is False
+    assert report.supply_floors_passed is False
+    assert report.per_game == ()
+
+
 def test_baseline_2_witnessed_event_rate_is_the_measured_anchor() -> None:
     """The 9p2i witnessed-event rate is the §6 6/160 = 3.75% crew-witnessed anchor."""
 
