@@ -229,17 +229,23 @@ def _vote_prompt(
     candidate_targets: tuple[PlayerId, ...],
     skip_confidence_threshold: float,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    reporter_id: PlayerId | None = None,
 ) -> str:
+    # ``reporter_id`` (Task 15.5) conforms to the widened VotePromptRenderer
+    # contract; surfaced only when supplied so a lever-OFF (``None``) render is
+    # byte-identical to the pre-15.5 stub output.
     suspicion_block = ",".join(
         f"{entry.player_id}:{entry.suspicion:.2f}/{entry.trust:.2f}"
         for entry in suspicion_graph
     )
+    reporter_line = f"reporter={reporter_id}\n" if reporter_id else ""
     return (
         "PHASE=VOTE\n"
         f"voter={voter_id}\n"
         f"candidates={','.join(candidate_targets)}\n"
         f"skip_threshold={skip_confidence_threshold:.2f}\n"
         f"{_fellow_impostors_line(fellow_impostor_ids)}"
+        f"{reporter_line}"
         f"suspicion={suspicion_block}\n"
         f"MEMORY:\n{rendered_memory}\n"
         f"TURNS_COUNT={len(transcript.turns)}\n"

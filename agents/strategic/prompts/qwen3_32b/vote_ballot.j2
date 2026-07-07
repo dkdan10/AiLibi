@@ -1,6 +1,15 @@
 {#- Vote-ballot prompt — bespoke qwen3_32b set (Task 14.5).
 
-   prompt_id: vote_ballot  --  version vote_ballot.qwen3_32b.v4
+   prompt_id: vote_ballot  --  version vote_ballot.qwen3_32b.v6
+
+   Version lineage: v4 (Task 14.11, below) was byte-identical through the Task
+   15.4 set-wide v5 bump (that task revised only the turn/opening templates and
+   left this one untouched, so the registry stamped v5 with no body change). v6
+   (Task 15.5) is the FIRST body edit since v4 and takes its own per-template
+   bump: it adds the reporter-exculpation annotation (the "## Who reported the
+   body" block below), rendered ONLY when the manager threads `reporter_id`
+   behind the default-OFF reporter_exculpation lever, so a lever-OFF ballot is
+   byte-identical to the v4/v5 body.
 
    Ground-up bespoke set for Qwen3-32B (non-thinking); NOT derived from the
    pinned qwen3_5_9b set. Output: ONE meetings.schemas.VoteBallot (the shared JSON
@@ -37,7 +46,9 @@
 
    Inputs (loader kwargs only): voter_id, rendered_memory, transcript,
    contradiction_flags, suspicion_graph, candidate_targets (optional),
-   skip_confidence_threshold (optional, default 0.6), fellow_impostor_ids (optional).
+   skip_confidence_threshold (optional, default 0.6), fellow_impostor_ids (optional),
+   reporter_id (optional, Task 15.5; the body-report meeting's reporter, or None —
+   the annotation renders only when the reporter_exculpation lever supplies it).
 -#}
 You are `{{ voter_id }}`, voting at an AiLibi meeting. AiLibi is a social-deduction
 game: a hidden impostor kills crewmates; the crew wins by voting the impostor out,
@@ -83,6 +94,15 @@ is struck to SKIP. Pick your target from this list, or SKIP.
 ## Your team
 Your fellow impostors are {{ fellow_impostor_ids | join(", ") }}. Never vote a
 teammate; if your suspicion lands on one, set `target` to `"SKIP"` instead.
+{% endif %}
+{% if reporter_id is defined and reporter_id %}
+
+## Who reported the body
+`{{ reporter_id }}` reported the body that opened this meeting. In this game
+self-report is weakly exculpatory: the impostor almost never reports its own
+kill, so being first to the body is not by itself evidence of guilt. Do not
+vote `{{ reporter_id }}` merely for having found the body — weigh them on the
+same testimony, contradiction flags, and memory as everyone else.
 {% endif %}
 {% if candidate_targets is defined and candidate_targets %}
 {% set _susp = suspicion_graph | selectattr('player_id', 'in', candidate_targets) | map(attribute='suspicion') | list %}

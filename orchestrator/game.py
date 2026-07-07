@@ -315,9 +315,15 @@ def _bespoke_versions(set_name: str, version: str = "v1") -> Mapping[str, str]:
 PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
     DEFAULT_PROMPT_SET: DEFAULT_PROMPT_VERSIONS,
     # Task 15.4 (vent observability): v5 = the vent-elicitation revision of the
-    # turn/opening templates (vote_ballot.j2 byte-identical; its own next edit
-    # is Task 15.5's per-template v6 entry).
-    "qwen3_32b": _bespoke_versions("qwen3_32b", version="v5"),
+    # turn/opening templates (vote_ballot.j2 byte-identical at the set bump).
+    # Task 15.5 (reporter exculpation): vote_ballot ALONE advances v5 -> v6 (its
+    # per-template bump for the reporter-exculpation annotation), so the pre- and
+    # post-15.5 vote-prompt bodies can never share the ``vote_ballot.qwen3_32b.v5``
+    # stamp; the other three templates stay v5.
+    "qwen3_32b": {
+        **_bespoke_versions("qwen3_32b", version="v5"),
+        "vote_ballot": "vote_ballot.qwen3_32b.v6",
+    },
     "qwen3_32b_thinking": _bespoke_versions("qwen3_32b_thinking", version="v2"),
     "qwen3_30b_a3b": _bespoke_versions("qwen3_30b_a3b", version="v2"),
     "glm_4_32b": _bespoke_versions("glm_4_32b", version="v3"),

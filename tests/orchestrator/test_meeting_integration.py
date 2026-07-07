@@ -980,6 +980,7 @@ def _stub_vote_prompt(
     candidate_targets: tuple[PlayerId, ...],
     skip_confidence_threshold: float,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    reporter_id: PlayerId | None = None,  # Task 15.5: widened contract kwarg
 ) -> str:
     return f"VOTE voter={voter_id}"
 
