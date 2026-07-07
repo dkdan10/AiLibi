@@ -205,28 +205,39 @@ def _crew_terms(rollout: EpisodeRollout) -> dict[str, float]:
     )
     crew_alive = last.alive_crew if last is not None else 0
     initial_crew = max(1, rollout.num_players - rollout.num_impostors)
-    # This is the CREW tactical-reporting reward, so both terms count only
-    # meetings a crewmate ROUTED via a body report — never an emergency or an
-    # impostor-triggered report, which credit the crew for outcomes it did not
-    # produce and would skew the optimizer toward meeting-layer/opponent behavior.
-    crew_reports = [
-        meeting
+    # correctly-routed reports: count only meetings a crewmate ROUTED via a body
+    # report that ejected an impostor — never an emergency or an impostor-triggered
+    # report, which credit the crew for outcomes it did not produce.
+    correct_reports = sum(
+        1
         for meeting in rollout.meetings
         if meeting.trigger == "report"
         and rollout.roles.get(meeting.triggered_by) == "CREWMATE"
-    ]
-    correct_reports = sum(
-        1
-        for meeting in crew_reports
-        if meeting.ejected_player_id is not None
+        and meeting.ejected_player_id is not None
         and rollout.roles.get(meeting.ejected_player_id) == "IMPOSTOR"
     )
-    report_coverage = len(crew_reports)
+    # buddy/patrol coverage of last-seen suspects: the fraction of genuine PLAY
+    # ticks a crewmate shadowed a suspect's ACTUAL position (an impostor). Reads
+    # engine truth (like every reward term), so a crew that shadows a suspect
+    # WITHOUT filing a report is rewarded and an unrelated body report is not —
+    # the Phase-15 crew coverage term the contract names. Trivial spawn / meeting
+    # co-presence is excluded by reading only ``kind="tick"`` PLAY frames.
+    play_frames = [
+        frame
+        for frame in rollout.frames
+        if frame.kind == "tick" and frame.phase == "PLAY"
+    ]
+    patrol_coverage = (
+        sum(1 for frame in play_frames if frame.crew_shadowing_impostor)
+        / len(play_frames)
+        if play_frames
+        else 0.0
+    )
     return {
         "task_progress": task_progress,
         "survival": crew_alive / initial_crew,
         "correct_reports": float(correct_reports),
-        "report_coverage": float(report_coverage),
+        "patrol_coverage": patrol_coverage,
     }
 
 

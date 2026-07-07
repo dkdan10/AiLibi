@@ -217,6 +217,55 @@ def test_post_meeting_frame_uses_the_resumed_tick() -> None:
         assert frame.phase in ("PLAY", "GAME_OVER")
 
 
+def test_episode_rollout_rejects_inconsistent_terminal_shape() -> None:
+    """The rollout record enforces its terminal-shape invariant at construction,
+    so an invalid record cannot be built (and thus cannot be scored)."""
+
+    from training.rollout import BehavioralDescriptors, EpisodeRollout
+
+    descriptors = BehavioralDescriptors(
+        kill_ticks=(),
+        witness_exposure_rate=0.0,
+        vent_usage=0,
+        meeting_count=0,
+        meeting_trigger_rate=0.0,
+        do_task_emissions=0,
+        do_task_cadence=0.0,
+        win_shape="IMPOSTORS",
+    )
+
+    def _build(*, truncated: bool, outcome: str, winner: str | None) -> EpisodeRollout:
+        return EpisodeRollout(
+            seed=0,
+            num_players=_NUM_PLAYERS,
+            num_impostors=_NUM_IMPOSTORS,
+            tasks_per_crewmate=_TASKS,
+            episode_boundary="full_game",
+            truncated=truncated,
+            outcome=outcome,  # type: ignore[arg-type]
+            winner=winner,  # type: ignore[arg-type]
+            win_reason=None,
+            final_tick=1,
+            roles={"p0": "IMPOSTOR"},
+            frames=(),
+            events=(),
+            meetings=(),
+            descriptors=descriptors,
+        )
+
+    # A consistent completed episode builds fine.
+    assert _build(truncated=False, outcome="IMPOSTORS", winner="IMPOSTORS").complete
+    # Truncated but carrying a winner — rejected.
+    with pytest.raises(ValueError):
+        _build(truncated=True, outcome="FIRST_MEETING", winner="IMPOSTORS")
+    # Terminal outcome disagreeing with the winner — rejected.
+    with pytest.raises(ValueError):
+        _build(truncated=False, outcome="IMPOSTORS", winner="CREWMATES")
+    # Terminal outcome but truncated — rejected.
+    with pytest.raises(ValueError):
+        _build(truncated=True, outcome="CREWMATES", winner=None)
+
+
 def test_reconstruct_rejects_unknown_boundary() -> None:
     game_map = load_canonical_map()
     with tempfile.TemporaryDirectory(prefix="ailibi-badbound-") as tmp:

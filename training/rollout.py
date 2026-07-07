@@ -153,6 +153,12 @@ class EpisodeFrame:
     alive_crew: int
     alive_impostors: int
     cumulative_kills: int
+    # Whether a living, non-vented crewmate shared a room with a living,
+    # non-vented impostor this step — the engine-truth basis of the crew's
+    # buddy/patrol-coverage reward (:mod:`training.rewards`). Trivially True at
+    # spawn / meeting-room resumption, so the reward reads it only on genuine
+    # ``kind="tick"`` PLAY frames.
+    crew_shadowing_impostor: bool = False
 
 
 @dataclass(frozen=True)
@@ -227,6 +233,17 @@ class EpisodeRollout:
     records, the roster's roles (from the re-seeded state), the terminal shape,
     and the behavioral descriptors. Downstream trainers import THIS — never the
     replay bytes. Signature is stable per the task contract.
+
+    A frozen dataclass (not a Pydantic model) for the same reason the
+    orchestrator's own in-memory result bundles
+    (:class:`orchestrator.game.MeetingArtifacts` /
+    :class:`~orchestrator.game.HeadlessGameResult`) are: it is a computation
+    result held in-process and it CARRIES engine ``EngineEvent`` frozen
+    dataclasses (AGENTS.md reserves Pydantic for serialized/boundary DTOs like
+    the replay entries, and frozen dataclasses for engine state — a Pydantic
+    model wrapping a tuple of engine dataclasses would re-validate already-valid
+    engine truth). :meth:`__post_init__` enforces the terminal-shape invariant so
+    an inconsistent record still fails loud at construction.
     """
 
     seed: int
@@ -244,6 +261,31 @@ class EpisodeRollout:
     events: tuple[EngineEvent, ...]
     meetings: tuple[MeetingRecord, ...]
     descriptors: BehavioralDescriptors
+
+    def __post_init__(self) -> None:
+        # Fail loud on an inconsistent terminal shape (AGENTS.md no silent
+        # fallbacks): a truncated / non-terminal episode must carry no winner, a
+        # completed one must carry a winner matching its outcome. This makes an
+        # invalid rollout record unconstructable, so it can never be scored.
+        if self.truncated and (self.winner is not None or self.win_reason is not None):
+            raise ValueError(
+                "truncated EpisodeRollout must have winner=None and "
+                f"win_reason=None (got winner={self.winner!r})"
+            )
+        if self.outcome in ("CREWMATES", "IMPOSTORS"):
+            if self.truncated or self.winner != self.outcome:
+                raise ValueError(
+                    f"terminal outcome {self.outcome!r} requires winner=={self.outcome!r}"
+                    f" and truncated=False (got winner={self.winner!r}, "
+                    f"truncated={self.truncated})"
+                )
+        elif self.winner is not None or not self.truncated:
+            # FIRST_MEETING / TICK_BUDGET are non-terminal: no winner, truncated.
+            raise ValueError(
+                f"non-terminal outcome {self.outcome!r} requires winner=None and "
+                f"truncated=True (got winner={self.winner!r}, "
+                f"truncated={self.truncated})"
+            )
 
     @property
     def state_hashes(self) -> tuple[str, ...]:
@@ -291,6 +333,31 @@ def _count_do_task_submissions(raw_actions: Sequence[Mapping[str, object]]) -> i
     return sum(1 for raw in raw_actions if raw.get("type") == "do_task")
 
 
+def _crew_shadows_impostor(state: WorldState, roles: Mapping[PlayerId, Role]) -> bool:
+    """Whether a living, non-vented crewmate shares a room with an impostor.
+
+    The engine-truth basis of the crew's buddy/patrol-coverage reward: a crew
+    member co-located with a suspect's ACTUAL position (the impostor) is covering
+    it, deterring the kill — the intended shadowing behavior, rewardable without
+    reconstructing agent belief state. Vented players are excluded (a vented
+    impostor is hidden; a vented crew is not patrolling)."""
+
+    impostor_rooms = {
+        player.room
+        for pid, player in state.players.items()
+        if player.alive and not player.in_vent and roles.get(pid) == "IMPOSTOR"
+    }
+    if not impostor_rooms:
+        return False
+    return any(
+        player.alive
+        and not player.in_vent
+        and roles.get(pid) == "CREWMATE"
+        and player.room in impostor_rooms
+        for pid, player in state.players.items()
+    )
+
+
 def _frame(
     state: WorldState,
     *,
@@ -321,6 +388,7 @@ def _frame(
         alive_crew=alive_crew,
         alive_impostors=alive_impostors,
         cumulative_kills=cumulative_kills,
+        crew_shadowing_impostor=_crew_shadows_impostor(state, roles),
     )
 
 

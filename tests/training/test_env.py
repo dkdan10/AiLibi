@@ -402,10 +402,10 @@ def test_mask_legality_against_engine(seed: int) -> None:
     assert submission_only_seen > 0
 
 
-def test_impostor_pretend_do_task_is_submission_only_not_engine_legal() -> None:
+def test_impostor_pretend_do_task_is_submission_only_in_the_task_room() -> None:
     game_map = load_canonical_map()
     public_map = public_map_from_engine_map(game_map)
-    state = seed_initial_state(
+    base = seed_initial_state(
         seed=0,
         game_map=game_map,
         num_players=_NUM_PLAYERS,
@@ -413,33 +413,43 @@ def test_impostor_pretend_do_task_is_submission_only_not_engine_legal() -> None:
         tasks_per_crewmate=_TASKS,
     )
     impostor = next(
-        pid for pid, player in state.players.items() if player.role == "IMPOSTOR"
+        pid for pid, player in base.players.items() if player.role == "IMPOSTOR"
     )
-    with tempfile.TemporaryDirectory(prefix="ailibi-pretend-") as tmp:
-        service = ObservationService(
-            game_map=game_map, audit_log_path=Path(tmp) / "a.jsonl"
-        )
-        packet = service.build_packet(
-            world_state=state, agent_id=impostor, engine_events=()
-        )
-        service.close()
-
-    pending = packet.self_state.pending_task_id
+    pending = _packet_for(base, impostor, game_map).self_state.pending_task_id
     assert pending is not None  # an impostor's pretend map task
-    mask = build_action_mask(
-        packet,
-        public_map,
-        sabotage_kinds=tuple(sorted(game_map.sabotages)),
-        emergency_uses_remaining=game_map.emergency.uses_per_player,
-    )
+    task_room = public_map.task_locations[pending]
     pretend = DoTaskIntent.model_validate(
         {"type": "do_task", "actor": impostor, "payload": {"task_id": pending}}
     )
-    assert pretend in mask.submission_only
-    assert mask.is_submission_legal(pretend)
-    assert not mask.is_engine_legal(pretend)
-    # The camouflage submission is genuinely engine-rejected (no owned instance).
-    assert _engine_rejects(state, pretend, game_map)
+
+    def _mask_with_impostor_in(room: str, *, in_vent: bool = False) -> ActionMask:
+        players = dict(base.players)
+        players[impostor] = replace(players[impostor], room=room, in_vent=in_vent)
+        state = replace(base, players=players)
+        return build_action_mask(
+            _packet_for(state, impostor, game_map),
+            public_map,
+            sabotage_kinds=tuple(sorted(game_map.sabotages)),
+            emergency_uses_remaining=game_map.emergency.uses_per_player,
+        )
+
+    # In the pretend task's room: the observation-meaningful camouflage submission
+    # (engine-rejected, not engine-legal).
+    in_room = _mask_with_impostor_in(task_room)
+    assert pretend in in_room.submission_only
+    assert in_room.is_submission_legal(pretend)
+    assert not in_room.is_engine_legal(pretend)
+    assert _engine_rejects(base, pretend, game_map)  # no owned instance, any room
+
+    # Elsewhere (a different room, or hidden in a vent): a plain illegal
+    # submission, so a selector cannot spam a stationary fake task.
+    other_room = next(room for room in public_map.room_ids if room != task_room)
+    elsewhere = _mask_with_impostor_in(other_room)
+    assert pretend in elsewhere.illegal
+    assert not elsewhere.is_submission_legal(pretend)
+    vented = _mask_with_impostor_in(task_room, in_vent=True)
+    assert pretend in vented.illegal
+    assert not vented.is_submission_legal(pretend)
 
 
 # --------------------------------------------------------------------------- #

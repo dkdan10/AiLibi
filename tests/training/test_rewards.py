@@ -83,6 +83,21 @@ def _frame(
     )
 
 
+def _play_frame(*, shadowing: bool) -> EpisodeFrame:
+    return EpisodeFrame(
+        tick=1,
+        kind="tick",
+        phase="PLAY",
+        state_hash="0" * 64,
+        tasks_completed=0,
+        tasks_total=1,
+        alive_crew=1,
+        alive_impostors=1,
+        cumulative_kills=0,
+        crew_shadowing_impostor=shadowing,
+    )
+
+
 def _make_rollout(
     *,
     truncated: bool,
@@ -99,7 +114,9 @@ def _make_rollout(
         tasks_per_crewmate=_TASKS,
         episode_boundary="first_meeting" if truncated else "full_game",
         truncated=truncated,
-        outcome="FIRST_MEETING" if truncated else "IMPOSTORS",
+        # The EpisodeRollout invariant requires outcome == winner for a completed
+        # episode, so the outcome tracks the winner when not truncated.
+        outcome="FIRST_MEETING" if truncated else winner,  # type: ignore[arg-type]
         winner=winner,  # type: ignore[arg-type]
         win_reason=None if winner is None else "IMPOSTOR_PARITY",
         final_tick=1,
@@ -237,11 +254,12 @@ def test_crew_terms_read_the_typed_state() -> None:
         "task_progress",
         "survival",
         "correct_reports",
-        "report_coverage",
+        "patrol_coverage",
     }
     assert 0.0 <= terms["task_progress"] <= 1.0
     assert 0.0 <= terms["survival"] <= 1.0
     assert terms["correct_reports"] >= 0.0
+    assert 0.0 <= terms["patrol_coverage"] <= 1.0
 
 
 def test_shaped_reward_total_combines_terminal_dense_and_shaping() -> None:
@@ -285,9 +303,9 @@ def test_impostor_unwitnessed_kills_ignore_teammate_witnesses() -> None:
     assert terms["unwitnessed_kills"] == 2.0
 
 
-def test_crew_reports_count_only_crew_triggered_body_reports() -> None:
-    """``correct_reports`` / ``report_coverage`` credit only meetings a crewmate
-    routed via a body report — never an emergency or an impostor-triggered one."""
+def test_correct_reports_count_only_crew_triggered_body_reports() -> None:
+    """``correct_reports`` credits only a crewmate-routed body report that ejected
+    an impostor — never an emergency or an impostor-triggered report."""
 
     roles: dict[str, Role] = {
         "p0": "IMPOSTOR",
@@ -300,17 +318,36 @@ def test_crew_reports_count_only_crew_triggered_body_reports() -> None:
         winner="CREWMATES",
         roles=roles,
         meetings=(
-            # A crew body-report that ejected an impostor: counts for both.
+            # A crew body-report that ejected an impostor: counts.
             _meeting(trigger="report", triggered_by="c1", ejected="p0"),
-            # A crew body-report that ejected a crewmate: coverage only.
+            # A crew body-report that ejected a crewmate: no credit.
             _meeting(trigger="report", triggered_by="c2", ejected="c1"),
-            # An impostor-triggered body report that ejected an impostor: neither.
+            # An impostor-triggered body report that ejected an impostor: no credit.
             _meeting(trigger="report", triggered_by="p1", ejected="p1"),
-            # An emergency meeting that ejected an impostor: neither.
+            # An emergency meeting that ejected an impostor: no credit.
             _meeting(trigger="emergency", triggered_by="c1", ejected="p1"),
         ),
         frames=(_frame(tasks_completed=1, alive_crew=1, alive_impostors=0),),
     )
     terms = side_specific_terms(rollout, "CREWMATE")
-    assert terms["report_coverage"] == 2.0  # the two crew body-reports
     assert terms["correct_reports"] == 1.0  # only the crew report that got an impostor
+
+
+def test_patrol_coverage_rewards_shadowing_without_a_report() -> None:
+    """``patrol_coverage`` is the fraction of PLAY ticks a crewmate shadowed a
+    live impostor — rewarding buddy/patrol play with no body report at all."""
+
+    roles: dict[str, Role] = {"p0": "IMPOSTOR", "c1": "CREWMATE"}
+    frames = (
+        _play_frame(shadowing=True),
+        _play_frame(shadowing=False),
+        _play_frame(shadowing=True),
+        _play_frame(shadowing=True),
+    )
+    rollout = _make_rollout(
+        truncated=False, winner="CREWMATES", roles=roles, frames=frames
+    )
+    terms = side_specific_terms(rollout, "CREWMATE")
+    assert terms["patrol_coverage"] == pytest.approx(3 / 4)  # 3 of 4 PLAY ticks
+    # No meetings at all, so shadowing alone produces the coverage signal.
+    assert terms["correct_reports"] == 0.0

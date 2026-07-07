@@ -202,12 +202,22 @@ def build_action_mask(
         do_task = DoTaskIntent.model_validate(
             {"type": "do_task", "actor": actor, "payload": {"task_id": pending}}
         )
+        task_room = public_map.task_locations.get(pending)
         if role == "IMPOSTOR":
-            # Pretend do_task: engine-rejected (owns no instance) but the
-            # ``action="task"`` camouflage submission — observation-meaningful.
-            submission_only.append(do_task)
+            # Pretend do_task: engine-rejected (owns no instance). It is the
+            # ``action="task"`` camouflage submission ONLY when the impostor
+            # actually stands in the pretend task's room and is not vented —
+            # matching the FSM blend (``impostor_policy._idle``) and the
+            # believable-camouflage semantics (crew task only in task rooms, so a
+            # ``do_task`` elsewhere is a tell, not camouflage; a vented actor is
+            # unseen, so nothing renders). Elsewhere it is a plain illegal
+            # submission, so a selector cannot spam a stationary fake task to
+            # farm the camouflage/cadence channel.
+            if (not in_vent) and task_room == own_room:
+                submission_only.append(do_task)
+            else:
+                illegal.append(do_task)
         else:
-            task_room = public_map.task_locations.get(pending)
             add(
                 do_task,
                 legal=(
