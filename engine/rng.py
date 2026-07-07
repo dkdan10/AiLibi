@@ -131,10 +131,20 @@ class EngineRng:
         if hash_policy is RngStateHashPolicy.FULL:
             payload = {"v": version, "s": list(internal), "g": gauss}
             return json.dumps(payload, separators=(",", ":")).encode("utf-8")
-        header = _FAST_HEADER.pack(
-            version, gauss is not None, gauss if gauss is not None else 0.0
+        if hash_policy is RngStateHashPolicy.TRAINING_FAST:
+            header = _FAST_HEADER.pack(
+                version, gauss is not None, gauss if gauss is not None else 0.0
+            )
+            return _FAST_STATE_MARKER + header + array("Q", internal).tobytes()
+        # No silent fallback (AGENTS.md): an unrecognised policy -- e.g. a raw
+        # config string or ``None`` reaching an untyped caller -- must fail loud
+        # here rather than fall through to the fast codec and silently emit
+        # non-committed rng_state bytes under a caller that asked for something
+        # else.
+        raise ValueError(
+            f"unknown RngStateHashPolicy: {hash_policy!r}; expected "
+            f"{RngStateHashPolicy.FULL!r} or {RngStateHashPolicy.TRAINING_FAST!r}"
         )
-        return _FAST_STATE_MARKER + header + array("Q", internal).tobytes()
 
     def randint(
         self,

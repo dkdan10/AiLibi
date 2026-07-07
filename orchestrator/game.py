@@ -1344,15 +1344,23 @@ class HeadlessGame:
         # loud (DESIGN.md §11.4; Task 4.16). run() keeps its existing
         # signature; the flag rides the constructor.
         self._force = force
-        # No-replay mode writes nothing, so the observation audit log (which
-        # opens its file lazily on the first packet) is routed to the null device
-        # instead of a sibling of the replay: the ObservationService requires a
-        # Path, and os.devnull discards every write so the "nothing on disk"
-        # contract holds without widening the out-of-scope service surface.
+        # No-replay mode writes nothing, so the observation audit log (which the
+        # ObservationService writes a row to per packet) is routed to the null
+        # device: the service requires a Path, and os.devnull discards every write
+        # so the "nothing on disk" contract holds without widening the
+        # out-of-scope service surface. An EXPLICIT audit_log_path contradicts
+        # that contract, so it is refused rather than silently honoured (a
+        # no-replay run must never leave an audit JSONL behind) -- AGENTS.md "no
+        # silent fallbacks".
         if not records_replay:
-            self._audit_log_path = (
-                audit_log_path if audit_log_path is not None else Path(os.devnull)
-            )
+            if audit_log_path is not None:
+                raise ValueError(
+                    "a no-replay HeadlessGame (replay_path=None) writes NOTHING to "
+                    "disk, so an explicit audit_log_path is refused; omit it (the "
+                    "audit is routed to the null device) or pass a replay_path to "
+                    "record."
+                )
+            self._audit_log_path = Path(os.devnull)
         else:
             assert replay_path is not None  # records_replay == replay_path is not None
             self._audit_log_path = (

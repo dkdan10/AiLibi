@@ -24,6 +24,8 @@ from __future__ import annotations
 import json
 import random
 
+import pytest
+
 from engine.actions import Action, WaitAction
 from engine.entities import PlayerId
 from engine.rng import EngineRng, RngStateHashPolicy
@@ -124,6 +126,18 @@ def test_randint_draw_is_policy_invariant() -> None:
         EngineRng.from_state(next_full)._random.getstate()
         == EngineRng.from_state(next_fast)._random.getstate()
     )
+
+
+def test_snapshot_rejects_an_unknown_policy() -> None:
+    # No silent fallback: a raw config value / None reaching an untyped caller
+    # must fail loud rather than default to the fast codec.
+    rng = EngineRng.from_seed(1)
+    with pytest.raises(ValueError, match="unknown RngStateHashPolicy"):
+        rng.snapshot(hash_policy="training_fast")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="unknown RngStateHashPolicy"):
+        rng.snapshot(hash_policy=None)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="unknown RngStateHashPolicy"):
+        rng.randint(0, 10, hash_policy="full")  # type: ignore[arg-type]
 
 
 def test_fast_codec_matches_a_hand_rolled_getstate_round_trip() -> None:

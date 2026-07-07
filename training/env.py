@@ -71,7 +71,7 @@ from engine.actions import DoTaskAction
 from engine.entities import PlayerId, Role
 from engine.events import EngineEvent, GameOverEvent, KilledEvent, MeetingTriggeredEvent
 from engine.rng import RngStateHashPolicy
-from engine.world import Map, load_canonical_map
+from engine.world import Map, WorldState, load_canonical_map
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE, build_default_client
 from observation.action_intent import (
     ActionIntent,
@@ -707,14 +707,27 @@ class TacticalRolloutEnv:
         typed event log, the meeting records, the behavioral descriptors, and the
         terminal-shape logic — but reads the already-captured live trajectory
         instead of re-running ``advance_tick`` and verifying recorded hashes: the
-        captured states ARE the engine truth. The per-frame ``state_hash`` is
-        computed here over the live state; under the fast rng codec it is not
-        comparable to a recorded game's hash (only the recorded path pins a
-        byte-determinism chain), and the reward channel reads frame scalars, not
-        hashes.
+        captured states ARE the engine truth.
+
+        The per-frame ``state_hash`` is SKIPPED on the fast path: the fast rng
+        rollout never verifies these hashes (there is no replay to verify
+        against), so stable-JSON-serializing the full ``WorldState`` per frame
+        would re-pay exactly the per-tick serialization cost the fast path exists
+        to avoid, and the reward channel / descriptors read frame SCALARS + events
+        rather than the hash. Fast-path frames therefore carry an empty
+        ``state_hash`` placeholder. The FULL no-replay path keeps a real hash, so
+        it stays byte-identical to :func:`reconstruct_episode` (including the
+        state-hash chain).
         """
 
         episode_boundary = self._episode_boundary
+        # Skip the full-WorldState serialization on the fast training path (see
+        # docstring); FULL no-replay keeps real, reconstruct-comparable hashes.
+        skip_state_hash = self._rng_hash_policy is RngStateHashPolicy.TRAINING_FAST
+
+        def _frame_hash(state: WorldState) -> str:
+            return "" if skip_state_hash else _state_hash(state)
+
         initial_state = result.initial_state
         roles: dict[PlayerId, Role] = {
             pid: player.role for pid, player in initial_state.players.items()
@@ -739,7 +752,7 @@ class TacticalRolloutEnv:
                 initial_state,
                 tick=initial_state.tick,
                 kind="initial",
-                state_hash=_state_hash(initial_state),
+                state_hash=_frame_hash(initial_state),
                 roles=roles,
                 cumulative_kills=cumulative_kills,
             )
@@ -762,7 +775,7 @@ class TacticalRolloutEnv:
                     step.state,
                     tick=step.input_tick,
                     kind="tick",
-                    state_hash=_state_hash(step.state),
+                    state_hash=_frame_hash(step.state),
                     roles=roles,
                     cumulative_kills=cumulative_kills,
                 )
@@ -833,7 +846,7 @@ class TacticalRolloutEnv:
                     # post-meeting frame is stamped with the RESUMED tick.
                     tick=meeting_step.state.tick,
                     kind="meeting",
-                    state_hash=_state_hash(meeting_step.state),
+                    state_hash=_frame_hash(meeting_step.state),
                     roles=roles,
                     cumulative_kills=cumulative_kills,
                 )

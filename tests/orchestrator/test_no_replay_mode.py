@@ -116,6 +116,22 @@ def test_replay_writing_construction_refuses_the_fast_path(tmp_path: Path) -> No
         )
 
 
+def test_no_replay_construction_refuses_an_explicit_audit_log_path(
+    tmp_path: Path,
+) -> None:
+    # An explicit audit_log_path would leave an ObservationAuditLog JSONL on disk,
+    # contradicting the "nothing on disk" no-replay contract -- refuse it loudly.
+    with pytest.raises(ValueError, match="audit_log_path is refused|writes NOTHING"):
+        HeadlessGame(
+            seed=1,
+            game_map=load_canonical_map(),
+            agent_factory=build_default_agent_factory(),
+            replay_path=None,
+            audit_log_path=tmp_path / "audit.jsonl",
+            meeting_runner=_runner(),  # type: ignore[arg-type]
+        )
+
+
 def test_no_replay_construction_refuses_a_tactical_policy_stamp() -> None:
     with pytest.raises(ValueError, match="tactical_policy_stamp|nothing to attribute"):
         HeadlessGame(

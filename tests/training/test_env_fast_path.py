@@ -92,6 +92,23 @@ def test_trajectory_equivalence_recorded_vs_fast_no_replay(seed: int) -> None:
 
 
 @pytest.mark.parametrize("seed", _SEEDS)
+def test_fast_no_replay_frames_skip_the_state_hash(seed: int) -> None:
+    # The fast path never verifies these hashes (no replay to verify against), so
+    # it skips the per-frame full-WorldState serialization and carries an empty
+    # placeholder -- otherwise the fast rollout re-pays the cost it exists to
+    # avoid. FULL no-replay keeps a real, reconstruct-comparable hash.
+    fast = _env(
+        no_replay=True, rng_hash_policy=RngStateHashPolicy.TRAINING_FAST
+    ).rollout(seed)
+    assert fast.frames
+    assert all(frame.state_hash == "" for frame in fast.frames)
+    assert all(state_hash == "" for state_hash in fast.state_hashes)
+
+    full = _env(no_replay=True).rollout(seed)
+    assert all(frame.state_hash for frame in full.frames)
+
+
+@pytest.mark.parametrize("seed", _SEEDS)
 def test_no_replay_full_matches_recorded_reconstruction_exactly(seed: int) -> None:
     # no_replay with FULL rng must be identical to the recorded reconstruction in
     # EVERY field, including the state-hash chain (same encoding, same states).
