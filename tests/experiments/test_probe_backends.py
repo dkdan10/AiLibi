@@ -75,6 +75,9 @@ _FLAGS_ON = {
     "movement_perception": True,
     "unfreeze_memory": True,
     "evidence_quality_lift": True,
+    # Task 15.5's live toggle: DEFAULT-OFF, so the bare/default snapshot stamps
+    # it False alongside the five unconditional levers.
+    "reporter_exculpation": False,
 }
 
 

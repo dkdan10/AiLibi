@@ -164,6 +164,20 @@ class VotePromptRenderer(Protocol):
     the shared ballot template renders a teammate block only when it is
     non-empty (instructing the impostor to SKIP rather than vote a
     teammate), so a crewmate / sole-impostor prompt is byte-unchanged.
+
+    ``reporter_id`` (Task 15.5, the reporter-exculpation lever) is the
+    body-report meeting's own reporter -- the manager threads
+    :attr:`meetings.manager.MeetingTrigger.triggered_by`, but ONLY when the
+    default-OFF ``reporter_exculpation`` lever is ON and the meeting is a body
+    report. The template renders the base-rate annotation ("p-N reported the
+    body; self-report is weakly exculpatory in this game") only when it is
+    non-``None``. The default ``None`` -- lever OFF, an emergency call, or any
+    ad-hoc render -- omits the block, so a lever-OFF ballot prompt is
+    byte-identical (the Voice-doc 15.0 widen-the-contract-inert pattern). This is
+    the render mirror of the belief-side damp in
+    :func:`agents.memory.beliefs.apply_meeting_evidence_rules`; both read the one
+    :func:`agents.memory.beliefs.reporter_exculpation_enabled` resolver so the
+    damped suspicion graph and the annotation cannot disagree.
     """
 
     def __call__(
@@ -177,6 +191,7 @@ class VotePromptRenderer(Protocol):
         candidate_targets: tuple[PlayerId, ...],
         skip_confidence_threshold: float,
         fellow_impostor_ids: tuple[PlayerId, ...] = (),
+        reporter_id: PlayerId | None = None,
     ) -> str: ...
 
 

@@ -459,15 +459,17 @@ class TestQwen332bV5VentElicitation:
         )
         assert "witnessed p-3 VENT in ELECTRICAL" in rendered
 
-    def test_registry_stamps_the_set_v5(self) -> None:
-        # Task 15.4 owns the single v4 -> v5 SET bump; the only later registry
-        # edit is 15.5's per-template vote_ballot v6 entry.
+    def test_registry_stamps_vote_ballot_v6_others_v5(self) -> None:
+        # Task 15.4 owns the single v4 -> v5 SET bump; Task 15.5 (reporter
+        # exculpation) advances vote_ballot ALONE to v6 for its per-template
+        # annotation, so the pre- and post-15.5 vote-prompt bodies can never
+        # share a provenance stamp. The other three templates stay v5.
         versions = prompt_versions_for_set("qwen3_32b")
         assert versions == {
             "crewmate_report": "crewmate_report.qwen3_32b.v5",
             "impostor_report": "impostor_report.qwen3_32b.v5",
             "accusation_round": "accusation_round.qwen3_32b.v5",
-            "vote_ballot": "vote_ballot.qwen3_32b.v5",
+            "vote_ballot": "vote_ballot.qwen3_32b.v6",
         }
 
     def test_frozen_sets_do_not_carry_the_v5_markers(self) -> None:

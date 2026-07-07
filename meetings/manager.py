@@ -91,6 +91,7 @@ from agents.memory.beliefs import (
     BeliefState,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
+    reporter_exculpation_enabled,
 )
 from llm.client import LLMClient, LLMResponse
 from llm.provider import LLMCallFailure, extract_parse_failure
@@ -1428,6 +1429,19 @@ class MeetingManager:
             (other.agent_id for other in participants),
             exclude=participant.agent_id,
         )
+        # Task 15.5 reporter exculpation (default-OFF). The reporter is the
+        # body-report meeting's opener (``trigger.triggered_by``, the reporter
+        # identity already at meeting scope -- not re-derived from the
+        # transcript); an emergency call has no body-reporter, so the exculpation
+        # never applies there. The belief fold receives the reporter for a body
+        # report and gates the actual damp on the lever internally; the render
+        # annotation is threaded only when the lever is ON. Both read the one
+        # ``reporter_exculpation_enabled`` resolver, so a lever-OFF ballot is
+        # byte-identical (belief fold no-op + no annotation).
+        reporter_id = (
+            trigger.triggered_by if not _trigger_is_emergency(trigger) else None
+        )
+        render_reporter = reporter_id if reporter_exculpation_enabled() else None
         # Belief Rule 2 (DESIGN.md §6.3): a detected contradiction lifts the
         # contradicted subject's suspicion in this voter's graph before the
         # ballot prompt renders, so the vote sees the detected lie reflected
@@ -1446,6 +1460,9 @@ class MeetingManager:
             # signal for the evidence-quality downgrade (derived inside the
             # fold, active only when the default-OFF lever is ON).
             transcript=transcript,
+            # Task 15.5: the body-report reporter, damped in the pre-vote fold
+            # only when the default-OFF reporter_exculpation lever is ON.
+            reporter=reporter_id,
         )
         # Task 13.5.5: when the unfreeze hook is attached (unconditionally by
         # the orchestrator since Task 14.9), re-render
@@ -1471,6 +1488,10 @@ class MeetingManager:
             candidate_targets=candidate_targets,
             skip_confidence_threshold=self._config.skip_confidence_threshold,
             fellow_impostor_ids=participant.fellow_impostor_ids,
+            # Task 15.5: names the reporter + states the base rate, ONLY when the
+            # default-OFF reporter_exculpation lever is ON (``None`` otherwise, so
+            # a lever-OFF prompt renders byte-identical).
+            reporter_id=render_reporter,
         )
         # The in-prompt §4.6 verdict max, recomputed bit-for-bit from the SAME
         # graph + candidate set the template rendered (max suspicion over the
@@ -1848,6 +1869,8 @@ def _suspicion_graph_with_contradictions(
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
     evidence: MeetingBeliefEvidence | None = None,
     transcript: MeetingTranscript | None = None,
+    reporter: PlayerId | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> tuple[SuspicionEntry, ...]:
     """Apply belief Rule 2 + the pre-vote fold to a voter's graph (§6.3, §4.6).
 
@@ -1916,6 +1939,17 @@ def _suspicion_graph_with_contradictions(
     would otherwise silently skip the self-refuted-alibi downgrade and render
     values the run's stamped substrate says cannot exist (AGENTS.md "no silent
     fallbacks"). A contradiction-free fold may still pass ``None``.
+
+    Reporter exculpation (Task 15.5; default-OFF). ``reporter`` is the
+    body-report meeting's own reporter (``None`` for an emergency call), passed
+    straight into the pre-vote
+    :func:`agents.memory.beliefs.apply_meeting_evidence_rules` fold, which gates
+    the actual damp on the :func:`agents.memory.beliefs.reporter_exculpation_enabled`
+    lever (resolved from ``env``, defaulting to the process environment). ON, the
+    reporter's soft accusation lift is capped so proximity-at-discovery no longer
+    reads as guilt; OFF (the default) it is inert and this path is byte-identical.
+    ``env`` lets the offline counterfactual toggle the lever deterministically
+    without mutating ``os.environ``.
     """
 
     # Task 14.10 fail-loud seam guard (PR #217 review; unconditional since the
@@ -1966,6 +2000,12 @@ def _suspicion_graph_with_contradictions(
             # context only; the post-meeting persistent absorb passes none, so
             # only the flat +0.05 carries across rounds.
             pre_vote_voice_counts=dict(evidence.pre_vote_voice_counts),
+            # Task 15.5: the body-report meeting's reporter (or None for an
+            # emergency / non-vote-time call). The fold gates the actual damp on
+            # the default-OFF reporter_exculpation lever (``env``-resolved), so
+            # this is inert unless the lever is ON -- OFF stays byte-identical.
+            reporter=reporter,
+            env=env,
         )
 
     entries: list[SuspicionEntry] = []

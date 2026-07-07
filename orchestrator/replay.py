@@ -70,6 +70,7 @@ from typing import Annotated, Any, Final, Literal, TextIO, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from agents.memory.beliefs import reporter_exculpation_enabled
 from engine.actions import Action
 from engine.world import WorldState
 from meetings.schemas import (
@@ -388,8 +389,9 @@ ReplayLogEntry: TypeAlias = Annotated[
 # merged Phase-13.5 levers (Task 14.9) AND the Task-14.10 ``evidence_quality_lift``
 # lever (retired to unconditional at the Task-14.12 close, once baseline 2 adopted
 # it) are RETIRED as toggles — unconditionally ON, env gates deleted — but stay in
-# the snapshot as provenance. Any future toggleable lever registers its key +
-# resolver in ``_TOGGLEABLE_LEVER_RESOLVERS`` below (empty today).
+# the snapshot as provenance. A live toggleable lever registers its key +
+# resolver in ``_TOGGLEABLE_LEVER_RESOLVERS`` below (Task 15.5's default-OFF
+# ``reporter_exculpation``).
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",
@@ -403,12 +405,15 @@ _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
 # per AGENTS.md "no module-level mutable state", so nothing can silently change
 # replay stamps or the loader's mismatch check mid-process). Each resolver takes
 # the optional ``env`` mapping and returns the lever's active state (the 13.5
-# ``*_enabled()`` signature). EMPTY today: ``evidence_quality_lift`` (Task 14.10)
-# graduated to ``_RETIRED_ALWAYS_ON_LEVERS`` at the 14.12 close, so no lever is
-# env-gated anymore. The machinery stays generic for the next toggleable lever.
+# ``*_enabled()`` signature). Task 15.5's ``reporter_exculpation`` is the live
+# toggle: DEFAULT-OFF, so a bare-environment snapshot stamps it ``False`` and the
+# committed baseline-2 replays (recorded before the key existed) reconstruct
+# byte-identically -- ``_assert_substrate_matches`` reads a missing key as
+# ``False`` on both sides. ``evidence_quality_lift`` (Task 14.10) graduated to
+# ``_RETIRED_ALWAYS_ON_LEVERS`` at the 14.12 close and is no longer env-gated.
 _TOGGLEABLE_LEVER_RESOLVERS: Final[
     tuple[tuple[str, Callable[[Mapping[str, str] | None], bool]], ...]
-] = ()
+] = (("reporter_exculpation", reporter_exculpation_enabled),)
 
 # The still-toggleable subset of ``SUBSTRATE_FLAG_KEYS`` (Task 14.10):
 # levers whose active state is an ``AILIBI_*`` env read, so a stamp/ambient
@@ -438,10 +443,12 @@ def substrate_flag_snapshot(
     ``flags`` column and the replay stamp keep self-describing recordings (and
     so the loader's substrate-mismatch guard can still validate legacy stamped
     replays). Task 14.10's ``evidence_quality_lift`` joined them at the Task-14.12
-    close (its env gate retired after baseline 2 adopted it), so no lever is
-    env-gated today. Any FUTURE toggleable lever's resolver is read from the
-    immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded through
-    (defaulting to the live process environment), preserving the
+    close (its env gate retired after baseline 2 adopted it). Task 15.5's
+    ``reporter_exculpation`` is the one LIVE env-gated toggle: its resolver is read
+    from the immutable ``_TOGGLEABLE_LEVER_RESOLVERS`` table with ``env`` threaded
+    through (defaulting to the live process environment), so a bare environment
+    stamps it ``False`` (DEFAULT-OFF, byte-identical to baseline 2) while an
+    ``AILIBI_REPORTER_EXCULPATION`` export stamps it ``True`` -- preserving the
     deterministic-snapshot seam tests and sweep configs rely on.
     """
 

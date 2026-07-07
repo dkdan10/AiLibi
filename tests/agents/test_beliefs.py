@@ -10,6 +10,7 @@ import pytest
 
 if TYPE_CHECKING:
     from api.replay_loader import ReplayLoader
+    from eval.funnel import InformationFunnelReport
     from orchestrator.replay import MeetingReplayEntry
 
 from agents.memory.beliefs import (
@@ -227,6 +228,131 @@ class TestTeamInternalFirewallContract:
 
 
 _GATE = 0.60  # DESIGN.md §4.6 eject gate
+
+
+class TestBoundarySumGateCrossings:
+    """Pin every documented belief-delta combination against the §4.6 gate.
+
+    The IEEE-754 boundary hazard (audit post-phase-14-pause.md §4.3): the
+    design intent is that a subject accused across two meetings reaches the
+    0.60 eject gate and becomes ejectable, and ``0.5 + 0.05 + 0.05 ==
+    0.6000000000000001`` clears the inclusive ``>=`` gate ONLY because the
+    residue rounds *up*. Had it rounded down (as other delta combinations do),
+    the second accusation would silently fail to reach the gate and the
+    two-signal eject would break with no test catching it. These pins land
+    BEFORE Task 15.5 touches the belief-fold deltas (separate commit) so a
+    later retune of the accusation / spread / weak deltas cannot silently move
+    an intended gate-crossing a hair under 0.60 (or an intended sub-gate signal
+    over it). Exact float comparisons, never ``pytest.approx`` — the boundary
+    IS the thing under test.
+
+    Each combination is asserted two ways: the raw constant arithmetic (which
+    a constant retune breaks directly) and the realized :class:`BeliefState`
+    fold (which a clamp / ordering change breaks), so both the values and the
+    machinery are pinned.
+    """
+
+    @staticmethod
+    def _accumulated(*deltas: float) -> float:
+        """Realized suspicion after applying ``deltas`` sequentially (clamped)."""
+
+        beliefs = BeliefState()
+        for delta in deltas:
+            beliefs.adjust_suspicion("subject", delta=delta)
+        return beliefs.view("subject").suspicion
+
+    # -- combinations DESIGNED to cross the 0.60 gate ------------------------
+
+    def test_two_accusations_cross_the_gate_the_ieee_case(self) -> None:
+        # The audit §4.3 headline: 0.5 + 0.05 + 0.05 == 0.6000000000000001,
+        # ejectable only by IEEE luck. The whole reason these pins exist.
+        raw = (
+            _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA + ACCUSATION_SUSPICION_DELTA
+        )
+        assert raw == 0.6000000000000001  # noqa: PLR2004 — the exact residue
+        assert raw >= _GATE
+        assert (
+            self._accumulated(ACCUSATION_SUSPICION_DELTA, ACCUSATION_SUSPICION_DELTA)
+            >= _GATE
+        )
+
+    def test_three_accusations_cross_the_gate(self) -> None:
+        raw = _DEFAULT_SUSPICION + 3 * ACCUSATION_SUSPICION_DELTA
+        assert raw >= _GATE  # 0.65
+        assert (
+            self._accumulated(
+                ACCUSATION_SUSPICION_DELTA,
+                ACCUSATION_SUSPICION_DELTA,
+                ACCUSATION_SUSPICION_DELTA,
+            )
+            >= _GATE
+        )
+
+    def test_two_voice_testimony_spread_crosses_the_gate(self) -> None:
+        # TESTIMONY_SPREAD_TWO_VOICE_DELTA docstring: 0.50 -> 0.62, the first
+        # §4.6 gate-cross for two corroborating observation-backed voices.
+        raw = _DEFAULT_SUSPICION + TESTIMONY_SPREAD_TWO_VOICE_DELTA
+        assert raw >= _GATE  # 0.62
+        assert self._accumulated(TESTIMONY_SPREAD_TWO_VOICE_DELTA) >= _GATE
+
+    def test_three_voice_spread_cap_crosses_the_gate(self) -> None:
+        # TESTIMONY_SPREAD_CAP_DELTA docstring: 0.50 -> 0.65 (capped).
+        raw = _DEFAULT_SUSPICION + TESTIMONY_SPREAD_CAP_DELTA
+        assert raw >= _GATE  # 0.65
+        assert self._accumulated(TESTIMONY_SPREAD_CAP_DELTA) >= _GATE
+
+    def test_two_weak_flags_cross_the_gate(self) -> None:
+        # WEAK_CONTRADICTION_SUSPICION_DELTA docstring: a second independent
+        # weak flag reaches 0.66 (0.5 + 0.08 + 0.08), across the gate.
+        raw = (
+            _DEFAULT_SUSPICION
+            + WEAK_CONTRADICTION_SUSPICION_DELTA
+            + WEAK_CONTRADICTION_SUSPICION_DELTA
+        )
+        assert raw >= _GATE  # 0.66
+        assert (
+            self._accumulated(
+                WEAK_CONTRADICTION_SUSPICION_DELTA,
+                WEAK_CONTRADICTION_SUSPICION_DELTA,
+            )
+            >= _GATE
+        )
+
+    def test_single_strong_contradiction_crosses_the_gate(self) -> None:
+        # CONTRADICTION_SUSPICION_DELTA docstring: the LONE-STRONG outcome
+        # 0.5 -> 0.80, well over the gate.
+        raw = _DEFAULT_SUSPICION + CONTRADICTION_SUSPICION_DELTA
+        assert raw >= _GATE  # 0.80
+        assert self._accumulated(CONTRADICTION_SUSPICION_DELTA) >= _GATE
+
+    def test_body_proximity_prior_crosses_the_gate(self) -> None:
+        # CONTRADICTION_RENDER_CEIL docstring names the Rule-1 body-proximity
+        # prior 0.70 (0.5 + 0.2) as a standing over-gate prior.
+        raw = _DEFAULT_SUSPICION + BODY_PROXIMITY_SUSPICION_DELTA
+        assert raw >= _GATE  # 0.70
+        assert self._accumulated(BODY_PROXIMITY_SUSPICION_DELTA) >= _GATE
+
+    def test_meeting_contradiction_lift_cap_crosses_the_gate(self) -> None:
+        # The per-subject cap equals CONTRADICTION_SUSPICION_DELTA (0.30), so a
+        # capped stack still crosses: 0.5 + 0.30 = 0.80.
+        raw = _DEFAULT_SUSPICION + MEETING_CONTRADICTION_LIFT_CAP
+        assert raw >= _GATE  # 0.80
+
+    # -- combinations DESIGNED to stay UNDER the gate ------------------------
+
+    def test_lone_accusation_stays_under_the_gate(self) -> None:
+        # ACCUSATION_SUSPICION_DELTA docstring: one meeting lands at 0.55, well
+        # under the gate (a lone verbal accusation never ejects).
+        raw = _DEFAULT_SUSPICION + ACCUSATION_SUSPICION_DELTA
+        assert raw < _GATE  # 0.55
+        assert self._accumulated(ACCUSATION_SUSPICION_DELTA) < _GATE
+
+    def test_lone_weak_flag_stays_under_the_gate(self) -> None:
+        # WEAK_CONTRADICTION_SUSPICION_DELTA docstring: a lone weak flag lands
+        # at 0.58, inside [0.5, 0.60) — suspicious but below the gate.
+        raw = _DEFAULT_SUSPICION + WEAK_CONTRADICTION_SUSPICION_DELTA
+        assert raw < _GATE  # 0.58
+        assert self._accumulated(WEAK_CONTRADICTION_SUSPICION_DELTA) < _GATE
 
 
 def _kill_packet(
@@ -3150,6 +3276,7 @@ class TestSelfRefutedAlibiDowngrade:
             candidate_targets: tuple[str, ...],
             skip_confidence_threshold: float,
             fellow_impostor_ids: tuple[str, ...] = (),
+            reporter_id: str | None = None,  # Task 15.5: widened contract kwarg
         ) -> str:
             captured[voter_id] = suspicion_graph
             return "cast your ballot"
@@ -3432,3 +3559,287 @@ class TestEvidenceQualityLiftOnCommittedBytes:
         rows = self._rederived_rows(loader, seed, entry, roles_by_seed[seed])
         crossers = {v for v, row in rows.items() if row.get(ejected, 0.0) >= _GATE}
         assert crossers  # the genuine catch still rides the §4.6 gate
+
+
+class TestReporterExculpationOnCommittedBytes:
+    """The Task-15.5 reporter-exculpation lever, measured OFFLINE on the committed
+    baseline-2 9p2i bytes (the 14.8 ``allow_substrate_mismatch`` analysis-only
+    machinery; tasks/post-phase-14-clean-up.md H5; audit-phase-14-close.md §4).
+
+    Baseline 2 was recorded with the lever OFF (it did not yet exist), so the
+    RECORDED vote-time fold is the lever-OFF fold. This class re-derives that fold
+    seeded from the ReplayLoader memory walk (lever-neutral) and toggles the lever
+    ON via ``env`` -- the counterfactual the DoD requires:
+
+    * (a) how many of the 22 innocent-reporter convictions' deciding lifts the
+      damp keeps below the §4.6 gate;
+    * (b) the over-damping canary: ZERO hard-flag-backed convictions (a STRONG
+      contradiction, or a witnessed vent/kill pin) change gate outcome.
+
+    A subject is "hard-flag-backed" when a NON-weak contradiction flag names it OR
+    a seeded prior renders a witnessed vent/kill pin (>= ``_VENTKILL_PRIOR``). A
+    WEAK contradiction (0.08, sub-gate alone) is NOT hard-backed: a reporter
+    convicted by a weak flag PLUS a proximity accusation is a soft-decided
+    conviction the damp correctly exculpates (the belief-side spec: "a reporter
+    caught by a REAL contradiction ... is still convictable" -- a weak flag never
+    convicts alone).
+    """
+
+    _SET_DIR = Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
+    _ON: dict[str, str] = {"AILIBI_REPORTER_EXCULPATION": "1"}
+    _OFF: dict[str, str] = {}
+    # A seeded prior at/above this is a first-hand witnessed vent (0.5 + 0.5) or
+    # kill (1.0) pin -- the perception hard evidence; a Rule-1 body-proximity
+    # prior (0.70) sits below it, so it is classed prior-, not hard-, backed.
+    _VENTKILL_PRIOR = 0.90
+
+    @pytest.fixture(scope="class")
+    def loader(self) -> ReplayLoader:
+        from api.replay_loader import ReplayLoader
+
+        # The analysis-only override lets the lever-ON counterfactual re-derive
+        # the lever-OFF-stamped baseline (exactly what Task 14.8 exists for). The
+        # memory walk itself is lever-neutral, so one loader serves both env cells.
+        return ReplayLoader(self._SET_DIR, allow_substrate_mismatch=True)
+
+    @pytest.fixture(scope="class")
+    def funnel(self) -> InformationFunnelReport:
+        from eval.funnel import compute_information_funnel
+
+        return compute_information_funnel(self._SET_DIR)
+
+    @pytest.fixture(scope="class")
+    def roles_by_seed(self) -> dict[int, dict[str, str]]:
+        report = json.loads(
+            (self._SET_DIR / "tournament-eval-report.json").read_text(encoding="utf-8")
+        )
+        return {game["seed"]: game["roles"] for game in report["report"]["games"]}
+
+    def _entry(self, seed: int, meeting_id: str) -> MeetingReplayEntry:
+        from orchestrator.replay import MeetingReplayEntry, read_all_entries
+
+        for entry in read_all_entries(self._SET_DIR / f"replay-seed-{seed}.jsonl"):
+            if isinstance(entry, MeetingReplayEntry) and entry.meeting_id == meeting_id:
+                return entry
+        raise KeyError(meeting_id)
+
+    def _rederive(
+        self,
+        loader: ReplayLoader,
+        seed: int,
+        entry: MeetingReplayEntry,
+        roles: dict[str, str],
+        reporter: str,
+        env: dict[str, str],
+    ) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
+        """Re-run the production vote-time fold per voter; returns (rows, priors).
+
+        ``env`` toggles the reporter-exculpation lever; ``reporter`` is the
+        meeting's body-reporter (``entry.triggered_by``, the recorded reporter
+        identity -- not re-derived from the transcript).
+        """
+
+        from meetings.manager import (
+            SuspicionEntry,
+            _suspicion_graph_with_contradictions,  # noqa: PLC2701
+            derive_belief_evidence,
+        )
+
+        game_id = f"headless-seed-{seed}"
+        voters = sorted({ballot.voter for ballot in entry.ballots})
+        impostors = sorted(pid for pid, role in roles.items() if role == "IMPOSTOR")
+        evidence = derive_belief_evidence(
+            entry.transcript,
+            contradictions=entry.contradictions,
+            roster=frozenset(voters),
+        )
+        rows: dict[str, dict[str, float]] = {}
+        priors: dict[str, dict[str, float]] = {}
+        for voter in voters:
+            view = loader.get_meeting_memory(game_id, entry.meeting_id, voter)
+            seeded = tuple(
+                SuspicionEntry(
+                    player_id=belief.subject, suspicion=belief.suspicion, trust=0.5
+                )
+                for belief in view.beliefs
+            )
+            priors[voter] = {b.subject: b.suspicion for b in view.beliefs}
+            fellow = (
+                tuple(pid for pid in impostors if pid != voter)
+                if roles.get(voter) == "IMPOSTOR"
+                else ()
+            )
+            graph = _suspicion_graph_with_contradictions(
+                voter_id=voter,
+                suspicion_graph=seeded,
+                contradictions=entry.contradictions,
+                fellow_impostor_ids=fellow,
+                evidence=evidence,
+                transcript=entry.transcript,
+                reporter=reporter,
+                env=env,
+            )
+            rows[voter] = {e.player_id: e.suspicion for e in graph}
+        return rows, priors
+
+    @staticmethod
+    def _subject_max(rows: dict[str, dict[str, float]], subject: str) -> float:
+        return max((row.get(subject, 0.0) for row in rows.values()), default=0.0)
+
+    def _is_hard_backed(
+        self,
+        entry: MeetingReplayEntry,
+        subject: str,
+        priors: dict[str, dict[str, float]],
+    ) -> bool:
+        strong_flag = any(
+            subject in flag.subjects and not is_weak_contradiction(flag)
+            for flag in entry.contradictions
+        )
+        ventkill = any(
+            prior.get(subject, 0.0) >= self._VENTKILL_PRIOR for prior in priors.values()
+        )
+        return strong_flag or ventkill
+
+    def _innocent_reporter_meetings(
+        self, funnel: InformationFunnelReport
+    ) -> list[tuple[int, str, str]]:
+        return [
+            (row.seed, row.meeting_id, row.reporter)
+            for row in funnel.per_meeting
+            if row.reporter_ejected_innocent
+        ]
+
+    # -- the measured corpus facts (the docstring's empirical justification) --
+
+    def test_measured_corpus_census_and_zero_self_report(
+        self, funnel: InformationFunnelReport
+    ) -> None:
+        # The census this lever is grounded in: 22 of 106 report-meeting ejections
+        # removed the (always-innocent) reporter, and the impostor self-report rate
+        # is EXACTLY ZERO -- no report meeting had the killer as its reporter.
+        assert funnel.report_ejections == 106
+        assert funnel.reporter_ejected == 22
+        assert funnel.reporter_ejected_innocent == 22
+        assert funnel.killer_self_reported == 0
+
+    # -- (a) how many of the 22 the damp keeps below the gate ----------------
+
+    def test_damp_keeps_16_of_22_soft_decided_reporter_lifts_below_gate(
+        self,
+        loader: ReplayLoader,
+        funnel: InformationFunnelReport,
+        roles_by_seed: dict[int, dict[str, str]],
+    ) -> None:
+        meetings = self._innocent_reporter_meetings(funnel)
+        assert len(meetings) == 22
+
+        kept = 0
+        already_sub_gate = 0
+        prior_convicted = 0
+        for seed, meeting_id, reporter in meetings:
+            entry = self._entry(seed, meeting_id)
+            roles = roles_by_seed[seed]
+            assert roles[reporter] == "CREWMATE"  # every reporter is innocent
+            off_rows, _ = self._rederive(
+                loader, seed, entry, roles, reporter, self._OFF
+            )
+            on_rows, _ = self._rederive(loader, seed, entry, roles, reporter, self._ON)
+            off_max = self._subject_max(off_rows, reporter)
+            on_max = self._subject_max(on_rows, reporter)
+            # The damp never RAISES the reporter's suspicion.
+            assert on_max <= off_max
+            if off_max < _GATE:
+                already_sub_gate += 1  # graph already sub-gate; render-side handles
+            elif on_max < _GATE:
+                kept += 1  # the soft accusation was the deciding lift -> exculpated
+            else:
+                prior_convicted += 1  # a standing prior carries it; damp cannot reach
+
+        # 16 soft-decided convictions the damp drops below the gate; 2 already
+        # sub-gate at graph level (LLM-reading convictions the render annotation
+        # addresses live at 15.7); 4 carried by a Rule-1 body-proximity /
+        # accumulation prior the belief-damp intentionally does not touch.
+        assert (kept, already_sub_gate, prior_convicted) == (16, 2, 4)
+        assert kept + already_sub_gate + prior_convicted == 22
+
+    def test_no_innocent_reporter_conviction_is_hard_flag_backed(
+        self,
+        loader: ReplayLoader,
+        funnel: InformationFunnelReport,
+        roles_by_seed: dict[int, dict[str, str]],
+    ) -> None:
+        # None of the 22 innocent-reporter convictions rides a STRONG contradiction
+        # or a witnessed vent/kill pin -- every one is soft- or prior-decided, so
+        # the damp never removes hard evidence from a reporter.
+        for seed, meeting_id, reporter in self._innocent_reporter_meetings(funnel):
+            entry = self._entry(seed, meeting_id)
+            _, priors = self._rederive(
+                loader, seed, entry, roles_by_seed[seed], reporter, self._OFF
+            )
+            assert not self._is_hard_backed(entry, reporter, priors), meeting_id
+
+    # -- (b) the over-damping canary: zero hard-flag-backed outcome changes ---
+
+    def test_damp_touches_only_the_reporter(
+        self,
+        loader: ReplayLoader,
+        funnel: InformationFunnelReport,
+        roles_by_seed: dict[int, dict[str, str]],
+    ) -> None:
+        # Surgical scope: over the 22 reporter meetings, every subject OTHER than
+        # the reporter renders IDENTICAL suspicion ON and OFF -- the damp cannot
+        # change any non-reporter conviction (the structural half of the canary).
+        for seed, meeting_id, reporter in self._innocent_reporter_meetings(funnel):
+            entry = self._entry(seed, meeting_id)
+            roles = roles_by_seed[seed]
+            off_rows, _ = self._rederive(
+                loader, seed, entry, roles, reporter, self._OFF
+            )
+            on_rows, _ = self._rederive(loader, seed, entry, roles, reporter, self._ON)
+            for voter, off_row in off_rows.items():
+                for subject, off_susp in off_row.items():
+                    if subject == reporter:
+                        continue
+                    assert on_rows[voter][subject] == off_susp, (
+                        f"{meeting_id} voter={voter} subject={subject}"
+                    )
+
+    def test_zero_hard_flag_backed_convictions_change_outcome(
+        self,
+        loader: ReplayLoader,
+        funnel: InformationFunnelReport,
+        roles_by_seed: dict[int, dict[str, str]],
+    ) -> None:
+        # The canary: over ALL 106 committed report-ejections, every hard-flag-
+        # backed ejectee (a STRONG contradiction or a witnessed vent/kill pin)
+        # keeps its §4.6 gate outcome under the lever -- ZERO outcome changes.
+        report_ejections = [
+            row
+            for row in funnel.per_meeting
+            if row.outcome == "EJECTED" and row.ejected is not None
+        ]
+        assert len(report_ejections) == 106
+        hard_backed = 0
+        outcome_changes = 0
+        for row in report_ejections:
+            entry = self._entry(row.seed, row.meeting_id)
+            roles = roles_by_seed[row.seed]
+            reporter = entry.triggered_by
+            off_rows, priors = self._rederive(
+                loader, row.seed, entry, roles, reporter, self._OFF
+            )
+            ejected = row.ejected
+            assert ejected is not None  # filtered above; narrows for mypy
+            if not self._is_hard_backed(entry, ejected, priors):
+                continue
+            hard_backed += 1
+            on_rows, _ = self._rederive(
+                loader, row.seed, entry, roles, reporter, self._ON
+            )
+            off_convicts = self._subject_max(off_rows, ejected) >= _GATE
+            on_convicts = self._subject_max(on_rows, ejected) >= _GATE
+            if off_convicts != on_convicts:
+                outcome_changes += 1
+        assert hard_backed >= 40  # non-vacuous: there ARE hard convictions to guard
+        assert outcome_changes == 0  # the contract's hard line

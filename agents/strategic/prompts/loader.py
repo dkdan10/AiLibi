@@ -355,6 +355,7 @@ def vote_ballot_prompt(
     candidate_targets: tuple[PlayerId, ...],
     skip_confidence_threshold: float,
     fellow_impostor_ids: tuple[PlayerId, ...] = (),
+    reporter_id: PlayerId | None = None,
     environment: Environment | None = None,
 ) -> str:
     """Render a vote-ballot prompt (DESIGN.md §5.5).
@@ -367,6 +368,13 @@ def vote_ballot_prompt(
     list; the template renders the "never vote a teammate — SKIP
     instead" block only when it is non-empty, so a crewmate /
     sole-impostor ballot (``()``) is byte-unchanged.
+
+    ``reporter_id`` (Task 15.5, reporter-exculpation lever) is the
+    body-report meeting's own reporter, threaded by the manager ONLY when the
+    default-OFF ``reporter_exculpation`` lever is ON. The v6 template renders
+    the self-report base-rate annotation only when it is non-``None``; the
+    default ``None`` (lever OFF, emergency call, or ad-hoc render) omits the
+    block, so a lever-OFF ballot prompt is byte-identical.
     """
 
     return (
@@ -381,6 +389,7 @@ def vote_ballot_prompt(
             candidate_targets=candidate_targets,
             skip_confidence_threshold=skip_confidence_threshold,
             fellow_impostor_ids=fellow_impostor_ids,
+            reporter_id=reporter_id,
         )
     )
 
