@@ -23,6 +23,7 @@ import type {
   ReportBodyEventView,
   SabotageEventView,
   SawPlayerView,
+  SawVentObservationView,
   TaskCompletedEventView,
   VentEventView,
 } from "./api";
@@ -879,6 +880,8 @@ export function _narrow_ObservationClaimView(e: ObservationClaimView): Observati
       return e satisfies CompletedTaskObsView;
     case "found_body":
       return e satisfies FoundBodyObsView;
+    case "saw_vent":
+      return e satisfies SawVentObservationView;
     default: {
       const _exhaustive: never = e;
       return _exhaustive;

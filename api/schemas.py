@@ -466,8 +466,25 @@ class FoundBodyObsView(_FrozenView):
     room: str
 
 
+class SawVentObservationView(_FrozenView):
+    """Shadows ``meetings.schemas.SawVentObservation`` (Task 15.4.1).
+
+    The spectator mirror of the role-proving vent sighting (Task 15.4): a
+    witnessed impostor vent named by ``subject`` / ``room`` / ``tick``. Like
+    the source shape it carries no enter/exit phase field (the perception
+    layer collapses both vent engine events into a single witnessed action).
+    Whether the sighting minted a hard flag is conveyed separately by the
+    ``vent_sighting`` :class:`ContradictionView`, not by this observation.
+    """
+
+    type: Literal["saw_vent"]
+    tick: int
+    subject: str
+    room: str
+
+
 ObservationClaimView: TypeAlias = Annotated[
-    SawPlayerView | CompletedTaskObsView | FoundBodyObsView,
+    SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView,
     Field(discriminator="type"),
 ]
 
@@ -552,10 +569,16 @@ class ContradictionView(_FrozenView):
     strong=solid links without re-parsing the string client-side. Belief Rule 2
     keys its graduated down-weight on the same predicate, so the two cannot
     drift.
+
+    Task 15.4.1: the ``vent_sighting`` role-proving kind (Task 15.4) is
+    mirrored here — it is always STRONG (grounding is the precision gate, so
+    it carries no weak marker) and renders like the other kinds.
     """
 
     contradiction_id: str
-    kind: Literal["alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical"]
+    kind: Literal[
+        "alibi_conflict", "alibi_vs_sighting", "alibi_vs_physical", "vent_sighting"
+    ]
     event_a_id: str
     event_b_id: str
     subjects: tuple[str, ...]
@@ -996,6 +1019,7 @@ __all__ = [
     "SabotageDetailView",
     "SabotageEventView",
     "SawPlayerView",
+    "SawVentObservationView",
     "SizeView",
     "SuspicionEntryView",
     "SuspicionGraphView",

@@ -86,6 +86,7 @@ from api.schemas import (
     SabotageDetailView,
     SabotageEventView,
     SawPlayerView,
+    SawVentObservationView,
     SizeView,
     TaskCompletedEventView,
     TickEventView,
@@ -131,6 +132,7 @@ from meetings.schemas import (
     MeetingTurn,
     ObservationClaim,
     SawPlayerObservation,
+    SawVentObservation,
     VoteBallot,
 )
 from meetings.transcript import is_weak_contradiction
@@ -2033,7 +2035,7 @@ def _observations_from_memory(
 
 def _observation_claim_view(
     claim: ObservationClaim,
-) -> SawPlayerView | CompletedTaskObsView | FoundBodyObsView:
+) -> SawPlayerView | CompletedTaskObsView | FoundBodyObsView | SawVentObservationView:
     if isinstance(claim, SawPlayerObservation):
         return SawPlayerView(
             type="saw_player",
@@ -2054,6 +2056,17 @@ def _observation_claim_view(
             type="found_body",
             tick=claim.tick,
             body_of=claim.body_of,
+            room=claim.room,
+        )
+    if isinstance(claim, SawVentObservation):
+        # Task 15.4.1: the spectator mirror of the Task 15.4 vent sighting. The
+        # observation surfaces the sighting (subject/room/tick); whether it
+        # minted a hard flag is carried separately by a ``vent_sighting``
+        # ``ContradictionView``.
+        return SawVentObservationView(
+            type="saw_vent",
+            tick=claim.tick,
+            subject=claim.subject,
             room=claim.room,
         )
     raise TypeError(f"unsupported observation claim: {type(claim).__name__}")
@@ -2120,16 +2133,12 @@ def _contradiction_view(contradiction: ContradictionRef) -> ContradictionView:
     # ``kind`` passes through verbatim -- the Task 13.4 ``alibi_vs_physical`` kind
     # a recorded ``MeetingResult`` carries (the manager persists
     # ``detect_contradictions`` at close) renders like the other alibi kinds.
-    # The Task 15.4 ``vent_sighting`` kind fails loud here until the Task
-    # 15.4.1 spectator mirror teaches the view layer the fourth kind -- the
-    # same deliberate exhaustive-with-raise doctrine as
-    # ``_observation_claim_view`` (no committed replay carries it; the first
-    # recordings that can arrive with 15.7, behind 15.4.1's edge).
-    if contradiction.kind == "vent_sighting":
-        raise TypeError(
-            "unsupported contradiction kind for the spectator view: "
-            "'vent_sighting' (the view mirror is Task 15.4.1)"
-        )
+    # Task 15.4.1 teaches the view layer the fourth kind: the Task 15.4
+    # ``vent_sighting`` role-proving flag mirrors through here like the others.
+    # It is always STRONG (the grounding chokepoint is the precision gate, so it
+    # carries no weak marker), which ``is_weak_contradiction`` resolves below
+    # (no ``vent_sighting`` special-case is needed -- the predicate is
+    # marker-based). Committed v4 replays predate the kind and never carry it.
     weak = is_weak_contradiction(contradiction)
     return ContradictionView(
         contradiction_id=contradiction.contradiction_id,
