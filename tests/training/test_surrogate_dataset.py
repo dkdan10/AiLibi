@@ -18,6 +18,7 @@ import pytest
 from eval.validity import assemble_tournament_report
 from training.surrogate.dataset import (
     MeetingTableReconstructionError,
+    MeetingTableRow,
     build_meeting_table,
     load_splits,
 )
@@ -140,6 +141,55 @@ def test_witnessed_kill_marks_the_killer_not_a_bystander() -> None:
     assert witnessed, "baseline 3 9p2i should carry at least one crew-witnessed kill"
     assert all(cand.is_impostor for cand in witnessed), (
         "witnessed_kill must mark the killer (an impostor), never a bystander"
+    )
+
+
+def test_witnessed_vent_marks_the_venter_from_events() -> None:
+    """The witnessed-vent pin is the venter, derived from vent-event witnesses.
+
+    A crew member who saw a vent takes the +0.5 role-proving pin even when no
+    grounded ``vent_sighting`` contradiction is spoken; every ``witnessed_vent``
+    candidate is an IMPOSTOR (vents are impostor-only), so the event-derived pin
+    marks the venter, not a bystander.
+    """
+
+    table = build_meeting_table(_NINE)
+    vented = [
+        cand for row in table.rows for cand in row.candidates if cand.witnessed_vent
+    ]
+    assert vented, "baseline 3 9p2i should carry at least one crew-witnessed vent"
+    assert all(cand.is_impostor for cand in vented), (
+        "witnessed_vent must mark the venter (an impostor)"
+    )
+
+
+def test_eyewitness_pins_are_voter_local() -> None:
+    """A witnessed-kill/vent pin appears only in the WITNESSING voter's row.
+
+    Production stamps the act only for its witnesses, so the +1.0 / +0.5 pin must
+    not leak to a co-meeting voter who did not see it. Proven by finding a candidate
+    whose pin is True in one voter's row and False in another's, at the same meeting.
+    """
+
+    table = build_meeting_table(_NINE)
+    by_meeting: dict[tuple[int, str], list[MeetingTableRow]] = {}
+    for row in table.rows:
+        by_meeting.setdefault((row.seed, row.meeting_id), []).append(row)
+
+    found_local = False
+    for rows in by_meeting.values():
+        for name in ("witnessed_kill", "witnessed_vent"):
+            per_candidate: dict[str, set[bool]] = {}
+            for row in rows:
+                for cand in row.candidates:
+                    per_candidate.setdefault(cand.candidate, set()).add(
+                        bool(getattr(cand, name))
+                    )
+            if any(values == {True, False} for values in per_candidate.values()):
+                found_local = True
+    assert found_local, (
+        "expected at least one eyewitness pin that some voters hold and others do "
+        "not (voter-local), never a global flag shared by every voter"
     )
 
 

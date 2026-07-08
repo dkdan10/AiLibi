@@ -58,23 +58,31 @@ suspicion" band §2.2 says the LLM votes on.
 Alongside it, per candidate: the **contradiction-flag structure** (`strong_flags` /
 `weak_flags` / `vent_flags` — the Task-15.4 `vent_sighting` role-proving flag in its
 own band), **sighting / co-presence** (`witnessed` / `isolation`), **kill-proximity**
-(`seen_at_kill` co-presence proxy, and the EXACT `witnessed_kill` eyewitness pin read
-straight off `KilledEvent.witnesses` + `event.actor` — a crew member who SAW the
-candidate kill, the +1.0 role-proving pin, never a bystander), **body-proximity**,
-**reporter identity**, and **task-cadence / movement** (`task_submissions` /
-`move_count`). Roles ground truth (`is_impostor` / `is_ejected`) comes from the
-tournament report — raw replays are role-free by firewall design — and is a **label**,
-never a predictive input.
+(`seen_at_kill` co-presence proxy), the **VOTER-LOCAL eyewitness pins** `witnessed_kill`
+(+1.0) and `witnessed_vent` (+0.5) read straight off `KilledEvent` / vent-event
+witnesses — exposed only to the row whose voter actually saw the act, never a
+bystander and never leaked to a non-witness voter — **body-proximity**, **reporter
+identity**, and **task-cadence / movement** (`task_submissions` / `move_count`). Roles
+ground truth (`is_impostor` / `is_ejected`) comes from the tournament report — raw
+replays are role-free by firewall design — and is a **label**, never a predictive
+input.
 
 **Decision (documented):** the belief scalar folds only the cross-meeting MEETING
 evidence; the perception-time hard pins the real store also folds at ingest (a
 witnessed vent → +0.5, a witnessed kill → +1.0) are surfaced as their OWN first-class
-columns (`vent_flags`, `witnessed_kill`, `seen_at_kill`) rather than folded into the
-single suspicion scalar. Reconstructing the full per-agent belief store exactly would
-require re-driving the `ObservationService` + memory-store pipeline; as columns the
-surrogate weights each channel independently — and the honest ceiling folds the
-witnessed-kill pin back in at its real +1.0 weight — while the belief scalar stays a
-clean deterministic function of the recorded meeting evidence. The scalar is therefore
+columns (`vent_flags`, `witnessed_kill`, `witnessed_vent`, `seen_at_kill`) rather than
+folded into the single suspicion scalar. These eyewitness pins are **voter-local** —
+production stamps `action="kill"` / `"vent"` only for the witnessing agent's belief, so
+a pin is exposed only to a row whose voter is in the event's crew-witness set (a global
+flag would leak private evidence to every voter and inflate the ceiling; the honest
+ceiling ORs the pin across a meeting's voters — the strongest signal any voter holds).
+Reconstructing the full per-agent belief store exactly would require re-driving the
+`ObservationService` + memory-store pipeline; as columns the surrogate weights each
+channel independently — and the honest ceiling folds the eyewitness pins back in at
+their real weights (kill +1.0, vent +0.5) with the contradiction lift capped at one
+strong flag's worth (`MEETING_CONTRADICTION_LIFT_CAP`) and clamped to [0, 1], exactly
+as `apply_contradiction_rule` renders — while the belief scalar stays a clean
+deterministic function of the recorded meeting evidence. The scalar is therefore
 the **cross-meeting accusation/testimony accumulator** — precisely the "voice
 momentum" signal, and precisely what a physical-only surrogate (FO-6) lacks.
 
@@ -119,14 +127,17 @@ never imported): the same six LLM-free physical features
 candidate, a deterministic standardized logistic, its SKIP threshold tuned on train —
 now under **by-game 5-fold CV** across all 50 games (the spike used one 35/15 split).
 
-| Set | top-1 | top-2 | decision acc | always-eject baseline | ejection Brier/ECE | ballot Brier/ECE | binary head |
+| Set | top-1 | top-2 | decision acc (binary) | always-eject baseline | ejection Brier/ECE | ballot Brier/ECE | binary head |
 |---|---:|---:|---:|---:|---:|---:|---|
-| **9p2i** | **23.9%** (26/109) | **42.2%** (46/109) | **25.2%** | 78.4% | 0.107 / 0.008 | 0.211 / 0.120 | **collapses to always-SKIP** |
-| **4p1i** | 65.4% (17/26) | 84.6% (22/26) | 43.6% | 66.7% | 0.159 / 0.108 | 0.232 / 0.232 | SKIP-biased (not collapsed) |
+| **9p2i** | **23.9%** (26/109) | **42.2%** (46/109) | **38.1%** | 78.4% | 0.107 / 0.008 | 0.211 / 0.120 | **collapses to always-SKIP** |
+| **4p1i** | 65.4% (17/26) | 84.6% (22/26) | 59.0% | 66.7% | 0.159 / 0.108 | 0.232 / 0.232 | SKIP-biased (not collapsed) |
 
-(The **ejection** Brier/ECE calibrate FO-6's per-candidate ejection probability; the
-**ballot** Brier/ECE calibrate the RECORDED voters' confidences — the WOLF channel —
-and are model-independent, reported for every model as the ground-truth reference.)
+(Decision accuracy is the BINARY eject-vs-skip decision — right when the model's
+eject/skip *choice* matches, regardless of which player it named; the exact-target
+accuracy is the separate top-1 channel. The **ejection** Brier/ECE calibrate FO-6's
+per-candidate ejection probability; the **ballot** Brier/ECE calibrate the RECORDED
+voters' confidences — the WOLF channel — and are model-independent, reported for every
+model as the ground-truth reference.)
 
 The spike's headline **"FO-6 top-1 64% / top-2 82%"** was measured on 9p2i in the
 spike era. On the committed baseline-3 9p2i it is **23.9% / 42.2%** under by-game CV —
@@ -137,9 +148,9 @@ problem is trivially small (≤3 candidates), and its decision head is still bel
 always-eject baseline.
 
 **The always-SKIP collapse, made explicit (9p2i):** the tuned binary head predicts
-SKIP on **74 of 109 true ejection meetings** and reaches only **25.2%** SKIP-vs-eject
-accuracy — *worse than the trivial always-eject constant (78.4%)*. The single top-1
-number hid this. The SKIP/eject decision is testimony/plurality driven and **absent
+SKIP on **74 of 109 true ejection meetings** and reaches only **38.1%** binary
+eject-vs-skip accuracy — *worse than the trivial always-eject constant (78.4%)*. The
+single top-1 number hid this. The SKIP/eject decision is testimony/plurality driven and **absent
 from physical features**, exactly as §5.2 predicts; this is why §5.3's rebuild
 predicts BALLOTS and feeds the real tally instead of a binary ejection head.
 (`degenerates_to_skip = True` trips only on 9p2i; the flag requires both a
@@ -157,20 +168,20 @@ pre-meeting suspicion lead — is invisible to a training-time surrogate. The ce
 measures that: over each set's ejection meetings, the share whose ejected target is
 the **strict (unique) argmax** of the best-case reconstructed physical+belief
 suspicion (the sharpest ranking a physical+belief surrogate could form from the
-pre-meeting bytes, using the real belief-fold deltas — the witnessed-kill eyewitness
-pin at its +1.0 weight, `vent_sighting` strong, and the accusation accumulator). A
-flat tie (an early meeting, no prior evidence, no flag) is not uniquely rankable and
-correctly counts as unreachable.
+pre-meeting bytes, using the real belief-fold deltas — the voter-local eyewitness pins
+at +1.0 kill / +0.5 vent, the contradiction lift capped at one strong flag's worth and
+clamped to [0, 1], and the accusation accumulator). A flat tie (an early meeting, no
+prior evidence, no flag) is not uniquely rankable and correctly counts as unreachable.
 
-| Set | **max achievable top-1** | **voice-driven share** | reachable | flag on target | proximity on target | strict belief-lead |
+| Set | **max achievable top-1** | **voice-driven share** | reachable | flag on target | proximity/eyewitness on target | strict belief-lead |
 |---|---:|---:|---:|---:|---:|---:|
-| **9p2i** | **71.6%** | **28.4%** | 78/109 | 78/109 | 80/109 | 15/109 |
+| **9p2i** | **65.1%** | **34.9%** | 71/109 | 78/109 | 82/109 | 15/109 |
 | **4p1i** | 84.6% | 15.4% | 22/26 | 21/26 | 24/26 | 0/26 |
 
-Read the 9p2i row as: **no physical+belief surrogate can exceed ~72% top-1 on this
-corpus**, and **~28% of ejections are structurally voice-driven** — they formed from
+Read the 9p2i row as: **no physical+belief surrogate can exceed ~65% top-1 on this
+corpus**, and **~35% of ejections are structurally voice-driven** — they formed from
 the current meeting's narrative and cannot be seen without the LLM. FO-6's achieved
-**23.9%** sits far below the **71.6%** ceiling: the gap is the belief accumulator and
+**23.9%** sits far below the **65.1%** ceiling: the gap is the belief accumulator and
 the flag channels FO-6's six raw counts never use (the surrogate's headroom, Task
 15.13), while the ceiling itself is the honest cap the plan does not chase. §5.5's two
 responses follow directly: use the surrogate for the physically-legible component and

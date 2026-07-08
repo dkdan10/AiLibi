@@ -57,6 +57,8 @@ from pydantic import BaseModel, ConfigDict
 from agents.memory.beliefs import (
     BODY_PROXIMITY_SUSPICION_DELTA,
     CONTRADICTION_SUSPICION_DELTA,
+    MEETING_CONTRADICTION_LIFT_CAP,
+    VENTING_SUSPICION_DELTA,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
     WITNESSED_KILL_SUSPICION_DELTA,
 )
@@ -197,15 +199,29 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
         sample = rows[0]
         candidates = tuple(c.candidate for c in sample.candidates)
         alive_count = float(len(candidates))
+        # The eyewitness pins (``witnessed_kill`` / ``witnessed_vent``) are
+        # VOTER-LOCAL (only the witnessing voter's row carries them, Codex review),
+        # so a meeting-level signal is the OR across voters — "at least one voter
+        # holds this role-proving evidence", which is what a ballot-predicting
+        # surrogate could ride (that witness's ballot names the target). Every other
+        # physical column is voter-independent and read off any row.
+        witnessed_kill_any = {
+            c.candidate for row in rows for c in row.candidates if c.witnessed_kill
+        }
+        witnessed_vent_any = {
+            c.candidate for row in rows for c in row.candidates if c.witnessed_vent
+        }
         features: dict[PlayerId, dict[str, float]] = {}
         flag_legible: set[PlayerId] = set()
         proximity_legible: set[PlayerId] = set()
         for feat in sample.candidates:
-            features[feat.candidate] = {
+            cid = feat.candidate
+            features[cid] = {
                 "witnessed": float(feat.witnessed),
                 "isolation": float(feat.isolation),
                 "seen_at_kill": float(feat.seen_at_kill),
-                "witnessed_kill": float(feat.witnessed_kill),
+                "witnessed_kill": float(cid in witnessed_kill_any),
+                "witnessed_vent": float(cid in witnessed_vent_any),
                 "is_reporter": float(feat.is_reporter),
                 "meeting_index": float(sample.meeting_index),
                 "alive_count": alive_count,
@@ -217,9 +233,14 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
                 "move_count": float(feat.move_count),
             }
             if feat.strong_flags + feat.weak_flags + feat.vent_flags > 0:
-                flag_legible.add(feat.candidate)
-            if feat.seen_at_kill or feat.witnessed_kill or feat.body_proximity:
-                proximity_legible.add(feat.candidate)
+                flag_legible.add(cid)
+            if (
+                feat.seen_at_kill
+                or feat.body_proximity
+                or cid in witnessed_kill_any
+                or cid in witnessed_vent_any
+            ):
+                proximity_legible.add(cid)
         # Public belief suspicion toward each candidate: the max over voters who are
         # NOT that candidate (a candidate's own row carries the neutral 0.5 self
         # prior). Crew voters share the public evidence, so the max is the public
@@ -238,23 +259,33 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
             if not seen[cand]:
                 public[cand] = 0.5
         # Best-case reconstructed pre-meeting suspicion per candidate: the public
-        # belief accumulator PLUS the flag / proximity channels weighted by the
-        # REAL belief-fold deltas (agents/memory/beliefs.py) — the exact
-        # witnessed-kill eyewitness pin (+1.0) dominates, vent_sighting is a strong
-        # flag (Task 15.4). This is the sharpest ranking a physical+belief surrogate
-        # could form from the pre-meeting bytes; the honest ceiling reads its strict
-        # argmax (:func:`compute_honest_ceiling`).
+        # belief accumulator PLUS the real belief-fold channels (agents/memory/
+        # beliefs.py). The contradiction lift replicates ``apply_contradiction_rule``
+        # — a subject's whole meeting lift is CAPPED at one strong flag's worth
+        # (``MEETING_CONTRADICTION_LIFT_CAP``), never a raw per-flag sum (Codex
+        # review), so flag volume cannot manufacture or erase a strict argmax the
+        # real graph could not render. The perception pins are the real deltas
+        # (witnessed kill +1.0, witnessed vent +0.5, body proximity +0.2), and the
+        # whole thing is clamped to [0, 1] like a rendered suspicion. This is the
+        # sharpest ranking a physical+belief surrogate could form; the honest ceiling
+        # reads its strict argmax (:func:`compute_honest_ceiling`).
         recon: dict[PlayerId, float] = {}
         for cand in candidates:
             feats = features[cand]
-            recon[cand] = (
+            contradiction_lift = min(
+                CONTRADICTION_SUSPICION_DELTA * feats["strong_flags"]
+                + CONTRADICTION_SUSPICION_DELTA * feats["vent_flags"]
+                + WEAK_CONTRADICTION_SUSPICION_DELTA * feats["weak_flags"],
+                MEETING_CONTRADICTION_LIFT_CAP,
+            )
+            recon[cand] = min(
+                1.0,
                 public[cand]
                 + WITNESSED_KILL_SUSPICION_DELTA * feats["witnessed_kill"]
-                + CONTRADICTION_SUSPICION_DELTA * feats["strong_flags"]
-                + CONTRADICTION_SUSPICION_DELTA * feats["vent_flags"]
-                + WEAK_CONTRADICTION_SUSPICION_DELTA * feats["weak_flags"]
+                + VENTING_SUSPICION_DELTA * feats["witnessed_vent"]
                 + BODY_PROXIMITY_SUSPICION_DELTA * feats["body_proximity"]
                 + BODY_PROXIMITY_SUSPICION_DELTA * feats["seen_at_kill"]
+                + contradiction_lift,
             )
         views.append(
             MeetingView(
@@ -496,7 +527,9 @@ class SurrogateFidelityReport(BaseModel):
     top2: float
     top1_hits: int
     top2_hits: int
-    # SKIP-vs-eject decision (over ALL scored meetings).
+    # SKIP-vs-eject BINARY decision accuracy (over ALL scored meetings): right when
+    # the model's eject/skip choice matches the outcome, regardless of which player
+    # it named (exact-target accuracy is the separate top-1 channel).
     skip_vs_eject_accuracy: float
     always_eject_baseline: float
     predicted_ejections: int
@@ -553,6 +586,13 @@ def _game_folds(
         if unknown:
             raise ValueError(
                 f"splits.json references seeds absent from the table: {sorted(unknown)}"
+            )
+        omitted = table_seeds - (train | test)
+        if omitted:
+            raise ValueError(
+                f"splits.json omits table games {sorted(omitted)}: they would be in "
+                "neither train nor test, so the run would silently score a subset "
+                "while reporting the full set — the split must partition every game"
             )
         overlap = train & test
         if overlap:
@@ -631,7 +671,11 @@ def run_surrogate_fidelity(
                 predicted_skips += 1
             else:
                 predicted_ejections += 1
-            if predicted == true_eject or (predicted is None and true_eject is None):
+            # SKIP-vs-eject is a BINARY decision (Codex review): correct iff the
+            # model's eject/skip CHOICE matches the outcome's, regardless of WHICH
+            # player it named (that exactness is the separate top-1 channel, and the
+            # always-eject baseline is binary too). Compare None-ness, not identity.
+            if (predicted is None) == (true_eject is None):
                 if true_eject is None:
                     correct_skip += 1
                 else:

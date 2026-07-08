@@ -15,7 +15,11 @@ from pathlib import Path
 
 import pytest
 
-from training.surrogate.dataset import build_meeting_table
+from training.surrogate.dataset import (
+    MeetingTable,
+    SurrogateSplits,
+    build_meeting_table,
+)
 from training.surrogate.fidelity import (
     MeetingPrediction,
     MeetingView,
@@ -63,22 +67,31 @@ def test_by_game_cv_never_splits_a_games_meetings_across_folds() -> None:
     assert seen_test == all_seeds, "the test folds must cover every game exactly once"
 
 
-def test_committed_splits_produce_a_single_by_game_fold(tmp_path: Path) -> None:
-    """A committed ``splits.json`` yields one by-game (train, test) fold."""
+def _with_splits(table: MeetingTable, **kwargs: object) -> MeetingTable:
+    """Attach a :class:`SurrogateSplits` to a table without rebuilding it."""
 
-    splits_file = tmp_path / "splits.json"
-    splits_file.write_text('{"train": [0, 1, 2, 3], "val": [4], "test": [5, 6]}')
-    table = build_meeting_table(_FOUR, splits_path=splits_file)
+    return table.model_copy(update={"splits": SurrogateSplits(**kwargs)})  # type: ignore[arg-type]
+
+
+def test_committed_splits_produce_a_single_by_game_fold() -> None:
+    """A committed ``splits.json`` (a full partition) yields one by-game fold."""
+
+    base = build_meeting_table(_FOUR)
+    seeds = list(base.game_seeds())
+    test_seeds = seeds[-2:]
+    train_seeds = seeds[:-3]
+    val_seeds = seeds[-3:-2]
+    table = _with_splits(base, train=train_seeds, val=val_seeds, test=test_seeds)
     fold_pairs, by_game = _game_folds(table, folds=5)
     assert by_game
     assert len(fold_pairs) == 1
     train, test = fold_pairs[0]
-    assert test == frozenset({5, 6})
-    assert {0, 1, 2, 3, 4} <= train
+    assert test == frozenset(test_seeds)
+    assert frozenset(train_seeds) <= train
     assert train.isdisjoint(test)
 
 
-def test_leaky_committed_split_fails_loud(tmp_path: Path) -> None:
+def test_leaky_committed_split_fails_loud() -> None:
     """A split that puts a game in both the fit and test set raises (no silent leak).
 
     The anti-leakage guarantee is the harness's whole point; a 15.12 corpus mistake
@@ -86,29 +99,45 @@ def test_leaky_committed_split_fails_loud(tmp_path: Path) -> None:
     loud rather than silently inflating the fidelity numbers.
     """
 
-    splits_file = tmp_path / "splits.json"
-    splits_file.write_text('{"train": [0, 1, 5], "val": [], "test": [5, 6]}')
-    table = build_meeting_table(_FOUR, splits_path=splits_file)
+    base = build_meeting_table(_FOUR)
+    seeds = list(base.game_seeds())
+    # A full partition EXCEPT the last train seed is also in test (the leak).
+    table = _with_splits(base, train=seeds[:-1], val=[], test=[seeds[-2], seeds[-1]])
     with pytest.raises(ValueError, match="leaks games"):
         _game_folds(table, folds=5)
 
 
-def test_split_referencing_unknown_seed_fails_loud(tmp_path: Path) -> None:
+def test_split_omitting_table_seed_fails_loud() -> None:
+    """A split that leaves a table game out of BOTH train and test raises.
+
+    An omitted game's meetings would be in neither fold, so the run would silently
+    score a subset while reporting the full set — a corpus typo must fail loud.
+    """
+
+    base = build_meeting_table(_FOUR)
+    seeds = list(base.game_seeds())
+    # Covers every seed but the last — the omitted game.
+    table = _with_splits(base, train=seeds[:-2], val=[], test=[seeds[-2]])
+    with pytest.raises(ValueError, match="omits table games"):
+        _game_folds(table, folds=5)
+
+
+def test_split_referencing_unknown_seed_fails_loud() -> None:
     """A split naming a seed absent from the table raises."""
 
-    splits_file = tmp_path / "splits.json"
-    splits_file.write_text('{"train": [0, 1], "val": [], "test": [9999]}')
-    table = build_meeting_table(_FOUR, splits_path=splits_file)
+    base = build_meeting_table(_FOUR)
+    seeds = list(base.game_seeds())
+    table = _with_splits(base, train=seeds, val=[], test=[999999])
     with pytest.raises(ValueError, match="absent from the table"):
         _game_folds(table, folds=5)
 
 
-def test_empty_test_split_fails_loud(tmp_path: Path) -> None:
+def test_empty_test_split_fails_loud() -> None:
     """A split with an empty test set raises (nothing to score)."""
 
-    splits_file = tmp_path / "splits.json"
-    splits_file.write_text('{"train": [0, 1, 2], "val": [3], "test": []}')
-    table = build_meeting_table(_FOUR, splits_path=splits_file)
+    base = build_meeting_table(_FOUR)
+    seeds = list(base.game_seeds())
+    table = _with_splits(base, train=seeds, val=[], test=[])
     with pytest.raises(ValueError, match="test set is empty"):
         _game_folds(table, folds=5)
 
@@ -272,6 +301,47 @@ def test_malformed_prediction_is_rejected() -> None:
     table = build_meeting_table(_FOUR)
     with pytest.raises(ValueError, match="permutation"):
         run_surrogate_fidelity(table, _BrokenModel, model_name="broken")
+
+
+class _AlwaysEjectFirstModel:
+    """A model that always ejects the first candidate (test only).
+
+    Ejects on EVERY meeting (never SKIP) and names ``candidates[0]`` — so its
+    SKIP-vs-eject decision is right on every ejection meeting regardless of target,
+    but its top-1 is near zero. Proves the binary decision metric is decoupled from
+    the exact-target top-1 channel.
+    """
+
+    def fit(self, meetings: Sequence[MeetingView]) -> None:  # noqa: D401 - test stub
+        return None
+
+    def predict(self, meeting: MeetingView) -> MeetingPrediction:
+        leader = meeting.candidates[0]
+        return MeetingPrediction(
+            ranking=meeting.candidates,
+            ejected=leader,
+            ejection_prob={
+                cand: (1.0 if cand == leader else 0.0) for cand in meeting.candidates
+            },
+        )
+
+
+def test_skip_vs_eject_is_binary_not_exact_target() -> None:
+    """An always-eject model scores the binary decision at the always-eject baseline.
+
+    Ejecting the wrong player is still a correct EJECT decision (Codex review), so a
+    model that ejects every meeting matches the always-eject baseline on
+    ``skip_vs_eject_accuracy`` while its top-1 stays far lower — the decision channel
+    is not a duplicate of top-1.
+    """
+
+    table = build_meeting_table(_NINE)
+    report = run_surrogate_fidelity(
+        table, _AlwaysEjectFirstModel, model_name="always-eject-first"
+    )
+    assert report.predicted_skips == 0
+    assert report.skip_vs_eject_accuracy == pytest.approx(report.always_eject_baseline)
+    assert report.top1 < report.skip_vs_eject_accuracy
 
 
 def test_one_meeting_view_per_committed_meeting() -> None:

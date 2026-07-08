@@ -66,7 +66,12 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 from agents.memory.beliefs import BeliefState, apply_meeting_evidence_rules
 from engine.actions import Action
 from engine.entities import PlayerId, Role, RoomId
-from engine.events import KilledEvent, MeetingTriggeredEvent
+from engine.events import (
+    KilledEvent,
+    MeetingTriggeredEvent,
+    VentEnteredEvent,
+    VentExitedEvent,
+)
 from engine.tick import advance_tick
 from engine.world import Map, WorldState, load_canonical_map
 from eval.validity import (
@@ -144,10 +149,11 @@ class CandidateFeatures(BaseModel):
     witnessed: int
     isolation: int
     seen_at_kill: bool
-    # The EXACT role-proving eyewitness pin from ``KilledEvent.witnesses`` (a crew
-    # member saw THIS candidate commit a kill) — the +1.0 belief-store pin, distinct
-    # from the ``seen_at_kill`` co-presence proxy. Persistent (role-proving).
+    # VOTER-LOCAL role-proving eyewitness pins (Codex review): this row's VOTER
+    # personally witnessed the candidate kill (+1.0) / vent (+0.5) — the exact
+    # belief-store pins, exposed only to the witness, never the co-presence proxy.
     witnessed_kill: bool
+    witnessed_vent: bool
     body_proximity: bool
     # Cross-game cadence signals.
     task_submissions: int
@@ -300,17 +306,24 @@ class _WindowStats:
     Sighting/kill-proximity/body-proximity reset each meeting (FO-6 "recent
     activity" parity); ``task_submissions`` / ``moves`` accumulate over the whole
     game (a player who has completed no tasks all game is a game-long cadence
-    signal). ``witnessed_kill`` is the EXACT role-proving eyewitness pin from
-    ``KilledEvent.witnesses`` — persistent (a witnessed kill is role-proving
-    knowledge the crew never unlearns, mirroring the +1.0 belief pin the store
-    folds), so it does NOT reset. All updates read only reconstructed engine truth.
+    signal).
+
+    ``witnessed_kill`` / ``witnessed_vent`` are the EXACT role-proving eyewitness
+    pins from ``KilledEvent`` / vent-event witnesses (Codex review), mapping a
+    KILLER/VENTER to the set of CREW WITNESSES who saw the act. Production only
+    stamps ``action="kill"`` / ``"vent"`` for the WITNESSING agent before that
+    agent's own belief update, so the pin is VOTER-LOCAL: exposed only for a row
+    whose voter is in the witness set. Both are persistent (role-proving knowledge
+    the crew never unlearns, mirroring the +1.0 / +0.5 belief pins the store folds),
+    so they do NOT reset. All updates read only reconstructed engine truth.
     """
 
     def __init__(self) -> None:
         self.witnessed: dict[PlayerId, int] = defaultdict(int)
         self.isolation: dict[PlayerId, int] = defaultdict(int)
         self.seen_at_kill: dict[PlayerId, bool] = defaultdict(bool)
-        self.witnessed_kill: dict[PlayerId, bool] = defaultdict(bool)
+        self.witnessed_kill: dict[PlayerId, set[PlayerId]] = defaultdict(set)
+        self.witnessed_vent: dict[PlayerId, set[PlayerId]] = defaultdict(set)
         self.body_proximity: dict[PlayerId, bool] = defaultdict(bool)
         self.task_submissions: dict[PlayerId, int] = defaultdict(int)
         self.moves: dict[PlayerId, int] = defaultdict(int)
@@ -345,15 +358,34 @@ class _WindowStats:
         for event in events:
             if isinstance(event, KilledEvent):
                 self._pending_kills.append((event.tick, event.room))
-                # The EXACT witnessed-kill pin (Codex review): the killer stamped
-                # ``action="kill"`` for its CREW witnesses gets the +1.0 hard pin in
-                # production (agents/memory/beliefs.py). Read it straight off
-                # ``event.actor`` + ``event.witnesses`` (crew only — a fellow-impostor
-                # witness generates no crew evidence, §4.7), never the co-presence
-                # proxy, so a witnessed killer who moved or was alone is not missed
-                # and a bystander is never mismarked.
-                if any(roles.get(w) == "CREWMATE" for w in event.witnesses):
-                    self.witnessed_kill[event.actor] = True
+                # The EXACT witnessed-kill pin (Codex review): production stamps
+                # ``action="kill"`` for the killer's CREW witnesses, who each take
+                # the +1.0 hard pin in their OWN belief before voting
+                # (agents/memory/beliefs.py). Read the witness set straight off
+                # ``event.actor`` + ``event.witnesses`` (crew only — a
+                # fellow-impostor witness generates no crew evidence, §4.7); it is
+                # voter-local, never the co-presence proxy, so a witnessed killer who
+                # moved or was alone is not missed and a bystander is never
+                # mismarked, and the pin does not leak to non-witness voters.
+                crew_witnesses = {
+                    w for w in event.witnesses if roles.get(w) == "CREWMATE"
+                }
+                if crew_witnesses:
+                    self.witnessed_kill[event.actor].update(crew_witnesses)
+            elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):
+                # The witnessed-VENT pin (Codex review): a crew member who SAW an
+                # impostor vent takes the +0.5 role-proving pin at perception
+                # (VENTING_SUSPICION_DELTA), persisting into the pre-meeting graph
+                # even when no grounded ``vent_sighting`` contradiction is spoken.
+                # Witnesses = the source-room ∪ destination-room witness sets the
+                # engine records (:mod:`eval.funnel`), crew only, voter-local.
+                vent_witnesses = {
+                    w
+                    for w in (*event.source_witnesses, *event.destination_witnesses)
+                    if roles.get(w) == "CREWMATE"
+                }
+                if vent_witnesses:
+                    self.witnessed_vent[event.actor].update(vent_witnesses)
         for kill_tick, kill_room in self._pending_kills:
             if 0 <= state.tick - kill_tick <= SEEN_AT_KILL_WINDOW_TICKS:
                 occupants = by_room.get(kill_room, [])
@@ -442,7 +474,10 @@ def _candidate_features(
         witnessed=stats.witnessed.get(candidate, 0),
         isolation=stats.isolation.get(candidate, 0),
         seen_at_kill=stats.seen_at_kill.get(candidate, False),
-        witnessed_kill=stats.witnessed_kill.get(candidate, False),
+        # Voter-local: the pin is exposed only when THIS row's voter is in the
+        # candidate's witness set (production stamps the act only for its witnesses).
+        witnessed_kill=voter in stats.witnessed_kill.get(candidate, set()),
+        witnessed_vent=voter in stats.witnessed_vent.get(candidate, set()),
         body_proximity=stats.body_proximity.get(candidate, False),
         task_submissions=stats.task_submissions.get(candidate, 0),
         move_count=stats.moves.get(candidate, 0),
