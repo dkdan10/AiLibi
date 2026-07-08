@@ -444,6 +444,13 @@ record_set() {
   # waiter that finds the lock owned by a dead process marks the run failed (the
   # half-written MANIFEST is unsafe to freeze) and gives up. Returns non-zero when
   # the lock was NOT acquired — callers must not enter the critical section then.
+  # The owner PID uses $BASHPID (the WORKER subshell's own PID) when available, and
+  # falls back to $$ on macOS's stock Bash 3.2, which predates $BASHPID (the ${:-}
+  # form is exempt from `set -u`, so an undefined $BASHPID never fatally aborts the
+  # worker there). On 3.2 every worker shares $$ (the main shell), so dead-owner
+  # detection degrades to a no-op — the mkdir mutex + release still serialize
+  # correctly; only the rare "a worker was SIGKILLed mid-critical-section" safety
+  # net is lost. Install a newer bash (`brew install bash`) to restore it.
   acquire_lock() {
     local owner
     [[ -e "$stage_dir/.failed" ]] && return 1
@@ -460,7 +467,7 @@ record_set() {
       fi
       sleep 0.1
     done
-    printf '%s' "$BASHPID" >"$lockdir/owner"
+    printf '%s' "${BASHPID:-$$}" >"$lockdir/owner"
     return 0
   }
   release_lock() { rm -rf "$lockdir" 2>/dev/null || true; }
