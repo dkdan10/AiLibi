@@ -20,12 +20,13 @@ from orchestrator.replay import ReplayLog, TacticalPolicyStamp
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 # The flat 4p1i baseline now lives under replays/samples/4p1i/ (Task 12.12).
 _REAL_SAMPLES = _REPO_ROOT / "replays" / "samples" / "4p1i"
-# Task 14.7 Featherless re-record: the 4p/1i set is re-recorded on Qwen/Qwen3-32B
-# + the qwen3_32b.v4 prompt set with all four Phase-13.5 substrate flags ON. It
-# stays meeting-dense (39/50 seeds carry a meeting), so _NO_MEETING_SEED is seed 12
-# (still meeting-free) and seed 22 stays meeting-bearing. The recorded prompt
-# versions are now the bespoke set: accusation_round.qwen3_32b.v4 /
-# crewmate_report.qwen3_32b.v4 / impostor_report.qwen3_32b.v4 / vote_ballot.qwen3_32b.v4.
+# Task 15.7 baseline-3 re-record: the 4p/1i set is re-recorded on Qwen/Qwen3-32B
+# + the qwen3_32b.v5/v6 prompt set with all SIX substrate levers ON
+# (reporter_exculpation graduated to always-on this task). It stays meeting-dense
+# (39/50 seeds carry a meeting), so _NO_MEETING_SEED is seed 12 (still meeting-free)
+# and seed 22 stays meeting-bearing. The recorded prompt versions are now the
+# bespoke set: accusation_round.qwen3_32b.v5 / crewmate_report.qwen3_32b.v5 /
+# impostor_report.qwen3_32b.v5 / vote_ballot.qwen3_32b.v6.
 _MEETING_SEED = 22
 _NO_MEETING_SEED = 12
 
@@ -73,26 +74,27 @@ def test_provenance_meeting_seed(small_samples: Path) -> None:
     # FSM default).
     assert policy == mw._FSM_DEFAULT_POLICY == "fsm-default"
     # The union of the recorded prompt-version *values*, sorted — using the
-    # actual recorded values (e.g. "vote_ballot.qwen3_32b.v4"), not the hint.
-    assert "accusation_round.qwen3_32b.v4" in prompt_versions
-    assert "vote_ballot.qwen3_32b.v4" in prompt_versions
+    # actual recorded values (e.g. "vote_ballot.qwen3_32b.v6"), not the hint.
+    assert "accusation_round.qwen3_32b.v5" in prompt_versions
+    assert "vote_ballot.qwen3_32b.v6" in prompt_versions
     parts = prompt_versions.split(", ")
     assert parts == sorted(parts)
-    # The Task-14.7 Featherless re-record runs with all four Phase-13.5 substrate
-    # levers ON, plus the Task-14.10 evidence_quality_lift lever (baseline 2 is
-    # recorded with it ON, Task 14.12), stamped onto the replay's game_over
-    # record, so the flags column reports all five ON levers (sorted).
+    # The Task-15.7 baseline-3 re-record runs with all SIX substrate levers ON
+    # (the four Phase-13.5 levers, the Task-14.10 evidence_quality_lift lever, and
+    # Task-15.5's reporter_exculpation lever graduated to always-on this task),
+    # stamped onto the replay's game_over record, so the flags column reports all
+    # six ON levers (sorted).
     assert flags == (
-        "evidence_quality_lift, movement_perception, testimony_as_content, "
-        "unfreeze_memory, witnessed_kill_evidence"
+        "evidence_quality_lift, movement_perception, reporter_exculpation, "
+        "testimony_as_content, unfreeze_memory, witnessed_kill_evidence"
     )
-    # The Task-14.7 baseline runs on the hosted Featherless provider with $0
-    # provider-keyed cost, so the recorded per-seed cost is exactly 0.
+    # The baseline runs on a hosted provider with $0 provider-keyed cost, so the
+    # recorded per-seed cost is exactly 0.
     assert float(cost) == 0.0
     # This test pins provenance *extraction*, not the game outcome: the meeting
     # seed's winner is a live-recorded result that can land either way (seed 22's
-    # Qwen3-32B re-record resolves CREWMATES), so assert membership rather than a
-    # specific side — matching the no-meeting case.
+    # baseline-3 Qwen3-32B re-record resolves CREWMATES), so assert membership
+    # rather than a specific side — matching the no-meeting case.
     assert winner in {"CREWMATES", "IMPOSTORS"}
 
 
@@ -104,13 +106,14 @@ def test_provenance_no_meeting_seed(small_samples: Path) -> None:
     assert prompt_versions == mw._NO_MEETINGS
     # No stamp on the committed baseline -> FSM-default label.
     assert policy == "fsm-default"
-    # A no-meeting seed records no prompt versions, but the Task-14.7 substrate
+    # A no-meeting seed records no prompt versions, but the Task-15.7 substrate
     # stamp lives on the game_over record (not a meeting), so a flag-ON re-record
-    # still reports all five ON levers (the four 13.5 levers + the Task-14.10
-    # evidence_quality_lift lever baseline 2 records ON) in the flags column.
+    # still reports all six ON levers (the four 13.5 levers + the Task-14.10
+    # evidence_quality_lift lever + Task-15.5's graduated reporter_exculpation
+    # lever) in the flags column.
     assert flags == (
-        "evidence_quality_lift, movement_perception, testimony_as_content, "
-        "unfreeze_memory, witnessed_kill_evidence"
+        "evidence_quality_lift, movement_perception, reporter_exculpation, "
+        "testimony_as_content, unfreeze_memory, witnessed_kill_evidence"
     )
     assert cost == "0.0000"
     # No LLM call recorded -> attributed to the directory's meeting model.
@@ -183,7 +186,7 @@ def test_rebuild_writes_sorted_rows(small_samples: Path, tmp_path: Path) -> None
         _NO_MEETING_SEED,
         _MEETING_SEED,
     ]  # parsed in file order -> ascending
-    assert rows[22].prompt_versions.startswith("accusation_round.qwen3_32b.v4")
+    assert rows[22].prompt_versions.startswith("accusation_round.qwen3_32b.v5")
     assert rows[_NO_MEETING_SEED].prompt_versions == mw._NO_MEETINGS
 
 
@@ -193,11 +196,11 @@ def test_rebuild_real_samples_have_50_rows(tmp_path: Path) -> None:
     assert written == 50
     rows = mw.parse_manifest(manifest.read_text())
     assert set(rows) == set(range(50))
-    # Meeting-bearing seeds in the Task 14.7 Featherless flat 4p/1i re-record
+    # Meeting-bearing seeds in the Task 15.7 baseline-3 flat 4p/1i re-record
     # (39/50 seeds carry a meeting; 22/24/26/39 are all meeting-bearing, recording
-    # the qwen3_32b.v4 bespoke prompt versions).
+    # the qwen3_32b.v5 bespoke prompt versions).
     for seed in (22, 24, 26, 39):
-        assert "accusation_round.qwen3_32b.v4" in rows[seed].prompt_versions
+        assert "accusation_round.qwen3_32b.v5" in rows[seed].prompt_versions
         assert rows[seed].git_sha  # non-empty provenance
     assert rows[_NO_MEETING_SEED].prompt_versions == mw._NO_MEETINGS
 

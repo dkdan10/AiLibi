@@ -9,8 +9,9 @@ Three pillars, per the Definition of Done:
   artifact (the asymmetry is handled, not assumed away).
 * **Floor trips** — a railroaded crew ejection, a friendly-fire kill, and a
   determinism breach each force a game's score to 0 (synthetic ``_GameFacts``).
-* **Evidence-supply floors** — baseline 2 passes its own pinned floors; a synthetic
-  evidence-starved set (high meeting rate, zero flags, zero witnesses) FAILS.
+* **Evidence-supply floors** — the committed baseline (baseline-3) passes its own
+  pinned floors; a synthetic evidence-starved set (high meeting rate, zero flags,
+  zero witnesses) FAILS.
 """
 
 from __future__ import annotations
@@ -525,14 +526,19 @@ def test_malformed_bytes_fail_closed_not_crash(tmp_path: Path) -> None:
     assert report.per_game == ()
 
 
-def test_baseline_2_witnessed_event_rate_is_the_measured_anchor() -> None:
-    """The 9p2i witnessed-event rate is the §6 6/160 = 3.75% crew-witnessed anchor."""
+def test_baseline_3_witnessed_event_rate_is_the_measured_anchor() -> None:
+    """The 9p2i witnessed-event rate is the §6 5/154 = 3.25% crew-witnessed anchor.
+
+    Computed from the committed bytes (not the pinned constant), so it tracks the
+    default baseline: baseline 3 records 5 crew-witnessed of 154 kills in 9p2i
+    (baseline 2 was 6/160 = 3.75%).
+    """
 
     report = compute_watchability(_NINE)
     witnessed = next(
         g for g in report.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed.measured == pytest.approx(6 / 160)
+    assert witnessed.measured == pytest.approx(5 / 154)
 
 
 def test_evidence_starved_set_fails_the_referee() -> None:
@@ -583,7 +589,9 @@ def test_flags_per_meeting_is_vent_aware() -> None:
     reproduce a grounded ``vent_sighting`` flag (its grounding channel has no
     transcript id, Task 15.4), so the referee merges the persisted vent flags —
     else a vent-rich baseline-3 candidate's strongest evidence reads as starved.
-    The committed v4 sets carry none, so the pinned baseline-2 floors are unchanged.
+    The committed baseline-3 4p1i set carries 11 such vent flags (the Wave-0 vent
+    substrate), already folded into its pinned flags/meeting floor (14/13 = 42/39,
+    the 42 total_flags census includes them); injecting one more must add exactly 1.
     """
 
     from eval.validity import assemble_tournament_report
@@ -591,9 +599,10 @@ def test_flags_per_meeting_is_vent_aware() -> None:
     from meetings.schemas import ContradictionRef
 
     report = assemble_tournament_report(_FOUR)
-    # The committed set is v4 — zero vent flags, so nothing is double-counted and
-    # the pinned floor stays put.
-    assert _persisted_vent_flag_count(report) == 0
+    # The committed baseline-3 4p1i set carries 11 grounded vent flags that the
+    # transcript re-derivation cannot reproduce, so they are merged in (baseline 2's
+    # v4 set carried none).
+    assert _persisted_vent_flag_count(report) == 11
 
     game = next(g for g in report.games if g.meetings)
     subject = next(iter(game.roles))
@@ -619,10 +628,10 @@ def test_flags_per_meeting_is_vent_aware() -> None:
         }
     )
 
-    assert _persisted_vent_flag_count(report_with_vent) == 1
+    assert _persisted_vent_flag_count(report_with_vent) == 12
     before = _supply_gauge_values(report, [], [])
     after = _supply_gauge_values(report_with_vent, [], [])
-    assert after.persisted_vent_flags == 1
+    assert after.persisted_vent_flags == 12
     assert after.total_flags == before.total_flags + 1
     assert after.flags_per_meeting is not None and before.flags_per_meeting is not None
     assert after.flags_per_meeting > before.flags_per_meeting
@@ -746,10 +755,10 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     report = payload[0]
     assert report["referee_passed"] is True
     assert report["roster_key"] == "9p2i"
-    assert report["baseline_id"] == "baseline-2"
+    assert report["baseline_id"] == "baseline-3"
     assert len(report["per_game"]) == 50
     assert len(report["supply_gauges"]) == 3
-    assert report["mean_score"] == pytest.approx(46.44)
+    assert report["mean_score"] == pytest.approx(39.83)
 
 
 def test_cli_watchability_human_output() -> None:

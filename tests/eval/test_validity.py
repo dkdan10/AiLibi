@@ -3,7 +3,7 @@
 Covers each of the eight gate checks with a PASS input and a synthetic VIOLATION
 that flips ``passed`` to ``False`` (a gate that cannot fail is not a gate), the
 reconstruction cross-check against the tested win-condition home, and the
-baseline-2 reproduction of ``run_validity_gate`` over the committed sets.
+baseline-3 reproduction of ``run_validity_gate`` over the committed sets.
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ def test_meeting_rate_passes_on_committed(nine_report: TournamentReport) -> None
     check = check_meeting_rate_and_resolution(nine_report)
     assert check.passed
     assert check.facts["meeting_rate"] == 1.0
-    assert check.facts["resolved_meetings"] == 142
+    assert check.facts["resolved_meetings"] == 139
 
 
 def test_meeting_rate_fails_below_floor(nine_report: TournamentReport) -> None:
@@ -222,7 +222,7 @@ def test_meeting_resolution_fails_on_unresolved_meeting(
 def test_no_duplicate_meeting_rows_passes(nine_report: TournamentReport) -> None:
     check = check_no_duplicate_meeting_rows(nine_report)
     assert check.passed
-    assert int(check.facts["meetings_total"]) == 142  # type: ignore[arg-type]
+    assert int(check.facts["meetings_total"]) == 139  # type: ignore[arg-type]
 
 
 def test_no_duplicate_meeting_rows_fails(nine_report: TournamentReport) -> None:
@@ -350,6 +350,59 @@ def test_betrayal_fails_on_impostor_accusing_teammate(
     check = check_no_betrayal(bad_report)
     assert not check.passed
     assert any("accused teammate" in v for v in check.violations)
+
+
+def test_betrayal_ignores_impostor_self_accusation_and_self_vote(
+    nine_report: TournamentReport,
+) -> None:
+    # Task 15.7: an impostor accusing/voting ITSELF (against==speaker / target==voter)
+    # betrays no FELLOW impostor, so the §7.12 firewall — which drops only OTHER
+    # impostors (``meetings.manager`` fellow_impostor_ids excludes self, manager.py:496)
+    # — leaves it clean. baseline-3's v5 prompts produced a few such self-accusations
+    # (a Phase-16 dialogue finding); they must NOT trip this gate. Cross-teammate
+    # betrayal (the tests above) still fails, so the refinement narrows, not weakens.
+    game = _first_multi_impostor_game(nine_report)
+    impostors = sorted(pid for pid, role in game.roles.items() if role == "IMPOSTOR")
+    self_id = impostors[0]
+    meeting = next(m for m in game.meetings if m.ballots and m.transcript.turns)
+    self_ballot = meeting.ballots[0].model_copy(
+        update={"voter": self_id, "target": self_id}
+    )
+    self_accusation = AccusationClaim(
+        type="accusation",
+        against=self_id,
+        confidence=0.6,
+        reason="synthetic self-accusation",
+    )
+    self_turn = meeting.transcript.turns[0].model_copy(
+        update={"speaker": self_id, "claims": (self_accusation,)}
+    )
+    bad_meeting = meeting.model_copy(
+        update={
+            "ballots": (self_ballot, *meeting.ballots[1:]),
+            "transcript": meeting.transcript.model_copy(
+                update={"turns": (self_turn, *meeting.transcript.turns[1:])}
+            ),
+        }
+    )
+    bad_game = game.model_copy(
+        update={
+            "meetings": tuple(
+                bad_meeting if m.meeting_id == meeting.meeting_id else m
+                for m in game.meetings
+            )
+        }
+    )
+    report = nine_report.model_copy(
+        update={
+            "games": tuple(
+                bad_game if g.game_id == game.game_id else g for g in nine_report.games
+            )
+        }
+    )
+    check = check_no_betrayal(report)
+    assert check.passed
+    assert not check.violations
 
 
 def test_betrayal_vacuous_on_single_impostor(nine_report: TournamentReport) -> None:
@@ -715,7 +768,7 @@ def test_run_validity_gate_reproduces_9p2i_close() -> None:
     assert report.failing_checks() == ()
     facts = {c.name: c.facts for c in report.checks}
     assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 1.0
-    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 142
+    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 139
 
 
 def test_run_validity_gate_reproduces_4p1i_close() -> None:

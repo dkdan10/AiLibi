@@ -307,9 +307,40 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
             testimony_backed_conversion=0.32432432432432434,
         ),
     },
+    # Task 15.7 baseline-3 record (Qwen/Qwen3-32B, qwen3_32b.v5 + vote_ballot v6,
+    # the 6-lever Wave-0 substrate). The floors are baseline 3's OWN measured
+    # supply, so it passes at equality; a later candidate that produces less
+    # evidence than baseline 3 fails. Findings vs baseline 2: 9p2i witnessed-kill
+    # rate and flags/meeting fell slightly (fewer contradiction flags, fewer
+    # crew-witnessed kills) while testimony-backed conversion ROSE (0.44 -> 0.61)
+    # — the held evidence that IS present converts better (the Wave-0 vent/reporter
+    # substrate). Directions are findings, not pass bars (the Phase-14 doctrine).
+    "baseline-3": {
+        # Measured on replays/samples/9p2i (baseline 3):
+        #   witnessed_event_rate        = 5/154  = 0.032467532467532464 (crew-witnessed kills; §6)
+        #   flags_per_meeting           = 259/139 = 1.8633093525179856
+        #   testimony_backed_conversion = 71/117 = 0.6068376068376068 (OBSERVATION-BACKED)
+        "9p2i": SupplyFloors(
+            witnessed_event_rate=0.032467532467532464,
+            flags_per_meeting=1.8633093525179856,
+            testimony_backed_conversion=0.6068376068376068,
+        ),
+        # Measured on replays/samples/4p1i (baseline 3):
+        #   witnessed_event_rate        = 1/55  = 0.01818181818181818
+        #   flags_per_meeting           = 14/13 = 1.0769230769230769
+        #   testimony_backed_conversion = 3/5   = 0.6 (OBSERVATION-BACKED)
+        "4p1i": SupplyFloors(
+            witnessed_event_rate=0.01818181818181818,
+            flags_per_meeting=1.0769230769230769,
+            testimony_backed_conversion=0.6,
+        ),
+    },
 }
 
-_DEFAULT_BASELINE_ID: Final[str] = "baseline-2"
+# baseline 3 is the committed canonical set since Task 15.7, so a bare
+# ``measure_baseline.py --watchability`` (and the 15.15 harness's default) reads
+# baseline 3's own floors — the referee accepts the committed bytes at equality.
+_DEFAULT_BASELINE_ID: Final[str] = "baseline-3"
 
 
 @dataclass(frozen=True)
