@@ -21,7 +21,10 @@ instead of forecasts. Inputs (all machine-readable, all reproducible by the comm
 `results-impostor-bakeoff.jsonl` + `results-crew-track.jsonl` + `report-torch-probe.md` (per-entrant
 gate/referee/fitness/KL/determinism/cost), `report-ballot-surrogate.md` (fidelity vs honest ceiling +
 verdict), `report-goodhart-probe.md` (+ the 15.15 surrogate-path re-run), the corpus MANIFESTs + gate
-outputs, and the Wave-0 close audit (the funnel deltas the whole phase now stands on). Plus ONE fresh
+outputs, and the Wave-0 close audit (the funnel deltas the whole phase now stands on — including its
+§5 watch items, which this audit must SETTLE, not re-flag: the 4p1i eject-happiness uptick
+(report-meeting ejections 10 → 22, accuracy 0.923 → 0.808 at the 15.7 re-record) is adjudicated
+variance-or-shift against the corpus's fresh 50-seed 4p1i evidence via the committed CLIs). Plus ONE fresh
 measurement this task runs: the operator-run REAL-LLM finalist evaluation — the top 1–2 bake-off
 candidates re-recorded on the canonical 50-seed 9p2i set against `Qwen/Qwen3-32B` (Featherless $0,
 ~2.5h per finalist), scored by `scripts/validity_gate.py` + `scripts/measure_baseline.py
@@ -59,6 +62,7 @@ merge-criteria placeholder with the real criteria for the chosen deployment bran
 - [ ] All seven decisions are recorded with owner sign-off and rationale, including the NO paths (what was rejected and why).
 - [ ] The Wave-2 contracts are authored into this file per the chosen branch, `uv run python scripts/validate_task_docs.py` + `uv run python scripts/generate_prompts.py --check` pass with the new contracts, and the STATUS banner + end-of-phase merge criteria reflect the decisions.
 - [ ] The pause explicitly re-verdicts the referee: the Goodhart probe's findings (both runs) either cleared or their floors are contracted into Wave 2 before any champion selection uses the referee.
+- [ ] The Wave-0 close audit's §5 watch items are settled by data, not carried forward: the 4p1i eject-happiness cell is re-measured on the corpus's 4p1i set (funnel + R-gate via the committed CLIs) and the audit states variance-or-shift with the numbers; if a real shift, its Wave-2 implication (if any) is recorded in the decisions.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.

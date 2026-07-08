@@ -1,19 +1,23 @@
 # Phase 15 — Evidence substrate, then machine-learned tactical policies (Wave 0: cleanup → baseline 3; Wave 1: ML signal, harness, bake-off → PAUSE → Wave 2: productize)
 
-> **STATUS: AUTHORING (2026-07-05, restructured same day).** Wave 0 + Wave 1 + the PAUSE (Tasks
-> 15.1–15.18) are contracted below and dispatchable. Wave 2 exists only as a prose sketch at the bottom
-> of this file; its task contracts are authored BY Task 15.18 at the mid-phase pause (the Phase-7
-> precedent: later waves' contracts are appended only after earlier waves clear their gate). Roadmap
-> context: `tasks/post-phase-14-plan.md`. Wave 0's evidence base and target sheet:
-> `tasks/post-phase-14-clean-up.md`.
+> **STATUS: IN FLIGHT (updated 2026-07-08).** **Wave 0 is CLOSED on baseline 3** — both measured
+> holes shut (structured vents 0 → 55, innocent-reporter ejections 22 → 4), both canaries UP, gate +
+> referee PASS: `audits/audit-phase-15-wave0-close.md`. `replays/samples/` now IS baseline 3 (the
+> baseline-2 bytes survive in git history at `adca07f`; their final measurement is committed as
+> `audits/baseline2-final-measure.json`). Wave 1 + the PAUSE (Tasks 15.8–15.18) are dispatching.
+> Wave 2 exists only as a prose sketch at the bottom of this file; its task contracts are authored BY
+> Task 15.18 at the mid-phase pause (the Phase-7 precedent: later waves' contracts are appended only
+> after earlier waves clear their gate). Roadmap context: `tasks/post-phase-14-plan.md`. Wave 0's
+> evidence base and target sheet: `tasks/post-phase-14-clean-up.md`.
 
 Goal: give the agents machine-learned intelligence in the deterministic, LLM-free layer BETWEEN meetings
 — kill timing, witness avoidance, cooldown stalking, cover/vent play, buddy/patrol movement — replacing
 or augmenting the scripted FSMs in `agents/tactical/`, **on top of a first-fixed evidence substrate**.
 The LLM meeting layer's protocol stays frozen; Wave 0 repairs two measured holes in what that layer can
 SEE, because a policy optimizer farms whatever holes the fitness landscape contains. Phase 14 closed on
-baseline 2 (`replays/samples/{9p2i,4p1i}`, `Qwen/Qwen3-32B` Featherless $0, `qwen3_32b.v4`, all five
-substrate levers unconditionally ON — `audits/audit-phase-14-close.md`). A first-principles measurement
+baseline 2 (`Qwen/Qwen3-32B` Featherless $0, `qwen3_32b.v4`, all five substrate levers unconditionally
+ON — `audits/audit-phase-14-close.md`; those bytes lived in `replays/samples/{9p2i,4p1i}` until the
+15.7 re-record and survive in git history at `adca07f`). A first-principles measurement
 of those committed bytes (2026-07-05, reproduced by Task 15.3; full table in
 `tasks/post-phase-14-clean-up.md` §2) found the game is information-RICH but aggregation-LOSSY: pooled
 crew sightings narrow ~8 suspects to a median of 3 (narrowed to one candidate in 38/129 report
@@ -1660,7 +1664,10 @@ instead of forecasts. Inputs (all machine-readable, all reproducible by the comm
 `results-impostor-bakeoff.jsonl` + `results-crew-track.jsonl` + `report-torch-probe.md` (per-entrant
 gate/referee/fitness/KL/determinism/cost), `report-ballot-surrogate.md` (fidelity vs honest ceiling +
 verdict), `report-goodhart-probe.md` (+ the 15.15 surrogate-path re-run), the corpus MANIFESTs + gate
-outputs, and the Wave-0 close audit (the funnel deltas the whole phase now stands on). Plus ONE fresh
+outputs, and the Wave-0 close audit (the funnel deltas the whole phase now stands on — including its
+§5 watch items, which this audit must SETTLE, not re-flag: the 4p1i eject-happiness uptick
+(report-meeting ejections 10 → 22, accuracy 0.923 → 0.808 at the 15.7 re-record) is adjudicated
+variance-or-shift against the corpus's fresh 50-seed 4p1i evidence via the committed CLIs). Plus ONE fresh
 measurement this task runs: the operator-run REAL-LLM finalist evaluation — the top 1–2 bake-off
 candidates re-recorded on the canonical 50-seed 9p2i set against `Qwen/Qwen3-32B` (Featherless $0,
 ~2.5h per finalist), scored by `scripts/validity_gate.py` + `scripts/measure_baseline.py
@@ -1698,6 +1705,7 @@ merge-criteria placeholder with the real criteria for the chosen deployment bran
 - [ ] All seven decisions are recorded with owner sign-off and rationale, including the NO paths (what was rejected and why).
 - [ ] The Wave-2 contracts are authored into this file per the chosen branch, `uv run python scripts/validate_task_docs.py` + `uv run python scripts/generate_prompts.py --check` pass with the new contracts, and the STATUS banner + end-of-phase merge criteria reflect the decisions.
 - [ ] The pause explicitly re-verdicts the referee: the Goodhart probe's findings (both runs) either cleared or their floors are contracted into Wave 2 before any champion selection uses the referee.
+- [ ] The Wave-0 close audit's §5 watch items are settled by data, not carried forward: the 4p1i eject-happiness cell is re-measured on the corpus's 4p1i set (funnel + R-gate via the committed CLIs) and the audit states variance-or-shift with the numbers; if a real shift, its Wave-2 implication (if any) is recorded in the decisions.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
 - [ ] `uv run lint-imports` passes.
