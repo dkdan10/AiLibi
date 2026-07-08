@@ -31,5 +31,12 @@ replays/tournament-eval-report.json
 # it is never accidentally committed with the re-recorded samples.
 replays/samples/.ailibi-refresh-stage-*/
 
+# Transient per-set staging dir (scripts/record_ml_corpus.sh, Task 15.12): the
+# atomic stage + parallel-worker queue/state live under the set dir and are
+# removed by the recorder's RETURN trap. A Featherless corpus record runs for
+# hours with 2 workers, so this dir lingers long enough to surface as untracked —
+# ignore it so a mid-run checkpoint never commits in-flight staging junk.
+.ailibi-corpus-stage-*/
+
 # Design-thread local working docs (not committed; the canonical plan lives in tasks/ + memory)
 *.local.md
