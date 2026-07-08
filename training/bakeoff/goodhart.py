@@ -7,16 +7,22 @@ core (:mod:`training.bakeoff.es`) DIRECTLY on the referee score — the
 deliberately-forbidden objective (``eval/watchability.py`` SELECTION-ONLY DOCTRINE)
 — and reports what a tactical genome can extract.
 
-WHAT IS OPTIMIZED. The fitness is the full referee output over a fixed replay SET
-generated on the training env (:class:`training.env.TacticalRolloutEnv`) with
-fake-provider meetings: ``mean_score`` (the D1-D4 floor-gated geomean, averaged
-over the K fitness seeds) when the HARD validity gate
-(:func:`eval.validity.run_validity_gate`) passes, else a rejecting penalty. The
-validity gate is the ONLY constraint; the referee's own two layers (the per-game
-integrity floor + the set-level evidence-supply floors) are part of the objective
-under attack, exactly as the doctrine forbids. Averaging over the K seeds is the
-ES core's K-seed averaging done set-level by the referee's own per-game mean
-(equivalent to :func:`training.bakeoff.es.k_seed_mean` over the per-game scores).
+WHAT IS OPTIMIZED. The fitness is the full COMPOSED referee over a fixed replay
+SET generated on the training env (:class:`training.env.TacticalRolloutEnv`) with
+fake-provider meetings (:func:`_composed_referee_fitness`): when the HARD validity
+gate (:func:`eval.validity.run_validity_gate`) — the ONLY constraint — passes,
+``mean_score`` (the D1-D4 floor-gated geomean, averaged over the K fitness seeds)
+PLUS a dominating bonus iff the whole referee passes (``referee_passed`` = the
+set-level evidence-supply floors AND integrity). So the ES targets the full
+champion-selection referee, not the Layer-2 geomean alone — a genome that CLEARS
+the gate outranks any geomean-only candidate — with the geomean as the tie-break
+among the genomes that fail the gate. Under fake meetings the supply floors never
+clear, so the bonus is 0 for every genome and the fitness equals ``mean_score``;
+the composition is what makes the surrogate-path re-run (Task 15.15, where the
+floors CAN clear) hunt for a genome that actually launders past the gate.
+Averaging over the K seeds is the ES core's K-seed averaging done set-level by the
+referee's own per-game mean (equivalent to
+:func:`training.bakeoff.es.k_seed_mean` over the per-game scores).
 
 THE ATTACK SURFACE (the implementation hint). FO-3
 (``experiments/lab/ml_spike/fo3_rubric_goodhart.py``) already showed tactical play
@@ -46,10 +52,10 @@ from __future__ import annotations
 import json
 import math
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict
 
@@ -68,8 +74,15 @@ from observation.action_intent import (
     SabotageIntent,
     WaitIntent,
 )
+from orchestrator.game import MeetingRunner
 from training.bakeoff.es import ESConfig, ESResult, evolve
 from training.env import IntentSelector, MaskedDecision, TacticalRolloutEnv
+
+# A factory for the meeting runner the probe scores under. ``None`` (the default)
+# is the env's fake-provider runner (this task's scoping). Task 15.15 threads the
+# 15.13 learned surrogate factory through here to discharge the re-run obligation
+# via THIS probe path — no duplicate evaluator.
+MeetingRunnerFactory: TypeAlias = Callable[[], MeetingRunner]
 
 # --------------------------------------------------------------------------- #
 # The packet-only genome policy: features -> tactic MLP -> a legal intent.      #
@@ -239,6 +252,39 @@ def _forced_genome(tactic: str) -> tuple[float, ...]:
 # the referee's own integrity floor already zeroes non-reconstructing sets.
 _INVALID_FITNESS: Final[float] = -1.0
 
+# The bonus added when a set clears the COMPOSED referee (referee_passed = the
+# supply-floor gate AND integrity). Larger than any attainable geomean (score is
+# capped at 100), so the ES optimizes the FULL champion-selection referee, not the
+# Layer-2 geomean alone: a genome that PASSES the gate is preferred over ANY
+# geomean-only candidate, and the geomean is only the tie-break among the
+# (many) genomes that fail the gate. Under fake meetings the meeting-driven supply
+# floors are un-clearable, so this bonus is 0 for every genome and the fitness
+# degrades to mean_score — but the objective is now faithfully the composed
+# referee, so a surrogate-path re-run (where the floors CAN clear) will prefer a
+# lower-geomean champion that actually launders past the gate.
+_REFEREE_PASS_BONUS: Final[float] = 1000.0
+
+
+def _composed_referee_fitness(
+    watchability: WatchabilityReport, validity_passed: bool
+) -> float:
+    """The fitness under attack — the COMPOSED referee, validity-gated.
+
+    ``_INVALID_FITNESS`` when the only constraint (the HARD validity gate) fails;
+    otherwise ``mean_score`` PLUS ``_REFEREE_PASS_BONUS`` iff the whole referee
+    passes (supply-floor gate AND integrity). So the ES targets the full
+    champion-selection referee — a genome that CLEARS the gate outranks any
+    geomean-only candidate — with the geomean as the tie-break among the genomes
+    that fail the gate. Under fake meetings the gate never clears, so this equals
+    ``mean_score`` for every genome (today's report is unchanged); the composition
+    matters once the surrogate opens the meeting-driven floors at Task 15.15.
+    """
+
+    if not validity_passed:
+        return _INVALID_FITNESS
+    bonus = _REFEREE_PASS_BONUS if watchability.referee_passed else 0.0
+    return watchability.mean_score + bonus
+
 
 @dataclass(frozen=True)
 class _SetEvaluation:
@@ -309,12 +355,16 @@ class _RefereeAttackEvaluator:
         tasks_per_crewmate: int,
         fitness_seeds: Sequence[int],
         baseline_id: str,
+        meeting_runner_factory: MeetingRunnerFactory | None = None,
     ) -> None:
         self._num_players = num_players
         self._num_impostors = num_impostors
         self._tasks_per_crewmate = tasks_per_crewmate
         self._seeds = tuple(fitness_seeds)
         self._baseline_id = baseline_id
+        # None => the env's fake-provider runner (this task). Task 15.15 passes the
+        # 15.13 surrogate factory so the re-run opens the meeting-controlled terms.
+        self._meeting_runner_factory = meeting_runner_factory
         self._cache: dict[tuple[float, ...], _SetEvaluation] = {}
 
     def _roster_json(self, directory: Path) -> None:
@@ -343,6 +393,7 @@ class _RefereeAttackEvaluator:
                 tasks_per_crewmate=self._tasks_per_crewmate,
                 intent_selector=selector,
                 output_dir=directory,
+                meeting_runner_factory=self._meeting_runner_factory,
             )
             for seed in self._seeds:
                 env.rollout(seed)
@@ -355,7 +406,7 @@ class _RefereeAttackEvaluator:
             )
             validity = run_validity_gate(directory)
         evaluation = _SetEvaluation(
-            fitness=(watchability.mean_score if validity.passed else _INVALID_FITNESS),
+            fitness=_composed_referee_fitness(watchability, validity.passed),
             watchability=watchability,
             validity_passed=validity.passed,
         )
@@ -634,12 +685,16 @@ def run_goodhart_probe(
     tasks_per_crewmate: int,
     baseline_id: str = "baseline-3",
     materiality_bar: float = 0.25,
+    meeting_runner_factory: MeetingRunnerFactory | None = None,
 ) -> GoodhartProbeReport:
     """Run the probe: ES on the referee score, then the trust verdict (Task 15.14).
 
     ``materiality_bar`` is the RELATIVE geomean gain (champion vs scripted-FSM
     baseline ``mean_score``) above which a decomposed gain is reported as an
-    exploit rather than chaotic-fitness noise. Deterministic under ``config.seed``
+    exploit rather than chaotic-fitness noise. ``meeting_runner_factory`` defaults
+    to the env's fake-provider runner (this task's scoping); Task 15.15 passes the
+    15.13 learned surrogate factory to discharge the surrogate-path re-run
+    obligation through this SAME probe path. Deterministic under ``config.seed``
     (the env + referee are pure functions of the seed).
     """
 
@@ -649,6 +704,7 @@ def run_goodhart_probe(
         tasks_per_crewmate=tasks_per_crewmate,
         fitness_seeds=config.fitness_seeds,
         baseline_id=baseline_id,
+        meeting_runner_factory=meeting_runner_factory,
     )
 
     baseline = evaluator.evaluate_set(None)
@@ -867,8 +923,14 @@ def _build_exploits(
             )
         )
 
+    # The strongest ADMISSIBLE reachable score: the probe is validity-gated, so a
+    # validity-failing candidate (e.g. a stall-to-clock set that trips the meeting-
+    # rate floor) is not a reachable attack and must not be reported as the
+    # strongest — even if its raw geomean is high. Ranks the baseline + the
+    # validity-passing candidates only.
     strongest_score = max(
-        baseline_score, max(candidate.score for candidate in candidates)
+        [baseline_score]
+        + [candidate.score for candidate in candidates if candidate.validity_passed]
     )
 
     material = [

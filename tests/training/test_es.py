@@ -131,6 +131,26 @@ def test_evolve_respects_initial_genome() -> None:
     assert result.champion_fitness == 0.0
 
 
+def test_evolve_rejects_non_finite_fitness() -> None:
+    # A shared optimizer must fail loud on NaN/inf fitness (bad downstream reward
+    # math) rather than record a meaningless champion / poisoned digest.
+    config = ESConfig(
+        generations=3, population=3, sigma=0.2, seed=0, fitness_seeds=(0,)
+    )
+    with pytest.raises(ValueError):
+        evolve(lambda genome: float("nan"), genome_length=2, config=config)
+
+    # A non-finite fitness that appears only for an offspring is also caught.
+    calls = {"n": 0}
+
+    def fitness_nan_after_first(genome: tuple[float, ...]) -> float:
+        calls["n"] += 1
+        return 0.0 if calls["n"] == 1 else float("inf")
+
+    with pytest.raises(ValueError):
+        evolve(fitness_nan_after_first, genome_length=2, config=config)
+
+
 def test_evolve_rejects_bad_lengths() -> None:
     config = ESConfig(
         generations=1, population=1, sigma=0.1, seed=0, fitness_seeds=(0,)

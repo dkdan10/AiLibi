@@ -180,6 +180,23 @@ def _random_genome(length: int, *, seed: int, scale: float) -> tuple[float, ...]
     return tuple(rng.gauss(0.0, scale) for _ in range(length))
 
 
+def _finite_fitness(value: float, *, context: str) -> float:
+    """Fail loud on a non-finite fitness (AGENTS.md no silent fallbacks).
+
+    A ``NaN`` / ``inf`` fitness from a downstream reward (a divide-by-zero term,
+    an ``exp`` overflow) would poison selection — ``NaN`` breaks the ``key <
+    best_offspring_key`` tuple ordering and silently corrupts the champion, trace,
+    and digest. The ES core refuses it rather than record a meaningless champion.
+    """
+
+    if not math.isfinite(value):
+        raise ValueError(
+            f"fitness returned a non-finite value {value!r} for {context}; a shared "
+            "optimizer refuses NaN/inf fitness rather than corrupt the champion trace"
+        )
+    return value
+
+
 def evolve(
     fitness: FitnessFn,
     *,
@@ -214,7 +231,7 @@ def evolve(
                 f"{genome_length}"
             )
 
-    champion_fitness = fitness(champion)
+    champion_fitness = _finite_fitness(fitness(champion), context="initial genome")
     num_evaluations = 1
     fitness_trace: list[float] = [champion_fitness]
     champion_trace: list[tuple[float, ...]] = [champion]
@@ -233,7 +250,10 @@ def evolve(
                 seed=_derive_seed(config.seed, generation, member),
                 sigma=config.sigma,
             )
-            value = fitness(candidate)
+            value = _finite_fitness(
+                fitness(candidate),
+                context=f"generation {generation} member {member}",
+            )
             num_evaluations += 1
             key = (-value, candidate)
             if best_offspring_key is None or key < best_offspring_key:

@@ -4,10 +4,15 @@
 (`eval/watchability.py::compute_watchability` — Task 15.2, with the baseline-3
 evidence-supply floors from Task 15.7).
 **Method:** run the shared ES core (`training/bakeoff/es.py`) DIRECTLY on the
-referee score — the deliberately-forbidden objective (the SELECTION-ONLY DOCTRINE,
-`audits/post-phase-14-ML-training-signal.md` §3.2; the un-run charter guardrail
-§7.1.9; `experiments/lab/ml-spike-charter.md` gap 3) — plus a systematic
-single-tactic reachability sweep, and decompose everything that moves.
+COMPOSED referee — the deliberately-forbidden objective (the SELECTION-ONLY
+DOCTRINE, `audits/post-phase-14-ML-training-signal.md` §3.2; the un-run charter
+guardrail §7.1.9; `experiments/lab/ml-spike-charter.md` gap 3) — plus a systematic
+single-tactic reachability sweep, and decompose everything that moves. The fitness
+is the composed referee: `referee_passed` (the supply-floor gate AND integrity) is
+a dominating bonus term, with the Layer-2 `mean_score` geomean as the tie-break
+among the genomes that fail the gate — so the ES hunts for a genome that clears the
+whole gate first, and only maximizes the geomean because (under fake meetings) none
+can. It is NOT the geomean alone.
 **Anchors:** `experiments/lab/ml_spike/fo3_rubric_goodhart.py` (the prior probe
 shape); `audits/post-phase-14-ML-planning.md` §12.2 (reward-hacking guards).
 **Scoping:** the training env (`training/env.py::TacticalRolloutEnv`) on
