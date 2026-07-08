@@ -12,7 +12,6 @@ in Phase 3 (Task 3.3).
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
@@ -175,44 +174,42 @@ def evidence_quality_lift_enabled(env: Mapping[str, str] | None = None) -> bool:
     return True
 
 
-# Task 15.5 reporter-exculpation lever — DEFAULT-OFF (the 13.5/14.10 toggle
-# pattern, still env-gated, NOT retired). Unlike the five levers above, this one
-# stays a live toggle registered in ``orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS``
-# and stamped per-recording: OFF (the default) is byte-identical to the committed
-# baseline-2 substrate, and 15.7 records baseline 3 with it measured live.
+# Task 15.5 reporter-exculpation lever — UNCONDITIONAL since the Task-15.7
+# baseline-3 record (the Wave-0 close). The lever was adopted by the baseline-3
+# re-record, so — mirroring the Task-14.9/14.12 graduation of the five earlier
+# levers — it is now the default substrate rather than an env-gated toggle: the
+# reporter suspicion-damp and the vote-surface base-rate annotation always apply.
+# This is byte-identical to the baseline-3 recording (which ran the lever ON), and
+# it lets the committed set reconstruct/serve under a BARE environment (no AILIBI_*
+# export) — discharging the C6 recording-preflight hazard: no lever env for an
+# operator to forget, and no gap between the stamped flags and the code's bare
+# behavior. The lever is stamped unconditionally ON via
+# ``orchestrator.replay._RETIRED_ALWAYS_ON_LEVERS``; a stamp recording it OFF is a
+# legacy (baseline-2) artifact that fails loud (no cross-substrate replay).
+# ``ENV_REPORTER_EXCULPATION`` is retained (no longer read) for the stamp key's
+# naming provenance and backward-compatible imports.
 ENV_REPORTER_EXCULPATION: Final[str] = "AILIBI_REPORTER_EXCULPATION"
-_REPORTER_EXCULPATION_FLAG_TRUE: Final[frozenset[str]] = frozenset(
-    {"1", "true", "yes", "on"}
-)
 
 
 def reporter_exculpation_enabled(env: Mapping[str, str] | None = None) -> bool:
-    """Whether the Task 15.5 reporter-exculpation lever is ON. DEFAULT OFF.
+    """Whether the Task 15.5 reporter-exculpation lever is ON — now always True.
 
-    Reads :data:`ENV_REPORTER_EXCULPATION` from ``env`` (defaulting to the real
-    process environment), mirroring the retired 13.5 / 14.10 resolvers and
-    :func:`agents.strategic.prompts.loader.resolve_prompt_set`. Default OFF: an
-    unset / empty / unrecognised value is ``False`` so the belief fold and the
-    vote-ballot render stay byte-identical to the committed baseline-2 substrate
-    (``scripts/verify_samples.sh`` reconstructs clean) — the live re-record under
-    the lever is Task 15.7. Accepts ``1/true/yes/on`` (case-insensitive). The
-    ``env`` argument lets tests + the offline counterfactual toggle the lever
-    deterministically without mutating ``os.environ``.
-
-    ON gates the reporter-damp in :func:`apply_meeting_evidence_rules` (the
-    ``pre_vote`` soft accusation lift against a body-report meeting's own reporter
-    is capped at :data:`REPORTER_EXCULPATION_SOFT_LIFT_CAP`) and, on the render
-    side, the base-rate annotation the vote-ballot template surfaces. The HARD
-    channels (:func:`apply_contradiction_rule` strong flags; the witnessed
-    vent/kill perception pins) are never gated by it — a reporter caught by a real
-    contradiction or a vent/kill flag stays convictable.
+    Retired to UNCONDITIONAL at the Task-15.7 baseline-3 record (the 14.9/14.12
+    move for the earlier levers, applied to this lever once baseline 3 adopted
+    it): the reporter soft-lift damp in :func:`apply_meeting_evidence_rules` (the
+    ``pre_vote`` accusation lift against a body-report meeting's own reporter,
+    capped at :data:`REPORTER_EXCULPATION_SOFT_LIFT_CAP`) and, on the render side,
+    the base-rate annotation the vote-ballot template surfaces are the default
+    substrate. The HARD channels (:func:`apply_contradiction_rule` strong flags;
+    the witnessed vent/kill perception pins) are still never gated by it — a
+    reporter caught by a real contradiction or a vent/kill flag stays convictable.
+    The ``env`` argument is accepted and ignored (retained so the belief-fold call
+    sites and the substrate stamp read one source of truth without a signature
+    churn).
     """
 
-    environment = env if env is not None else os.environ
-    return (
-        environment.get(ENV_REPORTER_EXCULPATION, "").strip().lower()
-        in _REPORTER_EXCULPATION_FLAG_TRUE
-    )
+    del env  # retired: the lever is unconditional, no environment is consulted
+    return True
 
 
 REPORTER_EXCULPATION_SOFT_LIFT_CAP: Final[float] = 0.0
@@ -220,13 +217,13 @@ REPORTER_EXCULPATION_SOFT_LIFT_CAP: Final[float] = 0.0
 body-report meeting's own REPORTER (Task 15.5; tasks/post-phase-14-clean-up.md
 H5; audit-phase-14-close.md §4).
 
-Applied only behind the default-OFF :func:`reporter_exculpation_enabled` lever,
-and only in the ``pre_vote`` half of the fold (the transient vote-time graph the
-ballot reads — the deciding-lift channel), so OFF and the persistent across-meeting
-absorb are both byte-identical. When ON, a reporter's accusation-driven pre-vote
-bump -- the flat single-voice :data:`ACCUSATION_SUSPICION_DELTA` accusation-carry
-AND the graduated :func:`graduated_spread_delta` testimony-spread -- is capped at
-this value. At ``0.0`` the reporter takes NO soft lift: proximity-at-discovery no
+Applied behind the now-unconditional :func:`reporter_exculpation_enabled` lever
+(graduated to always-on at the Task-15.7 baseline-3 record), and only in the
+``pre_vote`` half of the fold (the transient vote-time graph the ballot reads — the
+deciding-lift channel), so the persistent across-meeting absorb is untouched. A
+reporter's accusation-driven pre-vote bump -- the flat single-voice
+:data:`ACCUSATION_SUSPICION_DELTA` accusation-carry AND the graduated
+:func:`graduated_spread_delta` testimony-spread -- is capped at this value. At ``0.0`` the reporter takes NO soft lift: proximity-at-discovery no
 longer reads as guilt on its own. The HARD channels are untouched by construction
 (this cap lives in the accusation-bump loop; :func:`apply_contradiction_rule` and
 the witnessed vent/kill perception pins never pass through it), so a reporter
@@ -1132,19 +1129,20 @@ def apply_meeting_evidence_rules(
     the legitimate 9.8 channel and stays untouched (lever ON or OFF). OFF is
     byte-identical to the pre-14.10 fold.
 
-    **Reporter exculpation (Task 15.5; default-OFF; H5 / audit-phase-14-close
-    §4).** ``reporter`` names the body-report meeting's own reporter (the
-    manager threads :attr:`meetings.manager.MeetingTrigger.triggered_by` for a
-    body report; ``None`` for an emergency call or any non-vote-time caller).
-    With the default-OFF :func:`reporter_exculpation_enabled` lever ON
-    (``env``-resolved) the reporter's ``pre_vote`` accusation-driven bump -- the
-    flat single-voice accusation-carry AND the graduated testimony-spread -- is
-    capped at :data:`REPORTER_EXCULPATION_SOFT_LIFT_CAP` (0.0), removing the
+    **Reporter exculpation (Task 15.5; unconditional since Task 15.7; H5 /
+    audit-phase-14-close §4).** ``reporter`` names the body-report meeting's own
+    reporter (the manager threads
+    :attr:`meetings.manager.MeetingTrigger.triggered_by` for a body report;
+    ``None`` for an emergency call or any non-vote-time caller). Under the
+    now-unconditional :func:`reporter_exculpation_enabled` lever the reporter's
+    ``pre_vote`` accusation-driven bump -- the flat single-voice accusation-carry
+    AND the graduated testimony-spread -- is capped at
+    :data:`REPORTER_EXCULPATION_SOFT_LIFT_CAP` (0.0), removing the
     proximity-at-discovery prior that read the always-at-the-body reporter as
     guilty (22/106 innocent-reporter ejections on baseline 2). ONLY the
     ``pre_vote`` transient half is damped -- the persistent post-vote / composed
     absorb never receives a ``reporter`` (the game.py absorb passes none), so the
-    across-meeting channel is untouched and OFF is byte-identical. The damp is
+    across-meeting channel is untouched. The damp is
     the accusation-bump loop's tightest cap, applied AFTER the 14.10 ceiling, so
     it composes with (never bypasses) the existing caps and the downstream
     :func:`meetings.manager._joint_capped_suspicion`. The HARD channels are

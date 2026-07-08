@@ -1,13 +1,18 @@
-"""Reporter-exculpation vote-surface render threading (Task 15.5).
+"""Reporter-exculpation vote-surface render threading (Task 15.5; graduated to
+unconditional at Task 15.7).
 
-The render half of the default-OFF ``reporter_exculpation`` lever
+The render half of the ``reporter_exculpation`` lever
 (tasks/post-phase-14-clean-up.md H5): the manager threads the body-report
 meeting's reporter (``MeetingTrigger.triggered_by`` -- the meeting-scope
 identity, never re-derived from the transcript) into the vote-ballot renderer's
-DEFAULTED ``reporter_id`` input ONLY when the lever is ON and the meeting is a
-body report, and the v6 ``vote_ballot`` template renders the self-report
-base-rate annotation only when it is supplied. Lever-OFF (the default) threads
-``None`` and the prompt is byte-identical.
+DEFAULTED ``reporter_id`` input for a body report, and the v6 ``vote_ballot``
+template renders the self-report base-rate annotation only when it is supplied.
+The lever graduated to unconditional-ON at the Task-15.7 baseline-3 record, so a
+body-report ballot ALWAYS carries the annotation and it is env-independent; an
+emergency call (no body-reporter) threads ``None`` and omits it. The
+``reporter_id=None`` template path (an emergency ballot, or any tooling caller)
+stays byte-identical to the un-annotated render -- the widen-the-contract-inert
+guarantee, pinned by ``TestReporterAnnotationTemplateBytes`` below.
 
 These tests drive the real ``_collect_one_ballot`` seam with the real qwen3_32b
 vote-ballot renderer, capturing both the threaded ``reporter_id`` and the
@@ -54,23 +59,18 @@ def _unused_prompt(*args: object, **kwargs: object) -> str:
 
 
 def _run_ballot(
-    monkeypatch: pytest.MonkeyPatch,
     *,
     trigger: MeetingTrigger,
-    lever_on: bool,
     voter: str = "p-3",
 ) -> tuple[list[PlayerId | None], str]:
     """Drive ``_collect_one_ballot`` and capture (threaded reporter_ids, prompt).
 
     The capturing renderer records the ``reporter_id`` the manager threads and
     delegates to the real qwen3_32b vote-ballot template, so the returned prompt
-    is the exact bytes a recording would log.
+    is the exact bytes a recording would log. The reporter_exculpation lever is
+    unconditional (Task 15.7), so the helper sets no env -- a body report always
+    threads the reporter and renders the annotation.
     """
-
-    if lever_on:
-        monkeypatch.setenv(_ENV_LEVER, "1")
-    else:
-        monkeypatch.delenv(_ENV_LEVER, raising=False)
 
     env = build_environment("qwen3_32b")
     real_vote = partial(vote_ballot_prompt, environment=env)
@@ -125,12 +125,8 @@ def _run_ballot(
 
 
 class TestReporterAnnotationThreading:
-    def test_lever_on_body_report_names_the_trigger_reporter(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        reporter_ids, prompt = _run_ballot(
-            monkeypatch, trigger=_BODY_REPORT, lever_on=True
-        )
+    def test_body_report_names_the_trigger_reporter(self) -> None:
+        reporter_ids, prompt = _run_ballot(trigger=_BODY_REPORT)
         # The threaded id is the trigger's reporter, NOT re-derived from the
         # (empty) transcript.
         assert reporter_ids == [_REPORTER]
@@ -138,26 +134,42 @@ class TestReporterAnnotationThreading:
         assert f"`{_REPORTER}` reported the body" in prompt
         assert "self-report is weakly exculpatory" in prompt
 
-    def test_lever_off_threads_none_and_omits_the_annotation(
+    def test_body_report_annotation_is_env_independent(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        reporter_ids, prompt = _run_ballot(
-            monkeypatch, trigger=_BODY_REPORT, lever_on=False
-        )
-        assert reporter_ids == [None]
-        assert _ANNOTATION_HEADER not in prompt
+        # Graduated to unconditional at Task 15.7: the annotation renders on a
+        # body report whatever AILIBI_REPORTER_EXCULPATION says (unset, "0", or
+        # "1") -- no env flips it off.
+        for value in (None, "0", "1"):
+            if value is None:
+                monkeypatch.delenv(_ENV_LEVER, raising=False)
+            else:
+                monkeypatch.setenv(_ENV_LEVER, value)
+            reporter_ids, prompt = _run_ballot(trigger=_BODY_REPORT)
+            assert reporter_ids == [_REPORTER]
+            assert _ANNOTATION_HEADER in prompt
 
-    def test_lever_on_off_prompts_differ_only_by_the_annotation(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # OFF must be byte-identical to the prompt the lever never touched.
-        _, off_prompt = _run_ballot(monkeypatch, trigger=_BODY_REPORT, lever_on=False)
-        _, on_prompt = _run_ballot(monkeypatch, trigger=_BODY_REPORT, lever_on=True)
-        assert off_prompt != on_prompt
-        # Rendering the same inputs with reporter_id=None reproduces the OFF
-        # bytes exactly (the widen-the-contract-inert guarantee).
+    def test_body_report_prompt_is_the_reporter_supplied_render(self) -> None:
+        # The manager threads exactly reporter_id=_REPORTER; the resulting prompt
+        # equals the reporter-supplied template render and differs from the
+        # reporter_id=None render by exactly the additive annotation.
+        _, body_prompt = _run_ballot(trigger=_BODY_REPORT)
         env = build_environment("qwen3_32b")
-        reference = vote_ballot_prompt(
+        annotated = vote_ballot_prompt(
+            voter_id="p-3",
+            rendered_memory="(memory)",
+            transcript=MeetingTranscript(turns=()),
+            contradiction_flags=(),
+            suspicion_graph=(
+                SuspicionEntry(player_id=_REPORTER, suspicion=0.5, trust=0.5),
+            ),
+            candidate_targets=("p-1", "p-4"),
+            skip_confidence_threshold=0.6,
+            fellow_impostor_ids=(),
+            reporter_id=_REPORTER,
+            environment=env,
+        )
+        none_render = vote_ballot_prompt(
             voter_id="p-3",
             rendered_memory="(memory)",
             transcript=MeetingTranscript(turns=()),
@@ -171,27 +183,21 @@ class TestReporterAnnotationThreading:
             reporter_id=None,
             environment=env,
         )
-        assert off_prompt == reference
+        assert body_prompt == annotated
+        assert body_prompt != none_render
+        assert _ANNOTATION_HEADER not in none_render
 
-    def test_lever_on_emergency_meeting_never_annotates(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_emergency_meeting_never_annotates(self) -> None:
         # An emergency call has no body-reporter; the exculpation must not assert
-        # a false "reporter at body" prior even with the lever ON.
-        reporter_ids, prompt = _run_ballot(
-            monkeypatch, trigger=_EMERGENCY, lever_on=True
-        )
+        # a false "reporter at body" prior even under the unconditional lever.
+        reporter_ids, prompt = _run_ballot(trigger=_EMERGENCY)
         assert reporter_ids == [None]
         assert _ANNOTATION_HEADER not in prompt
 
-    def test_lever_on_annotates_even_when_the_voter_is_the_reporter(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_annotates_even_when_the_voter_is_the_reporter(self) -> None:
         # The base-rate line is surfaced uniformly; a reporter voting on the
         # meeting they opened still sees it (names themselves).
-        reporter_ids, prompt = _run_ballot(
-            monkeypatch, trigger=_BODY_REPORT, lever_on=True, voter=_REPORTER
-        )
+        reporter_ids, prompt = _run_ballot(trigger=_BODY_REPORT, voter=_REPORTER)
         assert reporter_ids == [_REPORTER]
         assert _ANNOTATION_HEADER in prompt
 

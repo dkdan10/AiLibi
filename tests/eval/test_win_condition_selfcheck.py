@@ -117,15 +117,16 @@ def test_committed_4p1i_set_holds_the_invariant() -> None:
         if check.first_zero_impostor_tick is not None:
             eliminations += 1
             assert check.game_over_tick == check.first_zero_impostor_tick
-    # Ground truth of the Task 14.12 canonical re-record (baseline 2, prompts
-    # qwen3_32b.v4, evidence_quality_lift lever ON): on Qwen/Qwen3-32B the flat
-    # 4p/1i set ejects the impostor in 12 of 50 games (CREWMATE_EJECT) — matching
-    # the set's impostor_ejections=12 (ejection_accuracy 0.9231), and still a jump
-    # from the 9B baseline's four. Each elimination's first_zero == game_over tick
-    # is asserted above (the A-A-3 invariant, which still holds set-wide); this
-    # pins the count the re-record produced, so the §6.3 elimination path runs on
-    # the committed bytes, not only the hermetic apply_meeting_result eject tests.
-    assert eliminations == 12
+    # Ground truth of the Task 15.7 canonical re-record (baseline 3, prompts
+    # qwen3_32b.v5 + vote_ballot.v6, all six substrate levers unconditionally ON
+    # — reporter_exculpation graduated to always-on): on Qwen/Qwen3-32B the flat
+    # 4p/1i set ejects the impostor in 21 of 50 games (CREWMATE_EJECT) — matching
+    # the set's impostor_ejections=21 (ejection_accuracy 0.8077), up from
+    # baseline-2's twelve. Each elimination's first_zero == game_over tick is
+    # asserted above (the A-A-3 invariant, which still holds set-wide); this pins
+    # the count the re-record produced, so the §6.3 elimination path runs on the
+    # committed bytes, not only the hermetic apply_meeting_result eject tests.
+    assert eliminations == 21
 
 
 def _roster(replay_dir: Path) -> tuple[int, int, int]:

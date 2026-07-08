@@ -1,6 +1,6 @@
 """Tests for scripts/measure_baseline.py (Task 15.1).
 
-Pins the R-gate baseline-2 numbers EXACTLY from the committed bytes (any mismatch
+Pins the R-gate baseline-3 numbers EXACTLY from the committed bytes (any mismatch
 is a task failure, not a number to retrofit) and covers the CLI surface: default
 two-set run, explicit dir, ``--json``, and the usage-error path.
 """
@@ -19,45 +19,45 @@ _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
 
 
-def test_9p2i_reproduces_baseline_2_exactly() -> None:
+def test_9p2i_reproduces_baseline_3_exactly() -> None:
     report = measure_baseline.measure_baseline(_NINE)
     assert report.games_total == 50
-    # R1 eject-decided win share 24/50.
-    assert report.r1_eject_decided_wins == 24
+    # R1 eject-decided win share 34/50.
+    assert report.r1_eject_decided_wins == 34
     # Reason histogram exact (ordered desc by count).
     assert report.reason_histogram == {
-        "CREWMATE_EJECT": 24,
-        "IMPOSTOR_PARITY": 20,
-        "CREWMATE_TASKS": 6,
+        "CREWMATE_EJECT": 34,
+        "IMPOSTOR_PARITY": 15,
+        "CREWMATE_TASKS": 1,
     }
-    # Ejection accuracy 0.525 = 62 impostor / 56 crew of 118 ejections.
-    assert report.total_ejections == 118
-    assert report.impostor_ejections == 62
-    assert report.crewmate_ejections == 56
-    assert report.ejection_accuracy == pytest.approx(0.5254237288135594)
-    # Genuine-class conversion 0.625 (10/16).
-    assert report.genuine_class_supplied == 16
+    # Ejection accuracy 0.697 = 76 impostor / 33 crew of 109 ejections.
+    assert report.total_ejections == 109
+    assert report.impostor_ejections == 76
+    assert report.crewmate_ejections == 33
+    assert report.ejection_accuracy == pytest.approx(0.6972477064220184)
+    # Genuine-class conversion 0.769 (10/13).
+    assert report.genuine_class_supplied == 13
     assert report.genuine_class_converted == 10
-    assert report.genuine_class_conversion == pytest.approx(0.625)
-    # Impostor win 0.40; win split CREW 30 / IMP 20.
-    assert report.crew_wins == 30
-    assert report.impostor_wins == 20
-    assert report.impostor_win_rate == pytest.approx(0.40)
-    # Meeting rate 1.00 / 142 resolved.
+    assert report.genuine_class_conversion == pytest.approx(0.7692307692307693)
+    # Impostor win 0.30; win split CREW 35 / IMP 15.
+    assert report.crew_wins == 35
+    assert report.impostor_wins == 15
+    assert report.impostor_win_rate == pytest.approx(0.30)
+    # Meeting rate 1.00 / 139 resolved.
     assert report.meeting_rate == pytest.approx(1.0)
-    assert report.resolved_meetings == 142
+    assert report.resolved_meetings == 139
 
 
-def test_4p1i_reproduces_baseline_2_exactly() -> None:
+def test_4p1i_reproduces_baseline_3_exactly() -> None:
     report = measure_baseline.measure_baseline(_FOUR)
-    # Ejection accuracy 0.923 (12 impostor / 1 crew of 13).
-    assert report.total_ejections == 13
-    assert report.impostor_ejections == 12
-    assert report.crewmate_ejections == 1
-    assert report.ejection_accuracy == pytest.approx(0.9230769230769231)
-    # Genuine-class conversion 4/4.
-    assert report.genuine_class_supplied == 4
-    assert report.genuine_class_converted == 4
+    # Ejection accuracy 0.808 (21 impostor / 5 crew of 26).
+    assert report.total_ejections == 26
+    assert report.impostor_ejections == 21
+    assert report.crewmate_ejections == 5
+    assert report.ejection_accuracy == pytest.approx(0.8076923076923077)
+    # Genuine-class conversion 3/3.
+    assert report.genuine_class_supplied == 3
+    assert report.genuine_class_converted == 3
     assert report.genuine_class_conversion == pytest.approx(1.0)
     # Meeting rate 0.78 / 39.
     assert report.meeting_rate == pytest.approx(0.78)
@@ -72,8 +72,8 @@ def test_default_measures_both_canonical_sets(
     assert "9p2i" in out
     assert "4p1i" in out
     # The load-bearing numbers surface in the human output.
-    assert "24/50" in out
-    assert "0.5254" in out
+    assert "34/50" in out
+    assert "0.6972" in out
 
 
 def test_json_emits_array_of_reports(capsys: pytest.CaptureFixture[str]) -> None:
@@ -82,9 +82,9 @@ def test_json_emits_array_of_reports(capsys: pytest.CaptureFixture[str]) -> None
     assert isinstance(payload, list)
     assert len(payload) == 2
     nine = payload[0]
-    assert nine["ejection_accuracy"] == pytest.approx(0.5254237288135594)
-    assert nine["reason_histogram"]["CREWMATE_EJECT"] == 24
-    assert nine["r1_eject_decided_wins"] == 24
+    assert nine["ejection_accuracy"] == pytest.approx(0.6972477064220184)
+    assert nine["reason_histogram"]["CREWMATE_EJECT"] == 34
+    assert nine["r1_eject_decided_wins"] == 34
 
 
 def test_explicit_dir_measures_one_set(capsys: pytest.CaptureFixture[str]) -> None:
@@ -92,7 +92,7 @@ def test_explicit_dir_measures_one_set(capsys: pytest.CaptureFixture[str]) -> No
     payload = json.loads(capsys.readouterr().out)
     assert len(payload) == 1
     assert payload[0]["replay_set_dir"].endswith("4p1i")
-    assert payload[0]["ejection_accuracy"] == pytest.approx(0.9230769230769231)
+    assert payload[0]["ejection_accuracy"] == pytest.approx(0.8076923076923077)
 
 
 def test_report_json_round_trips() -> None:

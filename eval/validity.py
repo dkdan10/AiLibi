@@ -692,13 +692,26 @@ def check_no_friendly_fire_kills(kills: Sequence[_KillFact]) -> ValidityCheck:
 
 
 def check_no_betrayal(report: TournamentReport) -> ValidityCheck:
-    """No impostor ballot or accusation names a fellow impostor (§7.12 firewall).
+    """No impostor ballot or accusation names a FELLOW (other) impostor (§7.12 firewall).
 
     The Phase-14 close validity table (audits/audit-phase-14-close.md §1) carries
     ``betrayal ballots/accusations`` as a HARD row: the §7.12 firewall makes an
     impostor voting/accusing a teammate structurally absent, so a non-zero count
     on a multi-impostor set is a regression. Vacuously satisfied for a
     single-impostor set (no teammate exists to betray).
+
+    "Teammate" means a FELLOW impostor — a DIFFERENT one. The firewall the check
+    verifies drops targets in ``meetings.manager`` ``fellow_impostor_ids`` (Task
+    7.12), which is "the sorted ids of the OTHER impostors" (manager.py:496) —
+    self is deliberately excluded, because accusing/voting YOURSELF betrays no
+    teammate. So a SELF-target (``against == speaker`` / ``target == voter``) is
+    NOT a betrayal and is excluded here, matching the firewall's semantics. (A
+    self-accusation is a strategically-odd but firewall-clean model output: Task
+    15.7's baseline-3 v5 prompts introduced a handful — 3/851 multi-impostor
+    9p2i ballots — where an accused impostor echoes an accusation naming itself;
+    that is a Phase-16 dialogue-quality finding, not a firewall breach. Before
+    this refinement the check counted ``against in impostors`` incl. self, so it
+    was strictly stricter than the firewall it validates.)
     """
 
     violations: list[str] = []
@@ -715,6 +728,8 @@ def check_no_betrayal(report: TournamentReport) -> ValidityCheck:
                     ballot.voter in impostors
                     and ballot.target != "SKIP"
                     and ballot.target in impostors
+                    and ballot.target
+                    != ballot.voter  # self-vote is not fellow-betrayal
                 ):
                     violations.append(
                         f"seed {game.seed} meeting {meeting.meeting_id}: impostor "
@@ -726,7 +741,10 @@ def check_no_betrayal(report: TournamentReport) -> ValidityCheck:
                 for claim in turn.claims:
                     if isinstance(claim, AccusationClaim):
                         accusations_checked += 1
-                        if claim.against in impostors:
+                        if (
+                            claim.against in impostors
+                            and claim.against != turn.speaker  # self is not a fellow
+                        ):
                             violations.append(
                                 f"seed {game.seed} meeting {meeting.meeting_id}: "
                                 f"impostor {turn.speaker} accused teammate "

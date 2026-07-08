@@ -49,6 +49,7 @@ from orchestrator.replay import (
     LLMCallRecord,
     ReplayLogEntry,
     read_all_entries,
+    substrate_flag_snapshot,
 )
 from orchestrator.scheduler import TickScheduler
 from orchestrator.seeder import seed_initial_state
@@ -940,16 +941,13 @@ def test_committed_9p2i_set_holds_crew_firewall(tmp_path: Path) -> None:
 # needed anywhere — the committed flags-ON baseline serves under a BARE
 # environment (the Task-14.9 acceptance bar).
 
-_ALL_FLAGS_ON = {
-    "testimony_as_content": True,
-    "witnessed_kill_evidence": True,
-    "movement_perception": True,
-    "unfreeze_memory": True,
-    # Task 14.12 close follow-up: the Task-14.10 evidence_quality_lift lever is
-    # now unconditional too (the 14.9 move, applied after baseline 2 adopted it),
-    # so a fully-ON stamp carries it as well.
-    "evidence_quality_lift": True,
-}
+# Built from the live substrate snapshot so the fully-ON stamp tracks exactly the
+# lever set the loader's guard compares against and can never drift again. Task
+# 15.7 GRADUATED reporter_exculpation to always-on, so the snapshot is now SIX
+# keys (testimony_as_content, witnessed_kill_evidence, movement_perception,
+# unfreeze_memory, evidence_quality_lift, reporter_exculpation), all True — every
+# lever is unconditional, so the ambient snapshot IS the fully-ON stamp.
+_ALL_FLAGS_ON = dict(substrate_flag_snapshot())
 # A legacy stamp this build can no longer reproduce: the movement lever
 # recorded OFF (its OFF derivation was deleted by Task 14.9).
 _LEGACY_MOVEMENT_OFF = {**_ALL_FLAGS_ON, "movement_perception": False}

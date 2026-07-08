@@ -89,6 +89,7 @@ from eval.vote_correctness import (  # noqa: E402
     compute_vote_correctness,
 )
 from eval.watchability import (  # noqa: E402
+    _DEFAULT_BASELINE_ID,
     WatchabilityReport,
     compute_watchability,
 )
@@ -364,10 +365,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--baseline-id",
-        default="baseline-2",
+        default=_DEFAULT_BASELINE_ID,
         help=(
             "the per-baseline supply-floor block the referee reads "
-            "(default: baseline-2; Task 15.7 pins baseline-3)"
+            f"(default: {_DEFAULT_BASELINE_ID}, the committed canonical set; "
+            "pass baseline-2 to score against the pre-Wave-0 floors)"
         ),
     )
     args = parser.parse_args(argv)

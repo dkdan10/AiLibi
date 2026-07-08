@@ -181,21 +181,21 @@ def test_committed_4p1i_report_validates_against_current_model() -> None:
     assert isinstance(report, TournamentEvalReport)
     # The regenerated committed report carries every Task 7.11 field.
     # ejection_accuracy is None iff the set has no ejections (the field's own
-    # validator). Re-anchored to the Featherless / Qwen/Qwen3-32B (prompt set
-    # "qwen3_32b" v4) baseline-2 re-record with the Task-14.10
-    # evidence_quality_lift lever ON on top of the four Phase-13.5 substrate
-    # flags: the flat 4p/1i set ejects decisively — the committed ground truth
-    # is now 13 ejections, 12 impostors + 1 crew (accuracy 12/13 ≈ 0.923). With
-    # that supply the set is no longer small-n (flag False). vote_correctness_rate
-    # 1.0 (all 12 impostor ejections are transcript-evidence-backed).
-    # flagged_but_ignored 1 under the new substrate's detector supply.
-    assert report.vote_correctness.total_ejections == 13
-    assert report.vote_correctness.ejection_accuracy == pytest.approx(12 / 13)
-    assert report.vote_correctness.impostor_ejections == 12
-    assert report.vote_correctness.crewmate_ejections == 1
+    # validator). Re-anchored to the baseline-3 re-record (Qwen/Qwen3-32B,
+    # prompt set qwen3_32b.v5 + vote_ballot.v6) with all SIX substrate levers
+    # unconditionally ON — reporter_exculpation was graduated to always-on this
+    # task: the flat 4p/1i set ejects decisively — the committed ground truth is
+    # now 26 ejections, 21 impostors + 5 crew (accuracy 21/26 ≈ 0.808). With that
+    # supply the set is no longer small-n (flag False). vote_correctness_rate
+    # 1.0 (all 21 impostor ejections are transcript-evidence-backed).
+    # flagged_but_ignored 3 under the new substrate's detector supply.
+    assert report.vote_correctness.total_ejections == 26
+    assert report.vote_correctness.ejection_accuracy == pytest.approx(21 / 26)
+    assert report.vote_correctness.impostor_ejections == 21
+    assert report.vote_correctness.crewmate_ejections == 5
     assert report.vote_correctness.vote_correctness_rate == pytest.approx(1.0)
     assert report.vote_correctness.vote_correctness_small_n is False
-    assert report.vote_correctness.contradictions_flagged_but_ignored == 1
+    assert report.vote_correctness.contradictions_flagged_but_ignored == 3
     assert isinstance(report.accusation_calibration.vote_ballot_low_power, bool)
     assert (
         report.meeting_rate.skipped_meetings + report.meeting_rate.ejected_meetings
