@@ -83,6 +83,26 @@ maintains `MANIFEST.md`, rebuilds `tournament-eval-report.json`, writes
 bash scripts/record_ml_corpus.sh --splits-only        # --set to scope
 ```
 
+### Resuming an interrupted recording
+
+The recorder is **resumable**. A multi-hour hosted record can be interrupted
+(machine sleep, a transport blip that kills the process). Simply re-run the same
+command — it **skips any seed whose replay is already present** in the set dir and
+records only the missing ones, then refreshes every `MANIFEST.md` row and
+re-finalizes (report + splits + `FROZEN`). A fully-recorded set records nothing
+and just re-finalizes, so re-running is always safe and idempotent:
+
+```bash
+export FEATHERLESS_API_KEY=... AILIBI_PROMPT_SET=qwen3_32b
+bash scripts/record_ml_corpus.sh --set 9p2i           # resumes from wherever it left off
+```
+
+For a long, flaky hosted run, raise the per-seed transport retry budget:
+`AILIBI_SEED_MAX_ATTEMPTS=8 bash scripts/record_ml_corpus.sh --set 9p2i`. A set
+directory that carries `replay-seed-*.jsonl` but no `FROZEN` line in its
+`MANIFEST.md` is a **partial** (not-yet-finished) recording — re-run to complete
+and freeze it before running the acceptance gate.
+
 ## Acceptance (per set, before the PR merges)
 
 Hosted models do not byte-reproduce **fresh** generation; **recordings** replay
