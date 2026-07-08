@@ -40,7 +40,9 @@ on the meeting-DEPENDENT terms is EXPECTED and is reported WITH the surrogate-pa
 caveat, never as "referee safe".
 
 THE VERDICT. Every improvement in the ES fitness trace is decomposed to the
-moving D-term / floor with its behavioral cause named (no undecomposed gains). The
+moving D-term / floor — or to the referee-gate flip itself when the gain is the
+composed-referee pass bonus — with its behavioral cause named (no undecomposed
+gains). The
 report ends HELD (no exploit clears the stated materiality bar) or EXPLOITS-FOUND
 (each with trajectory evidence + a recommended floor routed to the PAUSE — this
 task NEVER edits the referee it attacks), and always states the 15.15
@@ -361,6 +363,16 @@ class _RefereeAttackEvaluator:
         self._num_impostors = num_impostors
         self._tasks_per_crewmate = tasks_per_crewmate
         self._seeds = tuple(fitness_seeds)
+        # The env writes one replay-seed-{seed}.jsonl per rollout, so a duplicate
+        # seed would OVERWRITE its earlier replay and the referee would score fewer
+        # games than the stated K-seed budget. ESConfig already rejects duplicates;
+        # this guards direct construction too (no silent budget shrink).
+        if len(set(self._seeds)) != len(self._seeds):
+            raise ValueError(
+                f"fitness_seeds must be unique, got {self._seeds!r}: duplicate "
+                "seeds overwrite each other's replays and silently shrink the "
+                "scored set below the stated budget"
+            )
         self._baseline_id = baseline_id
         # None => the env's fake-provider runner (this task). Task 15.15 passes the
         # 15.13 surrogate factory so the re-run opens the meeting-controlled terms.
@@ -433,10 +445,14 @@ class TraceImprovement(BaseModel):
     """One decomposed fitness gain in the ES trace (Task 15.14).
 
     ``moving_term`` is the D-dimension / floor that moved most (weighted log-gain
-    of the geomean, or the floor-trip rate); ``behavioral_cause`` names WHY
-    (e.g. meeting-farming D4-contest, stall-to-clock D1) from the behavioral
-    deltas. Every trace improvement produces one of these — the "no undecomposed
-    gains" contract.
+    of the geomean, or the floor-trip rate) — or ``referee_gate`` when the
+    composed-referee gate FLIPPED to passing between the two champions, in which
+    case the fitness jump is the referee-pass bonus, not a geomean move;
+    ``behavioral_cause`` names WHY (e.g. meeting-farming D4-contest,
+    stall-to-clock D1) from the behavioral deltas. ``referee_passed_before`` /
+    ``referee_passed_after`` carry the gate state through the trace so a
+    gate-bonus gain is never laundered as a D-term. Every trace improvement
+    produces one of these — the "no undecomposed gains" contract.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -447,6 +463,8 @@ class TraceImprovement(BaseModel):
     delta: float
     moving_term: str
     behavioral_cause: str
+    referee_passed_before: bool
+    referee_passed_after: bool
     mean_meetings_before: float
     mean_meetings_after: float
     floor_trip_rate_before: float
@@ -473,55 +491,78 @@ def _dominant_dimension(before: _SetAggregates, after: _SetAggregates) -> str:
     return max(contributions, key=lambda dim: contributions[dim])
 
 
+def _mechanism(before: _SetAggregates, after: _SetAggregates, moving_term: str) -> str:
+    """The distinct exploit MECHANISM behind a moving term (the dedupe key).
+
+    Two exploits that move the same top-level D dimension through DIFFERENT
+    mechanisms (D2 separation theater vs D2 conversion; D4 contest-farming vs
+    D4 arc/swing) are distinct findings, each owed its own trajectory evidence
+    and recommended floor — so exploit dedupe keys on the mechanism, never on
+    the dimension alone.
+    """
+
+    if moving_term == "d4":
+        contest_delta = after.mean_d4_contest - before.mean_d4_contest
+        meetings_delta = after.mean_meetings - before.mean_meetings
+        if contest_delta > 1e-6 and meetings_delta > 1e-6:
+            return "d4-contest-farming"
+        return "d4-arc-swing"
+    if moving_term == "d2":
+        sep_delta = after.mean_d2_separation - before.mean_d2_separation
+        conv_delta = after.mean_d2_conversion - before.mean_d2_conversion
+        if sep_delta > 1e-6 and conv_delta <= 1e-6:
+            return "d2-separation-theater"
+        return "d2-conversion"
+    # d1 / d3 / floor / referee_gate have one mechanism each.
+    return moving_term
+
+
 def _behavioral_cause(
     before: _SetAggregates, after: _SetAggregates, moving_term: str
 ) -> str:
     """Name the behavior behind a moving term from the set-level deltas."""
 
-    meetings_delta = after.mean_meetings - before.mean_meetings
-    if moving_term == "floor":
+    mechanism = _mechanism(before, after, moving_term)
+    if mechanism == "floor":
         return (
             "fewer per-game integrity floors tripped "
             f"({before.floor_trip_rate:.2f} -> {after.floor_trip_rate:.2f} trip "
             "rate): a railroad / friendly-fire / drift floor stopped zeroing games"
         )
-    if moving_term == "d4":
-        contest_delta = after.mean_d4_contest - before.mean_d4_contest
-        if contest_delta > 1e-6 and meetings_delta > 1e-6:
-            return (
-                "meeting-farming: mean meetings/game "
-                f"{before.mean_meetings:.2f} -> {after.mean_meetings:.2f} lifts the "
-                "D4 contest term min(1,(n-1)/2) with no added deduction"
-            )
+    if mechanism == "d4-contest-farming":
+        return (
+            "meeting-farming: mean meetings/game "
+            f"{before.mean_meetings:.2f} -> {after.mean_meetings:.2f} lifts the "
+            "D4 contest term min(1,(n-1)/2) with no added deduction"
+        )
+    if mechanism == "d4-arc-swing":
         return (
             "D4 arc/swing moved (a cross-meeting suspicion rise/knife-edge eject) "
             "— meeting-decided, not tactically reachable under fake meetings"
         )
-    if moving_term == "d1":
+    if mechanism == "d1":
         return (
             "resolution shift: the D1 term moved with the win-reason / meeting mix "
             f"(mean meetings {before.mean_meetings:.2f} -> {after.mean_meetings:.2f})"
         )
-    if moving_term == "d2":
-        sep_delta = after.mean_d2_separation - before.mean_d2_separation
-        conv_delta = after.mean_d2_conversion - before.mean_d2_conversion
-        if sep_delta > 1e-6 and conv_delta <= 1e-6:
-            return (
-                "D2 SEPARATION inflated "
-                f"({before.mean_d2_separation:.2f} -> {after.mean_d2_separation:.2f}) "
-                "while conversion stayed pinned "
-                f"({before.mean_d2_conversion:.2f} -> {after.mean_d2_conversion:.2f}): "
-                "the FAKE provider's rendered suspicion tracks the impostor's "
-                "kill/exposure count, so aggressive play lifts the 'crew-deduction' "
-                "term WITHOUT any ejection — suspicion theater, a REACHABLE artifact "
-                "of scoring separation on fake-provider suspicion, not real deduction"
-            )
+    if mechanism == "d2-separation-theater":
+        return (
+            "D2 SEPARATION inflated "
+            f"({before.mean_d2_separation:.2f} -> {after.mean_d2_separation:.2f}) "
+            "while conversion stayed pinned "
+            f"({before.mean_d2_conversion:.2f} -> {after.mean_d2_conversion:.2f}): "
+            "the FAKE provider's rendered suspicion tracks the impostor's "
+            "kill/exposure count, so aggressive play lifts the 'crew-deduction' "
+            "term WITHOUT any ejection — suspicion theater, a REACHABLE artifact "
+            "of scoring separation on fake-provider suspicion, not real deduction"
+        )
+    if mechanism == "d2-conversion":
         return (
             "D2 conversion moved (a real ejection of an observation-backed impostor) "
             "— meeting-decided; unexpected under fake meetings, so treat as "
             "chaotic-fitness noise until the surrogate re-run confirms it (FO-3)"
         )
-    if moving_term == "d3":
+    if mechanism == "d3":
         return (
             "D3 (impostor deflection) is decided inside the meeting; a move under "
             "fake meetings is chaotic-fitness noise, not reachable (FO-3) — surrogate"
@@ -541,21 +582,51 @@ def _moving_term(before: _SetAggregates, after: _SetAggregates) -> str:
     return _dominant_dimension(before, after)
 
 
+def _gate_flip_cause(after_report: WatchabilityReport) -> str:
+    """The cause string for a referee-gate flip in the trace (the bonus jump)."""
+
+    gauges = ", ".join(
+        f"{g.name}={'PASS' if g.passed else 'FAIL'}" for g in after_report.supply_gauges
+    )
+    return (
+        "the COMPOSED referee gate FLIPPED to passing (referee_passed False -> "
+        "True): the fitness jump is the referee-pass bonus, not a geomean move — "
+        f"the evidence-supply floors / integrity now clear ({gauges}), so the "
+        "SELECTION gate would accept this directly-referee-optimized champion "
+        "(the gate-laundering mechanism the 15.15 surrogate re-run hunts)"
+    )
+
+
 def _decompose_improvement(
     generation: int,
     fitness_before: float,
     fitness_after: float,
-    before: _SetAggregates,
-    after: _SetAggregates,
+    before_eval: _SetEvaluation,
+    after_eval: _SetEvaluation,
 ) -> TraceImprovement:
-    moving_term = _moving_term(before, after)
+    before = _aggregate(before_eval.watchability.per_game)
+    after = _aggregate(after_eval.watchability.per_game)
+    gate_before = before_eval.watchability.referee_passed
+    gate_after = after_eval.watchability.referee_passed
+    # A gate flip means the improvement includes the dominating referee-pass
+    # bonus; attributing that jump to whichever D-term drifted alongside it would
+    # hide the gate-laundering mechanism, so it gets its own term. (The reverse
+    # flip cannot be an improvement — losing the bonus dwarfs any geomean gain.)
+    if gate_after and not gate_before:
+        moving_term = "referee_gate"
+        behavioral_cause = _gate_flip_cause(after_eval.watchability)
+    else:
+        moving_term = _moving_term(before, after)
+        behavioral_cause = _behavioral_cause(before, after, moving_term)
     return TraceImprovement(
         generation=generation,
         fitness_before=round(fitness_before, 4),
         fitness_after=round(fitness_after, 4),
         delta=round(fitness_after - fitness_before, 4),
         moving_term=moving_term,
-        behavioral_cause=_behavioral_cause(before, after, moving_term),
+        behavioral_cause=behavioral_cause,
+        referee_passed_before=gate_before,
+        referee_passed_after=gate_after,
         mean_meetings_before=round(before.mean_meetings, 3),
         mean_meetings_after=round(after.mean_meetings, 3),
         floor_trip_rate_before=round(before.floor_trip_rate, 3),
@@ -569,11 +640,17 @@ def _decompose_improvement(
 
 
 class ProbeExploit(BaseModel):
-    """One material exploit surfaced by the probe (routed to the PAUSE)."""
+    """One material exploit surfaced by the probe (routed to the PAUSE).
+
+    ``mechanism`` is the distinct exploit mechanism (e.g. ``d2-separation-theater``
+    vs ``d2-conversion``) — the dedupe key, finer than ``moving_term`` so two
+    different attacks on the same D dimension are both reported.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     moving_term: str
+    mechanism: str
     behavioral_cause: str
     score_baseline: float
     score_champion: float
@@ -732,9 +809,11 @@ def run_goodhart_probe(
     )
 
     # Decompose EVERY improvement in the champion trace (no undecomposed gains).
-    champion_aggs = [
-        _aggregate(evaluator.evaluate_set(genome).watchability.per_game)
-        for genome in result.champion_trace
+    # The FULL evaluations (not just the D-term aggregates) flow through so a
+    # referee-gate flip — the dominating pass bonus — decomposes to referee_gate
+    # rather than being laundered as whichever D-term drifted alongside it.
+    champion_evals = [
+        evaluator.evaluate_set(genome) for genome in result.champion_trace
     ]
     improvements: list[TraceImprovement] = []
     for gen in range(1, len(result.fitness_trace)):
@@ -746,15 +825,15 @@ def run_goodhart_probe(
                     gen,
                     before_f,
                     after_f,
-                    champion_aggs[gen - 1],
-                    champion_aggs[gen],
+                    champion_evals[gen - 1],
+                    champion_evals[gen],
                 )
             )
 
     # The reachability sweep: force each single-tactic lever and score its
     # degenerate policy. A bounded random-init ES can MISS a reachable exploit; the
     # sweep is the systematic net so a null ES trace never launders a false HELD.
-    levers = _sweep_levers(evaluator, baseline_score, baseline_aggs)
+    levers, lever_candidates = _sweep_levers(evaluator, baseline_score, baseline_aggs)
 
     champion_eval = evaluator.evaluate_set(result.champion)
     champion_report = champion_eval.watchability
@@ -772,8 +851,7 @@ def run_goodhart_probe(
         champion_eval=champion_eval,
         champion_score=champion_score,
         champion_gain=relative_gain,
-        levers=levers,
-        evaluator=evaluator,
+        lever_candidates=lever_candidates,
         materiality_bar=materiality_bar,
         fake_meetings=fake_meetings,
     )
@@ -825,30 +903,44 @@ def _sweep_levers(
     evaluator: _RefereeAttackEvaluator,
     baseline_score: float,
     baseline_aggs: _SetAggregates,
-) -> tuple[LeverResult, ...]:
-    """Score every single-tactic lever, decomposed vs the scripted-FSM baseline."""
+) -> tuple[tuple[LeverResult, ...], tuple[_ExploitCandidate, ...]]:
+    """Score every single-tactic lever, decomposed vs the scripted-FSM baseline.
+
+    Returns the display rows AND the exploit candidates: the candidate carries the
+    UNROUNDED score/gain and the set aggregates so ``_build_exploits`` thresholds
+    and dedupes on exact values, while ``LeverResult`` stays rounded for the report.
+    """
 
     results: list[LeverResult] = []
+    candidates: list[_ExploitCandidate] = []
     for tactic in _SWEEP_TACTICS:
         evaluation = evaluator.evaluate_set(_forced_genome(tactic))
+        score = evaluation.watchability.mean_score
         aggs = _aggregate(evaluation.watchability.per_game)
         moving = _moving_term(baseline_aggs, aggs)
         results.append(
             LeverResult(
                 tactic=tactic,
-                mean_score=round(evaluation.watchability.mean_score, 2),
+                mean_score=round(score, 2),
                 referee_passed=evaluation.watchability.referee_passed,
                 validity_passed=evaluation.validity_passed,
-                relative_gain=round(
-                    _relative_gain(baseline_score, evaluation.watchability.mean_score),
-                    4,
-                ),
+                relative_gain=round(_relative_gain(baseline_score, score), 4),
                 mean_meetings=round(aggs.mean_meetings, 3),
                 moving_term=moving,
                 behavioral_cause=_behavioral_cause(baseline_aggs, aggs, moving),
             )
         )
-    return tuple(results)
+        candidates.append(
+            _ExploitCandidate(
+                label=f"forced-{tactic} lever",
+                score=score,
+                gain=_relative_gain(baseline_score, score),
+                referee_passed=evaluation.watchability.referee_passed,
+                validity_passed=evaluation.validity_passed,
+                aggs=aggs,
+            )
+        )
+    return tuple(results), tuple(candidates)
 
 
 def _recommended_floor(moving_term: str) -> str:
@@ -917,8 +1009,7 @@ def _build_exploits(
     champion_eval: _SetEvaluation,
     champion_score: float,
     champion_gain: float,
-    levers: Sequence[LeverResult],
-    evaluator: _RefereeAttackEvaluator,
+    lever_candidates: Sequence[_ExploitCandidate],
     materiality_bar: float,
     fake_meetings: bool,
 ) -> tuple[tuple[ProbeExploit, ...], float]:
@@ -936,8 +1027,12 @@ def _build_exploits(
       finding, where the gate still rejects it).
 
     Gains are compared UNROUNDED (rounding only happens at display time) so a
-    candidate at 24.99% is not promoted past a 25% bar. Deduped by mechanism so a
-    distinct exploit is reported once with its worst-case evidence.
+    candidate at 24.99% is not promoted past a 25% bar. Deduped by the exploit
+    MECHANISM (``_mechanism`` — finer than the top-level D dimension), so two
+    distinct attacks that move the same dimension (D2 separation theater vs D2
+    conversion, D4 contest-farming vs D4 arc/swing) are BOTH reported, each with
+    its own trajectory evidence and recommended floor, while repeats of one
+    mechanism keep only the worst-case (highest-scoring) evidence.
     """
 
     candidates: list[_ExploitCandidate] = [
@@ -948,23 +1043,9 @@ def _build_exploits(
             referee_passed=champion_eval.watchability.referee_passed,
             validity_passed=champion_eval.validity_passed,
             aggs=_aggregate(champion_eval.watchability.per_game),
-        )
+        ),
+        *lever_candidates,
     ]
-    for lever in levers:
-        lever_eval = evaluator.evaluate_set(_forced_genome(lever.tactic))
-        lever_score = lever_eval.watchability.mean_score
-        candidates.append(
-            _ExploitCandidate(
-                label=f"forced-{lever.tactic} lever",
-                score=lever_score,
-                # UNROUNDED gain (not the display-rounded LeverResult.relative_gain)
-                # so the materiality threshold is not tripped by 4-decimal rounding.
-                gain=_relative_gain(baseline_score, lever_score),
-                referee_passed=lever_eval.watchability.referee_passed,
-                validity_passed=lever_eval.validity_passed,
-                aggs=_aggregate(lever_eval.watchability.per_game),
-            )
-        )
 
     # The strongest ADMISSIBLE reachable score: the probe is validity-gated, so a
     # validity-failing candidate (e.g. a stall-to-clock set that trips the meeting-
@@ -988,24 +1069,29 @@ def _build_exploits(
         and (candidate.gain >= materiality_bar or _gate_laundered(candidate))
     ]
     # Gate-laundering first (the strongest exploit), then by score; dedupe by the
-    # exploit MECHANISM so each is reported once with its worst-case evidence.
+    # exploit MECHANISM so each distinct mechanism is reported once with its
+    # worst-case evidence.
     material.sort(
         key=lambda candidate: (_gate_laundered(candidate), candidate.score),
         reverse=True,
     )
     exploits: list[ProbeExploit] = []
-    seen_terms: set[str] = set()
+    seen_mechanisms: set[str] = set()
     for candidate in material:
         laundered = _gate_laundered(candidate)
-        moving = (
-            "referee_gate" if laundered else _moving_term(baseline_aggs, candidate.aggs)
-        )
-        if moving in seen_terms:
+        if laundered:
+            moving = "referee_gate"
+            mechanism = "referee_gate"
+        else:
+            moving = _moving_term(baseline_aggs, candidate.aggs)
+            mechanism = _mechanism(baseline_aggs, candidate.aggs, moving)
+        if mechanism in seen_mechanisms:
             continue
-        seen_terms.add(moving)
+        seen_mechanisms.add(mechanism)
         exploits.append(
             ProbeExploit(
                 moving_term=moving,
+                mechanism=mechanism,
                 behavioral_cause=(
                     _gate_laundered_cause(candidate)
                     if laundered

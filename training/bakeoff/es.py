@@ -92,9 +92,16 @@ class ESConfig(BaseModel):
 
     @field_validator("fitness_seeds")
     @classmethod
-    def _nonempty_seeds(cls, value: tuple[int, ...]) -> tuple[int, ...]:
+    def _nonempty_unique_seeds(cls, value: tuple[int, ...]) -> tuple[int, ...]:
         if not value:
             raise ValueError("fitness_seeds must be non-empty (K >= 1)")
+        if len(set(value)) != len(value):
+            raise ValueError(
+                f"fitness_seeds must be unique, got {value!r}: a duplicate seed "
+                "silently double-weights the K-seed average, and a replay-set "
+                "evaluator keyed on the seed overwrites that seed's games — the "
+                "stated K-seed budget would be a lie"
+            )
         return value
 
 
@@ -105,12 +112,18 @@ def k_seed_mean(evaluate: SeedFitnessFn, seeds: Sequence[int]) -> FitnessFn:
     averaging that tames chaotic per-seed fitness before selection (the spike's
     check-2 lesson). ``math.fsum`` keeps the mean order-stable so the averaged
     fitness is bit-reproducible. Raises on an empty seed set (an un-averaged
-    fitness is never a silent fallback).
+    fitness is never a silent fallback) and on duplicate seeds (a silent
+    double-weighting of one seed's games).
     """
 
     seed_tuple = tuple(seeds)
     if not seed_tuple:
         raise ValueError("k_seed_mean requires at least one seed")
+    if len(set(seed_tuple)) != len(seed_tuple):
+        raise ValueError(
+            f"k_seed_mean requires unique seeds, got {seed_tuple!r}: a duplicate "
+            "seed silently double-weights that seed in the K-seed average"
+        )
 
     def fitness(genome: tuple[float, ...]) -> float:
         return math.fsum(evaluate(genome, seed) for seed in seed_tuple) / len(

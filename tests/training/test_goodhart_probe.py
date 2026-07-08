@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from eval.watchability import WatchabilityReport
 from training.bakeoff.es import ESConfig
 from training.bakeoff.goodhart import (
@@ -17,6 +19,9 @@ from training.bakeoff.goodhart import (
     ProbeExploit,
     TraceImprovement,
     _build_exploits,
+    _decompose_improvement,
+    _ExploitCandidate,
+    _RefereeAttackEvaluator,
     _SetAggregates,
     _SetEvaluation,
     build_probe_selector,
@@ -114,8 +119,19 @@ def test_every_improvement_is_decomposed() -> None:
     assert len(report.improvements) == len(improving)
     for improvement in report.improvements:
         assert isinstance(improvement, TraceImprovement)
-        assert improvement.moving_term in ("d1", "d2", "d3", "d4", "floor")
+        assert improvement.moving_term in (
+            "d1",
+            "d2",
+            "d3",
+            "d4",
+            "floor",
+            "referee_gate",
+        )
         assert improvement.behavioral_cause
+        # Under fake meetings the composed gate never clears, so no trace
+        # improvement can be a gate flip.
+        assert improvement.referee_passed_before is False
+        assert improvement.referee_passed_after is False
 
 
 def test_verdict_matches_exploits() -> None:
@@ -166,8 +182,7 @@ def test_gate_laundering_is_flagged_without_geomean_gain() -> None:
         champion_eval=_champion_eval(referee_passed=True, mean_score=8.0),
         champion_score=8.0,
         champion_gain=-0.2,  # LOWER geomean than the baseline, but clears the gate
-        levers=(),
-        evaluator=None,  # type: ignore[arg-type]  # unused when levers is empty
+        lever_candidates=(),
         materiality_bar=0.25,
         fake_meetings=False,
     )
@@ -187,8 +202,7 @@ def test_gate_pass_not_flagged_when_baseline_also_passes() -> None:
         champion_eval=_champion_eval(referee_passed=True, mean_score=9.0),
         champion_score=9.0,
         champion_gain=-0.1,
-        levers=(),
-        evaluator=None,  # type: ignore[arg-type]
+        lever_candidates=(),
         materiality_bar=0.25,
         fake_meetings=False,
     )
@@ -204,9 +218,151 @@ def test_below_bar_geomean_gain_is_not_promoted() -> None:
         champion_eval=_champion_eval(referee_passed=False, mean_score=12.4996),
         champion_score=12.4996,
         champion_gain=0.24996,
-        levers=(),
-        evaluator=None,  # type: ignore[arg-type]
+        lever_candidates=(),
         materiality_bar=0.25,
         fake_meetings=True,
     )
     assert exploits == ()
+
+
+def _lever_candidate(
+    *, label: str, score: float, gain: float, aggs: _SetAggregates
+) -> _ExploitCandidate:
+    return _ExploitCandidate(
+        label=label,
+        score=score,
+        gain=gain,
+        referee_passed=False,
+        validity_passed=True,
+        aggs=aggs,
+    )
+
+
+def _d2_aggs(*, separation: float = 0.0, conversion: float = 0.0) -> _SetAggregates:
+    return _SetAggregates(
+        mean_score=0.0,
+        mean_d1=0.0,
+        mean_d2=0.5,
+        mean_d3=0.0,
+        mean_d4=0.0,
+        mean_d2_separation=separation,
+        mean_d2_conversion=conversion,
+        mean_d4_arc=0.0,
+        mean_d4_swing=0.0,
+        mean_d4_contest=0.0,
+        mean_meetings=0.0,
+        floor_trip_rate=0.0,
+    )
+
+
+def test_distinct_mechanisms_on_same_dimension_are_both_reported() -> None:
+    # Two material candidates that move the SAME top-level D dimension (d2)
+    # through DIFFERENT mechanisms (separation theater vs conversion) are two
+    # distinct exploits — the dedupe key is the mechanism, not the dimension.
+    exploits, _ = _build_exploits(
+        baseline_score=10.0,
+        baseline_aggs=_SetAggregates(*([0.0] * 12)),
+        baseline_referee_passed=False,
+        champion_eval=_champion_eval(referee_passed=False, mean_score=10.0),
+        champion_score=10.0,
+        champion_gain=0.0,  # the ES champion itself is not material here
+        lever_candidates=(
+            _lever_candidate(
+                label="forced-kill lever",
+                score=20.0,
+                gain=1.0,
+                aggs=_d2_aggs(separation=0.5),
+            ),
+            _lever_candidate(
+                label="forced-report lever",
+                score=15.0,
+                gain=0.5,
+                aggs=_d2_aggs(conversion=0.5),
+            ),
+        ),
+        materiality_bar=0.25,
+        fake_meetings=True,
+    )
+    assert len(exploits) == 2
+    assert all(exploit.moving_term == "d2" for exploit in exploits)
+    assert {exploit.mechanism for exploit in exploits} == {
+        "d2-separation-theater",
+        "d2-conversion",
+    }
+
+
+def test_same_mechanism_is_deduped_to_worst_case() -> None:
+    # Two candidates with the SAME mechanism collapse to one exploit carrying the
+    # worst-case (highest-scoring) evidence.
+    exploits, _ = _build_exploits(
+        baseline_score=10.0,
+        baseline_aggs=_SetAggregates(*([0.0] * 12)),
+        baseline_referee_passed=False,
+        champion_eval=_champion_eval(referee_passed=False, mean_score=10.0),
+        champion_score=10.0,
+        champion_gain=0.0,
+        lever_candidates=(
+            _lever_candidate(
+                label="forced-kill lever",
+                score=18.0,
+                gain=0.8,
+                aggs=_d2_aggs(separation=0.4),
+            ),
+            _lever_candidate(
+                label="forced-sabotage lever",
+                score=20.0,
+                gain=1.0,
+                aggs=_d2_aggs(separation=0.5),
+            ),
+        ),
+        materiality_bar=0.25,
+        fake_meetings=True,
+    )
+    assert len(exploits) == 1
+    assert exploits[0].mechanism == "d2-separation-theater"
+    assert exploits[0].score_champion == 20.0
+
+
+def test_gate_flip_improvement_decomposes_to_referee_gate() -> None:
+    # A trace improvement that FLIPS referee_passed includes the dominating
+    # referee-pass bonus; it must decompose to the referee_gate term (with the
+    # gate state carried through), never to whichever D-term drifted alongside.
+    improvement = _decompose_improvement(
+        1,
+        5.0,
+        1004.0,
+        _champion_eval(referee_passed=False, mean_score=5.0),
+        _champion_eval(referee_passed=True, mean_score=4.0),
+    )
+    assert improvement.moving_term == "referee_gate"
+    assert improvement.referee_passed_before is False
+    assert improvement.referee_passed_after is True
+    assert "referee-pass bonus" in improvement.behavioral_cause
+
+
+def test_non_flip_improvement_keeps_dterm_decomposition() -> None:
+    improvement = _decompose_improvement(
+        1,
+        5.0,
+        6.0,
+        _champion_eval(referee_passed=False, mean_score=5.0),
+        _champion_eval(referee_passed=False, mean_score=6.0),
+    )
+    assert improvement.moving_term in ("d1", "d2", "d3", "d4", "floor")
+    assert improvement.referee_passed_before is False
+    assert improvement.referee_passed_after is False
+
+
+def test_evaluator_rejects_duplicate_fitness_seeds() -> None:
+    # The evaluator writes one replay-seed-{seed}.jsonl per rollout, so a
+    # duplicate seed would overwrite its earlier replay and the referee would
+    # score fewer games than the stated K-seed budget. ESConfig rejects
+    # duplicates too; this pins the evaluator's own guard.
+    with pytest.raises(ValueError):
+        _RefereeAttackEvaluator(
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            fitness_seeds=(0, 1, 0),
+            baseline_id="baseline-3",
+        )

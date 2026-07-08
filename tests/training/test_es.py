@@ -37,6 +37,16 @@ def test_esconfig_rejects_degenerate_knobs() -> None:
         ESConfig(generations=4, population=4, sigma=0.1, seed=0, fitness_seeds=())
 
 
+def test_esconfig_rejects_duplicate_seeds() -> None:
+    # A duplicate seed silently double-weights the K-seed average — and a
+    # replay-set evaluator keyed on the seed overwrites that seed's games, so the
+    # stated K-seed budget would be a lie. Fail loud at config time.
+    with pytest.raises(ValueError):
+        ESConfig(
+            generations=4, population=4, sigma=0.1, seed=0, fitness_seeds=(0, 1, 0)
+        )
+
+
 def test_esconfig_is_frozen() -> None:
     config = ESConfig(
         generations=4, population=4, sigma=0.1, seed=0, fitness_seeds=(0, 1)
@@ -54,6 +64,11 @@ def test_k_seed_mean_averages() -> None:
 def test_k_seed_mean_rejects_empty() -> None:
     with pytest.raises(ValueError):
         k_seed_mean(lambda genome, seed: 0.0, ())
+
+
+def test_k_seed_mean_rejects_duplicate_seeds() -> None:
+    with pytest.raises(ValueError):
+        k_seed_mean(lambda genome, seed: 0.0, (2, 4, 2))
 
 
 def test_evolve_is_deterministic_and_hash_pinned() -> None:
