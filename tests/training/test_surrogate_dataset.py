@@ -16,9 +16,12 @@ from pathlib import Path
 import pytest
 
 from eval.validity import assemble_tournament_report
+from meetings.schemas import ContradictionRef
+from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
 from training.surrogate.dataset import (
     MeetingTableReconstructionError,
     MeetingTableRow,
+    _contradiction_lifts,
     build_meeting_table,
     load_splits,
 )
@@ -55,9 +58,17 @@ def test_table_counts_reproduce_the_committed_report(sample_dir: Path) -> None:
     assert table.ejections_total == ejections
     assert table.skips_total == skips
     assert table.ballots_total == ballots
+    assert table.games_total == len(table.game_seeds())
     # The reconstructed row set reproduces the same counts, independently.
     assert len({(r.seed, r.meeting_id) for r in table.rows}) == meetings
-    assert sum(1 for r in table.rows if r.outcome == "EJECTED") // 1 >= 0
+    ejected_meetings = {
+        (r.seed, r.meeting_id) for r in table.rows if r.outcome == "EJECTED"
+    }
+    skipped_meetings = {
+        (r.seed, r.meeting_id) for r in table.rows if r.outcome == "SKIPPED"
+    }
+    assert len(ejected_meetings) == ejections
+    assert len(skipped_meetings) == skips
 
 
 @pytest.mark.parametrize("sample_dir", [_NINE, _FOUR])
@@ -234,3 +245,66 @@ def test_missing_directory_fails_loud(tmp_path: Path) -> None:
 
     with pytest.raises(NotADirectoryError):
         build_meeting_table(tmp_path / "does-not-exist")
+
+
+def _weak_flag(
+    flag_id: str, *, subject: str, alibi_claim_id: str, sighting_id: str
+) -> ContradictionRef:
+    """A weak ``alibi_vs_sighting`` flag riding one underlying alibi claim."""
+
+    return ContradictionRef(
+        contradiction_id=flag_id,
+        kind="alibi_vs_sighting",
+        event_a_id=alibi_claim_id,
+        event_b_id=sighting_id,
+        subjects=(subject,),
+        description=(
+            f"{WEAK_CONTRADICTION_MARKER_PREFIX}self-stated alibi] alibi vs sighting"
+        ),
+    )
+
+
+def test_duplicate_claim_flags_fold_to_one_rendered_lift() -> None:
+    """``contradiction_lift`` carries the production dedup + cap, not raw sums.
+
+    ``apply_contradiction_rule`` takes ONE delta per (subject, alibi-claim) lift
+    group: one alibi paired against N sightings is N flags but a single +0.08.
+    Two flags on DIFFERENT claims still accumulate, and the per-meeting total is
+    capped at one strong flag's worth (0.30) — the exact vote-time semantics the
+    honest ceiling must read (a raw count sum would report 0.16 / 0.60 here).
+    """
+
+    living = ["p-1", "p-2"]
+    same_claim = [
+        _weak_flag(
+            "c-1", subject="p-1", alibi_claim_id="turn:t1:claim:0", sighting_id="s1"
+        ),
+        _weak_flag(
+            "c-2", subject="p-1", alibi_claim_id="turn:t1:claim:0", sighting_id="s2"
+        ),
+    ]
+    assert _contradiction_lifts(same_claim, living)["p-1"] == pytest.approx(0.08)
+
+    distinct_claims = [
+        _weak_flag(
+            "c-1", subject="p-1", alibi_claim_id="turn:t1:claim:0", sighting_id="s1"
+        ),
+        _weak_flag(
+            "c-2", subject="p-1", alibi_claim_id="turn:t2:claim:1", sighting_id="s2"
+        ),
+    ]
+    assert _contradiction_lifts(distinct_claims, living)["p-1"] == pytest.approx(0.16)
+
+    # Many distinct-claim flags cap at one strong flag's worth, never 1.0.
+    stacked = [
+        _weak_flag(
+            f"c-{i}",
+            subject="p-1",
+            alibi_claim_id=f"turn:t{i}:claim:{i}",
+            sighting_id=f"s{i}",
+        )
+        for i in range(6)
+    ]
+    lifts = _contradiction_lifts(stacked, living)
+    assert lifts["p-1"] == pytest.approx(0.30)
+    assert lifts["p-2"] == pytest.approx(0.0)  # unflagged candidate reads zero

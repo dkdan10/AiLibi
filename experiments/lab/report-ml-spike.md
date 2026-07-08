@@ -6,8 +6,8 @@
 > FO-6 physical logistic scores **top-1 23.9% / top-2 42.2%** on the baseline-3 9p2i
 > set (the spike's 64% was pre-re-record; the audit measured the regression to
 > 26%/43% on baseline 2). Its binary eject-vs-SKIP head **degenerates to always-SKIP**
-> (25.2% decision accuracy vs a 78.4% always-eject baseline; SKIP predicted on 74/109
-> true ejection meetings). The single top-1 number hid that collapse. The honest
+> (35.3% binary decision accuracy vs a 78.4% always-eject baseline; SKIP predicted on
+> 78/109 true ejection meetings). The single top-1 number hid that collapse. The honest
 > re-baseline, the fidelity protocol, and the measured voice-driven ceiling live in
 > **`training/reports/report-meeting-table.md`** (Task 15.11); read that before
 > citing any FO-6 figure below.

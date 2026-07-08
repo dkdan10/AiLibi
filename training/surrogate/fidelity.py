@@ -56,10 +56,7 @@ from pydantic import BaseModel, ConfigDict
 
 from agents.memory.beliefs import (
     BODY_PROXIMITY_SUSPICION_DELTA,
-    CONTRADICTION_SUSPICION_DELTA,
-    MEETING_CONTRADICTION_LIFT_CAP,
     VENTING_SUSPICION_DELTA,
-    WEAK_CONTRADICTION_SUSPICION_DELTA,
     WITNESSED_KILL_SUSPICION_DELTA,
 )
 from engine.entities import PlayerId
@@ -228,6 +225,7 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
                 "strong_flags": float(feat.strong_flags),
                 "weak_flags": float(feat.weak_flags),
                 "vent_flags": float(feat.vent_flags),
+                "contradiction_lift": float(feat.contradiction_lift),
                 "body_proximity": float(feat.body_proximity),
                 "task_submissions": float(feat.task_submissions),
                 "move_count": float(feat.move_count),
@@ -260,24 +258,19 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
                 public[cand] = 0.5
         # Best-case reconstructed pre-meeting suspicion per candidate: the public
         # belief accumulator PLUS the real belief-fold channels (agents/memory/
-        # beliefs.py). The contradiction lift replicates ``apply_contradiction_rule``
-        # — a subject's whole meeting lift is CAPPED at one strong flag's worth
-        # (``MEETING_CONTRADICTION_LIFT_CAP``), never a raw per-flag sum (Codex
-        # review), so flag volume cannot manufacture or erase a strict argmax the
-        # real graph could not render. The perception pins are the real deltas
-        # (witnessed kill +1.0, witnessed vent +0.5, body proximity +0.2), and the
-        # whole thing is clamped to [0, 1] like a rendered suspicion. This is the
-        # sharpest ranking a physical+belief surrogate could form; the honest ceiling
-        # reads its strict argmax (:func:`compute_honest_ceiling`).
+        # beliefs.py). The contradiction lift is the table's ``contradiction_lift``
+        # column — RENDERED by the real ``apply_contradiction_rule`` at build time
+        # (one delta per (subject, claim) lift group, capped at one strong flag's
+        # worth; Codex review), so duplicate flags of one claim can neither
+        # manufacture nor erase a strict argmax the real graph could not render.
+        # The perception pins are the real deltas (witnessed kill +1.0, witnessed
+        # vent +0.5, body proximity +0.2), and the whole thing is clamped to [0, 1]
+        # like a rendered suspicion. This is the sharpest ranking a physical+belief
+        # surrogate could form; the honest ceiling reads its strict argmax
+        # (:func:`compute_honest_ceiling`).
         recon: dict[PlayerId, float] = {}
         for cand in candidates:
             feats = features[cand]
-            contradiction_lift = min(
-                CONTRADICTION_SUSPICION_DELTA * feats["strong_flags"]
-                + CONTRADICTION_SUSPICION_DELTA * feats["vent_flags"]
-                + WEAK_CONTRADICTION_SUSPICION_DELTA * feats["weak_flags"],
-                MEETING_CONTRADICTION_LIFT_CAP,
-            )
             recon[cand] = min(
                 1.0,
                 public[cand]
@@ -285,7 +278,7 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
                 + VENTING_SUSPICION_DELTA * feats["witnessed_vent"]
                 + BODY_PROXIMITY_SUSPICION_DELTA * feats["body_proximity"]
                 + BODY_PROXIMITY_SUSPICION_DELTA * feats["seen_at_kill"]
-                + contradiction_lift,
+                + feats["contradiction_lift"],
             )
         views.append(
             MeetingView(
@@ -404,7 +397,10 @@ class Fo6Logistic:
     ) -> PlayerId | None:
         if not probs:
             return None
-        leader = max(meeting.candidates, key=lambda cand: (probs[cand], cand))
+        # Smallest-id tie-break — the SAME leader ranking[0] carries (predict sorts
+        # by (-prob, cand)) and the spike's own first-strict-max scan picked, so the
+        # decision head and the ranking never disagree on an exact-probability tie.
+        leader = min(meeting.candidates, key=lambda cand: (-probs[cand], cand))
         return leader if probs[leader] >= tau else None
 
     def predict(self, meeting: MeetingView) -> MeetingPrediction:
@@ -560,21 +556,27 @@ class SurrogateFidelityReport(BaseModel):
 
 def _game_folds(
     table: MeetingTable, *, folds: int
-) -> tuple[list[tuple[frozenset[int], frozenset[int]]], bool]:
+) -> list[tuple[frozenset[int], frozenset[int]]]:
     """Deterministic by-GAME (train, test) fold pairs; honour ``splits.json``.
 
-    When the table carries a committed split, returns the single (train ∪ val, test)
-    pair it names — a by-game split by construction, but VALIDATED first (Codex
-    review): the fit set ``(train ∪ val)`` and the test set must be DISJOINT and
-    every referenced seed must be a game in the table, and the test set must be
-    non-empty. A 15.12 corpus mistake that put a seed in both fit and test would put
-    the same game's meetings on both sides of the single fold — leaking exactly the
-    cross-meeting belief state this by-game harness exists to prevent — so it fails
-    loud rather than silently inflating the fidelity numbers. Otherwise partitions
-    the sorted game seeds into ``folds`` contiguous test blocks (train = the rest).
-    Either way a game's seed lands wholly inside one test fold, so no meeting of a
-    game is ever split across folds (the anti-leakage guarantee; asserted by the
-    leakage test).
+    Every returned pair assigns whole GAMES to one side, so no meeting of a game
+    is ever split across folds (the anti-leakage guarantee; asserted by the
+    leakage test). The fold universe is ``table.seeds`` — EVERY recorded game,
+    including no-meeting games (they contribute no scoreable views but must
+    still be assignable, or a legitimate 15.12 split naming them would be
+    falsely rejected).
+
+    When the table carries a committed split, returns the single (train ∪ val,
+    test) pair it names — VALIDATED first (Codex review): the fit set
+    ``(train ∪ val)`` and the test set must be DISJOINT, together they must
+    PARTITION every recorded game, and BOTH sides must be non-empty (an empty
+    test set scores nothing; an empty fit set would silently evaluate an
+    untrained model). A 15.12 corpus mistake that put a seed on both sides
+    would leak the same game's meetings into fitting and scoring — exactly the
+    cross-meeting belief leak this by-game harness exists to prevent — so every
+    violation fails loud rather than silently biasing the fidelity numbers.
+    Otherwise partitions the sorted game seeds into ``folds`` strided test
+    blocks (train = the rest).
     """
 
     seeds = list(table.game_seeds())
@@ -603,14 +605,19 @@ def _game_folds(
             )
         if not test:
             raise ValueError("splits.json test set is empty; nothing to score")
-        return [(train, test)], True
+        if not train:
+            raise ValueError(
+                "splits.json fit set (train ∪ val) is empty; the run would fit on "
+                "nothing and score an untrained model as if it were by-game CV"
+            )
+        return [(train, test)]
     k = max(1, min(folds, len(seeds)))
     blocks: list[tuple[frozenset[int], frozenset[int]]] = []
     for fold in range(k):
         test = frozenset(seeds[fold::k])
         train = frozenset(seeds) - test
         blocks.append((train, test))
-    return blocks, True
+    return blocks
 
 
 def run_surrogate_fidelity(
@@ -625,8 +632,13 @@ def run_surrogate_fidelity(
     ``model_factory`` is a zero-arg callable returning a fresh :class:`MeetingModel`
     (a new model is fit per fold on that fold's TRAIN games only). Pools the
     per-fold TEST predictions into the four fidelity channels and the decision
-    census, and attaches the set's measured honest ceiling. Deterministic: the folds,
-    the fit, and every metric are pure functions of the committed table.
+    census, and attaches the honest ceiling measured over the SAME scored
+    (test-side) meetings every other channel reports on — under K-fold CV that is
+    every meeting (each game is tested exactly once); under a committed split it
+    is the held-out test games only, so the ceiling bounds the score it is
+    compared against rather than a different distribution (Codex review).
+    Deterministic: the folds, the fit, and every metric are pure functions of the
+    committed table.
     """
 
     if not callable(model_factory):
@@ -636,7 +648,15 @@ def run_surrogate_fidelity(
     for view in views:
         views_by_seed[view.seed].append(view)
 
-    fold_pairs, by_game = _game_folds(table, folds=folds)
+    fold_pairs = _game_folds(table, folds=folds)
+    # The scored population: the union of the test folds (every game exactly once
+    # under K-fold; the committed test set under a split). The ballot calibration
+    # AND the honest ceiling are measured over exactly this population, so every
+    # channel in the report describes one distribution.
+    scored_seeds: set[int] = set()
+    for _, test_seeds in fold_pairs:
+        scored_seeds |= set(test_seeds)
+    scored_views = [view for view in views if view.seed in scored_seeds]
 
     top1_hits = 0
     top2_hits = 0
@@ -696,11 +716,7 @@ def run_surrogate_fidelity(
 
     # Recorded ballot-confidence calibration over the SCORED meetings' non-SKIP
     # ballots (§5.5). Model-independent — read straight off the table's recorded
-    # ballots for the games that were scored (the union of the test folds; every
-    # game in K-fold, the committed test set under a split).
-    scored_seeds: set[int] = set()
-    for _, test_seeds in fold_pairs:
-        scored_seeds |= set(test_seeds)
+    # ballots for the scored population.
     ballot_calib: list[tuple[float, int]] = []
     for row in table.rows:
         if row.seed not in scored_seeds or row.ballot_target == "SKIP":
@@ -726,7 +742,10 @@ def run_surrogate_fidelity(
         replay_set_dir=table.replay_set_dir,
         games_total=table.games_total,
         folds=len(fold_pairs),
-        by_game_cv=by_game,
+        # By-game by construction: _game_folds only ever assigns whole games to a
+        # side (K-fold strides seeds; a committed split is validated to partition
+        # them), so this is a documented guarantee, not a runtime branch.
+        by_game_cv=True,
         meetings_scored=meetings_scored,
         ejection_meetings=ejection_meetings,
         skip_meetings=skip_meetings,
@@ -751,7 +770,10 @@ def run_surrogate_fidelity(
         ballot_brier=ballot_brier,
         ballot_ece=ballot_ece,
         ballot_rows=len(ballot_calib),
-        honest_ceiling=compute_honest_ceiling(views),
+        # Measured over the SCORED (test-side) views only, the same population as
+        # top1/ejection_meetings — under a committed split the ceiling bounds the
+        # held-out score, never a train/val distribution (Codex review).
+        honest_ceiling=compute_honest_ceiling(scored_views),
     )
 
 

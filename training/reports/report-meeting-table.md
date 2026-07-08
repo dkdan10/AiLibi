@@ -57,7 +57,10 @@ suspicion" band §2.2 says the LLM votes on.
 
 Alongside it, per candidate: the **contradiction-flag structure** (`strong_flags` /
 `weak_flags` / `vent_flags` — the Task-15.4 `vent_sighting` role-proving flag in its
-own band), **sighting / co-presence** (`witnessed` / `isolation`), **kill-proximity**
+own band — plus `contradiction_lift`, the meeting's RENDERED vote-time lift computed
+by the real `apply_contradiction_rule`: one delta per (subject, claim) group, capped
+at one strong flag's worth, so duplicate flags of one claim never stack),
+**sighting / co-presence** (`witnessed` / `isolation`), **kill-proximity**
 (`seen_at_kill` co-presence proxy), the **VOTER-LOCAL eyewitness pins** `witnessed_kill`
 (+1.0) and `witnessed_vent` (+0.5) read straight off `KilledEvent` / vent-event
 witnesses — exposed only to the row whose voter actually saw the act, never a
@@ -124,13 +127,15 @@ The FO-6 logistic (`experiments/lab/ml_spike/fo6_learned_vote_surrogate.py`) is
 **re-run** here (re-implemented as `Fo6Logistic`; the spike is mypy-excluded and
 never imported): the same six LLM-free physical features
 `{witnessed, isolation, seen_at_kill, is_reporter, meeting_index, alive_count}` per
-candidate, a deterministic standardized logistic, its SKIP threshold tuned on train —
-now under **by-game 5-fold CV** across all 50 games (the spike used one 35/15 split).
+candidate, a deterministic standardized logistic, its SKIP threshold tuned on train,
+probability ties broken toward the smallest player id (the spike's own
+first-strict-max convention, shared by the ranking and the decision head) — now
+under **by-game 5-fold CV** across all 50 games (the spike used one 35/15 split).
 
 | Set | top-1 | top-2 | decision acc (binary) | always-eject baseline | ejection Brier/ECE | ballot Brier/ECE | binary head |
 |---|---:|---:|---:|---:|---:|---:|---|
-| **9p2i** | **23.9%** (26/109) | **42.2%** (46/109) | **38.1%** | 78.4% | 0.107 / 0.008 | 0.211 / 0.120 | **collapses to always-SKIP** |
-| **4p1i** | 65.4% (17/26) | 84.6% (22/26) | 59.0% | 66.7% | 0.159 / 0.108 | 0.232 / 0.232 | SKIP-biased (not collapsed) |
+| **9p2i** | **23.9%** (26/109) | **42.2%** (46/109) | **35.3%** | 78.4% | 0.107 / 0.008 | 0.211 / 0.120 | **collapses to always-SKIP** |
+| **4p1i** | 69.2% (18/26) | 88.5% (23/26) | 64.1% | 66.7% | 0.154 / 0.102 | 0.232 / 0.232 | SKIP-biased (not collapsed) |
 
 (Decision accuracy is the BINARY eject-vs-skip decision — right when the model's
 eject/skip *choice* matches, regardless of which player it named; the exact-target
@@ -142,13 +147,13 @@ model as the ground-truth reference.)
 The spike's headline **"FO-6 top-1 64% / top-2 82%"** was measured on 9p2i in the
 spike era. On the committed baseline-3 9p2i it is **23.9% / 42.2%** under by-game CV —
 matching the audit's re-record regression to "26% / 43% on baseline 2" (§2.1). The
-small **4p1i** set still shows a high headline (65.4%) — that is the *misleading*
+small **4p1i** set still shows a high headline (69.2%) — that is the *misleading*
 single number the audit warns about, not a recovery: on a 4-player set the ranking
 problem is trivially small (≤3 candidates), and its decision head is still below the
 always-eject baseline.
 
 **The always-SKIP collapse, made explicit (9p2i):** the tuned binary head predicts
-SKIP on **74 of 109 true ejection meetings** and reaches only **38.1%** binary
+SKIP on **78 of 109 true ejection meetings** and reaches only **35.3%** binary
 eject-vs-skip accuracy — *worse than the trivial always-eject constant (78.4%)*. The
 single top-1 number hid this. The SKIP/eject decision is testimony/plurality driven and **absent
 from physical features**, exactly as §5.2 predicts; this is why §5.3's rebuild
@@ -165,11 +170,14 @@ The crew's entire deduction signal under same-room-only vision is physical
 (sightings, kill-proximity) plus the cross-meeting belief accumulator. A conviction
 that formed from THIS meeting's spoken narrative — no flag, no proximity, no
 pre-meeting suspicion lead — is invisible to a training-time surrogate. The ceiling
-measures that: over each set's ejection meetings, the share whose ejected target is
-the **strict (unique) argmax** of the best-case reconstructed physical+belief
-suspicion (the sharpest ranking a physical+belief surrogate could form from the
-pre-meeting bytes, using the real belief-fold deltas — the voter-local eyewitness pins
-at +1.0 kill / +0.5 vent, the contradiction lift capped at one strong flag's worth and
+measures that: over the SCORED ejection meetings (the same held-out population every
+other channel reports on — all meetings under K-fold, the test games under a
+committed split), the share whose ejected target is the **strict (unique) argmax** of
+the best-case reconstructed physical+belief suspicion (the sharpest ranking a
+physical+belief surrogate could form from the pre-meeting bytes, using the real
+belief-fold deltas — the voter-local eyewitness pins at +1.0 kill / +0.5 vent, the
+table's `contradiction_lift` column RENDERED by the real `apply_contradiction_rule`
+(one delta per (subject, claim) lift group, capped at one strong flag's worth),
 clamped to [0, 1], and the accusation accumulator). A flat tie (an early meeting, no
 prior evidence, no flag) is not uniquely rankable and correctly counts as unreachable.
 

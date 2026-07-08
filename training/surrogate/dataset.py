@@ -63,7 +63,11 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
-from agents.memory.beliefs import BeliefState, apply_meeting_evidence_rules
+from agents.memory.beliefs import (
+    BeliefState,
+    apply_contradiction_rule,
+    apply_meeting_evidence_rules,
+)
 from engine.actions import Action
 from engine.entities import PlayerId, Role, RoomId
 from engine.events import (
@@ -145,6 +149,13 @@ class CandidateFeatures(BaseModel):
     strong_flags: int
     weak_flags: int
     vent_flags: int
+    # The candidate's RENDERED vote-time contradiction lift for this meeting,
+    # computed by the real :func:`agents.memory.beliefs.apply_contradiction_rule`
+    # (one delta per (subject, claim) lift group — repeated flags of one underlying
+    # claim never stack — capped at one strong flag's worth). The raw count columns
+    # above are surrogate features; THIS is the production-faithful magnitude the
+    # honest ceiling folds in (Codex review: dedup by claim, not raw counts).
+    contradiction_lift: float
     # Physical reconstruction over the pre-meeting play window (FO-6 parity).
     witnessed: int
     isolation: int
@@ -231,13 +242,24 @@ class MeetingTable(BaseModel):
     ejections_total: int
     skips_total: int
     ballots_total: int
+    # EVERY recorded game seed in the set, sorted — including games with no
+    # meetings (a real shape: 11 of the baseline-3 4p1i games end before any
+    # meeting fires, so they carry no rows). Split validation and by-game folds
+    # partition THIS list, so a committed 15.12 split that legitimately assigns a
+    # no-meeting game is never falsely rejected, and ``games_total == len(seeds)``.
+    seeds: tuple[int, ...]
     splits: SurrogateSplits | None
     rows: tuple[MeetingTableRow, ...]
 
     def game_seeds(self) -> tuple[int, ...]:
-        """The distinct game seeds present in the table, sorted."""
+        """Every recorded game seed in the set, sorted (``self.seeds``).
 
-        return tuple(sorted({row.seed for row in self.rows}))
+        The by-game fold universe. A game with no meetings is still a GAME — it
+        must be assignable to a fold/split side even though it contributes no
+        scoreable meeting rows.
+        """
+
+        return self.seeds
 
 
 def load_splits(sample_dir: Path) -> SurrogateSplits | None:
@@ -298,6 +320,37 @@ def _flag_counts(
             else:
                 counts[subject] = (strong + 1, weak, vent)
     return counts
+
+
+def _contradiction_lifts(
+    contradictions: Sequence[ContradictionRef],
+    living: Sequence[PlayerId],
+) -> dict[PlayerId, float]:
+    """Per-candidate RENDERED contradiction lift for one meeting (Codex review).
+
+    Runs the REAL production rule — :func:`agents.memory.beliefs.
+    apply_contradiction_rule` — on a zero-seeded state, so the lift carries the
+    exact vote-time semantics: one delta per ``(subject,
+    meetings.transcript.contradiction_lift_key)`` group (repeated flags of one
+    underlying claim never stack — the seed-9 19-duplicate shape folds to one
+    delta), summed across groups, capped at one strong flag's worth. Raw count
+    sums would double a duplicated weak flag (0.16 vs the rendered 0.08) and
+    corrupt the ceiling's strict-argmax reachability.
+
+    ``env={}`` pins the default-OFF 14.10 evidence-quality lever regardless of
+    the process environment (the table must build byte-identically offline);
+    ``transcript`` is not threaded for the same reason — both levers only ever
+    TIGHTEN the lift, so this reads as the ceiling-appropriate upper bound of
+    the rendered value.
+    """
+
+    if not contradictions:
+        return {pid: 0.0 for pid in living}
+    base = BeliefState()
+    for pid in living:
+        base.seed_player(pid, suspicion=0.0, trust=0.5)
+    lifted = apply_contradiction_rule(base, contradictions, env={})
+    return {pid: lifted.view(pid).suspicion for pid in living}
 
 
 class _WindowStats:
@@ -455,6 +508,7 @@ def _candidate_features(
     reporter: PlayerId,
     ejected: PlayerId | None,
     flags: Mapping[PlayerId, tuple[int, int, int]],
+    lifts: Mapping[PlayerId, float],
     stats: _WindowStats,
 ) -> CandidateFeatures:
     strong, weak, vent = flags.get(candidate, (0, 0, 0))
@@ -471,6 +525,7 @@ def _candidate_features(
         strong_flags=strong,
         weak_flags=weak,
         vent_flags=vent,
+        contradiction_lift=lifts.get(candidate, 0.0),
         witnessed=stats.witnessed.get(candidate, 0),
         isolation=stats.isolation.get(candidate, 0),
         seen_at_kill=stats.seen_at_kill.get(candidate, False),
@@ -573,6 +628,7 @@ def _walk_game(
         voters = sorted(ballot.voter for ballot in result.ballots)
         living = tuple(voters)
         flags = _flag_counts(result.contradictions)
+        lifts = _contradiction_lifts(result.contradictions, living)
 
         by_voter = {ballot.voter: ballot for ballot in result.ballots}
         for voter in living:
@@ -586,6 +642,7 @@ def _walk_game(
                     reporter=reporter,
                     ejected=ejected,
                     flags=flags,
+                    lifts=lifts,
                     stats=stats,
                 )
                 for candidate in living
@@ -736,6 +793,7 @@ def build_meeting_table(
         ejections_total=ejections_total,
         skips_total=skips_total,
         ballots_total=ballots_total,
+        seeds=tuple(seeds),
         splits=splits,
         rows=tuple(rows),
     )

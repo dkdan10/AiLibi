@@ -51,8 +51,7 @@ def test_by_game_cv_never_splits_a_games_meetings_across_folds() -> None:
 
     table = build_meeting_table(_NINE)
     all_seeds = set(table.game_seeds())
-    fold_pairs, by_game = _game_folds(table, folds=5)
-    assert by_game
+    fold_pairs = _game_folds(table, folds=5)
 
     seen_test: set[int] = set()
     for train, test in fold_pairs:
@@ -82,13 +81,80 @@ def test_committed_splits_produce_a_single_by_game_fold() -> None:
     train_seeds = seeds[:-3]
     val_seeds = seeds[-3:-2]
     table = _with_splits(base, train=train_seeds, val=val_seeds, test=test_seeds)
-    fold_pairs, by_game = _game_folds(table, folds=5)
-    assert by_game
+    fold_pairs = _game_folds(table, folds=5)
     assert len(fold_pairs) == 1
     train, test = fold_pairs[0]
     assert test == frozenset(test_seeds)
     assert frozenset(train_seeds) <= train
     assert train.isdisjoint(test)
+
+
+def test_split_universe_is_every_recorded_game_including_no_meeting_games() -> None:
+    """The fold/split universe is EVERY recorded game, not just games with rows.
+
+    11 of the committed 4p1i games end before any meeting fires (no rows), yet a
+    legitimate 15.12 ``splits.json`` must still be able to assign them to a side —
+    validating against rows-bearing seeds only would falsely reject it.
+    """
+
+    table = build_meeting_table(_FOUR)
+    rows_bearing = {row.seed for row in table.rows}
+    assert len(table.game_seeds()) == table.games_total == 50
+    assert len(rows_bearing) < table.games_total, (
+        "4p1i is the fixture BECAUSE it has no-meeting games"
+    )
+    # A full partition that puts a no-meeting game in test validates and runs.
+    no_meeting = sorted(set(table.game_seeds()) - rows_bearing)[0]
+    with_meeting = next(s for s in table.game_seeds() if s in rows_bearing)
+    rest = [s for s in table.game_seeds() if s not in (no_meeting, with_meeting)]
+    split_table = _with_splits(
+        table, train=rest, val=[], test=[no_meeting, with_meeting]
+    )
+    report = run_surrogate_fidelity(split_table, _OracleModel, model_name="oracle")
+    assert report.folds == 1
+    # The no-meeting game contributes nothing scoreable; the scored population is
+    # exactly the rows-bearing test game's meetings.
+    test_meetings = {
+        (r.seed, r.meeting_id) for r in table.rows if r.seed == with_meeting
+    }
+    assert report.meetings_scored == len(test_meetings)
+
+
+def test_ceiling_is_measured_over_the_scored_population() -> None:
+    """``honest_ceiling`` counts EXACTLY the scored ejection meetings.
+
+    Under K-fold every game is tested once, so ``ceiling.ejections_total ==
+    ejection_meetings``; under a committed split it is the held-out games'
+    ejections only — never train/val meetings — so the GO/NO-GO comparison of
+    achieved top-1 vs the ceiling reads one distribution (Codex review).
+    """
+
+    table = build_meeting_table(_NINE)
+    kfold = fo6_rebaseline(table)
+    assert kfold.honest_ceiling.ejections_total == kfold.ejection_meetings
+
+    seeds = list(table.game_seeds())
+    test_seeds = seeds[:10]
+    split = _with_splits(table, train=seeds[10:], val=[], test=test_seeds)
+    report = run_surrogate_fidelity(split, _OracleModel, model_name="oracle")
+    assert report.honest_ceiling.ejections_total == report.ejection_meetings
+    held_out_ejections = len(
+        {
+            (r.seed, r.meeting_id)
+            for r in table.rows
+            if r.seed in set(test_seeds) and r.outcome == "EJECTED"
+        }
+    )
+    assert report.honest_ceiling.ejections_total == held_out_ejections
+
+
+def test_split_with_empty_fit_set_fails_loud() -> None:
+    """``train=[] val=[] test=<all>`` raises — fit([]) must never score silently."""
+
+    base = build_meeting_table(_FOUR)
+    table = _with_splits(base, train=[], val=[], test=list(base.game_seeds()))
+    with pytest.raises(ValueError, match="fit set"):
+        _game_folds(table, folds=5)
 
 
 def test_leaky_committed_split_fails_loud() -> None:
