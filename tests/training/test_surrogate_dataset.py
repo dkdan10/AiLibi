@@ -124,6 +124,25 @@ def test_vent_flags_are_counted_in_their_own_band() -> None:
     assert vent_rows, "baseline 3 9p2i should carry at least one vent_sighting flag"
 
 
+def test_witnessed_kill_marks_the_killer_not_a_bystander() -> None:
+    """The witnessed-kill pin reads ``KilledEvent.witnesses`` + actor, not a proxy.
+
+    Every candidate flagged ``witnessed_kill`` must be an IMPOSTOR — only impostors
+    kill, so the event-derived pin marks the killer (``event.actor``), never a
+    co-present bystander. Baseline 3 9p2i carries crew-witnessed kills, so the
+    column is non-empty (the +1.0 role-proving pin the belief store folds).
+    """
+
+    table = build_meeting_table(_NINE)
+    witnessed = [
+        cand for row in table.rows for cand in row.candidates if cand.witnessed_kill
+    ]
+    assert witnessed, "baseline 3 9p2i should carry at least one crew-witnessed kill"
+    assert all(cand.is_impostor for cand in witnessed), (
+        "witnessed_kill must mark the killer (an impostor), never a bystander"
+    )
+
+
 def test_self_candidate_reads_the_neutral_prior() -> None:
     """A voter's own candidate row is never a held belief (the own-id exclusion)."""
 

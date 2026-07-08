@@ -144,6 +144,10 @@ class CandidateFeatures(BaseModel):
     witnessed: int
     isolation: int
     seen_at_kill: bool
+    # The EXACT role-proving eyewitness pin from ``KilledEvent.witnesses`` (a crew
+    # member saw THIS candidate commit a kill) — the +1.0 belief-store pin, distinct
+    # from the ``seen_at_kill`` co-presence proxy. Persistent (role-proving).
+    witnessed_kill: bool
     body_proximity: bool
     # Cross-game cadence signals.
     task_submissions: int
@@ -296,13 +300,17 @@ class _WindowStats:
     Sighting/kill-proximity/body-proximity reset each meeting (FO-6 "recent
     activity" parity); ``task_submissions`` / ``moves`` accumulate over the whole
     game (a player who has completed no tasks all game is a game-long cadence
-    signal). All updates read only reconstructed engine truth.
+    signal). ``witnessed_kill`` is the EXACT role-proving eyewitness pin from
+    ``KilledEvent.witnesses`` — persistent (a witnessed kill is role-proving
+    knowledge the crew never unlearns, mirroring the +1.0 belief pin the store
+    folds), so it does NOT reset. All updates read only reconstructed engine truth.
     """
 
     def __init__(self) -> None:
         self.witnessed: dict[PlayerId, int] = defaultdict(int)
         self.isolation: dict[PlayerId, int] = defaultdict(int)
         self.seen_at_kill: dict[PlayerId, bool] = defaultdict(bool)
+        self.witnessed_kill: dict[PlayerId, bool] = defaultdict(bool)
         self.body_proximity: dict[PlayerId, bool] = defaultdict(bool)
         self.task_submissions: dict[PlayerId, int] = defaultdict(int)
         self.moves: dict[PlayerId, int] = defaultdict(int)
@@ -318,7 +326,12 @@ class _WindowStats:
             elif raw.get("type") == "move":
                 self.moves[actor] += 1
 
-    def absorb_tick(self, state: WorldState, events: Sequence[object]) -> None:
+    def absorb_tick(
+        self,
+        state: WorldState,
+        events: Sequence[object],
+        roles: Mapping[PlayerId, Role],
+    ) -> None:
         by_room: dict[RoomId, list[PlayerId]] = {}
         for pid, player in state.players.items():
             if player.alive and not player.in_vent:
@@ -332,6 +345,15 @@ class _WindowStats:
         for event in events:
             if isinstance(event, KilledEvent):
                 self._pending_kills.append((event.tick, event.room))
+                # The EXACT witnessed-kill pin (Codex review): the killer stamped
+                # ``action="kill"`` for its CREW witnesses gets the +1.0 hard pin in
+                # production (agents/memory/beliefs.py). Read it straight off
+                # ``event.actor`` + ``event.witnesses`` (crew only — a fellow-impostor
+                # witness generates no crew evidence, §4.7), never the co-presence
+                # proxy, so a witnessed killer who moved or was alone is not missed
+                # and a bystander is never mismarked.
+                if any(roles.get(w) == "CREWMATE" for w in event.witnesses):
+                    self.witnessed_kill[event.actor] = True
         for kill_tick, kill_room in self._pending_kills:
             if 0 <= state.tick - kill_tick <= SEEN_AT_KILL_WINDOW_TICKS:
                 occupants = by_room.get(kill_room, [])
@@ -420,6 +442,7 @@ def _candidate_features(
         witnessed=stats.witnessed.get(candidate, 0),
         isolation=stats.isolation.get(candidate, 0),
         seen_at_kill=stats.seen_at_kill.get(candidate, False),
+        witnessed_kill=stats.witnessed_kill.get(candidate, False),
         body_proximity=stats.body_proximity.get(candidate, False),
         task_submissions=stats.task_submissions.get(candidate, 0),
         move_count=stats.moves.get(candidate, 0),
@@ -476,7 +499,7 @@ def _walk_game(
                 f"{game_id}: tick {entry.tick} reconstructed {actual!r} != recorded "
                 f"{entry.state_hash!r} (roster mismatch or engine non-determinism)"
             )
-        stats.absorb_tick(state, events)
+        stats.absorb_tick(state, events, roles)
 
         if state.phase == "GAME_OVER":
             break

@@ -78,6 +78,41 @@ def test_committed_splits_produce_a_single_by_game_fold(tmp_path: Path) -> None:
     assert train.isdisjoint(test)
 
 
+def test_leaky_committed_split_fails_loud(tmp_path: Path) -> None:
+    """A split that puts a game in both the fit and test set raises (no silent leak).
+
+    The anti-leakage guarantee is the harness's whole point; a 15.12 corpus mistake
+    that leaks the same game's meetings onto both sides of the single fold must fail
+    loud rather than silently inflating the fidelity numbers.
+    """
+
+    splits_file = tmp_path / "splits.json"
+    splits_file.write_text('{"train": [0, 1, 5], "val": [], "test": [5, 6]}')
+    table = build_meeting_table(_FOUR, splits_path=splits_file)
+    with pytest.raises(ValueError, match="leaks games"):
+        _game_folds(table, folds=5)
+
+
+def test_split_referencing_unknown_seed_fails_loud(tmp_path: Path) -> None:
+    """A split naming a seed absent from the table raises."""
+
+    splits_file = tmp_path / "splits.json"
+    splits_file.write_text('{"train": [0, 1], "val": [], "test": [9999]}')
+    table = build_meeting_table(_FOUR, splits_path=splits_file)
+    with pytest.raises(ValueError, match="absent from the table"):
+        _game_folds(table, folds=5)
+
+
+def test_empty_test_split_fails_loud(tmp_path: Path) -> None:
+    """A split with an empty test set raises (nothing to score)."""
+
+    splits_file = tmp_path / "splits.json"
+    splits_file.write_text('{"train": [0, 1, 2], "val": [3], "test": []}')
+    table = build_meeting_table(_FOUR, splits_path=splits_file)
+    with pytest.raises(ValueError, match="test set is empty"):
+        _game_folds(table, folds=5)
+
+
 # --------------------------------------------------------------------------- #
 # The four channels reported together                                         #
 # --------------------------------------------------------------------------- #
@@ -94,6 +129,24 @@ def test_report_carries_all_four_channels_together() -> None:
     # The decision census reconciles with the meeting count.
     assert report.predicted_ejections + report.predicted_skips == report.meetings_scored
     assert report.ejection_meetings + report.skip_meetings == report.meetings_scored
+
+
+def test_recorded_ballot_confidence_calibration_is_reported() -> None:
+    """Brier/ECE on the recorded ballot confidences is a first-class channel (§5.5).
+
+    Over the scored meetings' non-SKIP ballots, the voter's stated confidence vs
+    whether its named target was ejected — reported ALONGSIDE the model's ejection
+    calibration, so a badly-calibrated ballot model is judged against the real
+    voters' calibration rather than only the post-tally number.
+    """
+
+    table = build_meeting_table(_NINE)
+    report = fo6_rebaseline(table)
+    non_skip = sum(1 for r in table.rows if r.ballot_target != "SKIP")
+    assert report.ballot_rows == non_skip  # 5-fold covers every game once
+    assert 0.0 <= report.ballot_brier <= 1.0
+    assert 0.0 <= report.ballot_ece <= 1.0
+    assert report.ballot_brier > 0.0  # real voters are imperfectly calibrated
 
 
 def test_fo6_rebaseline_collapses_to_always_skip_on_the_big_set() -> None:
@@ -195,6 +248,30 @@ def test_harness_is_model_agnostic_oracle_scores_perfectly() -> None:
     assert report.skip_vs_eject_accuracy == pytest.approx(1.0)
     assert not report.degenerates_to_skip
     assert report.brier == pytest.approx(0.0)
+
+
+class _BrokenModel:
+    """A model that drops a candidate from its ranking (test only)."""
+
+    def fit(self, meetings: Sequence[MeetingView]) -> None:  # noqa: D401 - test stub
+        return None
+
+    def predict(self, meeting: MeetingView) -> MeetingPrediction:
+        # Drop the last candidate — ranking is no longer a permutation.
+        truncated = meeting.candidates[:-1]
+        return MeetingPrediction(
+            ranking=truncated,
+            ejected=None,
+            ejection_prob={cand: 0.0 for cand in truncated},
+        )
+
+
+def test_malformed_prediction_is_rejected() -> None:
+    """A model omitting a candidate fails loud rather than scoring meaningless metrics."""
+
+    table = build_meeting_table(_FOUR)
+    with pytest.raises(ValueError, match="permutation"):
+        run_surrogate_fidelity(table, _BrokenModel, model_name="broken")
 
 
 def test_one_meeting_view_per_committed_meeting() -> None:

@@ -8,10 +8,12 @@ always the four channels together —
   (does the model rank the actually-ejected player first / in its top two).
 * **SKIP-vs-eject decision accuracy** — the decision FO-6 failed at (its binary head
   degenerates to always-SKIP, §5.2).
-* **Brier / ECE calibration** — of the model's per-candidate ejection confidence
-  against the binary ejected outcome (Brier is numeric-probability fidelity, the
-  ranking is ordering — arXiv:2504.18278 says report both; WOLF reports Brier
-  ~0.26-0.29 for werewolf vote prediction, arXiv:2512.09187).
+* **Brier / ECE calibration** — on two channels, both reported: the model's
+  per-candidate ejection confidence against the binary ejected outcome, AND the
+  recorded **ballot confidences** (each non-SKIP voter's stated confidence vs
+  whether its named target was ejected — the WOLF vote-prediction channel, Brier
+  ~0.26-0.29, arXiv:2512.09187). Brier is numeric-probability fidelity, the ranking
+  is ordering — arXiv:2504.18278 says report both.
 
 All under **by-GAME cross-validation** — a game's meetings never split across folds
 (by-meeting CV would leak a game's cross-meeting belief state between train and
@@ -56,6 +58,7 @@ from agents.memory.beliefs import (
     BODY_PROXIMITY_SUSPICION_DELTA,
     CONTRADICTION_SUSPICION_DELTA,
     WEAK_CONTRADICTION_SUSPICION_DELTA,
+    WITNESSED_KILL_SUSPICION_DELTA,
 )
 from engine.entities import PlayerId
 from training.surrogate.dataset import MeetingTable, MeetingTableRow
@@ -122,6 +125,44 @@ class MeetingPrediction:
     ejection_prob: dict[PlayerId, float]
 
 
+def _validate_prediction(
+    prediction: MeetingPrediction, meeting: MeetingView, *, model_name: str
+) -> None:
+    """Reject a malformed model prediction before it is scored (Codex review).
+
+    The harness must fail loud, not silently produce meaningless top-k / Brier / ECE
+    numbers, when a model (e.g. the 15.13 surrogate) emits a broken prediction
+    (AGENTS.md "no silent fallbacks"). Enforces that ``ranking`` is a PERMUTATION of
+    the meeting's living candidates, ``ejected`` is a living candidate or ``None``
+    (SKIP), and ``ejection_prob`` covers exactly those candidates with values in
+    ``[0, 1]``.
+    """
+
+    candidates = frozenset(meeting.candidates)
+    where = f"model {model_name!r} meeting {meeting.seed}:{meeting.meeting_id}"
+    if len(prediction.ranking) != len(meeting.candidates) or (
+        frozenset(prediction.ranking) != candidates
+    ):
+        raise ValueError(
+            f"{where}: ranking {prediction.ranking} is not a permutation of the "
+            f"living candidates {tuple(meeting.candidates)}"
+        )
+    if prediction.ejected is not None and prediction.ejected not in candidates:
+        raise ValueError(
+            f"{where}: ejected {prediction.ejected!r} is not a living candidate or None"
+        )
+    if frozenset(prediction.ejection_prob) != candidates:
+        raise ValueError(
+            f"{where}: ejection_prob keys {sorted(prediction.ejection_prob)} != "
+            f"living candidates {sorted(candidates)}"
+        )
+    for cand, prob in prediction.ejection_prob.items():
+        if not 0.0 <= prob <= 1.0:
+            raise ValueError(
+                f"{where}: ejection_prob[{cand!r}] = {prob} is outside [0, 1]"
+            )
+
+
 @runtime_checkable
 class MeetingModel(Protocol):
     """The interface every meeting model the harness judges implements.
@@ -164,6 +205,7 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
                 "witnessed": float(feat.witnessed),
                 "isolation": float(feat.isolation),
                 "seen_at_kill": float(feat.seen_at_kill),
+                "witnessed_kill": float(feat.witnessed_kill),
                 "is_reporter": float(feat.is_reporter),
                 "meeting_index": float(sample.meeting_index),
                 "alive_count": alive_count,
@@ -176,7 +218,7 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
             }
             if feat.strong_flags + feat.weak_flags + feat.vent_flags > 0:
                 flag_legible.add(feat.candidate)
-            if feat.seen_at_kill or feat.body_proximity:
+            if feat.seen_at_kill or feat.witnessed_kill or feat.body_proximity:
                 proximity_legible.add(feat.candidate)
         # Public belief suspicion toward each candidate: the max over voters who are
         # NOT that candidate (a candidate's own row carries the neutral 0.5 self
@@ -197,15 +239,17 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
                 public[cand] = 0.5
         # Best-case reconstructed pre-meeting suspicion per candidate: the public
         # belief accumulator PLUS the flag / proximity channels weighted by the
-        # REAL belief-fold deltas (agents/memory/beliefs.py) — vent_sighting is a
-        # strong flag (Task 15.4). This is the sharpest ranking a physical+belief
-        # surrogate could form from the pre-meeting bytes; the honest ceiling reads
-        # its strict argmax (:func:`compute_honest_ceiling`).
+        # REAL belief-fold deltas (agents/memory/beliefs.py) — the exact
+        # witnessed-kill eyewitness pin (+1.0) dominates, vent_sighting is a strong
+        # flag (Task 15.4). This is the sharpest ranking a physical+belief surrogate
+        # could form from the pre-meeting bytes; the honest ceiling reads its strict
+        # argmax (:func:`compute_honest_ceiling`).
         recon: dict[PlayerId, float] = {}
         for cand in candidates:
             feats = features[cand]
             recon[cand] = (
                 public[cand]
+                + WITNESSED_KILL_SUSPICION_DELTA * feats["witnessed_kill"]
                 + CONTRADICTION_SUSPICION_DELTA * feats["strong_flags"]
                 + CONTRADICTION_SUSPICION_DELTA * feats["vent_flags"]
                 + WEAK_CONTRADICTION_SUSPICION_DELTA * feats["weak_flags"]
@@ -465,9 +509,18 @@ class SurrogateFidelityReport(BaseModel):
     # of true-ejection meetings AND does no better than the trivial always-eject
     # constant — the physical features cannot learn the SKIP/eject decision.
     degenerates_to_skip: bool
-    # Calibration of the per-candidate ejection confidence (both, §5.5).
+    # Calibration of the model's per-candidate ejection confidence (§5.5).
     brier: float
     ece: float
+    # Calibration of the RECORDED ballot confidences (§5.5 "Brier/ECE on the ballot
+    # confidences"; the WOLF vote-prediction channel, arXiv:2512.09187): over the
+    # scored meetings' non-SKIP ballots, the voter's stated confidence vs whether
+    # that ballot's named target was ejected. Model-independent (a property of the
+    # committed ballots), so a badly-calibrated ballot surrogate is judged against
+    # the real voters' calibration rather than only the post-tally ejection number.
+    ballot_brier: float
+    ballot_ece: float
+    ballot_rows: int
     # The honest ceiling (a measurement, not a target).
     honest_ceiling: HonestCeiling
 
@@ -478,16 +531,38 @@ def _game_folds(
     """Deterministic by-GAME (train, test) fold pairs; honour ``splits.json``.
 
     When the table carries a committed split, returns the single (train ∪ val, test)
-    pair it names — a by-game split by construction. Otherwise partitions the sorted
-    game seeds into ``folds`` contiguous test blocks (train = the rest). Either way a
-    game's seed lands wholly inside one test fold, so no meeting of a game is ever
-    split across folds (the anti-leakage guarantee; asserted by the leakage test).
+    pair it names — a by-game split by construction, but VALIDATED first (Codex
+    review): the fit set ``(train ∪ val)`` and the test set must be DISJOINT and
+    every referenced seed must be a game in the table, and the test set must be
+    non-empty. A 15.12 corpus mistake that put a seed in both fit and test would put
+    the same game's meetings on both sides of the single fold — leaking exactly the
+    cross-meeting belief state this by-game harness exists to prevent — so it fails
+    loud rather than silently inflating the fidelity numbers. Otherwise partitions
+    the sorted game seeds into ``folds`` contiguous test blocks (train = the rest).
+    Either way a game's seed lands wholly inside one test fold, so no meeting of a
+    game is ever split across folds (the anti-leakage guarantee; asserted by the
+    leakage test).
     """
 
     seeds = list(table.game_seeds())
     if table.splits is not None:
+        table_seeds = frozenset(seeds)
         test = frozenset(table.splits.test)
         train = frozenset(table.splits.train) | frozenset(table.splits.val)
+        unknown = (train | test) - table_seeds
+        if unknown:
+            raise ValueError(
+                f"splits.json references seeds absent from the table: {sorted(unknown)}"
+            )
+        overlap = train & test
+        if overlap:
+            raise ValueError(
+                "splits.json leaks games across the fit/test boundary: seeds "
+                f"{sorted(overlap)} are in both (train ∪ val) and test — the same "
+                "game's meetings would be used for fitting and scoring"
+            )
+        if not test:
+            raise ValueError("splits.json test set is empty; nothing to score")
         return [(train, test)], True
     k = max(1, min(folds, len(seeds)))
     blocks: list[tuple[frozenset[int], frozenset[int]]] = []
@@ -549,6 +624,7 @@ def run_surrogate_fidelity(
         for view in test_views:
             meetings_scored += 1
             prediction = model.predict(view)
+            _validate_prediction(prediction, view, model_name=model_name)
             true_eject = view.ejected
             predicted = prediction.ejected
             if predicted is None:
@@ -573,6 +649,24 @@ def run_surrogate_fidelity(
                 label = 1 if cand == true_eject else 0
                 brier_terms.append((prob - label) ** 2)
                 calib.append((prob, label))
+
+    # Recorded ballot-confidence calibration over the SCORED meetings' non-SKIP
+    # ballots (§5.5). Model-independent — read straight off the table's recorded
+    # ballots for the games that were scored (the union of the test folds; every
+    # game in K-fold, the committed test set under a split).
+    scored_seeds: set[int] = set()
+    for _, test_seeds in fold_pairs:
+        scored_seeds |= set(test_seeds)
+    ballot_calib: list[tuple[float, int]] = []
+    for row in table.rows:
+        if row.seed not in scored_seeds or row.ballot_target == "SKIP":
+            continue
+        label = 1 if row.ballot_target == row.ejected_player_id else 0
+        ballot_calib.append((row.ballot_confidence, label))
+    ballot_brier = (
+        float(np.mean([(c - y) ** 2 for c, y in ballot_calib])) if ballot_calib else 0.0
+    )
+    ballot_ece = _expected_calibration_error(ballot_calib)
 
     skip_meetings = meetings_scored - ejection_meetings
     brier = float(np.mean(brier_terms)) if brier_terms else 0.0
@@ -610,6 +704,9 @@ def run_surrogate_fidelity(
         and decision_accuracy <= always_eject_baseline,
         brier=brier,
         ece=ece,
+        ballot_brier=ballot_brier,
+        ballot_ece=ballot_ece,
+        ballot_rows=len(ballot_calib),
         honest_ceiling=compute_honest_ceiling(views),
     )
 
