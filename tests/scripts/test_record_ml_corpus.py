@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -125,6 +126,23 @@ def test_dry_run_locks_provider_to_featherless() -> None:
     assert "provider: featherless (LOCKED" in proc.stdout
     assert "would require FEATHERLESS_API_KEY" in proc.stdout
     assert "prompt set: qwen3_32b" in proc.stdout
+
+
+def test_dry_run_announces_endpoint_and_prompt_version_locks() -> None:
+    # The full substrate lock is visible in the plan: the hosted endpoint pin
+    # (a non-default AILIBI_FEATHERLESS_BASE_URL is refused) and the exact
+    # per-template prompt-version map the corpus is frozen at.
+    proc = _run("--dry-run")
+    assert proc.returncode == 0
+    assert (
+        "endpoint: https://api.featherless.ai/v1 (pinned; a non-default "
+        "AILIBI_FEATHERLESS_BASE_URL override is refused)" in proc.stdout
+    )
+    assert (
+        "prompt versions: locked to [accusation_round.qwen3_32b.v5, "
+        "crewmate_report.qwen3_32b.v5, impostor_report.qwen3_32b.v5, "
+        "vote_ballot.qwen3_32b.v6]" in proc.stdout
+    )
 
 
 def test_dry_run_stamps_fsm_default_policy() -> None:
@@ -318,13 +336,60 @@ def test_preflight_refuses_non_baseline_model_override(
     assert not corpus_root.exists()  # refused before any record
 
 
+def test_preflight_refuses_non_default_base_url(tmp_path: Path) -> None:
+    # build_default_client also honors AILIBI_FEATHERLESS_BASE_URL for
+    # featherless, so a leftover mock/staging export would record the whole
+    # "hosted-$0" corpus against an alternate endpoint while the MANIFEST stamps
+    # the baseline substrate — undetectable by the validity gate if that endpoint
+    # echoes the same model id. The preflight must refuse it BEFORE any record.
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_FEATHERLESS_BASE_URL="http://localhost:9999/v1",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", env=env)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "hosted Featherless endpoint" in out
+    assert "AILIBI_FEATHERLESS_BASE_URL" in out
+    assert not corpus_root.exists()  # refused before any record
+
+
+def test_prompt_version_registry_matches_locked_script_constant() -> None:
+    # The corpus contract freezes the baseline-3 prompt VERSIONS (turn/opening v5,
+    # vote_ballot v6), not just the set name — the recorder's preflight asserts
+    # the live registry still resolves qwen3_32b to its locked constant. Pin the
+    # two together here: if a later task bumps the registry entry, this test
+    # fails and forces the corpus re-lock conversation instead of letting the
+    # recorder's guard and the registry drift apart silently.
+    from orchestrator.game import PROMPT_VERSION_SETS
+
+    script = _RECORD_SH.read_text(encoding="utf-8")
+    match = re.search(r'^REQUIRED_PROMPT_VERSIONS="([^"]+)"$', script, re.MULTILINE)
+    assert match is not None, "REQUIRED_PROMPT_VERSIONS constant missing from script"
+    locked = match.group(1)
+    resolved = ", ".join(sorted(PROMPT_VERSION_SETS["qwen3_32b"].values()))
+    assert resolved == locked, (
+        "PROMPT_VERSION_SETS['qwen3_32b'] has moved off the locked baseline-3 "
+        "corpus versions; recording/resuming the 15.12 corpus would now drift. "
+        "Re-locking is an owner decision (re-record + re-freeze)."
+    )
+
+
 def test_record_path_accepts_baseline_model_override_and_rejects_stray_replay(
     tmp_path: Path,
 ) -> None:
-    # Two guards in one hermetic run of the REAL record path (no network: the run
-    # stops before any tournament invocation):
+    # Several guards in one hermetic run of the REAL record path (no network: the
+    # run stops before any tournament invocation):
     # * an override explicitly set TO the baseline model is not a drift risk, so
     #   the model preflight passes it ("Locked model OK");
+    # * a base-URL override explicitly set TO the hosted endpoint likewise passes
+    #   ("Locked endpoint OK"), and the registry check confirms the locked prompt
+    #   versions ("Locked prompt versions OK");
     # * a stray replay outside the set's locked seed range then fails the
     #   pre-spend check_seed_range, BEFORE any seed is staged — proving both that
     #   the range guard fires in the record path and that it fails before spend.
@@ -337,12 +402,15 @@ def test_record_path_accepts_baseline_model_override_and_rejects_stray_replay(
         AILIBI_PROMPT_SET="qwen3_32b",
         AILIBI_LLM_MEETING_MODEL="Qwen/Qwen3-32B",
         AILIBI_LLM_TRIGGER_MODEL="Qwen/Qwen3-32B",
+        AILIBI_FEATHERLESS_BASE_URL="https://api.featherless.ai/v1",
         AILIBI_ML_CORPUS_ROOT=str(corpus_root),
     )
     proc = _run("--set", "4p1i", env=env, timeout=120)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
     assert "Locked model OK" in out  # baseline-valued override passed the guard
+    assert "Locked endpoint OK" in out  # default-valued base URL passed the guard
+    assert "Locked prompt versions OK" in out  # registry matches the locked map
     assert "locked seed range 1000..1049" in out
     assert "replay-seed-2000.jsonl" in out
     # Failed BEFORE any record/finalize: no roster.json, manifest, or splits.

@@ -72,12 +72,18 @@ bash scripts/record_ml_corpus.sh      # --set 9p2i|4p1i|both (default both)
 
 The preflight locks the full baseline-3 substrate, not just the provider: a
 leftover `AILIBI_LLM_MEETING_MODEL` / `AILIBI_LLM_TRIGGER_MODEL` export from a
-model sweep is refused unless it names the baseline model, and both knobs are
-then exported pinned so the recorded model can never drift from the one the
-`MANIFEST` stamps. The recorder also refuses a set dir containing any
-`replay-seed-*.jsonl` outside the set's locked seed range (checked before
-recording and again before freezing), so a stray file can never be swept into
-the frozen corpus or its splits.
+model sweep is refused unless it names the baseline model, a non-default
+`AILIBI_FEATHERLESS_BASE_URL` (a mock/staging endpoint) is refused outright, and
+all three knobs are then exported pinned so the recorded substrate can never
+drift from the one the `MANIFEST` stamps. The prompt **versions** are locked
+too, not just the set name: the preflight asserts the registry still resolves
+`qwen3_32b` to the baseline-3 map (turn/opening v5, `vote_ballot` v6), and the
+finalize refuses to freeze a set whose `MANIFEST` rows carry any other version
+string — a later registry bump stops the recorder cold instead of silently
+recording (or resuming into) a non-baseline corpus. The recorder also refuses a
+set dir containing any `replay-seed-*.jsonl` outside the set's locked seed range
+(checked before recording and again before freezing), so a stray file can never
+be swept into the frozen corpus or its splits.
 
 The wrapper composes the same tooling `scripts/refresh_samples.sh` drives
 (`scripts/run_tournament.py --tactical-policy-stamp fsm-default`,
@@ -97,9 +103,13 @@ bash scripts/record_ml_corpus.sh --splits-only        # --set to scope
 The recorder is **resumable**. A multi-hour hosted record can be interrupted
 (machine sleep, a transport blip that kills the process). Simply re-run the same
 command — it **skips any seed whose replay is already present** in the set dir and
-records only the missing ones, then refreshes every `MANIFEST.md` row and
-re-finalizes (report + splits + `FROZEN`). A fully-recorded set records nothing
-and just re-finalizes, so re-running is always safe and idempotent:
+records only the missing ones, then re-finalizes (report + splits + `FROZEN`).
+Provenance is per-seed: a resume backfills `MANIFEST.md` rows only for seeds
+that lack one (the crash window between a replay landing and its row being
+written) — rows recorded by an earlier session keep that session's `git_sha`,
+so a resume never rewrites the provenance of bytes it did not record. A
+fully-recorded set records nothing and just re-finalizes, so re-running is
+always safe and idempotent:
 
 ```bash
 export FEATHERLESS_API_KEY=... AILIBI_PROMPT_SET=qwen3_32b

@@ -49,11 +49,14 @@
 #   -h, --help            show this help
 #
 # Operator gate: requires FEATHERLESS_API_KEY and AILIBI_PROMPT_SET=qwen3_32b; the
-# corpus is baseline-3, so the provider is LOCKED to featherless (a run under any
-# other provider — including the fake CI provider — is refused, so a corpus game
-# can never be silently recorded off-substrate, AGENTS.md "no silent fallbacks")
-# and the meeting/trigger models are pinned to the baseline (a non-baseline
-# AILIBI_LLM_MEETING_MODEL / AILIBI_LLM_TRIGGER_MODEL override is refused).
+# corpus is baseline-3, so the FULL substrate is LOCKED: the provider (a run under
+# any other provider — including the fake CI provider — is refused, so a corpus
+# game can never be silently recorded off-substrate, AGENTS.md "no silent
+# fallbacks"), the meeting/trigger models (a non-baseline AILIBI_LLM_MEETING_MODEL
+# / AILIBI_LLM_TRIGGER_MODEL override is refused), the endpoint (a non-default
+# AILIBI_FEATHERLESS_BASE_URL override is refused), and the per-template prompt
+# versions (the registry must still resolve qwen3_32b to the locked v5/v6 map,
+# and rows recorded off that map are refused at freeze).
 # ~7h wall; commit is one atomic PR after the gate + byte-verify pass per set. May
 # share the 15.7 operator session.
 
@@ -74,9 +77,22 @@ CORPUS_ROOT="${AILIBI_ML_CORPUS_ROOT:-$REPO_ROOT/replays/ml_corpus}"
 # llm.featherless_client.DEFAULT_FEATHERLESS_MODEL and refresh_samples.sh. Stamped
 # onto no-meeting rows and asserted by the operator's --expected-model gate.
 DEFAULT_FEATHERLESS_MODEL="Qwen/Qwen3-32B"
+# The hosted Featherless endpoint; mirrors
+# llm.featherless_client.DEFAULT_FEATHERLESS_BASE_URL. build_default_client honors
+# AILIBI_FEATHERLESS_BASE_URL, so the preflight pins it — a leftover mock/staging
+# export must never record the "hosted-$0" corpus against an alternate endpoint.
+DEFAULT_FEATHERLESS_BASE_URL="https://api.featherless.ai/v1"
 # The locked prompt set the corpus records under (baseline 3; Task 15.7). A
 # featherless run with any other set would SILENTLY record the wrong substrate.
 REQUIRED_PROMPT_SET="qwen3_32b"
+# The locked baseline-3 per-template prompt versions the set must resolve to
+# (turn/opening at v5 per Task 15.4, vote_ballot at v6 per Task 15.5). The set
+# NAME alone is not a version pin — the registry entry can be bumped by a later
+# task — so the preflight asserts orchestrator.game.PROMPT_VERSION_SETS still
+# resolves $REQUIRED_PROMPT_SET to exactly this map, and the finalize refuses to
+# freeze a set whose MANIFEST rows carry any other version string. Sorted,
+# comma+space-joined (the MANIFEST cell rendering).
+REQUIRED_PROMPT_VERSIONS="accusation_round.qwen3_32b.v5, crewmate_report.qwen3_32b.v5, impostor_report.qwen3_32b.v5, vote_ballot.qwen3_32b.v6"
 # The 15.9 tactical-policy stamp for the canonical scripted FSMs. Every corpus
 # game is FSM-default (no learned mover exists yet); the stamp makes that explicit
 # provenance rather than the absent = FSM-default default, so the MANIFEST policy
@@ -250,21 +266,30 @@ print(
 PY
 }
 
-# List every present seed (replay-seed-<int>.jsonl) in a set dir, ascending, as
-# a comma-separated string. Used by the finalize to refresh all MANIFEST rows.
-_present_seeds_csv() {
-  local set_dir="$1"
-  uv run python - "$set_dir" <<'PYINNER'
+# List every seed whose replay is present on disk but has NO row in the MANIFEST,
+# ascending, comma-separated (empty output = none missing). Used by the finalize
+# to close the crash window where a seed's replay was moved into place but its
+# per-seed MANIFEST update never ran. Deliberately NOT "all present seeds": a
+# resumed run must not restamp previously recorded seeds with the resume run's
+# git_sha — existing rows keep the provenance of the session that recorded their
+# bytes (per-seed history is exactly what a later audit reads). Reuses
+# _manifest_writer's own discovery + parser so the definition of "a seed" and
+# "a row" can never drift from the writer's.
+_seeds_missing_rows_csv() {
+  local set_dir="$1" manifest="$2"
+  uv run python - "$REPO_ROOT" "$set_dir" "$manifest" <<'PYINNER'
 import sys
 from pathlib import Path
 
-set_dir = Path(sys.argv[1])
-seeds = sorted(
-    int(p.stem[len("replay-seed-") :])
-    for p in set_dir.glob("replay-seed-*.jsonl")
-    if p.stem[len("replay-seed-") :].isdigit()
+sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
+from _manifest_writer import discover_seeds, parse_manifest  # noqa: E402
+
+set_dir, manifest = Path(sys.argv[2]), Path(sys.argv[3])
+stamped = (
+    set(parse_manifest(manifest.read_text(encoding="utf-8"))) if manifest.exists() else set()
 )
-print(",".join(str(s) for s in seeds))
+missing = sorted(seed for seed in discover_seeds(set_dir) if seed not in stamped)
+print(",".join(str(seed) for seed in missing))
 PYINNER
 }
 
@@ -298,15 +323,97 @@ if bad:
 PYINNER
 }
 
+# Assert the live registry still resolves $REQUIRED_PROMPT_SET to EXACTLY the
+# locked baseline-3 per-template versions. Run at preflight (fail before spend):
+# a later task bumping the set's registry entry must stop this recorder cold —
+# re-locking the corpus to a new prompt baseline is an owner decision, never a
+# silent drift. Pure Python, no network.
+check_prompt_version_registry() {
+  uv run python - "$REPO_ROOT" "$REQUIRED_PROMPT_SET" "$REQUIRED_PROMPT_VERSIONS" <<'PYINNER'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from orchestrator.game import PROMPT_VERSION_SETS  # noqa: E402
+
+set_name, locked = sys.argv[2], sys.argv[3]
+resolved = ", ".join(sorted(PROMPT_VERSION_SETS[set_name].values()))
+if resolved != locked:
+    sys.stderr.write(
+        f"Error: the prompt-set registry has moved off the locked baseline-3 versions.\n"
+        f"  PROMPT_VERSION_SETS[{set_name!r}] resolves to: {resolved}\n"
+        f"  the Task-15.12 corpus is frozen at:            {locked}\n"
+        "Recording the baseline-3 corpus against a bumped prompt set would freeze a\n"
+        "non-baseline corpus as Task 15.12. Re-locking to a new prompt baseline is an\n"
+        "owner decision (re-record + re-freeze); nothing was recorded.\n"
+    )
+    raise SystemExit(1)
+PYINNER
+}
+
+# Refuse to freeze a set whose MANIFEST rows carry any prompt-version string
+# outside the locked baseline-3 map. The preflight pins the registry FORWARD from
+# this run; this catches the RESUME case looking BACKWARD — seeds recorded by an
+# earlier session under a different (older/newer) prompt baseline whose rows
+# would otherwise be swept into the frozen corpus. No-meeting rows carry the
+# "(none — no meetings)" sentinel and are exempt (they invoked no template).
+check_recorded_prompt_versions() {
+  local set_dir="$1" manifest="$2"
+  uv run python - "$REPO_ROOT" "$set_dir" "$manifest" "$REQUIRED_PROMPT_VERSIONS" <<'PYINNER'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
+from _manifest_writer import parse_manifest  # noqa: E402
+
+set_dir, manifest, locked_csv = sys.argv[2], Path(sys.argv[3]), sys.argv[4]
+locked = {token.strip() for token in locked_csv.split(",")}
+if not manifest.exists():
+    sys.stderr.write(f"check_recorded_prompt_versions: no MANIFEST at {manifest}\n")
+    raise SystemExit(1)
+bad: dict[int, list[str]] = {}
+for seed, row in sorted(parse_manifest(manifest.read_text(encoding="utf-8")).items()):
+    cell = row.prompt_versions
+    if cell.startswith("(none"):  # the no-meetings sentinel: no template invoked
+        continue
+    foreign = [v for v in (token.strip() for token in cell.split(",")) if v not in locked]
+    if foreign:
+        bad[seed] = foreign
+if bad:
+    listing = "; ".join(f"seed {seed}: {', '.join(vs)}" for seed, vs in bad.items())
+    sys.stderr.write(
+        f"check_recorded_prompt_versions: {len(bad)} MANIFEST row(s) in {set_dir} carry "
+        f"prompt versions outside the locked baseline-3 map — {listing}\n"
+        "A resumed set must not mix prompt baselines; re-record the offending seeds.\n"
+    )
+    raise SystemExit(1)
+PYINNER
+}
+
 # --- FREEZE: append the explicit FROZEN line naming the git SHA --------------
 
 # The MANIFEST already stamps git_sha per row (via _manifest_writer update). The
 # freeze is an ADDITIONAL explicit marker: a trailing prose line naming the SHA
-# the corpus was recorded at, so a frozen set is unmistakable from the MANIFEST
-# alone. Appended AFTER the last per-seed update (a re-record re-renders the table
-# and drops this line, so an incomplete re-run is never left looking frozen).
+# of the run that FROZE the set, so a frozen set is unmistakable from the MANIFEST
+# alone. Any pre-existing FROZEN line is stripped first: a per-seed update
+# re-renders the table and drops it (so an incomplete re-run is never left looking
+# frozen), but a no-op re-finalize — all seeds present, no rows backfilled —
+# skips that rewrite, and without the strip each re-run would append a duplicate.
 freeze_manifest() {
   local manifest="$1" set_name="$2" git_sha="$3" refreshed_at="$4"
+  if ! uv run python - "$manifest" <<'PYINNER'
+import sys
+from pathlib import Path
+
+manifest = Path(sys.argv[1])
+lines = manifest.read_text(encoding="utf-8").splitlines()
+kept = [line for line in lines if not line.startswith("**FROZEN**")]
+while kept and not kept[-1].strip():  # drop trailing blanks left by old freezes
+    kept.pop()
+manifest.write_text("\n".join(kept) + "\n", encoding="utf-8")
+PYINNER
+  then
+    return 1
+  fi
   {
     printf '\n'
     printf '**FROZEN** at git_sha `%s` (recorded %s; Task 15.12): the %s ML-calibration corpus is frozen at baseline-3 config (Qwen/Qwen3-32B Featherless, prompt set %s, all substrate levers ON, tactical policy %s). By-game split rule: %s. Do not re-record without re-freezing.\n' \
@@ -342,6 +449,8 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
   echo "[dry-run] prompt set: $REQUIRED_PROMPT_SET (must be exported as AILIBI_PROMPT_SET)"
   echo "[dry-run] model: $DEFAULT_FEATHERLESS_MODEL (meeting + trigger pinned; a non-baseline AILIBI_LLM_MEETING_MODEL/AILIBI_LLM_TRIGGER_MODEL override is refused)"
+  echo "[dry-run] endpoint: $DEFAULT_FEATHERLESS_BASE_URL (pinned; a non-default AILIBI_FEATHERLESS_BASE_URL override is refused)"
+  echo "[dry-run] prompt versions: locked to [$REQUIRED_PROMPT_VERSIONS] (the registry is asserted at preflight; rows off this map are refused at freeze)"
   echo "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 since Task 14.9, evidence_quality_lift since the 14.12 close)"
   echo "[dry-run] tactical policy stamp: $POLICY_STAMP (15.9 FSM-default on every game)"
   if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
@@ -420,6 +529,36 @@ done
 export AILIBI_LLM_MEETING_MODEL="$DEFAULT_FEATHERLESS_MODEL"
 export AILIBI_LLM_TRIGGER_MODEL="$DEFAULT_FEATHERLESS_MODEL"
 echo "Locked model OK: meeting/trigger models pinned to $DEFAULT_FEATHERLESS_MODEL."
+
+# ... and the ENDPOINT: build_default_client also honors AILIBI_FEATHERLESS_BASE_URL
+# (llm/provider.py ENV_FEATHERLESS_BASE_URL), so a leftover export for a mock or
+# staging endpoint would record the whole "baseline-3 Featherless" corpus against
+# an alternate server while the MANIFEST stamps the baseline model and $0 — and
+# the validity gate cannot catch it if that endpoint echoes the same model id.
+# Refuse any non-default override (never silently discard an operator's explicit
+# setting), then export the knob pinned to the hosted endpoint.
+if [[ -n "${AILIBI_FEATHERLESS_BASE_URL:-}" \
+  && "${AILIBI_FEATHERLESS_BASE_URL}" != "$DEFAULT_FEATHERLESS_BASE_URL" ]]; then
+  echo "Error: the corpus must record against the hosted Featherless endpoint ($DEFAULT_FEATHERLESS_BASE_URL)." >&2
+  echo "       AILIBI_FEATHERLESS_BASE_URL='${AILIBI_FEATHERLESS_BASE_URL}' would record against an alternate endpoint while the MANIFEST stamps the baseline substrate." >&2
+  echo "       Unset AILIBI_FEATHERLESS_BASE_URL (or set it to '$DEFAULT_FEATHERLESS_BASE_URL') and re-run; nothing was recorded." >&2
+  exit 1
+fi
+export AILIBI_FEATHERLESS_BASE_URL="$DEFAULT_FEATHERLESS_BASE_URL"
+echo "Locked endpoint OK: base URL pinned to $DEFAULT_FEATHERLESS_BASE_URL."
+
+# ... and the PROMPT VERSIONS, not just the set name: the corpus contract freezes
+# the baseline-3 versions (turn/opening v5, vote_ballot v6), but AILIBI_PROMPT_SET
+# names a REGISTRY entry whose per-template versions can be bumped by a later
+# task. If that happens, re-running/resuming this recorder would silently record
+# (or mix) a non-baseline-prompt corpus and freeze it as Task 15.12. Assert the
+# live registry still resolves the set to EXACTLY the locked map; a mismatch is a
+# fail-loud stop — re-locking the corpus to a new prompt baseline is an owner
+# decision (a re-record + re-freeze), never a silent drift.
+if ! check_prompt_version_registry; then
+  exit 1
+fi
+echo "Locked prompt versions OK: $REQUIRED_PROMPT_SET resolves to the baseline-3 map ($REQUIRED_PROMPT_VERSIONS)."
 
 # Export the resolved provider so run_tournament.py records on Featherless — never
 # fall through to build_default_client()'s fake default (which would silently
@@ -706,27 +845,37 @@ record_set() {
     return 1
   fi
 
-  # Refresh MANIFEST rows for EVERY present seed (fresh or resumed-from-checkpoint),
-  # so a resume can never leave a recorded replay without a current row; $0, no
-  # provider call. Re-stamps all rows with this run's git_sha (one sha per set,
-  # matching the FROZEN line).
-  local present_csv
-  if ! present_csv="$(_present_seeds_csv "$set_dir")"; then
-    echo "ERROR: could not enumerate the recorded seeds in $set_dir; NOT freezing." >&2
+  # Backfill MANIFEST rows for seeds that have a replay on disk but NO row (the
+  # crash window: a replay was moved into place but its per-seed MANIFEST update
+  # never ran); $0, no provider call. ONLY row-less seeds are stamped — seeds
+  # recorded by an earlier session keep their existing rows' git_sha untouched,
+  # so a resume never rewrites the provenance of bytes it did not record (the
+  # per-seed history is exactly what a later audit reads; the FROZEN line names
+  # the sha of the run that FROZE the set).
+  local missing_csv
+  if ! missing_csv="$(_seeds_missing_rows_csv "$set_dir" "$manifest")"; then
+    echo "ERROR: could not reconcile recorded seeds with $manifest; NOT freezing." >&2
     return 1
   fi
-  if [[ -n "$present_csv" ]]; then
-    echo "Refreshing MANIFEST rows for all present seeds ..."
+  if [[ -n "$missing_csv" ]]; then
+    echo "Backfilling MANIFEST rows for row-less seeds: $missing_csv ..."
     if ! uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
-      --seeds "$present_csv" \
+      --seeds "$missing_csv" \
       --git-sha "$git_sha" \
       --refreshed-at "$refreshed_at" \
       --model "$DEFAULT_FEATHERLESS_MODEL" \
       --sample-dir "$set_dir" \
       --manifest "$manifest"; then
-      echo "ERROR: the final MANIFEST refresh failed for $set_name; NOT freezing." >&2
+      echo "ERROR: the MANIFEST backfill failed for $set_name; NOT freezing." >&2
       return 1
     fi
+  fi
+
+  # Refuse to freeze rows recorded under a different prompt baseline (the resume
+  # counterpart of the preflight registry pin — see check_recorded_prompt_versions).
+  if ! check_recorded_prompt_versions "$set_dir" "$manifest"; then
+    echo "ERROR: $set_name carries non-baseline prompt versions; NOT freezing." >&2
+    return 1
   fi
 
   # Rebuild the derived eval report (roles ground truth) from the recorded replays.
