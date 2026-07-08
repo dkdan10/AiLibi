@@ -248,6 +248,24 @@ print(
 PY
 }
 
+# List every present seed (replay-seed-<int>.jsonl) in a set dir, ascending, as
+# a comma-separated string. Used by the finalize to refresh all MANIFEST rows.
+_present_seeds_csv() {
+  local set_dir="$1"
+  uv run python - "$set_dir" <<'PYINNER'
+import sys
+from pathlib import Path
+
+set_dir = Path(sys.argv[1])
+seeds = sorted(
+    int(p.stem[len("replay-seed-") :])
+    for p in set_dir.glob("replay-seed-*.jsonl")
+    if p.stem[len("replay-seed-") :].isdigit()
+)
+print(",".join(str(s) for s in seeds))
+PYINNER
+}
+
 # --- FREEZE: append the explicit FROZEN line naming the git SHA --------------
 
 # The MANIFEST already stamps git_sha per row (via _manifest_writer update). The
@@ -297,6 +315,7 @@ if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] seed workers: 1 (sequential)"
   fi
   echo "[dry-run] seed crash-retry: up to $SEED_MAX_ATTEMPTS attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)"
+  echo "[dry-run] resume: seeds whose replay already exists in the set dir are skipped (a re-run records only the missing ones)"
   echo "[dry-run] split rule: $SPLIT_RULE_DESC (by game; no game in two splits)"
   for set_name in "${sets[@]}"; do
     read -r start count np ni tpc <<<"$(set_config "$set_name")"
@@ -381,13 +400,24 @@ record_set() {
     --num-impostors "$ni" \
     --tasks-per-crewmate "$tpc"
 
-  # Build the contiguous seed list for this set.
+  # Build the contiguous seed list for this set, SKIPPING any seed whose replay is
+  # already present in the set dir (RESUME): a re-run after an interruption records
+  # only the missing seeds. The per-seed move is atomic, so an existing replay in
+  # the set dir is always complete. A fully-recorded set records nothing here and
+  # jumps straight to the finalize (report + splits + freeze), which is idempotent.
   local -a seed_list=()
-  local s
+  local s already=0
   for ((s = start; s <= last; s++)); do
+    if [[ -s "$set_dir/replay-seed-$s.jsonl" ]]; then
+      already=$((already + 1))
+      continue
+    fi
     seed_list+=("$s")
   done
   local total_seeds="${#seed_list[@]}"
+  if [[ "$already" -gt 0 ]]; then
+    echo "Resume: $already/$count seed(s) already recorded; $total_seeds remaining."
+  fi
 
   # Stage per-seed runs on the same filesystem as the set dir so the replay can be
   # moved into place atomically, and only after the run succeeds. Each seed gets
@@ -585,6 +615,23 @@ record_set() {
   meetings_seen="$(cat "$stage_dir/.state/meetings")"
   echo "Set $set_name recorded: $meetings_seen/$total_seeds seeds reached a meeting"
   echo "  (authoritative meeting_rate is in the eval report)."
+
+  # Refresh MANIFEST rows for EVERY present seed (fresh or resumed-from-checkpoint),
+  # so a resume can never leave a recorded replay without a current row; $0, no
+  # provider call. Re-stamps all rows with this run's git_sha (one sha per set,
+  # matching the FROZEN line).
+  local present_csv
+  present_csv="$(_present_seeds_csv "$set_dir")"
+  if [[ -n "$present_csv" ]]; then
+    echo "Refreshing MANIFEST rows for all present seeds ..."
+    uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
+      --seeds "$present_csv" \
+      --git-sha "$git_sha" \
+      --refreshed-at "$refreshed_at" \
+      --model "$DEFAULT_FEATHERLESS_MODEL" \
+      --sample-dir "$set_dir" \
+      --manifest "$manifest"
+  fi
 
   # Rebuild the derived eval report (roles ground truth) from the recorded replays.
   echo "Rebuilding eval report for $set_name ..."
