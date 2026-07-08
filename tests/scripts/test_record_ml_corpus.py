@@ -1,9 +1,9 @@
 """Tests for scripts/record_ml_corpus.sh (Task 15.12).
 
-Exercises argument handling, the --dry-run plan, the provider/substrate
-preflight (which the corpus LOCKS to featherless + qwen3_32b), and the
-hermetic --splits-only emission. Every case is hermetic and makes NO network
-call and NO real-provider record:
+Exercises argument handling, the --dry-run plan, the provider/substrate/model
+preflight (which the corpus LOCKS to featherless + qwen3_32b + the baseline
+model), the locked-seed-range guard, and the hermetic --splits-only emission.
+Every case is hermetic and makes NO network call and NO real-provider record:
 
 * --dry-run touches nothing and describes the plan;
 * the preflight cases fail loud BEFORE any tournament invocation (wrong
@@ -291,6 +291,68 @@ def test_preflight_requires_locked_prompt_set_before_record(tmp_path: Path) -> N
     assert not corpus_root.exists()
 
 
+@pytest.mark.parametrize(
+    "model_env", ["AILIBI_LLM_MEETING_MODEL", "AILIBI_LLM_TRIGGER_MODEL"]
+)
+def test_preflight_refuses_non_baseline_model_override(
+    tmp_path: Path, model_env: str
+) -> None:
+    # build_default_client honors the model env knobs for featherless, so a
+    # leftover export from a model sweep would record the whole corpus on a
+    # non-baseline model while the MANIFEST stamps Qwen/Qwen3-32B. The preflight
+    # must refuse it BEFORE any record.
+    corpus_root = tmp_path / "ml_corpus"
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    env[model_env] = "some-other/Model-7B"
+    proc = _run("--set", "4p1i", env=env)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "locked baseline-3 model" in out
+    assert model_env in out
+    assert not corpus_root.exists()  # refused before any record
+
+
+def test_record_path_accepts_baseline_model_override_and_rejects_stray_replay(
+    tmp_path: Path,
+) -> None:
+    # Two guards in one hermetic run of the REAL record path (no network: the run
+    # stops before any tournament invocation):
+    # * an override explicitly set TO the baseline model is not a drift risk, so
+    #   the model preflight passes it ("Locked model OK");
+    # * a stray replay outside the set's locked seed range then fails the
+    #   pre-spend check_seed_range, BEFORE any seed is staged — proving both that
+    #   the range guard fires in the record path and that it fails before spend.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = _stub_set(corpus_root, "4p1i", [1000, 1001, 2000])  # 2000 is stray
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_LLM_MEETING_MODEL="Qwen/Qwen3-32B",
+        AILIBI_LLM_TRIGGER_MODEL="Qwen/Qwen3-32B",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", env=env, timeout=120)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "Locked model OK" in out  # baseline-valued override passed the guard
+    assert "locked seed range 1000..1049" in out
+    assert "replay-seed-2000.jsonl" in out
+    # Failed BEFORE any record/finalize: no roster.json, manifest, or splits.
+    assert set(p.name for p in set_dir.iterdir()) == {
+        "replay-seed-1000.jsonl",
+        "replay-seed-1001.jsonl",
+        "replay-seed-2000.jsonl",
+    }
+
+
 # -- splits-only (hermetic; no network, no record) ----------------------------
 
 
@@ -361,6 +423,34 @@ def test_splits_only_empty_set_dir_fails_loud(tmp_path: Path) -> None:
     proc = _run("--set", "9p2i", "--splits-only", env=env)
     assert proc.returncode != 0
     assert "no replay-seed-*.jsonl" in proc.stdout + proc.stderr
+
+
+def test_splits_only_rejects_out_of_range_replay(tmp_path: Path) -> None:
+    # A stray replay outside the set's locked seed range (here: a 9p2i seed range
+    # file of 1000..1149) must fail loud rather than be partitioned into the
+    # committed splits.json (and, in the record path, frozen into the corpus).
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = _stub_set(corpus_root, "9p2i", [1000, 1001, 1150])  # 1150 > 1149
+    env = dict(_clean_env(), AILIBI_ML_CORPUS_ROOT=str(corpus_root))
+    proc = _run("--set", "9p2i", "--splits-only", env=env)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "locked seed range 1000..1149" in out
+    assert "replay-seed-1150.jsonl" in out
+    assert not (set_dir / "splits.json").exists()
+
+
+def test_splits_only_rejects_non_canonical_seed_alias(tmp_path: Path) -> None:
+    # A zero-padded alias parses to an in-range seed but is a DUPLICATE of the
+    # canonical filename — reject it instead of double-counting the game.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = _stub_set(corpus_root, "4p1i", [1000, 1001])
+    (set_dir / "replay-seed-01001.jsonl").write_text("{}\n")
+    env = dict(_clean_env(), AILIBI_ML_CORPUS_ROOT=str(corpus_root))
+    proc = _run("--set", "4p1i", "--splits-only", env=env)
+    assert proc.returncode != 0
+    assert "replay-seed-01001.jsonl" in proc.stdout + proc.stderr
+    assert not (set_dir / "splits.json").exists()
 
 
 def test_splits_only_both_sets(tmp_path: Path) -> None:

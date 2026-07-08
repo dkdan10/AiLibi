@@ -51,7 +51,9 @@
 # Operator gate: requires FEATHERLESS_API_KEY and AILIBI_PROMPT_SET=qwen3_32b; the
 # corpus is baseline-3, so the provider is LOCKED to featherless (a run under any
 # other provider — including the fake CI provider — is refused, so a corpus game
-# can never be silently recorded off-substrate, AGENTS.md "no silent fallbacks").
+# can never be silently recorded off-substrate, AGENTS.md "no silent fallbacks")
+# and the meeting/trigger models are pinned to the baseline (a non-baseline
+# AILIBI_LLM_MEETING_MODEL / AILIBI_LLM_TRIGGER_MODEL override is refused).
 # ~7h wall; commit is one atomic PR after the gate + byte-verify pass per set. May
 # share the 15.7 operator session.
 
@@ -266,6 +268,36 @@ print(",".join(str(s) for s in seeds))
 PYINNER
 }
 
+# Fail loud when a set dir holds any replay-seed-*.jsonl OUTSIDE the set's locked
+# contiguous seed range — or a non-canonical alias (leading zeros, a non-integer
+# stem) that would shadow/duplicate an in-range seed. The finalize discovers
+# replays by filename, so without this check a stray file dropped into a resumed
+# set dir would be swept into the MANIFEST/report/splits and silently FROZEN into
+# the corpus (growing it past the required game count and contaminating
+# train/val/test). Checked BEFORE recording (fail before spend) and again before
+# the finalize/freeze. Pure Python, no network.
+check_seed_range() {
+  local set_dir="$1" start="$2" last="$3"
+  uv run python - "$set_dir" "$start" "$last" <<'PYINNER'
+import sys
+from pathlib import Path
+
+set_dir, start, last = Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+bad: list[str] = []
+for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+    core = path.stem[len("replay-seed-") :]
+    if not core.isdigit() or str(int(core)) != core or not (start <= int(core) <= last):
+        bad.append(path.name)
+if bad:
+    sys.stderr.write(
+        f"check_seed_range: {len(bad)} replay file(s) in {set_dir} fall outside the "
+        f"locked seed range {start}..{last}: {', '.join(bad)}\n"
+        "Remove the stray file(s); refusing to record into / freeze a dirty set.\n"
+    )
+    raise SystemExit(1)
+PYINNER
+}
+
 # --- FREEZE: append the explicit FROZEN line naming the git SHA --------------
 
 # The MANIFEST already stamps git_sha per row (via _manifest_writer update). The
@@ -294,6 +326,8 @@ if [[ "$splits_only" -eq 1 ]]; then
       exit 1
     fi
     echo "=== splits-only: $set_name ($set_dir) ==="
+    # A stray out-of-range replay would otherwise be partitioned into the splits.
+    check_seed_range "$set_dir" "$_start" "$((_start + _count - 1))"
     write_splits "$set_name" "$set_dir"
   done
   exit 0
@@ -307,6 +341,7 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] provider: featherless (LOCKED — the corpus is baseline-3)"
   echo "[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; \$0 provider-keyed cost)"
   echo "[dry-run] prompt set: $REQUIRED_PROMPT_SET (must be exported as AILIBI_PROMPT_SET)"
+  echo "[dry-run] model: $DEFAULT_FEATHERLESS_MODEL (meeting + trigger pinned; a non-baseline AILIBI_LLM_MEETING_MODEL/AILIBI_LLM_TRIGGER_MODEL override is refused)"
   echo "[dry-run] substrate flags: all five levers ON (unconditional; 13.5 since Task 14.9, evidence_quality_lift since the 14.12 close)"
   echo "[dry-run] tactical policy stamp: $POLICY_STAMP (15.9 FSM-default on every game)"
   if [[ "$REFRESH_WORKERS" -gt 1 ]]; then
@@ -365,6 +400,27 @@ if [[ "${AILIBI_PROMPT_SET:-}" != "$REQUIRED_PROMPT_SET" ]]; then
 fi
 echo "Locked substrate OK: AILIBI_PROMPT_SET=$REQUIRED_PROMPT_SET (all five levers unconditionally ON)."
 
+# Baseline-3 also locks the MODEL: build_default_client honors
+# AILIBI_LLM_MEETING_MODEL / AILIBI_LLM_TRIGGER_MODEL for featherless, so a
+# leftover export from a model sweep would silently record the whole multi-hour
+# corpus on a non-baseline model while the MANIFEST/no-meeting rows keep stamping
+# $DEFAULT_FEATHERLESS_MODEL. Refuse any non-baseline override (AGENTS.md "no
+# silent fallbacks" — never silently discard an operator's explicit setting),
+# then export both knobs pinned to the baseline so the recorded model can never
+# drift from the stamped one.
+for model_env in AILIBI_LLM_MEETING_MODEL AILIBI_LLM_TRIGGER_MODEL; do
+  model_val="${!model_env:-}"
+  if [[ -n "$model_val" && "$model_val" != "$DEFAULT_FEATHERLESS_MODEL" ]]; then
+    echo "Error: the corpus must record the locked baseline-3 model ($DEFAULT_FEATHERLESS_MODEL)." >&2
+    echo "       $model_env='$model_val' would record off-baseline while the MANIFEST stamps the baseline model." >&2
+    echo "       Unset $model_env (or set it to '$DEFAULT_FEATHERLESS_MODEL') and re-run; nothing was recorded." >&2
+    exit 1
+  fi
+done
+export AILIBI_LLM_MEETING_MODEL="$DEFAULT_FEATHERLESS_MODEL"
+export AILIBI_LLM_TRIGGER_MODEL="$DEFAULT_FEATHERLESS_MODEL"
+echo "Locked model OK: meeting/trigger models pinned to $DEFAULT_FEATHERLESS_MODEL."
+
 # Export the resolved provider so run_tournament.py records on Featherless — never
 # fall through to build_default_client()'s fake default (which would silently
 # record fake output at $0 with the wrong model).
@@ -391,14 +447,31 @@ record_set() {
   echo "  roster ${np}p/${ni}i @ ${tpc} task(s)/crewmate -> $set_dir"
   echo "===================================================================="
 
-  mkdir -p "$set_dir"
+  # record_set is invoked in an `if ! record_set ...` conditional, which disables
+  # errexit for the whole function body (Bash semantics) — so every step that
+  # must not be skipped over on failure carries an EXPLICIT `if ! ...; then
+  # return 1` guard. Without them a failed roster pin / manifest refresh / report
+  # rebuild / splits write would fall through and still FREEZE the set with a
+  # zero exit status.
+  if ! mkdir -p "$set_dir"; then
+    echo "ERROR: could not create $set_dir; nothing recorded." >&2
+    return 1
+  fi
+  # Refuse a dirty set dir BEFORE spending: a stray replay outside the locked
+  # range would survive the resume skip-scan and be swept into the finalize.
+  if ! check_seed_range "$set_dir" "$start" "$last"; then
+    return 1
+  fi
   # Pin the set's roster.json BEFORE spending, so the recorded replays reconstruct
   # from their own descriptor (fails loud if an existing one disagrees).
-  uv run python "$REPO_ROOT/scripts/_manifest_writer.py" roster \
+  if ! uv run python "$REPO_ROOT/scripts/_manifest_writer.py" roster \
     --sample-dir "$set_dir" \
     --num-players "$np" \
     --num-impostors "$ni" \
-    --tasks-per-crewmate "$tpc"
+    --tasks-per-crewmate "$tpc"; then
+    echo "ERROR: roster pin failed for $set_name; nothing recorded." >&2
+    return 1
+  fi
 
   # Build the contiguous seed list for this set, SKIPPING any seed whose replay is
   # already present in the set dir (RESUME): a re-run after an interruption records
@@ -427,7 +500,10 @@ record_set() {
   # discarded stage, so the set dir holds no non-replay JSONL the validity gate /
   # loader would trip on).
   local stage_dir
-  stage_dir="$(mktemp -d "$set_dir/.ailibi-corpus-stage-XXXXXX")"
+  if ! stage_dir="$(mktemp -d "$set_dir/.ailibi-corpus-stage-XXXXXX")"; then
+    echo "ERROR: could not create the staging dir under $set_dir; nothing recorded." >&2
+    return 1
+  fi
   # shellcheck disable=SC2064
   trap "rm -rf '$stage_dir'" RETURN
 
@@ -623,34 +699,56 @@ record_set() {
   echo "Set $set_name recorded: $meetings_seen/$total_seeds seeds reached a meeting"
   echo "  (authoritative meeting_rate is in the eval report)."
 
+  # Re-validate the set dir right before the finalize sweeps it by filename: a
+  # stray out-of-range replay that appeared mid-run must never be frozen in.
+  if ! check_seed_range "$set_dir" "$start" "$last"; then
+    echo "ERROR: $set_name holds replays outside seeds $start..$last; NOT freezing." >&2
+    return 1
+  fi
+
   # Refresh MANIFEST rows for EVERY present seed (fresh or resumed-from-checkpoint),
   # so a resume can never leave a recorded replay without a current row; $0, no
   # provider call. Re-stamps all rows with this run's git_sha (one sha per set,
   # matching the FROZEN line).
   local present_csv
-  present_csv="$(_present_seeds_csv "$set_dir")"
+  if ! present_csv="$(_present_seeds_csv "$set_dir")"; then
+    echo "ERROR: could not enumerate the recorded seeds in $set_dir; NOT freezing." >&2
+    return 1
+  fi
   if [[ -n "$present_csv" ]]; then
     echo "Refreshing MANIFEST rows for all present seeds ..."
-    uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
+    if ! uv run python "$REPO_ROOT/scripts/_manifest_writer.py" update \
       --seeds "$present_csv" \
       --git-sha "$git_sha" \
       --refreshed-at "$refreshed_at" \
       --model "$DEFAULT_FEATHERLESS_MODEL" \
       --sample-dir "$set_dir" \
-      --manifest "$manifest"
+      --manifest "$manifest"; then
+      echo "ERROR: the final MANIFEST refresh failed for $set_name; NOT freezing." >&2
+      return 1
+    fi
   fi
 
   # Rebuild the derived eval report (roles ground truth) from the recorded replays.
   echo "Rebuilding eval report for $set_name ..."
-  uv run python "$REPO_ROOT/scripts/build_sample_report.py" --sample-dir "$set_dir"
+  if ! uv run python "$REPO_ROOT/scripts/build_sample_report.py" --sample-dir "$set_dir"; then
+    echo "ERROR: the eval-report rebuild failed for $set_name; NOT freezing." >&2
+    return 1
+  fi
 
   # Write the committed by-game splits.json.
   echo "Writing splits.json for $set_name ..."
-  write_splits "$set_name" "$set_dir"
+  if ! write_splits "$set_name" "$set_dir"; then
+    echo "ERROR: writing splits.json failed for $set_name; NOT freezing." >&2
+    return 1
+  fi
 
   # FREEZE: append the explicit FROZEN line naming the git SHA (last, after every
   # per-seed MANIFEST update, so the freeze line survives the final render).
-  freeze_manifest "$manifest" "$set_name" "$git_sha" "$refreshed_at"
+  if ! freeze_manifest "$manifest" "$set_name" "$git_sha" "$refreshed_at"; then
+    echo "ERROR: appending the FROZEN line failed for $set_name." >&2
+    return 1
+  fi
   echo "Set $set_name complete and FROZEN."
 }
 

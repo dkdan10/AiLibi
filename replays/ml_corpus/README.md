@@ -70,6 +70,15 @@ export AILIBI_PROMPT_SET=qwen3_32b    # the locked baseline-3 prompt set
 bash scripts/record_ml_corpus.sh      # --set 9p2i|4p1i|both (default both)
 ```
 
+The preflight locks the full baseline-3 substrate, not just the provider: a
+leftover `AILIBI_LLM_MEETING_MODEL` / `AILIBI_LLM_TRIGGER_MODEL` export from a
+model sweep is refused unless it names the baseline model, and both knobs are
+then exported pinned so the recorded model can never drift from the one the
+`MANIFEST` stamps. The recorder also refuses a set dir containing any
+`replay-seed-*.jsonl` outside the set's locked seed range (checked before
+recording and again before freezing), so a stray file can never be swept into
+the frozen corpus or its splits.
+
 The wrapper composes the same tooling `scripts/refresh_samples.sh` drives
 (`scripts/run_tournament.py --tactical-policy-stamp fsm-default`,
 `scripts/_manifest_writer.py`, `scripts/build_sample_report.py`); it never edits
