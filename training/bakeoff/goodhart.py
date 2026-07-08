@@ -662,18 +662,31 @@ _SURROGATE_OBLIGATION: Final[str] = (
 )
 
 
-def _supply_floor_note(report: WatchabilityReport) -> str:
+def _supply_floor_note(report: WatchabilityReport, fake_meetings: bool) -> str:
+    provider = "fake meetings" if fake_meetings else "the surrogate meeting path"
     gauges = ", ".join(
         f"{g.name}={'PASS' if g.passed else 'FAIL'}"
         f"(measured={g.measured}, floor={g.floor})"
         for g in report.supply_gauges
     )
+    prefix = f"Evidence-supply floors on the champion set ({provider}): {gauges}. "
+    if fake_meetings and not report.referee_passed:
+        return (
+            prefix + "The meeting-driven floors cannot clear under the fake provider "
+            "(no contradiction flags, no observation-backed accusations), so "
+            "referee_passed stays False — the champion-SELECTION GATE holds under "
+            "probe by the two-layer design, independent of the geomean."
+        )
+    if report.referee_passed:
+        return (
+            prefix + "The champion CLEARS the composed referee (referee_passed=True) "
+            "— the selection gate would ACCEPT this candidate, so the supply floors "
+            "did NOT hold here; see the gate-laundering exploit."
+        )
     return (
-        "Evidence-supply floors on the champion set (fake meetings): "
-        f"{gauges}. The meeting-driven floors cannot clear under the fake provider "
-        "(no contradiction flags, no observation-backed accusations), so "
-        "referee_passed stays False for every genome — the champion-SELECTION GATE "
-        "holds under probe by the two-layer design, independent of the geomean."
+        prefix + "The champion does not clear the supply-floor gate "
+        "(referee_passed=False); the gate holds for this candidate, independent of "
+        "the geomean."
     )
 
 
@@ -748,15 +761,21 @@ def run_goodhart_probe(
     champion_score = champion_report.mean_score
     relative_gain = _relative_gain(baseline_score, champion_score)
 
+    # None => the fake-provider runner (this task); a factory => the 15.15 surrogate
+    # path, under which the meeting-driven supply floors CAN clear and a candidate
+    # may launder past the gate. The verdict + evidence text branch on this.
+    fake_meetings = meeting_runner_factory is None
     exploits, strongest_score = _build_exploits(
         baseline_score=baseline_score,
         baseline_aggs=baseline_aggs,
+        baseline_referee_passed=baseline.watchability.referee_passed,
         champion_eval=champion_eval,
         champion_score=champion_score,
         champion_gain=relative_gain,
         levers=levers,
         evaluator=evaluator,
         materiality_bar=materiality_bar,
+        fake_meetings=fake_meetings,
     )
     verdict: Literal["HELD", "EXPLOITS_FOUND"] = (
         "EXPLOITS_FOUND" if exploits else "HELD"
@@ -789,7 +808,7 @@ def run_goodhart_probe(
         strongest_reachable_score=round(strongest_score, 2),
         verdict=verdict,
         exploits=exploits,
-        supply_floor_note=_supply_floor_note(champion_report),
+        supply_floor_note=_supply_floor_note(champion_report, fake_meetings),
         surrogate_rerun_obligation=_SURROGATE_OBLIGATION,
     )
 
@@ -835,6 +854,16 @@ def _sweep_levers(
 def _recommended_floor(moving_term: str) -> str:
     """The floor/patch recommended to the PAUSE for a moving term (never applied)."""
 
+    if moving_term == "referee_gate":
+        return (
+            "A referee-optimized genome CLEARS the composed selection gate "
+            "(referee_passed) that the honest scripted baseline does NOT — the "
+            "referee would SELECT this candidate as a champion. Scrutinize whether "
+            "its play is genuinely watchable or a laundered degenerate before "
+            "trusting the gate; harden the supply floors / add a behavioral-diversity "
+            "check against the anchor — routed to the PAUSE (eval/watchability.py is "
+            "the subject under attack, out of scope here)"
+        )
     if moving_term == "d4":
         return (
             "cap the D4 contest term's reward for raw meeting COUNT (it already "
@@ -884,20 +913,31 @@ def _build_exploits(
     *,
     baseline_score: float,
     baseline_aggs: _SetAggregates,
+    baseline_referee_passed: bool,
     champion_eval: _SetEvaluation,
     champion_score: float,
     champion_gain: float,
     levers: Sequence[LeverResult],
     evaluator: _RefereeAttackEvaluator,
     materiality_bar: float,
+    fake_meetings: bool,
 ) -> tuple[tuple[ProbeExploit, ...], float]:
     """Promote every material policy (ES champion / lever) to an exploit.
 
-    Returns ``(exploits, strongest_reachable_score)``. A candidate is an exploit
-    when the validity gate passes AND its relative geomean gain clears the bar —
-    the referee's mean_score was pushed materially above the honest FSM without
-    (necessarily) real deduction. Deduped by moving-term (strongest delta wins) so
-    distinct mechanisms are listed once.
+    Returns ``(exploits, strongest_reachable_score)``. A candidate is material when
+    the validity gate passes AND EITHER of:
+
+    * it CLEARS the composed referee gate (``referee_passed``) that the honest
+      scripted baseline does NOT — a laundered champion the SELECTION gate would
+      accept (the strongest possible exploit; flagged regardless of geomean gain,
+      the primary case the 15.15 surrogate path opens); or
+    * its relative geomean gain clears the materiality bar — the ``mean_score``
+      sub-metric pushed materially above the honest FSM (today's fake-meeting
+      finding, where the gate still rejects it).
+
+    Gains are compared UNROUNDED (rounding only happens at display time) so a
+    candidate at 24.99% is not promoted past a 25% bar. Deduped by mechanism so a
+    distinct exploit is reported once with its worst-case evidence.
     """
 
     candidates: list[_ExploitCandidate] = [
@@ -912,13 +952,16 @@ def _build_exploits(
     ]
     for lever in levers:
         lever_eval = evaluator.evaluate_set(_forced_genome(lever.tactic))
+        lever_score = lever_eval.watchability.mean_score
         candidates.append(
             _ExploitCandidate(
                 label=f"forced-{lever.tactic} lever",
-                score=lever.mean_score,
-                gain=lever.relative_gain,
-                referee_passed=lever.referee_passed,
-                validity_passed=lever.validity_passed,
+                score=lever_score,
+                # UNROUNDED gain (not the display-rounded LeverResult.relative_gain)
+                # so the materiality threshold is not tripped by 4-decimal rounding.
+                gain=_relative_gain(baseline_score, lever_score),
+                referee_passed=lever_eval.watchability.referee_passed,
+                validity_passed=lever_eval.validity_passed,
                 aggs=_aggregate(lever_eval.watchability.per_game),
             )
         )
@@ -933,44 +976,92 @@ def _build_exploits(
         + [candidate.score for candidate in candidates if candidate.validity_passed]
     )
 
+    def _gate_laundered(candidate: _ExploitCandidate) -> bool:
+        # A referee-optimized genome that clears the gate the honest baseline does
+        # not = the referee would SELECT a directly-optimized champion.
+        return candidate.referee_passed and not baseline_referee_passed
+
     material = [
         candidate
         for candidate in candidates
-        if candidate.validity_passed and candidate.gain >= materiality_bar
+        if candidate.validity_passed
+        and (candidate.gain >= materiality_bar or _gate_laundered(candidate))
     ]
-    # Strongest delta first, then dedupe by the moving term so each distinct
-    # exploit MECHANISM is reported once with its worst-case evidence.
-    material.sort(key=lambda candidate: candidate.score, reverse=True)
+    # Gate-laundering first (the strongest exploit), then by score; dedupe by the
+    # exploit MECHANISM so each is reported once with its worst-case evidence.
+    material.sort(
+        key=lambda candidate: (_gate_laundered(candidate), candidate.score),
+        reverse=True,
+    )
     exploits: list[ProbeExploit] = []
     seen_terms: set[str] = set()
     for candidate in material:
-        moving = _moving_term(baseline_aggs, candidate.aggs)
+        laundered = _gate_laundered(candidate)
+        moving = (
+            "referee_gate" if laundered else _moving_term(baseline_aggs, candidate.aggs)
+        )
         if moving in seen_terms:
             continue
         seen_terms.add(moving)
-        trajectory = (
-            f"{candidate.label}: scripted-FSM baseline mean_score="
-            f"{baseline_score:.2f} (mean meetings {baseline_aggs.mean_meetings:.2f}) "
-            f"-> mean_score={candidate.score:.2f} (mean meetings "
-            f"{candidate.aggs.mean_meetings:.2f}); relative geomean gain "
-            f"{candidate.gain:.0%}. referee_passed={candidate.referee_passed} — the "
-            "supply-floor GATE still rejects it under fake meetings, so no champion "
-            "is laundered TODAY, but the geomean sub-metric is inflated"
-        )
         exploits.append(
             ProbeExploit(
                 moving_term=moving,
-                behavioral_cause=_behavioral_cause(
-                    baseline_aggs, candidate.aggs, moving
+                behavioral_cause=(
+                    _gate_laundered_cause(candidate)
+                    if laundered
+                    else _behavioral_cause(baseline_aggs, candidate.aggs, moving)
                 ),
                 score_baseline=round(baseline_score, 2),
                 score_champion=round(candidate.score, 2),
                 delta=round(candidate.score - baseline_score, 2),
-                trajectory_evidence=trajectory,
+                trajectory_evidence=_exploit_trajectory(
+                    candidate, baseline_score, baseline_aggs, fake_meetings, laundered
+                ),
                 recommended_floor=_recommended_floor(moving),
             )
         )
     return tuple(exploits), strongest_score
+
+
+def _gate_laundered_cause(candidate: _ExploitCandidate) -> str:
+    return (
+        f"{candidate.label} CLEARS the composed referee (referee_passed=True) that "
+        "the honest scripted baseline does not: a directly-referee-optimized genome "
+        f"the SELECTION gate would accept as a champion at mean_score "
+        f"{candidate.score:.2f}. This is laundering the forbidden objective past the "
+        "gate — the exact failure the two-layer referee exists to prevent."
+    )
+
+
+def _exploit_trajectory(
+    candidate: _ExploitCandidate,
+    baseline_score: float,
+    baseline_aggs: _SetAggregates,
+    fake_meetings: bool,
+    laundered: bool,
+) -> str:
+    head = (
+        f"{candidate.label}: scripted-FSM baseline mean_score={baseline_score:.2f} "
+        f"(mean meetings {baseline_aggs.mean_meetings:.2f}) -> mean_score="
+        f"{candidate.score:.2f} (mean meetings {candidate.aggs.mean_meetings:.2f}); "
+        f"relative geomean gain {candidate.gain:.0%}. "
+        f"referee_passed={candidate.referee_passed}"
+    )
+    if laundered:
+        return (
+            head + " — the candidate CLEARS the composed selection gate and would be "
+            "SELECTED as a champion (LAUNDERED); the supply floors did NOT hold here."
+        )
+    if fake_meetings:
+        return (
+            head + " — the supply-floor GATE still rejects it under fake meetings, so "
+            "no champion is laundered TODAY, but the geomean sub-metric is inflated "
+            "(re-check under the surrogate)."
+        )
+    return (
+        head + " — the supply-floor gate rejects it on the surrogate meeting path, so "
+        "no champion is laundered, but the geomean sub-metric is inflated."
+    )
 
 
 __all__ = [

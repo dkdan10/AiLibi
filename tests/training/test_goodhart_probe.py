@@ -10,16 +10,39 @@ from __future__ import annotations
 
 import random
 
+from eval.watchability import WatchabilityReport
 from training.bakeoff.es import ESConfig
 from training.bakeoff.goodhart import (
     GoodhartProbeReport,
     ProbeExploit,
     TraceImprovement,
+    _build_exploits,
+    _SetAggregates,
+    _SetEvaluation,
     build_probe_selector,
     probe_genome_length,
     run_goodhart_probe,
 )
 from training.env import TacticalRolloutEnv
+
+
+def _watchability(*, referee_passed: bool, mean_score: float) -> WatchabilityReport:
+    """A minimal WatchabilityReport fixture (only the fields _build_exploits reads)."""
+
+    return WatchabilityReport(
+        replay_set_dir="x",
+        baseline_id="baseline-3",
+        roster_key="9p2i",
+        games_total=0,
+        integrity_ok=True,
+        referee_passed=referee_passed,
+        supply_floors_passed=referee_passed,
+        supply_gauges=(),
+        mean_score=mean_score,
+        median_score=mean_score,
+        per_game=(),
+    )
+
 
 # A cheap budget: 1 generation x 2 offspring over 2 seeds on the short 4p1i roster.
 _TINY = ESConfig(generations=1, population=2, sigma=0.4, seed=0, fitness_seeds=(0, 1))
@@ -120,3 +143,70 @@ def test_probe_report_round_trips_json() -> None:
     report = _run_tiny()
     restored = GoodhartProbeReport.model_validate_json(report.to_json())
     assert restored == report
+
+
+def _champion_eval(*, referee_passed: bool, mean_score: float) -> _SetEvaluation:
+    return _SetEvaluation(
+        fitness=mean_score,
+        watchability=_watchability(
+            referee_passed=referee_passed, mean_score=mean_score
+        ),
+        validity_passed=True,
+    )
+
+
+def test_gate_laundering_is_flagged_without_geomean_gain() -> None:
+    # A champion that CLEARS the referee gate the baseline does NOT is a material
+    # exploit even with a BELOW-BAR (here NEGATIVE) geomean gain — the referee
+    # would select this laundered champion (the 15.15 surrogate-path threat).
+    exploits, strongest = _build_exploits(
+        baseline_score=10.0,
+        baseline_aggs=_SetAggregates(*([0.0] * 12)),
+        baseline_referee_passed=False,
+        champion_eval=_champion_eval(referee_passed=True, mean_score=8.0),
+        champion_score=8.0,
+        champion_gain=-0.2,  # LOWER geomean than the baseline, but clears the gate
+        levers=(),
+        evaluator=None,  # type: ignore[arg-type]  # unused when levers is empty
+        materiality_bar=0.25,
+        fake_meetings=False,
+    )
+    assert len(exploits) == 1
+    assert exploits[0].moving_term == "referee_gate"
+    assert "LAUNDERED" in exploits[0].trajectory_evidence
+    assert strongest == 10.0  # baseline is still the strongest ADMISSIBLE score here
+
+
+def test_gate_pass_not_flagged_when_baseline_also_passes() -> None:
+    # If the honest baseline already clears the gate, a champion also clearing it
+    # (with no geomean gain) is NOT laundering — no exploit.
+    exploits, _ = _build_exploits(
+        baseline_score=10.0,
+        baseline_aggs=_SetAggregates(*([0.0] * 12)),
+        baseline_referee_passed=True,
+        champion_eval=_champion_eval(referee_passed=True, mean_score=9.0),
+        champion_score=9.0,
+        champion_gain=-0.1,
+        levers=(),
+        evaluator=None,  # type: ignore[arg-type]
+        materiality_bar=0.25,
+        fake_meetings=False,
+    )
+    assert exploits == ()
+
+
+def test_below_bar_geomean_gain_is_not_promoted() -> None:
+    # A gain just under the bar must not be promoted (unrounded threshold).
+    exploits, _ = _build_exploits(
+        baseline_score=10.0,
+        baseline_aggs=_SetAggregates(*([0.0] * 12)),
+        baseline_referee_passed=False,
+        champion_eval=_champion_eval(referee_passed=False, mean_score=12.4996),
+        champion_score=12.4996,
+        champion_gain=0.24996,
+        levers=(),
+        evaluator=None,  # type: ignore[arg-type]
+        materiality_bar=0.25,
+        fake_meetings=True,
+    )
+    assert exploits == ()
