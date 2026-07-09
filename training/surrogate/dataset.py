@@ -30,11 +30,15 @@ real :func:`agents.memory.beliefs.apply_meeting_evidence_rules` (the exact persi
 post-meeting absorb the orchestrator runs, ``phase=None``) reconstructs the
 per-voter cross-meeting suspicion accumulator the LLM votes on — WITHOUT this
 meeting's transcript (a training-time surrogate has no LLM, hence no current
-transcript), so it is the honest pre-meeting graph. The perception-time hard pins
-(witnessed vent → the ``vent_sighting`` flag column; kill-proximity → the
-``seen_at_kill`` column) are surfaced as their own first-class feature columns
-rather than folded into the single suspicion scalar, so a linear/tree surrogate can
-weight each channel independently (see the module ``## Decisions`` in the PR).
+transcript), so it is the honest pre-meeting graph. The perception-time pins
+(witnessed kill +1.0 / witnessed vent +0.5 / Rule-1 body proximity +0.2) are
+ingested into the perceiving voter's ``BeliefState`` at event time exactly as
+production's ``apply_observation_rules`` ingests them — so the scalar carries the
+FULL pre-meeting row, and the real Rule-5 fold decays an unreinforced pin toward
+the 0.5 prior across later meetings (Codex review: a stale pin never re-applies at
+full strength). The boolean pin columns (``witnessed_kill`` / ``witnessed_vent`` /
+``body_proximity``) remain first-class first-hand-evidence FLAGS so a linear/tree
+surrogate can weight each channel independently.
 
 Row grain is one row per (meeting, voter); the roster is read off ``result.ballots``
 (every living participant casts exactly one ballot — ``meetings/manager.py``), which
@@ -64,7 +68,10 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from agents.memory.beliefs import (
+    BODY_PROXIMITY_SUSPICION_DELTA,
     BODY_PROXIMITY_WINDOW_TICKS,
+    VENTING_SUSPICION_DELTA,
+    WITNESSED_KILL_SUSPICION_DELTA,
     BeliefState,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
@@ -132,10 +139,14 @@ class MeetingTableReconstructionError(RuntimeError):
 class CandidateFeatures(BaseModel):
     """One living candidate's reconstructed features, from a voter's view (frozen).
 
-    All columns derive OFFLINE from the committed bytes. The suspicion/trust pair is
-    the voter-specific pre-meeting belief-fold state (folded over PRIOR meetings'
-    public evidence; the candidate's OWN row is never held about the voter, so a
-    ``is_self`` candidate reads the neutral 0.5 prior). The contradiction-flag
+    All columns derive OFFLINE from the committed bytes. The suspicion/trust pair
+    is the voter's FULL pre-meeting belief row: prior meetings' public evidence
+    folded by the real post-meeting absorb PLUS the perception pins the voter took
+    at event time (witnessed kill/vent, Rule-1 body proximity), with the real
+    Rule-5 fold decaying unreinforced rows toward the 0.5 prior — the production
+    graph, not an accumulator subset. The candidate's OWN row is never held about
+    the voter, so a ``is_self`` candidate reads the neutral 0.5 prior. The
+    contradiction-flag
     counts (``strong_flags`` / ``weak_flags`` / ``vent_flags``), sighting counts
     (``witnessed`` / ``isolation``), ``seen_at_kill``, ``is_reporter``,
     ``task_submissions`` and ``move_count`` are voter-INDEPENDENT meeting/window
@@ -153,7 +164,8 @@ class CandidateFeatures(BaseModel):
     is_impostor: bool
     is_ejected: bool
     is_reporter: bool
-    # Voter-specific pre-meeting belief-fold state (prior meetings only).
+    # The voter's full pre-meeting belief row: prior-meeting evidence fold +
+    # perception pins ingested at event time, Rule-5 decayed by the real fold.
     belief_suspicion: float
     belief_trust: float
     # THIS meeting's contradiction-flag structure naming the candidate.
@@ -393,9 +405,13 @@ class _WindowStats:
     KILLER/VENTER to the set of CREW WITNESSES who saw the act. Production only
     stamps ``action="kill"`` / ``"vent"`` for the WITNESSING agent before that
     agent's own belief update, so the pin is VOTER-LOCAL: exposed only for a row
-    whose voter is in the witness set. Both are persistent (role-proving knowledge
-    the crew never unlearns, mirroring the +1.0 / +0.5 belief pins the store folds),
-    so they do NOT reset. All updates read only reconstructed engine truth.
+    whose voter is in the witness set. The FLAG sets persist (they record that the
+    voter once held first-hand evidence) and do not reset; the pin's belief DELTA
+    (+1.0 / +0.5 / +0.2) is ingested into the witness's ``BeliefState`` at event
+    time — production's ``apply_observation_rules`` — where the real Rule-5 fold
+    decays it toward 0.5 across later unreinforced meetings (Codex review), so
+    the magnitude lives in ``belief_suspicion``, never re-applied at full
+    strength. All updates read only reconstructed engine truth.
 
     ``body_proximity`` is the VOTER-LOCAL §6.3 Rule 1 reconstruction (Codex
     review): production fires the +0.2 bump in agent A's OWN beliefs only on the
@@ -438,6 +454,8 @@ class _WindowStats:
         state: WorldState,
         events: Sequence[object],
         roles: Mapping[PlayerId, Role],
+        *,
+        beliefs: Mapping[PlayerId, BeliefState],
     ) -> None:
         by_room: dict[RoomId, list[PlayerId]] = {}
         for pid, player in state.players.items():
@@ -474,6 +492,14 @@ class _WindowStats:
                 }
                 if crew_witnesses:
                     self.witnessed_kill[event.actor].update(crew_witnesses)
+                    # Ingest the pin into the witness's OWN belief row at
+                    # perception, exactly as production does — so Rule 5 decays
+                    # it at later unreinforced meeting folds (Codex review:
+                    # never reapply a stale pin at full strength).
+                    for witness in sorted(crew_witnesses):
+                        beliefs[witness].adjust_suspicion(
+                            event.actor, delta=WITNESSED_KILL_SUSPICION_DELTA
+                        )
             elif isinstance(event, (VentEnteredEvent, VentExitedEvent)):
                 # The witnessed-VENT pin (Codex review): a crew member who SAW an
                 # impostor vent takes the +0.5 role-proving pin at perception
@@ -488,16 +514,23 @@ class _WindowStats:
                 }
                 if vent_witnesses:
                     self.witnessed_vent[event.actor].update(vent_witnesses)
+                    for witness in sorted(vent_witnesses):
+                        beliefs[witness].adjust_suspicion(
+                            event.actor, delta=VENTING_SUSPICION_DELTA
+                        )
         for kill_tick, kill_room in self._pending_kills:
             if 0 <= state.tick - kill_tick <= SEEN_AT_KILL_WINDOW_TICKS:
                 occupants = by_room.get(kill_room, [])
                 if len(occupants) >= 2:
                     for pid in occupants:
                         self.seen_at_kill[pid] = True
-        self._absorb_body_proximity(state, roles)
+        self._absorb_body_proximity(state, roles, beliefs)
 
     def _absorb_body_proximity(
-        self, state: WorldState, roles: Mapping[PlayerId, Role]
+        self,
+        state: WorldState,
+        roles: Mapping[PlayerId, Role],
+        beliefs: Mapping[PlayerId, BeliefState],
     ) -> None:
         """§6.3 Rule 1, voter-local (Codex review): first sighting + co-presence.
 
@@ -539,8 +572,14 @@ class _WindowStats:
                     for tick, pid in sightings.get(body.room, ())
                     if tick >= cutoff and pid != body.player_id and pid not in teammates
                 }
-                for pid in co_present:
+                for pid in sorted(co_present):
                     self.body_proximity[pid].add(observer)
+                    # Production ingests the +0.2 into the OBSERVER's own belief
+                    # row at perception; the real Rule-5 fold then decays it at
+                    # later unreinforced meetings (Codex review).
+                    beliefs[observer].adjust_suspicion(
+                        pid, delta=BODY_PROXIMITY_SUSPICION_DELTA
+                    )
             # Record this tick's sightings (and prune beyond the window) AFTER
             # the body pass, keyed by the SEEN player's room like ``saw_player``.
             for room in list(sightings):
@@ -694,12 +733,24 @@ def _walk_game(
                 f"{game_id}: tick {entry.tick} reconstructed {actual!r} != recorded "
                 f"{entry.state_hash!r} (roster mismatch or engine non-determinism)"
             )
-        stats.absorb_tick(state, events, roles)
 
-        if state.phase == "GAME_OVER":
-            break
         if state.phase != "MEETING":
+            # An absorb here ≡ the production packet the orchestrator builds at
+            # the NEXT tick from this post-action state (packets are built from
+            # the PRE-action state each tick, ``orchestrator/game.py``).
+            stats.absorb_tick(state, events, roles, beliefs=beliefs)
+            if state.phase == "GAME_OVER":
+                break
             continue
+
+        # MEETING trigger tick (Codex review — pre-meeting perception timing):
+        # production voters last ingested the packet built BEFORE this tick's
+        # actions (≡ the previous iteration's absorb); the trigger tick's own
+        # events and post-action state are deliberately preserved and delivered
+        # on the RESUME tick, after the meeting. So the rows are built from the
+        # stats/beliefs as of the PREVIOUS absorb — a same-tick witnessed
+        # kill/vent never leaks into this meeting's rows — and this tick's
+        # events are absorbed after the meeting below.
 
         trigger_event = next(
             (e for e in events if isinstance(e, MeetingTriggeredEvent)), None
@@ -797,6 +848,14 @@ def _walk_game(
                 f"recorded {meeting_entry.state_hash_after!r}"
             )
         stats.reset_window()
+        # The RESUME-tick packet (orchestrator/game.py: ``last_events =
+        # pre_meeting_events + post_events``): the post-meeting resumed state
+        # plus the trigger tick's preserved events. This is where the trigger
+        # tick's witnessed kill/vent pins land (after the meeting, exactly as
+        # production delivers them) and where the new window's sightings begin.
+        stats.absorb_tick(
+            state, tuple(events) + tuple(post_events), roles, beliefs=beliefs
+        )
         meeting_index += 1
         if state.phase == "GAME_OVER":
             break

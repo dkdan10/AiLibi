@@ -15,12 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from agents.memory.beliefs import (
-    BODY_PROXIMITY_SUSPICION_DELTA,
-    CONTRADICTION_RENDER_CEIL,
-    VENTING_SUSPICION_DELTA,
-    WITNESSED_KILL_SUSPICION_DELTA,
-)
+from agents.memory.beliefs import CONTRADICTION_RENDER_CEIL
 from training.surrogate.dataset import (
     MeetingTable,
     SurrogateSplits,
@@ -285,36 +280,53 @@ def test_derived_fold_with_no_trainable_meetings_fails_loud() -> None:
         fo6_rebaseline(tiny)
 
 
+def test_run_with_no_scoreable_meetings_fails_loud() -> None:
+    """A derived run over ONLY no-meeting games raises, never an all-zero report.
+
+    Every derived fold's test side is empty so every fold is skipped; without the
+    guard the harness would fall through and return ``meetings_scored=0`` with
+    all-zero metrics as if it were a valid fidelity run (Codex review).
+    """
+
+    base = build_meeting_table(_FOUR)
+    no_meeting = sorted(set(base.game_seeds()) - {row.seed for row in base.rows})
+    assert len(no_meeting) >= 2, "4p1i is the fixture BECAUSE it has no-meeting games"
+    empty = base.model_copy(
+        update={
+            "seeds": tuple(no_meeting[:2]),
+            "rows": (),
+            "games_total": 2,
+            "splits": None,
+        }
+    )
+    with pytest.raises(ValueError, match="no fold scored any meeting"):
+        fo6_rebaseline(empty)
+
+
 def test_recon_respects_the_production_render_ceiling() -> None:
     """The recon applies the Task-14.10 certain-guilt ceiling (Codex review).
 
     Production caps flag-driven lift at ``max(prior, CONTRADICTION_RENDER_CEIL)``
-    — a body+flag shape renders ~0.97, never the 1.0 clamp, while a first-hand
-    conclusive prior already at the clamp (the witnessed-kill pin) holds. The
-    best-case recon must render the same bound or the ceiling counts strict
-    argmaxes the real belief graph could not produce.
+    — a pinned-prior+flag shape renders ~0.97, never the 1.0 clamp, while a
+    first-hand conclusive prior already at the clamp (a fresh witnessed-kill pin)
+    holds. The prior is the strongest voter's real pre-meeting belief row
+    (``public_suspicion`` — perception pins ingested at event time and Rule-5
+    decayed by the real fold). The best-case recon must render the same bound or
+    the ceiling counts strict argmaxes the real belief graph could not produce.
     """
 
     views = build_meeting_views(build_meeting_table(_NINE))
     ceiled_cases = 0
     for view in views:
         for cand in view.candidates:
-            feats = view.features[cand]
-            prior = min(
-                1.0,
-                view.public_suspicion[cand]
-                + WITNESSED_KILL_SUSPICION_DELTA * feats["witnessed_kill"]
-                + VENTING_SUSPICION_DELTA * feats["witnessed_vent"]
-                + BODY_PROXIMITY_SUSPICION_DELTA * feats["body_proximity"]
-                + BODY_PROXIMITY_SUSPICION_DELTA * feats["seen_at_kill"],
-            )
+            prior = view.public_suspicion[cand]
             bound = max(prior, CONTRADICTION_RENDER_CEIL)
             assert view.recon_suspicion[cand] <= bound + 1e-9
-            if prior + feats["contradiction_lift"] > bound + 1e-9:
+            if prior + view.features[cand]["contradiction_lift"] > bound + 1e-9:
                 ceiled_cases += 1
                 assert view.recon_suspicion[cand] == pytest.approx(bound)
     # The bound must actually bind somewhere on the committed bytes — the
-    # body+flag shape the 14.10 audit pinned is present in baseline 3.
+    # pinned-prior+flag shape the 14.10 audit pinned is present in baseline 3.
     assert ceiled_cases > 0
 
 

@@ -41,19 +41,23 @@ exactly one feature row (100% join rate)**. The table rebuilds byte-identically
 ### Feature columns (all offline)
 
 The single biggest upgrade over FO-6's six raw physical counts is the **pre-meeting
-belief-fold rendered suspicion**. The belief fold in `agents/memory/beliefs.py` is
-deterministic over recorded events and needs no LLM;
+belief row** — the voter's FULL production suspicion graph. The belief fold in
+`agents/memory/beliefs.py` is deterministic over recorded events and needs no LLM;
 `meetings.manager.extract_belief_evidence` (the `derive_belief_evidence` derivation,
 roster off `result.ballots`) re-derives each meeting's public evidence
 (accused / corroborated / contradicted / testimony). Folding that evidence over
 **PRIOR** meetings through the real
 `agents.memory.beliefs.apply_meeting_evidence_rules` (`phase=None` — the exact
-persistent post-meeting absorb the orchestrator runs) reconstructs each voter's
-cross-meeting suspicion accumulator **without this meeting's transcript** (a
-training-time surrogate has no LLM, hence no current transcript). At the first
-meeting no prior evidence has folded, so every candidate reads the neutral 0.5 prior;
-by later meetings the accumulator has moved — this is the "0.60–0.69 rendered
-suspicion" band §2.2 says the LLM votes on.
+persistent post-meeting absorb the orchestrator runs), with the perception pins
+(witnessed kill +1.0 / witnessed vent +0.5 / Rule-1 body proximity +0.2) ingested
+into the perceiving voter's `BeliefState` at event time exactly as production's
+`apply_observation_rules` ingests them, reconstructs each voter's pre-meeting row
+**without this meeting's transcript** (a training-time surrogate has no LLM, hence
+no current transcript) — and the real Rule-5 fold decays an unreinforced row
+toward the 0.5 prior across later meetings, so a stale pin never re-applies at
+full strength. At the first meeting a candidate the voter holds no pin about reads
+the neutral 0.5 prior; by later meetings the accumulator has moved — this is the
+"0.60–0.69 rendered suspicion" band §2.2 says the LLM votes on.
 
 Alongside it, per candidate: the **contradiction-flag structure** (`strong_flags` /
 `weak_flags` / `vent_flags` — the Task-15.4 `vent_sighting` role-proving flag in its
@@ -79,26 +83,27 @@ ground truth (`is_impostor` / `is_ejected`) comes from the tournament report —
 replays are role-free by firewall design — and is a **label**, never a predictive
 input.
 
-**Decision (documented):** the belief scalar folds only the cross-meeting MEETING
-evidence; the perception-time hard pins the real store also folds at ingest (a
-witnessed vent → +0.5, a witnessed kill → +1.0, first-sighting body proximity →
-+0.2) are surfaced as their OWN first-class columns (`vent_flags`, `witnessed_kill`,
-`witnessed_vent`, `body_proximity`, `seen_at_kill`) rather than
-folded into the single suspicion scalar. These perception pins are **voter-local** —
-production stamps the evidence only into the perceiving agent's own beliefs, so
-a pin is exposed only to a row whose voter is in the event's witness/observer set (a
-global flag would leak private evidence to every voter and distort the ceiling; the
-honest ceiling ORs the pin across a meeting's voters — the strongest signal any voter
-holds). The per-agent perception is reconstructed through the real
-`compute_visibility_for_player`; as columns the surrogate weights each
-channel independently — and the honest ceiling folds the pins back in at
-their real weights (kill +1.0, vent +0.5, body +0.2) with the contradiction lift
-capped at one strong flag's worth (`MEETING_CONTRADICTION_LIFT_CAP`) and applied
-under the Task-14.10 `CONTRADICTION_RENDER_CEIL` certain-guilt exclusion, exactly
-as `apply_contradiction_rule` renders — while the belief scalar stays a clean
-deterministic function of the recorded meeting evidence. The scalar is therefore
-the **cross-meeting accusation/testimony accumulator** — precisely the "voice
-momentum" signal, and precisely what a physical-only surrogate (FO-6) lacks.
+**Decision (documented):** the belief scalar is the voter's FULL pre-meeting row —
+the cross-meeting MEETING-evidence fold PLUS the perception pins ingested at event
+time (a witnessed vent → +0.5, a witnessed kill → +1.0, first-sighting body
+proximity → +0.2), Rule-5 decayed by the real fold — while the pins are ALSO
+surfaced as first-class boolean FLAG columns (`witnessed_kill`, `witnessed_vent`,
+`body_proximity`, beside `vent_flags` / `seen_at_kill`) so a linear/tree surrogate
+can weight each first-hand-evidence channel independently of its decayed magnitude.
+The pins are **voter-local** — production stamps the evidence only into the
+perceiving agent's own beliefs, so a pin (and its belief delta) is exposed only to
+a row whose voter is in the event's witness/observer set; a global flag would leak
+private evidence to every voter and distort the ceiling. The per-agent perception
+is reconstructed through the real `compute_visibility_for_player`, and perception
+timing mirrors the orchestrator exactly: packets are built from the PRE-action
+state each tick, and a meeting-trigger tick's events are delivered on the RESUME
+tick — so a same-tick witnessed kill never leaks into that meeting's rows. The
+honest ceiling reads the strongest voter's row plus the contradiction lift capped
+at one strong flag's worth (`MEETING_CONTRADICTION_LIFT_CAP`) and applied under
+the Task-14.10 `CONTRADICTION_RENDER_CEIL` certain-guilt exclusion, exactly as
+`apply_contradiction_rule` renders. The row is therefore the **production
+suspicion graph** — the physically-and-belief-legible signal, whose complement is
+precisely the voice channel a physical+belief surrogate (FO-6) lacks.
 
 ---
 
@@ -149,8 +154,8 @@ under **by-game 5-fold CV** across all 50 games (the spike used one 35/15 split)
 
 | Set | top-1 | top-2 | decision acc (binary) | always-eject baseline | ejection Brier/ECE | ballot Brier/ECE | binary head |
 |---|---:|---:|---:|---:|---:|---:|---|
-| **9p2i** | **23.9%** (26/109) | **42.2%** (46/109) | **35.3%** | 78.4% | 0.107 / 0.008 | 0.211 / 0.120 | **collapses to always-SKIP** |
-| **4p1i** | 69.2% (18/26) | 88.5% (23/26) | 64.1% | 66.7% | 0.154 / 0.102 | 0.232 / 0.232 | SKIP-biased (not collapsed) |
+| **9p2i** | **25.7%** (28/109) | **45.9%** (50/109) | **38.1%** | 78.4% | 0.107 / 0.008 | 0.211 / 0.120 | **collapses to always-SKIP** |
+| **4p1i** | 69.2% (18/26) | 88.5% (23/26) | 64.1% | 66.7% | 0.154 / 0.080 | 0.232 / 0.232 | SKIP-biased (not collapsed) |
 
 (Decision accuracy is the BINARY eject-vs-skip decision — right when the model's
 eject/skip *choice* matches, regardless of which player it named; the exact-target
@@ -160,15 +165,16 @@ voters' confidences — the WOLF channel — and are model-independent, reported
 model as the ground-truth reference.)
 
 The spike's headline **"FO-6 top-1 64% / top-2 82%"** was measured on 9p2i in the
-spike era. On the committed baseline-3 9p2i it is **23.9% / 42.2%** under by-game CV —
-matching the audit's re-record regression to "26% / 43% on baseline 2" (§2.1). The
+spike era. On the committed baseline-3 9p2i it is **25.7% / 45.9%** under by-game CV —
+matching the audit's independently measured re-record regression to "26% / 43% on
+baseline 2" (§2.1) almost exactly. The
 small **4p1i** set still shows a high headline (69.2%) — that is the *misleading*
 single number the audit warns about, not a recovery: on a 4-player set the ranking
 problem is trivially small (≤3 candidates), and its decision head is still below the
 always-eject baseline.
 
 **The always-SKIP collapse, made explicit (9p2i):** the tuned binary head predicts
-SKIP on **78 of 109 true ejection meetings** and reaches only **35.3%** binary
+SKIP on **70 of 109 true ejection meetings** and reaches only **38.1%** binary
 eject-vs-skip accuracy — *worse than the trivial always-eject constant (78.4%)*. The
 single top-1 number hid this. The SKIP/eject decision is testimony/plurality driven and **absent
 from physical features**, exactly as §5.2 predicts; this is why §5.3's rebuild
@@ -188,30 +194,31 @@ pre-meeting suspicion lead — is invisible to a training-time surrogate. The ce
 measures that: over the SCORED ejection meetings (the same held-out population every
 other channel reports on — all meetings under K-fold, the test games under a
 committed split), the share whose ejected target is the **strict (unique) argmax** of
-the best-case reconstructed physical+belief suspicion (the sharpest ranking a
-physical+belief surrogate could form from the pre-meeting bytes, using the real
-belief-fold deltas — the voter-local perception pins at +1.0 kill / +0.5 vent / +0.2
-first-sighting body proximity, the table's `contradiction_lift` column RENDERED by
-the real `apply_contradiction_rule` (one delta per (subject, claim) lift group,
-capped at one strong flag's worth, transcript-threaded) applied under the Task-14.10
-certain-guilt render ceiling exactly as production renders it — a body+flag shape
-reads ~0.97, never the 1.0 clamp; a witnessed-kill prior at the clamp holds — and
-the accusation accumulator). A flat tie (an early meeting, no prior evidence, no
+the best-case reconstructed physical+belief suspicion. The prior is the strongest
+voter's REAL pre-meeting belief row (`belief_suspicion` — the prior-meeting evidence
+fold plus the perception pins ingested at event time, with the real Rule-5 fold
+decaying an unreinforced pin toward 0.5 so stale evidence never re-applies at full
+strength); on top of it the table's `contradiction_lift` column (RENDERED by the
+real `apply_contradiction_rule`: one delta per (subject, claim) lift group, capped
+at one strong flag's worth, transcript-threaded) is applied under the Task-14.10
+certain-guilt render ceiling exactly as production renders it — a pinned-prior+flag
+shape reads ~0.97, never the 1.0 clamp; a fresh witnessed-kill prior at the clamp
+holds. A flat tie (an early meeting, no prior evidence, no
 flag) is not uniquely rankable and correctly counts as unreachable.
 
 | Set | **max achievable top-1** | **voice-driven share** | reachable | flag on target | proximity/eyewitness on target | strict belief-lead |
 |---|---:|---:|---:|---:|---:|---:|
-| **9p2i** | **73.4%** | **26.6%** | 80/109 | 78/109 | 73/109 | 15/109 |
-| **4p1i** | 84.6% | 15.4% | 22/26 | 21/26 | 11/26 | 0/26 |
+| **9p2i** | **71.6%** | **28.4%** | 78/109 | 78/109 | 71/109 | 65/109 |
+| **4p1i** | 84.6% | 15.4% | 22/26 | 21/26 | 11/26 | 11/26 |
 
-Read the 9p2i row as: **no physical+belief surrogate can exceed ~73% top-1 on this
-corpus**, and **~27% of ejections are structurally voice-driven** — they formed from
+Read the 9p2i row as: **no physical+belief surrogate can exceed ~72% top-1 on this
+corpus**, and **~28% of ejections are structurally voice-driven** — they formed from
 the current meeting's narrative and cannot be seen without the LLM. (Earlier drafts
-measured 65.1%/34.9%; the voter-local body-proximity pin and the production render
-ceiling removed spurious top-of-ranking ties — bystanders globally flagged near a
-body, and body+flag shapes clamping to certain-guilt 1.0 alongside a witnessed-kill
-pin — so more true targets are now strict argmaxes.) FO-6's achieved
-**23.9%** sits far below the **73.4%** ceiling: the gap is the belief accumulator and
+measured 65.1%/34.9% then 73.4%/26.6%; the review-driven fidelity ladder — voter-local
+first-sighting body proximity, the production render ceiling, event-time pin ingest
+with Rule-5 decay, and pre-meeting perception timing at the trigger tick — settled the
+measurement at the production-exact graph.) FO-6's achieved
+**25.7%** sits far below the **71.6%** ceiling: the gap is the belief accumulator and
 the flag channels FO-6's six raw counts never use (the surrogate's headroom, Task
 15.13), while the ceiling itself is the honest cap the plan does not chase. §5.5's two
 responses follow directly: use the surrogate for the physically-legible component and

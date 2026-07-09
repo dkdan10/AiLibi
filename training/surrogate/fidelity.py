@@ -54,12 +54,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict
 
-from agents.memory.beliefs import (
-    BODY_PROXIMITY_SUSPICION_DELTA,
-    CONTRADICTION_RENDER_CEIL,
-    VENTING_SUSPICION_DELTA,
-    WITNESSED_KILL_SUSPICION_DELTA,
-)
+from agents.memory.beliefs import CONTRADICTION_RENDER_CEIL
 from engine.entities import PlayerId
 from training.surrogate.dataset import MeetingTable, MeetingTableRow
 
@@ -89,9 +84,11 @@ class MeetingView:
 
     Built from the table's (meeting, voter) rows: the candidate physical features are
     voter-independent (identical across a meeting's voters), so they are read off the
-    rows once; ``public_suspicion`` is the cross-meeting belief accumulator toward
-    each candidate from a NON-self perspective (crew voters share the public
-    evidence). ``ejected`` is ``None`` on a SKIP meeting.
+    rows once; ``public_suspicion`` is the strongest NON-self voter's full pre-meeting
+    belief row toward each candidate (the real evidence fold plus event-time
+    perception pins, Rule-5 decayed — the max over voters, since the sharpest-informed
+    voter's ballot is what a surrogate could ride). ``ejected`` is ``None`` on a SKIP
+    meeting.
     """
 
     seed: int
@@ -261,36 +258,27 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
         for cand in candidates:
             if not seen[cand]:
                 public[cand] = 0.5
-        # Best-case reconstructed pre-meeting suspicion per candidate: the public
-        # belief accumulator PLUS the real belief-fold channels (agents/memory/
-        # beliefs.py). The contradiction lift is the table's ``contradiction_lift``
-        # column — RENDERED by the real ``apply_contradiction_rule`` at build time
-        # (one delta per (subject, claim) lift group, capped at one strong flag's
-        # worth; Codex review), so duplicate flags of one claim can neither
-        # manufacture nor erase a strict argmax the real graph could not render.
-        # The perception pins are the real deltas (witnessed kill +1.0, witnessed
-        # vent +0.5, body proximity +0.2) folded into the PRIOR, and the lift is
-        # then applied under the Task-14.10 certain-guilt render ceiling exactly
-        # as production renders it (Codex review): the flag-driven delta is capped
-        # at ``max(prior, CONTRADICTION_RENDER_CEIL) - prior``, so a body+flag
-        # shape renders ~0.97, never the 1.0 clamp, while a first-hand conclusive
-        # prior already at the clamp (the witnessed-kill pin) holds — the ceiling
+        # Best-case reconstructed pre-meeting suspicion per candidate: the PRIOR
+        # is the strongest voter's real pre-meeting belief row (``public`` — the
+        # table's ``belief_suspicion`` already carries the perception pins
+        # ingested at event time AND their Rule-5 decay through the real fold, so
+        # a stale pin is never re-applied at full strength; Codex review). The
+        # vote-time transient is the table's ``contradiction_lift`` column —
+        # RENDERED by the real ``apply_contradiction_rule`` (one delta per
+        # (subject, claim) lift group, capped at one strong flag's worth) —
+        # applied under the Task-14.10 certain-guilt render ceiling exactly as
+        # production renders it: the flag-driven delta is capped at
+        # ``max(prior, CONTRADICTION_RENDER_CEIL) - prior``, so a body+flag shape
+        # renders ~0.97, never the 1.0 clamp, while a first-hand conclusive prior
+        # already at the clamp (a fresh witnessed-kill pin) holds — the ceiling
         # bounds the lift, never the prior. This is the sharpest ranking a
         # physical+belief surrogate could form; the honest ceiling reads its
         # strict argmax (:func:`compute_honest_ceiling`).
         recon: dict[PlayerId, float] = {}
         for cand in candidates:
-            feats = features[cand]
-            prior = min(
-                1.0,
-                public[cand]
-                + WITNESSED_KILL_SUSPICION_DELTA * feats["witnessed_kill"]
-                + VENTING_SUSPICION_DELTA * feats["witnessed_vent"]
-                + BODY_PROXIMITY_SUSPICION_DELTA * feats["body_proximity"]
-                + BODY_PROXIMITY_SUSPICION_DELTA * feats["seen_at_kill"],
-            )
+            prior = public[cand]
             lift = min(
-                feats["contradiction_lift"],
+                features[cand]["contradiction_lift"],
                 max(prior, CONTRADICTION_RENDER_CEIL) - prior,
             )
             recon[cand] = min(1.0, prior + lift)
@@ -779,6 +767,18 @@ def run_surrogate_fidelity(
         float(np.mean([(c - y) ** 2 for c, y in ballot_calib])) if ballot_calib else 0.0
     )
     ballot_ece = _expected_calibration_error(ballot_calib)
+
+    if meetings_scored == 0:
+        # Every derived fold was skipped (a corpus of only no-meeting games) —
+        # a committed split cannot reach here (_game_folds rejects a
+        # no-scoreable-meeting side). Fail loud rather than return a
+        # valid-looking all-zero report (Codex review; AGENTS.md "no silent
+        # fallbacks").
+        raise ValueError(
+            f"{table.replay_set_dir}: no fold scored any meeting — every recorded "
+            "game ends before a meeting fires, so there is nothing to judge; "
+            "refusing to emit an all-zero fidelity report"
+        )
 
     skip_meetings = meetings_scored - ejection_meetings
     brier = float(np.mean(brier_terms)) if brier_terms else 0.0

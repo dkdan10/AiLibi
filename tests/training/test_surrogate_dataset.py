@@ -16,8 +16,14 @@ from pathlib import Path
 
 import pytest
 
+from agents.memory.beliefs import (
+    MEETING_SUSPICION_DECAY_RATE,
+    BeliefState,
+    apply_meeting_evidence_rules,
+)
 from engine.actions import Action, DoTaskAction, MoveAction
 from engine.entities import BodyState
+from engine.events import KilledEvent
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from eval.validity import assemble_tournament_report
@@ -109,11 +115,14 @@ def test_table_is_byte_deterministic(sample_dir: Path) -> None:
 
 
 def test_belief_fold_is_neutral_at_first_meeting_and_diverges_later() -> None:
-    """The pre-meeting belief-fold suspicion accumulates ONLY over prior meetings.
+    """The pre-meeting belief row starts neutral except for perception pins.
 
-    At meeting index 0 no prior evidence has folded, so every candidate reads the
-    neutral 0.5 prior; by a later meeting the cross-meeting accumulator has moved
-    some candidate off 0.5 — the signal FO-6's six raw counts never carried.
+    At meeting index 0 no prior meeting evidence has folded, so a candidate the
+    voter holds NO perception pin about reads the neutral 0.5 prior — while a
+    pinned candidate (witnessed kill/vent, Rule-1 body proximity) reads ABOVE it,
+    exactly as production's perception-time ingest leaves the graph. By a later
+    meeting the cross-meeting accumulator has moved some candidate off 0.5 — the
+    signal FO-6's six raw counts never carried.
     """
 
     table = build_meeting_table(_NINE)
@@ -121,8 +130,11 @@ def test_belief_fold_is_neutral_at_first_meeting_and_diverges_later() -> None:
     assert first_meeting, "expected at least one first-meeting row on 9p2i"
     for row in first_meeting:
         for cand in row.candidates:
-            assert cand.belief_suspicion == pytest.approx(0.5)
             assert cand.belief_trust == pytest.approx(0.5)
+            if cand.witnessed_kill or cand.witnessed_vent or cand.body_proximity:
+                assert cand.belief_suspicion > 0.5  # the ingested perception pin
+            else:
+                assert cand.belief_suspicion == pytest.approx(0.5)
 
     later = [
         cand
@@ -443,7 +455,8 @@ def test_task_and_move_counts_derive_from_accepted_events() -> None:
     next_state, events = advance_tick(state, actions, game_map=game_map)
 
     stats = _WindowStats(game_map)
-    stats.absorb_tick(next_state, events, roles)
+    beliefs = {pid: BeliefState() for pid in state.players}
+    stats.absorb_tick(next_state, events, roles, beliefs=beliefs)
     assert stats.task_submissions.get(worker, 0) == 1  # accepted task tick counts
     assert rejected_actor not in stats.task_submissions  # rejected intent does not
     assert stats.moves.get(mover, 0) == 1  # accepted move counts
@@ -475,6 +488,7 @@ def test_body_proximity_is_first_sighting_co_presence_not_room_occupancy() -> No
     room_s = game_map.room_neighbors(room_r)[0]
 
     stats = _WindowStats(game_map)
+    beliefs = {pid: BeliefState() for pid in state.players}
 
     # Tick 1: A and C co-present in R; D and V away in S. No body yet.
     players_t1 = dict(state.players)
@@ -482,7 +496,7 @@ def test_body_proximity_is_first_sighting_co_presence_not_room_occupancy() -> No
     players_t1[latecomer_d] = replace(players_t1[latecomer_d], room=room_s)
     players_t1[victim_v] = replace(players_t1[victim_v], room=room_s)
     state_t1 = replace(state, tick=1, players=players_t1)
-    stats.absorb_tick(state_t1, [], roles)
+    stats.absorb_tick(state_t1, [], roles, beliefs=beliefs)
 
     # Tick 2: C left to S, D walked into R, V's body lies undiscovered in R.
     players_t2 = dict(players_t1)
@@ -498,7 +512,7 @@ def test_body_proximity_is_first_sighting_co_presence_not_room_occupancy() -> No
         discovered_by=None,
     )
     state_t2 = replace(state, tick=2, players=players_t2, bodies={body.id: body})
-    stats.absorb_tick(state_t2, [], roles)
+    stats.absorb_tick(state_t2, [], roles, beliefs=beliefs)
 
     # C is pinned, but ONLY in A's view (A saw C in R shortly before discovery).
     assert stats.body_proximity.get(leaver_c) == {observer_a}
@@ -507,3 +521,57 @@ def test_body_proximity_is_first_sighting_co_presence_not_room_occupancy() -> No
     assert latecomer_d not in stats.body_proximity
     # The victim is never a suspect of its own body.
     assert victim_v not in stats.body_proximity
+    # The +0.2 ingested into the OBSERVER's own belief row at perception —
+    # production's Rule-1 stamp — and nobody else's.
+    assert beliefs[observer_a].view(leaver_c).suspicion == pytest.approx(0.7)
+    assert beliefs[latecomer_d].view(leaver_c).suspicion == pytest.approx(0.5)
+    assert beliefs[leaver_c].view(latecomer_d).suspicion == pytest.approx(0.5)
+
+
+def test_perception_pins_decay_through_the_real_fold() -> None:
+    """A pin ingested at perception decays at unreinforced meeting folds (Codex).
+
+    Production's Rule 5 drifts an already-known row toward the 0.5 prior by
+    ``MEETING_SUSPICION_DECAY_RATE`` per meeting that produced no new evidence
+    about the subject. Because the walk ingests the witnessed-kill +1.0 into the
+    witness's ``BeliefState`` at event time and runs the REAL fold per meeting,
+    a stale pin reads its decayed value in later rows — never the full +1.0
+    re-applied.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=4, num_impostors=1, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+    killer = next(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    crew = sorted(pid for pid, role in roles.items() if role == "CREWMATE")
+    witness, victim = crew[0], crew[1]
+
+    stats = _WindowStats(game_map)
+    beliefs = {pid: BeliefState() for pid in state.players}
+    kill = KilledEvent(
+        type="Killed",
+        tick=1,
+        actor=killer,
+        target=victim,
+        room=state.players[killer].room,
+        witnesses=(witness,),
+    )
+    stats.absorb_tick(state, [kill], roles, beliefs=beliefs)
+    assert beliefs[witness].view(killer).suspicion == pytest.approx(1.0)
+    assert witness in stats.witnessed_kill[killer]
+
+    # One meeting with NO evidence about the killer: the real fold decays the
+    # pinned row toward 0.5 — 1.0 -> 0.875 at the 0.25 rate.
+    beliefs[witness] = apply_meeting_evidence_rules(
+        beliefs[witness],
+        own_id=witness,
+        accused=(),
+        roster=frozenset(state.players),
+    )
+    expected = 0.5 + (1.0 - 0.5) * (1.0 - MEETING_SUSPICION_DECAY_RATE)
+    assert beliefs[witness].view(killer).suspicion == pytest.approx(expected)
+    # The FLAG persists (the voter once held first-hand evidence) — the decayed
+    # MAGNITUDE lives in the belief row, never re-applied at full strength.
+    assert witness in stats.witnessed_kill[killer]
