@@ -350,12 +350,15 @@ if resolved != locked:
 PYINNER
 }
 
-# Refuse to freeze a set whose MANIFEST rows carry any prompt-version string
-# outside the locked baseline-3 map. The preflight pins the registry FORWARD from
-# this run; this catches the RESUME case looking BACKWARD — seeds recorded by an
-# earlier session under a different (older/newer) prompt baseline whose rows
-# would otherwise be swept into the frozen corpus. No-meeting rows carry the
-# "(none — no meetings)" sentinel and are exempt (they invoked no template).
+# Refuse to freeze a set whose meeting-bearing MANIFEST rows are not EXACTLY the
+# locked baseline-3 prompt-version map. The preflight pins the registry FORWARD
+# from this run; this catches the RESUME case looking BACKWARD — seeds recorded
+# by an earlier session under a different (older/newer) prompt baseline, OR rows
+# with stripped/partial provenance (a row carrying only allowed tokens is still a
+# violation: the manager stamps the FULL set map on every meeting, so anything
+# short of the exact four is missing provenance, not a lighter meeting — every
+# committed baseline-3 row empirically carries all four). No-meeting rows carry
+# the "(none — no meetings)" sentinel and are exempt (they invoked no template).
 check_recorded_prompt_versions() {
   local set_dir="$1" manifest="$2"
   uv run python - "$REPO_ROOT" "$set_dir" "$manifest" "$REQUIRED_PROMPT_VERSIONS" <<'PYINNER'
@@ -366,65 +369,98 @@ sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
 from _manifest_writer import parse_manifest  # noqa: E402
 
 set_dir, manifest, locked_csv = sys.argv[2], Path(sys.argv[3]), sys.argv[4]
-locked = {token.strip() for token in locked_csv.split(",")}
+locked = ", ".join(sorted(token.strip() for token in locked_csv.split(",")))
 if not manifest.exists():
     sys.stderr.write(f"check_recorded_prompt_versions: no MANIFEST at {manifest}\n")
     raise SystemExit(1)
-bad: dict[int, list[str]] = {}
+bad: dict[int, str] = {}
 for seed, row in sorted(parse_manifest(manifest.read_text(encoding="utf-8")).items()):
     cell = row.prompt_versions
     if cell.startswith("(none"):  # the no-meetings sentinel: no template invoked
         continue
-    foreign = [v for v in (token.strip() for token in cell.split(",")) if v not in locked]
-    if foreign:
-        bad[seed] = foreign
+    normalized = ", ".join(sorted(token.strip() for token in cell.split(",")))
+    if normalized != locked:
+        bad[seed] = cell
 if bad:
-    listing = "; ".join(f"seed {seed}: {', '.join(vs)}" for seed, vs in bad.items())
+    listing = "; ".join(f"seed {seed}: {cell!r}" for seed, cell in bad.items())
     sys.stderr.write(
-        f"check_recorded_prompt_versions: {len(bad)} MANIFEST row(s) in {set_dir} carry "
-        f"prompt versions outside the locked baseline-3 map — {listing}\n"
-        "A resumed set must not mix prompt baselines; re-record the offending seeds.\n"
+        f"check_recorded_prompt_versions: {len(bad)} meeting-bearing MANIFEST row(s) "
+        f"in {set_dir} do not carry EXACTLY the locked baseline-3 prompt versions "
+        f"[{locked}] — {listing}\n"
+        "A resumed set must not mix prompt baselines or carry stripped prompt\n"
+        "provenance; re-record the offending seeds.\n"
     )
     raise SystemExit(1)
 PYINNER
 }
 
-# Refuse to treat a present replay as a corpus game unless its BYTES carry the
-# EXPLICIT 15.9 tactical-policy stamp with the locked policy id. File presence is
-# not provenance: the resume skip-scan trusts any non-empty in-range replay, but
-# an UNSTAMPED replay (an earlier pre-15.9 run, a canonical sample copied in)
-# renders in the MANIFEST policy column identically to a stamped one
-# (_manifest_writer._render_policy maps an absent stamp to the fsm-default
-# label) and scripts/validity_gate.py does not check the stamp — so without this
-# guard such a replay would be resumed-over and silently FROZEN in violation of
-# the Task-15.12 contract. Checked pre-spend (before the skip-scan treats a
-# replay as complete) and again before the freeze. Reads the replay bytes, not
-# MANIFEST rows (rows cannot distinguish absent from explicit). $0, no network.
-check_replay_policy_stamps() {
+# Refuse to treat a present replay as a corpus game unless its BYTES prove the
+# baseline-3 provenance the corpus contract requires. File presence is not
+# provenance: the resume skip-scan trusts any non-empty in-range replay, but the
+# model/endpoint preflights only govern seeds recorded by THIS run, and the
+# MANIFEST cannot carry these checks (its policy column renders an absent stamp
+# identically to an explicit one, and its model column derives from the same
+# bytes) — so without this guard a foreign replay dropped into the dir would be
+# resumed-over and silently FROZEN, leaving the external validity gate to fail
+# only AFTER the set was marked frozen. Per replay, three byte-level checks:
+#   * the 15.9 tactical-policy stamp is present and equals the FULL five-field
+#     canonical fsm_default_tactical_policy_stamp() — matching policy_id alone
+#     would accept a hand-crafted stamp with non-canonical method/encoder/
+#     weights/anchor fields that the MANIFEST renders indistinguishably;
+#   * every model recorded anywhere in it (meeting llm_calls AND failed-call
+#     rows) is the locked baseline model — this also refuses a wall-clock-miss
+#     "(deadline_default)" phantom, which the validity gate rejects too;
+#   * its summed cost is exactly $0 (the flat-rate provider contract).
+# Checked pre-spend (before the skip-scan treats a replay as complete) and again
+# before the freeze. $0, no network.
+check_replay_provenance() {
   local set_dir="$1"
-  uv run python - "$REPO_ROOT" "$set_dir" "$POLICY_STAMP" <<'PYINNER'
+  uv run python - "$REPO_ROOT" "$set_dir" "$DEFAULT_FEATHERLESS_MODEL" <<'PYINNER'
 import sys
 from pathlib import Path
 
 sys.path.insert(0, sys.argv[1])
-from orchestrator.replay import read_tactical_policy_stamp  # noqa: E402
+from orchestrator.replay import (  # noqa: E402
+    FailedCallReplayEntry,
+    MeetingReplayEntry,
+    compute_cost_usd,
+    fsm_default_tactical_policy_stamp,
+    read_all_entries,
+    read_tactical_policy_stamp,
+)
 
-set_dir, required = Path(sys.argv[2]), sys.argv[3]
+set_dir, baseline_model = Path(sys.argv[2]), sys.argv[3]
+canonical = fsm_default_tactical_policy_stamp()
 bad: list[str] = []
 for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
     stamp = read_tactical_policy_stamp(path)
     if stamp is None:
         bad.append(f"{path.name}: no tactical_policy stamp")
-    elif stamp.policy_id != required:
-        bad.append(f"{path.name}: policy_id={stamp.policy_id!r}")
+    elif stamp != canonical:
+        bad.append(
+            f"{path.name}: tactical_policy stamp differs from the canonical "
+            f"fsm-default (got {stamp.model_dump()!r})"
+        )
+    models: set[str] = set()
+    for entry in read_all_entries(path):
+        if isinstance(entry, MeetingReplayEntry):
+            models.update(call.model for call in entry.llm_calls)
+        elif isinstance(entry, FailedCallReplayEntry):
+            models.add(entry.model)
+    foreign = sorted(models - {baseline_model})
+    if foreign:
+        bad.append(f"{path.name}: non-baseline model(s) recorded: {', '.join(foreign)}")
+    cost = compute_cost_usd(path)
+    if cost != 0.0:
+        bad.append(f"{path.name}: non-zero recorded cost ${cost:.4f}")
 if bad:
     listing = "; ".join(bad)
     sys.stderr.write(
-        f"check_replay_policy_stamps: {len(bad)} replay(s) in {set_dir} lack the "
-        f"explicit '{required}' tactical-policy stamp — {listing}\n"
-        "An unstamped replay renders identically to a stamped one in the MANIFEST\n"
-        "policy column, so presence alone must never make it a corpus game; remove\n"
-        "the file(s) and re-record the seed(s) with this recorder.\n"
+        f"check_replay_provenance: {len(bad)} violation(s) in {set_dir} — {listing}\n"
+        "A present replay's bytes must prove the full baseline-3 provenance (the\n"
+        "canonical 15.9 fsm-default stamp, the locked model on every recorded call,\n"
+        "$0 cost); presence alone must never make it a corpus game. Remove the\n"
+        "file(s) and re-record the seed(s) with this recorder.\n"
     )
     raise SystemExit(1)
 PYINNER
@@ -643,9 +679,11 @@ record_set() {
     return 1
   fi
   # File presence is not provenance: before the resume skip-scan treats a present
-  # replay as "already recorded", prove its bytes carry the explicit 15.9 stamp
-  # (see check_replay_policy_stamps — an unstamped one would freeze undetected).
-  if ! check_replay_policy_stamps "$set_dir"; then
+  # replay as "already recorded", prove its bytes carry the full baseline-3
+  # provenance — the canonical five-field 15.9 stamp, the locked model on every
+  # recorded call, and $0 cost (see check_replay_provenance — a foreign replay
+  # would otherwise freeze undetected).
+  if ! check_replay_provenance "$set_dir"; then
     return 1
   fi
   # Pin the set's roster.json BEFORE spending, so the recorded replays reconstruct
@@ -925,11 +963,12 @@ record_set() {
     return 1
   fi
 
-  # Refuse to freeze a replay whose bytes lack the explicit 15.9 stamp (re-run of
-  # the pre-spend guard over the now-complete set, incl. anything that appeared
-  # mid-run; MANIFEST rows cannot carry this check — see check_replay_policy_stamps).
-  if ! check_replay_policy_stamps "$set_dir"; then
-    echo "ERROR: $set_name holds replays without the explicit $POLICY_STAMP tactical-policy stamp; NOT freezing." >&2
+  # Refuse to freeze a replay whose bytes fail the full baseline-3 provenance
+  # check (re-run of the pre-spend guard over the now-complete set, incl.
+  # anything that appeared mid-run; MANIFEST rows cannot carry this check — see
+  # check_replay_provenance).
+  if ! check_replay_provenance "$set_dir"; then
+    echo "ERROR: $set_name holds replays that fail baseline-3 provenance; NOT freezing." >&2
     return 1
   fi
 

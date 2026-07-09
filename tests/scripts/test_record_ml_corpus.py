@@ -445,7 +445,7 @@ def test_record_path_refuses_unstamped_present_replay(tmp_path: Path) -> None:
     proc = _run("--set", "4p1i", env=env, timeout=120)
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
-    assert "check_replay_policy_stamps" in out
+    assert "check_replay_provenance" in out
     assert "replay-seed-1000.jsonl: no tactical_policy stamp" in out
     # Refused BEFORE the roster pin / any record: the dir still holds only the
     # offending replay.
@@ -477,9 +477,76 @@ def test_record_path_accepts_stamped_present_replay(tmp_path: Path) -> None:
     assert proc.returncode != 0
     out = proc.stdout + proc.stderr
     # The stamp guard passed (no policy complaint) ...
-    assert "check_replay_policy_stamps" not in out
+    assert "check_replay_provenance" not in out
     # ... and the failure is the roster conflict, the step AFTER the guard.
     assert "disagrees with the requested roster" in out
+
+
+def test_record_path_refuses_non_canonical_stamp_fields(tmp_path: Path) -> None:
+    # Matching policy_id alone is not enough: a hand-crafted stamp with
+    # policy_id="fsm-default" but non-canonical method/encoder/weights/anchor
+    # fields renders identically in the MANIFEST policy column, so the guard must
+    # compare the FULL five-field stamp to fsm_default_tactical_policy_stamp().
+    # Fixture: a committed corpus replay with its game_over stamp's method field
+    # doctored. Hermetic: refused before any tournament invocation.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    set_dir.mkdir(parents=True)
+    source = _REPO_ROOT / "replays" / "ml_corpus" / "4p1i" / "replay-seed-1000.jsonl"
+    lines = source.read_text(encoding="utf-8").splitlines()
+    for i, line in enumerate(lines):
+        record = json.loads(line)
+        if record.get("kind") == "game_over" and record.get("tactical_policy"):
+            record["tactical_policy"]["method"] = "hand-edited"
+            lines[i] = json.dumps(record, separators=(",", ":"))
+    (set_dir / "replay-seed-1000.jsonl").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", env=env, timeout=120)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "check_replay_provenance" in out
+    assert "differs from the canonical" in out
+    assert "hand-edited" in out
+
+
+def test_record_path_refuses_non_baseline_model_in_replay_bytes(
+    tmp_path: Path,
+) -> None:
+    # The model/endpoint preflights only govern seeds recorded by THIS run; a
+    # resumed replay recorded under another model (but carrying a valid stamp)
+    # must be refused by its BYTES before the skip-scan treats it as complete —
+    # not left for the external validity gate to fail after the freeze. Fixture:
+    # a committed corpus replay with every recorded model id rewritten. Hermetic:
+    # refused before any tournament invocation.
+    corpus_root = tmp_path / "ml_corpus"
+    set_dir = corpus_root / "4p1i"
+    set_dir.mkdir(parents=True)
+    source = _REPO_ROOT / "replays" / "ml_corpus" / "4p1i" / "replay-seed-1000.jsonl"
+    doctored = source.read_text(encoding="utf-8").replace(
+        '"model":"Qwen/Qwen3-32B"', '"model":"Other/Model-32B"'
+    )
+    assert '"model":"Other/Model-32B"' in doctored  # the fixture has LLM calls
+    (set_dir / "replay-seed-1000.jsonl").write_text(doctored, encoding="utf-8")
+    env = dict(
+        _clean_env(),
+        AILIBI_LLM_PROVIDER="featherless",
+        FEATHERLESS_API_KEY="test-key-unused",
+        AILIBI_PROMPT_SET="qwen3_32b",
+        AILIBI_ML_CORPUS_ROOT=str(corpus_root),
+    )
+    proc = _run("--set", "4p1i", env=env, timeout=120)
+    assert proc.returncode != 0
+    out = proc.stdout + proc.stderr
+    assert "check_replay_provenance" in out
+    assert "non-baseline model(s) recorded: Other/Model-32B" in out
 
 
 # -- splits-only (hermetic; no network, no record) ----------------------------

@@ -78,9 +78,12 @@ all three knobs are then exported pinned so the recorded substrate can never
 drift from the one the `MANIFEST` stamps. The prompt **versions** are locked
 too, not just the set name: the preflight asserts the registry still resolves
 `qwen3_32b` to the baseline-3 map (turn/opening v5, `vote_ballot` v6), and the
-finalize refuses to freeze a set whose `MANIFEST` rows carry any other version
-string — a later registry bump stops the recorder cold instead of silently
-recording (or resuming into) a non-baseline corpus. The recorder also refuses a
+finalize refuses to freeze a set unless every meeting-bearing `MANIFEST` row
+carries **exactly** that map (a foreign version string AND a stripped/partial
+row both refuse — the manager stamps the full set map on every meeting, so
+anything short of the exact four is missing provenance) — a later registry bump
+stops the recorder cold instead of silently recording (or resuming into) a
+non-baseline corpus. The recorder also refuses a
 set dir containing any `replay-seed-*.jsonl` outside the set's locked seed range
 (checked before recording and again before freezing), so a stray file can never
 be swept into the frozen corpus or its splits.
@@ -109,12 +112,18 @@ that lack one (the crash window between a replay landing and its row being
 written) — rows recorded by an earlier session keep that session's `git_sha`,
 so a resume never rewrites the provenance of bytes it did not record. File
 presence alone is not provenance: before a present replay is skipped as
-"already recorded" (and again before the freeze), the recorder proves its bytes
-carry the explicit 15.9 `fsm-default` tactical-policy stamp — an unstamped
-replay (a pre-15.9 recording, a canonical sample copied in) is refused, since
-it would render in the `MANIFEST` policy column identically to a stamped one
-and the validity gate does not check the stamp. A fully-recorded set records
-nothing and just re-finalizes, so re-running is always safe and idempotent:
+"already recorded" (and again before the freeze), the recorder proves its
+**bytes** carry the full baseline-3 provenance — the canonical **five-field**
+15.9 `fsm-default` tactical-policy stamp (not just its id: a hand-crafted stamp
+with non-canonical method/encoder/weights/anchor fields renders identically in
+the `MANIFEST`), the locked model on **every** recorded call (meeting calls and
+failed-call rows alike, so a wall-clock-miss phantom or a foreign-model
+recording is refused), and exactly `$0` recorded cost. An unstamped replay (a
+pre-15.9 recording, a canonical sample copied in) is refused for the same
+reason: it would render in the `MANIFEST` policy column identically to a
+stamped one and the validity gate does not check the stamp. A fully-recorded
+set records nothing and just re-finalizes, so re-running is always safe and
+idempotent:
 
 ```bash
 export FEATHERLESS_API_KEY=... AILIBI_PROMPT_SET=qwen3_32b
