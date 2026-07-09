@@ -64,12 +64,13 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from agents.memory.beliefs import (
+    BODY_PROXIMITY_WINDOW_TICKS,
     BeliefState,
     apply_contradiction_rule,
     apply_meeting_evidence_rules,
 )
 from engine.actions import Action
-from engine.entities import PlayerId, Role, RoomId
+from engine.entities import BodyId, PlayerId, Role, RoomId
 from engine.events import (
     KilledEvent,
     MeetingTriggeredEvent,
@@ -80,6 +81,7 @@ from engine.events import (
     VentExitedEvent,
 )
 from engine.tick import advance_tick
+from engine.visibility import compute_visibility_for_player
 from engine.world import Map, WorldState, load_canonical_map
 from eval.validity import (
     assemble_tournament_report,
@@ -135,11 +137,12 @@ class CandidateFeatures(BaseModel):
     public evidence; the candidate's OWN row is never held about the voter, so a
     ``is_self`` candidate reads the neutral 0.5 prior). The contradiction-flag
     counts (``strong_flags`` / ``weak_flags`` / ``vent_flags``), sighting counts
-    (``witnessed`` / ``isolation``), ``seen_at_kill``, ``body_proximity``,
-    ``is_reporter``, ``task_submissions`` and ``move_count`` are voter-INDEPENDENT
-    meeting/window facts (identical across a meeting's voters), so a meeting-level
-    ranker (FO-6) reads them off any row. ``is_ejected`` / ``is_impostor`` are labels
-    (roles ground truth), never predictive inputs.
+    (``witnessed`` / ``isolation``), ``seen_at_kill``, ``is_reporter``,
+    ``task_submissions`` and ``move_count`` are voter-INDEPENDENT meeting/window
+    facts (identical across a meeting's voters), so a meeting-level ranker (FO-6)
+    reads them off any row; ``witnessed_kill`` / ``witnessed_vent`` /
+    ``body_proximity`` are VOTER-LOCAL perception pins. ``is_ejected`` /
+    ``is_impostor`` are labels (roles ground truth), never predictive inputs.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -173,6 +176,9 @@ class CandidateFeatures(BaseModel):
     # belief-store pins, exposed only to the witness, never the co-presence proxy.
     witnessed_kill: bool
     witnessed_vent: bool
+    # VOTER-LOCAL §6.3 Rule 1 pin (Codex review): this row's VOTER first-sighted
+    # a body and had personally observed the candidate in that body's room within
+    # the prior window (+0.2) — never a global corpse-room-occupancy flag.
     body_proximity: bool
     # Game-long cadence signals from ACCEPTED engine events (Codex review): one
     # ``TaskProgressed``/``TaskCompleted`` per accepted task-work tick, one
@@ -390,18 +396,42 @@ class _WindowStats:
     whose voter is in the witness set. Both are persistent (role-proving knowledge
     the crew never unlearns, mirroring the +1.0 / +0.5 belief pins the store folds),
     so they do NOT reset. All updates read only reconstructed engine truth.
+
+    ``body_proximity`` is the VOTER-LOCAL §6.3 Rule 1 reconstruction (Codex
+    review): production fires the +0.2 bump in agent A's OWN beliefs only on the
+    tick A FIRST sees a body, and only for players A itself observed in that
+    body's room within the prior ``BODY_PROXIMITY_WINDOW_TICKS`` ticks (the
+    victim excluded; an impostor observer's fellow impostors excluded, §4.7) —
+    never for whoever happens to stand in the corpse's room at report time. The
+    reconstruction runs the REAL :func:`engine.visibility.
+    compute_visibility_for_player` per observer per tick (role-asymmetric sight,
+    sabotage degrades, vent/dead filtering, ``discovered_by`` body gating), keeps
+    each observer's rolling same-as-production sighting window, and maps a
+    CANDIDATE to the set of observers holding the pin. Like production's
+    perception-time bump it persists in the observer's graph, so it does not
+    reset. (The ``observed_actions`` extras production also folds into
+    ``saw_player`` rows are the witnessed kill/vent stamps — carried here as
+    their own first-class pin columns.)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, game_map: Map) -> None:
         self.witnessed: dict[PlayerId, int] = defaultdict(int)
         self.isolation: dict[PlayerId, int] = defaultdict(int)
         self.seen_at_kill: dict[PlayerId, bool] = defaultdict(bool)
         self.witnessed_kill: dict[PlayerId, set[PlayerId]] = defaultdict(set)
         self.witnessed_vent: dict[PlayerId, set[PlayerId]] = defaultdict(set)
-        self.body_proximity: dict[PlayerId, bool] = defaultdict(bool)
+        self.body_proximity: dict[PlayerId, set[PlayerId]] = defaultdict(set)
         self.task_submissions: dict[PlayerId, int] = defaultdict(int)
         self.moves: dict[PlayerId, int] = defaultdict(int)
         self._pending_kills: list[tuple[int, RoomId]] = []
+        self._game_map = game_map
+        # Per-observer first-sighting guard (production: ``saw_body`` rows
+        # strictly before the current tick) and per-observer sighting log
+        # (production: ``saw_player`` rows keyed by the SEEN player's room).
+        self._seen_bodies: dict[PlayerId, set[BodyId]] = defaultdict(set)
+        self._sightings: dict[PlayerId, dict[RoomId, list[tuple[int, PlayerId]]]] = (
+            defaultdict(dict)
+        )
 
     def absorb_tick(
         self,
@@ -464,16 +494,72 @@ class _WindowStats:
                 if len(occupants) >= 2:
                     for pid in occupants:
                         self.seen_at_kill[pid] = True
-        for body in state.bodies.values():
-            for pid in by_room.get(body.room, []):
-                if pid != body.player_id:
-                    self.body_proximity[pid] = True
+        self._absorb_body_proximity(state, roles)
+
+    def _absorb_body_proximity(
+        self, state: WorldState, roles: Mapping[PlayerId, Role]
+    ) -> None:
+        """§6.3 Rule 1, voter-local (Codex review): first sighting + co-presence.
+
+        Per observer, through the REAL :func:`compute_visibility_for_player`:
+        on the tick the observer FIRST sees a body, every player the observer
+        itself saw in that body's room within the prior
+        ``BODY_PROXIMITY_WINDOW_TICKS`` ticks (current tick excluded — the
+        window is "shortly before" the discovery) gains the pin IN THAT
+        OBSERVER'S view only. The victim is skipped (a corpse seen alive
+        moments earlier is not a suspect) and an impostor observer's fellow
+        impostors are skipped (§4.7 — a teammate near a teammate's kill never
+        manufactures crew-shaped evidence). Bodies are processed BEFORE this
+        tick's sightings are recorded, mirroring production's strict
+        ``event.tick < current_tick`` co-presence window.
+        """
+
+        impostor_ids = frozenset(
+            pid for pid, role in roles.items() if role == "IMPOSTOR"
+        )
+        cutoff = state.tick - BODY_PROXIMITY_WINDOW_TICKS
+        for observer in sorted(state.players):
+            visibility = compute_visibility_for_player(
+                observer_id=observer, world_state=state, game_map=self._game_map
+            )
+            sightings = self._sightings[observer]
+            for body_id in visibility.visible_body_ids:
+                seen = self._seen_bodies[observer]
+                if body_id in seen:
+                    continue  # Rule 1 fires only on the FIRST sighting.
+                seen.add(body_id)
+                body = state.bodies[body_id]
+                teammates = (
+                    impostor_ids - {observer}
+                    if observer in impostor_ids
+                    else frozenset()
+                )
+                co_present = {
+                    pid
+                    for tick, pid in sightings.get(body.room, ())
+                    if tick >= cutoff and pid != body.player_id and pid not in teammates
+                }
+                for pid in co_present:
+                    self.body_proximity[pid].add(observer)
+            # Record this tick's sightings (and prune beyond the window) AFTER
+            # the body pass, keyed by the SEEN player's room like ``saw_player``.
+            for room in list(sightings):
+                kept = [(t, pid) for t, pid in sightings[room] if t >= cutoff]
+                if kept:
+                    sightings[room] = kept
+                else:
+                    del sightings[room]
+            for pid in visibility.visible_player_ids:
+                room = state.players[pid].room
+                sightings.setdefault(room, []).append((state.tick, pid))
 
     def reset_window(self) -> None:
+        # ``body_proximity`` deliberately survives the reset: production's Rule 1
+        # bump lands once at first sighting and persists in the observer's stored
+        # beliefs, like the witnessed kill/vent pins.
         self.witnessed.clear()
         self.isolation.clear()
         self.seen_at_kill.clear()
-        self.body_proximity.clear()
         self._pending_kills.clear()
 
 
@@ -548,11 +634,12 @@ def _candidate_features(
         witnessed=stats.witnessed.get(candidate, 0),
         isolation=stats.isolation.get(candidate, 0),
         seen_at_kill=stats.seen_at_kill.get(candidate, False),
-        # Voter-local: the pin is exposed only when THIS row's voter is in the
-        # candidate's witness set (production stamps the act only for its witnesses).
+        # Voter-local: each pin is exposed only when THIS row's voter is in the
+        # candidate's witness/observer set (production stamps the evidence only
+        # into the perceiving agent's own beliefs).
         witnessed_kill=voter in stats.witnessed_kill.get(candidate, set()),
         witnessed_vent=voter in stats.witnessed_vent.get(candidate, set()),
-        body_proximity=stats.body_proximity.get(candidate, False),
+        body_proximity=voter in stats.body_proximity.get(candidate, set()),
         task_submissions=stats.task_submissions.get(candidate, 0),
         move_count=stats.moves.get(candidate, 0),
     )
@@ -594,7 +681,7 @@ def _walk_game(
     )
     roster = frozenset(state.players)
     beliefs: dict[PlayerId, BeliefState] = {pid: BeliefState() for pid in roster}
-    stats = _WindowStats()
+    stats = _WindowStats(game_map)
     rows: list[MeetingTableRow] = []
     meeting_index = 0
 

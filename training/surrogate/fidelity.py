@@ -56,6 +56,7 @@ from pydantic import BaseModel, ConfigDict
 
 from agents.memory.beliefs import (
     BODY_PROXIMITY_SUSPICION_DELTA,
+    CONTRADICTION_RENDER_CEIL,
     VENTING_SUSPICION_DELTA,
     WITNESSED_KILL_SUSPICION_DELTA,
 )
@@ -196,17 +197,21 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
         sample = rows[0]
         candidates = tuple(c.candidate for c in sample.candidates)
         alive_count = float(len(candidates))
-        # The eyewitness pins (``witnessed_kill`` / ``witnessed_vent``) are
-        # VOTER-LOCAL (only the witnessing voter's row carries them, Codex review),
-        # so a meeting-level signal is the OR across voters — "at least one voter
-        # holds this role-proving evidence", which is what a ballot-predicting
-        # surrogate could ride (that witness's ballot names the target). Every other
-        # physical column is voter-independent and read off any row.
+        # The perception pins (``witnessed_kill`` / ``witnessed_vent`` /
+        # ``body_proximity``) are VOTER-LOCAL (only the perceiving voter's row
+        # carries them, Codex review), so a meeting-level signal is the OR across
+        # voters — "at least one voter holds this evidence", which is what a
+        # ballot-predicting surrogate could ride (that voter's ballot names the
+        # target). Every other physical column is voter-independent and read off
+        # any row.
         witnessed_kill_any = {
             c.candidate for row in rows for c in row.candidates if c.witnessed_kill
         }
         witnessed_vent_any = {
             c.candidate for row in rows for c in row.candidates if c.witnessed_vent
+        }
+        body_proximity_any = {
+            c.candidate for row in rows for c in row.candidates if c.body_proximity
         }
         features: dict[PlayerId, dict[str, float]] = {}
         flag_legible: set[PlayerId] = set()
@@ -226,7 +231,7 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
                 "weak_flags": float(feat.weak_flags),
                 "vent_flags": float(feat.vent_flags),
                 "contradiction_lift": float(feat.contradiction_lift),
-                "body_proximity": float(feat.body_proximity),
+                "body_proximity": float(cid in body_proximity_any),
                 "task_submissions": float(feat.task_submissions),
                 "move_count": float(feat.move_count),
             }
@@ -234,7 +239,7 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
                 flag_legible.add(cid)
             if (
                 feat.seen_at_kill
-                or feat.body_proximity
+                or cid in body_proximity_any
                 or cid in witnessed_kill_any
                 or cid in witnessed_vent_any
             ):
@@ -264,22 +269,31 @@ def build_meeting_views(table: MeetingTable) -> list[MeetingView]:
         # worth; Codex review), so duplicate flags of one claim can neither
         # manufacture nor erase a strict argmax the real graph could not render.
         # The perception pins are the real deltas (witnessed kill +1.0, witnessed
-        # vent +0.5, body proximity +0.2), and the whole thing is clamped to [0, 1]
-        # like a rendered suspicion. This is the sharpest ranking a physical+belief
-        # surrogate could form; the honest ceiling reads its strict argmax
-        # (:func:`compute_honest_ceiling`).
+        # vent +0.5, body proximity +0.2) folded into the PRIOR, and the lift is
+        # then applied under the Task-14.10 certain-guilt render ceiling exactly
+        # as production renders it (Codex review): the flag-driven delta is capped
+        # at ``max(prior, CONTRADICTION_RENDER_CEIL) - prior``, so a body+flag
+        # shape renders ~0.97, never the 1.0 clamp, while a first-hand conclusive
+        # prior already at the clamp (the witnessed-kill pin) holds — the ceiling
+        # bounds the lift, never the prior. This is the sharpest ranking a
+        # physical+belief surrogate could form; the honest ceiling reads its
+        # strict argmax (:func:`compute_honest_ceiling`).
         recon: dict[PlayerId, float] = {}
         for cand in candidates:
             feats = features[cand]
-            recon[cand] = min(
+            prior = min(
                 1.0,
                 public[cand]
                 + WITNESSED_KILL_SUSPICION_DELTA * feats["witnessed_kill"]
                 + VENTING_SUSPICION_DELTA * feats["witnessed_vent"]
                 + BODY_PROXIMITY_SUSPICION_DELTA * feats["body_proximity"]
-                + BODY_PROXIMITY_SUSPICION_DELTA * feats["seen_at_kill"]
-                + feats["contradiction_lift"],
+                + BODY_PROXIMITY_SUSPICION_DELTA * feats["seen_at_kill"],
             )
+            lift = min(
+                feats["contradiction_lift"],
+                max(prior, CONTRADICTION_RENDER_CEIL) - prior,
+            )
+            recon[cand] = min(1.0, prior + lift)
         views.append(
             MeetingView(
                 seed=seed,
@@ -342,8 +356,13 @@ class Fo6Logistic:
         matrix = self._matrix(meetings)
         labels = self._labels(meetings)
         if matrix.shape[0] == 0:
-            self._weights = np.zeros(len(FO6_FEATURE_NAMES), dtype=np.float64)
-            return
+            # Never install a silent untrained model (Codex review; AGENTS.md
+            # "no silent fallbacks") — an all-zero logistic would still emit
+            # valid-looking fidelity numbers.
+            raise ValueError(
+                "Fo6Logistic.fit received no meetings; refusing to install an "
+                "untrained (all-zero) model"
+            )
         mean = matrix.mean(axis=0)
         std = matrix.std(axis=0)
         std[std == 0.0] = 1.0
@@ -365,7 +384,7 @@ class Fo6Logistic:
 
     def _prob(self, meeting: MeetingView) -> dict[PlayerId, float]:
         if self._weights is None or self._mean is None or self._std is None:
-            return {cand: 0.0 for cand in meeting.candidates}
+            raise RuntimeError("Fo6Logistic.predict called before fit")
         out: dict[PlayerId, float] = {}
         for cand in meeting.candidates:
             vector = np.asarray(
@@ -690,11 +709,24 @@ def run_surrogate_fidelity(
     brier_terms: list[float] = []
     calib: list[tuple[float, int]] = []
 
-    for train_seeds, test_seeds in fold_pairs:
+    for fold_index, (train_seeds, test_seeds) in enumerate(fold_pairs):
         train_views = [v for s in sorted(train_seeds) for v in views_by_seed[s]]
         test_views = [v for s in sorted(test_seeds) for v in views_by_seed[s]]
         if not test_views:
+            # A derived fold whose test block holds only no-meeting games scores
+            # nothing; the union of the other test folds still covers every
+            # rows-bearing game exactly once. (A committed split cannot reach
+            # here — _game_folds already rejects a no-scoreable-meeting side.)
             continue
+        if not train_views:
+            # Model-agnostic twin of the Fo6Logistic.fit guard (Codex review): a
+            # derived fold on a tiny/no-meeting corpus must not silently score
+            # an untrained model as if it were by-game CV.
+            raise ValueError(
+                f"fold {fold_index} has no scoreable training meetings: every "
+                "fit-side game ends before any meeting fires, so the model "
+                "would fit on nothing — use a larger corpus or a committed split"
+            )
         model = model_factory()
         if not isinstance(model, MeetingModel):
             raise TypeError(

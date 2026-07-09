@@ -15,12 +15,19 @@ from pathlib import Path
 
 import pytest
 
+from agents.memory.beliefs import (
+    BODY_PROXIMITY_SUSPICION_DELTA,
+    CONTRADICTION_RENDER_CEIL,
+    VENTING_SUSPICION_DELTA,
+    WITNESSED_KILL_SUSPICION_DELTA,
+)
 from training.surrogate.dataset import (
     MeetingTable,
     SurrogateSplits,
     build_meeting_table,
 )
 from training.surrogate.fidelity import (
+    Fo6Logistic,
     MeetingPrediction,
     MeetingView,
     _game_folds,
@@ -243,6 +250,72 @@ def test_empty_test_split_fails_loud() -> None:
     table = _with_splits(base, train=seeds, val=[], test=[])
     with pytest.raises(ValueError, match="test set is empty"):
         _game_folds(table, folds=5)
+
+
+def test_fo6_fit_rejects_empty_training_input() -> None:
+    """``Fo6Logistic.fit([])`` raises — never a silent all-zero model."""
+
+    with pytest.raises(ValueError, match="untrained"):
+        Fo6Logistic().fit([])
+
+
+def test_derived_fold_with_no_trainable_meetings_fails_loud() -> None:
+    """A derived K-fold whose fit side has no meetings raises (Codex review).
+
+    On a corpus with fewer than two meeting-bearing games, ``_game_folds`` can
+    put the only scoreable game on the test side and the rest-side games carry
+    no meetings; the harness must fail loud rather than fit a model on nothing
+    and report valid-looking by-game-CV numbers.
+    """
+
+    base = build_meeting_table(_FOUR)
+    rows_bearing = sorted({row.seed for row in base.rows})
+    no_meeting = sorted(set(base.game_seeds()) - set(rows_bearing))
+    assert no_meeting, "4p1i is the fixture BECAUSE it has no-meeting games"
+    with_meeting = rows_bearing[0]
+    tiny = base.model_copy(
+        update={
+            "seeds": tuple(sorted((no_meeting[0], with_meeting))),
+            "rows": tuple(r for r in base.rows if r.seed == with_meeting),
+            "games_total": 2,
+            "splits": None,
+        }
+    )
+    with pytest.raises(ValueError, match="no scoreable training meetings"):
+        fo6_rebaseline(tiny)
+
+
+def test_recon_respects_the_production_render_ceiling() -> None:
+    """The recon applies the Task-14.10 certain-guilt ceiling (Codex review).
+
+    Production caps flag-driven lift at ``max(prior, CONTRADICTION_RENDER_CEIL)``
+    — a body+flag shape renders ~0.97, never the 1.0 clamp, while a first-hand
+    conclusive prior already at the clamp (the witnessed-kill pin) holds. The
+    best-case recon must render the same bound or the ceiling counts strict
+    argmaxes the real belief graph could not produce.
+    """
+
+    views = build_meeting_views(build_meeting_table(_NINE))
+    ceiled_cases = 0
+    for view in views:
+        for cand in view.candidates:
+            feats = view.features[cand]
+            prior = min(
+                1.0,
+                view.public_suspicion[cand]
+                + WITNESSED_KILL_SUSPICION_DELTA * feats["witnessed_kill"]
+                + VENTING_SUSPICION_DELTA * feats["witnessed_vent"]
+                + BODY_PROXIMITY_SUSPICION_DELTA * feats["body_proximity"]
+                + BODY_PROXIMITY_SUSPICION_DELTA * feats["seen_at_kill"],
+            )
+            bound = max(prior, CONTRADICTION_RENDER_CEIL)
+            assert view.recon_suspicion[cand] <= bound + 1e-9
+            if prior + feats["contradiction_lift"] > bound + 1e-9:
+                ceiled_cases += 1
+                assert view.recon_suspicion[cand] == pytest.approx(bound)
+    # The bound must actually bind somewhere on the committed bytes — the
+    # body+flag shape the 14.10 audit pinned is present in baseline 3.
+    assert ceiled_cases > 0
 
 
 # --------------------------------------------------------------------------- #

@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from engine.actions import Action, DoTaskAction, MoveAction
+from engine.entities import BodyState
 from engine.tick import advance_tick
 from engine.world import load_canonical_map
 from eval.validity import assemble_tournament_report
@@ -201,7 +202,7 @@ def test_eyewitness_pins_are_voter_local() -> None:
 
     found_local = False
     for rows in by_meeting.values():
-        for name in ("witnessed_kill", "witnessed_vent"):
+        for name in ("witnessed_kill", "witnessed_vent", "body_proximity"):
             per_candidate: dict[str, set[bool]] = {}
             for row in rows:
                 for cand in row.candidates:
@@ -441,9 +442,68 @@ def test_task_and_move_counts_derive_from_accepted_events() -> None:
     ]
     next_state, events = advance_tick(state, actions, game_map=game_map)
 
-    stats = _WindowStats()
+    stats = _WindowStats(game_map)
     stats.absorb_tick(next_state, events, roles)
     assert stats.task_submissions.get(worker, 0) == 1  # accepted task tick counts
     assert rejected_actor not in stats.task_submissions  # rejected intent does not
     assert stats.moves.get(mover, 0) == 1  # accepted move counts
     assert worker not in stats.moves
+
+
+def test_body_proximity_is_first_sighting_co_presence_not_room_occupancy() -> None:
+    """The Rule-1 pin is voter-local first-sighting evidence (Codex review).
+
+    Production fires the +0.2 bump only in the DISCOVERING agent's own beliefs,
+    and only for players that agent itself observed in the body's room within the
+    prior window — never for whoever stands in the corpse's room at discovery.
+    Scenario: A and C share room R at tick 1; by tick 2 C has left, D has walked
+    in, and V's body lies in R. A (first sighting, saw C in R at tick 1) pins C —
+    and only in A's view. D (arrived with the body, no prior sightings of R) pins
+    nobody despite standing in the corpse's room, and C (elsewhere) never saw the
+    body at all.
+    """
+
+    game_map = load_canonical_map()
+    state = seed_initial_state(
+        seed=0, game_map=game_map, num_players=4, num_impostors=1, tasks_per_crewmate=2
+    )
+    roles = {pid: player.role for pid, player in state.players.items()}
+    crew = sorted(pid for pid, role in roles.items() if role == "CREWMATE")
+    observer_a, leaver_c, latecomer_d = crew
+    victim_v = next(pid for pid, role in roles.items() if role == "IMPOSTOR")
+    room_r = state.players[observer_a].room
+    room_s = game_map.room_neighbors(room_r)[0]
+
+    stats = _WindowStats(game_map)
+
+    # Tick 1: A and C co-present in R; D and V away in S. No body yet.
+    players_t1 = dict(state.players)
+    players_t1[leaver_c] = replace(players_t1[leaver_c], room=room_r)
+    players_t1[latecomer_d] = replace(players_t1[latecomer_d], room=room_s)
+    players_t1[victim_v] = replace(players_t1[victim_v], room=room_s)
+    state_t1 = replace(state, tick=1, players=players_t1)
+    stats.absorb_tick(state_t1, [], roles)
+
+    # Tick 2: C left to S, D walked into R, V's body lies undiscovered in R.
+    players_t2 = dict(players_t1)
+    players_t2[leaver_c] = replace(players_t2[leaver_c], room=room_s)
+    players_t2[latecomer_d] = replace(players_t2[latecomer_d], room=room_r)
+    players_t2[victim_v] = replace(players_t2[victim_v], alive=False, room=room_r)
+    body = BodyState(
+        id="body-test",
+        player_id=victim_v,
+        room=room_r,
+        position=(0.0, 0.0),
+        killed_by=victim_v,
+        discovered_by=None,
+    )
+    state_t2 = replace(state, tick=2, players=players_t2, bodies={body.id: body})
+    stats.absorb_tick(state_t2, [], roles)
+
+    # C is pinned, but ONLY in A's view (A saw C in R shortly before discovery).
+    assert stats.body_proximity.get(leaver_c) == {observer_a}
+    # D stands in the corpse's room at discovery yet is NOT pinned (nobody
+    # observed D in R within the pre-discovery window), and pins nothing.
+    assert latecomer_d not in stats.body_proximity
+    # The victim is never a suspect of its own body.
+    assert victim_v not in stats.body_proximity
