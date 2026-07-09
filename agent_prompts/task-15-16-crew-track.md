@@ -51,7 +51,7 @@ deliverable is a clean measurement of what observable-option learning buys the c
 - [ ] Emergency semantics preserved: the learned scorer routes emergency intent through the same `EmergencyPacingTracker` gate the FSM uses — a test proves the tracker's pacing/announce bookkeeping is untouched — AND the emitted emergency intent (with the FSM's `reason` payload) is proven `submission_legal` under `build_action_mask` by a button-room fixture (the 15.8 exact-equality gap this task's env.py region closes; today's `tests/training/test_env.py` emergency fixture only round-trips the mask's own default-payload object and cannot fail on it).
 - [ ] The trained scorer vs the FSM crew is measured on the fixed eval seed set against the frozen scripted impostor: mis-eject-relevant deltas (meeting-trigger quality, correct-report rate), survival, task-completion pace, win rate — reported with gate/referee/determinism columns in the jsonl, same tuple shape as 15.15.
 - [ ] Anchor-KL to `CrewmatePolicy` (the anchor cross-entropy — log-loss at the FSM's deterministic choice, as 15.15 defines it) reported for every candidate; the FO-8 prior is quoted and the measured delta stated against it.
-- [ ] The crew report DISCLOSES the reward-definition divergence: `training/rewards.py`'s `patrol_coverage` measures co-location with an impostor's ACTUAL room (a deliberate, in-code-documented engine-truth proxy) rather than the doctrine phrase "coverage of last-seen suspects"; the observable-only DoD above governs the POLICY's inputs, not the reward channel, and the leak-test factory mode does not scan rewards — any belief-keyed re-definition of the term is a named ask for the pause, not an edit here.
+- [ ] The crew report DISCLOSES the reward definition: `training/rewards.py`'s `patrol_coverage` measures co-location with an impostor's ACTUAL room — the engine-truth proxy is now the RATIFIED doctrine (owner, 2026-07-09, mid-wave review Q6: a belief-keyed term would reward belief manipulation; see the preamble), so no re-definition ask goes to the pause. The observable-only DoD above governs the POLICY's inputs, not the reward channel. In its place, ONE diagnostic is required: the report measures the correlation between earned coverage credit and the agent's own contemporaneous suspicion toward the shadowed player — if the trained crew's coverage is mostly UN-CUED (shadowing players it holds no suspicion about), the term is training crowding rather than patrol, and the pause revisits with that data.
 - [ ] The report's final section is the crew-surface ask for the pause: the exact observation field proposed (owned-task set), the firewall/leak review it needs, and the expected-gain argument — with this track's measured ceiling as the evidence.
 - [ ] `uv run mypy .` passes.
 - [ ] `uv run ruff check .` and `uv run ruff format --check .` pass.
@@ -64,8 +64,8 @@ deliverable is a clean measurement of what observable-option learning buys the c
 ## Implementation hint
 
 The crew reward terms are the tactically-reachable set from the training-signal doc: task progress,
-survival, correctly-routed reports, buddy/patrol coverage of last-seen suspects — through the 15.8
-reward channel, plus the terminal win. "Belief-trusted group" keys on the crew agent's OWN
+survival, correctly-routed reports, buddy/patrol coverage (the engine-truth co-location proxy, per
+the owner-ratified preamble doctrine) — through the 15.8 reward channel, plus the terminal win. "Belief-trusted group" keys on the crew agent's OWN
 suspicion/trust floats (quantized, via the encoder) — the same information class that already reaches
 crew tactics through the emergency gate; nothing role-derived. Files are disjoint from 15.15 by
 construction; the harness and ES core are consumed strictly read-only, and any generalization the

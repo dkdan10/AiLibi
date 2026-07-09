@@ -96,3 +96,44 @@ Codex reviewed this PR and raised two concerns; both were assessed, and both are
 
 ---
 *Deliverable B in this PR: minimal amendments to the 15.13/15.15/15.16/15.17/15.18 contracts in `tasks/phase-15.md` implementing X1–X5 (+ the 15.13 anchor fixes and the §7.2 correction), the §7.1 loader fix in `training/surrogate/dataset.py` + frozen-file regression pins, with `agent_prompts/` regenerated, `validate_task_docs.py` + `generate_prompts.py --check` + full `check.sh` green on the amended tree.*
+
+## 8. Owner decisions on §5 (ratified 2026-07-09; contracted post-merge)
+
+All six questions answered by the owner; each ruling is folded into the governing contract so no
+decision lives only in this file.
+
+- **Q1 — 15.13 GO bar: population-relative on all three axes, no absolute constants.** GO ⇔ held-out
+  top-1 ≥ 0.75 × the corpus-population ceiling AND > the corpus-re-baselined FO-6 AND SKIP-vs-eject >
+  the population's own always-eject constant. Rationale: every absolute number in this project's
+  history moved when the population changed (64% → 26%; ceiling 65.1 → 70.6) — population-relative
+  bars survive re-records, absolute ones rot; 0.75× is principled (a surrogate capturing less than
+  ~three-quarters of the physically-legible signal leaves too much blind spot for 15.15's optimizer).
+  Pre-committed: NO-GO ⇒ fallback (a), surrogate ships diagnostic-only. → 15.13 DoD.
+- **Q2 — referee backing: re-anchor subject-aware in Wave 2, bundled with the D2-separation floor.**
+  Parity was correct for 15.2 (cross-implementation evidence); the referee's job is changing from
+  reproducing a lab measurement to gating a trained adversary that can exploit subject-agnostic
+  backing directly. Floors re-pinned under the subject-aware definition on the same bytes; parity
+  fixture frozen as a historical pin; landed before champion selection leans on fine D2-conversion
+  differences. → 15.18 DoD (Wave-2 referee-hardening bundle).
+- **Q3 — canary denominators: adopt the corpus, keep samples as the continuity anchor.** Canaries are
+  judged on the largest same-substrate validity-gated set available (corpus conversion 34/52 = 0.654),
+  samples figure alongside; the 50-seed sets remain the byte-identity/provenance anchor. Corollary:
+  branch B ⇒ baseline 4 needs a corpus-scale companion record. → 15.18 DoD.
+- **Q4 — libm: no libm-free forward pass now; demand cross-IMPLEMENTATION equality instead.** Replay
+  byte-identity is untouched by libm; the real cheap risk is numpy-trained vs pure-Python-shipped
+  divergence, so Wave-2 productization gates on bit-exact equality of the two forward passes over the
+  committed float-hex weights. Activation question folds into decision 6 (int-quantization ⇒ LUT tanh
+  ⇒ cross-host generation nearly free; float-hex ⇒ document same-host scope). → 15.18 DoD.
+- **Q5 — provenance durability: adopt the one-line convention, no retro-fix.** Every operator record
+  from 15.18 onward creates an annotated tag or back-fills the post-squash main sha into the MANIFEST;
+  existing MANIFESTs untouched (byte-verification is the operative guarantee, verified green). →
+  15.18 DoD.
+- **Q6 — patrol_coverage: keep the engine-truth reward; fix the doctrine text; add one diagnostic.**
+  The owner declined the review's implied belief-keyed fix: a belief-keyed coverage reward is
+  self-referential (the policy influences its own beliefs — rewarding belief manipulation, the exact
+  Goodhart class this phase avoids), while the engine-truth term is privileged but structurally
+  ungameable (the policy cannot see roles; gradient pressure can only select observable behaviors that
+  correlate with shadowing impostors). Doctrine text amended in the phase preamble; 15.16's report
+  must measure the correlation between coverage credit and the agent's own contemporaneous suspicion
+  toward the shadowed player — mostly un-cued coverage = training crowding, revisited at the pause
+  with data. → preamble + 15.16 DoD.
